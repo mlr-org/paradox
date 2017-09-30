@@ -1,0 +1,39 @@
+Package: phng
+Type: Package
+Title: Machine Learning in R - Next Generation
+Version: 0.1
+Authors@R: c(
+        person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("cre",
+        "aut")),
+    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut"))
+    )
+Description: Machine Learning in R. Next Gen.
+License: GPL-2
+NeedsCompilation: no
+Depends:
+    data.table
+Imports:
+    backports (>= 1.1.1),
+    BBmisc,
+    bit,
+    checkmate (>= 1.8.4),
+    digest,
+    glue,
+    parallelMap,
+    ParamHelpers,
+    R6,
+    stringi
+Suggests:
+    dbplyr,
+    devtools,
+    dplyr,
+    kernlab,
+    knitr,
+    lazyeval,
+    mlbench,
+    rmarkdown,
+    rpart,
+    RSQLite,
+    testthat
+RoxygenNote: 5.0.1
+VignetteBuilder: knitr
