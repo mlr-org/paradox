@@ -5,10 +5,10 @@
 #' A \code{\link[R6]{R6Class}} to represent parameters.
 #' This is the abstract base class, do not use directly!
 #'
-#' @return [\code{\link{ParaBase}}].
+#' @return [\code{\link{ParamBase}}].
 #' @family ParamHelpers
 #' @export
-ParaBase = R6Class("ParaBase",
+ParamBase = R6Class("ParamBase",
   public = list(
     ),
   private = list(
@@ -23,8 +23,8 @@ ParaBase = R6Class("ParaBase",
 #' @return [\code{\link{ParaNode}}].
 #' @family ParamHelpers
 #' @export
-ParaNode = R6Class("ParaNode",
-  inherit = ParaBase,
+ParamNode = R6Class("ParamNode",
+  inherit = ParamBase,
   public = list(
   ),
   private = list(

@@ -20,7 +20,6 @@ Imports:
     digest,
     glue,
     parallelMap,
-    ParamHelpers,
     R6,
     stringi
 Suggests:
