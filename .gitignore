@@ -2,5 +2,7 @@
 .Rhistory
 .RData
 .Ruserdata
+*.sublime-project
+*.sublime-workspace
 man
 NAMESPACE

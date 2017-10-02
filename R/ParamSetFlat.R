@@ -1,13 +1,14 @@
-#' @title GraghParamSet
+
+#' @title ParamSetFlat
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent set of parameters in a graph form.
+#' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
 #'
-#' @return [\code{\link{GraghParamSet}}].
+#' @return [\code{\link{ParamSet}}].
 #' @family ParamHelpers
 #' @export
-GraghParamSet = R6Class("GraghParamSet",
+ParamSetFlat = R6Class("ParamSetFlat",
   inherit = ParamSet,
   public = list(
     nodes = list(),
