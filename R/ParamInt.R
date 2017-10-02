@@ -1,4 +1,6 @@
-ParamInt = R6Class("ParamInt",
+ParamInt = R6Class(
+  "ParamInt",
+  
   public = list(
     lower = NULL,
     upper = NULL,
