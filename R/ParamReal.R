@@ -10,8 +10,8 @@ ParamReal = R6Class(
         checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
       }
       super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default)
-      self$lower = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
-      self$upper = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
+      self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
+      self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
       self$finite = assertFlag(finite)
     },
     sample = function(n = 1L) {

@@ -6,7 +6,7 @@ ParamFactor = R6Class(
     initialize = function(id, values, default = NULL, special.vals = NULL) {
       assertList(values, names = "named", any.missing = FALSE)
       value.names = names(values)
-      check = function(x, na.ok = FALSE, null.ok = FALSE) assertChoice(x, choices = value.names, null.ok = null.ok)
+      check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = value.names, null.ok = null.ok)
       super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals)
       self$values = values
     },
