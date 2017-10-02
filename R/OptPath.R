@@ -78,5 +78,5 @@ as.data.frame.OptPathNg = function(x, include.extras = TRUE, ...) {
 }
 
 '[[.OptPathNg' = function(x, ...) {
-  '[['(z$data, ...)
+  '[['(x$data, ...)
 }
