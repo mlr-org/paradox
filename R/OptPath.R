@@ -19,7 +19,7 @@ OptPath = R6Class(
         set(self$data, j = id, value = get(type, mode = "function")())
         },
         id = par.set$getIds(),
-        type = par.set$getTypes(df.cols = TRUE)
+        type = par.set$getTypes()
       )
       for (y.name in y.names) {
         set(self$data, j = y.name, value = numeric(0L))
@@ -59,7 +59,7 @@ OptPath = R6Class(
 
 
 #' @export
-as.data.frame.OptPathNg = function(x, include.extras = TRUE,, ...) {
+as.data.frame.OptPathNg = function(x, include.extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include.extras) {
@@ -71,12 +71,12 @@ as.data.frame.OptPathNg = function(x, include.extras = TRUE,, ...) {
 }
 
 
-`[.OptPathNg` = function(x, ...) {
+'[.OptPathNg' = function(x, ...) {
   z = x$clone()
   z$data = '['(z$data, ...)
   z
 }
 
-`[[.OptPathNg` = function(x, ...) {
-  \'[['(z$data, ...)
+'[[.OptPathNg' = function(x, ...) {
+  '[['(z$data, ...)
 }
