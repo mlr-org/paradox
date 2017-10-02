@@ -15,6 +15,7 @@ ParamSetTree = R6Class("ParamSetTree",
     handle = NULL,
     depend = NULL,  # by default no dependency
     children = NULL,
+    allowedVal = NULL,
     initialize = function(id = NULL, depend = NULL) {
       self$id = id
       self$val = NULL
@@ -26,6 +27,9 @@ ParamSetTree = R6Class("ParamSetTree",
       self$val = names(self$children)
       return(cnode)
     },
+    addCondChild = function() {
+
+    }
     addChildren = function(flatnodes) {
     },
     setParent = function(pnode) {
