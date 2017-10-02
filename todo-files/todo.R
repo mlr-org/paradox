@@ -4,5 +4,4 @@ pint = ParamInt$new(id = "test", lower = 1L, upper = 10L)
 pint$sample()
 
 
-
-FlatParamSet$new(nodes = list(pint))
+ParamSetFlat$new(nodes = list(pint))

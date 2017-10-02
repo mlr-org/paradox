@@ -13,3 +13,7 @@ ParamNode = R6Class("ParamNode",
   private = list(
   )
 )
+
+ParamNode$makeParam = function() {
+  print("I am the factory method of ParamNode, I will generate Params of different type for you!")
+}
