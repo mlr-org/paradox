@@ -11,6 +11,7 @@
 ParamSetFlat = R6Class("ParamSetFlat",
   inherit = ParamSet,
   public = list(
+    id = NULL,
     val = list(),  # rewrite father
     initialize = function(id = NULL) {
       super$initialize(id)

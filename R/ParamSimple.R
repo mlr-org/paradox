@@ -8,8 +8,9 @@
 #' @family ParamHelpers
 #' @export
 ParamSimple = R6Class("ParamSimple",
+  inherit = ParamNode,
   public = list(
-    initialize = function(id = NULL, parents = NULL) {
+    initialize = function(id = NULL) {
     },
     sample = function() {
       return(NULL)
