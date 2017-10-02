@@ -36,14 +36,6 @@ ParamSetTree = R6Class("ParamSetTree",
   )
 )
 
-ParamHandle = R6Class("ParamHandle",
-  inherit = ParamBase,
-  public = list(
-  ),
-  private = list(
-  )
-)
-
 ps = ParamSetTree$new("SVM")
 
 res = ps$addChild(ParamSetTree$new("Kernel"))

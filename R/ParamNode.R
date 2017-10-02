@@ -16,12 +16,13 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
-    initialize = function(id, type, check) {
+    initialize = function(id, type, check, handle = ParamHandle$new()) {
       self$id = assertString(id)
       self$type = assertString(type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)
       self$assert = makeAssertionFunction(check)
+      self$handle = assertClass(handle, "ParamHandle")
     },
     sample = function(n = 1L) {
       print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
@@ -29,6 +30,9 @@ ParamNode = R6Class("ParamNode",
     toString = function() {
       print("I am ParamNode, an abstract class which could both represent an atomic Param and Tree Param, my 'val' and 'handle' field are always Null, if you want something, please construct a subClass of me!")
     }
+  ),
+  active = list(
+    is.finite = function() NA
   ),
   private = list(
   )
