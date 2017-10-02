@@ -15,12 +15,16 @@ ParamSetTree = R6Class("ParamSetTree",
     handle = NULL,
     depend = NULL,  # by default no dependency
     children = NULL,
-    initialize = function(id = NULL) {
+    initialize = function(id = NULL, depend = NULL) {
       self$id = id
+      self$val = NULL
       self$children = new.env()  # parent = self
     },
     addChild = function(cnode) {
+      if(is.character(cnode)) cnode = ParamSetTree$new(cnode)
       assign(cnode$id, cnode, self$children)
+      self$val = names(self$children)
+      return(cnode)
     },
     addChildren = function(flatnodes) {
     },
@@ -42,4 +46,5 @@ ParamHandle = R6Class("ParamHandle",
 
 ps = ParamSetTree$new("SVM")
 
-ps$addChild(ParamSetTree$new("Kernel"))
+res = ps$addChild(ParamSetTree$new("Kernel"))
+#$addChild("rbf")
