@@ -12,35 +12,52 @@ ParamSetTree = R6Class("ParamSetTree",
   public = list(
     id = NULL,
     val = NULL,
+    flatval = NULL,
     handle = NULL,
     depend = NULL,  # by default no dependency
-    children = NULL,
-    allowedVal = NULL,
+    mand.children = NULL,
+    cond.children = NULL,
     initialize = function(id = NULL, depend = NULL) {
       self$id = id
-      self$val = NULL
-      self$children = new.env()  # parent = self
+      self$val = ParamInt$new("demo")
+      self$handle = NULL
+      self$depend = depend
+      self$flatval = list()
+      self$mand.children = new.env()
+      self$cond.children = new.env()
     },
-    addChild = function(cnode) {
-      if(is.character(cnode)) cnode = ParamSetTree$new(cnode)
-      assign(cnode$id, cnode, self$children)
-      self$val = names(self$children)
+    addMandChild = function(cnode) {
+      #if(is.character(cnode)) cnode = ParamSetTree$new(cnode)
+      assign(cnode$id, cnode, self$mand.children)
+      self$flatval$mand = names(self$mand.children)
       return(cnode)
     },
     addCondChild = function() {
 
     },
     addChildren = function(flatnodes) {
+
     },
     setParent = function(pnode) {
       self$depend = pnode
+    },
+    sampleCurrentNode = function() {
+
+    },
+    sampleMandChild = function() {
+
+    },
+    sampleCondChildChain = function(expr) {
+
+    },
+    sample = function() {
+      sampleCurrentNode()
+      sampleMandChild()
+      sampleCondChildChain()
     }
   ),
   private = list(
   )
 )
 
-ps = ParamSetTree$new("SVM")
 
-res = ps$addChild(ParamSetTree$new("Kernel"))
-#$addChild("rbf")
