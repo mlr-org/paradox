@@ -9,6 +9,14 @@
 ParamNode = R6Class("ParamNode",
   inherit = ParamBase,
   public = list(
+    val = NULL,
+    handle = NULL,
+    sample = function() {
+      print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
+    },
+    toString = function() {
+      print("I am ParamNode, an abstract class which could both represent an atomic Param and Tree Param, my 'val' and 'handle' field are always Null, if you want something, please construct a subClass of me!")
+    }
   ),
   private = list(
   )
