@@ -12,7 +12,14 @@ ParamFactor = R6Class(
     },
     sample = function(n = 1L) {
       sample(names(self$values), n)
+    }, 
+    denorm = function(x) {
+      res = cut(x, breaks = self$nlevels)
+      as.character(factor(res, labels = names(values)))
     }
+  ),
+  active = list(
+    nlevels = function() length(names(values))
   ),
   private = list(
   )

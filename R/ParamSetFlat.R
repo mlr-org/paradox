@@ -13,7 +13,7 @@ ParamSetFlat = R6Class("ParamSetFlat",
   public = list(
     id = NULL,
     val = list(),  # rewrite father
-    initialize = function(id = NULL) {
+    initialize = function(id = "parset") {
       super$initialize(id)
     }
   ),

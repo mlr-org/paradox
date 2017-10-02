@@ -12,7 +12,7 @@ ParamSet = R6Class("ParamSet",
   public = list(
     val = NULL,  # the flat version in the form of list(key = val)
     handle = NULL,
-    initialize = function(id = NULL) {
+    initialize = function(id = "parset") {
     },
     sample = function() {
       print("I am the sampling function of ParamSet, I will call an iterator to go through each ParamNode in me and call their sample() function, then I will return you a val, you could also use this value to set my 'val' field")
