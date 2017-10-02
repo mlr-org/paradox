@@ -11,10 +11,10 @@
 ParamSetFlat = R6Class("ParamSetFlat",
   inherit = ParamSet,
   public = list(
-    nodes = list(),
-    initialize = function(id = NULL, parents = NULL, children = NULL, nodes) {
-      super$initialize(id, parents, children)
-      self$nodes = nodes
+    id = NULL,
+    val = list(),  # rewrite father
+    initialize = function(id = NULL) {
+      super$initialize(id)
     }
   ),
   private = list(

@@ -5,7 +5,7 @@ ParamInt = R6Class(
     lower = NULL,
     upper = NULL,
     special.val = NULL,
-    initialize = function(id = NULL, parents = NULL, lower, upper) {
+    initialize = function(id = NULL, lower, upper) {
       self$lower = lower
       self$upper = upper
     },
