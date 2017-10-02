@@ -16,7 +16,8 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
-    initialize = function(id, type, check, handle = ParamHandle$new()) {
+    initialize = function(id, type, check, handle = NULL) {
+      handle = handle %??% ParamHandle$new()
       self$id = assertString(id)
       self$type = assertString(type)
       self$check = assertFunction(check)

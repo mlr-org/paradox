@@ -29,7 +29,7 @@ ParamSetTree = R6Class("ParamSetTree",
     },
     addCondChild = function() {
 
-    }
+    },
     addChildren = function(flatnodes) {
     },
     setParent = function(pnode) {
