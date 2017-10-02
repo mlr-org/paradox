@@ -11,6 +11,7 @@ ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
   public = list(
+    default.expr = NULL,
     special.vals = NULL, # special values as list, can not be changed after initialization
     initialize = function(id, type, check, special.vals, default) {
       # handle check for speical.vals
@@ -27,8 +28,7 @@ ParamSimple = R6Class(
       # init
       super$initialize(id = id, type = type, check = check.wrap)
       
-      self$default.expr = assertPossibleExpr(default, self$assert)
-
+      self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
       self$special.vals = special.vals
     },
     sample = function(n = 1L) stop("sample function not implemented!"),
@@ -36,8 +36,5 @@ ParamSimple = R6Class(
   ),
   active = list(
     default = function() evalIfExpr(self$default.expr, self)
-  ),
-  private = list(
-    default.expr = NULL
   )
 )

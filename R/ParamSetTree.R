@@ -32,9 +32,11 @@ ParamSetTree = R6Class("ParamSetTree",
       self$flatval$mand = names(self$mand.children)
       return(cnode)
     },
-    addCondChild = function(expr) {
+    addCondChild = function() {
+
     },
-    addMandChildren = function(flatnodes) {
+    addChildren = function(flatnodes) {
+
     },
     setParent = function(pnode) {
       self$depend = pnode
