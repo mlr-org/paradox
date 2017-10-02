@@ -10,11 +10,9 @@
 ParamSimple = R6Class("ParamSimple",
   inherit = ParamNode,
   public = list(
-    initialize = function(id = NULL) {
-    },
-    sample = function() {
-      return(NULL)
-    }
+    #initialize = function(id = NULL) {
+    #  super$initialize(id)
+    #}
   ),
   private = list(
   )

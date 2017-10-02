@@ -9,8 +9,12 @@
 ParamNode = R6Class("ParamNode",
   inherit = ParamBase,
   public = list(
+    id = NULL,
     val = NULL,
     handle = NULL,
+    initialize = function(id = NULL) {
+      self$id = id
+    },
     sample = function() {
       print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
     },
