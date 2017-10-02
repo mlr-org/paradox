@@ -71,12 +71,12 @@ as.data.frame.OptPathNg = function(x, include.extras = TRUE, ...) {
 }
 
 
-'[.OptPathNg' = function(x, ...) {
+'[.OptPath' = function(x, ...) {
   z = x$clone()
   z$data = '['(z$data, ...)
   z
 }
 
-'[[.OptPathNg' = function(x, ...) {
+'[[.OptPath' = function(x, ...) {
   '[['(x$data, ...)
 }

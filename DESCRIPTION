@@ -15,24 +15,12 @@ Depends:
 Imports:
     backports (>= 1.1.1),
     BBmisc,
-    bit,
     checkmate (>= 1.8.4),
-    digest,
-    glue,
-    parallelMap,
     R6,
     stringi
 Suggests:
-    dbplyr,
-    devtools,
-    dplyr,
-    kernlab,
     knitr,
-    lazyeval,
-    mlbench,
     rmarkdown,
-    rpart,
-    RSQLite,
     testthat
 RoxygenNote: 6.0.1
 VignetteBuilder: knitr
