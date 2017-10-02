@@ -1,18 +1,21 @@
-ParamInt = R6Class(
+ParamReal = R6Class(
   "ParamReal",
   inherit = ParamSimple,
   public = list(
     lower = NULL,
     upper = NULL,
-    special.val = NULL,
-    initialize = function(id = NULL, lower, upper) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
+    finite = NULL,
+    initialize = function(id, special.vals = NULL, lower = -Inf, upper = Inf, finite = TRUE) {
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
+      }
       super$initialize(id = id, type = "integer", check = check)
       self$lower = lower
       self$upper = upper
+      self$finite = finite
     },
-    sample = function() {
-      as.integer(round(runif(1, min = self$lower-0.5, max = self$upper+0.5)))
+    sample = function(n = 1L) {
+      runif(n, min = self$lower, max = self$upper)
     }
   ),
   private = list(
