@@ -21,7 +21,7 @@ ParamNode = R6Class("ParamNode",
       self$type = assertString(type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)
-      self$assert = makeAssertFunction(check)
+      self$assert = makeAssertionFunction(check)
     },
     sample = function() {
       print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
