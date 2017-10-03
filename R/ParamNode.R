@@ -18,7 +18,8 @@ ParamNode = R6Class("ParamNode",
     test = NULL, # test generated from the above check
     initialize = function(id, type, check, handle = NULL) {
       handle = handle %??% ParamHandle$new()
-      self$id = assertString(id)
+      assertString(id)
+      self$id = assertNames(id)
       self$type = assertString(type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)
