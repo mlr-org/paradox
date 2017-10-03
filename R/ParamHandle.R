@@ -41,11 +41,9 @@ ParamHandle = R6Class("ParamHandle",
       self$parent = pnode
     },
     sampleCurrentNode = function() {
-      catf("%s:%s",self$id, self$val)
-      #self$node$sample()
+      self$node$sample()
     },
     sampleMandChildChain = function() {
-      #for(handle in self$mand.children) handle$node$sample()
       if(length(self$mand.children) == 0) return(NULL)
       for(name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
@@ -63,6 +61,29 @@ ParamHandle = R6Class("ParamHandle",
       self$sampleCurrentNode()
       self$sampleMandChildChain()
       self$sampleCondChildChain()
+    },
+    printCurrentNode = function() {
+      catf("%s:%s", self$id, self$val)
+    },
+    printMandChildChain = function() {
+      if(length(self$mand.children) == 0) return(NULL)
+      for(name in names(self$mand.children)) {
+        handle = self$mand.children[[name]]
+        handle$toString()
+      }
+    },
+    printCondChildChain = function() {
+      if(length(self$cond.children) == 0) return(NULL)
+      for(name in names(self$cond.children)) {
+        handle = self$cond.children[[name]]
+        if(handle$require.expr(self)) handle$toString()
+      }
+    },
+    toString = function() {
+      self$printCurrentNode()
+      self$printMandChildChain()
+      self$printCondChildChain()
     }
   )
 )
+

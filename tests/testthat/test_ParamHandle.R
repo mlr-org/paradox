@@ -7,5 +7,5 @@ test_that("test if ParamHandle constructor works", {
   kernel = ps$addMandChild(ParamHandle$new(id = "kernel", val = "rbf"))
   kernel$addCondChild(ParamHandle$new(id = "gamma", val = 0.6, depend ="rbf"))
   kernel$addCondChild(ParamHandle$new(id = "n", val = 3, depend ="poly"))
-  ps$sample()
+  ps$toString()
 })
