@@ -12,52 +12,15 @@ ParamSetTree = R6Class("ParamSetTree",
   public = list(
     id = NULL,
     val = NULL,
-    flatval = NULL,
     handle = NULL,
-    depend = NULL,  # by default no dependency
-    mand.children = NULL,
-    cond.children = NULL,
-    initialize = function(id = NULL, depend = NULL) {
+    flatval = NULL,
+    initialize = function(id = NULL, val = NULL) {
       self$id = id
-      self$val = ParamInt$new("demo")
-      self$handle = NULL
-      self$depend = depend
+      self$val = val
       self$flatval = list()
-      self$mand.children = new.env()
-      self$cond.children = new.env()
-    },
-    addMandChild = function(cnode) {
-      #if(is.character(cnode)) cnode = ParamSetTree$new(cnode)
-      assign(cnode$id, cnode, self$mand.children)
-      self$flatval$mand = names(self$mand.children)
-      return(cnode)
-    },
-    addCondChild = function() {
-
-    },
-    addChildren = function(flatnodes) {
-
-    },
-    setParent = function(pnode) {
-      self$depend = pnode
-    },
-    sampleCurrentNode = function() {
-
-    },
-    sampleMandChild = function() {
-
-    },
-    sampleCondChildChain = function(expr) {
-
-    },
-    sample = function() {
-      sampleCurrentNode()
-      sampleMandChild()
-      sampleCondChildChain()
+      self$handle = NULL  #ParamHandle$new(self)
     }
   ),
   private = list(
   )
 )
-
-
