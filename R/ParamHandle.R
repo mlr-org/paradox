@@ -7,6 +7,7 @@ ParamHandle = R6Class("ParamHandle",
     root = NULL,
     parent = NULL,
     depend = NULL,  # gamma param is valid only when kernel = "RBF" 
+    reldepth = 0,  # this arg has to be updated when parent changed!
     flatval = NULL,
     mand.children = NULL,
     cond.children = NULL,
@@ -17,6 +18,7 @@ ParamHandle = R6Class("ParamHandle",
       self$val = val
       self$parent = parent
       self$depend = depend
+      self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
       self$mand.children = new.env()
       self$cond.children = new.env()
       self$require.expr = function(x) {
@@ -25,11 +27,13 @@ ParamHandle = R6Class("ParamHandle",
     }
     },
     addMandChild = function(cnodehandle) {
+      cnodehandle$setParent(self)
       assign(cnodehandle$id, cnodehandle, self$mand.children)
       self$flatval$mand = names(self$mand.children)
       return(cnodehandle)
     },
     addCondChild = function(cnodehandle) {  # rbf kernal params
+      cnodehandle$setParent(self)
       assign(cnodehandle$id, cnodehandle, self$cond.children)
       self$flatval$cond = names(self$cond.children)
       return(cnodehandle)
@@ -39,6 +43,7 @@ ParamHandle = R6Class("ParamHandle",
     },
     setParent = function(pnode) {
       self$parent = pnode
+      self$reldepth = self$parent$reldepth + 1
     },
     sampleCurrentNode = function() {
       self$node$sample()
@@ -63,7 +68,8 @@ ParamHandle = R6Class("ParamHandle",
       self$sampleCondChildChain()
     },
     printCurrentNode = function() {
-      catf("%s:%s", self$id, self$val)
+      indent = paste(rep("--",self$reldepth), collapse = "")
+      catf("%s-%s:%s", indent, self$id, self$val)
     },
     printMandChildChain = function() {
       if(length(self$mand.children) == 0) return(NULL)
