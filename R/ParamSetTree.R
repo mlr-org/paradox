@@ -17,8 +17,8 @@ ParamSetTree = R6Class("ParamSetTree",
     initialize = function(id = NULL, val = NULL) {
       self$id = id
       self$val = val
+      self$handle = ParamHandle$new(node = self)
       self$flatval = list()
-      self$handle = NULL  #ParamHandle$new(self)
     }
   ),
   private = list(

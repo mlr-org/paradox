@@ -16,7 +16,7 @@ ParamHandle = R6Class("ParamHandle",
       self$cond.children = new.env()
     },
     addMandChild = function(cnodehandle) {
-      assign(cnode$id, cnodehandle, self$mand.children)
+      assign(cnodehandle$id, cnodehandle, self$mand.children)
       self$flatval$mand = names(self$mand.children)
       return(cnodehandle)
     },
