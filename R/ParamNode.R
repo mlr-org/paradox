@@ -19,7 +19,7 @@ ParamNode = R6Class("ParamNode",
     initialize = function(id, type, check, handle = NULL) {
       handle = handle %??% ParamHandle$new()
       assertString(id)
-      self$id = assertNames(id)
+      self$id = assertNames(id, type = "strict")
       self$type = assertString(type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)

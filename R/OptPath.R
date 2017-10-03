@@ -11,9 +11,10 @@ OptPath = R6Class(
     initialize = function(par.set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
       self$data = data.table(
         dob = integer(0L),
-        eol = integer(0L),
-        msg = character(0L),
+        message = character(0L),
+        error = character(0L),
         exec.time = double(0L),
+        timestamp = NULL, #FIXME: Initialize empty POSIXct?
         extra = list())
       Map(function(id, type) {
         set(self$data, j = id, value = get(type, mode = "function")())
@@ -33,7 +34,7 @@ OptPath = R6Class(
       self$check.feasible = check.feasible
     },
 
-    add = function(x, y, dob = NULL, eol = NA_integer_, msg = NA_character_, exec.time = NA_real_, extra = NULL) {
+    add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL) {
       if (!is.list(y)) {
         y = setNames(as.list(y), self$y.names)
       }
@@ -50,7 +51,7 @@ OptPath = R6Class(
   ),
 
   active = list(
-    x.names = function() self$par.set$getIds(),
+    x.names = function() self$par.set$ids,
     length = function() nrow(self$data),
     x = function() self$data[, self$x.names, with = FALSE],
     y = function() self$data[, solf$y.names, with = FALSE]
