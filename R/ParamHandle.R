@@ -5,17 +5,24 @@ ParamHandle = R6Class("ParamHandle",
     node = NULL,
     val = NULL,
     root = NULL,
-    depend = NULL,  # by default no dependency
+    parent = NULL,
+    depend = NULL,  # gamma param is valid only when kernel = "RBF" 
     flatval = NULL,
     mand.children = NULL,
     cond.children = NULL,
-    initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL) {
+    require.expr = NULL,
+    initialize = function(id = NULL, node = NULL, val = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
       self$id = id
       self$node = node
       self$val = val
+      self$parent = parent
       self$depend = depend
       self$mand.children = new.env()
       self$cond.children = new.env()
+      self$require.expr = function(x) {
+        if(is.null(self$depend)) return(TRUE)
+        return(x$val == self$depend)
+    }
     },
     addMandChild = function(cnodehandle) {
       assign(cnodehandle$id, cnodehandle, self$mand.children)
@@ -23,7 +30,7 @@ ParamHandle = R6Class("ParamHandle",
       return(cnodehandle)
     },
     addCondChild = function(cnodehandle) {  # rbf kernal params
-      assign(cnode$id, cnodehandle, self$cond.children)
+      assign(cnodehandle$id, cnodehandle, self$cond.children)
       self$flatval$cond = names(self$cond.children)
       return(cnodehandle)
     },
@@ -31,10 +38,10 @@ ParamHandle = R6Class("ParamHandle",
 
     },
     setParent = function(pnode) {
-      self$depend = pnode
+      self$parent = pnode
     },
     sampleCurrentNode = function() {
-      print(self$val)
+      catf("%s:%s",self$id, self$val)
       #self$node$sample()
     },
     sampleMandChildChain = function() {
@@ -45,12 +52,11 @@ ParamHandle = R6Class("ParamHandle",
         handle$sample()
       }
     },
-    sampleCondChildChain = function(expr = function(x) {return(TRUE)}) {
+    sampleCondChildChain = function() {
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        #if(expr(self$node)) handle$node$sample()
-        if(expr(self$node)) handle$sample()
+        if(handle$require.expr(self)) handle$sample()
       }
     },
     sample = function() {
