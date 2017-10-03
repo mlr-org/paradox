@@ -85,10 +85,83 @@ ParamHandle = R6Class("ParamHandle",
         if(handle$require.expr(self)) handle$toString()
       }
     },
+
     toString = function() {
       self$printCurrentNode()
       self$printMandChildChain()
       self$printCondChildChain()
+    },
+
+    traverseMand = function(arg)
+    {
+      if(length(self$mand.children) == 0) return(NULL)
+      for(name in names(self$mand.children)) {
+        handle = self$mand.children[[name]]
+        if(handle$traverse(arg)) return(TRUE)
+      }
+    },
+    traverseCond = function(arg) {
+      if(length(self$cond.children) == 0) return(NULL)
+      for(name in names(self$cond.children)) {
+        handle = self$cond.children[[name]]
+        if(handle$traverse(arg)) return(TRUE)
+      }
+    },
+    fun.hit = function(x, args) {
+      return(TRUE)
+    },
+    parseFlat = function(node.list) {
+      len = length(node.list)
+      SAFECOUNTER = 0
+      while(length(node.list) != 0) {
+        for(name in names(node.list)) {
+          print(name)
+          if(self$traverse(node.list[[name]])) node.list[[name]] = NULL
+          print(length(node.list))
+        }
+        SAFECOUNTER = SAFECOUNTER + 1
+        if(SAFECOUNTER > 10 * len) stop("wrong flat input!")
+      }
+    },
+    traverse = function(arg) {
+      # always check arg$depend not null!!
+      if(is.null(arg$depend)) {
+        self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
+        return(TRUE) 
+      }
+      if(self$val == arg$depend)
+      { 
+        print("hit")
+        self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
+        return(TRUE) 
+      }
+      if(self$traverseMand(arg)) return(TRUE)
+      if(self$traverseCond(arg)) return(TRUE)
+      return(FALSE)
+    },
+    checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = "svm"), gamma =list(val = "0.3" ,depend = "rbf"))) {
+      fq = list()  # finished queue
+      wq = input   # waiting queue
+      hit = TRUE
+      findDependNode = function(fq, node) {
+        for(name in names(fq)) {
+          if(node$depend == fq[[name]]$val) return(TRUE)
+        }
+        return(FALSE)
+      }
+      while(hit)
+      {
+        hit = FALSE
+        for(name in names(wq)) {
+          if(is.null(wq[[name]]$depend) | findDependNode(wq[[name]])) {
+            regi(name)
+            fq[[name]] =  wq[[name]]
+            wq[[name]] = NULL
+            hit = TRUE
+          }
+        }
+      }
+      if(length(wq) > 0) stop("invalid parameter set!")
     }
   )
 )
