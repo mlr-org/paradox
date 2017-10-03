@@ -9,6 +9,8 @@
 ParamNode = R6Class("ParamNode",
   inherit = ParamBase,
   public = list(
+   
+    # member variables
     id = NULL, # string to uniquely identify this param
     val = NULL, # ????
     handle = NULL, # additional stuff
@@ -16,6 +18,8 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
+    
+    # constructor
     initialize = function(id, type, check, handle = NULL) {
       handle = handle %??% ParamHandle$new()
       assertString(id)
@@ -26,6 +30,8 @@ ParamNode = R6Class("ParamNode",
       self$assert = makeAssertionFunction(check)
       self$handle = assertClass(handle, "ParamHandle")
     },
+    
+    # public methods
     sample = function(n = 1L) {
       print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
     },

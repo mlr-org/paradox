@@ -12,6 +12,10 @@ ParamSetFlat = R6Class(
   "ParamSetFlat",
   inherit = ParamSet,
   public = list(
+   
+    # member variables
+    
+    # constructor
     initialize = function(id = "parset", handle = NULL, params, dictionary = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
@@ -33,7 +37,7 @@ ParamSetFlat = R6Class(
       super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary)
     },
 
-    # methods
+    # public methods
     sample = function(n = 1L) {
       xs = lapply(self$params, function(param) param$sample(n = n))
       as.data.table(xs)

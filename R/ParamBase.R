@@ -10,6 +10,11 @@
 #' @export
 ParamBase = R6Class("ParamBase",
   public = list(
+    # member variables
+
+    # constructor
+
+    # public methods
     ),
   private = list(
     )

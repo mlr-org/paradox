@@ -2,9 +2,13 @@ ParamReal = R6Class(
   "ParamReal",
   inherit = ParamSimple,
   public = list(
+   
+    # member variables
     finite = NULL,
     lower.expr = NULL,
     upper.expr = NULL,
+    
+    # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
@@ -14,6 +18,8 @@ ParamReal = R6Class(
       self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
       self$finite = assertFlag(finite)
     },
+
+    # public methods
     sample = function(n = 1L) {
       runif(n, min = self$lower, max = self$upper)
     },

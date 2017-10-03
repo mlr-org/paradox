@@ -1,6 +1,8 @@
 ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(
+   
+    # member variables
     id = NULL,
     node = NULL,
     val = NULL,
@@ -11,6 +13,8 @@ ParamHandle = R6Class("ParamHandle",
     mand.children = NULL,
     cond.children = NULL,
     require.expr = NULL,
+    
+    # constructor
     initialize = function(id = NULL, node = NULL, val = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
       self$id = id
       self$node = node
@@ -21,9 +25,11 @@ ParamHandle = R6Class("ParamHandle",
       self$cond.children = new.env()
       self$require.expr = function(x) {
         if(is.null(self$depend)) return(TRUE)
-        return(x$val == self$depend)
-    }
+          return(x$val == self$depend)
+      }
     },
+
+    # public methods
     addMandChild = function(cnodehandle) {
       assign(cnodehandle$id, cnodehandle, self$mand.children)
       self$flatval$mand = names(self$mand.children)

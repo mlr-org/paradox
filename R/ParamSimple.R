@@ -11,8 +11,12 @@ ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
   public = list(
+   
+    # member variables
     default.expr = NULL,
     special.vals = NULL, # special values as list, can not be changed after initialization
+    
+    # constructor
     initialize = function(id, type, check, special.vals, default) {
       # handle check for speical.vals
       assertList(special.vals, null.ok = TRUE)
@@ -31,6 +35,8 @@ ParamSimple = R6Class(
       self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
       self$special.vals = special.vals
     },
+
+    # public methods
     sample = function(n = 1L) stop("sample function not implemented!"),
     denorm = function(x) stop("denorm function not implemented!")
   ),
