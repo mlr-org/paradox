@@ -9,11 +9,11 @@ ParamReal = R6Class(
     upper.expr = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE, trafo = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
       }
-      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default)
+      super$initialize(id = id, type = "numeric", check = check, special.vals = special.vals, default = default, trafo = trafo)
       self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
       self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
       self$finite = assertFlag(finite)

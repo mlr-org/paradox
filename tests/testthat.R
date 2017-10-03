@@ -1,4 +1,4 @@
 library(testthat)
 library(phng)
 
-test_check("phng")
+test_check("phng", )

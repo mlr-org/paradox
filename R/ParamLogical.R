@@ -6,7 +6,7 @@ ParamLogical = R6Class(
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL) {
       check = checkFlag
-      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default)
+      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL)
     },
 
     # public methods
@@ -19,8 +19,7 @@ ParamLogical = R6Class(
   ),
   active = list(
     is.finite = function() TRUE,
-    levels = function() c(TRUE, FALSE),
-    nlevels = function() 2L,
-    is.finite = TRUE
+    values = function() c(TRUE, FALSE),
+    nlevels = function() 2L
   )
 )

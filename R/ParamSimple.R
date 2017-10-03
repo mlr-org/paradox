@@ -15,9 +15,10 @@ ParamSimple = R6Class(
     # member variables
     default.expr = NULL,
     special.vals = NULL, # special values as list, can not be changed after initialization
-    
+    trafo = NULL, # function to transform the value before evaluation
+
     # constructor
-    initialize = function(id, type, check, special.vals, default) {
+    initialize = function(id, type, check, special.vals, default, trafo) {
       # handle check for speical.vals
       assertList(special.vals, null.ok = TRUE)
       if (!is.null(special.vals)) {
@@ -34,11 +35,20 @@ ParamSimple = R6Class(
       
       self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
       self$special.vals = special.vals
+
+      # handle trafo
+      if (is.null(trafo)) trafo = identity
+      self$trafo = assertFunction(trafo)
     },
 
     # public methods
     sample = function(n = 1L) stop("sample function not implemented!"),
-    denorm = function(x) stop("denorm function not implemented!")
+    denorm = function(x) stop("denorm function not implemented!"),
+    transformValue = function(x) {
+      self$trafo(x)
+    },
+    sampleTransformed = function(n = 1L) self$trasformValue(self$sample(n = n)),
+    denormTransformed = function(x) self$transformValue(self$denorm(x = x))
   ),
   active = list(
     default = function() evalIfExpr(self$default.expr, self)
