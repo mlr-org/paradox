@@ -11,17 +11,19 @@ ParamSet = R6Class("ParamSet",
   inherit = ParamNode,
   public = list(
     params = NULL,  # a list of all ParamSimple's
-    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary = NULL) {
+    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary) {
       super$initialize(id = id, type = type, check = check, handle = handle)
-      assertList(params, class = "ParamNode")
+      assertList(params, types = "ParamNode")
       for (i in seq_along(params)) {
-        param$handle$root = self
+        params[[i]]$handle$root = self
       }
-      self$params = assertList(params, class = "ParamNode")
+      self$params = params
     },
+
+    # public methods
     sample = function(n = 1L) {
       print("I am the sampling function of ParamSet, I will call an iterator to go through each ParamNode in me and call their sample() function, then I will return you a val, you could also use this value to set my 'val' field")
-      stopf("sample function not implemented")
+      stop("sample function not implemented")
     },
     toString = function() {
       print("I am Paramset, I have a field called 'val' which looks like {kernel:rbf}")
@@ -35,7 +37,8 @@ ParamSet = R6Class("ParamSet",
         x = as.environment(x)
       }
       self$priv.dictionary = x
-    }
+    },
+    ids = function() stop("ids not implemented")
   ),
   private = list(
     priv.dictionary = NULL
