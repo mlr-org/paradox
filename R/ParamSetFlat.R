@@ -27,6 +27,8 @@ ParamSetFlat = R6Class(
       # make params a named list according to the ids
       names(params) = BBmisc::extractSubList(params, "id")
 
+      # A Flat ParamSet can only contain ParamSimple Objects?
+      assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
 
       super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary)
     },
@@ -38,7 +40,9 @@ ParamSetFlat = R6Class(
     },
 
     denorm = function(x) {
-      xs = lapply(self$params, function(param) param$denorm(x = x))
+      assertList(x, names = 'strict')
+      assertSetEqual(names(x), self$ids)
+      xs = lapply(names(x) , function(id) self$params[[id]]$denorm(x = x[[id]]))
       as.data.table(xs)
     }
   ),
@@ -47,16 +51,19 @@ ParamSetFlat = R6Class(
       names(self$params)
     },
     lower = function() {
-      BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real)
+      BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_)
     },
     upper = function() {
-      BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real)
+      BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_)
     },
     range = function() {
       data.table(id = self$ids, upper = self$upper, lower = self$lower)
     },
     is.finite = function() {
       all(BBmisc::vlapply(self$params, function(param) param$is.finite))
+    },
+    length = function() {
+      length(self$params)
     }
   )
 )
