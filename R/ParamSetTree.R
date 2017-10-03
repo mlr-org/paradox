@@ -10,16 +10,22 @@
 ParamSetTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(
+   
+    # member variables
     id = NULL,
     val = NULL,
     handle = NULL,
     flatval = NULL,
+    
+    # constructor
     initialize = function(id = NULL, val = NULL) {
       self$id = id
       self$val = val
       self$handle = ParamHandle$new(node = self)
       self$flatval = list()
     }
+
+    # public methods
   ),
   private = list(
   )

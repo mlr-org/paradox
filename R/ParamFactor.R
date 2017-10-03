@@ -2,7 +2,11 @@ ParamFactor = R6Class(
   "ParamFactor",
   inherit = ParamSimple,
   public = list(
+   
+    # member variables
     values = NULL,
+
+    # constructor
     initialize = function(id, values, default = NULL, special.vals = NULL) {
       # convinience: convert character vector to named list
       if (testCharacter(values, any.missing = FALSE, unique = TRUE)) {

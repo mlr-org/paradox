@@ -10,7 +10,11 @@
 ParamSet = R6Class("ParamSet",
   inherit = ParamNode,
   public = list(
+   
+    # member variables
     params = NULL,  # a list of all ParamSimple's
+    
+    # constructor
     initialize = function(id = "parset", type, check, handle = NULL, params, dictionary) {
       super$initialize(id = id, type = type, check = check, handle = handle)
       assertList(params, types = "ParamNode")

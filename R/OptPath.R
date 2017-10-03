@@ -3,11 +3,15 @@
 OptPath = R6Class(
   "OptPath",
   public = list(
+   
+    # member variables
     par.set = NULL,
     y.names = NULL,
     minimize = NULL,
     check.feasible = NULL,
     data = NULL,
+    
+    # constructor
     initialize = function(par.set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
       self$data = data.table(
         dob = integer(0L),
@@ -34,6 +38,7 @@ OptPath = R6Class(
       self$check.feasible = check.feasible
     },
 
+    # public methods
     add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL) {
       if (!is.list(y)) {
         y = setNames(as.list(y), self$y.names)
