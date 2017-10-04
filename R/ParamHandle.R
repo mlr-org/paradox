@@ -1,11 +1,21 @@
+#' @title Handle Class for ParamNode
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent the tree structure of ParamSet.
+#'
+#' @return [\code{\link{ParamHandle}}].
+#' @family ParamHelpers
+#' @export
+
 ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(
    
     # member variables
     id = NULL,
+    val = NULL,  # for devolepment
     node = NULL,
-    val = NULL,
     root = NULL,
     parent = NULL,
     depend = NULL,  # gamma param is valid only when kernel = "RBF" 
@@ -16,7 +26,7 @@ ParamHandle = R6Class("ParamHandle",
     require.expr = NULL,
     
     # constructor
-    initialize = function(id = NULL, node = NULL, val = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
+    initialize = function(id = NULL, val = NULL, node = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
       self$id = id
       self$node = node
       self$val = val
@@ -27,11 +37,20 @@ ParamHandle = R6Class("ParamHandle",
       self$cond.children = new.env()
       self$require.expr = function(x) {
         if(is.null(self$depend)) return(TRUE)
-          return(x$val == self$depend)
+          return(x$val == self$depend$val)
       }
     },
 
     # public methods
+    isdependMet = function() {  # return wether the parent took the defined value
+      if(is.null(self$depend)) return(TRUE)
+      if(is.null(self$parent)) return(TRUE)
+      if(is.null(self$parent$val)) return(FALSE)
+      #if(is.null(self$parent$val)) stop("parent has no value!")
+      if(is.null(self$depend$val)) stop("ill defined dependency")
+      return(self$parent$val == self$depend$val)
+    },
+
     addMandChild = function(cnodehandle) {
       cnodehandle$setParent(self)
       assign(cnodehandle$id, cnodehandle, self$mand.children)
@@ -52,8 +71,14 @@ ParamHandle = R6Class("ParamHandle",
       self$reldepth = self$parent$reldepth + 1
     },
     sampleCurrentNode = function() {
-      self$node$sample()
+      if(self$isdependMet()) {
+        catf("sampling %s", self$node$id)
+        self$val = self$node$ns$sample()
+        self$node$val = self$val
+      }
+      # self$node$sample will cause infinite recursion
     },
+
     sampleMandChildChain = function() {
       if(length(self$mand.children) == 0) return(NULL)
       for(name in names(self$mand.children)) {
@@ -65,7 +90,8 @@ ParamHandle = R6Class("ParamHandle",
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$require.expr(self)) handle$sample()
+        #if(handle$require.expr(self)) 
+        handle$sample()
       }
     },
     sample = function() {
@@ -135,7 +161,7 @@ ParamHandle = R6Class("ParamHandle",
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
         return(TRUE) 
       }
-      if(self$val == arg$depend)
+      if(self$val == arg$depend$val)
       { 
         print("hit")
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
@@ -145,13 +171,13 @@ ParamHandle = R6Class("ParamHandle",
       if(self$traverseCond(arg)) return(TRUE)
       return(FALSE)
     },
-    checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = "svm"), gamma =list(val = "0.3" ,depend = "rbf"))) {
+    checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))) {
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
       findDependNode = function(fq, node) {
         for(name in names(fq)) {
-          if(node$depend == fq[[name]]$val) return(TRUE)
+          if(node$depend$val == fq[[name]]$val) return(TRUE)
         }
         return(FALSE)
       }

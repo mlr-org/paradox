@@ -36,7 +36,9 @@ ParamFactor = R6Class(
 
     # public methods
     sample = function(n = 1L) {
-      sample(self$values, n, replace = TRUE)
+      res = sample(self$values, n, replace = TRUE)
+      catf(res)
+      res
     }, 
     denorm = function(x) {
       res = cut(x, breaks = self$nlevels)

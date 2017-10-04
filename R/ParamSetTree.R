@@ -13,19 +13,27 @@ ParamSetTree = R6Class("ParamSetTree",
    
     # member variables
     id = NULL,
-    val = NULL,
+    ns = NULL, # node simple
+    val = NULL,  
+    # val take down the value of a ParamSimple var since in ParamSimple there is no concreate value, but it is left to be discussion whether this value should be here or simple put inside handle ?
     handle = NULL,
     flatval = NULL,
+    depend = NULL,
     
     # constructor
-    initialize = function(id = NULL, val = NULL) {
-      self$id = id
-      self$val = val
-      self$handle = ParamHandle$new(node = self)
+    initialize = function(id = NULL, ns, val = NULL, depend = NULL) {
+      self$ns = ns
+      if(is.null(id)) self$id = ns$id
+      else self$id = id
+      self$handle = ParamHandle$new(id = self$id, val = val, node = self, depend = depend)
       self$flatval = list()
-    }
+      self$depend = depend
+    },
 
     # public methods
+    sample = function() {
+      self$handle$sample()
+    }
   ),
   private = list(
   )
