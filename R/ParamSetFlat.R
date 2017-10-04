@@ -19,11 +19,11 @@ ParamSetFlat = R6Class(
     initialize = function(id = "parset", handle = NULL, params, dictionary = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
+        assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
-        while (res == TRUE) {
-          for (param in x) {
-            res = param$check(x[[param$id]])
-          }
+        for (par.name in names(x)) {
+          res = self$params[[par.name]]$check(x[[par.name]])
+          if(!isTRUE(res)) return(res)
         }
         return(res)
       }
@@ -33,26 +33,41 @@ ParamSetFlat = R6Class(
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
-
+      
+      # construct super class
       super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary)
     },
 
     # public methods
     sample = function(n = 1L) {
+      assertInt(n, lower = 1)
       xs = lapply(self$params, function(param) param$sample(n = n))
+      names(xs) = NULL
       as.data.table(xs)
     },
 
     denorm = function(x) {
       assertList(x, names = 'strict')
       assertSetEqual(names(x), self$ids)
-      xs = lapply(names(x) , function(id) self$params[[id]]$denorm(x = x[[id]]))
+      xs = lapply(self$ids, function(id) self$params[[id]]$denorm(x = x[id]))
+      names(xs) = NULL
+      as.data.table(xs)
+    },
+
+    transform = function(x) {
+      assertList(x, names = 'strict')
+      assertSetEqual(names(x), self$ids)
+      xs = lapply(self$ids, function(id) self$params[[id]]$transform(x = x[id]))
+      names(xs) = NULL
       as.data.table(xs)
     }
   ),
   active = list(
     ids = function() {
       names(self$params)
+    },
+    types = function() {
+      BBmisc::vcapply(self$params, function(param) param$type)
     },
     lower = function() {
       BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_)

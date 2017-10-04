@@ -101,7 +101,7 @@ ParamHandle = R6Class("ParamHandle",
     },
     printCurrentNode = function() {
       indent = paste(rep("--",self$reldepth), collapse = "")
-      catf("%s-%s:%s", indent, self$id, self$val)
+      BBmisc::catf("%s-%s:%s", indent, self$id, self$val)
     },
     printMandChildChain = function() {
       if(length(self$mand.children) == 0) return(NULL)

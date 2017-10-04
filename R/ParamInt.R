@@ -8,24 +8,32 @@ ParamInt = R6Class(
     upper.expr = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL, allowed = NULL) {
+      
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
-      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo)
+      
+      # construct super class
+      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed)
+      
+      # write member variables
       self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
       self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sample = function(n = 1L) {  # FIXME: better not override sample!
       res = as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
       catf(as.character(res))
       res
     },
-    denorm = function(x) {
+    sampleVector = function(n = 1L) {
+      as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
+    },
+    denormVector = function(x) {
       as.integer(round(BBmisc::normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
     },
-    transformValue = function(x) {
-      as.integer(round(self$trafo(x)))
+    transformVector = function(x) {
+      as.integer(round(self$trafo(x))) 
     }
   ),
   active = list(

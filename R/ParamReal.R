@@ -9,21 +9,25 @@ ParamReal = R6Class(
     upper.expr = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE, trafo = NULL) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE, trafo = NULL, allowed = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
       }
-      super$initialize(id = id, type = "numeric", check = check, special.vals = special.vals, default = default, trafo = trafo)
+      
+      # construct super class
+      super$initialize(id = id, type = "numeric", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed)
+
+      # write member variables
       self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
       self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
       self$finite = assertFlag(finite)
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sampleVector = function(n = 1L) {
       runif(n, min = self$lower, max = self$upper)
     },
-    denorm = function(x) {
+    denormVector = function(x) {
       BBmisc::normalize(x = x, method = "range", range = self$range)
     }
   ),

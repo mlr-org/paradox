@@ -1,7 +1,6 @@
 context("ParamHandle")
 
 test_that("test if ParamHandle constructor works", {
-  print("")
   ps = ParamHandle$new(id = "Model", val = "SVM")
   ps$addMandChild(ParamHandle$new(id = "C", val = 0.3))
   kernel = ps$addMandChild(ParamHandle$new(id = "kernel", val = "rbf"))

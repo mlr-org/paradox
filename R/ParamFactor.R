@@ -8,7 +8,8 @@ ParamFactor = R6Class(
     true.values = NULL,
 
     # constructor
-    initialize = function(id, values, default = NULL, special.vals = NULL, trafo = NULL) {
+    initialize = function(id, values, default = NULL, special.vals = NULL, trafo = NULL, allowed = NULL) {
+      
       # convinience: if values is a list, store the entries in true.values and don't allow trafo
       if (is.list(values) && !is.null(trafo))
         stop("If the values are supplied as a list, trafo is not allowed!")
@@ -22,8 +23,10 @@ ParamFactor = R6Class(
       
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok)
       
-      super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals, trafo = trafo)
+      # construct super class
+      super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals, trafo = trafo, allowed = allowed)
       
+      # write member variables
       self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
       self$true.values = true.values
       if (!is.null(true.values)) {
@@ -35,12 +38,15 @@ ParamFactor = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sample = function(n = 1L) { # FIXME: This will break stuff! Better not overwrite super$sample() here!
       res = sample(self$values, n, replace = TRUE)
       catf(res)
       res
+    },
+    sampleVector = function(n = 1L) {
+      sample(self$values, n, replace = TRUE)
     }, 
-    denorm = function(x) {
+    denormVector = function(x) {
       res = cut(x, breaks = self$nlevels)
       as.character(factor(res, labels = self$values))
     }

@@ -6,14 +6,16 @@ ParamLogical = R6Class(
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL) {
       check = checkFlag
-      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL)
+      
+      # construct super class
+      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL, allowed = NULL)
     },
 
     # public methods
-    sample = function(n = 1L) {
-      sample(c(TRUE, FALSE), n = n, replicate = TRUE)
+    sampleVector = function(n = 1L) {
+      sample(c(TRUE, FALSE), size = n, replace = TRUE)
     },
-    denorm = function(x) {
+    denormVector = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }
   ),
