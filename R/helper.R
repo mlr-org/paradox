@@ -14,3 +14,10 @@ assertPossibleExpr = function(x, assert, ...) {
   if (!is.expression(x)) { x = assert(x, ...) }
   invisible(x)
 }
+
+# unify value output
+asDtCols = function(x, names) {
+  dt = as.data.table(x)
+  dt = setnames(dt, names)
+  return(dt)
+}

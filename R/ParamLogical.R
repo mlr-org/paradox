@@ -10,10 +10,10 @@ ParamLogical = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) {
-      sample(c(TRUE, FALSE), n = n, replicate = TRUE)
+    sampleVector = function(n = 1L) {
+      sample(c(TRUE, FALSE), size = n, replace = TRUE)
     },
-    denorm = function(x) {
+    denormVector = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }
   ),

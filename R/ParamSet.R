@@ -42,7 +42,8 @@ ParamSet = R6Class("ParamSet",
       }
       self$priv.dictionary = x
     },
-    ids = function() stop("ids not implemented")
+    ids = function() stop("ids not implemented"),
+    types = function() stop("types not implemented")
   ),
   private = list(
     priv.dictionary = NULL

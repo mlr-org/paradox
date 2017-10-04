@@ -20,10 +20,10 @@ ParamReal = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sampleVector = function(n = 1L) {
       runif(n, min = self$lower, max = self$upper)
     },
-    denorm = function(x) {
+    denormVector = function(x) {
       BBmisc::normalize(x = x, method = "range", range = self$range)
     }
   ),

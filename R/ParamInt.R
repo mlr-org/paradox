@@ -16,14 +16,14 @@ ParamInt = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sampleVector = function(n = 1L) {
       as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
     },
-    denorm = function(x) {
+    denormVector = function(x) {
       as.integer(round(BBmisc::normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
     },
-    transformValue = function(x) {
-      as.integer(round(self$trafo(x)))
+    transformVector = function(x) {
+      as.integer(round(self$trafo(x))) 
     }
   ),
   active = list(

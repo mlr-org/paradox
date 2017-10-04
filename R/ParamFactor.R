@@ -35,10 +35,10 @@ ParamFactor = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) {
+    sampleVector = function(n = 1L) {
       sample(self$values, n, replace = TRUE)
     }, 
-    denorm = function(x) {
+    denormVector = function(x) {
       res = cut(x, breaks = self$nlevels)
       as.character(factor(res, labels = self$values))
     }

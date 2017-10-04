@@ -42,13 +42,21 @@ ParamSimple = R6Class(
     },
 
     # public methods
-    sample = function(n = 1L) stop("sample function not implemented!"),
-    denorm = function(x) stop("denorm function not implemented!"),
-    transformValue = function(x) {
+    # Overwriting ParamNode Methods
+    sample = function(n = 1L) asDtCols(self$sampleVector(n = n), self$id),
+    denorm = function(x) asDtCols(self$denormVector(x[[self$id]]), self$id),
+    transform = function(x) asDtCols(self$transformVector(x[[self$id]]), self$id),
+    
+    # ParamSimpleMethods
+    sampleVector = function(n = 1L) stop("sample function not implemented!"),
+    denormVector = function(x) stop("denorm function not implemented!"),
+    transformVector = function(x) {
       self$trafo(x)
-    },
-    sampleTransformed = function(n = 1L) self$trasformValue(self$sample(n = n)),
-    denormTransformed = function(x) self$transformValue(self$denorm(x = x))
+    }
+    # Do we want the following? The user can call ps$transform(ps$sample())
+    #,
+    #sampleTransformedVector = function(n = 1L) self$trasformValue(self$sample(n = n)),
+    #denormTransformedVector = function(x) self$transform(self$denorm(x = x))
   ),
   active = list(
     default = function() evalIfExpr(self$default.expr, self)

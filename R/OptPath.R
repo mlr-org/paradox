@@ -18,21 +18,21 @@ OptPath = R6Class(
         message = character(0L),
         error = character(0L),
         exec.time = double(0L),
-        timestamp = NULL, #FIXME: Initialize empty POSIXct?
+        timestamp = Sys.time()[FALSE],
         extra = list())
       Map(function(id, type) {
         set(self$data, j = id, value = get(type, mode = "function")())
         },
-        id = par.set$getIds(),
-        type = par.set$getTypes()
+        id = par.set$ids,
+        type = par.set$types
       )
       for (y.name in y.names) {
         set(self$data, j = y.name, value = numeric(0L))
       }
-      if (lengths(names(minimize)) == 0) {
+      if (is.null(names(minimize))) {
         names(minimize) = y.names
       }
-      self$par.set = par.set
+      self$par.set = assertClass(par.set, "ParamSet")
       self$y.names = y.names
       self$minimize = minimize
       self$check.feasible = check.feasible
@@ -40,16 +40,30 @@ OptPath = R6Class(
 
     # public methods
     add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL) {
-      if (!is.list(y)) {
-        y = setNames(as.list(y), self$y.names)
+
+      # convinience: handle y
+      if (!testList(y)) {
+        y = as.list(y)
       }
-      assert_list(x, names = "strict")
-      assert_list(y, names = "strict")
+      if (!testNamed(y)) {
+        names(y) = self$y.names
+      }
+
+      # convinience: handle x
+      if (!testList(x)) {
+        x = as.list(x)
+      }
+
+      assertList(x, names = "strict")
+      assertSetEqual(names(x), self$x.names)
+      assertList(y, len = self$dim)
+      assertSetEqual(names(y), self$y.names)
+
       if (self$check.feasible) {
-        par.set$assert(x)
+        self$par.set$assert(x)
       }
       self$data = rbindlist(
-        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), eol = eol, msg = msg, exec.time = exec.time, extra = list(extra)), x, y))
+        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra)), x, y))
       )
       invisible(self)
     }
@@ -59,7 +73,8 @@ OptPath = R6Class(
     x.names = function() self$par.set$ids,
     length = function() nrow(self$data),
     x = function() self$data[, self$x.names, with = FALSE],
-    y = function() self$data[, solf$y.names, with = FALSE]
+    y = function() self$data[, self$y.names, with = FALSE],
+    dim = function() length(self$y.names)
   )
 )
 
