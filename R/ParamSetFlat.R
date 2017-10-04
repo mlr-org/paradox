@@ -33,7 +33,8 @@ ParamSetFlat = R6Class(
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
-
+      
+      # construct super class
       super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary)
     },
 

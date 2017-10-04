@@ -16,6 +16,8 @@ ParamSet = R6Class("ParamSet",
     
     # constructor
     initialize = function(id = "parset", type, check, handle = NULL, params, dictionary) {
+      
+      # construct super class
       super$initialize(id = id, type = type, check = check, handle = handle)
       assertList(params, types = "ParamNode")
       for (i in seq_along(params)) {

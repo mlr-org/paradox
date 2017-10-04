@@ -6,6 +6,8 @@ ParamLogical = R6Class(
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL) {
       check = checkFlag
+      
+      # construct super class
       super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL)
     },
 

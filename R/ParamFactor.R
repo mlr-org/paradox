@@ -8,7 +8,8 @@ ParamFactor = R6Class(
     true.values = NULL,
 
     # constructor
-    initialize = function(id, values, default = NULL, special.vals = NULL, trafo = NULL) {
+    initialize = function(id, values, default = NULL, special.vals = NULL, trafo = NULL, allowed = NULL) {
+      
       # convinience: if values is a list, store the entries in true.values and don't allow trafo
       if (is.list(values) && !is.null(trafo))
         stop("If the values are supplied as a list, trafo is not allowed!")
@@ -20,10 +21,12 @@ ParamFactor = R6Class(
         true.values = NULL
       }
       
-      check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok)
+      check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok, allowed = allowed)
       
+      # construct super class
       super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals, trafo = trafo)
       
+      # write member variables
       self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
       self$true.values = true.values
       if (!is.null(true.values)) {
