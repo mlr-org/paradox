@@ -8,7 +8,7 @@ ParamLogical = R6Class(
       check = checkFlag
       
       # construct super class
-      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL)
+      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL, allowed = NULL)
     },
 
     # public methods

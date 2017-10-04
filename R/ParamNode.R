@@ -18,7 +18,7 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
-    allowed = NULL # expression that states if certain conditions have to be met
+    allowed = NULL, # expression that states if certain conditions have to be met
     
     # constructor
     initialize = function(id, type, check, handle = NULL, allowed = NULL) {

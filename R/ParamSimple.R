@@ -40,7 +40,8 @@ ParamSimple = R6Class(
       }
 
       # assert allowed to only contain the variable of self
-      assertSubset(all.vars(substitute(allowed)), self$id)
+      if (!is.null(allowed))
+        assertSubset(all.vars(substitute(allowed)), self$id)
 
       # init
       

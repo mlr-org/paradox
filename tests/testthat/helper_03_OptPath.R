@@ -12,5 +12,12 @@ for (i in 1:10) {
     exec.time = i,
     extra = list(th.ex1 = i, th.ex2 = "th.ex2.string")
   )
-}  
+}
 
+# Multi-objective opt.path
+
+th.opt.path.multiobjective = OptPath$new(par.set = th.paramset.flat.trafo, y.names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
+for (i in 1:10) {
+  x = th.opt.path.multiobjective$par.set$sample(1)
+  th.opt.path.multiobjective$add(x = x, y = c(y2.max = i, y1.min = 10-i))
+}

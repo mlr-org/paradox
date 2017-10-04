@@ -23,6 +23,7 @@ asDtCols = function(x, names) {
 }
 
 # just a thought
+
 oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.generator, sample.validator, sample.combine) {
   x = sample.generator(n = round(oversample.rate * n)) 
   ind.allowed = sample.validator(x)
@@ -48,7 +49,7 @@ oversampleForbiddenVector = function(n = 1L, param, oversample.rate = 2, max.tri
 }
  
 oversampleForbidden = function(n = 1L, param, oversample.rate = 2L, max.tries = 10L) {
-  sample.generator = param$sample,
+  sample.generator = param$sample
   sample.validator = function(x) .mapply(function(x) pram$test(x), xdf, list())
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = cbind)
 }
