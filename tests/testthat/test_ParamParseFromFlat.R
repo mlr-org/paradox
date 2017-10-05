@@ -9,7 +9,7 @@ test_that("test if Param parse from flat works", {
     gamma = list(id = "gamma", val = "0.3", depend = list(id = "kernel", val = "rbf"))
     )
   ps$visitor$parseFlat(input)
-  ps$toString()
+  ps$toStringVal()
 })
 
 
@@ -22,6 +22,6 @@ test_that("test if Param parse from flat works with sample", {
     gamma = list(id = "gamma", val = "0.3", depend = list(id = "kernel", val = "rbf"))
   )
   ps$visitor$parseFlat(input)
-  ps$toString()
+  ps$toStringVal()
   ps$sample()
 })

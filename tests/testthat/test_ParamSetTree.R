@@ -15,7 +15,7 @@ test_that("test if ParamTree sample works", {
   pt = ParamSetTree$new(ns = pf,  depend = list(id = "model",val = "svm"))
   res = ps$handle$addMandChild(pt$handle)
   res$addCondChild(pn$handle)
-  ps$sample()
+  #ps$sample()
 })
 
 
@@ -25,9 +25,7 @@ test_that("test if ParamTree toString works", {
   pn = ParamSetTree$new(ns = ParamInt$new(id = "degree", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
   pt = ParamSetTree$new(ns = ParamFactor$new(id = "Kernel", values = c("rbf", "poly", "linear")),  depend = list(id = "model",val = "svm"))
   res = ps$handle$addMandChild(pt$handle)
-  res$toString()
+  res$toStringVal()
   pt$handle$addCondChild(pn$handle)
-  pt$handle$toString()
-  ps$handle$toString()
 })
 
