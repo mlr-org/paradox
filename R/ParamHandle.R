@@ -11,35 +11,44 @@
 ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(
-
     # member variables
     id = NULL,
-    val = NULL,  # for devolepment
-    node = NULL,
-    root = NULL,
-    parent = NULL,
+    node = NULL, # simple ParamNode
+    val = NULL,  # node value
+    flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
     depend = NULL,  # gamma param is valid only when kernel = "RBF"
-    reldepth = 0,  # this arg has to be updated when parent changed!
-    flatval = NULL,
+    require.expr = NULL,
+    #
+    parent = NULL,
+    root = NULL,    # root has to be changed when parent changed!
+    reldepth = 0L,  # reldepth has to be updated when parent changed!
+    #
     mand.children = NULL,
     cond.children = NULL,
-    require.expr = NULL,
     visitor = NULL,
 
     # constructor
-    initialize = function(id = NULL, val = NULL, node = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
+    initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, require.exp = NULL, parent = NULL) {
+      #if(!is.null(id) & !is.null(node)) stop("either set id or node, do not support both!")
+      #self$id = ifelse(is.null(node), id, node$id)
       self$id = id
       self$node = node
       self$val = val
-      self$parent = parent
+      #
       self$depend = depend
+      self$require.expr = function(x) {
+        if (is.null(self$depend)) return(TRUE)
+        return(x$val == self$depend$val)
+      }
+      #
+      self$parent = parent
+      if (!is.null(parent)) {
+        self$root = ifelse(is.null(parent$root), parent, parent$root)
+      }
+      else self$root = NULL
       self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
       self$mand.children = new.env()
       self$cond.children = new.env()
-      self$require.expr = function(x) {
-        if(is.null(self$depend)) return(TRUE)
-          return(x$val == self$depend$val)
-      }
       self$visitor = ParamVisitor$new(self)
     },
 
@@ -71,6 +80,7 @@ ParamHandle = R6Class("ParamHandle",
     setParent = function(pnode) {
       self$parent = pnode
       self$reldepth = self$parent$reldepth + 1
+      self$root = self$parent$root
     },
     sampleCurrentNode = function() {
       if(is.null(self$node)) return(NULL)
