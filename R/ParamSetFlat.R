@@ -16,7 +16,7 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL) {
+    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = character()) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
         assertSetEqual(names(x), self$ids)
@@ -35,7 +35,7 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary)
+      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags)
     },
 
     # public methods

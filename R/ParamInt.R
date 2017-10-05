@@ -7,13 +7,12 @@ ParamInt = R6Class(
     lower.expr = NULL,
     upper.expr = NULL,
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL, allowed = NULL) {
-
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL, allowed = NULL, tags = character()) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
 
       # construct super class
-      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed)
-
+      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed, tags = tags)
+      
       # write member variables
       self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
       self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)

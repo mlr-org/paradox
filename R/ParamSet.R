@@ -15,10 +15,10 @@ ParamSet = R6Class("ParamSet",
     params = NULL,  # a list of all ParamSimple's
     
     # constructor
-    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary) {
+    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags) {
       
       # construct super class
-      super$initialize(id = id, type = type, check = check, handle = handle)
+      super$initialize(id = id, type = type, check = check, handle = handle, tags = tags)
       assertList(params, types = "ParamNode")
       for (i in seq_along(params)) {
         params[[i]]$handle$root = self
