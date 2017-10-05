@@ -16,15 +16,15 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, allowed = NULL, trafo = NULL) {
+    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
-        if (!is.null(allowed)) {
+        if (!is.null(restriction)) {
           x.n.dictionary = c(as.list(self$dictionary), x)
-          if (!isTRUE(eval(allowed, envir = x.n.dictionary))) {
-            "Value not allowed!"
+          if (!isTRUE(eval(restriction, envir = x.n.dictionary))) {
+            sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), as.character(restriction))
           }
         }
         for (par.name in names(x)) {
@@ -41,7 +41,7 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, allowed = allowed, trafo = trafo)
+      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
@@ -60,10 +60,18 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
+      if (is.data.table(x)) {
+        x = as.list(x)
+      }
       assertList(x, names = 'strict')
       assertSetEqual(names(x), self$ids)
-      if (is.null(self$trafo)) return(x)
-      xs = eval(x$trafo, envir = c(x, as.list(self$dictionary)))
+      if (is.null(self$trafo)) 
+        return(x)
+      # We require trafos to be vectorized!
+      #.mapply(function(x) {
+      #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
+      #}, x, list())
+      xs = eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       assertList(xs, names = "strict")
       as.data.table(xs)
     }

@@ -26,14 +26,15 @@ th.paramset.flat.trafo = ParamSetFlat$new(
   trafo = quote(list(th.param.int = th.param.int * 2L, th.param.real = th.param.real * th.param.int))
 )
 
-# th.paramset.flat.numeric.varpar = ParamSetFlat$new(
-#   id = 'th.paramset.flat.numeric.varpar',
-#   params = list(
-#     th.param.int.varpar,
-#     th.param.real.varpar
-#   ),
-#   dictionary = list(n = 100, p = 50)
-# )
+th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
+  id = 'th.paramset.flat.trafo.dictionary',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  dictionary = list(n = 100, p = 50),
+  trafo = quote(list(th.param.int = n * th.param.int, th.param.real = th.param.real/p))
+)
 
 # th.paramset.flat.numeric.trafo.varpar = ParamSetFlat$new(
 #   id = 'th.paramset.flat.numeric.trafo.varpar',

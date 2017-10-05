@@ -14,10 +14,10 @@ ParamSet = R6Class("ParamSet",
     # member variables
     params = NULL,  # a list of all ParamSimple's
     trafo = NULL, # function to transform the value before evaluation
-    allowed = NULL, # quote that states if certain conditions have to be met
+    restriction = NULL, # quote that states if certain conditions have to be met
     
     # constructor
-    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags, allowed, trafo) {
+    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags, restriction, trafo) {
       
       # construct super class
       super$initialize(id = id, type = type, check = check, handle = handle, tags = tags)
@@ -29,7 +29,8 @@ ParamSet = R6Class("ParamSet",
       }
       self$params = params
       self$trafo = assertClass(trafo, "call", null.ok = TRUE)
-      self$allowed = assertClass(allowed, "call", null.ok = TRUE)
+      self$restriction = assertClass(restriction, "call", null.ok = TRUE)
+      self$dictionary = assertList(dictionary, names = "strict", null.ok = TRUE)
     },
 
     # public methods
@@ -47,12 +48,11 @@ ParamSet = R6Class("ParamSet",
   active = list(
     dictionary = function(x) {
       if (missing(x)) {
-        return(self$priv.dictioary)
-      } else if (is.list(x)) {
-        # rebuild check functions for changing dictionaries
+        return(private$priv.dictionary)
+      } else if (!is.null(x)) {
         x = as.environment(x)
+        private$priv.dictionary = x   
       }
-      self$priv.dictionary = x
     },
     ids = function() stop("ids not implemented"),
     types = function() stop("types not implemented")

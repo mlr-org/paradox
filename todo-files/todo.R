@@ -23,7 +23,7 @@ par.set = ParamSetFlat$new(
     ParamLogical$new(id = "fitted", default = TRUE)
     # ParamGenerator(id = "scale", default = TRUE)
     ),
-  allowed = (
+  restriction = (
     (is.na(cost) & type != "C-classification") & 
     (is.na(nu) & type != "nu-classification") & 
     (is.na(degree) & kernel != "polynomial") & 

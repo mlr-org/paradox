@@ -26,14 +26,14 @@ asDtCols = function(x, names) {
 
 oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.generator, sample.validator, sample.combine) {
   x = sample.generator(n = round(oversample.rate * n)) 
-  ind.allowed = sample.validator(x)
+  ind.restriction = sample.validator(x)
   this.try = 1
-  good.ones = sum(ind.allowed)
+  good.ones = sum(ind.restriction)
   x = x[good.ones]
   while (this.try <= max.tries && good.ones < n) {
     x.new = sample.generator(n = round(oversample.rate * n))
-    ind.allowed = sample.validator(x.new)
-    good.ones = sum(ind.allowed)
+    ind.restriction = sample.validator(x.new)
+    good.ones = sum(ind.restriction)
     x = sample.combine(x, head(x.new, n - good.ones))
   }
   if (good.ones < n) {
@@ -53,3 +53,7 @@ oversampleForbidden = function(n = 1L, param, oversample.rate = 2L, max.tries = 
   sample.validator = function(x) .mapply(function(x) pram$test(x), xdf, list())
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = cbind)
 }
+
+# vectorizeTrafo = function(trafo) {
+# 
+# }

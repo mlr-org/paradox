@@ -45,7 +45,7 @@ ParamSimple = R6Class(
     
     # ParamSimpleMethods
     sampleVector = function(n = 1L) {
-      # samples vector values without respecting what is 'allowed'
+      # samples vector values without respecting what is 'restriction'
       stop("sampleVector not implemented")
     },
     denormVector = function(x) {
