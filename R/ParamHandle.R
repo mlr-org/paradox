@@ -11,20 +11,20 @@
 ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(
-   
+
     # member variables
     id = NULL,
     val = NULL,  # for devolepment
     node = NULL,
     root = NULL,
     parent = NULL,
-    depend = NULL,  # gamma param is valid only when kernel = "RBF" 
+    depend = NULL,  # gamma param is valid only when kernel = "RBF"
     reldepth = 0,  # this arg has to be updated when parent changed!
     flatval = NULL,
     mand.children = NULL,
     cond.children = NULL,
     require.expr = NULL,
-    
+
     # constructor
     initialize = function(id = NULL, val = NULL, node = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
       self$id = id
@@ -73,7 +73,7 @@ ParamHandle = R6Class("ParamHandle",
     sampleCurrentNode = function() {
       if(self$isdependMet()) {
         catf("sampling %s", self$node$id)
-        self$val = self$node$ns$sample()
+        self$val = self$node$ns$msample()
         self$node$val = self$val
       }
       # self$node$sample will cause infinite recursion
@@ -90,7 +90,7 @@ ParamHandle = R6Class("ParamHandle",
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        #if(handle$require.expr(self)) 
+        #if(handle$require.expr(self))
         handle$sample()
       }
     },
@@ -159,13 +159,13 @@ ParamHandle = R6Class("ParamHandle",
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
-        return(TRUE) 
+        return(TRUE)
       }
       if(self$val == arg$depend$val)
-      { 
+      {
         print("hit")
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
-        return(TRUE) 
+        return(TRUE)
       }
       if(self$traverseMand(arg)) return(TRUE)
       if(self$traverseCond(arg)) return(TRUE)
