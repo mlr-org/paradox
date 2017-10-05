@@ -28,7 +28,7 @@ ParamHandle = R6Class("ParamHandle",
     visitor = NULL,
 
     # constructor
-    initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, require.exp = NULL, parent = NULL) {
+    initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, parent = NULL) {
       #if(!is.null(id) & !is.null(node)) stop("either set id or node, do not support both!")
       #self$id = ifelse(is.null(node), id, node$id)
       self$id = id
@@ -54,9 +54,9 @@ ParamHandle = R6Class("ParamHandle",
 
     # public methods
     isdependMet = function() {  # return wether the parent took the defined value
-      if(is.null(self$depend)) return(TRUE)
-      if(is.null(self$parent)) return(TRUE)
-      if(is.null(self$parent$val)) return(FALSE)
+      if (is.null(self$depend)) return(TRUE)
+      if (is.null(self$parent)) return(TRUE)
+      if(is.null(self$parent$val)) return(TRUE)  #FIXME: SHOULD HERE BE FALSE OR TRUE?
       #if(is.null(self$parent$val)) stop("parent has no value!")
       if(is.null(self$depend$val)) stop("ill defined dependency")
       return(self$parent$val == self$depend$val)
@@ -88,12 +88,14 @@ ParamHandle = R6Class("ParamHandle",
         catf("sampling %s\n", self$node$id)
         self$val = self$sampleNode()
         catf("\n")
-        self$node$val = self$val
+        #self$node$val = self$val
       }
       # self$node$sample will cause infinite recursion
     },
     sampleNode = function() {
-      return(self$node$sampleVector())
+      val = self$node$sampleVector()
+      catf("%s", val)
+      return(val)
     },
     sampleMandChildChain = function() {
       if(length(self$mand.children) == 0) return(NULL)
