@@ -22,8 +22,9 @@ ParamSetFlat = R6Class(
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
         if (!is.null(allowed)) {
-          if (!isTRUE(eval(allowed, envir = x))) {
-            sprintf("Value %s is not allowed by %s.", as.character(x), deparse(x))
+          x.n.dictionary = c(as.list(self$dictionary), x)
+          if (!isTRUE(eval(allowed, envir = x.n.dictionary))) {
+            "Value not allowed!"
           }
         }
         for (par.name in names(x)) {
@@ -61,8 +62,9 @@ ParamSetFlat = R6Class(
     transform = function(x) {
       assertList(x, names = 'strict')
       assertSetEqual(names(x), self$ids)
-      xs = lapply(self$ids, function(id) self$params[[id]]$transform(x = x[id]))
-      names(xs) = NULL
+      if (is.null(self$trafo)) return(x)
+      xs = eval(x$trafo, envir = c(x, as.list(self$dictionary)))
+      assertList(xs, names = "strict")
       as.data.table(xs)
     }
   ),

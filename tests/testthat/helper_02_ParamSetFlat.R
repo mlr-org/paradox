@@ -5,10 +5,7 @@ th.paramset.flat.full = ParamSetFlat$new(
     th.param.int,
     th.param.real,
     th.param.factor,
-    th.param.logical#,
-#    th.param.int.trafo,
-#    th.param.real.trafo,
-#    th.param.factor.trafo
+    th.param.logical
   )
 )
 
@@ -20,13 +17,14 @@ th.paramset.flat.numeric = ParamSetFlat$new(
   )
 )
 
-# th.paramset.flat.trafo = ParamSetFlat$new(
-#   id = 'th.paramset.flat.trafo',
-#   params = list(
-#     th.param.int.trafo,
-#     th.param.real.trafo
-#   )
-# )
+th.paramset.flat.trafo = ParamSetFlat$new(
+  id = 'th.paramset.flat.trafo',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  trafo = quote(list(th.param.int = th.param.int * 2L, th.param.real = th.param.real * th.param.int))
+)
 
 # th.paramset.flat.numeric.varpar = ParamSetFlat$new(
 #   id = 'th.paramset.flat.numeric.varpar',

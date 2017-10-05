@@ -70,7 +70,7 @@ OptPath = R6Class(
         self$par.set$assert(x)
       }
       self$data = rbindlist(
-        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra)), x, y))
+        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y))
       )
       invisible(self)
     }

@@ -49,6 +49,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(x)) {
         return(self$priv.dictioary)
       } else if (is.list(x)) {
+        # rebuild check functions for changing dictionaries
         x = as.environment(x)
       }
       self$priv.dictionary = x
