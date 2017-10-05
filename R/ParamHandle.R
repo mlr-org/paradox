@@ -100,7 +100,7 @@ ParamHandle = R6Class("ParamHandle",
       self$sampleCondChildChain()
     },
     printCurrentNode = function() {
-      indent = paste(rep("--",self$reldepth), collapse = "")
+      indent = paste(rep("++",self$reldepth), collapse = "")
       BBmisc::catf("%s-%s:%s", indent, self$id, self$val)
     },
     printMandChildChain = function() {
@@ -126,18 +126,26 @@ ParamHandle = R6Class("ParamHandle",
 
     traverseMand = function(arg)
     {
-      if(length(self$mand.children) == 0) return(NULL)
+      if(length(self$mand.children) == 0) return(FALSE)
       for(name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
-        if(handle$traverse(arg)) return(TRUE)
+        if(handle$traverse(arg)) {
+          #self$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
+          return(TRUE)
+        }
       }
+      return(FALSE)
     },
     traverseCond = function(arg) {
-      if(length(self$cond.children) == 0) return(NULL)
+      if(length(self$cond.children) == 0) return(FALSE)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$traverse(arg)) return(TRUE)
+        if(handle$traverse(arg)) {
+          #self$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
+          return(TRUE)
+        }
       }
+      return(FALSE)
     },
     fun.hit = function(x, args) {
       return(TRUE)
@@ -147,30 +155,41 @@ ParamHandle = R6Class("ParamHandle",
       SAFECOUNTER = 0
       while(length(node.list) != 0) {
         for(name in names(node.list)) {
-          print(name)
+          catf("parsing %s",name)
           if(self$traverse(node.list[[name]])) node.list[[name]] = NULL
-          print(length(node.list))
+          catf("number in wait list left %d",length(node.list))
         }
         SAFECOUNTER = SAFECOUNTER + 1
         if(SAFECOUNTER > 10 * len) stop("wrong flat input!")
       }
     },
+    ## traverse the tree to find out if the the arg could be inserted
     traverse = function(arg) {
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
+        catf("hit %s", arg$id)
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
         return(TRUE)
       }
+      # now the input arg has a field called depend
+      if(is.null(arg$depend$val)) stop("missing val filed in depend!")
+      if(is.null(self$val)) {  # always try to expore the possibility to explore true first
+        if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
+        if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
+      }
+      # now the self$val is not null
       if(self$val == arg$depend$val)
       {
-        print("hit")
+        catf("hit %s", arg$id)
         self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
         return(TRUE)
       }
-      if(self$traverseMand(arg)) return(TRUE)
-      if(self$traverseCond(arg)) return(TRUE)
+      if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
+      if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
       return(FALSE)
     },
+
+    # check if the flat form of paramset violates the dependency
     checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))) {
       fq = list()  # finished queue
       wq = input   # waiting queue
