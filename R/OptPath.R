@@ -19,7 +19,9 @@ OptPath = R6Class(
         error = character(0L),
         exec.time = double(0L),
         timestamp = Sys.time()[FALSE],
-        extra = list())
+        extra = list(),
+        transformed.x = list()
+      )
       Map(function(id, type) {
         set(self$data, j = id, value = get(type, mode = "function")())
         },
@@ -39,7 +41,7 @@ OptPath = R6Class(
     },
 
     # public methods
-    add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL) {
+    add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL, transformed.x = NULL) {
 
       # convinience: handle y
       if (!testList(y)) {
@@ -52,6 +54,11 @@ OptPath = R6Class(
       # convinience: handle x
       if (!testList(x)) {
         x = as.list(x)
+      }
+
+      # handle transformed.x
+      if (!is.null(self$par.set$trafo) && is.null(transformed.x)) {
+        transformed.x = self$par.set$transform(x)
       }
 
       assertList(x, names = "strict")
