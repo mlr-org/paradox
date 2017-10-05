@@ -2,7 +2,7 @@ library(devtools)
 load_all()
 
 # notes
-# check functions as public method?
+# check functions as public method? Has to be to make Lower Upper Flexible
 # 
 
 par.set = ParamSetFlat$new(

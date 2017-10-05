@@ -1,7 +1,7 @@
 #' @import checkmate
 #' 
 # Evaluates x if it is an call Otherwise just return the value.
-evalIfExpr = function(x, param) {
+evalIfCall = function(x, param) {
   if (is.call(x)) {
     eval(x, dict = param$handle$root$dictionary)
   } else {
@@ -43,13 +43,13 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
 
 }
 oversampleForbiddenVector = function(n = 1L, param, oversample.rate = 2, max.tries = 10L) {
-  sample.generator = param$sampleVectorUnrestricted
+  sample.generator = param$sampleVector
   sample.validator = function(x) BBmisc::vlapply(x, function(z) param$test(x))
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = c)
 }
  
 oversampleForbidden = function(n = 1L, param, oversample.rate = 2L, max.tries = 10L) {
-  sample.generator = param$sampleUnrestricted
+  sample.generator = param$sample
   sample.validator = function(x) .mapply(function(x) pram$test(x), xdf, list())
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = cbind)
 }

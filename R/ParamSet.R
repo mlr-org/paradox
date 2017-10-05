@@ -13,23 +13,32 @@ ParamSet = R6Class("ParamSet",
    
     # member variables
     params = NULL,  # a list of all ParamSimple's
+    trafo = NULL, # function to transform the value before evaluation
+    allowed = NULL, # quote that states if certain conditions have to be met
     
     # constructor
-    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags, allowed) {
+    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags, allowed, trafo) {
       
       # construct super class
-      super$initialize(id = id, type = type, check = check, handle = handle, tags = tags, allowed = allowed)
+      super$initialize(id = id, type = type, check = check, handle = handle, tags = tags)
+
+      # set member variables
       assertList(params, types = "ParamNode")
       for (i in seq_along(params)) {
         params[[i]]$handle$root = self
       }
       self$params = params
+      self$trafo = assertClass(trafo, "call", null.ok = TRUE)
+      self$allowed = assertClass(allowed, "call", null.ok = TRUE)
     },
 
     # public methods
     sample = function(n = 1L) {
       print("I am the sampling function of ParamSet, I will call an iterator to go through each ParamNode in me and call their sample() function, then I will return you a val, you could also use this value to set my 'val' field")
       stop("sample function not implemented")
+    },
+    transform = function(x) {
+      stop("transform not implemented")
     },
     toString = function() {
       print("I am Paramset, I have a field called 'val' which looks like {kernel:rbf}")
