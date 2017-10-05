@@ -43,7 +43,7 @@ ParamFactor = R6Class(
       cat(res)
       res
     },
-    sampleVector = function(n = 1L) {
+    sampleVectorUnrestricted = function(n = 1L) {
       sample(self$values, n, replace = TRUE)
     },
     denormVector = function(x) {

@@ -13,23 +13,22 @@ ParamSimple = R6Class(
   public = list(
    
     # member variables
-    default.expr = NULL,
+    default.varpar = NULL,
     special.vals = NULL, # special values as list, can not be changed after initialization
     trafo = NULL, # function to transform the value before evaluation
 
     # constructor
     initialize = function(id, type, check, special.vals, default, trafo, allowed, tags) {
-      # wrap the underlaying check to allow speical.vals and return an error for when the allowed expression is not TRUE.
+      # wrap the underlaying check to allow speical.vals and return an error for when the allowed quote is not TRUE.
       assertList(special.vals, null.ok = TRUE)
       if (!is.null(special.vals) || !is.null(allowed)) {
-        allowed.expr = substitute(allowed)
+        allowed.varpar = substitute(allowed)
         check.wrap = function(x) {
           # TRUE, if value is one of special.vals
           if (!is.null(special.vals) && x %in% special.vals) TRUE
           # character if value is not allowed
-          if (!is.null(allowed.expr)) {
-            envir.list = setNames(list(x), self$id)
-            if (!isTRUE(eval(x, envir = envir.list))) {
+          if (!is.null(allowed.varpar)) {
+            if (!isTRUE(eval(x, envir = setNames(list(x), self$id)))) {
               sprintf("Value %s is not allowed by %s.", as.character(x), deparse(x))
             }
           }
@@ -48,7 +47,7 @@ ParamSimple = R6Class(
       # construct super class
       super$initialize(id = id, type = type, check = check.wrap, allowed = allowed, tags = tags)
       
-      self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
+      self$default.varpar = assertPossibleCall(default, self$assert, null.ok = TRUE)
       self$special.vals = special.vals
 
       # handle trafo
@@ -63,8 +62,21 @@ ParamSimple = R6Class(
     transform = function(x) asDtCols(self$transformVector(x[[self$id]]), self$id),
     
     # ParamSimpleMethods
-    sampleVector = function(n = 1L) stop("sample function not implemented!"),
-    denormVector = function(x) stop("denorm function not implemented!"),
+    sampleVector = function(n = 1L) {
+      if (!is.null(self$allowed)) {
+        stop("WHY am i?")
+        oversampleForbiddenVector(n = n, param = self)
+      } else {
+        self$sampleVectorUnrestricted(n = n)
+      }
+    },
+    sampleVectorUnrestricted = function(n = 1L) {
+      # samples vector values without respecting what is 'allowed'
+      stop("sampleVectorUnrestricted not implemented")
+    },
+    denormVector = function(x) {
+      stop("denorm function not implemented!")
+    },
     transformVector = function(x) {
       self$trafo(x)
     }
@@ -74,6 +86,6 @@ ParamSimple = R6Class(
     #denormTransformedVector = function(x) self$transform(self$denorm(x = x))
   ),
   active = list(
-    default = function() evalIfExpr(self$default.expr, self)
+    default = function() evalIfCall(self$default.varpar, self)
   )
 )

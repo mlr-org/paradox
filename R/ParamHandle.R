@@ -23,7 +23,7 @@ ParamHandle = R6Class("ParamHandle",
     flatval = NULL,
     mand.children = NULL,
     cond.children = NULL,
-    require.expr = NULL,
+    require.varpar = NULL,
 
     # constructor
     initialize = function(id = NULL, val = NULL, node = NULL, parent = NULL, depend = NULL, require.exp = NULL) {
@@ -35,7 +35,7 @@ ParamHandle = R6Class("ParamHandle",
       self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
       self$mand.children = new.env()
       self$cond.children = new.env()
-      self$require.expr = function(x) {
+      self$require.varpar = function(x) {
         if(is.null(self$depend)) return(TRUE)
           return(x$val == self$depend$val)
       }
@@ -90,7 +90,7 @@ ParamHandle = R6Class("ParamHandle",
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        #if(handle$require.expr(self))
+        #if(handle$require.varpar(self))
         handle$sample()
       }
     },
@@ -114,7 +114,7 @@ ParamHandle = R6Class("ParamHandle",
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$require.expr(self)) handle$toString()
+        if(handle$require.varpar(self)) handle$toString()
       }
     },
 

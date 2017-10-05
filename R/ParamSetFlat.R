@@ -16,11 +16,17 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = character()) {
+    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = character(), allowed = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
+        if (!is.null(allowed)) {
+          allowed.varpar = substitute(allowed)
+          if (!isTRUE(eval(x, envir = x))) {
+            sprintf("Value %s is not allowed by %s.", as.character(x), deparse(x))
+          }
+        }
         for (par.name in names(x)) {
           res = self$params[[par.name]]$check(x[[par.name]])
           if(!isTRUE(res)) return(res)
@@ -35,15 +41,24 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags)
+      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, allowed = allowed)
     },
 
     # public methods
-    sample = function(n = 1L) {
-      assertInt(n, lower = 1)
+    sampleUnrestricted = function(n = 1L) {
       xs = lapply(self$params, function(param) param$sample(n = n))
       names(xs) = NULL
       as.data.table(xs)
+    },
+
+    sample = function(n = 1L) {
+      assertInt(n, lower = 1)
+      if (!is.null(self$allowed)) {
+        stop("why am i here?")
+        oversampleForbidden(n = n, param = self)
+      } else {
+        self$sampleUnrestricted(n = n)
+      }
     },
 
     denorm = function(x) {

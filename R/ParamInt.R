@@ -4,8 +4,8 @@ ParamInt = R6Class(
   public = list(
 
     # member variables
-    lower.expr = NULL,
-    upper.expr = NULL,
+    lower.varpar = NULL,
+    upper.varpar = NULL,
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL, allowed = NULL, tags = character()) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
@@ -14,8 +14,8 @@ ParamInt = R6Class(
       super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed, tags = tags)
       
       # write member variables
-      self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
-      self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
+      self$lower.varpar = assertPossibleCall(lower, self$assert, null.ok = TRUE)
+      self$upper.varpar = assertPossibleCall(upper, self$assert, null.ok = TRUE)
     },
 
     # public methods
@@ -24,7 +24,7 @@ ParamInt = R6Class(
       cat(as.character(res))
       res
     },
-    sampleVector = function(n = 1L) {
+    sampleVectorUnrestricted = function(n = 1L) {
       as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
     },
     denormVector = function(x) {
@@ -35,8 +35,8 @@ ParamInt = R6Class(
     }
   ),
   active = list(
-    lower = function() evalIfExpr(self$lower.expr, self),
-    upper = function() evalIfExpr(self$upper.expr, self),
+    lower = function() evalIfCall(self$lower.varpar, self),
+    upper = function() evalIfCall(self$upper.varpar, self),
     range = function() c(self$lower, self$upper),
     is.finite = function() all(is.finite(self$range))
   )

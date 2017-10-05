@@ -12,7 +12,7 @@ ParamLogical = R6Class(
     },
 
     # public methods
-    sampleVector = function(n = 1L) {
+    sampleVectorUnrestricted = function(n = 1L) {
       sample(c(TRUE, FALSE), size = n, replace = TRUE)
     },
     denormVector = function(x) {

@@ -1,17 +1,17 @@
 #' @import checkmate
 #' 
-# Evaluates x if it is an expression. Otherwise just return the value.
+# Evaluates x if it is an call Otherwise just return the value.
 evalIfExpr = function(x, param) {
-  if (is.expression(x)) {
+  if (is.call(x)) {
     eval(x, dict = param$handle$root$dictionary)
   } else {
     x
   }
 }
 
-# assert for possible expressions
-assertPossibleExpr = function(x, assert, ...) {
-  if (!is.expression(x)) { x = assert(x, ...) }
+# assert for possible call
+assertPossibleCall = function(x, assert, ...) {
+  if (!is.call(x)) { x = assert(x, ...) }
   invisible(x)
 }
 
@@ -43,13 +43,13 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
 
 }
 oversampleForbiddenVector = function(n = 1L, param, oversample.rate = 2, max.tries = 10L) {
-  sample.generator = param$sampleVector
+  sample.generator = param$sampleVectorUnrestricted
   sample.validator = function(x) BBmisc::vlapply(x, function(z) param$test(x))
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = c)
 }
  
 oversampleForbidden = function(n = 1L, param, oversample.rate = 2L, max.tries = 10L) {
-  sample.generator = param$sample
+  sample.generator = param$sampleUnrestricted
   sample.validator = function(x) .mapply(function(x) pram$test(x), xdf, list())
   oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = cbind)
 }
