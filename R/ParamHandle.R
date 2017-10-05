@@ -93,8 +93,7 @@ ParamHandle = R6Class("ParamHandle",
       if(length(self$cond.children) == 0) return(NULL)
       for(name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        #if(handle$require.expr(self))
-        handle$sample()
+        if(handle$require.expr(self)) handle$sample()
       }
     },
     sample = function() {
@@ -102,96 +101,31 @@ ParamHandle = R6Class("ParamHandle",
       self$sampleMandChildChain()
       self$sampleCondChildChain()
     },
-    printCurrentNode = function() {
-      indent = paste(rep("++",self$reldepth), collapse = "")
-      BBmisc::catf("%s-%s:%s", indent, self$id, self$val)
+    printCurrentNodeVal = function() {
+      expect_int(self$reldepth)
+      expect_character(self$id)
+      indentsym = ifelse(is.null(self$val), "--", "++")
+      indent = paste(rep(indentsym,self$reldepth), collapse = "")
+      value = ifelse(is.null(self$val), "TBD", self$val)
+      BBmisc::catf("%s-%s:%s", indent, self$id, value)
     },
-    printMandChildChain = function() {
-      if(length(self$mand.children) == 0) return(NULL)
+    printMandChildChainVal = function() {
       for(name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
-        handle$toString()
+        handle$toStringVal()
       }
     },
-    printCondChildChain = function() {
-      if(length(self$cond.children) == 0) return(NULL)
-      for(name in names(self$cond.children)) {
+    printCondChildChainVal = function() {
+      for (name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$require.expr(self)) handle$toString()
+        if(handle$require.expr(self)) handle$toStringVal()
       }
     },
-
-    toString = function() {
-      self$printCurrentNode()
-      self$printMandChildChain()
-      self$printCondChildChain()
+    toStringVal = function() {
+      self$printCurrentNodeVal()
+      if (length(self$mand.children) > 0) self$printMandChildChainVal()
+      if (length(self$cond.children) > 0) self$printCondChildChainVal()
     }
-    #
-    # traverseMand = function(arg)
-    # {
-    #   if(length(self$mand.children) == 0) return(FALSE)
-    #   for(name in names(self$mand.children)) {
-    #     handle = self$mand.children[[name]]
-    #     if(handle$traverse(arg)) {
-    #       #self$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
-    #       return(TRUE)
-    #     }
-    #   }
-    #   return(FALSE)
-    # },
-    # traverseCond = function(arg) {
-    #   if(length(self$cond.children) == 0) return(FALSE)
-    #   for(name in names(self$cond.children)) {
-    #     handle = self$cond.children[[name]]
-    #     if(handle$traverse(arg)) {
-    #       #self$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
-    #       return(TRUE)
-    #     }
-    #   }
-    #   return(FALSE)
-    # },
-    # fun.hit = function(x, args) {
-    #   return(TRUE)
-    # },
-    # parseFlat = function(node.list) {
-    #   len = length(node.list)
-    #   SAFECOUNTER = 0
-    #   while(length(node.list) != 0) {
-    #     for(name in names(node.list)) {
-    #       catf("parsing %s",name)
-    #       if(self$traverse(node.list[[name]])) node.list[[name]] = NULL
-    #       catf("number in wait list left %d",length(node.list))
-    #     }
-    #     SAFECOUNTER = SAFECOUNTER + 1
-    #     if(SAFECOUNTER > 10 * len) stop("wrong flat input!")
-    #   }
-    # },
-    # ## traverse the tree to find out if the the arg could be inserted
-    # traverse = function(arg) {
-    #   # always check arg$depend not null!!
-    #   if(is.null(arg$depend)) {
-    #     catf("hit %s", arg$id)
-    #     self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
-    #     return(TRUE)
-    #   }
-    #   # now the input arg has a field called depend
-    #   if(is.null(arg$depend$val)) stop("missing val filed in depend!")
-    #   if(is.null(self$val)) {  # always try to expore the possibility to explore true first
-    #     if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
-    #     if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
-    #   }
-    #   # now the self$val is not null
-    #   if(self$val == arg$depend$val)
-    #   {
-    #     catf("hit %s", arg$id)
-    #     self$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
-    #     return(TRUE)
-    #   }
-    #   if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
-    #   if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
-    #   return(FALSE)
-    # }
-    #
   )
 )
 
