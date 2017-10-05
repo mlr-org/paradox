@@ -18,7 +18,7 @@ ParamSimple = R6Class(
     trafo = NULL, # function to transform the value before evaluation
 
     # constructor
-    initialize = function(id, type, check, special.vals, default, trafo, allowed) {
+    initialize = function(id, type, check, special.vals, default, trafo, allowed, tags) {
       # wrap the underlaying check to allow speical.vals and return an error for when the allowed expression is not TRUE.
       assertList(special.vals, null.ok = TRUE)
       if (!is.null(special.vals) || !is.null(allowed)) {
@@ -46,7 +46,7 @@ ParamSimple = R6Class(
       # init
       
       # construct super class
-      super$initialize(id = id, type = type, check = check.wrap, allowed = allowed)
+      super$initialize(id = id, type = type, check = check.wrap, allowed = allowed, tags = tags)
       
       self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
       self$special.vals = special.vals

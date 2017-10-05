@@ -4,11 +4,11 @@ ParamLogical = R6Class(
   public = list(
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL) {
+    initialize = function(id, special.vals = NULL, default = NULL, tags = character()) {
       check = checkFlag
       
       # construct super class
-      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL, allowed = NULL)
+      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, trafo = NULL, allowed = NULL, tags = tags)
     },
 
     # public methods

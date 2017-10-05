@@ -80,7 +80,7 @@ OptPath = R6Class(
 
 
 #' @export
-as.data.frame.OptPathNg = function(x, include.extras = TRUE, ...) {
+as.data.frame.OptPath = function(x, include.extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include.extras) {
@@ -91,7 +91,7 @@ as.data.frame.OptPathNg = function(x, include.extras = TRUE, ...) {
   as.data.frame(dt, ...)
 }
 
-
+#' @export
 '[.OptPath' = function(x, ...) {
   z = x$clone()
   z$data = '['(z$data, ...)

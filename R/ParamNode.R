@@ -19,9 +19,10 @@ ParamNode = R6Class("ParamNode",
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
     allowed = NULL, # expression that states if certain conditions have to be met
+    tags = NULL, # additional properties like "on.train", "on.test" or "tunable" for mlr
     
     # constructor
-    initialize = function(id, type, check, handle = NULL, allowed = NULL) {
+    initialize = function(id, type, check, handle = NULL, allowed = NULL, tags) {
       handle = handle %??% ParamHandle$new()
       assertString(id)
       self$id = assertNames(id, type = "strict")
@@ -31,6 +32,7 @@ ParamNode = R6Class("ParamNode",
       self$assert = makeAssertionFunction(check)
       self$handle = assertClass(handle, "ParamHandle")
       self$allowed = substitute(allowed) %??% TRUE
+      self$tags = assertCharacter(tags)
     },
     
     # public methods
