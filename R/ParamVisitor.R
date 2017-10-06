@@ -21,6 +21,7 @@ ParamVisitor = R6Class("ParamVisitor",
 
     # public methods
 
+    # Traverse current node's mandatory child and add node arg to  it
     traverseMand = function(arg)
     {
       if(length(self$host$mand.children) == 0) return(FALSE)
@@ -32,6 +33,8 @@ ParamVisitor = R6Class("ParamVisitor",
       }
       return(FALSE)
     },
+
+    # Traverse current node's conditional child and add node arg to it
     traverseCond = function(arg) {
       if(length(self$host$cond.children) == 0) return(FALSE)
       for(name in names(self$host$cond.children)) {
@@ -42,9 +45,12 @@ ParamVisitor = R6Class("ParamVisitor",
       }
       return(FALSE)
     },
+
     fun.hit = function(x, args) {
       return(TRUE)
     },
+
+    # from a list of ParamNode, parse them to  Tree
     parseFlat = function(node.list) {
       len = length(node.list)
       SAFECOUNTER = 0
@@ -59,7 +65,7 @@ ParamVisitor = R6Class("ParamVisitor",
       }
     },
 
-    ## traverse the tree to find out if the the arg could be inserted
+    ## traverse the tree to find out if the the arg could be inserted as leave
     traverse = function(arg) {
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
