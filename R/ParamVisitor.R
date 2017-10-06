@@ -27,7 +27,6 @@ ParamVisitor = R6Class("ParamVisitor",
       for(name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
         if(handle$visitor$traverse(arg)) {
-          #self$host$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
           return(TRUE)
         }
       }
@@ -38,7 +37,6 @@ ParamVisitor = R6Class("ParamVisitor",
       for(name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
         if(handle$visitor$traverse(arg)) {
-          #self$host$addCondChild(ParamHandle$new(id = arg$id, val = arg$val))
           return(TRUE)
         }
       }
@@ -62,39 +60,6 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     ## traverse the tree to find out if the the arg could be inserted
-    traverseNaive = function(arg) {
-      # always check arg$depend not null!!
-      if(is.null(arg$depend)) {
-        catf("hit %s", arg$id)
-        self$host$addMandChild(ParamHandle$new(id = arg$id, node = arg$node, val = arg$val))
-        return(TRUE)
-      }
-      # now the input arg has a field called depend
-      #if(is.null(arg$depend$val)) stop("missing val filed in depend!")
-      if(is.null(arg$depend$id)) stop("missing id in depend!")
-      if(is.null(self$host$val)) {  # always try to expore the possibility to explore true first
-        #if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
-        #if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
-        #print("searching child now")
-      }
-      else { # now the self$host$val is not null
-      #if((self$host$val == arg$depend$val))
-      if((self$host$id == arg$depend$id))
-      {
-        catf("hit %s", arg$id)
-        # self$host$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
-        self$host$addCondChild(ParamHandle$new(id = arg$id, node = arg$node, depend = arg$depend,val = arg$depend$val))
-        return(TRUE)
-      }}
-      browser()
-      if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
-      if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
-      return(FALSE)
-    },
-
-
-
-    ## traverse the tree to find out if the the arg could be inserted
     traverse = function(arg) {
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
@@ -114,6 +79,8 @@ ParamVisitor = R6Class("ParamVisitor",
       if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
       return(FALSE)
     },
+
+    # transform the tree structure to a list and return the list
     toFlat = function(res = list()) {
       print(self$host$node$id)
       print(length(res))
@@ -161,7 +128,37 @@ ParamVisitor = R6Class("ParamVisitor",
         }
       }
       if(length(wq) > 0) stop("invalid parameter set!")
+    },
+
+    ## traverse the tree to find out if the the arg could be inserted
+    traverseNaive = function(arg) {
+      # always check arg$depend not null!!
+      if(is.null(arg$depend)) {
+        catf("hit %s", arg$id)
+        self$host$addMandChild(ParamHandle$new(id = arg$id, node = arg$node, val = arg$val))
+        return(TRUE)
+      }
+      # now the input arg has a field called depend
+      #if(is.null(arg$depend$val)) stop("missing val filed in depend!")
+      if(is.null(arg$depend$id)) stop("missing id in depend!")
+      if(is.null(self$host$val)) {  # always try to expore the possibility to explore true first
+        #if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
+        #if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
+        #print("searching child now")
+      }
+      else { # now the self$host$val is not null
+      #if((self$host$val == arg$depend$val))
+      if((self$host$id == arg$depend$id))
+      {
+        catf("hit %s", arg$id)
+        # self$host$addMandChild(ParamHandle$new(id = arg$id, val = arg$val))
+        self$host$addCondChild(ParamHandle$new(id = arg$id, node = arg$node, depend = arg$depend,val = arg$depend$val))
+        return(TRUE)
+      }}
+      if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
+      if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
+      return(FALSE)
     }
-  )
-)
+  ) # public 
+) # Class
 
