@@ -36,9 +36,9 @@ ParamHandle = R6Class("ParamHandle",
       self$val = val
       #
       self$depend = depend
-      self$require.expr = function(x) {
+      self$require.expr = function(parent) {
         if (is.null(self$depend)) return(TRUE)
-        return(x$val == self$depend$val)
+        return(parent$val == self$depend$val)
       }
       #
       self$parent = parent
