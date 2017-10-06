@@ -114,22 +114,24 @@ ParamVisitor = R6Class("ParamVisitor",
       if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
       return(FALSE)
     },
-    toFlat = function() {
-      res = list()
-      print(self$host$node)
+    toFlat = function(res = list()) {
+      print(self$host$node$id)
+      print(length(res))
       res[[self$host$node$id]] = self$host$node
       if(length(self$host$mand.children) > 0) {
       for(name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
-        print(handle$node)
+        #print(handle$node$id)
         res[[handle$node$id]] = handle$node
+        res = handle$visitor$toFlat(res)
       }
       } # if
       if(length(self$host$cond.children) > 0) {
       for(name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
-        print(handle$node)
+        #print(handle$node$id)
         res[[handle$node$id]] = handle$node
+        res = handle$visitor$toFlat(res)
       }
       } # if
       return(res)
