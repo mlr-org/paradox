@@ -71,7 +71,7 @@ ParamSetFlat = R6Class(
       #.mapply(function(x) {
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
-      xs = eval(self$trafo, envir = c(x, as.list(self$dictionary)))
+      xs = self$trafo(x = c(x, dict = self$dictionary))
       assertList(xs, names = "strict")
       as.data.table(xs)
     }
@@ -89,6 +89,9 @@ ParamSetFlat = R6Class(
     upper = function() {
       BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_)
     },
+    class = function() {
+      BBmisc::vcapply(self$params, function(param) class(param)[1])
+    }
     range = function() {
       data.table(id = self$ids, upper = self$upper, lower = self$lower)
     },

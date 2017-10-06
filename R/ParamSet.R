@@ -28,7 +28,7 @@ ParamSet = R6Class("ParamSet",
         params[[i]]$handle$root = self
       }
       self$params = params
-      self$trafo = assertClass(trafo, "call", null.ok = TRUE)
+      self$trafo = assertFunction(trafo, args = c("x", "dict"), null.ok = TRUE)
       self$restriction = assertClass(restriction, "call", null.ok = TRUE)
       self$dictionary = assertList(dictionary, names = "strict", null.ok = TRUE)
     },
