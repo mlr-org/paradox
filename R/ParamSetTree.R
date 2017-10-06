@@ -38,3 +38,6 @@ ParamSetTree = R6Class("ParamSetTree",
   private = list(
   )
 )
+
+ParamSetTree$fac = function() {
+}

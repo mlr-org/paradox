@@ -114,6 +114,26 @@ ParamVisitor = R6Class("ParamVisitor",
       if(self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
       return(FALSE)
     },
+    toFlat = function() {
+      res = list()
+      print(self$host$node)
+      res[[self$host$node$id]] = self$host$node
+      if(length(self$host$mand.children) > 0) {
+      for(name in names(self$host$mand.children)) {
+        handle = self$host$mand.children[[name]]
+        print(handle$node)
+        res[[handle$node$id]] = handle$node
+      }
+      } # if
+      if(length(self$host$cond.children) > 0) {
+      for(name in names(self$host$cond.children)) {
+        handle = self$host$cond.children[[name]]
+        print(handle$node)
+        res[[handle$node$id]] = handle$node
+      }
+      } # if
+      return(res)
+    },
 
     # check if the flat form of paramset violates the dependency
     checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))) {

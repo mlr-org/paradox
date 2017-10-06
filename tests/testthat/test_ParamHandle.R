@@ -17,8 +17,10 @@ test_that("test if ParamHandle constructor works with SimpleParamNode", {
   kernel = ps$addCondChild(ParamHandle$new(id = "kernel", node = ParamFactor$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", val = "SVM") , val = "rbf"))
   kernel$addCondChild(ParamHandle$new(id = "gamma", ParamReal$new(id = "gamma", lower = 0, upper = 100), val = 0.6, depend = list(id = "kernel", val = "rbf")))
   kernel$addCondChild(ParamHandle$new(id = "n", node = ParamInt$new(id = "n", lower = 1L, upper = 10L), val = 3L, depend = list(id = "kernel", val = "poly")))
+  ps$visitor$toFlat()
   ps$toStringVal()
   ps$sample()
   ps$toStringVal()  # after sampling, the string might be different
+  ps$visitor$toFlat()
 })
 
