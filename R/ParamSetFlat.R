@@ -67,7 +67,7 @@ ParamSetFlat = R6Class(
       assertSetEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
-      # We require trafos to be vectorized!
+      # We require trafos to be vectorized! That's why we dont need the following
       #.mapply(function(x) {
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
