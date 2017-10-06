@@ -21,10 +21,10 @@ ParamSetFlat = R6Class(
       check = function(x) {
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
-        if (!is.null(restriction)) {
+        if (!is.null(self$restriction)) {
           x.n.dictionary = c(as.list(self$dictionary), x)
-          if (!isTRUE(eval(restriction, envir = x.n.dictionary))) {
-            sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), as.character(restriction))
+          if (!isTRUE(eval(self$restriction, envir = x.n.dictionary))) {
+            return(sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), deparse(restriction)))
           }
         }
         for (par.name in names(x)) {
@@ -46,9 +46,20 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
-      xs = lapply(self$params, function(param) param$sample(n = n))
-      names(xs) = NULL
-      as.data.table(xs)
+      sample.generator = function(n) {
+        xs = lapply(self$params, function(param) param$sample(n = n))
+        names(xs) = NULL
+        as.data.table(xs)    
+      }
+      if (!is.null(self$restriction)) {
+        sample.validator = function(x) {
+          fn = function(...) {self$test(list(...))}
+          unlist(.mapply(fn, x, list()))
+        }
+        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = cbind)
+      } else {
+        sample.generator(n)
+      }
     },
 
     denorm = function(x) {
@@ -91,7 +102,7 @@ ParamSetFlat = R6Class(
     },
     class = function() {
       BBmisc::vcapply(self$params, function(param) class(param)[1])
-    }
+    },
     range = function() {
       data.table(id = self$ids, upper = self$upper, lower = self$lower)
     },

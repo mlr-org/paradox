@@ -2,7 +2,6 @@ ParamUntyped = R6Class(
   "ParamUntyped",
   inherit = ParamSimple,
   public = list(
-
     # member variables
 
     # constructor

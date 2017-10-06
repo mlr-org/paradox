@@ -25,11 +25,11 @@ asDtCols = function(x, names) {
 # just a thought
 
 oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.generator, sample.validator, sample.combine) {
-  x = sample.generator(n = round(oversample.rate * n)) 
+  x = sample.generator(n = round(oversample.rate * n))
   ind.restriction = sample.validator(x)
   this.try = 1
   good.ones = sum(ind.restriction)
-  x = x[good.ones]
+  x = x[ind.restriction]
   while (this.try <= max.tries && good.ones < n) {
     x.new = sample.generator(n = round(oversample.rate * n))
     ind.restriction = sample.validator(x.new)
@@ -40,20 +40,8 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
     BBmisc::stopf("Not enough valid param values for %s sampled (%i from %i)", param$id, good.ones, n)
   }
   return(x)
-
 }
-oversampleForbiddenVector = function(n = 1L, param, oversample.rate = 2, max.tries = 10L) {
-  sample.generator = param$sampleVector
-  sample.validator = function(x) BBmisc::vlapply(x, function(z) param$test(x))
-  oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = c)
-}
- 
-oversampleForbidden = function(n = 1L, param, oversample.rate = 2L, max.tries = 10L) {
-  sample.generator = param$sample
-  sample.validator = function(x) .mapply(function(x) pram$test(x), xdf, list())
-  oversampleForbidden2(n, param = param, oversample.rate, max.tries,sample.generator, sample.validator, sample.combine = cbind)
-}
-
 # vectorizeTrafo = function(trafo) {
 # 
 # }
+

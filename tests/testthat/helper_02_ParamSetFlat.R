@@ -27,7 +27,7 @@ th.paramset.flat.trafo = ParamSetFlat$new(
     x$th.param.int = x$th.param.int * 2L
     x$th.param.real = x$th.param.real * x$th.param.int
     return(x)
-  )
+  }
 )
 
 th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
@@ -39,9 +39,24 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
   dictionary = list(n = 100, p = 50),
   trafo = function(x, dict) {
     x$th.param.int = dict$n * x$th.param.int
-    x$th.param.real = x$th.param.real/dict$p)
+    x$th.param.real = x$th.param.real/dict$p
   }
 )
+
+th.param.flat.restricted = ParamSetFlat$new(
+  id = 'th.param.flat.restricted',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  restriction = quote(th.param.real > th.param.int)
+)
+
+# th.paramset.flat.trafo.vector = ParamSetFlat$new(
+#   id = 'th.paramset.flat.trafo.vector',
+#   params = list(
+#     )
+#   )
 
 # th.paramset.flat.numeric.trafo.varpar = ParamSetFlat$new(
 #   id = 'th.paramset.flat.numeric.trafo.varpar',
