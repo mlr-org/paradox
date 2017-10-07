@@ -6,7 +6,6 @@
 #'
 #' @return [\code{\link{ParamSetTree}}].
 #' @family ParamHelpers
-#' @export
 ParamSetTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(

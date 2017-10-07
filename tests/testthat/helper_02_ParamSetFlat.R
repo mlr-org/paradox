@@ -5,10 +5,7 @@ th.paramset.flat.full = ParamSetFlat$new(
     th.param.int,
     th.param.real,
     th.param.factor,
-    th.param.logical#,
-#    th.param.int.trafo,
-#    th.param.real.trafo,
-#    th.param.factor.trafo
+    th.param.flag
   )
 )
 
@@ -20,22 +17,46 @@ th.paramset.flat.numeric = ParamSetFlat$new(
   )
 )
 
-# th.paramset.flat.trafo = ParamSetFlat$new(
-#   id = 'th.paramset.flat.trafo',
-#   params = list(
-#     th.param.int.trafo,
-#     th.param.real.trafo
-#   )
-# )
+th.paramset.flat.trafo = ParamSetFlat$new(
+  id = 'th.paramset.flat.trafo',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  trafo = function(x, dict) {
+    x$th.param.int = x$th.param.int * 2L
+    x$th.param.real = x$th.param.real * x$th.param.int
+    return(x)
+  }
+)
 
-# th.paramset.flat.numeric.varpar = ParamSetFlat$new(
-#   id = 'th.paramset.flat.numeric.varpar',
+th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
+  id = 'th.paramset.flat.trafo.dictionary',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  dictionary = list(n = 100, p = 50),
+  trafo = function(x, dict) {
+    x$th.param.int = dict$n * x$th.param.int
+    x$th.param.real = x$th.param.real/dict$p
+  }
+)
+
+th.param.flat.restricted = ParamSetFlat$new(
+  id = 'th.param.flat.restricted',
+  params = list(
+    th.param.int,
+    th.param.real
+  ),
+  restriction = quote(th.param.real > th.param.int)
+)
+
+# th.paramset.flat.trafo.vector = ParamSetFlat$new(
+#   id = 'th.paramset.flat.trafo.vector',
 #   params = list(
-#     th.param.int.varpar,
-#     th.param.real.varpar
-#   ),
-#   dictionary = list(n = 100, p = 50)
-# )
+#     )
+#   )
 
 # th.paramset.flat.numeric.trafo.varpar = ParamSetFlat$new(
 #   id = 'th.paramset.flat.numeric.trafo.varpar',

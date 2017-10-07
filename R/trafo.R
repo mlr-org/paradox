@@ -8,4 +8,6 @@ trafo.10exp = function(x) 10^x
 #' @export
 trafo.log = function(x) log(x)
 #' @export
-trafo.get = function(x) get(x)
+trafo.getfun = function(x) get(x, mode = "function")
+#' @export
+trafo.getdict = function(x, dict) dict[x]

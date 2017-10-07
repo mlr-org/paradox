@@ -1,5 +1,12 @@
-#' @importFrom R6 R6Class
-#' @import data.table
+#' @title OptPath Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent the OptPath.
+#'
+#' @return [\code{\link{OptPath}}].
+#' @family ParamSimple
+#' @export
 OptPath = R6Class(
   "OptPath",
   public = list(
@@ -70,7 +77,7 @@ OptPath = R6Class(
         self$par.set$assert(x)
       }
       self$data = rbindlist(
-        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra)), x, y))
+        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y))
       )
       invisible(self)
     }

@@ -1,12 +1,3 @@
-#' @title Simple parameter object
-#' @format \code{\link{R6Class}} object
-#'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent simple parameters.
-#'
-#' @return [\code{\link{ParamSimple}}].
-#' @family ParamHelpers
-#' @export
 ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
@@ -45,7 +36,7 @@ ParamSimple = R6Class(
     
     # ParamSimpleMethods
     sampleVector = function(n = 1L) {
-      # samples vector values without respecting what is 'allowed'
+      # samples vector values without respecting what is 'restriction'
       stop("sampleVector not implemented")
     },
     denormVector = function(x) {
