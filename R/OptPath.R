@@ -1,5 +1,12 @@
-#' @importFrom R6 R6Class
-#' @import data.table
+#' @title OptPath Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent the OptPath.
+#'
+#' @return [\code{\link{OptPath}}].
+#' @family ParamSimple
+#' @export
 OptPath = R6Class(
   "OptPath",
   public = list(

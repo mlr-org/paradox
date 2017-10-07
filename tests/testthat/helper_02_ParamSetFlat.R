@@ -5,7 +5,7 @@ th.paramset.flat.full = ParamSetFlat$new(
     th.param.int,
     th.param.real,
     th.param.factor,
-    th.param.logical
+    th.param.flag
   )
 )
 

@@ -1,6 +1,4 @@
-#' @import checkmate
-#' 
-# Evaluates x if it is an call Otherwise just return the value.
+ # Evaluates x if it is an call Otherwise just return the value.
 evalIfCall = function(x, param) {
   if (is.call(x)) {
     eval(x, dict = param$handle$root$dictionary)

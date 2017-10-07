@@ -1,4 +1,3 @@
-
 #' @title ParamSetFlat
 #' @format \code{\link{R6Class}} object
 #'

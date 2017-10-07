@@ -1,3 +1,12 @@
+#' @title Factor Parameter Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent factor parameters.
+#'
+#' @return [\code{\link{ParamFactor}}].
+#' @family ParamSimple
+#' @export
 ParamFactor = R6Class(
   "ParamFactor",
   inherit = ParamSimple,

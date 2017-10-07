@@ -1,3 +1,12 @@
+#' @title Real Parameter Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
+#'
+#' @return [\code{\link{ParamReal}}].
+#' @family ParamSimple
+#' @export
 ParamReal = R6Class(
   "ParamReal",
   inherit = ParamSimple,
