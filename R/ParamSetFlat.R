@@ -17,7 +17,7 @@ ParamSetFlat = R6Class(
     # constructor
     initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
-      check = function(x) {
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
@@ -27,7 +27,7 @@ ParamSetFlat = R6Class(
           }
         }
         for (par.name in names(x)) {
-          res = self$params[[par.name]]$check(x[[par.name]])
+          res = self$params[[par.name]]$check(x[[par.name]], na.ok = na.ok, null.ok = null.ok)
           if(!isTRUE(res)) return(res)
         }
         return(res)
@@ -81,7 +81,7 @@ ParamSetFlat = R6Class(
       #.mapply(function(x) {
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
-      xs = self$trafo(x = c(x, dict = self$dictionary))
+      xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
       assertList(xs, names = "strict")
       as.data.table(xs)
     }
@@ -110,6 +110,9 @@ ParamSetFlat = R6Class(
     },
     length = function() {
       length(self$params)
+    },
+    member.tags = function() {
+      lapply(self$params, function(param) param$tags)
     }
   )
 )

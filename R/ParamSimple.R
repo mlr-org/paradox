@@ -9,13 +9,16 @@ ParamSimple = R6Class(
 
     # constructor
     initialize = function(id, type, check, special.vals, default, tags) {
-      # wrap the underlaying check to allow speical.vals.
+      
+      # wrap the underlaying check to allow special.vals.
+      # convinience special.vals == NA
+      if (!is.null(special.vals) && is.na(special.vals)) special.vals = list(special.vals)
       assertList(special.vals, null.ok = TRUE)
       if (!is.null(special.vals)) {
-        check.wrap = function(x) {
+        check.wrap = function(x, na.ok = FALSE, null.ok = FALSE) {
           # TRUE, if value is one of special.vals
-          if (!is.null(special.vals) && x %in% special.vals) TRUE
-          else check(x)
+          if (x %in% special.vals) TRUE
+          else check(x, na.ok = na.ok, null.ok = null.ok)
         }
       } else {
         check.wrap = check
