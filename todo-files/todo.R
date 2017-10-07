@@ -18,12 +18,12 @@ par.set = ParamSetFlat$new(
     ParamReal$new(id = "gamma", lower = 0, tags = "tunable"),
     ParamReal$new(id = "cachesize", default = 40L, tags = "tunable"),
     ParamReal$new(id = "tolerance", default = 0.001, lower = 0, tags = "tunable"),
-    ParamLogical$new(id = "shrinking", default = TRUE, tags = "tunable"),
+    ParamFlag$new(id = "shrinking", default = TRUE, tags = "tunable"),
     ParamInt$new(id = "cross", default = 0L, lower = 0L)
-    ParamLogical$new(id = "fitted", default = TRUE)
+    ParamFlag$new(id = "fitted", default = TRUE)
     # ParamGenerator(id = "scale", default = TRUE)
     ),
-  allowed = (
+  restriction = (
     (is.na(cost) & type != "C-classification") & 
     (is.na(nu) & type != "nu-classification") & 
     (is.na(degree) & kernel != "polynomial") & 

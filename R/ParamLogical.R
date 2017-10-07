@@ -1,5 +1,14 @@
-ParamLogical = R6Class(
-  "ParamLogical",
+#' @title Flag Parameter Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent Flag parameters.
+#'
+#' @return [\code{\link{ParamFlag}}].
+#' @family ParamSimple
+#' @export
+ParamFlag = R6Class(
+  "ParamFlag",
   inherit = ParamSimple,
   public = list(
     

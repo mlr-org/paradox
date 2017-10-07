@@ -1,3 +1,4 @@
+#' @title Parameter Node Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
@@ -5,7 +6,6 @@
 #'
 #' @return [\code{\link{ParaNode}}].
 #' @family ParamHelpers
-#' @export
 ParamNode = R6Class("ParamNode",
   inherit = ParamBase,
   public = list(

@@ -1,4 +1,3 @@
-
 #' @title ParamSetFlat
 #' @format \code{\link{R6Class}} object
 #'
@@ -16,14 +15,15 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, allowed = NULL, trafo = NULL) {
+    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
         assertSetEqual(names(x), self$ids)
         res = checkList(x, names = "named")
-        if (!is.null(allowed)) {
-          if (!isTRUE(eval(allowed, envir = x))) {
-            sprintf("Value %s is not allowed by %s.", as.character(x), deparse(x))
+        if (!is.null(self$restriction)) {
+          x.n.dictionary = c(as.list(self$dictionary), x)
+          if (!isTRUE(eval(self$restriction, envir = x.n.dictionary))) {
+            return(sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), deparse(restriction)))
           }
         }
         for (par.name in names(x)) {
@@ -40,14 +40,25 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, allowed = allowed, trafo = trafo)
+      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
     sample = function(n = 1L) {
-      xs = lapply(self$params, function(param) param$sample(n = n))
-      names(xs) = NULL
-      as.data.table(xs)
+      sample.generator = function(n) {
+        xs = lapply(self$params, function(param) param$sample(n = n))
+        names(xs) = NULL
+        as.data.table(xs)    
+      }
+      if (!is.null(self$restriction)) {
+        sample.validator = function(x) {
+          fn = function(...) {self$test(list(...))}
+          unlist(.mapply(fn, x, list()))
+        }
+        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = rbind)
+      } else {
+        sample.generator(n)
+      }
     },
 
     denorm = function(x) {
@@ -59,10 +70,19 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
+      if (is.data.table(x)) {
+        x = as.list(x)
+      }
       assertList(x, names = 'strict')
       assertSetEqual(names(x), self$ids)
-      xs = lapply(self$ids, function(id) self$params[[id]]$transform(x = x[id]))
-      names(xs) = NULL
+      if (is.null(self$trafo)) 
+        return(x)
+      # We require trafos to be vectorized! That's why we dont need the following
+      #.mapply(function(x) {
+      #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
+      #}, x, list())
+      xs = self$trafo(x = c(x, dict = self$dictionary))
+      assertList(xs, names = "strict")
       as.data.table(xs)
     }
   ),
@@ -78,6 +98,9 @@ ParamSetFlat = R6Class(
     },
     upper = function() {
       BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_)
+    },
+    class = function() {
+      BBmisc::vcapply(self$params, function(param) class(param)[1])
     },
     range = function() {
       data.table(id = self$ids, upper = self$upper, lower = self$lower)
