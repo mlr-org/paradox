@@ -30,16 +30,18 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
   this.try = 1
   good.ones = sum(ind.restriction)
   x = x[ind.restriction]
+  print(this.try <= max.tries && good.ones < n)
   while (this.try <= max.tries && good.ones < n) {
     x.new = sample.generator(n = round(oversample.rate * n))
     ind.restriction = sample.validator(x.new)
     good.ones = sum(ind.restriction)
+    browser()
     x = sample.combine(x, head(x.new, n - good.ones))
   }
   if (good.ones < n) {
     BBmisc::stopf("Not enough valid param values for %s sampled (%i from %i)", param$id, good.ones, n)
   }
-  return(x)
+  return(head(x, n))
 }
 # vectorizeTrafo = function(trafo) {
 # 

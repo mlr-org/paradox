@@ -56,7 +56,7 @@ ParamSetFlat = R6Class(
           fn = function(...) {self$test(list(...))}
           unlist(.mapply(fn, x, list()))
         }
-        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = cbind)
+        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = rbind)
       } else {
         sample.generator(n)
       }
