@@ -8,11 +8,11 @@ load_all()
 par.set = ParamSetFlat$new(
   id = "ps.svm",
   params = list(
-    ParamFactor$new(id = "type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
+    ParamCategorical$new(id = "type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
     ParamReal$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
     ParamReal$new(id = "nu", default = 0.5, tags = "tunable"),
     # ParamGenerator(id = "class.weights", ParamReal$new(lower = 0))
-    ParamFactor$new(id = "kernel", default = "radial", values = c("linear", "polynomial", "radial", "sigmoid"), tags = "tunable"),
+    ParamCategorical$new(id = "kernel", default = "radial", values = c("linear", "polynomial", "radial", "sigmoid"), tags = "tunable"),
     ParamInt$new(id = "degree", default = 3L, lower = 1L, tags = "tunable"),
     ParamReal$new(id = "coef0", default = 0, tags = "tunable"),
     ParamReal$new(id = "gamma", lower = 0, tags = "tunable"),

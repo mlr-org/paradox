@@ -1,7 +1,7 @@
-context("ParamFactor")
+context("ParamCategorical")
 
-test_that("test if ParamFactor constructor works", {
-  pint = ParamFactor$new(id = "test", values = c("a", "b"))
+test_that("test if ParamCategorical constructor works", {
+  pint = ParamCategorical$new(id = "test", values = c("a", "b"))
   expect_data_table(pint$sample())
 })
 
