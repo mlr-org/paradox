@@ -15,7 +15,7 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
+    initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x) {
         assertSetEqual(names(x), self$ids)
@@ -86,30 +86,20 @@ ParamSetFlat = R6Class(
       as.data.table(xs)
     }
   ),
+
+  #FIXME: add unit tests for empty flat set
+
   active = list(
-    ids = function() {
-      names(self$params)
-    },
-    types = function() {
-      BBmisc::vcapply(self$params, function(param) param$type)
-    },
-    lower = function() {
-      BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_)
-    },
-    upper = function() {
-      BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_)
-    },
-    class = function() {
-      BBmisc::vcapply(self$params, function(param) class(param)[1])
-    },
-    range = function() {
-      data.table(id = self$ids, upper = self$upper, lower = self$lower)
-    },
-    is.finite = function() {
-      all(BBmisc::vlapply(self$params, function(param) param$is.finite))
-    },
-    length = function() {
-      length(self$params)
-    }
+    ids = function() names(self$params),
+    # FIXME: bad name. call it storage.type
+    types = function() BBmisc::vcapply(self$params, function(param) param$type),
+    lower = function() BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_),
+    upper = function() BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_),
+    # FIXME: this is a really bad name, at least class it param.classes
+    class = function() BBmisc::vcapply(self$params, function(param) class(param)[1]),
+    range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
+    is.finite = function() all(BBmisc::vlapply(self$params, function(param) param$is.finite)),
+    length = function() length(self$params),
+    is.empty = function() self$length == 0L
   )
 )
