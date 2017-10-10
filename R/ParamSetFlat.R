@@ -40,7 +40,7 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
+      super$initialize(id, storage.type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
@@ -91,8 +91,8 @@ ParamSetFlat = R6Class(
 
   active = list(
     ids = function() names(self$params),
-    # FIXME: bad name. call it storage.type
-    types = function() BBmisc::vcapply(self$params, function(param) param$type),
+    # FIXME: bad name. call it storage.storage.type
+    storage.types = function() BBmisc::vcapply(self$params, function(param) param$storage.type),
     lower = function() BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_),
     upper = function() BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_),
     # FIXME: this is a really bad name, at least class it param.classes

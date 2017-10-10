@@ -21,7 +21,7 @@ ParamCategorical = R6Class(
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok)
 
       # construct super class
-      super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
+      super$initialize(id = id, storage.type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
 
       # write member variables
       self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)

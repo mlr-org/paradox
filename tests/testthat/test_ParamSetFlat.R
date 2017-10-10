@@ -6,7 +6,7 @@ test_that("test if ParamSetFlat constructor works", {
   expect_equal(ps$ids, c('th.param.int', 'th.param.real', 'th.param.categorical', 'th.param.flag'))
   expect_equal(ps$lower, c(th.param.int=-10, th.param.real=-10, th.param.categorical=NA_real_, th.param.flag=NA_real_))
   expect_equal(ps$upper, c(th.param.int=10, th.param.real=10, th.param.categorical=NA_real_, th.param.flag=NA_real_))
-  expect_equal(ps$type, "list")
+  expect_equal(ps$storage.type, "list")
 
   sampled = ps$sample(10)
   expect_data_table(sampled, nrows = 10)

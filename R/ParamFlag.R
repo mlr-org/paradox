@@ -17,7 +17,7 @@ ParamFlag = R6Class(
       check = checkFlag
       
       # construct super class
-      super$initialize(id = id, type = "logical", check = check, special.vals = special.vals, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "logical", check = check, special.vals = special.vals, default = default, tags = tags)
     },
 
     # public methods

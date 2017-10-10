@@ -14,8 +14,7 @@ ParamNode = R6Class("ParamNode",
     id = NULL, # string to uniquely identify this param
     val = NULL, # ????
     handle = NULL, # additional stuff
-    #FIXME: bad name, call it storage.type
-    type = NULL, # of what R data type can values of this parameter be stored?
+    storage.type = NULL, # of what R data storage.type can values of this parameter be stored?
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
@@ -23,11 +22,11 @@ ParamNode = R6Class("ParamNode",
     tags = NULL, # additional properties like "on.train", "on.test" or "tunable" for mlr
     
     # constructor
-    initialize = function(id, type, check, handle = NULL, tags) {
+    initialize = function(id, storage.type, check, handle = NULL, tags) {
       handle = handle %??% ParamHandle$new()
       assertString(id)
       self$id = assertNames(id, type = "strict")
-      self$type = assertString(type)
+      self$storage.type = assertString(storage.type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)
       self$assert = makeAssertionFunction(check)
@@ -55,5 +54,5 @@ ParamNode = R6Class("ParamNode",
 )
 
 ParamNode$makeParam = function() {
-  print("I am the factory method of ParamNode, I will generate Params of different type for you!")
+  print("I am the factory method of ParamNode, I will generate Params of different storage.type for you!")
 }

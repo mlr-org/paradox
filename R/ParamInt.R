@@ -21,7 +21,7 @@ ParamInt = R6Class(
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
 
       # construct super class
-      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
       
       # write member variables
       self$lower = self$assert(lower, null.ok = TRUE)
