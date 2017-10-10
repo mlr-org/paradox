@@ -2,7 +2,7 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent factor parameters.
+#' A \code{\link[R6]{R6Class}} to represent categorical parameters.
 #'
 #' @return [\code{\link{ParamCategorical}}].
 #' @family ParamSimple
