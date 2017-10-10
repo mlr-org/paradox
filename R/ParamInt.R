@@ -23,9 +23,8 @@ ParamInt = R6Class(
       # construct super class
       super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
       
-      # we need to allow INF here, thats not an int
-      self$lower = assertNumber(lower, null.ok = TRUE)
-      self$upper = assertNumber(upper, null.ok = TRUE)
+      self$lower = self$assert(lower, null.ok = TRUE)	
+      self$upper = self$assert(upper, null.ok = TRUE)  
     },
 
     # public methods
