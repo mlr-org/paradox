@@ -61,6 +61,14 @@ th.paramset.flat.collection = ParamSetFlat$new(
   trafo = function(x, dict, tags) {
     browser()
     ind = names(which(BBmisc::vlapply(tags, function(x) "th.param.real.na.collection" %in% x)))
+    ###
+    
+    xm = as.matrix(x[ind])
+    max.w = 
+    BBmisc::vnapply(x$th.param.int, function(x) lo)
+
+
+    ###
     res = .mapply(function(...) {
       x1 = list(...)
       ind.active = ind[seq_len(x1$th.param.nat)]
