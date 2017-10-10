@@ -32,8 +32,9 @@ ParamCategorical = R6Class(
       sample(self$values, n, replace = TRUE)
     },
     denormVector = function(x) {
-      res = cut(x, breaks = self$nlevels)
-      as.character(factor(res, labels = self$values))
+      res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1))
+      levels(res) = self$values
+      as.character(res)
     }
   ),
   active = list(
