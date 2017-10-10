@@ -13,23 +13,23 @@ ParamReal = R6Class(
   public = list(
    
     # member variables
-    finite = NULL,
+    allow.inf = NULL,
     lower = NULL,
     upper = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE, tags = NULL) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
+        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = !allow.inf)
       }
       
       # construct super class
       super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
 
       # write member variables
-      self$lower = self$assert(lower, null.ok = TRUE)
-      self$upper = self$assert(upper, null.ok = TRUE)
-      self$finite = assertFlag(finite)
+      self$lower = assertNumber(lower, finite = FALSE)
+      self$upper = assertNumber(upper, finite = FALSE)
+      self$allow.inf = assertFlag(allow.inf)
     },
 
     # public methods
