@@ -1,7 +1,6 @@
 context("ParseFromFlat")
 
 test_that("test if Param parse from flat works", {
-  print("")
   ps = ParamHandle$new(id = "Root", val = NULL)
   input = list(
     model = list(id = "model", val = "svm"),

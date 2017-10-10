@@ -28,7 +28,6 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
   this.try = 1
   good.ones = sum(ind.restriction)
   x = x[ind.restriction]
-  print(this.try <= max.tries && good.ones < n)
   while (this.try <= max.tries && good.ones < n) {
     x.new = sample.generator(n = round(oversample.rate * n))
     ind.restriction = sample.validator(x.new)

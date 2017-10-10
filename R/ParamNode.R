@@ -45,7 +45,3 @@ ParamNode = R6Class("ParamNode",
     is.finite = function() NA
   )
 )
-
-ParamNode$makeParam = function() {
-  print("I am the factory method of ParamNode, I will generate Params of different storage.type for you!")
-}

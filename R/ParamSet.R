@@ -34,7 +34,6 @@ ParamSet = R6Class("ParamSet",
 
     # public methods
     sample = function(n = 1L) {
-      print("I am the sampling function of ParamSet, I will call an iterator to go through each ParamNode in me and call their sample() function, then I will return you a val, you could also use this value to set my 'val' field")
       stop("sample function not implemented")
     },
     transform = function(x) {
