@@ -36,7 +36,7 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
     x = sample.combine(x, head(x.new, n - good.ones))
   }
   if (good.ones < n) {
-    BBmisc::stopf("Not enough valid param values for %s sampled (%i from %i)", param$id, good.ones, n)
+    stopf("Not enough valid param values for %s sampled (%i from %i)", param$id, good.ones, n)
   }
   return(head(x, n))
 }

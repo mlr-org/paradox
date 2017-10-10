@@ -102,7 +102,7 @@ ParamHandle = R6Class("ParamHandle",
     },
     printCurrentNode = function() {
       indent = paste(rep("++",self$reldepth), collapse = "")
-      BBmisc::catf("%s-%s:%s", indent, self$id, self$val)
+      catf("%s-%s:%s", indent, self$id, self$val)
     }
   )
 )

@@ -37,7 +37,7 @@ ParamReal = R6Class(
       runif(n, min = self$lower, max = self$upper)
     },
     denormVector = function(x) {
-      BBmisc::normalize(x = x, method = "range", range = self$range)
+      normalize(x = x, method = "range", range = self$range)
     }
   ),
   active = list(

@@ -32,7 +32,7 @@ ParamInt = R6Class(
       as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
     },
     denormVector = function(x) {
-      as.integer(round(BBmisc::normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
+      as.integer(round(normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
     }
   ),
   active = list(

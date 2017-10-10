@@ -23,7 +23,7 @@ ParamSetFlat = R6Class(
         if (!is.null(self$restriction)) {
           x.n.dictionary = c(as.list(self$dictionary), x)
           if (!isTRUE(eval(self$restriction, envir = x.n.dictionary))) {
-            return(sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), deparse(restriction)))
+            return(sprintf("Value %s not allowed by restriction: %s", convertToShortString(x), deparse(restriction)))
           }
         }
         for (par.name in names(x)) {
@@ -34,7 +34,7 @@ ParamSetFlat = R6Class(
       }
 
       # make params a named list according to the ids
-      names(params) = BBmisc::extractSubList(params, "id")
+      names(params) = extractSubList(params, "id")
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
@@ -91,12 +91,12 @@ ParamSetFlat = R6Class(
 
   active = list(
     ids = function() names(self$params),
-    storage.types = function() BBmisc::vcapply(self$params, function(param) param$storage.type),
-    lower = function() BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_),
-    upper = function() BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_),
-    param.classes = function() BBmisc::vcapply(self$params, function(param) class(param)[1]),
+    storage.types = function() vcapply(self$params, function(param) param$storage.type),
+    lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
+    upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
+    param.classes = function() vcapply(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
-    is.finite = function() all(BBmisc::vlapply(self$params, function(param) param$is.finite)),
+    is.finite = function() all(vlapply(self$params, function(param) param$is.finite)),
     length = function() length(self$params),
     is.empty = function() self$length == 0L
   )
