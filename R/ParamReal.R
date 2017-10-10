@@ -27,8 +27,8 @@ ParamReal = R6Class(
       super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
 
       # write member variables
-      self$lower = assertNumber(lower, finite = FALSE)
-      self$upper = assertNumber(upper, finite = FALSE)
+      self$lower = assertNumber(lower, finite = !allow.inf)
+      self$upper = assertNumber(upper, finite = !allow.inf)
       self$allow.inf = assertFlag(allow.inf)
       assert_true(lower <= upper)
     },
