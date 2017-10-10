@@ -23,15 +23,16 @@ ParamInt = R6Class(
       # construct super class
       super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
       
+      # arg check lower and upper, we need handle Inf special case, that is not an int
       if (identical(lower, Inf) || identical(lower, -Inf))
         self$lower = lower
       else
         self$lower = asInt(lower)
-      
       if (identical(upper, Inf) || identical(upper, -Inf))
         self$upper = upper
       else
         self$upper = asInt(upper)
+      assert_true(lower <= upper)
     },
 
     # public methods

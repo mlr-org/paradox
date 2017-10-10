@@ -10,7 +10,9 @@ test_that("test if ParamReal constructor works", {
   expect_equal(p$upper, Inf)
   
   # check some invalid arg settings
-  expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
+  expect_error(ParamReal$new(id = "x", lower = NULL), "not 'NULL'")
+  expect_error(ParamReal$new(id = "x", lower = 1, upper = 0), "lower <= upper")
+  expect_error(ParamReal$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
 test_that("ParamReal allow.inf works", {

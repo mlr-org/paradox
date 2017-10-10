@@ -30,6 +30,7 @@ ParamReal = R6Class(
       self$lower = assertNumber(lower, finite = FALSE)
       self$upper = assertNumber(upper, finite = FALSE)
       self$allow.inf = assertFlag(allow.inf)
+      assert_true(lower <= upper)
     },
 
     # public methods
