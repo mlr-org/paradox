@@ -56,29 +56,30 @@ th.paramset.flat.collection = ParamSetFlat$new(
   id = 'th.param.flat.collection',
   params = c(
     list(th.param.nat, th.param.categorical),
-    createCollectionParam(10L, th.param.real.na)
+    createCollectionParamList(10L, th.param.real.na)
   ),
-  trafo = function(x, dict, tags) {
-    browser()
-    ind = names(which(BBmisc::vlapply(tags, function(x) "th.param.real.na.collection" %in% x)))
-    ###
-    
-    xm = as.matrix(x[ind])
-    max.w = 
-    BBmisc::vnapply(x$th.param.int, function(x) lo)
-
-
-    ###
-    res = .mapply(function(...) {
-      x1 = list(...)
-      ind.active = ind[seq_len(x1$th.param.nat)]
-      ind.inactive = setdiff(ind, ind.active)
-      suma = do.call(sum, x1[ind.active])
-      x1[ind.active] = lapply(x1[ind.active], function(x) x/suma)
-      x1[ind.inactive] = NA
-      x1$th.param.nat = NULL
-      return(x1)
-    }, x, list())
-    as.list(rbindlist(res))
-  }
+  trafo = collectionHelper(fun = function(x, dict, tags) {
+    xm = as.matrix(as.data.table(x))
+    col.ind = seq_len(ncol(xm))
+    ind.mat = sapply(dict$th.param.nat, function(z) col.ind <= z)
+    ind.mat = t(ind.mat)
+    xm[!ind.mat] = NA
+    xm = xm / rowSums(xm, na.rm = TRUE)
+    list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
+  }, collection.param.id = "th.param.real.na", additional.params = "th.param.nat")
+  # trafo = function(x, dict, tags) {
+  #   browser()
+  #   ind = names(which(BBmisc::vlapply(tags, function(x) "th.param.real.na.collection" %in% x)))
+  #   res = .mapply(function(...) {
+  #     x1 = list(...)
+  #     ind.active = ind[seq_len(x1$th.param.nat)]
+  #     ind.inactive = setdiff(ind, ind.active)
+  #     suma = do.call(sum, x1[ind.active])
+  #     x1[ind.active] = lapply(x1[ind.active], function(x) x/suma)
+  #     x1[ind.inactive] = NA
+  #     x1$th.param.nat = NULL
+  #     return(x1)
+  #   }, x, list())
+  #   as.list(rbindlist(res))
+  # }
 )
