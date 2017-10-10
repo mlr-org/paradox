@@ -18,7 +18,6 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assertion generated from the above check
     test = NULL, # test generated from the above check
-    #FIXME: 
     tags = NULL, # additional properties like "on.train", "on.test" or "tunable" for mlr
     
     # constructor

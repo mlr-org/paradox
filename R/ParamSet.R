@@ -1,7 +1,3 @@
-#FIXME: why do Paramset and ParamSimple BOTH inherit from ParamNode?
-#many properties of ParamNode do not make sense for ParamSets? like storage.type, tags, etc?
-
-
 #' @title Base Class for ParamSet
 #' @format \code{\link{R6Class}} object
 #'
