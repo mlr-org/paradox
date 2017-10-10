@@ -13,4 +13,19 @@ test_that("test if ParamReal constructor works", {
   expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
 })
 
+test_that("ParamReal allow.inf works", {
+  p = ParamReal$new(id = "x", lower = 1L, upper = 10L, allow.inf = FALSE)
+  expect_true(p$test(1))
+  expect_false(p$test(Inf))
+  
+  p = ParamReal$new(id = "x", lower = 1L, allow.inf = FALSE)
+  expect_true(p$test(1))
+  expect_false(p$test(Inf))
+  
+  p = ParamReal$new(id = "x", lower = 1L, allow.inf = TRUE)
+  expect_true(p$test(1))
+  expect_true(p$test(Inf))
+})
+
+
 
