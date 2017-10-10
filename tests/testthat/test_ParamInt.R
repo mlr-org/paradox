@@ -1,6 +1,6 @@
 context("ParamInt")
 
-test_that("test if ParamInt constructor works", {
+test_that("constructor works", {
   p = ParamInt$new(id = "test", lower = 1L, upper = 10L)
   expect_data_table(p$sample())
 
@@ -15,4 +15,9 @@ test_that("test if ParamInt constructor works", {
   expect_error(ParamInt$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
+test_that("has.finite.bounds works", {
+  expect_true(ParamInt$new(id = "x", lower = 1, upper = 10)$has.finite.bounds)
+  expect_false(ParamInt$new(id = "x", lower = 1)$has.finite.bounds)
+  expect_false(ParamInt$new(id = "x")$has.finite.bounds)
+})
 

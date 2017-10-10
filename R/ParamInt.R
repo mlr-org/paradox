@@ -45,6 +45,6 @@ ParamInt = R6Class(
   ),
   active = list(
     range = function() c(self$lower, self$upper),
-    is.finite = function() all(is.finite(self$range))
+    has.finite.bounds = function() all(is.finite(self$range))
   )
 )
