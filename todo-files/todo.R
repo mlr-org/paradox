@@ -8,7 +8,7 @@ load_all()
 par.set = ParamSetFlat$new(
   id = "ps.svm",
   params = list(
-    ParamCategorical$new(id = "type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
+    ParamCategorical$new(id = "storage.type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
     ParamReal$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
     ParamReal$new(id = "nu", default = 0.5, tags = "tunable"),
     # ParamGenerator(id = "class.weights", ParamReal$new(lower = 0))
@@ -24,8 +24,8 @@ par.set = ParamSetFlat$new(
     # ParamGenerator(id = "scale", default = TRUE)
     ),
   restriction = (
-    (is.na(cost) & type != "C-classification") & 
-    (is.na(nu) & type != "nu-classification") & 
+    (is.na(cost) & storage.type != "C-classification") & 
+    (is.na(nu) & storage.type != "nu-classification") & 
     (is.na(degree) & kernel != "polynomial") & 
     (is.na(coef0) & !(kernel == "polynomial" || kernel == "sigmoid")) &
     (is.na(gamma) & kernel == "linear")

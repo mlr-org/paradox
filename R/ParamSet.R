@@ -1,7 +1,3 @@
-#FIXME: why do Paramset and ParamSimple BOTH inherit from ParamNode?
-#many properties of ParamNode do not make sense for ParamSets? like type, tags, etc?
-
-
 #' @title Base Class for ParamSet
 #' @format \code{\link{R6Class}} object
 #'
@@ -20,10 +16,10 @@ ParamSet = R6Class("ParamSet",
     restriction = NULL, # quote that states if certain conditions have to be met
     
     # constructor
-    initialize = function(id = "parset", type, check, handle = NULL, params, dictionary, tags, restriction, trafo) {
+    initialize = function(id = "parset", storage.type, check, handle = NULL, params, dictionary, tags, restriction, trafo) {
       
       # construct super class
-      super$initialize(id = id, type = type, check = check, handle = handle, tags = tags)
+      super$initialize(id = id, storage.type = storage.type, check = check, handle = handle, tags = tags)
 
       # set member variables
       assertList(params, types = "ParamNode")
@@ -31,21 +27,17 @@ ParamSet = R6Class("ParamSet",
         params[[i]]$handle$root = self
       }
       self$params = params
-      self$trafo = assertFunction(trafo, args = c("x", "dict"), null.ok = TRUE)
+      self$trafo = assertFunction(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
       self$restriction = assertClass(restriction, "call", null.ok = TRUE)
       self$dictionary = assertList(dictionary, names = "strict", null.ok = TRUE)
     },
 
     # public methods
     sample = function(n = 1L) {
-      print("I am the sampling function of ParamSet, I will call an iterator to go through each ParamNode in me and call their sample() function, then I will return you a val, you could also use this value to set my 'val' field")
       stop("sample function not implemented")
     },
     transform = function(x) {
       stop("transform not implemented")
-    },
-    toString = function() {
-      print("I am Paramset, I have a field called 'val' which looks like {kernel:rbf}")
     }
   ),
   active = list(
@@ -58,7 +50,7 @@ ParamSet = R6Class("ParamSet",
       }
     },
     ids = function() stop("ids not implemented"),
-    types = function() stop("types not implemented")
+    storage.types = function() stop("storage.types not implemented")
   ),
   private = list(
     priv.dictionary = NULL

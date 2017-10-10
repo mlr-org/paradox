@@ -1,14 +1,19 @@
 Package: phng
 Type: Package
-Title: Machine Learning in R - Next Generation
+Title: Define Parameter Spaces, generate Designs and check feasibilities
 Version: 0.1
 Authors@R: c(
-        person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("cre",
-        "aut")),
-    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut"))
+    person("Jakob", "Richter", NULL, "jakob1richter@gmail.com", role = c("cre", "aut")),
+    person("Xudong", "Sun", NULL, "smilesun.east@gmail.com", role = c("aut")),
+    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut")),
+    person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("aut"))
     )
-Description: Machine Learning in R. Next Gen.
+Description: A successor of the ParamHelpers Package. 
+    Easily define parameter spaces and generate LHS and random designs from it.
+    Check parameter values for feasibility.
 License: GPL-2
+URL: https://github.com/mlr-org/phng
+BugReports: https://github.com/mlr-org/phng/issues
 NeedsCompilation: no
 Depends:
     data.table

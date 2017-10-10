@@ -24,7 +24,7 @@ ParamReal = R6Class(
       }
       
       # construct super class
-      super$initialize(id = id, type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
 
       # write member variables
       self$lower = self$assert(lower, null.ok = TRUE)

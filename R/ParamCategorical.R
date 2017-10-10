@@ -2,7 +2,7 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent factor parameters.
+#' A \code{\link[R6]{R6Class}} to represent categorical parameters.
 #'
 #' @return [\code{\link{ParamCategorical}}].
 #' @family ParamSimple
@@ -21,7 +21,7 @@ ParamCategorical = R6Class(
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok)
 
       # construct super class
-      super$initialize(id = id, type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
+      super$initialize(id = id, storage.type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
 
       # write member variables
       self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
@@ -32,8 +32,9 @@ ParamCategorical = R6Class(
       sample(self$values, n, replace = TRUE)
     },
     denormVector = function(x) {
-      res = cut(x, breaks = self$nlevels)
-      as.character(factor(res, labels = self$values))
+      res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1))
+      levels(res) = self$values
+      as.character(res)
     }
   ),
   active = list(

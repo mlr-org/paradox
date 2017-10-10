@@ -1,14 +1,14 @@
-#' @title Untyped Parameter Object
+#' @title Unstorage.typed Parameter Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent untyped parameters.
+#' A \code{\link[R6]{R6Class}} to represent unstorage.typed parameters.
 #'
-#' @return [\code{\link{ParamUntyped}}].
+#' @return [\code{\link{ParamUnstorage.typed}}].
 #' @family ParamSimple
 #' @export
-ParamUntyped = R6Class(
-  "ParamUntyped",
+ParamUnstorage.typed = R6Class(
+  "ParamUnstorage.typed",
   inherit = ParamSimple,
   public = list(
     # member variables
@@ -22,7 +22,7 @@ ParamUntyped = R6Class(
       }
 
       # construct super class
-      super$initialize(id = id, type = "list", check = check, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags)
     },
 
     # public methods
@@ -30,7 +30,7 @@ ParamUntyped = R6Class(
       stop("Untped Param can not be sampled")
     },
     denormVector = function(x) {
-      stop("Untyped Param can not be denormed")
+      stop("Unstorage.typed Param can not be denormed")
     }
   )
 )
