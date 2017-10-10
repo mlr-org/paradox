@@ -43,9 +43,6 @@ ParamSet = R6Class("ParamSet",
     },
     transform = function(x) {
       stop("transform not implemented")
-    },
-    toString = function() {
-      print("I am Paramset, I have a field called 'val' which looks like {kernel:rbf}")
     }
   ),
   active = list(

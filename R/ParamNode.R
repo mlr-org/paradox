@@ -36,16 +36,10 @@ ParamNode = R6Class("ParamNode",
     
     # public methods
     sample = function(n = 1L) {
-      #FIXME: remove this.
-      print("I am the sample function of ParamNode, actually I cannot do anything, I am waiting my subClass to overwrite this method")
       stop("sample not implemented")
     },
     denorm = function(x) {
       stop("denorm not implemented")
-    },
-    toString = function() {
-      #FIXME: remove this.
-      print("I am ParamNode, an abstract class which could both represent an atomic Param and Tree Param, my 'val' and 'handle' field are always Null, if you want something, please construct a subClass of me!")
     }
   ),
   active = list(

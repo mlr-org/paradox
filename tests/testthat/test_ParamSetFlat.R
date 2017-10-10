@@ -14,5 +14,4 @@ test_that("test if ParamSetFlat constructor works", {
   denormed = ps$denorm(list(th.param.int=runif(5), th.param.real=runif(5), th.param.categorical=runif(5), th.param.flag=runif(5)))
   expect_data_table(denormed, nrows = 5)
   expect_equal(colnames(denormed), ps$ids)
-  expect_string(ps$toString())
 })
