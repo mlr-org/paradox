@@ -1,0 +1,18 @@
+language: r
+sudo: false
+cache: packages
+
+env:
+  - _R_CHECK_LENGTH_1_CONDITION_=true
+
+r:
+  - oldrel
+  - release
+  - devel
+
+r_github_packages:
+  - jimhester/covr
+
+after_success:
+  - if [[ "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then Rscript -e 'covr::coveralls()'; fi
+
