@@ -93,8 +93,25 @@ OptPath = R6Class(
 )
 
 
+#' @title Convert optimization path to data.frame.
+#' @description
+#'   Convert optimization path to data.frame.
+#'
+#' @param x [\code{\link{OptPath}}]\cr
+#'   Optimization path.
+#' @param row.names [\code{character}]\cr
+#'   Row names for result.
+#'   Default is none.
+#' @param optional [any]\cr
+#'   Currently ignored.
+#' @param include.extras [\code{logical(1)}]\cr
+#'   Include all extra columns?
+#'   Default is \code{TRUE}.
+#' @param ... [any] \cr
+#'   passed to \code{as.data.frame}.
+#' @return [\code{data.frame}].
 #' @export
-as.data.frame.OptPath = function(x, include.extras = TRUE, ...) {
+as.data.frame.OptPath = function(x, row.names = NULL, optional = FALSE, include.extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include.extras) {

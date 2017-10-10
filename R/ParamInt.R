@@ -4,7 +4,7 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent Integer parameters.
 #'
-#' @return [\code{\link{ParamInteger}}].
+#' @return [\code{\link{ParamInt}}].
 #' @family ParamSimple
 #' @export
 ParamInt = R6Class(

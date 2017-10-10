@@ -1,2 +1,13 @@
+todo-files
+man-roxygen
+^.*tar.gz$
+.gitignore
+.Rproj.user
+.travis.yml
+README.md
+^.editorconfig$
+^appveyor\.yml$
 ^.*\.Rproj$
 ^\.Rproj\.user$
+^.*\.sublime-workspace$
+^.*\.sublime-project$

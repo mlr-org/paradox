@@ -5,7 +5,7 @@
 #'
 #' @param fun [\code{function}]\cr
 #'   A trafo function with the arguments x, dict, tags
-#' @param collec [\code{character(1)}]\cr
+#' @param collection.param.id [\code{character(1)}]\cr
 #'   The id of the parameter the collection was created from
 #' @param additional.params [\code{character}]\cr
 #'   Additional parameter ids that will be passed inside the \code{dict} object.

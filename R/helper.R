@@ -1,7 +1,7 @@
  # Evaluates x if it is an call Otherwise just return the value.
 evalIfCall = function(x, param) {
   if (is.call(x)) {
-    eval(x, dict = param$handle$root$dictionary)
+    eval(x, envir = param$handle$root$dictionary)
   } else {
     x
   }
