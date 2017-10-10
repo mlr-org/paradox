@@ -8,6 +8,9 @@ test_that("test if ParamInt constructor works", {
   p = ParamInt$new(id = "test", lower = 1L)
   expect_equal(p$lower, 1L)
   expect_equal(p$upper, Inf)
+
+  # check some invalid arg settings
+  expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
 })
 
 
