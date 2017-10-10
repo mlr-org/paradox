@@ -67,19 +67,4 @@ th.paramset.flat.collection = ParamSetFlat$new(
     xm = xm / rowSums(xm, na.rm = TRUE)
     list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
   }, collection.param.id = "th.param.real.na", additional.params = "th.param.nat")
-  # trafo = function(x, dict, tags) {
-  #   browser()
-  #   ind = names(which(BBmisc::vlapply(tags, function(x) "th.param.real.na.collection" %in% x)))
-  #   res = .mapply(function(...) {
-  #     x1 = list(...)
-  #     ind.active = ind[seq_len(x1$th.param.nat)]
-  #     ind.inactive = setdiff(ind, ind.active)
-  #     suma = do.call(sum, x1[ind.active])
-  #     x1[ind.active] = lapply(x1[ind.active], function(x) x/suma)
-  #     x1[ind.inactive] = NA
-  #     x1$th.param.nat = NULL
-  #     return(x1)
-  #   }, x, list())
-  #   as.list(rbindlist(res))
-  # }
 )
