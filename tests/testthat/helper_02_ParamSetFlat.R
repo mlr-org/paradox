@@ -55,7 +55,7 @@ th.paramset.flat.restricted = ParamSetFlat$new(
 th.paramset.flat.collection = ParamSetFlat$new(
   id = 'th.param.flat.collection',
   params = c(
-    list(th.param.nat, th.param.factor),
+    list(th.param.nat, th.param.categorical),
     createCollectionParam(10L, th.param.real.na)
   ),
   trafo = function(x, dict, tags) {
