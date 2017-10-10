@@ -17,7 +17,7 @@ ParamSimple = R6Class(
       if (!is.null(special.vals)) {
         check.wrap = function(x, na.ok = FALSE, null.ok = FALSE) {
           # TRUE, if value is one of special.vals
-          if (x %in% special.vals) TRUE
+          if (any(vlapply(special.vals, identical, x) TRUE
           else check(x, na.ok = na.ok, null.ok = null.ok)
         }
       } else {
