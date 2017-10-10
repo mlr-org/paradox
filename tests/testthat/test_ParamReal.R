@@ -37,5 +37,9 @@ test_that("has.finite.bounds works", {
 })
 
 
+test_that("sample requires finite bounds", {
+  p = ParamReal$new(id = "x", lower = 1)
+  expect_error(p$sample(), "has.finite.bounds")
+})
 
 
