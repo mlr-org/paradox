@@ -15,7 +15,7 @@ ParamSetFlat = R6Class(
     # member variables
     
     # constructor
-    initialize = function(id = "parset", handle = NULL, params, dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
+    initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assertSetEqual(names(x), self$ids)
@@ -40,7 +40,7 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
+      super$initialize(id, storage.type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
@@ -86,33 +86,18 @@ ParamSetFlat = R6Class(
       as.data.table(xs)
     }
   ),
+
+  #FIXME: add unit tests for empty flat set
+
   active = list(
-    ids = function() {
-      names(self$params)
-    },
-    types = function() {
-      BBmisc::vcapply(self$params, function(param) param$type)
-    },
-    lower = function() {
-      BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_)
-    },
-    upper = function() {
-      BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_)
-    },
-    class = function() {
-      BBmisc::vcapply(self$params, function(param) class(param)[1])
-    },
-    range = function() {
-      data.table(id = self$ids, upper = self$upper, lower = self$lower)
-    },
-    is.finite = function() {
-      all(BBmisc::vlapply(self$params, function(param) param$is.finite))
-    },
-    length = function() {
-      length(self$params)
-    },
-    member.tags = function() {
-      lapply(self$params, function(param) param$tags)
-    }
+    ids = function() names(self$params),
+    storage.types = function() BBmisc::vcapply(self$params, function(param) param$storage.type),
+    lower = function() BBmisc::vnapply(self$params, function(param) param$lower %??% NA_real_),
+    upper = function() BBmisc::vnapply(self$params, function(param) param$upper %??% NA_real_),
+    param.classes = function() BBmisc::vcapply(self$params, function(param) class(param)[1]),
+    range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
+    is.finite = function() all(BBmisc::vlapply(self$params, function(param) param$is.finite)),
+    length = function() length(self$params),
+    member.tags = function() lapply(self$params, function(param) param$tags)
   )
 )

@@ -29,11 +29,11 @@ OptPath = R6Class(
         extra = list(),
         transformed.x = list()
       )
-      Map(function(id, type) {
-        set(self$data, j = id, value = get(type, mode = "function")())
+      Map(function(id, storage.type) {
+        set(self$data, j = id, value = get(storage.type, mode = "function")())
         },
         id = par.set$ids,
-        type = par.set$types
+        storage.type = par.set$storage.types
       )
       for (y.name in y.names) {
         set(self$data, j = y.name, value = numeric(0L))

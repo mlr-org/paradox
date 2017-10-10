@@ -4,7 +4,7 @@ th.paramset.flat.full = ParamSetFlat$new(
   params = list(
     th.param.int,
     th.param.real,
-    th.param.factor,
+    th.param.categorical,
     th.param.flag
   )
 )
@@ -23,7 +23,7 @@ th.paramset.flat.trafo = ParamSetFlat$new(
     th.param.int,
     th.param.real
   ),
-  trafo = function(x, dict) {
+  trafo = function(x, dict, tags) {
     x$th.param.int = x$th.param.int * 2L
     x$th.param.real = x$th.param.real * x$th.param.int
     return(x)
@@ -37,7 +37,7 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
     th.param.real
   ),
   dictionary = list(n = 100, p = 50),
-  trafo = function(x, dict) {
+  trafo = function(x, dict, tags) {
     x$th.param.int = dict$n * x$th.param.int
     x$th.param.real = x$th.param.real/dict$p
   }

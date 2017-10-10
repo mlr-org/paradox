@@ -8,8 +8,8 @@ ParamSimple = R6Class(
     special.vals = NULL, # special values as list, can not be changed after initialization
 
     # constructor
-    initialize = function(id, type, check, special.vals, default, tags) {
-      
+    initialize = function(id, storage.type, check, special.vals, default, tags) {
+
       # wrap the underlaying check to allow special.vals.
       # convinience special.vals == NA
       if (!is.null(special.vals) && is.na(special.vals)) special.vals = list(special.vals)
@@ -25,7 +25,7 @@ ParamSimple = R6Class(
       }
       
       # construct super class
-      super$initialize(id = id, type = type, check = check.wrap, tags = tags)
+      super$initialize(id = id, storage.type = storage.type, check = check.wrap, tags = tags)
       
       # set member variables
       self$default = self$assert(default, null.ok = TRUE)
