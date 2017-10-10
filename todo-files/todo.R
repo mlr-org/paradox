@@ -23,11 +23,11 @@ par.set = ParamSetFlat$new(
     ParamFlag$new(id = "fitted", default = TRUE)
     # ParamGenerator(id = "scale", default = TRUE)
     ),
-  restriction = (
-    (is.na(cost) & storage.type != "C-classification") & 
-    (is.na(nu) & storage.type != "nu-classification") & 
-    (is.na(degree) & kernel != "polynomial") & 
-    (is.na(coef0) & !(kernel == "polynomial" || kernel == "sigmoid")) &
-    (is.na(gamma) & kernel == "linear")
+  restriction = quote(
+    (is.na(cost) | type != "C-classification") & 
+    (is.na(nu) | type != "nu-classification") & 
+    (is.na(degree) | kernel != "polynomial") & 
+    (is.na(coef0) | !(kernel == "polynomial" || kernel == "sigmoid")) &
+    (is.na(gamma) | kernel == "linear")
   )
 )

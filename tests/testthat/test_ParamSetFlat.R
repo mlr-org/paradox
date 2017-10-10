@@ -1,6 +1,6 @@
 context("ParamSetFlat")
 
-test_that("test if ParamSetFlat constructor works", {
+test_that("ParamSetFlat constructor works", {
   ps = th.paramset.flat.full
   expect_class(ps, "ParamSetFlat")
   expect_equal(ps$ids, c('th.param.int', 'th.param.real', 'th.param.categorical', 'th.param.flag'))
@@ -14,4 +14,15 @@ test_that("test if ParamSetFlat constructor works", {
   denormed = ps$denorm(list(th.param.int=runif(5), th.param.real=runif(5), th.param.categorical=runif(5), th.param.flag=runif(5)))
   expect_data_table(denormed, nrows = 5)
   expect_equal(colnames(denormed), ps$ids)
+})
+
+test_that("collections in ParamSetFlat works", {
+  ps = th.paramset.flat.collection
+  expect_class(ps, "ParamSetFlat")
+  expect_equal(sum(sapply(ps$member.tags, function(z) "th.param.real.na.collection" %in% z)), 10)
+  xs = ps$sample(10)
+  expect_true("th.param.categorical" %in% names(xs))
+  xs.t = ps$transform(xs)
+  expect_false("th.param.nat" %in% names(xs.t))
+  expect_list(xs.t$vector.param)
 })

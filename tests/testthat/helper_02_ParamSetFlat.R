@@ -43,7 +43,7 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
   }
 )
 
-th.param.flat.restricted = ParamSetFlat$new(
+th.paramset.flat.restricted = ParamSetFlat$new(
   id = 'th.param.flat.restricted',
   params = list(
     th.param.int,
@@ -52,17 +52,34 @@ th.param.flat.restricted = ParamSetFlat$new(
   restriction = quote(th.param.real > th.param.int)
 )
 
-# th.paramset.flat.trafo.vector = ParamSetFlat$new(
-#   id = 'th.paramset.flat.trafo.vector',
-#   params = list(
-#     )
-#   )
-
-# th.paramset.flat.numeric.trafo.varpar = ParamSetFlat$new(
-#   id = 'th.paramset.flat.numeric.trafo.varpar',
-#   params = list(
-#     th.param.int.trafo.varpar,
-#     th.param.real.trafo.varpar
-#   ),
-#   dictionary = list(n = 100, p = 50)
-# )
+th.paramset.flat.collection = ParamSetFlat$new(
+  id = 'th.param.flat.collection',
+  params = c(
+    list(th.param.nat, th.param.categorical),
+    createCollectionParamList(10L, th.param.real.na)
+  ),
+  trafo = collectionHelper(fun = function(x, dict, tags) {
+    xm = as.matrix(as.data.table(x))
+    col.ind = seq_len(ncol(xm))
+    ind.mat = sapply(dict$th.param.nat, function(z) col.ind <= z)
+    ind.mat = t(ind.mat)
+    xm[!ind.mat] = NA
+    xm = xm / rowSums(xm, na.rm = TRUE)
+    list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
+  }, collection.param.id = "th.param.real.na", additional.params = "th.param.nat")
+  # trafo = function(x, dict, tags) {
+  #   browser()
+  #   ind = names(which(BBmisc::vlapply(tags, function(x) "th.param.real.na.collection" %in% x)))
+  #   res = .mapply(function(...) {
+  #     x1 = list(...)
+  #     ind.active = ind[seq_len(x1$th.param.nat)]
+  #     ind.inactive = setdiff(ind, ind.active)
+  #     suma = do.call(sum, x1[ind.active])
+  #     x1[ind.active] = lapply(x1[ind.active], function(x) x/suma)
+  #     x1[ind.inactive] = NA
+  #     x1$th.param.nat = NULL
+  #     return(x1)
+  #   }, x, list())
+  #   as.list(rbindlist(res))
+  # }
+)

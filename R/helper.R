@@ -43,4 +43,3 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
 # vectorizeTrafo = function(trafo) {
 # 
 # }
-
