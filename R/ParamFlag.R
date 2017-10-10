@@ -29,7 +29,7 @@ ParamFlag = R6Class(
     }
   ),
   active = list(
-    is.finite = function() TRUE,
+    has.finite.bounds = function() TRUE,
     values = function() c(TRUE, FALSE),
     nlevels = function() 2L
   )

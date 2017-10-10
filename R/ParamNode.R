@@ -42,6 +42,6 @@ ParamNode = R6Class("ParamNode",
     }
   ),
   active = list(
-    is.finite = function() NA
+    has.finite.bounds = function() NA
   )
 )
