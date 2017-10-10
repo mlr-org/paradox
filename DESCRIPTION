@@ -8,7 +8,6 @@ Authors@R: c(
     person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut")),
     person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("aut"))
     )
-    
 Description: A successor of the ParamHelpers Package. 
     Easily define parameter spaces and generate LHS and random designs from it.
     Check parameter values for feasibility.
