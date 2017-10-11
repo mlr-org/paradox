@@ -1,6 +1,6 @@
 #!/bin/bash
 
-R --no-save <<< 'pkgdown::build_site()'
+R --no-save <<< 'devtools::install(); pkgdown::build_site()'
 git checkout master
 export TRAVIS_COMMIT_MSG="$(git log --format=%B --no-merges -n 1)"
 git config user.name "$GN"
