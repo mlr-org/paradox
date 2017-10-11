@@ -15,6 +15,6 @@ r_github_packages:
 before_script:
 - R --no-save <<< 'library("devtools"); document()'
 after_success:
-- if [[ "$TRAVIS_PULL_REQUEST" == "false" && "$TRAVIS_BRANCH" == "master" && "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then sh .github/deploy.sh; fi;
+- if [[ "$TRAVIS_PULL_REQUEST" == "false" && "$TRAVIS_BRANCH" == "master" && "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then bash .github/deploy.sh; fi;
 - if [[ "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then Rscript -e 'covr::coveralls()';
   fi;
