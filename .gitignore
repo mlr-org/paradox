@@ -1,7 +1,13 @@
-.Rproj.user
-.Rhistory
-.RData
-.Ruserdata
 *.sublime-project
 *.sublime-workspace
+*_cache
+.RData
+.Rhistory
+.Rproj.user
+.Ruserdata
+docs
 man
+README.md
+vignettes/*.html
+vignettes/*.R
+vignettes/*_files/
