@@ -6,12 +6,15 @@ env:
   - _R_CHECK_LENGTH_1_CONDITION_=true
 
 r:
-  - oldrel
-  - release
+  # - oldrel
+  # - release
   - devel
 
 r_github_packages:
   - jimhester/covr
+
+#r_packages:
+# - roxygen2
 
 before_script:
   - R --no-save <<< 'library("devtools"); document()'
