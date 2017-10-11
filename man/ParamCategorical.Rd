@@ -17,6 +17,6 @@ A \code{\link[R6]{R6Class}} to represent categorical parameters.
 \seealso{
 Other ParamSimple: \code{\link{OptPath}},
   \code{\link{ParamFlag}}, \code{\link{ParamInt}},
-  \code{\link{ParamReal}}
+  \code{\link{ParamReal}}, \code{\link{ParamUntyped}}
 }
 \keyword{datasets}
