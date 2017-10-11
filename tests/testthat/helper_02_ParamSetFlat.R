@@ -11,6 +11,11 @@ th.paramset.flat.full = ParamSetFlat$new(
   )
 )
 
+th.paramset.flat.untyped = ParamSetFlat$new(
+  id = 'th.paramset.flat.untyped'
+  params = list(th.param.untyped)
+)
+
 th.paramset.flat.numeric = ParamSetFlat$new(
   id = 'th.paramset.flat.numeric',
   params = list(
@@ -46,7 +51,7 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
 )
 
 th.paramset.flat.restricted = ParamSetFlat$new(
-  id = 'th.param.flat.restricted',
+  id = 'th.paramset.flat.restricted',
   params = list(
     th.param.int,
     th.param.real
@@ -55,7 +60,7 @@ th.paramset.flat.restricted = ParamSetFlat$new(
 )
 
 th.paramset.flat.collection = ParamSetFlat$new(
-  id = 'th.param.flat.collection',
+  id = 'th.paramset.flat.collection',
   params = c(
     list(th.param.nat, th.param.categorical),
     createCollectionParamList(10L, th.param.real.na)
