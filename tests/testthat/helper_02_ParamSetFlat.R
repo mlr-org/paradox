@@ -12,7 +12,7 @@ th.paramset.flat.full = ParamSetFlat$new(
 )
 
 th.paramset.flat.untyped = ParamSetFlat$new(
-  id = 'th.paramset.flat.untyped'
+  id = 'th.paramset.flat.untyped',
   params = list(th.param.untyped)
 )
 

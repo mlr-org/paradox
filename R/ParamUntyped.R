@@ -22,15 +22,15 @@ ParamUntyped = R6Class(
       }
 
       # construct super class
-      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags, special.vals = NULL)
     },
 
     # public methods
     sampleVector = function(n = 1L) {
-      stop("Untped Param can not be sampled")
+      stop("Untyped Param can not be sampled")
     },
     denormVector = function(x) {
-      stop("Unstorage.typed Param can not be denormed")
+      stop("Untyped Param can not be denormed")
     }
   )
 )
