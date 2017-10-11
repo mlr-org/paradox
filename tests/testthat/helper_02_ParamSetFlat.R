@@ -1,4 +1,6 @@
 # ParamSetFlat
+th.paramset.empty = ParamSetFlat$new()
+
 th.paramset.flat.full = ParamSetFlat$new(
   id = 'th.paramset.flat.full',
   params = list(
