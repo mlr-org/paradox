@@ -1,12 +1,12 @@
-#' @title Unstorage.typed Parameter Object
-#' @format \code{\link{R6Class}} object
-#'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent unstorage.typed parameters.
-#'
-#' @return [\code{\link{ParamUnstorage.typed}}].
-#' @family ParamSimple
-#' @export
+# @title Unstorage.typed Parameter Object
+# @format \code{\link{R6Class}} object
+#
+# @description
+# A \code{\link[R6]{R6Class}} to represent unstorage.typed parameters.
+#
+# @return [\code{\link{ParamUnstorage.typed}}].
+# @family ParamSimple
+# @export
 ParamUnstorage.typed = R6Class(
   "ParamUnstorage.typed",
   inherit = ParamSimple,
