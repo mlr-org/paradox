@@ -1,24 +1,19 @@
 language: r
 sudo: false
 cache: packages
-
 env:
+  matrix:
   - _R_CHECK_LENGTH_1_CONDITION_=true
-
+  global:
+    secure: sMGD5YeFSbufGGYNddENBh6/C53Au7TQp/eBoV5OSF33XYbAtELR4fau4GRMYnDzyOXfSnwOsELw2dreb2KkFTg2Mk3m/4wgLuoIOBhU3Zi5H6qR4DYYjVOXe/pczNLhswMzmynNBkD6OVSMWByOaeazQHS3ybyJwfNtzo9Eo0zAxXjhRTGn3/uvlV0yQldXarn9m4OedJMZzq/gEr45/FB5wVCpkNfcb/XDRHwE+e7hk3UxyttlNMbXVVfippfqHwO6SXscGsQUBoeXaDbttkMUAz+/lNFWtXSnKJweAmJ1qJ3HgSFt0HCkQA7f6dFgRqyKY86xtyoNXclZqSDoxYiEY1YJ4KqfZwc2gfmy9dC/GEqEzCCSGwyFZg+iPWb9ZIQWkz3P4b44mnOUcoFyeCGkPz2mk5dK2FZiQ+bh1Dzk0PIFdMGUnmrVC0wvf66NlDh3s2lrkHzvmV75ypvj/N50LPLpOtp1EXtkTTF81LAaJZHSUCrZ4PXpEAdRooePSeQZA+rtzm4OF4mVmbN5MAl1Xsekc790lazr31DKtC3X/63d47+a7Cr9c8ow0/sc09PlSy4iko8YJYhaeg7blMtGOH83C2MXD1B6d+e4HbeyJlOVhK5i3+ns4MeYrfAGGELWF7gTcg3mEcc1WqhQcuA5u7tWFuRat5gnC2bPV24=
 r:
-  # - oldrel
-  # - release
-  - devel
-
+- devel
+- release
 r_github_packages:
-  - jimhester/covr
-
-#r_packages:
-# - roxygen2
-
+- jimhester/covr
 before_script:
-  - R --no-save <<< 'library("devtools"); document()'
-
+- R --no-save <<< 'library("devtools"); document()'
 after_success:
-  - if [[ "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then Rscript -e 'covr::coveralls()'; fi
-
+- if [[ "$TRAVIS_PULL_REQUEST" == "false" && "$TRAVIS_BRANCH" == "master" && "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then sh .github/deploy.sh
+- if [[ "${TRAVIS_R_VERSION_STRING}" == "release" ]]; then Rscript -e 'covr::coveralls()';
+  fi

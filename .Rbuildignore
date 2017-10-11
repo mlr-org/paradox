@@ -2,6 +2,7 @@ todo-files
 man-roxygen
 ^.*tar.gz$
 .gitignore
+.github
 .Rproj.user
 .travis.yml
 README.md
