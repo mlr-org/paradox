@@ -3,9 +3,22 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent the OptPath.
+#' 
+#' @field par.set [\code{ParamSet}] The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.
+#' @field y.names [\code{character()}] The names for the y values. Default is \dQuote{y}.
+#' @field minimize [\code{logical()}] A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.
+#' @field check.feasible [\code{logical(1)}] Should new x values be checked for feasibility according to the \code{ParamSet}.
+#' @field data [\code{data.table}] This field contains all values logged into the opt.path.
+#' 
+#' @field add() Add a new line to the \code{OptPath}.
+#' 
+#' @field x.names [\code{character()}]
+#' @field length [\code{integer(1)}] The number of entries in this \code{OptPath}.
+#' @field x [\code{data.table}] A subset of \code{data} only containing the x values.
+#' @field y [\code{data.table}] A subset of \code{data} only containing the y values.
+#' @field dim [\code{integer(1)}] The dimensionality of the optimization problem.
 #'
-#' @return [\code{\link{OptPath}}].
-#' @family ParamSimple
+#' @family OptPath
 #' @export
 OptPath = R6Class(
   "OptPath",
