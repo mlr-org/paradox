@@ -93,15 +93,22 @@
 
     <p><code>R6Class</code> object</p>
     
-    <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
+    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
 
-    <p>[<code>OptPath</code>].</p>
     
-    <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
-
-    <p>Other ParamSimple: <code><a href='ParamCategorical.html'>ParamCategorical</a></code>,
-  <code><a href='ParamFlag.html'>ParamFlag</a></code>, <code><a href='ParamInt.html'>ParamInt</a></code>,
-  <code><a href='ParamReal.html'>ParamReal</a></code>, <code><a href='ParamUntyped.html'>ParamUntyped</a></code></p>
+    <dl class='dl-horizontal'>
+<dt><code>par.set</code></dt><dd><p>[<code>ParamSet</code>] The [<code>ParamSet</code>] from which the <code>x</code> values will be added to this <code>OptPath</code>.</p></dd>
+    <dt><code>y.names</code></dt><dd><p>[<code>character()</code>] The names for the y values. Default is &#8220;y&#8221;.</p></dd>
+    <dt><code>minimize</code></dt><dd><p>[<code>logical()</code>] A logical vector indicating which y components are to be minimized. Per default all are <code>TRUE</code>.</p></dd>
+    <dt><code>check.feasible</code></dt><dd><p>[<code>logical(1)</code>] Should new x values be checked for feasibility according to the <code>ParamSet</code>.</p></dd>
+    <dt><code>data</code></dt><dd><p>[<code>data.table</code>] This field contains all values logged into the opt.path.</p></dd>
+    <dt><code>add()</code></dt><dd><p>Add a new line to the <code>OptPath</code>.</p></dd>
+    <dt><code>x.names</code></dt><dd><p>[<code>character()</code>]</p></dd>
+    <dt><code>length</code></dt><dd><p>[<code>integer(1)</code>] The number of entries in this <code>OptPath</code>.</p></dd>
+    <dt><code>x</code></dt><dd><p>[<code>data.table</code>] A subset of <code>data</code> only containing the x values.</p></dd>
+    <dt><code>y</code></dt><dd><p>[<code>data.table</code>] A subset of <code>data</code> only containing the y values.</p></dd>
+    <dt><code>dim</code></dt><dd><p>[<code>integer(1)</code>] The dimensionality of the optimization problem.</p></dd>
+</dl>
     
 
   </div>
@@ -111,9 +118,7 @@
       
       <li><a href="#format">Format</a></li>
 
-      <li><a href="#value">Value</a></li>
-
-      <li><a href="#see-also">See also</a></li>
+      <li><a href="#fields">Fields</a></li>
           </ul>
 
   </div>

@@ -15,8 +15,8 @@ ParamReal
 A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
 }
 \seealso{
-Other ParamSimple: \code{\link{OptPath}},
-  \code{\link{ParamCategorical}}, \code{\link{ParamFlag}},
-  \code{\link{ParamInt}}, \code{\link{ParamUntyped}}
+Other ParamSimple: \code{\link{ParamCategorical}},
+  \code{\link{ParamFlag}}, \code{\link{ParamInt}},
+  \code{\link{ParamUntyped}}
 }
 \keyword{datasets}

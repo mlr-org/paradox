@@ -15,8 +15,8 @@ ParamFlag
 A \code{\link[R6]{R6Class}} to represent Flag parameters.
 }
 \seealso{
-Other ParamSimple: \code{\link{OptPath}},
-  \code{\link{ParamCategorical}}, \code{\link{ParamInt}},
-  \code{\link{ParamReal}}, \code{\link{ParamUntyped}}
+Other ParamSimple: \code{\link{ParamCategorical}},
+  \code{\link{ParamInt}}, \code{\link{ParamReal}},
+  \code{\link{ParamUntyped}}
 }
 \keyword{datasets}

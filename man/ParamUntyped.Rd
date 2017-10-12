@@ -15,8 +15,8 @@ ParamUntyped
 A \code{\link[R6]{R6Class}} to represent untyped parameters.
 }
 \seealso{
-Other ParamSimple: \code{\link{OptPath}},
-  \code{\link{ParamCategorical}}, \code{\link{ParamFlag}},
-  \code{\link{ParamInt}}, \code{\link{ParamReal}}
+Other ParamSimple: \code{\link{ParamCategorical}},
+  \code{\link{ParamFlag}}, \code{\link{ParamInt}},
+  \code{\link{ParamReal}}
 }
 \keyword{datasets}
