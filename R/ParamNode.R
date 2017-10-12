@@ -12,7 +12,6 @@ ParamNode = R6Class("ParamNode",
    
     # member variables
     id = NULL, # string to uniquely identify this param
-    val = NULL, # ????
     handle = NULL, # additional stuff
     storage.type = NULL, # of what R data storage.type can values of this parameter be stored?
     check = NULL, # a checkmate check function to validate if a value is valid for this Param

@@ -16,7 +16,6 @@ A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
 }
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
-  \code{\link{ParamHandle}}, \code{\link{ParamSetTree}},
-  \code{\link{ParamSet}}
+  \code{\link{ParamHandle}}, \code{\link{ParamSet}}
 }
 \keyword{datasets}
