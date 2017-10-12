@@ -17,6 +17,6 @@ A \code{\link[R6]{R6Class}} to represent set of parameters in a tree form.
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
   \code{\link{ParamHandle}}, \code{\link{ParamSetFlat}},
-  \code{\link{ParamSet}}, \code{\link{ParamVisitor}}
+  \code{\link{ParamSet}}
 }
 \keyword{datasets}

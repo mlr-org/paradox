@@ -1,26 +1,9 @@
- # Evaluates x if it is an call Otherwise just return the value.
-evalIfCall = function(x, param) {
-  if (is.call(x)) {
-    eval(x, envir = param$handle$root$dictionary)
-  } else {
-    x
-  }
-}
-
-# assert for possible call
-assertPossibleCall = function(x, assert, ...) {
-  if (!is.call(x)) { x = assert(x, ...) }
-  invisible(x)
-}
-
 # unify value output
 asDtCols = function(x, names) {
   dt = as.data.table(x)
   dt = setnames(dt, names)
   return(dt)
 }
-
-# just a thought
 
 oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.generator, sample.validator, sample.combine) {
   x = sample.generator(n = round(oversample.rate * n))
@@ -40,6 +23,3 @@ oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.gen
   }
   return(head(x, n))
 }
-# vectorizeTrafo = function(trafo) {
-# 
-# }
