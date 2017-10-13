@@ -43,7 +43,7 @@ ParamReal = R6Class(
     },
     denormVector = function(x) {
       assert_true(self$has.finite.bounds)
-      normalize(x = x, method = "range", range = self$range)
+      self$range[1] + x * diff(self$range)
     }
   ),
   active = list(

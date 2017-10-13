@@ -54,7 +54,8 @@ th.paramset.flat.restricted = ParamSetFlat$new(
   id = 'th.paramset.flat.restricted',
   params = list(
     th.param.int,
-    th.param.real
+    th.param.real,
+    th.param.categorical
   ),
   restriction = quote(th.param.real > th.param.int)
 )

@@ -45,17 +45,14 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
-      sample.generator = function(n) {
+      sample.generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
         as.data.table(xs)    
       }
       if (!is.null(self$restriction)) {
-        sample.validator = function(x) {
-          fn = function(...) {self$test(list(...))}
-          unlist(.mapply(fn, x, list()))
-        }
-        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = rbind)
+        sample.validator = function(x) vectorizedForParamSetFlat(x, self$test)
+        oversampleForbidden2(n = n, param = param, sample.generator = sample.generator, sample.validator = sample.validator)
       } else {
         sample.generator(n)
       }
@@ -84,6 +81,30 @@ ParamSetFlat = R6Class(
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
       assertList(xs, names = "strict")
       as.data.table(xs)
+    },
+
+    generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
+      lhs.des = lhs.function(n, k = self$length)
+      # converts the LHS output to values of the parameters
+      sample.converter = function(lhs.des) {
+        vec.cols = lapply(seq_len(ncol(lhs.des)), function(z) lhs.des[,z])
+        names(vec.cols) = self$ids
+        self$denorm(vec.cols)
+      }
+      if (!is.null(self$restriction)) {
+        # we work on the matrix that is the LHS output to be able to use augmentLHS to sample additional values.
+        sample.generator = function(n, old.x = NULL) {
+          if (is.null(old.x)) return(lhs.des)
+          lhs.des = lhs::augmentLHS(lhs = old.x, m = n)
+          tail(lhs.des, n)
+        }
+        # validates the LHS output, according to the param restrictions
+        sample.validator = function(lhs.des) {
+          vectorizedForParamSetFlat(sample.converter(lhs.des), self$test)
+        }
+        lhs.des = oversampleForbidden2(n = n, param = param, oversample.rate = 1, sample.generator = sample.generator, sample.validator = sample.validator)
+      }
+      sample.converter(lhs.des)
     }
   ),
 

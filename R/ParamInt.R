@@ -42,7 +42,11 @@ ParamInt = R6Class(
     },
     denormVector = function(x) {
       assert_true(self$has.finite.bounds)
-      as.integer(round(normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
+      r = self$range + c(-0.5, 0.5)
+      res = as.integer(round(r[1] + x * diff(r)))
+      res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
+      res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
+      res
     }
   ),
   active = list(

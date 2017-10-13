@@ -26,3 +26,17 @@ test_that("collections in ParamSetFlat works", {
   expect_false("th.param.nat" %in% names(xs.t))
   expect_list(xs.t$vector.param)
 })
+
+test_that("sample works with restrictions", {
+  ps = th.paramset.flat.restricted
+  x = ps$sample(100)
+  expect_data_table(x, nrows = 100, ncols = ps$length)
+  expect_true(all(x[, ps$test(.SD), by = row.names(x)]$V1))
+})
+
+test_that("generateLHSDesign works", {
+  ps = th.paramset.flat.restricted
+  x = ps$generateLHSDesign(100)
+  expect_data_table(x, nrows = 100, ncols = ps$length)
+  expect_true(all(x[, ps$test(.SD), by = row.names(x)]$V1))
+})
