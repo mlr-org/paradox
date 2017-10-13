@@ -1,3 +1,18 @@
+#' @title ParamSimple Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent a simple parameter.
+#' 
+#' @inheritSection ParamNode Member Variables
+#' @section Member Variables
+#' @field default [\code{any}] \cr default value.
+#' @field special.vals [\code{any}] \cr Special values this parameter is allowed to take that are within the defined space.
+#' 
+#' @inheritSection ParamNode Methods
+#' @section Methods
+#' @field sampleVector(n = 1L) \cr samples \code{n} Parameter Values.
+#' @field denormVector(x) \cr Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.
 ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
@@ -11,7 +26,7 @@ ParamSimple = R6Class(
     initialize = function(id, storage.type, check, special.vals, default, tags) {
 
       # wrap the underlaying check to allow special.vals.
-      # convinience special.vals == NA
+      # convenience special.vals == NA
       if (!is.null(special.vals) && is.na(special.vals)) special.vals = list(special.vals)
       assertList(special.vals, null.ok = TRUE)
       if (!is.null(special.vals)) {

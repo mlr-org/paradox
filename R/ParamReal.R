@@ -3,6 +3,9 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
+#' 
+#' @inheritSection ParamSimple Member Variables
+#' @inheritSection ParamSimple Methods
 #'
 #' @return [\code{\link{ParamReal}}].
 #' @family ParamSimple
