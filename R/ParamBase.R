@@ -7,7 +7,6 @@
 #'
 #' @return [\code{\link{ParamBase}}].
 #' @family ParamHelpers
-#' @export
 ParamBase = R6Class("ParamBase",
   public = list(
     # member variables

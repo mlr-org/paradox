@@ -1,79 +1,64 @@
-#' @title Simple parameter object
+#' @title ParamSimple Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent simple parameters.
-#'
-#' @return [\code{\link{ParamSimple}}].
-#' @family ParamHelpers
-#' @export
+#' A \code{\link[R6]{R6Class}} to represent a simple parameter.
+#' 
+#' @inheritSection ParamNode Member Variables
+#' @section Member Variables
+#' @field default [\code{any}] \cr default value.
+#' @field special.vals [\code{any}] \cr Special values this parameter is allowed to take that are within the defined space.
+#' 
+#' @inheritSection ParamNode Methods
+#' @section Methods
+#' @field sampleVector(n = 1L) \cr samples \code{n} Parameter Values.
+#' @field denormVector(x) \cr Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.
 ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
   public = list(
    
     # member variables
-    default.expr = NULL,
+    default = NULL,
     special.vals = NULL, # special values as list, can not be changed after initialization
-    trafo = NULL, # function to transform the value before evaluation
 
     # constructor
-    initialize = function(id, type, check, special.vals, default, trafo, allowed, tags) {
-      # wrap the underlaying check to allow speical.vals and return an error for when the allowed expression is not TRUE.
+    initialize = function(id, storage.type, check, special.vals, default, tags) {
+
+      # wrap the underlaying check to allow special.vals.
+      # convenience special.vals == NA
+      if (!is.null(special.vals) && is.na(special.vals)) special.vals = list(special.vals)
       assertList(special.vals, null.ok = TRUE)
-      if (!is.null(special.vals) || !is.null(allowed)) {
-        allowed.expr = substitute(allowed)
-        check.wrap = function(x) {
+      if (!is.null(special.vals)) {
+        check.wrap = function(x, na.ok = FALSE, null.ok = FALSE) {
           # TRUE, if value is one of special.vals
-          if (!is.null(special.vals) && x %in% special.vals) TRUE
-          # character if value is not allowed
-          if (!is.null(allowed.expr)) {
-            envir.list = setNames(list(x), self$id)
-            if (!isTRUE(eval(x, envir = envir.list))) {
-              sprintf("Value %s is not allowed by %s.", as.character(x), deparse(x))
-            }
-          }
-          else check(x)
+          if (any(vlapply(special.vals, identical, x))) TRUE
+          else check(x, na.ok = na.ok, null.ok = null.ok)
         }
       } else {
         check.wrap = check
       }
-
-      # assert allowed to only contain the variable of self
-      if (!is.null(allowed))
-        assertSubset(all.vars(substitute(allowed)), self$id)
-
-      # init
       
       # construct super class
-      super$initialize(id = id, type = type, check = check.wrap, allowed = allowed, tags = tags)
+      super$initialize(id = id, storage.type = storage.type, check = check.wrap, tags = tags)
       
-      self$default.expr = assertPossibleExpr(default, self$assert, null.ok = TRUE)
-      self$special.vals = special.vals
-
-      # handle trafo
-      if (is.null(trafo)) trafo = identity
-      self$trafo = assertFunction(trafo)
+      # set member variables
+      self$default = self$assert(default, null.ok = TRUE)
+      self$special.vals = assertList(special.vals, null.ok = TRUE)
     },
 
     # public methods
     # Overwriting ParamNode Methods
     sample = function(n = 1L) asDtCols(self$sampleVector(n = n), self$id),
     denorm = function(x) asDtCols(self$denormVector(x[[self$id]]), self$id),
-    transform = function(x) asDtCols(self$transformVector(x[[self$id]]), self$id),
     
     # ParamSimpleMethods
-    sampleVector = function(n = 1L) stop("sample function not implemented!"),
-    denormVector = function(x) stop("denorm function not implemented!"),
-    transformVector = function(x) {
-      self$trafo(x)
+    sampleVector = function(n = 1L) {
+      # samples vector values without respecting what is 'restriction'
+      stop("sampleVector not implemented")
+    },
+    denormVector = function(x) {
+      stop("denorm function not implemented!")
     }
-    # Do we want the following? The user can call ps$transform(ps$sample())
-    #,
-    #sampleTransformedVector = function(n = 1L) self$trasformValue(self$sample(n = n)),
-    #denormTransformedVector = function(x) self$transform(self$denorm(x = x))
   ),
-  active = list(
-    default = function() evalIfExpr(self$default.expr, self)
-  )
 )

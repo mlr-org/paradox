@@ -1,43 +1,52 @@
+#' @title Integer Parameter Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent Integer parameters.
+#'
+#' @return [\code{\link{ParamInt}}].
+#' @family ParamSimple
+#' @export
 ParamInt = R6Class(
   "ParamInt",
   inherit = ParamSimple,
   public = list(
 
     # member variables
-    lower.expr = NULL,
-    upper.expr = NULL,
+    lower = NULL,
+    upper = NULL,
+
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, trafo = NULL, allowed = NULL, tags = character()) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
 
       # construct super class
-      super$initialize(id = id, type = "integer", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed, tags = tags)
+      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
       
-      # write member variables
-      self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
-      self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
+      # arg check lower and upper, we need handle Inf special case, that is not an int
+      if (identical(lower, Inf) || identical(lower, -Inf))
+        self$lower = lower
+      else
+        self$lower = asInt(lower)
+      if (identical(upper, Inf) || identical(upper, -Inf))
+        self$upper = upper
+      else
+        self$upper = asInt(upper)
+      assert_true(lower <= upper)
     },
 
     # public methods
-    msample = function(n = 1L) {  # FIXME: better not override sample!
-      res = as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
-      cat(as.character(res))
-      res
-    },
     sampleVector = function(n = 1L) {
+      assert_true(self$has.finite.bounds)
       as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
     },
     denormVector = function(x) {
-      as.integer(round(BBmisc::normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
-    },
-    transformVector = function(x) {
-      as.integer(round(self$trafo(x)))
+      assert_true(self$has.finite.bounds)
+      as.integer(round(normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
     }
   ),
   active = list(
-    lower = function() evalIfExpr(self$lower.expr, self),
-    upper = function() evalIfExpr(self$upper.expr, self),
     range = function() c(self$lower, self$upper),
-    is.finite = function() all(is.finite(self$range))
+    has.finite.bounds = function() all(is.finite(self$range))
   )
 )

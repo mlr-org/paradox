@@ -1,40 +1,53 @@
+#' @title Real Parameter Object
+#' @format \code{\link{R6Class}} object
+#'
+#' @description
+#' A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
+#' 
+#' @inheritSection ParamSimple Member Variables
+#' @inheritSection ParamSimple Methods
+#'
+#' @return [\code{\link{ParamReal}}].
+#' @family ParamSimple
+#' @export
 ParamReal = R6Class(
   "ParamReal",
   inherit = ParamSimple,
   public = list(
    
     # member variables
-    finite = NULL,
-    lower.expr = NULL,
-    upper.expr = NULL,
+    allow.inf = NULL,
+    lower = NULL,
+    upper = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, finite = TRUE, trafo = NULL, allowed = NULL, tags = character()) {
+    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = finite)
+        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = !allow.inf)
       }
       
       # construct super class
-      super$initialize(id = id, type = "numeric", check = check, special.vals = special.vals, default = default, trafo = trafo, allowed = allowed, tags = tags)
+      super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
 
       # write member variables
-      self$lower.expr = assertPossibleExpr(lower, self$assert, null.ok = TRUE)
-      self$upper.expr = assertPossibleExpr(upper, self$assert, null.ok = TRUE)
-      self$finite = assertFlag(finite)
+      self$lower = assertNumber(lower)
+      self$upper = assertNumber(upper)
+      self$allow.inf = assertFlag(allow.inf)
+      assert_true(lower <= upper)
     },
 
     # public methods
     sampleVector = function(n = 1L) {
+      assert_true(self$has.finite.bounds)
       runif(n, min = self$lower, max = self$upper)
     },
     denormVector = function(x) {
-      BBmisc::normalize(x = x, method = "range", range = self$range)
+      assert_true(self$has.finite.bounds)
+      normalize(x = x, method = "range", range = self$range)
     }
   ),
   active = list(
-    lower = function() evalIfExpr(self$lower.expr, self),
-    upper = function() evalIfExpr(self$upper.expr, self),
     range = function() c(self$lower, self$upper),
-    is.finite = function() all(is.finite(self$range))
+    has.finite.bounds = function() all(is.finite(self$range))
   )
 )
