@@ -50,6 +50,14 @@ ParamInt = R6Class(
     }
   ),
   active = list(
+    nlevels = function() {
+      if (self$has.finite.bounds) self$upper - self$lower + 1L
+      else NA_integer_
+    },
+    values = function() {
+      if (self$has.finite.bounds) seq(self$lower, self$upper)
+      else NA
+    },
     range = function() c(self$lower, self$upper),
     has.finite.bounds = function() all(is.finite(self$range))
   )

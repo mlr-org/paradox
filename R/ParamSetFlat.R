@@ -113,12 +113,14 @@ ParamSetFlat = R6Class(
   active = list(
     ids = function() names(self$params),
     storage.types = function() vcapply(self$params, function(param) param$storage.type),
+    values = function() lapply(self$params, function(param) param$values),
     lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
     upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
     param.classes = function() vcapply(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
     has.finite.bounds = function() all(vlapply(self$params, function(param) param$has.finite.bounds)),
     length = function() length(self$params),
+    nlevels = function() viapply(self$params, function(param) param$nlevels %??% NA_integer_),
     member.tags = function() lapply(self$params, function(param) param$tags)
   )
 )

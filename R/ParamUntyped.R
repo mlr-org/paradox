@@ -16,7 +16,7 @@ ParamUntyped = R6Class(
     # constructor
     initialize = function(id, default = NULL, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (!na.ok && identical(x, NA)) "Value is NA"
+        if (!na.ok && length(x) == 1 && is.na(x)) "Value is NA"
         if (!null.ok && is.null(x)) "Value is NULL"
         return(TRUE)
       }
@@ -27,10 +27,14 @@ ParamUntyped = R6Class(
 
     # public methods
     sampleVector = function(n = 1L) {
-      stop("Untyped Param can not be sampled")
+      stop("Untyped Param can not be sampled.")
     },
     denormVector = function(x) {
-      stop("Untyped Param can not be denormed")
+      stop("Untyped Param can not be denormed.")
     }
+  ),
+
+  active = list(
+    has.finite.bounds = function() FALSE
   )
 )
