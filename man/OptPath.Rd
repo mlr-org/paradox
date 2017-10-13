@@ -29,7 +29,8 @@ Should new x values be checked for feasibility according to the \code{ParamSet}.
 \item{\code{data}}{[\code{data.table}]\cr 
 This field contains all values logged into the opt.path.}
 
-\item{\code{add()\cr}}{Add a new line to the \code{OptPath}.}
+\item{\code{add()}}{\cr 
+Add a new line to the \code{OptPath}.}
 
 \item{\code{x.names}}{[\code{character()}]}
 

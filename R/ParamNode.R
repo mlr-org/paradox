@@ -17,7 +17,7 @@
 #' @field denorm(x) \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.
 #' 
 #'
-#' @return [\code{\link{ParaNode}}].
+#' @return [\code{\link{ParamNode}}].
 #' @family ParamHelpers
 ParamNode = R6Class("ParamNode",
   inherit = ParamBase,
