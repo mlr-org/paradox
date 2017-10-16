@@ -19,6 +19,7 @@ ParamSetFlat = R6Class(
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assertSetEqual(names(x), self$ids)
+        if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
           x.n.dictionary = c(as.list(self$dictionary), x)
@@ -67,10 +68,10 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
-      if (is.data.table(x)) {
-        x = as.list(x)
+      if (is.list(x)) {
+        x = as.data.table(x)
       }
-      assertList(x, names = 'strict')
+      assertDataTable(x)
       assertSetEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
@@ -79,8 +80,10 @@ ParamSetFlat = R6Class(
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
-      assertList(xs, names = "strict")
-      as.data.table(xs)
+      if (is.list(xs)) {
+        xs = as.data.table(xs)
+      }
+      return(xs)
     },
 
     generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {

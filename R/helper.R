@@ -29,3 +29,12 @@ vectorizedForParamSetFlat = function(x, fun) {
   fn = function(...) {fun(list(...))}
   unlist(.mapply(fn, x, list()))
 }
+
+testSpecialVals = function(param) {
+  if (!is.null(param$special.vals) && any(vlapply(param$special.vals, identical, x))) {
+    # TRUE, if value is one of special.vals
+    TRUE
+  } else {
+    FALSE
+  }
+} 

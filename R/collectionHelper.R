@@ -16,10 +16,12 @@ collectionHelper = function(fun, collection.param.id, additional.params = list()
   assertString(collection.param.id)
   assertCharacter(additional.params)
   function(x, dict, tags) {
-    ind = names(which(BBmisc::vlapply(tags, function(x) paste0(collection.param.id, ".collection") %in% x)))
+    x = as.list(x)
+    ind = names(which(BBmisc::vlapply(tags, function(z) paste0(collection.param.id, ".collection") %in% z)))
     ind.additional = assertSubset(additional.params, names(x))
     dict = c(dict, x[ind.additional])
     res = fun(x = x[ind], dict = dict, tags = tags)
+    res = as.list(res)
     assertList(res, names = "strict")
     x[ind] = NULL
     x[ind.additional] = NULL

@@ -18,11 +18,11 @@ ParamInt = R6Class(
 
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        if (testSpecialVals(self)) return(TRUE)
+        checkInt(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok)
+      }
 
-      # construct super class
-      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
-      
       # arg check lower and upper, we need handle Inf special case, that is not an int
       if (identical(lower, Inf) || identical(lower, -Inf))
         self$lower = lower
@@ -33,6 +33,9 @@ ParamInt = R6Class(
       else
         self$upper = asInt(upper)
       assert_true(lower <= upper)
+
+      # construct super class
+      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
     },
 
     # public methods

@@ -22,18 +22,21 @@ ParamReal = R6Class(
     
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        checkNumber(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok, finite = !allow.inf)
-      }
-      
-      # construct super class
-      super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
 
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        if (testSpecialVals(self)) return(TRUE)
+        checkNumber(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok, finite = !self$allow.inf)
+      }
+     
       # write member variables
       self$lower = assertNumber(lower)
       self$upper = assertNumber(upper)
       self$allow.inf = assertFlag(allow.inf)
       assert_true(lower <= upper)
+       
+      # construct super class
+      super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
+
     },
 
     # public methods

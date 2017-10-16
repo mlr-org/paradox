@@ -47,6 +47,7 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
   trafo = function(x, dict, tags) {
     x$th.param.int = dict$n * x$th.param.int
     x$th.param.real = x$th.param.real/dict$p
+    return(x)
   }
 )
 
