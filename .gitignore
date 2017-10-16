@@ -6,6 +6,7 @@
 .Rproj.user
 .Ruserdata
 docs
+docs/*_cache/
 man
 README.md
 vignettes/*.html
