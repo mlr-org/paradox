@@ -47,24 +47,24 @@ test_that("advanced methods work", {
     expect_data_table(x, nrows = 10)
     expect_equal(colnames(x), ps$ids)
     expect_true(all(x[, ps$test(as.list(.SD)), by = seq_len(nrow(x))]$V1))
-    x = ps$transform(x)
-    expect_data_table(x, nrows = 10)
+    xt = ps$transform(x)
+    expect_data_table(xt, nrows = 10)
 
     x = lapply(ps$ids, function(x) runif(10))
     names(x) = ps$ids
-    x = ps$denorm(x)
-    expect_data_table(x, nrows = 10)
-    expect_equal(colnames(x), ps$ids)
+    xd = ps$denorm(x)
+    expect_data_table(xd, nrows = 10)
+    expect_equal(colnames(xd), ps$ids)
     # denorm can produce infeasible settings
     # expect_true(all(x[, ps$test(.SD), by = seq_len(nrow(x))]$V1))
-    x = ps$transform(x)
-    expect_data_table(x, nrows = 10)
+    xdt = ps$transform(xd)
+    expect_data_table(xdt, nrows = 10)
 
-    x = ps$generateLHSDesign(10)
-    expect_data_table(x, nrows = 10)
-    expect_true(all(x[, ps$test(.SD), by = seq_len(nrow(x))]$V1))
-    x = ps$transform(x)
-    expect_data_table(x, nrows = 10)
+    xl = ps$generateLHSDesign(10)
+    expect_data_table(xl, nrows = 10)
+    expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
+    xlt = ps$transform(xl)
+    expect_data_table(xlt, nrows = 10)
 
   }
 })

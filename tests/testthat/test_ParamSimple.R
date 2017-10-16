@@ -1,10 +1,26 @@
 context("ParamSimple")
 
-test_that("test if ParamSimple constructor works", {
-  pint = ParamSimple$new(id = "test", storage.type = "character", check = checkString, default = "keks", special.vals = NULL, tags = NULL)
-  expect_error(pint$sample(), "not implemented")
-
-  pint = ParamSimple$new(id = "test", storage.type = "matrix", check = function(x, na.ok = FALSE, null.ok = TRUE) {checkMatrix(x, null.ok = null.ok)}, default = NULL, special.vals = NULL, tags = NULL)
+test_that("special.vals work for all ancestors of ParamSimple", {
+  param.ancestors = list(ParamCategorical, ParamFlag, ParamInt, ParamReal)
+  special.vals.list = list(
+    list(1), 
+    list('a'), 
+    list(1:10), 
+    list('a', 1, 1:10, as.environment(list(a = 10, b = 100, c = mean))),
+    list(mean, sum, function(x) x^10))
+  for (param in param.ancestors) {
+    for (special.vals in special.vals.list) {
+      if (param$classname == "ParamCategorical") {
+        po = param$new(id = paste0('test.', param$classname), special.vals = special.vals, values = letters[11:20])
+      } else {
+        po = param$new(id = paste0('test.', param$classname), special.vals = special.vals)  
+      }
+      for (special.val in special.vals) {
+        expect_true(po$test(special.val))
+        expect_false(po$test('never valid'))
+      }
+    }
+  }
 })
 
 
