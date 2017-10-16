@@ -15,7 +15,7 @@
 #' @field data [\code{data.table}]\cr 
 #'   This field contains all values logged into the opt.path.
 #' 
-#' @field add() \cr 
+#' @field add() [\code{function}]\cr 
 #'   Add a new line to the \code{OptPath}.
 #' 
 #' @field x.names [\code{character()}]

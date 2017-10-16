@@ -11,8 +11,8 @@
 #' 
 #' @inheritSection ParamNode Methods
 #' @section Methods
-#' @field sampleVector(n = 1L) \cr samples \code{n} Parameter Values.
-#' @field denormVector(x) \cr Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.
+#' @field sampleVector(n = 1L) [\code{function}] \cr samples \code{n} Parameter Values.
+#' @field denormVector(x) [\code{function}] \cr Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.
 ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,
