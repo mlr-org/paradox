@@ -22,8 +22,8 @@ Imports:
     BBmisc,
     checkmate (>= 1.8.4),
     R6,
-    stringi
 Suggests:
+    lhs,
     knitr,
     rmarkdown,
     testthat,
