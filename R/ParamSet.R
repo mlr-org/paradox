@@ -48,9 +48,7 @@ ParamSet = R6Class("ParamSet",
         x = as.environment(x)
         private$priv.dictionary = x   
       }
-    },
-    ids = function() stop("ids not implemented"),
-    storage.types = function() stop("storage.types not implemented")
+    }
   ),
   private = list(
     priv.dictionary = NULL

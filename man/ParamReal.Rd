@@ -14,6 +14,18 @@ ParamReal
 \description{
 A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
 }
+\section{Member Variables}{
+NA
+
+NA
+}
+
+\section{Methods}{
+NA
+
+NA
+}
+
 \seealso{
 Other ParamSimple: \code{\link{ParamCategorical}},
   \code{\link{ParamFlag}}, \code{\link{ParamInt}},

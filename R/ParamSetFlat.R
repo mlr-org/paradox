@@ -19,6 +19,7 @@ ParamSetFlat = R6Class(
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assertSetEqual(names(x), self$ids)
+        if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
           x.n.dictionary = c(as.list(self$dictionary), x)
@@ -45,17 +46,14 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
-      sample.generator = function(n) {
+      sample.generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
         as.data.table(xs)    
       }
       if (!is.null(self$restriction)) {
-        sample.validator = function(x) {
-          fn = function(...) {self$test(list(...))}
-          unlist(.mapply(fn, x, list()))
-        }
-        oversampleForbidden2(n = n, param = param, oversample.rate = 2, max.tries = 10, sample.generator = sample.generator, sample.validator = sample.validator, sample.combine = rbind)
+        sample.validator = function(x) vectorizedForParamSetFlat(x, self$test)
+        oversampleForbidden2(n = n, param = param, sample.generator = sample.generator, sample.validator = sample.validator)
       } else {
         sample.generator(n)
       }
@@ -70,10 +68,10 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
-      if (is.data.table(x)) {
-        x = as.list(x)
+      if (is.list(x)) {
+        x = as.data.table(x)
       }
-      assertList(x, names = 'strict')
+      assertDataTable(x)
       assertSetEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
@@ -82,8 +80,34 @@ ParamSetFlat = R6Class(
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
-      assertList(xs, names = "strict")
-      as.data.table(xs)
+      if (is.list(xs)) {
+        xs = as.data.table(xs)
+      }
+      return(xs)
+    },
+
+    generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
+      lhs.des = lhs.function(n, k = self$length)
+      # converts the LHS output to values of the parameters
+      sample.converter = function(lhs.des) {
+        vec.cols = lapply(seq_len(ncol(lhs.des)), function(z) lhs.des[,z])
+        names(vec.cols) = self$ids
+        self$denorm(vec.cols)
+      }
+      if (!is.null(self$restriction)) {
+        # we work on the matrix that is the LHS output to be able to use augmentLHS to sample additional values.
+        sample.generator = function(n, old.x = NULL) {
+          if (is.null(old.x)) return(lhs.des)
+          lhs.des = lhs::augmentLHS(lhs = old.x, m = n)
+          tail(lhs.des, n)
+        }
+        # validates the LHS output, according to the param restrictions
+        sample.validator = function(lhs.des) {
+          vectorizedForParamSetFlat(sample.converter(lhs.des), self$test)
+        }
+        lhs.des = oversampleForbidden2(n = n, param = param, oversample.rate = 1, sample.generator = sample.generator, sample.validator = sample.validator)
+      }
+      sample.converter(lhs.des)
     }
   ),
 
@@ -92,12 +116,14 @@ ParamSetFlat = R6Class(
   active = list(
     ids = function() names(self$params),
     storage.types = function() vcapply(self$params, function(param) param$storage.type),
+    values = function() lapply(self$params, function(param) param$values),
     lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
     upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
     param.classes = function() vcapply(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
     has.finite.bounds = function() all(vlapply(self$params, function(param) param$has.finite.bounds)),
     length = function() length(self$params),
+    nlevels = function() viapply(self$params, function(param) param$nlevels %??% NA_integer_),
     member.tags = function() lapply(self$params, function(param) param$tags)
   )
 )

@@ -18,13 +18,16 @@ ParamCategorical = R6Class(
     # constructor
     initialize = function(id, values, default = NULL, special.vals = NULL, tags = NULL) {
 
-      check = function(x, na.ok = FALSE, null.ok = FALSE) checkChoice(x, choices = values, null.ok = null.ok)
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        if (na.ok && is.na(x) || testSpecialVals(self)) return(TRUE)
+        checkChoice(x, choices = self$values, null.ok = null.ok)
+      }
+      
+      # write member variables
+      self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
 
       # construct super class
       super$initialize(id = id, storage.type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
-
-      # write member variables
-      self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
     },
 
     # public methods

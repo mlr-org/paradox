@@ -25,26 +25,15 @@ ParamSimple = R6Class(
     # constructor
     initialize = function(id, storage.type, check, special.vals, default, tags) {
 
-      # wrap the underlaying check to allow special.vals.
-      # convenience special.vals == NA
       if (!is.null(special.vals) && is.na(special.vals)) special.vals = list(special.vals)
       assertList(special.vals, null.ok = TRUE)
-      if (!is.null(special.vals)) {
-        check.wrap = function(x, na.ok = FALSE, null.ok = FALSE) {
-          # TRUE, if value is one of special.vals
-          if (any(vlapply(special.vals, identical, x))) TRUE
-          else check(x, na.ok = na.ok, null.ok = null.ok)
-        }
-      } else {
-        check.wrap = check
-      }
-      
+
       # construct super class
-      super$initialize(id = id, storage.type = storage.type, check = check.wrap, tags = tags)
+      super$initialize(id = id, storage.type = storage.type, check = check, tags = tags)
       
       # set member variables
       self$default = self$assert(default, null.ok = TRUE)
-      self$special.vals = assertList(special.vals, null.ok = TRUE)
+      self$special.vals = special.vals
     },
 
     # public methods

@@ -1,5 +1,5 @@
 # ParamSetFlat
-th.paramset.empty = ParamSetFlat$new()
+th.paramset.flat.empty = ParamSetFlat$new()
 
 th.paramset.flat.full = ParamSetFlat$new(
   id = 'th.paramset.flat.full',
@@ -47,6 +47,7 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
   trafo = function(x, dict, tags) {
     x$th.param.int = dict$n * x$th.param.int
     x$th.param.real = x$th.param.real/dict$p
+    return(x)
   }
 )
 
@@ -54,7 +55,8 @@ th.paramset.flat.restricted = ParamSetFlat$new(
   id = 'th.paramset.flat.restricted',
   params = list(
     th.param.int,
-    th.param.real
+    th.param.real,
+    th.param.categorical
   ),
   restriction = quote(th.param.real > th.param.int)
 )

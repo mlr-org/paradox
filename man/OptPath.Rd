@@ -14,27 +14,37 @@ A \code{\link[R6]{R6Class}} to represent the OptPath.
 \section{Fields}{
 
 \describe{
-\item{\code{par.set}}{[\code{ParamSet}] The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
+\item{\code{par.set}}{[\code{ParamSet}]\cr 
+The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
 
-\item{\code{y.names}}{[\code{character()}] The names for the y values. Default is \dQuote{y}.}
+\item{\code{y.names}}{[\code{character()}]\cr 
+The names for the y values. Default is \dQuote{y}.}
 
-\item{\code{minimize}}{[\code{logical()}] A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
+\item{\code{minimize}}{[\code{logical()}]\cr 
+A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
 
-\item{\code{check.feasible}}{[\code{logical(1)}] Should new x values be checked for feasibility according to the \code{ParamSet}.}
+\item{\code{check.feasible}}{[\code{logical(1)}]\cr 
+Should new x values be checked for feasibility according to the \code{ParamSet}.}
 
-\item{\code{data}}{[\code{data.table}] This field contains all values logged into the opt.path.}
+\item{\code{data}}{[\code{data.table}]\cr 
+This field contains all values logged into the opt.path.}
 
-\item{\code{add()}}{Add a new line to the \code{OptPath}.}
+\item{\code{add()}}{\cr 
+Add a new line to the \code{OptPath}.}
 
 \item{\code{x.names}}{[\code{character()}]}
 
-\item{\code{length}}{[\code{integer(1)}] The number of entries in this \code{OptPath}.}
+\item{\code{length}}{[\code{integer(1)}]\cr 
+The number of entries in this \code{OptPath}.}
 
-\item{\code{x}}{[\code{data.table}] A subset of \code{data} only containing the x values.}
+\item{\code{x}}{[\code{data.table}]\cr 
+A subset of \code{data} only containing the x values.}
 
-\item{\code{y}}{[\code{data.table}] A subset of \code{data} only containing the y values.}
+\item{\code{y}}{[\code{data.table}]\cr 
+A subset of \code{data} only containing the y values.}
 
-\item{\code{dim}}{[\code{integer(1)}] The dimensionality of the optimization problem.}
+\item{\code{dim}}{[\code{integer(1)}]\cr 
+The dimensionality of the optimization problem.}
 }}
 
 \keyword{datasets}

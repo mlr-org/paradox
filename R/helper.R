@@ -5,21 +5,36 @@ asDtCols = function(x, names) {
   return(dt)
 }
 
-oversampleForbidden2 = function(n, param, oversample.rate, max.tries, sample.generator, sample.validator, sample.combine) {
+oversampleForbidden2 = function(n, param, oversample.rate = 2, max.tries = 100, sample.generator, sample.validator) {
   x = sample.generator(n = round(oversample.rate * n))
   ind.restriction = sample.validator(x)
   this.try = 1
-  good.ones = sum(ind.restriction)
-  x = x[ind.restriction]
-  while (this.try <= max.tries && good.ones < n) {
-    x.new = sample.generator(n = round(oversample.rate * n))
+  x = x[ind.restriction,]
+  while (this.try <= max.tries && nrow(x) < n) {
+    x.new = sample.generator(n = round(oversample.rate * n), old.x = x)
     ind.restriction = sample.validator(x.new)
-    good.ones = sum(ind.restriction)
-    browser()
-    x = sample.combine(x, head(x.new, n - good.ones))
+    x.new = x.new[ind.restriction, ]
+    x = rbind(x, head(x.new, n - nrow(x)))
+    this.try = this.try + 1
   }
-  if (good.ones < n) {
-    stopf("Not enough valid param values for %s sampled (%i from %i)", param$id, good.ones, n)
+  if (nrow(x) < n) {
+    warning("Not enough valid param values for %s sampled (%i from %i)", param$id, nrow(x), n)
   }
-  return(head(x, n))
+  return(x)
 }
+
+# x list of columns (or data.table)
+# fun function that accepts a list of the same structure as x, but each list element has just one item, meaning this function works just on one row.
+vectorizedForParamSetFlat = function(x, fun) {
+  fn = function(...) {fun(list(...))}
+  unlist(.mapply(fn, x, list()))
+}
+
+testSpecialVals = function(param) {
+  if (!is.null(param$special.vals) && any(vlapply(param$special.vals, identical, x))) {
+    # TRUE, if value is one of special.vals
+    TRUE
+  } else {
+    FALSE
+  }
+} 

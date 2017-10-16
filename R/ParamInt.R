@@ -18,11 +18,11 @@ ParamInt = R6Class(
 
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) checkInt(x, lower = lower, upper = upper, na.ok = na.ok, null.ok = null.ok)
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        if (testSpecialVals(self)) return(TRUE)
+        checkInt(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok)
+      }
 
-      # construct super class
-      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
-      
       # arg check lower and upper, we need handle Inf special case, that is not an int
       if (identical(lower, Inf) || identical(lower, -Inf))
         self$lower = lower
@@ -33,6 +33,9 @@ ParamInt = R6Class(
       else
         self$upper = asInt(upper)
       assert_true(lower <= upper)
+
+      # construct super class
+      super$initialize(id = id, storage.type = "integer", check = check, special.vals = special.vals, default = default, tags = tags)
     },
 
     # public methods
@@ -42,10 +45,22 @@ ParamInt = R6Class(
     },
     denormVector = function(x) {
       assert_true(self$has.finite.bounds)
-      as.integer(round(normalize(x = x, method = "range", range = self$range + c(-0.5, 0.5))))
+      r = self$range + c(-0.5, 0.5)
+      res = as.integer(round(r[1] + x * diff(r)))
+      res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
+      res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
+      res
     }
   ),
   active = list(
+    nlevels = function() {
+      if (self$has.finite.bounds) self$upper - self$lower + 1L
+      else NA_integer_
+    },
+    values = function() {
+      if (self$has.finite.bounds) seq(self$lower, self$upper)
+      else NA
+    },
     range = function() c(self$lower, self$upper),
     has.finite.bounds = function() all(is.finite(self$range))
   )
