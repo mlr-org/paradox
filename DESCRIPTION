@@ -21,7 +21,7 @@ Imports:
     backports (>= 1.1.1),
     BBmisc,
     checkmate (>= 1.8.4),
-    R6,
+    R6
 Suggests:
     lhs,
     knitr,
