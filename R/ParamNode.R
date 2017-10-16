@@ -13,8 +13,8 @@
 #' @field tags [\code{character}] \cr A vector of \code{characters} that indicate special properties of this Parameter.
 #' 
 #' @section Methods
-#' @field sample(n) \cr Function to sample Parameter values. Always returns a \code{data.table}.
-#' @field denorm(x) \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.
+#' @field sample(n) [\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.
+#' @field denorm(x) [\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.
 #' 
 #'
 #' @return [\code{\link{ParamNode}}].

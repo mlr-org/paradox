@@ -19,7 +19,7 @@ ParamCategorical = R6Class(
     initialize = function(id, values, default = NULL, special.vals = NULL, tags = NULL) {
 
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (na.ok && is.na(x) || testSpecialVals(self)) return(TRUE)
+        if (na.ok && is.na(x) || testSpecialVals(self, x)) return(TRUE)
         checkChoice(x, choices = self$values, null.ok = null.ok)
       }
       

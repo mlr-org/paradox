@@ -24,7 +24,7 @@ ParamReal = R6Class(
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
 
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (testSpecialVals(self)) return(TRUE)
+        if (testSpecialVals(self, x)) return(TRUE)
         checkNumber(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok, finite = !self$allow.inf)
       }
      

@@ -19,7 +19,7 @@ ParamInt = R6Class(
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (testSpecialVals(self)) return(TRUE)
+        if (testSpecialVals(self, x)) return(TRUE)
         checkInt(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok)
       }
 

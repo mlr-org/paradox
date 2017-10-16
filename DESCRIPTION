@@ -21,9 +21,9 @@ Imports:
     backports (>= 1.1.1),
     BBmisc,
     checkmate (>= 1.8.4),
-    R6,
-    stringi
+    R6
 Suggests:
+    lhs,
     knitr,
     rmarkdown,
     testthat,

@@ -15,7 +15,7 @@ ParamFlag = R6Class(
     # constructor
     initialize = function(id, special.vals = NULL, default = NULL, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (testSpecialVals(self)) return(TRUE)
+        if (testSpecialVals(self, x)) return(TRUE)
         checkFlag(x, na.ok, null.ok)
       }
       

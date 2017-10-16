@@ -8,13 +8,17 @@ asDtCols = function(x, names) {
 oversampleForbidden2 = function(n, param, oversample.rate = 2, max.tries = 100, sample.generator, sample.validator) {
   x = sample.generator(n = round(oversample.rate * n))
   ind.restriction = sample.validator(x)
+  # select the first n elements, that are valid
+  ind.restriction = ind.restriction & cumsum(ind.restriction) <= n 
   this.try = 1
   x = x[ind.restriction,]
   while (this.try <= max.tries && nrow(x) < n) {
     x.new = sample.generator(n = round(oversample.rate * n), old.x = x)
     ind.restriction = sample.validator(x.new)
+    # select the first n elements, that are valid
+    ind.restriction = ind.restriction & cumsum(ind.restriction) <= n - nrow(x) 
     x.new = x.new[ind.restriction, ]
-    x = rbind(x, head(x.new, n - nrow(x)))
+    x = rbind(x, x.new)
     this.try = this.try + 1
   }
   if (nrow(x) < n) {
@@ -30,7 +34,7 @@ vectorizedForParamSetFlat = function(x, fun) {
   unlist(.mapply(fn, x, list()))
 }
 
-testSpecialVals = function(param) {
+testSpecialVals = function(param, x) {
   if (!is.null(param$special.vals) && any(vlapply(param$special.vals, identical, x))) {
     # TRUE, if value is one of special.vals
     TRUE
