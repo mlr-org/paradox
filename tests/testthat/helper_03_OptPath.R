@@ -14,10 +14,10 @@ for (i in 1:10) {
   )
 }
 
-# Multi-objective opt.path
+# Multi-objective opt.path with transformations
 
-# th.opt.path.multiobjective = OptPath$new(par.set = th.paramset.flat.full, y.names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
-# for (i in 1:10) {
-#   x = th.opt.path.multiobjective$par.set$sample(1)
-#   th.opt.path.multiobjective$add(x = x, y = c(y2.max = i, y1.min = 10-i))
-# }
+th.opt.path.multiobjective = OptPath$new(par.set = th.paramset.flat.collection, y.names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
+for (i in 1:10) {
+  x = th.opt.path.multiobjective$par.set$sample(1)
+  th.opt.path.multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))
+}
