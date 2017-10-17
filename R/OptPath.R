@@ -93,8 +93,10 @@ OptPath = R6Class(
 
       assertList(x, names = "strict")
       assertSetEqual(names(x), self$x.names)
+      x = x[self$x.names]
       assertList(y, len = self$dim)
       assertSetEqual(names(y), self$y.names)
+      y = y[self$y.names]
 
       if (self$check.feasible) {
         self$par.set$assert(x)
@@ -139,9 +141,12 @@ as.data.frame.OptPath = function(x, row.names = NULL, optional = FALSE, include.
 
   if (include.extras) {
     extra = rbindlist(dt$extra, fill = TRUE)
-    dt[, "extra" := NULL]
-    dt = cbind(dt, extra)
-  }  
+    if (nrow(extra) > 0 && ncol(extra) > 0) {
+      dt[, "extra" := NULL]
+      dt = cbind(dt, extra)
+    }
+  }
+  
   as.data.frame(dt, ...)
 }
 
