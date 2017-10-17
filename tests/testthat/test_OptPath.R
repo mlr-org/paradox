@@ -13,13 +13,13 @@ test_that("active bindings works", {
   expect_equal(op$dim, 1)
 
   # sub-setting
-  expect_data_table(op[dob < 6], nrows = 5)
+  expect_class(op[dob < 6], "OptPath")
   expect_class(op[["timestamp"]], "POSIXct")
 
   # contents after data.frame conversion
   op.df = as.data.frame(op)
   expect_data_frame(op.df, nrow = 10, ncol = 13)
-  expect_set_equal(colnames(op.df), c("dob", "message", "error", "exec.time", "timestamp", "th.param.int", "th.param.real", "th.param.categorical", "th.param.flag", "y", 'th.ex1', 'th.ex2'))
+  expect_set_equal(colnames(op.df), c("dob", "message", "error", "transformed.x", "exec.time", "timestamp", "th.param.int", "th.param.real", "th.param.categorical", "th.param.flag", "y", "th.ex1", "th.ex2"))
   expect_equal(op.df$y, 1:10)
   expect_equal(op.df$th.ex1, 1:10)
   expect_class(op.df$timestamp, "POSIXct")
