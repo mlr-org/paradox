@@ -41,4 +41,33 @@ testSpecialVals = function(param, x) {
   } else {
     FALSE
   }
-} 
+}
+
+# res int(1) - aimed at resolution
+# nlevels int() - number of levels per param or NA if continuous.
+# return: int vector that gives the resolution for each param leading to 
+optGridRes = function(n, nlevels) {
+  nnames = names(nlevels)
+  p = length(nlevels) # number of params
+  x = ceiling(n^(1/p)) # upper bound for factor levels
+  consumed = !is.na(nlevels) & nlevels < x # find out which params we can completely use
+  n.rest = n / prod(nlevels[consumed]) # remove them from the n
+  p.rest = p - sum(consumed) # remaining number of parameters we have to optimize for
+  x.rest = ceiling(n.rest^(1/p.rest)) # recalculate uper bound for number of params for each level
+  optFun = function(k) {
+    x.rest^k * (x.rest-1)^(p.rest-k) - n.rest
+  }
+  opt.k = 0:p.rest
+  k = opt.k[which.min(abs(sapply(opt.k, optFun) - 0))]
+  # build result vector
+  res = rep(NA_integer_, p)
+  names(res) = nnames
+  # define the values where we can use all levels
+  res[consumed] = nlevels[consumed]
+  # use the first appearing params to use the higher resolution
+  empty = which(is.na(res))
+  res[empty[seq_len(k)]] = x.rest
+  # fill the rest with the lower available resolution
+  res[is.na(res)] = x.rest - 1
+  return(res)
+}

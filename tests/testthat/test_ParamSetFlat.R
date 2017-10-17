@@ -41,10 +41,11 @@ test_that("advanced methods work", {
     th.paramset.flat.trafo,
     th.paramset.flat.trafo.dictionary
   )
+  ps = ps.list[[1]]
   for (ps in ps.list) {
 
     x = ps$sample(10)
-    expect_data_table(x, nrows = 10)
+    expect_data_table(x, nrows = 10, any.missing = FALSE)
     expect_equal(colnames(x), ps$ids)
     expect_true(all(x[, ps$test(as.list(.SD)), by = seq_len(nrow(x))]$V1))
     xt = ps$transform(x)
@@ -53,7 +54,7 @@ test_that("advanced methods work", {
     x = lapply(ps$ids, function(x) runif(10))
     names(x) = ps$ids
     xd = ps$denorm(x)
-    expect_data_table(xd, nrows = 10)
+    expect_data_table(xd, nrows = 10, any.missing = FALSE)
     expect_equal(colnames(xd), ps$ids)
     # denorm can produce infeasible settings
     # expect_true(all(x[, ps$test(.SD), by = seq_len(nrow(x))]$V1))
@@ -61,18 +62,34 @@ test_that("advanced methods work", {
     expect_data_table(xdt, nrows = 10)
 
     xl = ps$generateLHSDesign(10)
-    expect_data_table(xl, nrows = 10)
+    expect_data_table(xl, nrows = 10, any.missing = FALSE)
     expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
     xlt = ps$transform(xl)
     expect_data_table(xlt, nrows = 10)
 
+    xg = ps$generateGridDesign(5)
+    expect_data_table(xg, any.missing = FALSE)
+    expect_true(nrow(xg) <= 5^ps$length)
+    expect_true(all(xg[, ps$test(.SD), by = seq_len(nrow(xg))]$V1))
+    xgt = ps$transform(xg)
+    expect_data_table(xgt, nrows = nrow(xg))
+
+    p.res = ps$nlevels
+    p.res[is.na(p.res)] = 2
+    xgp = ps$generateGridDesign(param.resolutions = p.res)
+    expect_data_table(xgp, any.missing = FALSE)
+    expect_true(nrow(xgp) <= prod(p.res))
+
+    xgn = ps$generateGridDesign(n = 100)
+    expect_data_table(xgn, any.missing = FALSE)
+    expect_true(nrow(xgn) <= 100)
   }
 })
 
 test_that("collections in ParamSetFlat works", {
   ps = th.paramset.flat.collection
   expect_class(ps, "ParamSetFlat")
-  expect_equal(sum(sapply(ps$member.tags, function(z) "th.param.real.na.collection" %in% z)), 10)
+  expect_equal(sum(sapply(ps$member.tags, function(z) "th.param.real.na.collection" %in% z)), 4)
   xs = ps$sample(10)
   expect_true("th.param.categorical" %in% names(xs))
   xs.t = ps$transform(xs)

@@ -46,6 +46,7 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
+      assertInt(n, lower = 1L)
       sample.generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
@@ -87,6 +88,8 @@ ParamSetFlat = R6Class(
     },
 
     generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
+      assertInt(n, lower = 1L)
+      assertFunction(lhs.function, args = c("n", "k"))
       lhs.des = lhs.function(n, k = self$length)
       # converts the LHS output to values of the parameters
       sample.converter = function(lhs.des) {
@@ -108,6 +111,45 @@ ParamSetFlat = R6Class(
         lhs.des = oversampleForbidden2(n = n, param = param, oversample.rate = 1, sample.generator = sample.generator, sample.validator = sample.validator)
       }
       sample.converter(lhs.des)
+    },
+
+    # resolution int(1) - resolution used for each parameter
+    # param.resolutions int() - resolution given per parameter (named vector)
+    # n int(1) - approx. maximum number of samples in grid
+    generateGridDesign = function(resolution = NULL, param.resolutions = NULL, n = NULL) {
+      if (sum(!is.null(resolution), !is.null(param.resolutions), !is.null(n)) != 1) {
+        stop("You can only specify one of the arguments!")
+      }
+
+      seqGen = function(r) seq(0, 1, length.out = r)
+
+      if (!is.null(resolution)) {
+        # build for resolution
+        assertInt(resolution, lower = 1L)
+        grid.vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
+        names(grid.vec) = self$ids
+        res = as.list(self$denorm(grid.vec))
+      } else {
+        # build for n: calculate param.resolutions
+        if (!is.null(n)) {
+          assertInt(n, lower = 1L)
+          param.resolutions = optGridRes(n, self$nlevels)
+        }
+        # build for param.resolutions
+        assertIntegerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")
+        assertSetEqual(names(param.resolutions), self$ids)
+        grid.vec = lapply(param.resolutions, seqGen)
+        res = lapply(names(grid.vec), function(z) self$params[[z]]$denormVector(x = grid.vec[[z]]))
+        names(res) = names(grid.vec)
+      } 
+      res = lapply(res, unique)
+      res = do.call(CJ, as.list(res))
+      if (!is.null(self$restriction)) {
+        ind.valid = vectorizedForParamSetFlat(res, self$test)
+        return(res[ind.valid, ])
+      } else {
+        return(res)
+      }
     }
   ),
 
