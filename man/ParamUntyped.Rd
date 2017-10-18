@@ -17,6 +17,7 @@ A \code{\link[R6]{R6Class}} to represent untyped parameters.
 \section{Member Variables}{
 
   \emph{none}
+
 Inherited from \code{ParamSimple}:
 
 
@@ -45,6 +46,7 @@ Inherited from \code{ParamNode}:
 \section{Methods}{
 
   \emph{none}
+
 Inherited from \code{ParamSimple}
 
 
@@ -69,10 +71,12 @@ Inherited from \code{ParamNode}:
 \section{Active Bindings}{
 
   \emph{none}
+
 Inherited from \code{ParamSimple}
 
 
   \emph{none}
+
 Inherited from \code{ParamNode}:
 
 

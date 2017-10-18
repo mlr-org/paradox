@@ -58,6 +58,7 @@ Inherited from \code{ParamNode}:
 \section{Active Bindings}{
 
   \emph{none}
+
 Inherited from \code{ParamNode}:
 
 

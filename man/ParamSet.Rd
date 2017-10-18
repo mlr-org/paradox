@@ -48,6 +48,7 @@ Inherited from \code{ParamNode}:
 \section{Methods}{
 
   \emph{none}
+
 Inherited from \code{ParamNode}:
 
 

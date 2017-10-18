@@ -17,6 +17,7 @@ A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
 \section{Member Variables}{
 
   \emph{none}
+
 Inherited from \code{ParamSet}:
 
 
@@ -68,6 +69,7 @@ Inherited from \code{ParamSet}:
 
 
   \emph{none}
+
 Inherited from \code{ParamNode}:
 
 

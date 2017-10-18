@@ -78,7 +78,18 @@
 <div id="usage" class="section level2">
 <h2 class="hasAnchor">
 <a href="#usage" class="anchor"></a>Usage</h2>
-<p>Create a simple ParamSet:</p>
+<p>Create a simple ParamSet using all supported Parameter Types:</p>
+<ul>
+<li>_Int_egers</li>
+<li>
+<em>Real</em>-valued numbers</li>
+<li>
+<em>Flag</em> for <code>TRUE</code>/<code>FALSE</code>
+</li>
+<li>
+<em>Categorical</em> values, namely characters.</li>
+<li>Further types are only possible by using transformations.</li>
+</ul>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
   <span class="dt">params =</span> <span class="kw">list</span>(
     ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),
@@ -118,6 +129,74 @@
 ## 14: 3  10  FALSE       c
 ## 15: 3  10   TRUE       a
 ## 16: 3  10   TRUE       c</code></pre>
+<p>Properties of the parameters within the ParamSet:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$values</code></pre></div>
+<pre><code>## $z
+## [1] 1 2 3
+## 
+## $x
+## NULL
+## 
+## $switch
+## [1]  TRUE FALSE
+## 
+## $methods
+## [1] "a" "b" "c"</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$param.classes</code></pre></div>
+<pre><code>##                  z                  x             switch 
+##         "ParamInt"        "ParamReal"        "ParamFlag" 
+##            methods 
+## "ParamCategorical"</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$nlevels</code></pre></div>
+<pre><code>##       z       x  switch methods 
+##       3      NA       2       3</code></pre>
+<div id="numeric-paramset" class="section level3">
+<h3 class="hasAnchor">
+<a href="#numeric-paramset" class="anchor"></a>Numeric ParamSet</h3>
+<p>Things you can do on an all numeric ParamSet:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
+  <span class="dt">params =</span> <span class="kw">c</span>(
+    <span class="kw">list</span>(ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),
+    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">10</span>))
+  )
+)
+
+ps$lower</code></pre></div>
+<pre><code>##            z x.repeated.1 x.repeated.2 
+##          -10            0            0</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$upper</code></pre></div>
+<pre><code>##            z x.repeated.1 x.repeated.2 
+##           10           10           10</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$range</code></pre></div>
+<pre><code>##              id upper lower
+## 1:            z    10   -10
+## 2: x.repeated.1    10     0
+## 3: x.repeated.2    10     0</code></pre>
+<p>The usage of <code>repeatParam</code> generates tags show to which group the parameters belong to:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$member.tags</code></pre></div>
+<pre><code>## $z
+## NULL
+## 
+## $x.repeated.1
+## [1] "x.repeated"
+## 
+## $x.repeated.2
+## [1] "x.repeated"</code></pre>
+<p>This becomes useful if you want to do operations on parameters of one group like with transformations.</p>
+</div>
+<div id="transformations" class="section level3">
+<h3 class="hasAnchor">
+<a href="#transformations" class="anchor"></a>Transformations</h3>
+<p>Transformations are functions with a fixed signature.</p>
+<ul>
+<li>
+<code>x</code> A named list of parameter values. Each list item contains a vector of parameter values of a single parameter.</li>
+<li>
+<code>dict</code> An environment that can be accessed using the <code>$</code> operator. It can contains values that don’t belong to any parameter but are important for transformations.</li>
+<li>
+<code>tags</code> A list of the tags for each parameter. Each parameter can have a various tags indicating additional characteristics.</li>
+</ul>
+</div>
 </div>
 </div>
 </div>
