@@ -68,11 +68,56 @@
 <p>Universal Parameter Space Description and Tools</p>
 <ul>
 <li><a href="https://github.com/mlr-org/phng/issues">Issues and Bugs</a></li>
+<li><a href="https://mlr-org.github.io/phng">Documentation</a></li>
 </ul>
 <div id="installation" class="section level2">
 <h2 class="hasAnchor">
 <a href="#installation" class="anchor"></a>Installation</h2>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">devtools::<span class="kw">install_github</span>(<span class="st">"mlr-org/phng"</span>, <span class="dt">dependencies =</span> <span class="ot">TRUE</span>)</code></pre></div>
+</div>
+<div id="usage" class="section level2">
+<h2 class="hasAnchor">
+<a href="#usage" class="anchor"></a>Usage</h2>
+<p>Create a simple ParamSet:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
+  <span class="dt">params =</span> <span class="kw">list</span>(
+    ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),
+    ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>),
+    ParamFlag$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),
+    ParamCategorical$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">values =</span> <span class="kw">c</span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))
+  )
+)</code></pre></div>
+<p>Draw random samples / create random design:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">sample</span>(<span class="dv">3</span>)</code></pre></div>
+<pre><code>##    z         x switch methods
+## 1: 1  7.660348  FALSE       b
+## 2: 3  8.809346  FALSE       c
+## 3: 2 -9.088870  FALSE       b</code></pre>
+<p>Generate LHS Design:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)</code></pre></div>
+<pre><code>##    z         x switch methods
+## 1: 1 -9.019242  FALSE       b
+## 2: 2  8.636449  FALSE       a
+## 3: 3 -1.890614   TRUE       c</code></pre>
+<p>Generate Grid Design:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateGridDesign</span>(<span class="dt">resolution =</span> <span class="dv">2</span>)</code></pre></div>
+<pre><code>##     z   x switch methods
+##  1: 1 -10  FALSE       a
+##  2: 1 -10  FALSE       c
+##  3: 1 -10   TRUE       a
+##  4: 1 -10   TRUE       c
+##  5: 1  10  FALSE       a
+##  6: 1  10  FALSE       c
+##  7: 1  10   TRUE       a
+##  8: 1  10   TRUE       c
+##  9: 3 -10  FALSE       a
+## 10: 3 -10  FALSE       c
+## 11: 3 -10   TRUE       a
+## 12: 3 -10   TRUE       c
+## 13: 3  10  FALSE       a
+## 14: 3  10  FALSE       c
+## 15: 3  10   TRUE       a
+## 16: 3  10   TRUE       c</code></pre>
 </div>
 </div>
 </div>
