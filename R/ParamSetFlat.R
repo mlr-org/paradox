@@ -6,6 +6,7 @@
 #' 
 #' @section Member Variables:
 #'   \emph{none}
+#' 
 #' Inherited from \code{ParamSet}:
 #' @inheritSection ParamSet Member Variables
 #'

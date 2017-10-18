@@ -17,11 +17,13 @@
 #' 
 #' @section Methods:
 #'   \emph{none}
+#' 
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
 #' 
 #' @section Active Bindings:
 #'   \emph{none}
+#' 
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Active Bindings
 #'

@@ -25,6 +25,7 @@
 #'
 #' @section Methods:
 #'   \emph{none}
+#' 
 #' Inherited from \code{ParamNode}:
 #' @inheritSection ParamNode Methods
 #' 

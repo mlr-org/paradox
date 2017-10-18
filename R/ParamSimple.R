@@ -30,6 +30,7 @@
 #' 
 #' @section Active Bindings:
 #'   \emph{none}
+#' 
 #' Inherited from \code{ParamNode}:
 #' @inheritSection ParamNode Active Bindings
 #' 
