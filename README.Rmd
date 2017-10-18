@@ -26,7 +26,14 @@ devtools::install_github("mlr-org/phng", dependencies = TRUE)
 
 ## Usage
 
-Create a simple ParamSet:
+Create a simple ParamSet using all supported Parameter Types:
+
+* _Int_egers
+* _Real_-valued numbers
+* _Flag_ for `TRUE`/`FALSE`
+* _Categorical_ values, namely characters.
+* Further types are only possible by using transformations.
+
 ```{r}
 ps = ParamSetFlat$new(
   params = list(
@@ -39,16 +46,55 @@ ps = ParamSetFlat$new(
 ```
 
 Draw random samples / create random design:
-```{r}
+```{r ps}
 ps$sample(3)
 ```
 
 Generate LHS Design:
-```{r}
+```{r pslhs}
 ps$generateLHSDesign(3)
 ```
 
 Generate Grid Design:
-```{r}
+```{r psgrid}
 ps$generateGridDesign(resolution = 2)
 ```
+
+Properties of the parameters within the ParamSet:
+```{r psprobs}
+ps$values
+ps$param.classes
+ps$nlevels
+```
+
+### Numeric ParamSet
+
+Things you can do on an all numeric ParamSet:
+```{r psnumeric}
+ps = ParamSetFlat$new(
+  params = c(
+    list(ParamInt$new(id = "z", lower = -10, upper = 10)),
+    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 10))
+  )
+)
+
+ps$lower
+ps$upper
+ps$range
+```
+
+The usage of `repeatParam` generates tags show to which group the parameters belong to:
+
+```{r psnumerictags}
+ps$member.tags
+```
+
+This becomes useful if you want to do operations on parameters of one group like with transformations.
+
+### Transformations
+
+Transformations are functions with a fixed signature.
+
+* `x` A named list of parameter values. Each list item contains a vector of parameter values of a single parameter.
+* `dict` An environment that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
+* `tags` A list of the tags for each parameter. Each parameter can have a various tags indicating additional characteristics.
