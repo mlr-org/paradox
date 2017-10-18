@@ -32,16 +32,21 @@ A \code{\link[R6]{R6Class}} to represent set of parameters.
 }
 }
 
-\section{Methods}{
-
-}
-
 \section{Active Bindings}{
 
 
 \describe{
   \item{dictionary}{[\code{list|environment}] \cr
     A dictionary that additional values that might be important for the transformation function, like \code{n} for the number of observations.}
+}
+}
+
+\section{Methods}{
+
+
+\describe{
+  \item{sample(n)}{[\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.}
+  \item{denorm(x)}{[\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.}
 }
 }
 

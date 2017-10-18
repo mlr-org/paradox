@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Base Class for ParamSet — ParamSet • phng</title>
+<title>Repeat a single Parameter — repeatParam • phng</title>
 
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script>
@@ -80,79 +80,44 @@
       <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Base Class for ParamSet</h1>
+    <h1>Repeat a single Parameter</h1>
     </div>
 
     
-    <p>A <code><a href='http://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent set of parameters.</p>
+    <p>Creates a list of a single Parameter repeated.
+Each parameter is tagged with <code>&lt;param$id&gt;.repeated</code>.
+This way it can be determined that they belong together</p>
     
 
-    <pre class="usage"><span class='no'>ParamSet</span></pre>
-        
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
-
-    <p><code>R6Class</code> object</p>
+    <pre class="usage"><span class='fu'>repeatParam</span>(<span class='kw'>n</span> <span class='kw'>=</span> <span class='fl'>1L</span>, <span class='no'>param</span>)</pre>
+    
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a> Arguments</h2>
+    <table class="ref-arguments">
+    <colgroup><col class="name" /><col class="desc" /></colgroup>
+    <tr>
+      <th>n</th>
+      <td><p>[<code>integer(1)</code>]
+How often should this parameter be copied?</p></td>
+    </tr>
+    <tr>
+      <th>param</th>
+      <td><p>[<code><a href='ParamSimple.html'>ParamSimple(1)</a></code>]
+The parameter that should be repeated.</p></td>
+    </tr>
+    </table>
     
     <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
-    <p>[<code>ParamSet</code>].</p>
-    
-    <h2 class="hasAnchor" id="member-variables"><a class="anchor" href="#member-variables"></a>Member Variables</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>params</dt><dd><p>[<code>list</code>] 
-  List of the Params</p></dd>
-  <dt>trafo</dt><dd><p>[<code>function(x, dict, tags)</code>] 
-    A function that returns a list of transformed x values. 
-    Has to work vectorized and also return untransformed x values.
-    The function takes a list <code>x</code> of all parameter values, additionally the dictionary linked to the <code>ParamSet</code>.
-    <code>tags</code> is a named list that contains the tags for each Param in <code>x</code>.</p></dd>
-  <dt>restriction</dt><dd><p>[<code>quote</code>] 
-    A quoted expression (<code>quote()</code>) that is evaluated on all parameter values to check if they are feasible.
-    It has to be evaluated to <code>TRUE</code> so that the parameter value is valid.
-    The expression has to work on vectors of values.</p></dd>
-</dl>
-    
-    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active Bindings</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>dictionary</dt><dd><p>[<code>list|environment</code>] 
-    A dictionary that additional values that might be important for the transformation function, like <code>n</code> for the number of observations.</p></dd>
-</dl>
-    
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>sample(n)</dt><dd><p>[<code>function</code>]  Function to sample Parameter values. Always returns a <code>data.table</code>.</p></dd>
-  <dt>denorm(x)</dt><dd><p>[<code>function</code>]  Takes a named list. Each list item contains a numerical vector with values between <code>[0,1]</code>. These values will be mapped to values of the Parameter Space.</p></dd>
-</dl>
-    
-    <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
-
-    <p>Other ParamHelpers: <code><a href='ParamBase.html'>ParamBase</a></code>,
-  <code><a href='ParamHandle.html'>ParamHandle</a></code>, <code><a href='ParamNode.html'>ParamNode</a></code>,
-  <code><a href='ParamSetFlat.html'>ParamSetFlat</a></code></p>
+    <p>List of Parameters</p>
     
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>
     <ul class="nav nav-pills nav-stacked">
+      <li><a href="#arguments">Arguments</a></li>
       
-      <li><a href="#format">Format</a></li>
-
       <li><a href="#value">Value</a></li>
-
-      <li><a href="#member-variables">Member Variables</a></li>
-
-      <li><a href="#active-bindings">Active Bindings</a></li>
-
-      <li><a href="#methods">Methods</a></li>
-
-      <li><a href="#see-also">See also</a></li>
           </ul>
 
   </div>
