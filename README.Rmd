@@ -17,8 +17,38 @@ library(phng)
 Universal Parameter Space Description and Tools
 
 * [Issues and Bugs](https://github.com/mlr-org/phng/issues)
+* [Documentation](https://mlr-org.github.io/phng)
 
 ## Installation
 ```{r, eval=FALSE}
 devtools::install_github("mlr-org/phng", dependencies = TRUE)
+```
+
+## Usage
+
+Create a simple ParamSet:
+```{r}
+ps = ParamSetFlat$new(
+  params = list(
+    ParamInt$new(id = "z", lower = 1, upper = 3),
+    ParamReal$new(id = "x", lower = -10, upper = 10),
+    ParamFlag$new(id = "switch"),
+    ParamCategorical$new(id = "methods", values = c("a","b","c"))
+  )
+)
+```
+
+Draw random samples / create random design:
+```{r}
+ps$sample(3)
+```
+
+Generate LHS Design:
+```{r}
+ps$generateLHSDesign(3)
+```
+
+Generate Grid Design:
+```{r}
+ps$generateGridDesign(resolution = 2)
 ```
