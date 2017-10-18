@@ -14,6 +14,37 @@ ParamSet
 \description{
 A \code{\link[R6]{R6Class}} to represent set of parameters.
 }
+\section{Member Variables}{
+
+
+\describe{
+  \item{params}{[\code{list}] \cr
+  List of the Params}
+  \item{trafo}{[\code{function(x, dict, tags)}] \cr
+    A function that returns a list of transformed x values. 
+    Has to work vectorized and also return untransformed x values.
+    The function takes a list \code{x} of all parameter values, additionally the dictionary linked to the \code{ParamSet}.
+    \code{tags} is a named list that contains the tags for each Param in \code{x}.}
+  \item{restriction}{[\code{quote}] \cr
+    A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
+    It has to be evaluated to \code{TRUE} so that the parameter value is valid.
+    The expression has to work on vectors of values.}
+}
+}
+
+\section{Methods}{
+
+}
+
+\section{Active Bindings}{
+
+
+\describe{
+  \item{dictionary}{[\code{list|environment}] \cr
+    A dictionary that additional values that might be important for the transformation function, like \code{n} for the number of observations.}
+}
+}
+
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
   \code{\link{ParamHandle}}, \code{\link{ParamNode}},

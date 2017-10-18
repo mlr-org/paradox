@@ -3,6 +3,9 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent categorical parameters.
+#' 
+#' @inheritSection ParamSimple Member Variables
+#' @inheritSection ParamSimple Methods
 #'
 #' @return [\code{\link{ParamCategorical}}].
 #' @family ParamSimple

@@ -4,15 +4,23 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent a simple parameter.
 #' 
-#' @inheritSection ParamNode Member Variables
-#' @section Member Variables
-#' @field default [\code{any}] \cr default value.
-#' @field special.vals [\code{any}] \cr Special values this parameter is allowed to take that are within the defined space.
+#' @section Member Variables:
 #' 
-#' @inheritSection ParamNode Methods
-#' @section Methods
-#' @field sampleVector(n = 1L) [\code{function}] \cr samples \code{n} Parameter Values.
-#' @field denormVector(x) [\code{function}] \cr Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.
+#' \describe{
+#'   \item{default}{[\code{any}] \cr
+#'     default value.}
+#'   \item{special.vals}{[\code{any}] \cr
+#'     Special values this parameter is allowed to take that are within the defined space.}
+#' }
+#' 
+#' @section Methods:
+#' 
+#' \describe{
+#'   \item{sampleVector(n)}{[\code{function}] \cr
+#'     samples \code{n} Parameter Values.}
+#'   \item{denormVector(x)}{[\code{function}] \cr
+#'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
+#' }
 ParamSimple = R6Class(
   "ParamSimple",
   inherit = ParamNode,

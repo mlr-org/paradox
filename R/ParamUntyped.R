@@ -3,6 +3,12 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent untyped parameters.
+#' 
+#' @inheritSection ParamSimple Member Variables
+#' 
+#' @inheritSection ParamSimple Methods
+#' 
+#' @inheritSection ParamNode Active Bindings
 #'
 #' @return [\code{\link{ParamUntyped}}].
 #' @family ParamSimple

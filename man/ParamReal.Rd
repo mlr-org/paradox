@@ -15,15 +15,25 @@ ParamReal
 A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
 }
 \section{Member Variables}{
-NA
 
-NA
+
+\describe{
+  \item{default}{[\code{any}] \cr
+    default value.}
+  \item{special.vals}{[\code{any}] \cr
+    Special values this parameter is allowed to take that are within the defined space.}
+}
 }
 
 \section{Methods}{
-NA
 
-NA
+
+\describe{
+  \item{sampleVector(n)}{[\code{function}] \cr
+    samples \code{n} Parameter Values.}
+  \item{denormVector(x)}{[\code{function}] \cr
+    Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
+}
 }
 
 \seealso{

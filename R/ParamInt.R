@@ -3,6 +3,9 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent Integer parameters.
+#' 
+#' @inheritSection ParamSimple Member Variables
+#' @inheritSection ParamSimple Methods
 #'
 #' @return [\code{\link{ParamInt}}].
 #' @family ParamSimple

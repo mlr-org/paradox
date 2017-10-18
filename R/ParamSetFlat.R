@@ -3,7 +3,25 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
+#' 
+#' @section Member Variables:
 #'
+#' @section Methods:
+#' 
+#' \describe{
+#'   \item{generateLHSDesign(n, lhs.function)}{[\code{function}] \cr
+#'     Function to generate a LHS design.}
+#'   \item{generateGridDesign(resolution, param.resolutions, n)}{[\code{function}] \cr
+#'     \describe{
+#'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
+#'       \item{param.resolutions}{[\code{integer()}] for each parameter individually. Has to be a named vector.}
+#'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
+#'     }
+#'   }  
+#' }
+#' 
+#' @section Active Bindings:
+#' 
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamHelpers
 #' @export
