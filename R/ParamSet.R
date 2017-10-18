@@ -19,7 +19,13 @@
 #'     It has to be evaluated to \code{TRUE} so that the parameter value is valid.
 #'     The expression has to work on vectors of values.}
 #' }
+#' 
+#' Inherited from \code{ParamNode}:
+#' @inheritSection ParamNode Member Variables
 #'
+#' @section Methods:
+#'   \emph{none}
+#' Inherited from \code{ParamNode}:
 #' @inheritSection ParamNode Methods
 #' 
 #' @section Active Bindings:
@@ -28,9 +34,12 @@
 #'   \item{dictionary}{[\code{list|environment}] \cr
 #'     A dictionary that additional values that might be important for the transformation function, like \code{n} for the number of observations.}
 #' }
+#' 
+#' Inherited from \code{ParamNode}
+#' @inheritSection ParamNode Active Bindings
 #'
 #' @return [\code{\link{ParamSet}}].
-#' @family ParamHelpers
+#' @family ParamSet
 ParamSet = R6Class("ParamSet",
   inherit = ParamNode,
   public = list(

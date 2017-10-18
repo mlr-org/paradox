@@ -4,11 +4,20 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent untyped parameters.
 #' 
+#' @section Member Variables:
+#'   \emph{none}
+#' Inherited from \code{ParamSimple}:
 #' @inheritSection ParamSimple Member Variables
 #' 
+#' @section Methods:
+#'   \emph{none}
+#' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
 #' 
-#' @inheritSection ParamNode Active Bindings
+#' @section Active Bindings:
+#'   \emph{none}
+#' Inherited from \code{ParamSimple}
+#' @inheritSection ParamSimple Active Bindings
 #'
 #' @return [\code{\link{ParamUntyped}}].
 #' @family ParamSimple

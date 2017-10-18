@@ -4,8 +4,25 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent categorical parameters.
 #' 
+#' @section Member Variables:
+#' \describe{
+#'   \item{values}{[\code{character}] \cr
+#'     All categorical values.}
+#' }
+#' 
+#' Inherited from \code{ParamSimple}:
 #' @inheritSection ParamSimple Member Variables
+#' 
+#' @section Methods:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
+#' 
+#' @section Active Bindings:
+#'   \emph{none}
+#' Inherited from \code{ParamSimple}
+#' @inheritSection ParamSimple Active Bindings
 #'
 #' @return [\code{\link{ParamCategorical}}].
 #' @family ParamSimple

@@ -4,6 +4,9 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
 #' 
+#' @section Member Variables:
+#'   \emph{none}
+#' Inherited from \code{ParamSet}:
 #' @inheritSection ParamSet Member Variables
 #'
 #' @section Methods:
@@ -14,16 +17,45 @@
 #'   \item{generateGridDesign(resolution, param.resolutions, n)}{[\code{function}] \cr
 #'     \describe{
 #'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
-#'       \item{param.resolutions}{[\code{integer()}] for each parameter individually. Has to be a named vector.}
+#'       \item{param.resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
 #'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
 #'     }
 #'   }  
 #' }
 #' 
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Methods
+#' 
+#' @section Active Bindings:
+#' 
+#' \describe{
+#'   \item{ids}{[\code{character}] \cr
+#'     ids of the Parameters in this ParamSet.}
+#'   \item{storage.types}{[\code{character}] \cr
+#'     How is a Value of this Parameter stored as an R-object?}
+#'   \item{values}{[\code{list}] \cr
+#'     For any discrete Parameter return the values. Also works for Integers.}
+#'   \item{lower}{[\code{numeric}] \cr
+#'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
+#'   \item{upper}{[\code{numeric}] \cr
+#'     Same as for \code{lower}}
+#'   \item{param.classes}{[\code{character}] \cr
+#'     The \code{R6} class name of each Parameter.}
+#'   \item{range}{[\code{data.table}] \cr
+#'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
+#'   \item{length}{[\code{integer(1)}] \cr
+#'     The number of parameters.}
+#'   \item{nlevels}{[\code{integer}] \cr
+#'     For each discrete Parameter return the number of different values.}
+#'   \item{member.tags}{[\code{list}] \cr
+#'     The \code{tags} of each Parameter.}
+#' }
+#' 
+#' Inherited from \code{ParamSet}:
 #' @inheritSection ParamSet Active Bindings
 #' 
 #' @return [\code{\link{ParamSet}}].
-#' @family ParamHelpers
+#' @family ParamSet
 #' @export
 ParamSetFlat = R6Class(
   "ParamSetFlat",
@@ -170,8 +202,6 @@ ParamSetFlat = R6Class(
       }
     }
   ),
-
-  #FIXME: add unit tests for empty flat set
 
   active = list(
     ids = function() names(self$params),
