@@ -4,7 +4,7 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
 #' 
-#' @section Member Variables:
+#' @inheritSection ParamSet Member Variables
 #'
 #' @section Methods:
 #' 
@@ -20,7 +20,7 @@
 #'   }  
 #' }
 #' 
-#' @section Active Bindings:
+#' @inheritSection ParamSet Active Bindings
 #' 
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamHelpers

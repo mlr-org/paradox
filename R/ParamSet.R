@@ -20,7 +20,7 @@
 #'     The expression has to work on vectors of values.}
 #' }
 #'
-#' @section Methods:
+#' @inheritSection ParamNode Methods
 #' 
 #' @section Active Bindings:
 #' 

@@ -61,13 +61,13 @@ th.paramset.flat.restricted = ParamSetFlat$new(
   restriction = quote(th.param.real > th.param.int)
 )
 
-th.paramset.flat.collection = ParamSetFlat$new(
-  id = 'th.paramset.flat.collection',
+th.paramset.flat.repeated = ParamSetFlat$new(
+  id = 'th.paramset.flat.repeated',
   params = c(
     list(th.param.nat, th.param.categorical),
-    createCollectionParamList(4L, th.param.real.na)
+    repeatParam(4L, th.param.real.na)
   ),
-  trafo = collectionHelper(fun = function(x, dict, tags) {
+  trafo = trafoOnRepeatedParam(fun = function(x, dict, tags) {
     xm = as.matrix(as.data.table(x))
     col.ind = seq_len(ncol(xm))
     ind.mat = sapply(dict$th.param.nat, function(z) col.ind <= z)
@@ -77,5 +77,5 @@ th.paramset.flat.collection = ParamSetFlat$new(
     xm = xm / xm.rowsums
     xm[is.nan(xm)] = 1 # take care of dev by zero
     list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
-  }, collection.param.id = "th.param.real.na", additional.params = "th.param.nat")
+  }, repeated.param.id = "th.param.real.na", additional.params = "th.param.nat")
 )

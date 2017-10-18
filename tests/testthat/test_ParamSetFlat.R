@@ -4,7 +4,7 @@ test_that("methods and active bindings work", {
   ps.list = list(
     th.paramset.flat.empty,
     th.paramset.flat.full,
-    th.paramset.flat.collection,
+    th.paramset.flat.repeated,
     th.paramset.flat.restricted,
     th.paramset.flat.untyped,
     th.paramset.flat.numeric,
@@ -35,7 +35,7 @@ test_that("methods and active bindings work", {
 test_that("advanced methods work", {
   ps.list = list(
     th.paramset.flat.full,
-    th.paramset.flat.collection,
+    th.paramset.flat.repeated,
     th.paramset.flat.restricted,
     th.paramset.flat.numeric,
     th.paramset.flat.trafo,
@@ -86,10 +86,10 @@ test_that("advanced methods work", {
   }
 })
 
-test_that("collections in ParamSetFlat works", {
-  ps = th.paramset.flat.collection
+test_that("repeated params in ParamSetFlat works", {
+  ps = th.paramset.flat.repeated
   expect_class(ps, "ParamSetFlat")
-  expect_equal(sum(sapply(ps$member.tags, function(z) "th.param.real.na.collection" %in% z)), 4)
+  expect_equal(sum(sapply(ps$member.tags, function(z) "th.param.real.na.repeated" %in% z)), 4)
   xs = ps$sample(10)
   expect_true("th.param.categorical" %in% names(xs))
   xs.t = ps$transform(xs)
