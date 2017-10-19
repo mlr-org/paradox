@@ -16,7 +16,7 @@
 #' }
 #' 
 #' @section Methods:
-#' 
+
 #' \describe{
 #'   \item{sample(n)}{[\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.}
 #'   \item{denorm(x)}{[\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.}
@@ -45,15 +45,15 @@ ParamNode = R6Class("ParamNode",
     
     # constructor
     initialize = function(id, storage.type, check, handle = NULL, tags) {
-      handle = handle %??% ParamHandle$new(id = id, node = self)
       assertString(id)
       self$id = assertNames(id, type = "strict")
       self$storage.type = assertString(storage.type)
       self$check = assertFunction(check)
       self$test = makeTestFunction(check)
       self$assert = makeAssertionFunction(check)
-      self$handle = assertClass(handle, "ParamHandle")
       self$tags = assertCharacter(tags, null.ok = TRUE)
+      handle = handle %??% ParamHandle$new(node = self)  # handle should always be constructed after node is constructed
+      self$handle = assertClass(handle, "ParamHandle")
     },
     
     # public methods

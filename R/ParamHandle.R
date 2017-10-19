@@ -30,8 +30,7 @@ ParamHandle = R6Class("ParamHandle",
     # constructor
     initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, parent = NULL) {
       #if(!is.null(id) & !is.null(node)) stop("either set id or node, do not support both!")
-      #self$id = ifelse(is.null(node), id, node$id)
-      self$id = id
+      self$id = ifelse(is.null(id), node$id, id)
       self$node = node
       self$val = val
       #
