@@ -74,7 +74,7 @@ ParamVisitor = R6Class("ParamVisitor",
         return(TRUE)
       }
       # now the input arg has a field called depend
-      if(is.null(arg$depend$id)) stop("missing id in depend!")
+      if(is.null(arg$depend$id) && is.null(arg$func)) stop("need at least id or func in depend!")
       if((self$host$id == arg$depend$id))
       {
         catf("hit depend:  %s", arg$node$id)
