@@ -145,6 +145,11 @@ ParamHandle = R6Class("ParamHandle",
       if (length(self$mand.children) > 0) self$printMandChildChainVal()
       if (length(self$cond.children) > 0) self$printCondChildChainVal()
     }
-  )
+  ),
+    active = list(
+    getFirstMandChild = function() {
+      mnames = names(self$mand.children)
+      self$mand.children[[mnames[1L]]]
+    })
 )
 

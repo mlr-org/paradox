@@ -78,7 +78,7 @@ ParamVisitor = R6Class("ParamVisitor",
       if((self$host$id == arg$depend$id))
       {
         catf("hit depend:  %s", arg$node$id)
-        self$host$addCondChild(ParamHandle$new(node = arg$node, depend = arg$depend,val = arg$val))
+        self$host$addCondChild(ParamHandle$new(node = arg$node, depend = arg$depend, val = arg$val))
         return(TRUE)
       }
       if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
