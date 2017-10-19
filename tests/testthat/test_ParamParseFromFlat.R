@@ -16,6 +16,7 @@ test_that("test if Param parse from flat works", {
 
 test_that("test if Param parse from flat works with sample", {
   ps = ParamHandle$new(id = "Root", val = NULL)
+  # list(id, ParamNode, val, depend)
   input = list(
     model = list(id = "model", ParamCategorical$new(id = "model", values = c("SVM", "RF")), val = "svm"),
     c = list(id = "C", node = ParamReal$new(id = "C", lower = 0, upper = 100), val = 3, depend = list(id = "model", val = "svm")),
