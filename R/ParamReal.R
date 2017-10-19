@@ -4,8 +4,30 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
 #' 
+#' @section Member Variables:
+#' \describe{
+#'   \item{lower}{[\code{integer(1)|-Inf}] \cr
+#'     Upper boundary.}
+#'   \item{upper}{[\code{integer(1)|-Inf}] \cr
+#'     Lower boundary.}
+#'   \item{allow.inf}{[\code{logical(1)}] \cr
+#'     Are the values \code{-Inf} and \code{Inf} feasible?}
+#' }
+#' 
+#' Inherited from \code{ParamSimple}:
 #' @inheritSection ParamSimple Member Variables
+#' 
+#' @section Methods:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
+#' 
+#' @section Active Bindings:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSimple}
+#' @inheritSection ParamSimple Active Bindings
 #'
 #' @return [\code{\link{ParamReal}}].
 #' @family ParamSimple

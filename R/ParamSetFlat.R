@@ -3,9 +3,60 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
+#' 
+#' @section Member Variables:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Member Variables
 #'
+#' @section Methods:
+#' 
+#' \describe{
+#'   \item{generateLHSDesign(n, lhs.function)}{[\code{function}] \cr
+#'     Function to generate a LHS design.}
+#'   \item{generateGridDesign(resolution, param.resolutions, n)}{[\code{function}] \cr
+#'     \describe{
+#'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
+#'       \item{param.resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
+#'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
+#'     }
+#'   }  
+#' }
+#' 
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Methods
+#' 
+#' @section Active Bindings:
+#' 
+#' \describe{
+#'   \item{ids}{[\code{character}] \cr
+#'     ids of the Parameters in this ParamSet.}
+#'   \item{storage.types}{[\code{character}] \cr
+#'     How is a Value of this Parameter stored as an R-object?}
+#'   \item{values}{[\code{list}] \cr
+#'     For any discrete Parameter return the values. Also works for Integers.}
+#'   \item{lower}{[\code{numeric}] \cr
+#'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
+#'   \item{upper}{[\code{numeric}] \cr
+#'     Same as for \code{lower}}
+#'   \item{param.classes}{[\code{character}] \cr
+#'     The \code{R6} class name of each Parameter.}
+#'   \item{range}{[\code{data.table}] \cr
+#'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
+#'   \item{length}{[\code{integer(1)}] \cr
+#'     The number of parameters.}
+#'   \item{nlevels}{[\code{integer}] \cr
+#'     For each discrete Parameter return the number of different values.}
+#'   \item{member.tags}{[\code{list}] \cr
+#'     The \code{tags} of each Parameter.}
+#' }
+#' 
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Active Bindings
+#' 
 #' @return [\code{\link{ParamSet}}].
-#' @family ParamHelpers
+#' @family ParamSet
 #' @export
 ParamSetFlat = R6Class(
   "ParamSetFlat",
@@ -46,6 +97,7 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
+      assertInt(n, lower = 1L)
       sample.generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
@@ -87,6 +139,8 @@ ParamSetFlat = R6Class(
     },
 
     generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
+      assertInt(n, lower = 1L)
+      assertFunction(lhs.function, args = c("n", "k"))
       lhs.des = lhs.function(n, k = self$length)
       # converts the LHS output to values of the parameters
       sample.converter = function(lhs.des) {
@@ -108,10 +162,47 @@ ParamSetFlat = R6Class(
         lhs.des = oversampleForbidden2(n = n, param = param, oversample.rate = 1, sample.generator = sample.generator, sample.validator = sample.validator)
       }
       sample.converter(lhs.des)
+    },
+
+    # resolution int(1) - resolution used for each parameter
+    # param.resolutions int() - resolution given per parameter (named vector)
+    # n int(1) - approx. maximum number of samples in grid
+    generateGridDesign = function(resolution = NULL, param.resolutions = NULL, n = NULL) {
+      if (sum(!is.null(resolution), !is.null(param.resolutions), !is.null(n)) != 1) {
+        stop("You can only specify one of the arguments!")
+      }
+
+      seqGen = function(r) seq(0, 1, length.out = r)
+
+      if (!is.null(resolution)) {
+        # build for resolution
+        assertInt(resolution, lower = 1L)
+        grid.vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
+        names(grid.vec) = self$ids
+        res = as.list(self$denorm(grid.vec))
+      } else {
+        # build for n: calculate param.resolutions
+        if (!is.null(n)) {
+          assertInt(n, lower = 1L)
+          param.resolutions = optGridRes(n, self$nlevels)
+        }
+        # build for param.resolutions
+        assertIntegerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")
+        assertSetEqual(names(param.resolutions), self$ids)
+        grid.vec = lapply(param.resolutions, seqGen)
+        res = lapply(names(grid.vec), function(z) self$params[[z]]$denormVector(x = grid.vec[[z]]))
+        names(res) = names(grid.vec)
+      } 
+      res = lapply(res, unique)
+      res = do.call(CJ, as.list(res))
+      if (!is.null(self$restriction)) {
+        ind.valid = vectorizedForParamSetFlat(res, self$test)
+        return(res[ind.valid, ])
+      } else {
+        return(res)
+      }
     }
   ),
-
-  #FIXME: add unit tests for empty flat set
 
   active = list(
     ids = function() names(self$params),

@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>OptPath Object — OptPath • phng</title>
+<title>Repeat a single Parameter — repeatParam • phng</title>
 
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script>
@@ -80,72 +80,44 @@
       <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>OptPath Object</h1>
+    <h1>Repeat a single Parameter</h1>
     </div>
 
     
-    <p>A <code><a href='http://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent the OptPath.</p>
+    <p>Creates a list of a single Parameter repeated.
+Each parameter is tagged with <code>&lt;param$id&gt;.repeated</code>.
+This way it can be determined that they belong together</p>
     
 
-    <pre class="usage"><span class='no'>OptPath</span></pre>
-        
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
+    <pre class="usage"><span class='fu'>repeatParam</span>(<span class='kw'>n</span> <span class='kw'>=</span> <span class='fl'>1L</span>, <span class='no'>param</span>)</pre>
+    
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a> Arguments</h2>
+    <table class="ref-arguments">
+    <colgroup><col class="name" /><col class="desc" /></colgroup>
+    <tr>
+      <th>n</th>
+      <td><p>[<code>integer(1)</code>]
+How often should this parameter be copied?</p></td>
+    </tr>
+    <tr>
+      <th>param</th>
+      <td><p>[<code><a href='ParamSimple.html'>ParamSimple(1)</a></code>]
+The parameter that should be repeated.</p></td>
+    </tr>
+    </table>
+    
+    <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
-    <p><code>R6Class</code> object</p>
-    
-    <h2 class="hasAnchor" id="member-variables"><a class="anchor" href="#member-variables"></a>Member Variables</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>par.set</dt><dd><p>[<code>ParamSet</code>]  
-    The [<code>ParamSet</code>] from which the <code>x</code> values will be added to this <code>OptPath</code>.</p></dd>
-  <dt>y.names</dt><dd><p>[<code>character()</code>]  
-    The names for the y values. Default is &#8220;y&#8221;.</p></dd>
-  <dt>minimize</dt><dd><p>[<code>logical()</code>]   
-    A logical vector indicating which y components are to be minimized. Per default all are <code>TRUE</code>.</p></dd>
-  <dt>check.feasible</dt><dd><p>[<code>logical(1)</code>]   
-    Should new x values be checked for feasibility according to the <code>ParamSet</code>.</p></dd>
-  <dt>data</dt><dd><p>[<code>data.table</code>]   
-    This field contains all values logged into the opt.path.</p></dd>
-</dl>
-    
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>add()</dt><dd><p>[<code>function</code>]   
-    Add a new line to the <code>OptPath</code>.</p></dd>
-</dl>
-    
-    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active Bindings</h2>
-
-    
-    <dl class='dl-horizontal'>
-  <dt>x.names</dt><dd><p>[<code>character()</code>] 
-    Names of the x-values</p></dd>
-  <dt>length</dt><dd><p>[<code>integer(1)</code>] 
-    The number of entries in this <code>OptPath</code>.</p></dd>
-  <dt>x</dt><dd><p>[<code>data.table</code>]   
-    A subset of <code>data</code> only containing the x values.</p></dd>
-  <dt>y</dt><dd><p>[<code>data.table</code>]   
-    A subset of <code>data</code> only containing the y values.</p></dd>
-  <dt>dim</dt><dd><p>[<code>integer(1)</code>]   
-    The dimensionality of the optimization problem.</p></dd>
-</dl>
+    <p>List of Parameters</p>
     
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>
     <ul class="nav nav-pills nav-stacked">
+      <li><a href="#arguments">Arguments</a></li>
       
-      <li><a href="#format">Format</a></li>
-
-      <li><a href="#member-variables">Member Variables</a></li>
-
-      <li><a href="#methods">Methods</a></li>
-
-      <li><a href="#active-bindings">Active Bindings</a></li>
+      <li><a href="#value">Value</a></li>
           </ul>
 
   </div>

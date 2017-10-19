@@ -3,6 +3,27 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent categorical parameters.
+#' 
+#' @section Member Variables:
+#' \describe{
+#'   \item{values}{[\code{character}] \cr
+#'     All categorical values.}
+#' }
+#' 
+#' Inherited from \code{ParamSimple}:
+#' @inheritSection ParamSimple Member Variables
+#' 
+#' @section Methods:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSimple}
+#' @inheritSection ParamSimple Methods
+#' 
+#' @section Active Bindings:
+#'   \emph{none}
+#' 
+#' Inherited from \code{ParamSimple}
+#' @inheritSection ParamSimple Active Bindings
 #'
 #' @return [\code{\link{ParamCategorical}}].
 #' @family ParamSimple
@@ -35,7 +56,7 @@ ParamCategorical = R6Class(
       sample(self$values, n, replace = TRUE)
     },
     denormVector = function(x) {
-      res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1))
+      res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
     }

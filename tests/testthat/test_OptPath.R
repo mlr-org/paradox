@@ -29,18 +29,18 @@ test_that("multi-objective with trafos works", {
   op = th.opt.path.multiobjective
 
   # test active bindings
-  expect_equal(op$x.names, names(th.paramset.flat.collection$params))
+  expect_equal(op$x.names, names(th.paramset.flat.repeated$params))
   expect_equal(op$length, 10)
   expect_data_table(op$x)
-  expect_equal(colnames(op$x), names(th.paramset.flat.collection$params))
+  expect_equal(colnames(op$x), names(th.paramset.flat.repeated$params))
   expect_data_table(op$y)
   expect_equal(op$y$y1.min, 10:1)
   expect_equal(op$y$y2.max, 1:10)
   expect_equal(op$dim, 2)
 
   # contents after data.frame conversion
-  op.df = as.data.frame(op)
-  expect_data_frame(op.df, nrow = 10, ncol = 21)
+  op.df = as.data.frame(op, include.extras = FALSE)
+  expect_data_frame(op.df, nrow = 10, ncol = 7 + op$par.set$length + op$dim)
   expect_list(op.df$transformed.x, len = 10)
 })
 

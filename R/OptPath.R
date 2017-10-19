@@ -4,36 +4,47 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent the OptPath.
 #' 
-#' @field par.set [\code{ParamSet}]\cr 
-#'   The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.
-#' @field y.names [\code{character()}]\cr 
-#'   The names for the y values. Default is \dQuote{y}.
-#' @field minimize [\code{logical()}]\cr 
-#'   A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.
-#' @field check.feasible [\code{logical(1)}]\cr 
-#'   Should new x values be checked for feasibility according to the \code{ParamSet}.
-#' @field data [\code{data.table}]\cr 
-#'   This field contains all values logged into the opt.path.
+#' @section Member Variables:
 #' 
-#' @field add() [\code{function}]\cr 
-#'   Add a new line to the \code{OptPath}.
+#' \describe{
+#'   \item{par.set}{[\code{ParamSet}] \cr 
+#'     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
+#'   \item{y.names}{[\code{character()}] \cr 
+#'     The names for the y values. Default is \dQuote{y}.}
+#'   \item{minimize}{[\code{logical()}] \cr  
+#'     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
+#'   \item{check.feasible}{[\code{logical(1)}] \cr  
+#'     Should new x values be checked for feasibility according to the \code{ParamSet}.}
+#'   \item{data}{[\code{data.table}] \cr  
+#'     This field contains all values logged into the opt.path.}
+#' }
 #' 
-#' @field x.names [\code{character()}]
-#' @field length [\code{integer(1)}]\cr 
-#'   The number of entries in this \code{OptPath}.
-#' @field x [\code{data.table}]\cr 
-#'   A subset of \code{data} only containing the x values.
-#' @field y [\code{data.table}]\cr 
-#'   A subset of \code{data} only containing the y values.
-#' @field dim [\code{integer(1)}]\cr 
-#'   The dimensionality of the optimization problem.
-#'
+#' @section Methods:
+#' 
+#' \describe{
+#'   \item{add()}{[\code{function}] \cr  
+#'     Add a new line to the \code{OptPath}.}
+#' }
+#' 
+#' @section Active Bindings:
+#' 
+#' \describe{
+#'   \item{x.names}{[\code{character()}] \cr
+#'     Names of the x-values}
+#'   \item{length}{[\code{integer(1)}] \cr
+#'     The number of entries in this \code{OptPath}.}
+#'   \item{x}{[\code{data.table}] \cr  
+#'     A subset of \code{data} only containing the x values.}
+#'   \item{y}{[\code{data.table}] \cr  
+#'     A subset of \code{data} only containing the y values.}
+#'   \item{dim}{[\code{integer(1)}] \cr  
+#'     The dimensionality of the optimization problem.}
+#' }
 #' @family OptPath
 #' @export
 OptPath = R6Class(
   "OptPath",
   public = list(
-   
     # member variables
     par.set = NULL,
     y.names = NULL,
