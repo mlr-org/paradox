@@ -45,7 +45,7 @@ ParamNode = R6Class("ParamNode",
     
     # constructor
     initialize = function(id, storage.type, check, handle = NULL, tags) {
-      handle = handle %??% ParamHandle$new()
+      handle = handle %??% ParamHandle$new(id = id, node = self)
       assertString(id)
       self$id = assertNames(id, type = "strict")
       self$storage.type = assertString(storage.type)

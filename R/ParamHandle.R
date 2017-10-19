@@ -54,6 +54,10 @@ ParamHandle = R6Class("ParamHandle",
     },
 
     # public methods
+    setRoot = function(root) {
+      self$root = root
+    },
+
     isdependMet = function() {  # return wether the parent took the defined value
       if (is.null(self$depend)) return(TRUE)
       if (is.null(self$parent)) return(TRUE)

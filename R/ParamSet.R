@@ -59,7 +59,7 @@ ParamSet = R6Class("ParamSet",
       # set member variables
       assertList(params, types = "ParamNode")
       for (i in seq_along(params)) {
-        params[[i]]$handle$root = self
+        params[[i]]$handle$setRoot(self)  # FIXME: are we sure? (p.s. members in handle will mainly be private in the future)
       }
       self$params = params
       self$trafo = assertFunction(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
