@@ -64,7 +64,7 @@ ParamReal = R6Class(
     # public methods
     sampleVector = function(n = 1L) {
       assert_true(self$has.finite.bounds)
-      runif(n, min = self$lower, max = self$upper)
+      runif (n, min = self$lower, max = self$upper)
     },
     denormVector = function(x) {
       assert_true(self$has.finite.bounds)

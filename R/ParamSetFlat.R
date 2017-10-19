@@ -80,7 +80,7 @@ ParamSetFlat = R6Class(
         }
         for (par.name in names(x)) {
           res = self$params[[par.name]]$check(x[[par.name]], na.ok = na.ok, null.ok = null.ok)
-          if(!isTRUE(res)) return(res)
+          if (!isTRUE(res)) return(res)
         }
         return(res)
       }

@@ -23,7 +23,7 @@ ParamSetTree = R6Class("ParamSetTree",
     # constructor
     initialize = function(id = NULL, ns, val = NULL, depend = NULL) {
       self$ns = ns
-      if(is.null(id)) self$id = ns$id
+      if (is.null(id)) self$id = ns$id
       else self$id = id
       self$handle = ParamHandle$new(id = self$id, val = val, node = self, depend = depend)
       self$flatval = list()

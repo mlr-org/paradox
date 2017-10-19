@@ -29,7 +29,7 @@ ParamHandle = R6Class("ParamHandle",
 
     # constructor
     initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, parent = NULL) {
-      if(is.null(id) & is.null(node)) stop("either set id or node for handle!")
+      if (is.null(id) & is.null(node)) stop("either set id or node for handle!")
       self$id = ifelse(is.null(id), node$id, id)
       self$node = node
       self$val = val
@@ -60,9 +60,9 @@ ParamHandle = R6Class("ParamHandle",
     isdependMet = function() {  # return wether the parent took the defined value
       if (is.null(self$depend)) return(TRUE)
       if (is.null(self$parent)) return(TRUE)
-      if(is.null(self$parent$val)) return(TRUE)  #FIXME: SHOULD HERE BE FALSE OR TRUE?
-      #if(is.null(self$parent$val)) stop("parent has no value!")
-      if(is.null(self$depend$val)) stop("ill defined dependency")
+      if (is.null(self$parent$val)) return(TRUE)  #FIXME: SHOULD HERE BE FALSE OR TRUE?
+      #if (is.null(self$parent$val)) stop("parent has no value!")
+      if (is.null(self$depend$val)) stop("ill defined dependency")
       return(self$parent$val == self$depend$val)
     },
 
@@ -87,8 +87,8 @@ ParamHandle = R6Class("ParamHandle",
       self$root = self$parent$root
     },
     sampleCurrentNode = function() {
-      if(is.null(self$node)) return(NULL)
-      if(self$isdependMet()) {
+      if (is.null(self$node)) return(NULL)
+      if (self$isdependMet()) {
         catf("sampling %s\n", self$node$id)
         self$val = self$sampleNode()
         catf("\n")
@@ -102,17 +102,17 @@ ParamHandle = R6Class("ParamHandle",
       return(val)
     },
     sampleMandChildChain = function() {
-      if(length(self$mand.children) == 0) return(NULL)
-      for(name in names(self$mand.children)) {
+      if (length(self$mand.children) == 0) return(NULL)
+      for (name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
         handle$sample()
       }
     },
     sampleCondChildChain = function() {
-      if(length(self$cond.children) == 0) return(NULL)
-      for(name in names(self$cond.children)) {
+      if (length(self$cond.children) == 0) return(NULL)
+      for (name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$require.expr(self)) handle$sample()
+        if (handle$require.expr(self)) handle$sample()
       }
     },
     sample = function() {
@@ -129,7 +129,7 @@ ParamHandle = R6Class("ParamHandle",
       BBmisc::catf("%s-%s:%s", indent, self$id, value)
     },
     printMandChildChainVal = function() {
-      for(name in names(self$mand.children)) {
+      for (name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
         handle$toStringVal()
       }
@@ -137,7 +137,7 @@ ParamHandle = R6Class("ParamHandle",
     printCondChildChainVal = function() {
       for (name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        if(handle$require.expr(self)) handle$toStringVal()
+        if (handle$require.expr(self)) handle$toStringVal()
       }
     },
     toStringVal = function() {
