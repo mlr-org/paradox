@@ -27,7 +27,7 @@ ParamVisitor = R6Class("ParamVisitor",
       if(length(self$host$mand.children) == 0) return(FALSE)
       for(name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
-        if(handle$visitor$traverse(arg)) {
+        if(handle$visitor$insertNode(arg)) {
           return(TRUE)
         }
       }
@@ -39,7 +39,7 @@ ParamVisitor = R6Class("ParamVisitor",
       if(length(self$host$cond.children) == 0) return(FALSE)
       for(name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
-        if(handle$visitor$traverse(arg)) {
+        if(handle$visitor$insertNode(arg)) {
           return(TRUE)
         }
       }
@@ -57,7 +57,7 @@ ParamVisitor = R6Class("ParamVisitor",
       while(length(node.list) != 0) {
         for(name in names(node.list)) {
           catf("parsing %s",name)
-          if(self$traverse(node.list[[name]])) node.list[[name]] = NULL
+          if(self$insertNode(node.list[[name]])) node.list[[name]] = NULL
           catf("number in wait list left %d",length(node.list))
         }
         SAFECOUNTER = SAFECOUNTER + 1
@@ -66,7 +66,7 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     ## traverse the tree to find out if the the arg could be inserted as leave
-    traverse = function(arg) {
+    insertNode = function(arg) {
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
         catf("hit no depend : %s", arg$node$id)
