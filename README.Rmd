@@ -8,7 +8,7 @@ output: github_document
 [![Coverage Status](https://coveralls.io/repos/github/mlr-org/phng/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/phng?branch=master)
 
 
-```{r, setup, include=FALSE}
+```{r setup, include=FALSE}
 set.seed(123)
 knitr::opts_chunk$set(cache = TRUE, collapse = FALSE, warning = FALSE, error = FALSE)
 library(phng)
@@ -20,7 +20,7 @@ Universal Parameter Space Description and Tools
 * [Documentation](https://mlr-org.github.io/phng)
 
 ## Installation
-```{r, eval=FALSE}
+```{r inst, eval=FALSE}
 devtools::install_github("mlr-org/phng", dependencies = TRUE)
 ```
 
@@ -34,7 +34,7 @@ Create a simple ParamSet using all supported Parameter Types:
 * _Categorical_ values, namely characters.
 * Further types are only possible by using transformations.
 
-```{r}
+```{r ps}
 ps = ParamSetFlat$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
@@ -46,7 +46,7 @@ ps = ParamSetFlat$new(
 ```
 
 Draw random samples / create random design:
-```{r ps}
+```{r pssample}
 ps$sample(3)
 ```
 
@@ -83,7 +83,7 @@ ps$upper
 ps$range
 ```
 
-The usage of `repeatParam` generates tags show to which group the parameters belong to:
+The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
 ps$member.tags
@@ -95,7 +95,7 @@ This becomes useful if you want to do operations on parameters of one group like
 
 Transformations are functions with a fixed signature.
 
-* `x` A `data.table` of parameter values. Each list item contains a vector of parameter values of a single parameter.
+* `x` A `data.table` of parameter values. Each column contains a vector of parameter values of a single parameter.
 * `dict` An environment, that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
 * `tags` A list of the tags for each parameter. Each parameter can have various tags indicating additional characteristics.
 
@@ -118,12 +118,12 @@ ps = ParamSetFlat$new(
 
 The transformation uses the dictionary and will fail if none is supplied:
 
-```{r pstransscale2}
+```{r pstransscale2, error = TRUE}
 ps$transform(x)
 ```
 
 The dictionary can always be changed:
-```{r pstransscale2}
+```{r pstransscale3}
 ps$dictionary = list(p = 10)
 ps$transform(x)
 ps$dictionary = list(p = 1000)
@@ -132,7 +132,7 @@ ps$transform(x)
 ### Advanced Transformations
 
 The following creates a ParamSet with a transformation that scales the `x` values and returns them as a vector.
-The original parameters will removed from the trafo result.
+The original parameters will be removed from the trafo result.
 Keep in mind that `z` stays untouched and remains after the transformation.
 
 ```{r psnumtrans}
@@ -166,8 +166,8 @@ ps = ParamSetFlat$new(
   params = c(
     list(
       ParamFlag$new(id = "switch"),
-      ParamInt$new(id = "z", lower = 1, upper = 5)),
-    repeatParam(5, ParamReal$new(id = "x", lower = 0, upper = 1))
+      ParamInt$new(id = "z", lower = 1, upper = 4)),
+    repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = trafoOnRepeatedParam(
     fun = function(x, dict, tags) {
@@ -175,7 +175,8 @@ ps = ParamSetFlat$new(
         x = c(...)[1:z]
         x / sum(x)
       }
-      data.table(x = .mapply(scale, cbind(z = dict$z, x), list()))
+      res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
+      list(x = res)
     }, repeated.param.id = "x", additional.params = "z")
   )
 (x = ps$sample(3))
