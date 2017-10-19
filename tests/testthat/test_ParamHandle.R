@@ -33,6 +33,7 @@ test_that("ParamHandle toStringVal behaves normal without value", {
   kernel$addCondChild(ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")))
   kernel$addCondChild(ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly")))
   ps$toStringVal()
+  ps$sample()
 })
 
 
