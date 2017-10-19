@@ -43,6 +43,17 @@ testSpecialVals = function(param, x) {
   }
 }
 
+couldListBeDataTable = function(x) {
+  is.list(x) && length(unique(viapply(x, length))) == 1 && testNamed(x, type = "strict")
+}
+
+ensureDataTable = function(x, ...) {
+  if (testDataFrame(x) || couldListBeDataTable(x)) {
+    x = as.data.table(x)
+  }
+  assertDataTable(x, ...)
+}
+
 # res int(1) - aimed at resolution
 # nlevels int() - number of levels per param or NA if continuous.
 # return: int vector that gives the resolution for each param leading to 

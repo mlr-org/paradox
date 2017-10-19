@@ -120,10 +120,7 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
-      if (is.list(x)) {
-        x = as.data.table(x)
-      }
-      assertDataTable(x)
+      x = ensureDataTable(x)
       assertSetEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
@@ -132,9 +129,7 @@ ParamSetFlat = R6Class(
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
-      if (is.list(xs)) {
-        xs = as.data.table(xs)
-      }
+      xs = ensureDataTable(xs)
       return(xs)
     },
 
