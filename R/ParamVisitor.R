@@ -69,16 +69,16 @@ ParamVisitor = R6Class("ParamVisitor",
     traverse = function(arg) {
       # always check arg$depend not null!!
       if(is.null(arg$depend)) {
-        catf("hit %s", arg$id)
-        self$host$addMandChild(ParamHandle$new(id = arg$id, node = arg$node, val = arg$val))
+        catf("hit no depend : %s", arg$node$id)
+        self$host$addMandChild(ParamHandle$new(node = arg$node, val = arg$val))
         return(TRUE)
       }
       # now the input arg has a field called depend
       if(is.null(arg$depend$id)) stop("missing id in depend!")
       if((self$host$id == arg$depend$id))
       {
-        catf("hit %s", arg$id)
-        self$host$addCondChild(ParamHandle$new(id = arg$id, node = arg$node, depend = arg$depend,val = arg$val))
+        catf("hit depend:  %s", arg$node$id)
+        self$host$addCondChild(ParamHandle$new(node = arg$node, depend = arg$depend,val = arg$val))
         return(TRUE)
       }
       if(self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
