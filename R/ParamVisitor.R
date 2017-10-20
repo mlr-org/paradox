@@ -58,9 +58,9 @@ ParamVisitor = R6Class("ParamVisitor",
       names(node.list) = unlist(mnames)
       while(length(node.list) != 0) {
         for (name in mnames) {
-          catf("parsing %s",name)
+          # catf("parsing %s",name)  # For future debug, please do not delete!
           if (self$insertNode(node.list[[name]])) node.list[[name]] = NULL
-          catf("number in wait list left %d",length(node.list))
+          # catf("number in wait list left %d",length(node.list)) # For future debug, please do not delete!
         }
         SAFECOUNTER = SAFECOUNTER + 1
         if (SAFECOUNTER > len) stop("wrong flat input!")
@@ -71,7 +71,7 @@ ParamVisitor = R6Class("ParamVisitor",
     insertNode = function(arg) {
       # always check arg$depend not null!!
       if (is.null(arg$depend)) {
-        catf("hit no depend : %s", arg$node$id)
+        # catf("hit no depend : %s", arg$node$id) # for future debug, please do not delete!
         self$host$addMandChild(ParamHandle$new(node = arg$node))
         return(TRUE)
       }
@@ -79,7 +79,7 @@ ParamVisitor = R6Class("ParamVisitor",
       if (is.null(arg$depend$id) && is.null(arg$func)) stop("need at least id or func in depend!")
       if ((self$host$id == arg$depend$id))
       {
-        catf("hit depend:  %s", arg$node$id)
+        # catf("hit depend:  %s", arg$node$id) # for future debug, please do not delete!
         self$host$addCondChild(ParamHandle$new(node = arg$node, depend = arg$depend))
         return(TRUE)
       }
@@ -90,8 +90,8 @@ ParamVisitor = R6Class("ParamVisitor",
 
     # transform the tree structure to a list and return the list
     toFlat = function(res = list()) {
-      print(self$host$node$id)
-      print(length(res))
+      #print(self$host$node$id)
+      #print(length(res))
       res[[self$host$node$id]] = self$host$node
       if (length(self$host$mand.children) > 0) {
       for (name in names(self$host$mand.children)) {
@@ -137,6 +137,6 @@ ParamVisitor = R6Class("ParamVisitor",
       }
       if (length(wq) > 0) stop("invalid parameter set!")
     }
-  ) # public 
+  ) # public
 ) # Class
 

@@ -233,3 +233,45 @@ Transformations are functions with a fixed signature.
     ## ++++-C:41.4546335814521
     ## ++++-kernel:rbf
     ## ++++++-gamma:36.8845450924709
+
+or one could build a tree mannually
+
+``` r
+  ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
+  ps$setRoot(ps)
+  temp = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "Model", val = "RF"))
+  ntree = ps$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "Model", val = "SVM"))
+  c = ps$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", val = "SVM"))
+  kernel = ps$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
+  gamma = kernel$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
+  poly = kernel$addCondChild(temp)
+  list.flat = ps$visitor$toFlat()
+  ps$toStringVal()
+```
+
+    ## -Model:TBD
+
+``` r
+  ps$sample()
+  ps$toStringVal()  # after sampling, the string might be different
+```
+
+    ## -Model:SVM
+    ## ++-C:13.880606344901
+    ## ++-kernel:rbf
+    ## ++++-gamma:46.5962450252846
+
+``` r
+  list.flat = ps$visitor$toFlat()
+  poly$getRoot$sample() # use the root to sample
+  ps$toStringVal()
+```
+
+    ## -Model:SVM
+    ## ++-C:85.7827715342864
+    ## ++-kernel:rbf
+    ## ++++-gamma:44.2200074205175

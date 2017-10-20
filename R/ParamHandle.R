@@ -88,16 +88,14 @@ ParamHandle = R6Class("ParamHandle",
     sampleCurrentNode = function() {
       if (is.null(self$node)) return(NULL)
       if (self$isdependMet()) {
-        catf("sampling %s\n", self$node$id)
-        self$val = self$sampleNode()
-        catf("\n")
-        #self$node$val = self$val
+        #catf("sampling %s\n", self$node$id)  # for future debug, please do not delete!
+        self$val = self$sampleNode()  # self$node$sample will cause infinite recursion
+        #catf("\n")  for future debug, please do not delete!
       }
-      # self$node$sample will cause infinite recursion
     },
     sampleNode = function() {
       val = self$node$sampleVector()
-      catf("%s", val)
+      # catf("%s", val) # for future debug, please do not delete!
       return(val)
     },
     sampleMandChildChain = function() {
