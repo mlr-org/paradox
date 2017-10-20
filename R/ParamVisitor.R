@@ -112,6 +112,23 @@ ParamVisitor = R6Class("ParamVisitor",
       return(res)
     },
 
+    # apply func to all node in the tree, without dependency
+    treeApply = function(func) {
+      if(self$host$nochild) return(func(self$host$node))
+      if (length(self$host$mand.children) > 0) {
+        for (name in names(self$host$mand.children)) {
+          handle = self$host$mand.children[[name]]
+          return(handle$visitor$treeApply(func))
+        }
+      } # if
+      if (length(self$host$cond.children) > 0) {
+        for (name in names(self$host$cond.children)) {
+          handle = self$host$cond.children[[name]]
+          return(handle$visitor$treeApply(func))
+        }
+      } # if
+    },
+
     # check if the flat form of paramset violates the dependency
     checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))) {
       fq = list()  # finished queue

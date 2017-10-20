@@ -150,6 +150,12 @@ ParamHandle = R6Class("ParamHandle",
     },
     getRoot = function() {
         self$root
-    })
+    },
+    nochild = function() {
+      if (length(self$host$mand.children) > 0) return(FALSE)
+      if (length(self$host$cond.children) > 0) return(FALSE)
+      return(TRUE)
+    }
+    )
 )
 
