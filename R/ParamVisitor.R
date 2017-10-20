@@ -54,8 +54,10 @@ ParamVisitor = R6Class("ParamVisitor",
     parseFlat = function(node.list) {
       len = length(node.list)
       SAFECOUNTER = 0
+      mnames = lapply(node.list, function(x) x$node$id)
+      names(node.list) = unlist(mnames)
       while(length(node.list) != 0) {
-        for (name in names(node.list)) {
+        for (name in mnames) {
           catf("parsing %s",name)
           if (self$insertNode(node.list[[name]])) node.list[[name]] = NULL
           catf("number in wait list left %d",length(node.list))
