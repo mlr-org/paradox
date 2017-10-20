@@ -67,12 +67,14 @@ ParamHandle = R6Class("ParamHandle",
 
     addMandChild = function(cnodehandle) {
       cnodehandle$setParent(self)
+      cnodehandle$setRoot(self$getRoot)
       assign(cnodehandle$id, cnodehandle, self$mand.children)
       self$flatval$mand = names(self$mand.children)
       return(cnodehandle)
     },
     addCondChild = function(cnodehandle) {
       cnodehandle$setParent(self)
+      cnodehandle$setRoot(self$getRoot)
       assign(cnodehandle$id, cnodehandle, self$cond.children)
       self$flatval$cond = names(self$cond.children)
       return(cnodehandle)
@@ -147,6 +149,9 @@ ParamHandle = R6Class("ParamHandle",
     getFirstMandChild = function() {
       mnames = names(self$mand.children)
       self$mand.children[[mnames[1L]]]
+    },
+    getRoot = function() {
+        self$root
     })
 )
 
