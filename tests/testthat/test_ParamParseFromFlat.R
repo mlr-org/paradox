@@ -14,20 +14,3 @@ test_that("test if Param parse from flat works with sample", {
   ps$toStringVal()
 })
 
-
-
-test_that("test if Param parse from flat works with ParamFlat", {
-  ps = ParamHandle$new(id = "Root", val = NULL)
-  # list(id, ParamNode, val, depend)
-  mnames = names(th.paramset.flat.full$params)
-  lapply(mnames, function(x) list(id = x, th.paramset.flat.full$params[[x]]))
-  function(x) {
-    x.n.dictionary
-    isTRUE(eval(x$restriction, envir = x.n.dictionary))
-  }
-  #ps$visitor$parseFlat(input)
-  #ps$sample()
-})
-
-
-
