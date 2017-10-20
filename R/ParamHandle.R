@@ -61,7 +61,6 @@ ParamHandle = R6Class("ParamHandle",
       if (is.null(self$depend)) return(TRUE)
       if (is.null(self$parent)) return(TRUE)
       if (is.null(self$parent$val)) return(TRUE)  #FIXME: SHOULD HERE BE FALSE OR TRUE?
-      #if (is.null(self$parent$val)) stop("parent has no value!")
       if (is.null(self$depend$val)) stop("ill defined dependency")
       return(self$parent$val == self$depend$val)
     },
@@ -72,15 +71,13 @@ ParamHandle = R6Class("ParamHandle",
       self$flatval$mand = names(self$mand.children)
       return(cnodehandle)
     },
-    addCondChild = function(cnodehandle) {  # rbf kernal params
+    addCondChild = function(cnodehandle) {
       cnodehandle$setParent(self)
       assign(cnodehandle$id, cnodehandle, self$cond.children)
       self$flatval$cond = names(self$cond.children)
       return(cnodehandle)
     },
-    addChildren = function(flatnodes) {
 
-    },
     setParent = function(pnode) {
       self$parent = pnode
       self$reldepth = self$parent$reldepth + 1
