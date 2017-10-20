@@ -41,3 +41,7 @@ ParamTree$fac = function(...) {
   return(ps)
 }
 
+ParamTree$dn = function(node, depend = NULL) {
+  return(list(node = node, depend = depend))
+}
+
