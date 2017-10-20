@@ -35,7 +35,7 @@ ParamTree = R6Class("ParamSetTree",
 )
 
 ParamTree$fac = function(...) {
-  input = as.list(...)
+  input = list(...)
   ps = ParamHandle$new(id = "Root")
   ps$visitor$parseFlat(input)
   return(ps)
