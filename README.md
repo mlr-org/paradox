@@ -176,3 +176,60 @@ Transformations are functions with a fixed signature.
 -   `x` A named list of parameter values. Each list item contains a vector of parameter values of a single parameter.
 -   `dict` An environment that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
 -   `tags` A list of the tags for each parameter. Each parameter can have a various tags indicating additional characteristics.
+
+### ParamTree
+
+``` r
+  ps = ParamTree$fac(
+      ParamTree$dn(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
+      ParamTree$dn(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
+      ParamTree$dn(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
+      ParamTree$dn(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
+      )
+```
+
+    ## parsing model
+    ## hit no depend : model
+    ## number in wait list left 3
+    ## parsing C
+    ## hit depend:  C
+    ## number in wait list left 2
+    ## parsing kernel
+    ## hit depend:  kernel
+    ## number in wait list left 1
+    ## parsing gamma
+    ## hit depend:  gamma
+    ## number in wait list left 0
+
+``` r
+  ps$getFirstMandChild$sample()
+```
+
+    ## sampling model
+    ## 
+    ## SVM
+    ## 
+    ## 
+    ## sampling C
+    ## 
+    ## 41.4546335814521
+    ## 
+    ## 
+    ## sampling kernel
+    ## 
+    ## rbf
+    ## 
+    ## 
+    ## sampling gamma
+    ## 
+    ## 36.8845450924709
+
+``` r
+  ps$toStringVal()
+```
+
+    ## -Root:TBD
+    ## ++-model:SVM
+    ## ++++-C:41.4546335814521
+    ## ++++-kernel:rbf
+    ## ++++++-gamma:36.8845450924709

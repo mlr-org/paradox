@@ -16,7 +16,7 @@ ParamTree = R6Class("ParamSetTree",
     handle = NULL,
     flatval = NULL,
     depend = NULL,
-    
+
     # constructor
     initialize = function(id = NULL, handle = NULL, depend = NULL) {
       self$id = id
@@ -33,14 +33,14 @@ ParamTree = R6Class("ParamSetTree",
   private = list(
   )
 )
-
+#' @export
 ParamTree$fac = function(...) {
   input = list(...)
   ps = ParamHandle$new(id = "Root")
   ps$visitor$parseFlat(input)
   return(ps)
 }
-
+#' @export
 ParamTree$dn = function(node, depend = NULL) {
   return(list(node = node, depend = depend))
 }
