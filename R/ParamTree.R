@@ -1,13 +1,13 @@
-#' @title ParamSetTree
+#' @title ParamTree
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a tree form.
 #'
-#' @return [\code{\link{ParamSetTree}}].
+#' @return [\code{\link{ParamTree}}].
 #' @family ParamHelpers
 #' @export
-ParamSetTree = R6Class("ParamSetTree",
+ParamTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(
 
@@ -34,5 +34,10 @@ ParamSetTree = R6Class("ParamSetTree",
   )
 )
 
-ParamSetTree$fac = function(...) {
+ParamTree$fac = function(...) {
+  input = as.list(...)
+  ps = ParamHandle$new(id = "Root")
+  ps$visitor$parseFlat(input)
+  return(ps)
 }
+
