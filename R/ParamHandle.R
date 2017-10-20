@@ -13,10 +13,10 @@ ParamHandle = R6Class("ParamHandle",
   public = list(
     # member variables
     id = NULL,
-    node = NULL, # simple ParamNode
-    val = NULL,  # node value
+    node = NULL, # simple ParamNode the handle(pointer) point to
+    val = NULL,  # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
-    depend = NULL,  # gamma param is valid only when kernel = "RBF"
+    depend = NULL,  # depend is a list with field <id><[val][func]> which will decide if the current node is going to be activated in a sampling process, if depend$func() is True, then the sampling function is called
     require.expr = NULL,
     #
     parent = NULL,
