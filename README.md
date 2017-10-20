@@ -180,52 +180,20 @@ Transformations are functions with a fixed signature.
 ### ParamTree
 
 ``` r
-  ps = ParamTree$fac(
+  pt = ParamTree$fac(
       ParamTree$dn(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
       ParamTree$dn(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
       ParamTree$dn(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
-      ParamTree$dn(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
+      ParamTree$dn(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
+      ParamTree$dn(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
       )
+  pt$sample()
 ```
 
-    ## parsing model
-    ## hit no depend : model
-    ## number in wait list left 3
-    ## parsing C
-    ## hit depend:  C
-    ## number in wait list left 2
-    ## parsing kernel
-    ## hit depend:  kernel
-    ## number in wait list left 1
-    ## parsing gamma
-    ## hit depend:  gamma
-    ## number in wait list left 0
+    ## NULL
 
 ``` r
-  ps$getFirstMandChild$sample()
-```
-
-    ## sampling model
-    ## 
-    ## SVM
-    ## 
-    ## 
-    ## sampling C
-    ## 
-    ## 41.4546335814521
-    ## 
-    ## 
-    ## sampling kernel
-    ## 
-    ## rbf
-    ## 
-    ## 
-    ## sampling gamma
-    ## 
-    ## 36.8845450924709
-
-``` r
-  ps$toStringVal()
+  pt$toStringVal()
 ```
 
     ## -Root:TBD
