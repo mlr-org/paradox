@@ -50,11 +50,10 @@ OptPath = R6Class(
     y.names = NULL,
     minimize = NULL,
     check.feasible = NULL,
-    data = NULL,
     
     # constructor
     initialize = function(par.set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
-      self$data = data.table(
+      private$p.data = data.table(
         dob = integer(0L),
         message = character(0L),
         error = character(0L),
@@ -64,13 +63,13 @@ OptPath = R6Class(
         transformed.x = list()
       )
       Map(function(id, storage.type) {
-        set(self$data, j = id, value = get(storage.type, mode = "function")())
+        set(private$p.data, j = id, value = get(storage.type, mode = "function")())
         },
         id = par.set$ids,
         storage.type = par.set$storage.types
       )
       for (y.name in y.names) {
-        set(self$data, j = y.name, value = numeric(0L))
+        set(private$p.data, j = y.name, value = numeric(0L))
       }
       if (is.null(names(minimize))) {
         names(minimize) = y.names
@@ -112,16 +111,40 @@ OptPath = R6Class(
       if (self$check.feasible) {
         self$par.set$assert(x)
       }
-      self$data = rbindlist(
-        list(self$data, c(list(dob = dob %??% (nrow(self$data) + 1), message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y))
-      )
+
+      # add the data to the opt path
+
+      if (private$cache.pos == length(private$cache)) private$flush()
+      private$cache.pos = private$cache.pos + 1L
+      private$cache[[private$cache.pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y)
       invisible(self)
     }
   ),
 
+  private = list(
+
+    # private member variables
+
+    cache.pos = 0L, # the index of the last cached opt path row
+    cache = vector("list", 512L), # list to store the cache
+    p.data = NULL, # the real data.table
+
+    # private methods
+
+    flush = function() {
+      if (private$cache.pos > 0L) {
+        cached = rbindlist(head(private$cache, private$cache.pos), fill = TRUE)
+        private$p.data = rbindlist(list(private$p.data, cached), fill = TRUE)
+        setorderv(private$p.data, "dob")
+        private$cache.pos = 0L
+      }
+    }
+  ),
+
   active = list(
+    data = function() {private$flush(); private$p.data},
     x.names = function() self$par.set$ids,
-    length = function() nrow(self$data),
+    length = function() nrow(private$p.data) + private$cache.pos,
     x = function() self$data[, self$x.names, with = FALSE],
     y = function() self$data[, self$y.names, with = FALSE],
     dim = function() length(self$y.names)
