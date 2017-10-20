@@ -142,7 +142,15 @@ OptPath = R6Class(
   ),
 
   active = list(
-    data = function() {private$flush(); private$p.data},
+    data = function(x) {
+      if (missing(x)) {
+        private$flush()
+        private$p.data
+      } else {
+        private$flush()
+        private$p.data = x
+      }
+    },
     x.names = function() self$par.set$ids,
     length = function() nrow(private$p.data) + private$cache.pos,
     x = function() self$data[, self$x.names, with = FALSE],
