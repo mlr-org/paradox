@@ -25,22 +25,20 @@ ParamHandle = R6Class("ParamHandle",
     #
     mand.children = NULL,
     cond.children = NULL,
-    visitor = NULL,
+    visitor = NULL, # visitor pattern, which decouples the data structure and operation
 
     # constructor
     initialize = function(id = NULL, node = NULL, val = NULL, depend = NULL, parent = NULL) {
-      if (is.null(id) & is.null(node)) stop("either set id or node for handle!")
+      if (is.null(id) && is.null(node)) stop("either set id or node for handle!")
       self$id = ifelse(is.null(id), node$id, id)
       self$node = node
       self$val = val
-      #
       self$depend = depend
       self$require.expr = function(parent) {
         if (is.null(parent$val)) return(FALSE)
         if (is.null(self$depend)) return(TRUE)
         return(parent$val == self$depend$val)
       }
-      #
       self$parent = parent
       if (!is.null(parent)) {
         self$root = ifelse(is.null(parent$root), parent, parent$root)

@@ -33,14 +33,12 @@ ParamTree = R6Class("ParamSetTree",
   private = list(
   )
 )
-#' @export
 ParamTree$fac = function(...) {
   input = list(...)
   ps = ParamHandle$new(id = "Root")
   ps$visitor$parseFlat(input)
   return(ps$getFirstMandChild)
 }
-#' @export
 ParamTree$dn = function(node, depend = NULL) {
   return(list(node = node, depend = depend))
 }
