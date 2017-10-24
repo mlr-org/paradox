@@ -12,7 +12,7 @@ ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(
     # member variables
-    id = NULL,
+    id = NULL,  # by default, id should be the same with the node id which this handle points to
     node = NULL, # simple ParamNode the handle(pointer) point to
     val = NULL,  # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
