@@ -29,7 +29,6 @@ A \code{\link[R6]{R6Class}} to represent parameters.
 
 \section{Methods}{
 
-
 \describe{
   \item{sample(n)}{[\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.}
   \item{denorm(x)}{[\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.}
@@ -46,6 +45,7 @@ A \code{\link[R6]{R6Class}} to represent parameters.
 
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
-  \code{\link{ParamHandle}}
+  \code{\link{ParamHandle}}, \code{\link{ParamTree}},
+  \code{\link{ParamVisitor}}
 }
 \keyword{datasets}
