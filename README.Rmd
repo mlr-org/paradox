@@ -8,7 +8,7 @@ output: github_document
 [![Coverage Status](https://coveralls.io/repos/github/mlr-org/phng/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/phng?branch=master)
 
 
-```{r, setup, include=FALSE}
+```{r setup, include=FALSE}
 set.seed(123)
 knitr::opts_chunk$set(cache = TRUE, collapse = FALSE, warning = FALSE, error = FALSE)
 library(phng)
@@ -20,7 +20,7 @@ Universal Parameter Space Description and Tools
 * [Documentation](https://mlr-org.github.io/phng)
 
 ## Installation
-```{r, eval=FALSE}
+```{r inst, eval=FALSE}
 devtools::install_github("mlr-org/phng", dependencies = TRUE)
 ```
 
@@ -34,7 +34,7 @@ Create a simple ParamSet using all supported Parameter Types:
 * _Categorical_ values, namely characters.
 * Further types are only possible by using transformations.
 
-```{r}
+```{r ps}
 ps = ParamSetFlat$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
@@ -46,7 +46,7 @@ ps = ParamSetFlat$new(
 ```
 
 Draw random samples / create random design:
-```{r ps}
+```{r pssample}
 ps$sample(3)
 ```
 
@@ -74,7 +74,7 @@ Things you can do on an all numeric ParamSet:
 ps = ParamSetFlat$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 10))
+    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
   )
 )
 
@@ -83,7 +83,7 @@ ps$upper
 ps$range
 ```
 
-The usage of `repeatParam` generates tags show to which group the parameters belong to:
+The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
 ps$member.tags
@@ -95,43 +95,90 @@ This becomes useful if you want to do operations on parameters of one group like
 
 Transformations are functions with a fixed signature.
 
-* `x` A named list of parameter values. Each list item contains a vector of parameter values of a single parameter.
-* `dict` An environment that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
-* `tags` A list of the tags for each parameter. Each parameter can have a various tags indicating additional characteristics.
+* `x` A `data.table` of parameter values. Each column contains a vector of parameter values of a single parameter.
+* `dict` An environment, that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
+* `tags` A list of the tags for each parameter. Each parameter can have various tags indicating additional characteristics.
 
+Transformations are useful to scale parameters:
 
-### ParamTree
-```{r}
-  pt = ParamTree$fac(
-      ParamTree$dn(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
-      ParamTree$dn(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
-      ParamTree$dn(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
-      ParamTree$dn(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
-      ParamTree$dn(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
-      )
-  pt$sample()
-  pt$toStringVal()
+```{r pstransscale}
+ps = ParamSetFlat$new(
+  params = list(
+    ParamInt$new(id = "z", lower = -3, upper = 3),
+    ParamReal$new(id = "x", lower = 0, upper = 1)
+  ),
+  trafo = function(x, dict, tags) {
+    x$z = 2^x$z
+    x$x = round(x$x * dict$p)
+    return(x)
+  }
+)
+(x = ps$sample(3))
 ```
 
-or one could build a tree mannually
-```{r}
-  ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
-  ps$setRoot(ps)
-  temp = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "Model", val = "RF"))
-  ntree = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "Model", val = "SVM"))
-  c = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", val = "SVM"))
-  kernel = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
-  gamma = kernel$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
-  poly = kernel$addCondChild(temp)
-  list.flat = ps$visitor$toFlat()
-  ps$toStringVal()
-  ps$sample()
-  ps$toStringVal()  # after sampling, the string might be different
-  list.flat = ps$visitor$toFlat()
-  poly$getRoot$sample() # use the root to sample
-  ps$toStringVal()
+The transformation uses the dictionary and will fail if none is supplied:
+
+```{r pstransscale2, error = TRUE}
+ps$transform(x)
+```
+
+The dictionary can always be changed:
+```{r pstransscale3}
+ps$dictionary = list(p = 10)
+ps$transform(x)
+ps$dictionary = list(p = 1000)
+ps$transform(x)
+```
+### Advanced Transformations
+
+The following creates a ParamSet with a transformation that scales the `x` values and returns them as a vector.
+The original parameters will be removed from the trafo result.
+Keep in mind that `z` stays untouched and remains after the transformation.
+
+```{r psnumtrans}
+ps = ParamSetFlat$new(
+  params = c(
+    list(ParamInt$new(id = "z", lower = -10, upper = 10)),
+    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
+  ),
+  trafo = function(x, dict, tags) {
+    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
+    x$x = Map(scale, x$x.repeated.1, x$x.repeated.2)
+    x$x.repeated.1 = NULL
+    x$x.repeated.2 = NULL
+    return(x)
+  }
+)
+```
+
+The output of all value generating functions won't change for a ParamSet that has a `trafo` function.
+Instead these outputs can be put into `ps$transform()` to obtain the desired parameter values.
+
+```{r psnumtrans2}
+x = ps$generateLHSDesign(3)
+ps$transform(x)
+```
+
+For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
+
+```{r trafoOnRepeatedParam}
+ps = ParamSetFlat$new(
+  params = c(
+    list(
+      ParamFlag$new(id = "switch"),
+      ParamInt$new(id = "z", lower = 1, upper = 4)),
+    repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
+  ),
+  trafo = trafoOnRepeatedParam(
+    fun = function(x, dict, tags) {
+      scale = function(z, ...) {
+        x = c(...)[1:z]
+        x / sum(x)
+      }
+      res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
+      list(x = res)
+    }, repeated.param.id = "x", additional.params = "z")
+  )
+(x = ps$sample(3))
+ps$transform(x)
 ```

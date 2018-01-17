@@ -4,7 +4,8 @@
 \alias{trafoOnRepeatedParam}
 \title{A helper to create trafo functions for repeated parameters.}
 \usage{
-trafoOnRepeatedParam(fun, repeated.param.id, additional.params = list())
+trafoOnRepeatedParam(fun, repeated.param.id,
+  additional.params = character(0L))
 }
 \arguments{
 \item{fun}{[\code{function}]\cr

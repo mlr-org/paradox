@@ -157,7 +157,7 @@
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
   <span class="dt">params =</span> <span class="kw">c</span>(
     <span class="kw">list</span>(ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),
-    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">10</span>))
+    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
   )
 )
 
@@ -166,13 +166,13 @@ ps$lower</code></pre></div>
 ##          -10            0            0</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$upper</code></pre></div>
 <pre><code>##            z x.repeated.1 x.repeated.2 
-##           10           10           10</code></pre>
+##           10            1            1</code></pre>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$range</code></pre></div>
 <pre><code>##              id upper lower
 ## 1:            z    10   -10
-## 2: x.repeated.1    10     0
-## 3: x.repeated.2    10     0</code></pre>
-<p>The usage of <code>repeatParam</code> generates tags show to which group the parameters belong to:</p>
+## 2: x.repeated.1     1     0
+## 3: x.repeated.2     1     0</code></pre>
+<p>The usage of <code>repeatParam</code> generates tags that indicate to which group the parameters belong to:</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$member.tags</code></pre></div>
 <pre><code>## $z
 ## NULL
@@ -190,12 +190,98 @@ ps$lower</code></pre></div>
 <p>Transformations are functions with a fixed signature.</p>
 <ul>
 <li>
-<code>x</code> A named list of parameter values. Each list item contains a vector of parameter values of a single parameter.</li>
+<code>x</code> A <code>data.table</code> of parameter values. Each column contains a vector of parameter values of a single parameter.</li>
 <li>
-<code>dict</code> An environment that can be accessed using the <code>$</code> operator. It can contains values that don’t belong to any parameter but are important for transformations.</li>
+<code>dict</code> An environment, that can be accessed using the <code>$</code> operator. It can contains values that don’t belong to any parameter but are important for transformations.</li>
 <li>
-<code>tags</code> A list of the tags for each parameter. Each parameter can have a various tags indicating additional characteristics.</li>
+<code>tags</code> A list of the tags for each parameter. Each parameter can have various tags indicating additional characteristics.</li>
 </ul>
+<p>Transformations are useful to scale parameters:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
+  <span class="dt">params =</span> <span class="kw">list</span>(
+    ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">3</span>, <span class="dt">upper =</span> <span class="dv">3</span>),
+    ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)
+  ),
+  <span class="dt">trafo =</span> function(x, dict, tags) {
+    x$z =<span class="st"> </span><span class="dv">2</span>^x$z
+    x$x =<span class="st"> </span><span class="kw">round</span>(x$x *<span class="st"> </span>dict$p)
+    <span class="kw">return</span>(x)
+  }
+)
+(<span class="dt">x =</span> ps$<span class="kw">sample</span>(<span class="dv">3</span>))</code></pre></div>
+<pre><code>##     z         x
+## 1: -3 0.3688455
+## 2: -1 0.1524447
+## 3: -1 0.1388061</code></pre>
+<p>The transformation uses the dictionary and will fail if none is supplied:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">transform</span>(x)</code></pre></div>
+<pre><code>## Error in `[&lt;-.data.table`(x, j = name, value = value): RHS of assignment to existing column 'x' is zero length but not NULL. If you intend to delete the column use NULL. Otherwise, the RHS must have length &gt; 0; e.g., NA_integer_. If you are trying to change the column type to be an empty list column then, as with all column type changes, provide a full length RHS vector such as vector('list',nrow(DT)); i.e., 'plonk' in the new column.</code></pre>
+<p>The dictionary can always be changed:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">10</span>)
+ps$<span class="kw">transform</span>(x)</code></pre></div>
+<pre><code>##        z x
+## 1: 0.125 4
+## 2: 0.500 2
+## 3: 0.500 1</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">1000</span>)
+ps$<span class="kw">transform</span>(x)</code></pre></div>
+<pre><code>##        z   x
+## 1: 0.125 369
+## 2: 0.500 152
+## 3: 0.500 139</code></pre>
+</div>
+<div id="advanced-transformations" class="section level3">
+<h3 class="hasAnchor">
+<a href="#advanced-transformations" class="anchor"></a>Advanced Transformations</h3>
+<p>The following creates a ParamSet with a transformation that scales the <code>x</code> values and returns them as a vector. The original parameters will be removed from the trafo result. Keep in mind that <code>z</code> stays untouched and remains after the transformation.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
+  <span class="dt">params =</span> <span class="kw">c</span>(
+    <span class="kw">list</span>(ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),
+    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
+  ),
+  <span class="dt">trafo =</span> function(x, dict, tags) {
+    scale =<span class="st"> </span>function(x1, x2) <span class="kw">c</span>(x1, x2) /<span class="st"> </span><span class="kw">sqrt</span>(x1^<span class="dv">2</span>+x2^<span class="dv">2</span>) 
+    x$x =<span class="st"> </span><span class="kw">Map</span>(scale, x$x.repeated<span class="fl">.1</span>, x$x.repeated<span class="fl">.2</span>)
+    x$x.repeated<span class="fl">.1</span> =<span class="st"> </span><span class="ot">NULL</span>
+    x$x.repeated<span class="fl">.2</span> =<span class="st"> </span><span class="ot">NULL</span>
+    <span class="kw">return</span>(x)
+  }
+)</code></pre></div>
+<p>The output of all value generating functions won’t change for a ParamSet that has a <code>trafo</code> function. Instead these outputs can be put into <code>ps$transform()</code> to obtain the desired parameter values.</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">x =<span class="st"> </span>ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)
+ps$<span class="kw">transform</span>(x)</code></pre></div>
+<pre><code>##     z                   x
+## 1:  3 0.1391386,0.9902729
+## 2:  4 0.8819020,0.4714328
+## 3: -5 0.8727897,0.4880965</code></pre>
+<p>For more advanced transformations on repeated parameters you can use <code><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam()</a></code>:</p>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
+  <span class="dt">params =</span> <span class="kw">c</span>(
+    <span class="kw">list</span>(
+      ParamFlag$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),
+      ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">4</span>)),
+    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">4</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
+  ),
+  <span class="dt">trafo =</span> <span class="kw"><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam</a></span>(
+    <span class="dt">fun =</span> function(x, dict, tags) {
+      scale =<span class="st"> </span>function(z, ...) {
+        x =<span class="st"> </span><span class="kw">c</span>(...)[<span class="dv">1</span>:z]
+        x /<span class="st"> </span><span class="kw">sum</span>(x)
+      }
+      res =<span class="st"> </span><span class="kw">do.call</span>(Map, <span class="kw">c</span>(<span class="kw">list</span>(<span class="dt">f =</span> scale, <span class="dt">z =</span> dict$z), <span class="kw">as.list</span>(x)))
+      <span class="kw">list</span>(<span class="dt">x =</span> res)
+    }, <span class="dt">repeated.param.id =</span> <span class="st">"x"</span>, <span class="dt">additional.params =</span> <span class="st">"z"</span>)
+  )
+(<span class="dt">x =</span> ps$<span class="kw">sample</span>(<span class="dv">3</span>))</code></pre></div>
+<pre><code>##    switch z x.repeated.1 x.repeated.2 x.repeated.3 x.repeated.4
+## 1:  FALSE 4 0.0006247733    0.3798165    0.1111354    0.4176468
+## 2:  FALSE 3 0.4753165741    0.6127710    0.2436195    0.7881958
+## 3:   TRUE 3 0.2201188852    0.3517979    0.6680556    0.1028646</code></pre>
+<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">transform</span>(x)</code></pre></div>
+<pre><code>##    switch                                                   x
+## 1:  FALSE 0.0006871504,0.4177372576,0.1222311373,0.4593444546
+## 2:  FALSE                       0.3569228,0.4601395,0.1829377
+## 3:   TRUE                       0.1775192,0.2837143,0.5387665</code></pre>
 </div>
 </div>
 </div>
