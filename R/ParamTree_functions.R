@@ -1,29 +1,28 @@
-#' title 
+#' @title  ParamTree Factory method
 #' 
-#' description
+#' @description
 #' 
-#' @param ... value
-#' @return returndes
+#' @param ... set of ParamTreeDn
+#' @return the root node of the ParamTree
 #' @export 
-#' @examples 
-#' x=c(1,2,3) 
 ParamTreeFac = function(...) {
   input = list(...)
   ps = ParamHandle$new(id = "Root")
   ps$visitor$parseFlat(input)
   return(ps$getFirstMandChild)
 }
-#' title 
+
+#' @title 
 #' 
-#' description
+#' @description
 #' 
-#' @param node value
+#' @param node Elementary ParamNode
 #' @param depend value
 #' @return returndes
+#' @examples
+#' ParamTreeDn(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
+#' ParamTreeDn(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
 #' @export 
-#' @examples 
-#' x=c(1,2,3) 
-
 ParamTreeDn = function(node, depend = NULL) {
   return(list(node = node, depend = depend))
 }

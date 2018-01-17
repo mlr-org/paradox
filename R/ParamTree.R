@@ -33,13 +33,4 @@ ParamTree = R6Class("ParamSetTree",
   private = list(
   )
 )
-ParamTree$fac = function(...) {
-  input = list(...)
-  ps = ParamHandle$new(id = "Root")
-  ps$visitor$parseFlat(input)
-  return(ps$getFirstMandChild)
-}
-ParamTree$dn = function(node, depend = NULL) {
-  return(list(node = node, depend = depend))
-}
 

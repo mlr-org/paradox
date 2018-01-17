@@ -7,7 +7,6 @@
 #' @return [\code{\link{ParamHandle}}].
 #' @family ParamHelpers
 #' @export
-
 ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure? Yes!
   public = list(

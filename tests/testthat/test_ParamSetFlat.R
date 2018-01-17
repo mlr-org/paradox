@@ -51,7 +51,7 @@ test_that("advanced methods work", {
     xt = ps$transform(x)
     expect_data_table(xt, nrows = 10)
 
-    x = lapply(ps$ids, function(x) runif (10))
+    x = lapply(ps$ids, function(x) runif(10))
     names(x) = ps$ids
     xd = ps$denorm(x)
     expect_data_table(xd, nrows = 10, any.missing = FALSE)
