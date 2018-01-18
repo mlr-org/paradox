@@ -2,13 +2,13 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to visit ParamHandle.
+#' A \code{\link[R6]{R6Class}} to visit attached ParamHandle object(host). Using a separate visitor to a class is a frequently used design pattern which could seperate the operations(traversal the graph structure of the ParamHandle) on the ParamHandle and the ParamHandle pointer themselves. The ParamHandle node has two kinds of children node: the mandatory node and conditional node. Mandatory nodes are unconditional children for a graph-like hyper parameter, for example, the normal SVM has a hyperparameter C which is mandatory node but the hyperparameter gamma only makes sense when the hyperparameter kernel type is rbf kernel.
 #'
 #' @return [\code{\link{ParamVisitor}}].
 #' @family ParamHelpers
 #' @export
 ParamVisitor = R6Class("ParamVisitor",
-  inherit = ParamBase, # FIXME: Are we sure? Yes!
+  inherit = ParamBase, # FIXME: Are we sure?
   public = list(
 
     # member variables
@@ -20,82 +20,84 @@ ParamVisitor = R6Class("ParamVisitor",
 
     # public methods
 
-    # Traverse current node's mandatory child and add node arg to  it
+    # Depth First Traversal of current node's mandatory children and add node [arg] to it
     traverseMand = function(arg)
     {
-      if (length(self$host$mand.children) == 0) return(FALSE)
+      if (length(self$host$mand.children) == 0L) return(FALSE)  # if the current node has no mandatory children, recursion stop
       for (name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
-        if (handle$visitor$insertNode(arg)) {
-          return(TRUE)
+        if (handle$visitor$insertNode(arg)) {   # recursion: insertNode(arg) -> traverseMand(arg) -> insertNode(arg) -> ...
+          return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
-      return(FALSE)
+      return(FALSE)  # no place to insert the input among the current node's direct mandatory children.
     },
 
     # Traverse current node's conditional child and add node arg to it
     traverseCond = function(arg) {
-      if (length(self$host$cond.children) == 0) return(FALSE)
+      if (length(self$host$cond.children) == 0L) return(FALSE)  # if the current node has no conditional children, recursion stop
       for (name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
-        if (handle$visitor$insertNode(arg)) {
-          return(TRUE)
+        if (handle$visitor$insertNode(arg)) {  # recursion: insertNode(arg) -> traverseCond(arg) -> insertNode(arg) -> ...
+          return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
-      return(FALSE)
+      return(FALSE)  # no place to insert the input among the current node's direct conditional children.
     },
 
-    fun.hit = function(x, args) {
+    fun.hit = function(x, args) {  #FIXME: We need a generic expression here
       return(TRUE)
     },
 
-    # from a list of ParamNode, parse them to  Tree
+    # from a list of ParamNode and dependency, parse them to a Tree/Graph structure, look at the following example
+    #  input = list(
+    #    list(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
+    #    list(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
+    #    list(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
+    #    list(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
+    #    list(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly")),
+    #    list(node = ParamInt$new(id = "ntree", lower = 1L, upper = 10L), depend = list(id = "model", val = "RF"))
+    # )
+    #  ps$visitor$parseFlat(input)
     parseFlat = function(node.list) {
       len = length(node.list)
-      SAFECOUNTER = 0
+      safecounter = 0L
       mnames = lapply(node.list, function(x) x$node$id)
       names(node.list) = unlist(mnames)
       while(length(node.list) != 0) {
         for (name in mnames) {
-          # catf("parsing %s",name)  # For future debug, please do not delete!
-          if (self$insertNode(node.list[[name]])) node.list[[name]] = NULL
-          # catf("number in wait list left %d",length(node.list)) # For future debug, please do not delete!
+          if (self$insertNode(node.list[[name]])) node.list[[name]] = NULL  # if inserted successfully, delete the node in wait list
         }
-        SAFECOUNTER = SAFECOUNTER + 1
-        if (SAFECOUNTER > len) stop("wrong flat input!")
+        safecounter = safecounter + 1L
+        if (safecounter > len) stop("parseFlat: parsing did not finish after [length of input] steps")
       }
     },
 
-    ## traverse the tree to find out if the the arg could be inserted as leave
-    insertNode = function(arg) {
-      # always check arg$depend not null!!
-      if (is.null(arg$depend)) {
-        # catf("hit no depend : %s", arg$node$id) # for future debug, please do not delete!
-        self$host$addMandChild(ParamHandle$new(node = arg$node))
+    ## traverse the tree to find out if the the input could be inserted as leave, only used privately inside parseFlat
+    insertNode = function(node.depend) {
+      if (is.null(node.depend$depend)) {  # the input is a top layer hyper-parameter
+        self$host$addMandChild(ParamHandle$new(node = node.depend$node))
         return(TRUE)
       }
-      # now the input arg has a field called depend
-      if (is.null(arg$depend$id) && is.null(arg$func)) stop("need at least id or func in depend!")
-      if ((self$host$id == arg$depend$id))
+      # the input is **not** a top layer hyper-parameter
+      if (is.null(node.depend$depend$id) && is.null(node.depend$func)) stop("parseFlat: input need at least depend$id or func")
+      if ((self$host$id == node.depend$depend$id))  # the input is direct child of the host
       {
-        # catf("hit depend:  %s", arg$node$id) # for future debug, please do not delete!
-        self$host$addCondChild(ParamHandle$new(node = arg$node, depend = arg$depend))
+        self$host$addCondChild(ParamHandle$new(node = node.depend$node, depend = node.depend$depend))
         return(TRUE)
       }
-      if (self$traverseMand(arg)) return(TRUE)  # child will be added inside the recursion
-      if (self$traverseCond(arg)) return(TRUE)  # child will be added inside the recursion
-      return(FALSE)
+      # the input is **not** a direct child of the host
+      if (self$traverseMand(node.depend)) return(TRUE)  # child will be added inside the recursion
+      if (self$traverseCond(node.depend)) return(TRUE)  # child will be added inside the recursion
+      return(FALSE)  # failed to insert the input
     },
 
-    # transform the tree structure to a list and return the list
+    # transform the tree structure to a flat list and return the list
     toFlat = function(res = list()) {
-      #print(self$host$node$id)
-      #print(length(res))
       res[[self$host$node$id]] = self$host$node
       if (length(self$host$mand.children) > 0) {
       for (name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
-        #print(handle$node$id)
         res[[handle$node$id]] = handle$node
         res = handle$visitor$toFlat(res)
       }
@@ -103,7 +105,6 @@ ParamVisitor = R6Class("ParamVisitor",
       if (length(self$host$cond.children) > 0) {
       for (name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
-        #print(handle$node$id)
         res[[handle$node$id]] = handle$node
         res = handle$visitor$toFlat(res)
       }
@@ -113,7 +114,7 @@ ParamVisitor = R6Class("ParamVisitor",
 
     # apply func to all node in the tree, without dependency
     treeApply = function(func) {
-      if(self$host$nochild) return(func(self$host$node))
+      if(self$host$nochild) return(func(self$host$node))  # apply func to the leave node
       if (length(self$host$mand.children) > 0) {
         for (name in names(self$host$mand.children)) {
           handle = self$host$mand.children[[name]]
@@ -129,7 +130,8 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     # check if the flat form of paramset violates the dependency
-    checkValidFromFlat = function(input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))) {
+    # example: input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))
+    checkValidFromFlat = function(input = list()) {  #FIXME: unter development
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
