@@ -1,3 +1,14 @@
 template:
   params:
     bootswatch: cosmo
+
+navbar:
+  left:
+  - text: Topics
+    icon: fa-file-text-o
+    menu:
+      - text: Tree structured ParamSets
+        href: articles/supplementary/tree_structured_paramsets.html
+  - text: Reference
+    icon: fa-book
+    href: reference/index.html
