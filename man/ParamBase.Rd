@@ -17,7 +17,7 @@ This is the abstract base class, do not use directly!
 }
 \seealso{
 Other ParamHelpers: \code{\link{ParamHandle}},
-  \code{\link{ParamNode}}, \code{\link{ParamTree}},
+  \code{\link{ParamNode}}, \code{\link{ParamSetTree}},
   \code{\link{ParamVisitor}}
 }
 \keyword{datasets}

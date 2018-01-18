@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>ParamSetTree — ParamSetTree • phng</title>
+<title>ParamTree — ParamSetTree • phng</title>
 
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script>
@@ -51,14 +51,26 @@
     </div>
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
-        <li>
-  <a href="..//index.html">
-    <span class="fa fa-home fa-lg"></span>
+        <li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
+    <span class="fa fa-file-text-o"></span>
      
+    Topics
+     
+    <span class="caret"></span>
   </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="../articles/supplementary/tree_structured_paramsets.html">Tree structured ParamSets</a>
+    </li>
+  </ul>
 </li>
 <li>
-  <a href="../reference/index.html">Reference</a>
+  <a href="../reference/index.html">
+    <span class="fa fa-book"></span>
+     
+    Reference
+  </a>
 </li>
       </ul>
       
@@ -80,7 +92,7 @@
       <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>ParamSetTree</h1>
+    <h1>ParamTree</h1>
     </div>
 
     
@@ -95,13 +107,13 @@
     
     <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
-    <p>[<code>ParamSetTree</code>].</p>
+    <p>[<code>ParamTree</code>].</p>
     
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
     <p>Other ParamHelpers: <code><a href='ParamBase.html'>ParamBase</a></code>,
-  <code><a href='ParamHandle.html'>ParamHandle</a></code>, <code><a href='ParamSetFlat.html'>ParamSetFlat</a></code>,
-  <code><a href='ParamSet.html'>ParamSet</a></code></p>
+  <code><a href='ParamHandle.html'>ParamHandle</a></code>, <code><a href='ParamNode.html'>ParamNode</a></code>,
+  <code><a href='ParamVisitor.html'>ParamVisitor</a></code></p>
     
 
   </div>
@@ -125,7 +137,7 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="http://hadley.github.io/pkgdown/">pkgdown</a>.</p>
+  <p>Site built with <a href="http://pkgdown.r-lib.org/">pkgdown</a>.</p>
 </div>
 
       </footer>

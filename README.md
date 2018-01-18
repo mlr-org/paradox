@@ -12,7 +12,7 @@ Universal Parameter Space Description and Tools
 Installation
 ------------
 
-``` r
+``` {.r}
 devtools::install_github("mlr-org/phng", dependencies = TRUE)
 ```
 
@@ -21,13 +21,13 @@ Usage
 
 Create a simple ParamSet using all supported Parameter Types:
 
--   \_Int\_egers
+-   *Int*egers
 -   *Real*-valued numbers
 -   *Flag* for `TRUE`/`FALSE`
 -   *Categorical* values, namely characters.
 -   Further types are only possible by using transformations.
 
-``` r
+``` {.r}
 ps = ParamSetFlat$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
@@ -40,7 +40,7 @@ ps = ParamSetFlat$new(
 
 Draw random samples / create random design:
 
-``` r
+``` {.r}
 ps$sample(3)
 ```
 
@@ -51,7 +51,7 @@ ps$sample(3)
 
 Generate LHS Design:
 
-``` r
+``` {.r}
 ps$generateLHSDesign(3)
 ```
 
@@ -62,7 +62,7 @@ ps$generateLHSDesign(3)
 
 Generate Grid Design:
 
-``` r
+``` {.r}
 ps$generateGridDesign(resolution = 2)
 ```
 
@@ -86,7 +86,7 @@ ps$generateGridDesign(resolution = 2)
 
 Properties of the parameters within the ParamSet:
 
-``` r
+``` {.r}
 ps$values
 ```
 
@@ -102,7 +102,7 @@ ps$values
     ## $methods
     ## [1] "a" "b" "c"
 
-``` r
+``` {.r}
 ps$param.classes
 ```
 
@@ -111,7 +111,7 @@ ps$param.classes
     ##            methods 
     ## "ParamCategorical"
 
-``` r
+``` {.r}
 ps$nlevels
 ```
 
@@ -122,7 +122,7 @@ ps$nlevels
 
 Things you can do on an all numeric ParamSet:
 
-``` r
+``` {.r}
 ps = ParamSetFlat$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
@@ -136,14 +136,14 @@ ps$lower
     ##            z x.repeated.1 x.repeated.2 
     ##          -10            0            0
 
-``` r
+``` {.r}
 ps$upper
 ```
 
     ##            z x.repeated.1 x.repeated.2 
     ##           10            1            1
 
-``` r
+``` {.r}
 ps$range
 ```
 
@@ -154,7 +154,7 @@ ps$range
 
 The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
 
-``` r
+``` {.r}
 ps$member.tags
 ```
 
@@ -179,7 +179,7 @@ Transformations are functions with a fixed signature.
 
 Transformations are useful to scale parameters:
 
-``` r
+``` {.r}
 ps = ParamSetFlat$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
@@ -201,7 +201,7 @@ ps = ParamSetFlat$new(
 
 The transformation uses the dictionary and will fail if none is supplied:
 
-``` r
+``` {.r}
 ps$transform(x)
 ```
 
@@ -209,7 +209,7 @@ ps$transform(x)
 
 The dictionary can always be changed:
 
-``` r
+``` {.r}
 ps$dictionary = list(p = 10)
 ps$transform(x)
 ```
@@ -219,7 +219,7 @@ ps$transform(x)
     ## 2: 0.500 2
     ## 3: 0.500 1
 
-``` r
+``` {.r}
 ps$dictionary = list(p = 1000)
 ps$transform(x)
 ```
@@ -233,7 +233,7 @@ ps$transform(x)
 
 The following creates a ParamSet with a transformation that scales the `x` values and returns them as a vector. The original parameters will be removed from the trafo result. Keep in mind that `z` stays untouched and remains after the transformation.
 
-``` r
+``` {.r}
 ps = ParamSetFlat$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
@@ -251,7 +251,7 @@ ps = ParamSetFlat$new(
 
 The output of all value generating functions won't change for a ParamSet that has a `trafo` function. Instead these outputs can be put into `ps$transform()` to obtain the desired parameter values.
 
-``` r
+``` {.r}
 x = ps$generateLHSDesign(3)
 ps$transform(x)
 ```
@@ -263,7 +263,7 @@ ps$transform(x)
 
 For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
 
-``` r
+``` {.r}
 ps = ParamSetFlat$new(
   params = c(
     list(
@@ -289,7 +289,7 @@ ps = ParamSetFlat$new(
     ## 2:  FALSE 3 0.4753165741    0.6127710    0.2436195    0.7881958
     ## 3:   TRUE 3 0.2201188852    0.3517979    0.6680556    0.1028646
 
-``` r
+``` {.r}
 ps$transform(x)
 ```
 

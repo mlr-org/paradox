@@ -45,7 +45,7 @@ A \code{\link[R6]{R6Class}} to represent parameters.
 
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
-  \code{\link{ParamHandle}}, \code{\link{ParamTree}},
+  \code{\link{ParamHandle}}, \code{\link{ParamSetTree}},
   \code{\link{ParamVisitor}}
 }
 \keyword{datasets}
