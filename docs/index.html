@@ -29,7 +29,7 @@
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
 <li>
-  <a href="/index.html">
+  <a href="index.html">
     <span class="fa fa-home fa-lg"></span>
      
   </a>
@@ -106,10 +106,10 @@
 ## 3: 2 -9.088870  FALSE       b</code></pre>
 <p>Generate LHS Design:</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)</code></pre></div>
-<pre><code>##    z         x switch methods
-## 1: 1 -9.019242  FALSE       b
-## 2: 2  8.636449  FALSE       a
-## 3: 3 -1.890614   TRUE       c</code></pre>
+<pre><code>##    z          x switch methods
+## 1: 1  0.4842227  FALSE       a
+## 2: 3 -9.7196031   TRUE       c
+## 3: 2  7.9520227  FALSE       b</code></pre>
 <p>Generate Grid Design:</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateGridDesign</span>(<span class="dt">resolution =</span> <span class="dv">2</span>)</code></pre></div>
 <pre><code>##     z   x switch methods
@@ -250,10 +250,10 @@ ps$<span class="kw">transform</span>(x)</code></pre></div>
 <p>The output of all value generating functions won’t change for a ParamSet that has a <code>trafo</code> function. Instead these outputs can be put into <code>ps$transform()</code> to obtain the desired parameter values.</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">x =<span class="st"> </span>ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)
 ps$<span class="kw">transform</span>(x)</code></pre></div>
-<pre><code>##     z                   x
-## 1:  3 0.1391386,0.9902729
-## 2:  4 0.8819020,0.4714328
-## 3: -5 0.8727897,0.4880965</code></pre>
+<pre><code>##     z                     x
+## 1: -2   0.9839367,0.1785177
+## 2: 10   0.8173283,0.5761722
+## 3: -5 0.04754544,0.99886908</code></pre>
 <p>For more advanced transformations on repeated parameters you can use <code><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam()</a></code>:</p>
 <div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
   <span class="dt">params =</span> <span class="kw">c</span>(
@@ -322,7 +322,7 @@ ps$<span class="kw">transform</span>(x)</code></pre></div>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="http://hadley.github.io/pkgdown/">pkgdown</a>.</p>
+  <p>Site built with <a href="http://pkgdown.r-lib.org/">pkgdown</a>.</p>
 </div>
 
       </footer>
