@@ -60,8 +60,12 @@ ParamVisitor = R6Class("ParamVisitor",
     # )
     #  ps$visitor$parseFlat(input)
     parseFlat = function(node.list) {
+      node.list = lapply(node.list, function(x) {
+        if("ParamSimple" %in% class(x)) return(makeCondTreeNode(x))
+        return(x)
+      })
       len = length(node.list)
-      safecounter = 0L
+      safecounter = 0L  # count how many nodes have been inserted
       mnames = lapply(node.list, function(x) x$node$id)
       names(node.list) = unlist(mnames)
       while(length(node.list) != 0) {

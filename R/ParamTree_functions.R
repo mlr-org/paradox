@@ -1,6 +1,6 @@
 #' @title  ParamTree Factory method
 #' 
-#' @description
+#' @description Define a list of Node in the hyper-parameter definition
 #' 
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
@@ -12,18 +12,20 @@ ParamTreeFac = function(...) {
   return(ps$getFirstMandChild)
 }
 
-#' @title 
+#' @title make conditional tree node
 #' 
-#' @description
+#' @description Define a node in the hyper parameter tree with dependencies
 #' 
-#' @param node Elementary ParamNode
-#' @param depend value
-#' @return returndes
+#' @param node ParamSimple
+#' @param depend A list with id and val representing the dependency for the current node
+#' @return List of class NodeParamSetTree
 #' @examples
-#' ParamTreeDn(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
-#' ParamTreeDn(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
+#' makeCondTreeNode(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
+#' makeCondTreeNode(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
 #' @export 
-ParamTreeDn = function(node, depend = NULL) {
-  return(list(node = node, depend = depend))
+makeCondTreeNode = function(node, depend = NULL) {
+  node = list(node = node, depend = depend)
+  class(node) = "NodeParamSetTree"
+  return(node)
 }
 
