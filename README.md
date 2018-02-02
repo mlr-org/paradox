@@ -55,10 +55,10 @@ Generate LHS Design:
 ps$generateLHSDesign(3)
 ```
 
-    ##    z         x switch methods
-    ## 1: 1 -9.019242  FALSE       b
-    ## 2: 2  8.636449  FALSE       a
-    ## 3: 3 -1.890614   TRUE       c
+    ##    z          x switch methods
+    ## 1: 1  0.4842227  FALSE       a
+    ## 2: 3 -9.7196031   TRUE       c
+    ## 3: 2  7.9520227  FALSE       b
 
 Generate Grid Design:
 
@@ -256,10 +256,10 @@ x = ps$generateLHSDesign(3)
 ps$transform(x)
 ```
 
-    ##     z                   x
-    ## 1:  3 0.1391386,0.9902729
-    ## 2:  4 0.8819020,0.4714328
-    ## 3: -5 0.8727897,0.4880965
+    ##     z                     x
+    ## 1: -2   0.9839367,0.1785177
+    ## 2: 10   0.8173283,0.5761722
+    ## 3: -5 0.04754544,0.99886908
 
 For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
 
