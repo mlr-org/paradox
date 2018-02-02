@@ -20,8 +20,8 @@ ParamTreeFac = function(...) {
 #' @param depend A list with id and val representing the dependency for the current node
 #' @return List of class NodeParamSetTree
 #' @examples
-#' makeCondTreeNode(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
-#' makeCondTreeNode(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
+#' makeCondTreeNode(node = ParamCategorical$new(id = "model", values = c("SVM", "RF")))
+#' makeCondTreeNode(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM"))
 #' @export 
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
