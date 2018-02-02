@@ -51,26 +51,14 @@
     </div>
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
-        <li class="dropdown">
-  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
-    <span class="fa fa-file-text-o"></span>
+        <li>
+  <a href="..//index.html">
+    <span class="fa fa-home fa-lg"></span>
      
-    Topics
-     
-    <span class="caret"></span>
   </a>
-  <ul class="dropdown-menu" role="menu">
-    <li>
-      <a href="../articles/supplementary/tree_structured_paramsets.html">Tree structured ParamSets</a>
-    </li>
-  </ul>
 </li>
 <li>
-  <a href="../reference/index.html">
-    <span class="fa fa-book"></span>
-     
-    Reference
-  </a>
+  <a href="../reference/index.html">Reference</a>
 </li>
       </ul>
       
@@ -96,7 +84,7 @@
     </div>
 
     
-    <p>A <code><a href='http://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to visit attached ParamHandle object(host). Using a separate visitor to a class is a frequently used design pattern which could seperate the operations(traversal the graph structure of the ParamHandle) on the ParamHandle and the ParamHandle pointer themselves. The ParamHandle node has two kinds of children node: the mandatory node and conditional node. Mandatory nodes are unconditional children for a graph-like hyper parameter, for example, the normal SVM has a hyperparameter C which is mandatory node but the hyperparameter gamma only makes sense when the hyperparameter kernel type is rbf kernel.</p>
+    <p>A <code><a href='http://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to visit ParamHandle.</p>
     
 
     <pre class="usage"><span class='no'>ParamVisitor</span></pre>
@@ -112,8 +100,8 @@
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
     <p>Other ParamHelpers: <code><a href='ParamBase.html'>ParamBase</a></code>,
-  <code><a href='ParamHandle.html'>ParamHandle</a></code>, <code><a href='ParamNode.html'>ParamNode</a></code>,
-  <code><a href='ParamSetTree.html'>ParamSetTree</a></code></p>
+  <code><a href='ParamHandle.html'>ParamHandle</a></code>, <code><a href='ParamSetFlat.html'>ParamSetFlat</a></code>,
+  <code><a href='ParamSetTree.html'>ParamSetTree</a></code>, <code><a href='ParamSet.html'>ParamSet</a></code></p>
     
 
   </div>
@@ -137,7 +125,7 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="http://pkgdown.r-lib.org/">pkgdown</a>.</p>
+  <p>Site built with <a href="http://hadley.github.io/pkgdown/">pkgdown</a>.</p>
 </div>
 
       </footer>
