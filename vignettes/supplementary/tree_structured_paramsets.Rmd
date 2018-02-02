@@ -35,7 +35,7 @@ In future versions of this package, firstly we might eliminate the unique id lim
 The user could define the following tree based hyper-parameter set, where `ParamTreeDn` means define Node and `ParamTreeFac` defines the ParamSetTree.
 
  ```{r example1}
-   devtools::load_all("../../")
+   library(phng)
    pst = ParamTreeFac(
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
