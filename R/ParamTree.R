@@ -1,10 +1,10 @@
-#' @title ParamTree
+#' @title ParamSetTree
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a tree form.
 #'
-#' @return [\code{\link{ParamTree}}].
+#' @return [\code{\link{ParamSetTree}}].
 #' @family ParamHelpers
 #' @export
 ParamSetTree = R6Class("ParamSetTree",

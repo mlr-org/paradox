@@ -7,7 +7,8 @@
 #' @export 
 ParamTreeFac = function(...) {
   input = list(...)
-  ps = ParamHandle$new(id = "Root")
+  lapply(input, function(x) { assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency")) })
+  ps = ParamHandle$new(id = "Root")  #FIXME: id should be defined outside the code
   ps$visitor$parseFlat(input)
   return(ps$getFirstMandChild)
 }
@@ -19,13 +20,10 @@ ParamTreeFac = function(...) {
 #' @param node ParamSimple
 #' @param depend A list with id and val representing the dependency for the current node
 #' @return List of class NodeParamSetTree
-#' @examples
-#' makeCondTreeNode(node = ParamCategorical$new(id = "model", values = c("SVM", "RF")))
-#' makeCondTreeNode(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM"))
 #' @export 
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
-  class(node) = "NodeParamSetTree"
+  class(node) = "NodeWithDependency"
   return(node)
 }
 
