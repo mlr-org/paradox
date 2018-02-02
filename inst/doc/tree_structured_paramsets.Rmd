@@ -1,0 +1,77 @@
+---
+title: "Tree structured ParamSets"
+output:
+  html_document:
+    toc: true
+    toc_float:
+      collapsed: true
+      smooth_scroll: false
+    dev: svg
+vignette: >
+  %\VignetteIndexEntry{Tree structured ParamSets}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r setup, include = FALSE, cache = FALSE}
+library(phng)
+set.seed(123)
+knitr::opts_chunk$set(cache = TRUE, collapse = FALSE, dev = "svg", fig.height = 3.5)
+knitr::knit_hooks$set(document = function(x){
+  gsub("```\n*```r*\n*", "", x)
+})
+```
+
+# ParamSetTree
+We implemented ParamSetTree as an alternative to ParamSetFlat to accomodate different users' needs for different programing tasks. In ParamSet, some hyper-parameters depend on other hyper-parameters. Our ParamSetFlat implmentation addresses this problem by adding an expression as restriction across the hyper-parameters, while our ParamSetTree implementation defines a "depend" relationship that is uni-directional. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
+
+Each separate hyper-parameter has a unique identifier called "id" which is defined inside 
+the ParamSimple(ParamCategorical, ParamReal, ..etc). These "id"s are extracted from ParamSimple and used as the unique identifier as the node in the tree as well.
+
+If a hyper-parameter has a dependency, "gamma" for example, we write its dependency in the form of ```depend = list(id = "kernel", val = "rbf")``` which means that "gamma" only makes sense if the "kernel" hyper-parameter takes the value of "rbf".
+
+In future versions of this package, firstly we might eliminate the unique id limitation since two identical leave node ids could be differenciated by the two different paths of the tree which lead to this two leave nodes. Secondly, we will have a more general dependency representation like in the ParamSetFlat. For example, if the parent node takes a range of values which could also activiate the child node, but not only an equal relation.
+
+The user could define the following tree based hyper-parameter set, where `ParamTreeDn` means define Node and `ParamTreeFac` defines the ParamSetTree.
+
+ ```{r example1}
+   library(phng)
+   pst = ParamTreeFac(
+       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
+       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
+       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
+       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
+       )
+   pst$sample()
+   pst$toStringVal()
+```
+## Advanced features
+We also provide the user with a "Functional API" which means the user could program at runtime a dynamic structure of the tree. 
+
+Here we introduce the concept of mandatory child node and conditional child node. Mandatory child node means a dependent childnode that is unconditional and conditional child node means the node only make sense once the parent node meet some requirements. For example, in a model multiplexer of "Support Vector Machine" (SVM) and "Random Forest" (RF), the parameter "n_tree" only make sense if the "Model" is "RF". But if the root node is "RF", then "n_tree" becomes a Mandatory child node for "RF".
+
+Secondly, we introduce the concept of ParamHandle, which takes argument of `node` and `depend`. It is basically representing a node in the tree structure which contains pointers to its mandatory child nodes and conditional child nodes.
+
+```{r example2}
+  ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
+  ps$setRoot(ps)  # set the current node to be the root node
+  temp_ntree = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "Model", val = "RF"))
+  ntree = ps$addCondChild(temp_ntree)  # the condition is contained in temp_ntree§depend already
+  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "Model", val = "SVM"))
+  c = ps$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", val = "SVM"))
+  kernel = ps$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
+  gamma = kernel$addCondChild(temp)
+  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
+  poly = kernel$addCondChild(temp)
+  list.flat = ps$visitor$toFlat()
+  ps$toStringVal()
+  ps$sample()
+  ps$toStringVal()  # after sampling, the string might be different
+  list.flat = ps$visitor$toFlat()
+  poly$getRoot$sample() # use the root to sample
+  ps$toStringVal()
+```
+
