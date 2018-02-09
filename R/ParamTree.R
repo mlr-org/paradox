@@ -7,7 +7,7 @@
 #' @return [\code{\link{ParamSetTree}}].
 #' @family ParamHelpers
 #' @export
-ParamSetTree = R6Class("ParamSetTree",
+ParamSetTree = R6Class("ParamSetTree",  ##FIXME: this class is still under development, the difference between ParamSetTree and ParamHandle is that one could "hang" a tree(of nodes) directly(instead of only one node) to a ParamHandle or another tree
   inherit = ParamSet,
   public = list(
 
@@ -19,7 +19,7 @@ ParamSetTree = R6Class("ParamSetTree",
 
     # constructor
     initialize = function(id = NULL, handle = NULL, depend = NULL) {
-      self$id = id
+      self$id = assertNames(id)
       self$handle = handle
       self$flatval = list()
       self$depend = depend
