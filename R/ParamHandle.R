@@ -8,7 +8,7 @@
 #' @family ParamHelpers
 #' @export
 ParamHandle = R6Class("ParamHandle",
-  inherit = ParamBase, # FIXME: Are we sure? Yes!
+  inherit = ParamBase, # FIXME: Are we sure?
   public = list(
     # member variables
     id = NULL,  # by default, id should be the same with the node id which this handle points to
@@ -44,7 +44,7 @@ ParamHandle = R6Class("ParamHandle",
       }
       else self$root = NULL
       self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
-      self$mand.children = new.env()
+      self$mand.children = new.env()  # environments are used because they have both unique names and reference semantic
       self$cond.children = new.env()
       self$visitor = ParamVisitor$new(self)
     },
