@@ -44,7 +44,7 @@ ParamHandle = R6Class("ParamHandle",
       }
       else self$root = NULL
       self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
-      self$mand.children = new.env()  # environments are used because they have both unique names and reference semantic
+      self$mand.children = new.env()  # environments are used because they have both unique names and reference semantic, the new.env will take global environment as parent so will not blur the search path
       self$cond.children = new.env()
       self$visitor = ParamVisitor$new(self)
     },
