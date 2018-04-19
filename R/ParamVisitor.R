@@ -77,9 +77,10 @@ ParamVisitor = R6Class("ParamVisitor",
       }
     },
 
-    ## traverse the tree to find out if the the input could be inserted as leave, only used privately inside parseFlat
+    ## traverse the tree to find out if the the input could be inserted as leave
     insertNode = function(node.depend) {
-      if (is.null(node.depend$depend)) {  # the input is a top layer hyper-parameter
+      if (is.null(node.depend$depend)) {  
+        # the input is a top layer hyper-parameter
         self$host$addMandChild(ParamHandle$new(node = node.depend$node))
         return(TRUE)
       }
@@ -133,14 +134,19 @@ ParamVisitor = R6Class("ParamVisitor",
       } # if
     },
 
+    # FIXME: the following code need to be refactored and removed
     # check if the flat form of paramset violates the dependency
-    # example: input = list(model = list(val = "svm"), kernel = list(val = "rbf", depend = list(val = "svm")), gamma =list(val = "0.3" ,depend = list(val = "rbf")))
+    # example: 
+    # input = list(model = list(val = "svm"), 
+    # kernel = list(val = "rbf", depend = list(val = "svm")), 
+    # gamma =list(val = "0.3" ,depend = list(val = "rbf")))
     checkValidFromFlat = function(input = list()) {  #FIXME: unter development
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
       findDependNode = function(fq, node) {
-        for (name in names(fq)) {
+        fqns = names(fq)
+        for (name in fqns) {
           if (node$depend$val == fq[[name]]$val) return(TRUE)
         }
         return(FALSE)

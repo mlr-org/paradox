@@ -16,7 +16,6 @@ ParamHandle = R6Class("ParamHandle",
     val = NULL,  # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
     depend = NULL,  # depend is a list with field <id><[val][func]> which will decide if the current node is going to be activated in a sampling process, if depend$func() is True, then the sampling function is called
-    # require.expr = NULL,  # function to take arguments as parents, but not using the self$parent
     parent = NULL,
     root = NULL,    # root has to be changed when parent changed!
     reldepth = 0L,  # reldepth has to be updated when parent changed!
@@ -32,11 +31,7 @@ ParamHandle = R6Class("ParamHandle",
       self$node = node
       self$val = val
       self$depend = depend
-      # self$require.expr = function(parent) {
-      #  if (is.null(parent$val)) return(FALSE)
-      #  if (is.null(self$depend)) return(TRUE)
-      #  return(parent$val == self$depend$val)
-      #}
+      if ((!is.null(self$depend)) && is.null(self$depend$fun) && is.null(self$depend$val)) stop("dependency must be a list(id = id,fun =quote(expression)) form!")
       self$parent = parent
       if (!is.null(parent)) {
         self$root = ifelse(is.null(parent$root), parent, parent$root)
@@ -60,19 +55,19 @@ ParamHandle = R6Class("ParamHandle",
       self$root = root
     },
 
+
+    # return wether the parent took the defined value
     isDependMet = function() {
-      # return wether the parent took the defined value
-      if (is.null(self$depend)) return(TRUE)  # Free Hyper-Parameter, no constraint
-      if (is.null(self$parent)) return(TRUE)  # No parent node
-      # it is ok to have parent but no depend, which is MandChild
-      if (is.null(self$parent$val)) {
+      depend.null = is.null(self$depend)
+      parent.null = is.null(self$parent)
+      parent.val.null = is.null(self$parent$val)
+      if (depend.null) return(TRUE)  # Free Hyper-Parameter, no constraint
+      # Now there is dependency. It is ok to have parent but no depend though, which is MandChild
+      if (parent.null || parent.val.null) {
         warning("ParamHandle$isDependMet: parent value has not been specified yet")
-        return(TRUE)  #FIXME: SHOULD HERE BE FALSE OR TRUE? Or Should we stop here? Or just set warning messages? Currently we decide to just have a warning
+        return(TRUE)  #FIXME: SHOULD HERE BE warning or error?
       }
-      if (is.null(self$depend$val) && is.null(self$depend$fun)) stop("ParamHandle$isDependMet: ill defined dependency in self$depend$val")
-      # eflag = (self$parent$val == self$depend$val)
       cflag = self$lazyChecker()
-      # return(eflag || cflag)
       return(cflag)
     },
 
@@ -94,22 +89,20 @@ ParamHandle = R6Class("ParamHandle",
 
     setParent = function(pnode) {
       self$parent = pnode
-      self$reldepth = self$parent$reldepth + 1
+      self$reldepth = self$parent$reldepth + 1L
       self$root = self$parent$root
     },
 
     sampleCurrentNode = function() {
       if (is.null(self$node)) return(NULL)  # No ParamSimple specified for the current class
-      if (self$isDependMet()) {
-        #catf("sampling %s\n", self$node$id)  # for future debug, please do not delete!
+      if (self$isDependMet()){
+        # debug: self$node$id
         self$val = self$sampleNode()  # self$node$sample will cause infinite recursion
-        #catf("\n")  for future debug, please do not delete!
       }
     },
 
     sampleNode = function() {
-      val = self$node$sampleVector()
-      # catf("%s", val) # for future debug, please do not delete!
+      val = self$node$sampleVector()  # print val for debug
       return(val)
     },
 
@@ -125,7 +118,6 @@ ParamHandle = R6Class("ParamHandle",
       if (length(self$cond.children) == 0) return(NULL)
       for (name in names(self$cond.children)) {
         handle = self$cond.children[[name]]
-        # if (handle$require.expr(self)) {
         flag = handle$isDependMet()
         if (flag) {
           handle$sample()
@@ -160,7 +152,6 @@ ParamHandle = R6Class("ParamHandle",
       for (name in cns) {
         handle = self$cond.children[[name]]
         flag = handle$isDependMet()
-        # if (handle$require.expr(self)) {
         if (flag) {
           handle$toStringVal()
         }
