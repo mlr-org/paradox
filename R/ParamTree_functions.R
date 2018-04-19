@@ -19,17 +19,18 @@ ParamTreeFac = function(...) {
 #' @description Define a node in the hyper parameter tree with dependencies
 #'
 #' @param node ParamSimple
-#' @param depend A list with id and val representing the dependency for the current node
+#' @param did dependent node id
+#' @param expr expression that provides the dependency
 #' @return List of class NodeParamSetTree
+#' @export
+addDep = function(node, did, expr) {
+  makeCondTreeNode(node = node, depend = list(id = did, fun = expr))
+}
+
 #' @export
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
   class(node) = "NodeWithDependency"
   return(node)
-}
-
-#' @export
-makeCondTreeNode2 = function(node, did, expr) {
-  makeCondTreeNode(node = node, depend = list(id = did, fun = fun))
 }
 

@@ -22,39 +22,28 @@ knitr::knit_hooks$set(document = function(x){
 })
 ```
 
-# ParamSetTree
+# ParamTree
+Some hyper-parameters could depend on other hyper-parameters. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
 
-We implemented ParamSetTree as an alternative to ParamSetFlat to accomodate different users' needs for different programing tasks. 
-
-In ParamSet, some hyper-parameters depend on other hyper-parameters. Our ParamSetFlat implmentation addresses this problem by adding an expression as restriction across the hyper-parameters, while our ParamSetTree implementation defines a "depend" relationship that is uni-directional. 
-
-For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
-
-Each separate hyper-parameter has a unique identifier called "id" which is defined inside 
-the ParamSimple(ParamCategorical, ParamReal, ..etc). These "id"s are extracted from ParamSimple and used as the unique identifier as the node in the tree as well.
-
-If a hyper-parameter has a dependency, "gamma" for example, we write its dependency in the form of ```depend = list(id = "kernel", val = "rbf")``` which means that "gamma" only makes sense if the "kernel" hyper-parameter takes the value of "rbf".
-
-In future versions of this package, firstly we might eliminate the unique id limitation since two identical leave node ids could be differenciated by the two different paths of the tree which lead to this two leave nodes. Secondly, we will have a more general dependency representation like in the ParamSetFlat. For example, if the parent node takes a range of values which could also activiate the child node, but not only an equal relation.
-
-The user could define the following tree based hyper-parameter set, where `ParamTreeDn` means define Node and `ParamTreeFac` defines the ParamSetTree.
+To tackle the above mentioned problem, we have the following code. Each separate hyper-parameter has a unique identifier called "id" which is defined inside the ParamSimple(ParamCategorical, ParamReal, ..etc). These "id"s are extracted from ParamSimple and used as the unique identifier as the node in the tree as well.
 
 ```{r example1}
    library(phng)
    pst = ParamTreeFac(
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
-       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), 
-         depend = list(id = "model", fun = quote(model == "SVM"))),
-       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
-         depend = list(id = "model", fun = quote(model == "SVM"))),
-       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), 
-         depend = list(id = "kernel", fun = quote(kernel == "rbf"))),
-       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
-         depend = list(id = "kernel", fun = quote(kernel == "poly")))
+       addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
+         did = "model", expr = quote(model == "SVM")), # did here means dependant id
+       addDep(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
+         did = "model", expr = quote(model == "SVM")),
+       addDep(ParamReal$new(id = "gamma", lower = 0, upper = 100), 
+         did = "kernel", expr = quote(kernel == "rbf")),
+       addDep(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+         did = "kernel", expr = quote(kernel == "poly"))
        )
    pst$sample()
    pst$toStringVal()
 ```
+
 
 ## Advanced features
 
