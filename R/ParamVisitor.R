@@ -21,12 +21,12 @@ ParamVisitor = R6Class("ParamVisitor",
     # public methods
 
     # Depth First Traversal of current node's mandatory children and add node [arg] to it
-    traverseMand = function(arg)
-    {
+    traverseMand = function(arg) {
       if (length(self$host$mand.children) == 0L) return(FALSE)  # if the current node has no mandatory children, recursion stop
       for (name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
-        if (handle$visitor$insertNode(arg)) {   # recursion: insertNode(arg) -> traverseMand(arg) -> insertNode(arg) -> ...
+        if (handle$visitor$insertNode(arg)) {
+          # recursion: insertNode(arg) -> traverseMand(arg) -> insertNode(arg) -> ...
           return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
@@ -38,7 +38,8 @@ ParamVisitor = R6Class("ParamVisitor",
       if (length(self$host$cond.children) == 0L) return(FALSE)  # if the current node has no conditional children, recursion stop
       for (name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
-        if (handle$visitor$insertNode(arg)) {  # recursion: insertNode(arg) -> traverseCond(arg) -> insertNode(arg) -> ...
+        if (handle$visitor$insertNode(arg)) {
+          # recursion: insertNode(arg) -> traverseCond(arg) -> insertNode(arg) -> ...
           return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
@@ -61,14 +62,14 @@ ParamVisitor = R6Class("ParamVisitor",
     #  ps$visitor$parseFlat(input)
     parseFlat = function(node.list) {
       node.list = lapply(node.list, function(x) {
-        if("ParamSimple" %in% class(x)) return(makeCondTreeNode(x))
+        if ("ParamSimple" %in% class(x)) return(makeCondTreeNode(x))
         return(x)
       })
       len = length(node.list)
       safecounter = 0L  # count how many nodes have been inserted
       mnames = lapply(node.list, function(x) x$node$id)
       names(node.list) = unlist(mnames)
-      while(length(node.list) != 0) {
+      while (length(node.list) != 0) {
         for (name in mnames) {
           if (self$insertNode(node.list[[name]])) node.list[[name]] = NULL  # if inserted successfully, delete the node in wait list
         }
@@ -79,15 +80,15 @@ ParamVisitor = R6Class("ParamVisitor",
 
     ## traverse the tree to find out if the the input could be inserted as leave
     insertNode = function(node.depend) {
-      if (is.null(node.depend$depend)) {  
+      if (is.null(node.depend$depend)) {
         # the input is a top layer hyper-parameter
         self$host$addMandChild(ParamHandle$new(node = node.depend$node))
         return(TRUE)
       }
       # the input is **not** a top layer hyper-parameter
       if (is.null(node.depend$depend$id) && is.null(node.depend$func)) stop("parseFlat: input need at least depend$id or func")
-      if ((self$host$id == node.depend$depend$id))  # the input is direct child of the host
-      {
+      # the input is direct child of the host
+      if (self$host$id == node.depend$depend$id) {
         self$host$addCondChild(ParamHandle$new(node = node.depend$node, depend = node.depend$depend))
         return(TRUE)
       }
@@ -119,7 +120,7 @@ ParamVisitor = R6Class("ParamVisitor",
 
     # apply func to all node in the tree, without dependency
     treeApply = function(func) {
-      if(self$host$nochild) return(func(self$host$node))  # apply func to the leave node
+      if (self$host$nochild) return(func(self$host$node))  # apply func to the leave node
       if (length(self$host$mand.children) > 0) {
         for (name in names(self$host$mand.children)) {
           handle = self$host$mand.children[[name]]
@@ -134,13 +135,13 @@ ParamVisitor = R6Class("ParamVisitor",
       } # if
     },
 
-    # FIXME: the following code need to be refactored and removed
     # check if the flat form of paramset violates the dependency
     # example: 
     # input = list(model = list(val = "svm"), 
     # kernel = list(val = "rbf", depend = list(val = "svm")), 
     # gamma =list(val = "0.3" ,depend = list(val = "rbf")))
-    checkValidFromFlat = function(input = list()) {  #FIXME: unter development
+    checkValidFromFlat = function(input = list()) {
+      #FIXME: unter development
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
