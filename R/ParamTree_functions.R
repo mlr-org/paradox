@@ -14,7 +14,7 @@ ParamTreeFac = function(...) {
   return(ps$getFirstMandChild)
 }
 
-#' @title make conditional tree node
+#' @title Add dependent Node
 #'
 #' @description Define a node in the hyper parameter tree with dependencies
 #'
@@ -27,6 +27,13 @@ addDep = function(node, did, expr) {
   makeCondTreeNode(node = node, depend = list(id = did, fun = expr))
 }
 
+#' @title make conditional tree node
+#'
+#' @description Define a node in the hyper parameter tree with dependencies
+#'
+#' @param node ParamSimple
+#' @param depend A list of field c("id", "val", "fun")
+#' @return List of class NodeParamSetTree
 #' @export
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
