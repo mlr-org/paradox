@@ -23,7 +23,12 @@ knitr::knit_hooks$set(document = function(x){
 ```
 
 # ParamSetTree
-We implemented ParamSetTree as an alternative to ParamSetFlat to accomodate different users' needs for different programing tasks. In ParamSet, some hyper-parameters depend on other hyper-parameters. Our ParamSetFlat implmentation addresses this problem by adding an expression as restriction across the hyper-parameters, while our ParamSetTree implementation defines a "depend" relationship that is uni-directional. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
+
+We implemented ParamSetTree as an alternative to ParamSetFlat to accomodate different users' needs for different programing tasks. 
+
+In ParamSet, some hyper-parameters depend on other hyper-parameters. Our ParamSetFlat implmentation addresses this problem by adding an expression as restriction across the hyper-parameters, while our ParamSetTree implementation defines a "depend" relationship that is uni-directional. 
+
+For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
 
 Each separate hyper-parameter has a unique identifier called "id" which is defined inside 
 the ParamSimple(ParamCategorical, ParamReal, ..etc). These "id"s are extracted from ParamSimple and used as the unique identifier as the node in the tree as well.
@@ -34,19 +39,21 @@ In future versions of this package, firstly we might eliminate the unique id lim
 
 The user could define the following tree based hyper-parameter set, where `ParamTreeDn` means define Node and `ParamTreeFac` defines the ParamSetTree.
 
- ```{r example1}
+```{r example1}
    library(phng)
    pst = ParamTreeFac(
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
-       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
-       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
-       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
-       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
+       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
+       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", fun = quote(model == "SVM"))),
+       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = quote(kernel == "rbf"))),
+       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly")))
        )
    pst$sample()
    pst$toStringVal()
 ```
+
 ## Advanced features
+
 We also provide the user with a "Functional API" which means the user could program at runtime a dynamic structure of the tree. 
 
 Here we introduce the concept of mandatory child node and conditional child node. Mandatory child node means a dependent childnode that is unconditional and conditional child node means the node only make sense once the parent node meet some requirements. For example, in a model multiplexer of "Support Vector Machine" (SVM) and "Random Forest" (RF), the parameter "n_tree" only make sense if the "Model" is "RF". But if the root node is "RF", then "n_tree" becomes a Mandatory child node for "RF".
