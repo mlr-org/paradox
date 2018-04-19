@@ -16,7 +16,7 @@ ParamHandle = R6Class("ParamHandle",
     val = NULL,  # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
     depend = NULL,  # depend is a list with field <id><[val][func]> which will decide if the current node is going to be activated in a sampling process, if depend$func() is True, then the sampling function is called
-    require.expr = NULL,  # function to take arguments as parents, but not using the self$parent
+    # require.expr = NULL,  # function to take arguments as parents, but not using the self$parent
     parent = NULL,
     root = NULL,    # root has to be changed when parent changed!
     reldepth = 0L,  # reldepth has to be updated when parent changed!
@@ -32,11 +32,11 @@ ParamHandle = R6Class("ParamHandle",
       self$node = node
       self$val = val
       self$depend = depend
-      self$require.expr = function(parent) {
-        if (is.null(parent$val)) return(FALSE)
-        if (is.null(self$depend)) return(TRUE)
-        return(parent$val == self$depend$val)
-      }
+      # self$require.expr = function(parent) {
+      #  if (is.null(parent$val)) return(FALSE)
+      #  if (is.null(self$depend)) return(TRUE)
+      #  return(parent$val == self$depend$val)
+      #}
       self$parent = parent
       if (!is.null(parent)) {
         self$root = ifelse(is.null(parent$root), parent, parent$root)
