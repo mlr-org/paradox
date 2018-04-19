@@ -43,10 +43,14 @@ The user could define the following tree based hyper-parameter set, where `Param
    library(phng)
    pst = ParamTreeFac(
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
-       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
-       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", fun = quote(model == "SVM"))),
-       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = quote(kernel == "rbf"))),
-       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly")))
+       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), 
+         depend = list(id = "model", fun = quote(model == "SVM"))),
+       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
+         depend = list(id = "model", fun = quote(model == "SVM"))),
+       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), 
+         depend = list(id = "kernel", fun = quote(kernel == "rbf"))),
+       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+         depend = list(id = "kernel", fun = quote(kernel == "poly")))
        )
    pst$sample()
    pst$toStringVal()
