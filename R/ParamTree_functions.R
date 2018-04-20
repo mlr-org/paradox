@@ -9,9 +9,9 @@ ParamTreeFac = function(...) {
   input = list(...)
   lapply(input, function(x) {
     assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency")) })
-  ps = ParamHandle$new(id = "Root")  #FIXME: id should be defined outside the code
-  ps$visitor$parseFlat(input)
-  return(ps$getFirstMandChild)
+    ps = PHinge$new(id = "Root")  #FIXME: do we need a hard coded id here?
+    ps$visitor$parseFlat(input)
+    return(ps)
 }
 
 #' @title Add dependent Node

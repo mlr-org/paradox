@@ -186,3 +186,20 @@ ParamHandle = R6Class("ParamHandle",
     )
 )
 
+PHinge = R6Class("PHinge",
+  inherit = ParamHandle,
+  public = list(
+    initialize = function(id = NULL) {
+      super$initialize(id = id, node = NULL, val = NULL, depend = NULL, parent = NULL)
+    },
+
+    sample = function() {
+      self$sampleMandChildChain()
+  },
+
+    toStringVal = function() {
+      num.mand = length(self$mand.children)
+      if (num.mand > 0) self$printMandChildChainVal()
+    }
+)
+  )
