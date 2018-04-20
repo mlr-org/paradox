@@ -35,10 +35,12 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "SVM")), # did here means dependant id
        addDep(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
          did = "model", expr = quote(model == "SVM")),
-       addDep(ParamReal$new(id = "gamma", lower = 0, upper = 100), 
+       addDep(ParamReal$new(id = "gamma", lower = 0, upper = 101), 
          did = "kernel", expr = quote(kernel == "rbf")),
        addDep(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
-         did = "kernel", expr = quote(kernel == "poly"))
+         did = "kernel", expr = quote(kernel == "poly")),
+       addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
+         did = "model", expr = quote(model == "RF"))
        )
    pst$sample()
    pst$toStringVal()
@@ -56,22 +58,26 @@ Secondly, we introduce the concept of ParamHandle, which takes argument of `node
 ```{r example2}
   ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
   ps$setRoot(ps)  # set the current node to be the root node
-  temp_ntree = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "Model", val = "RF"))
+  temp_ntree = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
+    depend = list(id = "Model", fun = quote(Model == "RF")))
   ntree = ps$addCondChild(temp_ntree)  # the condition is contained in temp_ntree§depend already
-  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "Model", val = "SVM"))
+  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), 
+    depend = list(id = "Model", fun = quote(Model == "SVM")))
   c = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", val = "SVM"))
+  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")),
+    depend = list(id = "Model", fun = quote(Model == "SVM")))
   kernel = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf"))
+  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), 
+    depend = list(id = "kernel", fun = quote(kernel == "rbf")))
   gamma = kernel$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly"))
+  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+    depend = list(id = "kernel", fun = quote(kernel == "poly")))
   poly = kernel$addCondChild(temp)
-  list.flat = ps$visitor$toFlat()
-  ps$toStringVal()
   ps$sample()
-  ps$toStringVal()  # after sampling, the string might be different
-  list.flat = ps$visitor$toFlat()
+  ps$toStringVal() 
+  hh = ps$visitor$toFlat()
   poly$getRoot$sample() # use the root to sample
   ps$toStringVal()
+  hh = ps$visitor$toFlat()
 ```
 
