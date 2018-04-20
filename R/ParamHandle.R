@@ -31,7 +31,9 @@ ParamHandle = R6Class("ParamHandle",
       self$node = node
       self$val = val
       self$depend = depend
-      if ((!is.null(self$depend)) && is.null(self$depend$fun) && is.null(self$depend$val)) stop("dependency must be a list(id = id,fun =quote(expression)) form!")
+      haveDep = !is.null(self$depend)
+      depNc = is.null(self$depend$fun) || is.null(self$depend$id)
+      if (haveDep && depNc) stop("dependency must be a list(id = id,fun =quote(expression)) form!")
       self$parent = parent
       if (!is.null(parent)) {
         self$root = ifelse(is.null(parent$root), parent, parent$root)
@@ -45,7 +47,6 @@ ParamHandle = R6Class("ParamHandle",
 
     # public methods
     lazyChecker = function() {
-      if (is.null(self$depend$fun)) return(TRUE)
       dict = as.list(self$parent$val)
       dict = setNames(dict, self$parent$id)
       isTRUE(eval(self$depend$fun, envir = dict))
