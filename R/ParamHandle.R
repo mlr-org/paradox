@@ -11,15 +11,14 @@ ParamHandle = R6Class("ParamHandle",
   inherit = ParamBase, # FIXME: Are we sure?
   public = list(
     # member variables
-    id = NULL,  # by default, id should be the same with the node id which this handle points to
-    node = NULL, # simple ParamNode the handle(pointer) point to
-    val = NULL,  # the value of the SimpleParamNode it points to. val is used for sampling
+    id = NULL,      # by default, id should be the same with the node id which this handle points to
+    node = NULL,    # simple ParamNode the handle(pointer) point to
+    val = NULL,     # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
-    depend = NULL,  # depend is a list with field <id><[val][func]> which will decide if the current node is going to be activated in a sampling process, if depend$func() is True, then the sampling function is called
+    depend = NULL,  # depend is a list with field <id><func>
     parent = NULL,
     root = NULL,    # root has to be changed when parent changed!
     reldepth = 0L,  # reldepth has to be updated when parent changed!
-    #
     mand.children = NULL,
     cond.children = NULL,
     visitor = NULL, # visitor pattern, which decouples the data structure and operation
@@ -40,7 +39,8 @@ ParamHandle = R6Class("ParamHandle",
       }
       else self$root = NULL
       self$reldepth = ifelse(is.null(parent), 0, (parent$reldepth + 1))
-      self$mand.children = new.env()  # environments are used because they have both unique names and reference semantic, the new.env will take global environment as parent so will not blur the search path
+      self$mand.children = new.env()
+      # environments are used because they have both unique names and reference semantic, the new.env will take global environment as parent so will not blur the search path
       self$cond.children = new.env()
       self$visitor = ParamVisitor$new(self)
     },

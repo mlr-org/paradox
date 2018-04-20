@@ -26,7 +26,7 @@ ParamVisitor = R6Class("ParamVisitor",
       for (name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
         if (handle$visitor$insertNode(arg)) {
-          # recursion: insertNode(arg) -> traverseMand(arg) -> insertNode(arg) -> ...
+          # recursion: insertNode(arg), traverseMand(arg), insertNode(arg), ...
           return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
@@ -39,28 +39,14 @@ ParamVisitor = R6Class("ParamVisitor",
       for (name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
         if (handle$visitor$insertNode(arg)) {
-          # recursion: insertNode(arg) -> traverseCond(arg) -> insertNode(arg) -> ...
+          # recursion: insertNode(arg), traverseCond(arg), insertNode(arg), ...
           return(TRUE)  # insertNode returns true if the input is a direct child of the current node or recursion of insertNode is true
         }
       }
       return(FALSE)  # no place to insert the input among the current node's direct conditional children.
     },
 
-    fun.hit = function(x, args) {  #FIXME: We need a generic expression here
-      return(TRUE)
-    },
-
-    # from a list of ParamNode and dependency, parse them to a Tree/Graph structure, look at the following example
-    #  input = list(
-    #    list(node = ParamCategorical$new(id = "model", values = c("SVM", "RF"))),
-    #    list(node = ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", val = "SVM")),
-    #    list(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", val = "SVM")),
-    #    list(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", val = "rbf")),
-    #    list(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", val = "poly")),
-    #    list(node = ParamInt$new(id = "ntree", lower = 1L, upper = 10L), depend = list(id = "model", val = "RF"))
-    # )
-    #  ps$visitor$parseFlat(input)
-    parseFlat = function(node.list) {
+   parseFlat = function(node.list) {
       node.list = lapply(node.list, function(x) {
         if ("ParamSimple" %in% class(x)) return(makeCondTreeNode(x))
         return(x)
@@ -136,12 +122,12 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     # check if the flat form of paramset violates the dependency
-    # example: 
-    # input = list(model = list(val = "svm"), 
-    # kernel = list(val = "rbf", depend = list(val = "svm")), 
-    # gamma =list(val = "0.3" ,depend = list(val = "rbf")))
+    #FIXME: unter development
+    #' example:
+    #' input = list(model = list(val = "svm"),
+    #' kernel = list(val = "rbf", depend = list(val = "svm")),
+    #' gamma =list(val = "0.3" ,depend = list(val = "rbf")))
     checkValidFromFlat = function(input = list()) {
-      #FIXME: unter development
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
@@ -152,8 +138,7 @@ ParamVisitor = R6Class("ParamVisitor",
         }
         return(FALSE)
       }
-      while(hit)
-      {
+      while (hit) {
         hit = FALSE
         for (name in names(wq)) {
           if (is.null(wq[[name]]$depend) | findDependNode(wq[[name]])) {
