@@ -59,7 +59,38 @@ To tackle the above mentioned problem, we have the following code. Each separate
   ps$toStringVal()
 ```
 
-## Advanced features
+## Machine learning pipeline specification
+
+```{r}
+   tt = ParamTreeFac(
+       ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
+       addDep(ParamInt$new(id = "k", lower = 1, upper = 5), 
+          did = "preprocessing", expr = quote(preprocessing == "PCA")),
+       addDep(ParamInt$new(id = "n", lower = 1, upper = 10), 
+          did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering"))
+     )
+   pst = ParamSetTree$new("pre", tt)
+   tt1 = ParamTreeFac(
+       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+       addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
+         did = "model", expr = quote(model == "SVM")), # did here means dependant id
+       addDep(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
+         did = "model", expr = quote(model == "SVM")),
+       addDep(ParamReal$new(id = "gamma", lower = 0, upper = 101), 
+         did = "kernel", expr = quote(kernel == "rbf")),
+       addDep(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+         did = "kernel", expr = quote(kernel == "poly")),
+       addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
+         did = "model", expr = quote(model == "RF"))
+       )
+   pst1 = ParamSetTree$new("ml", tt1)
+   pst$setChild(pst1)
+   pst$sample()
+   pst$toStringVal()
+```
+
+
+## Functional API
 
 We also provide the user with a "Functional API" which means the user could program at runtime a dynamic structure of the tree. 
 
