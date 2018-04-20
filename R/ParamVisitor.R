@@ -72,7 +72,7 @@ ParamVisitor = R6Class("ParamVisitor",
         return(TRUE)
       }
       # the input is **not** a top layer hyper-parameter
-      if (is.null(node.depend$depend$id) && is.null(node.depend$func)) stop("parseFlat: input need at least depend$id or func")
+      if (is.null(node.depend$depend$id) && is.null(node.depend$fun)) stop("parseFlat: input need at least depend$id or func")
       # the input is direct child of the host
       if (self$host$id == node.depend$depend$id) {
         self$host$addCondChild(ParamHandle$new(node = node.depend$node, depend = node.depend$depend))
@@ -130,7 +130,7 @@ ParamVisitor = R6Class("ParamVisitor",
       findDependNode = function(fq, node) {
         fqns = names(fq)
         for (name in fqns) {
-          flag = eval(node$depend$func, envir = setNames(fq[[name]]$val, name))
+          flag = eval(node$depend$fun, envir = setNames(fq[[name]]$val, name))
           if (flag) return(TRUE)
         }
         return(FALSE)
