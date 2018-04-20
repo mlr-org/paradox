@@ -11,7 +11,7 @@ test_that("test if ParamFac parse from flat", {
   ps$toStringVal()
 })
 
-test_that("test if ParamTree sample works", {
+test_that("test if two ParamTree works", {
   ps = ParamTreeFac(
       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
@@ -31,5 +31,15 @@ test_that("test if ParamTree sample works", {
   pt$setChild(pt2)
   pt$sample()
   pt$toStringVal()
+})
+
+test_that("test if two ParamTree works", {
+  ps = recursiveParaFac(2,
+      ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+      makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
+     makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
+      )
+  ps$sample()
+  ps$toStringVal()
 })
 
