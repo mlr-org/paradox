@@ -122,11 +122,7 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     # check if the flat form of paramset violates the dependency
-    #FIXME: unter development
-    #' example:
-    #' input = list(model = list(val = "svm"),
-    #' kernel = list(val = "rbf", depend = list(val = "svm")),
-    #' gamma =list(val = "0.3" ,depend = list(val = "rbf")))
+    # FIXME: unter development
     checkValidFromFlat = function(input = list()) {
       fq = list()  # finished queue
       wq = input   # waiting queue
@@ -134,7 +130,8 @@ ParamVisitor = R6Class("ParamVisitor",
       findDependNode = function(fq, node) {
         fqns = names(fq)
         for (name in fqns) {
-          if (node$depend$val == fq[[name]]$val) return(TRUE)
+          flag = eval(node$depend$func, envir = setNames(fq[[name]]$val, name))
+          if (flag) return(TRUE)
         }
         return(FALSE)
       }
