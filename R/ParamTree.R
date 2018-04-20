@@ -17,22 +17,38 @@ ParamSetTree = R6Class("ParamSetTree",
     # member variables
     ns.id = NULL,  # namespace id
     root.handle = NULL,
-    depend = NULL,
+    parent.set = NULL,
+    child.set = NULL,
 
     # constructor
-    initialize = function(ns.id = NULL, root.handle = NULL, depend = NULL) {
+    initialize = function(ns.id = NULL, root.handle = NULL) {
       self$ns.id = assertNames(ns.id)
-      self$root.handle = handle
-      self$depend = depend
+      self$root.handle = root.handle
     },
 
     # public methods
-    attachTo = function(depend) {
-      stop("attach operation from one tree to another not implemented yet")
+    # after a tree factory is called, directly set the root
+    setRootHandle = function(handle) {
+      self$root.handle = handle
+    },
+
+    setChild = function(child.set) {
+      self$child.set = child.set
+      child.set$parent.set = self
     },
 
     sample = function() {
       self$root.handle$sample()
+      if (!is.null(self$child.set)) {
+        self$child.set$sample()
+      }
+    },
+
+    toStringVal = function() {
+      self$root.handle$toStringVal()
+      if (!is.null(self$child.set)) {
+        self$child.set$toStringVal()
+      }
     }
   ),
   private = list(
