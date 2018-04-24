@@ -42,11 +42,10 @@ makeCondTreeNode = function(node, depend = NULL) {
 }
 
 recursiveParaFac = function(n, ...) {
-  ps = ParamTreeFac(...)
-  root = ParamSetTree$new("0", ps)
+  root = ParamSetTree$new("root", ...)
   cc = root
   for (i in 1:n) {
-    psn = ParamSetTree$new(as.character(i), ParamTreeFac(...))
+    psn = ParamSetTree$new(as.character(i), ...)
     cc$setChild(psn)
     cc = psn
   }

@@ -10,7 +10,6 @@
 #' @family ParamHelpers
 #' @export
 
-#FIXME: this class is still under development, see description above of this file
 ParamSetTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(
@@ -21,10 +20,16 @@ ParamSetTree = R6Class("ParamSetTree",
     child.set = NULL,
 
     # constructor
-    initialize = function(ns.id = NULL, root.handle = NULL) {
+#    initialize = function(ns.id = NULL, root.handle = NULL) {
+#      self$ns.id = assertNames(ns.id)
+#      self$root.handle = root.handle
+#    },
+#
+    initialize = function(ns.id = NULL, ...) {
       self$ns.id = assertNames(ns.id)
-      self$root.handle = root.handle
+      self$root.handle = ParamTreeFac(...)
     },
+
 
     # public methods
     # after a tree factory is called, directly set the root

@@ -22,16 +22,16 @@ knitr::knit_hooks$set(document = function(x){
 })
 ```
 
-# ParamTree 
+# ParamSetTree 
 
-## Support Vector Machine Hyper-parameter Specification
+## Support Vector Machine/Random Forest Model Multiplexer Hyper-parameter Specification
 Some hyper-parameters could depend on other hyper-parameters. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
 
 To tackle the above mentioned problem, we have the following code. Each separate hyper-parameter has a unique identifier called "id" which is defined inside the ParamSimple(ParamCategorical, ParamReal, ..etc). These "id"s are extracted from ParamSimple and used as the unique identifier as the node in the tree as well.
 
 ```{r example1}
    library(phng)
-   pst = ParamTreeFac(
+   pst = ParamSetTree$new("test",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
          did = "model", expr = quote(model == "SVM")), # did here means dependant id
@@ -60,15 +60,12 @@ To tackle the above mentioned problem, we have the following code. Each separate
 ## Machine learning pipeline specification
 
 ```{r}
-   tt = ParamTreeFac(
-       ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
-       addDep(ParamInt$new(id = "k", lower = 1, upper = 5), 
-          did = "preprocessing", expr = quote(preprocessing == "PCA")),
-       addDep(ParamInt$new(id = "n", lower = 1, upper = 10), 
-          did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering"))
-     )
-   pst = ParamSetTree$new("pre", tt)
-   tt1 = ParamTreeFac(
+   pst = ParamSetTree$new("pre",     
+     ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
+      addDep(ParamInt$new(id = "k", lower = 1, upper = 5), did = "preprocessing", expr = quote(preprocessing == "PCA")),
+       addDep(ParamInt$new(id = "n", lower = 1, upper = 10), did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
+
+   pst1 = ParamSetTree$new("se",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
          did = "model", expr = quote(model == "SVM")), # did here means dependant id
@@ -81,7 +78,6 @@ To tackle the above mentioned problem, we have the following code. Each separate
        addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
          did = "model", expr = quote(model == "RF"))
        )
-   pst1 = ParamSetTree$new("ml", tt1)
    pst$setChild(pst1)
    pst$render2str()
 ```
