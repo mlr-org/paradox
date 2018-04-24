@@ -167,6 +167,11 @@ ParamHandle = R6Class("ParamHandle",
       if (num.cond > 0) self$printCondChildChainVal()
     },
 
+    render2str = function() {
+      self$asample()
+      self$toStringVal()
+    },
+
     sample = function(n = 1) {
       self$asample()
       self$toStringVal()

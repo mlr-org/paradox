@@ -51,6 +51,11 @@ ParamSetTree = R6Class("ParamSetTree",
       }
     },
 
+    render2str = function() {
+      self$asample()
+      self$toStringVal()
+    },
+
     sample = function(n = 1) {
       self$asample()
       self$toStringVal()

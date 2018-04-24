@@ -44,7 +44,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
        addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
          did = "model", expr = quote(model == "RF"))
        )
-   pst$sample()
+   pst$render2str()
 ```
 
 ## Neural network architecture specification
@@ -54,7 +54,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
       ParamReal$new(id = "regulation_lambda", lower = 0, upper = 100.0),
       ParamInt$new(id = "n_neurons", lower = 1L, upper = 10L)
       )
-  ps$sample()
+  ps$render2str()
 ```
 
 ## Machine learning pipeline specification
@@ -83,7 +83,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
        )
    pst1 = ParamSetTree$new("ml", tt1)
    pst$setChild(pst1)
-   pst$sample()
+   pst$render2str()
 ```
 
 
@@ -113,9 +113,9 @@ Secondly, we introduce the concept of ParamHandle, which takes argument of `node
   temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), 
     depend = list(id = "kernel", fun = quote(kernel == "poly")))
   poly = kernel$addCondChild(temp)
-  ps$sample()
+  ps$render2str()
   hh = ps$visitor$toFlat()
-  poly$getRoot$sample() # use the root to sample
+  poly$getRoot$render2str() # use the root to sample
   ps$toStringVal()
   hh = ps$visitor$toFlat()
 ```
