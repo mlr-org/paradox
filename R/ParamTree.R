@@ -37,10 +37,10 @@ ParamSetTree = R6Class("ParamSetTree",
       child.set$parent.set = self
     },
 
-    sample = function() {
-      self$root.handle$sample()
+    asample = function() {
+      self$root.handle$asample()
       if (!is.null(self$child.set)) {
-        self$child.set$sample()
+        self$child.set$asample()
       }
     },
 
@@ -49,6 +49,11 @@ ParamSetTree = R6Class("ParamSetTree",
       if (!is.null(self$child.set)) {
         self$child.set$toStringVal()
       }
+    },
+
+    sample = function(n = 1) {
+      self$asample()
+      self$toStringVal()
     }
   ),
   private = list(

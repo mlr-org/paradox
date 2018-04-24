@@ -12,7 +12,7 @@ test_that("test if Param parse from flat works with sample", {
     list(node = ParamInt$new(id = "ntree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
  )
   ps$visitor$parseFlat(input)
-  ps$getFirstMandChild$sample()
+  ps$getFirstMandChild$asample()
   ps$toStringVal()
 })
 

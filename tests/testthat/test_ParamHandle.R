@@ -23,10 +23,10 @@ test_that("test if ParamHandle constructor works with SimpleParamNode", {
   temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly")))
   poly = kernel$addCondChild(temp)
   list.flat = ps$visitor$toFlat()
-  ps$sample()
+  ps$asample()
   ps$toStringVal()
   list.flat = ps$visitor$toFlat()
-  poly$getRoot$sample() # use the root to sample
+  poly$getRoot$asample() # use the root to sample
   ps$toStringVal()
 })
 
@@ -36,7 +36,7 @@ test_that("ParamHandle toStringVal behaves normal without value", {
   kernel = ps$addCondChild(ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "Model", fun = quote(Model == "SVM"))))
   kernel$addCondChild(ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", fun = quote(kernel == "rbf"))))
   kernel$addCondChild(ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly"))))
-  ps$sample()
+  ps$asample()
   ps$toStringVal()
 })
 

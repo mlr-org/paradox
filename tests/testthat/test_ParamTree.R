@@ -7,7 +7,7 @@ test_that("test if ParamFac parse from flat", {
       makeCondTreeNode(ParamReal$new(id = "gamma", lower = 0, upper = 100), depend = list(id = "kernel", fun = quote(kernel == "rbf"))),
       makeCondTreeNode(ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly")))
       )
-  ps$sample()
+  ps$asample()
   ps$toStringVal()
 })
 
@@ -18,7 +18,7 @@ test_that("test if two ParamTree works", {
      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
       )
   pt = ParamSetTree$new("pt1", ps)
-  pt$sample()
+  pt$asample()
   pt$toStringVal()
   ps2 = ParamTreeFac(
       ParamCategorical$new(id = "activation", values = c("sigmoid", "tanh")),
@@ -26,10 +26,10 @@ test_that("test if two ParamTree works", {
       ParamInt$new(id = "n", lower = 1L, upper = 100L)
       )
   pt2 = ParamSetTree$new("pt2", ps2)
-  pt2$sample()
+  pt2$asample()
   pt2$toStringVal()
   pt$setChild(pt2)
-  pt$sample()
+  pt$asample()
   pt$toStringVal()
 })
 
@@ -39,7 +39,7 @@ test_that("test if two ParamTree works", {
       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
       )
-  ps$sample()
+  ps$asample()
   ps$toStringVal()
 })
 

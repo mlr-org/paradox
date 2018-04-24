@@ -111,7 +111,7 @@ ParamHandle = R6Class("ParamHandle",
       if (length(self$mand.children) == 0) return(NULL)
       for (name in names(self$mand.children)) {
         handle = self$mand.children[[name]]
-        handle$sample()
+        handle$asample()
       }
     },
 
@@ -121,12 +121,12 @@ ParamHandle = R6Class("ParamHandle",
         handle = self$cond.children[[name]]
         flag = handle$isDependMet()
         if (flag) {
-          handle$sample()
+          handle$asample()
         }
       }
     },
 
-    sample = function() {
+    asample = function() {
       self$sampleCurrentNode()
       self$sampleMandChildChain()
       self$sampleCondChildChain()
@@ -165,6 +165,11 @@ ParamHandle = R6Class("ParamHandle",
       num.cond = length(self$cond.children)
       if (num.mand > 0) self$printMandChildChainVal()
       if (num.cond > 0) self$printCondChildChainVal()
+    },
+
+    sample = function(n = 1) {
+      self$asample()
+      self$toStringVal()
     }
   ),
 
@@ -193,7 +198,7 @@ PHinge = R6Class("PHinge",
       super$initialize(id = id, node = NULL, val = NULL, depend = NULL, parent = NULL)
     },
 
-    sample = function() {
+    asample = function() {
       self$sampleMandChildChain()
   },
 
