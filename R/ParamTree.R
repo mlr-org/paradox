@@ -19,12 +19,6 @@ ParamSetTree = R6Class("ParamSetTree",
     parent.set = NULL,
     child.set = NULL,
 
-    # constructor
-#    initialize = function(ns.id = NULL, root.handle = NULL) {
-#      self$ns.id = assertNames(ns.id)
-#      self$root.handle = root.handle
-#    },
-#
     initialize = function(ns.id = NULL, ...) {
       self$ns.id = assertNames(ns.id)
       self$root.handle = ParamTreeFac(...)
@@ -62,8 +56,7 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     sample = function(n = 1) {
-      self$asample()
-      self$toStringVal()
+      self$root.handle$sample(n)
     }
   ),
   private = list(

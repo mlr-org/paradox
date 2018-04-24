@@ -173,8 +173,19 @@ ParamHandle = R6Class("ParamHandle",
     },
 
     sample = function(n = 1) {
-      self$asample()
-      self$toStringVal()
+      xs = lapply(1:n, function(i) {
+        self$asample()
+        self$visitor$toFlat()
+      })
+      colns = unique(names(unlist(xs)))
+      ncol = length(colns)
+      df = data.frame(xs[[1]])
+      j = 2
+      while (j <= n) {
+        df = plyr::rbind.fill(df, data.frame(xs[[j]]))
+        j = j + 1
+      }
+      as.data.table(df)
     }
   ),
 

@@ -85,7 +85,7 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     # transform the tree structure to a flat list and return the list
-    toFlat = function(res = list()) {
+    toFlat0 = function(res = list()) {
       res[[self$host$node$id]] = self$host$node
       if (length(self$host$mand.children) > 0) {
       for (name in names(self$host$mand.children)) {
@@ -99,6 +99,28 @@ ParamVisitor = R6Class("ParamVisitor",
         handle = self$host$cond.children[[name]]
         res[[handle$node$id]] = handle$node
         res = handle$visitor$toFlat(res)
+      }
+      } # if
+      return(res)
+    },
+
+    toFlat = function(res = list()) {
+      res[[self$host$node$id]] = self$host$val
+      if (length(self$host$mand.children) > 0) {
+      for (name in names(self$host$mand.children)) {
+        handle = self$host$mand.children[[name]]
+        res[[handle$node$id]] = handle$node
+        res = handle$visitor$toFlat(res)
+      }
+      } # if
+      if (length(self$host$cond.children) > 0) {
+      for (name in names(self$host$cond.children)) {
+        handle = self$host$cond.children[[name]]
+        if (handle$isDependMet()) {
+          # difference between toFlat0 and to Flat
+        res[[handle$node$id]] = handle$node
+        res = handle$visitor$toFlat(res)
+        }
       }
       } # if
       return(res)
