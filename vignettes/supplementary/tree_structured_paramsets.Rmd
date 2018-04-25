@@ -45,6 +45,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$render2str()
+   pst$sample(4)
 ```
 
 ## Neural network architecture specification
@@ -80,6 +81,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
        )
    pst$setChild(pst1)
    pst$render2str()
+   pst$sample(2)
 ```
 
 

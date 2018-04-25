@@ -216,7 +216,12 @@ PHinge = R6Class("PHinge",
 
     asample = function() {
       self$sampleMandChildChain()
-  },
+    },
+
+    sample = function(n) {
+      res.list = lapply(self$mand.children, function(x) x$sample(n))
+      rbindlist(res.list)
+    },
 
     toStringVal = function() {
       num.mand = length(self$mand.children)

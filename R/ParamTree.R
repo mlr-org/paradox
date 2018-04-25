@@ -56,7 +56,18 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     sample = function(n = 1) {
-      self$root.handle$sample(n)
+      if (n == 1L) {
+        res = self$root.handle$sample(1)
+        return(res)
+      }
+      res.list = lapply(1:n, function(i) {
+        res = self$root.handle$sample(1)
+      if (!is.null(self$child.set)) {
+        res = plyr::rbind.fill(res, self$child.set$sample(1))
+      }
+        return(res)
+      })
+      rbindlist(res.list)
     }
   ),
   private = list(

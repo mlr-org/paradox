@@ -22,7 +22,6 @@ test_that("test if ParamHandle constructor works with SimpleParamNode", {
   gamma = kernel$addCondChild(temp)
   temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), depend = list(id = "kernel", fun = quote(kernel == "poly")))
   poly = kernel$addCondChild(temp)
-  list.flat = ps$visitor$toFlat()
   ps$asample()
   ps$toStringVal()
   list.flat = ps$visitor$toFlat()
