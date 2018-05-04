@@ -1,6 +1,6 @@
 context("ParamTree")
 test_that("test if ParamFac parse from flat", {
-  ps = ParamTreeFac(
+  ps = ParamTreeFac(id = "test",
       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
       makeCondTreeNode(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), depend = list(id = "model", fun = quote(model == "SVM"))),

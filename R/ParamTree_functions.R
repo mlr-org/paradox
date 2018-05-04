@@ -5,12 +5,12 @@
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
 #' @export
-ParamTreeFac = function(...) {
+ParamTreeFac = function(id = "Root", ...) {
   input = list(...)
   lapply(input, function(x) {
     assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency"))
   })
-  ps = PHinge$new(id = "Root")  #FIXME: do we need a hard coded id here?
+  ps = PHinge$new(id = id)
   ps$visitor$parseFlat(input)
   return(ps)
 }
@@ -51,12 +51,12 @@ makeCondTreeNode = function(node, depend = NULL) {
 #' @export
 recursiveParaFac = function(nr, ...) {
   #FIXME: currently recursiveParaFac() does not support conditional parameter
-  root = ParamSetTree$new("l0", ...)  # the first layer
-  root$rt.hinge$setNamePrefix("l0")
+  root = ParamSetTree$new("L0", ...)  # the first layer
+  root$rt.hinge$setNamePrefix("L0")
   cc = root
   for (i in 1:nr) {
     psn = ParamSetTree$new(as.character(i), ...)
-    psn$rt.hinge$setNamePrefix(paste0("l", as.character(i)))
+    psn$rt.hinge$setNamePrefix(paste0("L", as.character(i)))
     cc$setChild(psn)
     cc = psn
   }

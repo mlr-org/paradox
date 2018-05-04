@@ -21,7 +21,7 @@ ParamSetTree = R6Class("ParamSetTree",
 
     initialize = function(ns.id, ...) {
       self$ns.id = assertNames(ns.id)
-      self$rt.hinge = ParamTreeFac(...)
+      self$rt.hinge = ParamTreeFac(ns.id, ...)
     },
 
 
