@@ -50,6 +50,7 @@ makeCondTreeNode = function(node, depend = NULL) {
 #' @return A ParamSetTree
 #' @export
 recursiveParaFac = function(nr, ...) {
+  #FIXME: currently recursiveParaFac() does not support conditional parameter
   root = ParamSetTree$new("l0", ...)  # the first layer
   root$rt.hinge$setNamePrefix("l0")
   cc = root
