@@ -223,13 +223,20 @@ PHinge = R6Class("PHinge",
       super$initialize(id = id, node = NULL, val = NULL, depend = NULL, parent = NULL)
     },
 
+    setNamePrefix = function(nprefix) {
+      self$id = nprefix
+      lapply(self$mand.children, function(x) x$id = paste0(nprefix, x$id))
+    },
+
     asample = function() {
       self$sampleMandChildChain()
     },
 
     sample = function(n) {
       res.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child
-      Reduce(cbind, res.list)
+      dt.raw = Reduce(cbind, res.list)
+      names(dt.raw) = paste(self$id, names(dt.raw), sep = ".")
+      dt.raw
     },
 
     toStringVal = function() {

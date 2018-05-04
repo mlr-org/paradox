@@ -45,7 +45,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$render2str()
-   pst$sample(4)
+   pst$sample(10L)
 ```
 
 ## Neural network architecture specification
@@ -64,7 +64,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
       ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0), 
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
  ps$render2str() 
- ps$sample(2L) 
+ ps$sample(3L) 
 ``` 
 
 ## Machine learning pipeline specification 

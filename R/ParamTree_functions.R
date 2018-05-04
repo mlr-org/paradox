@@ -51,13 +51,25 @@ makeCondTreeNode = function(node, depend = NULL) {
 #' @return A ParamSetTree
 #' @export
 recursiveParaFac = function(nr, ...) {
-  root = ParamSetTree$new("root", ...)  # the first layer
+  root = ParamSetTree$new("l0", ...)  # the first layer
+  root$rt.hinge$setNamePrefix("l0")
   cc = root
   for (i in 1:nr) {
     psn = ParamSetTree$new(as.character(i), ...)
+    psn$rt.hinge$setNamePrefix(paste0("l", as.character(i)))
     cc$setChild(psn)
     cc = psn
   }
   return(root)
+}
+
+keras_helper = function() {
+  expr = sprintf("model = keras_model_sequential();model %%>%%")
+  input.shape = input.shape
+  {
+  sprintf("layer_dense(units = %d, activation = '%s', input_shape = c(%d), kernel_regularizer = %s, bias_regularizer = %s)", nhidden, act1, input_shape, kernel_regularizer, bias_regularizer)
+  }
+  sprintf("%%>%%layer_dense(units = %d, activation = '%s');", output_shape, act2)
+  sprintf("model$compile(loss = '%s', optimizer = optimizer_rmsprop(lr = %f)); model", loss, lr)
 }
 
