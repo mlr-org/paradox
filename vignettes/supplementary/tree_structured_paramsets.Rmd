@@ -24,6 +24,13 @@ knitr::knit_hooks$set(document = function(x){
 
 # ParamSetTree 
 
+## Setup
+Install the Tree branch
+```{r}
+# devtools::install_github("mlr-org/phng", ref = "tree")
+```
+
+
 ## Support Vector Machine/Random Forest Model Multiplexer Hyper-parameter Specification
 Some hyper-parameters could depend on other hyper-parameters. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
 
@@ -44,7 +51,9 @@ To tackle the above mentioned problem, we have the following code. Each separate
        addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
          did = "model", expr = quote(model == "RF"))
        )
-   pst$render2str()
+   pst$sample(1L)
+   pst$toStringVal()
+   pst$asample.render2str()
    pst$sample(10L)
 ```
 
@@ -57,13 +66,13 @@ To tackle the above mentioned problem, we have the following code. Each separate
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear"))
       )
  pt$sample()
+ pt$toStringVal()
 
   ps = recursiveParaFac(nr = 2,
       ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
       ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 100.0), 
       ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0), 
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
- ps$render2str() 
  ps$sample(3L) 
 ``` 
 
@@ -88,8 +97,9 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$setChild(pst1)
-   pst$render2str()
+   pst$asample.render2str()
    pst$sample(4L)
+   pst$toStringVal()  # always keep the last sampled value
 ```
 
 

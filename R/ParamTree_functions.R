@@ -33,8 +33,7 @@ addDep = function(node, did, expr) {
 #' @description Define a node in the hyper parameter tree with dependencies
 #'
 #' @param node ParamSimple
-#' @param depend A list of field c("id", "val", "fun")
-#' @return List of class NodeParamSetTree
+#' @param depend A list of field c("id", "val", "fun") #' @return List of class NodeParamSetTree
 #' @export
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
@@ -63,13 +62,13 @@ recursiveParaFac = function(nr, ...) {
   return(root)
 }
 
-keras_helper = function() {
+keras_helper = function(input.shape, output.shape, output.act, loss, lr) {
   expr = sprintf("model = keras_model_sequential();model %%>%%")
   input.shape = input.shape
   {
-  sprintf("layer_dense(units = %d, activation = '%s', input_shape = c(%d), kernel_regularizer = %s, bias_regularizer = %s)", nhidden, act1, input_shape, kernel_regularizer, bias_regularizer)
+  sprintf("layer_dense(units = %d, activation = '%s', input_shape = c(%d), kernel_regularizer = %s, bias_regularizer = %s)", units, act, input_shape, kernel_regularizer, bias_regularizer)
   }
-  sprintf("%%>%%layer_dense(units = %d, activation = '%s');", output_shape, act2)
+  sprintf("%%>%%layer_dense(units = %d, activation = '%s');", output.shape, output.act)
   sprintf("model$compile(loss = '%s', optimizer = optimizer_rmsprop(lr = %f)); model", loss, lr)
 }
 

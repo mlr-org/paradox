@@ -50,7 +50,7 @@ ParamSetTree = R6Class("ParamSetTree",
       }
     },
 
-    render2str = function() {
+    asample.render2str = function() {
       self$asample()
       self$toStringVal()
     },
@@ -65,6 +65,26 @@ ParamSetTree = R6Class("ParamSetTree",
         return(res)
       })
       rbindlist(res.list, fill = TRUE)
+    },
+
+    getFlatList = function() {
+      res = self$rt.hinge$getList()
+      if (!is.null(self$child.set)) {
+        temp = self$child.set$getFlatList()
+        res = c(res, temp)
+      }
+      res
+    },
+
+    getRecursiveList = function(res = list()) {
+      n = length(res)
+      if (is.null(self$child.set)) {
+        temp = self$rt.hinge$getList()
+      } else {
+        temp = self$child.set$getRecursiveList(res = res)
+      }
+      res[[n + 1L]] = temp
+      res
     }
   ),
   private = list(
