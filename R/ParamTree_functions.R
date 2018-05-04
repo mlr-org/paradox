@@ -8,10 +8,11 @@
 ParamTreeFac = function(...) {
   input = list(...)
   lapply(input, function(x) {
-    assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency")) })
-    ps = PHinge$new(id = "Root")  #FIXME: do we need a hard coded id here?
-    ps$visitor$parseFlat(input)
-    return(ps)
+    assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency"))
+  })
+  ps = PHinge$new(id = "Root")  #FIXME: do we need a hard coded id here?
+  ps$visitor$parseFlat(input)
+  return(ps)
 }
 
 #' @title Add dependent Node
@@ -41,10 +42,18 @@ makeCondTreeNode = function(node, depend = NULL) {
   return(node)
 }
 
-recursiveParaFac = function(n, ...) {
-  root = ParamSetTree$new("root", ...)
+#' @title make recursive ParamsetTree
+#'
+#' @description Repeat the same structure
+#'
+#' @param nr The number of repetitiveness
+#' @param ... Params to add
+#' @return A ParamSetTree
+#' @export
+recursiveParaFac = function(nr, ...) {
+  root = ParamSetTree$new("root", ...)  # the first layer
   cc = root
-  for (i in 1:n) {
+  for (i in 1:nr) {
     psn = ParamSetTree$new(as.character(i), ...)
     cc$setChild(psn)
     cc = psn

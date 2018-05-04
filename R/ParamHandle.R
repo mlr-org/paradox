@@ -186,7 +186,16 @@ ParamHandle = R6Class("ParamHandle",
         j = j + 1
       }
       as.data.table(df)
+    },
+
+    getMandChildrenName = function() {
+      names(self$mand.children)
+    },
+
+    getCondChildrenName = function() {
+      names(self$cond.children)
     }
+
   ),
 
     active = list(
@@ -219,8 +228,8 @@ PHinge = R6Class("PHinge",
     },
 
     sample = function(n) {
-      res.list = lapply(self$mand.children, function(x) x$sample(n))
-      rbindlist(res.list)
+      res.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child
+      Reduce(cbind, res.list)
     },
 
     toStringVal = function() {

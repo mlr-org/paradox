@@ -50,23 +50,31 @@ To tackle the above mentioned problem, we have the following code. Each separate
 
 ## Neural network architecture specification
 ```{r}
-  ps = recursiveParaFac(2,
-      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh")),
-      ParamReal$new(id = "regulation_lambda", lower = 0, upper = 100.0),
-      ParamInt$new(id = "n_neurons", lower = 1L, upper = 10L)
+ pt = ParamSetTree$new(ns.id = "keras",
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 100.0),
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear"))
       )
-  ps$render2str()
-```
+ pt$sample()
 
-## Machine learning pipeline specification
+  ps = recursiveParaFac(nr = 2,
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 100.0), 
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0), 
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
+ ps$render2str() 
+ ps$sample(2L) 
+``` 
 
+## Machine learning pipeline specification 
 ```{r}
    pst = ParamSetTree$new("pre",     
      ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
-      addDep(ParamInt$new(id = "k", lower = 1, upper = 5), did = "preprocessing", expr = quote(preprocessing == "PCA")),
-       addDep(ParamInt$new(id = "n", lower = 1, upper = 10), did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
+      addDep(ParamInt$new(id = "pca.k", lower = 1, upper = 5), did = "preprocessing", expr = quote(preprocessing == "PCA")),
+       addDep(ParamInt$new(id = "filter.n", lower = 1, upper = 10), did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
 
-   pst1 = ParamSetTree$new("se",
+   pst1 = ParamSetTree$new("ml",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
          did = "model", expr = quote(model == "SVM")), # did here means dependant id
@@ -74,14 +82,14 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "SVM")),
        addDep(ParamReal$new(id = "gamma", lower = 0, upper = 101), 
          did = "kernel", expr = quote(kernel == "rbf")),
-       addDep(ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+       addDep(ParamInt$new(id = "poly.n", lower = 1L, upper = 10L), 
          did = "kernel", expr = quote(kernel == "poly")),
        addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
          did = "model", expr = quote(model == "RF"))
        )
    pst$setChild(pst1)
    pst$render2str()
-   pst$sample(2)
+   pst$sample(4L)
 ```
 
 

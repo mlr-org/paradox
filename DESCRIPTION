@@ -27,7 +27,6 @@ Suggests:
     knitr,
     rmarkdown,
     testthat,
-    roxygen2,
-    plyr
+    roxygen
 RoxygenNote: 6.0.1
 VignetteBuilder: knitr

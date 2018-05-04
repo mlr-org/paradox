@@ -3,7 +3,7 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a tree form.
-#' The difference between ParamSetTree and Paramroot.handle is that one could "hang" a ParamSetTree(tree of nodes, instead of only one node) directly to a ParamHandle or another tree.
+#' The difference between ParamSetTree and Paramrt.hinge is that one could "hang" a ParamSetTree(tree of nodes, instead of only one node) directly to a ParamHandle or another tree.
 #' This class serves the situation when one set of parameters decide on another set of parameters.
 #'
 #' @return [\code{\link{ParamSetTree}}].
@@ -15,20 +15,20 @@ ParamSetTree = R6Class("ParamSetTree",
   public = list(
     # member variables
     ns.id = NULL,  # namespace id
-    root.handle = NULL,
+    rt.hinge = NULL,
     parent.set = NULL,
     child.set = NULL,
 
-    initialize = function(ns.id = NULL, ...) {
+    initialize = function(ns.id, ...) {
       self$ns.id = assertNames(ns.id)
-      self$root.handle = ParamTreeFac(...)
+      self$rt.hinge = ParamTreeFac(...)
     },
 
 
     # public methods
     # after a tree factory is called, directly set the root
     setRootHandle = function(handle) {
-      self$root.handle = handle
+      self$rt.hinge = handle
     },
 
     setChild = function(child.set) {
@@ -37,14 +37,14 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     asample = function() {
-      self$root.handle$asample()
+      self$rt.hinge$asample()
       if (!is.null(self$child.set)) {
         self$child.set$asample()
       }
     },
 
     toStringVal = function() {
-      self$root.handle$toStringVal()
+      self$rt.hinge$toStringVal()
       if (!is.null(self$child.set)) {
         self$child.set$toStringVal()
       }
@@ -56,18 +56,15 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     sample = function(n = 1) {
-      if (n == 1L) {
-        res = self$root.handle$sample(1)
-        return(res)
-      }
       res.list = lapply(1:n, function(i) {
-        res = self$root.handle$sample(1)
+        res = self$rt.hinge$sample(1L)
       if (!is.null(self$child.set)) {
-        res = plyr::rbind.fill(res, self$child.set$sample(1))
+        temp = self$child.set$sample(1L)
+        res = cbind(res, temp)
       }
         return(res)
       })
-      rbindlist(res.list)
+      rbindlist(res.list, fill = TRUE)
     }
   ),
   private = list(
