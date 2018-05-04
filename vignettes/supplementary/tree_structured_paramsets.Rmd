@@ -26,10 +26,10 @@ knitr::knit_hooks$set(document = function(x){
 
 ## Setup
 Install the Tree branch
-```{r}
-# devtools::install_github("mlr-org/phng", ref = "tree")
+```{r eval = FALSE}
+devtools::install_github("mlr-org/phng", ref = "tree")
 ```
-
+This tutorial will guide you how to set up conditional hyperparameters for SVM and Random Forest, setting up Machine Learning Pipeline and Deep Learning Architecture 
 
 ## Support Vector Machine/Random Forest Model Multiplexer Hyper-parameter Specification
 Some hyper-parameters could depend on other hyper-parameters. For example, if we have a model multiplexer of Support Vector Machine(SVM) and Random Forest(RF). The hyper-parameter "kernel" only makes sense if the chosen model is "SVM". Moreover, the hyper-parameter of "gamma" only makes sense if the chosen kernel for "SVM" is "rbf". This kind of relationship resembles a tree or directed graph structure where a node is only activated when its corresponding parent node is activated. 
@@ -52,36 +52,20 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$sample(1L)
+   pst$getFlatList()
    pst$toStringVal()
-   pst$asample.render2str()
    pst$sample(10L)
 ```
 
-## Neural network architecture specification
-```{r}
- pt = ParamSetTree$new(ns.id = "keras",
-      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
-      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 100.0),
-      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0),
-      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear"))
-      )
- pt$sample()
- pt$toStringVal()
-
-  ps = recursiveParaFac(nr = 2,
-      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
-      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 100.0), 
-      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 100.0), 
-      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
- ps$sample(3L) 
-``` 
 
 ## Machine learning pipeline specification 
 ```{r}
    pst = ParamSetTree$new("pre",     
      ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
-      addDep(ParamInt$new(id = "pca.k", lower = 1, upper = 5), did = "preprocessing", expr = quote(preprocessing == "PCA")),
-       addDep(ParamInt$new(id = "filter.n", lower = 1, upper = 10), did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
+      addDep(ParamInt$new(id = "pca.k", lower = 1, upper = 5), 
+        did = "preprocessing", expr = quote(preprocessing == "PCA")),
+       addDep(ParamInt$new(id = "filter.n", lower = 1, upper = 10), 
+         did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
 
    pst1 = ParamSetTree$new("ml",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
@@ -102,6 +86,38 @@ To tackle the above mentioned problem, we have the following code. Each separate
    pst$toStringVal()  # always keep the last sampled value
 ```
 
+## Neural network architecture specification
+```{r}
+ pt = ParamSetTree$new(ns.id = "keras",
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0),
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0),
+      ParamCategorical$new(id = "reg_type", values = c("l1", "l2")),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear"))
+      )
+ pt$sample()
+ pt$toStringVal()
+ pt$getFlatList()
+```
+
+Multiple Layers
+```{r}
+  ps = recursiveParaFac(nr = 2,
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0), 
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0), 
+      ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
+  ps$sample()
+  list.par.val = ps$getRecursiveList()
+  ps$sample(3L) 
+``` 
+
+```{r}
+library(keras)
+tex = keras_helper(input.shape = 256, output.shape = 10L, output.act = "softmax", loss = "mse", lr = 0.0025, list.par.val = list.par.val)
+eval(parse(text = tex))
+```
 
 ## Functional API
 

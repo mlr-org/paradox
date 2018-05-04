@@ -77,13 +77,17 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     getRecursiveList = function(res = list()) {
-      n = length(res)
       if (is.null(self$child.set)) {
         temp = self$rt.hinge$getList()
+        n = length(res)
+        res[[n + 1L]] = temp
+        return(res)
       } else {
-        temp = self$child.set$getRecursiveList(res = res)
+        res = self$child.set$getRecursiveList(res = res)
+        temp = self$rt.hinge$getList()
+        n = length(res)
+        res[[n + 1L]] = temp
       }
-      res[[n + 1L]] = temp
       res
     }
   ),

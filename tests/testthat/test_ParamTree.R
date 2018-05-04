@@ -9,6 +9,7 @@ test_that("test if ParamFac parse from flat", {
       )
   ps$asample()
   ps$toStringVal()
+  ps$getList()
 })
 
 test_that("test if two ParamTree works", {

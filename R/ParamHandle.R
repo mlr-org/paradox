@@ -172,14 +172,10 @@ ParamHandle = R6Class("ParamHandle",
       self$toStringVal()
     },
 
-    toFlat = function() {
-      self$asample()
-      self$visitor$toFlat()
-    },
-
     sample = function(n = 1) {
       xs = lapply(1:n, function(i) {
-        self$toFlat()
+        self$asample()
+        self$visitor$toFlat()
       })
       colns = unique(names(unlist(xs)))
       ncol = length(colns)
@@ -237,8 +233,8 @@ PHinge = R6Class("PHinge",
     },
 
     getList = function() {
-      res.list = lapply(self$mand.children, function(x) x$toFlat())  # PHinge is required to only have mand child
-      Reduce(c,res.list)
+      res.list = lapply(self$mand.children, function(x) x$visitor$toFlat())  # PHinge is required to only have mand child
+      Reduce(c, res.list)
     },
 
     sample = function(n) {
