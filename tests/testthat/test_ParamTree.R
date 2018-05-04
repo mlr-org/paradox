@@ -32,13 +32,13 @@ test_that("test if two ParamTree works", {
   pt$toStringVal()
 })
 
-test_that("test if two ParamTree works", {
-  ps = recursiveParaFac(2,
-      ParamCategorical$new(id = "model", values = c("SVM", "RF")),
-      makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
-     makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
-      )
-  ps$asample()
-  ps$toStringVal()
-})
+# test_that("test if two ParamTree works", {
+#   ps = recursiveParaFac(2,
+#       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+#       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
+#      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
+#       )
+#   ps$asample()
+#   ps$toStringVal()
+# })
 
