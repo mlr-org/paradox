@@ -1,7 +1,7 @@
 #' @title  ParamTree Factory method
 #'
 #' @description Define a list of Node in the hyper-parameter definition
-#'
+#' @param id The name of the Hinge node
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
 #' @export
