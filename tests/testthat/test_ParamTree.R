@@ -63,6 +63,7 @@ test_that("recursive para works", {
 })
 
  test_that("test conditional params works for conditional ParamTree", {
+   # this example does not make sense, just to prove it works
    ps = recursiveParaFac(nr = 2,
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),

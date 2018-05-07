@@ -226,9 +226,7 @@ PHinge = R6Class("PHinge",
 
     setNamePrefix = function(nprefix) {
       self$id.decorator = nprefix
-      #lapply(self$mand.children, function(x) x$id.decorator = nprefix)
-      # lapply(self$mand.children, function(x) x$id.decorator = paste0(nprefix, x$id))
-      lapply(self$mand.children, function(x) x$id = paste0(nprefix, x$id))
+      lapply(self$mand.children, function(x) x$id.decorator = nprefix) # this line  is not useful for the current version but severs as namespace definition for future.
     },
 
     asample = function() {
@@ -241,9 +239,10 @@ PHinge = R6Class("PHinge",
     },
 
     sample = function(n) {
-      res.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child
-      dt.raw = Reduce(cbind, res.list)
-      names(dt.raw) = paste(self$id.decorator, self$id, names(dt.raw), sep = ".")
+      subspace.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child.
+      # This function PHinge$sample(n) is calling recursion from ParamHandle$sample(n). Whilist, ParamSetTree$sample will sample another Tree
+      dt.raw = Reduce(cbind, subspace.list)  # combine all hyper-parameter subspaces
+      names(dt.raw) = paste(self$id.decorator, names(dt.raw), sep = ".")
       dt.raw
     },
 
