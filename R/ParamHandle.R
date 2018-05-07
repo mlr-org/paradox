@@ -183,6 +183,7 @@ ParamHandle = R6Class("ParamHandle",
       df = data.frame(xs[[1]])
       j = 2
       while (j <= n) {
+        # this line is tested but in user API not used
         df = plyr::rbind.fill(df, data.frame(xs[[j]]))
         j = j + 1
       }
@@ -242,7 +243,7 @@ PHinge = R6Class("PHinge",
       subspace.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child.
       # This function PHinge$sample(n) is calling recursion from ParamHandle$sample(n). Whilist, ParamSetTree$sample will sample another Tree
       dt.raw = Reduce(cbind, subspace.list)  # combine all hyper-parameter subspaces
-      names(dt.raw) = paste(self$id.decorator, names(dt.raw), sep = ".")
+      if(!is.null(self$id.decorator)) names(dt.raw) = paste(self$id.decorator, names(dt.raw), sep = ".")
       dt.raw
     },
 

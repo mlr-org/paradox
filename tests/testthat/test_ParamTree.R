@@ -50,6 +50,7 @@ test_that("ParamSetTree constructor works", {
    pst$getFlatList()
    pst$toStringVal()
    pst$sample(10L)
+   pst$rt.hinge$sample(3)
 })
 
 test_that("recursive para works", {
