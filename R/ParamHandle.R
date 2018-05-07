@@ -12,6 +12,7 @@ ParamHandle = R6Class("ParamHandle",
   public = list(
     # member variables
     id = NULL,      # by default, id should be the same with the node id which this handle points to
+    id.decorator = NULL,  # namespace for parameters
     node = NULL,    # simple ParamNode the handle(pointer) point to
     val = NULL,     # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
@@ -224,7 +225,9 @@ PHinge = R6Class("PHinge",
     },
 
     setNamePrefix = function(nprefix) {
-      self$id = nprefix
+      self$id.decorator = nprefix
+      #lapply(self$mand.children, function(x) x$id.decorator = nprefix)
+      # lapply(self$mand.children, function(x) x$id.decorator = paste0(nprefix, x$id))
       lapply(self$mand.children, function(x) x$id = paste0(nprefix, x$id))
     },
 
@@ -240,7 +243,7 @@ PHinge = R6Class("PHinge",
     sample = function(n) {
       res.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child
       dt.raw = Reduce(cbind, res.list)
-      names(dt.raw) = paste(self$id, names(dt.raw), sep = ".")
+      names(dt.raw) = paste(self$id.decorator, self$id, names(dt.raw), sep = ".")
       dt.raw
     },
 

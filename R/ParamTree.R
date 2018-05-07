@@ -19,9 +19,15 @@ ParamSetTree = R6Class("ParamSetTree",
     parent.set = NULL,
     child.set = NULL,
 
-    initialize = function(ns.id, ...) {
+    initialize = function(ns.id, ..., nr = 1L) {
       self$ns.id = assertNames(ns.id)
+      if (nr == 1L) {
       self$rt.hinge = ParamTreeFac(ns.id, ...)
+      }
+      if (nr > 1) {
+        root = recursiveParaFac(nr, ...)
+        self$rt.hinge = root$rt.hinge
+      }
     },
 
 

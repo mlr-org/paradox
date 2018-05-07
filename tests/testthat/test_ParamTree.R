@@ -59,15 +59,16 @@ test_that("recursive para works", {
       ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0), 
       ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
-  ps$sample(3L) 
+  ps$sample(3L)
 })
-# test_that("test if two ParamTree works", {
-#   ps = recursiveParaFac(2,
-#       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
-#       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
-#      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
-#       )
-#   ps$asample()
-#   ps$toStringVal()
-# })
+
+ test_that("test conditional params works for conditional ParamTree", {
+   ps = recursiveParaFac(nr = 2,
+       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
+      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
+       )
+   ps$asample()
+   ps$toStringVal()
+ })
 
