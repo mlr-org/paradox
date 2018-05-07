@@ -5,7 +5,7 @@
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
 #' @export
-ParamTreeFac = function(id = "Root", ...) {
+ParamTreeFac = function(id, ...) {
   input = list(...)
   lapply(input, function(x) {
     assertTRUE(test_class(x, "ParamSimple") | test_class(x, "NodeWithDependency"))
