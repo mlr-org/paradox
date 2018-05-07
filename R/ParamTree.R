@@ -124,7 +124,7 @@ ParamSetTreeRe = R6Class("ParamSetTreeRe",
     sample = function(n = 1L) {
       self$root.set$sample(n)
     },
-  
+
     getRecursiveList = function() {
       self$root.set$getRecursiveList()
     }

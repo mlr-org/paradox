@@ -183,7 +183,7 @@ ParamHandle = R6Class("ParamHandle",
       df = data.frame(xs[[1]])
       j = 2
       while (j <= n) {
-        # this line is tested but in user API not used
+        # this line is tested but in user API not used since it is always called with n = 1L
         df = plyr::rbind.fill(df, data.frame(xs[[j]]))
         j = j + 1
       }

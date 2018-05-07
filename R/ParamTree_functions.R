@@ -4,7 +4,6 @@
 #' @param id The name of the Hinge node
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
-#' @export
 ParamTreeFac = function(id, ...) {
   input = list(...)
   lapply(input, function(x) {
@@ -23,7 +22,6 @@ ParamTreeFac = function(id, ...) {
 #' @param did dependent node id
 #' @param expr expression that provides the dependency
 #' @return List of class NodeParamSetTree
-#' @export
 addDep = function(node, did, expr) {
   makeCondTreeNode(node = node, depend = list(id = did, fun = expr))
 }
@@ -34,7 +32,6 @@ addDep = function(node, did, expr) {
 #'
 #' @param node ParamSimple
 #' @param depend A list of field c("id", "val", "fun") #' @return List of class NodeParamSetTree
-#' @export
 makeCondTreeNode = function(node, depend = NULL) {
   node = list(node = node, depend = depend)
   class(node) = "NodeWithDependency"
@@ -48,7 +45,6 @@ makeCondTreeNode = function(node, depend = NULL) {
 #' @param nr The number of repetitiveness
 #' @param ... Params to add
 #' @return A ParamSetTree
-#' @export
 recursiveParaFac = function(nr, ...) {
   root = ParamSetTree$new("L0", ...)  # the first layer
   root$rt.hinge$setNamePrefix("L0")
@@ -63,6 +59,19 @@ recursiveParaFac = function(nr, ...) {
   return(root)
 }
 
+
+#' @title  Helper for Keras
+#'
+#' @description
+#' Specify Keras model with ParamSetTree
+#' @param input.shape The input shape for neural network
+#' @param output.shape The output shape for neural network
+#' @param output.act The activation function for the output
+#' @param loss The loss of neural network
+#' @param lr The learning rate
+#' @param list.par.val The flat list converted from ParamSetTree
+#' @return A String that has Keras semantic
+#' @export
 keras_helper = function(input.shape, output.shape, output.act, loss, lr, list.par.val) {
   hh = function(reg_type, val) {
     paste0(reg_type, "(l=", as.character(val), ")")
@@ -70,7 +79,8 @@ keras_helper = function(input.shape, output.shape, output.act, loss, lr, list.pa
   s0 = sprintf("model = keras_model_sequential();model ")
   input.shape = input.shape
   list.str = lapply(list.par.val, function(x) {
-  sprintf("%%>%%layer_dense(units = %d, activation = '%s', input_shape = c(%d), kernel_regularizer = %s, bias_regularizer = %s)", x$layer_dense.units, x$activation_fun, input.shape, hh(x$reg_type, x$kernel_regularizer), hh(x$reg_type, x$bias_regularizer))
+  sprintf("%%>%%layer_dense(units = %d, activation = '%s', input_shape = c(%d), kernel_regularizer = %s, bias_regularizer = %s)",
+    x$layer_dense.units, x$activation_fun, input.shape, hh(x$reg_type, x$kernel_regularizer), hh(x$reg_type, x$bias_regularizer))
   })
   ss = Reduce(paste0, list.str)
   ss = paste0(s0, ss)
