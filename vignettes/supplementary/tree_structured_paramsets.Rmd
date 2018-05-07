@@ -102,7 +102,9 @@ Multiple Layers
 library(keras)
 ps$sample()
 list.par.val = ps$getRecursiveList()
-tex = keras_helper(input.shape = 256, output.shape = 10L, output.act = "softmax", loss = "mse", lr = 0.0025, list.par.val = list.par.val)
+tex = keras_helper(input.shape = 256, output.shape = 10L, 
+  output.act = "softmax", loss = "mse", 
+  lr = 0.0025, list.par.val = list.par.val)
 eval(parse(text = tex))
 ```
 

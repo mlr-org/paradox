@@ -211,8 +211,8 @@ ParamHandle = R6Class("ParamHandle",
     },
 
     nochild = function() {
-      if (length(self$host$mand.children) > 0) return(FALSE)
-      if (length(self$host$cond.children) > 0) return(FALSE)
+      if (length(self$mand.children) > 0) return(FALSE)
+      if (length(self$cond.children) > 0) return(FALSE)
       return(TRUE)
     }
     )
@@ -240,10 +240,24 @@ PHinge = R6Class("PHinge",
     },
 
     sample = function(n) {
+      fun = function(x) {
+        x$id
+      }
+      all.ns = lapply(self$mand.children, function(x) x$visitor$treeApply(fun))
+      all.ns = unlist(all.ns)
+      names(all.ns) = NULL
       subspace.list = lapply(self$mand.children, function(x) x$sample(n))  # PHinge is required to only have mand child.
       # This function PHinge$sample(n) is calling recursion from ParamHandle$sample(n). Whilist, ParamSetTree$sample will sample another Tree
       dt.raw = Reduce(cbind, subspace.list)  # combine all hyper-parameter subspaces
-      if(!is.null(self$id.decorator)) names(dt.raw) = paste(self$id.decorator, names(dt.raw), sep = ".")
+      ns = names(dt.raw)
+      lns = setdiff(all.ns, ns)
+      if (length(lns) > 0) {
+        dt.raw[, lns] = NA
+        dt.raw = as.data.frame(dt.raw)
+        dt.raw = dt.raw[, all.ns]
+        dt.raw = as.data.table(dt.raw)
+      }
+      if (!is.null(self$id.decorator)) names(dt.raw) = paste(self$id.decorator, names(dt.raw), sep = ".")
       dt.raw
     },
 

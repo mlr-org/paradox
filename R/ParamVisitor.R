@@ -127,7 +127,7 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     # apply func to all node in the tree, without dependency
-    treeApply = function(func) {
+    treeApply0 = function(func) {
       if (self$host$nochild) return(func(self$host$node))  # apply func to the leave node
       if (length(self$host$mand.children) > 0) {
         for (name in names(self$host$mand.children)) {
@@ -142,6 +142,29 @@ ParamVisitor = R6Class("ParamVisitor",
         }
       } # if
     },
+
+    # apply func to all node in the tree, without dependency
+    treeApply = function(func) {
+      res = func(self$host$node)
+      if (self$host$nochild) return(res)  # apply func to the leave node
+      if (length(self$host$mand.children) > 0) {
+        res2 = lapply(names(self$host$mand.children), function(name) {
+          handle = self$host$mand.children[[name]]
+          return(handle$visitor$treeApply(func))
+      })
+        res = c(list(res), res2)
+    } # if
+      if (length(self$host$cond.children) > 0) {
+        res3 = lapply(names(self$host$cond.children), function(name) {
+          handle = self$host$cond.children[[name]]
+          return(handle$visitor$treeApply(func))
+      })
+        res = c(list(res), res3)
+      } # if
+      return(res)
+    },
+
+
 
     # check if the flat form of paramset violates the dependency
     # FIXME: unter development
