@@ -16,6 +16,6 @@ A \code{\link[R6]{R6Class}} to represent the tree structure of ParamSet.
 }
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
-  \code{\link{ParamNode}}
+  \code{\link{ParamNode}}, \code{\link{ParamVisitor}}
 }
 \keyword{datasets}

@@ -76,7 +76,7 @@ test_that("recursive para works", {
 
 
 test_that("test conditional ParamTree with rlR", {
-pst = ParamSetTree$new("rlR",
+pst = ParamSetTree$new("rlR", context = list(a = 3),
     ParamCategorical$new(id = "agent.name", values = c("AgentDQN", "AgentFDQN", "AgentDDQN", "AgentPG", "AgentActorCritic")),
     ParamReal$new(id = "agent.gamma", lower = 0, upper = 1),
     ParamCategorical$new(id = "replay.memname", values = c("Uniform", "Latest")),

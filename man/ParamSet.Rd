@@ -52,7 +52,6 @@ Inherited from \code{ParamNode}:
 Inherited from \code{ParamNode}:
 
 
-
 \describe{
   \item{sample(n)}{[\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.}
   \item{denorm(x)}{[\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.}
@@ -77,6 +76,7 @@ Inherited from \code{ParamNode}
 }
 
 \seealso{
-Other ParamSet: \code{\link{ParamSetFlat}}
+Other ParamSet: \code{\link{ParamSetFlat}},
+  \code{\link{ParamSetTreeRe}}, \code{\link{ParamSetTree}}
 }
 \keyword{datasets}

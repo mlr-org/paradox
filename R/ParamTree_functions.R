@@ -1,6 +1,6 @@
-#' @title  ParamTree Factory method
+#' @title  ParamTree Factory
 #'
-#' @description Define a list of Node in the hyper-parameter definition
+#' @description Define a list of Node in the hyper-parameter definition. Helper function for ParamSetTreeConstructor
 #' @param id The name of the Hinge node
 #' @param ... set of ParamTreeDn
 #' @return the root node of the ParamTree
@@ -21,6 +21,7 @@ ParamTreeFac = function(id, ...) {
 #' @param node ParamSimple
 #' @param did dependent node id
 #' @param expr expression that provides the dependency
+#' @param sample.fun user defined function to do customized sampling
 #' @return List of class NodeParamSetTree
 #' @export
 addDep = function(node, did, expr, sample.fun = NULL) {
@@ -32,7 +33,8 @@ addDep = function(node, did, expr, sample.fun = NULL) {
 #' @description Define a node in the hyper parameter tree with dependencies
 #'
 #' @param node ParamSimple
-#' @param depend A list of field c("id", "val", "fun") #' @return List of class NodeParamSetTree
+#' @param depend A list of field c("id", "val", "fun")
+#' @return List of class NodeParamSetTree
 makeCondTreeNode = function(node, depend = NULL, context = NULL) {
   node = list(node = node, depend = depend, context = context)
   class(node) = "NodeWithDependency"
@@ -92,3 +94,11 @@ keras_helper = function(input.shape, output.shape, output.act, loss, lr, list.pa
   ss
 }
 
+# Fixme: make this works
+#    pst = ParamSetTree$new("tree", context = list(n = 1000, p = 10),
+#        ParamInt$new(id = "mtry", lower = quote(as.integer(context$p/10)), upper = as.integer(context$p/1.5)),
+#        ParamInt$new(id = "num.trees", lower = 100, upper = 5000),
+#        ParamReal$new(id = "fw.perc", lower = 0.001, upper = 0.8),
+#        ParamReal$new(id = "sample.fraction", lower = 0.1, upper = 1, default = 0.5),
+#        ParamInt$new(id = "min.node.size", lower = 1L, upper = 50, default = 5L)
+# )
