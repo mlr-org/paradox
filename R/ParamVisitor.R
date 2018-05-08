@@ -6,7 +6,6 @@
 #'
 #' @return [\code{\link{ParamVisitor}}].
 #' @family ParamHelpers
-#' @export
 ParamVisitor = R6Class("ParamVisitor",
   inherit = ParamBase, # FIXME: Are we sure?
   public = list(

@@ -7,9 +7,8 @@
 #' This class serves the situation when one set of parameters decide on another set of parameters.
 #'
 #' @return [\code{\link{ParamSetTree}}].
-#' @family ParamHelpers
+#' @family ParamSet
 #' @export
-
 ParamSetTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(
@@ -111,24 +110,3 @@ ParamSetTree = R6Class("ParamSetTree",
   private = list(
   )
 )
-
-ParamSetTreeRe = R6Class("ParamSetTreeRe",
-  inherit = ParamSetTree,
-  public = list(
-    # member variables
-    root.set = NULL,
-    initialize = function(ns.id, ..., nr = 1L) {
-      if (nr > 1) {
-        self$root.set = recursiveParaFac(nr, ...)
-      }
-    },
-
-    sample = function(n = 1L) {
-      self$root.set$sample(n)
-    },
-
-    getRecursiveList = function() {
-      self$root.set$getRecursiveList()
-    }
-    ))
-

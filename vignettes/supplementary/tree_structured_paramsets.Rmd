@@ -98,7 +98,7 @@ Multiple Layers
   ps$sample(3L)
 ``` 
 
-```{r keras}
+```{r keras, eval = FALSE}
 library(keras)
 ps$sample()
 list.par.val = ps$getRecursiveList()
