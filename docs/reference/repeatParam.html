@@ -18,13 +18,24 @@
 <!-- Font Awesome icons -->
 <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1" crossorigin="anonymous">
 
+<!-- clipboard.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/1.7.1/clipboard.min.js" integrity="sha384-cV+rhyOuRHc9Ub/91rihWcGmMmCXDeksTtCihMupQHSsi8GIIRDG0ThDc3HGQFJ3" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
 <link href="../pkgdown.css" rel="stylesheet">
 <script src="../jquery.sticky-kit.min.js"></script>
 <script src="../pkgdown.js"></script>
-  
-  
+
+
+
+<meta property="og:title" content="Repeat a single Parameter — repeatParam" />
+
+<meta property="og:description" content="Creates a list of a single Parameter repeated.
+Each parameter is tagged with &lt;param$id&gt;.repeated.
+This way it can be determined that they belong together" />
+<meta name="twitter:card" content="summary" />
+
+
 <!-- mathjax -->
 <script src='https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
 
@@ -47,8 +58,12 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <a class="navbar-brand" href="../index.html">phng</a>
+      <span class="navbar-brand">
+        <a class="navbar-link" href="../index.html">phng</a>
+        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.1</span>
+      </span>
     </div>
+
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
@@ -70,6 +85,7 @@
   </a>
 </li>
       </ul>
+      
     </div><!--/.nav-collapse -->
   </div><!--/.container -->
 </div><!--/.navbar -->
@@ -77,31 +93,35 @@
       
       </header>
 
-      <div class="row">
+<div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Repeat a single Parameter</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/phng/blob/master/R/repeatParam.R'><code>R/repeatParam.R</code></a></small>
+    <div class="hidden name"><code>repeatParam.Rd</code></div>
     </div>
 
+    <div class="ref-description">
     
     <p>Creates a list of a single Parameter repeated.
 Each parameter is tagged with <code>&lt;param$id&gt;.repeated</code>.
 This way it can be determined that they belong together</p>
     
+    </div>
 
     <pre class="usage"><span class='fu'>repeatParam</span>(<span class='kw'>n</span> <span class='kw'>=</span> <span class='fl'>1L</span>, <span class='no'>param</span>)</pre>
     
-    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a> Arguments</h2>
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
     <colgroup><col class="name" /><col class="desc" /></colgroup>
     <tr>
       <th>n</th>
-      <td><p>[<code>integer(1)</code>]
+      <td><p>[<code>integer(1)</code>]<br />
 How often should this parameter be copied?</p></td>
     </tr>
     <tr>
       <th>param</th>
-      <td><p>[<code><a href='ParamSimple.html'>ParamSimple(1)</a></code>]
+      <td><p>[<code><a href='ParamSimple.html'>ParamSimple(1)</a></code>]<br />
 The parameter that should be repeated.</p></td>
     </tr>
     </table>
@@ -135,5 +155,8 @@ The parameter that should be repeated.</p></td>
       </footer>
    </div>
 
+  
+
   </body>
 </html>
+

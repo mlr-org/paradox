@@ -18,13 +18,19 @@
 <!-- Font Awesome icons -->
 <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1" crossorigin="anonymous">
 
+<!-- clipboard.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/1.7.1/clipboard.min.js" integrity="sha384-cV+rhyOuRHc9Ub/91rihWcGmMmCXDeksTtCihMupQHSsi8GIIRDG0ThDc3HGQFJ3" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
 <link href="../pkgdown.css" rel="stylesheet">
 <script src="../jquery.sticky-kit.min.js"></script>
 <script src="../pkgdown.js"></script>
-  
-  
+
+
+
+<meta property="og:title" content="Function reference" />
+
+
 <!-- mathjax -->
 <script src='https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
 
@@ -47,8 +53,12 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <a class="navbar-brand" href="../index.html">phng</a>
+      <span class="navbar-brand">
+        <a class="navbar-link" href="../index.html">phng</a>
+        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.1</span>
+      </span>
     </div>
+
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
@@ -70,6 +80,7 @@
   </a>
 </li>
       </ul>
+      
     </div><!--/.nav-collapse -->
   </div><!--/.container -->
 </div><!--/.navbar -->
@@ -77,124 +88,119 @@
       
       </header>
 
-      <div class="row">
-  <div class="col-md-9">
+<div class="row">
+  <div class="contents col-md-9">
     <div class="page-header">
-      <h1>
-        Reference
-        <small>version&nbsp;0.1</small>
-      </h1>
+      <h1>Reference</h1>
     </div>
 
-    <div class="contents">
-      <table class="ref-index">
+    <table class="ref-index">
 
-      <colgroup>
-        <col class="alias" />
-        <col class="title" />
-      </colgroup>
+    <colgroup>
+      <col class="alias" />
+      <col class="title" />
+    </colgroup>
 
-      <tbody>
-        <tr>
-          <th colspan="2">
-            <h2 id="section-all-functions" class="hasAnchor"><a href="#section-all-functions" class="anchor"></a>All functions</h2>
-            <p class="section-desc"></p>
-          </th>
-        </tr>
-        <tr>
-          <!--  -->
-          <td>
-            <p><code><a href="as.data.frame.OptPath.html">as.data.frame</a></code> </p>
-          </td>
-          <td><p>Convert optimization path to data.frame.</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="OptPath.html">OptPath</a></code> </p>
-          </td>
-          <td><p>OptPath Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamBase.html">ParamBase</a></code> </p>
-          </td>
-          <td><p>Base Class for ParamHelpers</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamCategorical.html">ParamCategorical</a></code> </p>
-          </td>
-          <td><p>Categorical Parameter Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamFlag.html">ParamFlag</a></code> </p>
-          </td>
-          <td><p>Flag Parameter Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamHandle.html">ParamHandle</a></code> </p>
-          </td>
-          <td><p>Handle Class for ParamNode</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamInt.html">ParamInt</a></code> </p>
-          </td>
-          <td><p>Integer Parameter Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamNode.html">ParamNode</a></code> </p>
-          </td>
-          <td><p>Parameter Node Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamReal.html">ParamReal</a></code> </p>
-          </td>
-          <td><p>Real Parameter Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamSet.html">ParamSet</a></code> </p>
-          </td>
-          <td><p>Base Class for ParamSet</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamSetFlat.html">ParamSetFlat</a></code> </p>
-          </td>
-          <td><p>ParamSetFlat</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamSimple.html">ParamSimple</a></code> </p>
-          </td>
-          <td><p>ParamSimple Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="ParamUntyped.html">ParamUntyped</a></code> </p>
-          </td>
-          <td><p>Untyped Parameter Object</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="repeatParam.html">repeatParam</a></code> </p>
-          </td>
-          <td><p>Repeat a single Parameter</p></td>
-        </tr><tr>
-          <!--  -->
-          <td>
-            <p><code><a href="trafoOnRepeatedParam.html">trafoOnRepeatedParam</a></code> </p>
-          </td>
-          <td><p>A helper to create trafo functions for repeated parameters.</p></td>
-        </tr>
-      </tbody>
-      </table>
-    </div>
+    <tbody>
+      <tr>
+        <th colspan="2">
+          <h2 id="section-all-functions" class="hasAnchor"><a href="#section-all-functions" class="anchor"></a>All functions</h2>
+          <p class="section-desc"></p>
+        </th>
+      </tr>
+      <tr>
+        <!--  -->
+        <td>
+          <p><code><a href="OptPath.html">OptPath</a></code> </p>
+        </td>
+        <td><p>OptPath Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamBase.html">ParamBase</a></code> </p>
+        </td>
+        <td><p>Base Class for ParamHelpers</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamCategorical.html">ParamCategorical</a></code> </p>
+        </td>
+        <td><p>Categorical Parameter Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamFlag.html">ParamFlag</a></code> </p>
+        </td>
+        <td><p>Flag Parameter Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamHandle.html">ParamHandle</a></code> </p>
+        </td>
+        <td><p>Handle Class for ParamNode</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamInt.html">ParamInt</a></code> </p>
+        </td>
+        <td><p>Integer Parameter Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamNode.html">ParamNode</a></code> </p>
+        </td>
+        <td><p>Parameter Node Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamReal.html">ParamReal</a></code> </p>
+        </td>
+        <td><p>Real Parameter Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamSet.html">ParamSet</a></code> </p>
+        </td>
+        <td><p>Base Class for ParamSet</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamSetFlat.html">ParamSetFlat</a></code> </p>
+        </td>
+        <td><p>ParamSetFlat</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamSimple.html">ParamSimple</a></code> </p>
+        </td>
+        <td><p>ParamSimple Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="ParamUntyped.html">ParamUntyped</a></code> </p>
+        </td>
+        <td><p>Untyped Parameter Object</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="as.data.frame.OptPath.html">as.data.frame(<i>&lt;OptPath&gt;</i>)</a></code> </p>
+        </td>
+        <td><p>Convert optimization path to data.frame.</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="repeatParam.html">repeatParam()</a></code> </p>
+        </td>
+        <td><p>Repeat a single Parameter</p></td>
+      </tr><tr>
+        <!--  -->
+        <td>
+          <p><code><a href="trafoOnRepeatedParam.html">trafoOnRepeatedParam()</a></code> </p>
+        </td>
+        <td><p>A helper to create trafo functions for repeated parameters.</p></td>
+      </tr>
+    </tbody>
+    </table>
   </div>
 
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
@@ -217,5 +223,8 @@
       </footer>
    </div>
 
+  
+
   </body>
 </html>
+
