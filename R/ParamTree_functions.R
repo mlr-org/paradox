@@ -94,11 +94,3 @@ keras_helper = function(input.shape, output.shape, output.act, loss, lr, list.pa
   ss
 }
 
-# Fixme: make this works
-#    pst = ParamSetTree$new("tree", context = list(n = 1000, p = 10),
-#        ParamInt$new(id = "mtry", lower = quote(as.integer(context$p/10)), upper = as.integer(context$p/1.5)),
-#        ParamInt$new(id = "num.trees", lower = 100, upper = 5000),
-#        ParamReal$new(id = "fw.perc", lower = 0.001, upper = 0.8),
-#        ParamReal$new(id = "sample.fraction", lower = 0.1, upper = 1, default = 0.5),
-#        ParamInt$new(id = "min.node.size", lower = 1L, upper = 50, default = 5L)
-# )

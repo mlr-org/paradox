@@ -95,3 +95,14 @@ pst$sample()
 pst$toStringVal()
  })
 
+# Fixme: make this works
+# mtry [p/10, p/1.5]
+# pst = ParamSetTree$new("tree", context = list(n = 1000, p = 10),
+#   addDep(ParamReal$new(id = "mtry", lower = 0.1, upper = 1.0 / 1.5), 
+#       did = "",
+#       sample.fun = quote(ParamReal$new(id = "mtry", lower = 0, upper = context$p))),
+#     ParamInt$new(id = "num.trees", lower = 100, upper = 5000),
+#     ParamReal$new(id = "fw.perc", lower = 0.001, upper = 0.8),
+#     ParamReal$new(id = "sample.fraction", lower = 0.1, upper = 1, default = 0.5),
+#     ParamInt$new(id = "min.node.size", lower = 1L, upper = 50, default = 5L)
+# )
