@@ -16,7 +16,7 @@ ParamHandle = R6Class("ParamHandle",
     node = NULL,    # simple ParamNode the handle(pointer) point to
     val = NULL,     # the value of the SimpleParamNode it points to. val is used for sampling
     flatval = NULL, # if the node is itself a tree, this hold the preroot traversal of the tree
-    depend = NULL,  # depend is a list with field <id><func>
+    depend = NULL,  # depend is a list with field <id><func><sample_fun>
     parent = NULL,  # the ParamHandle of parent node.
     root = NULL,    # root has to be changed when parent changed!
     reldepth = 0L,  # reldepth has to be updated when parent changed!
@@ -32,8 +32,10 @@ ParamHandle = R6Class("ParamHandle",
       self$val = val
       self$depend = depend
       haveDep = !is.null(self$depend)
+      contexNc = is.null(self$depend$sample.fun) || is.null(self$depend$id)
       depNc = is.null(self$depend$fun) || is.null(self$depend$id)
-      if (haveDep && depNc) stop("dependency must be a list(id = id,fun =quote(expression)) form!")
+      flag = contexNc && depNc
+      if (haveDep && flag) stop("dependency must be a list(id = id,fun =quote(expression)), sample.fun form!")
       self$parent = parent
       if (!is.null(parent)) {
         self$root = ifelse(is.null(parent$root), parent, parent$root)
@@ -60,7 +62,7 @@ ParamHandle = R6Class("ParamHandle",
 
     # return wether the parent took the defined value
     isDependMet = function() {
-      depend.null = is.null(self$depend)
+      depend.null = is.null(self$depend) || is.null(self$depend$fun)
       parent.null = is.null(self$parent)
       parent.val.null = is.null(self$parent$val)
       if (depend.null) return(TRUE)  # Free Hyper-Parameter, no constraint
@@ -96,9 +98,18 @@ ParamHandle = R6Class("ParamHandle",
     },
 
     sampleCurrentNode = function() {
-      if (is.null(self$node)) return(NULL)  # No ParamSimple specified for the current class
+      if (is.null(self$node)) {
+        warning("self$node is null")
+        return(NULL)  #FIXME: should here be error?: No ParamSimple specified for the current class
+      }
+      # debug: self$node$id
       if (self$isDependMet()){
-        # debug: self$node$id
+        if (!is.null(self$depend$sample.fun)) {
+          dict = as.list(self$parent$val)
+          dict = setNames(dict, self$parent$id)
+          self$val = eval(self$depend$sample.fun, envir = dict)
+          return(NULL)
+        }
         self$val = self$sampleNode()  # self$node$sample will cause infinite recursion
       }
     },

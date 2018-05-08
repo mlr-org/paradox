@@ -23,8 +23,8 @@ ParamTreeFac = function(id, ...) {
 #' @param expr expression that provides the dependency
 #' @return List of class NodeParamSetTree
 #' @export
-addDep = function(node, did, expr) {
-  makeCondTreeNode(node = node, depend = list(id = did, fun = expr))
+addDep = function(node, did, expr, sample.fun = NULL) {
+  makeCondTreeNode(node = node, depend = list(id = did, fun = expr, sample.fun = sample.fun))
 }
 
 #' @title make conditional tree node
@@ -33,8 +33,8 @@ addDep = function(node, did, expr) {
 #'
 #' @param node ParamSimple
 #' @param depend A list of field c("id", "val", "fun") #' @return List of class NodeParamSetTree
-makeCondTreeNode = function(node, depend = NULL) {
-  node = list(node = node, depend = depend)
+makeCondTreeNode = function(node, depend = NULL, context = NULL) {
+  node = list(node = node, depend = depend, context = context)
   class(node) = "NodeWithDependency"
   return(node)
 }

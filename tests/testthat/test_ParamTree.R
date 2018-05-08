@@ -87,7 +87,7 @@ pst = ParamSetTree$new("rlR",
     addDep(ParamReal$new(id = "policy.epsilon", lower = 0, upper = 1), 
       did = "policy.name", expr = quote(policy.name == "PolicyEpsilonGreedy")), # did here means dependant id
     addDep(ParamReal$new(id = "policy.minEpsilon", lower = 0, upper = 1), 
-      did = "policy.epsilon", expr = quote(TRUE)), 
+      did = "policy.epsilon", expr = quote(TRUE), sample.fun = quote(ParamReal$new(id = "policy.minEpsilon", lower = 0, upper = policy.epsilon)$sampleVector())), 
     addDep(ParamReal$new(id = "policy.decay", lower = 0, upper = 1),
       did = "policy.minEpsilon", expr = quote(TRUE)) # did here means dependant id
     )
