@@ -63,7 +63,7 @@ test_that("recursive para works", {
   ps$sample(3L)
 })
 
- test_that("test conditional params works for conditional ParamTree", {
+ test_that("test conditional params works for recursive ParamTree", {
    # this example does not make sense, just to prove it works
    ps = recursiveParaFac(nr = 2,
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
@@ -72,5 +72,26 @@ test_that("recursive para works", {
        )
    ps$asample()
    ps$toStringVal()
+ })
+
+
+test_that("test conditional ParamTree with rlR", {
+pst = ParamSetTree$new("rlR",
+    ParamCategorical$new(id = "agent.name", values = c("AgentDQN", "AgentFDQN", "AgentDDQN", "AgentPG", "AgentActorCritic")),
+    ParamReal$new(id = "agent.gamma", lower = 0, upper = 1),
+    ParamCategorical$new(id = "replay.memname", values = c("Uniform", "Latest")),
+    ParamCategorical$new(id = "policy.name", values = c("PolicyEpsilonGreedy")),
+    ParamInt$new(id = "replay.epochs", lower = 1L, upper = 50L),
+    addDep(ParamInt$new(id = "replay.batchsize", lower = 0, upper = 100), 
+      did = "agent.name", expr = quote(agent.name != "AgentPG")), 
+    addDep(ParamReal$new(id = "policy.epsilon", lower = 0, upper = 1), 
+      did = "policy.name", expr = quote(policy.name == "PolicyEpsilonGreedy")), # did here means dependant id
+    addDep(ParamReal$new(id = "policy.minEpsilon", lower = 0, upper = 1), 
+      did = "policy.epsilon", expr = quote(TRUE)), 
+    addDep(ParamReal$new(id = "policy.decay", lower = 0, upper = 1),
+      did = "policy.minEpsilon", expr = quote(TRUE)) # did here means dependant id
+    )
+pst$sample()
+pst$toStringVal()
  })
 
