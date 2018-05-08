@@ -61,6 +61,7 @@ Inherited from \code{ParamSimple}
 Inherited from \code{ParamNode}:
 
 
+
 \describe{
   \item{sample(n)}{[\code{function}] \cr Function to sample Parameter values. Always returns a \code{data.table}.}
   \item{denorm(x)}{[\code{function}] \cr Takes a named list. Each list item contains a numerical vector with values between \code{[0,1]}. These values will be mapped to values of the Parameter Space.}
