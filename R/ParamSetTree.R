@@ -9,10 +9,8 @@
 #' \describe{
 #'   \item{setChild(child.set)}{[\code{function}] \cr
 #'     Set child tree to the current tree}
-#'   \item{getFlatList()}{[\code{function}] \cr
+#'   \item{sampleList()}{[\code{function}] \cr
 #'     Get all the parameter node  in a normal R list}
-#'   \item{getRecursiveList()}{[\code{function}] \cr
-#'     For recursive parameter tree, get all the parameters in a normal R list}
 #' }
 #'
 #' Inherited from \code{ParamSet}:
