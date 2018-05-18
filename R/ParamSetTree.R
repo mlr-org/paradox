@@ -11,15 +11,9 @@
 #'     Set child tree to the current tree}
 #'   \item{sampleList()}{[\code{function}] \cr
 #'     Get all the parameter node  in a normal R list}
+#'   \item{sample(n)}{[\code{function}] \cr
+#'     Generate n samples of parameter set in a data table }
 #' }
-#'
-#' Inherited from \code{ParamSet}:
-#' @inheritSection ParamSet Methods
-#'
-#' Inherited from \code{ParamSet}:
-#' @inheritSection ParamSet Active Bindings
-#'
-
 #' @return [\code{\link{ParamSetTree}}].
 #' @family ParamSet
 #' @export

@@ -34,6 +34,7 @@ addDep = function(node, did, expr, sample.fun = NULL) {
 #'
 #' @param node ParamSimple
 #' @param depend A list of field c("id", "val", "fun")
+#' @param context For evaluation, as environments
 #' @return List of class NodeParamSetTree
 makeCondTreeNode = function(node, depend = NULL, context = NULL) {
   node = list(node = node, depend = depend, context = context)
