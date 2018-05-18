@@ -106,36 +106,3 @@ tex = keras_helper(input.shape = 256, output.shape = 10L,
   lr = 0.0025, list.par.val = list.par.val)
 eval(parse(text = tex))
 ```
-
-## Functional API
-
-We also provide the user with a "Functional API" which means the user could program at runtime a dynamic structure of the tree. 
-
-Here we introduce the concept of mandatory child node and conditional child node. Mandatory child node means a dependent childnode that is unconditional and conditional child node means the node only make sense once the parent node meet some requirements. For example, in a model multiplexer of "Support Vector Machine" (SVM) and "Random Forest" (RF), the parameter "n_tree" only make sense if the "Model" is "RF". But if the root node is "RF", then "n_tree" becomes a Mandatory child node for "RF".
-
-Secondly, we introduce the concept of ParamHandle, which takes argument of `node` and `depend`. It is basically representing a node in the tree structure which contains pointers to its mandatory child nodes and conditional child nodes.
-
-```{r example2}
-  ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
-  ps$setRoot(ps)  # set the current node to be the root node
-  temp_ntree = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
-    depend = list(id = "Model", fun = quote(Model == "RF")))
-  ntree = ps$addCondChild(temp_ntree)  # the condition is contained in temp_ntree§depend already
-  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), 
-    depend = list(id = "Model", fun = quote(Model == "SVM")))
-  c = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")),
-    depend = list(id = "Model", fun = quote(Model == "SVM")))
-  kernel = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), 
-    depend = list(id = "kernel", fun = quote(kernel == "rbf")))
-  gamma = kernel$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), 
-    depend = list(id = "kernel", fun = quote(kernel == "poly")))
-  poly = kernel$addCondChild(temp)
-  ps$render2str()
-  ps$visitor$toFlat()
-  poly$getRoot$render2str() # use the root to sample
-  ps$sample(3)
-```
-
