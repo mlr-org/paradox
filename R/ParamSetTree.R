@@ -2,13 +2,30 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent set of parameters in a tree form.
-#' The difference between ParamSetTree and Paramrt.hinge is that one could "hang" a ParamSetTree(tree of nodes, instead of only one node) directly to a ParamHandle or another tree.
-#' This class serves the situation when one set of parameters decide on another set of parameters.
+#' A \code{\link[R6]{R6Class}} to represent set of layer-wise hierachical parameters in a tree form which is a natural way to represent
 #'
+#' @section Methods:
+#'
+#' \describe{
+#'   \item{setChild(child.set)}{[\code{function}] \cr
+#'     Set child tree to the current tree}
+#'   \item{getFlatList()}{[\code{function}] \cr
+#'     Get all the parameter node  in a normal R list}
+#'   \item{getRecursiveList()}{[\code{function}] \cr
+#'     For recursive parameter tree, get all the parameters in a normal R list}
+#' }
+#'
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Methods
+#'
+#' Inherited from \code{ParamSet}:
+#' @inheritSection ParamSet Active Bindings
+#'
+
 #' @return [\code{\link{ParamSetTree}}].
 #' @family ParamSet
 #' @export
+
 ParamSetTree = R6Class("ParamSetTree",
   inherit = ParamSet,
   public = list(
@@ -18,20 +35,6 @@ ParamSetTree = R6Class("ParamSetTree",
     parent.set = NULL,
     child.set = NULL,
     context = NULL,
-
-    #initialize = function(ns.id, ..., nr = 1L) {
-    #  self$ns.id = assertNames(ns.id)
-    #  if (nr == 1L) {
-    #  self$rt.hinge = ParamTreeFac(ns.id, ...)
-    #  }
-    #  if (nr > 1) {
-    #    root = recursiveParaFac(nr, ...)
-    #    self$rt.hinge = root$rt.hinge
-    #    self$ns.id = root$ns.id
-    #    self$child.set = root$child.set
-    #    self$parent.set = root$parent.set
-    #  }
-    #},
 
     initialize = function(ns.id, ..., context = NULL) {
       self$ns.id = assertNames(ns.id)
