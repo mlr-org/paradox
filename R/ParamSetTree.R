@@ -69,11 +69,6 @@ ParamSetTree = R6Class("ParamSetTree",
       }
     },
 
-    asample.render2str = function() {
-      self$asample()
-      self$toStringVal()
-    },
-
     sample = function(n = 1) {
       res.list = lapply(1:n, function(i) {
         res = self$rt.hinge$sample(1L)
