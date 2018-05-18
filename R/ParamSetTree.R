@@ -46,10 +46,6 @@ ParamSetTree = R6Class("ParamSetTree",
 
     # public methods
     # after a tree factory is called, directly set the root
-    setRootHandle = function(handle) {
-      self$rt.hinge = handle
-    },
-
     setChild = function(child.set) {
       self$child.set = child.set
       child.set$parent.set = self
