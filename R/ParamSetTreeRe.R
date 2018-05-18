@@ -2,7 +2,7 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' ???
+#' Recursive ParamsetTree, used in situation where one want to define a deep learning network for example.
 #'
 #' @return [\code{\link{ParamSetTreeRe}}].
 #' @family ParamSet
