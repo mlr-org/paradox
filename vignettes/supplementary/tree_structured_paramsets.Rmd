@@ -81,7 +81,6 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$setChild(pst1)
-   pst$asample.render2str()
    pst$sample(4L)
    pst$toStringVal()  # always keep the last sampled value
 ```

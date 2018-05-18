@@ -97,8 +97,8 @@ ParamSetTree = R6Class("ParamSetTree",
         temp = self$rt.hinge$getList()
         n = length(res)
         res[[n + 1L]] = temp
+        return(res)
       }
-      res
     }
   ),
   private = list(
