@@ -52,7 +52,7 @@ To tackle the above mentioned problem, we have the following code. Each separate
          did = "model", expr = quote(model == "RF"))
        )
    pst$sample(1L)
-   pst$getFlatList()
+   pst$sampleList()
    pst$toStringVal()
    pst$sample(10L)
 ```
@@ -100,7 +100,7 @@ Multiple Layers
 ```{r keras, eval = FALSE}
 library(keras)
 ps$sample()
-list.par.val = ps$getRecursiveList()
+list.par.val = ps$sampleList()
 tex = keras_helper(input.shape = 256, output.shape = 10L, 
   output.act = "softmax", loss = "mse", 
   lr = 0.0025, list.par.val = list.par.val)

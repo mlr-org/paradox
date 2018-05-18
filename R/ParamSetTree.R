@@ -77,6 +77,11 @@ ParamSetTree = R6Class("ParamSetTree",
       rbindlist(res.list, fill = TRUE)
     },
 
+    sampleList = function() {
+      self$getFlatList()
+    },
+
+    # this should not be used by user, but also cannot be private since it need to call getFlatList itself
     getFlatList = function() {
       res = self$rt.hinge$getList()
       if (!is.null(self$child.set)) {
@@ -86,6 +91,7 @@ ParamSetTree = R6Class("ParamSetTree",
       res
     },
 
+    # only used in ParamSetRe
     getRecursiveList = function(res = list()) {
       if (is.null(self$child.set)) {
         temp = self$rt.hinge$getList()

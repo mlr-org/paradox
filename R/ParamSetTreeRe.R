@@ -16,13 +16,16 @@ ParamSetTreeRe = R6Class("ParamSetTreeRe",
       if (nr > 1) {
         self$root.set = recursiveParaFac(nr, ...)
       }
+      else {
+        stop("only use ParamSetTreeRe for more than 2 layer!")
+      }
     },
 
     sample = function(n = 1L) {
       self$root.set$sample(n)
     },
 
-    getRecursiveList = function() {
+    sampleList = function() {
       self$root.set$getRecursiveList()
     }
   )
