@@ -10,6 +10,7 @@ test_that("test if ParamFac parse from flat", {
   ps$asample()
   ps$toStringVal()
   ps$getList()
+  expect_true(TRUE)
 })
 
 test_that("test if two ParamTree works", {
@@ -30,6 +31,7 @@ test_that("test if two ParamTree works", {
   pt$setChild(pt2)
   pt$asample()
   pt$toStringVal()
+  expect_true(TRUE)
 })
 
 test_that("ParamSetTree constructor works", {
@@ -51,6 +53,7 @@ test_that("ParamSetTree constructor works", {
    pst$toStringVal()
    pst$sample(10L)
    pst$rt.hinge$sample(3)
+   expect_true(TRUE)
 })
 
 test_that("recursive para works", {
@@ -61,6 +64,7 @@ test_that("recursive para works", {
       ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
+  expect_true(TRUE)
 })
 
  test_that("test conditional params works for recursive ParamTree", {
@@ -72,6 +76,7 @@ test_that("recursive para works", {
        )
    ps$asample()
    ps$toStringVal()
+   expect_true(TRUE)
  })
 
 
@@ -91,9 +96,25 @@ pst = ParamSetTree$new("rlR", context = list(a = 3),
     addDep(ParamReal$new(id = "policy.decay", lower = 0, upper = 1),
       did = "policy.minEpsilon", expr = quote(TRUE)) # did here means dependant id
     )
-pst$sample()
-pst$toStringVal()
+  pst$sample()
+  pst$toStringVal()
+  expect_true(TRUE)
  })
+
+
+
+test_that("user API for NN works", {
+  ps = ParamSetTreeRe$new("nn", nr = 2,
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0), 
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0), 
+      ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
+  ps$sample(3L)
+  ps$sampleList()
+  expect_true(TRUE)
+ })
+
 
 # Fixme: make this works
 # mtry [p/10, p/1.5]
