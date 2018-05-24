@@ -18,13 +18,22 @@
 <!-- Font Awesome icons -->
 <link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1" crossorigin="anonymous">
 
+<!-- clipboard.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/1.7.1/clipboard.min.js" integrity="sha384-cV+rhyOuRHc9Ub/91rihWcGmMmCXDeksTtCihMupQHSsi8GIIRDG0ThDc3HGQFJ3" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
 <link href="../pkgdown.css" rel="stylesheet">
 <script src="../jquery.sticky-kit.min.js"></script>
 <script src="../pkgdown.js"></script>
-  
-  
+
+
+
+<meta property="og:title" content="OptPath Object — OptPath" />
+
+<meta property="og:description" content="A R6Class to represent the OptPath." />
+<meta name="twitter:card" content="summary" />
+
+
 <!-- mathjax -->
 <script src='https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML'></script>
 
@@ -47,18 +56,34 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <a class="navbar-brand" href="../index.html">phng</a>
+      <span class="navbar-brand">
+        <a class="navbar-link" href="../index.html">phng</a>
+        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.1</span>
+      </span>
     </div>
+
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
-        <li>
-  <a href="../index.html">
-    <span class="fa fa-home fa-lg"></span>
+        <li class="dropdown">
+  <a href="#" class="dropdown-toggle" data-toggle="dropdown" role="button" aria-expanded="false">
+    <span class="fa fa-file-text-o"></span>
      
+    Topics
+     
+    <span class="caret"></span>
   </a>
+  <ul class="dropdown-menu" role="menu">
+    <li>
+      <a href="../articles/supplementary/tree_structured_paramsets.html">Tree structured ParamSets</a>
+    </li>
+  </ul>
 </li>
 <li>
-  <a href="../reference/index.html">Reference</a>
+  <a href="../reference/index.html">
+    <span class="fa fa-book"></span>
+     
+    Reference
+  </a>
 </li>
       </ul>
       
@@ -70,6 +95,7 @@
   </a>
 </li>
       </ul>
+      
     </div><!--/.nav-collapse -->
   </div><!--/.container -->
 </div><!--/.navbar -->
@@ -77,15 +103,19 @@
       
       </header>
 
-      <div class="row">
+<div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>OptPath Object</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/phng/blob/master/R/OptPath.R'><code>R/OptPath.R</code></a></small>
+    <div class="hidden name"><code>OptPath.Rd</code></div>
     </div>
 
+    <div class="ref-description">
     
     <p>A <code><a href='http://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent the OptPath.</p>
     
+    </div>
 
     <pre class="usage"><span class='no'>OptPath</span></pre>
         
@@ -97,15 +127,15 @@
 
     
     <dl class='dl-horizontal'>
-  <dt>par.set</dt><dd><p>[<code>ParamSet</code>]  
+  <dt>par.set</dt><dd><p>[<code>ParamSet</code>] <br /> 
     The [<code>ParamSet</code>] from which the <code>x</code> values will be added to this <code>OptPath</code>.</p></dd>
-  <dt>y.names</dt><dd><p>[<code>character()</code>]  
+  <dt>y.names</dt><dd><p>[<code>character()</code>] <br /> 
     The names for the y values. Default is &#8220;y&#8221;.</p></dd>
-  <dt>minimize</dt><dd><p>[<code>logical()</code>]   
+  <dt>minimize</dt><dd><p>[<code>logical()</code>] <br />  
     A logical vector indicating which y components are to be minimized. Per default all are <code>TRUE</code>.</p></dd>
-  <dt>check.feasible</dt><dd><p>[<code>logical(1)</code>]   
+  <dt>check.feasible</dt><dd><p>[<code>logical(1)</code>] <br />  
     Should new x values be checked for feasibility according to the <code>ParamSet</code>.</p></dd>
-  <dt>data</dt><dd><p>[<code>data.table</code>]   
+  <dt>data</dt><dd><p>[<code>data.table</code>] <br />  
     This field contains all values logged into the opt.path.</p></dd>
 </dl>
     
@@ -113,7 +143,7 @@
 
     
     <dl class='dl-horizontal'>
-  <dt>add()</dt><dd><p>[<code>function</code>]   
+  <dt>add()</dt><dd><p>[<code>function</code>] <br />  
     Add a new line to the <code>OptPath</code>.</p></dd>
 </dl>
     
@@ -121,15 +151,15 @@
 
     
     <dl class='dl-horizontal'>
-  <dt>x.names</dt><dd><p>[<code>character()</code>] 
+  <dt>x.names</dt><dd><p>[<code>character()</code>] <br />
     Names of the x-values</p></dd>
-  <dt>length</dt><dd><p>[<code>integer(1)</code>] 
+  <dt>length</dt><dd><p>[<code>integer(1)</code>] <br />
     The number of entries in this <code>OptPath</code>.</p></dd>
-  <dt>x</dt><dd><p>[<code>data.table</code>]   
+  <dt>x</dt><dd><p>[<code>data.table</code>] <br />  
     A subset of <code>data</code> only containing the x values.</p></dd>
-  <dt>y</dt><dd><p>[<code>data.table</code>]   
+  <dt>y</dt><dd><p>[<code>data.table</code>] <br />  
     A subset of <code>data</code> only containing the y values.</p></dd>
-  <dt>dim</dt><dd><p>[<code>integer(1)</code>]   
+  <dt>dim</dt><dd><p>[<code>integer(1)</code>] <br />  
     The dimensionality of the optimization problem.</p></dd>
 </dl>
     
@@ -163,5 +193,8 @@
       </footer>
    </div>
 
+  
+
   </body>
 </html>
+
