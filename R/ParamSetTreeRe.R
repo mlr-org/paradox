@@ -25,8 +25,8 @@ ParamSetTreeRe = R6Class("ParamSetTreeRe",
       self$root.set$sample(n)
     },
 
-    sampleList = function(prefer = "flat") {
-      if (prefer == "flat") self$root.set$sampleList()
+    sampleList = function(flat = TRUE) {
+      if (flat) self$root.set$sampleList()
       else self$root.set$getRecursiveList()
     }
   ),

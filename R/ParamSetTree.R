@@ -71,8 +71,8 @@ ParamSetTree = R6Class("ParamSetTree",
       rbindlist(res.list, fill = TRUE)
     },
 
-    sampleList = function() {
-      private$getFlatList()
+    sampleList = function(annotate = FALSE) {
+      private$getFlatList(annotate = annotate)
     },
 
 

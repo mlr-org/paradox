@@ -100,7 +100,7 @@ Multiple Layers
 ```{r keras, eval = FALSE}
 library(keras)
 ps$sample()
-list.par.val = ps$sampleList()
+list.par.val = ps$sampleList(flat = FALSE)
 tex = keras_helper(input.shape = 256, output.shape = 10L, 
   output.act = "softmax", loss = "mse", 
   lr = 0.0025, list.par.val = list.par.val)

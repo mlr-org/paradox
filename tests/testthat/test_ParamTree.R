@@ -50,6 +50,7 @@ test_that("ParamSetTree constructor works", {
        )
    pst$sample(1L)
    pst$sampleList()
+   pst$getRecursiveList()
    pst$toStringVal()
    pst$sample(10L)
    pst$rt.hinge$sample(3)
@@ -64,6 +65,7 @@ test_that("recursive para works", {
       ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
+  ps$sample(1L)
   ps$sampleList()
   expect_true(TRUE)
 })
@@ -106,6 +108,15 @@ pst = ParamSetTree$new("rlR", context = list(a = 3),
 
 
 test_that("user API for NN works", {
+  expect_error({
+  ps = ParamSetTreeRe$new("nn", nr = 1,
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0), 
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0), 
+      ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
+
+  })
   ps = ParamSetTreeRe$new("nn", nr = 2,
       ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
       ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0), 
@@ -114,7 +125,8 @@ test_that("user API for NN works", {
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
   ps$sample(1L)
-  ps$sampleList()
+  ps$sampleList(TRUE)
+  ps$sampleList(FALSE)
   expect_true(TRUE)
  })
 
@@ -143,6 +155,24 @@ test_that("ParamTree works with child", {
    pst$sampleList()
    pst$toStringVal()  # always keep the last sampled value
 
+})
+
+test_that("keras helper works", {
+  ps = ParamSetTreeRe$new("nn", nr = 2,
+      ParamInt$new(id = "layer_dense.units", lower = 2L, upper = 1000L),
+      ParamReal$new(id = "kernel_regularizer", lower = 0, upper = 3.0), 
+      ParamReal$new(id = "bias_regularizer", lower = 0, upper = 3.0), 
+      ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
+      ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
+  ps$sample(3L)
+  library(keras)
+  ps$sample()
+  list.par.val = ps$sampleList(flat = FALSE)
+  tex = keras_helper(input.shape = 256, output.shape = 10L, 
+  output.act = "softmax", loss = "mse", 
+  lr = 0.0025, list.par.val = list.par.val)
+  eval(parse(text = tex))
+  expect_true(TRUE)
 })
 
 # Fixme: make this works
