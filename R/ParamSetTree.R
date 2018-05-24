@@ -8,13 +8,11 @@
 #'
 #' \describe{
 #'   \item{setChild(child.set)}{[\code{function}] \cr
-#'     Set child tree to the current tree}
-#'   \item{asample()}{[\code{function}] \cr
-#'     Ancestral sampling}
-#'   \item{sampleList()}{[\code{function}] \cr
+#'     Set child.set(Another [\code{ParamSetTree}]) to be  the child of the current tree}
+#'   \item{sampleList(annotate = FALSE, sep = "_", recursive = FALSE)}{[\code{function}] \cr
 #'     Get all the parameter node  in a normal R list}
 #'   \item{sample(n)}{[\code{function}] \cr
-#'     Generate n samples of parameter set in a data table }
+#'     Generate n samples of parameter set in a data table}
 #' }
 #' @return [\code{\link{ParamSetTree}}].
 #' @family ParamSet
@@ -71,10 +69,10 @@ ParamSetTree = R6Class("ParamSetTree",
       rbindlist(res.list, fill = TRUE)
     },
 
-    sampleList = function(annotate = FALSE) {
-      private$getFlatList(annotate = annotate)
+    sampleList = function(annotate = FALSE, sep = "_", recursive = FALSE) {
+      if (recursive) self$getRecursiveList()
+      else private$getFlatList(annotate = annotate, sep = sep)
     },
-
 
     # The difference is that when a ParamSetTree has a child, this function return a list of list instead of a flat list.
     getRecursiveList = function(res = list()) {

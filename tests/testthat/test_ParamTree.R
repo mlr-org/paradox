@@ -50,7 +50,8 @@ test_that("ParamSetTree constructor works", {
        )
    pst$sample(1L)
    pst$sampleList()
-   pst$getRecursiveList()
+   #pst$getRecursiveList()
+   pst$sampleList(recursive = TRUE)
    pst$toStringVal()
    pst$sample(10L)
    pst$rt.hinge$sample(3)
@@ -125,8 +126,8 @@ test_that("user API for NN works", {
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
   ps$sample(1L)
-  ps$sampleList(TRUE)
-  ps$sampleList(FALSE)
+  ps$sampleList(recursive = TRUE)
+  ps$sampleList(recursive = FALSE)
   expect_true(TRUE)
  })
 
@@ -166,7 +167,7 @@ test_that("keras helper works", {
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
   ps$sample()
-  list.par.val = ps$sampleList(flat = FALSE)
+  list.par.val = ps$sampleList()
   tex = keras_helper(input.shape = 256, output.shape = 10L, 
   output.act = "softmax", loss = "mse", 
   lr = 0.0025, list.par.val = list.par.val)
