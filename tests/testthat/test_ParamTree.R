@@ -49,7 +49,7 @@ test_that("ParamSetTree constructor works", {
          did = "model", expr = quote(model == "RF"))
        )
    pst$sample(1L)
-   pst$getFlatList()
+   pst$sampleList()
    pst$toStringVal()
    pst$sample(10L)
    pst$rt.hinge$sample(3)
@@ -64,6 +64,7 @@ test_that("recursive para works", {
       ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
+  ps$sampleList()
   expect_true(TRUE)
 })
 
@@ -97,6 +98,7 @@ pst = ParamSetTree$new("rlR", context = list(a = 3),
       did = "policy.minEpsilon", expr = quote(TRUE)) # did here means dependant id
     )
   pst$sample()
+  pst$sampleList()
   pst$toStringVal()
   expect_true(TRUE)
  })
@@ -111,10 +113,37 @@ test_that("user API for NN works", {
       ParamCategorical$new(id = "reg_type", values = c("regularizer_l1", "regularizer_l2")),
       ParamCategorical$new(id = "activation_fun", values = c("sigmoid", "tanh", "linear")))
   ps$sample(3L)
+  ps$sample(1L)
   ps$sampleList()
   expect_true(TRUE)
  })
 
+test_that("ParamTree works with child", {
+   pst = ParamSetTree$new("pre",     
+     ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
+      addDep(ParamInt$new(id = "pca.k", lower = 1, upper = 5), 
+        did = "preprocessing", expr = quote(preprocessing == "PCA")),
+       addDep(ParamInt$new(id = "filter.n", lower = 1, upper = 10), 
+         did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
+   pst1 = ParamSetTree$new("ml",
+       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+       addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
+         did = "model", expr = quote(model == "SVM")), # did here means dependant id
+       addDep(ParamCategorical$new(id = "kernel", values = c("rbf", "poly")), 
+         did = "model", expr = quote(model == "SVM")),
+       addDep(ParamReal$new(id = "gamma", lower = 0, upper = 101), 
+         did = "kernel", expr = quote(kernel == "rbf")),
+       addDep(ParamInt$new(id = "poly.n", lower = 1L, upper = 10L), 
+         did = "kernel", expr = quote(kernel == "poly")),
+       addDep(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
+         did = "model", expr = quote(model == "RF"))
+       )
+   pst$setChild(pst1)
+   pst$sample(4L)
+   pst$sampleList()
+   pst$toStringVal()  # always keep the last sampled value
+
+})
 
 # Fixme: make this works
 # mtry [p/10, p/1.5]

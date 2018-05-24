@@ -9,6 +9,8 @@
 #' \describe{
 #'   \item{setChild(child.set)}{[\code{function}] \cr
 #'     Set child tree to the current tree}
+#'   \item{asample()}{[\code{function}] \cr
+#'     Ancestral sampling}
 #'   \item{sampleList()}{[\code{function}] \cr
 #'     Get all the parameter node  in a normal R list}
 #'   \item{sample(n)}{[\code{function}] \cr
@@ -70,20 +72,11 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     sampleList = function() {
-      self$getFlatList()
+      private$getFlatList()
     },
 
-    # this should not be used by user, but also cannot be private since it need to call getFlatList itself
-    getFlatList = function() {
-      res = self$rt.hinge$getList()
-      if (!is.null(self$child.set)) {
-        temp = self$child.set$getFlatList()
-        res = c(res, temp)
-      }
-      res
-    },
 
-    # only used in ParamSetRe
+    # The difference is that when a ParamSetTree has a child, this function return a list of list instead of a flat list.
     getRecursiveList = function(res = list()) {
       if (is.null(self$child.set)) {
         temp = self$rt.hinge$getList()
@@ -100,5 +93,15 @@ ParamSetTree = R6Class("ParamSetTree",
     }
   ),
   private = list(
+    # this should not be used by user, but also cannot be private since it need to call getFlatList itself
+    getFlatList = function(annotate = TRUE, sep = "_") {
+      res = self$rt.hinge$getList()
+      if (annotate) names(res) = paste(self$ns.id, names(res), sep = sep)
+      if (!is.null(self$child.set)) {
+        temp = self$child.set$sampleList()
+        res = c(res, temp)
+      }
+      res
+    }
   )
 )
