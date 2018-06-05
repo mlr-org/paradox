@@ -21,7 +21,7 @@ test_that("test if Param parse from flat works with sample", {
   names(ps1)
   ps1$visitor$toFlat()
   node_list = ps1$visitor$toFlat0()
-  #ps$visitor$checkValidFromFlat(list(model = "RF", ntree = 2))
+  ps$visitor$checkValidFromFlat(list(model = "RF", ntree = 2))
   ps$getFirstMandChild$asample()
   ps$toStringVal()
 })

@@ -131,20 +131,25 @@ ParamVisitor = R6Class("ParamVisitor",
       if (length(self$host$mand.children) > 0) {
         for (name in names(self$host$mand.children)) {
           handle = self$host$mand.children[[name]]
-          return(handle$visitor$treeApply(func))
+          return(handle$visitor$treeApply0(func))
         }
       } # if
       if (length(self$host$cond.children) > 0) {
         for (name in names(self$host$cond.children)) {
           handle = self$host$cond.children[[name]]
-          return(handle$visitor$treeApply(func))
+          return(handle$visitor$treeApply0(func))
         }
       } # if
     },
 
     # apply func to all node in the tree, without dependency
     treeApply = function(func) {
-      res = func(self$host$node)
+      if (is.null(self$host$node)) {
+        res = NULL
+      }
+      else {
+        res = func(self$host$node)
+      }
       if (self$host$nochild) return(res)  # apply func to the leave node
       if (length(self$host$mand.children) > 0) {
         res2 = lapply(names(self$host$mand.children), function(name) {
@@ -163,6 +168,27 @@ ParamVisitor = R6Class("ParamVisitor",
       return(res)
     },
 
+    findDependNode = function(val, name) {
+      flag = FALSE
+      self$treeApply(function(x) {
+        if (is.null(x)) return(NULL)
+        flag = FALSE
+        if (!is.null(x$id) && (x$id == name)) {
+          x$handle$val = val
+          flag = x$handle$isDependMet()
+        }
+      })
+      return(flag)
+    },
+      #       findDependNode0 = function(fq, node) {
+      #         fqns = names(fq)
+      #         for (name in fqns) {
+      #           flag = eval(node$depend$fun, envir = setNames(fq[[name]]$val, name))
+      #           if (flag) return(TRUE)
+      #         }
+      #         return(FALSE)
+      #       }
+
 
 
     # check if the flat form of paramset violates the dependency
@@ -171,26 +197,20 @@ ParamVisitor = R6Class("ParamVisitor",
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
-      findDependNode = function(fq, node) {
-        fqns = names(fq)
-        for (name in fqns) {
-          flag = eval(node$depend$fun, envir = setNames(fq[[name]]$val, name))
-          if (flag) return(TRUE)
-        }
-        return(FALSE)
-      }
       while (hit) {
         hit = FALSE
         for (name in names(wq)) {
-          if (is.null(wq[[name]]$depend) | findDependNode(wq[[name]])) {
-            regi(name)
+          if (self$findDependNode(wq[[name]], name)) {
+            #regi(name)
             fq[[name]] =  wq[[name]]
             wq[[name]] = NULL
             hit = TRUE
           }
         }
       }
-      if (length(wq) > 0) stop("invalid parameter set!")
+      #if (length(wq) > 0) stop("invalid parameter set!")
+      if (length(wq) > 0) return(FALSE)
+      return(TRUE)
     }
   ) # public
 ) # Class
