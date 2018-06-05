@@ -169,16 +169,21 @@ ParamVisitor = R6Class("ParamVisitor",
     },
 
     findDependNode = function(val, name) {
-      flag = FALSE
-      self$treeApply(function(x) {
+      flag_bit = FALSE
+      list_flag = self$treeApply(function(x) {
         if (is.null(x)) return(NULL)
-        flag = FALSE
         if (!is.null(x$id) && (x$id == name)) {
           x$handle$val = val
-          flag = x$handle$isDependMet()
+          x$handle$parent$id
+          x$handle$id
+          flag_ = x$handle$isDependMet()
+          flag_bit = flag_
+          if (flag_) return(TRUE)
         }
+        return(FALSE)
       })
-      return(flag)
+      flag = unlist(list_flag)
+      return(any(flag))
     },
       #       findDependNode0 = function(fq, node) {
       #         fqns = names(fq)
@@ -192,8 +197,8 @@ ParamVisitor = R6Class("ParamVisitor",
 
 
     # check if the flat form of paramset violates the dependency
-    # FIXME: unter development
     checkValidFromFlat = function(input = list()) {
+      self$treeApply(function(x) x$handle$val = NULL)
       fq = list()  # finished queue
       wq = input   # waiting queue
       hit = TRUE
@@ -201,14 +206,14 @@ ParamVisitor = R6Class("ParamVisitor",
         hit = FALSE
         for (name in names(wq)) {
           if (self$findDependNode(wq[[name]], name)) {
-            #regi(name)
             fq[[name]] =  wq[[name]]
             wq[[name]] = NULL
             hit = TRUE
+          } else {
+            hit = FALSE
           }
         }
       }
-      #if (length(wq) > 0) stop("invalid parameter set!")
       if (length(wq) > 0) return(FALSE)
       return(TRUE)
     }

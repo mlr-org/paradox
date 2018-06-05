@@ -29,6 +29,7 @@ ParamHandle = R6Class("ParamHandle",
       if (is.null(id) && is.null(node)) stop("either set id or node for handle!")
       self$id = ifelse(is.null(id), node$id, id)
       self$node = node
+      self$node$handle = self  ## 
       self$val = val
       self$depend = depend
       haveDep = !is.null(self$depend)
@@ -68,8 +69,9 @@ ParamHandle = R6Class("ParamHandle",
       if (depend.null) return(TRUE)  # Free Hyper-Parameter, no constraint
       # Now there is dependency. It is ok to have parent but no depend though, which is MandChild
       if (parent.null || parent.val.null) {
-        warning("ParamHandle$isDependMet: parent value has not been specified yet")
-        return(TRUE)  #FIXME: SHOULD HERE BE warning or error?
+        #warning("ParamHandle$isDependMet: parent value has not been specified yet")
+        return(FALSE)
+        #return(TRUE)  #FIXME: SHOULD HERE BE warning or error?
       }
       cflag = self$lazyChecker()
       return(cflag)

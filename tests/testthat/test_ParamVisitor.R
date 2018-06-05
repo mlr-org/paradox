@@ -12,6 +12,8 @@ test_that("test if Param parse from flat works with sample", {
     list(node = ParamInt$new(id = "ntree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
  )
   ps$visitor$parseFlat(input)
+  ps$visitor$checkValidFromFlat(list(model = "RF", n = 2))
+
   ps$visitor$treeApply(identity)
   ps$visitor$treeApply(function(x) x$id)
   ps$visitor$treeApply0(identity)
@@ -22,6 +24,7 @@ test_that("test if Param parse from flat works with sample", {
   ps1$visitor$toFlat()
   node_list = ps1$visitor$toFlat0()
   ps$visitor$checkValidFromFlat(list(model = "RF", ntree = 2))
+  ps$visitor$checkValidFromFlat(list(model = "SVM", n = 2))
   ps$getFirstMandChild$asample()
   ps$toStringVal()
 })
