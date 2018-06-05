@@ -83,21 +83,21 @@ ParamVisitor = R6Class("ParamVisitor",
       return(FALSE)  # failed to insert the input
     },
 
-    # transform the tree structure to a flat list and return the list
+    # transform the tree structure to a flat list of **all** nodes and return the list
     toFlat0 = function(res = list()) {
       res[[self$host$node$id]] = self$host$node
       if (length(self$host$mand.children) > 0) {
       for (name in names(self$host$mand.children)) {
         handle = self$host$mand.children[[name]]
         res[[handle$node$id]] = handle$node
-        res = handle$visitor$toFlat(res)
+        res = handle$visitor$toFlat0(res)
       }
       } # if
       if (length(self$host$cond.children) > 0) {
       for (name in names(self$host$cond.children)) {
         handle = self$host$cond.children[[name]]
         res[[handle$node$id]] = handle$node
-        res = handle$visitor$toFlat(res)
+        res = handle$visitor$toFlat0(res)
       }
       } # if
       return(res)
