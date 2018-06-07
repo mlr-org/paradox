@@ -53,5 +53,5 @@ A \code{\link[R6]{R6Class}} to represent the OptPath.
     The dimensionality of the optimization problem.}
 }
 }
-
 \keyword{datasets}
+

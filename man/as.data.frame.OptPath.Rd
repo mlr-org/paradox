@@ -31,3 +31,4 @@ passed to \code{as.data.frame}.}
 \description{
 Convert optimization path to data.frame.
 }
+
