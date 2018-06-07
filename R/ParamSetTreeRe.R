@@ -16,7 +16,7 @@
 #' @family ParamSet
 #' @export
 ParamSetTreeRe = R6Class("ParamSetTreeRe",
-  inherit = ParamSetTree,
+  inherit = ParamSetTreeX,
   public = list(
     # member variables
     root.set = NULL,

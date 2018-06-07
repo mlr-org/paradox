@@ -14,14 +14,14 @@ test_that("test if ParamFac parse from flat", {
 })
 
 test_that("test if two ParamTree works", {
-  pt = ParamSetTree$new("pt1",
+  pt = ParamSetTreeX$new("pt1",
       ParamCategorical$new(id = "model", values = c("SVM", "RF")),
       makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF")))
       )
   pt$asample()
   pt$toStringVal()
-  pt2 = ParamSetTree$new("pt2",
+  pt2 = ParamSetTreeX$new("pt2",
       ParamCategorical$new(id = "activation", values = c("sigmoid", "tanh")),
       ParamReal$new(id = "regu", lower = 0, upper = 100),
       ParamInt$new(id = "n", lower = 1L, upper = 100L)
@@ -35,7 +35,7 @@ test_that("test if two ParamTree works", {
 })
 
 test_that("ParamSetTree constructor works", {
-   pst = ParamSetTree$new("test",
+   pst = ParamSetTreeX$new("test",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
          did = "model", expr = quote(model == "SVM")), # did here means dependant id
@@ -85,7 +85,7 @@ test_that("recursive para works", {
 
 
 test_that("test conditional ParamTree with rlR", {
-pst = ParamSetTree$new("rlR", context = list(a = 3),
+pst = ParamSetTreeX$new("rlR", context = list(a = 3),
     ParamCategorical$new(id = "agent.name", values = c("AgentDQN", "AgentFDQN", "AgentDDQN", "AgentPG", "AgentActorCritic")),
     ParamReal$new(id = "agent.gamma", lower = 0, upper = 1),
     ParamCategorical$new(id = "replay.memname", values = c("Uniform", "Latest")),
@@ -132,13 +132,13 @@ test_that("user API for NN works", {
  })
 
 test_that("ParamTree works with child", {
-   pst = ParamSetTree$new("pre",     
+   pst = ParamSetTreeX$new("pre",     
      ParamCategorical$new(id = "preprocessing", values = c("PCA", "FeatureFiltering")),
       addDep(ParamInt$new(id = "pca.k", lower = 1, upper = 5), 
         did = "preprocessing", expr = quote(preprocessing == "PCA")),
        addDep(ParamInt$new(id = "filter.n", lower = 1, upper = 10), 
          did = "preprocessing", expr = quote(preprocessing == "FeatureFiltering")))
-   pst1 = ParamSetTree$new("ml",
+   pst1 = ParamSetTreeX$new("ml",
        ParamCategorical$new(id = "model", values = c("SVM", "RF")),
        addDep(ParamReal$new(id = "C", lower = 0, upper = 100), 
          did = "model", expr = quote(model == "SVM")), # did here means dependant id

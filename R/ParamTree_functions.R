@@ -50,12 +50,12 @@ makeCondTreeNode = function(node, depend = NULL, context = NULL) {
 #' @param ... Params to add
 #' @return A ParamSetTree
 recursiveParaFac = function(nr, ...) {
-  root = ParamSetTree$new("L0", ...)  # the first layer
+  root = ParamSetTreeX$new("L0", ...)  # the first layer
   root$rt.hinge$setNamePrefix("L0")
   cc = root
   for (i in 1:nr) {
     name = paste0("L", as.character(i))
-    psn = ParamSetTree$new(name, ...)
+    psn = ParamSetTreeX$new(name, ...)
     psn$rt.hinge$setNamePrefix(name)
     cc$setChild(psn)
     cc = psn
