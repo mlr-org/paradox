@@ -40,8 +40,10 @@ ParamSetTree = R6Class("ParamSetTree",
     },
 
     sample = function(n = 1) {
+      # repeat the same process for n times
       res.list = lapply(1:n, function(i) {
         res = self$rt.hinge$sample(1L)
+        # if there is another tree
         if (!is.null(self$child.set)) {
           temp = self$child.set$sample(1L)
           res = cbind(res, temp)  # combine the subspace(colums) of current tree and the child tree

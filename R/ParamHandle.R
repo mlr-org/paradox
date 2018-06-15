@@ -29,7 +29,7 @@ ParamHandle = R6Class("ParamHandle",
       if (is.null(id) && is.null(node)) stop("either set id or node for handle!")
       self$id = ifelse(is.null(id), node$id, id)
       self$node = node
-      self$node$handle = self  ## 
+      self$node$handle = self  ##
       self$val = val
       self$depend = depend
       haveDep = !is.null(self$depend)
@@ -186,6 +186,7 @@ ParamHandle = R6Class("ParamHandle",
       self$toStringVal()
     },
 
+    # sample function could be run at arbitray node of the tree
     sample = function(n = 1) {
       xs = lapply(1:n, function(i) {
         self$asample()
@@ -263,7 +264,7 @@ PHinge = R6Class("PHinge",
       # This function PHinge$sample(n) is calling recursion from ParamHandle$sample(n). Whilist, ParamSetTree$sample will sample another Tree
       dt.raw = Reduce(cbind, subspace.list)  # combine all hyper-parameter subspaces
       ns = names(dt.raw)
-      lns = setdiff(all.ns, ns)
+      lns = setdiff(all.ns, ns)  # use NA to denote cond entries that are not sampled
       if (length(lns) > 0) {
         dt.raw[, lns] = NA
         dt.raw = as.data.frame(dt.raw)
