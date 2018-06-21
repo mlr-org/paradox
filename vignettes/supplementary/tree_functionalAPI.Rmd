@@ -1,12 +1,5 @@
 ---
 title: "Tree structured ParamSets"
-output:
-  html_document:
-    toc: true
-    toc_float:
-      collapsed: true
-      smooth_scroll: false
-    dev: svg
 vignette: >
   %\VignetteIndexEntry{Tree structured ParamSets}
   %\VignetteEngine{knitr::rmarkdown}
@@ -31,26 +24,38 @@ Here we introduce the concept of mandatory child node and conditional child node
 Secondly, we introduce the concept of ParamHandle, which takes argument of `node` and `depend`. It is basically representing a node in the tree structure which contains pointers to its mandatory child nodes and conditional child nodes.
 
 ```{r example2}
-  ps = ParamHandle$new(node = ParamCategorical$new(id = "Model", values = c("SVM", "RF")))
-  ps$setRoot(ps)  # set the current node to be the root node
-  temp_ntree = ParamHandle$new(node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
-    depend = list(id = "Model", fun = quote(Model == "RF")))
-  ntree = ps$addCondChild(temp_ntree)  # the condition is contained in temp_ntree§depend already
-  temp = ParamHandle$new(node = ParamReal$new(id = "C", lower = 0, upper = 100), 
-    depend = list(id = "Model", fun = quote(Model == "SVM")))
-  c = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")),
-    depend = list(id = "Model", fun = quote(Model == "SVM")))
-  kernel = ps$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamReal$new(id = "gamma", lower = 0, upper = 100), 
-    depend = list(id = "kernel", fun = quote(kernel == "rbf")))
-  gamma = kernel$addCondChild(temp)
-  temp = ParamHandle$new(node = ParamInt$new(id = "n", lower = 1L, upper = 10L), 
-    depend = list(id = "kernel", fun = quote(kernel == "poly")))
-  poly = kernel$addCondChild(temp)
-  ps$render2str()
-  ps$visitor$toFlat()
-  poly$getRoot$render2str() # use the root to sample
-  ps$sample(3)
+ps = ParamHandle$new(
+  node = ParamCategorical$new(id = "Model", values = c("SVM", "RF"))
+)
+ps$setRoot(ps)  # set the current node to be the root node
+temp_ntree = ParamHandle$new(
+  node = ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), 
+  depend = list(id = "Model", fun = quote(Model == "RF"))
+)
+ntree = ps$addCondChild(temp_ntree)  # the condition is contained in temp_ntree§depend already
+temp = ParamHandle$new(
+  node = ParamReal$new(id = "C", lower = 0, upper = 100), 
+  depend = list(id = "Model", fun = quote(Model == "SVM"))
+)
+c = ps$addCondChild(temp)
+temp = ParamHandle$new(
+  node = ParamCategorical$new(id = "kernel", values = c("rbf", "poly")),
+  depend = list(id = "Model", fun = quote(Model == "SVM"))
+)
+kernel = ps$addCondChild(temp)
+temp = ParamHandle$new(
+  node = ParamReal$new(id = "gamma", lower = 0, upper = 100), 
+  depend = list(id = "kernel", fun = quote(kernel == "rbf"))
+)
+gamma = kernel$addCondChild(temp)
+temp = ParamHandle$new(
+  node = ParamInt$new(id = "n", lower = 1L, upper = 10L), 
+  depend = list(id = "kernel", fun = quote(kernel == "poly"))
+)
+poly = kernel$addCondChild(temp)
+ps$render2str()
+ps$visitor$toFlat()
+poly$getRoot$render2str() # use the root to sample
+ps$sample(3)
 ```
 
