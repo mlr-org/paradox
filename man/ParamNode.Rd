@@ -42,9 +42,9 @@ A \code{\link[R6]{R6Class}} to represent parameters.
   \item{has.finite.bounds}{\code{logical(1)} \cr Does the Parameter have finite bounds.}
 }
 }
+
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},
   \code{\link{ParamHandle}}, \code{\link{ParamVisitor}}
 }
 \keyword{datasets}
-

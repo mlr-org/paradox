@@ -21,4 +21,3 @@ Creates a list of a single Parameter repeated.
 Each parameter is tagged with \code{<param$id>.repeated}.
 This way it can be determined that they belong together
 }
-

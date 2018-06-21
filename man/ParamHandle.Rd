@@ -19,4 +19,3 @@ Other ParamHelpers: \code{\link{ParamBase}},
   \code{\link{ParamNode}}, \code{\link{ParamVisitor}}
 }
 \keyword{datasets}
-
