@@ -25,5 +25,3 @@ test_that("sample requires finite bounds", {
   p = ParamInt$new(id = "x", lower = 1)
   expect_error(p$sample(), "has.finite.bounds")
 })
-
-

@@ -18,6 +18,8 @@ test_that("special.vals work for all ancestors of ParamSimple", {
       for (special.val in special.vals) {
         expect_true(po$test(special.val))
         expect_false(po$test('never valid'))
+        expect_false(po$test(NA))
+        expect_false(po$test(NULL))
       }
     }
   }

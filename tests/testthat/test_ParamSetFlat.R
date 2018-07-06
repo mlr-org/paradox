@@ -41,7 +41,7 @@ test_that("advanced methods work", {
     th.paramset.flat.trafo,
     th.paramset.flat.trafo.dictionary
   )
-  ps = ps.list[[1]]
+  
   for (ps in ps.list) {
 
     x = ps$sample(10)

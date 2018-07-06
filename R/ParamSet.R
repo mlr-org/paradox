@@ -46,7 +46,7 @@ ParamSet = R6Class("ParamSet",
   public = list(
    
     # member variables
-    params = NULL,  # a list of all ParamSimple's
+    params = NULL,  # a list of ParamNodes
     trafo = NULL, # function to transform the value before evaluation
     restriction = NULL, # quote that states if certain conditions have to be met
     
