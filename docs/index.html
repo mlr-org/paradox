@@ -8,8 +8,8 @@
 <title>Define Parameter Spaces, generate Designs and check feasibilities • phng</title>
 <!-- jquery --><script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script><!-- Bootstrap --><link href="https://maxcdn.bootstrapcdn.com/bootswatch/3.3.7/cosmo/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script><!-- Font Awesome icons --><link href="https://maxcdn.bootstrapcdn.com/font-awesome/4.6.3/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-T8Gy5hrqNKT+hzMclPo118YTQO6cYprQmhrYwIiQ/3axmI1hQomh7Ud2hPOy8SP1" crossorigin="anonymous">
-<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/1.7.1/clipboard.min.js" integrity="sha384-cV+rhyOuRHc9Ub/91rihWcGmMmCXDeksTtCihMupQHSsi8GIIRDG0ThDc3HGQFJ3" crossorigin="anonymous"></script><!-- pkgdown --><link href="pkgdown.css" rel="stylesheet">
-<script src="jquery.sticky-kit.min.js"></script><script src="pkgdown.js"></script><meta property="og:title" content="Define Parameter Spaces, generate Designs and check feasibilities">
+<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/1.7.1/clipboard.min.js" integrity="sha384-cV+rhyOuRHc9Ub/91rihWcGmMmCXDeksTtCihMupQHSsi8GIIRDG0ThDc3HGQFJ3" crossorigin="anonymous"></script><!-- sticky kit --><script src="https://cdnjs.cloudflare.com/ajax/libs/sticky-kit/1.1.3/sticky-kit.min.js" integrity="sha256-c4Rlo1ZozqTPE2RLuvbusY3+SU1pQaJC0TjuhygMipw=" crossorigin="anonymous"></script><!-- pkgdown --><link href="pkgdown.css" rel="stylesheet">
+<script src="pkgdown.js"></script><meta property="og:title" content="Define Parameter Spaces, generate Designs and check feasibilities">
 <meta property="og:description" content="A successor of the ParamHelpers Package. 
     Easily define parameter spaces and generate LHS and random designs from it.
     Check parameter values for feasibility.">
@@ -81,7 +81,7 @@
 <div id="installation" class="section level2">
 <h2 class="hasAnchor">
 <a href="#installation" class="anchor"></a>Installation</h2>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">devtools::<span class="kw">install_github</span>(<span class="st">"mlr-org/phng"</span>, <span class="dt">dependencies =</span> <span class="ot">TRUE</span>)</code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">devtools<span class="op">::</span><span class="kw"><a href="http://www.rdocumentation.org/packages/devtools/topics/install_github">install_github</a></span>(<span class="st">"mlr-org/phng"</span>, <span class="dt">dependencies =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
 </div>
 <div id="usage" class="section level2">
 <h2 class="hasAnchor">
@@ -98,28 +98,28 @@
 <em>Categorical</em> values, namely characters.</li>
 <li>Further types are only possible by using transformations.</li>
 </ul>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
-  <span class="dt">params =</span> <span class="kw">list</span>(
-    ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),
-    ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>),
-    ParamFlag$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),
-    ParamCategorical$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">values =</span> <span class="kw">c</span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))
-  )
-)</code></pre></div>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1">ps =<span class="st"> </span>ParamSetFlat<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb2-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb2-3" data-line-number="3">    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</a>
+<a class="sourceLine" id="cb2-4" data-line-number="4">    ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>),</a>
+<a class="sourceLine" id="cb2-5" data-line-number="5">    ParamFlag<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),</a>
+<a class="sourceLine" id="cb2-6" data-line-number="6">    ParamCategorical<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">values =</span> <span class="kw">c</span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))</a>
+<a class="sourceLine" id="cb2-7" data-line-number="7">  )</a>
+<a class="sourceLine" id="cb2-8" data-line-number="8">)</a></code></pre></div>
 <p>Draw random samples / create random design:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">sample</span>(<span class="dv">3</span>)</code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1">ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>)</a></code></pre></div>
 <pre><code>##    z         x switch methods
 ## 1: 1  7.660348  FALSE       b
 ## 2: 3  8.809346  FALSE       c
 ## 3: 2 -9.088870  FALSE       b</code></pre>
 <p>Generate LHS Design:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)</code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1">ps<span class="op">$</span><span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)</a></code></pre></div>
 <pre><code>##    z          x switch methods
 ## 1: 1  0.4842227  FALSE       a
 ## 2: 3 -9.7196031   TRUE       c
 ## 3: 2  7.9520227  FALSE       b</code></pre>
 <p>Generate Grid Design:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">generateGridDesign</span>(<span class="dt">resolution =</span> <span class="dv">2</span>)</code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1">ps<span class="op">$</span><span class="kw">generateGridDesign</span>(<span class="dt">resolution =</span> <span class="dv">2</span>)</a></code></pre></div>
 <pre><code>##     z   x switch methods
 ##  1: 1 -10  FALSE       a
 ##  2: 1 -10  FALSE       c
@@ -138,7 +138,7 @@
 ## 15: 3  10   TRUE       a
 ## 16: 3  10   TRUE       c</code></pre>
 <p>Properties of the parameters within the ParamSet:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$values</code></pre></div>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">ps<span class="op">$</span>values</a></code></pre></div>
 <pre><code>## $z
 ## [1] 1 2 3
 ## 
@@ -150,38 +150,38 @@
 ## 
 ## $methods
 ## [1] "a" "b" "c"</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$param.classes</code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb11-1" data-line-number="1">ps<span class="op">$</span>param.classes</a></code></pre></div>
 <pre><code>##                  z                  x             switch 
 ##         "ParamInt"        "ParamReal"        "ParamFlag" 
 ##            methods 
 ## "ParamCategorical"</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$nlevels</code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">ps<span class="op">$</span>nlevels</a></code></pre></div>
 <pre><code>##       z       x  switch methods 
 ##       3      NA       2       3</code></pre>
 <div id="numeric-paramset" class="section level3">
 <h3 class="hasAnchor">
 <a href="#numeric-paramset" class="anchor"></a>Numeric ParamSet</h3>
 <p>Things you can do on an all numeric ParamSet:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
-  <span class="dt">params =</span> <span class="kw">c</span>(
-    <span class="kw">list</span>(ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),
-    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
-  )
-)
-
-ps$lower</code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1">ps =<span class="st"> </span>ParamSetFlat<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb15-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
+<a class="sourceLine" id="cb15-3" data-line-number="3">    <span class="kw">list</span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
+<a class="sourceLine" id="cb15-4" data-line-number="4">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
+<a class="sourceLine" id="cb15-5" data-line-number="5">  )</a>
+<a class="sourceLine" id="cb15-6" data-line-number="6">)</a>
+<a class="sourceLine" id="cb15-7" data-line-number="7"></a>
+<a class="sourceLine" id="cb15-8" data-line-number="8">ps<span class="op">$</span>lower</a></code></pre></div>
 <pre><code>##            z x.repeated.1 x.repeated.2 
 ##          -10            0            0</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$upper</code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1">ps<span class="op">$</span>upper</a></code></pre></div>
 <pre><code>##            z x.repeated.1 x.repeated.2 
 ##           10            1            1</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$range</code></pre></div>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1">ps<span class="op">$</span>range</a></code></pre></div>
 <pre><code>##              id upper lower
 ## 1:            z    10   -10
 ## 2: x.repeated.1     1     0
 ## 3: x.repeated.2     1     0</code></pre>
 <p>The usage of <code>repeatParam</code> generates tags that indicate to which group the parameters belong to:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$member.tags</code></pre></div>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb21-1" data-line-number="1">ps<span class="op">$</span>member.tags</a></code></pre></div>
 <pre><code>## $z
 ## NULL
 ## 
@@ -205,34 +205,34 @@ ps$lower</code></pre></div>
 <code>tags</code> A list of the tags for each parameter. Each parameter can have various tags indicating additional characteristics.</li>
 </ul>
 <p>Transformations are useful to scale parameters:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
-  <span class="dt">params =</span> <span class="kw">list</span>(
-    ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">3</span>, <span class="dt">upper =</span> <span class="dv">3</span>),
-    ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)
-  ),
-  <span class="dt">trafo =</span> function(x, dict, tags) {
-    x$z =<span class="st"> </span><span class="dv">2</span>^x$z
-    x$x =<span class="st"> </span><span class="kw">round</span>(x$x *<span class="st"> </span>dict$p)
-    <span class="kw">return</span>(x)
-  }
-)
-(<span class="dt">x =</span> ps$<span class="kw">sample</span>(<span class="dv">3</span>))</code></pre></div>
+<div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1">ps =<span class="st"> </span>ParamSetFlat<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb23-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb23-3" data-line-number="3">    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-3</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</a>
+<a class="sourceLine" id="cb23-4" data-line-number="4">    ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)</a>
+<a class="sourceLine" id="cb23-5" data-line-number="5">  ),</a>
+<a class="sourceLine" id="cb23-6" data-line-number="6">  <span class="dt">trafo =</span> <span class="cf">function</span>(x, dict, tags) {</a>
+<a class="sourceLine" id="cb23-7" data-line-number="7">    x<span class="op">$</span>z =<span class="st"> </span><span class="dv">2</span><span class="op">^</span>x<span class="op">$</span>z</a>
+<a class="sourceLine" id="cb23-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw">round</span>(x<span class="op">$</span>x <span class="op">*</span><span class="st"> </span>dict<span class="op">$</span>p)</a>
+<a class="sourceLine" id="cb23-9" data-line-number="9">    <span class="kw">return</span>(x)</a>
+<a class="sourceLine" id="cb23-10" data-line-number="10">  }</a>
+<a class="sourceLine" id="cb23-11" data-line-number="11">)</a>
+<a class="sourceLine" id="cb23-12" data-line-number="12">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>))</a></code></pre></div>
 <pre><code>##     z         x
 ## 1: -3 0.3688455
 ## 2: -1 0.1524447
 ## 3: -1 0.1388061</code></pre>
 <p>The transformation uses the dictionary and will fail if none is supplied:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">transform</span>(x)</code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
 <pre><code>## Error in `[&lt;-.data.table`(x, j = name, value = value): RHS of assignment to existing column 'x' is zero length but not NULL. If you intend to delete the column use NULL. Otherwise, the RHS must have length &gt; 0; e.g., NA_integer_. If you are trying to change the column type to be an empty list column then, as with all column type changes, provide a full length RHS vector such as vector('list',nrow(DT)); i.e., 'plonk' in the new column.</code></pre>
 <p>The dictionary can always be changed:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">10</span>)
-ps$<span class="kw">transform</span>(x)</code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb27-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
 <pre><code>##        z x
 ## 1: 0.125 4
 ## 2: 0.500 2
 ## 3: 0.500 1</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">1000</span>)
-ps$<span class="kw">transform</span>(x)</code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">1000</span>)</a>
+<a class="sourceLine" id="cb29-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
 <pre><code>##        z   x
 ## 1: 0.125 369
 ## 2: 0.500 152
@@ -242,50 +242,50 @@ ps$<span class="kw">transform</span>(x)</code></pre></div>
 <h3 class="hasAnchor">
 <a href="#advanced-transformations" class="anchor"></a>Advanced Transformations</h3>
 <p>The following creates a ParamSet with a transformation that scales the <code>x</code> values and returns them as a vector. The original parameters will be removed from the trafo result. Keep in mind that <code>z</code> stays untouched and remains after the transformation.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
-  <span class="dt">params =</span> <span class="kw">c</span>(
-    <span class="kw">list</span>(ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> -<span class="dv">10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),
-    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
-  ),
-  <span class="dt">trafo =</span> function(x, dict, tags) {
-    scale =<span class="st"> </span>function(x1, x2) <span class="kw">c</span>(x1, x2) /<span class="st"> </span><span class="kw">sqrt</span>(x1^<span class="dv">2</span>+x2^<span class="dv">2</span>) 
-    x$x =<span class="st"> </span><span class="kw">Map</span>(scale, x$x.repeated<span class="fl">.1</span>, x$x.repeated<span class="fl">.2</span>)
-    x$x.repeated<span class="fl">.1</span> =<span class="st"> </span><span class="ot">NULL</span>
-    x$x.repeated<span class="fl">.2</span> =<span class="st"> </span><span class="ot">NULL</span>
-    <span class="kw">return</span>(x)
-  }
-)</code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1">ps =<span class="st"> </span>ParamSetFlat<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb31-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
+<a class="sourceLine" id="cb31-3" data-line-number="3">    <span class="kw">list</span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
+<a class="sourceLine" id="cb31-4" data-line-number="4">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
+<a class="sourceLine" id="cb31-5" data-line-number="5">  ),</a>
+<a class="sourceLine" id="cb31-6" data-line-number="6">  <span class="dt">trafo =</span> <span class="cf">function</span>(x, dict, tags) {</a>
+<a class="sourceLine" id="cb31-7" data-line-number="7">    scale =<span class="st"> </span><span class="cf">function</span>(x1, x2) <span class="kw">c</span>(x1, x2) <span class="op">/</span><span class="st"> </span><span class="kw">sqrt</span>(x1<span class="op">^</span><span class="dv">2</span><span class="op">+</span>x2<span class="op">^</span><span class="dv">2</span>) </a>
+<a class="sourceLine" id="cb31-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw">Map</span>(scale, x<span class="op">$</span>x.repeated<span class="fl">.1</span>, x<span class="op">$</span>x.repeated<span class="fl">.2</span>)</a>
+<a class="sourceLine" id="cb31-9" data-line-number="9">    x<span class="op">$</span>x.repeated<span class="fl">.1</span> =<span class="st"> </span><span class="ot">NULL</span></a>
+<a class="sourceLine" id="cb31-10" data-line-number="10">    x<span class="op">$</span>x.repeated<span class="fl">.2</span> =<span class="st"> </span><span class="ot">NULL</span></a>
+<a class="sourceLine" id="cb31-11" data-line-number="11">    <span class="kw">return</span>(x)</a>
+<a class="sourceLine" id="cb31-12" data-line-number="12">  }</a>
+<a class="sourceLine" id="cb31-13" data-line-number="13">)</a></code></pre></div>
 <p>The output of all value generating functions won’t change for a ParamSet that has a <code>trafo</code> function. Instead these outputs can be put into <code>ps$transform()</code> to obtain the desired parameter values.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">x =<span class="st"> </span>ps$<span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)
-ps$<span class="kw">transform</span>(x)</code></pre></div>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">x =<span class="st"> </span>ps<span class="op">$</span><span class="kw">generateLHSDesign</span>(<span class="dv">3</span>)</a>
+<a class="sourceLine" id="cb32-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
 <pre><code>##     z                     x
 ## 1: -2   0.9839367,0.1785177
 ## 2: 10   0.8173283,0.5761722
 ## 3: -5 0.04754544,0.99886908</code></pre>
 <p>For more advanced transformations on repeated parameters you can use <code><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam()</a></code>:</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps =<span class="st"> </span>ParamSetFlat$<span class="kw">new</span>(
-  <span class="dt">params =</span> <span class="kw">c</span>(
-    <span class="kw">list</span>(
-      ParamFlag$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),
-      ParamInt$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">4</span>)),
-    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">4</span>, ParamReal$<span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))
-  ),
-  <span class="dt">trafo =</span> <span class="kw"><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam</a></span>(
-    <span class="dt">fun =</span> function(x, dict, tags) {
-      scale =<span class="st"> </span>function(z, ...) {
-        x =<span class="st"> </span><span class="kw">c</span>(...)[<span class="dv">1</span>:z]
-        x /<span class="st"> </span><span class="kw">sum</span>(x)
-      }
-      res =<span class="st"> </span><span class="kw">do.call</span>(Map, <span class="kw">c</span>(<span class="kw">list</span>(<span class="dt">f =</span> scale, <span class="dt">z =</span> dict$z), <span class="kw">as.list</span>(x)))
-      <span class="kw">list</span>(<span class="dt">x =</span> res)
-    }, <span class="dt">repeated.param.id =</span> <span class="st">"x"</span>, <span class="dt">additional.params =</span> <span class="st">"z"</span>)
-  )
-(<span class="dt">x =</span> ps$<span class="kw">sample</span>(<span class="dv">3</span>))</code></pre></div>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb34-1" data-line-number="1">ps =<span class="st"> </span>ParamSetFlat<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb34-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
+<a class="sourceLine" id="cb34-3" data-line-number="3">    <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb34-4" data-line-number="4">      ParamFlag<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),</a>
+<a class="sourceLine" id="cb34-5" data-line-number="5">      ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">4</span>)),</a>
+<a class="sourceLine" id="cb34-6" data-line-number="6">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">4</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
+<a class="sourceLine" id="cb34-7" data-line-number="7">  ),</a>
+<a class="sourceLine" id="cb34-8" data-line-number="8">  <span class="dt">trafo =</span> <span class="kw"><a href="reference/trafoOnRepeatedParam.html">trafoOnRepeatedParam</a></span>(</a>
+<a class="sourceLine" id="cb34-9" data-line-number="9">    <span class="dt">fun =</span> <span class="cf">function</span>(x, dict, tags) {</a>
+<a class="sourceLine" id="cb34-10" data-line-number="10">      scale =<span class="st"> </span><span class="cf">function</span>(z, ...) {</a>
+<a class="sourceLine" id="cb34-11" data-line-number="11">        x =<span class="st"> </span><span class="kw">c</span>(...)[<span class="dv">1</span><span class="op">:</span>z]</a>
+<a class="sourceLine" id="cb34-12" data-line-number="12">        x <span class="op">/</span><span class="st"> </span><span class="kw">sum</span>(x)</a>
+<a class="sourceLine" id="cb34-13" data-line-number="13">      }</a>
+<a class="sourceLine" id="cb34-14" data-line-number="14">      res =<span class="st"> </span><span class="kw">do.call</span>(Map, <span class="kw">c</span>(<span class="kw">list</span>(<span class="dt">f =</span> scale, <span class="dt">z =</span> dict<span class="op">$</span>z), <span class="kw">as.list</span>(x)))</a>
+<a class="sourceLine" id="cb34-15" data-line-number="15">      <span class="kw">list</span>(<span class="dt">x =</span> res)</a>
+<a class="sourceLine" id="cb34-16" data-line-number="16">    }, <span class="dt">repeated.param.id =</span> <span class="st">"x"</span>, <span class="dt">additional.params =</span> <span class="st">"z"</span>)</a>
+<a class="sourceLine" id="cb34-17" data-line-number="17">  )</a>
+<a class="sourceLine" id="cb34-18" data-line-number="18">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>))</a></code></pre></div>
 <pre><code>##    switch z x.repeated.1 x.repeated.2 x.repeated.3 x.repeated.4
 ## 1:  FALSE 4 0.0006247733    0.3798165    0.1111354    0.4176468
 ## 2:  FALSE 3 0.4753165741    0.6127710    0.2436195    0.7881958
 ## 3:   TRUE 3 0.2201188852    0.3517979    0.6680556    0.1028646</code></pre>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">ps$<span class="kw">transform</span>(x)</code></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
 <pre><code>##    switch                                                   x
 ## 1:  FALSE 0.0006871504,0.4177372576,0.1222311373,0.4593444546
 ## 2:  FALSE                       0.3569228,0.4601395,0.1829377
