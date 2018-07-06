@@ -13,6 +13,20 @@ test_that("test if ParamFac parse from flat", {
   expect_true(TRUE)
 })
 
+
+test_that("test trafo works", {
+  pt = ParamSetTree$new("pt1",
+      ParamCategorical$new(id = "model", values = c("SVM", "RF")),
+      makeCondTreeNode(ParamReal$new(id = "C", lower = 0, upper = 100), depend = list(id = "model", fun = quote(model == "SVM"))),
+      makeCondTreeNode(ParamInt$new(id = "n_tree", lower = 1L, upper = 10L), depend = list(id = "model", fun = quote(model == "RF"))),
+      trafo = function(x, dict, tags) {
+        x$C = 2 * x$C
+        return(x)
+      }
+  )
+  expect_class(pt, "ParamSetTree")
+})
+
 test_that("test if two ParamTree works", {
   pt = ParamSetTreeX$new("pt1",
       ParamCategorical$new(id = "model", values = c("SVM", "RF")),

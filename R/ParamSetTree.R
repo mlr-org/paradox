@@ -26,10 +26,35 @@ ParamSetTree = R6Class("ParamSetTree",
     child.set = NULL,
     context = NULL,
 
-    initialize = function(ns.id, ..., context = NULL) {
+    initialize = function(ns.id,  ..., trafo = NULL, dictionary = NULL, tags = NULL, context = NULL) {
       self$ns.id = assertNames(ns.id)
       self$rt.hinge = ParamTreeFac(ns.id, ...)
       self$context = context
+      # check function that checks the whole param set by simply iterating
+      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+        assertSetEqual(names(x), names(self$params))  # self$params are list of ParamNodeSimple
+        if (is.data.table(x)) x = as.list(x)
+        res = checkList(x, names = "named")
+        if (!isTRUE(self$rt.hinge$visitor$checkValidFromFlat(x))) {
+            return(sprintf("Value Violation Found!"))
+        }
+        for (par.name in names(x)) {
+          res = self$params[[par.name]]$check(x[[par.name]], na.ok = na.ok, null.ok = null.ok)
+          if (!isTRUE(res)) return(res)
+        }
+        return(res)
+      }
+      super$initialize(ns.id, storage.type = "list", check = check, params = list(), dictionary = dictionary, tags = tags, restriction = NULL, trafo = trafo)
+    },
+
+    transform = function(x) {
+      x = ensureDataTable(x)
+      assertSetEqual(names(x), self$ids)
+      if (is.null(self$trafo))
+        return(x)
+      xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
+      xs = ensureDataTable(xs)
+      return(xs)
     },
 
     # public methods
@@ -57,7 +82,7 @@ ParamSetTree = R6Class("ParamSetTree",
 
 
 # This class is to extend the functionality of ParamSetTree and should not be exported!
-ParamSetTreeX = R6Class("ParamSetTree",
+ParamSetTreeX = R6Class("ParamSetTreeX",
   inherit = ParamSetTree,
   public = list(
     sampleList = function(annotate = FALSE, sep = "_", recursive = FALSE) {
