@@ -46,8 +46,7 @@ ParamSetTree = R6Class("ParamSetTree",
         }
         return(res)
       }
-      name = names(self$rt.hinge$mand.children)
-      params = self$rt.hinge$mand.children[[name]]$visitor$toFlat0()
+      params = self$rt.hinge$getList0()
       super$initialize(ns.id, storage.type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = NULL, trafo = trafo)
     },
 

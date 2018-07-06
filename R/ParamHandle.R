@@ -253,6 +253,12 @@ PHinge = R6Class("PHinge",
       Reduce(c, res.list)
     },
 
+    getList0 = function() {
+      res.list = lapply(self$mand.children, function(x) x$visitor$toFlat0())  # PHinge is required to only have mand child
+      Reduce(c, res.list)
+    },
+
+
     sample = function(n) {
       fun = function(x) {
         x$id
