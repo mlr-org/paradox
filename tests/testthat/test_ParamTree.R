@@ -37,6 +37,7 @@ test_that("test trafo works", {
   )
   x = pt$sample(1L)
   expect_true(pt$test(x))
+  pt$transform(x)
   expect_class(pt, "ParamSetTree")
 })
 

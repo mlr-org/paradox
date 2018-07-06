@@ -52,7 +52,6 @@ ParamSetTree = R6Class("ParamSetTree",
 
     transform = function(x) {
       x = ensureDataTable(x)
-      assertSetEqual(names(x), self$ids)
       if (is.null(self$trafo))
         return(x)
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
