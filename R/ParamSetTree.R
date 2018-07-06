@@ -32,10 +32,12 @@ ParamSetTree = R6Class("ParamSetTree",
       self$context = context
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        assertSetEqual(names(x), names(self$params))  # self$params are list of ParamNodeSimple
         if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
-        if (!isTRUE(self$rt.hinge$visitor$checkValidFromFlat(x))) {
+        x = lapply(x, function(x) ifelse(is.factor(x), as.character(x), x))
+        x[is.na(x)] = NULL
+        flag = self$rt.hinge$visitor$checkValidFromFlat(x)
+        if (!isTRUE(flag)) {
             return(sprintf("Value Violation Found!"))
         }
         for (par.name in names(x)) {
@@ -44,7 +46,9 @@ ParamSetTree = R6Class("ParamSetTree",
         }
         return(res)
       }
-      super$initialize(ns.id, storage.type = "list", check = check, params = list(), dictionary = dictionary, tags = tags, restriction = NULL, trafo = trafo)
+      name = names(self$rt.hinge$mand.children)
+      params = self$rt.hinge$mand.children[[name]]$visitor$toFlat0()
+      super$initialize(ns.id, storage.type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = NULL, trafo = trafo)
     },
 
     transform = function(x) {
