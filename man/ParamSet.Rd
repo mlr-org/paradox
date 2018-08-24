@@ -79,4 +79,5 @@ Inherited from \code{ParamNode}
 \seealso{
 Other ParamSet: \code{\link{ParamSetFlat}}
 }
+\concept{ParamSet}
 \keyword{datasets}

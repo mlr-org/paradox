@@ -54,4 +54,5 @@ A \code{\link[R6]{R6Class}} to represent the OptPath.
 }
 }
 
+\concept{OptPath}
 \keyword{datasets}

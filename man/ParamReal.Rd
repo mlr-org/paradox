@@ -98,4 +98,5 @@ Other ParamSimple: \code{\link{ParamCategorical}},
   \code{\link{ParamFlag}}, \code{\link{ParamInt}},
   \code{\link{ParamSimple}}, \code{\link{ParamUntyped}}
 }
+\concept{ParamSimple}
 \keyword{datasets}

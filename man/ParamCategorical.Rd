@@ -94,4 +94,5 @@ Other ParamSimple: \code{\link{ParamFlag}},
   \code{\link{ParamInt}}, \code{\link{ParamReal}},
   \code{\link{ParamSimple}}, \code{\link{ParamUntyped}}
 }
+\concept{ParamSimple}
 \keyword{datasets}

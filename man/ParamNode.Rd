@@ -48,4 +48,5 @@ A \code{\link[R6]{R6Class}} to represent parameters.
 Other ParamHelpers: \code{\link{ParamBase}},
   \code{\link{ParamHandle}}
 }
+\concept{ParamHelpers}
 \keyword{datasets}

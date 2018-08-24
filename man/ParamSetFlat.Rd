@@ -127,4 +127,5 @@ Inherited from \code{ParamNode}
 \seealso{
 Other ParamSet: \code{\link{ParamSet}}
 }
+\concept{ParamSet}
 \keyword{datasets}

@@ -19,4 +19,5 @@ This is the abstract base class, do not use directly!
 Other ParamHelpers: \code{\link{ParamHandle}},
   \code{\link{ParamNode}}
 }
+\concept{ParamHelpers}
 \keyword{datasets}
