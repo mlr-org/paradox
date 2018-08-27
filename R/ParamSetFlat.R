@@ -172,9 +172,9 @@ ParamSetFlat = R6Class(
       if (!is.null(resolution)) {
         # build for resolution
         assert_int(resolution, lower = 1L)
-        grid.vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
-        names(grid.vec) = self$ids
-        res = as.list(self$denorm(grid.vec))
+        grid_vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
+        names(grid_vec) = self$ids
+        res = as.list(self$denorm(grid_vec))
       } else {
         # build for n: calculate param_resolutions
         if (!is.null(n)) {
@@ -184,15 +184,15 @@ ParamSetFlat = R6Class(
         # build for param_resolutions
         assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
         assert_set_equal(names(param_resolutions), self$ids)
-        grid.vec = lapply(param_resolutions, seqGen)
-        res = lapply(names(grid.vec), function(z) self$params[[z]]$denorm_vector(x = grid.vec[[z]]))
-        names(res) = names(grid.vec)
+        grid_vec = lapply(param_resolutions, seqGen)
+        res = lapply(names(grid_vec), function(z) self$params[[z]]$denorm_vector(x = grid_vec[[z]]))
+        names(res) = names(grid_vec)
       } 
       res = lapply(res, unique)
       res = do.call(CJ, as.list(res))
       if (!is.null(self$restriction)) {
-        ind.valid = vectorized_for_param_set_flat(res, self$test)
-        return(res[ind.valid, ])
+        ind_valid = vectorized_for_param_set_flat(res, self$test)
+        return(res[ind_valid, ])
       } else {
         return(res)
       }

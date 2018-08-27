@@ -65,17 +65,17 @@ th_paramset_flat_repeated = ParamSetFlat$new(
   id = 'th_paramset_flat_repeated',
   params = c(
     list(th_param_nat, th_param_categorical),
-    repeatParam(4L, th_param_real.na)
+    repeatParam(4L, th_param_real_na)
   ),
   trafo = trafoOnRepeatedParam(fun = function(x, dict, tags) {
     xm = as.matrix(as.data.table(x))
-    col.ind = seq_len(ncol(xm))
-    ind.mat = sapply(dict$th_param_nat, function(z) col.ind <= z)
+    col_ind = seq_len(ncol(xm))
+    ind.mat = sapply(dict$th_param_nat, function(z) col_ind <= z)
     ind.mat = t(ind.mat)
     xm[!ind.mat] = NA
     xm.rowsums = rowSums(xm, na.rm = TRUE)
     xm = xm / xm.rowsums
     xm[is.nan(xm)] = 1 # take care of dev by zero
-    list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
-  }, repeated_param_id = "th_param_real.na", additional.params = "th_param_nat")
+    list(vector_param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
+  }, repeated_param_id = "th_param_real_na", additional_params = "th_param_nat")
 )

@@ -102,10 +102,10 @@ OptPath = R6Class(
       }
 
       assert_list(x, names = "strict")
-      assert_setEqual(names(x), self$x_names)
+      assert_set_equal(names(x), self$x_names)
       x = x[self$x_names]
       assert_list(y, len = self$dim)
-      assert_setEqual(names(y), self$y_names)
+      assert_set_equal(names(y), self$y_names)
       y = y[self$y_names]
 
       if (self$check_feasible) {

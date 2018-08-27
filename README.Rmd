@@ -143,9 +143,9 @@ ps = ParamSetFlat$new(
   ),
   trafo = function(x, dict, tags) {
     scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
-    x$x = Map(scale, x$x.repeated_1, x$x.repeated_2)
-    x$x.repeated_1 = NULL
-    x$x.repeated_2 = NULL
+    x$x = Map(scale, x$x_repeated_1, x$x_repeated_2)
+    x$x_repeated_1 = NULL
+    x$x_repeated_2 = NULL
     return(x)
   }
 )
@@ -177,7 +177,7 @@ ps = ParamSetFlat$new(
       }
       res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
       list(x = res)
-    }, repeated_param_id = "x", additional.params = "z")
+    }, repeated_param_id = "x", additional_params = "z")
   )
 (x = ps$sample(3))
 ps$transform(x)

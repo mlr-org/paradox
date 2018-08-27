@@ -14,11 +14,11 @@
 repeatParam = function(n = 1L, param) {
   assert_int(n)
   assert_class(param, "ParamSimple")
-  joining.id = paste0(param$id, ".repeated")
+  joining_id = paste0(param$id, ".repeated")
   lapply(seq_len(n), function(i) {
-    this.param = param$clone()
-    this.param$id = paste0(joining.id, ".", i)
-    this.param$tags = c(this.param$tags, joining.id)
-    this.param
+    this_param = param$clone()
+    this_param$id = paste0(joining_id, "_", i)
+    this_param$tags = c(this_param$tags, joining_id)
+    this_param
   })
 }

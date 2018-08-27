@@ -41,7 +41,7 @@ ParamNode = R6Class("ParamNode",
     check = NULL, # a checkmate check function to validate if a value is valid for this Param
     assert = NULL, # assert_ion generated from the above check
     test = NULL, # test generated from the above check
-    tags = NULL, # additional properties like "on.train", "on.test" or "tunable" for mlr
+    tags = NULL, # additional properties like "on_train", "on_test" or "tunable" for mlr
     
     # constructor
     initialize = function(id, storage_type, check, handle = NULL, tags) {

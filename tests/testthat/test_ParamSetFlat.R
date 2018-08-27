@@ -89,10 +89,10 @@ test_that("advanced methods work", {
 test_that("repeated params in ParamSetFlat works", {
   ps = th_paramset_flat_repeated
   expect_class(ps, "ParamSetFlat")
-  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real.na.repeated" %in% z)), 4)
+  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na.repeated" %in% z)), 4)
   xs = ps$sample(10)
   expect_true("th_param_categorical" %in% names(xs))
   xs.t = ps$transform(xs)
   expect_false("th_param_nat" %in% names(xs.t))
-  expect_list(xs.t$vector.param)
+  expect_list(xs.t$vector_param)
 })
