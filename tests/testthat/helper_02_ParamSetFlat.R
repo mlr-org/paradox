@@ -70,9 +70,9 @@ th_paramset_flat_repeated = ParamSetFlat$new(
   trafo = trafoOnRepeatedParam(fun = function(x, dict, tags) {
     xm = as.matrix(as.data.table(x))
     col_ind = seq_len(ncol(xm))
-    ind.mat = sapply(dict$th_param_nat, function(z) col_ind <= z)
-    ind.mat = t(ind.mat)
-    xm[!ind.mat] = NA
+    ind_mat = sapply(dict$th_param_nat, function(z) col_ind <= z)
+    ind_mat = t(ind_mat)
+    xm[!ind_mat] = NA
     xm_rowsums = rowSums(xm, na.rm = TRUE)
     xm = xm / xm_rowsums
     xm[is.nan(xm)] = 1 # take care of dev by zero
