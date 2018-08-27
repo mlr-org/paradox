@@ -9,7 +9,7 @@
 #' \describe{
 #'   \item{par_set}{[\code{ParamSet}] \cr 
 #'     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
-#'   \item{y.names}{[\code{character()}] \cr 
+#'   \item{y_names}{[\code{character()}] \cr 
 #'     The names for the y values. Default is \dQuote{y}.}
 #'   \item{minimize}{[\code{logical()}] \cr  
 #'     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
@@ -29,7 +29,7 @@
 #' @section Active Bindings:
 #' 
 #' \describe{
-#'   \item{x.names}{[\code{character()}] \cr
+#'   \item{x_names}{[\code{character()}] \cr
 #'     Names of the x-values}
 #'   \item{length}{[\code{integer(1)}] \cr
 #'     The number of entries in this \code{OptPath}.}
@@ -47,20 +47,20 @@ OptPath = R6Class(
   public = list(
     # member variables
     par_set = NULL,
-    y.names = NULL,
+    y_names = NULL,
     minimize = NULL,
     check.feasible = NULL,
     
     # constructor
-    initialize = function(par_set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
+    initialize = function(par_set, y_names = "y", minimize = TRUE, check.feasible = TRUE) {
       private$.data = data.table(
         dob = integer(0L),
         message = character(0L),
         error = character(0L),
-        exec.time = double(0L),
+        exec_time = double(0L),
         timestamp = Sys.time()[FALSE],
         extra = list(),
-        transformed.x = list()
+        transformed_x = list()
       )
       Map(function(id, storage_type) {
         set(private$.data, j = id, value = get(storage_type, mode = "function")())
@@ -68,27 +68,27 @@ OptPath = R6Class(
         id = par_set$ids,
         storage_type = par_set$storage_types
       )
-      for (y.name in y.names) {
+      for (y.name in y_names) {
         set(private$.data, j = y.name, value = numeric(0L))
       }
       if (is.null(names(minimize))) {
-        names(minimize) = y.names
+        names(minimize) = y_names
       }
       self$par_set = assertClass(par_set, "ParamSet")
-      self$y.names = y.names
+      self$y_names = y_names
       self$minimize = minimize
       self$check.feasible = check.feasible
     },
 
     # public methods
-    add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec.time = NA_real_, timestamp = Sys.time(), extra = NULL, transformed.x = NULL) {
+    add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec_time = NA_real_, timestamp = Sys.time(), extra = NULL, transformed_x = NULL) {
 
       # convenience: handle y
       if (!testList(y)) {
         y = as.list(y)
       }
       if (!testNamed(y)) {
-        names(y) = self$y.names
+        names(y) = self$y_names
       }
 
       # convenience: handle x
@@ -96,17 +96,17 @@ OptPath = R6Class(
         x = as.list(x)
       }
 
-      # handle transformed.x
-      if (!is.null(self$par_set$trafo) && is.null(transformed.x)) {
-        transformed.x = self$par_set$transform(x)
+      # handle transformed_x
+      if (!is.null(self$par_set$trafo) && is.null(transformed_x)) {
+        transformed_x = self$par_set$transform(x)
       }
 
       assertList(x, names = "strict")
-      assertSetEqual(names(x), self$x.names)
-      x = x[self$x.names]
+      assertSetEqual(names(x), self$x_names)
+      x = x[self$x_names]
       assertList(y, len = self$dim)
-      assertSetEqual(names(y), self$y.names)
-      y = y[self$y.names]
+      assertSetEqual(names(y), self$y_names)
+      y = y[self$y_names]
 
       if (self$check.feasible) {
         self$par_set$assert(x)
@@ -116,7 +116,7 @@ OptPath = R6Class(
 
       if (private$cache_pos == length(private$cache)) private$flush()
       private$cache_pos = private$cache_pos + 1L
-      private$cache[[private$cache_pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y)
+      private$cache[[private$cache_pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec_time = exec_time, timestamp = timestamp, extra = list(extra), transformed_x = list(transformed_x)), x, y)
       invisible(self)
     }
   ),
@@ -151,11 +151,11 @@ OptPath = R6Class(
         private$.data = x
       }
     },
-    x.names = function() self$par_set$ids,
+    x_names = function() self$par_set$ids,
     length = function() nrow(private$.data) + private$cache_pos,
-    x = function() self$data[, self$x.names, with = FALSE],
-    y = function() self$data[, self$y.names, with = FALSE],
-    dim = function() length(self$y.names)
+    x = function() self$data[, self$x_names, with = FALSE],
+    y = function() self$data[, self$y_names, with = FALSE],
+    dim = function() length(self$y_names)
   )
 )
 

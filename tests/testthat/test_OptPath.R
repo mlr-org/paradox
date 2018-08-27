@@ -4,7 +4,7 @@ test_that("active bindings works", {
   op = th.opt.path.full
 
   # test active bindings
-  expect_equal(op$x.names, names(th.paramset.flat.full$params))
+  expect_equal(op$x_names, names(th.paramset.flat.full$params))
   expect_equal(op$length, 10)
   expect_data_table(op$x)
   expect_equal(colnames(op$x), names(th.paramset.flat.full$params))
@@ -19,7 +19,7 @@ test_that("active bindings works", {
   # contents after data.frame conversion
   op.df = as.data.frame(op)
   expect_data_frame(op.df, nrow = 10, ncol = 13)
-  expect_set_equal(colnames(op.df), c("dob", "message", "error", "transformed.x", "exec.time", "timestamp", "th.param.int", "th.param.real", "th.param.categorical", "th.param.flag", "y", "th.ex1", "th.ex2"))
+  expect_set_equal(colnames(op.df), c("dob", "message", "error", "transformed_x", "exec_time", "timestamp", "th.param.int", "th.param.real", "th.param.categorical", "th.param.flag", "y", "th.ex1", "th.ex2"))
   expect_equal(op.df$y, 1:10)
   expect_equal(op.df$th.ex1, 1:10)
   expect_class(op.df$timestamp, "POSIXct")
@@ -29,7 +29,7 @@ test_that("multi-objective with trafos works", {
   op = th.opt.path.multiobjective
 
   # test active bindings
-  expect_equal(op$x.names, names(th.paramset.flat.repeated$params))
+  expect_equal(op$x_names, names(th.paramset.flat.repeated$params))
   expect_equal(op$length, 10)
   expect_data_table(op$x)
   expect_equal(colnames(op$x), names(th.paramset.flat.repeated$params))
@@ -41,7 +41,7 @@ test_that("multi-objective with trafos works", {
   # contents after data.frame conversion
   op.df = as.data.frame(op, include.extras = FALSE)
   expect_data_frame(op.df, nrow = 10, ncol = 7 + op$par_set$length + op$dim)
-  expect_list(op.df$transformed.x, len = 10)
+  expect_list(op.df$transformed_x, len = 10)
 })
 
 

@@ -9,14 +9,14 @@ for (i in 1:10) {
     y = i, 
     message = sprintf("message: %i", i),
     error = sprintf("error: %i", i),
-    exec.time = i,
+    exec_time = i,
     extra = list(th.ex1 = i, th.ex2 = "th.ex2.string")
   )
 }
 
 # Multi-objective opt.path with transformations
 
-th.opt.path.multiobjective = OptPath$new(par_set = th.paramset.flat.repeated, y.names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
+th.opt.path.multiobjective = OptPath$new(par_set = th.paramset.flat.repeated, y_names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
 for (i in 1:10) {
   x = th.opt.path.multiobjective$par_set$sample(1)
   th.opt.path.multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))
