@@ -66,7 +66,7 @@ ParamReal = R6Class(
       assert_true(self$has_finite_bounds)
       runif(n, min = self$lower, max = self$upper)
     },
-    denormVector = function(x) {
+    denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       self$range[1] + x * diff(self$range)
     }

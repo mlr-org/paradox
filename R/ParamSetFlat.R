@@ -13,7 +13,7 @@
 #' @section Methods:
 #' 
 #' \describe{
-#'   \item{generate_lhs_design(n, lhs.function)}{[\code{function}] \cr
+#'   \item{generate_lhs_design(n, lhs_function)}{[\code{function}] \cr
 #'     Function to generate a LHS design.}
 #'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
 #'     \describe{
@@ -78,8 +78,8 @@ ParamSetFlat = R6Class(
             return(sprintf("Value %s not allowed by restriction: %s", convertToShortString(x), deparse(restriction)))
           }
         }
-        for (par.name in names(x)) {
-          res = self$params[[par.name]]$check(x[[par.name]], na.ok = na.ok, null.ok = null.ok)
+        for (par_name in names(x)) {
+          res = self$params[[par_name]]$check(x[[par_name]], na.ok = na.ok, null.ok = null.ok)
           if(!isTRUE(res)) return(res)
         }
         return(res)
@@ -133,30 +133,30 @@ ParamSetFlat = R6Class(
       return(xs)
     },
 
-    generate_lhs_design = function(n, lhs.function = lhs::maximinLHS) {
+    generate_lhs_design = function(n, lhs_function = lhs::maximinLHS) {
       assert_int(n, lower = 1L)
-      assert_function(lhs.function, args = c("n", "k"))
-      lhs.des = lhs.function(n, k = self$length)
+      assert_function(lhs_function, args = c("n", "k"))
+      lhs_des = lhs_function(n, k = self$length)
       # converts the LHS output to values of the parameters
-      sample_converter = function(lhs.des) {
-        vec.cols = lapply(seq_len(ncol(lhs.des)), function(z) lhs.des[,z])
-        names(vec.cols) = self$ids
-        self$denorm(vec.cols)
+      sample_converter = function(lhs_des) {
+        vec_cols = lapply(seq_len(ncol(lhs_des)), function(z) lhs_des[,z])
+        names(vec_cols) = self$ids
+        self$denorm(vec_cols)
       }
       if (!is.null(self$restriction)) {
         # we work on the matrix that is the LHS output to be able to use augmentLHS to sample additional values.
         sample_generator = function(n, old_x = NULL) {
-          if (is.null(old_x)) return(lhs.des)
-          lhs.des = lhs::augmentLHS(lhs = old_x, m = n)
-          tail(lhs.des, n)
+          if (is.null(old_x)) return(lhs_des)
+          lhs_des = lhs::augmentLHS(lhs = old_x, m = n)
+          tail(lhs_des, n)
         }
         # validates the LHS output, according to the param restrictions
-        sample_validator = function(lhs.des) {
-          vectorized_for_param_set_flat(sample_converter(lhs.des), self$test)
+        sample_validator = function(lhs_des) {
+          vectorized_for_param_set_flat(sample_converter(lhs_des), self$test)
         }
-        lhs.des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
+        lhs_des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
       }
-      sample_converter(lhs.des)
+      sample_converter(lhs_des)
     },
 
     # resolution int(1) - resolution used for each parameter
@@ -185,7 +185,7 @@ ParamSetFlat = R6Class(
         assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
         assert_setEqual(names(param_resolutions), self$ids)
         grid.vec = lapply(param_resolutions, seqGen)
-        res = lapply(names(grid.vec), function(z) self$params[[z]]$denormVector(x = grid.vec[[z]]))
+        res = lapply(names(grid.vec), function(z) self$params[[z]]$denorm_vector(x = grid.vec[[z]]))
         names(res) = names(grid.vec)
       } 
       res = lapply(res, unique)

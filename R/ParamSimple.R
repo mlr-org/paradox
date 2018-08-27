@@ -21,7 +21,7 @@
 #' \describe{
 #'   \item{sampleVector(n)}{[\code{function}] \cr
 #'     samples \code{n} Parameter Values.}
-#'   \item{denormVector(x)}{[\code{function}] \cr
+#'   \item{denorm_vector(x)}{[\code{function}] \cr
 #'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 #' }
 #' 
@@ -61,14 +61,14 @@ ParamSimple = R6Class(
     # public methods
     # Overwriting ParamNode Methods
     sample = function(n = 1L) asDtCols(self$sampleVector(n = n), self$id),
-    denorm = function(x) asDtCols(self$denormVector(x[[self$id]]), self$id),
+    denorm = function(x) asDtCols(self$denorm_vector(x[[self$id]]), self$id),
     
     # ParamSimpleMethods
     sampleVector = function(n = 1L) {
       # samples vector values without respecting what is 'restriction'
       stop("sampleVector not implemented")
     },
-    denormVector = function(x) {
+    denorm_vector = function(x) {
       stop("denorm function not implemented!")
     }
   ),

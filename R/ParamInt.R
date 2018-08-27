@@ -66,7 +66,7 @@ ParamInt = R6Class(
       assert_true(self$has_finite_bounds)
       as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
     },
-    denormVector = function(x) {
+    denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       r = self$range + c(-0.5, 0.5)
       res = as.integer(round(r[1] + x * diff(r)))
