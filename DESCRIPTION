@@ -1,6 +1,6 @@
-Package: phng
+Package: paradox
 Type: Package
-Title: Define Parameter Spaces, generate Designs and check feasibilities
+Title: Define and Document Parameter Spaces, Generate Designs and Check Feasibilities
 Version: 0.1
 Authors@R: c(
     person("Jakob", "Richter", NULL, "jakob1richter@gmail.com", role = c("cre", "aut")),
