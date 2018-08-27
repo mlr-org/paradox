@@ -39,7 +39,7 @@ test_that("multi-objective with trafos works", {
   expect_equal(op$dim, 2)
 
   # contents after data.frame conversion
-  op.df = as.data.frame(op, include.extras = FALSE)
+  op.df = as.data.frame(op, include_extras = FALSE)
   expect_data_frame(op.df, nrow = 10, ncol = 7 + op$par_set$length + op$dim)
   expect_list(op.df$transformed_x, len = 10)
 })

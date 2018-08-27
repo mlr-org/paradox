@@ -13,7 +13,7 @@
 #'     The names for the y values. Default is \dQuote{y}.}
 #'   \item{minimize}{[\code{logical()}] \cr  
 #'     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
-#'   \item{check.feasible}{[\code{logical(1)}] \cr  
+#'   \item{check_feasible}{[\code{logical(1)}] \cr  
 #'     Should new x values be checked for feasibility according to the \code{ParamSet}.}
 #'   \item{data}{[\code{data.table}] \cr  
 #'     This field contains all values logged into the opt.path.}
@@ -49,10 +49,10 @@ OptPath = R6Class(
     par_set = NULL,
     y_names = NULL,
     minimize = NULL,
-    check.feasible = NULL,
+    check_feasible = NULL,
     
     # constructor
-    initialize = function(par_set, y_names = "y", minimize = TRUE, check.feasible = TRUE) {
+    initialize = function(par_set, y_names = "y", minimize = TRUE, check_feasible = TRUE) {
       private$.data = data.table(
         dob = integer(0L),
         message = character(0L),
@@ -68,8 +68,8 @@ OptPath = R6Class(
         id = par_set$ids,
         storage_type = par_set$storage_types
       )
-      for (y.name in y_names) {
-        set(private$.data, j = y.name, value = numeric(0L))
+      for (y_name in y_names) {
+        set(private$.data, j = y_name, value = numeric(0L))
       }
       if (is.null(names(minimize))) {
         names(minimize) = y_names
@@ -77,7 +77,7 @@ OptPath = R6Class(
       self$par_set = assertClass(par_set, "ParamSet")
       self$y_names = y_names
       self$minimize = minimize
-      self$check.feasible = check.feasible
+      self$check_feasible = check_feasible
     },
 
     # public methods
@@ -108,7 +108,7 @@ OptPath = R6Class(
       assertSetEqual(names(y), self$y_names)
       y = y[self$y_names]
 
-      if (self$check.feasible) {
+      if (self$check_feasible) {
         self$par_set$assert(x)
       }
 
@@ -166,22 +166,22 @@ OptPath = R6Class(
 #'
 #' @param x [\code{\link{OptPath}}]\cr
 #'   Optimization path.
-#' @param row.names [\code{character}]\cr
+#' @param row_names [\code{character}]\cr
 #'   Row names for result.
 #'   Default is none.
 #' @param optional [any]\cr
 #'   Currently ignored.
-#' @param include.extras [\code{logical(1)}]\cr
+#' @param include_extras [\code{logical(1)}]\cr
 #'   Include all extra columns?
 #'   Default is \code{TRUE}.
 #' @param ... [any] \cr
 #'   passed to \code{as.data.frame}.
 #' @return [\code{data.frame}].
 #' @export
-as.data.frame_OptPath = function(x, row.names = NULL, optional = FALSE, include.extras = TRUE, ...) {
+as.data.frame_OptPath = function(x, row_names = NULL, optional = FALSE, include_extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
-  if (include.extras) {
+  if (include_extras) {
     extra = rbindlist(dt$extra, fill = TRUE)
     if (nrow(extra) > 0 && ncol(extra) > 0) {
       dt[, "extra" := NULL]
