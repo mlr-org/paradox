@@ -73,8 +73,8 @@ th_paramset_flat_repeated = ParamSetFlat$new(
     ind.mat = sapply(dict$th_param_nat, function(z) col_ind <= z)
     ind.mat = t(ind.mat)
     xm[!ind.mat] = NA
-    xm.rowsums = rowSums(xm, na.rm = TRUE)
-    xm = xm / xm.rowsums
+    xm_rowsums = rowSums(xm, na.rm = TRUE)
+    xm = xm / xm_rowsums
     xm[is.nan(xm)] = 1 # take care of dev by zero
     list(vector_param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
   }, repeated_param_id = "th_param_real_na", additional_params = "th_param_nat")

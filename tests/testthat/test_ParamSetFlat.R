@@ -1,7 +1,7 @@
 context("ParamSetFlat")
 
 test_that("methods and active bindings work", {
-  ps.list = list(
+  ps_list = list(
     th_paramset_flat_empty,
     th_paramset_flat_full,
     th_paramset_flat_repeated,
@@ -11,7 +11,7 @@ test_that("methods and active bindings work", {
     th_paramset_flat_trafo,
     th_paramset_flat_trafo_dictionary
     )
-  for (ps in ps.list) {
+  for (ps in ps_list) {
     if (ps$id == "th_paramset_flat_full") {
       expect_equal(ps$ids, c('th_param_int', 'th_param_real', 'th_param_categorical', 'th_param_flag'))
       expect_equal(ps$lower, c(th_param_int=-10, th_param_real=-10, th_param_categorical=NA_real_, th_param_flag=NA_real_))
@@ -33,7 +33,7 @@ test_that("methods and active bindings work", {
 })
 
 test_that("advanced methods work", {
-  ps.list = list(
+  ps_list = list(
     th_paramset_flat_full,
     th_paramset_flat_repeated,
     th_paramset_flat_restricted,
@@ -42,7 +42,7 @@ test_that("advanced methods work", {
     th_paramset_flat_trafo_dictionary
   )
   
-  for (ps in ps.list) {
+  for (ps in ps_list) {
 
     x = ps$sample(10)
     expect_data_table(x, nrows = 10, any.missing = FALSE)
@@ -74,11 +74,11 @@ test_that("advanced methods work", {
     xgt = ps$transform(xg)
     expect_data_table(xgt, nrows = nrow(xg))
 
-    p.res = ps$nlevels
-    p.res[is.na(p.res)] = 2
-    xgp = ps$generate_grid_design(param_resolutions = p.res)
+    p_res = ps$nlevels
+    p_res[is.na(p_res)] = 2
+    xgp = ps$generate_grid_design(param_resolutions = p_res)
     expect_data_table(xgp, any.missing = FALSE)
-    expect_true(nrow(xgp) <= prod(p.res))
+    expect_true(nrow(xgp) <= prod(p_res))
 
     xgn = ps$generate_grid_design(n = 100)
     expect_data_table(xgn, any.missing = FALSE)
@@ -89,10 +89,10 @@ test_that("advanced methods work", {
 test_that("repeated params in ParamSetFlat works", {
   ps = th_paramset_flat_repeated
   expect_class(ps, "ParamSetFlat")
-  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na.repeated" %in% z)), 4)
+  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na_repeated" %in% z)), 4)
   xs = ps$sample(10)
   expect_true("th_param_categorical" %in% names(xs))
-  xs.t = ps$transform(xs)
-  expect_false("th_param_nat" %in% names(xs.t))
-  expect_list(xs.t$vector_param)
+  xs_t = ps$transform(xs)
+  expect_false("th_param_nat" %in% names(xs_t))
+  expect_list(xs_t$vector_param)
 })
