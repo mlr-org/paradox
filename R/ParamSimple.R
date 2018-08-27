@@ -45,13 +45,13 @@ ParamSimple = R6Class(
     special_vals = NULL, # special values as list, can not be changed after initialization
 
     # constructor
-    initialize = function(id, storage.type, check, special_vals, default, tags) {
+    initialize = function(id, storage_type, check, special_vals, default, tags) {
 
       if (!is.null(special_vals) && is.na(special_vals)) special_vals = list(special_vals)
       assertList(special_vals, null.ok = TRUE)
 
       # construct super class
-      super$initialize(id = id, storage.type = storage.type, check = check, tags = tags)
+      super$initialize(id = id, storage_type = storage_type, check = check, tags = tags)
       
       # set member variables
       self$default = self$assert(default, null.ok = TRUE)

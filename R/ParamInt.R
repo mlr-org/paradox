@@ -58,7 +58,7 @@ ParamInt = R6Class(
       assert_true(lower <= upper)
 
       # construct super class
-      super$initialize(id = id, storage.type = "integer", check = check, special_vals = special_vals, default = default, tags = tags)
+      super$initialize(id = id, storage_type = "integer", check = check, special_vals = special_vals, default = default, tags = tags)
     },
 
     # public methods

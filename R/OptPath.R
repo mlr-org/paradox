@@ -7,7 +7,7 @@
 #' @section Member Variables:
 #' 
 #' \describe{
-#'   \item{par.set}{[\code{ParamSet}] \cr 
+#'   \item{par_set}{[\code{ParamSet}] \cr 
 #'     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
 #'   \item{y.names}{[\code{character()}] \cr 
 #'     The names for the y values. Default is \dQuote{y}.}
@@ -46,14 +46,14 @@ OptPath = R6Class(
   "OptPath",
   public = list(
     # member variables
-    par.set = NULL,
+    par_set = NULL,
     y.names = NULL,
     minimize = NULL,
     check.feasible = NULL,
     
     # constructor
-    initialize = function(par.set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
-      private$p.data = data.table(
+    initialize = function(par_set, y.names = "y", minimize = TRUE, check.feasible = TRUE) {
+      private$.data = data.table(
         dob = integer(0L),
         message = character(0L),
         error = character(0L),
@@ -62,19 +62,19 @@ OptPath = R6Class(
         extra = list(),
         transformed.x = list()
       )
-      Map(function(id, storage.type) {
-        set(private$p.data, j = id, value = get(storage.type, mode = "function")())
+      Map(function(id, storage_type) {
+        set(private$.data, j = id, value = get(storage_type, mode = "function")())
         },
-        id = par.set$ids,
-        storage.type = par.set$storage.types
+        id = par_set$ids,
+        storage_type = par_set$storage_types
       )
       for (y.name in y.names) {
-        set(private$p.data, j = y.name, value = numeric(0L))
+        set(private$.data, j = y.name, value = numeric(0L))
       }
       if (is.null(names(minimize))) {
         names(minimize) = y.names
       }
-      self$par.set = assertClass(par.set, "ParamSet")
+      self$par_set = assertClass(par_set, "ParamSet")
       self$y.names = y.names
       self$minimize = minimize
       self$check.feasible = check.feasible
@@ -97,8 +97,8 @@ OptPath = R6Class(
       }
 
       # handle transformed.x
-      if (!is.null(self$par.set$trafo) && is.null(transformed.x)) {
-        transformed.x = self$par.set$transform(x)
+      if (!is.null(self$par_set$trafo) && is.null(transformed.x)) {
+        transformed.x = self$par_set$transform(x)
       }
 
       assertList(x, names = "strict")
@@ -109,7 +109,7 @@ OptPath = R6Class(
       y = y[self$y.names]
 
       if (self$check.feasible) {
-        self$par.set$assert(x)
+        self$par_set$assert(x)
       }
 
       # add the data to the opt path
@@ -134,8 +134,8 @@ OptPath = R6Class(
     flush = function() {
       if (private$cache_pos > 0L) {
         cached = rbindlist(head(private$cache, private$cache_pos), fill = TRUE)
-        private$p.data = rbindlist(list(private$p.data, cached), fill = TRUE)
-        setorderv(private$p.data, "dob")
+        private$.data = rbindlist(list(private$.data, cached), fill = TRUE)
+        setorderv(private$.data, "dob")
         private$cache_pos = 0L
       }
     }
@@ -145,14 +145,14 @@ OptPath = R6Class(
     data = function(x) {
       if (missing(x)) {
         private$flush()
-        private$p.data
+        private$.data
       } else {
         private$flush()
-        private$p.data = x
+        private$.data = x
       }
     },
-    x.names = function() self$par.set$ids,
-    length = function() nrow(private$p.data) + private$cache_pos,
+    x.names = function() self$par_set$ids,
+    length = function() nrow(private$.data) + private$cache_pos,
     x = function() self$data[, self$x.names, with = FALSE],
     y = function() self$data[, self$y.names, with = FALSE],
     dim = function() length(self$y.names)

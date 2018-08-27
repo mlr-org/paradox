@@ -5,7 +5,7 @@ test_that("methods and active bindings work", {
     th.paramset.flat.empty,
     th.paramset.flat.full,
     th.paramset.flat.repeated,
-    th.paramset.flat.restricted,
+    th.paramset.flat_restricted,
     th.paramset.flat.untyped,
     th.paramset.flat.numeric,
     th.paramset.flat.trafo,
@@ -20,7 +20,7 @@ test_that("methods and active bindings work", {
     expect_class(ps, "ParamSetFlat")
     expect_numeric(ps$lower, any.missing = TRUE, names = "strict")
     expect_numeric(ps$upper, any.missing = TRUE, names = "strict")
-    expect_character(ps$storage.types, names = "strict")
+    expect_character(ps$storage_types, names = "strict")
     expect_character(ps$ids)
     expect_list(ps$values, any.missing = TRUE, names = "strict")
     expect_character(ps$param.classes, names = "strict")
@@ -36,7 +36,7 @@ test_that("advanced methods work", {
   ps.list = list(
     th.paramset.flat.full,
     th.paramset.flat.repeated,
-    th.paramset.flat.restricted,
+    th.paramset.flat_restricted,
     th.paramset.flat.numeric,
     th.paramset.flat.trafo,
     th.paramset.flat.trafo.dictionary

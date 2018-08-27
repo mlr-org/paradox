@@ -57,7 +57,7 @@ ParamReal = R6Class(
       assert_true(lower <= upper)
        
       # construct super class
-      super$initialize(id = id, storage.type = "numeric", check = check, special_vals = special_vals, default = default, tags = tags)
+      super$initialize(id = id, storage_type = "numeric", check = check, special_vals = special_vals, default = default, tags = tags)
 
     },
 

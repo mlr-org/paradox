@@ -32,7 +32,7 @@
 #' \describe{
 #'   \item{ids}{[\code{character}] \cr
 #'     ids of the Parameters in this ParamSet.}
-#'   \item{storage.types}{[\code{character}] \cr
+#'   \item{storage_types}{[\code{character}] \cr
 #'     How is a Value of this Parameter stored as an R-object?}
 #'   \item{values}{[\code{list}] \cr
 #'     For any discrete Parameter return the values. Also works for Integers.}
@@ -92,7 +92,7 @@ ParamSetFlat = R6Class(
       assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
-      super$initialize(id, storage.type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
+      super$initialize(id, storage_type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
@@ -201,7 +201,7 @@ ParamSetFlat = R6Class(
 
   active = list(
     ids = function() names(self$params),
-    storage.types = function() vcapply(self$params, function(param) param$storage.type),
+    storage_types = function() vcapply(self$params, function(param) param$storage_type),
     values = function() lapply(self$params, function(param) param$values),
     lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
     upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),

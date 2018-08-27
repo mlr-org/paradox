@@ -51,10 +51,10 @@ ParamSet = R6Class("ParamSet",
     restriction = NULL, # quote that states if certain conditions have to be met
     
     # constructor
-    initialize = function(id = "parset", storage.type, check, handle = NULL, params, dictionary, tags, restriction, trafo) {
+    initialize = function(id = "parset", storage_type, check, handle = NULL, params, dictionary, tags, restriction, trafo) {
       
       # construct super class
-      super$initialize(id = id, storage.type = storage.type, check = check, handle = handle, tags = tags)
+      super$initialize(id = id, storage_type = storage_type, check = check, handle = handle, tags = tags)
 
       # set member variables
       assertList(params, types = "ParamNode")

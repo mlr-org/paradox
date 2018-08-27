@@ -5,10 +5,10 @@ load_all()
 # check functions as public method? Has to be to make Lower Upper Flexible
 # 
 
-par.set = ParamSetFlat$new(
+par_set = ParamSetFlat$new(
   id = "ps.svm",
   params = list(
-    ParamCategorical$new(id = "storage.type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
+    ParamCategorical$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
     ParamReal$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
     ParamReal$new(id = "nu", default = 0.5, tags = "tunable"),
     # ParamGenerator(id = "class.weights", ParamReal$new(lower = 0))

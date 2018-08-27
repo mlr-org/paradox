@@ -51,8 +51,8 @@ th.paramset.flat.trafo.dictionary = ParamSetFlat$new(
   }
 )
 
-th.paramset.flat.restricted = ParamSetFlat$new(
-  id = 'th.paramset.flat.restricted',
+th.paramset.flat_restricted = ParamSetFlat$new(
+  id = 'th.paramset.flat_restricted',
   params = list(
     th.param.int,
     th.param.real,
