@@ -1,14 +1,14 @@
 #' @title Repeat a single Parameter
 #'
 #' @description
-#' Creates a list of a single Parameter repeated.
+#' Creates a list of a single Parameter repeated_
 #' Each parameter is tagged with \code{<param$id>.repeated}.
 #' This way it can be determined that they belong together
 #'
 #' @param n [\code{integer(1)}]\cr
 #'   How often should this parameter be copied?
 #' @param param [\code{ParamSimple(1)}]\cr
-#'   The parameter that should be repeated.
+#'   The parameter that should be repeated_
 #' @return List of Parameters
 #' @export
 repeatParam = function(n = 1L, param) {

@@ -78,14 +78,14 @@ ParamSet = R6Class("ParamSet",
   active = list(
     dictionary = function(x) {
       if (missing(x)) {
-        return(private$priv.dictionary)
+        return(private$priv_dictionary)
       } else if (!is.null(x)) {
         x = as.environment(x)
-        private$priv.dictionary = x   
+        private$priv_dictionary = x   
       }
     }
   ),
   private = list(
-    priv.dictionary = NULL
+    priv_dictionary = NULL
   )
 )

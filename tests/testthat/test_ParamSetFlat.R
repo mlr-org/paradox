@@ -9,7 +9,7 @@ test_that("methods and active bindings work", {
     th_paramset_flat_untyped,
     th_paramset_flat_numeric,
     th_paramset_flat_trafo,
-    th_paramset_flat_trafo.dictionary
+    th_paramset_flat_trafo_dictionary
     )
   for (ps in ps.list) {
     if (ps$id == "th_paramset_flat_full") {
@@ -39,7 +39,7 @@ test_that("advanced methods work", {
     th_paramset_flat_restricted,
     th_paramset_flat_numeric,
     th_paramset_flat_trafo,
-    th_paramset_flat_trafo.dictionary
+    th_paramset_flat_trafo_dictionary
   )
   
   for (ps in ps.list) {
@@ -61,7 +61,7 @@ test_that("advanced methods work", {
     xdt = ps$transform(xd)
     expect_data_table(xdt, nrows = 10)
 
-    xl = ps$generateLHSDesign(10)
+    xl = ps$generate_lhs_design(10)
     expect_data_table(xl, nrows = 10, any.missing = FALSE)
     expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
     xlt = ps$transform(xl)

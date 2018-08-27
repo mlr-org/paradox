@@ -13,7 +13,7 @@
 #' @section Methods:
 #' 
 #' \describe{
-#'   \item{generateLHSDesign(n, lhs.function)}{[\code{function}] \cr
+#'   \item{generate_lhs_design(n, lhs.function)}{[\code{function}] \cr
 #'     Function to generate a LHS design.}
 #'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
 #'     \describe{
@@ -73,8 +73,8 @@ ParamSetFlat = R6Class(
         if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
-          x.n.dictionary = c(as.list(self$dictionary), x)
-          if (!isTRUE(eval(self$restriction, envir = x.n.dictionary))) {
+          x_n_dictionary = c(as.list(self$dictionary), x)
+          if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
             return(sprintf("Value %s not allowed by restriction: %s", convertToShortString(x), deparse(restriction)))
           }
         }
@@ -104,7 +104,7 @@ ParamSetFlat = R6Class(
         as.data.table(xs)    
       }
       if (!is.null(self$restriction)) {
-        sample_validator = function(x) vectorizedForParamSetFlat(x, self$test)
+        sample_validator = function(x) vectorized_for_param_set_flat(x, self$test)
         oversample_forbidden2(n = n, param = param, sample_generator = sample_generator, sample_validator = sample_validator)
       } else {
         sample_generator(n)
@@ -120,7 +120,7 @@ ParamSetFlat = R6Class(
     },
 
     transform = function(x) {
-      x = ensureDataTable(x)
+      x = ensure_data_table(x)
       assert_setEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
@@ -129,11 +129,11 @@ ParamSetFlat = R6Class(
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
       xs = self$trafo(x = x, dict = self$dictionary, tags = self$member_tags)
-      xs = ensureDataTable(xs)
+      xs = ensure_data_table(xs)
       return(xs)
     },
 
-    generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
+    generate_lhs_design = function(n, lhs.function = lhs::maximinLHS) {
       assert_int(n, lower = 1L)
       assert_function(lhs.function, args = c("n", "k"))
       lhs.des = lhs.function(n, k = self$length)
@@ -152,7 +152,7 @@ ParamSetFlat = R6Class(
         }
         # validates the LHS output, according to the param restrictions
         sample_validator = function(lhs.des) {
-          vectorizedForParamSetFlat(sample_converter(lhs.des), self$test)
+          vectorized_for_param_set_flat(sample_converter(lhs.des), self$test)
         }
         lhs.des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
       }
@@ -191,7 +191,7 @@ ParamSetFlat = R6Class(
       res = lapply(res, unique)
       res = do.call(CJ, as.list(res))
       if (!is.null(self$restriction)) {
-        ind.valid = vectorizedForParamSetFlat(res, self$test)
+        ind.valid = vectorized_for_param_set_flat(res, self$test)
         return(res[ind.valid, ])
       } else {
         return(res)

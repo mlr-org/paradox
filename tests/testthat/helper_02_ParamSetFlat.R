@@ -37,8 +37,8 @@ th_paramset_flat_trafo = ParamSetFlat$new(
   }
 )
 
-th_paramset_flat_trafo.dictionary = ParamSetFlat$new(
-  id = 'th_paramset_flat_trafo.dictionary',
+th_paramset_flat_trafo_dictionary = ParamSetFlat$new(
+  id = 'th_paramset_flat_trafo_dictionary',
   params = list(
     th_param_int,
     th_param_real
@@ -77,5 +77,5 @@ th_paramset_flat_repeated = ParamSetFlat$new(
     xm = xm / xm.rowsums
     xm[is.nan(xm)] = 1 # take care of dev by zero
     list(vector.param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
-  }, repeated.param_id = "th_param_real.na", additional.params = "th_param_nat")
+  }, repeated_param_id = "th_param_real.na", additional.params = "th_param_nat")
 )

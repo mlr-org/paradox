@@ -52,7 +52,7 @@ ps$sample(3)
 
 Generate LHS Design:
 ```{r pslhs}
-ps$generateLHSDesign(3)
+ps$generate_lhs_design(3)
 ```
 
 Generate Grid Design:
@@ -143,9 +143,9 @@ ps = ParamSetFlat$new(
   ),
   trafo = function(x, dict, tags) {
     scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
-    x$x = Map(scale, x$x.repeated.1, x$x.repeated.2)
-    x$x.repeated.1 = NULL
-    x$x.repeated.2 = NULL
+    x$x = Map(scale, x$x.repeated_1, x$x.repeated_2)
+    x$x.repeated_1 = NULL
+    x$x.repeated_2 = NULL
     return(x)
   }
 )
@@ -155,7 +155,7 @@ The output of all value generating functions won't change for a ParamSet that ha
 Instead these outputs can be put into `ps$transform()` to obtain the desired parameter values.
 
 ```{r psnumtrans2}
-x = ps$generateLHSDesign(3)
+x = ps$generate_lhs_design(3)
 ps$transform(x)
 ```
 
@@ -177,7 +177,7 @@ ps = ParamSetFlat$new(
       }
       res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
       list(x = res)
-    }, repeated.param_id = "x", additional.params = "z")
+    }, repeated_param_id = "x", additional.params = "z")
   )
 (x = ps$sample(3))
 ps$transform(x)
