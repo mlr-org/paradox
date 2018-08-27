@@ -29,7 +29,7 @@ oversample_forbidden_2 = function(n, param, oversample_rate = 2, max_tries = 100
 
 # x list of columns (or data.table)
 # fun function that accepts a list of the same structure as x, but each list element has just one item, meaning this function works just on one row.
-vectorized_for_ParamSetFlat = function(x, fun) {
+vectorized_for_paramSetFlat = function(x, fun) {
   fn = function(...) {fun(list(...))}
   unlist(.mapply(fn, x, list()))
 }
@@ -51,7 +51,7 @@ ensureDataTable = function(x, ...) {
   if (testDataFrame(x) || could_list_be_data_table(x)) {
     x = as.data.table(x)
   }
-  assertDataTable(x, ...)
+  assert_dataTable(x, ...)
 }
 
 # res int(1) - aimed at resolution

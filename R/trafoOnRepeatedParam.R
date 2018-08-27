@@ -12,13 +12,13 @@
 #' @return function
 #' @export
 trafoOnRepeatedParam = function(fun, repeated.param.id, additional.params = character(0L)) {
-  assertFunction(fun, args = c("x", "dict", "tags"))
-  assertString(repeated.param.id)
-  assertCharacter(additional.params)
+  assert_function(fun, args = c("x", "dict", "tags"))
+  assert_string(repeated.param.id)
+  assert_character(additional.params)
   function(x, dict, tags) {
     x = ensureDataTable(x)
     ind = names(which(BBmisc::vlapply(tags, function(z) paste0(repeated.param.id, ".repeated") %in% z)))
-    ind.additional = assertSubset(additional.params, names(x))
+    ind.additional = assert_subset(additional.params, names(x))
     dict = c(dict, as.list(x)[ind.additional])
     res = fun(x = x[, ind, with = FALSE], dict = dict, tags = tags)
     res = ensureDataTable(res, nrows = nrow(x))

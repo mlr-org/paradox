@@ -51,9 +51,9 @@ ParamReal = R6Class(
       }
      
       # write member variables
-      self$lower = assertNumber(lower)
-      self$upper = assertNumber(upper)
-      self$allow_inf = assertFlag(allow_inf)
+      self$lower = assert_number(lower)
+      self$upper = assert_number(upper)
+      self$allow_inf = assert_flag(allow_inf)
       assert_true(lower <= upper)
        
       # construct super class

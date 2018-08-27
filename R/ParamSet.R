@@ -57,14 +57,14 @@ ParamSet = R6Class("ParamSet",
       super$initialize(id = id, storage_type = storage_type, check = check, handle = handle, tags = tags)
 
       # set member variables
-      assertList(params, types = "ParamNode")
+      assert_list(params, types = "ParamNode")
       for (i in seq_along(params)) {
         params[[i]]$handle$root = self
       }
       self$params = params
-      self$trafo = assertFunction(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
-      self$restriction = assertClass(restriction, "call", null.ok = TRUE)
-      self$dictionary = assertList(dictionary, names = "strict", null.ok = TRUE)
+      self$trafo = assert_function(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
+      self$restriction = assert_class(restriction, "call", null.ok = TRUE)
+      self$dictionary = assert_list(dictionary, names = "strict", null.ok = TRUE)
     },
 
     # public methods

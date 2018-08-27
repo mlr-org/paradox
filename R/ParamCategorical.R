@@ -45,7 +45,7 @@ ParamCategorical = R6Class(
       }
       
       # write member variables
-      self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
+      self$values = assert_character(values, any.missing = FALSE, unique = TRUE)
 
       # construct super class
       super$initialize(id = id, storage_type = "character", check = check, default = default, special_vals = special_vals, tags = tags)

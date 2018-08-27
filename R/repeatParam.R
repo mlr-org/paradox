@@ -12,8 +12,8 @@
 #' @return List of Parameters
 #' @export
 repeatParam = function(n = 1L, param) {
-  assertInt(n)
-  assertClass(param, "ParamSimple")
+  assert_int(n)
+  assert_class(param, "ParamSimple")
   joining.id = paste0(param$id, ".repeated")
   lapply(seq_len(n), function(i) {
     this.param = param$clone()

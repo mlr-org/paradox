@@ -69,7 +69,7 @@ ParamSetFlat = R6Class(
     initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        assertSetEqual(names(x), self$ids)
+        assert_setEqual(names(x), self$ids)
         if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
@@ -89,7 +89,7 @@ ParamSetFlat = R6Class(
       names(params) = extractSubList(params, "id")
 
       # A Flat ParamSet can only contain ParamSimple Objects?
-      assertList(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
+      assert_list(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
       
       # construct super class
       super$initialize(id, storage_type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
@@ -97,7 +97,7 @@ ParamSetFlat = R6Class(
 
     # public methods
     sample = function(n = 1L) {
-      assertInt(n, lower = 1L)
+      assert_int(n, lower = 1L)
       sample_generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
@@ -112,8 +112,8 @@ ParamSetFlat = R6Class(
     },
 
     denorm = function(x) {
-      assertList(x, names = 'strict')
-      assertSetEqual(names(x), self$ids)
+      assert_list(x, names = 'strict')
+      assert_setEqual(names(x), self$ids)
       xs = lapply(self$ids, function(id) self$params[[id]]$denorm(x = x[id]))
       names(xs) = NULL
       as.data.table(xs)
@@ -121,7 +121,7 @@ ParamSetFlat = R6Class(
 
     transform = function(x) {
       x = ensureDataTable(x)
-      assertSetEqual(names(x), self$ids)
+      assert_setEqual(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
       # We require trafos to be vectorized! That's why we dont need the following
@@ -134,8 +134,8 @@ ParamSetFlat = R6Class(
     },
 
     generateLHSDesign = function(n, lhs.function = lhs::maximinLHS) {
-      assertInt(n, lower = 1L)
-      assertFunction(lhs.function, args = c("n", "k"))
+      assert_int(n, lower = 1L)
+      assert_function(lhs.function, args = c("n", "k"))
       lhs.des = lhs.function(n, k = self$length)
       # converts the LHS output to values of the parameters
       sample.converter = function(lhs.des) {
@@ -171,19 +171,19 @@ ParamSetFlat = R6Class(
 
       if (!is.null(resolution)) {
         # build for resolution
-        assertInt(resolution, lower = 1L)
+        assert_int(resolution, lower = 1L)
         grid.vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
         names(grid.vec) = self$ids
         res = as.list(self$denorm(grid.vec))
       } else {
         # build for n: calculate param.resolutions
         if (!is.null(n)) {
-          assertInt(n, lower = 1L)
+          assert_int(n, lower = 1L)
           param.resolutions = opt_grid_res(n, self$nlevels)
         }
         # build for param.resolutions
-        assertIntegerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")
-        assertSetEqual(names(param.resolutions), self$ids)
+        assert_integerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")
+        assert_setEqual(names(param.resolutions), self$ids)
         grid.vec = lapply(param.resolutions, seqGen)
         res = lapply(names(grid.vec), function(z) self$params[[z]]$denormVector(x = grid.vec[[z]]))
         names(res) = names(grid.vec)

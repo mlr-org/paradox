@@ -28,10 +28,10 @@ devtools::install_github("mlr-org/phng", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* _Int_egers
-* _Real_-valued numbers
-* _Flag_ for `TRUE`/`FALSE`
-* _Categorical_ values, namely characters.
+* _int_egers
+* _real_-valued numbers
+* _flag_ for `TRUE`/`FALSE`
+* _categorical_ values, namely characters.
 * Further types are only possible by using transformations.
 
 ```{r ps}

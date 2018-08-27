@@ -15,16 +15,16 @@ test_that("constructor works", {
   expect_error(ParamReal$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
-test_that("allow.inf works", {
-  p = ParamReal$new(id = "x", lower = 1, upper = 10, allow.inf = FALSE)
+test_that("allow_inf works", {
+  p = ParamReal$new(id = "x", lower = 1, upper = 10, allow_inf = FALSE)
   expect_true(p$test(1))
   expect_false(p$test(Inf))
   
-  p = ParamReal$new(id = "x", lower = 1, allow.inf = FALSE)
+  p = ParamReal$new(id = "x", lower = 1, allow_inf = FALSE)
   expect_true(p$test(1))
   expect_false(p$test(Inf))
   
-  p = ParamReal$new(id = "x", lower = 1, allow.inf = TRUE)
+  p = ParamReal$new(id = "x", lower = 1, allow_inf = TRUE)
   expect_true(p$test(1))
   expect_true(p$test(Inf))
 })

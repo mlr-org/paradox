@@ -48,7 +48,7 @@ ParamSimple = R6Class(
     initialize = function(id, storage_type, check, special_vals, default, tags) {
 
       if (!is.null(special_vals) && is.na(special_vals)) special_vals = list(special_vals)
-      assertList(special_vals, null.ok = TRUE)
+      assert_list(special_vals, null.ok = TRUE)
 
       # construct super class
       super$initialize(id = id, storage_type = storage_type, check = check, tags = tags)

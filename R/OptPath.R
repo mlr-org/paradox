@@ -74,7 +74,7 @@ OptPath = R6Class(
       if (is.null(names(minimize))) {
         names(minimize) = y_names
       }
-      self$par_set = assertClass(par_set, "ParamSet")
+      self$par_set = assert_class(par_set, "ParamSet")
       self$y_names = y_names
       self$minimize = minimize
       self$check_feasible = check_feasible
@@ -101,11 +101,11 @@ OptPath = R6Class(
         transformed_x = self$par_set$transform(x)
       }
 
-      assertList(x, names = "strict")
-      assertSetEqual(names(x), self$x_names)
+      assert_list(x, names = "strict")
+      assert_setEqual(names(x), self$x_names)
       x = x[self$x_names]
-      assertList(y, len = self$dim)
-      assertSetEqual(names(y), self$y_names)
+      assert_list(y, len = self$dim)
+      assert_setEqual(names(y), self$y_names)
       y = y[self$y_names]
 
       if (self$check_feasible) {
@@ -178,7 +178,7 @@ OptPath = R6Class(
 #'   passed to \code{as.data.frame}.
 #' @return [\code{data.frame}].
 #' @export
-as.data.frame_OptPath = function(x, row_names = NULL, optional = FALSE, include_extras = TRUE, ...) {
+as.data.frame_optPath = function(x, row_names = NULL, optional = FALSE, include_extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include_extras) {
