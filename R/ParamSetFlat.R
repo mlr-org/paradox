@@ -105,7 +105,7 @@ ParamSetFlat = R6Class(
       }
       if (!is.null(self$restriction)) {
         sample_validator = function(x) vectorizedForParamSetFlat(x, self$test)
-        oversampleForbidden2(n = n, param = param, sample_generator = sample_generator, sample_validator = sample_validator)
+        oversample_forbidden2(n = n, param = param, sample_generator = sample_generator, sample_validator = sample_validator)
       } else {
         sample_generator(n)
       }
@@ -138,7 +138,7 @@ ParamSetFlat = R6Class(
       assert_function(lhs.function, args = c("n", "k"))
       lhs.des = lhs.function(n, k = self$length)
       # converts the LHS output to values of the parameters
-      sample.converter = function(lhs.des) {
+      sample_converter = function(lhs.des) {
         vec.cols = lapply(seq_len(ncol(lhs.des)), function(z) lhs.des[,z])
         names(vec.cols) = self$ids
         self$denorm(vec.cols)
@@ -152,11 +152,11 @@ ParamSetFlat = R6Class(
         }
         # validates the LHS output, according to the param restrictions
         sample_validator = function(lhs.des) {
-          vectorizedForParamSetFlat(sample.converter(lhs.des), self$test)
+          vectorizedForParamSetFlat(sample_converter(lhs.des), self$test)
         }
-        lhs.des = oversampleForbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
+        lhs.des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
       }
-      sample.converter(lhs.des)
+      sample_converter(lhs.des)
     },
 
     # resolution int(1) - resolution used for each parameter
