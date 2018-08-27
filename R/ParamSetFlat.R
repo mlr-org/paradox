@@ -69,7 +69,7 @@ ParamSetFlat = R6Class(
     initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        assert_setEqual(names(x), self$ids)
+        assert_set_equal(names(x), self$ids)
         if (is.data.table(x)) x = as.list(x)
         res = checkList(x, names = "named")
         if (!is.null(self$restriction)) {
@@ -113,7 +113,7 @@ ParamSetFlat = R6Class(
 
     denorm = function(x) {
       assert_list(x, names = 'strict')
-      assert_setEqual(names(x), self$ids)
+      assert_set_equal(names(x), self$ids)
       xs = lapply(self$ids, function(id) self$params[[id]]$denorm(x = x[id]))
       names(xs) = NULL
       as.data.table(xs)
@@ -121,7 +121,7 @@ ParamSetFlat = R6Class(
 
     transform = function(x) {
       x = ensure_data_table(x)
-      assert_setEqual(names(x), self$ids)
+      assert_set_equal(names(x), self$ids)
       if (is.null(self$trafo)) 
         return(x)
       # We require trafos to be vectorized! That's why we dont need the following
@@ -183,7 +183,7 @@ ParamSetFlat = R6Class(
         }
         # build for param_resolutions
         assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
-        assert_setEqual(names(param_resolutions), self$ids)
+        assert_set_equal(names(param_resolutions), self$ids)
         grid.vec = lapply(param_resolutions, seqGen)
         res = lapply(names(grid.vec), function(z) self$params[[z]]$denorm_vector(x = grid.vec[[z]]))
         names(res) = names(grid.vec)
