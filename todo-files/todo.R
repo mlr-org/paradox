@@ -6,7 +6,7 @@ load_all()
 # 
 
 par_set = ParamSetFlat$new(
-  id = "ps.svm",
+  id = "ps_svm",
   params = list(
     ParamCategorical$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
     ParamReal$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
