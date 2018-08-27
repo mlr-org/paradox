@@ -4,21 +4,21 @@
 \alias{as.data.frame.OptPath}
 \title{Convert optimization path to data.frame.}
 \usage{
-\method{as.data.frame}{OptPath}(x, row.names = NULL, optional = FALSE,
-  include.extras = TRUE, ...)
+\method{as.data.frame}{OptPath}(x, row_names = NULL, optional = FALSE,
+  include_extras = TRUE, ...)
 }
 \arguments{
 \item{x}{[\code{\link{OptPath}}]\cr
-Optimization path.}
+Optimization path_}
 
-\item{row.names}{[\code{character}]\cr
+\item{row_names}{[\code{character}]\cr
 Row names for result.
 Default is none.}
 
 \item{optional}{[any]\cr
 Currently ignored.}
 
-\item{include.extras}{[\code{logical(1)}]\cr
+\item{include_extras}{[\code{logical(1)}]\cr
 Include all extra columns?
 Default is \code{TRUE}.}
 

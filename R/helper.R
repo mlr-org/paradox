@@ -5,7 +5,7 @@ as_dt_cols = function(x, names) {
   return(dt)
 }
 
-oversample_forbidden_2 = function(n, param, oversample_rate = 2, max_tries = 100, sample_generator, sample_validator) {
+oversample_forbidden2 = function(n, param, oversample_rate = 2, max_tries = 100, sample_generator, sample_validator) {
   x = sample_generator(n = round(oversample_rate * n))
   ind_restriction = sample_validator(x)
   # select the first n elements, that are valid
@@ -51,7 +51,7 @@ ensure_data_table = function(x, ...) {
   if (testDataFrame(x) || could_list_be_data_table(x)) {
     x = as.data.table(x)
   }
-  assert_dataTable(x, ...)
+  assert_data_table(x, ...)
 }
 
 # res int(1) - aimed at resolution

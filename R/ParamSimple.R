@@ -60,8 +60,8 @@ ParamSimple = R6Class(
 
     # public methods
     # Overwriting ParamNode Methods
-    sample = function(n = 1L) asDtCols(self$sampleVector(n = n), self$id),
-    denorm = function(x) asDtCols(self$denorm_vector(x[[self$id]]), self$id),
+    sample = function(n = 1L) as_dt_cols(self$sampleVector(n = n), self$id),
+    denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
     
     # ParamSimpleMethods
     sampleVector = function(n = 1L) {

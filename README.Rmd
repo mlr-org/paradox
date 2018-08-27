@@ -35,7 +35,7 @@ Create a simple ParamSet using all supported Parameter Types:
 * Further types are only possible by using transformations.
 
 ```{r ps}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamReal$new(id = "x", lower = -10, upper = 10),
@@ -71,7 +71,7 @@ ps$nlevels
 
 Things you can do on an all numeric ParamSet:
 ```{r psnumeric}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
     repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
@@ -102,7 +102,7 @@ Transformations are functions with a fixed signature.
 Transformations are useful to scale parameters:
 
 ```{r pstransscale}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
     ParamReal$new(id = "x", lower = 0, upper = 1)
@@ -136,7 +136,7 @@ The original parameters will be removed from the trafo result.
 Keep in mind that `z` stays untouched and remains after the transformation.
 
 ```{r psnumtrans}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
     repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
@@ -162,7 +162,7 @@ ps$transform(x)
 For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
 
 ```{r trafoOnRepeatedParam}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = c(
     list(
       ParamFlag$new(id = "switch"),

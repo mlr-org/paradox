@@ -1,4 +1,4 @@
-#' @title Base Class for ParamSet
+#' @title Base Class for ParamSetBase
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
@@ -39,9 +39,9 @@
 #' Inherited from \code{ParamNode}
 #' @inheritSection ParamNode Active Bindings
 #'
-#' @return [\code{\link{ParamSet}}].
-#' @family ParamSet
-ParamSet = R6Class("ParamSet",
+#' @return [\code{\link{ParamSetBase}}].
+#' @family ParamSetBase
+ParamSetBase = R6Class("ParamSetBase",
   inherit = ParamNode,
   public = list(
    

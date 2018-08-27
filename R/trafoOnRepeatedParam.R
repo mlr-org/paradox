@@ -17,7 +17,7 @@ trafoOnRepeatedParam = function(fun, repeated_param_id, additional_params = char
   assert_character(additional_params)
   function(x, dict, tags) {
     x = ensure_data_table(x)
-    ind = names(which(BBmisc::vlapply(tags, function(z) paste0(repeated_param_id, ".repeated") %in% z)))
+    ind = names(which(BBmisc::vlapply(tags, function(z) paste0(repeated_param_id, "_repeated") %in% z)))
     ind_additional = assert_subset(additional_params, names(x))
     dict = c(dict, as.list(x)[ind_additional])
     res = fun(x = x[, ind, with = FALSE], dict = dict, tags = tags)

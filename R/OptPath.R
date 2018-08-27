@@ -178,7 +178,7 @@ OptPath = R6Class(
 #'   passed to \code{as.data.frame}.
 #' @return [\code{data.frame}].
 #' @export
-as.data.frame_optPath = function(x, row_names = NULL, optional = FALSE, include_extras = TRUE, ...) {
+as.data.frame.OptPath = function(x, row_names = NULL, optional = FALSE, include_extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include_extras) {

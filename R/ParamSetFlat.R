@@ -1,4 +1,4 @@
-#' @title ParamSetFlat
+#' @title ParamSet
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
@@ -7,8 +7,8 @@
 #' @section Member Variables:
 #'   \emph{none}
 #' 
-#' Inherited from \code{ParamSet}:
-#' @inheritSection ParamSet Member Variables
+#' Inherited from \code{ParamSetBase}:
+#' @inheritSection ParamSetBase Member Variables
 #'
 #' @section Methods:
 #' 
@@ -24,8 +24,8 @@
 #'   }  
 #' }
 #' 
-#' Inherited from \code{ParamSet}:
-#' @inheritSection ParamSet Methods
+#' Inherited from \code{ParamSetBase}:
+#' @inheritSection ParamSetBase Methods
 #' 
 #' @section Active Bindings:
 #' 
@@ -52,15 +52,15 @@
 #'     The \code{tags} of each Parameter.}
 #' }
 #' 
-#' Inherited from \code{ParamSet}:
-#' @inheritSection ParamSet Active Bindings
+#' Inherited from \code{ParamSetBase}:
+#' @inheritSection ParamSetBase Active Bindings
 #' 
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamSet
 #' @export
-ParamSetFlat = R6Class(
-  "ParamSetFlat",
-  inherit = ParamSet,
+ParamSet = R6Class(
+  "ParamSet",
+  inherit = ParamSetBase,
   public = list(
    
     # member variables
@@ -167,7 +167,7 @@ ParamSetFlat = R6Class(
         stop("You can only specify one of the arguments!")
       }
 
-      seqGen = function(r) seq(0, 1, length_out = r)
+      seqGen = function(r) seq(0, 1, length.out = r)
 
       if (!is.null(resolution)) {
         # build for resolution

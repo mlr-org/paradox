@@ -5,7 +5,7 @@ load_all()
 # check functions as public method? Has to be to make Lower Upper Flexible
 # 
 
-par_set = ParamSetFlat$new(
+par_set = ParamSet$new(
   id = "ps_svm",
   params = list(
     ParamCategorical$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),

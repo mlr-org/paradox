@@ -4,17 +4,17 @@
 \alias{trafoOnRepeatedParam}
 \title{A helper to create trafo functions for repeated parameters.}
 \usage{
-trafoOnRepeatedParam(fun, repeated.param.id,
-  additional.params = character(0L))
+trafoOnRepeatedParam(fun, repeated_param_id,
+  additional_params = character(0L))
 }
 \arguments{
 \item{fun}{[\code{function}]\cr
 A trafo function with the arguments x, dict, tags}
 
-\item{repeated.param.id}{[\code{character(1)}]\cr
-The id of the parameter the that is repeated.}
+\item{repeated_param_id}{[\code{character(1)}]\cr
+The id of the parameter the that is repeated_}
 
-\item{additional.params}{[\code{character}]\cr
+\item{additional_params}{[\code{character}]\cr
 Additional parameter ids that will be passed inside the \code{dict} object.}
 }
 \value{
