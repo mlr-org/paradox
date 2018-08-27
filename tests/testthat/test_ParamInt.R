@@ -15,13 +15,13 @@ test_that("constructor works", {
   expect_error(ParamInt$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
-test_that("has.finite.bounds works", {
-  expect_true(ParamInt$new(id = "x", lower = 1, upper = 10)$has.finite.bounds)
-  expect_false(ParamInt$new(id = "x", lower = 1)$has.finite.bounds)
-  expect_false(ParamInt$new(id = "x")$has.finite.bounds)
+test_that("has_finite_bounds works", {
+  expect_true(ParamInt$new(id = "x", lower = 1, upper = 10)$has_finite_bounds)
+  expect_false(ParamInt$new(id = "x", lower = 1)$has_finite_bounds)
+  expect_false(ParamInt$new(id = "x")$has_finite_bounds)
 })
 
 test_that("sample requires finite bounds", {
   p = ParamInt$new(id = "x", lower = 1)
-  expect_error(p$sample(), "has.finite.bounds")
+  expect_error(p$sample(), "has_finite_bounds")
 })

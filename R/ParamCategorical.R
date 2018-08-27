@@ -63,7 +63,7 @@ ParamCategorical = R6Class(
   ),
   active = list(
     nlevels = function() length(self$values),
-    has.finite.bounds = function() TRUE
+    has_finite_bounds = function() TRUE
   ),
   private = list(
   )

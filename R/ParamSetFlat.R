@@ -207,7 +207,7 @@ ParamSetFlat = R6Class(
     upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
     param.classes = function() vcapply(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
-    has.finite.bounds = function() all(vlapply(self$params, function(param) param$has.finite.bounds)),
+    has_finite_bounds = function() all(vlapply(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
     nlevels = function() viapply(self$params, function(param) param$nlevels %??% NA_integer_),
     member.tags = function() lapply(self$params, function(param) param$tags)

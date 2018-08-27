@@ -53,6 +53,6 @@ ParamUntyped = R6Class(
   ),
 
   active = list(
-    has.finite.bounds = function() FALSE
+    has_finite_bounds = function() FALSE
   )
 )

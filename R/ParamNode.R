@@ -25,7 +25,7 @@
 #' @section Active Bindings:
 #' 
 #' \describe{
-#'   \item{has.finite.bounds}{\code{logical(1)} \cr Does the Parameter have finite bounds.}
+#'   \item{has_finite_bounds}{\code{logical(1)} \cr Does the Parameter have finite bounds.}
 #' }
 #'
 #' @return [\code{\link{ParamNode}}].
@@ -65,6 +65,6 @@ ParamNode = R6Class("ParamNode",
     }
   ),
   active = list(
-    has.finite.bounds = function() NA
+    has_finite_bounds = function() NA
   )
 )

@@ -25,7 +25,7 @@ test_that("methods and active bindings work", {
     expect_list(ps$values, any.missing = TRUE, names = "strict")
     expect_character(ps$param.classes, names = "strict")
     expect_data_table(ps$range)
-    expect_flag(ps$has.finite.bounds)
+    expect_flag(ps$has_finite_bounds)
     expect_int(ps$length, lower = 0L)
     expect_integer(ps$nlevels, any.missing = TRUE)
     expect_list(ps$member.tags, names = "strict", any.missing = TRUE)

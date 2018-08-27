@@ -34,7 +34,7 @@ ParamFlag = R6Class(
     initialize = function(id, special_vals = NULL, default = NULL, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         if (test_special_vals(self, x)) return(TRUE)
-        checkFlag(x, na.ok, null.ok)
+        check_flag(x, na.ok, null.ok)
       }
       
       # construct super class
@@ -50,7 +50,7 @@ ParamFlag = R6Class(
     }
   ),
   active = list(
-    has.finite.bounds = function() TRUE,
+    has_finite_bounds = function() TRUE,
     values = function() c(TRUE, FALSE),
     nlevels = function() 2L
   )
