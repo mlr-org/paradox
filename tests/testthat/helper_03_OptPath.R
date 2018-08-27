@@ -1,6 +1,6 @@
 # OptPath
 
-th_opt.path_full = OptPath$new(par_set = th_paramset.flat.full)
+th_opt.path_full = OptPath$new(par_set = th_paramset_flat_full)
 
 for (i in 1:10) {
   x = th_opt.path_full$par_set$sample(1)
@@ -16,7 +16,7 @@ for (i in 1:10) {
 
 # Multi-objective opt.path with transformations
 
-th_opt.path_multiobjective = OptPath$new(par_set = th_paramset.flat.repeated, y_names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
+th_opt.path_multiobjective = OptPath$new(par_set = th_paramset_flat_repeated, y_names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
 for (i in 1:10) {
   x = th_opt.path_multiobjective$par_set$sample(1)
   th_opt.path_multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))

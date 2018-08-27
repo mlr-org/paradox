@@ -2,17 +2,17 @@ context("ParamSetFlat")
 
 test_that("methods and active bindings work", {
   ps.list = list(
-    th_paramset.flat.empty,
-    th_paramset.flat.full,
-    th_paramset.flat.repeated,
-    th_paramset.flat_restricted,
-    th_paramset.flat.untyped,
-    th_paramset.flat.numeric,
-    th_paramset.flat.trafo,
-    th_paramset.flat.trafo.dictionary
+    th_paramset_flat_empty,
+    th_paramset_flat_full,
+    th_paramset_flat_repeated,
+    th_paramset_flat_restricted,
+    th_paramset_flat_untyped,
+    th_paramset_flat_numeric,
+    th_paramset_flat_trafo,
+    th_paramset_flat_trafo.dictionary
     )
   for (ps in ps.list) {
-    if (ps$id == "th_paramset.flat.full") {
+    if (ps$id == "th_paramset_flat_full") {
       expect_equal(ps$ids, c('th_param_int', 'th_param_real', 'th_param_categorical', 'th_param_flag'))
       expect_equal(ps$lower, c(th_param_int=-10, th_param_real=-10, th_param_categorical=NA_real_, th_param_flag=NA_real_))
       expect_equal(ps$upper, c(th_param_int=10, th_param_real=10, th_param_categorical=NA_real_, th_param_flag=NA_real_))
@@ -28,18 +28,18 @@ test_that("methods and active bindings work", {
     expect_flag(ps$has_finite_bounds)
     expect_int(ps$length, lower = 0L)
     expect_integer(ps$nlevels, any.missing = TRUE)
-    expect_list(ps$member.tags, names = "strict", any.missing = TRUE)
+    expect_list(ps$member_tags, names = "strict", any.missing = TRUE)
   }
 })
 
 test_that("advanced methods work", {
   ps.list = list(
-    th_paramset.flat.full,
-    th_paramset.flat.repeated,
-    th_paramset.flat_restricted,
-    th_paramset.flat.numeric,
-    th_paramset.flat.trafo,
-    th_paramset.flat.trafo.dictionary
+    th_paramset_flat_full,
+    th_paramset_flat_repeated,
+    th_paramset_flat_restricted,
+    th_paramset_flat_numeric,
+    th_paramset_flat_trafo,
+    th_paramset_flat_trafo.dictionary
   )
   
   for (ps in ps.list) {
@@ -87,9 +87,9 @@ test_that("advanced methods work", {
 })
 
 test_that("repeated params in ParamSetFlat works", {
-  ps = th_paramset.flat.repeated
+  ps = th_paramset_flat_repeated
   expect_class(ps, "ParamSetFlat")
-  expect_equal(sum(sapply(ps$member.tags, function(z) "th_param_real.na.repeated" %in% z)), 4)
+  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real.na.repeated" %in% z)), 4)
   xs = ps$sample(10)
   expect_true("th_param_categorical" %in% names(xs))
   xs.t = ps$transform(xs)

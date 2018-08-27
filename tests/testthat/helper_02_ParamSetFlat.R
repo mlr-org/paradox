@@ -1,8 +1,8 @@
 # ParamSetFlat
-th_paramset.flat.empty = ParamSetFlat$new()
+th_paramset_flat_empty = ParamSetFlat$new()
 
-th_paramset.flat.full = ParamSetFlat$new(
-  id = 'th_paramset.flat.full',
+th_paramset_flat_full = ParamSetFlat$new(
+  id = 'th_paramset_flat_full',
   params = list(
     th_param_int,
     th_param_real,
@@ -11,21 +11,21 @@ th_paramset.flat.full = ParamSetFlat$new(
   )
 )
 
-th_paramset.flat.untyped = ParamSetFlat$new(
-  id = 'th_paramset.flat.untyped',
+th_paramset_flat_untyped = ParamSetFlat$new(
+  id = 'th_paramset_flat_untyped',
   params = list(th_param_untyped)
 )
 
-th_paramset.flat.numeric = ParamSetFlat$new(
-  id = 'th_paramset.flat.numeric',
+th_paramset_flat_numeric = ParamSetFlat$new(
+  id = 'th_paramset_flat_numeric',
   params = list(
     th_param_int,
     th_param_real
   )
 )
 
-th_paramset.flat.trafo = ParamSetFlat$new(
-  id = 'th_paramset.flat.trafo',
+th_paramset_flat_trafo = ParamSetFlat$new(
+  id = 'th_paramset_flat_trafo',
   params = list(
     th_param_int,
     th_param_real
@@ -37,8 +37,8 @@ th_paramset.flat.trafo = ParamSetFlat$new(
   }
 )
 
-th_paramset.flat.trafo.dictionary = ParamSetFlat$new(
-  id = 'th_paramset.flat.trafo.dictionary',
+th_paramset_flat_trafo.dictionary = ParamSetFlat$new(
+  id = 'th_paramset_flat_trafo.dictionary',
   params = list(
     th_param_int,
     th_param_real
@@ -51,8 +51,8 @@ th_paramset.flat.trafo.dictionary = ParamSetFlat$new(
   }
 )
 
-th_paramset.flat_restricted = ParamSetFlat$new(
-  id = 'th_paramset.flat_restricted',
+th_paramset_flat_restricted = ParamSetFlat$new(
+  id = 'th_paramset_flat_restricted',
   params = list(
     th_param_int,
     th_param_real,
@@ -61,8 +61,8 @@ th_paramset.flat_restricted = ParamSetFlat$new(
   restriction = quote(th_param_real > th_param_int)
 )
 
-th_paramset.flat.repeated = ParamSetFlat$new(
-  id = 'th_paramset.flat.repeated',
+th_paramset_flat_repeated = ParamSetFlat$new(
+  id = 'th_paramset_flat_repeated',
   params = c(
     list(th_param_nat, th_param_categorical),
     repeatParam(4L, th_param_real.na)

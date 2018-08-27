@@ -48,7 +48,7 @@
 #'     The number of parameters.}
 #'   \item{nlevels}{[\code{integer}] \cr
 #'     For each discrete Parameter return the number of different values.}
-#'   \item{member.tags}{[\code{list}] \cr
+#'   \item{member_tags}{[\code{list}] \cr
 #'     The \code{tags} of each Parameter.}
 #' }
 #' 
@@ -128,7 +128,7 @@ ParamSetFlat = R6Class(
       #.mapply(function(x) {
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
-      xs = self$trafo(x = x, dict = self$dictionary, tags = self$member.tags)
+      xs = self$trafo(x = x, dict = self$dictionary, tags = self$member_tags)
       xs = ensureDataTable(xs)
       return(xs)
     },
@@ -210,6 +210,6 @@ ParamSetFlat = R6Class(
     has_finite_bounds = function() all(vlapply(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
     nlevels = function() viapply(self$params, function(param) param$nlevels %??% NA_integer_),
-    member.tags = function() lapply(self$params, function(param) param$tags)
+    member_tags = function() lapply(self$params, function(param) param$tags)
   )
 )

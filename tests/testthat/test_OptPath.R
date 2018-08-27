@@ -4,10 +4,10 @@ test_that("active bindings works", {
   op = th_opt.path_full
 
   # test active bindings
-  expect_equal(op$x_names, names(th_paramset.flat.full$params))
+  expect_equal(op$x_names, names(th_paramset_flat_full$params))
   expect_equal(op$length, 10)
   expect_data_table(op$x)
-  expect_equal(colnames(op$x), names(th_paramset.flat.full$params))
+  expect_equal(colnames(op$x), names(th_paramset_flat_full$params))
   expect_data_table(op$y)
   expect_equal(op$y$y, 1:10)
   expect_equal(op$dim, 1)
@@ -29,10 +29,10 @@ test_that("multi-objective with trafos works", {
   op = th_opt.path_multiobjective
 
   # test active bindings
-  expect_equal(op$x_names, names(th_paramset.flat.repeated$params))
+  expect_equal(op$x_names, names(th_paramset_flat_repeated$params))
   expect_equal(op$length, 10)
   expect_data_table(op$x)
-  expect_equal(colnames(op$x), names(th_paramset.flat.repeated$params))
+  expect_equal(colnames(op$x), names(th_paramset_flat_repeated$params))
   expect_data_table(op$y)
   expect_equal(op$y$y1.min, 10:1)
   expect_equal(op$y$y2.max, 1:10)

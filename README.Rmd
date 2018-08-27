@@ -86,7 +86,7 @@ ps$range
 The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
-ps$member.tags
+ps$member_tags
 ```
 
 This becomes useful if you want to do operations on parameters of one group like with transformations.
