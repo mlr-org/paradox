@@ -2,7 +2,7 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent the OptPath.
+#' A \code{\link[R6]{R6Class}} to represent the OptPath_
 #' 
 #' @section Member Variables:
 #' 
@@ -16,7 +16,7 @@
 #'   \item{check_feasible}{[\code{logical(1)}] \cr  
 #'     Should new x values be checked for feasibility according to the \code{ParamSet}.}
 #'   \item{data}{[\code{data.table}] \cr  
-#'     This field contains all values logged into the opt.path.}
+#'     This field contains all values logged into the opt.path_}
 #' }
 #' 
 #' @section Methods:
@@ -165,7 +165,7 @@ OptPath = R6Class(
 #'   Convert optimization path to data.frame.
 #'
 #' @param x [\code{\link{OptPath}}]\cr
-#'   Optimization path.
+#'   Optimization path_
 #' @param row_names [\code{character}]\cr
 #'   Row names for result.
 #'   Default is none.

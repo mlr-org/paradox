@@ -57,13 +57,13 @@ ps$generateLHSDesign(3)
 
 Generate Grid Design:
 ```{r psgrid}
-ps$generateGridDesign(resolution = 2)
+ps$generate_grid_design(resolution = 2)
 ```
 
 Properties of the parameters within the ParamSet:
 ```{r psprobs}
 ps$values
-ps$param.classes
+ps$param_classes
 ps$nlevels
 ```
 
@@ -177,7 +177,7 @@ ps = ParamSetFlat$new(
       }
       res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
       list(x = res)
-    }, repeated.param.id = "x", additional.params = "z")
+    }, repeated.param_id = "x", additional.params = "z")
   )
 (x = ps$sample(3))
 ps$transform(x)

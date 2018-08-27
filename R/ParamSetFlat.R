@@ -15,10 +15,10 @@
 #' \describe{
 #'   \item{generateLHSDesign(n, lhs.function)}{[\code{function}] \cr
 #'     Function to generate a LHS design.}
-#'   \item{generateGridDesign(resolution, param.resolutions, n)}{[\code{function}] \cr
+#'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
 #'     \describe{
 #'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
-#'       \item{param.resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
+#'       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
 #'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
 #'     }
 #'   }  
@@ -40,7 +40,7 @@
 #'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
 #'   \item{upper}{[\code{numeric}] \cr
 #'     Same as for \code{lower}}
-#'   \item{param.classes}{[\code{character}] \cr
+#'   \item{param_classes}{[\code{character}] \cr
 #'     The \code{R6} class name of each Parameter.}
 #'   \item{range}{[\code{data.table}] \cr
 #'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
@@ -160,14 +160,14 @@ ParamSetFlat = R6Class(
     },
 
     # resolution int(1) - resolution used for each parameter
-    # param.resolutions int() - resolution given per parameter (named vector)
+    # param_resolutions int() - resolution given per parameter (named vector)
     # n int(1) - approx. maximum number of samples in grid
-    generateGridDesign = function(resolution = NULL, param.resolutions = NULL, n = NULL) {
-      if (sum(!is.null(resolution), !is.null(param.resolutions), !is.null(n)) != 1) {
+    generate_grid_design = function(resolution = NULL, param_resolutions = NULL, n = NULL) {
+      if (sum(!is.null(resolution), !is.null(param_resolutions), !is.null(n)) != 1) {
         stop("You can only specify one of the arguments!")
       }
 
-      seqGen = function(r) seq(0, 1, length.out = r)
+      seqGen = function(r) seq(0, 1, length_out = r)
 
       if (!is.null(resolution)) {
         # build for resolution
@@ -176,15 +176,15 @@ ParamSetFlat = R6Class(
         names(grid.vec) = self$ids
         res = as.list(self$denorm(grid.vec))
       } else {
-        # build for n: calculate param.resolutions
+        # build for n: calculate param_resolutions
         if (!is.null(n)) {
           assert_int(n, lower = 1L)
-          param.resolutions = opt_grid_res(n, self$nlevels)
+          param_resolutions = opt_grid_res(n, self$nlevels)
         }
-        # build for param.resolutions
-        assert_integerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")
-        assert_setEqual(names(param.resolutions), self$ids)
-        grid.vec = lapply(param.resolutions, seqGen)
+        # build for param_resolutions
+        assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
+        assert_setEqual(names(param_resolutions), self$ids)
+        grid.vec = lapply(param_resolutions, seqGen)
         res = lapply(names(grid.vec), function(z) self$params[[z]]$denormVector(x = grid.vec[[z]]))
         names(res) = names(grid.vec)
       } 
@@ -205,7 +205,7 @@ ParamSetFlat = R6Class(
     values = function() lapply(self$params, function(param) param$values),
     lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
     upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
-    param.classes = function() vcapply(self$params, function(param) class(param)[1]),
+    param_classes = function() vcapply(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
     has_finite_bounds = function() all(vlapply(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
