@@ -114,9 +114,9 @@ OptPath = R6Class(
 
       # add the data to the opt path
 
-      if (private$cache.pos == length(private$cache)) private$flush()
-      private$cache.pos = private$cache.pos + 1L
-      private$cache[[private$cache.pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y)
+      if (private$cache_pos == length(private$cache)) private$flush()
+      private$cache_pos = private$cache_pos + 1L
+      private$cache[[private$cache_pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec.time = exec.time, timestamp = timestamp, extra = list(extra), transformed.x = list(transformed.x)), x, y)
       invisible(self)
     }
   ),
@@ -125,18 +125,18 @@ OptPath = R6Class(
 
     # private member variables
 
-    cache.pos = 0L, # the index of the last cached opt path row
+    cache_pos = 0L, # the index of the last cached opt path row
     cache = vector("list", 512L), # list to store the cache
-    p.data = NULL, # the real data.table
+    .data = NULL, # the real data.table
 
     # private methods
 
     flush = function() {
-      if (private$cache.pos > 0L) {
-        cached = rbindlist(head(private$cache, private$cache.pos), fill = TRUE)
+      if (private$cache_pos > 0L) {
+        cached = rbindlist(head(private$cache, private$cache_pos), fill = TRUE)
         private$p.data = rbindlist(list(private$p.data, cached), fill = TRUE)
         setorderv(private$p.data, "dob")
-        private$cache.pos = 0L
+        private$cache_pos = 0L
       }
     }
   ),
@@ -152,7 +152,7 @@ OptPath = R6Class(
       }
     },
     x.names = function() self$par.set$ids,
-    length = function() nrow(private$p.data) + private$cache.pos,
+    length = function() nrow(private$p.data) + private$cache_pos,
     x = function() self$data[, self$x.names, with = FALSE],
     y = function() self$data[, self$y.names, with = FALSE],
     dim = function() length(self$y.names)
@@ -178,7 +178,7 @@ OptPath = R6Class(
 #'   passed to \code{as.data.frame}.
 #' @return [\code{data.frame}].
 #' @export
-as.data.frame.OptPath = function(x, row.names = NULL, optional = FALSE, include.extras = TRUE, ...) {
+as.data.frame_OptPath = function(x, row.names = NULL, optional = FALSE, include.extras = TRUE, ...) {
   dt = data.table::copy(x$data)
 
   if (include.extras) {

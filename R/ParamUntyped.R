@@ -40,7 +40,7 @@ ParamUntyped = R6Class(
       }
 
       # construct super class
-      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags, special.vals = NULL)
+      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags, special_vals = NULL)
     },
 
     # public methods

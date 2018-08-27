@@ -98,16 +98,16 @@ ParamSetFlat = R6Class(
     # public methods
     sample = function(n = 1L) {
       assertInt(n, lower = 1L)
-      sample.generator = function(n, ...) {
+      sample_generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
         as.data.table(xs)    
       }
       if (!is.null(self$restriction)) {
-        sample.validator = function(x) vectorizedForParamSetFlat(x, self$test)
-        oversampleForbidden2(n = n, param = param, sample.generator = sample.generator, sample.validator = sample.validator)
+        sample_validator = function(x) vectorizedForParamSetFlat(x, self$test)
+        oversampleForbidden2(n = n, param = param, sample_generator = sample_generator, sample_validator = sample_validator)
       } else {
-        sample.generator(n)
+        sample_generator(n)
       }
     },
 
@@ -145,16 +145,16 @@ ParamSetFlat = R6Class(
       }
       if (!is.null(self$restriction)) {
         # we work on the matrix that is the LHS output to be able to use augmentLHS to sample additional values.
-        sample.generator = function(n, old.x = NULL) {
-          if (is.null(old.x)) return(lhs.des)
-          lhs.des = lhs::augmentLHS(lhs = old.x, m = n)
+        sample_generator = function(n, old_x = NULL) {
+          if (is.null(old_x)) return(lhs.des)
+          lhs.des = lhs::augmentLHS(lhs = old_x, m = n)
           tail(lhs.des, n)
         }
         # validates the LHS output, according to the param restrictions
-        sample.validator = function(lhs.des) {
+        sample_validator = function(lhs.des) {
           vectorizedForParamSetFlat(sample.converter(lhs.des), self$test)
         }
-        lhs.des = oversampleForbidden2(n = n, param = param, oversample.rate = 1, sample.generator = sample.generator, sample.validator = sample.validator)
+        lhs.des = oversampleForbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
       }
       sample.converter(lhs.des)
     },
@@ -179,7 +179,7 @@ ParamSetFlat = R6Class(
         # build for n: calculate param.resolutions
         if (!is.null(n)) {
           assertInt(n, lower = 1L)
-          param.resolutions = optGridRes(n, self$nlevels)
+          param.resolutions = opt_grid_res(n, self$nlevels)
         }
         # build for param.resolutions
         assertIntegerish(param.resolutions, lower = 1L, any.missing = FALSE, names = "strict")

@@ -31,14 +31,14 @@ ParamFlag = R6Class(
   public = list(
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, tags = NULL) {
+    initialize = function(id, special_vals = NULL, default = NULL, tags = NULL) {
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (testSpecialVals(self, x)) return(TRUE)
+        if (test_special_vals(self, x)) return(TRUE)
         checkFlag(x, na.ok, null.ok)
       }
       
       # construct super class
-      super$initialize(id = id, storage.type = "logical", check = check, special.vals = special.vals, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "logical", check = check, special_vals = special_vals, default = default, tags = tags)
     },
 
     # public methods

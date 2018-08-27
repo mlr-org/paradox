@@ -43,10 +43,10 @@ ParamReal = R6Class(
     upper = NULL,
     
     # constructor
-    initialize = function(id, special.vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
+    initialize = function(id, special_vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow.inf = FALSE, tags = NULL) {
 
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (testSpecialVals(self, x)) return(TRUE)
+        if (test_special_vals(self, x)) return(TRUE)
         checkNumber(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok, finite = !self$allow.inf)
       }
      
@@ -57,7 +57,7 @@ ParamReal = R6Class(
       assert_true(lower <= upper)
        
       # construct super class
-      super$initialize(id = id, storage.type = "numeric", check = check, special.vals = special.vals, default = default, tags = tags)
+      super$initialize(id = id, storage.type = "numeric", check = check, special_vals = special_vals, default = default, tags = tags)
 
     },
 
