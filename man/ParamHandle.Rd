@@ -12,7 +12,7 @@ ParamHandle
 [\code{\link{ParamHandle}}].
 }
 \description{
-A \code{\link[R6]{R6Class}} to represent the tree structure of ParamSet.
+A \code{\link[R6]{R6Class}} to represent the tree structure of ParamSetBase.
 }
 \seealso{
 Other ParamHelpers: \code{\link{ParamBase}},

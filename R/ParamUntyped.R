@@ -40,19 +40,19 @@ ParamUntyped = R6Class(
       }
 
       # construct super class
-      super$initialize(id = id, storage.type = "list", check = check, default = default, tags = tags, special.vals = NULL)
+      super$initialize(id = id, storage_type = "list", check = check, default = default, tags = tags, special_vals = NULL)
     },
 
     # public methods
     sampleVector = function(n = 1L) {
       stop("Untyped Param can not be sampled.")
     },
-    denormVector = function(x) {
+    denorm_vector = function(x) {
       stop("Untyped Param can not be denormed.")
     }
   ),
 
   active = list(
-    has.finite.bounds = function() FALSE
+    has_finite_bounds = function() FALSE
   )
 )

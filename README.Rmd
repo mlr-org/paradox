@@ -1,41 +1,41 @@
 ---
 output: github_document
 ---
-# phng
+# paradox
 
-[![Build Status Linux](https://travis-ci.org/mlr-org/phng.svg?branch=master)](https://travis-ci.org/mlr-org/phng)
-[![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/phng)
-[![Coverage Status](https://coveralls.io/repos/github/mlr-org/phng/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/phng?branch=master)
+[![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
+[![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox)
+[![Coverage Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
 
 
 ```{r setup, include=FALSE}
 set.seed(123)
 knitr::opts_chunk$set(cache = TRUE, collapse = FALSE, warning = FALSE, error = FALSE)
-library(phng)
+library(paradox)
 ```
 
 Universal Parameter Space Description and Tools
 
-* [Issues and Bugs](https://github.com/mlr-org/phng/issues)
-* [Documentation](https://mlr-org.github.io/phng)
+* [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
+* [Documentation](https://mlr-org.github.io/paradox)
 
 ## Installation
 ```{r inst, eval=FALSE}
-devtools::install_github("mlr-org/phng", dependencies = TRUE)
+devtools::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
 ## Usage
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* _Int_egers
-* _Real_-valued numbers
-* _Flag_ for `TRUE`/`FALSE`
-* _Categorical_ values, namely characters.
+* _int_egers
+* _real_-valued numbers
+* _flag_ for `TRUE`/`FALSE`
+* _categorical_ values, namely characters.
 * Further types are only possible by using transformations.
 
 ```{r ps}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamReal$new(id = "x", lower = -10, upper = 10),
@@ -52,18 +52,18 @@ ps$sample(3)
 
 Generate LHS Design:
 ```{r pslhs}
-ps$generateLHSDesign(3)
+ps$generate_lhs_design(3)
 ```
 
 Generate Grid Design:
 ```{r psgrid}
-ps$generateGridDesign(resolution = 2)
+ps$generate_grid_design(resolution = 2)
 ```
 
 Properties of the parameters within the ParamSet:
 ```{r psprobs}
 ps$values
-ps$param.classes
+ps$param_classes
 ps$nlevels
 ```
 
@@ -71,7 +71,7 @@ ps$nlevels
 
 Things you can do on an all numeric ParamSet:
 ```{r psnumeric}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
     repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
@@ -86,7 +86,7 @@ ps$range
 The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
-ps$member.tags
+ps$member_tags
 ```
 
 This becomes useful if you want to do operations on parameters of one group like with transformations.
@@ -102,7 +102,7 @@ Transformations are functions with a fixed signature.
 Transformations are useful to scale parameters:
 
 ```{r pstransscale}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
     ParamReal$new(id = "x", lower = 0, upper = 1)
@@ -136,16 +136,16 @@ The original parameters will be removed from the trafo result.
 Keep in mind that `z` stays untouched and remains after the transformation.
 
 ```{r psnumtrans}
-ps = ParamSetFlat$new(
+ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
     repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = function(x, dict, tags) {
     scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
-    x$x = Map(scale, x$x.repeated.1, x$x.repeated.2)
-    x$x.repeated.1 = NULL
-    x$x.repeated.2 = NULL
+    x$x = Map(scale, x$x_repeated_1, x$x_repeated_2)
+    x$x_repeated_1 = NULL
+    x$x_repeated_2 = NULL
     return(x)
   }
 )
@@ -155,21 +155,21 @@ The output of all value generating functions won't change for a ParamSet that ha
 Instead these outputs can be put into `ps$transform()` to obtain the desired parameter values.
 
 ```{r psnumtrans2}
-x = ps$generateLHSDesign(3)
+x = ps$generate_lhs_design(3)
 ps$transform(x)
 ```
 
-For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
+For more advanced transformations on repeated parameters you can use `trafo_on_repeated_param()`:
 
-```{r trafoOnRepeatedParam}
-ps = ParamSetFlat$new(
+```{r trafo_on_repeated_param}
+ps = ParamSet$new(
   params = c(
     list(
       ParamFlag$new(id = "switch"),
       ParamInt$new(id = "z", lower = 1, upper = 4)),
     repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
-  trafo = trafoOnRepeatedParam(
+  trafo = trafo_on_repeated_param(
     fun = function(x, dict, tags) {
       scale = function(z, ...) {
         x = c(...)[1:z]
@@ -177,7 +177,7 @@ ps = ParamSetFlat$new(
       }
       res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
       list(x = res)
-    }, repeated.param.id = "x", additional.params = "z")
+    }, repeated_param_id = "x", additional_params = "z")
   )
 (x = ps$sample(3))
 ps$transform(x)

@@ -15,31 +15,31 @@ test_that("constructor works", {
   expect_error(ParamReal$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
-test_that("allow.inf works", {
-  p = ParamReal$new(id = "x", lower = 1, upper = 10, allow.inf = FALSE)
+test_that("allow_inf works", {
+  p = ParamReal$new(id = "x", lower = 1, upper = 10, allow_inf = FALSE)
   expect_true(p$test(1))
   expect_false(p$test(Inf))
   
-  p = ParamReal$new(id = "x", lower = 1, allow.inf = FALSE)
+  p = ParamReal$new(id = "x", lower = 1, allow_inf = FALSE)
   expect_true(p$test(1))
   expect_false(p$test(Inf))
   
-  p = ParamReal$new(id = "x", lower = 1, allow.inf = TRUE)
+  p = ParamReal$new(id = "x", lower = 1, allow_inf = TRUE)
   expect_true(p$test(1))
   expect_true(p$test(Inf))
 })
 
 
-test_that("has.finite.bounds works", {
-  expect_true(ParamReal$new(id = "x", lower = 1, upper = 10)$has.finite.bounds)
-  expect_false(ParamReal$new(id = "x", lower = 1)$has.finite.bounds)
-  expect_false(ParamReal$new(id = "x")$has.finite.bounds)
+test_that("has_finite_bounds works", {
+  expect_true(ParamReal$new(id = "x", lower = 1, upper = 10)$has_finite_bounds)
+  expect_false(ParamReal$new(id = "x", lower = 1)$has_finite_bounds)
+  expect_false(ParamReal$new(id = "x")$has_finite_bounds)
 })
 
 
 test_that("sample requires finite bounds", {
   p = ParamReal$new(id = "x", lower = 1)
-  expect_error(p$sample(), "has.finite.bounds")
+  expect_error(p$sample(), "has_finite_bounds")
 })
 
 

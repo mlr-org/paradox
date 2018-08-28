@@ -37,25 +37,25 @@ ParamCategorical = R6Class(
     values = NULL,
 
     # constructor
-    initialize = function(id, values, default = NULL, special.vals = NULL, tags = NULL) {
+    initialize = function(id, values, default = NULL, special_vals = NULL, tags = NULL) {
 
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (na.ok && is.na(x) || testSpecialVals(self, x)) return(TRUE)
+        if (na.ok && is.na(x) || test_special_vals(self, x)) return(TRUE)
         checkChoice(x, choices = self$values, null.ok = null.ok)
       }
       
       # write member variables
-      self$values = assertCharacter(values, any.missing = FALSE, unique = TRUE)
+      self$values = assert_character(values, any.missing = FALSE, unique = TRUE)
 
       # construct super class
-      super$initialize(id = id, storage.type = "character", check = check, default = default, special.vals = special.vals, tags = tags)
+      super$initialize(id = id, storage_type = "character", check = check, default = default, special_vals = special_vals, tags = tags)
     },
 
     # public methods
     sampleVector = function(n = 1L) {
       sample(self$values, n, replace = TRUE)
     },
-    denormVector = function(x) {
+    denorm_vector = function(x) {
       res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
@@ -63,7 +63,7 @@ ParamCategorical = R6Class(
   ),
   active = list(
     nlevels = function() length(self$values),
-    has.finite.bounds = function() TRUE
+    has_finite_bounds = function() TRUE
   ),
   private = list(
   )

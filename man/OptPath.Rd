@@ -9,22 +9,22 @@
 OptPath
 }
 \description{
-A \code{\link[R6]{R6Class}} to represent the OptPath.
+A \code{\link[R6]{R6Class}} to represent the OptPath_
 }
 \section{Member Variables}{
 
 
 \describe{
-  \item{par.set}{[\code{ParamSet}] \cr 
+  \item{par_set}{[\code{ParamSet}] \cr 
     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
-  \item{y.names}{[\code{character()}] \cr 
+  \item{y_names}{[\code{character()}] \cr 
     The names for the y values. Default is \dQuote{y}.}
   \item{minimize}{[\code{logical()}] \cr  
     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
-  \item{check.feasible}{[\code{logical(1)}] \cr  
+  \item{check_feasible}{[\code{logical(1)}] \cr  
     Should new x values be checked for feasibility according to the \code{ParamSet}.}
   \item{data}{[\code{data.table}] \cr  
-    This field contains all values logged into the opt.path.}
+    This field contains all values logged into the opt_path_}
 }
 }
 
@@ -41,7 +41,7 @@ A \code{\link[R6]{R6Class}} to represent the OptPath.
 
 
 \describe{
-  \item{x.names}{[\code{character()}] \cr
+  \item{x_names}{[\code{character()}] \cr
     Names of the x-values}
   \item{length}{[\code{integer(1)}] \cr
     The number of entries in this \code{OptPath}.}

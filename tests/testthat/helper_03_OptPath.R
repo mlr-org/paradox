@@ -1,23 +1,23 @@
 # OptPath
 
-th.opt.path.full = OptPath$new(par.set = th.paramset.flat.full)
+th_opt_path_full = OptPath$new(par_set = th_paramset_full)
 
 for (i in 1:10) {
-  x = th.opt.path.full$par.set$sample(1)
-  th.opt.path.full$add(
+  x = th_opt_path_full$par_set$sample(1)
+  th_opt_path_full$add(
     x = x,
     y = i, 
     message = sprintf("message: %i", i),
     error = sprintf("error: %i", i),
-    exec.time = i,
-    extra = list(th.ex1 = i, th.ex2 = "th.ex2.string")
+    exec_time = i,
+    extra = list(th_ex1 = i, th_ex2 = "th_ex2.string")
   )
 }
 
-# Multi-objective opt.path with transformations
+# Multi-objective opt_path with transformations
 
-th.opt.path.multiobjective = OptPath$new(par.set = th.paramset.flat.repeated, y.names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
+th_opt_path_multiobjective = OptPath$new(par_set = th_paramset_repeated, y_names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
 for (i in 1:10) {
-  x = th.opt.path.multiobjective$par.set$sample(1)
-  th.opt.path.multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))
+  x = th_opt_path_multiobjective$par_set$sample(1)
+  th_opt_path_multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))
 }

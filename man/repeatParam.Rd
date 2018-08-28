@@ -11,13 +11,13 @@ repeatParam(n = 1L, param)
 How often should this parameter be copied?}
 
 \item{param}{[\code{ParamSimple(1)}]\cr
-The parameter that should be repeated.}
+The parameter that should be repeated_}
 }
 \value{
 List of Parameters
 }
 \description{
-Creates a list of a single Parameter repeated.
+Creates a list of a single Parameter repeated_
 Each parameter is tagged with \code{<param$id>.repeated}.
 This way it can be determined that they belong together
 }
