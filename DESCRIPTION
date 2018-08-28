@@ -14,7 +14,7 @@ Description: A successor of the ParamHelpers Package.
 License: GPL-2
 URL: https://github.com/mlr-org/paradox
 BugReports: https://github.com/mlr-org/paradox/issues
-NeedsCompilation: nogit co
+NeedsCompilation: no
 Depends:
     data.table
 Imports:
