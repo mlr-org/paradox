@@ -67,7 +67,7 @@ th_paramset_repeated = ParamSet$new(
     list(th_param_nat, th_param_categorical),
     repeatParam(4L, th_param_real_na)
   ),
-  trafo = trafoOnRepeatedParam(fun = function(x, dict, tags) {
+  trafo = trafo_on_repeated_param(fun = function(x, dict, tags) {
     xm = as.matrix(as.data.table(x))
     col_ind = seq_len(ncol(xm))
     ind_mat = sapply(dict$th_param_nat, function(z) col_ind <= z)

@@ -159,9 +159,9 @@ x = ps$generate_lhs_design(3)
 ps$transform(x)
 ```
 
-For more advanced transformations on repeated parameters you can use `trafoOnRepeatedParam()`:
+For more advanced transformations on repeated parameters you can use `trafo_on_repeated_param()`:
 
-```{r trafoOnRepeatedParam}
+```{r trafo_on_repeated_param}
 ps = ParamSet$new(
   params = c(
     list(
@@ -169,7 +169,7 @@ ps = ParamSet$new(
       ParamInt$new(id = "z", lower = 1, upper = 4)),
     repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
-  trafo = trafoOnRepeatedParam(
+  trafo = trafo_on_repeated_param(
     fun = function(x, dict, tags) {
       scale = function(z, ...) {
         x = c(...)[1:z]

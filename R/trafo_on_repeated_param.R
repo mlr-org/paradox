@@ -11,7 +11,7 @@
 #'   Additional parameter ids that will be passed inside the \code{dict} object.
 #' @return function
 #' @export
-trafoOnRepeatedParam = function(fun, repeated_param_id, additional_params = character(0L)) {
+trafo_on_repeated_param = function(fun, repeated_param_id, additional_params = character(0L)) {
   assert_function(fun, args = c("x", "dict", "tags"))
   assert_string(repeated_param_id)
   assert_character(additional_params)
