@@ -166,7 +166,7 @@ OptPath = R6Class(
 #'
 #' @param x [\code{\link{OptPath}}]\cr
 #'   Optimization path_
-#' @param row_names [\code{character}]\cr
+#' @param row.names [\code{character}]\cr
 #'   Row names for result.
 #'   Default is none.
 #' @param optional [any]\cr
