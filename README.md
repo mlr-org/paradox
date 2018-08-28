@@ -1,19 +1,19 @@
 
-phng
+paradox
 ====
 
-[![Build Status Linux](https://travis-ci.org/mlr-org/phng.svg?branch=master)](https://travis-ci.org/mlr-org/phng) [![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/phng) [![Coverage Status](https://coveralls.io/repos/github/mlr-org/phng/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/phng?branch=master)
+[![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox) [![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox) [![Coverage Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
 
 Universal Parameter Space Description and Tools
 
--   [Issues and Bugs](https://github.com/mlr-org/phng/issues)
--   [Documentation](https://mlr-org.github.io/phng)
+-   [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
+-   [Documentation](https://mlr-org.github.io/paradox)
 
 Installation
 ------------
 
 ``` r
-devtools::install_github("mlr-org/phng", dependencies = TRUE)
+devtools::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
 Usage

@@ -12,9 +12,9 @@ Description: A successor of the ParamHelpers Package.
     Easily define parameter spaces and generate LHS and random designs from it.
     Check parameter values for feasibility.
 License: GPL-2
-URL: https://github.com/mlr-org/phng
-BugReports: https://github.com/mlr-org/phng/issues
-NeedsCompilation: no
+URL: https://github.com/mlr-org/paradox
+BugReports: https://github.com/mlr-org/paradox/issues
+NeedsCompilation: nogit co
 Depends:
     data.table
 Imports:

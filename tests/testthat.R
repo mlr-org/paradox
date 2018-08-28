@@ -1,4 +1,4 @@
 library(testthat)
-library(phng)
+library(paradox)
 
-test_check("phng", )
+test_check("paradox")
