@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Repeat a single Parameter — repeatParam • paradox</title>
+<title>A helper to create trafo functions for repeated parameters. — trafo_on_repeated_param • paradox</title>
 
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script>
@@ -30,11 +30,9 @@
 
 
 
-<meta property="og:title" content="Repeat a single Parameter — repeatParam" />
+<meta property="og:title" content="A helper to create trafo functions for repeated parameters. — trafo_on_repeated_param" />
 
-<meta property="og:description" content="Creates a list of a single Parameter repeated_
-Each parameter is tagged with &amp;lt;param$id&amp;gt;.repeated.
-This way it can be determined that they belong together" />
+<meta property="og:description" content="A helper to create trafo functions for repeated parameters." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -99,39 +97,43 @@ This way it can be determined that they belong together" />
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Repeat a single Parameter</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/repeat_param.R'><code>R/repeat_param.R</code></a></small>
-    <div class="hidden name"><code>repeatParam.Rd</code></div>
+    <h1>A helper to create trafo functions for repeated parameters.</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/trafo_on_repeated_param.R'><code>R/trafo_on_repeated_param.R</code></a></small>
+    <div class="hidden name"><code>trafo_on_repeated_param.Rd</code></div>
     </div>
 
     <div class="ref-description">
     
-    <p>Creates a list of a single Parameter repeated_
-Each parameter is tagged with <code>&lt;param$id&gt;.repeated</code>.
-This way it can be determined that they belong together</p>
+    <p>A helper to create trafo functions for repeated parameters.</p>
     
     </div>
 
-    <pre class="usage"><span class='fu'>repeatParam</span>(<span class='kw'>n</span> <span class='kw'>=</span> <span class='fl'>1L</span>, <span class='no'>param</span>)</pre>
+    <pre class="usage"><span class='fu'>trafo_on_repeated_param</span>(<span class='no'>fun</span>, <span class='no'>repeated_param_id</span>,
+  <span class='kw'>additional_params</span> <span class='kw'>=</span> <span class='fu'>character</span>(<span class='fl'>0L</span>))</pre>
     
     <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
     <colgroup><col class="name" /><col class="desc" /></colgroup>
     <tr>
-      <th>n</th>
-      <td><p>[<code>integer(1)</code>]<br />
-How often should this parameter be copied?</p></td>
+      <th>fun</th>
+      <td><p>[<code>function</code>]<br />
+A trafo function with the arguments x, dict, tags</p></td>
     </tr>
     <tr>
-      <th>param</th>
-      <td><p>[<code><a href='ParamSimple.html'>ParamSimple(1)</a></code>]<br />
-The parameter that should be repeated_</p></td>
+      <th>repeated_param_id</th>
+      <td><p>[<code>character(1)</code>]<br />
+The id of the parameter the that is repeated_</p></td>
+    </tr>
+    <tr>
+      <th>additional_params</th>
+      <td><p>[<code>character</code>]<br />
+Additional parameter ids that will be passed inside the <code>dict</code> object.</p></td>
     </tr>
     </table>
     
     <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
-    <p>List of Parameters</p>
+    <p>function</p>
     
 
   </div>

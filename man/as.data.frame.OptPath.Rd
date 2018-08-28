@@ -4,14 +4,14 @@
 \alias{as.data.frame.OptPath}
 \title{Convert optimization path to data.frame.}
 \usage{
-\method{as.data.frame}{OptPath}(x, row_names = NULL, optional = FALSE,
+\method{as.data.frame}{OptPath}(x, row.names = NULL, optional = FALSE,
   include_extras = TRUE, ...)
 }
 \arguments{
 \item{x}{[\code{\link{OptPath}}]\cr
 Optimization path_}
 
-\item{row_names}{[\code{character}]\cr
+\item{row.names}{[\code{character}]\cr
 Row names for result.
 Default is none.}
 
