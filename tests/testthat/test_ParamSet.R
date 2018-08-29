@@ -66,6 +66,8 @@ test_that("advanced methods work", {
     expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
     xlt = ps$transform(xl)
     expect_data_table(xlt, nrows = 10)
+    xltl = design_to_list(xlt)
+    expect_list(xltl, len = 10)
 
     xg = ps$generate_grid_design(5)
     expect_data_table(xg, any.missing = FALSE)
@@ -95,4 +97,6 @@ test_that("repeated params in ParamSet works", {
   xs_t = ps$transform(xs)
   expect_false("th_param_nat" %in% names(xs_t))
   expect_list(xs_t$vector_param)
+  xs_l = design_to_list(xs_t)
+  expect_list(xs_l, len = 10)
 })
