@@ -71,7 +71,7 @@ ParamSet = R6Class(
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assert_set_equal(names(x), self$ids)
         if (is.data.table(x)) x = as.list(x)
-        res = checkList(x, names = "named")
+        assert_list(x, names = "named")
         if (!is.null(self$restriction)) {
           x_n_dictionary = c(as.list(self$dictionary), x)
           if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
