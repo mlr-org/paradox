@@ -3,15 +3,15 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
-#' 
+#'
 #' @section Member Variables:
 #'   \emph{none}
-#' 
+#'
 #' Inherited from \code{ParamSetBase}:
 #' @inheritSection ParamSetBase Member Variables
 #'
 #' @section Methods:
-#' 
+#'
 #' \describe{
 #'   \item{generate_lhs_design(n, lhs_function)}{[\code{function}] \cr
 #'     Function to generate a LHS design.}
@@ -21,14 +21,14 @@
 #'       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
 #'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
 #'     }
-#'   }  
+#'   }
 #' }
-#' 
+#'
 #' Inherited from \code{ParamSetBase}:
 #' @inheritSection ParamSetBase Methods
-#' 
+#'
 #' @section Active Bindings:
-#' 
+#'
 #' \describe{
 #'   \item{ids}{[\code{character}] \cr
 #'     ids of the Parameters in this ParamSet.}
@@ -51,10 +51,10 @@
 #'   \item{member_tags}{[\code{list}] \cr
 #'     The \code{tags} of each Parameter.}
 #' }
-#' 
+#'
 #' Inherited from \code{ParamSetBase}:
 #' @inheritSection ParamSetBase Active Bindings
-#' 
+#'
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamSet
 #' @export
@@ -62,9 +62,9 @@ ParamSet = R6Class(
   "ParamSet",
   inherit = ParamSetBase,
   public = list(
-   
+
     # member variables
-    
+
     # constructor
     initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
       # check function that checks the whole param set by simply iterating
@@ -75,7 +75,7 @@ ParamSet = R6Class(
         if (!is.null(self$restriction)) {
           x_n_dictionary = c(as.list(self$dictionary), x)
           if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
-            return(sprintf("Value %s not allowed by restriction: %s", convertToShortString(x), deparse(restriction)))
+            return(sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), deparse(restriction)))
           }
         }
         for (par_name in names(x)) {
@@ -86,11 +86,11 @@ ParamSet = R6Class(
       }
 
       # make params a named list according to the ids
-      names(params) = extractSubList(params, "id")
+      names(params) = vcapply(params, "[[", "id")
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assert_list(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
-      
+
       # construct super class
       super$initialize(id, storage_type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
@@ -101,7 +101,7 @@ ParamSet = R6Class(
       sample_generator = function(n, ...) {
         xs = lapply(self$params, function(param) param$sample(n = n))
         names(xs) = NULL
-        as.data.table(xs)    
+        as.data.table(xs)
       }
       if (!is.null(self$restriction)) {
         sample_validator = function(x) vectorized_for_param_set_flat(x, self$test)
@@ -122,7 +122,7 @@ ParamSet = R6Class(
     transform = function(x) {
       x = ensure_data_table(x)
       assert_set_equal(names(x), self$ids)
-      if (is.null(self$trafo)) 
+      if (is.null(self$trafo))
         return(x)
       # We require trafos to be vectorized! That's why we dont need the following
       #.mapply(function(x) {
@@ -187,7 +187,7 @@ ParamSet = R6Class(
         grid_vec = lapply(param_resolutions, seqGen)
         res = lapply(names(grid_vec), function(z) self$params[[z]]$denorm_vector(x = grid_vec[[z]]))
         names(res) = names(grid_vec)
-      } 
+      }
       res = lapply(res, unique)
       res = do.call(CJ, as.list(res))
       if (!is.null(self$restriction)) {

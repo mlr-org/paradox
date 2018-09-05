@@ -62,7 +62,7 @@ Inherited from \code{ParamNode}:
       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
     }
-  }  
+  }
 }
 
 Inherited from \code{ParamSetBase}:
