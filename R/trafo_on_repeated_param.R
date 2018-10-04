@@ -17,7 +17,7 @@ trafo_on_repeated_param = function(fun, repeated_param_id, additional_params = c
   assert_character(additional_params)
   function(x, dict, tags) {
     x = ensure_data_table(x)
-    ind = names(which(vlapply(tags, function(z) paste0(repeated_param_id, "_repeated") %in% z)))
+    ind = names(which(vapply(tags, function(z) paste0(repeated_param_id, "_repeated") %in% z, FUN.VALUE = NA)))
     ind_additional = assert_subset(additional_params, names(x))
     dict = c(dict, as.list(x)[ind_additional])
     res = fun(x = x[, ind, with = FALSE], dict = dict, tags = tags)

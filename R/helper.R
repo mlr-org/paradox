@@ -9,14 +9,14 @@ oversample_forbidden2 = function(n, param, oversample_rate = 2, max_tries = 100,
   x = sample_generator(n = round(oversample_rate * n))
   ind_restriction = sample_validator(x)
   # select the first n elements, that are valid
-  ind_restriction = ind_restriction & cumsum(ind_restriction) <= n 
+  ind_restriction = ind_restriction & cumsum(ind_restriction) <= n
   this_try = 1
   x = x[ind_restriction,]
   while (this_try <= max_tries && nrow(x) < n) {
     x_new = sample_generator(n = round(oversample_rate * n), old_x = x)
     ind_restriction = sample_validator(x_new)
     # select the first n elements, that are valid
-    ind_restriction = ind_restriction & cumsum(ind_restriction) <= n - nrow(x) 
+    ind_restriction = ind_restriction & cumsum(ind_restriction) <= n - nrow(x)
     x_new = x_new[ind_restriction, ]
     x = rbind(x, x_new)
     this_try = this_try + 1
@@ -35,7 +35,7 @@ vectorized_for_param_set_flat = function(x, fun) {
 }
 
 test_special_vals = function(param, x) {
-  if (!is.null(param$special_vals) && any(vlapply(param$special_vals, identical, x))) {
+  if (!is.null(param$special_vals) && any(vapply(param$special_vals, identical, x, FUN.VALUE = NA))) {
     # TRUE, if value is one of special_vals
     TRUE
   } else {
@@ -44,7 +44,7 @@ test_special_vals = function(param, x) {
 }
 
 could_list_be_data_table = function(x) {
-  is.list(x) && length(unique(viapply(x, length))) == 1 && testNamed(x, type = "strict")
+  is.list(x) && length(unique(lengths(x))) == 1L && testNamed(x, type = "strict")
 }
 
 ensure_data_table = function(x, ...) {
@@ -56,7 +56,7 @@ ensure_data_table = function(x, ...) {
 
 # res int(1) - aimed at resolution
 # nlevels int() - number of levels per param or NA if continuous.
-# return: int vector that gives the resolution for each param leading to 
+# return: int vector that gives the resolution for each param leading to
 opt_grid_res = function(n, nlevels) {
   nnames = names(nlevels)
   p = length(nlevels) # number of params

@@ -8,7 +8,7 @@ Authors@R: c(
     person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut")),
     person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("aut"))
     )
-Description: A successor of the ParamHelpers Package. 
+Description: A successor of the ParamHelpers Package.
     Easily define parameter spaces and generate LHS and random designs from it.
     Check parameter values for feasibility.
 License: GPL-2
@@ -19,7 +19,6 @@ Depends:
     data.table
 Imports:
     backports (>= 1.1.1),
-    BBmisc,
     checkmate (>= 1.8.4),
     R6
 Suggests:

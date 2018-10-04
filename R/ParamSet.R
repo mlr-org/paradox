@@ -86,7 +86,7 @@ ParamSet = R6Class(
       }
 
       # make params a named list according to the ids
-      names(params) = vcapply(params, "[[", "id")
+      names(params) = vapply(params, "[[", "id", FUN.VALUE = NA_character_)
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assert_list(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
@@ -201,15 +201,15 @@ ParamSet = R6Class(
 
   active = list(
     ids = function() names(self$params),
-    storage_types = function() vcapply(self$params, function(param) param$storage_type),
+    storage_types = function() vapply(self$params, function(param) param$storage_type, FUN.VALUE = NA_character_),
     values = function() lapply(self$params, function(param) param$values),
-    lower = function() vnapply(self$params, function(param) param$lower %??% NA_real_),
-    upper = function() vnapply(self$params, function(param) param$upper %??% NA_real_),
-    param_classes = function() vcapply(self$params, function(param) class(param)[1]),
+    lower = function() vapply(self$params, function(param) param$lower %??% NA_real_, FUN.VALUE = NA_real_),
+    upper = function() vapply(self$params, function(param) param$upper %??% NA_real_, FUN.VALUE = NA_real_),
+    param_classes = function() vapply(self$params, function(param) class(param)[1], FUN.VALUE = NA_character_),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
-    has_finite_bounds = function() all(vlapply(self$params, function(param) param$has_finite_bounds)),
+    has_finite_bounds = function() all(vapply(self$params, function(param) param$has_finite_bounds, FUN.VALUE = NA)),
     length = function() length(self$params),
-    nlevels = function() viapply(self$params, function(param) param$nlevels %??% NA_integer_),
+    nlevels = function() vapply(self$params, function(param) param$nlevels %??% NA_integer_, FUN.VALUE = NA_integer_),
     member_tags = function() lapply(self$params, function(param) param$tags)
   )
 )
