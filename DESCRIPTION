@@ -18,6 +18,7 @@ NeedsCompilation: no
 Depends:
     data.table
 Imports:
+    BBmisc,
     backports (>= 1.1.1),
     checkmate (>= 1.8.4),
     R6
