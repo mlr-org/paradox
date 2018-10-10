@@ -3,41 +3,41 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent the OptPath_
-#' 
+#'
 #' @section Member Variables:
-#' 
+#'
 #' \describe{
-#'   \item{par_set}{[\code{ParamSet}] \cr 
+#'   \item{param_set}{[\code{ParamSet}] \cr
 #'     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
-#'   \item{y_names}{[\code{character()}] \cr 
+#'   \item{y_names}{[\code{character()}] \cr
 #'     The names for the y values. Default is \dQuote{y}.}
-#'   \item{minimize}{[\code{logical()}] \cr  
+#'   \item{minimize}{[\code{logical()}] \cr
 #'     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
-#'   \item{check_feasible}{[\code{logical(1)}] \cr  
+#'   \item{check_feasible}{[\code{logical(1)}] \cr
 #'     Should new x values be checked for feasibility according to the \code{ParamSet}.}
-#'   \item{data}{[\code{data.table}] \cr  
+#'   \item{data}{[\code{data.table}] \cr
 #'     This field contains all values logged into the opt_path_}
 #' }
-#' 
+#'
 #' @section Methods:
-#' 
+#'
 #' \describe{
-#'   \item{add()}{[\code{function}] \cr  
+#'   \item{add()}{[\code{function}] \cr
 #'     Add a new line to the \code{OptPath}.}
 #' }
-#' 
+#'
 #' @section Active Bindings:
-#' 
+#'
 #' \describe{
 #'   \item{x_names}{[\code{character()}] \cr
 #'     Names of the x-values}
 #'   \item{length}{[\code{integer(1)}] \cr
 #'     The number of entries in this \code{OptPath}.}
-#'   \item{x}{[\code{data.table}] \cr  
+#'   \item{x}{[\code{data.table}] \cr
 #'     A subset of \code{data} only containing the x values.}
-#'   \item{y}{[\code{data.table}] \cr  
+#'   \item{y}{[\code{data.table}] \cr
 #'     A subset of \code{data} only containing the y values.}
-#'   \item{dim}{[\code{integer(1)}] \cr  
+#'   \item{dim}{[\code{integer(1)}] \cr
 #'     The dimensionality of the optimization problem.}
 #' }
 #' @family OptPath
@@ -46,13 +46,13 @@ OptPath = R6Class(
   "OptPath",
   public = list(
     # member variables
-    par_set = NULL,
+    param_set = NULL,
     y_names = NULL,
     minimize = NULL,
     check_feasible = NULL,
-    
+
     # constructor
-    initialize = function(par_set, y_names = "y", minimize = TRUE, check_feasible = TRUE) {
+    initialize = function(param_set, y_names = "y", minimize = TRUE, check_feasible = TRUE) {
       private$.data = data.table(
         dob = integer(0L),
         message = character(0L),
@@ -65,8 +65,8 @@ OptPath = R6Class(
       Map(function(id, storage_type) {
         set(private$.data, j = id, value = get(storage_type, mode = "function")())
         },
-        id = par_set$ids,
-        storage_type = par_set$storage_types
+        id = param_set$ids,
+        storage_type = param_set$storage_types
       )
       for (y_name in y_names) {
         set(private$.data, j = y_name, value = numeric(0L))
@@ -74,7 +74,7 @@ OptPath = R6Class(
       if (is.null(names(minimize))) {
         names(minimize) = y_names
       }
-      self$par_set = assert_class(par_set, "ParamSet")
+      self$param_set = assert_class(param_set, "ParamSet")
       self$y_names = y_names
       self$minimize = minimize
       self$check_feasible = check_feasible
@@ -97,8 +97,8 @@ OptPath = R6Class(
       }
 
       # handle transformed_x
-      if (!is.null(self$par_set$trafo) && is.null(transformed_x)) {
-        transformed_x = self$par_set$transform(x)
+      if (!is.null(self$param_set$trafo) && is.null(transformed_x)) {
+        transformed_x = self$param_set$transform(x)
       }
 
       assert_list(x, names = "strict")
@@ -109,7 +109,7 @@ OptPath = R6Class(
       y = y[self$y_names]
 
       if (self$check_feasible) {
-        self$par_set$assert(x)
+        self$param_set$assert(x)
       }
 
       # add the data to the opt path
@@ -151,7 +151,7 @@ OptPath = R6Class(
         private$.data = x
       }
     },
-    x_names = function() self$par_set$ids,
+    x_names = function() self$param_set$ids,
     length = function() nrow(private$.data) + private$cache_pos,
     x = function() self$data[, self$x_names, with = FALSE],
     y = function() self$data[, self$y_names, with = FALSE],
@@ -188,7 +188,7 @@ as.data.frame.OptPath = function(x, row.names = NULL, optional = FALSE, include_
       dt = cbind(dt, extra)
     }
   }
-  
+
   as.data.frame(dt, row.names = row.names, optional = optional, ...)
 }
 

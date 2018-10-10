@@ -3,9 +3,9 @@ load_all()
 
 # notes
 # check functions as public method? Has to be to make Lower Upper Flexible
-# 
+#
 
-par_set = ParamSet$new(
+param_set = ParamSet$new(
   id = "ps_svm",
   params = list(
     ParamCategorical$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
@@ -24,9 +24,9 @@ par_set = ParamSet$new(
     # ParamGenerator(id = "scale", default = TRUE)
     ),
   restriction = quote(
-    (is.na(cost) | type != "C-classification") & 
-    (is.na(nu) | type != "nu-classification") & 
-    (is.na(degree) | kernel != "polynomial") & 
+    (is.na(cost) | type != "C-classification") &
+    (is.na(nu) | type != "nu-classification") &
+    (is.na(degree) | kernel != "polynomial") &
     (is.na(coef0) | !(kernel == "polynomial" || kernel == "sigmoid")) &
     (is.na(gamma) | kernel == "linear")
   )
