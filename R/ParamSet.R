@@ -198,6 +198,55 @@ ParamSet = R6Class(
       }
     },
 
+    # in: * ids (character)
+    #       ids of ParamSimple
+    #     * fix (named list)
+    #       names = ids of ParamSimple
+    #       values = values of respective param
+    # out: ParamSet
+    subset = function(ids = NULL, fix = NULL) {
+      if (is.null(ids)) {
+        keep_ids = self$ids
+      } else {
+        assert_subset(ids, self$ids)
+        if (any(names(fix)) %in% ids) {
+          stop("You cannot keep ids and fix them at the same time!")
+        }
+        keep_ids = ids
+      }
+      new_dictionary = dictionary
+      if (!is.null(fix)) {
+        assert_list(fix, names = "named")
+        keep_ids = setdiff(keep_ids, names(fix))
+        new_dictionary[names(fix)] = fix
+      }
+      ParamSet$new(
+        id = paste0(self$id,"_subset"),
+        handle = self$handle$copy(),
+        params = self$params[keep_ids],
+        dictionary = new_dictionary,
+        tags = self$tags,
+        restriction = self$restriction,
+        trafo = self$trafo)
+    },
+
+    combine = function(param_set) {
+      if (length(intersect(self$ids, param_set$ids)) > 0) {
+        stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
+      }
+      ParamSet$new(
+        id = paste0(self$id, "_", param_set$id),
+        handle = self$handle$copy(), #FIXME: If the handle is actually used this might not be a good idea, throw error?
+        params = c(self$params, param_set$params),
+        dictionary = c(self$dictionary, param_set$dictionary),
+        tags = union(self$tags, param_set$tags),
+        restriction = substitute((a) && (b), list(a = self$restriction, b = param_set$restriction)),
+        trafo = function(x, dict, tags) {
+          #FIXME
+          #continue to work here
+        })
+    }
+
     print = function(...) {
       cat("ParamSet:", self$id, "\n")
       cat("Parameters:", "\n")
