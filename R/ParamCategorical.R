@@ -3,25 +3,25 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent categorical parameters.
-#' 
+#'
 #' @section Member Variables:
 #' \describe{
 #'   \item{values}{[\code{character}] \cr
 #'     All categorical values.}
 #' }
-#' 
+#'
 #' Inherited from \code{ParamSimple}:
 #' @inheritSection ParamSimple Member Variables
-#' 
+#'
 #' @section Methods:
 #'   \emph{none}
-#' 
+#'
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
-#' 
+#'
 #' @section Active Bindings:
 #'   \emph{none}
-#' 
+#'
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Active Bindings
 #'
@@ -43,7 +43,7 @@ ParamCategorical = R6Class(
         if (na.ok && is.na(x) || test_special_vals(self, x)) return(TRUE)
         checkChoice(x, choices = self$values, null.ok = null.ok)
       }
-      
+
       # write member variables
       self$values = assert_character(values, any.missing = FALSE, unique = TRUE)
 
@@ -59,6 +59,10 @@ ParamCategorical = R6Class(
       res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
+    },
+    print = function(...) {
+      super$print(newline = FALSE, ...)
+      cat(sprintf(": {%s}\n", paste(self$values, collapse = ", ")))
     }
   ),
   active = list(

@@ -29,6 +29,7 @@ test_that("methods and active bindings work", {
     expect_int(ps$length, lower = 0L)
     expect_integer(ps$nlevels, any.missing = TRUE)
     expect_list(ps$member_tags, names = "strict", any.missing = TRUE)
+    expect_output(print(th_paramset_full), "ParamSet:")
   }
 })
 
@@ -41,7 +42,7 @@ test_that("advanced methods work", {
     th_paramset_trafo,
     th_paramset_trafo_dictionary
   )
-  
+
   for (ps in ps_list) {
 
     x = ps$sample(10)

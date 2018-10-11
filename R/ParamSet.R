@@ -196,6 +196,30 @@ ParamSet = R6Class(
       } else {
         return(res)
       }
+    },
+
+    print = function(...) {
+      cat("ParamSet:", self$id, "\n")
+      cat("Parameters:", "\n")
+      for (param in self$params) {
+        param$print(...)
+      }
+      if (!is.null(self$dictionary)) {
+        cat("Dictonary is set:", "\n")
+        print(self$dictionary)
+      }
+      if (!is.null(self$tags)) {
+        cat("Tags are set:", "\n")
+        print(self$tags)
+      }
+      if (!is.null(self$restriction)) {
+        cat("Restriction is set:", "\n")
+        print(self$restriction)
+      }
+      if (!is.null(self$trafo)) {
+        cat("Trafo is set:", "\n")
+        print(self$trafo)
+      }
     }
   ),
 

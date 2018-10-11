@@ -3,7 +3,7 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent Integer parameters.
-#' 
+#'
 #' @section Member Variables:
 #' \describe{
 #'   \item{lower}{[\code{integer(1)|-Inf}] \cr
@@ -11,19 +11,19 @@
 #'   \item{upper}{[\code{integer(1)|-Inf}] \cr
 #'     Lower boundary.}
 #' }
-#' 
+#'
 #' Inherited from \code{ParamSimple}:
 #' @inheritSection ParamSimple Member Variables
-#' 
+#'
 #' @section Methods:
 #'   \emph{none}
-#' 
+#'
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Methods
-#' 
+#'
 #' @section Active Bindings:
 #'   \emph{none}
-#' 
+#'
 #' Inherited from \code{ParamSimple}
 #' @inheritSection ParamSimple Active Bindings
 #'
@@ -73,6 +73,10 @@ ParamInt = R6Class(
       res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
       res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
       res
+    },
+    print = function(...) {
+      super$print(newline = FALSE, ...)
+      cat(sprintf(": {%i, ..., %i}\n", self$lower, self$upper))
     }
   ),
   active = list(

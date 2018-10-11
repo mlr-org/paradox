@@ -14,7 +14,14 @@ ParamBase = R6Class("ParamBase",
     # constructor
 
     # public methods
+    print = function(...) {
+      cat("ParamBase Object", "\n")
+    }
     ),
   private = list(
     )
   )
+
+print.ParamBase = function(x, ...) {
+  x$print(...)
+}

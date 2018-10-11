@@ -15,15 +15,15 @@ A \code{\link[R6]{R6Class}} to represent the OptPath_
 
 
 \describe{
-  \item{par_set}{[\code{ParamSet}] \cr 
+  \item{param_set}{[\code{ParamSet}] \cr
     The [\code{ParamSet}] from which the \code{x} values will be added to this \code{OptPath}.}
-  \item{y_names}{[\code{character()}] \cr 
+  \item{y_names}{[\code{character()}] \cr
     The names for the y values. Default is \dQuote{y}.}
-  \item{minimize}{[\code{logical()}] \cr  
+  \item{minimize}{[\code{logical()}] \cr
     A logical vector indicating which y components are to be minimized. Per default all are \code{TRUE}.}
-  \item{check_feasible}{[\code{logical(1)}] \cr  
+  \item{check_feasible}{[\code{logical(1)}] \cr
     Should new x values be checked for feasibility according to the \code{ParamSet}.}
-  \item{data}{[\code{data.table}] \cr  
+  \item{data}{[\code{data.table}] \cr
     This field contains all values logged into the opt_path_}
 }
 }
@@ -32,7 +32,7 @@ A \code{\link[R6]{R6Class}} to represent the OptPath_
 
 
 \describe{
-  \item{add()}{[\code{function}] \cr  
+  \item{add()}{[\code{function}] \cr
     Add a new line to the \code{OptPath}.}
 }
 }
@@ -45,11 +45,11 @@ A \code{\link[R6]{R6Class}} to represent the OptPath_
     Names of the x-values}
   \item{length}{[\code{integer(1)}] \cr
     The number of entries in this \code{OptPath}.}
-  \item{x}{[\code{data.table}] \cr  
+  \item{x}{[\code{data.table}] \cr
     A subset of \code{data} only containing the x values.}
-  \item{y}{[\code{data.table}] \cr  
+  \item{y}{[\code{data.table}] \cr
     A subset of \code{data} only containing the y values.}
-  \item{dim}{[\code{integer(1)}] \cr  
+  \item{dim}{[\code{integer(1)}] \cr
     The dimensionality of the optimization problem.}
 }
 }
