@@ -74,7 +74,7 @@ OptPath = R6Class(
       if (is.null(names(minimize))) {
         names(minimize) = y_names
       }
-      self$param_set = assert_class(param_set, "ParamSet")
+      self$param_set = assert_r6(param_set, "ParamSet")
       self$y_names = y_names
       self$minimize = minimize
       self$check_feasible = check_feasible

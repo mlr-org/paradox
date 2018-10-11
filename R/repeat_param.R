@@ -13,7 +13,7 @@
 #' @export
 repeatParam = function(n = 1L, param) {
   assert_int(n)
-  assert_class(param, "ParamSimple")
+  assert_r6(param, "ParamSimple")
   joining_id = paste0(param$id, "_repeated")
   lapply(seq_len(n), function(i) {
     this_param = param$clone()
