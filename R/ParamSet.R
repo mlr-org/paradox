@@ -198,6 +198,85 @@ ParamSet = R6Class(
       }
     },
 
+    # in: * ids (character)
+    #       ids of ParamSimple
+    #     * fix (named list)
+    #       names = ids of ParamSimple
+    #       values = values of respective param
+    # out: ParamSet
+    subset = function(ids = NULL, fix = NULL) {
+      if (is.null(ids)) {
+        keep_ids = self$ids
+      } else {
+        assert_subset(ids, self$ids)
+        keep_ids = ids
+      }
+      if (!is.null(fix)) {
+        if (any(names(fix) %in% ids)) {
+          stop("You cannot keep ids and fix them at the same time!")
+        }
+        assert_list(fix, names = "named")
+        keep_ids = setdiff(keep_ids, names(fix))
+      }
+      # if we have fixed parameters we have to supply them to the trafo function in case there are needed there.
+      new_trafo = self$trafo
+      if (!is.null(fix) && !is.null(new_trafo)) {
+        assert_list(fix, names = "named")
+        old_trafo = force(self$trafo)
+        new_trafo = function(x, dict, tags) {
+          x = cbind(x, as.data.table(fix))
+          res = old_trafo(x, dict, tags)
+          res = x[, !names(fix), with = FALSE]
+          return(res)
+        }
+      }
+      # if we have fixed parameters we can substitute them in the restriction quote
+      new_restriction = self$restriction
+      if (!is.null(fix) && !is.null(new_restriction)) {
+        new_restriction = substituteDirect(new_restriction, fix)
+      }
+      ParamSet$new(
+        id = paste0(self$id,"_subset"),
+        handle = self$handle$clone(),
+        params = self$params[keep_ids],
+        dictionary = as.list(self$dictionary),
+        tags = self$tags,
+        restriction = new_restriction,
+        trafo = new_trafo)
+    },
+
+    combine = function(param_set) {
+      if (self$length == 0) {
+        return(param_set$clone())
+      } else if (param_set$length == 0) {
+        return(self$clone())
+      }
+      if (length(intersect(self$ids, param_set$ids)) > 0) {
+        stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
+      }
+      new_restriction = self$restriction %??% param_set$restriction
+      if (!is.null(self$restriction) && !is.null(param_set$restriction)) {
+        new_restriction = substitute((a) && (b), list(a = self$restriction %??% TRUE, b = param_set$restriction %??% TRUE))
+      }
+      new_trafo = self$trafo %??% param_set$trafo
+      if (!is.null(self$trafo) && !is.null(param_set$trafo)) {
+        new_trafo = function(x, dict, tags) {
+          x = self$trafo(x, dict, tags)
+          x = param_set$trafo(x, dict, tags)
+          return(x)
+        }
+      }
+      ParamSet$new(
+        id = paste0(self$id, "_", param_set$id),
+        handle = self$handle$clone(), #FIXME: If the handle is actually used this might not be a good idea, throw error?
+        params = c(self$params, param_set$params),
+        dictionary = c(as.list(self$dictionary), as.list(param_set$dictionary)),
+        tags = union(self$tags, param_set$tags),
+        restriction = new_restriction,
+        trafo = new_trafo
+      )
+    },
+
     print = function(...) {
       cat("ParamSet:", self$id, "\n")
       cat("Parameters:", "\n")
