@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Function reference • paradox</title>
+<title>Design to List — design_to_list • paradox</title>
 
 <link rel="shortcut icon" type="image/x-icon" href="../favicon.ico">
 
@@ -32,7 +32,10 @@
 
 
 
-<meta property="og:title" content="Function reference" />
+<meta property="og:title" content="Design to List — design_to_list" />
+
+<meta property="og:description" content="Converts a design or any `data.table` to a list where each list element contains one row." />
+<meta name="twitter:card" content="summary" />
 
 
 
@@ -48,7 +51,7 @@
   </head>
 
   <body>
-    <div class="container template-reference-index">
+    <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
@@ -95,132 +98,45 @@
       </header>
 
 <div class="row">
-  <div class="contents col-md-9">
+  <div class="col-md-9 contents">
     <div class="page-header">
-      <h1>Reference</h1>
+    <h1>Design to List</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/design_to_list.R'><code>R/design_to_list.R</code></a></small>
+    <div class="hidden name"><code>design_to_list.Rd</code></div>
     </div>
 
-    <table class="ref-index">
+    <div class="ref-description">
+    
+    <p>Converts a design or any `data.table` to a list where each list element contains one row.</p>
+    
+    </div>
 
-    <colgroup>
-      
-      <col class="alias" />
-      <col class="title" />
-    </colgroup>
-
-    <tbody>
-      <tr>
-        <th colspan="2">
-          <h2 id="section-all-functions" class="hasAnchor"><a href="#section-all-functions" class="anchor"></a>All functions</h2>
-          <p class="section-desc"></p>
-        </th>
-      </tr>
-      <tr>
-        
-        <td>
-          <p><code><a href="OptPath.html">OptPath</a></code> </p>
-        </td>
-        <td><p>OptPath Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamBase.html">ParamBase</a></code> </p>
-        </td>
-        <td><p>Base Class for ParamHelpers</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamCategorical.html">ParamCategorical</a></code> </p>
-        </td>
-        <td><p>Categorical Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamFlag.html">ParamFlag</a></code> </p>
-        </td>
-        <td><p>Flag Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamHandle.html">ParamHandle</a></code> </p>
-        </td>
-        <td><p>Handle Class for ParamNode</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamInt.html">ParamInt</a></code> </p>
-        </td>
-        <td><p>Integer Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamNode.html">ParamNode</a></code> </p>
-        </td>
-        <td><p>Parameter Node Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamReal.html">ParamReal</a></code> </p>
-        </td>
-        <td><p>Real Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamSet.html">ParamSet</a></code> </p>
-        </td>
-        <td><p>ParamSet</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamSetBase.html">ParamSetBase</a></code> </p>
-        </td>
-        <td><p>Base Class for ParamSetBase</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamSimple.html">ParamSimple</a></code> </p>
-        </td>
-        <td><p>ParamSimple Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamUntyped.html">ParamUntyped</a></code> </p>
-        </td>
-        <td><p>Untyped Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="as.data.frame.OptPath.html">as.data.frame(<i>&lt;OptPath&gt;</i>)</a></code> </p>
-        </td>
-        <td><p>Convert optimization path to data.frame.</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="design_to_list.html">design_to_list()</a></code> </p>
-        </td>
-        <td><p>Design to List</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="repeatParam.html">repeatParam()</a></code> </p>
-        </td>
-        <td><p>Repeat a single Parameter</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="trafo_on_repeated_param.html">trafo_on_repeated_param()</a></code> </p>
-        </td>
-        <td><p>A helper to create trafo functions for repeated parameters.</p></td>
-      </tr>
-    </tbody>
+    <pre class="usage"><span class='fu'>design_to_list</span>(<span class='no'>design</span>)</pre>
+    
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
+    <table class="ref-arguments">
+    <colgroup><col class="name" /><col class="desc" /></colgroup>
+    <tr>
+      <th>design</th>
+      <td><p>[`data.table`]:
+The `data.table` that should be converted</p></td>
+    </tr>
     </table>
-  </div>
+    
+    <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
+    <p>`list`</p>
+    
+
+  </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>
     <ul class="nav nav-pills nav-stacked">
-      <li><a href="#section-all-functions">All functions</a></li>
-    </ul>
+      <li><a href="#arguments">Arguments</a></li>
+      
+      <li><a href="#value">Value</a></li>
+          </ul>
+
   </div>
 </div>
 
