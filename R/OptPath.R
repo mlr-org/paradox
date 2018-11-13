@@ -84,15 +84,15 @@ OptPath = R6Class(
     add = function(x, y, dob = NULL, message = NA_character_, error = NA_character_, exec_time = NA_real_, timestamp = Sys.time(), extra = NULL, transformed_x = NULL) {
 
       # convenience: handle y
-      if (!testList(y)) {
+      if (!test_list(y)) {
         y = as.list(y)
       }
-      if (!testNamed(y)) {
+      if (!test_named(y)) {
         names(y) = self$y_names
       }
 
       # convenience: handle x
-      if (!testList(x)) {
+      if (!test_list(x)) {
         x = as.list(x)
       }
 

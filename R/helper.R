@@ -44,11 +44,11 @@ test_special_vals = function(param, x) {
 }
 
 could_list_be_data_table = function(x) {
-  is.list(x) && length(unique(lengths(x))) == 1L && testNamed(x, type = "strict")
+  is.list(x) && length(unique(lengths(x))) == 1L && test_named(x, type = "strict")
 }
 
 ensure_data_table = function(x, ...) {
-  if (testDataFrame(x) || could_list_be_data_table(x)) {
+  if (test_data_frame(x) || could_list_be_data_table(x)) {
     x = as.data.table(x)
   }
   assert_data_table(x, ...)
