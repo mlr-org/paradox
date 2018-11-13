@@ -75,7 +75,7 @@ ParamSet = R6Class(
         if (!is.null(self$restriction)) {
           x_n_dictionary = c(as.list(self$dictionary), x)
           if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
-            return(sprintf("Value %s not allowed by restriction: %s", BBmisc::convertToShortString(x), deparse(restriction)))
+            return(sprintf("Value %s not allowed by restriction: %s", convert_to_string(x), deparse(restriction)))
           }
         }
         for (par_name in names(x)) {
