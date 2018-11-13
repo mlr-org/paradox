@@ -21,7 +21,7 @@
 <![endif]-->
 </head>
 <body>
-    <div class="container template-article">
+    <div class="container template-home">
       <header><div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
     <div class="navbar-header">
@@ -33,7 +33,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="index.html">paradox</a>
-        <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
       </span>
     </div>
 
@@ -66,11 +66,7 @@
 
       
       </header><div class="row">
-  <div class="col-md-9 contents">
-    
-
-    
-    
+  <div class="contents col-md-9">
 <div id="paradox" class="section level1">
 <div class="page-header"><h1 class="hasAnchor">
 <a href="#paradox" class="anchor"></a>paradox</h1></div>
@@ -83,7 +79,7 @@
 <div id="installation" class="section level2">
 <h2 class="hasAnchor">
 <a href="#installation" class="anchor"></a>Installation</h2>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">devtools<span class="op">::</span><span class="kw"><a href="http://www.rdocumentation.org/packages/devtools/topics/reexports">install_github</a></span>(<span class="st">"mlr-org/paradox"</span>, <span class="dt">dependencies =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">devtools<span class="op">::</span><span class="kw"><a href="https://www.rdocumentation.org/packages/devtools/topics/reexports">install_github</a></span>(<span class="st">"mlr-org/paradox"</span>, <span class="dt">dependencies =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
 </div>
 <div id="usage" class="section level2">
 <h2 class="hasAnchor">
@@ -101,15 +97,15 @@
 <li>Further types are only possible by using transformations.</li>
 </ul>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb2-1" data-line-number="1">ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb2-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb2-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
 <a class="sourceLine" id="cb2-3" data-line-number="3">    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</a>
 <a class="sourceLine" id="cb2-4" data-line-number="4">    ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>),</a>
 <a class="sourceLine" id="cb2-5" data-line-number="5">    ParamFlag<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),</a>
-<a class="sourceLine" id="cb2-6" data-line-number="6">    ParamCategorical<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">values =</span> <span class="kw">c</span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))</a>
+<a class="sourceLine" id="cb2-6" data-line-number="6">    ParamCategorical<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">values =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))</a>
 <a class="sourceLine" id="cb2-7" data-line-number="7">  )</a>
 <a class="sourceLine" id="cb2-8" data-line-number="8">)</a></code></pre></div>
 <p>Draw random samples / create random design:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1">ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/sample">sample</a></span>(<span class="dv">3</span>)</a></code></pre></div>
 <pre><code>##    z         x switch methods
 ## 1: 1  7.660348  FALSE       b
 ## 2: 3  8.809346  FALSE       c
@@ -165,8 +161,8 @@
 <a href="#numeric-paramset" class="anchor"></a>Numeric ParamSet</h3>
 <p>Things you can do on an all numeric ParamSet:</p>
 <div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb15-1" data-line-number="1">ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb15-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
-<a class="sourceLine" id="cb15-3" data-line-number="3">    <span class="kw">list</span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
+<a class="sourceLine" id="cb15-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(</a>
+<a class="sourceLine" id="cb15-3" data-line-number="3">    <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
 <a class="sourceLine" id="cb15-4" data-line-number="4">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
 <a class="sourceLine" id="cb15-5" data-line-number="5">  )</a>
 <a class="sourceLine" id="cb15-6" data-line-number="6">)</a>
@@ -208,33 +204,33 @@
 </ul>
 <p>Transformations are useful to scale parameters:</p>
 <div class="sourceCode" id="cb23"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb23-1" data-line-number="1">ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb23-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb23-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
 <a class="sourceLine" id="cb23-3" data-line-number="3">    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-3</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</a>
 <a class="sourceLine" id="cb23-4" data-line-number="4">    ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)</a>
 <a class="sourceLine" id="cb23-5" data-line-number="5">  ),</a>
 <a class="sourceLine" id="cb23-6" data-line-number="6">  <span class="dt">trafo =</span> <span class="cf">function</span>(x, dict, tags) {</a>
 <a class="sourceLine" id="cb23-7" data-line-number="7">    x<span class="op">$</span>z =<span class="st"> </span><span class="dv">2</span><span class="op">^</span>x<span class="op">$</span>z</a>
-<a class="sourceLine" id="cb23-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw">round</span>(x<span class="op">$</span>x <span class="op">*</span><span class="st"> </span>dict<span class="op">$</span>p)</a>
-<a class="sourceLine" id="cb23-9" data-line-number="9">    <span class="kw">return</span>(x)</a>
+<a class="sourceLine" id="cb23-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/Round">round</a></span>(x<span class="op">$</span>x <span class="op">*</span><span class="st"> </span>dict<span class="op">$</span>p)</a>
+<a class="sourceLine" id="cb23-9" data-line-number="9">    <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/function">return</a></span>(x)</a>
 <a class="sourceLine" id="cb23-10" data-line-number="10">  }</a>
 <a class="sourceLine" id="cb23-11" data-line-number="11">)</a>
-<a class="sourceLine" id="cb23-12" data-line-number="12">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>))</a></code></pre></div>
+<a class="sourceLine" id="cb23-12" data-line-number="12">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/sample">sample</a></span>(<span class="dv">3</span>))</a></code></pre></div>
 <pre><code>##     z         x
 ## 1: -3 0.3688455
 ## 2: -1 0.1524447
 ## 3: -1 0.1388061</code></pre>
 <p>The transformation uses the dictionary and will fail if none is supplied:</p>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/transform">transform</a></span>(x)</a></code></pre></div>
 <pre><code>## Error in `[&lt;-.data.table`(x, j = name, value = value): RHS of assignment to existing column 'x' is zero length but not NULL. If you intend to delete the column use NULL. Otherwise, the RHS must have length &gt; 0; e.g., NA_integer_. If you are trying to change the column type to be an empty list column then, as with all column type changes, provide a full length RHS vector such as vector('list',nrow(DT)); i.e., 'plonk' in the new column.</code></pre>
 <p>The dictionary can always be changed:</p>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb27-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">p =</span> <span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb27-2" data-line-number="2">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/transform">transform</a></span>(x)</a></code></pre></div>
 <pre><code>##        z x
 ## 1: 0.125 4
 ## 2: 0.500 2
 ## 3: 0.500 1</code></pre>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw">list</span>(<span class="dt">p =</span> <span class="dv">1000</span>)</a>
-<a class="sourceLine" id="cb29-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">ps<span class="op">$</span>dictionary =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">p =</span> <span class="dv">1000</span>)</a>
+<a class="sourceLine" id="cb29-2" data-line-number="2">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/transform">transform</a></span>(x)</a></code></pre></div>
 <pre><code>##        z   x
 ## 1: 0.125 369
 ## 2: 0.500 152
@@ -245,29 +241,29 @@
 <a href="#advanced-transformations" class="anchor"></a>Advanced Transformations</h3>
 <p>The following creates a ParamSet with a transformation that scales the <code>x</code> values and returns them as a vector. The original parameters will be removed from the trafo result. Keep in mind that <code>z</code> stays untouched and remains after the transformation.</p>
 <div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1">ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb31-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
-<a class="sourceLine" id="cb31-3" data-line-number="3">    <span class="kw">list</span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
+<a class="sourceLine" id="cb31-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(</a>
+<a class="sourceLine" id="cb31-3" data-line-number="3">    <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>)),</a>
 <a class="sourceLine" id="cb31-4" data-line-number="4">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">2</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
 <a class="sourceLine" id="cb31-5" data-line-number="5">  ),</a>
 <a class="sourceLine" id="cb31-6" data-line-number="6">  <span class="dt">trafo =</span> <span class="cf">function</span>(x, dict, tags) {</a>
-<a class="sourceLine" id="cb31-7" data-line-number="7">    scale =<span class="st"> </span><span class="cf">function</span>(x1, x2) <span class="kw">c</span>(x1, x2) <span class="op">/</span><span class="st"> </span><span class="kw">sqrt</span>(x1<span class="op">^</span><span class="dv">2</span><span class="op">+</span>x2<span class="op">^</span><span class="dv">2</span>) </a>
-<a class="sourceLine" id="cb31-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw">Map</span>(scale, x<span class="op">$</span>x_repeated_<span class="dv">1</span>, x<span class="op">$</span>x_repeated_<span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb31-7" data-line-number="7">    scale =<span class="st"> </span><span class="cf">function</span>(x1, x2) <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(x1, x2) <span class="op">/</span><span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/MathFun">sqrt</a></span>(x1<span class="op">^</span><span class="dv">2</span><span class="op">+</span>x2<span class="op">^</span><span class="dv">2</span>) </a>
+<a class="sourceLine" id="cb31-8" data-line-number="8">    x<span class="op">$</span>x =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/funprog">Map</a></span>(scale, x<span class="op">$</span>x_repeated_<span class="dv">1</span>, x<span class="op">$</span>x_repeated_<span class="dv">2</span>)</a>
 <a class="sourceLine" id="cb31-9" data-line-number="9">    x<span class="op">$</span>x_repeated_<span class="dv">1</span> =<span class="st"> </span><span class="ot">NULL</span></a>
 <a class="sourceLine" id="cb31-10" data-line-number="10">    x<span class="op">$</span>x_repeated_<span class="dv">2</span> =<span class="st"> </span><span class="ot">NULL</span></a>
-<a class="sourceLine" id="cb31-11" data-line-number="11">    <span class="kw">return</span>(x)</a>
+<a class="sourceLine" id="cb31-11" data-line-number="11">    <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/function">return</a></span>(x)</a>
 <a class="sourceLine" id="cb31-12" data-line-number="12">  }</a>
 <a class="sourceLine" id="cb31-13" data-line-number="13">)</a></code></pre></div>
 <p>The output of all value generating functions won’t change for a ParamSet that has a <code>trafo</code> function. Instead these outputs can be put into <code>ps$transform()</code> to obtain the desired parameter values.</p>
 <div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">x =<span class="st"> </span>ps<span class="op">$</span><span class="kw">generate_lhs_design</span>(<span class="dv">3</span>)</a>
-<a class="sourceLine" id="cb32-2" data-line-number="2">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
+<a class="sourceLine" id="cb32-2" data-line-number="2">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/transform">transform</a></span>(x)</a></code></pre></div>
 <pre><code>##     z                     x
 ## 1: -2   0.9839367,0.1785177
 ## 2: 10   0.8173283,0.5761722
 ## 3: -5 0.04754544,0.99886908</code></pre>
 <p>For more advanced transformations on repeated parameters you can use <code><a href="reference/trafo_on_repeated_param.html">trafo_on_repeated_param()</a></code>:</p>
 <div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb34-1" data-line-number="1">ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb34-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw">c</span>(</a>
-<a class="sourceLine" id="cb34-3" data-line-number="3">    <span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb34-2" data-line-number="2">  <span class="dt">params =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(</a>
+<a class="sourceLine" id="cb34-3" data-line-number="3">    <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
 <a class="sourceLine" id="cb34-4" data-line-number="4">      ParamFlag<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"switch"</span>),</a>
 <a class="sourceLine" id="cb34-5" data-line-number="5">      ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">4</span>)),</a>
 <a class="sourceLine" id="cb34-6" data-line-number="6">    <span class="kw"><a href="reference/repeatParam.html">repeatParam</a></span>(<span class="dv">4</span>, ParamReal<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>))</a>
@@ -275,19 +271,19 @@
 <a class="sourceLine" id="cb34-8" data-line-number="8">  <span class="dt">trafo =</span> <span class="kw"><a href="reference/trafo_on_repeated_param.html">trafo_on_repeated_param</a></span>(</a>
 <a class="sourceLine" id="cb34-9" data-line-number="9">    <span class="dt">fun =</span> <span class="cf">function</span>(x, dict, tags) {</a>
 <a class="sourceLine" id="cb34-10" data-line-number="10">      scale =<span class="st"> </span><span class="cf">function</span>(z, ...) {</a>
-<a class="sourceLine" id="cb34-11" data-line-number="11">        x =<span class="st"> </span><span class="kw">c</span>(...)[<span class="dv">1</span><span class="op">:</span>z]</a>
-<a class="sourceLine" id="cb34-12" data-line-number="12">        x <span class="op">/</span><span class="st"> </span><span class="kw">sum</span>(x)</a>
+<a class="sourceLine" id="cb34-11" data-line-number="11">        x =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(...)[<span class="dv">1</span><span class="op">:</span>z]</a>
+<a class="sourceLine" id="cb34-12" data-line-number="12">        x <span class="op">/</span><span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/sum">sum</a></span>(x)</a>
 <a class="sourceLine" id="cb34-13" data-line-number="13">      }</a>
-<a class="sourceLine" id="cb34-14" data-line-number="14">      res =<span class="st"> </span><span class="kw">do.call</span>(Map, <span class="kw">c</span>(<span class="kw">list</span>(<span class="dt">f =</span> scale, <span class="dt">z =</span> dict<span class="op">$</span>z), <span class="kw">as.list</span>(x)))</a>
-<a class="sourceLine" id="cb34-15" data-line-number="15">      <span class="kw">list</span>(<span class="dt">x =</span> res)</a>
+<a class="sourceLine" id="cb34-14" data-line-number="14">      res =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/do.call">do.call</a></span>(Map, <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">f =</span> scale, <span class="dt">z =</span> dict<span class="op">$</span>z), <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">as.list</a></span>(x)))</a>
+<a class="sourceLine" id="cb34-15" data-line-number="15">      <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">x =</span> res)</a>
 <a class="sourceLine" id="cb34-16" data-line-number="16">    }, <span class="dt">repeated_param_id =</span> <span class="st">"x"</span>, <span class="dt">additional_params =</span> <span class="st">"z"</span>)</a>
 <a class="sourceLine" id="cb34-17" data-line-number="17">  )</a>
-<a class="sourceLine" id="cb34-18" data-line-number="18">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw">sample</span>(<span class="dv">3</span>))</a></code></pre></div>
+<a class="sourceLine" id="cb34-18" data-line-number="18">(<span class="dt">x =</span> ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/sample">sample</a></span>(<span class="dv">3</span>))</a></code></pre></div>
 <pre><code>##    switch z x_repeated_1 x_repeated_2 x_repeated_3 x_repeated_4
 ## 1:  FALSE 4 0.0006247733    0.3798165    0.1111354    0.4176468
 ## 2:  FALSE 3 0.4753165741    0.6127710    0.2436195    0.7881958
 ## 3:   TRUE 3 0.2201188852    0.3517979    0.6680556    0.1028646</code></pre>
-<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">ps<span class="op">$</span><span class="kw">transform</span>(x)</a></code></pre></div>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/transform">transform</a></span>(x)</a></code></pre></div>
 <pre><code>##    switch                                                   x
 ## 1:  FALSE 0.0006871504,0.4177372576,0.1222311373,0.4593444546
 ## 2:  FALSE                       0.3569228,0.4601395,0.1829377
@@ -297,7 +293,7 @@
 </div>
   </div>
 
-  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
+  <div class="col-md-3" id="sidebar">
     <div class="links">
 <h2>Links</h2>
 <ul class="list-unstyled">
@@ -323,7 +319,7 @@
 </ul>
 </div>
 
-      <div class="dev-status">
+  <div class="dev-status">
 <h2>Dev status</h2>
 <ul class="list-unstyled">
 <li><a href="https://travis-ci.org/mlr-org/paradox"><img src="https://travis-ci.org/mlr-org/paradox.svg?branch=master" alt="Build Status Linux"></a></li>
@@ -332,7 +328,6 @@
 </ul>
 </div>
 </div>
-
 </div>
 
 
@@ -341,7 +336,7 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="http://pkgdown.r-lib.org/">pkgdown</a>.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a>.</p>
 </div>
 
       </footer>
