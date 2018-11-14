@@ -86,6 +86,17 @@ ParamSetBase = R6Class("ParamSetBase",
     }
   ),
   private = list(
-    priv_dictionary = NULL
+    priv_dictionary = NULL,
+    deep_clone = function(name, value) {
+      if(name == "params") {
+        lapply(value, function(x) {
+          x$clone()
+        })
+      } else if(inherits(value, "R6")) {
+        value$clone()
+      } else {
+        value
+      }
+    }
   )
 )
