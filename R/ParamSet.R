@@ -75,7 +75,7 @@ ParamSet = R6Class(
         if (!is.null(self$restriction)) {
           x_n_dictionary = c(as.list(self$dictionary), x)
           if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
-            return(sprintf("Value %s not allowed by restriction: %s", convert_to_string(x), deparse(restriction)))
+            return(sprintf("Value %s not allowed by restriction: %s", as_short_string(x), deparse(restriction)))
           }
         }
         for (par_name in names(x)) {
@@ -86,7 +86,7 @@ ParamSet = R6Class(
       }
 
       # make params a named list according to the ids
-      names(params) = vapply(params, "[[", "id", FUN.VALUE = NA_character_)
+      names(params) = map_chr(params, "id")
 
       # A Flat ParamSet can only contain ParamSimple Objects?
       assert_list(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
@@ -304,15 +304,15 @@ ParamSet = R6Class(
 
   active = list(
     ids = function() names(self$params),
-    storage_types = function() vapply(self$params, function(param) param$storage_type, FUN.VALUE = NA_character_),
+    storage_types = function() map_chr(self$params, "storage_type"),
     values = function() lapply(self$params, function(param) param$values),
-    lower = function() vapply(self$params, function(param) param$lower %??% NA_real_, FUN.VALUE = NA_real_),
-    upper = function() vapply(self$params, function(param) param$upper %??% NA_real_, FUN.VALUE = NA_real_),
-    param_classes = function() vapply(self$params, function(param) class(param)[1], FUN.VALUE = NA_character_),
+    lower = function() map_dbl(self$params, function(param) param$lower %??% NA_real_),
+    upper = function() map_dbl(self$params, function(param) param$upper %??% NA_real_),
+    param_classes = function() map_chr(self$params, function(param) class(param)[1]),
     range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
-    has_finite_bounds = function() all(vapply(self$params, function(param) param$has_finite_bounds, FUN.VALUE = NA)),
+    has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
-    nlevels = function() vapply(self$params, function(param) param$nlevels %??% NA_integer_, FUN.VALUE = NA_integer_),
+    nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
     member_tags = function() lapply(self$params, function(param) param$tags)
   )
 )

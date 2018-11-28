@@ -20,6 +20,7 @@ Depends:
 Imports:
     backports (>= 1.1.1),
     checkmate (>= 1.8.4),
+    mlr3misc,
     R6
 Suggests:
     lhs,
@@ -29,3 +30,5 @@ Suggests:
     roxygen2
 RoxygenNote: 6.1.1
 VignetteBuilder: knitr
+Remotes:
+    mlr-org/mlr3misc

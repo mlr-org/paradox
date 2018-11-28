@@ -35,7 +35,7 @@ vectorized_for_param_set_flat = function(x, fun) {
 }
 
 test_special_vals = function(param, x) {
-  if (!is.null(param$special_vals) && any(vapply(param$special_vals, identical, x, FUN.VALUE = NA))) {
+  if (!is.null(param$special_vals) && any(map_lgl(param$special_vals, identical, x))) {
     # TRUE, if value is one of special_vals
     TRUE
   } else {
@@ -81,42 +81,4 @@ opt_grid_res = function(n, nlevels) {
   # fill the rest with the lower available resolution
   res[is.na(res)] = x_rest - 1
   return(res)
-}
-
-
-convert_to_string = function (x, num.format = "%.4g", clip.len = 15L) {
-  names2 = function (x, missing.val = NA_character_) {
-      n = names(x)
-      if (is.null(n))
-        return(rep.int(missing.val, length(x)))
-      replace(n, is.na(n) | n == "", missing.val)
-  }
-
-  convObj = function(x) {
-    string = if (is.atomic(x) && !is.null(x) && length(x) == 0L) {
-      sprintf("%s(0)", cl)
-    } else if (cl == "numeric") {
-      paste0(sprintf(num.format, x), collapse = ",")
-    } else if (cl %in% c("integer", "logical", "expression", "character")) {
-      paste0(as.character(x), collapse = ",")
-    } else {
-      sprintf("<%s>", cl)
-    }
-
-    if (nchar(string) > clip.len)
-      string = paste0(substr(string, 1L, clip.len - 3L), "...")
-    string
-  }
-
-  cl = class(x)[1L]
-
-  if (cl == "list") {
-    if (length(x) == 0L)
-      return("list()")
-    ns = names2(x, missing.val = "<unnamed>")
-    ss = lapply(x, convObj)
-    paste0(paste0(ns, "=", ss), collapse = ", ")
-  } else {
-    convObj(x)
-  }
 }
