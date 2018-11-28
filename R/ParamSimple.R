@@ -72,15 +72,15 @@ ParamSimple = R6Class(
       stop("denorm function not implemented!")
     },
     print = function(newline = TRUE, ...) {
-      cat(sprintf("%s [%s]", self$id, self$storage_type))
+      catf("%s [%s]", self$id, self$storage_type)
       if (!is.null(self$special_vals)) {
-        cat(sprintf("+{special_vals}")) #FIXME: Better Printer for special_vals!
+        catf("+{special_vals}") #FIXME: Better Printer for special_vals!
       }
       if (!is.null(self$default)) {
-        cat(sprintf(" (Default: %s)", as.character(self$default)))
+        catf(" (Default: %s)", as.character(self$default))
       }
       if (!is.null(self$tags)) {
-        cat(sprintf(" (Tags: %s)", paste(self$tags, collapse = ", ")))
+        catf(" (Tags: %s)", paste(self$tags, collapse = ", "))
       }
       if (newline) {
         cat("\n")

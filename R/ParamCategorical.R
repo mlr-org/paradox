@@ -62,7 +62,7 @@ ParamCategorical = R6Class(
     },
     print = function(...) {
       super$print(newline = FALSE, ...)
-      cat(sprintf(": {%s}\n", paste(self$values, collapse = ", ")))
+      catf(": {%s}\n", paste0(self$values, collapse = ", "))
     }
   ),
   active = list(

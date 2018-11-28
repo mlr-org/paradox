@@ -72,7 +72,7 @@ ParamReal = R6Class(
     },
     print = function(...) {
       super$print(newline = FALSE, ...)
-      cat(sprintf(": [%i, %i]\n", self$lower, self$upper))
+      catf(": [%i, %i]\n", self$lower, self$upper)
     }
   ),
   active = list(

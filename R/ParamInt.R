@@ -47,15 +47,9 @@ ParamInt = R6Class(
       }
 
       # arg check lower and upper, we need handle Inf special case, that is not an int
-      if (identical(lower, Inf) || identical(lower, -Inf))
-        self$lower = lower
-      else
-        self$lower = asInt(lower)
-      if (identical(upper, Inf) || identical(upper, -Inf))
-        self$upper = upper
-      else
-        self$upper = asInt(upper)
-      assert_true(lower <= upper)
+      self$lower = if (identical(lower, Inf) || identical(lower, -Inf)) lower else asInt(lower)
+      self$upper = if (identical(upper, Inf) || identical(upper, -Inf)) upper else asInt(upper)
+      stopifnot(lower <= upper)
 
       # construct super class
       super$initialize(id = id, storage_type = "integer", check = check, special_vals = special_vals, default = default, tags = tags)
@@ -64,7 +58,7 @@ ParamInt = R6Class(
     # public methods
     sampleVector = function(n = 1L) {
       assert_true(self$has_finite_bounds)
-      as.integer(round(runif(n, min = self$lower-0.5, max = self$upper+0.5)))
+      as.integer(runif(n, min = self$lower, max = self$upper + 1L))
     },
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
@@ -76,7 +70,7 @@ ParamInt = R6Class(
     },
     print = function(...) {
       super$print(newline = FALSE, ...)
-      cat(sprintf(": {%g, ..., %g}\n", self$lower, self$upper))
+      catf(": {%g, ..., %g}\n", self$lower, self$upper)
     }
   ),
   active = list(

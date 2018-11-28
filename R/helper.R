@@ -35,12 +35,7 @@ vectorized_for_param_set_flat = function(x, fun) {
 }
 
 test_special_vals = function(param, x) {
-  if (!is.null(param$special_vals) && any(map_lgl(param$special_vals, identical, x))) {
-    # TRUE, if value is one of special_vals
-    TRUE
-  } else {
-    FALSE
-  }
+  !is.null(param$special_vals) && any(map_lgl(param$special_vals, identical, x))
 }
 
 could_list_be_data_table = function(x) {
@@ -50,8 +45,9 @@ could_list_be_data_table = function(x) {
 ensure_data_table = function(x, ...) {
   if (test_data_frame(x) || could_list_be_data_table(x)) {
     x = as.data.table(x)
+  } else {
+    assert_data_table(x, ...)
   }
-  assert_data_table(x, ...)
 }
 
 # res int(1) - aimed at resolution
@@ -69,7 +65,7 @@ opt_grid_res = function(n, nlevels) {
     x_rest^k * (x_rest-1)^(p_rest-k) - n_rest
   }
   opt_k = 0:p_rest
-  k = opt_k[which.min(abs(sapply(opt_k, optFun) - 0))]
+  k = opt_k[which.min(abs(map_dbl(opt_k, optFun)))]
   # build result vector
   res = rep(NA_integer_, p)
   names(res) = nnames
