@@ -3,21 +3,49 @@
 \docType{data}
 \name{ParamBase}
 \alias{ParamBase}
-\title{Base Class for ParamHelpers}
+\title{ParamBase Object}
 \format{\code{\link{R6Class}} object}
 \usage{
 ParamBase
 }
-\value{
-[\code{\link{ParamBase}}].
-}
 \description{
-A \code{\link[R6]{R6Class}} to represent parameters.
-This is the abstract base class, do not use directly!
+Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
 }
+\section{Member Variables}{
+
+
+\describe{
+  \item{default}{[\code{any}] \cr
+    default value.}
+  \item{special_vals}{[\code{any}] \cr
+    Special values this parameter is allowed to take that are within the defined space.}
+}
+
+Inherited from \code{ParamNode}:
+}
+
+\section{Methods}{
+
+
+\describe{
+  \item{sampleVector(n)}{[\code{function}] \cr
+    samples \code{n} Parameter Values.}
+  \item{denorm_vector(x)}{[\code{function}] \cr
+    Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
+}
+
+Inherited from \code{ParamNode}:
+}
+
+\section{Active Bindings}{
+
+  \emph{none}
+}
+
 \seealso{
-Other ParamHelpers: \code{\link{ParamHandle}},
-  \code{\link{ParamNode}}
+Other ParamBase: \code{\link{ParamCategorical}},
+  \code{\link{ParamFlag}}, \code{\link{ParamInt}},
+  \code{\link{ParamReal}}, \code{\link{ParamUntyped}}
 }
-\concept{ParamHelpers}
+\concept{ParamBase}
 \keyword{datasets}
