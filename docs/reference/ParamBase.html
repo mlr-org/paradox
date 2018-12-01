@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Base Class for ParamHelpers — ParamBase • paradox</title>
+<title>ParamBase Object — ParamBase • paradox</title>
 
 <!-- jquery -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
@@ -30,10 +30,9 @@
 
 
 
-<meta property="og:title" content="Base Class for ParamHelpers — ParamBase" />
+<meta property="og:title" content="ParamBase Object — ParamBase" />
 
-<meta property="og:description" content="A R6Class to represent parameters.
-This is the abstract base class, do not use directly!" />
+<meta property="og:description" content="Abstract base class R6Class to represent a parameter." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -100,15 +99,14 @@ This is the abstract base class, do not use directly!" />
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Base Class for ParamHelpers</h1>
+    <h1>ParamBase Object</h1>
     <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/ParamBase.R'><code>R/ParamBase.R</code></a></small>
     <div class="hidden name"><code>ParamBase.Rd</code></div>
     </div>
 
     <div class="ref-description">
     
-    <p>A <code><a href='https://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent parameters.
-This is the abstract base class, do not use directly!</p>
+    <p>Abstract base class <code><a href='https://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent a parameter.</p>
     
     </div>
 
@@ -118,14 +116,38 @@ This is the abstract base class, do not use directly!</p>
 
     <p><code>R6Class</code> object</p>
     
-    <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
+    <h2 class="hasAnchor" id="member-variables"><a class="anchor" href="#member-variables"></a>Member Variables</h2>
 
-    <p>[<code>ParamBase</code>].</p>
+    
+    <dl class='dl-horizontal'>
+  <dt>default</dt><dd><p>[<code>any</code>] <br />
+    default value.</p></dd>
+  <dt>special_vals</dt><dd><p>[<code>any</code>] <br />
+    Special values this parameter is allowed to take that are within the defined space.</p></dd>
+</dl>
+    <p>Inherited from <code>ParamNode</code>:</p>
+    
+    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
+
+    
+    <dl class='dl-horizontal'>
+  <dt>sampleVector(n)</dt><dd><p>[<code>function</code>] <br />
+    samples <code>n</code> Parameter Values.</p></dd>
+  <dt>denorm_vector(x)</dt><dd><p>[<code>function</code>] <br />
+    Takes a vector with values between <code>[0,1]</code> and maps them to values of the Parameter.</p></dd>
+</dl>
+    <p>Inherited from <code>ParamNode</code>:</p>
+    
+    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active Bindings</h2>
+
+    
+    <p><em>none</em></p>
     
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
-    <div class='dont-index'><p>Other ParamHelpers: <code><a href='ParamHandle.html'>ParamHandle</a></code>,
-  <code><a href='ParamNode.html'>ParamNode</a></code></p></div>
+    <div class='dont-index'><p>Other ParamBase: <code><a href='ParamCategorical.html'>ParamCategorical</a></code>,
+  <code><a href='ParamFlag.html'>ParamFlag</a></code>, <code><a href='ParamInt.html'>ParamInt</a></code>,
+  <code><a href='ParamReal.html'>ParamReal</a></code>, <code><a href='ParamUntyped.html'>ParamUntyped</a></code></p></div>
     
 
   </div>
@@ -135,7 +157,11 @@ This is the abstract base class, do not use directly!</p>
       
       <li><a href="#format">Format</a></li>
 
-      <li><a href="#value">Value</a></li>
+      <li><a href="#member-variables">Member Variables</a></li>
+
+      <li><a href="#methods">Methods</a></li>
+
+      <li><a href="#active-bindings">Active Bindings</a></li>
 
       <li><a href="#see-also">See also</a></li>
           </ul>
