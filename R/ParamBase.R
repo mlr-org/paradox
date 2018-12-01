@@ -91,6 +91,9 @@ ParamBase = R6Class("ParamBase",
       if (newline) {
         cat("\n")
       }
+    },
+    value_to_string = function(x, ...) {
+      stop("value_to_string not implemented!")
     }
   ),
 

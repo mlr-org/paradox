@@ -309,6 +309,13 @@ ParamSet = R6Class( "ParamSet",
         cat("Trafo is set:", "\n")
         print(self$trafo)
       }
+    },
+    value_to_string = function(x, ...) {
+      paste0(names(self$params), sapply(self$params, function(param) {
+        # Convert every parameter individually with its value_to_string function.
+        param_id = param$id
+        param$value_to_string(x$param_id, ...)
+      }), sep = " = ", collapse=", ")
     }
   ),
 

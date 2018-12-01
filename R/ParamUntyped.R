@@ -49,6 +49,9 @@ ParamUntyped = R6Class(
     },
     denorm_vector = function(x) {
       stop("Untyped Param can not be denormed.")
+    },
+    value_to_string = function(x, ...) {
+      stop("Untyped Param can not be converted to string.")
     }
   ),
 
