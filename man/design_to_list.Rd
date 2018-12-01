@@ -2,17 +2,17 @@
 % Please edit documentation in R/design_to_list.R
 \name{design_to_list}
 \alias{design_to_list}
-\title{Design to List}
+\title{Convert Design to List}
 \usage{
 design_to_list(design)
 }
 \arguments{
-\item{design}{[`data.table`]:
-The `data.table` that should be converted}
+\item{design}{[\code{data.table}]\cr
+The object that contains the design.}
 }
 \value{
-`list`
+list
 }
 \description{
-Converts a design or any `data.table` to a list where each list element contains one row.
+Convert design to a list where each list item represents one line of the design.
 }
