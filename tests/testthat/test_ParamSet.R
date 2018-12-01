@@ -60,30 +60,6 @@ test_that("advanced methods work", {
     xdt = ps$transform(xd)
     expect_data_table(xdt, nrows = 10)
 
-    xl = ps$generate_lhs_design(10)
-    expect_data_table(xl, nrows = 10, any.missing = FALSE)
-    expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
-    xlt = ps$transform(xl)
-    expect_data_table(xlt, nrows = 10)
-    xltl = design_to_list(xlt)
-    expect_list(xltl, len = 10)
-
-    xg = ps$generate_grid_design(5)
-    expect_data_table(xg, any.missing = FALSE)
-    expect_true(nrow(xg) <= 5^ps$length)
-    expect_true(all(xg[, ps$test(.SD), by = seq_len(nrow(xg))]$V1))
-    xgt = ps$transform(xg)
-    expect_data_table(xgt, nrows = nrow(xg))
-
-    p_res = ps$nlevels
-    p_res[is.na(p_res)] = 2
-    xgp = ps$generate_grid_design(param_resolutions = p_res)
-    expect_data_table(xgp, any.missing = FALSE)
-    expect_true(nrow(xgp) <= prod(p_res))
-
-    xgn = ps$generate_grid_design(n = 100)
-    expect_data_table(xgn, any.missing = FALSE)
-    expect_true(nrow(xgn) <= 100)
   }
 })
 

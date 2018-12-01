@@ -138,70 +138,7 @@ ParamSet = R6Class( "ParamSet",
       return(xs)
     },
 
-    generate_lhs_design = function(n, lhs_function = lhs::maximinLHS) {
-      assert_int(n, lower = 1L)
-      assert_function(lhs_function, args = c("n", "k"))
-      lhs_des = lhs_function(n, k = self$length)
-      # converts the LHS output to values of the parameters
-      sample_converter = function(lhs_des) {
-        vec_cols = lapply(seq_len(ncol(lhs_des)), function(z) lhs_des[,z])
-        names(vec_cols) = self$ids
-        self$denorm(vec_cols)
-      }
-      if (!is.null(self$restriction)) {
-        # we work on the matrix that is the LHS output to be able to use augmentLHS to sample additional values.
-        sample_generator = function(n, old_x = NULL) {
-          if (is.null(old_x)) return(lhs_des)
-          lhs_des = lhs::augmentLHS(lhs = old_x, m = n)
-          tail(lhs_des, n)
-        }
-        # validates the LHS output, according to the param restrictions
-        sample_validator = function(lhs_des) {
-          vectorized_for_param_set_flat(sample_converter(lhs_des), self$test)
-        }
-        lhs_des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
-      }
-      sample_converter(lhs_des)
-    },
 
-    # resolution int(1) - resolution used for each parameter
-    # param_resolutions int() - resolution given per parameter (named vector)
-    # n int(1) - approx. maximum number of samples in grid
-    generate_grid_design = function(resolution = NULL, param_resolutions = NULL, n = NULL) {
-      if (sum(!is.null(resolution), !is.null(param_resolutions), !is.null(n)) != 1) {
-        stop("You can only specify one of the arguments!")
-      }
-
-      seqGen = function(r) seq(0, 1, length.out = r)
-
-      if (!is.null(resolution)) {
-        # build for resolution
-        assert_int(resolution, lower = 1L)
-        grid_vec = replicate(self$length, seqGen(resolution), simplify = FALSE)
-        names(grid_vec) = self$ids
-        res = as.list(self$denorm(grid_vec))
-      } else {
-        # build for n: calculate param_resolutions
-        if (!is.null(n)) {
-          assert_int(n, lower = 1L)
-          param_resolutions = opt_grid_res(n, self$nlevels)
-        }
-        # build for param_resolutions
-        assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
-        assert_set_equal(names(param_resolutions), self$ids)
-        grid_vec = lapply(param_resolutions, seqGen)
-        res = lapply(names(grid_vec), function(z) self$params[[z]]$denorm_vector(x = grid_vec[[z]]))
-        names(res) = names(grid_vec)
-      }
-      res = lapply(res, unique)
-      res = do.call(CJ, as.list(res))
-      if (!is.null(self$restriction)) {
-        ind_valid = vectorized_for_param_set_flat(res, self$test)
-        return(res[ind_valid, ])
-      } else {
-        return(res)
-      }
-    },
 
     # in: * ids (character)
     #       ids of ParamBase
