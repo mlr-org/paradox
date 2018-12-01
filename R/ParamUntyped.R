@@ -44,7 +44,7 @@ ParamUntyped = R6Class(
     },
 
     # public methods
-    sampleVector = function(n = 1L) {
+    sample_vector = function(n = 1L) {
       stop("Untyped Param can not be sampled.")
     },
     denorm_vector = function(x) {

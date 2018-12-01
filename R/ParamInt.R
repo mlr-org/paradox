@@ -56,7 +56,7 @@ ParamInt = R6Class(
     },
 
     # public methods
-    sampleVector = function(n = 1L) {
+    sample_vector = function(n = 1L) {
       assert_true(self$has_finite_bounds)
       as.integer(runif(n, min = self$lower, max = self$upper + 1L))
     },

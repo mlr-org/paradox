@@ -42,7 +42,7 @@ ParamFlag = R6Class("ParamFlag",
     },
 
     # public methods
-    sampleVector = function(n = 1L) {
+    sample_vector = function(n = 1L) {
       sample(c(TRUE, FALSE), size = n, replace = TRUE)
     },
     denorm_vector = function(x) {

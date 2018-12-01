@@ -46,7 +46,7 @@ Inherited from \code{ParamBase}
 
 
 \describe{
-  \item{sampleVector(n)}{[\code{function}] \cr
+  \item{sample_vector(n)}{[\code{function}] \cr
     samples \code{n} Parameter Values.}
   \item{denorm_vector(x)}{[\code{function}] \cr
     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}

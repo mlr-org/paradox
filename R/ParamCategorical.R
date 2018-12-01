@@ -52,7 +52,7 @@ ParamCategorical = R6Class(
     },
 
     # public methods
-    sampleVector = function(n = 1L) {
+    sample_vector = function(n = 1L) {
       sample(self$values, n, replace = TRUE)
     },
     denorm_vector = function(x) {

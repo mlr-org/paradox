@@ -20,10 +20,10 @@ A \code{\link[R6]{R6Class}} to represent set of parameters.
 \describe{
   \item{params}{[\code{list}] \cr
   List of the Params}
-  \item{trafo}{[\code{function(x, dict, tags)}] \cr
+  \item{trafo}{[\code{function(x, tags)}] \cr
     A function that returns a list of transformed x values.
     Has to work vectorized and also return untransformed x values.
-    The function takes a list \code{x} of all parameter values, additionally the dictionary linked to the \code{ParamSet}.
+    The function takes a list \code{x} of all parameter values.
     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
   \item{restriction}{[\code{quote}] \cr
     A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
