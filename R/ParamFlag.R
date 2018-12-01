@@ -2,28 +2,8 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent Flag parameters.
+#' A \code{\link[R6]{R6Class}} to represent boolean parameters.
 #'
-#' @section Member Variables:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}:
-#' @inheritSection ParamBase Member Variables
-#'
-#' @section Methods:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Methods
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Active Bindings
-#'
-#' @return [\code{\link{ParamFlag}}].
-#' @family ParamBase
 #' @export
 ParamFlag = R6Class("ParamFlag",
   inherit = ParamBase,

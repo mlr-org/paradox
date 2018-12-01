@@ -6,31 +6,13 @@
 #'
 #' @section Member Variables:
 #' \describe{
-#'   \item{lower}{[\code{integer(1)|-Inf}] \cr
-#'     Upper boundary.}
-#'   \item{upper}{[\code{integer(1)|-Inf}] \cr
-#'     Lower boundary.}
-#'   \item{allow_inf}{[\code{logical(1)}] \cr
-#'     Are the values \code{-Inf} and \code{Inf} feasible?}
+#'   \item{lower}{[\code{numeric(1), \code{default = -Inf}] \cr
+#'     Upper bound for feasible values.}
+#'   \item{upper}{[\code{integer(1), \code{default = Inf}}] \cr
+#'     Lower bound for feasible values.}
+#'   \item{allow_inf}{[\code{logical(1)}, \code{default = TRUE}] \cr
+#'     Are values \code{-Inf} and \code{Inf} feasible?}
 #' }
-#'
-#' Inherited from \code{ParamBase}:
-#' @inheritSection ParamBase Member Variables
-#'
-#' @section Methods:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Methods
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Active Bindings
-#'
-#' @return [\code{\link{ParamReal}}].
-#' @family ParamBase
 #' @export
 ParamReal = R6Class(
   "ParamReal",

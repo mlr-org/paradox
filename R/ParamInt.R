@@ -12,23 +12,6 @@
 #'     Lower boundary.}
 #' }
 #'
-#' Inherited from \code{ParamBase}:
-#' @inheritSection ParamBase Member Variables
-#'
-#' @section Methods:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Methods
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Active Bindings
-#'
-#' @return [\code{\link{ParamInt}}].
-#' @family ParamBase
 #' @export
 ParamInt = R6Class(
   "ParamInt",

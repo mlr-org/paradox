@@ -13,9 +13,6 @@
 #'     Special values this parameter is allowed to take that are within the defined space.}
 #' }
 #'
-#' Inherited from \code{ParamNode}:
-#' @inheritSection ParamNode Member Variables
-#'
 #' @section Methods:
 #'
 #' \describe{
@@ -24,9 +21,6 @@
 #'   \item{denorm_vector(x)}{[\code{function}] \cr
 #'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 #' }
-#'
-#' Inherited from \code{ParamNode}:
-#' @inheritSection ParamNode Methods
 #'
 #' @section Active Bindings:
 #'   \emph{none}

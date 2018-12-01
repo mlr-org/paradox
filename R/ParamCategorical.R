@@ -10,23 +10,6 @@
 #'     All categorical values.}
 #' }
 #'
-#' Inherited from \code{ParamBase}:
-#' @inheritSection ParamBase Member Variables
-#'
-#' @section Methods:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Methods
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Active Bindings
-#'
-#' @return [\code{\link{ParamCategorical}}].
-#' @family ParamBase
 #' @export
 ParamCategorical = R6Class(
   "ParamCategorical",
