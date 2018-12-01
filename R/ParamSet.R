@@ -9,10 +9,10 @@
 #' \describe{
 #'   \item{params}{[\code{list}] \cr
 #'   List of the Params}
-#'   \item{trafo}{[\code{function(x, dict, tags)}] \cr
+#'   \item{trafo}{[\code{function(x, tags)}] \cr
 #'     A function that returns a list of transformed x values.
 #'     Has to work vectorized and also return untransformed x values.
-#'     The function takes a list \code{x} of all parameter values, additionally the dictionary linked to the \code{ParamSet}.
+#'     The function takes a list \code{x} of all parameter values.
 #'     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
 #'   \item{restriction}{[\code{quote}] \cr
 #'     A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
@@ -75,27 +75,20 @@ ParamSet = R6Class( "ParamSet",
     test = NULL, # test generated from the above check
 
     # constructor
-    initialize = function(params = list(), id = "paramset", dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
+    initialize = function(params = list(), id = "paramset", tags = NULL, restriction = NULL, trafo = NULL) {
       # set member variables
       assert_list(params, types = "ParamBase")
       names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
       self$params = params
       self$id = assert_string(id)
-      self$trafo = assert_function(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
+      self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       self$restriction = assert_class(restriction, "call", null.ok = TRUE)
-      self$dictionary = assert_list(dictionary, names = "strict", null.ok = TRUE)
 
       # check function that checks the whole param set by simply iterating
       self$check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assert_set_equal(names(x), self$ids)
         if (is.data.table(x)) x = as.list(x)
         assert_list(x, names = "named")
-        if (!is.null(self$restriction)) {
-          x_n_dictionary = c(as.list(self$dictionary), x)
-          if (!isTRUE(eval(self$restriction, envir = x_n_dictionary))) {
-            return(sprintf("Value %s not allowed by restriction: %s", as_short_string(x), deparse(restriction)))
-          }
-        }
         for (par_name in names(x)) {
           res = self$params[[par_name]]$check(x[[par_name]], na.ok = na.ok, null.ok = null.ok)
           if(!isTRUE(res)) return(res)
@@ -140,7 +133,7 @@ ParamSet = R6Class( "ParamSet",
       #.mapply(function(x) {
       #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
       #}, x, list())
-      xs = self$trafo(x = x, dict = self$dictionary, tags = self$member_tags)
+      xs = self$trafo(x = x, tags = self$member_tags)
       xs = ensure_data_table(xs)
       return(xs)
     },
@@ -235,9 +228,9 @@ ParamSet = R6Class( "ParamSet",
       if (!is.null(fix) && !is.null(new_trafo)) {
         assert_list(fix, names = "named")
         old_trafo = force(self$trafo)
-        new_trafo = function(x, dict, tags) {
+        new_trafo = function(x, tags) {
           x = cbind(x, as.data.table(fix))
-          res = old_trafo(x, dict, tags)
+          res = old_trafo(x, tags)
           res = x[, !names(fix), with = FALSE]
           return(res)
         }
@@ -250,7 +243,6 @@ ParamSet = R6Class( "ParamSet",
       ParamSet$new(
         id = paste0(self$id,"_subset"),
         params = self$params[keep_ids],
-        dictionary = as.list(self$dictionary),
         tags = self$tags,
         restriction = new_restriction,
         trafo = new_trafo)
@@ -271,16 +263,15 @@ ParamSet = R6Class( "ParamSet",
       }
       new_trafo = self$trafo %??% param_set$trafo
       if (!is.null(self$trafo) && !is.null(param_set$trafo)) {
-        new_trafo = function(x, dict, tags) {
-          x = self$trafo(x, dict, tags)
-          x = param_set$trafo(x, dict, tags)
+        new_trafo = function(x, tags) {
+          x = self$trafo(x, tags)
+          x = param_set$trafo(x, tags)
           return(x)
         }
       }
       ParamSet$new(
         id = paste0(self$id, "_", param_set$id),
         params = c(self$params, param_set$params),
-        dictionary = c(as.list(self$dictionary), as.list(param_set$dictionary)),
         tags = union(self$tags, param_set$tags),
         restriction = new_restriction,
         trafo = new_trafo
@@ -292,10 +283,6 @@ ParamSet = R6Class( "ParamSet",
       cat("Parameters:", "\n")
       for (param in self$params) {
         param$print(...)
-      }
-      if (!is.null(self$dictionary)) {
-        cat("Dictonary is set:", "\n")
-        print(self$dictionary)
       }
       if (!is.null(self$tags)) {
         cat("Tags are set:", "\n")
@@ -323,17 +310,6 @@ ParamSet = R6Class( "ParamSet",
     has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
     nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
-    member_tags = function() lapply(self$params, function(param) param$tags),
-    dictionary = function(x) {
-      if (missing(x)) {
-        return(private$priv_dictionary)
-      } else if (!is.null(x)) {
-        x = as.environment(x)
-        private$priv_dictionary = x
-      }
-    }
-  ),
-  private = list(
-    priv_dictionary = NULL
+    member_tags = function() lapply(self$params, function(param) param$tags)
   )
 )

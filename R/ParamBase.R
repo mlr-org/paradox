@@ -92,19 +92,5 @@ ParamBase = R6Class("ParamBase",
         cat("\n")
       }
     }
-  ),
-
-  active = list(
-    dictionary = function(x) {
-      if (missing(x)) {
-        return(private$priv_dictionary)
-      } else if (!is.null(x)) {
-        x = as.environment(x)
-        private$priv_dictionary = x
-      }
-    }
-  ),
-  private = list(
-    priv_dictionary = NULL
   )
 )
