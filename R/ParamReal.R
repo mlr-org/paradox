@@ -14,27 +14,27 @@
 #'     Are the values \code{-Inf} and \code{Inf} feasible?}
 #' }
 #'
-#' Inherited from \code{ParamSimple}:
-#' @inheritSection ParamSimple Member Variables
+#' Inherited from \code{ParamBase}:
+#' @inheritSection ParamBase Member Variables
 #'
 #' @section Methods:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Methods
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Methods
 #'
 #' @section Active Bindings:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Active Bindings
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Active Bindings
 #'
 #' @return [\code{\link{ParamReal}}].
-#' @family ParamSimple
+#' @family ParamBase
 #' @export
 ParamReal = R6Class(
   "ParamReal",
-  inherit = ParamSimple,
+  inherit = ParamBase,
   public = list(
 
     # member variables

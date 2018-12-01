@@ -7,13 +7,13 @@
 #'
 #' @param n [\code{integer(1)}]\cr
 #'   How often should this parameter be copied?
-#' @param param [\code{ParamSimple(1)}]\cr
+#' @param param [\code{ParamBase(1)}]\cr
 #'   The parameter that should be repeated_
 #' @return List of Parameters
 #' @export
 repeatParam = function(n = 1L, param) {
   assert_int(n)
-  assert_r6(param, "ParamSimple")
+  assert_r6(param, "ParamBase")
   joining_id = paste0(param$id, "_repeated")
   lapply(seq_len(n), function(i) {
     this_param = param$clone()

@@ -2,13 +2,23 @@
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent set of parameters in a flat form.
+#' A \code{\link[R6]{R6Class}} to represent set of parameters.
 #'
 #' @section Member Variables:
-#'   \emph{none}
 #'
-#' Inherited from \code{ParamSetBase}:
-#' @inheritSection ParamSetBase Member Variables
+#' \describe{
+#'   \item{params}{[\code{list}] \cr
+#'   List of the Params}
+#'   \item{trafo}{[\code{function(x, dict, tags)}] \cr
+#'     A function that returns a list of transformed x values.
+#'     Has to work vectorized and also return untransformed x values.
+#'     The function takes a list \code{x} of all parameter values, additionally the dictionary linked to the \code{ParamSet}.
+#'     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
+#'   \item{restriction}{[\code{quote}] \cr
+#'     A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
+#'     It has to be evaluated to \code{TRUE} so that the parameter value is valid.
+#'     The expression has to work on vectors of values.}
+#' }
 #'
 #' @section Methods:
 #'
@@ -23,9 +33,6 @@
 #'     }
 #'   }
 #' }
-#'
-#' Inherited from \code{ParamSetBase}:
-#' @inheritSection ParamSetBase Methods
 #'
 #' @section Active Bindings:
 #'
@@ -52,23 +59,34 @@
 #'     The \code{tags} of each Parameter.}
 #' }
 #'
-#' Inherited from \code{ParamSetBase}:
-#' @inheritSection ParamSetBase Active Bindings
-#'
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamSet
 #' @export
-ParamSet = R6Class(
-  "ParamSet",
-  inherit = ParamSetBase,
+ParamSet = R6Class( "ParamSet",
   public = list(
 
     # member variables
+    params = NULL,  # a list of ParamNodes
+    id = NULL,
+    trafo = NULL, # function to transform the value before evaluation
+    restriction = NULL, # quote that states if certain conditions have to be met
+    check = NULL, # a checkmate check function to validate if a value is valid for this Param
+    assert = NULL, # assert_ion generated from the above check
+    test = NULL, # test generated from the above check
 
     # constructor
-    initialize = function(id = "parset", handle = NULL, params = list(), dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
+    initialize = function(params = list(), id = "paramset", dictionary = NULL, tags = NULL, restriction = NULL, trafo = NULL) {
+      # set member variables
+      assert_list(params, types = "ParamBase")
+      names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
+      self$params = params
+      self$id = assert_string(id)
+      self$trafo = assert_function(trafo, args = c("x", "dict", "tags"), null.ok = TRUE)
+      self$restriction = assert_class(restriction, "call", null.ok = TRUE)
+      self$dictionary = assert_list(dictionary, names = "strict", null.ok = TRUE)
+
       # check function that checks the whole param set by simply iterating
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
+      self$check = function(x, na.ok = FALSE, null.ok = FALSE) {
         assert_set_equal(names(x), self$ids)
         if (is.data.table(x)) x = as.list(x)
         assert_list(x, names = "named")
@@ -84,15 +102,9 @@ ParamSet = R6Class(
         }
         return(res)
       }
+      self$test = makeTestFunction(self$check)
+      self$assert = makeAssertionFunction(self$check)
 
-      # make params a named list according to the ids
-      names(params) = map_chr(params, "id")
-
-      # A Flat ParamSet can only contain ParamSimple Objects?
-      assert_list(params, types = "ParamSimple") # FIXME: Maybe too restricitve?
-
-      # construct super class
-      super$initialize(id, storage_type = "list", check = check, params = params, dictionary = dictionary, tags = tags, restriction = restriction, trafo = trafo)
     },
 
     # public methods
@@ -199,9 +211,9 @@ ParamSet = R6Class(
     },
 
     # in: * ids (character)
-    #       ids of ParamSimple
+    #       ids of ParamBase
     #     * fix (named list)
-    #       names = ids of ParamSimple
+    #       names = ids of ParamBase
     #       values = values of respective param
     # out: ParamSet
     subset = function(ids = NULL, fix = NULL) {
@@ -237,7 +249,6 @@ ParamSet = R6Class(
       }
       ParamSet$new(
         id = paste0(self$id,"_subset"),
-        handle = self$handle$clone(),
         params = self$params[keep_ids],
         dictionary = as.list(self$dictionary),
         tags = self$tags,
@@ -268,7 +279,6 @@ ParamSet = R6Class(
       }
       ParamSet$new(
         id = paste0(self$id, "_", param_set$id),
-        handle = self$handle$clone(), #FIXME: If the handle is actually used this might not be a good idea, throw error?
         params = c(self$params, param_set$params),
         dictionary = c(as.list(self$dictionary), as.list(param_set$dictionary)),
         tags = union(self$tags, param_set$tags),
@@ -313,6 +323,17 @@ ParamSet = R6Class(
     has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
     length = function() length(self$params),
     nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
-    member_tags = function() lapply(self$params, function(param) param$tags)
+    member_tags = function() lapply(self$params, function(param) param$tags),
+    dictionary = function(x) {
+      if (missing(x)) {
+        return(private$priv_dictionary)
+      } else if (!is.null(x)) {
+        x = as.environment(x)
+        private$priv_dictionary = x
+      }
+    }
+  ),
+  private = list(
+    priv_dictionary = NULL
   )
 )

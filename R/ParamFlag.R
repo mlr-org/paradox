@@ -7,27 +7,26 @@
 #' @section Member Variables:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}:
-#' @inheritSection ParamSimple Member Variables
+#' Inherited from \code{ParamBase}:
+#' @inheritSection ParamBase Member Variables
 #'
 #' @section Methods:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Methods
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Methods
 #'
 #' @section Active Bindings:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Active Bindings
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Active Bindings
 #'
 #' @return [\code{\link{ParamFlag}}].
-#' @family ParamSimple
+#' @family ParamBase
 #' @export
-ParamFlag = R6Class(
-  "ParamFlag",
-  inherit = ParamSimple,
+ParamFlag = R6Class("ParamFlag",
+  inherit = ParamBase,
   public = list(
 
     # constructor

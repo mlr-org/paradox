@@ -3,31 +3,31 @@
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent untyped parameters.
-#' 
+#'
 #' @section Member Variables:
 #'   \emph{none}
-#' 
-#' Inherited from \code{ParamSimple}:
-#' @inheritSection ParamSimple Member Variables
-#' 
+#'
+#' Inherited from \code{ParamBase}:
+#' @inheritSection ParamBase Member Variables
+#'
 #' @section Methods:
 #'   \emph{none}
-#' 
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Methods
-#' 
+#'
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Methods
+#'
 #' @section Active Bindings:
 #'   \emph{none}
-#' 
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Active Bindings
+#'
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Active Bindings
 #'
 #' @return [\code{\link{ParamUntyped}}].
-#' @family ParamSimple
+#' @family ParamBase
 #' @export
 ParamUntyped = R6Class(
   "ParamUntyped",
-  inherit = ParamSimple,
+  inherit = ParamBase,
   public = list(
     # member variables
 

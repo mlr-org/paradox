@@ -100,7 +100,6 @@ OptPath = R6Class(
       if (!is.null(self$param_set$trafo) && is.null(transformed_x)) {
         transformed_x = self$param_set$transform(x)
       }
-
       assert_list(x, names = "strict")
       assert_set_equal(names(x), self$x_names)
       x = x[self$x_names]

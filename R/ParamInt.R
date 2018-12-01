@@ -12,27 +12,27 @@
 #'     Lower boundary.}
 #' }
 #'
-#' Inherited from \code{ParamSimple}:
-#' @inheritSection ParamSimple Member Variables
+#' Inherited from \code{ParamBase}:
+#' @inheritSection ParamBase Member Variables
 #'
 #' @section Methods:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Methods
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Methods
 #'
 #' @section Active Bindings:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamSimple}
-#' @inheritSection ParamSimple Active Bindings
+#' Inherited from \code{ParamBase}
+#' @inheritSection ParamBase Active Bindings
 #'
 #' @return [\code{\link{ParamInt}}].
-#' @family ParamSimple
+#' @family ParamBase
 #' @export
 ParamInt = R6Class(
   "ParamInt",
-  inherit = ParamSimple,
+  inherit = ParamBase,
   public = list(
 
     # member variables
