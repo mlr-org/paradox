@@ -6,7 +6,7 @@
 #'
 #' @export
 ParamBool = R6Class("ParamBool",
-  inherit = ParamBase,
+  inherit = Parameter,
   public = list(
 
     # constructor

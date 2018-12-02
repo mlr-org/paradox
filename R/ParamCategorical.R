@@ -13,7 +13,7 @@
 #' @export
 ParamCateg = R6Class(
   "ParamCateg",
-  inherit = ParamBase,
+  inherit = Parameter,
   public = list(
 
     # member variables

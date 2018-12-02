@@ -7,27 +7,27 @@
 #' @section Member Variables:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamBase}:
-#' @inheritSection ParamBase Member Variables
+#' Inherited from \code{Parameter}:
+#' @inheritSection Parameter Member Variables
 #'
 #' @section Methods:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Methods
+#' Inherited from \code{Parameter}
+#' @inheritSection Parameter Methods
 #'
 #' @section Active Bindings:
 #'   \emph{none}
 #'
-#' Inherited from \code{ParamBase}
-#' @inheritSection ParamBase Active Bindings
+#' Inherited from \code{Parameter}
+#' @inheritSection Parameter Active Bindings
 #'
 #' @return [\code{\link{ParamUntyped}}].
-#' @family ParamBase
+#' @family Parameter
 #' @export
 ParamUntyped = R6Class(
   "ParamUntyped",
-  inherit = ParamBase,
+  inherit = Parameter,
   public = list(
     # member variables
 

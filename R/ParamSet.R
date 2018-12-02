@@ -77,7 +77,7 @@ ParamSet = R6Class( "ParamSet",
     # constructor
     initialize = function(params = list(), id = "paramset", tags = NULL, restriction = NULL, trafo = NULL) {
       # set member variables
-      assert_list(params, types = "ParamBase")
+      assert_list(params, types = "Parameter")
       names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
       self$params = params
       self$id = assert_string(id)
@@ -127,9 +127,9 @@ ParamSet = R6Class( "ParamSet",
 
 
     # in: * ids (character)
-    #       ids of ParamBase
+    #       ids of Parameter
     #     * fix (named list)
-    #       names = ids of ParamBase
+    #       names = ids of Parameter
     #       values = values of respective param
     # out: ParamSet
     subset = function(ids = NULL, fix = NULL) {

@@ -1,4 +1,4 @@
-ParamNumber = R6Class( "ParamNumber", inherit = ParamBase,
+ParamNumber = R6Class( "ParamNumber", inherit = Parameter,
   public = list(
     # member variables
     lower = NULL,

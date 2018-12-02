@@ -1,7 +1,7 @@
 # Objects Used for Testing
 # use th_ to indicate a test helper object
 
-# ParamBase
+# Parameter
 th_param_int = ParamInt$new(id = 'th_param_int', default = 0, lower = -10, upper = 10)
 th_param_nat = ParamInt$new(id = 'th_param_nat', default = 1L, lower = 1L, upper = 4L)
 th_param_real = ParamFloat$new(id = 'th_param_real', default = 0, lower = -10, upper = 10)

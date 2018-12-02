@@ -1,6 +1,6 @@
-context("ParamBase")
+context("Parameter")
 
-test_that("special_vals work for all ancestors of ParamBase", {
+test_that("special_vals work for all ancestors of Parameter", {
   param_ancestors = list(ParamCateg, ParamBool, ParamInt, ParamFloat)
   special_vals_list = list(
     list(1),

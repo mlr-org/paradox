@@ -1,4 +1,4 @@
-#' @title ParamBase Object
+#' @title Parameter Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
@@ -23,8 +23,8 @@
 #' @section Active Bindings:
 #'   \emph{none}
 #'
-#' @family ParamBase
-ParamBase = R6Class("ParamBase",
+#' @family Parameter
+Parameter = R6Class("Parameter",
   public = list(
 
     # member variables
@@ -60,7 +60,7 @@ ParamBase = R6Class("ParamBase",
     # Overwriting ParamNode Methods
     denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
 
-    # ParamBaseMethods
+    # ParameterMethods
     sample_vector = function(n = 1L) {
       # samples vector values without respecting what is 'restriction'
       stop("sample_vector not implemented")

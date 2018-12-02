@@ -6,8 +6,8 @@ Sampler = R6Class("Sampler",
     # member variables
     params = NULL, # params that the sampler refers to
 
-    initialize = function(params, params.cl = "ParamBase") {
-      assert_list(params, "ParamBase")
+    initialize = function(params, params.cl = "Parameter") {
+      assert_list(params, "Parameter")
       self$params = params
     },
 
