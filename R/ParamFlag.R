@@ -22,9 +22,6 @@ ParamFlag = R6Class("ParamFlag",
     },
 
     # public methods
-    sample_vector = function(n = 1L) {
-      sample(c(TRUE, FALSE), size = n, replace = TRUE)
-    },
     denorm_vector = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }

@@ -13,14 +13,9 @@
 #' }
 #'
 #' @export
-ParamInt = R6Class(
-  "ParamInt",
-  inherit = ParamBase,
+ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
   public = list(
 
-    # member variables
-    lower = NULL,
-    upper = NULL,
 
     # constructor
     initialize = function(id, special_vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
@@ -28,21 +23,14 @@ ParamInt = R6Class(
         if (test_special_vals(self, x)) return(TRUE)
         checkInt(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok)
       }
-
       # arg check lower and upper, we need handle Inf special case, that is not an int
-      self$lower = if (identical(lower, Inf) || identical(lower, -Inf)) lower else asInt(lower)
-      self$upper = if (identical(upper, Inf) || identical(upper, -Inf)) upper else asInt(upper)
-      stopifnot(lower <= upper)
-
-      # construct super class
-      super$initialize(id = id, storage_type = "integer", check = check, special_vals = special_vals, default = default, tags = tags)
+      lower = if (identical(lower, Inf) || identical(lower, -Inf)) lower else asInt(lower)
+      upper = if (identical(upper, Inf) || identical(upper, -Inf)) upper else asInt(upper)
+      super$initialize(id = id, storage_type = "integer", check = check, special_vals = special_vals,
+        lower = lower, upper = upper, default = default, tags = tags)
     },
 
     # public methods
-    sample_vector = function(n = 1L) {
-      assert_true(self$has_finite_bounds)
-      as.integer(runif(n, min = self$lower, max = self$upper + 1L))
-    },
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       r = self$range + c(-0.5, 0.5)
@@ -53,7 +41,7 @@ ParamInt = R6Class(
     },
     print = function(...) {
       super$print(newline = FALSE, ...)
-      catf(": {%g, ..., %g}\n", self$lower, self$upper)
+      catf(": {%i, ..., %i}\n", self$lower, self$upper)
     }
   ),
   active = list(
@@ -64,8 +52,6 @@ ParamInt = R6Class(
     values = function() {
       if (self$has_finite_bounds) seq(self$lower, self$upper)
       else NA
-    },
-    range = function() c(self$lower, self$upper),
-    has_finite_bounds = function() all(is.finite(self$range))
+    }
   )
 )

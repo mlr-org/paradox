@@ -16,8 +16,6 @@
 #' @section Methods:
 #'
 #' \describe{
-#'   \item{sample_vector(n)}{[\code{function}] \cr
-#'     samples \code{n} Parameter Values.}
 #'   \item{denorm_vector(x)}{[\code{function}] \cr
 #'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 #' }
@@ -60,7 +58,6 @@ ParamBase = R6Class("ParamBase",
 
     # public methods
     # Overwriting ParamNode Methods
-    sample = function(n = 1L) as_dt_cols(self$sample_vector(n = n), self$id),
     denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
 
     # ParamBaseMethods

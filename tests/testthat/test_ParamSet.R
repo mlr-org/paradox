@@ -42,8 +42,8 @@ test_that("advanced methods work", {
   )
 
   for (ps in ps_list) {
-
-    x = ps$sample(10)
+    s = SamplerUnif$new(ps)
+    x = s$sample(10)
     expect_data_table(x, nrows = 10, any.missing = FALSE)
     expect_equal(colnames(x), ps$ids)
     expect_true(all(x[, ps$test(as.list(.SD)), by = seq_len(nrow(x))]$V1))
@@ -67,7 +67,8 @@ test_that("repeated params in ParamSet works", {
   ps = th_paramset_repeated
   expect_class(ps, "ParamSet")
   expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na_repeated" %in% z)), 4)
-  xs = ps$sample(10)
+  s = SamplerUnif$new(ps)
+  xs = s$sample(10)
   expect_true("th_param_categorical" %in% names(xs))
   # xs_t = ps$transform(xs)
   # expect_false("th_param_nat" %in% names(xs_t))
@@ -113,14 +114,15 @@ test_that("param subset in ParamSet works", {
   for (conf in configs) {
     paramset_sub = conf$ps$subset(ids = conf$ids, fix = conf$fix)
     expect_equal(paramset_sub$ids, conf$expected_ids)
-    x = paramset_sub$sample(2)
+    s = SamplerUnif$new(paramset_sub)
+    x = s$sample(2)
     expect_set_equal(colnames(x), conf$expected_ids)
     expect_true(paramset_sub$check(x[1,]))
     expect_true(paramset_sub$check(x[2,]))
     x_trafo = paramset_sub$transform(x)
 
 
-    x = paramset_sub$sample(1)
+    x = s$sample(1)
     expect_set_equal(colnames(x), conf$expected_ids)
     expect_true(paramset_sub$check(x))
     x_trafo = paramset_sub$transform(x)
@@ -166,18 +168,20 @@ test_that("Combine of ParamSet work", {
   )
 
   for (ps in ps_list) {
-    for(ps_new in new_param_sets) {
+    for (ps_new in new_param_sets) {
+      info = paste0("parset = ", ps$id, "-", ps_new$id)
       ps_comb1 = ps$combine(ps_new)
       ps_comb2 = ps_new$combine(ps)
-      expect_set_equal(ps_comb1$ids, ps_comb1$ids)
-      expect_set_equal(ps_comb1$ids, c(ps$ids, ps_new$ids))
-      x = ps_comb1$sample(1)
-      expect_data_table(x)
-      expect_true(ps_comb1$check(x))
-      expect_true(ps_comb2$check(x))
+      expect_set_equal(ps_comb1$ids, ps_comb1$ids, info = info)
+      expect_set_equal(ps_comb1$ids, c(ps$ids, ps_new$ids), info = info)
+      s = SamplerUnif$new(ps_comb1)
+      x = s$sample(1)
+      expect_data_table(x, info = info)
+      expect_true(ps_comb1$check(x), info = info)
+      expect_true(ps_comb2$check(x), info = info)
       xt1 = ps_comb1$transform(x)
       xt2 = ps_comb2$transform(x)[, colnames(xt1), with = FALSE]
-      expect_equal(xt1, xt2)
+      expect_equal(xt1, xt2, info = info)
     }
   }
 

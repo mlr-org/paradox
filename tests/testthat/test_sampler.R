@@ -13,7 +13,7 @@ test_that("sampling 1d cat", {
   s = Sampler1DCat$new(p)
   x = s$sample(20)
   expect_data_table(x, ncols = 1L, nrows = 20L)
-  expect_factor(x$th_param_categorical, levels = letters[1:3])
+  expect_character(x$th_param_categorical)
 })
 
 
@@ -26,9 +26,16 @@ test_that("multivariate", {
   x = s$sample(20)
   expect_data_table(x, ncols = 2L, nrows = 20L)
   expect_numeric(x$th_param_real, lower = -10, upper = 10)
-  expect_factor(x$th_param_categorical, levels = letters[1:3])
+  expect_character(x$th_param_categorical)
 })
 
+test_that("sampling of number requires finite bounds", {
+  p = ParamInt$new(id = "x", lower = 1)
+  s = expect_error(Sampler1DIntUnif$new(p), "has_finite_bounds")
+
+  p = ParamReal$new(id = "x", lower = 1)
+  s = expect_error(Sampler1DRealUnif$new(p), "has_finite_bounds")
+})
 
 
 

@@ -1,5 +1,5 @@
 # ParamSet
-th_paramset_empty = ParamSet$new()
+th_paramset_empty = ParamSet$new(id = "th_paramset_empty")
 
 th_paramset_full = ParamSet$new(
   id = 'th_paramset_full',

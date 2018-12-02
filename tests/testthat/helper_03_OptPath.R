@@ -3,7 +3,8 @@
 th_opt_path_full = OptPath$new(param_set = th_paramset_full)
 
 for (i in 1:10) {
-  x = th_opt_path_full$param_set$sample(1)
+  s = SamplerUnif$new(th_opt_path_full$param_set)
+  x = s$sample(1)
   th_opt_path_full$add(
     x = x,
     y = i,
@@ -18,6 +19,7 @@ for (i in 1:10) {
 
 th_opt_path_multiobjective = OptPath$new(param_set = th_paramset_repeated, y_names = c('y1.min', 'y2.max'), minimize = c(TRUE, FALSE))
 for (i in 1:10) {
-  x = th_opt_path_multiobjective$param_set$sample(1)
+  s = SamplerUnif$new(th_opt_path_multiobjective$param_set)
+  x = s$sample(1)
   th_opt_path_multiobjective$add(x = x, y = c(y2.max = i, y1.min = 11-i))
 }

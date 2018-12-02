@@ -101,20 +101,6 @@ ParamSet = R6Class( "ParamSet",
     },
 
     # public methods
-    sample = function(n = 1L) {
-      assert_int(n, lower = 1L)
-      sample_generator = function(n, ...) {
-        xs = lapply(self$params, function(param) param$sample(n = n))
-        names(xs) = NULL
-        as.data.table(xs)
-      }
-      if (!is.null(self$restriction)) {
-        sample_validator = function(x) vectorized_for_param_set_flat(x, self$test)
-        oversample_forbidden2(n = n, param = param, sample_generator = sample_generator, sample_validator = sample_validator)
-      } else {
-        sample_generator(n)
-      }
-    },
 
     denorm = function(x) {
       assert_list(x, names = 'strict')

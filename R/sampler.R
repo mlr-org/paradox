@@ -30,27 +30,35 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
   ),
 
   private = list(
-    return_dt = function(x) {
-      dt = as.data.frame(x)
-      names(dt) = self$param$id
-      setDT(dt)
-    }
+    as_dt_col = function(x) as_dt_cols(list(x), names = self$param$id)
   )
 
 )
 
+# static method
+Sampler1D$new_1d_unif = function(param) {
+  # not so great code here with the switch-on-class, but i think we live with this
+  switch(class(param)[1L],
+    ParamReal = Sampler1DRealUnif$new(param),
+    ParamInt = Sampler1DIntUnif$new(param),
+    ParamCategorical = Sampler1DCat$new(param),
+    ParamFlag = Sampler1DCat$new(param),
+    stopf("Sampler not implemented for param of type: %s", class(param)[1L])
+  )
+}
+
 
 # samples from a 1D real-values, from an arbitrary distribution. default is uniform
 # note that we always sample from the truncated distribution
-Sampler1DReal = R6Class("Sampler1DReal", inherit = Sampler1D,
+Sampler1DNumber = R6Class("Sampler1DReal", inherit = Sampler1D,
   public = list(
 
     # member variables
     rfun = NULL,
     trunc = NULL,
 
-    initialize = function(param, rfun, trunc = TRUE) {
-      super$initialize(param, "ParamReal")
+    initialize = function(param, param.cl, rfun, trunc = TRUE) {
+      super$initialize(param, param.cl)
       assert_function(rfun, args = "n")
       self$rfun = rfun
       assert_flag(trunc)
@@ -64,7 +72,7 @@ Sampler1DReal = R6Class("Sampler1DReal", inherit = Sampler1D,
         s = sample_truncated(n, self$rfun)
       else
         s = self$rfun(n = n)
-      super$return_dt(s)
+      super$as_dt_col(s)
     },
 
     sample_truncated = function(n, rfun) {
@@ -80,11 +88,52 @@ Sampler1DReal = R6Class("Sampler1DReal", inherit = Sampler1D,
   )
 )
 
-Sampler1DRealUnif = R6Class("Sampler1DRealUni", inherit = Sampler1DReal,
+Sampler1DRealUnif = R6Class("Sampler1DRealUnif", inherit = Sampler1DNumber,
   public = list(
     initialize = function(param) {
-      super$initialize(param, trunc = FALSE,
+      super$initialize(param, "ParamRa",  trunc = FALSE,
         rfun = function(n) runif(n, min = self$param$lower, max = self$param$upper))
+      assert_true(param$has_finite_bounds)
+    }
+  )
+)
+
+Sampler1DRealNorm = R6Class("Sampler1DRealNorm", inherit = Sampler1DNumber,
+
+  public = list(
+    # member variables
+    mu = NULL,
+    sd = NULL,
+
+    initialize = function(param, mu = NULL, sd = NULL) {
+      super$initialize(param, trunc = FALSE,
+        rfun = function(n) rnorm(n, min = self$param$lower, max = self$param$upper))
+      if (is.null(mu))
+        mu = self$param$center
+      assert_number(mu)
+      assert_number(sd, lower = 0)
+      self$mu = mu
+      self$sd = sd
+    }
+  )
+)
+
+# samples 1D ints, between lower and upper
+Sampler1DIntUnif = R6Class("Sampler1DIntUnif", inherit = Sampler1DNumber,
+  public = list(
+    initialize = function(param) {
+      super$initialize(param, "ParamInt", trunc = FALSE,
+        rfun = function(n) as.integer(round(runif(n, self$param$lower - 0.5, max = param$upper + 0.5))))
+      assert_true(param$has_finite_bounds)
+    }
+  )
+)
+
+# samples 1D ints, between lower and upper
+Sampler1DIntGeom = R6Class("Sampler1DIntGeom", inherit = Sampler1DNumber,
+  public = list(
+    initialize = function(param) {
+      super$initialize(param, "ParamInt")
     }
   )
 )
@@ -108,7 +157,7 @@ Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
 
     sample = function(n) {
       s = sample(self$param$values, n, replace = TRUE, prob = self$prob)
-      super$return_dt(s)
+      super$as_dt_col(s)
     }
   )
 )
@@ -128,7 +177,22 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
     sample = function(n) {
       # FIXME: should use map_dtc here? doesnt work, reported in mlr3misc
       s = lapply(self$samplers, function(s) s$sample(n))
+      names(s) = NULL
       do.call(cbind, s)
     }
   )
 )
+
+# creates a joint, independent sampler out of multiple samplers
+SamplerUnif = R6Class("SamplerUnif", inherit = SamplerJointIndep,
+  public = list(
+    initialize = function(param_set) {
+      samplers = lapply(param_set$params, Sampler1D$new_1d_unif)
+      super$initialize(samplers)
+    }
+  )
+)
+
+
+
+
