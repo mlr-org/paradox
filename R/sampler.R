@@ -4,11 +4,13 @@
 Sampler = R6Class("Sampler",
   public = list(
     # member variables
-    params = NULL, # params that the sampler refers to
+    param_set = NULL, # param_set that the sampler refers to
 
-    initialize = function(params, params.cl = "Parameter") {
-      assert_list(params, "Parameter")
-      self$params = params
+    # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
+    initialize = function(param_set, params.cl = "Parameter") {
+      assert_r6(param_set, "ParamSet")
+      assert_list(param_set$params, types = params.cl)
+      self$param_set = param_set
     },
 
     sample = function(n) {
@@ -20,13 +22,13 @@ Sampler = R6Class("Sampler",
 Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 
   public = list(
-    initialize = function(param, cl)  {
-      super$initialize(list(param), params.cl = cl)
+    initialize = function(param, param.cl)  {
+      super$initialize(ParamSet$new(list(param)), params.cl = param.cl)
     }
   ),
 
   active = list(
-    param = function() self$params[[1L]]
+    param = function() self$param_set$params[[1L]]
   ),
 
   private = list(
@@ -36,7 +38,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 )
 
 # static method
-Sampler1D$new_1d_unif = function(param) {
+new_1d_unif = function(param) {
   # not so great code here with the switch-on-class, but i think we live with this
   switch(class(param)[1L],
     ParamFloat = Sampler1DFloatUnif$new(param),
@@ -91,7 +93,7 @@ Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
 Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
   public = list(
     initialize = function(param) {
-      super$initialize(param, "ParamRa",  trunc = FALSE,
+      super$initialize(param, "ParamFloat", trunc = FALSE,
         rfun = function(n) runif(n, min = self$param$lower, max = self$param$upper))
       assert_true(param$has_finite_bounds)
     }
@@ -146,7 +148,7 @@ Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
     prob = NULL,
 
     initialize = function(param, prob = NULL) {
-      super$initialize(param, "ParamCateg")
+      super$initialize(param, c("ParamCateg", "ParamBool"))
       k = param$nlevels
       if (is.null(prob))
         prob = rep(1/k, k)
@@ -187,7 +189,8 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
 SamplerUnif = R6Class("SamplerUnif", inherit = SamplerJointIndep,
   public = list(
     initialize = function(param_set) {
-      samplers = lapply(param_set$params, Sampler1D$new_1d_unif)
+      assert_r6(param_set, "ParamSet")
+      samplers = lapply(param_set$params, new_1d_unif)
       super$initialize(samplers)
     }
   )
