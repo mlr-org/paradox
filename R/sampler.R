@@ -41,7 +41,7 @@ Sampler1D$new_1d_unif = function(param) {
   switch(class(param)[1L],
     ParamFloat = Sampler1DFloatUnif$new(param),
     ParamInt = Sampler1DIntUnif$new(param),
-    ParamCategorical = Sampler1DCat$new(param),
+    ParamCateg = Sampler1DCat$new(param),
     ParamFlag = Sampler1DCat$new(param),
     stopf("Sampler not implemented for param of type: %s", class(param)[1L])
   )
@@ -146,7 +146,7 @@ Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
     prob = NULL,
 
     initialize = function(param, prob = NULL) {
-      super$initialize(param, "ParamCategorical")
+      super$initialize(param, "ParamCateg")
       k = param$nlevels
       if (is.null(prob))
         prob = rep(1/k, k)

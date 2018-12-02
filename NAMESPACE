@@ -3,7 +3,7 @@
 S3method("[",OptPath)
 S3method(as.data.frame,OptPath)
 export(OptPath)
-export(ParamCategorical)
+export(ParamCateg)
 export(ParamFlag)
 export(ParamFloat)
 export(ParamInt)

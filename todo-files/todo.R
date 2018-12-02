@@ -8,16 +8,16 @@ load_all()
 param_set = ParamSet$new(
   id = "ps_svm",
   params = list(
-    ParamCategorical$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
-    ParamReal$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
-    ParamReal$new(id = "nu", default = 0.5, tags = "tunable"),
-    # ParamGenerator(id = "class.weights", ParamReal$new(lower = 0))
-    ParamCategorical$new(id = "kernel", default = "radial", values = c("linear", "polynomial", "radial", "sigmoid"), tags = "tunable"),
+    ParamCateg$new(id = "storage_type", default = "C-classification", values = c("C-classification", "nu-classification"), tags = "tunable"),
+    ParamFloat$new(id = "cost", id = "cost",  default = 1, lower = 0, tags = "tunable"),
+    ParamFloat$new(id = "nu", default = 0.5, tags = "tunable"),
+    # ParamGenerator(id = "class.weights", ParamFloat$new(lower = 0))
+    ParamCateg$new(id = "kernel", default = "radial", values = c("linear", "polynomial", "radial", "sigmoid"), tags = "tunable"),
     ParamInt$new(id = "degree", default = 3L, lower = 1L, tags = "tunable"),
-    ParamReal$new(id = "coef0", default = 0, tags = "tunable"),
-    ParamReal$new(id = "gamma", lower = 0, tags = "tunable"),
-    ParamReal$new(id = "cachesize", default = 40L, tags = "tunable"),
-    ParamReal$new(id = "tolerance", default = 0.001, lower = 0, tags = "tunable"),
+    ParamFloat$new(id = "coef0", default = 0, tags = "tunable"),
+    ParamFloat$new(id = "gamma", lower = 0, tags = "tunable"),
+    ParamFloat$new(id = "cachesize", default = 40L, tags = "tunable"),
+    ParamFloat$new(id = "tolerance", default = 0.001, lower = 0, tags = "tunable"),
     ParamFlag$new(id = "shrinking", default = TRUE, tags = "tunable"),
     ParamInt$new(id = "cross", default = 0L, lower = 0L)
     ParamFlag$new(id = "fitted", default = TRUE)

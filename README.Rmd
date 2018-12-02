@@ -40,7 +40,7 @@ ps = ParamSet$new(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamFloat$new(id = "x", lower = -10, upper = 10),
     ParamFlag$new(id = "switch"),
-    ParamCategorical$new(id = "methods", values = c("a","b","c"))
+    ParamCateg$new(id = "methods", values = c("a","b","c"))
   )
 )
 ```

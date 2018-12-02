@@ -1,7 +1,7 @@
 context("ParamBase")
 
 test_that("special_vals work for all ancestors of ParamBase", {
-  param_ancestors = list(ParamCategorical, ParamFlag, ParamInt, ParamFloat)
+  param_ancestors = list(ParamCateg, ParamFlag, ParamInt, ParamFloat)
   special_vals_list = list(
     list(1),
     list('a'),
@@ -10,7 +10,7 @@ test_that("special_vals work for all ancestors of ParamBase", {
     list(mean, sum, function(x) x^10))
   for (param in param_ancestors) {
     for (special_vals in special_vals_list) {
-      if (param$classname == "ParamCategorical") {
+      if (param$classname == "ParamCateg") {
         po = param$new(id = paste0('test.', param$classname), special_vals = special_vals, values = letters[11:20])
       } else {
         po = param$new(id = paste0('test.', param$classname), special_vals = special_vals)

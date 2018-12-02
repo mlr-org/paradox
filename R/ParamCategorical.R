@@ -11,8 +11,8 @@
 #' }
 #'
 #' @export
-ParamCategorical = R6Class(
-  "ParamCategorical",
+ParamCateg = R6Class(
+  "ParamCateg",
   inherit = ParamBase,
   public = list(
 
