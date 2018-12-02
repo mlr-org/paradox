@@ -44,4 +44,11 @@ test_that("multi-objective with trafos works", {
   expect_list(op_df$transformed_x, len = 10)
 })
 
+test_that("printer works", {
+  op = th_opt_path_full
+  expect_output(print(op), "x = 4")
+  expect_output(print(op), "y = 1")
+  expect_output(print(op), "Length = 10")
+  expect_output(print(op), "errors: 5")
+})
 

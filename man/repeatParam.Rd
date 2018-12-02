@@ -10,7 +10,7 @@ repeatParam(n = 1L, param)
 \item{n}{[\code{integer(1)}]\cr
 How often should this parameter be copied?}
 
-\item{param}{[\code{ParamBase(1)}]\cr
+\item{param}{[\code{Parameter(1)}]\cr
 The parameter that should be repeated_}
 }
 \value{

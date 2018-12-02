@@ -18,7 +18,7 @@ A \code{\link[R6]{R6Class}} to represent untyped parameters.
 
   \emph{none}
 
-Inherited from \code{ParamBase}:
+Inherited from \code{Parameter}:
 
 
 
@@ -28,42 +28,34 @@ Inherited from \code{ParamBase}:
   \item{special_vals}{[\code{any}] \cr
     Special values this parameter is allowed to take that are within the defined space.}
 }
-
-Inherited from \code{ParamNode}:
 }
 
 \section{Methods}{
 
   \emph{none}
 
-Inherited from \code{ParamBase}
+Inherited from \code{Parameter}
 
 
 
 \describe{
-  \item{sample_vector(n)}{[\code{function}] \cr
-    samples \code{n} Parameter Values.}
   \item{denorm_vector(x)}{[\code{function}] \cr
     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 }
-
-Inherited from \code{ParamNode}:
 }
 
 \section{Active Bindings}{
 
   \emph{none}
 
-Inherited from \code{ParamBase}
+Inherited from \code{Parameter}
 
 
   \emph{none}
 }
 
 \seealso{
-Other ParamBase: \code{\link{ParamBase}},
-  \code{\link{ParamCategorical}}, \code{\link{ParamFlag}},
-  \code{\link{ParamInt}}, \code{\link{ParamReal}}
+Other Parameter: \code{\link{Parameter}}
 }
-\concept{ParamBase}
+\concept{Parameter}
 \keyword{datasets}
