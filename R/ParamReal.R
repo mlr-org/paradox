@@ -1,4 +1,4 @@
-#' @title Real Parameter Object
+#' @title Float Parameter Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
@@ -14,7 +14,7 @@
 #'     Are values \code{-Inf} and \code{Inf} feasible?}
 #' }
 #' @export
-ParamReal = R6Class("ParamReal", inherit = ParamNumber,
+ParamFloat = R6Class("ParamFloat", inherit = ParamNumber,
   public = list(
     # member variables
     allow_inf = NULL,

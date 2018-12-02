@@ -39,7 +39,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 Sampler1D$new_1d_unif = function(param) {
   # not so great code here with the switch-on-class, but i think we live with this
   switch(class(param)[1L],
-    ParamReal = Sampler1DRealUnif$new(param),
+    ParamFloat = Sampler1DFloatUnif$new(param),
     ParamInt = Sampler1DIntUnif$new(param),
     ParamCategorical = Sampler1DCat$new(param),
     ParamFlag = Sampler1DCat$new(param),
@@ -50,7 +50,7 @@ Sampler1D$new_1d_unif = function(param) {
 
 # samples from a 1D real-values, from an arbitrary distribution. default is uniform
 # note that we always sample from the truncated distribution
-Sampler1DNumber = R6Class("Sampler1DReal", inherit = Sampler1D,
+Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
   public = list(
 
     # member variables
@@ -88,7 +88,7 @@ Sampler1DNumber = R6Class("Sampler1DReal", inherit = Sampler1D,
   )
 )
 
-Sampler1DRealUnif = R6Class("Sampler1DRealUnif", inherit = Sampler1DNumber,
+Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
   public = list(
     initialize = function(param) {
       super$initialize(param, "ParamRa",  trunc = FALSE,
@@ -98,7 +98,7 @@ Sampler1DRealUnif = R6Class("Sampler1DRealUnif", inherit = Sampler1DNumber,
   )
 )
 
-Sampler1DRealNorm = R6Class("Sampler1DRealNorm", inherit = Sampler1DNumber,
+Sampler1DFloatNorm = R6Class("Sampler1DFloatNorm", inherit = Sampler1DNumber,
 
   public = list(
     # member variables

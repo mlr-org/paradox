@@ -135,13 +135,13 @@ test_that("Combine of ParamSet work", {
     normal = ParamSet$new(
       id = "new_param_set",
       params = list(
-        ParamReal$new("new_int", lower = 0L, upper = 10L)
+        ParamFloat$new("new_int", lower = 0L, upper = 10L)
       )
     ),
     trafo = ParamSet$new(
       id = "new_param_set_trafo",
       params = list(
-        ParamReal$new("new_real", lower = 0, upper = 10)
+        ParamFloat$new("new_real", lower = 0, upper = 10)
       ),
       trafo = function(x, tags) {
         x$new_real = sqrt(x$new_real)
@@ -151,8 +151,8 @@ test_that("Combine of ParamSet work", {
     restriction = ParamSet$new(
       id = "new_param_set_requires",
       params = list(
-        ParamReal$new("new_real", lower = 0, upper = 10),
-        ParamReal$new("new_int", lower = 0L, upper = 10L)
+        ParamFloat$new("new_real", lower = 0, upper = 10),
+        ParamFloat$new("new_int", lower = 0L, upper = 10L)
       ),
       restriction = quote(new_real>=new_int)
     )
