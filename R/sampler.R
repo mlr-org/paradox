@@ -42,7 +42,7 @@ Sampler1D$new_1d_unif = function(param) {
     ParamFloat = Sampler1DFloatUnif$new(param),
     ParamInt = Sampler1DIntUnif$new(param),
     ParamCateg = Sampler1DCat$new(param),
-    ParamFlag = Sampler1DCat$new(param),
+    ParamBool = Sampler1DCat$new(param),
     stopf("Sampler not implemented for param of type: %s", class(param)[1L])
   )
 }

@@ -1,7 +1,7 @@
 context("ParamBase")
 
 test_that("special_vals work for all ancestors of ParamBase", {
-  param_ancestors = list(ParamCateg, ParamFlag, ParamInt, ParamFloat)
+  param_ancestors = list(ParamCateg, ParamBool, ParamInt, ParamFloat)
   special_vals_list = list(
     list(1),
     list('a'),

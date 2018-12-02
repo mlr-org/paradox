@@ -39,7 +39,7 @@ ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamFloat$new(id = "x", lower = -10, upper = 10),
-    ParamFlag$new(id = "switch"),
+    ParamBool$new(id = "switch"),
     ParamCateg$new(id = "methods", values = c("a","b","c"))
   )
 )
@@ -165,7 +165,7 @@ For more advanced transformations on repeated parameters you can use `trafo_on_r
 ps = ParamSet$new(
   params = c(
     list(
-      ParamFlag$new(id = "switch"),
+      ParamBool$new(id = "switch"),
       ParamInt$new(id = "z", lower = 1, upper = 4)),
     repeatParam(4, ParamFloat$new(id = "x", lower = 0, upper = 1))
   ),

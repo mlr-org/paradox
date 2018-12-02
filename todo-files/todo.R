@@ -18,9 +18,9 @@ param_set = ParamSet$new(
     ParamFloat$new(id = "gamma", lower = 0, tags = "tunable"),
     ParamFloat$new(id = "cachesize", default = 40L, tags = "tunable"),
     ParamFloat$new(id = "tolerance", default = 0.001, lower = 0, tags = "tunable"),
-    ParamFlag$new(id = "shrinking", default = TRUE, tags = "tunable"),
+    ParamBool$new(id = "shrinking", default = TRUE, tags = "tunable"),
     ParamInt$new(id = "cross", default = 0L, lower = 0L)
-    ParamFlag$new(id = "fitted", default = TRUE)
+    ParamBool$new(id = "fitted", default = TRUE)
     # ParamGenerator(id = "scale", default = TRUE)
     ),
   restriction = quote(

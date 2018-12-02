@@ -1,11 +1,11 @@
-#' @title Flag Parameter Object
+#' @title Boolean Parameter Object
 #' @format \code{\link{R6Class}} object
 #'
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent boolean parameters.
 #'
 #' @export
-ParamFlag = R6Class("ParamFlag",
+ParamBool = R6Class("ParamBool",
   inherit = ParamBase,
   public = list(
 
