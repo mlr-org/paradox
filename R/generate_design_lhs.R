@@ -19,7 +19,7 @@ generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
     sample_validator = function(lhs_des) {
       vectorized_for_param_set_flat(sample_converter(lhs_des), param_set$test)
     }
-    lhs_des = oversample_forbidden2(n = n, param = param, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
+    lhs_des = oversample_forbidden2(n = n, param_set = param_set, oversample_rate = 1, sample_generator = sample_generator, sample_validator = sample_validator)
   }
   sample_converter(lhs_des)
 }

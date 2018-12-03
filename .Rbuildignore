@@ -1,5 +1,6 @@
 .github
 .gitignore
+.ignore
 .Rproj.user
 .travis.yml
 ^.*\.Rproj$
@@ -21,3 +22,4 @@ man-roxygen
 README.md
 README.Rmd
 todo-files
+attic

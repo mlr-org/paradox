@@ -5,7 +5,7 @@ as_dt_cols = function(x, names) {
   return(dt)
 }
 
-oversample_forbidden2 = function(n, param, oversample_rate = 2, max_tries = 100, sample_generator, sample_validator) {
+oversample_forbidden2 = function(n, param_set, oversample_rate = 2, max_tries = 100, sample_generator, sample_validator) {
   x = sample_generator(n = round(oversample_rate * n))
   ind_restriction = sample_validator(x)
   # select the first n elements, that are valid
@@ -22,7 +22,7 @@ oversample_forbidden2 = function(n, param, oversample_rate = 2, max_tries = 100,
     this_try = this_try + 1
   }
   if (nrow(x) < n) {
-    warning("Not enough valid param values for %s sampled (%i from %i)", param$id, nrow(x), n)
+    warning("Not enough valid param values for %s sampled (%i from %i)", param_set$id, nrow(x), n)
   }
   return(x)
 }
