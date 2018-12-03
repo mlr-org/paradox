@@ -82,11 +82,6 @@ ParamSet = R6Class("ParamSet",
     },
 
     # public methods
-
-    add_param = function(param) {
-
-    },
-
     denorm = function(x) {
       assert_list(x, names = 'strict')
       assert_set_equal(names(x), self$ids)
