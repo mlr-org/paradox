@@ -69,6 +69,7 @@ ParamSet = R6Class("ParamSet",
     id = NULL,
     trafo = NULL, # function to transform the value before evaluation
     restriction = NULL, # quote that states if certain conditions have to be met
+    deps = NULL,
 
     # constructor
     initialize = function(params = list(), id = "paramset", tags = NULL, restriction = NULL, trafo = NULL) {
@@ -79,6 +80,12 @@ ParamSet = R6Class("ParamSet",
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       self$restriction = assert_class(restriction, "call", null.ok = TRUE)
+      # create depnodes as graph with allocated nodes, but no current edges
+      private$.dep_nodes = vector("list", length(params))
+      names(private$.dep_nodes) = names(params)
+      for (p in params) {
+        private$.dep_nodes[[p$id]] = DependencyNode$new(p)
+      }
     },
 
     # public methods
@@ -201,6 +208,17 @@ ParamSet = R6Class("ParamSet",
       makeAssertionFunction(self$check)(...)
     },
 
+    add_dependency = function(dep) {
+      assert_r6(dep, "Dependency")
+      # add dependency to member list
+      self$deps = c(self$deps, list(dep))
+      # connect subordinate to super param in depnode graph
+      dnc = private$.dep_nodes[[dep$child$id]]
+      dnp = private$.dep_nodes[[dep$parent$id]]
+      dnc$parents = c(dnc$parents, list(dnp))
+      dnp$children = c(dnp$children, list(dnc))
+    },
+
     print = function(...) {
       cat("ParamSet:", self$id, "\n")
       cat("Parameters:", "\n")
@@ -234,5 +252,10 @@ ParamSet = R6Class("ParamSet",
     length = function() length(self$params),
     nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
     member_tags = function() lapply(self$params, function(param) param$tags)
+  ),
+
+  private = list(
+    .dep_nodes = NULL
   )
+
 )

@@ -1,7 +1,5 @@
 
 
-
-
 Dependency = R6Class("Dependency",
   public = list(
 
@@ -12,9 +10,23 @@ Dependency = R6Class("Dependency",
     # constructor
     initialize = function(child, parent, expr) {
       assert_r6(child, "Parameter")
-      assert_r6(parent, "ParamCategorical")
+      assert_r6(parent, "ParamCateg")
       self$child = child
       self$parent = parent
+    }
+  )
+)
+
+DependencyNode = R6Class("DependencyNode",
+  public = list(
+    # member variables
+    param = NULL,
+    children = NULL,
+    parents = NULL,
+
+    # constructor
+    initialize = function(param) {
+      self$param = param
     }
   )
 )
