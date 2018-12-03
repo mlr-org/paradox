@@ -70,6 +70,7 @@ Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
     # maybe we want an option to use my truncation here, as this slows stuff down somewhat and
     # there are some real truncated rngs in R
     sample = function(n) {
+      assert_count(n, positive = TRUE)
       if (self$trunc)
         s = sample_truncated(n, self$rfun)
       else
@@ -158,6 +159,7 @@ Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
     },
 
     sample = function(n) {
+      assert_count(n, positive = TRUE)
       s = sample(self$param$values, n, replace = TRUE, prob = self$prob)
       super$as_dt_col(s)
     }
@@ -177,6 +179,7 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
     },
 
     sample = function(n) {
+      assert_count(n, positive = TRUE)
       # FIXME: should use map_dtc here? doesnt work, reported in mlr3misc
       s = lapply(self$samplers, function(s) s$sample(n))
       names(s) = NULL
