@@ -62,17 +62,13 @@
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamSet
 #' @export
-ParamSet = R6Class( "ParamSet",
+ParamSet = R6Class("ParamSet",
   public = list(
-
     # member variables
     params = NULL,  # a list of ParamNodes
     id = NULL,
     trafo = NULL, # function to transform the value before evaluation
     restriction = NULL, # quote that states if certain conditions have to be met
-    check = NULL, # a checkmate check function to validate if a value is valid for this Param
-    assert = NULL, # assert_ion generated from the above check
-    test = NULL, # test generated from the above check
 
     # constructor
     initialize = function(params = list(), id = "paramset", tags = NULL, restriction = NULL, trafo = NULL) {
@@ -83,24 +79,13 @@ ParamSet = R6Class( "ParamSet",
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       self$restriction = assert_class(restriction, "call", null.ok = TRUE)
-
-      # check function that checks the whole param set by simply iterating
-      self$check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        assert_set_equal(names(x), self$ids)
-        if (is.data.table(x)) x = as.list(x)
-        assert_list(x, names = "named")
-        for (par_name in names(x)) {
-          res = self$params[[par_name]]$check(x[[par_name]], na.ok = na.ok, null.ok = null.ok)
-          if(!isTRUE(res)) return(res)
-        }
-        return(res)
-      }
-      self$test = makeTestFunction(self$check)
-      self$assert = makeAssertionFunction(self$check)
-
     },
 
     # public methods
+
+    add_param = function(param) {
+
+    },
 
     denorm = function(x) {
       assert_list(x, names = 'strict')
@@ -199,6 +184,26 @@ ParamSet = R6Class( "ParamSet",
         restriction = new_restriction,
         trafo = new_trafo
       )
+    },
+
+    # check function that checks the whole param set by simply iterating
+    check = function(x, na.ok = FALSE, null.ok = FALSE) {
+      assert_set_equal(names(x), self$ids)
+      if (is.data.table(x)) x = as.list(x)
+      assert_list(x, names = "named")
+      for (par_name in names(x)) {
+        res = self$params[[par_name]]$check(x[[par_name]], na.ok = na.ok, null.ok = null.ok)
+        if(!isTRUE(res)) return(res)
+      }
+      return(res)
+    },
+
+    test = function(...) {
+      makeTestFunction(self$check)(...)
+    },
+
+    assert = function(...) {
+      makeAssertionFunction(self$check)(...)
     },
 
     print = function(...) {
