@@ -2,13 +2,13 @@ context("ParamSet")
 
 test_that("methods and active bindings work", {
   ps_list = list(
-    th_paramset_empty,
-    th_paramset_full,
-    th_paramset_repeated,
-    th_paramset_restricted,
-    th_paramset_untyped,
-    th_paramset_numeric,
-    th_paramset_trafo
+    th_paramset_empty(),
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_restricted(),
+    th_paramset_untyped(),
+    th_paramset_numeric(),
+    th_paramset_trafo()
   )
   for (ps in ps_list) {
     if (ps$id == "th_paramset_full") {
@@ -28,17 +28,17 @@ test_that("methods and active bindings work", {
     expect_int(ps$length, lower = 0L)
     expect_integer(ps$nlevels, any.missing = TRUE)
     expect_list(ps$member_tags, names = "strict", any.missing = TRUE)
-    expect_output(print(th_paramset_full), "ParamSet:")
+    expect_output(print(th_paramset_full()), "ParamSet:")
   }
 })
 
 test_that("advanced methods work", {
   ps_list = list(
-    th_paramset_full,
-    th_paramset_repeated,
-    th_paramset_restricted,
-    th_paramset_numeric,
-    th_paramset_trafo
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_restricted(),
+    th_paramset_numeric(),
+    th_paramset_trafo()
   )
 
   for (ps in ps_list) {
@@ -64,7 +64,7 @@ test_that("advanced methods work", {
 })
 
 test_that("repeated params in ParamSet works", {
-  ps = th_paramset_repeated
+  ps = th_paramset_repeated()
   expect_class(ps, "ParamSet")
   expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na_repeated" %in% z)), 4)
   s = SamplerUnif$new(ps)
@@ -81,30 +81,30 @@ test_that("param subset in ParamSet works", {
   # Define all the different subsets we want to try:
   configs = list(
     list(
-      ps = th_paramset_full,
+      ps = th_paramset_full(),
       ids = c("th_param_int", "th_param_bool"),
       expected_ids = c("th_param_int", "th_param_bool"),
       fix = NULL
     ),
     list(
-      ps = th_paramset_full,
+      ps = th_paramset_full(),
       expected_ids = c("th_param_real", "th_param_categ", "th_param_bool"),
       fix = list("th_param_int" = 1L)
     ),
     list(
-      ps = th_paramset_trafo,
+      ps = th_paramset_trafo(),
       ids = c("th_param_int"),
       expected_ids = c("th_param_int"),
       fix = list("th_param_real" = 1)
     ),
     list(
-      ps = th_paramset_trafo,
+      ps = th_paramset_trafo(),
       ids = NULL,
       expected_ids = c("th_param_int"),
       fix = list("th_param_real" = 1)
     ),
     list(
-      ps = th_paramset_restricted,
+      ps = th_paramset_restricted(),
       ids = NULL,
       expected_ids = c("th_param_int", "th_param_categ"),
       fix = list("th_param_real" = 1)
@@ -159,12 +159,12 @@ test_that("Combine of ParamSet work", {
   )
 
   ps_list = list(
-    th_paramset_empty,
-    th_paramset_full,
-    th_paramset_repeated,
-    th_paramset_restricted,
-    th_paramset_numeric,
-    th_paramset_trafo
+    th_paramset_empty(),
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_restricted(),
+    th_paramset_numeric(),
+    th_paramset_trafo()
   )
 
   for (ps in ps_list) {

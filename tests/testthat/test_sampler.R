@@ -1,7 +1,7 @@
 context("sampling")
 
 test_that("sampling 1d unif", {
-  p = th_param_real
+  p = th_param_real()
   s = Sampler1DFloatUnif$new(p)
   x = s$sample(20)
   expect_data_table(x, ncols = 1L, nrows = 20L)
@@ -9,7 +9,7 @@ test_that("sampling 1d unif", {
 })
 
 test_that("sampling 1d cat", {
-  p = th_param_categ
+  p = th_param_categ()
   s = Sampler1DCat$new(p)
   x = s$sample(20)
   expect_data_table(x, ncols = 1L, nrows = 20L)
@@ -18,8 +18,8 @@ test_that("sampling 1d cat", {
 
 
 test_that("multivariate", {
-  p1 = th_param_categ
-  p2 = th_param_real
+  p1 = th_param_categ()
+  p2 = th_param_real()
   s1 = Sampler1DCat$new(p1)
   s2 = Sampler1DFloatUnif$new(p2)
   s = SamplerJointIndep$new(list(s1, s2))
