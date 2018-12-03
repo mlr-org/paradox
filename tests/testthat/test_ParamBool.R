@@ -1,7 +1,7 @@
-context("ParamBool")
+context("ParamLgl")
 
 test_that("constructor works", {
-  p = ParamBool$new(id = "test")
+  p = ParamLgl$new(id = "test")
   expect_equal(p$id, "test")
   expect_equal(p$values, c(TRUE, FALSE))
   expect_true(p$has_finite_bounds)
@@ -10,7 +10,7 @@ test_that("constructor works", {
 
 
 test_that("printer works", {
-  p = ParamBool$new(id = "x")
+  p = ParamLgl$new(id = "x")
   expect_output(print(p), "x \\[logical\\]")
 })
 

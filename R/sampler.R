@@ -41,10 +41,10 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 new_1d_unif = function(param) {
   # not so great code here with the switch-on-class, but i think we live with this
   switch(class(param)[1L],
-    ParamFloat = Sampler1DFloatUnif$new(param),
+    ParamDbl = Sampler1DFloatUnif$new(param),
     ParamInt = Sampler1DIntUnif$new(param),
-    ParamCateg = Sampler1DCat$new(param),
-    ParamBool = Sampler1DCat$new(param),
+    ParamFct = Sampler1DCat$new(param),
+    ParamLgl = Sampler1DCat$new(param),
     stopf("Sampler not implemented for param of type: %s", class(param)[1L])
   )
 }
@@ -94,7 +94,7 @@ Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
 Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
   public = list(
     initialize = function(param) {
-      super$initialize(param, "ParamFloat", trunc = FALSE,
+      super$initialize(param, "ParamDbl", trunc = FALSE,
         rfun = function(n) runif(n, min = self$param$lower, max = self$param$upper))
       assert_true(param$has_finite_bounds)
     }
@@ -141,7 +141,7 @@ Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
     prob = NULL,
 
     initialize = function(param, prob = NULL) {
-      super$initialize(param, c("ParamCateg", "ParamBool"))
+      super$initialize(param, c("ParamFct", "ParamLgl"))
       k = param$nlevels
       if (is.null(prob))
         prob = rep(1/k, k)

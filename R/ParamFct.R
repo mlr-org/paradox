@@ -11,8 +11,8 @@
 #' }
 #'
 #' @export
-ParamCateg = R6Class(
-  "ParamCateg",
+ParamFct = R6Class(
+  "ParamFct",
   inherit = Parameter,
   public = list(
 

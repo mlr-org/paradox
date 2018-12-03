@@ -10,7 +10,7 @@ Dependency = R6Class("Dependency",
     # constructor
     initialize = function(child, parent, expr) {
       assert_r6(child, "Parameter")
-      assert_r6(parent, "ParamCateg")
+      assert_r6(parent, "ParamFct")
       self$child = child
       self$parent = parent
     }

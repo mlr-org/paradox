@@ -6,9 +6,9 @@ th_paramset_full = function() {
     id = 'th_paramset_full',
     params = list(
       th_param_int(),
-      th_param_real(),
-      th_param_categ(),
-      th_param_bool()
+      th_param_dbl(),
+      th_param_fct(),
+      th_param_lgl()
       )
     )
 }
@@ -16,7 +16,7 @@ th_paramset_full = function() {
 th_paramset_untyped = function() {
   ParamSet$new(
     id = 'th_paramset_untyped',
-    params = list(th_param_untyped())
+    params = list(th_param_uty())
     )
 }
 
@@ -25,7 +25,7 @@ th_paramset_numeric = function() {
     id = 'th_paramset_numeric',
     params = list(
       th_param_int(),
-      th_param_real()
+      th_param_dbl()
       )
     )
 }
@@ -35,11 +35,11 @@ th_paramset_trafo = function() {
     id = 'th_paramset_trafo',
     params = list(
       th_param_int(),
-      th_param_real()
+      th_param_dbl()
       ),
     trafo = function(x, tags) {
       x$th_param_int = x$th_param_int * 2L
-      x$th_param_real = x$th_param_real * x$th_param_int
+      x$th_param_dbl = x$th_param_dbl * x$th_param_int
       return(x)
     }
     )
@@ -51,10 +51,10 @@ th_paramset_restricted = function() {
     id = 'th_paramset_restricted',
     params = list(
       th_param_int(),
-      th_param_real(),
-      th_param_categ()
+      th_param_dbl(),
+      th_param_fct()
       ),
-    restriction = quote(th_param_real > th_param_int)
+    restriction = quote(th_param_dbl > th_param_int)
     )
 }
 
@@ -62,8 +62,8 @@ th_paramset_repeated = function() {
   ParamSet$new(
     id = 'th_paramset_repeated',
     params = c(
-      list(th_param_nat(), th_param_categ()),
-      repeatParam(4L, th_param_real_na())
+      list(th_param_nat(), th_param_fct()),
+      repeatParam(4L, th_param_dbl_na())
       )
     #   trafo = trafo_on_repeated_param(fun = function(x, tags) {
 #     xm = as.matrix(as.data.table(x))
@@ -75,7 +75,7 @@ th_paramset_repeated = function() {
 #     xm = xm / xm_rowsums
 #     xm[is.nan(xm)] = 1 # take care of dev by zero
 #     list(vector_param = lapply(seq_len(nrow(xm)), function(z) xm[z,]))
-#   }, repeated_param_id = "th_param_real_na")
+#   }, repeated_param_id = "th_param_dbl_na")
     )
   }
 

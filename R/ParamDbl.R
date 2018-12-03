@@ -14,7 +14,7 @@
 #'     Are values \code{-Inf} and \code{Inf} feasible?}
 #' }
 #' @export
-ParamFloat = R6Class("ParamFloat", inherit = ParamNumber,
+ParamDbl = R6Class("ParamDbl", inherit = ParamNumber,
   public = list(
     # member variables
     allow_inf = NULL,

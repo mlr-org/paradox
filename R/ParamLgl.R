@@ -5,7 +5,7 @@
 #' A \code{\link[R6]{R6Class}} to represent boolean parameters.
 #'
 #' @export
-ParamBool = R6Class("ParamBool",
+ParamLgl = R6Class("ParamLgl",
   inherit = Parameter,
   public = list(
 

@@ -12,9 +12,9 @@ test_that("methods and active bindings work", {
   )
   for (ps in ps_list) {
     if (ps$id == "th_paramset_full") {
-      expect_equal(ps$ids, c('th_param_int', 'th_param_real', 'th_param_categ', 'th_param_bool'))
-      expect_equal(ps$lower, c(th_param_int=-10, th_param_real=-10, th_param_categ=NA_real_, th_param_bool=NA_real_))
-      expect_equal(ps$upper, c(th_param_int=10, th_param_real=10, th_param_categ=NA_real_, th_param_bool=NA_real_))
+      expect_equal(ps$ids, c('th_param_int', 'th_param_dbl', 'th_param_fct', 'th_param_lgl'))
+      expect_equal(ps$lower, c(th_param_int=-10, th_param_dbl=-10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
+      expect_equal(ps$upper, c(th_param_int=10, th_param_dbl=10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
     }
     expect_class(ps, "ParamSet")
     expect_numeric(ps$lower, any.missing = TRUE, names = "strict")
@@ -66,10 +66,10 @@ test_that("advanced methods work", {
 test_that("repeated params in ParamSet works", {
   ps = th_paramset_repeated()
   expect_class(ps, "ParamSet")
-  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na_repeated" %in% z)), 4)
+  expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_dbl_na_repeated" %in% z)), 4)
   s = SamplerUnif$new(ps)
   xs = s$sample(10)
-  expect_true("th_param_categ" %in% names(xs))
+  expect_true("th_param_fct" %in% names(xs))
   # xs_t = ps$transform(xs)
   # expect_false("th_param_nat" %in% names(xs_t))
   # expect_list(xs_t$vector_param)
@@ -82,32 +82,32 @@ test_that("param subset in ParamSet works", {
   configs = list(
     list(
       ps = th_paramset_full(),
-      ids = c("th_param_int", "th_param_bool"),
-      expected_ids = c("th_param_int", "th_param_bool"),
+      ids = c("th_param_int", "th_param_lgl"),
+      expected_ids = c("th_param_int", "th_param_lgl"),
       fix = NULL
     ),
     list(
       ps = th_paramset_full(),
-      expected_ids = c("th_param_real", "th_param_categ", "th_param_bool"),
+      expected_ids = c("th_param_dbl", "th_param_fct", "th_param_lgl"),
       fix = list("th_param_int" = 1L)
     ),
     list(
       ps = th_paramset_trafo(),
       ids = c("th_param_int"),
       expected_ids = c("th_param_int"),
-      fix = list("th_param_real" = 1)
+      fix = list("th_param_dbl" = 1)
     ),
     list(
       ps = th_paramset_trafo(),
       ids = NULL,
       expected_ids = c("th_param_int"),
-      fix = list("th_param_real" = 1)
+      fix = list("th_param_dbl" = 1)
     ),
     list(
       ps = th_paramset_restricted(),
       ids = NULL,
-      expected_ids = c("th_param_int", "th_param_categ"),
-      fix = list("th_param_real" = 1)
+      expected_ids = c("th_param_int", "th_param_fct"),
+      fix = list("th_param_dbl" = 1)
     )
   )
   # Test the different combinations:
@@ -135,13 +135,13 @@ test_that("Combine of ParamSet work", {
     normal = ParamSet$new(
       id = "new_param_set",
       params = list(
-        ParamFloat$new("new_int", lower = 0L, upper = 10L)
+        ParamDbl$new("new_int", lower = 0L, upper = 10L)
       )
     ),
     trafo = ParamSet$new(
       id = "new_param_set_trafo",
       params = list(
-        ParamFloat$new("new_real", lower = 0, upper = 10)
+        ParamDbl$new("new_real", lower = 0, upper = 10)
       ),
       trafo = function(x, tags) {
         x$new_real = sqrt(x$new_real)
@@ -151,8 +151,8 @@ test_that("Combine of ParamSet work", {
     restriction = ParamSet$new(
       id = "new_param_set_requires",
       params = list(
-        ParamFloat$new("new_real", lower = 0, upper = 10),
-        ParamFloat$new("new_int", lower = 0L, upper = 10L)
+        ParamDbl$new("new_real", lower = 0, upper = 10),
+        ParamDbl$new("new_int", lower = 0L, upper = 10L)
       ),
       restriction = quote(new_real>=new_int)
     )

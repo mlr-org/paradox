@@ -19,7 +19,7 @@ test_that("active bindings works", {
   # contents after data.frame conversion
   op_df = as.data.frame(op)
   expect_data_frame(op_df, nrow = 10, ncol = 13)
-  expect_set_equal(colnames(op_df), c("dob", "message", "error", "transformed_x", "exec_time", "timestamp", "th_param_int", "th_param_real", "th_param_categ", "th_param_bool", "y", "th_ex1", "th_ex2"))
+  expect_set_equal(colnames(op_df), c("dob", "message", "error", "transformed_x", "exec_time", "timestamp", "th_param_int", "th_param_dbl", "th_param_fct", "th_param_lgl", "y", "th_ex1", "th_ex2"))
   expect_equal(op_df$y, 1:10)
   expect_equal(op_df$th_ex1, 1:10)
   expect_class(op_df$timestamp, "POSIXct")
