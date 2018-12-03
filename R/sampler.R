@@ -101,6 +101,7 @@ Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
   )
 )
 
+# samples from a (truncated) normal distribution
 Sampler1DFloatNorm = R6Class("Sampler1DFloatNorm", inherit = Sampler1DNumber,
 
   public = list(
@@ -109,7 +110,7 @@ Sampler1DFloatNorm = R6Class("Sampler1DFloatNorm", inherit = Sampler1DNumber,
     sd = NULL,
 
     initialize = function(param, mu = NULL, sd = NULL) {
-      super$initialize(param, trunc = FALSE,
+      super$initialize(param, trunc = TRUE,
         rfun = function(n) rnorm(n, min = self$param$lower, max = self$param$upper))
       if (is.null(mu))
         mu = self$param$center
@@ -117,6 +118,7 @@ Sampler1DFloatNorm = R6Class("Sampler1DFloatNorm", inherit = Sampler1DNumber,
       assert_number(sd, lower = 0)
       self$mu = mu
       self$sd = sd
+      assert_true(param$has_finite_bounds)
     }
   )
 )
@@ -131,16 +133,6 @@ Sampler1DIntUnif = R6Class("Sampler1DIntUnif", inherit = Sampler1DNumber,
     }
   )
 )
-
-# samples 1D ints, between lower and upper
-Sampler1DIntGeom = R6Class("Sampler1DIntGeom", inherit = Sampler1DNumber,
-  public = list(
-    initialize = function(param) {
-      super$initialize(param, "ParamInt")
-    }
-  )
-)
-
 
 # samples from a categorical distribution, default is uniform with equal weights
 Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
