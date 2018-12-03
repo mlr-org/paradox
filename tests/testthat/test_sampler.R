@@ -9,16 +9,16 @@ test_that("sampling 1d unif", {
 })
 
 test_that("sampling 1d cat", {
-  p = th_param_categorical
+  p = th_param_categ
   s = Sampler1DCat$new(p)
   x = s$sample(20)
   expect_data_table(x, ncols = 1L, nrows = 20L)
-  expect_character(x$th_param_categorical)
+  expect_character(x$th_param_categ)
 })
 
 
 test_that("multivariate", {
-  p1 = th_param_categorical
+  p1 = th_param_categ
   p2 = th_param_real
   s1 = Sampler1DCat$new(p1)
   s2 = Sampler1DFloatUnif$new(p2)
@@ -26,7 +26,7 @@ test_that("multivariate", {
   x = s$sample(20)
   expect_data_table(x, ncols = 2L, nrows = 20L)
   expect_numeric(x$th_param_real, lower = -10, upper = 10)
-  expect_character(x$th_param_categorical)
+  expect_character(x$th_param_categ)
 })
 
 test_that("sampling of number requires finite bounds", {

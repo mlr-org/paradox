@@ -6,8 +6,8 @@ th_paramset_full = ParamSet$new(
   params = list(
     th_param_int,
     th_param_real,
-    th_param_categorical,
-    th_param_flag
+    th_param_categ,
+    th_param_bool
   )
 )
 
@@ -43,7 +43,7 @@ th_paramset_restricted = ParamSet$new(
   params = list(
     th_param_int,
     th_param_real,
-    th_param_categorical
+    th_param_categ
   ),
   restriction = quote(th_param_real > th_param_int)
 )
@@ -51,7 +51,7 @@ th_paramset_restricted = ParamSet$new(
 th_paramset_repeated = ParamSet$new(
   id = 'th_paramset_repeated',
   params = c(
-    list(th_param_nat, th_param_categorical),
+    list(th_param_nat, th_param_categ),
     repeatParam(4L, th_param_real_na)
   )
 #   trafo = trafo_on_repeated_param(fun = function(x, tags) {

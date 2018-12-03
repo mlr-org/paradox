@@ -12,9 +12,9 @@ test_that("methods and active bindings work", {
   )
   for (ps in ps_list) {
     if (ps$id == "th_paramset_full") {
-      expect_equal(ps$ids, c('th_param_int', 'th_param_real', 'th_param_categorical', 'th_param_flag'))
-      expect_equal(ps$lower, c(th_param_int=-10, th_param_real=-10, th_param_categorical=NA_real_, th_param_flag=NA_real_))
-      expect_equal(ps$upper, c(th_param_int=10, th_param_real=10, th_param_categorical=NA_real_, th_param_flag=NA_real_))
+      expect_equal(ps$ids, c('th_param_int', 'th_param_real', 'th_param_categ', 'th_param_bool'))
+      expect_equal(ps$lower, c(th_param_int=-10, th_param_real=-10, th_param_categ=NA_real_, th_param_bool=NA_real_))
+      expect_equal(ps$upper, c(th_param_int=10, th_param_real=10, th_param_categ=NA_real_, th_param_bool=NA_real_))
     }
     expect_class(ps, "ParamSet")
     expect_numeric(ps$lower, any.missing = TRUE, names = "strict")
@@ -69,7 +69,7 @@ test_that("repeated params in ParamSet works", {
   expect_equal(sum(sapply(ps$member_tags, function(z) "th_param_real_na_repeated" %in% z)), 4)
   s = SamplerUnif$new(ps)
   xs = s$sample(10)
-  expect_true("th_param_categorical" %in% names(xs))
+  expect_true("th_param_categ" %in% names(xs))
   # xs_t = ps$transform(xs)
   # expect_false("th_param_nat" %in% names(xs_t))
   # expect_list(xs_t$vector_param)
@@ -82,13 +82,13 @@ test_that("param subset in ParamSet works", {
   configs = list(
     list(
       ps = th_paramset_full,
-      ids = c("th_param_int", "th_param_flag"),
-      expected_ids = c("th_param_int", "th_param_flag"),
+      ids = c("th_param_int", "th_param_bool"),
+      expected_ids = c("th_param_int", "th_param_bool"),
       fix = NULL
     ),
     list(
       ps = th_paramset_full,
-      expected_ids = c("th_param_real", "th_param_categorical", "th_param_flag"),
+      expected_ids = c("th_param_real", "th_param_categ", "th_param_bool"),
       fix = list("th_param_int" = 1L)
     ),
     list(
@@ -106,7 +106,7 @@ test_that("param subset in ParamSet works", {
     list(
       ps = th_paramset_restricted,
       ids = NULL,
-      expected_ids = c("th_param_int", "th_param_categorical"),
+      expected_ids = c("th_param_int", "th_param_categ"),
       fix = list("th_param_real" = 1)
     )
   )
