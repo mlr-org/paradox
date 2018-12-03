@@ -23,3 +23,13 @@ test_that("has_finite_bounds works", {
   expect_false(ParamInt$new(id = "x")$has_finite_bounds)
 })
 
+test_that("printer works", {
+  p = ParamInt$new(id = "x", lower = 1)
+  expect_output(print(p), "x \\[integer\\]")
+  expect_output(print(p), "\\{1, ..., Inf\\}")
+  p = ParamInt$new(id = "x", lower = 1, upper = 3)
+  expect_output(print(p), "x \\[integer\\]")
+  expect_output(print(p), "\\{1, ..., 3\\}")
+})
+
+

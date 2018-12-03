@@ -41,7 +41,7 @@ ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
     },
     print = function(...) {
       super$print(newline = FALSE, ...)
-      catf(": {%i, ..., %i}\n", self$lower, self$upper)
+      catf(": {%g, ..., %g}\n", self$lower, self$upper)
     }
   ),
   active = list(
