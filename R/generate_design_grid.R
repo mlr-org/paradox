@@ -1,29 +1,38 @@
 # resolution int(1) - resolution used for each parameter
 # param_resolutions int() - resolution given per parameter (named vector)
 
-#' @title Generate a space-filling LHS design
+#' @title Generate a grid design.
+#'
+#' @description
+#' Generate a grid with specified resolution in the parameter space.
+#'
+#' @param param_set [\code{\link{ParamSet}}].
+#' @param resolution [\code{integer(1)}]:\cr
+#'   Resolution to be used for each parameter in the \code{param_set}.
+#' @param param_resolutions [named \code{integer()}]:\cr
+#'   Resolution given per parameter, as named integer vector.
+#'
+#' @return [\code{\link[data.table]{data.table}}].
+#'
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
-  if (!is.null(resolution) && !is.null(param_resolutions))
-    stop("You can only specify one of the arguments!")
+  if (!xor(is.null(resolution), is.null(param_resolutions)))
+    stop("You must specify resolution (x)or param_resolutions!")
 
-  seq_gen = function(r) seq(0, 1, length.out = r)
+  if (!is.null(resolution)) {
+    resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
+    param_resolutions = set_names(rep.int(resolution, param_set$length), param_set$ids)
+  } else { # !is.null(param_resolutions)
+    param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
+    assert_names(names(param_resolutions), "strict", permutation.of = param_set$ids)
+  }
 
-  if (!is.null(resolution)) { # build param_resolutions as repeated resolution
-    resolution = asInt(resolution, lower = 1L)
-    param_resolutions = map_int(param_set$params, function(p) resolution)
-  }
-  assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, names = "strict")
-  assert_names(names(param_resolutions), permutation.of = param_set$ids)
-  grid_vec = lapply(param_resolutions, seq_gen)
-  res = lapply(names(grid_vec), function(z) param_set$params[[z]]$denorm_vector(x = grid_vec[[z]]))
-  names(res) = names(grid_vec)
-  res = lapply(res, unique)
-  res = do.call(CJ, as.list(res))
-  if (!is.null(param_set$restriction)) {
-    ind_valid = vectorized_for_param_set_flat(res, param_set$test)
-    return(res[ind_valid, ])
-  } else {
-    return(res)
-  }
+  grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
+  res = imap(grid_vec, function(value, id) unique(param_set$params[[id]]$denorm_vector(x = value)))
+  res = do.call(CJ, res)
+
+  if (!is.null(param_set$restriction))
+    res = res[map_lgl(pmap(res, list), param_set$test)]
+
+  return(res)
 }

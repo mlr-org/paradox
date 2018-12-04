@@ -8,7 +8,7 @@
 #' \describe{
 #'   \item{lower}{[\code{numeric(1)}, \code{default = -Inf}] \cr
 #'     Upper bound for feasible values.}
-#'   \item{upper}{[\code{integer(1), \code{default = Inf}}] \cr
+#'   \item{upper}{[\code{integer(1)}, \code{default = Inf}] \cr
 #'     Lower bound for feasible values.}
 #'   \item{allow_inf}{[\code{logical(1)}, \code{default = TRUE}] \cr
 #'     Are values \code{-Inf} and \code{Inf} feasible?}
