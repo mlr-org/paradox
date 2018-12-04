@@ -1,6 +1,7 @@
 # resolution int(1) - resolution used for each parameter
 # param_resolutions int() - resolution given per parameter (named vector)
 
+#' @title Generate a space-filling LHS design
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
   if (!is.null(resolution) && !is.null(param_resolutions))

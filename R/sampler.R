@@ -106,17 +106,17 @@ Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DNumber,
 
   public = list(
     # member variables
-    mu = NULL,
+    mean = NULL,
     sd = NULL,
 
-    initialize = function(param, mu = NULL, sd = NULL) {
+    initialize = function(param, mean = NULL, sd = NULL) {
       super$initialize(param, trunc = TRUE,
-        rfun = function(n) rnorm(n, min = self$param$lower, max = self$param$upper))
-      if (is.null(mu))
-        mu = self$param$center
-      assert_number(mu)
+        rfun = function(n) rnorm(n, mean = mean , sd = sd))
+      if (is.null(mean))
+        mean = self$param$center
+      assert_number(mean)
       assert_number(sd, lower = 0)
-      self$mu = mu
+      self$mean = mean
       self$sd = sd
       assert_true(param$has_finite_bounds)
     }

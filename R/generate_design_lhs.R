@@ -1,3 +1,5 @@
+#' @title Generate a space-filling LHS design
+#' @export
 generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
   assert_int(n, lower = 1L)
   assert_function(lhs_function, args = c("n", "k"))
