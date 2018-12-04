@@ -41,10 +41,10 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 new_1d_unif = function(param) {
   # not so great code here with the switch-on-class, but i think we live with this
   switch(class(param)[1L],
-    ParamDbl = Sampler1DFloatUnif$new(param),
+    ParamDbl = Sampler1DDblUnif$new(param),
     ParamInt = Sampler1DIntUnif$new(param),
-    ParamFct = Sampler1DCat$new(param),
-    ParamLgl = Sampler1DCat$new(param),
+    ParamFct = Sampler1DFct$new(param),
+    ParamLgl = Sampler1DFct$new(param),
     stopf("Sampler not implemented for param of type: %s", class(param)[1L])
   )
 }
@@ -52,7 +52,7 @@ new_1d_unif = function(param) {
 
 # samples from a 1D real-values, from an arbitrary distribution. default is uniform
 # note that we always sample from the truncated distribution
-Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
+Sampler1DNumber = R6Class("Sampler1DDbl", inherit = Sampler1D,
   public = list(
 
     # member variables
@@ -91,7 +91,7 @@ Sampler1DNumber = R6Class("Sampler1DFloat", inherit = Sampler1D,
   )
 )
 
-Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
+Sampler1DDblUnif = R6Class("Sampler1DDblUnif", inherit = Sampler1DNumber,
   public = list(
     initialize = function(param) {
       super$initialize(param, "ParamDbl", trunc = FALSE,
@@ -102,7 +102,7 @@ Sampler1DFloatUnif = R6Class("Sampler1DFloatUnif", inherit = Sampler1DNumber,
 )
 
 # samples from a (truncated) normal distribution
-Sampler1DFloatNorm = R6Class("Sampler1DFloatNorm", inherit = Sampler1DNumber,
+Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DNumber,
 
   public = list(
     # member variables
@@ -135,7 +135,7 @@ Sampler1DIntUnif = R6Class("Sampler1DIntUnif", inherit = Sampler1DNumber,
 )
 
 # samples from a categorical distribution, default is uniform with equal weights
-Sampler1DCat = R6Class("Sampler1DCat", inherit = Sampler1D,
+Sampler1DFct = R6Class("Sampler1DFct", inherit = Sampler1D,
   public = list(
     # member variables
     prob = NULL,
