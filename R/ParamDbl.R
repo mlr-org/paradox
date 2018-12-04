@@ -6,7 +6,7 @@
 #'
 #' @section Member Variables:
 #' \describe{
-#'   \item{lower}{[\code{numeric(1), \code{default = -Inf}] \cr
+#'   \item{lower}{[\code{numeric(1)}, \code{default = -Inf}] \cr
 #'     Upper bound for feasible values.}
 #'   \item{upper}{[\code{integer(1), \code{default = Inf}}] \cr
 #'     Lower bound for feasible values.}
