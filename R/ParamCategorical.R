@@ -65,7 +65,7 @@ ParamCategorical = R6Class(
       catf(": {%s}\n", paste0(self$values, collapse = ", "))
     },
     value_to_string = function(x, ...) {
-      # ...?
+      x
     }
   ),
   active = list(

@@ -51,7 +51,8 @@ ParamUntyped = R6Class(
       stop("Untyped Param can not be denormed.")
     },
     value_to_string = function(x, ...) {
-      stop("Untyped Param can not be converted to string.")
+      # Is there a less hacky solution for this?
+      capture.output(print(x))
     }
   ),
 

@@ -74,7 +74,7 @@ ParamReal = R6Class(
       super$print(newline = FALSE, ...)
       catf(": [%i, %i]\n", self$lower, self$upper)
     },
-    value_to_string = function(x, num.format = "%.3g", ...) {
+    value_to_string = function(x, show.missing.values = FALSE, num.format = "%.3g", ...) {
       if (is.na(x)) {
         # Return "NA" or "", depending on show.missing.values.
         ifthenelse(show.missing.values, "NA", "")

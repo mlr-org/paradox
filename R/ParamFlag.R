@@ -48,13 +48,18 @@ ParamFlag = R6Class("ParamFlag",
     denorm_vector = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     },
-    value_to_string = function(x, short.flags=F, ...) {
-      if (short.bool) {
-        # Return "T" or "F"
-        substr(as.character(x), 1, 1)
+    value_to_string = function(x, show.missing.values = FALSE, short.flags = FALSE, ...) {
+      if (is.na(x)) {
+        # Return "NA", "N" or "", depending on show.missing.values and short.flags.
+        ifthenelse(show.missing.values, ifthenelse(short.flags, "N", "NA"), "")
       } else {
-        # Return "TRUE" or "FALSE"
-        as.character(x)
+        if (short.flags) {
+          # Return "T" or "F"
+          substr(as.character(x), 1, 1)
+        } else {
+          # Return "TRUE" or "FALSE"
+          as.character(x)
+        }
       }
     }
   ),
