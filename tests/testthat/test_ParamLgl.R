@@ -11,7 +11,7 @@ test_that("constructor works", {
 
 test_that("printer works", {
   p = ParamLgl$new(id = "x")
-  expect_output(print(p), "x \\[logical\\]")
+  expect_output(print(p), "x l")
 })
 
 

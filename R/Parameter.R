@@ -68,20 +68,25 @@ Parameter = R6Class("Parameter",
     denorm_vector = function(x) {
       stop("denorm function not implemented!")
     },
-    print = function(newline = TRUE, ...) {
-      catf("%s [%s]", self$id, self$storage_type)
-      if (!is.null(self$special_vals)) {
-        catf("+{special_vals}") #FIXME: Better Printer for special_vals!
-      }
-      if (!is.null(self$default)) {
-        catf(" (Default: %s)", as.character(self$default))
-      }
+
+    print = function(...) {
+      catf("%s %s %s", self$id, private$get_type_string(), private$get_range_string())
+      # if (!is.null(self$special_vals)) {
+        # catf("+{special_vals}") #FIXME: Better Printer for special_vals!
+      # }
+      # if (!is.null(self$default)) {
+      #   catf(" (Default: %s)", as.character(self$default))
+      # }
       if (!is.null(self$tags)) {
         catf(" (Tags: %s)", paste(self$tags, collapse = ", "))
       }
-      if (newline) {
-        cat("\n")
-      }
     }
+  ),
+
+  private = list(
+    # return a short string, displaying the range of the param, called in super$print
+    get_range_string = function() stop("abstract"),
+    # return 1char, displaying type param, called in super$print
+    get_type_string = function() stop("abstract")
   )
 )

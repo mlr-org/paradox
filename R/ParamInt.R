@@ -38,10 +38,6 @@ ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
       res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
       res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
       res
-    },
-    print = function(...) {
-      super$print(newline = FALSE, ...)
-      catf(": {%g, ..., %g}\n", self$lower, self$upper)
     }
   ),
   active = list(
@@ -53,5 +49,10 @@ ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
       if (self$has_finite_bounds) seq(self$lower, self$upper)
       else NA
     }
+  ),
+
+  private = list(
+    get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
+    get_type_string = function() "i"
   )
 )

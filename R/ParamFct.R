@@ -39,10 +39,6 @@ ParamFct = R6Class(
       res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
-    },
-    print = function(...) {
-      super$print(newline = FALSE, ...)
-      catf(": {%s}\n", paste0(self$values, collapse = ", "))
     }
   ),
   active = list(
@@ -50,5 +46,7 @@ ParamFct = R6Class(
     has_finite_bounds = function() TRUE
   ),
   private = list(
+    get_range_string = function() sprintf("{%s}", paste0(self$values, collapse = ",")),
+    get_type_string = function() "f"
   )
 )

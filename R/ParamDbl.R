@@ -35,10 +35,6 @@ ParamDbl = R6Class("ParamDbl", inherit = ParamNumber,
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       self$range[1] + x * diff(self$range)
-    },
-    print = function(...) {
-      super$print(newline = FALSE, ...)
-      catf(": [%g, %g]\n", self$lower, self$upper)
     }
   ),
   active = list(
@@ -46,5 +42,10 @@ ParamDbl = R6Class("ParamDbl", inherit = ParamNumber,
       assert_true(self$has_finite_bounds)
       (self$lower + self$upper) / 2
     }
+  ),
+
+  private = list(
+    get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
+    get_type_string = function() "d"
   )
 )

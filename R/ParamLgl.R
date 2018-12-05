@@ -30,5 +30,10 @@ ParamLgl = R6Class("ParamLgl",
     has_finite_bounds = function() TRUE,
     values = function() c(TRUE, FALSE),
     nlevels = function() 2L
+  ),
+
+  private = list(
+    get_range_string = function() "",
+    get_type_string = function() "l"
   )
 )

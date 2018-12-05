@@ -12,8 +12,7 @@ test_that("test if ParamFct constructor works", {
 
 test_that("printer works", {
   p = ParamFct$new(id = "x", values = c("a", "b"))
-  expect_output(print(p), "x \\[character\\]")
-  expect_output(print(p), "\\{a, b\\}")
+  expect_output(print(p), "x f \\{a,b\\}")
 })
 
 
