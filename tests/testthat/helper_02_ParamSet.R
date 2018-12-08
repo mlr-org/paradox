@@ -45,19 +45,6 @@ th_paramset_trafo = function() {
     )
 }
 
-
-th_paramset_restricted = function() {
-  ParamSet$new(
-    id = 'th_paramset_restricted',
-    params = list(
-      th_param_int(),
-      th_param_dbl(),
-      th_param_fct()
-      ),
-    restriction = quote(th_param_dbl > th_param_int)
-    )
-}
-
 th_paramset_repeated = function() {
   ParamSet$new(
     id = 'th_paramset_repeated',

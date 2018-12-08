@@ -25,10 +25,6 @@ A \code{\link[R6]{R6Class}} to represent set of parameters.
     Has to work vectorized and also return untransformed x values.
     The function takes a list \code{x} of all parameter values.
     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
-  \item{restriction}{[\code{quote}] \cr
-    A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
-    It has to be evaluated to \code{TRUE} so that the parameter value is valid.
-    The expression has to work on vectors of values.}
 }
 }
 

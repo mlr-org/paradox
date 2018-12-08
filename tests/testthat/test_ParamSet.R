@@ -5,7 +5,6 @@ test_that("methods and active bindings work", {
     th_paramset_empty(),
     th_paramset_full(),
     th_paramset_repeated(),
-    th_paramset_restricted(),
     th_paramset_untyped(),
     th_paramset_numeric(),
     th_paramset_trafo()
@@ -36,7 +35,6 @@ test_that("advanced methods work", {
   ps_list = list(
     th_paramset_full(),
     th_paramset_repeated(),
-    th_paramset_restricted(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
@@ -102,12 +100,6 @@ test_that("param subset in ParamSet works", {
       ids = NULL,
       expected_ids = c("th_param_int"),
       fix = list("th_param_dbl" = 1)
-    ),
-    list(
-      ps = th_paramset_restricted(),
-      ids = NULL,
-      expected_ids = c("th_param_int", "th_param_fct"),
-      fix = list("th_param_dbl" = 1)
     )
   )
   # Test the different combinations:
@@ -147,14 +139,6 @@ test_that("Combine of ParamSet work", {
         x$new_real = sqrt(x$new_real)
         return(x)
       }
-    ),
-    restriction = ParamSet$new(
-      id = "new_param_set_requires",
-      params = list(
-        ParamDbl$new("new_real", lower = 0, upper = 10),
-        ParamDbl$new("new_int", lower = 0L, upper = 10L)
-      ),
-      restriction = quote(new_real>=new_int)
     )
   )
 
@@ -162,7 +146,6 @@ test_that("Combine of ParamSet work", {
     th_paramset_empty(),
     th_paramset_full(),
     th_paramset_repeated(),
-    th_paramset_restricted(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )

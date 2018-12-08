@@ -61,10 +61,6 @@ Parameter = R6Class("Parameter",
     denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
 
     # ParameterMethods
-    sample_vector = function(n = 1L) {
-      # samples vector values without respecting what is 'restriction'
-      stop("sample_vector not implemented")
-    },
     denorm_vector = function(x) {
       stop("denorm function not implemented!")
     },

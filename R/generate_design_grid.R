@@ -31,8 +31,5 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   res = imap(grid_vec, function(value, id) unique(param_set$params[[id]]$denorm_vector(x = value)))
   res = do.call(CJ, res)
 
-  if (!is.null(param_set$restriction))
-    res = res[map_lgl(pmap(res, list), param_set$test)]
-
   return(res)
 }

@@ -14,10 +14,6 @@
 #'     Has to work vectorized and also return untransformed x values.
 #'     The function takes a list \code{x} of all parameter values.
 #'     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
-#'   \item{restriction}{[\code{quote}] \cr
-#'     A quoted expression (\code{quote()}) that is evaluated on all parameter values to check if they are feasible.
-#'     It has to be evaluated to \code{TRUE} so that the parameter value is valid.
-#'     The expression has to work on vectors of values.}
 #' }
 #'
 #' @section Methods:
@@ -68,18 +64,16 @@ ParamSet = R6Class("ParamSet",
     params = NULL,  # a list of ParamNodes
     id = NULL,
     trafo = NULL, # function to transform the value before evaluation
-    restriction = NULL, # quote that states if certain conditions have to be met
     deps = NULL,
 
     # constructor
-    initialize = function(params = list(), id = "paramset", tags = NULL, restriction = NULL, trafo = NULL) {
+    initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
       # set member variables
       assert_list(params, types = "Parameter")
       names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
       self$params = params
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
-      self$restriction = assert_class(restriction, "call", null.ok = TRUE)
       # create depnodes as graph with allocated nodes, but no current edges
       private$.dep_nodes = vector("list", length(params))
       names(private$.dep_nodes) = names(params)
@@ -145,16 +139,10 @@ ParamSet = R6Class("ParamSet",
           return(res)
         }
       }
-      # if we have fixed parameters we can substitute them in the restriction quote
-      new_restriction = self$restriction
-      if (!is.null(fix) && !is.null(new_restriction)) {
-        new_restriction = substituteDirect(new_restriction, fix)
-      }
       ParamSet$new(
         id = paste0(self$id,"_subset"),
         params = self$params[keep_ids],
         tags = self$tags,
-        restriction = new_restriction,
         trafo = new_trafo)
     },
 
@@ -166,10 +154,6 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(intersect(self$ids, param_set$ids)) > 0) {
         stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
-      }
-      new_restriction = self$restriction %??% param_set$restriction
-      if (!is.null(self$restriction) && !is.null(param_set$restriction)) {
-        new_restriction = substitute((a) && (b), list(a = self$restriction %??% TRUE, b = param_set$restriction %??% TRUE))
       }
       new_trafo = self$trafo %??% param_set$trafo
       if (!is.null(self$trafo) && !is.null(param_set$trafo)) {
@@ -183,7 +167,6 @@ ParamSet = R6Class("ParamSet",
         id = paste0(self$id, "_", param_set$id),
         params = c(self$params, param_set$params),
         tags = union(self$tags, param_set$tags),
-        restriction = new_restriction,
         trafo = new_trafo
       )
     },
@@ -228,10 +211,6 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(self$tags)) {
         cat("Tags are set:", "\n")
         print(self$tags)
-      }
-      if (!is.null(self$restriction)) {
-        cat("Restriction is set:", "\n")
-        print(self$restriction)
       }
       if (!is.null(self$trafo)) {
         cat("Trafo is set:", "\n")

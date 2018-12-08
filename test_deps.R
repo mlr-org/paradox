@@ -8,7 +8,7 @@ ps = ParamSet$new(list(p1, p2, p3))
 
 print(ps)
 
-# ps$add_dependency(Dependency$new(child = p2, parent = p1))
+ps$add_dependency(Dependency$new(child = p2, parent = p1))
 
     # # check function that checks whether a (named) list of values is a feasible configuration
     # check = function(x, na.ok = FALSE, null.ok = FALSE) {
