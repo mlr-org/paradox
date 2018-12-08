@@ -8,6 +8,7 @@
 ^.*\.sublime-workspace$
 ^.*tar.gz$
 ^.+_cache$
+^test_.*\.*R$
 ^.+_files$
 ^.editorconfig$
 ^\.Rproj\.user$
