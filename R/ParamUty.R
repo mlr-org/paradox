@@ -56,10 +56,6 @@ ParamUntyped = R6Class(
     }
   ),
 
-  active = list(
-    has_finite_bounds = function() FALSE
-  ),
-
   private = list(
     get_range_string = function() "",
     get_type_string = function() "u"
