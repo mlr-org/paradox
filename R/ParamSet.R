@@ -203,6 +203,10 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
+
+    # return a Parameter of the set, by id
+    # FIXME: careful, this returns a reference! by chanhing that we might
+    # hurt the integrity of the paramset. we might at least offer a "deep" copy as option and document this?
     get_param = function(id) {
       assert_choice(id, self$ids)
       r = self$data[id, on = "id"] # index single row by id

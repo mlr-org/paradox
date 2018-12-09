@@ -78,14 +78,21 @@ Parameter = R6Class("Parameter",
     rep = function(n) {
       assert_count(n)
       pid = self$id
+      # get dt, copy it n times, change id and tags, then construct param from dt
+      dt = self$data
       join_id = paste0(pid, "_rep")
       pars = lapply(seq_len(n), function(i) {
-        this_param = param$clone()
-        this_param$id = paste0(join_id, "_", i)
-        this_param$tags = c(this_param$tags, join_id)
-        this_param
+        dt2 = copy(dt)
+        dt2$id = paste0(join_id, "_", i)
+        dt2$tags[[1L]] = c(dt2$tags[[1L]], join_id)
+        new_param_from_dt(dt2)
       })
       ParamSet$new(pars, id = join_id)
+    },
+
+    deep_clone = function(name, value) {
+      # deep copy the "data" dt member
+      if (name == "data") copy(value) else value
     },
 
     print = function(...) {
