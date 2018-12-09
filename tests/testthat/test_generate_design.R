@@ -9,18 +9,20 @@ test_that("generate_design_grid", {
   )
 
   for (ps in ps_list) {
-    xg = generate_design_grid(ps, resolution = 3)
-    expect_data_table(xg, any.missing = FALSE)
-    # expect_equal(nrow(xg), 3^ps$length)
-    # expect_true(all(xg[, ps$test(.SD), by = seq_len(nrow(xg))]$V1))
+    info = ps$id
+    print(info)
+    d = generate_design_grid(ps, resolution = 3)
+    expect_data_table(d, any.missing = FALSE, info = info)
+    # expect_equal(nrow(xg), 3^ps$length, info = info)
+    # expect_true(all(xg[, ps$test(.SD), by = seq_len(nrow(xg))]$V1), info = info)
     # xgt = ps$transform(xg)
-    # expect_data_table(xgt, nrows = nrow(xg))
+    # expect_data_table(xgt, nrows = nrow(xg), info = info)
 
     # p_res = ps$nlevels
     # p_res[is.na(p_res)] = 2
     # xgp = generate_design_grid(ps, param_resolutions = p_res)
-    # expect_data_table(xgp, any.missing = FALSE)
-    # expect_true(nrow(xgp) == prod(p_res))
+    # expect_data_table(xgp, any.missing = FALSE, info = info)
+    # expect_true(nrow(xgp) == prod(p_res), info = info)
   }
 })
 
@@ -34,9 +36,11 @@ test_that("generate_design_lhs", {
   )
 
   for (ps in ps_list) {
+    info = ps$id
     d = generate_design_lhs(ps, 10)
-    expect_data_table(d, nrows = 10, any.missing = FALSE)
+    expect_data_table(d, nrows = 10, any.missing = FALSE, info = info)
     xs = design_to_list(d)
+    # FIXME: the next test seesm unfinished
     all(map_lgl(xs, ps$test))
     # FIXME: the next lines should not be here, they test transform and design_to_list
     # xlt = ps$transform(xl)

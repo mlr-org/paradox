@@ -31,19 +31,13 @@ ParamUntyped = R6Class(
   public = list(
 
     initialize = function(id, default = NULL, tags = NULL) {
-      # FIXME: doc what this does
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (!na.ok && length(x) == 1 && is.na(x)) "Value is NA"
-        if (!null.ok && is.null(x)) "Value is NULL"
-        return(TRUE)
-      }
       super$initialize(
         id = id,
         storage_type = "list",
         lower = NA_real_,
         upper = NA_real_,
         values = NULL,
-        check = check,
+        check = function(x) TRUE,  # values are always feasible
         special_vals = NULL,
         default = default,
         tags = tags

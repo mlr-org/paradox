@@ -115,6 +115,10 @@ Parameter = R6Class("Parameter",
     lower = function() self$data$lower,
     upper = function() self$data$upper,
     values = function() self$data$values[[1L]],
+    nlevels = function() {
+      v = self$values
+      if (is.null(v)) NA_integer_ else length(v)
+    },
     special_vals = function() self$data$special_vals[[1]]
   ),
 

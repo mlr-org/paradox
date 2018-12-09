@@ -164,7 +164,7 @@ ParamSet = R6Class("ParamSet",
       )
     },
 
-    # check function that checks the whole param set by simply iterating
+    # check function that checks whether a named list is a feasible point from the set
     check = function(xs) {
       ids = self$ids
       assert_list(xs)
@@ -211,6 +211,15 @@ ParamSet = R6Class("ParamSet",
       assert_choice(id, self$ids)
       r = self$data[id, on = "id"] # index single row by id
       new_param_from_dt(r)
+    },
+
+    # return a list of params, for given ids or all ids
+    get_params = function(ids = NULL) {
+      sids = self$ids
+      if (is.null(ids))
+        ids = sids
+      assert_subset(ids, sids)
+      map(ids, self$get_param)
     }
   ),
 
@@ -221,8 +230,15 @@ ParamSet = R6Class("ParamSet",
     storage_types = function() private$get_col_with_idnames("storage_type"),
     lowers = function() private$get_col_with_idnames("lower"),
     uppers = function() private$get_col_with_idnames("upper"),
+    nlevels = function() {
+      # this is a bit slow, we can write worse code on the data dt for speed
+      nlevs = map_int(self$get_params(), function(p) p$nlevels)
+      set_names(nlevs, self$ids)
+    },
     values = function() private$get_col_with_idnames("values"),
-    tags = function() private$get_col_with_idnames("tags")
+    tags = function() private$get_col_with_idnames("tags"),
+    ids_num = function() self$data[pclass %in% c("ParamDbl", "ParamInt"), id],
+    ids_cat = function() self$data[pclass %in% c("ParamFct", "ParamLgl"), id]
   ),
 
   private = list(
