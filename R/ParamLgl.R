@@ -15,7 +15,7 @@ ParamLgl = R6Class("ParamLgl",
         storage_type = "logical",
         lower = NA_real_,
         upper = NA_real_,
-        values = c("TRUE", "FALSE"),
+        values = NULL,
         checker = function(x) check_flag(x),
         special_vals = special_vals,
         default = default,
@@ -28,8 +28,6 @@ ParamLgl = R6Class("ParamLgl",
     }
   ),
   active = list(
-    has_finite_bounds = function() TRUE,
-    values = function() c(TRUE, FALSE),
     nlevels = function() 2L
   ),
 

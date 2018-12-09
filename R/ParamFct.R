@@ -37,8 +37,7 @@ ParamFct = R6Class(
     }
   ),
   active = list(
-    nlevels = function() length(self$values),
-    has_finite_bounds = function() TRUE
+    nlevels = function() length(self$values)
   ),
   private = list(
     get_range_string = function() sprintf("{%s}", paste0(self$values, collapse = ",")),

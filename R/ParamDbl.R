@@ -33,7 +33,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
 
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
-      self$range[1] + x * diff(self$range)
+      self$lower + x * self$span
     }
 
   ),
@@ -43,7 +43,8 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
     center = function() {
       assert_true(self$has_finite_bounds)
       (self$lower + self$upper) / 2
-    }
+    },
+    span = function() self$upper - self$lower
   ),
 
   private = list(

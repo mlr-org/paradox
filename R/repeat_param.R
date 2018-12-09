@@ -11,8 +11,6 @@
 #'   The parameter that should be repeated_
 #' @return List of Parameters
 #' @export
-
-#' FIXME return a param set
 repeatParam = function(n = 1L, param) {
   assert_int(n)
   assert_r6(param, "Parameter")

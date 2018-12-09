@@ -34,13 +34,15 @@ test_that("generate_design_lhs", {
   )
 
   for (ps in ps_list) {
-    xl = generate_design_lhs(ps, 10)
-    expect_data_table(xl, nrows = 10, any.missing = FALSE)
-    expect_true(all(xl[, ps$test(.SD), by = seq_len(nrow(xl))]$V1))
-    xlt = ps$transform(xl)
-    expect_data_table(xlt, nrows = 10)
-    xltl = design_to_list(xlt)
-    expect_list(xltl, len = 10)
+    d = generate_design_lhs(ps, 10)
+    expect_data_table(d, nrows = 10, any.missing = FALSE)
+    xs = design_to_list(d)
+    all(map_lgl(xs, ps$test))
+    # FIXME: the next lines should not be here, they test transform and design_to_list
+    # xlt = ps$transform(xl)
+    # expect_data_table(xlt, nrows = 10)
+    # xltl = design_to_list(xlt)
+    # expect_list(xltl, len = 10)
   }
 })
 

@@ -67,7 +67,8 @@ Parameter = R6Class("Parameter",
 
     test = function(x) makeTestFunction(self$check)(x),
 
-    denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
+    # FIXME: what is this? remove?
+    # denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
 
     denorm_vector = function(x) {
       stop("denorm function not implemented!")
@@ -104,3 +105,26 @@ Parameter = R6Class("Parameter",
     get_type_string = function() stop("abstract")
   )
 )
+
+
+# private factory methods, creates a param from a single dt row
+new_param_from_dt = function(dt) {
+  # get pclass constructor from namespace then call it on all (relevent) entries from the dt row
+  p = as.list(dt)
+  cl = getFromNamespace(p$pclass, "paradox")
+  # remove pclass and storage type, as the are not passed to contructor
+  p$pclass = NULL; p$storage_type = NULL
+  # FIXME: this is not that perfect code:
+  # - we untangle all list-cols
+  # - we remove all NULL or NA entries, as they cannot be passed to the constructor,
+  # NB: we might also handle this thru a reflection table, where we "know" which elements the Param-constructors take
+  p = map_if(p, is.list, function(x) x[[1L]])
+  p = Filter(function(x) !is.null(x) && !is.na(x), p)
+  do.call(cl$new, p)
+}
+
+
+
+
+
+

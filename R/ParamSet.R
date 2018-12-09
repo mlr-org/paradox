@@ -70,6 +70,8 @@ ParamSet = R6Class("ParamSet",
     initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
       assert_list(params, types = "Parameter")
       self$data = rbindlist(map(params, "data"))
+      # we set index not key, so we dont resort the table
+      setindex(self$data, "id")
       # names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
@@ -79,14 +81,6 @@ ParamSet = R6Class("ParamSet",
       for (p in params) {
         private$.dep_nodes[[p$id]] = DependencyNode$new(p)
       }
-    },
-
-    denorm = function(x) {
-      assert_list(x, names = 'strict')
-      assert_set_equal(names(x), self$ids)
-      xs = lapply(self$ids, function(id) self$params[[id]]$denorm(x = x[id]))
-      names(xs) = NULL
-      as.data.table(xs)
     },
 
     # list --> list, named
@@ -103,9 +97,6 @@ ParamSet = R6Class("ParamSet",
       xs = ensure_data_table(xs)
       return(xs)
     },
-
-
-
 
     # FIXME: subset und fix trennen
 
@@ -174,24 +165,16 @@ ParamSet = R6Class("ParamSet",
     },
 
     # check function that checks the whole param set by simply iterating
-    check = function(x, na.ok = FALSE, null.ok = FALSE) {
-      assert_set_equal(names(x), self$ids)
-      if (is.data.table(x)) x = as.list(x)
-      assert_list(x, names = "named")
-      for (par_name in names(x)) {
-        res = self$params[[par_name]]$check(x[[par_name]], na.ok = na.ok, null.ok = null.ok)
-        if(!isTRUE(res)) return(res)
-      }
-      return(res)
+    check = function(xs) {
+      ids = self$ids
+      assert_list(xs)
+      assert_names(names(xs), permutation.of = ids)
+      all(map_lgl(ids, function(id) self$get_param(id)$check(xs[[id]])))
     },
 
-    test = function(...) {
-      makeTestFunction(self$check)(...)
-    },
+    test = function(xs) makeTestFunction(self$check)(xs),
 
-    assert = function(...) {
-      makeAssertionFunction(self$check)(...)
-    },
+    assert = function(xs) makeAssertionFunction(self$check)(xs),
 
     add_dependency = function(dep) {
       assert_r6(dep, "Dependency")
@@ -218,6 +201,12 @@ ParamSet = R6Class("ParamSet",
         cat("Trafo is set:", "\n")
         print(self$trafo)
       }
+    },
+
+    get_param = function(id) {
+      assert_choice(id, self$ids)
+      r = self$data[id, on = "id"] # index single row by id
+      new_param_from_dt(r)
     }
   ),
 
@@ -228,13 +217,8 @@ ParamSet = R6Class("ParamSet",
     storage_types = function() private$get_col_with_idnames("storage_type"),
     lowers = function() private$get_col_with_idnames("lower"),
     uppers = function() private$get_col_with_idnames("upper"),
-    values = function() private$get_col_with_idnames("values")
-    # FIXME: reeanable?
-    # nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
-    # FIXME: reeanable?
-    # has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
-    # FIXME: reeanable?
-    # member_tags = function() lapply(self$params, function(param) param$tags)
+    values = function() private$get_col_with_idnames("values"),
+    tags = function() private$get_col_with_idnames("tags")
   ),
 
   private = list(

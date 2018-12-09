@@ -28,7 +28,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   }
 
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) unique(param_set$params[[id]]$denorm_vector(x = value)))
+  res = imap(grid_vec, function(value, id) unique(param_set$get_param(id)$denorm_vector(x = value)))
   res = do.call(CJ, res)
 
   return(res)
