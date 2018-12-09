@@ -117,6 +117,16 @@ OptPath = R6Class(
       private$cache_pos = private$cache_pos + 1L
       private$cache[[private$cache_pos]] = c(list(dob = dob %??% self$length, message = message, error = error, exec_time = exec_time, timestamp = timestamp, extra = list(extra), transformed_x = list(transformed_x)), x, y)
       invisible(self)
+    },
+
+    print = function(...) {
+      dimx = self$param_set$length
+      dimy = length(self$y_names)
+      len = self$length
+      catf("Optimization path")
+      catf("Dimensions: x = %i, y = %i; Length = %i", dimx, dimy, len)
+      catf("Number of errors: %i", sum(!is.na(self$data$error)))
+      print(head(as.data.table(self)))
     }
   ),
 

@@ -1,5 +1,6 @@
 .github
 .gitignore
+.ignore
 .Rproj.user
 .travis.yml
 ^.*\.Rproj$
@@ -7,6 +8,7 @@
 ^.*\.sublime-workspace$
 ^.*tar.gz$
 ^.+_cache$
+^test_.*\.*R$
 ^.+_files$
 ^.editorconfig$
 ^\.Rproj\.user$
@@ -21,3 +23,4 @@ man-roxygen
 README.md
 README.Rmd
 todo-files
+attic

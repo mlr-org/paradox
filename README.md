@@ -38,7 +38,7 @@ ps = ParamSet$new(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamReal$new(id = "x", lower = -10, upper = 10),
     ParamFlag$new(id = "switch"),
-    ParamCategorical$new(id = "methods", values = c("a","b","c"))
+    ParamFct$new(id = "methods", values = c("a","b","c"))
   )
 )
 ```
@@ -107,13 +107,13 @@ ps$values
 ```
 ## $z
 ## [1] 1 2 3
-## 
+##
 ## $x
 ## NULL
-## 
+##
 ## $switch
 ## [1]  TRUE FALSE
-## 
+##
 ## $methods
 ## [1] "a" "b" "c"
 ```
@@ -123,10 +123,10 @@ ps$param_classes
 ```
 
 ```
-##                  z                  x             switch 
-##         "ParamInt"        "ParamReal"        "ParamFlag" 
-##            methods 
-## "ParamCategorical"
+##                  z                  x             switch
+##         "ParamInt"        "ParamReal"        "ParamFlag"
+##            methods
+## "ParamFct"
 ```
 
 ```r
@@ -134,7 +134,7 @@ ps$nlevels
 ```
 
 ```
-##       z       x  switch methods 
+##       z       x  switch methods
 ##       3      NA       2       3
 ```
 
@@ -154,7 +154,7 @@ ps$lower
 ```
 
 ```
-##            z x_repeated_1 x_repeated_2 
+##            z x_repeated_1 x_repeated_2
 ##          -10            0            0
 ```
 
@@ -163,7 +163,7 @@ ps$upper
 ```
 
 ```
-##            z x_repeated_1 x_repeated_2 
+##            z x_repeated_1 x_repeated_2
 ##           10            1            1
 ```
 
@@ -189,10 +189,10 @@ ps$member_tags
 ```
 ## $z
 ## NULL
-## 
+##
 ## $x_repeated_1
 ## [1] "x_repeated"
-## 
+##
 ## $x_repeated_2
 ## [1] "x_repeated"
 ```
@@ -285,7 +285,7 @@ ps = ParamSet$new(
     repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = function(x, dict, tags) {
-    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
+    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2)
     x$x = Map(scale, x$x_repeated_1, x$x_repeated_2)
     x$x_repeated_1 = NULL
     x$x_repeated_2 = NULL

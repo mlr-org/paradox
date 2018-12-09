@@ -38,9 +38,9 @@ Create a simple ParamSet using all supported Parameter Types:
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
-    ParamReal$new(id = "x", lower = -10, upper = 10),
-    ParamFlag$new(id = "switch"),
-    ParamCategorical$new(id = "methods", values = c("a","b","c"))
+    ParamDbl$new(id = "x", lower = -10, upper = 10),
+    ParamLgl$new(id = "switch"),
+    ParamFct$new(id = "methods", values = c("a","b","c"))
   )
 )
 ```
@@ -74,7 +74,7 @@ Things you can do on an all numeric ParamSet:
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
+    repeatParam(2, ParamDbl$new(id = "x", lower = 0, upper = 1))
   )
 )
 
@@ -105,7 +105,7 @@ Transformations are useful to scale parameters:
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
-    ParamReal$new(id = "x", lower = 0, upper = 1)
+    ParamDbl$new(id = "x", lower = 0, upper = 1)
   ),
   trafo = function(x, dict, tags) {
     x$z = 2^x$z
@@ -139,10 +139,10 @@ Keep in mind that `z` stays untouched and remains after the transformation.
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
+    repeatParam(2, ParamDbl$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = function(x, dict, tags) {
-    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2) 
+    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2)
     x$x = Map(scale, x$x_repeated_1, x$x_repeated_2)
     x$x_repeated_1 = NULL
     x$x_repeated_2 = NULL
@@ -165,9 +165,9 @@ For more advanced transformations on repeated parameters you can use `trafo_on_r
 ps = ParamSet$new(
   params = c(
     list(
-      ParamFlag$new(id = "switch"),
+      ParamLgl$new(id = "switch"),
       ParamInt$new(id = "z", lower = 1, upper = 4)),
-    repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
+    repeatParam(4, ParamDbl$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = trafo_on_repeated_param(
     fun = function(x, dict, tags) {

@@ -8,9 +8,6 @@
 \usage{
 ParamInt
 }
-\value{
-[\code{\link{ParamInt}}].
-}
 \description{
 A \code{\link[R6]{R6Class}} to represent Integer parameters.
 }
@@ -22,53 +19,6 @@ A \code{\link[R6]{R6Class}} to represent Integer parameters.
   \item{upper}{[\code{integer(1)|-Inf}] \cr
     Lower boundary.}
 }
-
-Inherited from \code{ParamBase}:
-
-
-
-\describe{
-  \item{default}{[\code{any}] \cr
-    default value.}
-  \item{special_vals}{[\code{any}] \cr
-    Special values this parameter is allowed to take that are within the defined space.}
 }
 
-Inherited from \code{ParamNode}:
-}
-
-\section{Methods}{
-
-  \emph{none}
-
-Inherited from \code{ParamBase}
-
-
-
-\describe{
-  \item{sampleVector(n)}{[\code{function}] \cr
-    samples \code{n} Parameter Values.}
-  \item{denorm_vector(x)}{[\code{function}] \cr
-    Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
-}
-
-Inherited from \code{ParamNode}:
-}
-
-\section{Active Bindings}{
-
-  \emph{none}
-
-Inherited from \code{ParamBase}
-
-
-  \emph{none}
-}
-
-\seealso{
-Other ParamBase: \code{\link{ParamBase}},
-  \code{\link{ParamCategorical}}, \code{\link{ParamFlag}},
-  \code{\link{ParamReal}}, \code{\link{ParamUntyped}}
-}
-\concept{ParamBase}
 \keyword{datasets}
