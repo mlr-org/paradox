@@ -14,30 +14,32 @@
 #'     Are values \code{-Inf} and \code{Inf} feasible?}
 #' }
 #' @export
-ParamDbl = R6Class("ParamDbl", inherit = ParamNumber,
+ParamDbl = R6Class("ParamDbl", inherit = Parameter,
   public = list(
-    # member variables
-    allow_inf = NULL,
-
-    initialize = function(id, special_vals = NULL, default = NULL, lower = -Inf, upper = Inf, allow_inf = FALSE, tags = NULL) {
-      self$allow_inf = assert_flag(allow_inf)
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (test_special_vals(self, x)) return(TRUE)
-        checkNumber(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok, finite = !self$allow_inf)
-      }
-      assert_number(lower)
-      assert_number(upper)
-      super$initialize(id = id, storage_type = "numeric", check = check, special_vals = special_vals,
-        lower = lower, upper = upper, default = default, tags = tags)
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
+      super$initialize(
+        id = id,
+        storage_type = "double",
+        lower = lower,
+        upper = upper,
+        values = NULL,
+        special_vals = special_vals,
+        checker = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+        default = default,
+        tags = tags
+      )
+      assert_true(lower <= upper)
     },
 
-    # public methods
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       self$range[1] + x * diff(self$range)
     }
+
   ),
   active = list(
+    range = function() c(self$lower, self$upper),
+    has_finite_bounds = function() all(is.finite(self$range)),
     center = function() {
       assert_true(self$has_finite_bounds)
       (self$lower + self$upper) / 2

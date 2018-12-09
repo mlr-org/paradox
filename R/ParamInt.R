@@ -13,24 +13,26 @@
 #' }
 #'
 #' @export
-ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
+ParamInt = R6Class( "ParamInt", inherit = Parameter,
   public = list(
-
-
-    # constructor
-    initialize = function(id, special_vals = NULL, default = NULL, lower = -Inf, upper = Inf, tags = NULL) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (test_special_vals(self, x)) return(TRUE)
-        checkInt(x, lower = self$lower, upper = self$upper, na.ok = na.ok, null.ok = null.ok)
-      }
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
       # arg check lower and upper, we need handle Inf special case, that is not an int
       lower = if (identical(lower, Inf) || identical(lower, -Inf)) lower else asInt(lower)
       upper = if (identical(upper, Inf) || identical(upper, -Inf)) upper else asInt(upper)
-      super$initialize(id = id, storage_type = "integer", check = check, special_vals = special_vals,
-        lower = lower, upper = upper, default = default, tags = tags)
+      super$initialize(
+        id = id,
+        storage_type = "integer",
+        lower = lower,
+        upper = upper,
+        values = NULL,
+        special_vals = special_vals,
+        default = default,
+        checker = function(x) checkInt(x, lower = self$lower, upper = self$upper),
+        tags = tags
+      )
+      assert_true(lower <= upper)
     },
 
-    # public methods
     denorm_vector = function(x) {
       assert_true(self$has_finite_bounds)
       r = self$range + c(-0.5, 0.5)
@@ -40,15 +42,10 @@ ParamInt = R6Class( "ParamInt", inherit = ParamNumber,
       res
     }
   ),
+
   active = list(
-    nlevels = function() {
-      if (self$has_finite_bounds) self$upper - self$lower + 1L
-      else NA_integer_
-    },
-    values = function() {
-      if (self$has_finite_bounds) seq(self$lower, self$upper)
-      else NA
-    }
+    range = function() c(self$lower, self$upper),
+    has_finite_bounds = function() all(is.finite(self$range))
   ),
 
   private = list(

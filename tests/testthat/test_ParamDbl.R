@@ -17,16 +17,12 @@ test_that("constructor works", {
   expect_error(ParamDbl$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })
 
-test_that("allow_inf works", {
-  p = ParamDbl$new(id = "x", lower = 1, upper = 10, allow_inf = FALSE)
+test_that("allowing inf as feasible value works", {
+  p = ParamDbl$new(id = "x", lower = 1, upper = 10)
   expect_true(p$test(1))
   expect_false(p$test(Inf))
 
-  p = ParamDbl$new(id = "x", lower = 1, allow_inf = FALSE)
-  expect_true(p$test(1))
-  expect_false(p$test(Inf))
-
-  p = ParamDbl$new(id = "x", lower = 1, allow_inf = TRUE)
+  p = ParamDbl$new(id = "x", lower = 1, special_vals = list(Inf))
   expect_true(p$test(1))
   expect_true(p$test(Inf))
 })

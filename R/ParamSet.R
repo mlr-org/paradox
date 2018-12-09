@@ -60,18 +60,15 @@
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
-    # member variables
-    params = NULL,  # a list of ParamNodes
     id = NULL,
+    data = NULL,  # a list of ParamNodes
     trafo = NULL, # function to transform the value before evaluation
     deps = NULL,
 
-    # constructor
     initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
-      # set member variables
       assert_list(params, types = "Parameter")
-      names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
-      self$params = params
+      self$data = rbindlist(map(params, "data"))
+      # names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       # create depnodes as graph with allocated nodes, but no current edges
@@ -82,7 +79,6 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
-    # public methods
     denorm = function(x) {
       assert_list(x, names = 'strict')
       assert_set_equal(names(x), self$ids)
@@ -220,21 +216,23 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
-    ids = function() names(self$params),
-    storage_types = function() map_chr(self$params, "storage_type"),
-    values = function() lapply(self$params, function(param) param$values),
-    lower = function() map_dbl(self$params, function(param) param$lower %??% NA_real_),
-    upper = function() map_dbl(self$params, function(param) param$upper %??% NA_real_),
-    param_classes = function() map_chr(self$params, function(param) class(param)[1]),
-    range = function() data.table(id = self$ids, upper = self$upper, lower = self$lower),
-    has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
-    length = function() length(self$params),
-    nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
-    member_tags = function() lapply(self$params, function(param) param$tags)
+    length = function() nrow(self$data),
+    ids = function() self$data$id,
+    pclasses = function() private$get_col_with_idnames("pclass"),
+    storage_types = function() private$get_col_with_idnames("storage_type"),
+    lowers = function() private$get_col_with_idnames("lower"),
+    uppers = function() private$get_col_with_idnames("upper"),
+    values = function() private$get_col_with_idnames("values")
+    # FIXME: reeanable?
+    # nlevels = function() map_int(self$params, function(param) param$nlevels %??% NA_integer_),
+    # FIXME: reeanable?
+    # has_finite_bounds = function() all(map_lgl(self$params, function(param) param$has_finite_bounds)),
+    # FIXME: reeanable?
+    # member_tags = function() lapply(self$params, function(param) param$tags)
   ),
 
   private = list(
-    .dep_nodes = NULL
+    .dep_nodes = NULL,
+    get_col_with_idnames = function(col) set_names(self$data[[col]], self$data[["id"]])
   )
-
 )

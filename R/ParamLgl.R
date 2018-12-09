@@ -9,19 +9,20 @@ ParamLgl = R6Class("ParamLgl",
   inherit = Parameter,
   public = list(
 
-    # constructor
     initialize = function(id, special_vals = NULL, default = NULL, tags = NULL) {
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (test_special_vals(self, x))
-          return(TRUE)
-        check_flag(x, na.ok, null.ok)
-      }
-
-      # construct super class
-      super$initialize(id = id, storage_type = "logical", check = check, special_vals = special_vals, default = default, tags = tags)
+      super$initialize(
+        id = id,
+        storage_type = "logical",
+        lower = NA_real_,
+        upper = NA_real_,
+        values = c("TRUE", "FALSE"),
+        checker = function(x) check_flag(x),
+        special_vals = special_vals,
+        default = default,
+        tags = tags
+      )
     },
 
-    # public methods
     denorm_vector = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }

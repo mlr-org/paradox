@@ -29,18 +29,25 @@ ParamUntyped = R6Class(
   "ParamUntyped",
   inherit = Parameter,
   public = list(
-    # member variables
 
-    # constructor
     initialize = function(id, default = NULL, tags = NULL) {
+      # FIXME: doc what this does
       check = function(x, na.ok = FALSE, null.ok = FALSE) {
         if (!na.ok && length(x) == 1 && is.na(x)) "Value is NA"
         if (!null.ok && is.null(x)) "Value is NULL"
         return(TRUE)
       }
-
-      # construct super class
-      super$initialize(id = id, storage_type = "list", check = check, default = default, tags = tags, special_vals = NULL)
+      super$initialize(
+        id = id,
+        storage_type = "list",
+        lower = NA_real_,
+        upper = NA_real_,
+        values = NULL,
+        check = check,
+        special_vals = NULL,
+        default = default,
+        tags = tags
+      )
     },
 
     # public methods

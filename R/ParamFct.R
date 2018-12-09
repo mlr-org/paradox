@@ -15,23 +15,18 @@ ParamFct = R6Class(
   "ParamFct",
   inherit = Parameter,
   public = list(
-
-    # member variables
-    values = NULL,
-
-    # constructor
     initialize = function(id, values, default = NULL, special_vals = NULL, tags = NULL) {
-
-      check = function(x, na.ok = FALSE, null.ok = FALSE) {
-        if (na.ok && is.na(x) || test_special_vals(self, x)) return(TRUE)
-        checkChoice(x, choices = self$values, null.ok = null.ok)
-      }
-
-      # write member variables
-      self$values = assert_character(values, any.missing = FALSE, unique = TRUE)
-
-      # construct super class
-      super$initialize(id = id, storage_type = "character", check = check, default = default, special_vals = special_vals, tags = tags)
+      super$initialize(
+        id = id,
+        storage_type = "character",
+        lower = NA_real_,
+        upper = NA_real_,
+        values = values,
+        special_vals = special_vals,
+        checker = function(x) check_choice(x, choices = self$values),
+        default = default,
+        tags = tags
+      )
     },
 
     # public methods

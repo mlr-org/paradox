@@ -3,7 +3,7 @@ context("generate_design")
 test_that("generate_design_grid", {
   ps_list = list(
     th_paramset_full(),
-    th_paramset_repeated(),
+    # th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
@@ -28,7 +28,7 @@ test_that("generate_design_grid", {
 test_that("generate_design_lhs", {
   ps_list = list(
     th_paramset_full(),
-    th_paramset_repeated(),
+    # th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
