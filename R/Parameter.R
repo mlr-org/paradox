@@ -74,6 +74,20 @@ Parameter = R6Class("Parameter",
       stop("denorm function not implemented!")
     },
 
+    # repeat this param n-times, return a ParamSet (named with <id>_rep)
+    rep = function(n) {
+      assert_count(n)
+      pid = self$id
+      join_id = paste0(pid, "_rep")
+      pars = lapply(seq_len(n), function(i) {
+        this_param = param$clone()
+        this_param$id = paste0(join_id, "_", i)
+        this_param$tags = c(this_param$tags, join_id)
+        this_param
+      })
+      ParamSet$new(pars, id = join_id)
+    },
+
     print = function(...) {
       catf("%s %s %s", self$id, private$get_type_string(), private$get_range_string())
       # if (!is.null(self$special_vals)) {
