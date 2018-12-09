@@ -65,6 +65,8 @@ ParamSet = R6Class("ParamSet",
     trafo = NULL, # function to transform the value before evaluation
     deps = NULL,
 
+   # FIXME: constructor which takes a dt?
+
     initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
       assert_list(params, types = "Parameter")
       self$data = rbindlist(map(params, "data"))
@@ -87,6 +89,7 @@ ParamSet = R6Class("ParamSet",
       as.data.table(xs)
     },
 
+    # list --> list, named
     transform = function(x) {
       x = ensure_data_table(x)
       assert_set_equal(names(x), self$ids)
@@ -102,6 +105,9 @@ ParamSet = R6Class("ParamSet",
     },
 
 
+
+
+    # FIXME: subset und fix trennen
 
     # in: * ids (character)
     #       ids of Parameter

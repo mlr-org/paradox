@@ -49,6 +49,7 @@ Parameter = R6Class("Parameter",
         upper = upper,                                             # double, Inf, or NA
         values = list(values),                                     # charvec or NULL
         special_vals = list(special_vals),                         # list or NULL
+        # FIXME: what if deafult is NULL?
         default = list(default),                                   # any or NULL
         tags = list(tags)                                          # charvec
       )
