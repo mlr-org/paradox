@@ -1,6 +1,6 @@
 #' @import checkmate
 #' @import mlr3misc
-#' @import data.table
+#' @importFrom data.table data.table as.data.table setnames
 #' @importFrom R6 R6Class
 #' @importFrom utils head tail
 NULL
