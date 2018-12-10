@@ -21,4 +21,6 @@ Resolution given per parameter, as named integer vector.}
 }
 \description{
 Generate a grid with specified resolution in the parameter space.
+NB: The resolution for categorical parameters is ignored, these paramters
+always produce a grid over all their valid levels.
 }
