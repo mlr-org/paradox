@@ -17,7 +17,7 @@ generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
   ids = param_set$ids
   d = lhs_function(n, k = param_set$length)
   colnames(d) = ids
-  d = map_dtc(ids, function(id) param_set$get_param(id)$denorm_vector(d[, id]))
+  d = map_dtc(ids, function(id) param_set$get_param(id)$map_unitint_to_values(d[, id]))
   set_names(d, ids)
 }
 

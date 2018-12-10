@@ -16,7 +16,7 @@
 #' @section Methods:
 #'
 #' \describe{
-#'   \item{denorm_vector(x)}{[\code{function}] \cr
+#'   \item{map_unitint_to_values(x)}{[\code{function}] \cr
 #'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 #' }
 #'
@@ -67,13 +67,6 @@ Parameter = R6Class("Parameter",
 
     test = function(x) makeTestFunction(self$check)(x),
 
-    # FIXME: what is this? remove?
-    # denorm = function(x) as_dt_cols(self$denorm_vector(x[[self$id]]), self$id),
-
-    denorm_vector = function(x) {
-      stop("denorm function not implemented!")
-    },
-
     # repeat this param n-times, return a ParamSet (named with <id>_rep)
     rep = function(n) {
       assert_count(n)
@@ -106,7 +99,11 @@ Parameter = R6Class("Parameter",
       if (!is.null(self$tags)) {
         catf(" (Tags: %s)", paste(self$tags, collapse = ", "))
       }
-    }
+    },
+
+    # takes a numeric vector from [0, 1] and maps it to a vector of <storage_type> of feasible values
+    # so that the values are regular distributed
+    map_unitint_to_values = function(x) stop("abstract")
   ),
 
   active = list(
@@ -124,8 +121,10 @@ Parameter = R6Class("Parameter",
 
   private = list(
     .checker = NULL,
+
     # return a short string, displaying the range of the param, called in super$print
     get_range_string = function() stop("abstract"),
+
     # return 1char, displaying type param, called in super$print
     get_type_string = function() stop("abstract")
   )

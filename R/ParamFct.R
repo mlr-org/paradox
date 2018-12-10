@@ -29,18 +29,22 @@ ParamFct = R6Class(
       )
     },
 
-    # public methods
-    denorm_vector = function(x) {
+    # maps [0, 1/k] --> a, (1/k, 2/k] --> b, ..., ((k-1)/k, 1] --> z
+    # NB: this is a bit inconsistent for the first part
+    map_unitint_to_values = function(x) {
       res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
     }
   ),
+
   active = list(
     nlevels = function() length(self$values)
   ),
+
   private = list(
     get_range_string = function() sprintf("{%s}", paste0(self$values, collapse = ",")),
+
     get_type_string = function() "f"
   )
 )

@@ -23,16 +23,18 @@ ParamLgl = R6Class("ParamLgl",
       )
     },
 
-    denorm_vector = function(x) {
+    map_unitint_to_values = function(x) {
       x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }
   ),
+
   active = list(
     nlevels = function() 2L
   ),
 
   private = list(
     get_range_string = function() "",
+
     get_type_string = function() "l"
   )
 )

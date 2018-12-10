@@ -33,7 +33,7 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
       assert_true(lower <= upper)
     },
 
-    denorm_vector = function(x) {
+    map_unitint_to_values = function(x) {
       assert_true(self$has_finite_bounds)
       r = self$range + c(-0.5, 0.5)
       res = as.integer(round(r[1] + x * diff(r)))
@@ -50,6 +50,7 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
 
   private = list(
     get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
+
     get_type_string = function() "i"
   )
 )

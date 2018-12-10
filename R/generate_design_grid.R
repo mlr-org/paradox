@@ -40,7 +40,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) param_set$get_param(id)$denorm_vector(x = value))
+  res = imap(grid_vec, function(value, id) param_set$get_param(id)$map_unitint_to_values(x = value))
   res = do.call(CJ, res)
 
   return(res)

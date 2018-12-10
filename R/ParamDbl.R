@@ -31,12 +31,13 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
       assert_true(lower <= upper)
     },
 
-    denorm_vector = function(x) {
+    # maps [0,1]*span + lower
+    map_unitint_to_values = function(x) {
       assert_true(self$has_finite_bounds)
       self$lower + x * self$span
     }
-
   ),
+
   active = list(
     range = function() c(self$lower, self$upper),
     has_finite_bounds = function() all(is.finite(self$range)),
@@ -49,6 +50,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
 
   private = list(
     get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
+
     get_type_string = function() "d"
   )
 )

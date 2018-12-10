@@ -44,14 +44,13 @@ ParamUntyped = R6Class(
       )
     },
 
-    # public methods
-    denorm_vector = function(x) {
-      stop("Untyped Param can not be denormed.")
-    }
+    map_unitint_to_values = function(x) stop("Not possible!")
   ),
 
   private = list(
     get_range_string = function() "",
+
     get_type_string = function() "u"
+
   )
 )
