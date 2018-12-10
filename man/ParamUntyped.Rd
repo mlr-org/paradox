@@ -39,7 +39,7 @@ Inherited from \code{Parameter}
 
 
 \describe{
-  \item{denorm_vector(x)}{[\code{function}] \cr
+  \item{map_unitint_to_values(x)}{[\code{function}] \cr
     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 }
 }

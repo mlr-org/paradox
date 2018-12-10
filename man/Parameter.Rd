@@ -26,7 +26,7 @@ Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
 
 
 \describe{
-  \item{denorm_vector(x)}{[\code{function}] \cr
+  \item{map_unitint_to_values(x)}{[\code{function}] \cr
     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
 }
 }
