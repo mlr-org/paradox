@@ -39,7 +39,7 @@ test_that("generate_design_lhs", {
     info = ps$id
     d = generate_design_lhs(ps, 10)
     expect_data_table(d, nrows = 10, any.missing = FALSE, info = info)
-    xs = design_to_list(d)
+    xs = mlr3misc::transpose(d)
     # FIXME: the next test seesm unfinished
     all(map_lgl(xs, ps$test))
     # FIXME: the next lines should not be here, they test transform and design_to_list
