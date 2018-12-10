@@ -22,11 +22,11 @@
 #' Inherited from \code{Parameter}
 #' @inheritSection Parameter Active Bindings
 #'
-#' @return [\code{\link{ParamUntyped}}].
+#' @return [\code{\link{ParamUty}}].
 #' @family Parameter
 #' @export
-ParamUntyped = R6Class(
-  "ParamUntyped",
+ParamUty = R6Class(
+  "ParamUty",
   inherit = Parameter,
   public = list(
 

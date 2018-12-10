@@ -37,7 +37,7 @@ Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamUntyped}}
+Other Parameter: \code{\link{ParamUty}}
 }
 \concept{Parameter}
 \keyword{datasets}
