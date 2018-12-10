@@ -1,6 +1,6 @@
+#' @rawNamespace import(data.table, except = transpose)
 #' @import checkmate
 #' @import mlr3misc
-#' @import data.table
 #' @importFrom R6 R6Class
 #' @importFrom utils head tail
 NULL
