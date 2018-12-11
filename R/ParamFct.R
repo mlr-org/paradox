@@ -40,11 +40,5 @@ ParamFct = R6Class(
 
   active = list(
     nlevels = function() length(self$values)
-  ),
-
-  private = list(
-    get_range_string = function() sprintf("{%s}", paste0(self$values, collapse = ",")),
-
-    get_type_string = function() "f"
   )
 )

@@ -9,11 +9,3 @@ test_that("test if ParamFct constructor works", {
   expect_error(ParamFct$new(id = "test", values = c("a", NA)))
 })
 
-test_that("printer works", {
-  p = ParamFct$new(id = "x", values = c("a", "b"))
-  expect_output(print(p), "x f \\{a,b\\}")
-})
-
-
-
-

@@ -184,7 +184,7 @@ test_that("we cannot create ParamSet with non-strict R names", {
 
 test_that("ParamSet$print", {
   ps = th_paramset_empty()
-  expect_output(print(ps), "ParamSet:")
+  expect_output(print(ps), "ParamSet: th_paramset_empty")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
   expect_output(print(ps), "ParamSet:")

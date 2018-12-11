@@ -46,11 +46,5 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
       (self$lower + self$upper) / 2
     },
     span = function() self$upper - self$lower
-  ),
-
-  private = list(
-    get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
-
-    get_type_string = function() "d"
   )
 )

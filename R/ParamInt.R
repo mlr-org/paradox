@@ -46,11 +46,5 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
   active = list(
     range = function() c(self$lower, self$upper),
     has_finite_bounds = function() all(is.finite(self$range))
-  ),
-
-  private = list(
-    get_range_string = function() sprintf("[%g, %g]", self$lower, self$upper),
-
-    get_type_string = function() "i"
   )
 )

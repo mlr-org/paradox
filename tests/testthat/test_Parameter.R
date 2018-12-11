@@ -30,3 +30,15 @@ test_that("we cannot create Params with non-strict R names", {
   expect_error(ParamInt$new(id = "$foo") , "naming convention")
 })
 
+test_that("printer works", {
+  for (p in th_paramset_full()$get_params()) {
+    info = p$id
+    s = capture_output(print(p))
+    expect_true(stri_detect_fixed(s, p$id), info = info)
+    expect_true(stri_detect_fixed(s, class(p)[1L]), info = info)
+  }
+})
+
+
+
+

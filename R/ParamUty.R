@@ -45,12 +45,5 @@ ParamUty = R6Class(
     },
 
     map_unitint_to_values = function(x) stop("Not possible!")
-  ),
-
-  private = list(
-    get_range_string = function() "",
-
-    get_type_string = function() "u"
-
   )
 )

@@ -89,17 +89,10 @@ Parameter = R6Class("Parameter",
       if (name == "data") copy(value) else value
     },
 
-    print = function(...) {
-      catf("%s %s %s", self$id, private$get_type_string(), private$get_range_string())
-      # if (!is.null(self$special_vals)) {
-        # catf("+{special_vals}") #FIXME: Better Printer for special_vals!
-      # }
-      # if (!is.null(self$default)) {
-      #   catf(" (Default: %s)", as.character(self$default))
-      # }
-      if (!is.null(self$tags)) {
-        catf(" (Tags: %s)", paste(self$tags, collapse = ", "))
-      }
+    print = function(..., hide.cols = c("storage_type", "tags")) {
+      d = self$data
+      assert_subset(hide.cols, names(d))
+      print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
     },
 
     # takes a numeric vector from [0, 1] and maps it to a vector of <storage_type> of feasible values
@@ -121,13 +114,7 @@ Parameter = R6Class("Parameter",
   ),
 
   private = list(
-    .checker = NULL,
-
-    # return a short string, displaying the range of the param, called in super$print
-    get_range_string = function() stop("abstract"),
-
-    # return 1char, displaying type param, called in super$print
-    get_type_string = function() stop("abstract")
+    .checker = NULL
   )
 )
 
