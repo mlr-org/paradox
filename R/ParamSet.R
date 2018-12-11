@@ -81,7 +81,9 @@ ParamSet = R6Class("ParamSet",
       } else {
         self$data = data.table()
       }
-      self$id = assert_string(id)
+      assert_string(id)
+      assert_names(id, type = "strict")
+      self$id = id
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       # create depnodes as graph with allocated nodes, but no current edges
       private$.dep_nodes = vector("list", length(params))

@@ -25,11 +25,12 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
     stop("You must specify resolution (x)or param_resolutions!")
 
   if (!is.null(resolution)) {
+    # create param_resolutions list, constant entry, same length as ids and named with ids
     resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
     param_resolutions = set_names(rep.int(resolution, param_set$length), param_set$ids)
   } else {
     param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
-    assert_names(names(param_resolutions), "strict", permutation.of = param_set$ids)
+    assert_names(names(param_resolutions), permutation.of = param_set$ids)
   }
 
   # overwrite the resolution for categorical stuff with the number of levels they have

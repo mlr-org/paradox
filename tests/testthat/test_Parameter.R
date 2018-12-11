@@ -26,4 +26,7 @@ test_that("special_vals work for all Parameter subclasses", {
   }
 })
 
+test_that("we cannot create Params with non-strict R names", {
+  expect_error(ParamInt$new(id = "$foo") , "naming convention")
+})
 

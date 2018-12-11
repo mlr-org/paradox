@@ -33,6 +33,7 @@ Parameter = R6Class("Parameter",
     initialize = function(id, storage_type, lower, upper, values, special_vals, checker, default, tags) {
       # FIXME: really finish all assertions and document them
       assert_string(id)
+      assert_names(id, type = "strict")
       assert_choice(storage_type, c("double", "integer", "character", "logical", "list"))
       # FIXME: for some args we might push the assert back up to toplevel classes. eg lower cannot be NA for numerical params
       assert_number(lower, na.ok = TRUE)

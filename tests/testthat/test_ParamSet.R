@@ -178,3 +178,7 @@ test_that("ParamSet$check", {
   expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
 })
 
+test_that("we cannot create ParamSet with non-strict R names", {
+  expect_error(ParamSet$new(id = "$foo") , "naming convention")
+})
+
