@@ -178,7 +178,12 @@ ParamSet = R6Class("ParamSet",
       ids = self$ids
       assert_list(xs)
       assert_names(names(xs), permutation.of = ids)
-      all(map_lgl(ids, function(id) self$get_param(id)$check(xs[[id]])))
+      for (id in ids) {
+        ch = self$get_param(id)$check(xs[[id]])
+        if (test_string(ch)) # we failed a check, return string
+          return(ch)
+      }
+      return(TRUE) # we passed all checks
     },
 
     test = function(xs) makeTestFunction(self$check)(xs),
