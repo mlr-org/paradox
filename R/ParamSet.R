@@ -93,7 +93,7 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
-    # list --> list, named
+    # FIXME: list --> list, named
     transform = function(x) {
       x = ensure_data_table(x)
       assert_set_equal(names(x), self$ids)
@@ -109,7 +109,9 @@ ParamSet = R6Class("ParamSet",
     },
 
     # FIXME: subset und fix trennen
-
+    # FIXME: maybe we can actually add a ParamFix (name etwas ungeil aber 3 chars?), ParamConst? (5 :( ) ParamCon (no)
+    # FIXME: mention to user that subset can destroy trafos. you ahave these options a) only subset if no trafo there b)
+    # manually set trafo after subset c) "fix" params to values so you can still use them
     # in: * ids (character)
     #       ids of Parameter
     #     * fix (named list)
