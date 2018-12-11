@@ -72,6 +72,7 @@ ParamSet = R6Class("ParamSet",
 
    # FIXME: constructor which takes a dt?
 
+    # this does a deep copy of all passed param objects
     initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
       assert_list(params, types = "Parameter")
       if (length(params) > 0L) {
@@ -146,6 +147,7 @@ ParamSet = R6Class("ParamSet",
         trafo = new_trafo)
     },
 
+    # FIXME: does this also deep copy? probably yes
     combine = function(param_set) {
       if (self$length == 0) {
         return(param_set$clone())

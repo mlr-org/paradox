@@ -195,5 +195,11 @@ test_that("ParamSet$print", {
   expect_false(stri_detect_fixed(s, "ParamInt"))
 })
 
-
-
+test_that("ParamSet does a deep copy of params on construction", {
+  p = ParamDbl$new("x", lower = 1, upper = 3)
+  ps = ParamSet$new(list(p))
+  p$data$lower = 2
+  expect_equal(p$lower, 2)
+  expect_equal(ps$lowers, c(x = 1))
+  expect_equal(ps$get_param("x")$lower, 1)
+})
