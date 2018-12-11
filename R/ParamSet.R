@@ -250,7 +250,7 @@ ParamSet = R6Class("ParamSet",
       if (is.null(ids))
         ids = sids
       assert_subset(ids, sids)
-      map(ids, self$get_param)
+      set_names(map(ids, self$get_param), ids)
     }
   ),
 
