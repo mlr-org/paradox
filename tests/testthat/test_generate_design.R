@@ -13,8 +13,6 @@ test_that("generate_design_grid", {
     print(info)
     d = generate_design_grid(ps, resolution = 3)
     expect_data_table(d, any.missing = FALSE, info = info)
-    # expect_equal(nrow(xg), 3^ps$length, info = info)
-    # expect_true(all(xg[, ps$test(.SD), by = seq_len(nrow(xg))]$V1), info = info)
     # xgt = ps$transform(xg)
     # expect_data_table(xgt, nrows = nrow(xg), info = info)
 
