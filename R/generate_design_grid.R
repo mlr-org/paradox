@@ -23,14 +23,14 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
 
   if (!xor(is.null(resolution), is.null(param_resolutions)))
     stop("You must specify resolution (x)or param_resolutions!")
-
+  ids = param_set$ids
   if (!is.null(resolution)) {
     # create param_resolutions list, constant entry, same length as ids and named with ids
     resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
-    param_resolutions = set_names(rep.int(resolution, param_set$length), param_set$ids)
+    param_resolutions = set_names(rep.int(resolution, param_set$length), ids)
   } else {
     param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
-    assert_names(names(param_resolutions), permutation.of = param_set$ids)
+    assert_names(names(param_resolutions), permutation.of = ids)
   }
 
   # overwrite the resolution for categorical stuff with the number of levels they have
@@ -42,7 +42,8 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
   res = imap(grid_vec, function(value, id) param_set$get_param(id)$map_unitint_to_values(x = value))
+  # FIXME: what happens when a vector is called "sorted"?
+  res$sorted = FALSE
   res = do.call(CJ, res)
-
   return(res)
 }

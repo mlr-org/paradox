@@ -13,15 +13,23 @@ test_that("generate_design_grid", {
     print(info)
     d = generate_design_grid(ps, resolution = 3)
     expect_data_table(d, any.missing = FALSE, info = info)
-    # xgt = ps$transform(xg)
-    # expect_data_table(xgt, nrows = nrow(xg), info = info)
-
-    # p_res = ps$nlevels
-    # p_res[is.na(p_res)] = 2
-    # xgp = generate_design_grid(ps, param_resolutions = p_res)
-    # expect_data_table(xgp, any.missing = FALSE, info = info)
-    # expect_true(nrow(xgp) == prod(p_res), info = info)
+    # compute length of design as product of resolution (for all numbers) * product of nlevels
+    nrows = ps$nlevels
+    nrows[is.na(nrows)] = 3L
+    nrows = prod(nrows)
+    expect_equal(nrow(d), nrows, info = info)
+    expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible
   }
+})
+
+test_that("check generate_design_grid against concrete expectation", {
+
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1, upper = 3),
+    ParamFct$new("y", values = c("a", "b"))
+  ))
+  d = generate_design_grid(ps, resolution = 3)
+  expect_equal(d, data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b")))
 })
 
 
