@@ -21,6 +21,11 @@ Resolution given per parameter, as named integer vector.}
 }
 \description{
 Generate a grid with specified resolution in the parameter space.
-NB: The resolution for categorical parameters is ignored, these paramters
+NB: The resolution for categorical parameters is ignored, these parameters
 always produce a grid over all their valid levels.
 }
+\seealso{
+Other generate_design: \code{\link{generate_design_lhs}},
+  \code{\link{generate_design_random}}
+}
+\concept{generate_design}
