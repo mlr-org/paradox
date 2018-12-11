@@ -71,5 +71,11 @@ A \code{\link[R6]{R6Class}} to represent set of parameters.
 }
 }
 
+\section{Further comments}{
+
+Note that you can construct an empty ParamSet by passing an empty list during construction.
+Such a ParamSet has length 0, and getter will always return NULL.
+}
+
 \concept{ParamSet}
 \keyword{datasets}
