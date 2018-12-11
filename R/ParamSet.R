@@ -203,21 +203,34 @@ ParamSet = R6Class("ParamSet",
       dnp$children = c(dnp$children, list(dnc))
     },
 
-    print = function(...) {
-      cat("ParamSet:", self$id, "\n")
-      cat("Parameters:", "\n")
-      for (param in self$params) {
-        param$print(...)
-      }
-      if (!is.null(self$tags)) {
-        cat("Tags are set:", "\n")
-        print(self$tags)
-      }
-      if (!is.null(self$trafo)) {
-        cat("Trafo is set:", "\n")
-        print(self$trafo)
+
+    # printer, simply prints datatable contents, with the option to hide some cols
+    print = function(..., hide.cols = c("storage_type", "tags")) {
+      catf("ParamSet:", self$id)
+      if (self$is_empty) {
+        catf("Empty.")
+      } else {
+        d = self$data
+        assert_subset(hide.cols, names(d))
+        print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
     },
+
+    # print = function(...) {
+    #   cat("ParamSet:", self$id, "\n")
+    #   cat("Parameters:", "\n")
+    #   for (param in self$params) {
+    #     param$print(...)
+    #   }
+    #   if (!is.null(self$tags)) {
+    #     cat("Tags are set:", "\n")
+    #     print(self$tags)
+    #   }
+    #   if (!is.null(self$trafo)) {
+    #     cat("Trafo is set:", "\n")
+    #     print(self$trafo)
+    #   }
+    # },
 
 
     # return a Parameter of the set, by id
@@ -241,6 +254,7 @@ ParamSet = R6Class("ParamSet",
 
   active = list(
     length = function() nrow(self$data),
+    is_empty = function() self$length == 0L,
     ids = function() self$data$id,
     pclasses = function() private$get_col_with_idnames("pclass"),
     storage_types = function() private$get_col_with_idnames("storage_type"),

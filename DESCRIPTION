@@ -27,7 +27,8 @@ Suggests:
     knitr,
     rmarkdown,
     testthat,
-    roxygen2
+    roxygen2,
+    stringi
 RoxygenNote: 6.1.1
 VignetteBuilder: knitr
 Encoding: UTF-8

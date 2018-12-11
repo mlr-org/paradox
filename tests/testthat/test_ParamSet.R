@@ -182,3 +182,18 @@ test_that("we cannot create ParamSet with non-strict R names", {
   expect_error(ParamSet$new(id = "$foo") , "naming convention")
 })
 
+test_that("ParamSet$print", {
+  ps = th_paramset_empty()
+  expect_output(print(ps), "ParamSet:")
+  expect_output(print(ps), "Empty")
+  ps = th_paramset_numeric()
+  expect_output(print(ps), "ParamSet:")
+  s = capture_output(print(ps))
+  expect_true(stri_detect_fixed(s, "ParamInt"))
+  expect_true(stri_detect_fixed(s, "ParamDbl"))
+  s = capture_output(print(ps, hide.cols = c("pclass")))
+  expect_false(stri_detect_fixed(s, "ParamInt"))
+})
+
+
+
