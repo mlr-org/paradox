@@ -19,3 +19,8 @@ LHS functions are implemented in package \pkg{lhs}.}
 \description{
 Generate a space-filling design using Latin hypercube sampling.
 }
+\seealso{
+Other generate_design: \code{\link{generate_design_grid}},
+  \code{\link{generate_design_random}}
+}
+\concept{generate_design}

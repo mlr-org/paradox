@@ -5,7 +5,7 @@
 #'
 #' @description
 #' Generate a grid with specified resolution in the parameter space.
-#' NB: The resolution for categorical parameters is ignored, these paramters
+#' NB: The resolution for categorical parameters is ignored, these parameters
 #' always produce a grid over all their valid levels.
 #'
 #' @param param_set [\code{\link{ParamSet}}].
@@ -17,6 +17,7 @@
 #' @return [\code{\link[data.table]{data.table}}].
 #'
 #' @export
+#' @family generate_design
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
 
   #FIXME: cannot be called on untyped params

@@ -1,5 +1,21 @@
 context("generate_design")
 
+test_that("generate_design_random", {
+  ps_list = list(
+    th_paramset_full(),
+    # th_paramset_repeated(),
+    th_paramset_numeric(),
+    th_paramset_trafo()
+  )
+
+  for (ps in ps_list) {
+    info = ps$id
+    d = generate_design_random(ps, n = 5L)
+    expect_data_table(d, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
+    expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible
+  }
+})
+
 test_that("generate_design_grid", {
   ps_list = list(
     th_paramset_full(),

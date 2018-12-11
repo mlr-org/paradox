@@ -10,6 +10,7 @@
 #'   Function to use to generate a LHS sample.
 #'   LHS functions are implemented in package \pkg{lhs}.
 #' @export
+#' @family generate_design
 generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
   n = assert_count(n, positive = TRUE, coerce = TRUE)
   assert_function(lhs_function, args = c("n", "k"))
