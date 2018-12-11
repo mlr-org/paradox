@@ -4,6 +4,7 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent set of parameters.
 #'
+#'
 #' @section Member Variables:
 #'
 #' \describe{
@@ -55,6 +56,10 @@
 #'     The \code{tags} of each Parameter.}
 #' }
 #'
+#' @section Further comments:
+#' Note that you can construct an empty ParamSet by passing an empty list during construction.
+#' Such a ParamSet has length 0, and getter will always return NULL.
+#'
 #' @return [\code{\link{ParamSet}}].
 #' @family ParamSet
 #' @export
@@ -69,10 +74,13 @@ ParamSet = R6Class("ParamSet",
 
     initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
       assert_list(params, types = "Parameter")
-      self$data = rbindlist(map(params, "data"))
-      # we set index not key, so we dont resort the table
-      setindex(self$data, "id")
-      # names(params) = map_chr(params, "id") # ensure we have a named list, with par ids
+      if (length(params) > 0L) {
+        self$data = rbindlist(map(params, "data"))
+        # we set index not key, so we dont resort the table
+        setindex(self$data, "id")
+      } else {
+        self$data = data.table()
+      }
       self$id = assert_string(id)
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
       # create depnodes as graph with allocated nodes, but no current edges
@@ -166,6 +174,7 @@ ParamSet = R6Class("ParamSet",
 
     # check function that checks whether a named list is a feasible point from the set
     check = function(xs) {
+      assert(self$length > 0L) # we cannot really check feasible x for empty sets
       ids = self$ids
       assert_list(xs)
       assert_names(names(xs), permutation.of = ids)

@@ -3,7 +3,6 @@ context("ParamSet")
 test_that("methods and active bindings work", {
   ps_list = list(
     # FIXME: reenable these 2 sets
-    # th_paramset_empty(),
     th_paramset_full(),
     # th_paramset_repeated(),
     th_paramset_untyped(),
@@ -162,3 +161,11 @@ test_that("methods and active bindings work", {
 #   }
 
 # })
+
+test_that("empty paramset", {
+  ps = ParamSet$new()
+  expect_r6(ps, "ParamSet")
+  expect_equal(ps$length, 0)
+  expect_null(ps$lower)
+})
+
