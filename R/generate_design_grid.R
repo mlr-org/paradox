@@ -42,8 +42,6 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
   res = imap(grid_vec, function(value, id) param_set$get_param(id)$map_unitint_to_values(x = value))
-  # FIXME: what happens when a vector is called "sorted"?
-  res$sorted = FALSE
-  res = do.call(CJ, res)
+  res = do.call(function(...) CJ(..., sorted = FALSE), res) #FIXME: Will throw error if res has sorted column.
   return(res)
 }
