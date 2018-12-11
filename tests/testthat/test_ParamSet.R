@@ -203,3 +203,13 @@ test_that("ParamSet does a deep copy of params on construction", {
   expect_equal(ps$lowers, c(x = 1))
   expect_equal(ps$get_param("x")$lower, 1)
 })
+
+test_that("ParamSet$clone can be deep", {
+  p = ParamDbl$new("x", lower = 1, upper = 3)
+  ps1 = ParamSet$new(list(p))
+  ps2 = ps1$clone(deep = TRUE)
+  ps2$data$id = "foo"
+  expect_equal(ps2$ids, "foo")
+  expect_equal(ps1$ids, "x")
+})
+
