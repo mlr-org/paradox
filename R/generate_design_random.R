@@ -1,6 +1,7 @@
 #' @title Generate a random design.
 #'
 #' @description
+#' Generates a design with randomly drawn points.
 #'
 #' @param param_set [\code{\link{ParamSet}}].
 #' @param n [\code{integer(1)}]:\cr

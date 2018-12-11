@@ -2,6 +2,7 @@
 #' @import checkmate
 #' @import mlr3misc
 #' @importFrom R6 R6Class
+#' @importFrom stats runif
 #' @importFrom utils head tail getFromNamespace
 NULL
 
