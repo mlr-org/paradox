@@ -33,7 +33,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
   ),
 
   private = list(
-    as_dt_col = function(x) as_dt_cols(list(x), names = self$param$id)
+    as_dt_col = function(x) set_names(data.table(x), self$param$id)
   )
 
 )

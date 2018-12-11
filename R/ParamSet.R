@@ -95,16 +95,11 @@ ParamSet = R6Class("ParamSet",
 
     # FIXME: list --> list, named
     transform = function(x) {
-      x = ensure_data_table(x)
+      assert_list(x)
       assert_set_equal(names(x), self$ids)
       if (is.null(self$trafo))
         return(x)
-      # We require trafos to be vectorized! That's why we dont need the following
-      #.mapply(function(x) {
-      #  eval(self$trafo, envir = c(x, as.list(self$dictionary)))
-      #}, x, list())
       xs = self$trafo(x = x, tags = self$member_tags)
-      xs = ensure_data_table(xs)
       return(xs)
     },
 
