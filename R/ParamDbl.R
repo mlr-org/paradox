@@ -19,7 +19,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
       super$initialize(
         id = id,
-        storage_type = "double",
+        storage_type = "numeric",
         lower = lower,
         upper = upper,
         values = NULL,

@@ -121,21 +121,9 @@ ParamSet = R6Class("ParamSet",
     #       names = ids of Parameter
     #       values = values of respective param
     # out: ParamSet
-    subset = function(ids = NULL, fix = NULL) {
-      if (is.null(ids)) {
-        keep_ids = self$ids
-      } else {
-        assert_subset(ids, self$ids)
-        keep_ids = ids
-      }
-      if (!is.null(fix)) {
-        if (any(names(fix) %in% ids)) {
-          stop("You cannot keep ids and fix them at the same time!")
-        }
-        assert_list(fix, names = "named")
-        keep_ids = setdiff(keep_ids, names(fix))
-      }
-      # if we have fixed parameters we have to supply them to the trafo function in case there are needed there.
+    fix = function(fix) {
+      assert_list(fix, names = "named")
+      assert_subset(names(fix), self$ids)
       new_trafo = self$trafo
       if (!is.null(fix) && !is.null(new_trafo)) {
         assert_list(fix, names = "named")
@@ -147,11 +135,14 @@ ParamSet = R6Class("ParamSet",
           return(res)
         }
       }
-      ParamSet$new(
-        id = paste0(self$id,"_subset"),
-        params = self$params[keep_ids],
-        tags = self$tags,
-        trafo = new_trafo)
+    },
+
+    subset = function(ids) {
+      assert_subset(ids, self$ids)
+      new_paramset = self$clone()
+      new_paramset$id = paste0(new_paramset$id,"_subset")
+      new_paramset$data = new_paramset$data[ids, ]
+      return(new_paramset)
     },
 
     # FIXME: does this also deep copy? probably yes
