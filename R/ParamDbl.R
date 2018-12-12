@@ -33,16 +33,16 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
 
     # maps [0,1]*span + lower
     map_unitint_to_values = function(x) {
-      assert_true(self$has_finite_bounds)
+      assert_true(self$is_bounded)
       self$lower + x * self$span
     }
   ),
 
   active = list(
     range = function() c(self$lower, self$upper),
-    has_finite_bounds = function() all(is.finite(self$range)),
+    is_bounded = function() all(is.finite(self$range)),
     center = function() {
-      assert_true(self$has_finite_bounds)
+      assert_true(self$is_bounded)
       (self$lower + self$upper) / 2
     },
     span = function() self$upper - self$lower

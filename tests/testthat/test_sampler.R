@@ -31,10 +31,10 @@ test_that("multivariate", {
 
 test_that("sampling of number requires finite bounds", {
   p = ParamInt$new(id = "x", lower = 1)
-  s = expect_error(Sampler1DIntUnif$new(p), "has_finite_bounds")
+  s = expect_error(Sampler1DIntUnif$new(p), "is_bounded")
 
   p = ParamDbl$new(id = "x", lower = 1)
-  s = expect_error(Sampler1DDblUnif$new(p), "has_finite_bounds")
+  s = expect_error(Sampler1DDblUnif$new(p), "is_bounded")
 })
 
 

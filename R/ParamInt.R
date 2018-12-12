@@ -34,7 +34,7 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
     },
 
     map_unitint_to_values = function(x) {
-      assert_true(self$has_finite_bounds)
+      assert_true(self$is_bounded)
       r = self$range + c(-0.5, 0.5)
       res = as.integer(round(r[1] + x * diff(r)))
       res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
@@ -45,6 +45,6 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
 
   active = list(
     range = function() c(self$lower, self$upper),
-    has_finite_bounds = function() all(is.finite(self$range))
+    is_bounded = function() all(is.finite(self$range))
   )
 )

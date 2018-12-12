@@ -30,7 +30,7 @@ test_that("methods and active bindings work", {
     expect_list(ps$values, info = info)
     expect_names(names(ps$values), identical.to = ps$ids, info = info)
     # FIXME: reenable this
-    # expect_flag(ps$has_finite_bounds, info = info)
+    # expect_flag(ps$is_bounded, info = info)
     # expect_integer(ps$nlevels, any.missing = TRUE, info = info)
     # expect_list(ps$member_tags, names = "strict", any.missing = TRUE, info = info)
     # expect_output(print(th_paramset_full()), "ParamSet:", info = info)
@@ -212,4 +212,22 @@ test_that("ParamSet$clone can be deep", {
   expect_equal(ps2$ids, "foo")
   expect_equal(ps1$ids, "x")
 })
+
+test_that("ParamSet$is_bounded", {
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1, upper = 3)
+  ))
+  expect_true(ps$is_bounded)
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1, upper = 3),
+    ParamLgl$new("y")
+  ))
+  expect_true(ps$is_bounded)
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1),
+    ParamLgl$new("y")
+  ))
+  expect_false(ps$is_bounded)
+})
+
 

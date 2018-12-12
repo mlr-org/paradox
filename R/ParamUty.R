@@ -45,5 +45,10 @@ ParamUty = R6Class(
     },
 
     map_unitint_to_values = function(x) stop("Not possible!")
+  ),
+
+  active = list(
+    nlevels = function() 2L,
+    is_bounded = function() stop("undefined")
   )
 )

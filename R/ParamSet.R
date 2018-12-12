@@ -267,7 +267,8 @@ ParamSet = R6Class("ParamSet",
     values = function() private$get_col_with_idnames("values"),
     tags = function() private$get_col_with_idnames("tags"),
     ids_num = function() self$data[pclass %in% c("ParamDbl", "ParamInt"), id],
-    ids_cat = function() self$data[pclass %in% c("ParamFct", "ParamLgl"), id]
+    ids_cat = function() self$data[pclass %in% c("ParamFct", "ParamLgl"), id],
+    is_bounded = function() all(map_lgl(self$get_params(), function(p) p$is_bounded))
   ),
 
   private = list(

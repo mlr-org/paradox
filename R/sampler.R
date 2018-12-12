@@ -97,7 +97,7 @@ Sampler1DDblUnif = R6Class("Sampler1DDblUnif", inherit = Sampler1DNumber,
     initialize = function(param) {
       super$initialize(param, "ParamDbl", trunc = FALSE,
         rfun = function(n) runif(n, min = self$param$lower, max = self$param$upper))
-      assert_true(param$has_finite_bounds)
+      assert_true(param$is_bounded)
     }
   )
 )
@@ -119,7 +119,7 @@ Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DNumber,
       assert_number(sd, lower = 0)
       self$mean = mean
       self$sd = sd
-      assert_true(param$has_finite_bounds)
+      assert_true(param$is_bounded)
     }
   )
 )
@@ -130,7 +130,7 @@ Sampler1DIntUnif = R6Class("Sampler1DIntUnif", inherit = Sampler1DNumber,
     initialize = function(param) {
       super$initialize(param, "ParamInt", trunc = FALSE,
         rfun = function(n) as.integer(round(runif(n, self$param$lower - 0.5, max = param$upper + 0.5))))
-      assert_true(param$has_finite_bounds)
+      assert_true(param$is_bounded)
     }
   )
 )

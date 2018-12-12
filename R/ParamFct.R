@@ -39,6 +39,7 @@ ParamFct = R6Class(
   ),
 
   active = list(
-    nlevels = function() length(self$values)
+    nlevels = function() length(self$values),
+    is_bounded = function() TRUE
   )
 )

@@ -28,10 +28,10 @@ test_that("allowing inf as feasible value works", {
 })
 
 
-test_that("has_finite_bounds works", {
-  expect_true(ParamDbl$new(id = "x", lower = 1, upper = 10)$has_finite_bounds)
-  expect_false(ParamDbl$new(id = "x", lower = 1)$has_finite_bounds)
-  expect_false(ParamDbl$new(id = "x")$has_finite_bounds)
+test_that("is_bounded works", {
+  expect_true(ParamDbl$new(id = "x", lower = 1, upper = 10)$is_bounded)
+  expect_false(ParamDbl$new(id = "x", lower = 1)$is_bounded)
+  expect_false(ParamDbl$new(id = "x")$is_bounded)
 })
 
 

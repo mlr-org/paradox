@@ -29,6 +29,7 @@ ParamLgl = R6Class("ParamLgl",
   ),
 
   active = list(
-    nlevels = function() 2L
+    nlevels = function() 2L,
+    is_bounded = function() TRUE
   )
 )
