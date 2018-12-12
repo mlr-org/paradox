@@ -66,7 +66,7 @@
 ParamSet = R6Class("ParamSet",
   public = list(
     id = NULL,
-    data = NULL,  # a list of ParamNodes
+    data = NULL,  # a datatable which consists of rows of Param-data elements
     trafo = NULL, # function to transform the value before evaluation
     deps = NULL,
 
@@ -272,6 +272,11 @@ ParamSet = R6Class("ParamSet",
 
   private = list(
     .dep_nodes = NULL,
-    get_col_with_idnames = function(col) set_names(self$data[[col]], self$data[["id"]])
+
+    get_col_with_idnames = function(col) set_names(self$data[[col]], self$data[["id"]]),
+
+    deep_clone = function(name, value) {
+      if (name == "data") copy(value) else value
+    }
   )
 )
