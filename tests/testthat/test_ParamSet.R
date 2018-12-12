@@ -204,6 +204,15 @@ test_that("ParamSet does a deep copy of params on construction", {
   expect_equal(ps$get_param("x")$lower, 1)
 })
 
+test_that("ParamSet does a deep copy of param on add", {
+  p = ParamDbl$new("x", lower = 1, upper = 3)
+  ps = ParamSet$new(list())$add_param(p)
+  p$data[, lower := 2]
+  expect_equal(p$lower, 2)
+  expect_equal(ps$lowers, c(x = 1))
+  expect_equal(ps$get_param("x")$lower, 1)
+})
+
 test_that("ParamSet$clone can be deep", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
   ps1 = ParamSet$new(list(p))
@@ -229,5 +238,18 @@ test_that("ParamSet$is_bounded", {
   ))
   expect_false(ps$is_bounded)
 })
+
+test_that("ParamSet$add_param", {
+  ps = ParamSet$new(list())
+  ps$add_param(ParamDbl$new("x", lower = 1))
+  expect_equal(ps$length, 1L)
+  expect_equal(ps$ids, "x")
+  expect_equal(ps$lowers, c(x = 1))
+  ps$add_param(ParamFct$new("y", values = c("a")))
+  expect_equal(ps$length, 2L)
+  expect_equal(ps$ids, c("x", "y"))
+  expect_equal(ps$lowers, c(x = 1, y = NA))
+})
+
 
 

@@ -94,6 +94,13 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
+    # add a param to the current self-set, deep copies it
+    add_param = function(p) {
+      assert_r6(p, "Parameter")
+      self$data = rbind(self$data, p$data)
+      return(self)
+    },
+
     # FIXME: list --> list, named
     transform = function(x) {
       assert_list(x)
