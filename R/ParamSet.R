@@ -183,11 +183,11 @@ ParamSet = R6Class("ParamSet",
     },
 
     test = function(xs) {
-      makeTest(self$check(xs))
+      makeTest(res = self$check(xs), check.fun = self$check)
     },
 
     assert = function(xs) {
-      makeAssertion(self$check(xs))
+      makeAssertion(x = xs, res = self$check(xs))
     },
 
     add_dependency = function(dep) {

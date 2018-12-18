@@ -22,7 +22,11 @@ ParamFix = R6Class(
       super$initialize(
         id = id,
         storage_type = storage_type,
-        checker = function(x) assert_true(identical(x, default)),
+        lower = NA_real_,
+        upper = NA_real_,
+        values = NULL,
+        special_vals = NULL,
+        checker = function(x) check_true(identical(x, default)),
         default = default,
         tags = tags
       )
