@@ -172,7 +172,7 @@ test_that("ParamSet$check", {
   ps = th_paramset_numeric()
   expect_true(ps$check(list(th_param_int = 5, th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
-  expect_error(ps$check(list(th_param_dbl = 5, new_param = 5)), "subset of")
+  expect_character(ps$check(list(th_param_dbl = 5, new_param = 5)), fixed = "subset of")
   expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
