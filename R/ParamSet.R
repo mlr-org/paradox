@@ -171,9 +171,14 @@ ParamSet = R6Class("ParamSet",
 
     # check function that checks whether a named list is a feasible point from the set
     check = function(xs) {
-      assert_list(xs)
-      if (length(xs) == 0) return(TRUE) # a empty list is always feasible
-      assert_names(names(xs), subset.of = self$ids)
+      ok = check_list(xs)
+      if (!isTRUE(ok))
+        return(ok)
+      if (length(xs) == 0)
+        return(TRUE) # a empty list is always feasible
+      ok = check_names(names(xs), subset.of = self$ids)
+      if (!isTRUE(ok))
+        return(ok)
       for (id in names(xs)) {
         ch = self$get_param(id)$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
@@ -186,8 +191,8 @@ ParamSet = R6Class("ParamSet",
       makeTest(res = self$check(xs))
     },
 
-    assert = function(xs) {
-      makeAssertion(x = xs, res = self$check(xs))
+    assert = function(xs, .var.name = vname(xs)) {
+      makeAssertion(xs, self$check(xs), .var.name, NULL)
     },
 
     add_dependency = function(dep) {
