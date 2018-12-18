@@ -16,7 +16,8 @@ ParamFix = R6Class(
   inherit = Parameter,
   public = list(
     initialize = function(id, storage_type, default, tags = NULL) {
-      assert_true(length(default), 1)
+      assert_atomic(default)
+      assert_true(length(default) == 1)
       assert_class(default, storage_type)
       super$initialize(
         id = id,
