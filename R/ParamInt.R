@@ -45,6 +45,7 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
 
   active = list(
     range = function() c(self$lower, self$upper),
-    is_bounded = function() all(is.finite(self$range))
+    is_bounded = function() all(is.finite(self$range)),
+    nlevels = function() diff(self$range)
   )
 )
