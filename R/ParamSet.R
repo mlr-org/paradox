@@ -184,10 +184,10 @@ ParamSet = R6Class("ParamSet",
 
       # check dependencies
       if (length(self$deps) > 0) {
-        for (dep in deps) {
+        for (dep in self$deps) {
           dep_res = dep$condition$eval(xs[[dep$parent_id]])
           if (isFALSE(dep_res) && dep$node_id %in% names(xs)) {
-            return(sprintf("Parameter %s is present, but dependency %s is not fulfilled.", dep$node_id, dep$id))
+            return(sprintf("Parameter %s is present, but condition %s is not fulfilled.", dep$node_id, dep$condition$id))
           }
         }
       }
