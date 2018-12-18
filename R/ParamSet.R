@@ -69,7 +69,7 @@ ParamSet = R6Class("ParamSet",
     id = NULL,
     data = NULL,  # a datatable which consists of rows of Param-data elements
     trafo = NULL, # function to transform the value before evaluation
-    deps = NULL,
+    deps = NULL, # a list of Dependency objects
 
    # FIXME: constructor which takes a dt?
 
@@ -87,12 +87,6 @@ ParamSet = R6Class("ParamSet",
       assert_names(id, type = "strict")
       self$id = id
       self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
-      # create depnodes as graph with allocated nodes, but no current edges
-      private$.dep_nodes = vector("list", length(params))
-      names(private$.dep_nodes) = names(params)
-      for (p in params) {
-        private$.dep_nodes[[p$id]] = DependencyNode$new(p)
-      }
     },
 
     # add a param to the current self-set, deep copies it
@@ -171,6 +165,7 @@ ParamSet = R6Class("ParamSet",
 
     # check function that checks whether a named list is a feasible point from the set
     check = function(xs) {
+
       ok = check_list(xs)
       if (!isTRUE(ok))
         return(ok)
@@ -179,11 +174,24 @@ ParamSet = R6Class("ParamSet",
       ok = check_names(names(xs), subset.of = self$ids)
       if (!isTRUE(ok))
         return(ok)
+
+      # check each parameters feasibility
       for (id in names(xs)) {
         ch = self$get_param(id)$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
           return(paste0(id,": ",ch))
       }
+
+      # check dependencies
+      if (length(self$deps) > 0) {
+        for (dep in deps) {
+          dep_res = dep$condition$eval(xs[[dep$parent_id]])
+          if (isFALSE(dep_res) && dep$node_id %in% names(xs)) {
+            return(sprintf("Parameter %s is present, but dependency %s is not fulfilled.", dep$node_id, dep$id))
+          }
+        }
+      }
+
       return(TRUE) # we passed all checks
     },
 
@@ -197,15 +205,12 @@ ParamSet = R6Class("ParamSet",
 
     add_dependency = function(dep) {
       assert_r6(dep, "Dependency")
+      # check that dependency makes sense
+      assert_choice(dep$parent_id, self$ids)
+      assert_choice(dep$node_id, self$ids)
       # add dependency to member list
       self$deps = c(self$deps, list(dep))
-      # connect subordinate to super param in depnode graph
-      dnc = private$.dep_nodes[[dep$child$id]]
-      dnp = private$.dep_nodes[[dep$parent$id]]
-      dnc$parents = c(dnc$parents, list(dnp))
-      dnp$children = c(dnp$children, list(dnc))
     },
-
 
     # printer, simply prints datatable contents, with the option to hide some cols
     print = function(..., hide.cols = c("storage_type", "tags")) {

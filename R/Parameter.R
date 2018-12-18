@@ -58,8 +58,8 @@ Parameter = R6Class("Parameter",
     },
 
     check = function(x) {
-      #FIXME: shuld use purrr::has_elemehnt, opened issue in mlr3misc
-      if(!is.null(self$special_vals) && any(map_lgl(self$special_vals, identical, x)))
+      #FIXME: shuld use purrr::has_element, opened issue in mlr3misc
+      if (!is.null(self$special_vals) && any(map_lgl(self$special_vals, identical, x)))
         return(TRUE)
       private$.checker(x)
     },

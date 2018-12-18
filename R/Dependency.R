@@ -1,39 +1,20 @@
-
-
 Dependency = R6Class("Dependency",
   public = list(
 
     # member variables
-    child = NULL, # the subordinate param
-    parent = NULL, # the (categ) parent param, that the child depends on
+    node_id = NULL, # thie param that is dependent
+    parent_id = NULL, # the (categ) parent param, that this node depends on
     condition = NULL,
 
     # constructor
-    initialize = function(child, parent, condition) {
-      assert_r6(child, "Parameter")
-      assert_r6(parent, "ParamFct")
+    initialize = function(node_id, parent_id, condition) {
+      assert_character(node_id)
+      assert_character(parent_id)
       assert_r6(condition, "Condition")
-      self$child = child
-      self$parent = parent
+      self$node_id = child
+      self$parent_id = parent
       self$condition = condition
     }
   )
 )
-
-DependencyNode = R6Class("DependencyNode",
-  public = list(
-    # member variables
-    param = NULL,
-    children = NULL,
-    parents = NULL,
-
-    # constructor
-    initialize = function(param) {
-      self$param = param
-    }
-  )
-)
-
-
-
 
