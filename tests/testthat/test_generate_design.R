@@ -31,6 +31,7 @@ test_that("generate_design_grid", {
     # compute length of design as product of resolution (for all numbers) * product of nlevels
     nrows = ps$nlevels
     nrows[is.na(nrows)] = 3L
+    nrows = pmin(nrows, 3L)
     nrows = prod(nrows)
     expect_equal(nrow(d), nrows, info = info)
     expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible
