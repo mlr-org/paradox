@@ -177,14 +177,18 @@ ParamSet = R6Class("ParamSet",
       for (id in self$ids) {
         ch = self$get_param(id)$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
-          return(ch)
+          return(paste0(id,": ",ch))
       }
       return(TRUE) # we passed all checks
     },
 
-    test = function(xs) makeTestFunction(self$check)(xs),
+    test = function(xs) {
+      makeTest(self$check(xs))
+    },
 
-    assert = function(xs) makeAssertionFunction(self$check)(xs),
+    assert = function(xs) {
+      makeAssertion(self$check(xs))
+    },
 
     add_dependency = function(dep) {
       assert_r6(dep, "Dependency")
