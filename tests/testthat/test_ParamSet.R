@@ -38,6 +38,7 @@ test_that("methods and active bindings work", {
     expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
     expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
     expect_output(print(ps), "ParamSet:", info = info)
+    expect_true(ps$check(list()))
   }
 })
 
