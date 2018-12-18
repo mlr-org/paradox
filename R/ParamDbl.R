@@ -41,10 +41,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
   active = list(
     range = function() c(self$lower, self$upper),
     is_bounded = function() all(is.finite(self$range)),
-    center = function() {
-      assert_true(self$is_bounded)
-      (self$lower + self$upper) / 2
-    },
     span = function() self$upper - self$lower
   )
 )

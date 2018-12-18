@@ -114,7 +114,7 @@ Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DNumber,
       super$initialize(param, trunc = TRUE,
         rfun = function(n) rnorm(n, mean = mean , sd = sd))
       if (is.null(mean))
-        mean = self$param$center
+        mean = self$param$map_unitint_to_values(0.5)
       assert_number(mean)
       assert_number(sd, lower = 0)
       self$mean = mean
