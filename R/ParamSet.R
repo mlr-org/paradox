@@ -11,10 +11,11 @@
 #'   \item{params}{[\code{list}] \cr
 #'   List of the Params}
 #'   \item{trafo}{[\code{function(x, tags)}] \cr
-#'     A function that returns a list of transformed x values.
-#'     Has to work vectorized and also return untransformed x values.
-#'     The function takes a list \code{x} of all parameter values.
-#'     \code{tags} is a named list that contains the tags for each Param in \code{x}.}
+#'     \code{x} is a \code{data.table}, each row contains one parameter setting.
+#'     \code{tags} is a named list that contains the tags for each Param in \code{x}.
+#'     This function is called from \code{ParamSet$transform()}.
+#'     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
+#'     }
 #' }
 #'
 #' @section Methods:
@@ -73,14 +74,14 @@ ParamSet = R6Class("ParamSet",
    # FIXME: constructor which takes a dt?
 
     # this does a deep copy of all passed param objects
-    initialize = function(params = list(), id = "paramset", tags = NULL, trafo = NULL) {
+    initialize = function(params = list(), id = "paramset", trafo = NULL) {
       assert_list(params, types = "Parameter")
       if (length(params) > 0L) {
         self$data = rbindlist(map(params, "data"))
         # we set index not key, so we dont resort the table
         setindex(self$data, "id")
       } else {
-        self$data = data.table()
+        self$data = data.table(id = character(0L), pclass = character(0L), storage_type = character(0L), lower = numeric(0L), upper = numeric(0L), values = list(), special_vals = list(), default = list(), tags = list())
       }
       assert_string(id)
       assert_names(id, type = "strict")
@@ -95,57 +96,56 @@ ParamSet = R6Class("ParamSet",
     },
 
     # add a param to the current self-set, deep copies it
-    add_param = function(p) {
-      assert_r6(p, "Parameter")
-      self$data = rbind(self$data, p$data)
+    add_param = function(param) {
+      assert_r6(param, "Parameter")
+      self$data = rbind(self$data, param$data)
       return(self)
     },
 
-    # FIXME: list --> list, named
+    # takes data.table and calls self$trafo on this data.table. Returns data.table.
     transform = function(x) {
-      assert_list(x)
+      assert_data_table(x)
       assert_set_equal(names(x), self$ids)
       if (is.null(self$trafo))
         return(x)
       xs = self$trafo(x = x, tags = self$member_tags)
+      assert_data_table(xs)
       return(xs)
     },
 
-    # FIXME: subset und fix trennen
-    # FIXME: maybe we can actually add a ParamFix (name etwas ungeil aber 3 chars?), ParamConst? (5 :( ) ParamCon (no)
-    # FIXME: mention to user that subset can destroy trafos. you ahave these options a) only subset if no trafo there b)
-    # manually set trafo after subset c) "fix" params to values so you can still use them
-    # in: * ids (character)
-    #       ids of Parameter
-    #     * fix (named list)
-    #       names = ids of Parameter
-    #       values = values of respective param
+    # fix (named list of parameter values to keep fixed)
+    # creates a subset of self (cloned) with all params that are not mentioned in fix
+    # adds ParamFix param for all dropped Params
     # out: ParamSet
     fix = function(fix) {
       assert_list(fix, names = "named")
       assert_subset(names(fix), self$ids)
-      new_trafo = self$trafo
-      if (!is.null(fix) && !is.null(new_trafo)) {
-        assert_list(fix, names = "named")
-        old_trafo = force(self$trafo)
-        new_trafo = function(x, tags) {
-          x = cbind(x, as.data.table(fix))
-          res = old_trafo(x, tags)
-          res = x[, !names(fix), with = FALSE]
-          return(res)
-        }
+      fix_ids = names(fix)
+      keep_ids = setdiff(self$ids, fix_ids)
+      new_paramset = self$subset(keep_ids) # creates clone
+      for (fix_ids in fix_ids) {
+        param_old = self$get_param(keep_id)
+        param_fix = ParamFix$new(
+          id = paste0(param_old$id),
+          storage_type = param_old$storage_type,
+          default = fix[[keep_id]],
+          tags = param_old$tags
+        )
+        new_paramset$add_param(param_fix)
       }
+      return(new_paramset)
     },
 
+    # ids to keep in a cloned ParamSet
     subset = function(ids) {
       assert_subset(ids, self$ids)
       new_paramset = self$clone()
       new_paramset$id = paste0(new_paramset$id,"_subset")
-      new_paramset$data = new_paramset$data[ids, ]
+      new_paramset$data = new_paramset$data[ids, on = "id"]
       return(new_paramset)
     },
 
-    # FIXME: does this also deep copy? probably yes
+    # returnes a cloned param_set of both
     combine = function(param_set) {
       if (self$length == 0) {
         return(param_set$clone())
@@ -155,19 +155,17 @@ ParamSet = R6Class("ParamSet",
       if (length(intersect(self$ids, param_set$ids)) > 0) {
         stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
       }
-      new_trafo = self$trafo %??% param_set$trafo
-      if (!is.null(self$trafo) && !is.null(param_set$trafo)) {
-        new_trafo = function(x, tags) {
-          x = self$trafo(x, tags)
-          x = param_set$trafo(x, tags)
-          return(x)
-        }
+      if (!is.null(param_set$trafo)) {
+        stop ("The new param_set can not have a trafo.")
       }
-      ParamSet$new(
+      if (!is.null(param_set$deps)) {
+        stop ("The new param_set can not have any dependency.")
+      }
+      result = ParamSet$new(
         id = paste0(self$id, "_", param_set$id),
-        params = c(self$params, param_set$params),
+        params = rbind(self$data, param_set$data),
         tags = union(self$tags, param_set$tags),
-        trafo = new_trafo
+        trafo = self$trafo,
       )
     },
 
@@ -207,28 +205,16 @@ ParamSet = R6Class("ParamSet",
       if (self$is_empty) {
         catf("Empty.")
       } else {
+        catf("Parameters:")
         d = self$data
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
+      if (!is.null(self$trafo)) {
+        catf("Trafo is set:")
+        print(self$trafo)
+      }
     },
-
-    # print = function(...) {
-    #   cat("ParamSet:", self$id, "\n")
-    #   cat("Parameters:", "\n")
-    #   for (param in self$params) {
-    #     param$print(...)
-    #   }
-    #   if (!is.null(self$tags)) {
-    #     cat("Tags are set:", "\n")
-    #     print(self$tags)
-    #   }
-    #   if (!is.null(self$trafo)) {
-    #     cat("Trafo is set:", "\n")
-    #     print(self$trafo)
-    #   }
-    # },
-
 
     # return a Parameter of the set, by id
     # FIXME: careful, this returns a reference! by chanhing that we might
@@ -266,7 +252,8 @@ ParamSet = R6Class("ParamSet",
     tags = function() private$get_col_with_idnames("tags"),
     ids_num = function() self$data[pclass %in% c("ParamDbl", "ParamInt"), id],
     ids_cat = function() self$data[pclass %in% c("ParamFct", "ParamLgl"), id],
-    is_bounded = function() all(map_lgl(self$get_params(), function(p) p$is_bounded))
+    is_bounded = function() all(map_lgl(self$get_params(), function(p) p$is_bounded)),
+    defaults = function() private$get_col_with_idnames("default")
   ),
 
   private = list(

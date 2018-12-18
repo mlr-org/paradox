@@ -34,7 +34,7 @@ Parameter = R6Class("Parameter",
       # FIXME: really finish all assertions and document them
       assert_string(id)
       assert_names(id, type = "strict")
-      assert_choice(storage_type, c("double", "integer", "character", "logical", "list"))
+      assert_choice(storage_type, c("numeric", "integer", "character", "logical", "list"))
       # FIXME: for some args we might push the assert back up to toplevel classes. eg lower cannot be NA for numerical params
       assert_number(lower, na.ok = TRUE)
       assert_number(upper, na.ok = TRUE)
@@ -43,16 +43,16 @@ Parameter = R6Class("Parameter",
       assert_character(tags, any.missing = TRUE, unique = TRUE, null.ok = TRUE)
 
       self$data = data.table(
-        id = id,                                                   # string
-        pclass = class(self)[[1]],                                 # string
-        storage_type = storage_type,                               # string
-        lower = lower,                                             # double, Inf, or NA
-        upper = upper,                                             # double, Inf, or NA
-        values = list(values),                                     # charvec or NULL
-        special_vals = list(special_vals),                         # list or NULL
+        id = id,                              # string
+        pclass = class(self)[[1]],            # string
+        storage_type = storage_type,          # string
+        lower = lower,                        # double, Inf, or NA
+        upper = upper,                        # double, Inf, or NA
+        values = list(values),                # charvec or NULL
+        special_vals = list(special_vals),    # list or NULL
         # FIXME: what if deafult is NULL?
-        default = list(default),                                   # any or NULL
-        tags = list(tags)                                          # charvec
+        default = list(default),              # any or NULL
+        tags = list(tags)                     # charvec
       )
       private$.checker = checker
     },
@@ -68,20 +68,19 @@ Parameter = R6Class("Parameter",
 
     test = function(x) makeTestFunction(self$check)(x),
 
-    # repeat this param n-times, return a ParamSet (named with <id>_rep)
+    # repeat this param n-times, return a list of Parameter (named with <id>_rep)
     rep = function(n) {
       assert_count(n)
       pid = self$id
       # get dt, copy it n times, change id and tags, then construct param from dt
       dt = self$data
       join_id = paste0(pid, "_rep")
-      pars = lapply(seq_len(n), function(i) {
+      lapply(seq_len(n), function(i) {
         dt2 = copy(dt)
         dt2$id = paste0(join_id, "_", i)
         dt2$tags[[1L]] = c(dt2$tags[[1L]], join_id)
         new_param_from_dt(dt2)
       })
-      ParamSet$new(pars, id = join_id)
     },
 
     deep_clone = function(name, value) {
@@ -110,7 +109,9 @@ Parameter = R6Class("Parameter",
       v = self$values
       if (is.null(v)) NA_integer_ else length(v)
     },
-    special_vals = function() self$data$special_vals[[1]]
+    special_vals = function() self$data$special_vals[[1]],
+    default = function() self$data$default[[1]],
+    is_bounded = function() stop("abstract")
   ),
 
   private = list(

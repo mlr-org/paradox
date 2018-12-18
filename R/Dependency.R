@@ -6,13 +6,16 @@ Dependency = R6Class("Dependency",
     # member variables
     child = NULL, # the subordinate param
     parent = NULL, # the (categ) parent param, that the child depends on
+    condition = NULL,
 
     # constructor
-    initialize = function(child, parent, expr) {
+    initialize = function(child, parent, condition) {
       assert_r6(child, "Parameter")
       assert_r6(parent, "ParamFct")
+      assert_r6(condition, "Condition")
       self$child = child
       self$parent = parent
+      self$condition = condition
     }
   )
 )

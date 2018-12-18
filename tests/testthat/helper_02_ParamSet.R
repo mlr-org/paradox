@@ -50,8 +50,8 @@ th_paramset_repeated = function() {
     id = 'th_paramset_repeated',
     params = c(
       list(th_param_nat(), th_param_fct()),
-      repeatParam(4L, th_param_dbl_na())
-      )
+      th_param_dbl_na()$rep(4L)
     )
-  }
+  )
+}
 

@@ -11,32 +11,29 @@
 #' }
 #'
 #' @export
-ParamFct = R6Class(
+ParamFix = R6Class(
   "ParamFix",
   inherit = Parameter,
   public = list(
-    initialize = function(id, default, special_vals = NULL, tags = NULL) {
+    initialize = function(id, storage_type, default, tags = NULL) {
+      assert_true(length(default), 1)
+      assert_class(default, storage_type)
       super$initialize(
         id = id,
-        storage_type = class(default),
-        special_vals = special_vals,
-        checker = function(x) check_choice(x, choices = self$values),
+        storage_type = storage_type,
+        checker = function(x) assert_true(identical(x, default)),
         default = default,
         tags = tags
       )
     },
 
-    # maps [0, 1/k] --> a, (1/k, 2/k] --> b, ..., ((k-1)/k, 1] --> z
-    # NB: this is a bit inconsistent for the first part
     map_unitint_to_values = function(x) {
-      res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
-      levels(res) = self$values
-      as.character(res)
+      rep(self$default, length(x))
     }
   ),
-
-  active = list(
-    nlevels = function() length(self$values),
-    is_bounded = function() TRUE
+   active = list(
+    nlevels = function() 1,
+    is_bounded = function() TRUE,
+    values = function() self$default
   )
 )

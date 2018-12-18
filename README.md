@@ -146,7 +146,7 @@ Things you can do on an all numeric ParamSet:
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
+    ParamReal$new(id = "x", lower = 0, upper = 1)$rep(2L)
   )
 )
 
@@ -179,7 +179,7 @@ ps$range
 ## 3: x_repeated_2     1     0
 ```
 
-The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
+The usage of `repeat_param` generates tags that indicate to which group the parameters belong to:
 
 
 ```r
@@ -282,7 +282,7 @@ Keep in mind that `z` stays untouched and remains after the transformation.
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamReal$new(id = "x", lower = 0, upper = 1))
+    repeat_param(2, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = function(x, dict, tags) {
     scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2)
@@ -320,7 +320,7 @@ ps = ParamSet$new(
     list(
       ParamFlag$new(id = "switch"),
       ParamInt$new(id = "z", lower = 1, upper = 4)),
-    repeatParam(4, ParamReal$new(id = "x", lower = 0, upper = 1))
+    repeat_param(4, ParamReal$new(id = "x", lower = 0, upper = 1))
   ),
   trafo = trafo_on_repeated_param(
     fun = function(x, dict, tags) {
