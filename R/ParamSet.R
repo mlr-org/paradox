@@ -123,12 +123,12 @@ ParamSet = R6Class("ParamSet",
       fix_ids = names(fix)
       keep_ids = setdiff(self$ids, fix_ids)
       new_paramset = self$subset(keep_ids) # creates clone
-      for (fix_ids in fix_ids) {
-        param_old = self$get_param(keep_id)
+      for (fix_id in fix_ids) {
+        param_old = self$get_param(fix_id)
         param_fix = ParamFix$new(
           id = paste0(param_old$id),
           storage_type = param_old$storage_type,
-          default = fix[[keep_id]],
+          default = fix[[fix_id]],
           tags = param_old$tags
         )
         new_paramset$add_param(param_fix)
@@ -147,11 +147,6 @@ ParamSet = R6Class("ParamSet",
 
     # returnes a cloned param_set of both
     combine = function(param_set) {
-      if (self$length == 0) {
-        return(param_set$clone())
-      } else if (param_set$length == 0) {
-        return(self$clone())
-      }
       if (length(intersect(self$ids, param_set$ids)) > 0) {
         stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
       }
@@ -161,12 +156,17 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(param_set$deps)) {
         stop ("The new param_set can not have any dependency.")
       }
+      if (self$length == 0) {
+        return(param_set$clone())
+      } else if (param_set$length == 0) {
+        return(self$clone())
+      }
       result = ParamSet$new(
         id = paste0(self$id, "_", param_set$id),
-        params = rbind(self$data, param_set$data),
-        tags = union(self$tags, param_set$tags),
         trafo = self$trafo,
       )
+      result$data = rbind(self$data, param_set$data)
+      return(result)
     },
 
     # check function that checks whether a named list is a feasible point from the set
@@ -183,7 +183,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     test = function(xs) {
-      makeTest(res = self$check(xs), check.fun = self$check)
+      makeTest(res = self$check(xs))
     },
 
     assert = function(xs) {

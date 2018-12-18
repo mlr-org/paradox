@@ -42,8 +42,88 @@ test_that("methods and active bindings work", {
   }
 })
 
-test_that("advanced methods work", {
+
+test_that("param subset in ParamSet works", {
+  # Define all the different subsets we want to try:
+  configs = list(
+    list(
+      ps = th_paramset_full(),
+      ids = c("th_param_int", "th_param_lgl"),
+      expected_ids = c("th_param_int", "th_param_lgl")
+    )
+  )
+  # Test the different combinations:
+  for (conf in configs) {
+    paramset_sub = conf$ps$subset(conf$ids)
+    expect_equal(paramset_sub$ids, conf$expected_ids)
+    s = SamplerUnif$new(paramset_sub)
+    #x = s$sample(2)
+    #expect_set_equal(colnames(x), conf$expected_ids)
+    #expect_true(paramset_sub$check(x[1,]))
+    #expect_true(paramset_sub$check(x[2,]))
+    #x_trafo = paramset_sub$transform(x)
+
+
+    #x = s$sample(1)
+    #expect_set_equal(colnames(x), conf$expected_ids)
+    #expect_true(paramset_sub$check(x))
+    #x_trafo = paramset_sub$transform(x)
+  }
+})
+
+test_that("param fix in ParamSet works", {
+  configs = list(
+    list(
+      ps = th_paramset_full(),
+      fix = list("th_param_int" = 1L)
+    ),
+    list(
+      ps = th_paramset_trafo(),
+      fix = list("th_param_dbl" = 1)
+    )
+  )
+  for (conf in configs) {
+    paramset_sub = conf$ps$fix(conf$fix)
+    expect_set_equal(paramset_sub$ids, conf$ps$ids)
+    expect_set_equal(names(which(paramset_sub$pclasses == "ParamFix")), names(conf$fix))
+    s = SamplerUnif$new(paramset_sub)
+    #x = s$sample(2)
+    #expect_set_equal(colnames(x), conf$expected_ids)
+    #expect_true(paramset_sub$check(x[1,]))
+    #expect_true(paramset_sub$check(x[2,]))
+    #x_trafo = paramset_sub$transform(x)
+
+
+    #x = s$sample(1)
+    #expect_set_equal(colnames(x), conf$expected_ids)
+    #expect_true(paramset_sub$check(x))
+    #x_trafo = paramset_sub$transform(x)
+  }
+})
+
+test_that("Combine of ParamSet work", {
+  # define some ParamSets we will join to the th_ ones
+  new_param_sets = list(
+    normal = ParamSet$new(
+      id = "new_param_set",
+      params = list(
+        ParamDbl$new("new_int", lower = 0L, upper = 10L)
+      )
+    ),
+    trafo = ParamSet$new(
+      id = "new_param_set_trafo",
+      params = list(
+        ParamDbl$new("new_real", lower = 0, upper = 10)
+      ),
+      trafo = function(x, tags) {
+        x$new_real = sqrt(x$new_real)
+        return(x)
+      }
+    )
+  )
+
   ps_list = list(
+    th_paramset_empty(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric(),
@@ -51,127 +131,40 @@ test_that("advanced methods work", {
   )
 
   for (ps in ps_list) {
-    s = SamplerUnif$new(ps)
-    x = s$sample(10)
-    expect_data_table(x, nrows = 10, any.missing = FALSE)
-    expect_equal(colnames(x), ps$ids)
-    expect_true(all(x[, ps$test(as.list(.SD)), by = seq_len(nrow(x))]$V1))
-    xt = ps$transform(x)
-    expect_data_table(xt, nrows = 10)
+    for (ps_new in new_param_sets) {
+      info = paste0("parset = ", ps$id, "-", ps_new$id)
+      if (is.null(ps_new$trafo)) {
+        ps_comb1 = ps$combine(ps_new)
+      } else {
+        expect_error(ps$combine(ps_new), regexp = "can not have a trafo", info = info)
+        break
+      }
+      if (is.null(ps$trafo)) {
+        ps_comb2 = ps_new$combine(ps)
+      } else {
+        expect_error(ps_new$combine(ps), regexp = "can not have a trafo", info = info)
+        break
+      }
 
-    x = lapply(ps$ids, function(x) runif(10))
-    names(x) = ps$ids
-    xd = ps$map_unitint_to_values(x)
-    expect_data_table(xd, nrows = 10, any.missing = FALSE)
-    expect_equal(colnames(xd), ps$ids)
-    # denorm can produce infeasible settings
-    # expect_true(all(x[, ps$test(.SD), by = seq_len(nrow(x))]$V1))
-    xdt = ps$transform(xd)
-    expect_data_table(xdt, nrows = 10)
+      expect_set_equal(ps_comb1$ids, ps_comb1$ids, info = info)
+      expect_set_equal(ps_comb1$ids, c(ps$ids, ps_new$ids), info = info)
+      s = SamplerUnif$new(ps_comb1)
+      x = s$sample(1)
+#      expect_data_table(x, info = info)
+#      expect_true(ps_comb1$check(x), info = info)
+#      expect_true(ps_comb2$check(x), info = info)
+#      xt1 = ps_comb1$transform(x)
+#      xt2 = ps_comb2$transform(x)[, colnames(xt1), with = FALSE]
+#      expect_equal(xt1, xt2, info = info)
+    }
   }
+
 })
-
-
-# test_that("param subset in ParamSet works", {
-#   # Define all the different subsets we want to try:
-#   configs = list(
-#     list(
-#       ps = th_paramset_full(),
-#       ids = c("th_param_int", "th_param_lgl"),
-#       expected_ids = c("th_param_int", "th_param_lgl"),
-#       fix = NULL
-#     ),
-#     list(
-#       ps = th_paramset_full(),
-#       expected_ids = c("th_param_dbl", "th_param_fct", "th_param_lgl"),
-#       fix = list("th_param_int" = 1L)
-#     ),
-#     list(
-#       ps = th_paramset_trafo(),
-#       ids = c("th_param_int"),
-#       expected_ids = c("th_param_int"),
-#       fix = list("th_param_dbl" = 1)
-#     ),
-#     list(
-#       ps = th_paramset_trafo(),
-#       ids = NULL,
-#       expected_ids = c("th_param_int"),
-#       fix = list("th_param_dbl" = 1)
-#     )
-#   )
-#   # Test the different combinations:
-#   for (conf in configs) {
-#     paramset_sub = conf$ps$subset(ids = conf$ids, fix = conf$fix)
-#     expect_equal(paramset_sub$ids, conf$expected_ids)
-#     s = SamplerUnif$new(paramset_sub)
-#     x = s$sample(2)
-#     expect_set_equal(colnames(x), conf$expected_ids)
-#     expect_true(paramset_sub$check(x[1,]))
-#     expect_true(paramset_sub$check(x[2,]))
-#     x_trafo = paramset_sub$transform(x)
-
-
-#     x = s$sample(1)
-#     expect_set_equal(colnames(x), conf$expected_ids)
-#     expect_true(paramset_sub$check(x))
-#     x_trafo = paramset_sub$transform(x)
-#   }
-# })
-
-# test_that("Combine of ParamSet work", {
-#   # define some ParamSets we will join to the th_ ones
-#   new_param_sets = list(
-#     normal = ParamSet$new(
-#       id = "new_param_set",
-#       params = list(
-#         ParamDbl$new("new_int", lower = 0L, upper = 10L)
-#       )
-#     ),
-#     trafo = ParamSet$new(
-#       id = "new_param_set_trafo",
-#       params = list(
-#         ParamDbl$new("new_real", lower = 0, upper = 10)
-#       ),
-#       trafo = function(x, tags) {
-#         x$new_real = sqrt(x$new_real)
-#         return(x)
-#       }
-#     )
-#   )
-
-#   ps_list = list(
-#     th_paramset_empty(),
-#     th_paramset_full(),
-#     th_paramset_repeated(),
-#     th_paramset_numeric(),
-#     th_paramset_trafo()
-#   )
-
-#   for (ps in ps_list) {
-#     for (ps_new in new_param_sets) {
-#       info = paste0("parset = ", ps$id, "-", ps_new$id)
-#       ps_comb1 = ps$combine(ps_new)
-#       ps_comb2 = ps_new$combine(ps)
-#       expect_set_equal(ps_comb1$ids, ps_comb1$ids, info = info)
-#       expect_set_equal(ps_comb1$ids, c(ps$ids, ps_new$ids), info = info)
-#       s = SamplerUnif$new(ps_comb1)
-#       x = s$sample(1)
-#       expect_data_table(x, info = info)
-#       expect_true(ps_comb1$check(x), info = info)
-#       expect_true(ps_comb2$check(x), info = info)
-#       xt1 = ps_comb1$transform(x)
-#       xt2 = ps_comb2$transform(x)[, colnames(xt1), with = FALSE]
-#       expect_equal(xt1, xt2, info = info)
-#     }
-#   }
-
-# })
 
 test_that("empty paramset", {
   ps = ParamSet$new()
   expect_r6(ps, "ParamSet")
   expect_equal(ps$length, 0)
-  expect_null(ps$lower)
 })
 
 
@@ -179,8 +172,10 @@ test_that("ParamSet$check", {
   ps = th_paramset_numeric()
   expect_true(ps$check(list(th_param_int = 5, th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
-  expect_error(ps$check(list(th_param_dbl = 5)), "permutation of") # incomplete list
+  expect_error(ps$check(list(th_param_dbl = 5, new_param = 5)), "subset of")
   expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
+  expect_true(ps$check(list(th_param_dbl = 5)))
+  expect_true(ps$check(list(th_param_int = 5)))
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {

@@ -38,4 +38,31 @@ test_that("sampling of number requires finite bounds", {
 })
 
 
+test_that("samping works", {
+  ps_list = list(
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_numeric(),
+    th_paramset_trafo()
+  )
 
+  for (ps in ps_list) {
+    s = SamplerUnif$new(ps)
+    #x = s$sample(10)
+    #expect_data_table(x, nrows = 10, any.missing = FALSE)
+    #expect_equal(colnames(x), ps$ids)
+    #expect_true(all(x[, ps$test(as.list(.SD)), by = seq_len(nrow(x))]$V1))
+    #xt = ps$transform(x)
+    #expect_data_table(xt, nrows = 10)
+
+    #x = lapply(ps$ids, function(x) runif(10))
+    #names(x) = ps$ids
+    #xd = ps$map_unitint_to_values(x)
+    #expect_data_table(xd, nrows = 10, any.missing = FALSE)
+    #expect_equal(colnames(xd), ps$ids)
+    # denorm can produce infeasible settings
+    # expect_true(all(x[, ps$test(.SD), by = seq_len(nrow(x))]$V1))
+    #xdt = ps$transform(xd)
+    #expect_data_table(xdt, nrows = 10)
+  }
+})
