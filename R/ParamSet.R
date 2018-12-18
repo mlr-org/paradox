@@ -174,7 +174,7 @@ ParamSet = R6Class("ParamSet",
       assert_list(xs)
       if (length(xs) == 0) return(TRUE) # a empty list is always feasible
       assert_names(names(xs), subset.of = self$ids)
-      for (id in self$ids) {
+      for (id in names(xs)) {
         ch = self$get_param(id)$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
           return(paste0(id,": ",ch))
