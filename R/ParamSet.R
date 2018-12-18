@@ -173,7 +173,7 @@ ParamSet = R6Class("ParamSet",
     check = function(xs) {
       assert_list(xs)
       if (length(xs) == 0) return(TRUE) # a empty list is always feasible
-      assert_names(names(xs), permutation.of = self$ids)
+      assert_names(names(xs), subset.of = self$ids)
       for (id in self$ids) {
         ch = self$get_param(id)$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
