@@ -70,11 +70,12 @@ ps$nlevels
 ### Numeric ParamSet
 
 Things you can do on an all numeric ParamSet:
+
 ```{r psnumeric}
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamDbl$new(id = "x", lower = 0, upper = 1))
+    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
   )
 )
 
@@ -83,7 +84,7 @@ ps$upper
 ps$range
 ```
 
-The usage of `repeatParam` generates tags that indicate to which group the parameters belong to:
+The usage of `Parameter$repeat()` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
 ps$member_tags
@@ -139,7 +140,7 @@ Keep in mind that `z` stays untouched and remains after the transformation.
 ps = ParamSet$new(
   params = c(
     list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    repeatParam(2, ParamDbl$new(id = "x", lower = 0, upper = 1))
+    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
   ),
   trafo = function(x, dict, tags) {
     scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2)
@@ -166,8 +167,9 @@ ps = ParamSet$new(
   params = c(
     list(
       ParamLgl$new(id = "switch"),
-      ParamInt$new(id = "z", lower = 1, upper = 4)),
-    repeatParam(4, ParamDbl$new(id = "x", lower = 0, upper = 1))
+      ParamInt$new(id = "z", lower = 1, upper = 4)
+    ),
+    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(4L)
   ),
   trafo = trafo_on_repeated_param(
     fun = function(x, dict, tags) {

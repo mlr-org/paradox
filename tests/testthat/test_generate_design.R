@@ -3,7 +3,7 @@ context("generate_design")
 test_that("generate_design_random", {
   ps_list = list(
     th_paramset_full(),
-    # th_paramset_repeated(),
+    th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
@@ -19,14 +19,13 @@ test_that("generate_design_random", {
 test_that("generate_design_grid", {
   ps_list = list(
     th_paramset_full(),
-    # th_paramset_repeated(),
+    th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
 
   for (ps in ps_list) {
     info = ps$id
-    print(info)
     d = generate_design_grid(ps, resolution = 3)
     expect_data_table(d, any.missing = FALSE, info = info)
     # compute length of design as product of resolution (for all numbers) * product of nlevels
@@ -52,7 +51,7 @@ test_that("check generate_design_grid against concrete expectation", {
 test_that("generate_design_lhs", {
   ps_list = list(
     th_paramset_full(),
-    # th_paramset_repeated(),
+    th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
   )
@@ -62,13 +61,7 @@ test_that("generate_design_lhs", {
     d = generate_design_lhs(ps, 10)
     expect_data_table(d, nrows = 10, any.missing = FALSE, info = info)
     xs = mlr3misc::transpose(d)
-    # FIXME: the next test seesm unfinished
-    all(map_lgl(xs, ps$test))
-    # FIXME: the next lines should not be here, they test transform and design_to_list
-    # xlt = ps$transform(xl)
-    # expect_data_table(xlt, nrows = 10)
-    # xltl = design_to_list(xlt)
-    # expect_list(xltl, len = 10)
+    expect_true(all(map_lgl(xs, ps$test)))
   }
 })
 

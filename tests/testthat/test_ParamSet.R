@@ -2,9 +2,9 @@ context("ParamSet")
 
 test_that("methods and active bindings work", {
   ps_list = list(
-    # FIXME: reenable these 2 sets
+    th_paramset_empty(),
     th_paramset_full(),
-    # th_paramset_repeated(),
+    th_paramset_repeated(),
     th_paramset_untyped(),
     th_paramset_numeric(),
     th_paramset_trafo()
@@ -29,11 +29,15 @@ test_that("methods and active bindings work", {
     expect_names(names(ps$uppers), identical.to = ps$ids, info = info)
     expect_list(ps$values, info = info)
     expect_names(names(ps$values), identical.to = ps$ids, info = info)
-    # FIXME: reenable this
-    # expect_flag(ps$is_bounded, info = info)
-    # expect_integer(ps$nlevels, any.missing = TRUE, info = info)
-    # expect_list(ps$member_tags, names = "strict", any.missing = TRUE, info = info)
-    # expect_output(print(th_paramset_full()), "ParamSet:", info = info)
+    if (ps$id == "th_paramset_untyped") {
+      expect_error(ps$is_bounded, regexp = "undefined", info = info)
+    } else {
+      expect_flag(ps$is_bounded, info = info)
+    }
+    expect_integer(ps$nlevels, any.missing = TRUE, info = info)
+    expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
+    expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
+    expect_output(print(ps), "ParamSet:", info = info)
   }
 })
 
