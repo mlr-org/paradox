@@ -2,7 +2,6 @@
 
 export(ParamDbl)
 export(ParamFct)
-export(ParamFix)
 export(ParamInt)
 export(ParamLgl)
 export(ParamSet)

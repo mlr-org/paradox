@@ -27,19 +27,9 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
         values = NULL,
         special_vals = special_vals,
         default = default,
-        checker = function(x) checkInt(x, lower = self$lower, upper = self$upper),
         tags = tags
       )
       assert_true(lower <= upper)
-    },
-
-    map_unitint_to_values = function(x) {
-      assert_true(self$is_bounded)
-      r = self$range + c(-0.5, 0.5)
-      res = as.integer(round(r[1] + x * diff(r)))
-      res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
-      res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
-      res
     }
   ),
 
@@ -47,5 +37,23 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
     range = function() c(self$lower, self$upper),
     is_bounded = function() all(is.finite(self$range)),
     nlevels = function() diff(self$range)
+  ),
+
+  private = list(
+    .check = function(x) checkInt(x, lower = self$lower, upper = self$upper),
+
+    .map_unitint_to_values = function(x) {
+      #FIXME: Can we make this shorter?
+      assert_true(self$is_bounded)
+      r = self$range + c(-0.5, 0.5)
+      res = as.integer(round(r[1] + x * diff(r)))
+      res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
+      res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
+      res
+    },
+
+    .fix = function(x) {
+      self$lower = self$upper = x
+    }
   )
 )
