@@ -1,69 +1,112 @@
 #' @title ParamSet
-#' @format \code{\link{R6Class}} object
 #'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent set of parameters.
+#' @description A set of [Parameter] objects.
 #'
+#' @section Usage:
+#' * `ps = ParamSet$new(params, id = "paramset", trafo = NULL) \cr
+#'        list of [Parameter] objects, `character(1)`, `function(x, param_set)` -> [ParamSet]
+#'  * `ps$id` -> `character(1)`
+#'  * `ps$data` -> `data.frame`
+#'  * `ps$trafo` -> `function(x, param_set)`
+#'  * `ps$deps` -> list of [Dependency] objects
+#'  * `ps$length` ->
+#'  * `ps$is_empty` ->
+#'  * `ps$ids` ->
+#'  * `ps$pclasses` ->
+#'  * `ps$storage_types` ->
+#'  * `ps$lowers` ->
+#'  * `ps$uppers` ->
+#'  * `ps$nlevels` ->
+#'  * `ps$values` ->
+#'  * `ps$tags` ->
+#'  * `ps$is_bounded` ->
+#'  * `ps$defaults` ->
+#'  * `ps$add_param(param)` \cr
+#'    [Parameter] -> `invisible(self)`
+#'  + `ps$add_param_set(param_set)` \cr
+#'    [ParamSet] -> `invisible(self)`
+#'  * `ps$transform(x)` \cr
+#'    [data.table] -> [data.table]
+#'  * `ps$check(x)` \cr
+#'    `named [list]` -> `TRUE` or `character(1)`
+#'  * `ps$assert(xs)` \cr
+#'    `named [list]` -> `named [list]`
+#'  * `ps$test(xs)` \cr
+#'    `named [list]` -> `logical(1)`
+#'  * `ps$fix(xs)` \cr
+#'    `named [list]` -> `invisible(self)`
+#'  * `ps$subset(ids)` \cr
+#'    `character(n)` -> `invisible(self)`
+#'  * `ps$add_dependency(dep)` \cr
+#'    [Dependency] -> `invisible(self)`
+#'  * get_param(id) \cr
+#'    `character(1)` -> [Parameter]
+#'  * get_params(ids = NULL) \cr
+#'    `character(n)` -> list of [Parameter] objects
 #'
-#' @section Member Variables:
+#' @section Details:
 #'
-#' \describe{
-#'   \item{params}{[\code{list}] \cr
-#'   List of the Params}
-#'   \item{trafo}{[\code{function(x, param_set)}] \cr
-#'     \code{x} is a \code{data.table}, each row contains one parameter setting.
-#'     \code{param_set} is the param_set. Can be useful to access tags.
-#'     This function is called from \code{ParamSet$transform()}.
-#'     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
-#'     }
-#' }
+#' @section Arguments:
 #'
-#' @section Methods:
-#'
-#' \describe{
-#'   \item{generate_lhs_design(n, lhs_function)}{[\code{function}] \cr
-#'     Function to generate a LHS design.}
-#'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
-#'     \describe{
-#'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
-#'       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
-#'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
-#'     }
-#'   }
-#' }
-#'
-#' @section Active Bindings:
-#'
-#' \describe{
-#'   \item{ids}{[\code{character}] \cr
-#'     ids of the Parameters in this ParamSet.}
-#'   \item{storage_types}{[\code{character}] \cr
-#'     How is a Value of this Parameter stored as an R-object?}
-#'   \item{values}{[\code{list}] \cr
-#'     For any discrete Parameter return the values. Also works for Integers.}
-#'   \item{lower}{[\code{numeric}] \cr
-#'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
-#'   \item{upper}{[\code{numeric}] \cr
-#'     Same as for \code{lower}}
-#'   \item{param_classes}{[\code{character}] \cr
-#'     The \code{R6} class name of each Parameter.}
-#'   \item{range}{[\code{data.table}] \cr
-#'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
-#'   \item{length}{[\code{integer(1)}] \cr
-#'     The number of parameters.}
-#'   \item{nlevels}{[\code{integer}] \cr
-#'     For each discrete Parameter return the number of different values.}
-#'   \item{member_tags}{[\code{list}] \cr
-#'     The \code{tags} of each Parameter.}
-#' }
-#'
-#' @section Further comments:
-#' Note that you can construct an empty ParamSet by passing an empty list during construction.
-#' Such a ParamSet has length 0, and getter will always return NULL.
-#'
-#' @return [\code{\link{ParamSet}}].
-#' @family ParamSet
-#' @export
+#' @name ParamSet
+NULL
+# #' \describe{
+# #'   \item{params}{[\code{list}] \cr
+# #'   List of the Params}
+# #'   \item{trafo}{[\code{function(x, param_set)}] \cr
+# #'     \code{x} is a \code{data.table}, each row contains one parameter setting.
+# #'     \code{param_set} is the param_set. Can be useful to access tags.
+# #'     This function is called from \code{ParamSet$transform()}.
+# #'     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
+# #'     }
+# #' }
+# #'
+# #' @section Methods:
+# #'
+# #' \describe{
+# #'   \item{generate_lhs_design(n, lhs_function)}{[\code{function}] \cr
+# #'     Function to generate a LHS design.}
+# #'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
+# #'     \describe{
+# #'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
+# #'       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
+# #'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
+# #'     }
+# #'   }
+# #' }
+# #'
+# #' @section Active Bindings:
+# #'
+# #' \describe{
+# #'   \item{ids}{[\code{character}] \cr
+# #'     ids of the Parameters in this ParamSet.}
+# #'   \item{storage_types}{[\code{character}] \cr
+# #'     How is a Value of this Parameter stored as an R-object?}
+# #'   \item{values}{[\code{list}] \cr
+# #'     For any discrete Parameter return the values. Also works for Integers.}
+# #'   \item{lower}{[\code{numeric}] \cr
+# #'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
+# #'   \item{upper}{[\code{numeric}] \cr
+# #'     Same as for \code{lower}}
+# #'   \item{param_classes}{[\code{character}] \cr
+# #'     The \code{R6} class name of each Parameter.}
+# #'   \item{range}{[\code{data.table}] \cr
+# #'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
+# #'   \item{length}{[\code{integer(1)}] \cr
+# #'     The number of parameters.}
+# #'   \item{nlevels}{[\code{integer}] \cr
+# #'     For each discrete Parameter return the number of different values.}
+# #'   \item{member_tags}{[\code{list}] \cr
+# #'     The \code{tags} of each Parameter.}
+# #' }
+# #'
+# #' @section Further comments:
+# #' Note that you can construct an empty ParamSet by passing an empty list during construction.
+# #' Such a ParamSet has length 0, and getter will always return NULL.
+# #'
+# #' @return [\code{\link{ParamSet}}].
+# #' @family ParamSet
+# #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
     id = NULL,
@@ -93,7 +136,7 @@ ParamSet = R6Class("ParamSet",
     add_param = function(param) {
       assert_r6(param, "Parameter")
       self$data = rbind(self$data, param$data)
-      return(self)
+      invisible(self)
     },
 
     # takes data.table and calls self$trafo on this data.table. Returns data.table.
@@ -111,12 +154,12 @@ ParamSet = R6Class("ParamSet",
     # creates a subset of self (cloned) with all params that are not mentioned in fix
     # adds ParamFix param for all dropped Params
     # out: ParamSet
-    fix = function(fix) {
-      assert_list(fix, names = "named")
-      assert_subset(names(fix), self$ids)
-      for (param_id in names(fix)) {
+    fix = function(xs) {
+      assert_list(x, names = "named")
+      assert_subset(names(x), self$ids)
+      for (param_id in names(x)) {
         ps = self$get_param(param_id)
-        ps$fix(fix[[param_id]])
+        ps$fix(x[[param_id]])
       }
       invisible(self)
     },
@@ -201,6 +244,7 @@ ParamSet = R6Class("ParamSet",
       assert_choice(dep$node_id, self$ids)
       # add dependency to member list
       self$deps = c(self$deps, list(dep))
+      invisible(self)
     },
 
     # printer, simply prints datatable contents, with the option to hide some cols
