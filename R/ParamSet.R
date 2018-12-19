@@ -10,9 +10,9 @@
 #' \describe{
 #'   \item{params}{[\code{list}] \cr
 #'   List of the Params}
-#'   \item{trafo}{[\code{function(x, tags)}] \cr
+#'   \item{trafo}{[\code{function(x, param_set)}] \cr
 #'     \code{x} is a \code{data.table}, each row contains one parameter setting.
-#'     \code{tags} is a named list that contains the tags for each Param in \code{x}.
+#'     \code{param_set} is the param_set. Can be useful to access tags.
 #'     This function is called from \code{ParamSet$transform()}.
 #'     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
 #'     }
@@ -86,7 +86,7 @@ ParamSet = R6Class("ParamSet",
       assert_string(id)
       assert_names(id, type = "strict")
       self$id = id
-      self$trafo = assert_function(trafo, args = c("x", "tags"), null.ok = TRUE)
+      self$trafo = assert_function(trafo, args = c("x", "param_set"), null.ok = TRUE)
     },
 
     # add a param to the current self-set, deep copies it
@@ -102,7 +102,7 @@ ParamSet = R6Class("ParamSet",
       assert_set_equal(names(x), self$ids)
       if (is.null(self$trafo))
         return(x)
-      xs = self$trafo(x = x, tags = self$member_tags)
+      xs = self$trafo(x = x, param_set = self)
       assert_data_table(xs)
       return(xs)
     },
@@ -132,6 +132,7 @@ ParamSet = R6Class("ParamSet",
 
     # ids to keep in a cloned ParamSet
     subset = function(ids) {
+      #FIXME not clone here
       assert_subset(ids, self$ids)
       new_paramset = self$clone()
       new_paramset$id = paste0(new_paramset$id,"_subset")
@@ -140,9 +141,9 @@ ParamSet = R6Class("ParamSet",
     },
 
     # returnes a cloned param_set of both
-    combine = function(param_set) {
+    add_param_set = function(param_set) {
       if (length(intersect(self$ids, param_set$ids)) > 0) {
-        stop ("Combine failed, because new param_set has at least one Param with the same id as in this ParamSet.")
+        stop ("add_param_set failed, because new param_set has at least one Param with the same id as in this ParamSet.")
       }
       if (!is.null(param_set$trafo)) {
         stop ("The new param_set can not have a trafo.")
@@ -155,15 +156,14 @@ ParamSet = R6Class("ParamSet",
       } else if (param_set$length == 0) {
         return(self$clone())
       }
-      result = ParamSet$new(
-        id = paste0(self$id, "_", param_set$id),
-        trafo = self$trafo,
-      )
-      result$data = rbind(self$data, param_set$data)
-      return(result)
+      self$data = rbind(self$data, param_set$data)
+      invisible(self)
     },
 
     # check function that checks whether a named list is a feasible point from the set
+    # xs named list of SINGLE parameter setting
+    # can be subset of all possible params (as long as dependencies allow that)
+    # returns TRUE or character with reason if the check fails
     check = function(xs) {
 
       ok = check_list(xs)
@@ -270,8 +270,6 @@ ParamSet = R6Class("ParamSet",
   ),
 
   private = list(
-    .dep_nodes = NULL,
-
     get_col_with_idnames = function(col) set_names(self$data[[col]], self$data[["id"]]),
 
     deep_clone = function(name, value) {

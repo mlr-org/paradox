@@ -101,21 +101,21 @@ test_that("param fix in ParamSet works", {
   }
 })
 
-test_that("Combine of ParamSet work", {
+test_that("add_param_set of ParamSet work", {
   # define some ParamSets we will join to the th_ ones
   new_param_sets = list(
-    normal = ParamSet$new(
+    normal = function() ParamSet$new(
       id = "new_param_set",
       params = list(
         ParamDbl$new("new_int", lower = 0L, upper = 10L)
       )
     ),
-    trafo = ParamSet$new(
+    trafo = function() ParamSet$new(
       id = "new_param_set_trafo",
       params = list(
         ParamDbl$new("new_real", lower = 0, upper = 10)
       ),
-      trafo = function(x, tags) {
+      trafo = function(x, param_set) {
         x$new_real = sqrt(x$new_real)
         return(x)
       }
@@ -123,26 +123,28 @@ test_that("Combine of ParamSet work", {
   )
 
   ps_list = list(
-    th_paramset_empty(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric(),
-    th_paramset_trafo()
+    function() th_paramset_empty(),
+    function() th_paramset_full(),
+    function() th_paramset_repeated(),
+    function() th_paramset_numeric(),
+    function() th_paramset_trafo()
   )
 
-  for (ps in ps_list) {
-    for (ps_new in new_param_sets) {
+  for (psf in ps_list) {
+    for (ps_newf in new_param_sets) {
+      ps = psf()
+      ps_new = ps_newf()
       info = paste0("parset = ", ps$id, "-", ps_new$id)
       if (is.null(ps_new$trafo)) {
-        ps_comb1 = ps$combine(ps_new)
+        ps_comb1 = ps$add_param_set(ps_new)
       } else {
-        expect_error(ps$combine(ps_new), regexp = "can not have a trafo", info = info)
+        expect_error(ps$add_param_set(ps_new), regexp = "can not have a trafo", info = info)
         break
       }
       if (is.null(ps$trafo)) {
-        ps_comb2 = ps_new$combine(ps)
+        ps_comb2 = ps_new$add_param_set(ps)
       } else {
-        expect_error(ps_new$combine(ps), regexp = "can not have a trafo", info = info)
+        expect_error(ps_new$add_param_set(ps), regexp = "can not have a trafo", info = info)
         break
       }
 
