@@ -20,9 +20,9 @@ A \code{\link[R6]{R6Class}} to represent set of parameters.
 \describe{
   \item{params}{[\code{list}] \cr
   List of the Params}
-  \item{trafo}{[\code{function(x, tags)}] \cr
+  \item{trafo}{[\code{function(x, param_set)}] \cr
     \code{x} is a \code{data.table}, each row contains one parameter setting.
-    \code{tags} is a named list that contains the tags for each Param in \code{x}.
+    \code{param_set} is the param_set. Can be useful to access tags.
     This function is called from \code{ParamSet$transform()}.
     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
     }

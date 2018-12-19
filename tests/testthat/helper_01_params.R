@@ -9,3 +9,4 @@ th_param_dbl_na = function() ParamDbl$new(id = 'th_param_dbl_na', default = 0, l
 th_param_fct = function() ParamFct$new(id = 'th_param_fct', default = 'a', values = letters[1:3])
 th_param_lgl = function() ParamLgl$new(id = 'th_param_lgl', default = FALSE)
 th_param_uty = function() ParamUty$new(id = 'th_param_uty')
+th_param_fix = function() ParamFix$new(id = 'th_param_fix', default = 9L, storage_type = 'integer')

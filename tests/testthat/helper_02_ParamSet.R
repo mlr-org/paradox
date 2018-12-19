@@ -37,7 +37,7 @@ th_paramset_trafo = function() {
       th_param_int(),
       th_param_dbl()
       ),
-    trafo = function(x, tags) {
+    trafo = function(x, param_set) {
       x$th_param_int = x$th_param_int * 2L
       x$th_param_dbl = x$th_param_dbl * x$th_param_int
       return(x)
@@ -55,3 +55,16 @@ th_paramset_repeated = function() {
   )
 }
 
+th_paramset_complex = function() {
+  ps = th_paramset_full()
+  ps$add_param(th_param_fix())
+  ps$add_dependency(Dependency$new(
+    node_id = "th_param_fct", parent_id = "th_param_lgl",
+    condition = cond_equal(TRUE)
+  ))
+  ps$add_dependency(Dependency$new(
+    node_id = "th_param_dbl", parent_id = "th_param_fct",
+    condition = cond_choice(c("a", "b"))
+  ))
+  return(ps)
+}

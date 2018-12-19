@@ -15,10 +15,14 @@ ParamFix = R6Class(
   "ParamFix",
   inherit = Parameter,
   public = list(
-    initialize = function(id, storage_type, default, tags = NULL) {
+    initialize = function(id, storage_type = NULL, default, tags = NULL) {
       assert_atomic(default)
       assert_true(length(default) == 1)
-      assert_class(default, storage_type)
+      if (is.null(storage_type)) {
+        storage_type = class(default)[1]
+      } else {
+        assert_class(default, storage_type)
+      }
       super$initialize(
         id = id,
         storage_type = storage_type,
