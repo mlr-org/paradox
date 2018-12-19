@@ -24,23 +24,31 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
         upper = upper,
         values = NULL,
         special_vals = special_vals,
-        checker = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
         default = default,
         tags = tags
       )
       assert_true(lower <= upper)
-    },
-
-    # maps [0,1]*span + lower
-    map_unitint_to_values = function(x) {
-      assert_true(self$is_bounded)
-      self$lower + x * self$span
     }
   ),
 
   active = list(
     range = function() c(self$lower, self$upper),
     is_bounded = function() all(is.finite(self$range)),
-    span = function() self$upper - self$lower
+    span = function() self$upper - self$lower,
+    nlevels = function() ifelse(self$span == 0, 1, Inf)
+  ),
+
+  private = list(
+    .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+
+    # maps [0,1]*span + lower
+    .map_unitint_to_values = function(x) {
+      assert_true(self$is_bounded)
+      self$lower + x * self$span
+    },
+
+    .fix = function(x) {
+      self$upper = self$lower = x
+    }
   )
 )

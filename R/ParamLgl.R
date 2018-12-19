@@ -16,20 +16,37 @@ ParamLgl = R6Class("ParamLgl",
         lower = NA_real_,
         upper = NA_real_,
         values = NULL,
-        checker = function(x) check_flag(x),
         special_vals = special_vals,
         default = default,
         tags = tags
       )
-    },
-
-    map_unitint_to_values = function(x) {
-      x < 0.5 #FIXME: Do we have to take care of x==0.5?
     }
   ),
 
   active = list(
-    nlevels = function() 2L,
+    nlevels = function() ifelse(is.null(self$values), 2L, 1L),
     is_bounded = function() TRUE
+  ),
+
+  private = list(
+    .check = function(x) {
+      if (is.null(self$values)) {
+        check_flag(x)
+      } else {
+        assert_true(identical(x, self$values))
+      }
+    },
+
+    .map_unitint_to_values = function(x) {
+      if (is.null(self$values)) {
+        x < 0.5 #FIXME: Do we have to take care of x==0.5?
+      } else {
+        self$values
+      }
+    },
+
+    .fix = function(x) {
+      self$values = x
+    }
   )
 )

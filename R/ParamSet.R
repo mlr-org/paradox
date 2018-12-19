@@ -114,20 +114,11 @@ ParamSet = R6Class("ParamSet",
     fix = function(fix) {
       assert_list(fix, names = "named")
       assert_subset(names(fix), self$ids)
-      fix_ids = names(fix)
-      keep_ids = setdiff(self$ids, fix_ids)
-      new_paramset = self$subset(keep_ids) # creates clone
-      for (fix_id in fix_ids) {
-        param_old = self$get_param(fix_id)
-        param_fix = ParamFix$new(
-          id = paste0(param_old$id),
-          storage_type = param_old$storage_type,
-          default = fix[[fix_id]],
-          tags = param_old$tags
-        )
-        new_paramset$add_param(param_fix)
+      for (param_id in names(fix)) {
+        ps = self$get_param(param_id)
+        ps$fix(fix[[param_id]])
       }
-      return(new_paramset)
+      invisible(self)
     },
 
     # ids to keep in a cloned ParamSet
@@ -258,7 +249,7 @@ ParamSet = R6Class("ParamSet",
     uppers = function() private$get_col_with_idnames("upper"),
     nlevels = function() {
       # this is a bit slow, we can write worse code on the data dt for speed
-      nlevs = map_int(self$get_params(), function(p) p$nlevels)
+      nlevs = map_dbl(self$get_params(), function(p) p$nlevels)
       set_names(nlevs, self$ids)
     },
     values = function() private$get_col_with_idnames("values"),

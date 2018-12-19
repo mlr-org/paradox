@@ -30,7 +30,7 @@ Parameter = R6Class("Parameter",
     data = NULL,
 
     # constructor
-    initialize = function(id, storage_type, lower, upper, values, special_vals, checker, default, tags) {
+    initialize = function(id, storage_type, lower, upper, values, special_vals, default, tags) {
       # FIXME: really finish all assertions and document them
       assert_string(id)
       assert_names(id, type = "strict")
@@ -54,14 +54,13 @@ Parameter = R6Class("Parameter",
         default = list(default),              # any or NULL
         tags = list(tags)                     # charvec
       )
-      private$.checker = checker
     },
 
     check = function(x) {
       #FIXME: shuld use purrr::has_element, opened issue in mlr3misc
       if (!is.null(self$special_vals) && any(map_lgl(self$special_vals, identical, x)))
         return(TRUE)
-      private$.checker(x)
+      private$.check(x)
     },
 
     assert = function(x) makeAssertFunction(self$check)(x),
@@ -96,7 +95,15 @@ Parameter = R6Class("Parameter",
 
     # takes a numeric vector from [0, 1] and maps it to a vector of <storage_type> of feasible values
     # so that the values are regular distributed
-    map_unitint_to_values = function(x) stop("abstract")
+    map_unitint_to_values = function(x) {
+      assert_numeric(x, lower = 0, upper = 1)
+      private$.map_unitint_to_values(x)
+    },
+
+    fix = function(x) {
+      self$check(x)
+      private$.check(x)
+    }
   ),
 
   active = list(
@@ -115,7 +122,9 @@ Parameter = R6Class("Parameter",
   ),
 
   private = list(
-    .checker = NULL
+    .check = function(x) stop("abstract"),
+    .map_unitint_to_values = function(x) stop("abstract"),
+    .fix = function(x) stop("abstract")
   )
 )
 

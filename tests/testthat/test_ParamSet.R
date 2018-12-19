@@ -34,7 +34,7 @@ test_that("methods and active bindings work", {
     } else {
       expect_flag(ps$is_bounded, info = info)
     }
-    expect_integer(ps$nlevels, any.missing = TRUE, info = info)
+    expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
     expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
     expect_output(print(ps), "ParamSet:", info = info)
@@ -83,10 +83,10 @@ test_that("param fix in ParamSet works", {
     )
   )
   for (conf in configs) {
-    paramset_sub = conf$ps$fix(conf$fix)
-    expect_set_equal(paramset_sub$ids, conf$ps$ids)
-    expect_set_equal(names(which(paramset_sub$pclasses == "ParamFix")), names(conf$fix))
-    s = SamplerUnif$new(paramset_sub)
+    # paramset_sub = conf$ps$fix(conf$fix)
+    # expect_set_equal(paramset_sub$ids, conf$ps$ids)
+    # expect_set_equal(names(which(paramset_sub$pclasses == "ParamFix")), names(conf$fix))
+    # s = SamplerUnif$new(paramset_sub)
     #x = s$sample(2)
     #expect_set_equal(colnames(x), conf$expected_ids)
     #expect_true(paramset_sub$check(x[1,]))
@@ -134,13 +134,19 @@ test_that("add_param_set of ParamSet work", {
     for (ps_newf in new_param_sets) {
       ps = psf()
       ps_new = ps_newf()
+
       info = paste0("parset = ", ps$id, "-", ps_new$id)
+
       if (is.null(ps_new$trafo)) {
         ps_comb1 = ps$add_param_set(ps_new)
       } else {
         expect_error(ps$add_param_set(ps_new), regexp = "can not have a trafo", info = info)
         break
       }
+
+      # the other way round
+      ps = psf()
+      ps_new = ps_newf()
       if (is.null(ps$trafo)) {
         ps_comb2 = ps_new$add_param_set(ps)
       } else {

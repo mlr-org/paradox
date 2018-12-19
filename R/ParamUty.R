@@ -37,18 +37,23 @@ ParamUty = R6Class(
         lower = NA_real_,
         upper = NA_real_,
         values = NULL,
-        check = function(x) TRUE,  # values are always feasible
         special_vals = NULL,
         default = default,
         tags = tags
       )
-    },
-
-    map_unitint_to_values = function(x) stop("Not possible!")
+    }
   ),
 
   active = list(
-    nlevels = function() 2L,
+    nlevels = function() Inf,
     is_bounded = function() stop("undefined")
+  ),
+
+  private = list(
+    .check = function(x) TRUE,  # values are always feasible
+
+    .map_unitint_to_values = function(x) stop("Not possible!"),
+
+    .fix = function(x) stop("Not possible!")
   )
 )
