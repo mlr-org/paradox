@@ -106,7 +106,8 @@ NULL
 # #'
 # #' @return [\code{\link{ParamSet}}].
 # #' @family ParamSet
-# #' @export
+
+#' @export
 ParamSet = R6Class("ParamSet",
   public = list(
     id = NULL,
