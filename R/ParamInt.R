@@ -15,28 +15,27 @@
 #' @export
 ParamInt = R6Class( "ParamInt", inherit = Parameter,
   public = list(
+    lower = NULL,
+    upper = NULL,
+
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
-      # arg check lower and upper, we need handle Inf special case, that is not an int
-      lower = if (identical(lower, Inf) || identical(lower, -Inf)) lower else asInt(lower)
-      upper = if (identical(upper, Inf) || identical(upper, -Inf)) upper else asInt(upper)
-      super$initialize(
-        id = id,
-        storage_type = "integer",
-        lower = lower,
-        upper = upper,
-        values = NULL,
-        special_vals = special_vals,
-        default = default,
-        tags = tags
-      )
+      assert_number(lower, na.ok = TRUE)
+      assert_number(upper, na.ok = TRUE)
       assert_true(lower <= upper)
+      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+      # FIXME: doc this
+      self$lower = ceiling(lower)
+      self$upper = floor(upper)
     }
   ),
 
   active = list(
-    range = function() c(self$lower, self$upper),
+    values = function() NULL,
+    nlevels = function() diff(self$range),
     is_bounded = function() all(is.finite(self$range)),
-    nlevels = function() diff(self$range)
+    storage_type = function() "integer",
+    range = function() c(self$lower, self$upper),
+    span = function() self$upper - self$lower
   ),
 
   private = list(

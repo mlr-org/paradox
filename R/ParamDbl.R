@@ -16,26 +16,26 @@
 #' @export
 ParamDbl = R6Class("ParamDbl", inherit = Parameter,
   public = list(
+    lower = NULL,
+    upper = NULL,
+
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
-      super$initialize(
-        id = id,
-        storage_type = "numeric",
-        lower = lower,
-        upper = upper,
-        values = NULL,
-        special_vals = special_vals,
-        default = default,
-        tags = tags
-      )
+      assert_number(lower, na.ok = TRUE)
+      assert_number(upper, na.ok = TRUE)
       assert_true(lower <= upper)
+      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+      self$lower = lower
+      self$upper = upper
     }
   ),
 
   active = list(
-    range = function() c(self$lower, self$upper),
+    values = function() NULL,
+    nlevels = function() ifelse(self$span == 0, 1, Inf),
     is_bounded = function() all(is.finite(self$range)),
-    span = function() self$upper - self$lower,
-    nlevels = function() ifelse(self$span == 0, 1, Inf)
+    storage_type = function() "numeric",
+    range = function() c(self$lower, self$upper),
+    span = function() self$upper - self$lower
   ),
 
   private = list(

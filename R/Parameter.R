@@ -4,66 +4,98 @@
 #' @description
 #' Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
 #'
-#' @section Member Variables:
+# FIXME: the docs need to be distributed?
+#' @section Public members / active bindings:
+#' * `new(params)` \cr
+#'   list of [Parameter] -> `self`
+#' * `id`               :: [character(1)]
+#'    ID of this param. Read-only.
+#' * `pclass`           :: [character(1)]
+#'    Parameter R6 class name.
+#' * `lower`            :: [double(1)]
+#'    Lower bounds of parameters, can be -Inf. NA if param is not a number. Read-only.
+#' * `upper`            :: [double(1)]
+#'    Upper bounds of parameters, can be +Inf. NA if param is not a number. Read-only.
+#' * `values`           :: [character]
+#'    Allowed categorical values, NULL if param is not categorical. Read-only.
+#' * `nlevels`          :: [double(1)]
+#'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper. Read-only.
+#' * `is_bounded`       :: [logical(1)]
+#'    Does param have a finitely bounded domain? Read-only.
+#' * `special_vals`     :: [list] \cr
+#'   Arbitrary special values this parameter is allowed to take, to make it feasible.
+#'   This allows extending the domain of the param. Read-only.
+#' * `default`          :: [any]
+#'    Default value. Can be from param domain or `special_vals`.
 #'
-#' \describe{
-#'   \item{default}{[\code{any}] \cr
-#'     default value.}
-#'   \item{special_vals}{[\code{any}] \cr
-#'     Special values this parameter is allowed to take that are within the defined space.}
-#' }
+#' @section Public methods:
+#' * `test(x)`, `check(x)`, `assert(x)` \cr
+#'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
+#'    A value is feasible if it is inside of the bounds or from `special_vals`.
+#' * `map_unitint_to_values(x)` \cr
+#'   [numeric(n)] -> [vector(n)]
+#'   Takes values from [0, 1] and maps them to a vector of feasible values, so that the values are regular distributed.
+#'   Use case: Sample a uniform-[0,1] random variable, an turn it into a uniform sample from this Parameter.
+#' * `rep(n)`
+#'   [integer(1)] -> [ParamSet]
+#'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
 #'
-#' @section Methods:
+#' @section Private / Internals:
+#' * `data`          :: [list]
+#'   Here, all member variables of the param are stored.
+#'   We use this list representation to easier convert the param into a data table when in a
+#'   Element types are:
+#'     - id: character(1)
+#'     - lower, upper: double, can also bei Inf or NA.
+#'     - values: list of one [character | NULL]
+#'     - special_vals: list of list of <arbitrary objects>
+#'     - default: list of one <arbitrary, but feasible, object>
+#'     - tags: list of character
+#'   The variable is public, but should be considered internal and might be subject to change.
+#'   Only directly access it or write to it if you know what you are doing.
 #'
-#' \describe{
-#'   \item{map_unitint_to_values(x)}{[\code{function}] \cr
-#'     Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
-#' }
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' @family Parameter
+#' @name Parameter
+#' @export
+
 Parameter = R6Class("Parameter",
   public = list(
-    data = NULL,
+    id = NULL,
+    special_vals = NULL,
+    # FIXME: what if deafult is NULL? this is the DEFAULT for 'default' in all param subclasses....
+    default = NULL,
+    tags = NULL,
 
-    initialize = function(id, storage_type, lower, upper, values, special_vals, default, tags) {
-      # FIXME: really finish all assertions and document them
+    # FIXME: should default of tags be char(0)? so no tags?
+    initialize = function(id, special_vals, default, tags) {
       assert_string(id)
       assert_names(id, type = "strict")
-      assert_choice(storage_type, c("numeric", "integer", "character", "logical", "list"))
-      # FIXME: for some args we might push the assert back up to toplevel classes. eg lower cannot be NA for numerical params
-      assert_number(lower, na.ok = TRUE)
-      assert_number(upper, na.ok = TRUE)
-      assert_character(values, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+      # FIXME: do we allow NULL here? or just a list?
       assert_list(special_vals, null.ok = TRUE)
+      # FIXME: do we allow NULL here? or just a charvec(0)?
       assert_character(tags, any.missing = TRUE, unique = TRUE, null.ok = TRUE)
 
-      self$data = data.table(
-        id = id,                              # string
-        lower = lower,                        # double, Inf, or NA
-        upper = upper,                        # double, Inf, or NA
-        values = list(values),                # charvec or NULL
-        special_vals = list(special_vals),    # list or NULL
-        # FIXME: what if deafult is NULL?
-        default = list(default),              # any or NULL
-        tags = list(tags)                     # charvec
-      )
+      self$id = id
+      self$special_vals = special_vals
+      self$default = default
+      self$tags = tags
     },
 
     check = function(x) {
-      #FIXME: shuld use purrr::has_element, opened issue in mlr3misc
-      if (!is.null(self$special_vals) && any(map_lgl(self$special_vals, identical, x)))
+      # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
+      ch = private$.check(x)
+      if (isTRUE(ch))
         return(TRUE)
-      private$.check(x)
+      #FIXME: shuld use purrr::has_element, opened issue in mlr3misc
+      else if (any(map_lgl(self$special_vals, identical, x)))
+        return(TRUE)
+      else
+        return(ch)
     },
 
     assert = function(x) makeAssertFunction(self$check)(x),
 
     test = function(x) makeTestFunction(self$check)(x),
 
-    # repeat this param n-times, return a list of Parameter (named with <id>_rep)
     rep = function(n) {
       assert_count(n)
       pid = self$id
@@ -71,18 +103,13 @@ Parameter = R6Class("Parameter",
       ps = replicate(n, self$clone(), simplify = FALSE)
       for (i in 1:n) {
         p = ps[[i]]
-        p$data$id = paste0(join_id, "_", i)
-        p$data$tags = c(p$tags, join_id)
+        p$id = paste0(join_id, "_", i)
+        p$tags = c(p$tags, join_id)
       }
       ParamSet$new(ps)
     },
 
-    # FIXME: comment is bullshit, and the dt-copy, too
-    deep_clone = function(name, value) {
-      # deep copy the "data" dt member
-      if (name == "data") copy(value) else value
-    },
-
+    # FIXME: manually test the printer so it looks good
     print = function(..., hide.cols = c("tags")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = ParamSet$new(list(self))$as_dt()
@@ -90,8 +117,6 @@ Parameter = R6Class("Parameter",
       print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
     },
 
-    # takes a numeric vector from [0, 1] and maps it to a vector of <storage_type> of feasible values
-    # so that the values are regular distributed
     map_unitint_to_values = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
       private$.map_unitint_to_values(x)
@@ -100,28 +125,34 @@ Parameter = R6Class("Parameter",
     fix = function(x) {
       self$check(x)
       private$.check(x)
+    },
+
+    # FIXME: S3?
+    # FIXME: add a few cols to make it more usable?
+    # FIXME: doc this
+    as_dt = function() {
+      data.table(
+        id = self$id,
+        pclass = self$pclass,
+        lower = self$lower,
+        upper = self$upper,
+        values = list(self$values),
+        special_vals = list(self$special_vals),
+        default = list(self$default),
+        tags = list(self$tags)
+      )
     }
   ),
 
   active = list(
-    id = function() self$data$id,
-    pclass = function() class(self)[[1L]],
-    storage_type = function() self$data$storage_type,
-    lower = function() self$data$lower,
-    upper = function() self$data$upper,
-    values = function() self$data$values[[1L]],
-    nlevels = function() {
-      v = self$values
-      if (is.null(v)) NA_integer_ else length(v)
-    },
-    special_vals = function() self$data$special_vals[[1]],
-    default = function() self$data$default[[1]],
-    is_bounded = function() stop("abstract")
+    pclass = function() class(self)[[1L]]
+    # FIXME: spec_vals was broken and needs a proper unit test
+    # FIXME: default was broken and needs a proper unit test
   ),
 
   private = list(
     .check = function(x) stop("abstract"),
-    .map_unitint_to_values = function(x) stop("abstract"),
+    .map_unitint_to_values = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Parameter$map_unitint_to_values
     .fix = function(x) stop("abstract")
   )
 )

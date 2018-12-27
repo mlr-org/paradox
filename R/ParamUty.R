@@ -4,49 +4,22 @@
 #' @description
 #' A \code{\link[R6]{R6Class}} to represent untyped parameters.
 #'
-#' @section Member Variables:
-#'   \emph{none}
-#'
-#' Inherited from \code{Parameter}:
-#' @inheritSection Parameter Member Variables
-#'
-#' @section Methods:
-#'   \emph{none}
-#'
-#' Inherited from \code{Parameter}
-#' @inheritSection Parameter Methods
-#'
-#' @section Active Bindings:
-#'   \emph{none}
-#'
-#' Inherited from \code{Parameter}
-#' @inheritSection Parameter Active Bindings
-#'
-#' @return [\code{\link{ParamUty}}].
 #' @family Parameter
 #' @export
-ParamUty = R6Class(
-  "ParamUty",
-  inherit = Parameter,
+ParamUty = R6Class("ParamUty", inherit = Parameter,
   public = list(
-
     initialize = function(id, default = NULL, tags = NULL) {
-      super$initialize(
-        id = id,
-        storage_type = "list",
-        lower = NA_real_,
-        upper = NA_real_,
-        values = NULL,
-        special_vals = NULL,
-        default = default,
-        tags = tags
-      )
+      super$initialize(id, special_vals = NULL, default = default, tags = tags)
     }
   ),
 
   active = list(
+    lower = function() NA_real_,
+    upper = function() NA_real_,
+    values = function() NULL,
     nlevels = function() Inf,
-    is_bounded = function() stop("undefined")
+    is_bounded = function() stop("undefined"),
+    storage_type = function() "list"
   ),
 
   private = list(

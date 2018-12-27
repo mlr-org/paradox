@@ -11,27 +11,23 @@
 #' }
 #'
 #' @export
-ParamFct = R6Class(
-  "ParamFct",
-  inherit = Parameter,
+ParamFct = R6Class("ParamFct", inherit = Parameter,
   public = list(
+    values = NULL,
+
     initialize = function(id, values, default = NULL, special_vals = NULL, tags = NULL) {
-      super$initialize(
-        id = id,
-        storage_type = "character",
-        lower = NA_real_,
-        upper = NA_real_,
-        values = values,
-        special_vals = special_vals,
-        default = default,
-        tags = tags
-      )
+      assert_character(values, any.missing = FALSE, unique = TRUE)
+      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+      self$values = values
     }
   ),
 
   active = list(
+    lower = function() NA_real_,
+    upper = function() NA_real_,
     nlevels = function() length(self$values),
-    is_bounded = function() TRUE
+    is_bounded = function() TRUE,
+    storage_type = function() "character"
   ),
 
   private = list(

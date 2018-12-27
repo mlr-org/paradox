@@ -3,35 +3,36 @@
 #' @description A set of [Parameter] objects.
 #'
 #' @section Public members / active bindings:
-#'  * `new(params)` \cr
-#'    list of [Parameter] -> `self`
-#'  * `id`               :: [character(1)]
-#'     ID of this param set. Settable.
-#'  * `params`           :: named list of [Parameter]
-#'     Contained parameters, named with their respective IDs.
-#'     NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#'  * `length`           :: [integer(1)]
-#'     Number of contained params. Read-only.
-#'  * `is_empty`         :: [logical(1)]
-#'     Is the param set empty? Read-only.
-#'  * `ids`              :: [character]
-#'     IDs of contained parameters. Read-only.
-#'  * `pclasses`         :: named [character]
-#'     Parameter classes of contained parameters. Named with param IDs.
-#'  * `lowers`           :: named [double]
-#'     Lower bounds of parameters, NA if param is not a number.
-#'     Named with param IDs. Read-only.
-#'  * `uppers`           :: named [double]
-#'     Upper bounds of parameters, NA if param is not a number.
-#'     Named with param IDs. Read-only.
-#'  * `values`           :: named [list]
-#'     List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
-#'     Named with param IDs. Read-only.
-#'  * `nlevels`          :: named [double]
-#'     Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
-#'     Named with param IDs. Read-only.
-#'  * `is_bounded`       :: [logical(1)]
-#'     Do all parameters have finite bounds? Read-only.
+#' * `new(params)` \cr
+#'   list of [Parameter] -> `self`
+#' * `id`               :: [character(1)]
+#'   ID of this param set. Settable.
+#' * `params`           :: named list of [Parameter]
+#'   Contained parameters, named with their respective IDs.
+#'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
+#' * `length`           :: [integer(1)]
+#'   Number of contained params. Read-only.
+#' * `is_empty`         :: [logical(1)]
+#'   Is the param set empty? Read-only.
+#' * `ids`              :: [character]
+#'   IDs of contained parameters. Read-only.
+#' * `pclasses`         :: named [character]
+#'   Parameter classes of contained parameters. Named with param IDs.
+#' * `lowers`           :: named [double]
+#'   Lower bounds of parameters, NA if param is not a number.
+#'   Named with param IDs. Read-only.
+#' * `uppers`           :: named [double]
+#'   Upper bounds of parameters, NA if param is not a number.
+#'   Named with param IDs. Read-only.
+#' * `values`           :: named [list]
+#'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
+#'   Named with param IDs. Read-only.
+#' * `nlevels`          :: named [double]
+#'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
+#'   Named with param IDs. Read-only.
+#' * `is_bounded`       :: [logical(1)]
+#'   Do all parameters have finite bounds? Read-only.
+#FIXME: clean up docs here
 #  * `ps$storage_types` ->
 #  * `ps$tags` ->
 #  * `ps$defaults` ->
@@ -63,7 +64,7 @@
 #' @name ParamSet
 #' @export
 
-
+# FIXME: this must be finished and removed
 #    \item{trafo}{[\code{function(x, param_set)}] \cr
 #      \code{x} is a \code{data.table}, each row contains one parameter setting.
 #      \code{param_set} is the param_set. Can be useful to access tags.
@@ -150,9 +151,9 @@ ParamSet = R6Class("ParamSet",
 
 
     # FIXME: should probably be S3
+    # FIXME: we need to really test what kind of cols this returns, for the fullset
     as_dt = function() {
-      dt = rbindlist(map(self$params, "data"))
-      cbind(dt[,1], pclass = self$pclasses, dt[,-1])  # adding the param class in the table seems good
+      dt = rbindlist(map(self$params, function(p) p$as_dt()))
     },
 
     check = function(xs) {
