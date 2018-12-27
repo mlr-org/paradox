@@ -14,5 +14,5 @@
 generate_design_random = function(param_set, n = 1L) {
   assert_class(param_set, "ParamSet")
   n = assert_count(n, positive = TRUE, coerce = TRUE)
-  map_dtc(param_set$get_params(), function(x) x$map_unitint_to_values(runif(n)))
+  map_dtc(param_set$params, function(x) x$map_unitint_to_values(runif(n)))
 }

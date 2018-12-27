@@ -5,7 +5,7 @@ test_that("generate_design_random", {
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric(),
-    th_paramset_trafo()#,
+    th_paramset_trafo()
     #th_paramset_complex() #FIXME: Make this possible
   )
 
@@ -31,8 +31,7 @@ test_that("generate_design_grid", {
     expect_data_table(d, any.missing = FALSE, info = info)
     # compute length of design as product of resolution (for all numbers) * product of nlevels
     nrows = ps$nlevels
-    nrows[is.na(nrows)] = 3L
-    nrows = pmin(nrows, 3L)
+    nrows[ps$is_number] = 3L
     nrows = prod(nrows)
     expect_equal(nrow(d), nrows, info = info)
     expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible

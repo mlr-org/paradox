@@ -2,141 +2,117 @@
 #'
 #' @description A set of [Parameter] objects.
 #'
-#' @section Usage:
-#' * `ps = ParamSet$new(params, id = "paramset", trafo = NULL) \cr
-#'        list of [Parameter] objects, `character(1)`, `function(x, param_set)` -> [ParamSet]
-#'  * `ps$id` -> `character(1)`
-#'  * `ps$data` -> `data.frame`
-#'  * `ps$trafo` -> `function(x, param_set)`
-#'  * `ps$deps` -> list of [Dependency] objects
-#'  * `ps$length` ->
-#'  * `ps$is_empty` ->
-#'  * `ps$ids` ->
-#'  * `ps$pclasses` ->
-#'  * `ps$storage_types` ->
-#'  * `ps$lowers` ->
-#'  * `ps$uppers` ->
-#'  * `ps$nlevels` ->
-#'  * `ps$values` ->
-#'  * `ps$tags` ->
-#'  * `ps$is_bounded` ->
-#'  * `ps$defaults` ->
-#'  * `ps$add_param(param)` \cr
-#'    [Parameter] -> `invisible(self)`
-#'  + `ps$add_param_set(param_set)` \cr
-#'    [ParamSet] -> `invisible(self)`
-#'  * `ps$transform(x)` \cr
+#' @section Public members / active bindings:
+#'  * `new(params)` \cr
+#'    list of [Parameter] -> `self`
+#'  * `id`               :: [character(1)]
+#'     ID of this param set. Settable.
+#'  * `params`           :: named list of [Parameter]
+#'     Contained parameters, named with their respective IDs.
+#'     NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
+#'  * `length`           :: [integer(1)]
+#'     Number of contained params. Read-only.
+#'  * `is_empty`         :: [logical(1)]
+#'     Is the param set empty? Read-only.
+#'  * `ids`              :: [character]
+#'     IDs of contained parameters. Read-only.
+#'  * `pclasses`         :: named [character]
+#'     Parameter classes of contained parameters. Named with param IDs.
+#'  * `lowers`           :: named [double]
+#'     Lower bounds of parameters, NA if param is not a number.
+#'     Named with param IDs. Read-only.
+#'  * `uppers`           :: named [double]
+#'     Upper bounds of parameters, NA if param is not a number.
+#'     Named with param IDs. Read-only.
+#'  * `values`           :: named [list]
+#'     List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
+#'     Named with param IDs. Read-only.
+#'  * `nlevels`          :: named [double]
+#'     Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
+#'     Named with param IDs. Read-only.
+#'  * `is_bounded`       :: [logical(1)]
+#'     Do all parameters have finite bounds? Read-only.
+#  * `ps$storage_types` ->
+#  * `ps$tags` ->
+#  * `ps$defaults` ->
+#  * `ps$trafo` -> `function(x, param_set)`
+#  * `ps$deps` -> list of [Dependency] objects
+#
+#' @section Public methods:
+#'  * `add_param(param)` \cr
+#'    [Parameter] -> `self`
+#'    Adds a param to this set, param is cloned.
+#'  * `add_param_set(param_set)` \cr
+#'    [ParamSet] -> `self`
+#'    Adds the contents of another set to this set, all params are cloned.
+#'  * `subset(ids)` \cr
+#'    `character` -> `self`
+#'    Changes the current set to the set of passed IDs.
+#'  * `transform(x)` \cr
 #'    [data.table] -> [data.table]
-#'  * `ps$check(x)` \cr
-#'    `named [list]` -> `TRUE` or `character(1)`
-#'  * `ps$assert(xs)` \cr
-#'    `named [list]` -> `named [list]`
-#'  * `ps$test(xs)` \cr
-#'    `named [list]` -> `logical(1)`
-#'  * `ps$fix(xs)` \cr
-#'    `named [list]` -> `invisible(self)`
-#'  * `ps$subset(ids)` \cr
-#'    `character(n)` -> `invisible(self)`
-#'  * `ps$add_dependency(dep)` \cr
-#'    [Dependency] -> `invisible(self)`
-#'  * get_param(id) \cr
-#'    `character(1)` -> [Parameter]
-#'  * get_params(ids = NULL) \cr
-#'    `character(n)` -> list of [Parameter] objects
-#'
-#' @section Details:
-#'
-#' @section Arguments:
-#'
+#'    Transforms a collections of configurations (rows) via the associated transformation of the param set,
+#'    so each row in the returned data.table corresponds to the origin-row with the same row-index.
+#'  * `test(x)`, `check(x)`, `assert(x)` \cr
+#'    Three checkmate-like check-functions. Take a named list.
+#'    A point x is feasible, if it configures a subset of params,
+#'    all individual param constraints are satisfied and all dependencies are satisfied.
+#'  * `fix(xs)` \cr
+#'    `named [list]` -> `self`
+#'  * `add_dependency(dep)` \cr
+#'    [Dependency] -> `self`
 #' @name ParamSet
-NULL
-# #' \describe{
-# #'   \item{params}{[\code{list}] \cr
-# #'   List of the Params}
-# #'   \item{trafo}{[\code{function(x, param_set)}] \cr
-# #'     \code{x} is a \code{data.table}, each row contains one parameter setting.
-# #'     \code{param_set} is the param_set. Can be useful to access tags.
-# #'     This function is called from \code{ParamSet$transform()}.
-# #'     It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
-# #'     }
-# #' }
-# #'
-# #' @section Methods:
-# #'
-# #' \describe{
-# #'   \item{generate_lhs_design(n, lhs_function)}{[\code{function}] \cr
-# #'     Function to generate a LHS design.}
-# #'   \item{generate_grid_design(resolution, param_resolutions, n)}{[\code{function}] \cr
-# #'     \describe{
-# #'       \item{resolution}{[\code{integer(1)}] for each parameter universally}
-# #'       \item{param_resolutions}{[\code{integer}] for each parameter individually. Has to be a named vector.}
-# #'       \item{n}{[\code{integer(1)}] size of design. Will be tried to match by optimizing \eqn{r^k * (r-1)^(p-k) - n}. \code{r} = resolution, \code{p} = total number of parameters.}
-# #'     }
-# #'   }
-# #' }
-# #'
-# #' @section Active Bindings:
-# #'
-# #' \describe{
-# #'   \item{ids}{[\code{character}] \cr
-# #'     ids of the Parameters in this ParamSet.}
-# #'   \item{storage_types}{[\code{character}] \cr
-# #'     How is a Value of this Parameter stored as an R-object?}
-# #'   \item{values}{[\code{list}] \cr
-# #'     For any discrete Parameter return the values. Also works for Integers.}
-# #'   \item{lower}{[\code{numeric}] \cr
-# #'     For each numeric Parameter return the lower boundary. \code{NA} for other Parameters.}
-# #'   \item{upper}{[\code{numeric}] \cr
-# #'     Same as for \code{lower}}
-# #'   \item{param_classes}{[\code{character}] \cr
-# #'     The \code{R6} class name of each Parameter.}
-# #'   \item{range}{[\code{data.table}] \cr
-# #'     A \code{data.table} with the columns \code{id}, \code{lower}, \code{upper}.}
-# #'   \item{length}{[\code{integer(1)}] \cr
-# #'     The number of parameters.}
-# #'   \item{nlevels}{[\code{integer}] \cr
-# #'     For each discrete Parameter return the number of different values.}
-# #'   \item{member_tags}{[\code{list}] \cr
-# #'     The \code{tags} of each Parameter.}
-# #' }
-# #'
-# #' @section Further comments:
-# #' Note that you can construct an empty ParamSet by passing an empty list during construction.
-# #' Such a ParamSet has length 0, and getter will always return NULL.
-# #'
-# #' @return [\code{\link{ParamSet}}].
-# #' @family ParamSet
-
 #' @export
+
+
+#    \item{trafo}{[\code{function(x, param_set)}] \cr
+#      \code{x} is a \code{data.table}, each row contains one parameter setting.
+#      \code{param_set} is the param_set. Can be useful to access tags.
+#      This function is called from \code{ParamSet$transform()}.
+#      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
+#      }
+#  }
+#
+#  \describe{
+#    \item{storage_types}{[\code{character}] \cr
+#      How is a Value of this Parameter stored as an R-object?}
+#    \item{member_tags}{[\code{list}] \cr
+#      The \code{tags} of each Parameter.}
+#  }
 ParamSet = R6Class("ParamSet",
   public = list(
-    id = NULL,
-    data = NULL,  # a datatable which consists of rows of Param-data elements
+    params = NULL,
     trafo = NULL, # function to transform the value before evaluation
     deps = NULL, # a list of Dependency objects
 
-   # FIXME: constructor which takes a dt?
-
     # this does a deep copy of all passed param objects
+    # FIXME: trafo should be an AB
+    # FIXME: id should be an AB
     initialize = function(params = list(), id = "paramset", trafo = NULL) {
       assert_list(params, types = "Parameter")
-      if (length(params) > 0L) {
-        self$data = rbindlist(map(params, "data"))
-        # we set index not key, so we dont resort the table
-        setindex(self$data, "id")
-      } else {
-        self$data = data.table(id = character(0L), pclass = character(0L), storage_type = character(0L), lower = numeric(0L), upper = numeric(0L), values = list(), special_vals = list(), default = list(), tags = list())
-      }
+      self$params = map(params, function(p) p$clone(deep = TRUE))
+      names(self$params) = map_chr(params, "id")
       assert_string(id)
       assert_names(id, type = "strict")
       self$id = id
       self$trafo = assert_function(trafo, args = c("x", "param_set"), null.ok = TRUE)
     },
 
-    # add a param to the current self-set, deep copies it
     add_param = function(param) {
       assert_r6(param, "Parameter")
-      self$data = rbind(self$data, param$data)
+      self$params[[param$id]] = param$clone()
+      invisible(self)
+    },
+
+    add_param_set = function(param_set) {
+      ids_inboth = intersect(self$ids, param_set$ids)
+      if (length(ids_inboth) > 0L)
+        stop("Name clash when adding a set. These ids are in both sets: %s", str_collapse(ids_inboth))
+      if (!is.null(param_set$trafo))
+        stop("Cannot add a param set with a trafo.")
+      if (!is.null(param_set$deps))
+        stop("Cannot add a param set with dependencies.")
+      ps2 = param_set$clone(deep = TRUE)
+      self$params = c(self$params, ps2$params)
       invisible(self)
     },
 
@@ -155,6 +131,7 @@ ParamSet = R6Class("ParamSet",
     # creates a subset of self (cloned) with all params that are not mentioned in fix
     # adds ParamFix param for all dropped Params
     # out: ParamSet
+    # FIXME: doc and unit test
     fix = function(xs) {
       assert_list(x, names = "named")
       assert_subset(names(x), self$ids)
@@ -165,40 +142,19 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
-    # ids to keep in a cloned ParamSet
     subset = function(ids) {
-      #FIXME not clone here
       assert_subset(ids, self$ids)
-      new_paramset = self$clone()
-      new_paramset$id = paste0(new_paramset$id,"_subset")
-      new_paramset$data = new_paramset$data[ids, on = "id"]
-      return(new_paramset)
-    },
-
-    # returnes a cloned param_set of both
-    add_param_set = function(param_set) {
-      if (length(intersect(self$ids, param_set$ids)) > 0) {
-        stop ("add_param_set failed, because new param_set has at least one Param with the same id as in this ParamSet.")
-      }
-      if (!is.null(param_set$trafo)) {
-        stop ("The new param_set can not have a trafo.")
-      }
-      if (!is.null(param_set$deps)) {
-        stop ("The new param_set can not have any dependency.")
-      }
-      if (self$length == 0) {
-        return(param_set$clone())
-      } else if (param_set$length == 0) {
-        return(self$clone())
-      }
-      self$data = rbind(self$data, param_set$data)
+      self$params = self$params[ids]
       invisible(self)
     },
 
-    # check function that checks whether a named list is a feasible point from the set
-    # xs named list of SINGLE parameter setting
-    # can be subset of all possible params (as long as dependencies allow that)
-    # returns TRUE or character with reason if the check fails
+
+    # FIXME: should probably be S3
+    as_dt = function() {
+      dt = rbindlist(map(self$params, "data"))
+      cbind(dt[,1], pclass = self$pclasses, dt[,-1])  # adding the param class in the table seems good
+    },
+
     check = function(xs) {
 
       ok = check_list(xs)
@@ -212,7 +168,7 @@ ParamSet = R6Class("ParamSet",
 
       # check each parameters feasibility
       for (id in names(xs)) {
-        ch = self$get_param(id)$check(xs[[id]])
+        ch = self$params[[id]]$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
           return(paste0(id,": ",ch))
       }
@@ -222,7 +178,8 @@ ParamSet = R6Class("ParamSet",
         for (dep in self$deps) {
           dep_res = dep$condition$eval(xs[[dep$parent_id]])
           if (isFALSE(dep_res) && dep$node_id %in% names(xs)) {
-            return(sprintf("Parameter %s is present, but condition %s is not fulfilled.", dep$node_id, dep$condition$id))
+            # FIXME: we should say something about what the condition is on / which params
+            return(sprintf("Parameter '%s' present, but condition '%s' not fulfilled.", dep$node_id, dep$condition$id))
           }
         }
       }
@@ -248,14 +205,14 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
-    # printer, simply prints datatable contents, with the option to hide some cols
-    print = function(..., hide.cols = c("storage_type", "tags")) {
+    # printer, prints the set as a datatable, with the option to hide some cols
+    print = function(..., hide.cols = c("tags")) {
       catf("ParamSet: %s", self$id)
       if (self$is_empty) {
         catf("Empty.")
       } else {
         catf("Parameters:")
-        d = self$data
+        d = self$as_dt()
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
@@ -263,53 +220,36 @@ ParamSet = R6Class("ParamSet",
         catf("Trafo is set:")
         print(self$trafo)
       }
-    },
-
-    # return a Parameter of the set, by id
-    # FIXME: careful, this returns a reference! by chanhing that we might
-    # hurt the integrity of the paramset. we might at least offer a "deep" copy as option and document this?
-    get_param = function(id) {
-      assert_choice(id, self$ids)
-      r = self$data[id, on = "id"] # index single row by id
-      new_param_from_dt(r)
-    },
-
-    # return a list of params, for given ids or all ids
-    get_params = function(ids = NULL) {
-      sids = self$ids
-      if (is.null(ids))
-        ids = sids
-      assert_subset(ids, sids)
-      set_names(map(ids, self$get_param), ids)
     }
   ),
 
   active = list(
-    length = function() nrow(self$data),
+    id = function(v) if (missing(v)) private$.id else private$.id = v,
+    length = function() length(self$params),
     is_empty = function() self$length == 0L,
-    ids = function() self$data$id,
-    pclasses = function() private$get_col_with_idnames("pclass"),
-    storage_types = function() private$get_col_with_idnames("storage_type"),
-    lowers = function() private$get_col_with_idnames("lower"),
-    uppers = function() private$get_col_with_idnames("upper"),
-    nlevels = function() {
-      # this is a bit slow, we can write worse code on the data dt for speed
-      nlevs = map_dbl(self$get_params(), function(p) p$nlevels)
-      set_names(nlevs, self$ids)
-    },
-    values = function() private$get_col_with_idnames("values"),
-    tags = function() private$get_col_with_idnames("tags"),
-    ids_num = function() self$data[pclass %in% c("ParamDbl", "ParamInt"), id],
-    ids_cat = function() self$data[pclass %in% c("ParamFct", "ParamLgl"), id],
-    is_bounded = function() all(map_lgl(self$get_params(), function(p) p$is_bounded)),
-    defaults = function() private$get_col_with_idnames("default")
+    ids = function() unname(map_chr(self$params, "id")),
+    pclasses = function() private$get_member_with_idnames("pclass", as.character),
+    storage_types = function() private$get_member_with_idnames("storage_type", as.character),
+    lowers = function() private$get_member_with_idnames("lower", as.double),
+    uppers = function() private$get_member_with_idnames("upper", as.double),
+    values = function() private$get_member_with_idnames("values", as.list),
+    nlevels = function() private$get_member_with_idnames("nlevels", as.double),
+    tags = function() private$get_member_with_idnames("tags", as.list),
+    is_bounded = function() all(map_lgl(self$params, "is_bounded")),
+    defaults = function() private$get_member_with_idnames("default", as.list),
+    # FIXME: doc is_number and is_categ
+    is_number = function() self$pclasses %in% c("ParamDbl", "ParamInt"),
+    is_categ = function() self$pclasses %in% c("ParamFct", "ParamLgl")
   ),
 
   private = list(
-    get_col_with_idnames = function(col) set_names(self$data[[col]], self$data[["id"]]),
+    .id = NULL,
+    # FIXME: doc
+    get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids),
 
+    # FIXME: we need to copy dep objects too, and check that this works in deep clone
     deep_clone = function(name, value) {
-      if (name == "data") copy(value) else value
+      if (name == "params") map(value, function(x) x$clone(deep = TRUE)) else value
     }
   )
 )

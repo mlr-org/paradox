@@ -26,10 +26,8 @@
 #' @family Parameter
 Parameter = R6Class("Parameter",
   public = list(
-
     data = NULL,
 
-    # constructor
     initialize = function(id, storage_type, lower, upper, values, special_vals, default, tags) {
       # FIXME: really finish all assertions and document them
       assert_string(id)
@@ -44,8 +42,6 @@ Parameter = R6Class("Parameter",
 
       self$data = data.table(
         id = id,                              # string
-        pclass = class(self)[[1]],            # string
-        storage_type = storage_type,          # string
         lower = lower,                        # double, Inf, or NA
         upper = upper,                        # double, Inf, or NA
         values = list(values),                # charvec or NULL
@@ -71,24 +67,25 @@ Parameter = R6Class("Parameter",
     rep = function(n) {
       assert_count(n)
       pid = self$id
-      # get dt, copy it n times, change id and tags, then construct param from dt
-      dt = self$data
       join_id = paste0(pid, "_rep")
-      lapply(seq_len(n), function(i) {
-        dt2 = copy(dt)
-        dt2$id = paste0(join_id, "_", i)
-        dt2$tags[[1L]] = c(dt2$tags[[1L]], join_id)
-        new_param_from_dt(dt2)
-      })
+      ps = replicate(n, self$clone(), simplify = FALSE)
+      for (i in 1:n) {
+        p = ps[[i]]
+        p$data$id = paste0(join_id, "_", i)
+        p$data$tags = c(p$tags, join_id)
+      }
+      ParamSet$new(ps)
     },
 
+    # FIXME: comment is bullshit, and the dt-copy, too
     deep_clone = function(name, value) {
       # deep copy the "data" dt member
       if (name == "data") copy(value) else value
     },
 
-    print = function(..., hide.cols = c("storage_type", "tags")) {
-      d = self$data
+    print = function(..., hide.cols = c("tags")) {
+      # this is bit bullshitty, but works by delegating to the printer of the PS
+      d = ParamSet$new(list(self))$as_dt()
       assert_subset(hide.cols, names(d))
       print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
     },
@@ -108,6 +105,7 @@ Parameter = R6Class("Parameter",
 
   active = list(
     id = function() self$data$id,
+    pclass = function() class(self)[[1L]],
     storage_type = function() self$data$storage_type,
     lower = function() self$data$lower,
     upper = function() self$data$upper,
@@ -127,23 +125,6 @@ Parameter = R6Class("Parameter",
     .fix = function(x) stop("abstract")
   )
 )
-
-
-# private factory methods, creates a param from a single dt row
-new_param_from_dt = function(dt) {
-  # get pclass constructor from namespace then call it on all (relevent) entries from the dt row
-  p = as.list(dt)
-  cl = getFromNamespace(p$pclass, "paradox")
-  # remove pclass and storage type, as the are not passed to contructor
-  p$pclass = NULL; p$storage_type = NULL
-  # FIXME: this is not that perfect code:
-  # - we untangle all list-cols
-  # - we remove all NULL or NA entries, as they cannot be passed to the constructor,
-  # NB: we might also handle this thru a reflection table, where we "know" which elements the Param-constructors take
-  p = map_if(p, is.list, function(x) x[[1L]])
-  p = Filter(function(x) !is.null(x) && !is.na(x), p)
-  do.call(cl$new, p)
-}
 
 
 

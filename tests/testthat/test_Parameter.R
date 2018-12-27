@@ -31,7 +31,7 @@ test_that("we cannot create Params with non-strict R names", {
 })
 
 test_that("printer works", {
-  for (p in th_paramset_full()$get_params()) {
+  for (p in th_paramset_full()$params) {
     info = p$id
     s = capture_output(print(p))
     expect_true(stri_detect_fixed(s, p$id), info = info)

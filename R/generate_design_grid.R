@@ -35,14 +35,12 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   }
 
   # overwrite the resolution for categorical stuff with the number of levels they have
-  ids_cat = param_set$ids_cat
-  if (length(ids_cat) > 0L)
-    param_resolutions[ids_cat] = param_set$nlevels[ids_cat]
-
+  isc = param_set$is_categ
+  param_resolutions[isc] = param_set$nlevels[isc]
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) param_set$get_param(id)$map_unitint_to_values(x = value))
+  res = imap(grid_vec, function(value, id) param_set$params[[id]]$map_unitint_to_values(x = value))
   res = do.call(function(...) CJ(..., sorted = FALSE), res) #FIXME: Will throw error if res has sorted column.
   return(res)
 }

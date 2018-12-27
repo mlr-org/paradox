@@ -1,13 +1,11 @@
 context("ParamSet")
 
-test_that("methods and active bindings work", {
+test_that("simple active bindings work", {
   ps_list = list(
-    th_paramset_empty(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_untyped(),
-    th_paramset_numeric(),
-    th_paramset_trafo()
+    th_paramset_numeric()
   )
   for (ps in ps_list) {
     info = ps$id
@@ -37,147 +35,71 @@ test_that("methods and active bindings work", {
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
     expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
-    expect_output(print(ps), "ParamSet:", info = info)
-    expect_true(ps$check(list()))
   }
 })
 
-
-test_that("param subset in ParamSet works", {
-  # Define all the different subsets we want to try:
-  configs = list(
-    list(
-      ps = th_paramset_full(),
-      ids = c("th_param_int", "th_param_lgl"),
-      expected_ids = c("th_param_int", "th_param_lgl")
-    )
-  )
-  # Test the different combinations:
-  for (conf in configs) {
-    paramset_sub = conf$ps$subset(conf$ids)
-    expect_equal(paramset_sub$ids, conf$expected_ids)
-    s = SamplerUnif$new(paramset_sub)
-    #x = s$sample(2)
-    #expect_set_equal(colnames(x), conf$expected_ids)
-    #expect_true(paramset_sub$check(x[1,]))
-    #expect_true(paramset_sub$check(x[2,]))
-    #x_trafo = paramset_sub$transform(x)
-
-
-    #x = s$sample(1)
-    #expect_set_equal(colnames(x), conf$expected_ids)
-    #expect_true(paramset_sub$check(x))
-    #x_trafo = paramset_sub$transform(x)
-  }
+test_that("ParamSet$subset", {
+  ids = th_paramset_full()$ids
+  getps = function() th_paramset_full()$clone(deep = TRUE) # give us a fresh clone of the fullset
+  # we can subset to an empty set
+  ps = getps()
+  ps$subset(character(0L))
+  expect_true(ps$is_empty)
+  ps = getps()
+  # subsetting to 2 params make the set smaller
+  ps$subset(ids[2:3])
+  expect_equal(ps$ids, ids[2:3])
+  expect_equal(ps$length, 2)
+  # subsetting to all ids does not change anything
+  ps = getps()
+  ps$subset(ids)
+  expect_equal(ps$as_dt(), getps()$as_dt())
+  # subset full set to 2 numeric params
+  ps = getps()
+  ps$subset(c("th_param_int", "th_param_dbl"))
+  expect_equal(ps$as_dt(), th_paramset_numeric()$as_dt())
 })
 
-test_that("param fix in ParamSet works", {
-  configs = list(
-    list(
-      ps = th_paramset_full(),
-      fix = list("th_param_int" = 1L)
-    ),
-    list(
-      ps = th_paramset_trafo(),
-      fix = list("th_param_dbl" = 1)
-    )
-  )
-  for (conf in configs) {
-    # paramset_sub = conf$ps$fix(conf$fix)
-    # expect_set_equal(paramset_sub$ids, conf$ps$ids)
-    # expect_set_equal(names(which(paramset_sub$pclasses == "ParamFix")), names(conf$fix))
-    # s = SamplerUnif$new(paramset_sub)
-    #x = s$sample(2)
-    #expect_set_equal(colnames(x), conf$expected_ids)
-    #expect_true(paramset_sub$check(x[1,]))
-    #expect_true(paramset_sub$check(x[2,]))
-    #x_trafo = paramset_sub$transform(x)
+test_that("ParamSet$add_param_set", {
+  # adding with the empty set
+  ps1 = th_paramset_numeric()$clone(deep = TRUE)
+  n1 = ps1$length
+  ps2 = th_paramset_empty()$clone(deep = TRUE)
+  ps1$add_param_set(ps2)
+  expect_equal(ps1$length, n1)
+  ps2$add_param_set(ps1)
+  expect_equal(ps2$length, n1)
 
+  # adding 2 sets, full and numeric, results in a clash
+  ps1 = th_paramset_numeric()$clone(deep = TRUE)
+  ps2 = th_paramset_full()$clone(deep = TRUE)
+  expect_error(ps1$add_param_set(ps2), "Name clash")
 
-    #x = s$sample(1)
-    #expect_set_equal(colnames(x), conf$expected_ids)
-    #expect_true(paramset_sub$check(x))
-    #x_trafo = paramset_sub$transform(x)
-  }
-})
-
-test_that("add_param_set of ParamSet work", {
-  # define some ParamSets we will join to the th_ ones
-  new_param_sets = list(
-    normal = function() ParamSet$new(
-      id = "new_param_set",
-      params = list(
-        ParamDbl$new("new_int", lower = 0L, upper = 10L)
-      )
-    ),
-    trafo = function() ParamSet$new(
-      id = "new_param_set_trafo",
-      params = list(
-        ParamDbl$new("new_real", lower = 0, upper = 10)
-      ),
-      trafo = function(x, param_set) {
-        x$new_real = sqrt(x$new_real)
-        return(x)
-      }
-    )
-  )
-
-  ps_list = list(
-    function() th_paramset_empty(),
-    function() th_paramset_full(),
-    function() th_paramset_repeated(),
-    function() th_paramset_numeric(),
-    function() th_paramset_trafo()
-  )
-
-  for (psf in ps_list) {
-    for (ps_newf in new_param_sets) {
-      ps = psf()
-      ps_new = ps_newf()
-
-      info = paste0("parset = ", ps$id, "-", ps_new$id)
-
-      if (is.null(ps_new$trafo)) {
-        ps_comb1 = ps$add_param_set(ps_new)
-      } else {
-        expect_error(ps$add_param_set(ps_new), regexp = "can not have a trafo", info = info)
-        break
-      }
-
-      # the other way round
-      ps = psf()
-      ps_new = ps_newf()
-      if (is.null(ps$trafo)) {
-        ps_comb2 = ps_new$add_param_set(ps)
-      } else {
-        expect_error(ps_new$add_param_set(ps), regexp = "can not have a trafo", info = info)
-        break
-      }
-
-      expect_set_equal(ps_comb1$ids, ps_comb1$ids, info = info)
-      expect_set_equal(ps_comb1$ids, c(ps$ids, ps_new$ids), info = info)
-      s = SamplerUnif$new(ps_comb1)
-      x = s$sample(1)
-#      expect_data_table(x, info = info)
-#      expect_true(ps_comb1$check(x), info = info)
-#      expect_true(ps_comb2$check(x), info = info)
-#      xt1 = ps_comb1$transform(x)
-#      xt2 = ps_comb2$transform(x)[, colnames(xt1), with = FALSE]
-#      expect_equal(xt1, xt2, info = info)
-    }
-  }
-
+  # adding 2 sets, numeric and untyped, makes them larger
+  ps1 = th_paramset_numeric()$clone(deep = TRUE)
+  ps2 = th_paramset_untyped()$clone(deep = TRUE)
+  ps1$add_param_set(ps2)
+  expect_equal(ps2$length, 1L)
+  expect_equal(ps1$ids, c("th_param_int", "th_param_dbl", "th_param_uty"))
+  ps1 = th_paramset_numeric()$clone(deep = TRUE)
+  ps2 = th_paramset_untyped()$clone(deep = TRUE)
+  ps2$add_param_set(ps1)
+  expect_equal(ps2$ids, c("th_param_uty", "th_param_int", "th_param_dbl"))
+  expect_equal(ps1$length, 2L)
 })
 
 test_that("empty paramset", {
   ps = ParamSet$new()
   expect_r6(ps, "ParamSet")
   expect_equal(ps$length, 0)
+  expect_equal(ps$ids, character(0L))
+  expect_equal(ps$lowers, set_names(numeric(0L), character(0L)))
 })
 
 
 test_that("ParamSet$check", {
   ps = th_paramset_numeric()
+  expect_true(ps$check(list()))
   expect_true(ps$check(list(th_param_int = 5, th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
   expect_character(ps$check(list(th_param_dbl = 5, new_param = 5)), fixed = "subset of")
@@ -201,31 +123,42 @@ test_that("ParamSet$print", {
   expect_true(stri_detect_fixed(s, "ParamDbl"))
   s = capture_output(print(ps, hide.cols = c("pclass")))
   expect_false(stri_detect_fixed(s, "ParamInt"))
+
+  # iterate through more complex PS and check that printer works by at least calling it
+  ps_list = list(
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_untyped(),
+    th_paramset_trafo()
+  )
+  for (ps in ps_list) {
+    expect_output(print(ps), "ParamSet:")
+  }
 })
 
 test_that("ParamSet does a deep copy of params on construction", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
   ps = ParamSet$new(list(p))
-  p$data[, lower := 2]
+  p$data$lower = 2
   expect_equal(p$lower, 2)
   expect_equal(ps$lowers, c(x = 1))
-  expect_equal(ps$get_param("x")$lower, 1)
+  expect_equal(ps$params[["x"]]$lower, 1)
 })
 
 test_that("ParamSet does a deep copy of param on add", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
   ps = ParamSet$new(list())$add_param(p)
-  p$data[, lower := 2]
+  p$data$lower = 2
   expect_equal(p$lower, 2)
   expect_equal(ps$lowers, c(x = 1))
-  expect_equal(ps$get_param("x")$lower, 1)
+  expect_equal(ps$params[["x"]]$lower, 1)
 })
 
 test_that("ParamSet$clone can be deep", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
   ps1 = ParamSet$new(list(p))
   ps2 = ps1$clone(deep = TRUE)
-  ps2$data[, id := "foo"]
+  ps2$params[[1]]$data$id = "foo"
   expect_equal(ps2$ids, "foo")
   expect_equal(ps1$ids, "x")
 })

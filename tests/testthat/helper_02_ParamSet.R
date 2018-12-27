@@ -46,13 +46,13 @@ th_paramset_trafo = function() {
 }
 
 th_paramset_repeated = function() {
-  ParamSet$new(
+  ps = ParamSet$new(
     id = 'th_paramset_repeated',
     params = c(
-      list(th_param_nat(), th_param_fct()),
-      th_param_dbl_na()$rep(4L)
+      list(th_param_nat(), th_param_fct())
     )
   )
+  ps$add_param_set(th_param_dbl_na()$rep(4L))
 }
 
 th_paramset_complex = function() {
