@@ -1,3 +1,6 @@
+#FIXME: we need to handle the specail case of fixing / mapunitint. maybe that auto-works, maybe not
+# we also need to be able to ask for the fixed value?
+
 #' @title Parameter Object
 #' @format \code{\link{R6Class}} object
 #'

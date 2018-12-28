@@ -14,31 +14,24 @@ ParamLgl = R6Class("ParamLgl", inherit = Parameter,
   ),
 
   active = list(
+    # FIXME: add unit test that this has "values"
     lower = function() NA_real_,
     upper = function() NA_real_,
-    # FIXME: what is this? has to do with fix?
-    nlevels = function() ifelse(is.null(self$values), 2L, 1L),
+    values = function() c(TRUE, FALSE),
+    # FIXME: what is this? has to do with fix? maybe ok now?
+    nlevels = function() length(self$values),
     is_bounded = function() TRUE,
     storage_type = function() "logical"
   ),
 
   private = list(
     .check = function(x) {
-      if (is.null(self$values)) {
-        check_flag(x)
-      } else {
-        # FIXME: why do we call an asser in a check function?
-        assert_true(identical(x, self$values))
-      }
+      check_choice(x, self$values)
     },
 
     .map_unitint_to_values = function(x) {
-      # FIXME: this is bullshot code? why should values be NULL?
-      if (is.null(self$values)) {
-        x < 0.5 #FIXME: Do we have to take care of x==0.5? # FIXME: no we dont
-      } else {
-        self$values
-      }
+      # FIXME: the code was bad here because of the "fixing" i think. we should do that in the super class!
+      x < 0.5
     },
 
     .fix = function(x) {

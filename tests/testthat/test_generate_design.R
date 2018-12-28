@@ -13,7 +13,7 @@ test_that("generate_design_random", {
     info = ps$id
     d = generate_design_random(ps, n = 5L)
     expect_data_table(d, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
-    expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible
+    expect_true(all(map_lgl(transpose(d), ps$test)), info = info) # check that all rows are feasible
   }
 })
 
@@ -34,7 +34,7 @@ test_that("generate_design_grid", {
     nrows[ps$is_number] = 3L
     nrows = prod(nrows)
     expect_equal(nrow(d), nrows, info = info)
-    expect_true(all(map_lgl(transpose(d), ps$test))) # check that all rows are feasible
+    expect_true(all(map_lgl(transpose(d), ps$test)), info = info) # check that all rows are feasible
   }
 })
 
@@ -62,7 +62,7 @@ test_that("generate_design_lhs", {
     d = generate_design_lhs(ps, 10)
     expect_data_table(d, nrows = 10, any.missing = FALSE, info = info)
     xs = mlr3misc::transpose(d)
-    expect_true(all(map_lgl(xs, ps$test)))
+    expect_true(all(map_lgl(xs, ps$test)), info = info)
   }
 })
 
