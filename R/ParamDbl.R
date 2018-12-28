@@ -41,11 +41,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
 
   private = list(
     .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
-
-    # maps [0,1]*span + lower
-    .map_unitint_to_values = function(x) {
-      assert_true(self$is_bounded)
-      self$lower + x * self$span
-    }
+    .map_unitint_to_values = function(x) x*self$span + self$lower
   )
 )

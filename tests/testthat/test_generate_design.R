@@ -27,11 +27,12 @@ test_that("generate_design_grid", {
 
   for (ps in ps_list) {
     info = ps$id
-    d = generate_design_grid(ps, resolution = 3)
+    reso = 3L
+    d = generate_design_grid(ps, resolution = reso)
     expect_data_table(d, any.missing = FALSE, info = info)
     # compute length of design as product of resolution (for all numbers) * product of nlevels
     nrows = ps$nlevels
-    nrows[ps$is_number] = 3L
+    nrows[ps$is_number] = reso
     nrows = prod(nrows)
     expect_equal(nrow(d), nrows, info = info)
     expect_true(all(map_lgl(transpose(d), ps$test)), info = info) # check that all rows are feasible

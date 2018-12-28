@@ -5,6 +5,7 @@ test_that("constructor works", {
   expect_equal(p$id, "test")
   expect_equal(p$lower, 1L)
   expect_equal(p$upper, 10L)
+  expect_equal(p$nlevels, 10L)
 
   # check that we can create param with Inf bounds
   p = ParamInt$new(id = "test", lower = 1L)
@@ -21,5 +22,23 @@ test_that("is_bounded works", {
   expect_true(ParamInt$new(id = "x", lower = 1, upper = 10)$is_bounded)
   expect_false(ParamInt$new(id = "x", lower = 1)$is_bounded)
   expect_false(ParamInt$new(id = "x")$is_bounded)
+})
+
+test_that("map_unitint_to_values", {
+  n = 100000L
+  testit = function(a, b) {
+    p = ParamInt$new("x", lower = a, upper = b)
+    k = p$nlevels
+    expect_equal(k, b-a+1)
+    u = runif(n)
+    v1 = p$map_unitint_to_values(u)
+    expect_setequal(unique(v1), a:b) # check we see all levels
+    # check that empirical frequencies are pretty much uniform
+    freqs = prop.table(table(v1))
+    p = rep(1/k, k)
+    expect_lte(max(abs(freqs - p)), 0.01)
+  }
+  testit(1, 12)
+  testit(-2, 1)
 })
 

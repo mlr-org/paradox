@@ -34,5 +34,22 @@ test_that("is_bounded works", {
   expect_false(ParamDbl$new(id = "x")$is_bounded)
 })
 
-
+test_that("map_unitint_to_values", {
+  n = 50000L
+  testit = function(a, b) {
+    # simulate from param, simulate directly from runif
+    # then check that the estimated ecdfs from both distribs are nearly the same (L1 dist)
+    p = ParamDbl$new("x", lower = a, upper = b)
+    u = runif(n)
+    v1 = p$map_unitint_to_values(u)
+    v2 = runif(n, min = a, max = b)
+    e1 = ecdf(v1)
+    e2 = ecdf(v2)
+    s = seq(a, b, by = 0.0001)
+    d = abs(e1(s) - e2(s))
+    expect_lte(max(d), 0.01)
+  }
+  testit(1, 12)
+  testit(-2, 1)
+})
 

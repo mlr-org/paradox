@@ -30,3 +30,4 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
     .map_unitint_to_values = function(x) x < 0.5
   )
 )
+

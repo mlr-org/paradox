@@ -32,7 +32,7 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   active = list(
     values = function() NULL,
-    nlevels = function() diff(self$range),
+    nlevels = function() diff(self$range) + 1L,
     is_bounded = function() all(is.finite(self$range)),
     storage_type = function() "integer",
     range = function() c(self$lower, self$upper),
@@ -41,15 +41,6 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   private = list(
     .check = function(x) checkInt(x, lower = self$lower, upper = self$upper),
-
-    .map_unitint_to_values = function(x) {
-      #FIXME: Can we make this shorter?
-      assert_true(self$is_bounded)
-      r = self$range + c(-0.5, 0.5)
-      res = as.integer(round(r[1] + x * diff(r)))
-      res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
-      res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
-      res
-    }
+    .map_unitint_to_values = function(x) floor(x * self$nlevels * (1 - 1e-16)) + self$lower  # make sure we dont map to upper+1
   )
 )

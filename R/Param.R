@@ -4,6 +4,8 @@
 
 #FIXME: superclass for dbl/int, lgl/fct?
 
+#FIXME: rename map_uniint to qunif?
+
 #' @title Param Object
 #' @format [R6Class] object.
 #'
@@ -118,6 +120,7 @@ Param = R6Class("Param",
 
     map_unitint_to_values = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
+      assert_true(self$is_bounded)
       private$.map_unitint_to_values(x)
     }
   ),
