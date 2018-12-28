@@ -199,6 +199,20 @@ test_that("as.data.table", {
   expect_equal(unname(ps$values), d$values)
 })
 
+test_that("ParamSet$defaults", {
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1, upper = 3, default = 2),
+    ParamInt$new("y", lower = 1, upper = 3)
+  ))
+  expect_equal(ps$defaults, list(x = 2))
+  expect_error(ParamDbl$new("x", lower = 1, upper = 3, default = 4))
+  expect_error(ParamDbl$new("x", lower = 1, upper = 3, default = NULL))
+  ps = ParamSet$new(list(
+    ParamDbl$new("x", lower = 1, upper = 3, special_vals = list(NULL), default = NULL),
+    ParamInt$new("y", lower = 1, upper = 3)
+  ))
+  expect_equal(ps$defaults, list(x = NULL))
+})
 
 
 

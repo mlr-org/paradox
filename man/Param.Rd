@@ -33,6 +33,7 @@ Arbitrary special values this parameter is allowed to take, to make it feasible.
 This allows extending the domain of the param.
 \item \code{default}          :: \code{any} \cr
 Default value. Can be from param domain or \code{special_vals}.
+Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid default.
 \item \code{storage_type}     :: \code{character(1)} \cr
 Data type when values of this param is stored in a data table or sampled. Read-only.
 \item \code{tags}             :: \code{character} \cr

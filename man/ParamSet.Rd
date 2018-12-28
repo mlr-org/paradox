@@ -50,7 +50,7 @@ Named with param IDs. Read-only.
 Can be used to group and subset params.
 Named with param IDs. Read-only.
 \item \code{defaults}          :: named \code{list} \cr
-Default values of all params.
+Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
 \item \code{trafo}            :: \code{function(x)} \cr
 Transformation function.

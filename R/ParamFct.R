@@ -12,10 +12,10 @@ ParamFct = R6Class("ParamFct", inherit = Param,
   public = list(
     values = NULL,
 
-    initialize = function(id, values, default = NULL, special_vals = list(), tags = NULL) {
+    initialize = function(id, values, default = NO_DEF, special_vals = list(), tags = NULL) {
       assert_character(values, any.missing = FALSE, unique = TRUE)
-      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
       self$values = values
+      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
 

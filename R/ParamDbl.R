@@ -19,13 +19,13 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     lower = NULL,
     upper = NULL,
 
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NULL, tags = NULL) {
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = NULL) {
       assert_number(lower)
       assert_number(upper)
       assert_true(lower <= upper)
-      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
       self$lower = lower
       self$upper = upper
+      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
 

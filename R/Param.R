@@ -6,6 +6,8 @@
 
 #FIXME: rename map_uniint to qunif?
 
+# FIXME: document args of all constructors better, it might be unclear what they mean
+
 #' @title Param Object
 #' @format [R6Class] object.
 #'
@@ -32,6 +34,7 @@
 #'   This allows extending the domain of the param.
 #' * `default`          :: `any` \cr
 #'    Default value. Can be from param domain or `special_vals`.
+#'    Has value `NO_DEF` if no default is there - `NULL` could be a valid default.
 #' * `storage_type`     :: `character(1)` \cr
 #'    Data type when values of this param is stored in a data table or sampled. Read-only.
 #' * `tags`             :: `character` \cr
@@ -79,7 +82,8 @@ Param = R6Class("Param",
       self$special_vals = special_vals
       self$default = default
       self$tags = tags
-      #FIXME: check that default is feasible
+      if (is_proper_default(default)) # check that default is feasible
+        self$assert(default)
     },
 
     check = function(x) {

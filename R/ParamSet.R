@@ -54,7 +54,7 @@
 #'   Can be used to group and subset params.
 #'   Named with param IDs. Read-only.
 #' * `defaults`          :: named `list` \cr
-#'   Default values of all params.
+#'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
 #' * `trafo`            :: `function(x)` \cr
 #'   Transformation function.
@@ -244,7 +244,7 @@ ParamSet = R6Class("ParamSet",
     values = function() private$get_member_with_idnames("values", as.list),
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
-    defaults = function() private$get_member_with_idnames("default", as.list),
+    defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_types = function() private$get_member_with_idnames("storage_type", as.character),
     # FIXME: doc is_number and is_categ

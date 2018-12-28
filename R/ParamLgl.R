@@ -10,7 +10,7 @@
 #' @export
 ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(
-    initialize = function(id, special_vals = list(), default = NULL, tags = NULL) {
+    initialize = function(id, special_vals = list(), default = NO_DEF, tags = NULL) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
