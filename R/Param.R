@@ -2,12 +2,7 @@
 # we also need to be able to ask for the fixed value?
 # we should probably add a note for each param what fixing means
 
-# FIXME: für alle params muss das "inherist from" gesetzt werden
-
 #FIXME: superclass for dbl/int, lgl/fct?
-
-# FIXME:  mal check assert und test unitesten, gab einen bug
-
 
 #' @title Param Object
 #' @format [R6Class] object.

@@ -1,5 +1,18 @@
 context("Param")
 
+test_that("check and assert work", {
+  # test-funcion should be tested in individual test_Param<type> files
+  # here we briefly check all 3 to see if they work in principle
+  p = ParamDbl$new("x", lower = 1, upper = 2)
+  p$assert(1)
+  expect_error(p$assert(3))
+  expect_true(p$check(1))
+  expect_string(p$check(3), fixed = "<= 2")
+  expect_true(p$test(1))
+  expect_false(p$test(3))
+})
+
+
 test_that("special_vals work for all Param subclasses", {
   pclasses = list(ParamFct, ParamLgl, ParamInt, ParamDbl)
   special_vals_list = list(
