@@ -50,6 +50,9 @@
 #' * `is_bounded`       :: named `logical(1)`
 #'   Do all parameters have finite bounds?
 #'   Named with param IDs. Read-only.
+#' * `special_vals`     :: named `list` of `list` \cr
+#'   Special values for all parameters.
+#'   Named with param IDs. Read-only.
 #' * `storage_types`     :: `character` \cr
 #'   Data types of params when stored in tables.
 #'   Named with param IDs. Read-only.
@@ -247,6 +250,7 @@ ParamSet = R6Class("ParamSet",
     values = function() private$get_member_with_idnames("values", as.list),
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
+    special_vals = function() private$get_member_with_idnames("special_vals", as.list),
     defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_types = function() private$get_member_with_idnames("storage_type", as.character),

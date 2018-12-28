@@ -30,6 +30,7 @@
 #' * `special_vals`     :: `list` \cr
 #'   Arbitrary special values this parameter is allowed to take, to make it feasible.
 #'   This allows extending the domain of the param.
+#'   This is only used in feasibility checks, neither in generating designs nor sampling.
 #' * `default`          :: `any` \cr
 #'    Default value. Can be from param domain or `special_vals`.
 #'    Has value `NO_DEF` if no default is there - `NULL` could be a valid default.
