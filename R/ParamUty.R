@@ -25,6 +25,7 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     lower = function() NA_real_,
     upper = function() NA_real_,
     values = function() NULL,
+    # FIXME: nlevels should be 1 if param is fixed
     nlevels = function() Inf,
     is_bounded = function() stop("undefined"),
     storage_type = function() "list"

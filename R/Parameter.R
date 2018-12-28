@@ -1,3 +1,5 @@
+#' FIXME: the whole fixing stuff is bullshit. this should be done in an extra data structure in the ps
+
 #FIXME: we need to handle the specail case of fixing / mapunitint. maybe that auto-works, maybe not
 # we also need to be able to ask for the fixed value?
 # we should probably add a note for each param what fixing means

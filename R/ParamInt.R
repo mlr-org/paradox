@@ -10,6 +10,7 @@
 #' @section Public methods:
 #' * `new(id, lower, upper, special_vals, default, tags)` \cr
 #'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
+#'   `lower` is set to its integer ceiling and 'upper' to its integer floor value.
 #'
 #' @name ParamInt
 #' @family Param
@@ -24,7 +25,6 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
       assert_number(upper, na.ok = TRUE)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-      # FIXME: doc this
       self$lower = ceiling(lower)
       self$upper = floor(upper)
     }
