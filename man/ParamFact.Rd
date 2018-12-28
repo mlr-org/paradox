@@ -5,7 +5,7 @@
 \alias{ParamFact}
 \alias{ParamFct}
 \title{Param: Factor}
-\format{\link{R6Class} object.}
+\format{\link{R6Class} object. Inherits from \link{Param}}
 \usage{
 ParamFct
 }

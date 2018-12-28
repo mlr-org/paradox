@@ -4,7 +4,7 @@
 \name{ParamInt}
 \alias{ParamInt}
 \title{Param: Integer}
-\format{\link{R6Class} object.}
+\format{\link{R6Class} object. Inherits from \link{Param}}
 \usage{
 ParamInt
 }

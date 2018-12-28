@@ -1,5 +1,5 @@
 #' @title Param: Untyped
-#' @format [R6Class] object.
+#' @format [R6Class] object. Inherits from [Param]
 #'
 #' @description
 #' Untyped parameters, can be used to bypass any complicated feasibility checks, when

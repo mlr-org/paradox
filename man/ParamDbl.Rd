@@ -4,7 +4,7 @@
 \name{ParamDbl}
 \alias{ParamDbl}
 \title{Param: Double}
-\format{\link{R6Class} object.}
+\format{\link{R6Class} object. Inherits from \link{Param}}
 \usage{
 ParamDbl
 }

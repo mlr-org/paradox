@@ -1,5 +1,5 @@
 #' @title Param: Integer
-#' @format [R6Class] object.
+#' @format [R6Class] object. Inherits from [Param]
 #'
 #' @section Public members / active bindings:
 #' * `range`            :: `numeric(2)` \cr

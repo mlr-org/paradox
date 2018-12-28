@@ -1,5 +1,5 @@
 #' @title Param: Logical
-#' @format [R6Class] object.
+#' @format [R6Class] object. Inherits from [Param]
 #'
 #' @section Public methods:
 #' * `new(id, special_vals, default, tags)` \cr

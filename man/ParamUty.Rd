@@ -4,7 +4,7 @@
 \name{ParamUty}
 \alias{ParamUty}
 \title{Param: Untyped}
-\format{\link{R6Class} object.}
+\format{\link{R6Class} object. Inherits from \link{Param}}
 \usage{
 ParamUty
 }
