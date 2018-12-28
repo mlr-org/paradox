@@ -4,8 +4,6 @@
 
 #FIXME: superclass for dbl/int, lgl/fct?
 
-#FIXME: rename map_uniint to qunif?
-
 # FIXME: document args of all constructors better, it might be unclear what they mean
 
 #' @title Param Object

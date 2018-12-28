@@ -55,7 +55,7 @@ th_paramset_repeated = function() {
   ps$add_param_set(th_param_dbl_na()$rep(4L))
 }
 
-th_paramset_complex = function() {
+th_paramset_deps = function() {
   ps = th_paramset_full()
   ps$add_dependency(Dependency$new(
     node_id = "th_param_fct", parent_id = "th_param_lgl",

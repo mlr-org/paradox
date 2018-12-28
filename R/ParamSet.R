@@ -12,6 +12,9 @@
 # FIXME: vielleicht kann man sich das ganze value-fixing bullhit zeugs sparen,
 # wenn paramvalues gleich ein teil vom paramset sind?
 
+#FIXME: add a hierarchical sampler for random sampling with deps. and ensure that sampling and gen_design
+# perform proper tests on deps
+
 
 #' @title ParamSet
 #'

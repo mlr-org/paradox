@@ -6,7 +6,6 @@ test_that("generate_design_random", {
     th_paramset_repeated(),
     th_paramset_numeric(),
     th_paramset_trafo()
-    #th_paramset_complex() #FIXME: Make this possible
   )
 
   for (ps in ps_list) {

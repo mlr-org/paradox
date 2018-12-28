@@ -52,8 +52,8 @@ Three checkmate-like check-functions. Take a value from the domain of the param,
 A value is feasible if it is inside of the bounds or from \code{special_vals}.
 \item \code{qunif(x)} \cr
 \code{numeric(n)} -> \code{vector(n)} \cr
-Takes values from [0,1] and maps them to a vector of feasible values, so that the values are regular distributed.
-Use case: Sample a uniform-[0,1] random variable, and turn it into a uniform sample from this param.
+Takes values from [0,1] and map them, regularly distributed, to the domain of the param.
+Think of: quantile function or the usecse to map a uniform-[0,1] random variable into a uniform sample from this param.
 \item \code{rep(n)} \cr
 \code{integer(1)} -> \link{ParamSet} \cr
 Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>" and gets additional tag "<id>_rep".
