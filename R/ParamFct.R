@@ -1,4 +1,4 @@
-#' @title Parameter: Factor
+#' @title Param: Factor
 #' @format [R6Class] object.
 #'
 #' @section Public methods:
@@ -6,9 +6,9 @@
 #'   `character(1)`, `character`, `list`, `any`, `character` -> self
 #'
 #' @name ParamFact
-#' @family Parameter
+#' @family Param
 #' @export
-ParamFct = R6Class("ParamFct", inherit = Parameter,
+ParamFct = R6Class("ParamFct", inherit = Param,
   public = list(
     values = NULL,
 

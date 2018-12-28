@@ -3,7 +3,7 @@
 \docType{data}
 \name{ParamUty}
 \alias{ParamUty}
-\title{Parameter: Untyped}
+\title{Param: Untyped}
 \format{\link{R6Class} object.}
 \usage{
 ParamUty
@@ -22,9 +22,9 @@ sampling or generaring designs with this param.
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamDbl}},
+Other Param: \code{\link{ParamDbl}},
   \code{\link{ParamFact}}, \code{\link{ParamInt}},
-  \code{\link{ParamLgl}}, \code{\link{Parameter}}
+  \code{\link{ParamLgl}}, \code{\link{Param}}
 }
-\concept{Parameter}
+\concept{Param}
 \keyword{datasets}

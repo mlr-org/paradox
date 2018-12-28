@@ -1,4 +1,4 @@
-#' @title Parameter: Untyped
+#' @title Param: Untyped
 #' @format [R6Class] object.
 #'
 #' @description
@@ -12,9 +12,9 @@
 #'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
 #'
 #' @name ParamUty
-#' @family Parameter
+#' @family Param
 #' @export
-ParamUty = R6Class("ParamUty", inherit = Parameter,
+ParamUty = R6Class("ParamUty", inherit = Param,
   public = list(
     initialize = function(id, default = NULL, tags = NULL) {
       super$initialize(id, special_vals = list(), default = default, tags = tags)

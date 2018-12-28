@@ -1,7 +1,7 @@
 # Objects Used for Testing
 # use th_ to indicate a test helper object
 
-# Parameter
+# Param
 th_param_int = function() ParamInt$new(id = 'th_param_int', default = 0, lower = -10, upper = 10)
 th_param_nat = function() ParamInt$new(id = 'th_param_nat', default = 1L, lower = 1L, upper = 4L)
 th_param_dbl = function() ParamDbl$new(id = 'th_param_dbl', default = 0, lower = -10, upper = 10)

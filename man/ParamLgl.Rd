@@ -3,13 +3,13 @@
 \docType{data}
 \name{ParamLgl}
 \alias{ParamLgl}
-\title{Parameter: Logical}
+\title{Param: Logical}
 \format{\link{R6Class} object.}
 \usage{
 ParamLgl
 }
 \description{
-Parameter: Logical
+Param: Logical
 }
 \section{Public methods}{
 
@@ -20,9 +20,9 @@ Parameter: Logical
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamDbl}},
+Other Param: \code{\link{ParamDbl}},
   \code{\link{ParamFact}}, \code{\link{ParamInt}},
-  \code{\link{ParamUty}}, \code{\link{Parameter}}
+  \code{\link{ParamUty}}, \code{\link{Param}}
 }
-\concept{Parameter}
+\concept{Param}
 \keyword{datasets}

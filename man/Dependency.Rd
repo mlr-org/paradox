@@ -3,12 +3,12 @@
 \docType{data}
 \name{Dependency}
 \alias{Dependency}
-\title{Parameter Dependency}
+\title{Param Dependency}
 \format{An object of class \code{R6ClassGenerator} of length 24.}
 \usage{
 Dependency
 }
 \description{
-Parameter Dependency
+Param Dependency
 }
 \keyword{datasets}

@@ -1,4 +1,4 @@
-#' @title Parameter: Logical
+#' @title Param: Logical
 #' @format [R6Class] object.
 #'
 #' @section Public methods:
@@ -6,9 +6,9 @@
 #'   `character(1)`, `list`, `any`, `character` -> self
 #'
 #' @name ParamLgl
-#' @family Parameter
+#' @family Param
 #' @export
-ParamLgl = R6Class("ParamLgl", inherit = Parameter,
+ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(
     initialize = function(id, special_vals = list(), default = NULL, tags = NULL) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)

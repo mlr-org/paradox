@@ -1,4 +1,4 @@
-#' @title Parameter: Double
+#' @title Param: Double
 #' @format [R6Class] object.
 #'
 #' @section Public members / active bindings:
@@ -12,9 +12,9 @@
 #'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
 #'
 #' @name ParamDbl
-#' @family Parameter
+#' @family Param
 #' @export
-ParamDbl = R6Class("ParamDbl", inherit = Parameter,
+ParamDbl = R6Class("ParamDbl", inherit = Param,
   public = list(
     lower = NULL,
     upper = NULL,

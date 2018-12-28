@@ -9,14 +9,14 @@
 ParamSet
 }
 \description{
-A set of \link{Parameter} objects.
+A set of \link{Param} objects.
 }
 \section{Public members / active bindings}{
 
 \itemize{
 \item \code{id}               :: \code{character(1)}
 ID of this param set. Settable.
-\item \code{params}           :: named list of \link{Parameter}
+\item \code{params}           :: named list of \link{Param}
 Contained parameters, named with their respective IDs.
 NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
 \item \code{length}           :: \code{integer(1)}
@@ -26,7 +26,7 @@ Is the param set empty? Read-only.
 \item \code{ids}              :: \code{character}
 IDs of contained parameters. Read-only.
 \item \code{pclasses}         :: named \code{character}
-Parameter classes of contained parameters.
+Param classes of contained parameters.
 Named with param IDs. Read-only.
 \item \code{lowers}           :: named \link{double}
 Lower bounds of parameters, NA if param is not a number.
@@ -61,9 +61,9 @@ Transformation function.
 
 \itemize{
 \item \code{new(params)} \cr
-list of \link{Parameter} -> \code{self}
+list of \link{Param} -> \code{self}
 \item \code{add_param(param)} \cr
-\link{Parameter} -> \code{self}
+\link{Param} -> \code{self}
 Adds a param to this set, param is cloned.
 \item \code{add_param_set(param_set)} \cr
 \link{ParamSet} -> \code{self}

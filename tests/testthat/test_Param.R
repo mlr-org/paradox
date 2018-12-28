@@ -1,6 +1,6 @@
-context("Parameter")
+context("Param")
 
-test_that("special_vals work for all Parameter subclasses", {
+test_that("special_vals work for all Param subclasses", {
   pclasses = list(ParamFct, ParamLgl, ParamInt, ParamDbl)
   special_vals_list = list(
     list(1),

@@ -7,7 +7,7 @@ Sampler = R6Class("Sampler",
     param_set = NULL, # param_set that the sampler refers to
 
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
-    initialize = function(param_set, params.cl = "Parameter") {
+    initialize = function(param_set, params.cl = "Param") {
       assert_r6(param_set, "ParamSet")
       assert_subset(param_set$pclasses, params.cl)
       self$param_set = param_set
@@ -28,7 +28,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
   ),
 
   active = list(
-    # retrieve the only param in the set, return Parameter object
+    # retrieve the only param in the set, return Param object
     param = function() self$param_set$params[[self$param_set$ids[1L]]]
   ),
 

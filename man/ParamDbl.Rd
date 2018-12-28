@@ -3,13 +3,13 @@
 \docType{data}
 \name{ParamDbl}
 \alias{ParamDbl}
-\title{Parameter: Double}
+\title{Param: Double}
 \format{\link{R6Class} object.}
 \usage{
 ParamDbl
 }
 \description{
-Parameter: Double
+Param: Double
 }
 \section{Public members / active bindings}{
 
@@ -30,9 +30,9 @@ Difference of \code{upper - lower}.
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamFact}},
+Other Param: \code{\link{ParamFact}},
   \code{\link{ParamInt}}, \code{\link{ParamLgl}},
-  \code{\link{ParamUty}}, \code{\link{Parameter}}
+  \code{\link{ParamUty}}, \code{\link{Param}}
 }
-\concept{Parameter}
+\concept{Param}
 \keyword{datasets}

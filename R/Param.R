@@ -5,6 +5,7 @@
 # FIXME: für alle params muss das "inherist from" gesetzt werden
 
 #FIXME: superclass for dbl/int, lgl/fct?
+# FIXME: rename parameter to param
 
 #' @title Param Object
 #' @format [R6Class] object.

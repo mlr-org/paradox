@@ -9,12 +9,12 @@
 
 #' @title ParamSet
 #'
-#' @description A set of [Parameter] objects.
+#' @description A set of [Param] objects.
 #'
 #' @section Public members / active bindings:
 #' * `id`               :: `character(1)`
 #'   ID of this param set. Settable.
-#' * `params`           :: named list of [Parameter]
+#' * `params`           :: named list of [Param]
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
 #' * `length`           :: `integer(1)`
@@ -24,7 +24,7 @@
 #' * `ids`              :: `character`
 #'   IDs of contained parameters. Read-only.
 #' * `pclasses`         :: named `character`
-#'   Parameter classes of contained parameters.
+#'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
 #' * `lowers`           :: named [double]
 #'   Lower bounds of parameters, NA if param is not a number.
@@ -55,9 +55,9 @@
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
-#'   list of [Parameter] -> `self`
+#'   list of [Param] -> `self`
 #' * `add_param(param)` \cr
-#'   [Parameter] -> `self`
+#'   [Param] -> `self`
 #'   Adds a param to this set, param is cloned.
 #' * `add_param_set(param_set)` \cr
 #'   [ParamSet] -> `self`
@@ -100,7 +100,7 @@ ParamSet = R6Class("ParamSet",
     # FIXME: trafo should be an AB
     # FIXME: id should be an AB
     initialize = function(params = list(), id = "paramset", trafo = NULL) {
-      assert_list(params, types = "Parameter")
+      assert_list(params, types = "Param")
       self$params = map(params, function(p) p$clone(deep = TRUE))
       names(self$params) = map_chr(params, "id")
       assert_string(id)
@@ -110,7 +110,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     add_param = function(param) {
-      assert_r6(param, "Parameter")
+      assert_r6(param, "Param")
       self$params[[param$id]] = param$clone()
       invisible(self)
     },
@@ -184,7 +184,7 @@ ParamSet = R6Class("ParamSet",
           dep_res = dep$condition$eval(xs[[dep$parent_id]])
           if (isFALSE(dep_res) && dep$node_id %in% names(xs)) {
             # FIXME: we should say something about what the condition is on / which params
-            return(sprintf("Parameter '%s' present, but condition '%s' not fulfilled.", dep$node_id, dep$condition$id))
+            return(sprintf("Param '%s' present, but condition '%s' not fulfilled.", dep$node_id, dep$condition$id))
           }
         }
       }
@@ -216,7 +216,7 @@ ParamSet = R6Class("ParamSet",
       if (self$is_empty) {
         catf("Empty.")
       } else {
-        catf("Parameters:")
+        catf("Params:")
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])

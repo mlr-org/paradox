@@ -3,13 +3,13 @@
 \docType{data}
 \name{ParamInt}
 \alias{ParamInt}
-\title{Parameter: Integer}
+\title{Param: Integer}
 \format{\link{R6Class} object.}
 \usage{
 ParamInt
 }
 \description{
-Parameter: Integer
+Param: Integer
 }
 \section{Public members / active bindings}{
 
@@ -30,9 +30,9 @@ Difference of \code{upper - lower}.
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamDbl}},
+Other Param: \code{\link{ParamDbl}},
   \code{\link{ParamFact}}, \code{\link{ParamLgl}},
-  \code{\link{ParamUty}}, \code{\link{Parameter}}
+  \code{\link{ParamUty}}, \code{\link{Param}}
 }
-\concept{Parameter}
+\concept{Param}
 \keyword{datasets}

@@ -4,13 +4,13 @@
 \name{ParamFact}
 \alias{ParamFact}
 \alias{ParamFct}
-\title{Parameter: Factor}
+\title{Param: Factor}
 \format{\link{R6Class} object.}
 \usage{
 ParamFct
 }
 \description{
-Parameter: Factor
+Param: Factor
 }
 \section{Public methods}{
 
@@ -21,9 +21,9 @@ Parameter: Factor
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamDbl}},
+Other Param: \code{\link{ParamDbl}},
   \code{\link{ParamInt}}, \code{\link{ParamLgl}},
-  \code{\link{ParamUty}}, \code{\link{Parameter}}
+  \code{\link{ParamUty}}, \code{\link{Param}}
 }
-\concept{Parameter}
+\concept{Param}
 \keyword{datasets}

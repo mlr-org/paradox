@@ -1,4 +1,4 @@
-#' @title Parameter Dependency
+#' @title Param Dependency
 #' @name Dependency
 #' @export
 Dependency = R6Class("Dependency",
