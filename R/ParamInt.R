@@ -41,6 +41,6 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   private = list(
     .check = function(x) checkInt(x, lower = self$lower, upper = self$upper),
-    .map_unitint_to_values = function(x) floor(x * self$nlevels * (1 - 1e-16)) + self$lower  # make sure we dont map to upper+1
+    .qunif = function(x) floor(x * self$nlevels * (1 - 1e-16)) + self$lower  # make sure we dont map to upper+1
   )
 )

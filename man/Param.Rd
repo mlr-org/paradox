@@ -50,7 +50,7 @@ Constructor of abstract base class, only called by inheriting classes.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 A value is feasible if it is inside of the bounds or from \code{special_vals}.
-\item \code{map_unitint_to_values(x)} \cr
+\item \code{qunif(x)} \cr
 \code{numeric(n)} -> \code{vector(n)} \cr
 Takes values from [0,1] and maps them to a vector of feasible values, so that the values are regular distributed.
 Use case: Sample a uniform-[0,1] random variable, and turn it into a uniform sample from this param.

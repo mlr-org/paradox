@@ -26,7 +26,7 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
 
   private = list(
     .check = function(x) check_flag(x),
-    .map_unitint_to_values = function(x) x < 0.5
+    .qunif = function(x) x < 0.5
   )
 )
 

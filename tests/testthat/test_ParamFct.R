@@ -9,13 +9,13 @@ test_that("test if ParamFct constructor works", {
   expect_error(ParamFct$new(id = "test", values = c("a", NA)))
 })
 
-test_that("map_unitint_to_values", {
+test_that("qunif", {
   n = 100000L
   testit = function(vals) {
     p = ParamFct$new("x", values = vals)
     k = p$nlevels
     u = runif(n)
-    v1 = p$map_unitint_to_values(u)
+    v1 = p$qunif(u)
     expect_setequal(unique(v1), p$values) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))

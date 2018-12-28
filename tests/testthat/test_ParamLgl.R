@@ -7,12 +7,12 @@ test_that("constructor works", {
   expect_equal(p$values, c(TRUE, FALSE))
 })
 
-test_that("map_unitint_to_values", {
+test_that("qunif", {
   n = 100000L
   testit = function() {
     p = ParamLgl$new("x")
     u = runif(n)
-    v1 = p$map_unitint_to_values(u)
+    v1 = p$qunif(u)
     expect_setequal(unique(v1), p$values) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))

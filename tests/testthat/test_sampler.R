@@ -57,7 +57,7 @@ test_that("samping works", {
 
     #x = lapply(ps$ids, function(x) runif(10))
     #names(x) = ps$ids
-    #xd = ps$map_unitint_to_values(x)
+    #xd = ps$qunif(x)
     #expect_data_table(xd, nrows = 10, any.missing = FALSE)
     #expect_equal(colnames(xd), ps$ids)
     # denorm can produce infeasible settings

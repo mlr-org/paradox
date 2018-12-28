@@ -47,7 +47,7 @@
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 #'    A value is feasible if it is inside of the bounds or from `special_vals`.
-#' * `map_unitint_to_values(x)` \cr
+#' * `qunif(x)` \cr
 #'   `numeric(n)` -> `vector(n)` \cr
 #'   Takes values from \[0,1\] and maps them to a vector of feasible values, so that the values are regular distributed.
 #'   Use case: Sample a uniform-\[0,1\] random variable, and turn it into a uniform sample from this param.
@@ -122,21 +122,20 @@ Param = R6Class("Param",
       print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
     },
 
-    map_unitint_to_values = function(x) {
+    qunif = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
-      private$.map_unitint_to_values(x)
+      private$.qunif(x)
     }
   ),
 
   active = list(
     pclass = function() class(self)[[1L]]
-    # FIXME: default was broken and needs a proper unit test
   ),
 
   private = list(
     .check = function(x) stop("abstract"),
-    .map_unitint_to_values = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$map_unitint_to_values
+    .qunif = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$qunif
   )
 )
 

@@ -41,6 +41,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
 
   private = list(
     .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
-    .map_unitint_to_values = function(x) x*self$span + self$lower
+    .qunif = function(x) x*self$span + self$lower
   )
 )

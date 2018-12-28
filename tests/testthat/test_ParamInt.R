@@ -24,14 +24,14 @@ test_that("is_bounded works", {
   expect_false(ParamInt$new(id = "x")$is_bounded)
 })
 
-test_that("map_unitint_to_values", {
+test_that("qunif", {
   n = 100000L
   testit = function(a, b) {
     p = ParamInt$new("x", lower = a, upper = b)
     k = p$nlevels
     expect_equal(k, b-a+1)
     u = runif(n)
-    v1 = p$map_unitint_to_values(u)
+    v1 = p$qunif(u)
     expect_setequal(unique(v1), a:b) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))

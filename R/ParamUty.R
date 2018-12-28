@@ -31,6 +31,6 @@ ParamUty = R6Class("ParamUty", inherit = Param,
 
   private = list(
     .check = function(x) TRUE,  # values are always feasible
-    .map_unitint_to_values = function(x) stop("undefined")
+    .qunif = function(x) stop("undefined")
   )
 )

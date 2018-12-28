@@ -30,7 +30,7 @@ ParamFct = R6Class("ParamFct", inherit = Param,
   private = list(
     .check = function(x) check_choice(x, choices = self$values),
 
-    .map_unitint_to_values = function(x) {
+    .qunif = function(x) {
       z = floor(x * self$nlevels * (1 - 1e-16)) + 1 # make sure we dont map to upper+1
       self$values[z]
     }
