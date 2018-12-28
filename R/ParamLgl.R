@@ -27,17 +27,10 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) {
-      check_choice(x, self$values)
-    },
+    .check = function(x) check_choice(x, self$values),
 
-    .map_unitint_to_values = function(x) {
-      # FIXME: the code was bad here because of the "fixing" i think. we should do that in the super class!
-      x < 0.5
-    },
+    .map_unitint_to_values = function(x) x < 0.5,
 
-    .fix = function(x) {
-      self$values = x
-    }
+    .fix = function(x) self$values = x
   )
 )

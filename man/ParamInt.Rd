@@ -26,6 +26,7 @@ Difference of \code{upper - lower}.
 \itemize{
 \item \code{new(id, lower, upper, special_vals, default, tags)} \cr
 \code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+\code{lower} is set to its integer ceiling and 'upper' to its integer floor value.
 }
 }
 
