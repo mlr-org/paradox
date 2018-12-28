@@ -20,8 +20,8 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     upper = NULL,
 
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NULL, tags = NULL) {
-      assert_number(lower, na.ok = TRUE)
-      assert_number(upper, na.ok = TRUE)
+      assert_number(lower)
+      assert_number(upper)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
       self$lower = lower
