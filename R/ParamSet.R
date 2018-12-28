@@ -74,12 +74,9 @@
 #' * `new(params)` \cr
 #'   list of [Param] -> `self`
 #'   Deep-clones all passed param objects.
-#' * `add_param(param)` \cr
-#'   [Param] -> `self`
-#'   Adds a param to this set, param is cloned.
-#' * `add_param_set(param_set)` \cr
-#'   [ParamSet] -> `self`
-#'   Adds the contents of another set to this set, all params are cloned.
+#' * `add(param_set)` \cr
+#'   [Param] | [ParamSet] -> `self`
+#'   Adds a single param or another set to this set, all params are cloned.
 #' * `subset(ids)` \cr
 #'   `character` -> `self`
 #'   Changes the current set to the set of passed IDs.
@@ -122,21 +119,19 @@ ParamSet = R6Class("ParamSet",
       self$id = id
     },
 
-    add_param = function(param) {
-      assert_r6(param, "Param")
-      self$params[[param$id]] = param$clone()
-      invisible(self)
-    },
-
-    add_param_set = function(param_set) {
-      ids_inboth = intersect(self$ids, param_set$ids)
+    add = function(p) {
+      assert_multi_class(p, c("Param", "ParamSet"))
+      if (test_r6(p, "Param")) # level-up param to set
+        p = ParamSet$new(list(p))
+      ids_inboth = intersect(self$ids, p$ids)
       if (length(ids_inboth) > 0L)
-        stop("Name clash when adding a set. These ids are in both sets: %s", str_collapse(ids_inboth))
-      if (!is.null(param_set$trafo))
+        stop("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
+      if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
-      if (!is.null(param_set$deps))
+      # FIXME: we can add deps?
+      if (!is.null(p$deps))
         stop("Cannot add a param set with dependencies.")
-      ps2 = param_set$clone(deep = TRUE)
+      ps2 = p$clone(deep = TRUE)
       self$params = c(self$params, ps2$params)
       invisible(self)
     },

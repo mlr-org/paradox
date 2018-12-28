@@ -61,25 +61,25 @@ test_that("ParamSet$add_param_set", {
   ps1 = th_paramset_numeric()$clone(deep = TRUE)
   n1 = ps1$length
   ps2 = th_paramset_empty()$clone(deep = TRUE)
-  ps1$add_param_set(ps2)
+  ps1$add(ps2)
   expect_equal(ps1$length, n1)
-  ps2$add_param_set(ps1)
+  ps2$add(ps1)
   expect_equal(ps2$length, n1)
 
   # adding 2 sets, full and numeric, results in a clash
   ps1 = th_paramset_numeric()$clone(deep = TRUE)
   ps2 = th_paramset_full()$clone(deep = TRUE)
-  expect_error(ps1$add_param_set(ps2), "Name clash")
+  expect_error(ps1$add(ps2), "Name clash")
 
   # adding 2 sets, numeric and untyped, makes them larger
   ps1 = th_paramset_numeric()$clone(deep = TRUE)
   ps2 = th_paramset_untyped()$clone(deep = TRUE)
-  ps1$add_param_set(ps2)
+  ps1$add(ps2)
   expect_equal(ps2$length, 1L)
   expect_equal(ps1$ids, c("th_param_int", "th_param_dbl", "th_param_uty"))
   ps1 = th_paramset_numeric()$clone(deep = TRUE)
   ps2 = th_paramset_untyped()$clone(deep = TRUE)
-  ps2$add_param_set(ps1)
+  ps2$add(ps1)
   expect_equal(ps2$ids, c("th_param_uty", "th_param_int", "th_param_dbl"))
   expect_equal(ps1$length, 2L)
 })
@@ -143,7 +143,7 @@ test_that("ParamSet does a deep copy of params on construction", {
 
 test_that("ParamSet does a deep copy of param on add", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
-  ps = ParamSet$new(list())$add_param(p)
+  ps = ParamSet$new(list())$add(p)
   p$lower = 2
   expect_equal(p$lower, 2)
   expect_equal(ps$lowers, c(x = 1))
@@ -178,11 +178,11 @@ test_that("ParamSet$is_bounded", {
 
 test_that("ParamSet$add_param", {
   ps = ParamSet$new(list())
-  ps$add_param(ParamDbl$new("x", lower = 1))
+  ps$add(ParamDbl$new("x", lower = 1))
   expect_equal(ps$length, 1L)
   expect_equal(ps$ids, "x")
   expect_equal(ps$lowers, c(x = 1))
-  ps$add_param(ParamFct$new("y", values = c("a")))
+  ps$add(ParamFct$new("y", values = c("a")))
   expect_equal(ps$length, 2L)
   expect_equal(ps$ids, c("x", "y"))
   expect_equal(ps$lowers, c(x = 1, y = NA))

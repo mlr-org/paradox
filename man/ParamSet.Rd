@@ -71,12 +71,9 @@ NB: For convenience, the self-paramset is also passed, if you need some info fro
 \item \code{new(params)} \cr
 list of \link{Param} -> \code{self}
 Deep-clones all passed param objects.
-\item \code{add_param(param)} \cr
-\link{Param} -> \code{self}
-Adds a param to this set, param is cloned.
-\item \code{add_param_set(param_set)} \cr
-\link{ParamSet} -> \code{self}
-Adds the contents of another set to this set, all params are cloned.
+\item \code{add(param_set)} \cr
+\link{Param} | \link{ParamSet} -> \code{self}
+Adds a single param or another set to this set, all params are cloned.
 \item \code{subset(ids)} \cr
 \code{character} -> \code{self}
 Changes the current set to the set of passed IDs.

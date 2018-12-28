@@ -53,7 +53,7 @@ th_paramset_repeated = function() {
       list(th_param_nat(), th_param_fct())
     )
   )
-  ps$add_param_set(th_param_dbl_na()$rep(4L))
+  ps$add(th_param_dbl_na()$rep(4L))
 }
 
 th_paramset_deps = function() {
