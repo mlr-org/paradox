@@ -211,7 +211,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     # printer, prints the set as a datatable, with the option to hide some cols
-    print = function(..., hide.cols = c("tags")) {
+    print = function(..., hide.cols = c("nlevels", "special_vals", "tags", "storage_type")) {
       catf("ParamSet: %s", self$id)
       if (self$is_empty) {
         catf("Empty.")

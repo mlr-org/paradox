@@ -114,7 +114,7 @@ Param = R6Class("Param",
     },
 
     # FIXME: manually test the printer so it looks good
-    print = function(..., hide.cols = c("tags")) {
+    print = function(..., hide.cols = c("nlevels", "special_vals", "tags", "storage_type")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = as.data.table(ParamSet$new(list(self)))
       assert_subset(hide.cols, names(d))
