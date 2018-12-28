@@ -53,11 +53,11 @@ test_that("ParamSet$subset", {
   # subsetting to all ids does not change anything
   ps = getps()
   ps$subset(ids)
-  expect_equal(ps$as_dt(), getps()$as_dt())
+  expect_equal(as.data.table(ps), as.data.table(getps()))
   # subset full set to 2 numeric params
   ps = getps()
   ps$subset(c("th_param_int", "th_param_dbl"))
-  expect_equal(ps$as_dt(), th_paramset_numeric()$as_dt())
+  expect_equal(as.data.table(ps), as.data.table(th_paramset_numeric()))
 })
 
 test_that("ParamSet$add_param_set", {
@@ -191,6 +191,19 @@ test_that("ParamSet$add_param", {
   expect_equal(ps$ids, c("x", "y"))
   expect_equal(ps$lowers, c(x = 1, y = NA))
 })
+
+test_that("as.data.table", {
+  d = as.data.table(th_paramset_empty())
+  expect_data_table(d, nrow = 0)
+  ps = th_paramset_full()
+  d = as.data.table(ps)
+  expect_data_table(d, nrow = 4, ncol = 10)
+  expect_equal(ps$ids, d$id)
+  expect_equal(unname(ps$lower), d$lowers)
+  expect_equal(unname(ps$values), d$values)
+})
+
+
 
 
 

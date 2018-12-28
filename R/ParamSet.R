@@ -79,6 +79,19 @@
 #    \item{member_tags}{[\code{list}] \cr
 #      The \code{tags} of each Parameter.}
 #  }
+#'
+#' @section S3 methods and type converters:
+#' * `as.data.table()` \cr
+#'   Compact representation as datatable. Col types are: \cr
+#'     - id: character
+#'     - lower, upper: double
+#'     - values: list col, with NULL elements
+#'     - special_vals: list col of list
+#'     - default: list col, with NULL elements
+#'     - storage_type: character
+#'     - tags: list col of character vectors
+#' @name ParamSet
+#' @export
 ParamSet = R6Class("ParamSet",
   public = list(
     params = NULL,
@@ -149,13 +162,6 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
-
-    # FIXME: should probably be S3
-    # FIXME: we need to really test what kind of cols this returns, for the fullset
-    as_dt = function() {
-      dt = rbindlist(map(self$params, function(p) p$as_dt()))
-    },
-
     check = function(xs) {
 
       ok = check_list(xs)
@@ -213,7 +219,7 @@ ParamSet = R6Class("ParamSet",
         catf("Empty.")
       } else {
         catf("Parameters:")
-        d = self$as_dt()
+        d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
@@ -254,3 +260,9 @@ ParamSet = R6Class("ParamSet",
     }
   )
 )
+
+#' @export
+as.data.table.ParamSet = function(x, ...) {
+  rbindlist(map(x$params, as.data.table))
+}
+

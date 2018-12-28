@@ -54,17 +54,14 @@ Use case: Sample a uniform-[0,1] random variable, and turn it into a uniform sam
 \item \code{rep(n)} \cr
 \code{integer(1)} -> \link{ParamSet} \cr
 Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>" and gets additional tag "<id>_rep".
-\item \code{as_dt()} \cr
-self -> \link{data.table} \cr
-Converts param to datatable with 1 row. Col types are: \cr
-\itemize{
-\item id: character
-\item lower, upper: double
-\item values: list col, with NULL elements
-\item special_vals: list col of list
-\item default: list col, with NULL elements
-\item tags: list col of character vectors
 }
+}
+
+\section{S3 methods and type converters}{
+
+\itemize{
+\item \code{as.data.table()} \cr
+Converts param to datatable with 1 row. See \link{ParamSet}.
 }
 }
 

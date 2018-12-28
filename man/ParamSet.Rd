@@ -73,4 +73,22 @@ all individual param constraints are satisfied and all dependencies are satisfie
 }
 }
 
+\section{S3 methods and type converters}{
+
+\itemize{
+\item \code{as.data.table()} \cr
+Compact representation as datatable. Col types are: \cr
+\itemize{
+\item id: character
+\item lower, upper: double
+\item values: list col, with NULL elements
+\item special_vals: list col of list
+\item is_bounded: logical
+\item default: list col, with NULL elements
+\item storage_type: character
+\item tags: list col of character vectors
+}
+}
+}
+
 \keyword{datasets}

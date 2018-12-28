@@ -50,15 +50,10 @@
 #' * `rep(n)` \cr
 #'   `integer(1)` -> [ParamSet] \cr
 #'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
-#' * `as_dt()` \cr
-#'   self -> [data.table] \cr
-#'   Converts param to datatable with 1 row. Col types are: \cr
-#'     - id: character
-#'     - lower, upper: double
-#'     - values: list col, with NULL elements
-#'     - special_vals: list col of list
-#'     - default: list col, with NULL elements
-#'     - tags: list col of character vectors
+#'
+#' @section S3 methods and type converters:
+#' * `as.data.table()` \cr
+#'   Converts param to datatable with 1 row. See [ParamSet].
 #'
 #' @name Parameter
 #' @family Parameter
@@ -118,7 +113,7 @@ Parameter = R6Class("Parameter",
     # FIXME: manually test the printer so it looks good
     print = function(..., hide.cols = c("tags")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
-      d = ParamSet$new(list(self))$as_dt()
+      d = as.data.table(ParamSet$new(list(self)))
       assert_subset(hide.cols, names(d))
       print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
     },
@@ -131,23 +126,8 @@ Parameter = R6Class("Parameter",
     fix = function(x) {
       self$check(x)
       private$.check(x)
-    },
-
-    # FIXME: S3?
-    # FIXME: add a few cols to make it more usable?
-    # FIXME: doc this
-    as_dt = function() {
-      data.table(
-        id = self$id,
-        pclass = self$pclass,
-        lower = self$lower,
-        upper = self$upper,
-        values = list(self$values),
-        special_vals = list(self$special_vals),
-        default = list(self$default),
-        tags = list(self$tags)
-      )
     }
+
   ),
 
   active = list(
@@ -162,8 +142,18 @@ Parameter = R6Class("Parameter",
   )
 )
 
-
-
-
-
-
+#' @export
+as.data.table.Parameter = function(x, ...) {
+  data.table(
+    id = x$id,
+    pclass = x$pclass,
+    lower = x$lower,
+    upper = x$upper,
+    values = list(x$values),
+    nlevels = x$nlevels,
+    special_vals = list(x$special_vals),
+    default = list(x$default),
+    storage_type = x$storage_type,
+    tags = list(x$tags)
+  )
+}
