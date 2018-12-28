@@ -55,8 +55,13 @@ Named with param IDs. Read-only.
 \item \code{defaults}          :: named \code{list} \cr
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
-\item \code{trafo}            :: \code{function(x)} \cr
-Transformation function.
+\item \code{trafo}            :: \code{function(x, param_set)} -> named \code{list} \cr
+Transformation function. Settable.
+The function is responsible to transform a single (feasible) configuration list into
+another encoding, before evaluating the configuration with the target algorithm.
+For the output-list, not many things have to hold.
+It needs to be a uniquely-named list, and the target algorithm has to accept the configuarion.
+NB: For convenience, the self-paramset is also passed, if you need some info from it.
 }
 }
 
@@ -65,6 +70,7 @@ Transformation function.
 \itemize{
 \item \code{new(params)} \cr
 list of \link{Param} -> \code{self}
+Deep-clones all passed param objects.
 \item \code{add_param(param)} \cr
 \link{Param} -> \code{self}
 Adds a param to this set, param is cloned.
@@ -76,7 +82,7 @@ Adds the contents of another set to this set, all params are cloned.
 Changes the current set to the set of passed IDs.
 \item \code{transform(x)} \cr
 \link{data.table} -> \link{data.table}
-Transforms a collections of configurations (rows) via the associated transformation of the param set,
+Transforms a collection of configurations (rows) via the associated \code{trafo} of the param set,
 so each row in the returned data.table corresponds to the origin-row with the same row-index.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a named list.

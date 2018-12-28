@@ -62,12 +62,18 @@
 #' * `defaults`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
-#' * `trafo`            :: `function(x)` \cr
-#'   Transformation function.
+#' * `trafo`            :: `function(x, param_set)` -> named `list` \cr
+#'   Transformation function. Settable.
+#'   The function is responsible to transform a single (feasible) configuration list into
+#'   another encoding, before evaluating the configuration with the target algorithm.
+#'   For the output-list, not many things have to hold.
+#'   It needs to be a uniquely-named list, and the target algorithm has to accept the configuarion.
+#'   NB: For convenience, the self-paramset is also passed, if you need some info from it.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
 #'   list of [Param] -> `self`
+#'   Deep-clones all passed param objects.
 #' * `add_param(param)` \cr
 #'   [Param] -> `self`
 #'   Adds a param to this set, param is cloned.
@@ -79,7 +85,7 @@
 #'   Changes the current set to the set of passed IDs.
 #' * `transform(x)` \cr
 #'   [data.table] -> [data.table]
-#'   Transforms a collections of configurations (rows) via the associated transformation of the param set,
+#'   Transforms a collection of configurations (rows) via the associated `trafo` of the param set,
 #'   so each row in the returned data.table corresponds to the origin-row with the same row-index.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'   Three checkmate-like check-functions. Take a named list.
@@ -104,20 +110,16 @@
 ParamSet = R6Class("ParamSet",
   public = list(
     params = NULL,
-    trafo = NULL, # function to transform the value before evaluation
     deps = NULL, # a list of Dependency objects
 
-    # this does a deep copy of all passed param objects
-    # FIXME: trafo should be an AB
     # FIXME: id should be an AB
-    initialize = function(params = list(), id = "paramset", trafo = NULL) {
+    initialize = function(params = list(), id = "paramset") {
       assert_list(params, types = "Param")
       self$params = map(params, function(p) p$clone(deep = TRUE))
       names(self$params) = map_chr(params, "id")
       assert_string(id)
       assert_names(id, type = "strict")
       self$id = id
-      self$trafo = assert_function(trafo, args = c("x", "param_set"), null.ok = TRUE)
     },
 
     add_param = function(param) {
@@ -139,17 +141,17 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
-    # takes data.table and calls self$trafo on this data.table. Returns data.table.
     transform = function(x) {
       assert_data_table(x)
       assert_set_equal(names(x), self$ids)
-      if (is.null(self$trafo))
+      if (is.null(self$trafo)) # if no trafo is there, we spit out the input - and assume its feasible
         return(x)
       xs = self$trafo(x = x, param_set = self)
       assert_data_table(xs)
       return(xs)
     },
 
+    # FIXME: remove and open issue about this
     # fix (named list of parameter values to keep fixed)
     # creates a subset of self (cloned) with all params that are not mentioned in fix
     # adds ParamFix param for all dropped Params
@@ -172,7 +174,6 @@ ParamSet = R6Class("ParamSet",
     },
 
     check = function(xs) {
-
       ok = check_list(xs)
       if (!isTRUE(ok))
         return(ok)
@@ -181,14 +182,12 @@ ParamSet = R6Class("ParamSet",
       ok = check_names(names(xs), subset.of = self$ids)
       if (!isTRUE(ok))
         return(ok)
-
       # check each parameters feasibility
       for (id in names(xs)) {
         ch = self$params[[id]]$check(xs[[id]])
         if (test_string(ch)) # we failed a check, return string
           return(paste0(id,": ",ch))
       }
-
       # check dependencies
       if (length(self$deps) > 0) {
         for (dep in self$deps) {
@@ -199,17 +198,12 @@ ParamSet = R6Class("ParamSet",
           }
         }
       }
-
       return(TRUE) # we passed all checks
     },
 
-    test = function(xs) {
-      makeTest(res = self$check(xs))
-    },
+    test = function(xs) makeTest(res = self$check(xs)),
 
-    assert = function(xs, .var.name = vname(xs)) {
-      makeAssertion(xs, self$check(xs), .var.name, NULL)
-    },
+    assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL),
 
     add_dependency = function(dep) {
       assert_r6(dep, "Dependency")
@@ -256,11 +250,18 @@ ParamSet = R6Class("ParamSet",
     storage_types = function() private$get_member_with_idnames("storage_type", as.character),
     # FIXME: doc is_number and is_categ
     is_number = function() self$pclasses %in% c("ParamDbl", "ParamInt"),
-    is_categ = function() self$pclasses %in% c("ParamFct", "ParamLgl")
+    is_categ = function() self$pclasses %in% c("ParamFct", "ParamLgl"),
+    trafo = function(f) {
+      if (missing(f))
+        private$.trafo
+      else
+        private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
+    }
   ),
 
   private = list(
     .id = NULL,
+    .trafo = NULL,
     # FIXME: doc
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids),
 

@@ -31,18 +31,19 @@ th_paramset_numeric = function() {
 }
 
 th_paramset_trafo = function() {
-  ParamSet$new(
+  ps = ParamSet$new(
     id = 'th_paramset_trafo',
     params = list(
       th_param_int(),
       th_param_dbl()
-      ),
-    trafo = function(x, param_set) {
-      x$th_param_int = x$th_param_int * 2L
-      x$th_param_dbl = x$th_param_dbl * x$th_param_int
-      return(x)
-    }
     )
+  )
+  ps$trafo = function(x, param_set) {
+    x$th_param_int = x$th_param_int * 2L
+    x$th_param_dbl = x$th_param_dbl * x$th_param_int
+    return(x)
+  }
+  return(ps)
 }
 
 th_paramset_repeated = function() {
