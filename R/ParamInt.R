@@ -50,10 +50,6 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
       res = ifelse(res > self$upper, self$upper, res) #if we rounded up, we have to go down
       res = ifelse(res < self$lower, self$lower, res) #if we rounded down, we have to go up
       res
-    },
-
-    .fix = function(x) {
-      self$lower = self$upper = x
     }
   )
 )

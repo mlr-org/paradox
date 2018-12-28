@@ -5,7 +5,9 @@
 # FIXME: für alle params muss das "inherist from" gesetzt werden
 
 #FIXME: superclass for dbl/int, lgl/fct?
-# FIXME: rename parameter to param
+
+# FIXME:  mal check assert und test unitesten, gab einen bug
+
 
 #' @title Param Object
 #' @format [R6Class] object.
@@ -25,7 +27,7 @@
 #' * `values`           :: `character` | `logical` | `NULL` \cr
 #'    Allowed values for categorical params, NULL if param is not categorical.
 #' * `nlevels`          :: `numeric(1)` \cr
-#'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper. Read-only.
+#'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
 #' * `is_bounded`       :: `logical(1)` \cr
 #'    Does param have a finitely bounded domain? Read-only.
 #' * `special_vals`     :: `list` \cr
@@ -95,7 +97,7 @@ Param = R6Class("Param",
         return(ch)
     },
 
-    assert = function(x) makeAssertFunction(self$check)(x),
+    assert = function(x) makeAssertionFunction(self$check)(x),
 
     test = function(x) makeTestFunction(self$check)(x),
 
@@ -112,8 +114,7 @@ Param = R6Class("Param",
       ParamSet$new(ps)
     },
 
-    # FIXME: manually test the printer so it looks good
-    print = function(..., hide.cols = c("tags")) {
+    print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = as.data.table(ParamSet$new(list(self)))
       assert_subset(hide.cols, names(d))
@@ -123,13 +124,7 @@ Param = R6Class("Param",
     map_unitint_to_values = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
       private$.map_unitint_to_values(x)
-    },
-
-    fix = function(x) {
-      self$check(x)
-      private$.check(x)
     }
-
   ),
 
   active = list(
@@ -139,8 +134,7 @@ Param = R6Class("Param",
 
   private = list(
     .check = function(x) stop("abstract"),
-    .map_unitint_to_values = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Param$map_unitint_to_values
-    .fix = function(x) stop("abstract")
+    .map_unitint_to_values = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$map_unitint_to_values
   )
 )
 
@@ -153,6 +147,7 @@ as.data.table.Param = function(x, ...) {
     upper = x$upper,
     values = list(x$values),
     nlevels = x$nlevels,
+    is_bounded = x$is_bounded,
     special_vals = list(x$special_vals),
     default = list(x$default),
     storage_type = x$storage_type,

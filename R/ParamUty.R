@@ -25,17 +25,14 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     lower = function() NA_real_,
     upper = function() NA_real_,
     values = function() NULL,
-    # FIXME: nlevels should be 1 if param is fixed
     nlevels = function() Inf,
-    is_bounded = function() stop("undefined"),
+    # FIXME: add to asdatatab
+    is_bounded = function() FALSE,
     storage_type = function() "list"
   ),
 
   private = list(
     .check = function(x) TRUE,  # values are always feasible
-
-    .map_unitint_to_values = function(x) stop("Not possible!"),
-
-    .fix = function(x) stop("Not possible!")
+    .map_unitint_to_values = function(x) stop("undefined")
   )
 )

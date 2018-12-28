@@ -36,10 +36,6 @@ ParamFct = R6Class("ParamFct", inherit = Param,
       res = cut(x, breaks = seq(0, 1, length.out = self$nlevels+1), include.lowest = TRUE)
       levels(res) = self$values
       as.character(res)
-    },
-
-    .fix = function(x) {
-      self$values = x
     }
   )
 )

@@ -27,11 +27,7 @@ test_that("simple active bindings work", {
     expect_names(names(ps$uppers), identical.to = ps$ids, info = info)
     expect_list(ps$values, info = info)
     expect_names(names(ps$values), identical.to = ps$ids, info = info)
-    if (ps$id == "th_paramset_untyped") {
-      expect_error(ps$is_bounded, regexp = "undefined", info = info)
-    } else {
-      expect_flag(ps$is_bounded, info = info)
-    }
+    expect_flag(ps$is_bounded, info = info)
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
     expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
@@ -197,7 +193,7 @@ test_that("as.data.table", {
   expect_data_table(d, nrow = 0)
   ps = th_paramset_full()
   d = as.data.table(ps)
-  expect_data_table(d, nrow = 4, ncol = 10)
+  expect_data_table(d, nrow = 4, ncol = 11)
   expect_equal(ps$ids, d$id)
   expect_equal(unname(ps$lower), d$lowers)
   expect_equal(unname(ps$values), d$values)

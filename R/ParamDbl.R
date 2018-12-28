@@ -32,7 +32,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   # FIXME: readd center again
   active = list(
     values = function() NULL,
-    nlevels = function() ifelse(self$span == 0, 1, Inf),
+    nlevels = function() Inf,
     is_bounded = function() all(is.finite(self$range)),
     storage_type = function() "numeric",
     range = function() c(self$lower, self$upper),
@@ -46,10 +46,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     .map_unitint_to_values = function(x) {
       assert_true(self$is_bounded)
       self$lower + x * self$span
-    },
-
-    .fix = function(x) {
-      self$upper = self$lower = x
     }
   )
 )

@@ -20,17 +20,13 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
     lower = function() NA_real_,
     upper = function() NA_real_,
     values = function() c(TRUE, FALSE),
-    # FIXME: what is this? has to do with fix? maybe ok now?
-    nlevels = function() length(self$values),
+    nlevels = function() 2L,
     is_bounded = function() TRUE,
     storage_type = function() "logical"
   ),
 
   private = list(
-    .check = function(x) check_choice(x, self$values),
-
-    .map_unitint_to_values = function(x) x < 0.5,
-
-    .fix = function(x) self$values = x
+    .check = function(x) check_flag(x),
+    .map_unitint_to_values = function(x) x < 0.5
   )
 )

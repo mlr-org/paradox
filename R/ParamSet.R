@@ -7,6 +7,12 @@
 #
 # FIXME: doc and unit tests dependencies better
 
+#FIXME: how do we handle fixed params in trafo? tramfsorm them? keep them as they are?
+
+# FIXME: vielleicht kann man sich das ganze value-fixing bullhit zeugs sparen,
+# wenn paramvalues gleich ein teil vom paramset sind?
+
+
 #' @title ParamSet
 #'
 #' @description A set of [Param] objects.
@@ -36,7 +42,7 @@
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
 #' * `nlevels`          :: named [double]
-#'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
+#'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 #'   Named with param IDs. Read-only.
 #' * `is_bounded`       :: named `logical(1)`
 #'   Do all parameters have finite bounds?
@@ -73,8 +79,6 @@
 #'   Three checkmate-like check-functions. Take a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
-#' * `fix(xs)` \cr
-#'   `named `list`` -> `self`
 #' * `add_dependency(dep)` \cr
 #'   [Dependency] -> `self`
 #'
@@ -85,6 +89,7 @@
 #'     - lower, upper: double
 #'     - values: list col, with NULL elements
 #'     - special_vals: list col of list
+#'     - is_bounded: logical
 #'     - default: list col, with NULL elements
 #'     - storage_type: character
 #'     - tags: list col of character vectors
@@ -211,7 +216,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     # printer, prints the set as a datatable, with the option to hide some cols
-    print = function(..., hide.cols = c("nlevels", "special_vals", "tags", "storage_type")) {
+    print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf("ParamSet: %s", self$id)
       if (self$is_empty) {
         catf("Empty.")
