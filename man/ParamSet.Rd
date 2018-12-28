@@ -23,8 +23,6 @@ NB: The returned list contains references, so you can potentially change the obj
 Number of contained params. Read-only.
 \item \code{is_empty}         :: \code{logical(1)}
 Is the param set empty? Read-only.
-\item \code{ids}              :: \code{character}
-IDs of contained parameters. Read-only.
 \item \code{pclasses}         :: named \code{character}
 Param classes of contained parameters.
 Named with param IDs. Read-only.
@@ -71,6 +69,10 @@ NB: For convenience, the self-paramset is also passed, if you need some info fro
 \item \code{new(params)} \cr
 list of \link{Param} -> \code{self}
 Deep-clones all passed param objects.
+\item \code{ids(pclass = NULL, is_bounded = NULL, tags = NULL)} \cr
+\code{character}, \code{logical(1)}, \code{character} -> \code{character}
+Retrieves IDs of contained params based on some selections, \code{NULL} means no restriction.
+\code{pclass} and \code{tags} can be sets.
 \item \code{add(param_set)} \cr
 \link{Param} | \link{ParamSet} -> \code{self}
 Adds a single param or another set to this set, all params are cloned.

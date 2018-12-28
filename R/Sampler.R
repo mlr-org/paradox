@@ -29,7 +29,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler,
 
   active = list(
     # retrieve the only param in the set, return Param object
-    param = function() self$param_set$params[[self$param_set$ids[1L]]]
+    param = function() self$param_set$params[[self$param_set$ids()[1L]]]
   ),
 
   private = list(

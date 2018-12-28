@@ -18,7 +18,7 @@ generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
   n = assert_count(n, positive = TRUE, coerce = TRUE)
   assert_function(lhs_function, args = c("n", "k"))
 
-  ids = param_set$ids
+  ids = param_set$ids()
   d = lhs_function(n, k = param_set$length)
   colnames(d) = ids
   d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))

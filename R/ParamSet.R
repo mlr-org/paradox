@@ -15,6 +15,8 @@
 #FIXME: add a hierarchical sampler for random sampling with deps. and ensure that sampling and gen_design
 # perform proper tests on deps
 
+# FIXME: die getter vom PS müssen genauso heißen wie vom datatable
+
 
 #' @title ParamSet
 #'
@@ -30,8 +32,6 @@
 #'   Number of contained params. Read-only.
 #' * `is_empty`         :: `logical(1)`
 #'   Is the param set empty? Read-only.
-#' * `ids`              :: `character`
-#'   IDs of contained parameters. Read-only.
 #' * `pclasses`         :: named `character`
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
@@ -74,6 +74,10 @@
 #' * `new(params)` \cr
 #'   list of [Param] -> `self`
 #'   Deep-clones all passed param objects.
+#' * `ids(pclass = NULL, is_bounded = NULL, tags = NULL)` \cr
+#'   `character`, `logical(1)`, `character` -> `character`
+#'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
+#'   `pclass` and `tags` can be sets.
 #' * `add(param_set)` \cr
 #'   [Param] | [ParamSet] -> `self`
 #'   Adds a single param or another set to this set, all params are cloned.
@@ -123,7 +127,7 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (test_r6(p, "Param")) # level-up param to set
         p = ParamSet$new(list(p))
-      ids_inboth = intersect(self$ids, p$ids)
+      ids_inboth = intersect(self$ids(), p$ids())
       if (length(ids_inboth) > 0L)
         stop("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
       if (!is.null(p$trafo))
@@ -138,7 +142,7 @@ ParamSet = R6Class("ParamSet",
 
     transform = function(x) {
       assert_data_table(x)
-      assert_set_equal(names(x), self$ids)
+      assert_set_equal(names(x), self$ids())
       if (is.null(self$trafo)) # if no trafo is there, we spit out the input - and assume its feasible
         return(x)
       xs = self$trafo(x = x, param_set = self)
@@ -154,7 +158,7 @@ ParamSet = R6Class("ParamSet",
     # FIXME: doc and unit test
     fix = function(xs) {
       assert_list(x, names = "named")
-      assert_subset(names(x), self$ids)
+      assert_subset(names(x), self$ids())
       for (param_id in names(x)) {
         ps = self$get_param(param_id)
         ps$fix(x[[param_id]])
@@ -162,8 +166,21 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
+    ids = function(pclass = NULL, is_bounded = NULL, tags = NULL) {
+      if (is.null(pclass) && is.null(is_bounded) && is.null(tags))
+        return(names(self$params))
+      assert_character(pclass, any.missing = FALSE, null.ok = TRUE)
+      assert_flag(is_bounded, null.ok = TRUE)
+      assert_character(tags, any.missing = FALSE, null.ok = TRUE)
+      d = as.data.table(self)
+      pc = pclass; isb = is_bounded; tgs = tags # rename for dt, sucks
+      d[  (is.null(pc) | d$pclass %in% pc) &
+          (is.null(isb) | is_bounded %in% isb) &
+          (is.null(tgs) | d$tags %in% tgs), id]
+    },
+
     subset = function(ids) {
-      assert_subset(ids, self$ids)
+      assert_subset(ids, self$ids())
       self$params = self$params[ids]
       invisible(self)
     },
@@ -174,7 +191,7 @@ ParamSet = R6Class("ParamSet",
         return(ok)
       if (length(xs) == 0)
         return(TRUE) # a empty list is always feasible
-      ok = check_names(names(xs), subset.of = self$ids)
+      ok = check_names(names(xs), subset.of = self$ids())
       if (!isTRUE(ok))
         return(ok)
       # check each parameters feasibility
@@ -203,8 +220,8 @@ ParamSet = R6Class("ParamSet",
     add_dependency = function(dep) {
       assert_r6(dep, "Dependency")
       # check that dependency makes sense
-      assert_choice(dep$parent_id, self$ids)
-      assert_choice(dep$node_id, self$ids)
+      assert_choice(dep$parent_id, self$ids())
+      assert_choice(dep$node_id, self$ids())
       # add dependency to member list
       self$deps = c(self$deps, list(dep))
       invisible(self)
@@ -232,7 +249,6 @@ ParamSet = R6Class("ParamSet",
     id = function(v) if (missing(v)) private$.id else private$.id = v,
     length = function() length(self$params),
     is_empty = function() self$length == 0L,
-    ids = function() unname(map_chr(self$params, "id")),
     pclasses = function() private$get_member_with_idnames("pclass", as.character),
     lowers = function() private$get_member_with_idnames("lower", as.double),
     uppers = function() private$get_member_with_idnames("upper", as.double),
@@ -258,7 +274,7 @@ ParamSet = R6Class("ParamSet",
     .id = NULL,
     .trafo = NULL,
     # FIXME: doc
-    get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids),
+    get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
 
     # FIXME: we need to copy dep objects too, and check that this works in deep clone
     deep_clone = function(name, value) {
