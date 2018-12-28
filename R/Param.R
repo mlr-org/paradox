@@ -49,8 +49,8 @@
 #'    A value is feasible if it is inside of the bounds or from `special_vals`.
 #' * `qunif(x)` \cr
 #'   `numeric(n)` -> `vector(n)` \cr
-#'   Takes values from \[0,1\] and maps them to a vector of feasible values, so that the values are regular distributed.
-#'   Use case: Sample a uniform-\[0,1\] random variable, and turn it into a uniform sample from this param.
+#'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the param.
+#'   Think of: quantile function or the usecse to map a uniform-\[0,1\] random variable into a uniform sample from this param.
 #' * `rep(n)` \cr
 #'   `integer(1)` -> [ParamSet] \cr
 #'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
