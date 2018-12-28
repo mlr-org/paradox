@@ -14,8 +14,6 @@ A set of \link{Parameter} objects.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{new(params)} \cr
-list of \link{Parameter} -> \code{self}
 \item \code{id}               :: \code{character(1)}
 ID of this param set. Settable.
 \item \code{params}           :: named list of \link{Parameter}
@@ -28,7 +26,8 @@ Is the param set empty? Read-only.
 \item \code{ids}              :: \code{character}
 IDs of contained parameters. Read-only.
 \item \code{pclasses}         :: named \code{character}
-Parameter classes of contained parameters. Named with param IDs.
+Parameter classes of contained parameters.
+Named with param IDs. Read-only.
 \item \code{lowers}           :: named \link{double}
 Lower bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
@@ -41,14 +40,28 @@ Named with param IDs. Read-only.
 \item \code{nlevels}          :: named \link{double}
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
 Named with param IDs. Read-only.
-\item \code{is_bounded}       :: \code{logical(1)}
-Do all parameters have finite bounds? Read-only.
+\item \code{is_bounded}       :: named \code{logical(1)}
+Do all parameters have finite bounds?
+Named with param IDs. Read-only.
+\item \code{storage_types}     :: \code{character} \cr
+Data types of params when stored in tables.
+Named with param IDs. Read-only.
+\item \code{tags}              :: named \code{list} of \code{character} \cr
+Can be used to group and subset params.
+Named with param IDs. Read-only.
+\item \code{defaults}          :: named \code{list} \cr
+Default values of all params.
+Named with param IDs. Read-only.
+\item \code{trafo}            :: \code{function(x)} \cr
+Transformation function.
 }
 }
 
 \section{Public methods}{
 
 \itemize{
+\item \code{new(params)} \cr
+list of \link{Parameter} -> \code{self}
 \item \code{add_param(param)} \cr
 \link{Parameter} -> \code{self}
 Adds a param to this set, param is cloned.
@@ -83,7 +96,6 @@ Compact representation as datatable. Col types are: \cr
 \item lower, upper: double
 \item values: list col, with NULL elements
 \item special_vals: list col of list
-\item is_bounded: logical
 \item default: list col, with NULL elements
 \item storage_type: character
 \item tags: list col of character vectors

@@ -35,6 +35,8 @@ This allows extending the domain of the param.
 Default value. Can be from param domain or \code{special_vals}.
 \item \code{storage_type}     :: \code{character(1)} \cr
 Data type when values of this param is stored in a data table or sampled. Read-only.
+\item \code{tags}             :: \code{character} \cr
+Can be used to group and subset params.
 }
 }
 

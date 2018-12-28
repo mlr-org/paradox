@@ -1,10 +1,17 @@
+#FIXME: doc and unit test trafo und transform better, expecially in and out datatypes
+#    \item{trafo}{[\code{function(x, param_set)}] \cr
+#      \code{x} is a \code{data.table}, each row contains one parameter setting.
+#      \code{param_set} is the param_set. Can be useful to access tags.
+#      This function is called from \code{ParamSet$transform()}.
+#      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
+#
+# FIXME: doc and unit tests dependencies better
+
 #' @title ParamSet
 #'
 #' @description A set of [Parameter] objects.
 #'
 #' @section Public members / active bindings:
-#' * `new(params)` \cr
-#'   list of [Parameter] -> `self`
 #' * `id`               :: `character(1)`
 #'   ID of this param set. Settable.
 #' * `params`           :: named list of [Parameter]
@@ -17,7 +24,8 @@
 #' * `ids`              :: `character`
 #'   IDs of contained parameters. Read-only.
 #' * `pclasses`         :: named `character`
-#'   Parameter classes of contained parameters. Named with param IDs.
+#'   Parameter classes of contained parameters.
+#'   Named with param IDs. Read-only.
 #' * `lowers`           :: named [double]
 #'   Lower bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
@@ -30,55 +38,45 @@
 #' * `nlevels`          :: named [double]
 #'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
 #'   Named with param IDs. Read-only.
-#' * `is_bounded`       :: `logical(1)`
-#'   Do all parameters have finite bounds? Read-only.
-#FIXME: clean up docs here
-#  * `ps$storage_types` ->
-#  * `ps$tags` ->
-#  * `ps$defaults` ->
-#  * `ps$trafo` -> `function(x, param_set)`
-#  * `ps$deps` -> list of [Dependency] objects
-#
+#' * `is_bounded`       :: named `logical(1)`
+#'   Do all parameters have finite bounds?
+#'   Named with param IDs. Read-only.
+#' * `storage_types`     :: `character` \cr
+#'   Data types of params when stored in tables.
+#'   Named with param IDs. Read-only.
+#' * `tags`              :: named `list` of `character` \cr
+#'   Can be used to group and subset params.
+#'   Named with param IDs. Read-only.
+#' * `defaults`          :: named `list` \cr
+#'   Default values of all params.
+#'   Named with param IDs. Read-only.
+#' * `trafo`            :: `function(x)` \cr
+#'   Transformation function.
+#'
 #' @section Public methods:
-#'  * `add_param(param)` \cr
-#'    [Parameter] -> `self`
-#'    Adds a param to this set, param is cloned.
-#'  * `add_param_set(param_set)` \cr
-#'    [ParamSet] -> `self`
-#'    Adds the contents of another set to this set, all params are cloned.
-#'  * `subset(ids)` \cr
-#'    `character` -> `self`
-#'    Changes the current set to the set of passed IDs.
-#'  * `transform(x)` \cr
-#'    [data.table] -> [data.table]
-#'    Transforms a collections of configurations (rows) via the associated transformation of the param set,
-#'    so each row in the returned data.table corresponds to the origin-row with the same row-index.
-#'  * `test(x)`, `check(x)`, `assert(x)` \cr
-#'    Three checkmate-like check-functions. Take a named list.
-#'    A point x is feasible, if it configures a subset of params,
-#'    all individual param constraints are satisfied and all dependencies are satisfied.
-#'  * `fix(xs)` \cr
-#'    `named `list`` -> `self`
-#'  * `add_dependency(dep)` \cr
-#'    [Dependency] -> `self`
-#' @name ParamSet
-#' @export
-
-# FIXME: this must be finished and removed
-#    \item{trafo}{[\code{function(x, param_set)}] \cr
-#      \code{x} is a \code{data.table}, each row contains one parameter setting.
-#      \code{param_set} is the param_set. Can be useful to access tags.
-#      This function is called from \code{ParamSet$transform()}.
-#      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
-#      }
-#  }
-#
-#  \describe{
-#    \item{storage_types}{[\code{character}] \cr
-#      How is a Value of this Parameter stored as an R-object?}
-#    \item{member_tags}{[\code{list}] \cr
-#      The \code{tags} of each Parameter.}
-#  }
+#' * `new(params)` \cr
+#'   list of [Parameter] -> `self`
+#' * `add_param(param)` \cr
+#'   [Parameter] -> `self`
+#'   Adds a param to this set, param is cloned.
+#' * `add_param_set(param_set)` \cr
+#'   [ParamSet] -> `self`
+#'   Adds the contents of another set to this set, all params are cloned.
+#' * `subset(ids)` \cr
+#'   `character` -> `self`
+#'   Changes the current set to the set of passed IDs.
+#' * `transform(x)` \cr
+#'   [data.table] -> [data.table]
+#'   Transforms a collections of configurations (rows) via the associated transformation of the param set,
+#'   so each row in the returned data.table corresponds to the origin-row with the same row-index.
+#' * `test(x)`, `check(x)`, `assert(x)` \cr
+#'   Three checkmate-like check-functions. Take a named list.
+#'   A point x is feasible, if it configures a subset of params,
+#'   all individual param constraints are satisfied and all dependencies are satisfied.
+#' * `fix(xs)` \cr
+#'   `named `list`` -> `self`
+#' * `add_dependency(dep)` \cr
+#'   [Dependency] -> `self`
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()` \cr
@@ -236,14 +234,14 @@ ParamSet = R6Class("ParamSet",
     is_empty = function() self$length == 0L,
     ids = function() unname(map_chr(self$params, "id")),
     pclasses = function() private$get_member_with_idnames("pclass", as.character),
-    storage_types = function() private$get_member_with_idnames("storage_type", as.character),
     lowers = function() private$get_member_with_idnames("lower", as.double),
     uppers = function() private$get_member_with_idnames("upper", as.double),
     values = function() private$get_member_with_idnames("values", as.list),
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
-    tags = function() private$get_member_with_idnames("tags", as.list),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     defaults = function() private$get_member_with_idnames("default", as.list),
+    tags = function() private$get_member_with_idnames("tags", as.list),
+    storage_types = function() private$get_member_with_idnames("storage_type", as.character),
     # FIXME: doc is_number and is_categ
     is_number = function() self$pclasses %in% c("ParamDbl", "ParamInt"),
     is_categ = function() self$pclasses %in% c("ParamFct", "ParamLgl")

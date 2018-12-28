@@ -35,6 +35,8 @@
 #'    Default value. Can be from param domain or `special_vals`.
 #' * `storage_type`     :: `character(1)` \cr
 #'    Data type when values of this param is stored in a data table or sampled. Read-only.
+#' * `tags`             :: `character` \cr
+#'   Can be used to group and subset params.
 #'
 #' @section Public methods:
 #' * `new(id, special_vals, default, tags)` \cr
