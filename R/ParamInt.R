@@ -18,7 +18,7 @@ ParamInt = R6Class( "ParamInt", inherit = Parameter,
     lower = NULL,
     upper = NULL,
 
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = NULL, default = NULL, tags = NULL) {
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NULL, tags = NULL) {
       assert_number(lower, na.ok = TRUE)
       assert_number(upper, na.ok = TRUE)
       assert_true(lower <= upper)

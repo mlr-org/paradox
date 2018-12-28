@@ -9,7 +9,7 @@
 ParamUty = R6Class("ParamUty", inherit = Parameter,
   public = list(
     initialize = function(id, default = NULL, tags = NULL) {
-      super$initialize(id, special_vals = NULL, default = default, tags = tags)
+      super$initialize(id, special_vals = list(), default = default, tags = tags)
     }
   ),
 

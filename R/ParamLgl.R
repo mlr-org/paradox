@@ -8,7 +8,7 @@
 # FIXME: doc them all on ?Parameter page?
 ParamLgl = R6Class("ParamLgl", inherit = Parameter,
   public = list(
-    initialize = function(id, special_vals = NULL, default = NULL, tags = NULL) {
+    initialize = function(id, special_vals = list(), default = NULL, tags = NULL) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),

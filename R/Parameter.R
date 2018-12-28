@@ -7,27 +7,27 @@
 #' @description
 #' Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
 #'
-# FIXME: the docs need to be distributed?
 #' @section Public members / active bindings:
-#' * `new(params)` \cr
-#'   list of [Parameter] -> `self`
+#' * `new(id, special_vals, default, tags)` \cr
+#'   [character(1)], [list], [any], [character] -> self
+#'   Constructor of abstract base class, only called by inheriting classes.
 #' * `id`               :: [character(1)]
-#'    ID of this param. Read-only.
+#'    ID of this param.
 #' * `pclass`           :: [character(1)]
-#'    Parameter R6 class name.
+#'    Parameter R6 class name. Read-only.
 #' * `lower`            :: [double(1)]
-#'    Lower bounds of parameters, can be -Inf. NA if param is not a number. Read-only.
+#'    Lower bounds of parameters, can be -Inf. NA if param is not a number.
 #' * `upper`            :: [double(1)]
-#'    Upper bounds of parameters, can be +Inf. NA if param is not a number. Read-only.
+#'    Upper bounds of parameters, can be +Inf. NA if param is not a number.
 #' * `values`           :: [character]
-#'    Allowed categorical values, NULL if param is not categorical. Read-only.
+#'    Allowed categorical values, NULL if param is not categorical.
 #' * `nlevels`          :: [double(1)]
 #'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper. Read-only.
 #' * `is_bounded`       :: [logical(1)]
 #'    Does param have a finitely bounded domain? Read-only.
 #' * `special_vals`     :: [list] \cr
 #'   Arbitrary special values this parameter is allowed to take, to make it feasible.
-#'   This allows extending the domain of the param. Read-only.
+#'   This allows extending the domain of the param.
 #' * `default`          :: [any]
 #'    Default value. Can be from param domain or `special_vals`.
 #'
@@ -42,20 +42,15 @@
 #' * `rep(n)`
 #'   [integer(1)] -> [ParamSet]
 #'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
-#'
-#' @section Private / Internals:
-#' * `data`          :: [list]
-#'   Here, all member variables of the param are stored.
-#'   We use this list representation to easier convert the param into a data table when in a
-#'   Element types are:
-#'     - id: character(1)
-#'     - lower, upper: double, can also bei Inf or NA.
-#'     - values: list of one [character | NULL]
-#'     - special_vals: list of list of <arbitrary objects>
-#'     - default: list of one <arbitrary, but feasible, object>
-#'     - tags: list of character
-#'   The variable is public, but should be considered internal and might be subject to change.
-#'   Only directly access it or write to it if you know what you are doing.
+#' * `as_dt()`
+#'   self -> [data.table]
+#'   Converts param to datatable with 1 row. Col types are:
+#'     - id: character
+#'     - lower, upper: double
+#'     - values: list col, with NULL elements
+#'     - special_vals: list col of list
+#'     - default: list col, with NULL elements
+#'     - tags: list col of character vectors
 #'
 #' @name Parameter
 #' @export
@@ -72,8 +67,7 @@ Parameter = R6Class("Parameter",
     initialize = function(id, special_vals, default, tags) {
       assert_string(id)
       assert_names(id, type = "strict")
-      # FIXME: do we allow NULL here? or just a list?
-      assert_list(special_vals, null.ok = TRUE)
+      assert_list(special_vals)
       # FIXME: do we allow NULL here? or just a charvec(0)?
       assert_character(tags, any.missing = TRUE, unique = TRUE, null.ok = TRUE)
 

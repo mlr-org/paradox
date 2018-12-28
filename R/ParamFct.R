@@ -15,7 +15,7 @@ ParamFct = R6Class("ParamFct", inherit = Parameter,
   public = list(
     values = NULL,
 
-    initialize = function(id, values, default = NULL, special_vals = NULL, tags = NULL) {
+    initialize = function(id, values, default = NULL, special_vals = list(), tags = NULL) {
       assert_character(values, any.missing = FALSE, unique = TRUE)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
       self$values = values
