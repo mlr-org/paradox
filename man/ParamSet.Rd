@@ -38,7 +38,7 @@ Named with param IDs. Read-only.
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.
 \item \code{nlevels}          :: named \link{double}
-Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
+Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 Named with param IDs. Read-only.
 \item \code{is_bounded}       :: named \code{logical(1)}
 Do all parameters have finite bounds?
@@ -79,8 +79,6 @@ so each row in the returned data.table corresponds to the origin-row with the sa
 Three checkmate-like check-functions. Take a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
-\item \code{fix(xs)} \cr
-\code{named }list`` -> \code{self}
 \item \code{add_dependency(dep)} \cr
 \link{Dependency} -> \code{self}
 }
@@ -96,6 +94,7 @@ Compact representation as datatable. Col types are: \cr
 \item lower, upper: double
 \item values: list col, with NULL elements
 \item special_vals: list col of list
+\item is_bounded: logical
 \item default: list col, with NULL elements
 \item storage_type: character
 \item tags: list col of character vectors

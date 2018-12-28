@@ -2,10 +2,9 @@
 #' @format [R6Class] object.
 #'
 #' @description
-#' Untyped parameters, can be used to bypass any complicated feasibilty checks, when
-#' a param is of truely complex type. OTOH we cannot perform meaningful perations like
-#' sampling or generaring designs with this param.
-# FIXME: check that the above is checked and unit tested in code
+#' Untyped parameters, can be used to bypass any complicated feasibility checks, when
+#' a param is of truly complex type. OTOH we cannot perform meaningful operations like
+#' sampling or generating designs with this param.
 #'
 #' @section Public methods:
 #' * `new(id, default, tags)` \cr
@@ -26,7 +25,6 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     upper = function() NA_real_,
     values = function() NULL,
     nlevels = function() Inf,
-    # FIXME: add to asdatatab
     is_bounded = function() FALSE,
     storage_type = function() "list"
   ),

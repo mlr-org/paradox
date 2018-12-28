@@ -9,9 +9,9 @@
 ParamUty
 }
 \description{
-Untyped parameters, can be used to bypass any complicated feasibilty checks, when
-a param is of truely complex type. OTOH we cannot perform meaningful perations like
-sampling or generaring designs with this param.
+Untyped parameters, can be used to bypass any complicated feasibility checks, when
+a param is of truly complex type. OTOH we cannot perform meaningful operations like
+sampling or generating designs with this param.
 }
 \section{Public methods}{
 

@@ -8,7 +8,7 @@ Sampler = R6Class("Sampler",
 
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
     initialize = function(param_set, params.cl = "Param") {
-      assert_r6(param_set, "ParamSet")
+      assert_paramset(param_set, no_untyped = TRUE)
       assert_subset(param_set$pclasses, params.cl)
       self$param_set = param_set
     },
