@@ -16,7 +16,6 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
   ),
 
   active = list(
-    # FIXME: add unit test that this has "values"
     lower = function() NA_real_,
     upper = function() NA_real_,
     values = function() c(TRUE, FALSE),

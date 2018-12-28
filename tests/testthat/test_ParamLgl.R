@@ -4,6 +4,7 @@ test_that("constructor works", {
   p = ParamLgl$new(id = "test")
   expect_equal(p$id, "test")
   expect_equal(p$nlevels, 2L)
+  expect_equal(p$values, c(TRUE, FALSE))
 })
 
 test_that("map_unitint_to_values", {
