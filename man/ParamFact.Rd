@@ -10,7 +10,7 @@
 ParamFct
 }
 \description{
-Param: Factor
+Slight misnomer as this parameter accepts only strings, from its defined set of categorical values.
 }
 \section{Public methods}{
 

@@ -45,7 +45,7 @@
 #'   Constructor of abstract base class, only called by inheriting classes.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
-#'    A value is feasible if it is inside of the bounds or from `special_vals`.
+#'    A value is feasible if it is of the same `storage_type`, inside of the bounds or from `special_vals`.
 #' * `qunif(x)` \cr
 #'   `numeric(n)` -> `vector(n)` \cr
 #'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the param.

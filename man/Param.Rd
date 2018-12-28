@@ -31,6 +31,7 @@ Does param have a finitely bounded domain? Read-only.
 \item \code{special_vals}     :: \code{list} \cr
 Arbitrary special values this parameter is allowed to take, to make it feasible.
 This allows extending the domain of the param.
+This is only used in feasibility checks, neither in generating designs nor sampling.
 \item \code{default}          :: \code{any} \cr
 Default value. Can be from param domain or \code{special_vals}.
 Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid default.
@@ -49,7 +50,7 @@ Can be used to group and subset params.
 Constructor of abstract base class, only called by inheriting classes.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
-A value is feasible if it is inside of the bounds or from \code{special_vals}.
+A value is feasible if it is of the same \code{storage_type}, inside of the bounds or from \code{special_vals}.
 \item \code{qunif(x)} \cr
 \code{numeric(n)} -> \code{vector(n)} \cr
 Takes values from [0,1] and map them, regularly distributed, to the domain of the param.

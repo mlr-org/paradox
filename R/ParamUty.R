@@ -3,8 +3,8 @@
 #'
 #' @description
 #' Untyped parameters, can be used to bypass any complicated feasibility checks, when
-#' a param is of truly complex type. OTOH we cannot perform meaningful operations like
-#' sampling or generating designs with this param.
+#' a param is of truly complex type, as checks for this param are always feasible.
+#' OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
 #'
 #' @section Public methods:
 #' * `new(id, default, tags)` \cr

@@ -43,6 +43,9 @@ Named with param IDs. Read-only.
 \item \code{is_bounded}       :: named \code{logical(1)}
 Do all parameters have finite bounds?
 Named with param IDs. Read-only.
+\item \code{special_vals}     :: named \code{list} of \code{list} \cr
+Special values for all parameters.
+Named with param IDs. Read-only.
 \item \code{storage_types}     :: \code{character} \cr
 Data types of params when stored in tables.
 Named with param IDs. Read-only.

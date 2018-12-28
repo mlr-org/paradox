@@ -21,8 +21,9 @@ Resolution per param, named by param ID.}
 }
 \description{
 Generate a grid with specified resolution in the parameter space.
-NB: The resolution for categorical parameters is ignored, these parameters
+NB1: The resolution for categorical parameters is ignored, these parameters
 always produce a grid over all their valid levels.
+NB2: For number params the endpoints of the params are always included in the grid.
 }
 \seealso{
 Other generate_design: \code{\link{generate_design_lhs}},
