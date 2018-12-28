@@ -1,6 +1,3 @@
-# resolution int(1) - resolution used for each parameter
-# param_resolutions int() - resolution given per parameter (named vector)
-
 #' @title Generate a grid design.
 #'
 #' @description
@@ -8,16 +5,15 @@
 #' NB: The resolution for categorical parameters is ignored, these parameters
 #' always produce a grid over all their valid levels.
 #'
-#' @param param_set [\code{\link{ParamSet}}].
-#' @param resolution [\code{integer(1)}]:\cr
-#'   Resolution to be used for each parameter in the \code{param_set}.
-#' @param param_resolutions [named \code{integer()}]:\cr
-#'   Resolution given per parameter, as named integer vector.
+#' @param param_set :: [ParamSet].
+#' @param resolution :: `integer(1)` \cr
+#'   Global resolution for all params.
+#' @param param_resolutions :: named `integer` \cr
+#'   Resolution per param, named by param ID.
+#' @return [data.table]
 #'
-#' @return [\code{\link[data.table]{data.table}}].
-#'
-#' @export
 #' @family generate_design
+#' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
 
   #FIXME: cannot be called on untyped params

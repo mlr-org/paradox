@@ -5,18 +5,18 @@
 #' @section Public members / active bindings:
 #' * `new(params)` \cr
 #'   list of [Parameter] -> `self`
-#' * `id`               :: [character(1)]
+#' * `id`               :: `character(1)`
 #'   ID of this param set. Settable.
 #' * `params`           :: named list of [Parameter]
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#' * `length`           :: [integer(1)]
+#' * `length`           :: `integer(1)`
 #'   Number of contained params. Read-only.
-#' * `is_empty`         :: [logical(1)]
+#' * `is_empty`         :: `logical(1)`
 #'   Is the param set empty? Read-only.
-#' * `ids`              :: [character]
+#' * `ids`              :: `character`
 #'   IDs of contained parameters. Read-only.
-#' * `pclasses`         :: named [character]
+#' * `pclasses`         :: named `character`
 #'   Parameter classes of contained parameters. Named with param IDs.
 #' * `lowers`           :: named [double]
 #'   Lower bounds of parameters, NA if param is not a number.
@@ -24,13 +24,13 @@
 #' * `uppers`           :: named [double]
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `values`           :: named [list]
+#' * `values`           :: named `list`
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
 #' * `nlevels`          :: named [double]
 #'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper.
 #'   Named with param IDs. Read-only.
-#' * `is_bounded`       :: [logical(1)]
+#' * `is_bounded`       :: `logical(1)`
 #'   Do all parameters have finite bounds? Read-only.
 #FIXME: clean up docs here
 #  * `ps$storage_types` ->
@@ -58,7 +58,7 @@
 #'    A point x is feasible, if it configures a subset of params,
 #'    all individual param constraints are satisfied and all dependencies are satisfied.
 #'  * `fix(xs)` \cr
-#'    `named [list]` -> `self`
+#'    `named `list`` -> `self`
 #'  * `add_dependency(dep)` \cr
 #'    [Dependency] -> `self`
 #' @name ParamSet

@@ -1,18 +1,18 @@
-#' @title Float Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @title Parameter: Double
+#' @format [R6Class] object.
 #'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
+#' @section Public members / active bindings:
+#' * `range`            :: `numeric(2)` \cr
+#'   Lower and upper bound as 2-dim-vector.
+#' * `span`            :: `numeric(1)` \cr
+#'   Difference of `upper - lower`.
 #'
-#' @section Member Variables:
-#' \describe{
-#'   \item{lower}{[\code{numeric(1)}, \code{default = -Inf}] \cr
-#'     Upper bound for feasible values.}
-#'   \item{upper}{[\code{integer(1)}, \code{default = Inf}] \cr
-#'     Lower bound for feasible values.}
-#'   \item{allow_inf}{[\code{logical(1)}, \code{default = TRUE}] \cr
-#'     Are values \code{-Inf} and \code{Inf} feasible?}
-#' }
+#' @section Public methods:
+#' * `new(id, lower, upper, special_vals, default, tags)` \cr
+#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
+#'
+#' @name ParamDbl
+#' @family Parameter
 #' @export
 ParamDbl = R6Class("ParamDbl", inherit = Parameter,
   public = list(
@@ -29,6 +29,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Parameter,
     }
   ),
 
+  # FIXME: readd center again
   active = list(
     values = function() NULL,
     nlevels = function() ifelse(self$span == 0, 1, Inf),

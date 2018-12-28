@@ -29,6 +29,7 @@ Suggests:
     testthat,
     roxygen2,
     stringi
+Roxygen: list(markdown = TRUE)
 RoxygenNote: 6.1.1
 VignetteBuilder: knitr
 Encoding: UTF-8

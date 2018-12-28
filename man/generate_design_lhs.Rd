@@ -7,14 +7,17 @@
 generate_design_lhs(param_set, n, lhs_function = lhs::maximinLHS)
 }
 \arguments{
-\item{param_set}{[\code{\link{ParamSet}}].}
+\item{param_set}{:: \link{ParamSet}.}
 
-\item{n}{[\code{integer(1)}]:\cr
+\item{n}{:: \code{integer(1)} \cr
 Number of points to sample.}
 
-\item{lhs_function}{[\code{function()}]:\cr
+\item{lhs_function}{:: \code{function} \cr
 Function to use to generate a LHS sample.
 LHS functions are implemented in package \pkg{lhs}.}
+}
+\value{
+\link{data.table}
 }
 \description{
 Generate a space-filling design using Latin hypercube sampling.

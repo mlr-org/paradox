@@ -3,22 +3,36 @@
 \docType{data}
 \name{ParamInt}
 \alias{ParamInt}
-\title{Integer Parameter Object}
-\format{\code{\link{R6Class}} object}
+\title{Parameter: Integer}
+\format{\link{R6Class} object.}
 \usage{
 ParamInt
 }
 \description{
-A \code{\link[R6]{R6Class}} to represent Integer parameters.
+Parameter: Integer
 }
-\section{Member Variables}{
+\section{Public members / active bindings}{
 
-\describe{
-  \item{lower}{[\code{integer(1)|-Inf}] \cr
-    Upper boundary.}
-  \item{upper}{[\code{integer(1)|-Inf}] \cr
-    Lower boundary.}
+\itemize{
+\item \code{range}            :: \code{numeric(2)} \cr
+Lower and upper bound as 2-dim-vector.
+\item \code{span}            :: \code{numeric(1)} \cr
+Difference of \code{upper - lower}.
 }
 }
 
+\section{Public methods}{
+
+\itemize{
+\item \code{new(id, lower, upper, special_vals, default, tags)} \cr
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+}
+}
+
+\seealso{
+Other Parameter: \code{\link{ParamDbl}},
+  \code{\link{ParamFact}}, \code{\link{ParamLgl}},
+  \code{\link{ParamUty}}, \code{\link{Parameter}}
+}
+\concept{Parameter}
 \keyword{datasets}

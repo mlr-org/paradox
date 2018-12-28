@@ -3,12 +3,26 @@
 \docType{data}
 \name{ParamLgl}
 \alias{ParamLgl}
-\title{Boolean Parameter Object}
-\format{\code{\link{R6Class}} object}
+\title{Parameter: Logical}
+\format{\link{R6Class} object.}
 \usage{
 ParamLgl
 }
 \description{
-A \code{\link[R6]{R6Class}} to represent boolean parameters.
+Parameter: Logical
 }
+\section{Public methods}{
+
+\itemize{
+\item \code{new(id, special_vals, default, tags)} \cr
+\code{character(1)}, \code{list}, \code{any}, \code{character} -> self
+}
+}
+
+\seealso{
+Other Parameter: \code{\link{ParamDbl}},
+  \code{\link{ParamFact}}, \code{\link{ParamInt}},
+  \code{\link{ParamUty}}, \code{\link{Parameter}}
+}
+\concept{Parameter}
 \keyword{datasets}

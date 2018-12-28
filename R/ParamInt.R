@@ -1,17 +1,18 @@
-#' @title Integer Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @title Parameter: Integer
+#' @format [R6Class] object.
 #'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent Integer parameters.
+#' @section Public members / active bindings:
+#' * `range`            :: `numeric(2)` \cr
+#'   Lower and upper bound as 2-dim-vector.
+#' * `span`            :: `numeric(1)` \cr
+#'   Difference of `upper - lower`.
 #'
-#' @section Member Variables:
-#' \describe{
-#'   \item{lower}{[\code{integer(1)|-Inf}] \cr
-#'     Upper boundary.}
-#'   \item{upper}{[\code{integer(1)|-Inf}] \cr
-#'     Lower boundary.}
-#' }
+#' @section Public methods:
+#' * `new(id, lower, upper, special_vals, default, tags)` \cr
+#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
 #'
+#' @name ParamInt
+#' @family Parameter
 #' @export
 ParamInt = R6Class( "ParamInt", inherit = Parameter,
   public = list(

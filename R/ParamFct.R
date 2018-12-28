@@ -1,15 +1,12 @@
-#' @title Categorical Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @title Parameter: Factor
+#' @format [R6Class] object.
 #'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent categorical parameters.
+#' @section Public methods:
+#' * `new(id, values, special_vals, default, tags)` \cr
+#'   `character(1)`, `character`, `list`, `any`, `character` -> self
 #'
-#' @section Member Variables:
-#' \describe{
-#'   \item{values}{[\code{character}] \cr
-#'     All categorical values.}
-#' }
-#'
+#' @name ParamFact
+#' @family Parameter
 #' @export
 ParamFct = R6Class("ParamFct", inherit = Parameter,
   public = list(

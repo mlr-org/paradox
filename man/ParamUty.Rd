@@ -3,59 +3,28 @@
 \docType{data}
 \name{ParamUty}
 \alias{ParamUty}
-\title{Untyped Parameter Object}
-\format{\code{\link{R6Class}} object}
+\title{Parameter: Untyped}
+\format{\link{R6Class} object.}
 \usage{
 ParamUty
 }
-\value{
-[\code{\link{ParamUty}}].
-}
 \description{
-A \code{\link[R6]{R6Class}} to represent untyped parameters.
+Untyped parameters, can be used to bypass any complicated feasibilty checks, when
+a param is of truely complex type. OTOH we cannot perform meaningful perations like
+sampling or generaring designs with this param.
 }
-\section{Member Variables}{
+\section{Public methods}{
 
-  \emph{none}
-
-Inherited from \code{Parameter}:
-
-
-
-\describe{
-  \item{default}{[\code{any}] \cr
-    default value.}
-  \item{special_vals}{[\code{any}] \cr
-    Special values this parameter is allowed to take that are within the defined space.}
+\itemize{
+\item \code{new(id, default, tags)} \cr
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
 }
-}
-
-\section{Methods}{
-
-  \emph{none}
-
-Inherited from \code{Parameter}
-
-
-
-\describe{
-  \item{map_unitint_to_values(x)}{[\code{function}] \cr
-    Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
-}
-}
-
-\section{Active Bindings}{
-
-  \emph{none}
-
-Inherited from \code{Parameter}
-
-
-  \emph{none}
 }
 
 \seealso{
-Other Parameter: \code{\link{Parameter}}
+Other Parameter: \code{\link{ParamDbl}},
+  \code{\link{ParamFact}}, \code{\link{ParamInt}},
+  \code{\link{ParamLgl}}, \code{\link{Parameter}}
 }
 \concept{Parameter}
 \keyword{datasets}

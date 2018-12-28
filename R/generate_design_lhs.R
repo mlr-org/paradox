@@ -3,14 +3,16 @@
 #' @description
 #' Generate a space-filling design using Latin hypercube sampling.
 #'
-#' @param param_set [\code{\link{ParamSet}}].
-#' @param n [\code{integer(1)}]:\cr
+#' @param param_set :: [ParamSet].
+#' @param n :: `integer(1)` \cr
 #'   Number of points to sample.
-#' @param lhs_function [\code{function()}]:\cr
+#' @param lhs_function :: `function` \cr
 #'   Function to use to generate a LHS sample.
 #'   LHS functions are implemented in package \pkg{lhs}.
-#' @export
+#' @return [data.table]
+#'
 #' @family generate_design
+#' @export
 generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
   n = assert_count(n, positive = TRUE, coerce = TRUE)
   assert_function(lhs_function, args = c("n", "k"))

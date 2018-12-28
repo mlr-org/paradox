@@ -3,24 +3,36 @@
 \docType{data}
 \name{ParamDbl}
 \alias{ParamDbl}
-\title{Float Parameter Object}
-\format{\code{\link{R6Class}} object}
+\title{Parameter: Double}
+\format{\link{R6Class} object.}
 \usage{
 ParamDbl
 }
 \description{
-A \code{\link[R6]{R6Class}} to represent numeric, real valued parameters.
+Parameter: Double
 }
-\section{Member Variables}{
+\section{Public members / active bindings}{
 
-\describe{
-  \item{lower}{[\code{numeric(1)}, \code{default = -Inf}] \cr
-    Upper bound for feasible values.}
-  \item{upper}{[\code{integer(1)}, \code{default = Inf}] \cr
-    Lower bound for feasible values.}
-  \item{allow_inf}{[\code{logical(1)}, \code{default = TRUE}] \cr
-    Are values \code{-Inf} and \code{Inf} feasible?}
+\itemize{
+\item \code{range}            :: \code{numeric(2)} \cr
+Lower and upper bound as 2-dim-vector.
+\item \code{span}            :: \code{numeric(1)} \cr
+Difference of \code{upper - lower}.
 }
 }
 
+\section{Public methods}{
+
+\itemize{
+\item \code{new(id, lower, upper, special_vals, default, tags)} \cr
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+}
+}
+
+\seealso{
+Other Parameter: \code{\link{ParamFact}},
+  \code{\link{ParamInt}}, \code{\link{ParamLgl}},
+  \code{\link{ParamUty}}, \code{\link{Parameter}}
+}
+\concept{Parameter}
 \keyword{datasets}

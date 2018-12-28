@@ -1,9 +1,17 @@
-#' @title Untyped Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @title Parameter: Untyped
+#' @format [R6Class] object.
 #'
 #' @description
-#' A \code{\link[R6]{R6Class}} to represent untyped parameters.
+#' Untyped parameters, can be used to bypass any complicated feasibilty checks, when
+#' a param is of truely complex type. OTOH we cannot perform meaningful perations like
+#' sampling or generaring designs with this param.
+# FIXME: check that the above is checked and unit tested in code
 #'
+#' @section Public methods:
+#' * `new(id, default, tags)` \cr
+#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
+#'
+#' @name ParamUty
 #' @family Parameter
 #' @export
 ParamUty = R6Class("ParamUty", inherit = Parameter,

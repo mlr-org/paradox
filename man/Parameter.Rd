@@ -4,40 +4,74 @@
 \name{Parameter}
 \alias{Parameter}
 \title{Parameter Object}
-\format{\code{\link{R6Class}} object}
+\format{\link{R6Class} object.}
 \usage{
 Parameter
 }
 \description{
-Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
+Abstract base class for params.
 }
-\section{Member Variables}{
+\section{Public members / active bindings}{
 
-
-\describe{
-  \item{default}{[\code{any}] \cr
-    default value.}
-  \item{special_vals}{[\code{any}] \cr
-    Special values this parameter is allowed to take that are within the defined space.}
+\itemize{
+\item \code{id}               :: \code{character(1)} \cr
+ID of this param.
+\item \code{pclass}           :: \code{character(1)} \cr
+Parameter R6 class name. Read-only.
+\item \code{lower}            :: \code{numeric(1)} \cr
+Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
+\item \code{upper}            :: \code{numeric(1)} \cr
+Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
+\item \code{values}           :: \code{character} | \code{logical} | \code{NULL} \cr
+Allowed values for categorical params, NULL if param is not categorical.
+\item \code{nlevels}          :: \code{numeric(1)} \cr
+Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper. Read-only.
+\item \code{is_bounded}       :: \code{logical(1)} \cr
+Does param have a finitely bounded domain? Read-only.
+\item \code{special_vals}     :: \code{list} \cr
+Arbitrary special values this parameter is allowed to take, to make it feasible.
+This allows extending the domain of the param.
+\item \code{default}          :: \code{any} \cr
+Default value. Can be from param domain or \code{special_vals}.
+\item \code{storage_type}     :: \code{character(1)} \cr
+Data type when values of this param is stored in a data table or sampled. Read-only.
 }
 }
 
-\section{Methods}{
+\section{Public methods}{
 
-
-\describe{
-  \item{map_unitint_to_values(x)}{[\code{function}] \cr
-    Takes a vector with values between \code{[0,1]} and maps them to values of the Parameter.}
+\itemize{
+\item \code{new(id, special_vals, default, tags)} \cr
+\code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
+Constructor of abstract base class, only called by inheriting classes.
+\item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
+Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
+A value is feasible if it is inside of the bounds or from \code{special_vals}.
+\item \code{map_unitint_to_values(x)} \cr
+\code{numeric(n)} -> \code{vector(n)} \cr
+Takes values from [0,1] and maps them to a vector of feasible values, so that the values are regular distributed.
+Use case: Sample a uniform-[0,1] random variable, and turn it into a uniform sample from this param.
+\item \code{rep(n)} \cr
+\code{integer(1)} -> \link{ParamSet} \cr
+Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>" and gets additional tag "<id>_rep".
+\item \code{as_dt()} \cr
+self -> \link{data.table} \cr
+Converts param to datatable with 1 row. Col types are: \cr
+\itemize{
+\item id: character
+\item lower, upper: double
+\item values: list col, with NULL elements
+\item special_vals: list col of list
+\item default: list col, with NULL elements
+\item tags: list col of character vectors
 }
 }
-
-\section{Active Bindings}{
-
-  \emph{none}
 }
 
 \seealso{
-Other Parameter: \code{\link{ParamUty}}
+Other Parameter: \code{\link{ParamDbl}},
+  \code{\link{ParamFact}}, \code{\link{ParamInt}},
+  \code{\link{ParamLgl}}, \code{\link{ParamUty}}
 }
 \concept{Parameter}
 \keyword{datasets}

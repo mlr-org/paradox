@@ -1,50 +1,58 @@
 #FIXME: we need to handle the specail case of fixing / mapunitint. maybe that auto-works, maybe not
 # we also need to be able to ask for the fixed value?
+# we should probably add a note for each param what fixing means
+
+# FIXME: für alle params muss das "inherist from" gesetzt werden
+
+#FIXME: superclass for dbl/int, lgl/fct?
+# FIXME: rename parameter to param
 
 #' @title Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @format [R6Class] object.
 #'
 #' @description
-#' Abstract base class \code{\link[R6]{R6Class}} to represent a parameter.
+#' Abstract base class for params.
 #'
 #' @section Public members / active bindings:
-#' * `new(id, special_vals, default, tags)` \cr
-#'   [character(1)], [list], [any], [character] -> self
-#'   Constructor of abstract base class, only called by inheriting classes.
-#' * `id`               :: [character(1)]
+#' * `id`               :: `character(1)` \cr
 #'    ID of this param.
-#' * `pclass`           :: [character(1)]
+#' * `pclass`           :: `character(1)` \cr
 #'    Parameter R6 class name. Read-only.
-#' * `lower`            :: [double(1)]
-#'    Lower bounds of parameters, can be -Inf. NA if param is not a number.
-#' * `upper`            :: [double(1)]
-#'    Upper bounds of parameters, can be +Inf. NA if param is not a number.
-#' * `values`           :: [character]
-#'    Allowed categorical values, NULL if param is not categorical.
-#' * `nlevels`          :: [double(1)]
+#' * `lower`            :: `numeric(1)` \cr
+#'    Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
+#' * `upper`            :: `numeric(1)` \cr
+#'    Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
+#' * `values`           :: `character` | `logical` | `NULL` \cr
+#'    Allowed values for categorical params, NULL if param is not categorical.
+#' * `nlevels`          :: `numeric(1)` \cr
 #'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl with lower != upper. Read-only.
-#' * `is_bounded`       :: [logical(1)]
+#' * `is_bounded`       :: `logical(1)` \cr
 #'    Does param have a finitely bounded domain? Read-only.
-#' * `special_vals`     :: [list] \cr
+#' * `special_vals`     :: `list` \cr
 #'   Arbitrary special values this parameter is allowed to take, to make it feasible.
 #'   This allows extending the domain of the param.
-#' * `default`          :: [any]
+#' * `default`          :: `any` \cr
 #'    Default value. Can be from param domain or `special_vals`.
+#' * `storage_type`     :: `character(1)` \cr
+#'    Data type when values of this param is stored in a data table or sampled. Read-only.
 #'
 #' @section Public methods:
+#' * `new(id, special_vals, default, tags)` \cr
+#'   `character(1)`, `list`, `any`, `character` -> self \cr
+#'   Constructor of abstract base class, only called by inheriting classes.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 #'    A value is feasible if it is inside of the bounds or from `special_vals`.
 #' * `map_unitint_to_values(x)` \cr
-#'   [numeric(n)] -> [vector(n)]
-#'   Takes values from [0, 1] and maps them to a vector of feasible values, so that the values are regular distributed.
-#'   Use case: Sample a uniform-[0,1] random variable, an turn it into a uniform sample from this Parameter.
-#' * `rep(n)`
-#'   [integer(1)] -> [ParamSet]
+#'   `numeric(n)` -> `vector(n)` \cr
+#'   Takes values from \[0,1\] and maps them to a vector of feasible values, so that the values are regular distributed.
+#'   Use case: Sample a uniform-\[0,1\] random variable, and turn it into a uniform sample from this param.
+#' * `rep(n)` \cr
+#'   `integer(1)` -> [ParamSet] \cr
 #'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
-#' * `as_dt()`
-#'   self -> [data.table]
-#'   Converts param to datatable with 1 row. Col types are:
+#' * `as_dt()` \cr
+#'   self -> [data.table] \cr
+#'   Converts param to datatable with 1 row. Col types are: \cr
 #'     - id: character
 #'     - lower, upper: double
 #'     - values: list col, with NULL elements
@@ -53,8 +61,8 @@
 #'     - tags: list col of character vectors
 #'
 #' @name Parameter
+#' @family Parameter
 #' @export
-
 Parameter = R6Class("Parameter",
   public = list(
     id = NULL,
@@ -75,6 +83,7 @@ Parameter = R6Class("Parameter",
       self$special_vals = special_vals
       self$default = default
       self$tags = tags
+      #FIXME: check that default is feasible
     },
 
     check = function(x) {
@@ -143,7 +152,6 @@ Parameter = R6Class("Parameter",
 
   active = list(
     pclass = function() class(self)[[1L]]
-    # FIXME: spec_vals was broken and needs a proper unit test
     # FIXME: default was broken and needs a proper unit test
   ),
 

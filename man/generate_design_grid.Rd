@@ -8,16 +8,16 @@ generate_design_grid(param_set, resolution = NULL,
   param_resolutions = NULL)
 }
 \arguments{
-\item{param_set}{[\code{\link{ParamSet}}].}
+\item{param_set}{:: \link{ParamSet}.}
 
-\item{resolution}{[\code{integer(1)}]:\cr
-Resolution to be used for each parameter in the \code{param_set}.}
+\item{resolution}{:: \code{integer(1)} \cr
+Global resolution for all params.}
 
-\item{param_resolutions}{[named \code{integer()}]:\cr
-Resolution given per parameter, as named integer vector.}
+\item{param_resolutions}{:: named \code{integer} \cr
+Resolution per param, named by param ID.}
 }
 \value{
-[\code{\link[data.table]{data.table}}].
+\link{data.table}
 }
 \description{
 Generate a grid with specified resolution in the parameter space.

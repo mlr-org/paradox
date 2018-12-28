@@ -7,13 +7,13 @@
 generate_design_random(param_set, n = 1L)
 }
 \arguments{
-\item{param_set}{[\code{\link{ParamSet}}].}
+\item{param_set}{\link{ParamSet}.}
 
-\item{n}{[\code{integer(1)}]:\cr
+\item{n}{\code{integer(1)} \cr
 Number of points to draw randomly. Defaults to 1.}
 }
 \value{
-[\code{\link[data.table]{data.table}}].
+\link{data.table}
 }
 \description{
 Generates a design with randomly drawn points.

@@ -1,11 +1,13 @@
-#' @title Boolean Parameter Object
-#' @format \code{\link{R6Class}} object
+#' @title Parameter: Logical
+#' @format [R6Class] object.
 #'
-#' @description
-#' A \code{\link[R6]{R6Class}} to represent boolean parameters.
+#' @section Public methods:
+#' * `new(id, special_vals, default, tags)` \cr
+#'   `character(1)`, `list`, `any`, `character` -> self
 #'
+#' @name ParamLgl
+#' @family Parameter
 #' @export
-# FIXME: doc them all on ?Parameter page?
 ParamLgl = R6Class("ParamLgl", inherit = Parameter,
   public = list(
     initialize = function(id, special_vals = list(), default = NULL, tags = NULL) {
