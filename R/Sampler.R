@@ -26,8 +26,6 @@
 #' @export
 
 #FIXME: deepclone on contruction?
-# FIXME: rename 1Dfct to 1dcat? and doc that this also works with lgl?
-# FIXME: rename sampler1ddblnorm to something shorter? truncnorn?
 # FIXME: can we use quinf trick also for rfun sampler?
 
 Sampler = R6Class("Sampler",

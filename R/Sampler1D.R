@@ -11,10 +11,10 @@
 #' @section Currently implenented samplers:
 #' * `Sampler1DUnif$new(param)` \cr
 #'   Uniform random for arbitrary (bounded) params.
-#' * `Sampler1DFct$new(param, prob = NULL)` \cr
+#' * `Sampler1DCateg$new(param, prob = NULL)` \cr
 #'   Categorical distribution, for a fct or lgl param.
 #'   `prob` is a numeric vector of `nlevels` probabilities, which is uniform by default.
-#' * `Sampler1DDblNorm$new(param)` \cr
+#' * `Sampler1DTruncNorm$new(param)` \cr
 #'   Normal sampling (truncated) for (bounded) doubles.
 #'   Has member variables `mean` and 'sd' which you can change to influence sampling,
 #'   they are initialized to `mean=mean(range)` and `sd=span/4`.
@@ -24,7 +24,7 @@
 #'   `trunc = TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
 #'
 #' @name Sampler1D
-#' @aliases Sampler1DUnif Sampler1DFct Sampler1DDblNorm Sampler1DRfun
+#' @aliases Sampler1DUnif Sampler1DCateg Sampler1DTruncNorm Sampler1DRfun
 #' @family Sampler
 #' NULL
 
@@ -70,9 +70,8 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     rfun = NULL,
     trunc = NULL,
 
-    # FIXME: can we use this to smaple unbounded? at least doc correctly
     initialize = function(param, rfun, trunc = TRUE) {
-      assert_param(param, "ParamDbl", must_bounded = TRUE)
+      assert_param(param, "ParamDbl")
       super$initialize(param)
       assert_function(rfun, args = "n")
       assert_flag(trunc)
@@ -107,7 +106,7 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
 )
 
 #' @export
-Sampler1DFct = R6Class("Sampler1DFct", inherit = Sampler1D,
+Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
   public = list(
     prob = NULL,
 
@@ -132,7 +131,7 @@ Sampler1DFct = R6Class("Sampler1DFct", inherit = Sampler1D,
 )
 
 #' @export
-Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DRfun,
+Sampler1DTruncNorm = R6Class("Sampler1DTruncNorm", inherit = Sampler1DRfun,
   public = list(
     initialize = function(param) {
       assert_param(param, "ParamDbl", must_bounded = TRUE)

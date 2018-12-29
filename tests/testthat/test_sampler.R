@@ -2,10 +2,10 @@ context("sampling")
 
 test_that("1d samplers: basic tests", {
   samplers = list(
-    ParamDbl = list(Sampler1DUnif, Sampler1DDblNorm),
+    ParamDbl = list(Sampler1DUnif, Sampler1DTruncNorm),
     ParamInt = list(Sampler1DUnif),
-    ParamFct = list(Sampler1DUnif, Sampler1DFct),
-    ParamLgl = list(Sampler1DUnif, Sampler1DFct)
+    ParamFct = list(Sampler1DUnif, Sampler1DCateg),
+    ParamLgl = list(Sampler1DUnif, Sampler1DCateg)
   )
   ps = th_paramset_full()
   for (p in ps$params) {
@@ -38,7 +38,7 @@ test_that("SamplerJointIndep", {
   p1 = th_param_fct()
   p2 = th_param_dbl()
   ps = ParamSet$new(list(p1, p2))
-  s1 = Sampler1DFct$new(p1)
+  s1 = Sampler1DCateg$new(p1)
   s2 = Sampler1DUnif$new(p2)
   s = SamplerJointIndep$new(list(s1, s2))
   d = s$sample(20)
