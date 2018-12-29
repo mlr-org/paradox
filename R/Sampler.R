@@ -27,15 +27,15 @@
 
 #FIXME: deepclone on contruction?
 # FIXME: rename 1Dfct to 1dcat? and doc that this also works with lgl?
+# FIXME: use qunif for 1d sampling?
 
 Sampler = R6Class("Sampler",
   public = list(
     param_set = NULL,
 
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
-    initialize = function(param_set, params.cl = "Param") {
+    initialize = function(param_set) {
       assert_paramset(param_set, no_untyped = TRUE)
-      assert_subset(param_set$pclasses, params.cl)
       self$param_set = param_set
     },
 

@@ -16,7 +16,7 @@ SamplerUnif = R6Class("SamplerUnif", inherit = SamplerJointIndep,
   public = list(
     initialize = function(param_set) {
       assert_r6(param_set, "ParamSet")
-      samplers = lapply(param_set$params, new_sampler_1d_unif)
+      samplers = lapply(param_set$params, Sampler1DUnif$new)
       super$initialize(samplers)
     }
   )

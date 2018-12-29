@@ -6,6 +6,8 @@
 
 # FIXME: document args of all constructors better, it might be unclear what they mean
 
+# FIXME: rename pclass to class?
+
 #' @title Param Object
 #' @format [R6Class] object.
 #'

@@ -3,12 +3,10 @@
 \docType{data}
 \name{Sampler1D}
 \alias{Sampler1D}
-\alias{Sampler1DDblUnif}
-\alias{Sampler1DIntUnif}
+\alias{Sampler1DUnif}
 \alias{Sampler1DFct}
 \alias{Sampler1DDblNorm}
 \alias{Sampler1DRfun}
-\alias{new_sampler_1d_unif}
 \title{Sampler}
 \format{\link{R6Class} object. Inherits from \link{Sampler}.}
 \usage{
@@ -28,10 +26,8 @@ Quick access to the one param in the set.
 \section{Currently implenented samplers}{
 
 \itemize{
-\item \code{Sampler1DDblUnif$new(param)} \cr
-Uniform random for (bounded) doubles.
-\item \code{Sampler1DIntUnif$new(param)} \cr
-Uniform random for (bounded) integer.
+\item \code{Sampler1DUnif$new(param)} \cr
+Uniform random for arbitrary (bounded) params.
 \item \code{Sampler1DFct$new(param, prob = NULL)} \cr
 Categorical distribution, for a fct or lgl param.
 \code{prob} is a numeric vector of \code{nlevels} probabilities, which is uniform by default.
@@ -43,8 +39,6 @@ they are initialized to \code{mean=mean(range)} and \code{sd=span/4}.
 Arbitrary sampling from 1D rng functions from R.
 Pass e.g. rfun=rexp to sample from exponential distribution.
 \code{trunc = TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
-\item \code{new_sampler_1d_unif(param)} \cr
-Creates an approriate 1D uniform sampler from above for an arbitrary param.
 }
 }
 
