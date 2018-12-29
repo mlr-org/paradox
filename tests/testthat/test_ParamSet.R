@@ -9,22 +9,17 @@ test_that("simple active bindings work", {
   )
   for (ps in ps_list) {
     info = ps$id
-    if (ps$id == "th_paramset_full") {
-      expect_equal(ps$ids(), c('th_param_int', 'th_param_dbl', 'th_param_fct', 'th_param_lgl'))
-      expect_equal(ps$lowers, c(th_param_int=-10, th_param_dbl=-10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
-      expect_equal(ps$uppers, c(th_param_int=10, th_param_dbl=10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
-    }
     expect_class(ps, "ParamSet", info = info)
     expect_int(ps$length, lower = 0L, info = info)
     expect_character(ps$ids(), info = info)
-    expect_character(ps$pclasses, info = info)
-    expect_names(names(ps$pclasses), identical.to = ps$ids(), info = info)
-    expect_character(ps$storage_types, info = info)
-    expect_names(names(ps$storage_types), identical.to = ps$ids(), info = info)
-    expect_numeric(ps$lowers, any.missing = TRUE, info = info)
-    expect_names(names(ps$lowers), identical.to = ps$ids(), info = info)
-    expect_numeric(ps$uppers, any.missing = TRUE, info = info)
-    expect_names(names(ps$uppers), identical.to = ps$ids(), info = info)
+    expect_character(ps$pclass, info = info)
+    expect_names(names(ps$pclass), identical.to = ps$ids(), info = info)
+    expect_character(ps$storage_type, info = info)
+    expect_names(names(ps$storage_type), identical.to = ps$ids(), info = info)
+    expect_numeric(ps$lower, any.missing = TRUE, info = info)
+    expect_names(names(ps$lower), identical.to = ps$ids(), info = info)
+    expect_numeric(ps$upper, any.missing = TRUE, info = info)
+    expect_names(names(ps$upper), identical.to = ps$ids(), info = info)
     expect_list(ps$values, info = info)
     expect_names(names(ps$values), identical.to = ps$ids(), info = info)
     expect_flag(ps$is_bounded, info = info)
@@ -34,6 +29,10 @@ test_that("simple active bindings work", {
     expect_list(ps$defaults, names = "strict", info = info)
     expect_names(names(ps$defaults), subset.of = ps$ids(), info = info)
   }
+  ps = th_paramset_full()
+  expect_equal(ps$ids(), c('th_param_int', 'th_param_dbl', 'th_param_fct', 'th_param_lgl'))
+  expect_equal(ps$lower, c(th_param_int=-10, th_param_dbl=-10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
+  expect_equal(ps$upper, c(th_param_int=10, th_param_dbl=10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
 })
 
 test_that("ParamSet$subset", {
@@ -91,7 +90,7 @@ test_that("empty paramset", {
   expect_r6(ps, "ParamSet")
   expect_equal(ps$length, 0)
   expect_equal(ps$ids(), character(0L))
-  expect_equal(ps$lowers, set_names(numeric(0L), character(0L)))
+  expect_equal(ps$lower, set_names(numeric(0L), character(0L)))
 })
 
 
@@ -108,12 +107,12 @@ test_that("ParamSet$check", {
 
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
-  expect_error(ps$id <- "$foo" , "naming convention")
+  expect_error(ps$set_id <- "$foo" , "naming convention")
 })
 
 test_that("ParamSet$print", {
   ps = ParamSet$new()
-  ps$id = "foo"
+  ps$set_id = "foo"
   expect_output(print(ps), "ParamSet: foo")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
@@ -141,7 +140,7 @@ test_that("ParamSet does a deep copy of params on construction", {
   ps = ParamSet$new(list(p))
   p$lower = 2
   expect_equal(p$lower, 2)
-  expect_equal(ps$lowers, c(x = 1))
+  expect_equal(ps$lower, c(x = 1))
   expect_equal(ps$params[["x"]]$lower, 1)
 })
 
@@ -150,7 +149,7 @@ test_that("ParamSet does a deep copy of param on add", {
   ps = ParamSet$new(list())$add(p)
   p$lower = 2
   expect_equal(p$lower, 2)
-  expect_equal(ps$lowers, c(x = 1))
+  expect_equal(ps$lower, c(x = 1))
   expect_equal(ps$params[["x"]]$lower, 1)
 })
 
@@ -159,8 +158,8 @@ test_that("ParamSet$clone can be deep", {
   ps1 = ParamSet$new(list(p))
   ps2 = ps1$clone(deep = TRUE)
   ps2$params[[1]]$lower = 9
-  expect_equal(ps2$lowers, c(x = 9))
-  expect_equal(ps1$lowers, c(x = 1))
+  expect_equal(ps2$lower, c(x = 9))
+  expect_equal(ps1$lower, c(x = 1))
 })
 
 test_that("ParamSet$is_bounded", {
@@ -185,11 +184,11 @@ test_that("ParamSet$add_param", {
   ps$add(ParamDbl$new("x", lower = 1))
   expect_equal(ps$length, 1L)
   expect_equal(ps$ids(), "x")
-  expect_equal(ps$lowers, c(x = 1))
+  expect_equal(ps$lower, c(x = 1))
   ps$add(ParamFct$new("y", values = c("a")))
   expect_equal(ps$length, 2L)
   expect_equal(ps$ids(), c("x", "y"))
-  expect_equal(ps$lowers, c(x = 1, y = NA))
+  expect_equal(ps$lower, c(x = 1, y = NA))
 })
 
 test_that("as.data.table", {
@@ -199,7 +198,7 @@ test_that("as.data.table", {
   d = as.data.table(ps)
   expect_data_table(d, nrow = 4, ncol = 11)
   expect_equal(ps$ids(), d$id)
-  expect_equal(unname(ps$lower), d$lowers)
+  expect_equal(unname(ps$lower), d$lower)
   expect_equal(unname(ps$values), d$values)
 })
 

@@ -7,15 +7,12 @@
 #
 # FIXME: doc and unit tests dependencies better
 
-# FIXME: die getter vom PS müssen genauso heißen wie vom datatable
-
-
 #' @title ParamSet
 #'
 #' @description A set of [Param] objects.
 #'
 #' @section Public members / active bindings:
-#' * `id`               :: `character(1)`
+#' * `set_id`           :: `character(1)`
 #'   ID of this param set. Settable.
 #' * `params`           :: named list of [Param]
 #'   Contained parameters, named with their respective IDs.
@@ -24,13 +21,13 @@
 #'   Number of contained params. Read-only.
 #' * `is_empty`         :: `logical(1)`
 #'   Is the param set empty? Read-only.
-#' * `pclasses`         :: named `character`
+#' * `pclass`         :: named `character`
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
-#' * `lowers`           :: named [double]
+#' * `lower`           :: named [double]
 #'   Lower bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `uppers`           :: named [double]
+#' * `upper`           :: named [double]
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
 #' * `values`           :: named `list`
@@ -45,7 +42,7 @@
 #' * `special_vals`     :: named `list` of `list` \cr
 #'   Special values for all parameters.
 #'   Named with param IDs. Read-only.
-#' * `storage_types`     :: `character` \cr
+#' * `storage_type`     :: `character` \cr
 #'   Data types of params when stored in tables.
 #'   Named with param IDs. Read-only.
 #' * `tags`              :: named `list` of `character` \cr
@@ -109,7 +106,7 @@ ParamSet = R6Class("ParamSet",
       assert_list(params, types = "Param")
       self$params = map(params, function(p) p$clone(deep = TRUE))
       names(self$params) = map_chr(params, "id")
-      self$id = "paramset"
+      self$set_id = "paramset"
     },
 
     add = function(p) {
@@ -203,7 +200,7 @@ ParamSet = R6Class("ParamSet",
     # printer, prints the set as a datatable, with the option to hide some cols
     # FIXME: print something about deps
     print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
-      catf("ParamSet: %s", self$id)
+      catf("ParamSet: %s", self$set_id)
       if (self$is_empty) {
         catf("Empty.")
       } else {
@@ -219,30 +216,30 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
-    id = function(v) {
+    set_id = function(v) {
       if (missing(v)) {
-        private$.id
+        private$.set_id
       } else {
         assert_string(v)
         assert_names(v, type = "strict")
-        private$.id = v
+        private$.set_id = v
       }
     },
     length = function() length(self$params),
     is_empty = function() self$length == 0L,
-    pclasses = function() private$get_member_with_idnames("pclass", as.character),
-    lowers = function() private$get_member_with_idnames("lower", as.double),
-    uppers = function() private$get_member_with_idnames("upper", as.double),
+    pclass = function() private$get_member_with_idnames("pclass", as.character),
+    lower = function() private$get_member_with_idnames("lower", as.double),
+    upper = function() private$get_member_with_idnames("upper", as.double),
     values = function() private$get_member_with_idnames("values", as.list),
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     special_vals = function() private$get_member_with_idnames("special_vals", as.list),
     defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
-    storage_types = function() private$get_member_with_idnames("storage_type", as.character),
+    storage_type = function() private$get_member_with_idnames("storage_type", as.character),
     # FIXME: doc is_number and is_categ
-    is_number = function() self$pclasses %in% c("ParamDbl", "ParamInt"),
-    is_categ = function() self$pclasses %in% c("ParamFct", "ParamLgl"),
+    is_number = function() self$pclass %in% c("ParamDbl", "ParamInt"),
+    is_categ = function() self$pclass %in% c("ParamFct", "ParamLgl"),
     trafo = function(f) {
       if (missing(f))
         private$.trafo
@@ -253,7 +250,7 @@ ParamSet = R6Class("ParamSet",
   ),
 
   private = list(
-    .id = NULL,
+    .set_id = NULL,
     .trafo = NULL,
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),

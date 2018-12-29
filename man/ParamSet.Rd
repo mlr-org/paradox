@@ -14,7 +14,7 @@ A set of \link{Param} objects.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{id}               :: \code{character(1)}
+\item \code{set_id}           :: \code{character(1)}
 ID of this param set. Settable.
 \item \code{params}           :: named list of \link{Param}
 Contained parameters, named with their respective IDs.
@@ -23,13 +23,13 @@ NB: The returned list contains references, so you can potentially change the obj
 Number of contained params. Read-only.
 \item \code{is_empty}         :: \code{logical(1)}
 Is the param set empty? Read-only.
-\item \code{pclasses}         :: named \code{character}
+\item \code{pclass}         :: named \code{character}
 Param classes of contained parameters.
 Named with param IDs. Read-only.
-\item \code{lowers}           :: named \link{double}
+\item \code{lower}           :: named \link{double}
 Lower bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{uppers}           :: named \link{double}
+\item \code{upper}           :: named \link{double}
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
 \item \code{values}           :: named \code{list}
@@ -44,7 +44,7 @@ Named with param IDs. Read-only.
 \item \code{special_vals}     :: named \code{list} of \code{list} \cr
 Special values for all parameters.
 Named with param IDs. Read-only.
-\item \code{storage_types}     :: \code{character} \cr
+\item \code{storage_type}     :: \code{character} \cr
 Data types of params when stored in tables.
 Named with param IDs. Read-only.
 \item \code{tags}              :: named \code{list} of \code{character} \cr

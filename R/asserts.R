@@ -25,7 +25,7 @@ assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = 
 assert_paramset = function(param_set, cl = "Param", no_untyped = FALSE, must_bounded = FALSE, no_deps = FALSE) {
   assert_r6(param_set, "ParamSet")
   assert_list(param_set$params, types = cl)
-  if (no_untyped && ("ParamUty" %in% param_set$pclasses))
+  if (no_untyped && ("ParamUty" %in% param_set$pclass))
     stop("ParamSet contains untyped params!")
   if (must_bounded && !all(param_set$is_bounded))
     stop("ParamSet contains bounded params!")
