@@ -60,9 +60,9 @@ test_that("ParamSet$subset", {
 
 test_that("ParamSet$add_param_set", {
   # adding with the empty set
-  ps1 = th_paramset_numeric()$clone(deep = TRUE)
+  ps1 = ParamSet$new()
   n1 = ps1$length
-  ps2 = th_paramset_empty()$clone(deep = TRUE)
+  ps2 = ParamSet$new()
   ps1$add(ps2)
   expect_equal(ps1$length, n1)
   ps2$add(ps1)
@@ -107,12 +107,14 @@ test_that("ParamSet$check", {
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
-  expect_error(ParamSet$new(id = "$foo") , "naming convention")
+  ps = ParamSet$new()
+  expect_error(ps$id <- "$foo" , "naming convention")
 })
 
 test_that("ParamSet$print", {
-  ps = th_paramset_empty()
-  expect_output(print(ps), "ParamSet: th_paramset_empty")
+  ps = ParamSet$new()
+  ps$id = "foo"
+  expect_output(print(ps), "ParamSet: foo")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
   expect_output(print(ps), "ParamSet:")
@@ -191,7 +193,7 @@ test_that("ParamSet$add_param", {
 })
 
 test_that("as.data.table", {
-  d = as.data.table(th_paramset_empty())
+  d = as.data.table(ParamSet$new())
   expect_data_table(d, nrow = 0)
   ps = th_paramset_full()
   d = as.data.table(ps)

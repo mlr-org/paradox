@@ -12,7 +12,9 @@
 # FIXME: vielleicht kann man sich das ganze value-fixing bullhit zeugs sparen,
 # wenn paramvalues gleich ein teil vom paramset sind?
 
-#FIXME: add a hierarchical sampler for random sampling with deps. and ensure that sampling and gen_design
+#FIXME: add a hierarchical sampler for random sampling with deps.
+
+# FIXME: and ensure that sampling and gen_design check for deps
 
 # FIXME: die getter vom PS müssen genauso heißen wie vom datatable
 
@@ -112,14 +114,11 @@ ParamSet = R6Class("ParamSet",
     params = NULL,
     deps = NULL, # a list of Dependency objects
 
-    # FIXME: id should be an AB
-    initialize = function(params = list(), id = "paramset") {
+    initialize = function(params = list()) {
       assert_list(params, types = "Param")
       self$params = map(params, function(p) p$clone(deep = TRUE))
       names(self$params) = map_chr(params, "id")
-      assert_string(id)
-      assert_names(id, type = "strict")
-      self$id = id
+      self$id = "paramset"
     },
 
     add = function(p) {
@@ -244,7 +243,15 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
-    id = function(v) if (missing(v)) private$.id else private$.id = v,
+    id = function(v) {
+      if (missing(v)) {
+        private$.id
+      } else {
+        assert_string(v)
+        assert_names(v, type = "strict")
+        private$.id = v
+      }
+    },
     length = function() length(self$params),
     is_empty = function() self$length == 0L,
     pclasses = function() private$get_member_with_idnames("pclass", as.character),
