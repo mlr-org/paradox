@@ -22,14 +22,15 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
     initialize = function(samplers) {
       assert_list(samplers, types = "Sampler")
       self$samplers = samplers
+      pss = map(samplers, "param_set")
+      self$param_set = Reduce(function(ps1, ps2) ps1$add(ps2), pss)
     }
   ),
 
   private = list(
-    .sample = function(n) {
       # FIXME: unname should ne needed, added an issue in ml3misc
-      map_dtc(unname(self$samplers), function(s) s$sample(n))
-    }
+    .sample = function(n) map_dtc(unname(self$samplers), function(s) s$sample(n)),
+    .print = function() catf("Independent comps: %i", length(self$samplers))
   )
 )
 

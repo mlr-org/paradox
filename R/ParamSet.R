@@ -13,7 +13,6 @@
 # wenn paramvalues gleich ein teil vom paramset sind?
 
 #FIXME: add a hierarchical sampler for random sampling with deps. and ensure that sampling and gen_design
-# perform proper tests on deps
 
 # FIXME: die getter vom PS müssen genauso heißen wie vom datatable
 
@@ -129,7 +128,7 @@ ParamSet = R6Class("ParamSet",
         p = ParamSet$new(list(p))
       ids_inboth = intersect(self$ids(), p$ids())
       if (length(ids_inboth) > 0L)
-        stop("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
+        stopf("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
       # FIXME: we can add deps?
