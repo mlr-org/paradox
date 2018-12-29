@@ -66,3 +66,10 @@ test_that("generate_design_lhs", {
   }
 })
 
+test_that("generate_design does not work with deps", {
+  ps = th_paramset_deps()
+  expect_error(generate_design_grid(ps, resolution = 2), "dependencies")
+  expect_error(generate_design_random(ps, n = 5L), "dependencies")
+  expect_error(generate_design_lhs(ps, n = 5L), "dependencies")
+})
+

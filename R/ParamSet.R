@@ -7,8 +7,6 @@
 #
 # FIXME: doc and unit tests dependencies better
 
-# FIXME: and ensure that sampling and gen_design check for deps
-
 # FIXME: die getter vom PS müssen genauso heißen wie vom datatable
 
 
@@ -141,22 +139,6 @@ ParamSet = R6Class("ParamSet",
       return(xs)
     },
 
-    # FIXME: remove and open issue about this
-    # fix (named list of parameter values to keep fixed)
-    # creates a subset of self (cloned) with all params that are not mentioned in fix
-    # adds ParamFix param for all dropped Params
-    # out: ParamSet
-    # FIXME: doc and unit test
-    fix = function(xs) {
-      assert_list(x, names = "named")
-      assert_subset(names(x), self$ids())
-      for (param_id in names(x)) {
-        ps = self$get_param(param_id)
-        ps$fix(x[[param_id]])
-      }
-      invisible(self)
-    },
-
     ids = function(pclass = NULL, is_bounded = NULL, tags = NULL) {
       if (is.null(pclass) && is.null(is_bounded) && is.null(tags))
         return(names(self$params))
@@ -219,6 +201,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     # printer, prints the set as a datatable, with the option to hide some cols
+    # FIXME: print something about deps
     print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf("ParamSet: %s", self$id)
       if (self$is_empty) {
@@ -265,13 +248,14 @@ ParamSet = R6Class("ParamSet",
         private$.trafo
       else
         private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
-    }
+    },
+    has_deps = function() !is.null(self$deps)
   ),
 
   private = list(
     .id = NULL,
     .trafo = NULL,
-    # FIXME: doc
+    # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
 
     # FIXME: we need to copy dep objects too, and check that this works in deep clone

@@ -16,7 +16,7 @@
 #' @family generate_design
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
-  assert_paramset(param_set, no_untyped = TRUE)
+  assert_paramset(param_set, no_untyped = TRUE, no_deps = TRUE)
 
   if (!xor(is.null(resolution), is.null(param_resolutions)))
     stop("You must specify resolution (x)or param_resolutions!")

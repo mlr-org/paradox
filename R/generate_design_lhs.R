@@ -14,7 +14,7 @@
 #' @family generate_design
 #' @export
 generate_design_lhs = function(param_set, n, lhs_function = lhs::maximinLHS) {
-  assert_paramset(param_set, no_untyped = TRUE)
+  assert_paramset(param_set, no_untyped = TRUE, no_deps = TRUE)
   n = assert_count(n, positive = TRUE, coerce = TRUE)
   assert_function(lhs_function, args = c("n", "k"))
 
