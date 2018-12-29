@@ -1,0 +1,40 @@
+#' @title Sampler: Multivariate joint independent.
+#' @format [R6Class] object. Inherits from [Sampler].
+#'
+#' @description
+#' Create joint, independent sampler out of multiple other samplers.
+#'
+#' @section Public members / active bindings:
+#' * `param_set`            :: [ParamSet]
+#'    Combined param sets all passed samplers.
+#'
+#' @section Public methods:
+#' * `new(samplers)` \cr
+#'   list of [Sampler] -> `self`
+#'
+#' @name SamplerJointIndep
+#' @family Sampler
+#' @export
+SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
+  public = list(
+    samplers = NULL,
+
+    initialize = function(samplers) {
+      assert_list(samplers, types = "Sampler")
+      self$samplers = samplers
+    }
+  ),
+
+  private = list(
+    .sample = function(n) {
+      map_dtc(self$samplers, function(s) s$sample(n))
+    }
+  )
+)
+
+
+
+
+
+
+

@@ -233,7 +233,6 @@ ParamSet = R6Class("ParamSet",
       if (self$is_empty) {
         catf("Empty.")
       } else {
-        catf("Params:")
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
