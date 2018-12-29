@@ -21,7 +21,7 @@
 #'   Number of contained params. Read-only.
 #' * `is_empty`         :: `logical(1)`
 #'   Is the param set empty? Read-only.
-#' * `pclass`         :: named `character`
+#' * `class`         :: named `character`
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
 #' * `lower`           :: named [double]
@@ -63,10 +63,10 @@
 #' * `new(params)` \cr
 #'   list of [Param] -> `self`
 #'   Deep-clones all passed param objects.
-#' * `ids(pclass = NULL, is_bounded = NULL, tags = NULL)` \cr
+#' * `ids(class = NULL, is_bounded = NULL, tags = NULL)` \cr
 #'   `character`, `logical(1)`, `character` -> `character`
 #'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
-#'   `pclass` and `tags` can be sets.
+#'   `class` and `tags` can be sets.
 #' * `add(param_set)` \cr
 #'   [Param] | [ParamSet] -> `self`
 #'   Adds a single param or another set to this set, all params are cloned.
@@ -136,15 +136,15 @@ ParamSet = R6Class("ParamSet",
       return(xs)
     },
 
-    ids = function(pclass = NULL, is_bounded = NULL, tags = NULL) {
-      if (is.null(pclass) && is.null(is_bounded) && is.null(tags))
+    ids = function(class = NULL, is_bounded = NULL, tags = NULL) {
+      if (is.null(class) && is.null(is_bounded) && is.null(tags))
         return(names(self$params))
-      assert_character(pclass, any.missing = FALSE, null.ok = TRUE)
+      assert_character(class, any.missing = FALSE, null.ok = TRUE)
       assert_flag(is_bounded, null.ok = TRUE)
       assert_character(tags, any.missing = FALSE, null.ok = TRUE)
       d = as.data.table(self)
-      pc = pclass; isb = is_bounded; tgs = tags # rename for dt, sucks
-      d[  (is.null(pc) | d$pclass %in% pc) &
+      pc = class; isb = is_bounded; tgs = tags # rename for dt, sucks
+      d[  (is.null(pc) | d$class %in% pc) &
           (is.null(isb) | is_bounded %in% isb) &
           (is.null(tgs) | d$tags %in% tgs), id]
     },
@@ -227,7 +227,7 @@ ParamSet = R6Class("ParamSet",
     },
     length = function() length(self$params),
     is_empty = function() self$length == 0L,
-    pclass = function() private$get_member_with_idnames("pclass", as.character),
+    class = function() private$get_member_with_idnames("class", as.character),
     lower = function() private$get_member_with_idnames("lower", as.double),
     upper = function() private$get_member_with_idnames("upper", as.double),
     values = function() private$get_member_with_idnames("values", as.list),
@@ -238,8 +238,8 @@ ParamSet = R6Class("ParamSet",
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
     # FIXME: doc is_number and is_categ
-    is_number = function() self$pclass %in% c("ParamDbl", "ParamInt"),
-    is_categ = function() self$pclass %in% c("ParamFct", "ParamLgl"),
+    is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
+    is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
     trafo = function(f) {
       if (missing(f))
         private$.trafo

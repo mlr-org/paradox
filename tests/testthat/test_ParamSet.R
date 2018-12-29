@@ -12,8 +12,8 @@ test_that("simple active bindings work", {
     expect_class(ps, "ParamSet", info = info)
     expect_int(ps$length, lower = 0L, info = info)
     expect_character(ps$ids(), info = info)
-    expect_character(ps$pclass, info = info)
-    expect_names(names(ps$pclass), identical.to = ps$ids(), info = info)
+    expect_character(ps$class, info = info)
+    expect_names(names(ps$class), identical.to = ps$ids(), info = info)
     expect_character(ps$storage_type, info = info)
     expect_names(names(ps$storage_type), identical.to = ps$ids(), info = info)
     expect_numeric(ps$lower, any.missing = TRUE, info = info)
@@ -120,7 +120,7 @@ test_that("ParamSet$print", {
   s = capture_output(print(ps))
   expect_true(stri_detect_fixed(s, "ParamInt"))
   expect_true(stri_detect_fixed(s, "ParamDbl"))
-  s = capture_output(print(ps, hide.cols = c("pclass")))
+  s = capture_output(print(ps, hide.cols = c("class")))
   expect_false(stri_detect_fixed(s, "ParamInt"))
 
   # iterate through more complex PS and check that printer works by at least calling it
@@ -224,8 +224,8 @@ test_that("ParamSet$ids", {
     ParamFct$new(id = "z", values = letters[1:3], tags = c("t1"))
   ))
   expect_equal(ps$ids(), c("x", "y", "z"))
-  expect_equal(ps$ids(pclass = c("ParamInt", "ParamFct")), c("y", "z"))
-  expect_equal(ps$ids(pclass = c("ParamInt", "ParamFct"), tags = "t1"), c("z"))
+  expect_equal(ps$ids(class = c("ParamInt", "ParamFct")), c("y", "z"))
+  expect_equal(ps$ids(class = c("ParamInt", "ParamFct"), tags = "t1"), c("z"))
   expect_equal(ps$ids(is_bounded = TRUE), c("y", "z"))
 })
 

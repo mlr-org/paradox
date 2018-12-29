@@ -14,7 +14,7 @@ test_that("check and assert work", {
 
 
 test_that("special_vals work for all Param subclasses", {
-  pclass = list(ParamFct, ParamLgl, ParamInt, ParamDbl)
+  class = list(ParamFct, ParamLgl, ParamInt, ParamDbl)
   special_vals_list = list(
     list(1),
     list('a'),
@@ -22,7 +22,7 @@ test_that("special_vals work for all Param subclasses", {
     list('a', 1, 1:10, as.environment(list(a = 10, b = 100, c = mean))),
     list(mean, sum, function(x) x^10)
   )
-  for (cl in pclass) {
+  for (cl in class) {
     for (special_vals in special_vals_list) {
       if (cl$classname == "ParamFct") {
         p = cl$new(id = paste0('test.', cl$classname), special_vals = special_vals, values = letters[11:20])

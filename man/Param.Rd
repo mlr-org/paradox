@@ -16,7 +16,7 @@ Abstract base class for params.
 \itemize{
 \item \code{id}               :: \code{character(1)} \cr
 ID of this param.
-\item \code{pclass}           :: \code{character(1)} \cr
+\item \code{class}           :: \code{character(1)} \cr
 Param R6 class name. Read-only.
 \item \code{lower}            :: \code{numeric(1)} \cr
 Lower bound for dbl/int params, can be -Inf. NA if param is not a number.

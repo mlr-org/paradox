@@ -1,6 +1,6 @@
 # FIXME: document args of all constructors better, it might be unclear what they mean
 
-# FIXME: rename pclass to class?
+# FIXME: rename class to class?
 
 #' @title Param Object
 #' @format [R6Class] object.
@@ -11,7 +11,7 @@
 #' @section Public members / active bindings:
 #' * `id`               :: `character(1)` \cr
 #'    ID of this param.
-#' * `pclass`           :: `character(1)` \cr
+#' * `class`           :: `character(1)` \cr
 #'    Param R6 class name. Read-only.
 #' * `lower`            :: `numeric(1)` \cr
 #'    Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
@@ -122,7 +122,7 @@ Param = R6Class("Param",
   ),
 
   active = list(
-    pclass = function() class(self)[[1L]]
+    class = function() class(self)[[1L]]
   ),
 
   private = list(
@@ -135,7 +135,7 @@ Param = R6Class("Param",
 as.data.table.Param = function(x, ...) {
   data.table(
     id = x$id,
-    pclass = x$pclass,
+    class = x$class,
     lower = x$lower,
     upper = x$upper,
     values = list(x$values),

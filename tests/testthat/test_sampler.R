@@ -9,7 +9,7 @@ test_that("1d samplers: basic tests", {
   )
   ps = th_paramset_full()
   for (p in ps$params) {
-    ss = samplers[[p$pclass]]
+    ss = samplers[[p$class]]
     for (s in ss) {
       s = s$new(p)
       info = paste(p$id, "-", class(s)[[1L]])
@@ -18,9 +18,9 @@ test_that("1d samplers: basic tests", {
       expect_data_table(x, ncols = 1L, nrows = n, info = info)
       x1 = x[[1]]
       expect_is(x1, p$storage_type, info = info)
-      if (p$pclass %in% c("ParamInt", "ParamDbl"))
+      if (p$class %in% c("ParamInt", "ParamDbl"))
         expect_true(all(x1 >= p$lower & x <= p$upper), info = info)
-      if (p$pclass %in% c("ParamFct"))
+      if (p$class %in% c("ParamFct"))
         expect_true(all(x1 %in% p$values), info = info)
       expect_output(print(s), "Sampler:")
     }
