@@ -1,9 +1,3 @@
-#FIXME: we need to handle the specail case of fixing / mapunitint. maybe that auto-works, maybe not
-# we also need to be able to ask for the fixed value?
-# we should probably add a note for each param what fixing means
-
-#FIXME: superclass for dbl/int, lgl/fct?
-
 # FIXME: document args of all constructors better, it might be unclear what they mean
 
 # FIXME: rename pclass to class?
@@ -70,7 +64,6 @@ Param = R6Class("Param",
     default = NULL,
     tags = NULL,
 
-    # FIXME: should default of tags be char(0)? so no tags?
     initialize = function(id, special_vals, default, tags) {
       assert_string(id)
       assert_names(id, type = "strict")

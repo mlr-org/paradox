@@ -7,13 +7,6 @@
 #
 # FIXME: doc and unit tests dependencies better
 
-#FIXME: how do we handle fixed params in trafo? tramfsorm them? keep them as they are?
-
-# FIXME: vielleicht kann man sich das ganze value-fixing bullhit zeugs sparen,
-# wenn paramvalues gleich ein teil vom paramset sind?
-
-#FIXME: add a hierarchical sampler for random sampling with deps.
-
 # FIXME: and ensure that sampling and gen_design check for deps
 
 # FIXME: die getter vom PS müssen genauso heißen wie vom datatable
