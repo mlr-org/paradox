@@ -27,7 +27,8 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
 
   private = list(
     .sample = function(n) {
-      map_dtc(self$samplers, function(s) s$sample(n))
+      # FIXME: unname should ne needed, added an issue in ml3misc
+      map_dtc(unname(self$samplers), function(s) s$sample(n))
     }
   )
 )

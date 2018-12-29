@@ -32,7 +32,7 @@ Uniform random for arbitrary (bounded) params.
 Categorical distribution, for a fct or lgl param.
 \code{prob} is a numeric vector of \code{nlevels} probabilities, which is uniform by default.
 \item \code{Sampler1DDblNorm$new(param)} \cr
-Normal sampling (truncated) for doubles.
+Normal sampling (truncated) for (bounded) doubles.
 Has member variables \code{mean} and 'sd' which you can change to influence sampling,
 they are initialized to \code{mean=mean(range)} and \code{sd=span/4}.
 \item \code{Sampler1DRfun(param, rfun, trunc = TRUE)} \cr
