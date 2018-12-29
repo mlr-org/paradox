@@ -12,6 +12,7 @@
 #' * `new(param_set)` \cr
 #'   [ParamSet] -> `self`
 #'   Abstract, only inheriting subclasses call this.
+#'   Param set is cloned on construction.
 #' * `sample(n)` \cr
 #'   `integer(1)` -> [data.table]
 #'   Sample n values from the distribution.
@@ -25,9 +26,6 @@
 #' @family Sampler
 #' @export
 
-#FIXME: deepclone on contruction?
-# FIXME: can we use quinf trick also for rfun sampler?
-
 Sampler = R6Class("Sampler",
   public = list(
     param_set = NULL,
@@ -35,7 +33,7 @@ Sampler = R6Class("Sampler",
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
     initialize = function(param_set) {
       assert_paramset(param_set, no_untyped = TRUE)
-      self$param_set = param_set
+      self$param_set = param_set$clone(deep = TRUE)
     },
 
     sample = function(n) {

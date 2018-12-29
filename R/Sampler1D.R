@@ -20,7 +20,7 @@
 #'   they are initialized to `mean=mean(range)` and `sd=span/4`.
 #' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
 #'   Arbitrary sampling from 1D rng functions from R.
-#'   Pass e.g. rfun=rexp to sample from exponential distribution.
+#'   Pass e.g. `rfun=rexp` to sample from exponential distribution.
 #'   `trunc = TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
 #'
 #' @name Sampler1D

@@ -29,7 +29,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     }
   ),
 
-  # FIXME: readd center again
   active = list(
     values = function() NULL,
     nlevels = function() Inf,
