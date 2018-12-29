@@ -1,20 +1,37 @@
 context("sampling")
 
-test_that("sampling 1d unif", {
+test_that("1d samplers: basic tests", {
+  samplers = list(
+    ParamDbl = list(Sampler1DUnif, Sampler1DDblNorm),
+    ParamInt = list(Sampler1DUnif),
+    ParamFct = list(Sampler1DUnif, Sampler1DFct),
+    ParamLgl = list(Sampler1DUnif, Sampler1DFct)
+  )
   ps = th_paramset_full()
   for (p in ps$params) {
-    info = p$id
-    s = Sampler1DUnif$new(p)
-    n = 5L
-    x = s$sample(n)
-    expect_data_table(x, ncols = 1L, nrows = n, info = info)
-    x1 = x[[1]]
-    expect_is(x1, p$storage_type, info = info)
-    if (p$pclass %in% c("ParamInt", "ParamDbl"))
-      expect_true(all(x1 >= p$lower & x <= p$upper), info = info)
-    if (p$pclass %in% c("ParamFct"))
-      expect_true(all(x1 %in% p$values), info = info)
+    ss = samplers[[p$pclass]]
+    for (s in ss) {
+      s = s$new(p)
+      info = paste(p$id, "-", class(s)[[1L]])
+      n = 5L
+      x = s$sample(n)
+      expect_data_table(x, ncols = 1L, nrows = n, info = info)
+      x1 = x[[1]]
+      expect_is(x1, p$storage_type, info = info)
+      if (p$pclass %in% c("ParamInt", "ParamDbl"))
+        expect_true(all(x1 >= p$lower & x <= p$upper), info = info)
+      if (p$pclass %in% c("ParamFct"))
+        expect_true(all(x1 %in% p$values), info = info)
+    }
   }
+})
+
+test_that("sampling of unif requires finite bounds", {
+  p = ParamInt$new(id = "x", lower = 1)
+  s = expect_error(Sampler1DUnif$new(p), "bounded")
+
+  p = ParamDbl$new(id = "x", lower = 1)
+  s = expect_error(Sampler1DUnif$new(p), "bounded")
 })
 
 test_that("multivariate", {
@@ -28,15 +45,6 @@ test_that("multivariate", {
   expect_numeric(x$th_param_dbl, lower = -10, upper = 10)
   expect_character(x$th_param_fct)
 })
-
-test_that("sampling of number requires finite bounds", {
-  p = ParamInt$new(id = "x", lower = 1)
-  s = expect_error(Sampler1DUnif$new(p), "bounded")
-
-  p = ParamDbl$new(id = "x", lower = 1)
-  s = expect_error(Sampler1DUnif$new(p), "bounded")
-})
-
 
 test_that("sampling works", {
   ps_list = list(

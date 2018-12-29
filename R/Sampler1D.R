@@ -15,7 +15,7 @@
 #'   Categorical distribution, for a fct or lgl param.
 #'   `prob` is a numeric vector of `nlevels` probabilities, which is uniform by default.
 #' * `Sampler1DDblNorm$new(param)` \cr
-#'   Normal sampling (truncated) for doubles.
+#'   Normal sampling (truncated) for (bounded) doubles.
 #'   Has member variables `mean` and 'sd' which you can change to influence sampling,
 #'   they are initialized to `mean=mean(range)` and `sd=span/4`.
 #' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
@@ -27,9 +27,6 @@
 #' @aliases Sampler1DUnif Sampler1DFct Sampler1DDblNorm Sampler1DRfun
 #' @family Sampler
 #' NULL
-
-#FIXME: convert to storage type and unittests
-
 
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
@@ -62,7 +59,7 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   ),
 
   private = list(
-    .sample = function(n) private$as_dt_col(self$param$qunif(runif(n)))
+    .sample = function(n) private$as_dt_col(self$param$qunif(runif(n))) # sample by doing qunif(u)
   )
 )
 
@@ -88,7 +85,7 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     # maybe we want an option to use my truncation here, as this slows stuff down somewhat and there are some real truncated rngs in R
     .sample = function(n) {
       if (self$trunc)
-        s = sample_truncated(n, self$rfun)
+        s = private$sample_truncated(n, self$rfun)
       else
         s = self$rfun(n = n)
       super$as_dt_col(s)
@@ -96,6 +93,7 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
 
     # extreme naive rejection sampling to enable trunc sampling from finite, restricted support
     sample_truncated = function(n, rfun) {
+      r = numeric(0L)
       for (i in 1:1000) {
         s = rfun(n = 2*n)
         s = s[s >= self$param$lower & s <= self$param$upper]
@@ -136,20 +134,23 @@ Sampler1DFct = R6Class("Sampler1DFct", inherit = Sampler1D,
 #' @export
 Sampler1DDblNorm = R6Class("Sampler1DDblNorm", inherit = Sampler1DRfun,
   public = list(
-    mean = NULL,
-    sd = NULL,
-
-    initialize = function(param, mean = NULL, sd = NULL) {
+    initialize = function(param) {
+      assert_param(param, "ParamDbl", must_bounded = TRUE)
       super$initialize(param, trunc = TRUE,
-        rfun = function(n) rnorm(n, mean = mean , sd = sd))
-      if (is.null(mean))
-        mean = self$param$qunif(0.5)
-      assert_number(mean)
-      assert_number(sd, lower = 0)
-      self$mean = mean
-      self$sd = sd
-      assert_true(param$is_bounded)
+        rfun = function(n) rnorm(n, mean = self$mean, sd = self$sd))
+      private$.mean = mean(self$param$range)
+      private$.sd = self$param$span / 4
     }
+  ),
+
+  active = list(
+    mean = function(v) if (missing(v)) private$.mean else private$.mean = assert_number(v),
+    sd = function(v) if (missing(v)) private$.sd else private$.sd = assert_number(v, lower = 0)
+  ),
+
+  private = list(
+    .mean = NULL,
+    .sd = NULL
   )
 )
 
