@@ -4,8 +4,8 @@
 \name{Sampler1D}
 \alias{Sampler1D}
 \alias{Sampler1DUnif}
-\alias{Sampler1DFct}
-\alias{Sampler1DDblNorm}
+\alias{Sampler1DCateg}
+\alias{Sampler1DTruncNorm}
 \alias{Sampler1DRfun}
 \title{Sampler}
 \format{\link{R6Class} object. Inherits from \link{Sampler}.}
@@ -28,16 +28,16 @@ Quick access to the one param in the set.
 \itemize{
 \item \code{Sampler1DUnif$new(param)} \cr
 Uniform random for arbitrary (bounded) params.
-\item \code{Sampler1DFct$new(param, prob = NULL)} \cr
+\item \code{Sampler1DCateg$new(param, prob = NULL)} \cr
 Categorical distribution, for a fct or lgl param.
 \code{prob} is a numeric vector of \code{nlevels} probabilities, which is uniform by default.
-\item \code{Sampler1DDblNorm$new(param)} \cr
+\item \code{Sampler1DTruncNorm$new(param)} \cr
 Normal sampling (truncated) for (bounded) doubles.
 Has member variables \code{mean} and 'sd' which you can change to influence sampling,
 they are initialized to \code{mean=mean(range)} and \code{sd=span/4}.
 \item \code{Sampler1DRfun(param, rfun, trunc = TRUE)} \cr
 Arbitrary sampling from 1D rng functions from R.
-Pass e.g. rfun=rexp to sample from exponential distribution.
+Pass e.g. \code{rfun=rexp} to sample from exponential distribution.
 \code{trunc = TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
 }
 }

@@ -29,8 +29,10 @@ test_that("simple active bindings work", {
     expect_names(names(ps$values), identical.to = ps$ids(), info = info)
     expect_flag(ps$is_bounded, info = info)
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
-    expect_list(ps$tags, names = "strict", any.missing = TRUE, info = info)
-    expect_list(ps$defaults, names = "strict", any.missing = TRUE, info = info)
+    expect_list(ps$tags, types = "character", info = info)
+    expect_names(names(ps$tags), identical.to = ps$ids(), info = info)
+    expect_list(ps$defaults, names = "strict", info = info)
+    expect_names(names(ps$defaults), subset.of = ps$ids(), info = info)
   }
 })
 

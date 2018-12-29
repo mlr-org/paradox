@@ -15,7 +15,7 @@
 #' @export
 ParamUty = R6Class("ParamUty", inherit = Param,
   public = list(
-    initialize = function(id, default = NO_DEF, tags = NULL) {
+    initialize = function(id, default = NO_DEF, tags = character(0L)) {
       super$initialize(id, special_vals = list(), default = default, tags = tags)
     }
   ),

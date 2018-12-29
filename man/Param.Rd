@@ -45,7 +45,7 @@ Can be used to group and subset params.
 \section{Public methods}{
 
 \itemize{
-\item \code{new(id, special_vals, default, tags)} \cr
+\item \code{new(id, special_vals = list(), default = NO_DEF, tags = character(0L))} \cr
 \code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor of abstract base class, only called by inheriting classes.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr

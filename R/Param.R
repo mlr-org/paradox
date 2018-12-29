@@ -42,7 +42,7 @@
 #'   Can be used to group and subset params.
 #'
 #' @section Public methods:
-#' * `new(id, special_vals, default, tags)` \cr
+#' * `new(id, special_vals = list(), default = NO_DEF, tags = character(0L))` \cr
 #'   `character(1)`, `list`, `any`, `character` -> self \cr
 #'   Constructor of abstract base class, only called by inheriting classes.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
@@ -67,7 +67,6 @@ Param = R6Class("Param",
   public = list(
     id = NULL,
     special_vals = NULL,
-    # FIXME: what if deafult is NULL? this is the DEFAULT for 'default' in all param subclasses....
     default = NULL,
     tags = NULL,
 
@@ -76,8 +75,7 @@ Param = R6Class("Param",
       assert_string(id)
       assert_names(id, type = "strict")
       assert_list(special_vals)
-      # FIXME: do we allow NULL here? or just a charvec(0)?
-      assert_character(tags, any.missing = TRUE, unique = TRUE, null.ok = TRUE)
+      assert_character(tags, any.missing = FALSE, unique = TRUE)
 
       self$id = id
       self$special_vals = special_vals

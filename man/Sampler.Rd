@@ -25,6 +25,7 @@ Domain / support of the distribution we want to sample from.
 \item \code{new(param_set)} \cr
 \link{ParamSet} -> \code{self}
 Abstract, only inheriting subclasses call this.
+Param set is cloned on construction.
 \item \code{sample(n)} \cr
 \code{integer(1)} -> \link{data.table}
 Sample n values from the distribution.
