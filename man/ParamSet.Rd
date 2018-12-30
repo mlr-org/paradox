@@ -54,12 +54,19 @@ Named with param IDs. Read-only.
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
 \item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
-Transformation function. Settable.
-The function is responsible to transform a single (feasible) configuration list into
-another encoding, before evaluating the configuration with the target algorithm.
-For the output-list, not many things have to hold.
-It needs to be a uniquely-named list, and the target algorithm has to accept the configuarion.
-NB: For convenience, the self-paramset is also passed, if you need some info from it.
+Transformation function. Settable. We do a bit of magic here for user convenience:
+On write: User has to pass a \code{function(x, param_set)}, where x is a data.table with atomic param-columns, and it
+must also returns a data.table.
+The function is responsible to transform feasible configurations (rows) into
+another encoding, before potentially evaluating the configuration with the target algorithm.
+For the output-datatable, not many things have to hold.
+It needs to have unique column names, and the target algorithm has to accept the configuration-rows.
+Note that you can also create list-cols in the return value if you need to transform to complex objects.
+For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+The user is responsible to transform this as he likes,
+and has access to the \code{param_set} (e.g. to access tags or other stuff)
+On read: Returns a \code{function(x)}, which does exactly what the user passed "on read",
+but also allows a list-interface, and auto-passes the param set.
 \item \code{has_trafo}         :: \code{logical(1)} \cr
 Has the set a trafo` function?
 \item \code{deps}              :: list of \link{Dependency} \cr
@@ -88,10 +95,6 @@ Adds a single param or another set to this set, all params are cloned.
 \item \code{subset(ids)} \cr
 \code{character} -> \code{self}
 Changes the current set to the set of passed IDs.
-\item \code{transform(x)} \cr
-\link{data.table} -> \link{data.table}
-Transforms a collection of configurations (rows) via the associated \code{trafo} of the param set,
-so each row in the returned data.table corresponds to the origin-row with the same row-index.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a named list.
 A point x is feasible, if it configures a subset of params,
