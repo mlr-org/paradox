@@ -127,8 +127,7 @@ test_that("ParamSet$print", {
   ps_list = list(
     th_paramset_full(),
     th_paramset_repeated(),
-    th_paramset_untyped(),
-    th_paramset_trafo()
+    th_paramset_untyped()
   )
   for (ps in ps_list) {
     expect_output(print(ps), "ParamSet:")
