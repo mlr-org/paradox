@@ -1,12 +1,3 @@
-#' @title Param: Logical
-#' @format [R6Class] object. Inherits from [Param]
-#'
-#' @section Public methods:
-#' * `new(id, special_vals, default, tags)` \cr
-#'   `character(1)`, `list`, `any`, `character` -> self
-#'
-#' @name ParamLgl
-#' @family Param
 #' @export
 ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(

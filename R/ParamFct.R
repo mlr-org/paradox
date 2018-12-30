@@ -1,15 +1,3 @@
-#' @title Param: Factor
-#' @format [R6Class] object. Inherits from [Param]
-#'
-#' @description
-#' Slight misnomer as this parameter accepts only strings, from its defined set of categorical values.
-#'
-#' @section Public methods:
-#' * `new(id, values, special_vals, default, tags)` \cr
-#'   `character(1)`, `character`, `list`, `any`, `character` -> self
-#'
-#' @name ParamFact
-#' @family Param
 #' @export
 ParamFct = R6Class("ParamFct", inherit = Param,
   public = list(

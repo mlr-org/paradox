@@ -3,13 +3,18 @@
 \docType{data}
 \name{Param}
 \alias{Param}
+\alias{ParamDbl}
+\alias{ParamInt}
+\alias{ParamFct}
+\alias{ParamLgl}
+\alias{ParamUty}
 \title{Param Object}
 \format{\link{R6Class} object.}
 \usage{
 Param
 }
 \description{
-Abstract base class for params.
+Abstract base class for params and inheriting concrete param classes.
 }
 \section{Public members / active bindings}{
 
@@ -45,9 +50,29 @@ Can be used to group and subset params.
 \section{Public methods}{
 
 \itemize{
-\item \code{new(id, special_vals = list(), default = NO_DEF, tags = character(0L))} \cr
+\item \code{Param$new(id, special_vals = list(), default = NO_DEF, tags = character(0L))} \cr
 \code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor of abstract base class, only called by inheriting classes.
+See meaning of \code{id}, \code{special_vals}, \code{default}, \code{tags} in member section.
+\item \code{Param$Dbl$new(id, lower, upper, special_vals, default, tags)} \cr
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.
+\item \code{Param$Int$new(id, lower, upper, special_vals, default, tags)} \cr
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
+\code{lower} is set to its integer ceiling and 'upper' to its integer floor value.
+\item \code{ParamFct$new(id, values, special_vals, default, tags)} \cr
+\code{character(1)}, \code{character}, \code{list}, \code{any}, \code{character} -> self
+Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
+from its defined set of categorical values.
+\item \code{Param$Lgl$new(id, special_vals, default, tags)} \cr
+\code{character(1)}, \code{list}, \code{any}, \code{character} -> self
+Constructor for logical-scalar-params.
+\item \code{ParamUty$new(id, default, tags)} \cr
+\code{character(1)}, \code{any}, \code{character} -> self
+Untyped parameters, can be used to bypass any complicated feasibility checks, when
+a param is of truly complex type, as checks for this param are always feasible.
+OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 A value is feasible if it is of the same \code{storage_type}, inside of the bounds or from \code{special_vals}.
@@ -61,6 +86,16 @@ Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>"
 }
 }
 
+\section{Further public methods for ParamDbl, ParamInt}{
+
+\itemize{
+\item \code{range}            :: \code{numeric(2)} \cr
+Lower and upper bound as 2-dim-vector.
+\item \code{span}            :: \code{numeric(1)} \cr
+Difference of \code{upper - lower}.
+}
+}
+
 \section{S3 methods and type converters}{
 
 \itemize{
@@ -69,10 +104,5 @@ Converts param to datatable with 1 row. See \link{ParamSet}.
 }
 }
 
-\seealso{
-Other Param: \code{\link{ParamDbl}},
-  \code{\link{ParamFact}}, \code{\link{ParamInt}},
-  \code{\link{ParamLgl}}, \code{\link{ParamUty}}
-}
 \concept{Param}
 \keyword{datasets}

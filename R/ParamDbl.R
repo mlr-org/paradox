@@ -1,18 +1,3 @@
-#' @title Param: Double
-#' @format [R6Class] object. Inherits from [Param]
-#'
-#' @section Public members / active bindings:
-#' * `range`            :: `numeric(2)` \cr
-#'   Lower and upper bound as 2-dim-vector.
-#' * `span`            :: `numeric(1)` \cr
-#'   Difference of `upper - lower`.
-#'
-#' @section Public methods:
-#' * `new(id, lower, upper, special_vals, default, tags)` \cr
-#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
-#'
-#' @name ParamDbl
-#' @family Param
 #' @export
 ParamDbl = R6Class("ParamDbl", inherit = Param,
   public = list(
