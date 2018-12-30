@@ -64,6 +64,9 @@
 #'   Parameter dependency objects, each element of the list is internally created by a call to `add_dep`.
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
+#' * `deps_on`          :: `data.table` \cr
+#'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`).
+#'   List all (direct) dependency parents of a param, through parameter IDs.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
@@ -220,9 +223,7 @@ ParamSet = R6Class("ParamSet",
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         if (self$has_deps) {  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep = list(d$parent$id)))
-          # FIXME: how can we join the list-els more nicely?
-          dtab = dtab[, .(dep = list(unlist(dep))), by = id]
+          dtab = self$deps_on
           d = merge(d, dtab, by = "id", all.x = TRUE) # left outer join d, dtab (dtab is incomplete)
         }
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
@@ -263,7 +264,12 @@ ParamSet = R6Class("ParamSet",
       else
         private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
     },
-    has_deps = function() length(self$deps) > 0L
+    has_trafo = function() !is.null(private$.trafo),
+    has_deps = function() length(self$deps) > 0L,
+    deps_on = function() {
+      dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id)))
+      dtab[, .(dep_parent = list(unlist(dep_parent))), by = id] # join par-charvecs rows with same ids
+    }
   ),
 
   private = list(

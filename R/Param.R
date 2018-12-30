@@ -104,13 +104,7 @@ Param = R6Class("Param",
     check = function(x) {
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
       ch = private$.check(x)
-      if (isTRUE(ch))
-        return(TRUE)
-      #FIXME: shuld use purrr::has_element, opened issue in mlr3misc
-      else if (any(map_lgl(self$special_vals, identical, x)))
-        return(TRUE)
-      else
-        return(ch)
+      ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
     },
 
     assert = function(x) makeAssertionFunction(self$check)(x),

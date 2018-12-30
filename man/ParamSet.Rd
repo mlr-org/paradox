@@ -66,6 +66,9 @@ Has the set a trafo` function?
 Parameter dependency objects, each element of the list is internally created by a call to \code{add_dep}.
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
+\item \code{deps_on}          :: \code{data.table} \cr
+Table has cols \code{id} (\code{character(1)}) and \code{dep_parent} (\code{list} of \code{character}).
+List all (direct) dependency parents of a param, through parameter IDs.
 }
 }
 
