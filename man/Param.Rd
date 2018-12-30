@@ -14,7 +14,7 @@
 Param
 }
 \description{
-Abstract base class for params and inheriting concrete param classes.
+Abstract base class for params and inheriting concrete param subclasses.
 }
 \section{Public members / active bindings}{
 

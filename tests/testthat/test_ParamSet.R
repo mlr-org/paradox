@@ -154,12 +154,20 @@ test_that("ParamSet does a deep copy of param on add", {
 })
 
 test_that("ParamSet$clone can be deep", {
-  p = ParamDbl$new("x", lower = 1, upper = 3)
-  ps1 = ParamSet$new(list(p))
+  p1 = ParamDbl$new("x", lower = 1, upper = 3)
+  p2 = ParamFct$new("y", values = c("a", "b"))
+  ps1 = ParamSet$new(list(p1, p2))
   ps2 = ps1$clone(deep = TRUE)
-  ps2$params[[1]]$lower = 9
-  expect_equal(ps2$lower, c(x = 9))
-  expect_equal(ps1$lower, c(x = 1))
+  ps2$params[["x"]]$lower = 9
+  expect_equal(ps2$lower, c(x = 9, y = NA))
+  expect_equal(ps1$lower, c(x = 1, y = NA))
+
+  # now lets add a dep, see if that gets clones properly
+  ps1$add_dep("x", on = "y", cond_equal("a"))
+  ps2 = ps1$clone(deep = TRUE)
+  ps2$deps[[1L]]$param$id = "foo"
+  expect_equal(ps2$deps[[1L]]$param$id, "foo")
+  expect_equal(ps1$deps[[1L]]$param$id, "x")
 })
 
 test_that("ParamSet$is_bounded", {

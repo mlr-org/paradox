@@ -122,7 +122,7 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
       # FIXME: we can add deps?
-      if (!is.null(p$deps))
+      if (p$has_deps)
         stop("Cannot add a param set with dependencies.")
       ps2 = p$clone(deep = TRUE)
       self$params = c(self$params, ps2$params)
@@ -261,18 +261,22 @@ ParamSet = R6Class("ParamSet",
       else
         private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
     },
-    has_deps = function() !is.null(self$deps)
+    has_deps = function() length(self$deps) > 0L
   ),
 
   private = list(
     .set_id = NULL,
     .trafo = NULL,
+
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
 
-    # FIXME: we need to copy dep objects too, and check that this works in deep clone
     deep_clone = function(name, value) {
-      if (name == "params") map(value, function(x) x$clone(deep = TRUE)) else value
+      switch(name,
+        "params" = map(value, function(x) x$clone(deep = TRUE)),
+        "deps" = map(value, function(x) x$clone(deep = TRUE)),
+        value
+      )
     }
   )
 )
