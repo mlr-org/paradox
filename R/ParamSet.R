@@ -12,37 +12,37 @@
 #' A set of [Param] objects.
 #'
 #' @section Public members / active bindings:
-#' * `set_id`           :: `character(1)`
+#' * `set_id`            :: `character(1)`
 #'   ID of this param set. Settable.
-#' * `params`           :: named list of [Param]
+#' * `params`            :: named list of [Param]
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#' * `length`           :: `integer(1)`
+#' * `length`            :: `integer(1)`
 #'   Number of contained params. Read-only.
-#' * `is_empty`         :: `logical(1)`
+#' * `is_empty`          :: `logical(1)`
 #'   Is the param set empty? Read-only.
-#' * `class`         :: named `character`
+#' * `class`             :: named `character`
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
-#' * `lower`           :: named [double]
+#' * `lower`             :: named [double]
 #'   Lower bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `upper`           :: named [double]
+#' * `upper`             :: named [double]
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `values`           :: named `list`
+#' * `values`            :: named `list`
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
-#' * `nlevels`          :: named [double]
+#' * `nlevels`           :: named [double]
 #'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 #'   Named with param IDs. Read-only.
-#' * `is_bounded`       :: named `logical(1)`
+#' * `is_bounded`        :: named `logical(1)`
 #'   Do all parameters have finite bounds?
 #'   Named with param IDs. Read-only.
-#' * `special_vals`     :: named `list` of `list` \cr
+#' * `special_vals`      :: named `list` of `list` \cr
 #'   Special values for all parameters.
 #'   Named with param IDs. Read-only.
-#' * `storage_type`     :: `character` \cr
+#' * `storage_type`      :: `character` \cr
 #'   Data types of params when stored in tables.
 #'   Named with param IDs. Read-only.
 #' * `tags`              :: named `list` of `character` \cr
@@ -51,13 +51,19 @@
 #' * `defaults`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
-#' * `trafo`            :: `function(x, param_set)` -> named `list` \cr
+#' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
 #'   Transformation function. Settable.
 #'   The function is responsible to transform a single (feasible) configuration list into
 #'   another encoding, before evaluating the configuration with the target algorithm.
 #'   For the output-list, not many things have to hold.
 #'   It needs to be a uniquely-named list, and the target algorithm has to accept the configuarion.
 #'   NB: For convenience, the self-paramset is also passed, if you need some info from it.
+#' * `has_trafo`         :: `logical(1)` \cr
+#'   Has the set a trafo` function?
+#' * `deps`              :: list of [Dependency] \cr
+#'   Parameter dependency objects, each element of the list is internally created by a call to `add_dep`.
+#' * `has_deps`          :: `logical(1)` \cr
+#'   Has the set param dependencies?
 #'
 #' @section Public methods:
 #' * `new(params)` \cr

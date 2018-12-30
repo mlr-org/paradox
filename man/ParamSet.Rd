@@ -14,37 +14,37 @@ A set of \link{Param} objects.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{set_id}           :: \code{character(1)}
+\item \code{set_id}            :: \code{character(1)}
 ID of this param set. Settable.
-\item \code{params}           :: named list of \link{Param}
+\item \code{params}            :: named list of \link{Param}
 Contained parameters, named with their respective IDs.
 NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-\item \code{length}           :: \code{integer(1)}
+\item \code{length}            :: \code{integer(1)}
 Number of contained params. Read-only.
-\item \code{is_empty}         :: \code{logical(1)}
+\item \code{is_empty}          :: \code{logical(1)}
 Is the param set empty? Read-only.
-\item \code{class}         :: named \code{character}
+\item \code{class}             :: named \code{character}
 Param classes of contained parameters.
 Named with param IDs. Read-only.
-\item \code{lower}           :: named \link{double}
+\item \code{lower}             :: named \link{double}
 Lower bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{upper}           :: named \link{double}
+\item \code{upper}             :: named \link{double}
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{values}           :: named \code{list}
+\item \code{values}            :: named \code{list}
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.
-\item \code{nlevels}          :: named \link{double}
+\item \code{nlevels}           :: named \link{double}
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 Named with param IDs. Read-only.
-\item \code{is_bounded}       :: named \code{logical(1)}
+\item \code{is_bounded}        :: named \code{logical(1)}
 Do all parameters have finite bounds?
 Named with param IDs. Read-only.
-\item \code{special_vals}     :: named \code{list} of \code{list} \cr
+\item \code{special_vals}      :: named \code{list} of \code{list} \cr
 Special values for all parameters.
 Named with param IDs. Read-only.
-\item \code{storage_type}     :: \code{character} \cr
+\item \code{storage_type}      :: \code{character} \cr
 Data types of params when stored in tables.
 Named with param IDs. Read-only.
 \item \code{tags}              :: named \code{list} of \code{character} \cr
@@ -53,13 +53,19 @@ Named with param IDs. Read-only.
 \item \code{defaults}          :: named \code{list} \cr
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
-\item \code{trafo}            :: \code{function(x, param_set)} -> named \code{list} \cr
+\item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
 Transformation function. Settable.
 The function is responsible to transform a single (feasible) configuration list into
 another encoding, before evaluating the configuration with the target algorithm.
 For the output-list, not many things have to hold.
 It needs to be a uniquely-named list, and the target algorithm has to accept the configuarion.
 NB: For convenience, the self-paramset is also passed, if you need some info from it.
+\item \code{has_trafo}         :: \code{logical(1)} \cr
+Has the set a trafo` function?
+\item \code{deps}              :: list of \link{Dependency} \cr
+Parameter dependency objects, each element of the list is internally created by a call to \code{add_dep}.
+\item \code{has_deps}          :: \code{logical(1)} \cr
+Has the set param dependencies?
 }
 }
 
