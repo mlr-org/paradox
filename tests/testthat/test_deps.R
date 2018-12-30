@@ -44,3 +44,29 @@ test_that("nested deps work", {
   x6 = list(th_param_fct = "c", th_param_lgl = TRUE, th_param_dbl = 3)
   expect_true(ps$check(x6))
 })
+
+
+test_that("adding 2 sets with deps works", {
+  ps1 = ParamSet$new(list(
+    ParamFct$new("x1", values = c("a", "b")),
+    ParamDbl$new("y1")
+  ))
+  ps1$add_dep("y1", on = "x1", cond_equal("a"))
+
+  ps2 = ParamSet$new(list(
+    ParamFct$new("x2", values = c("a", "b")),
+    ParamDbl$new("y2")
+  ))
+  ps2$add_dep("y2", on = "x2", cond_equal("a"))
+
+  ps1$add(ps2)
+  expect_equal(ps1$length, 4L)
+  expect_true(ps1$has_deps)
+  expect_equal(length(ps1$deps), 2L)
+  # do a few feasibility checks on larger set
+  expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y1 = 1)))
+  expect_true(ps1$test(list(x1 = "a", y1 = 1)))
+  expect_false(ps1$test(list(x1 = "b", y1 = 1)))
+  expect_true(ps1$test(list(x2 = "a", y2 = 1)))
+  expect_false(ps1$test(list(x2 = "b", y2 = 1)))
+})

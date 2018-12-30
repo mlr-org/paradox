@@ -121,11 +121,9 @@ ParamSet = R6Class("ParamSet",
         stopf("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
-      # FIXME: we can add deps?
-      if (p$has_deps)
-        stop("Cannot add a param set with dependencies.")
       ps2 = p$clone(deep = TRUE)
       self$params = c(self$params, ps2$params)
+      self$deps = c(self$deps, ps2$deps)
       invisible(self)
     },
 
