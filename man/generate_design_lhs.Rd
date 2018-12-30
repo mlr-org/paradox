@@ -4,7 +4,7 @@
 \alias{generate_design_lhs}
 \title{Generate a space-filling LHS design}
 \usage{
-generate_design_lhs(param_set, n, lhs_function = lhs::maximinLHS)
+generate_design_lhs(param_set, n, lhs_fun = NULL)
 }
 \arguments{
 \item{param_set}{:: \link{ParamSet}.}
@@ -12,9 +12,9 @@ generate_design_lhs(param_set, n, lhs_function = lhs::maximinLHS)
 \item{n}{:: \code{integer(1)} \cr
 Number of points to sample.}
 
-\item{lhs_function}{:: \code{function} \cr
-Function to use to generate a LHS sample.
-LHS functions are implemented in package \pkg{lhs}.}
+\item{lhs_fun}{:: \code{function(n, k)} \cr
+Function to use to generate a LHS sample, with n samples and k values per param.
+LHS functions are implemented in package \pkg{lhs}, default is to use \link[lhs:maximinLHS]{lhs::maximinLHS}.}
 }
 \value{
 \link{data.table}
