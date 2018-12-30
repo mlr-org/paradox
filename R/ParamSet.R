@@ -6,6 +6,8 @@
 #      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
 #
 
+# FIXME: add_dep rename first arg to "for"
+
 #' @title ParamSet
 #'
 #' @description
@@ -215,16 +217,16 @@ ParamSet = R6Class("ParamSet",
       } else {
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
+        if (self$has_deps) {  # add a nice extra charvec-col to the tab, which lists all parents-ids
+          dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep = list(d$parent$id)))
+          # FIXME: how can we join the list-els more nicely?
+          dtab = dtab[, .(dep = list(unlist(dep))), by = id]
+          d = merge(d, dtab, by = "id", all.x = TRUE) # left outer join d, dtab (dtab is incomplete)
+        }
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
-      # FIXME: printer for  is not so great, we could add that to the table-print
-      if (self$has_deps)
-        catf("Dependendent params: %s", map_chr(deps, c("param", "id")))
-      if (!is.null(self$trafo)) {
-        catf("Trafo is set:")
-        # FIXME: printing the function is bad
-        print(self$trafo)
-      }
+      if (!is.null(self$trafo))
+        catf("Trafo is set.") # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
     }
   ),
 

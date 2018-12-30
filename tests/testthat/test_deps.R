@@ -17,6 +17,12 @@ test_that("basic example works", {
   expect_true(ps$check(x5))
   x6 = list(th_param_dbl = 1.3)
   expect_true(ps$check(x6))
+
+  # test printer, with 2 deps
+  ps = th_paramset_full()
+  ps$add_dep("th_param_int", on = "th_param_fct", cond_equal("a"))
+  ps$add_dep("th_param_int", on = "th_param_lgl", cond_equal(TRUE))
+  expect_output(print(ps),"th_param_fct,th_param_lgl")
 })
 
 test_that("nested deps work", {
