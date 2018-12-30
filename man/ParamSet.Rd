@@ -87,8 +87,9 @@ so each row in the returned data.table corresponds to the origin-row with the sa
 Three checkmate-like check-functions. Take a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
-\item \code{add_dependency(dep)} \cr
-\link{Dependency} -> \code{self}
+\item \code{add_dep(id, on, cond)} \cr
+\code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self}
+Adds a \link{Dependency} to this set, so that param \code{id} now depends on param \code{on}.
 }
 }
 

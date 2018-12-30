@@ -8,7 +8,7 @@
 #'   Only bounded params allowed?
 #' @export
 assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = FALSE) {
-  assert_r6(param, cl)
+  assert_multi_class(param, cl)
   if (no_untyped && (param$class == "ParamUty"))
     stop("Param is untyped!")
   if (must_bounded && !param$is_bounded)

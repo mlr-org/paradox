@@ -5,11 +5,11 @@
 #      This function is called from \code{ParamSet$transform()}.
 #      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
 #
-# FIXME: doc and unit tests dependencies better
 
 #' @title ParamSet
 #'
-#' @description A set of [Param] objects.
+#' @description
+#' A set of [Param] objects.
 #'
 #' @section Public members / active bindings:
 #' * `set_id`           :: `character(1)`
@@ -81,8 +81,9 @@
 #'   Three checkmate-like check-functions. Take a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
-#' * `add_dependency(dep)` \cr
-#'   [Dependency] -> `self`
+#' * `add_dep(id, on, cond)` \cr
+#'   `character(1)`, `character(1)`, [Condition] -> `self`
+#'    Adds a [Dependency] to this set, so that param `id` now depends on param `on`.
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()` \cr
@@ -171,12 +172,21 @@ ParamSet = R6Class("ParamSet",
           return(paste0(id,": ",ch))
       }
       # check dependencies
-      if (length(self$deps) > 0) {
+      nxs = names(xs)
+      if (self$has_deps) {
         for (dep in self$deps) {
-          dep_res = dep$condition$eval(xs[[dep$parent_id]])
-          if (isFALSE(dep_res) && dep$node_id %in% names(xs)) {
-            # FIXME: we should say something about what the condition is on / which params
-            return(sprintf("Param '%s' present, but condition '%s' not fulfilled.", dep$node_id, dep$condition$id))
+          p1id = dep$param$id
+          p2id = dep$parent$id
+          # we are ONLY ok if:
+          # - if param is there, then parent must be there, then cond must be true
+          # - if param is not there
+          ok = (p1id %in% nxs && p2id %in% nxs && dep$cond$eval(xs[[p2id]])) ||
+               (p1id %nin% nxs)
+          if (isFALSE(ok)) {
+            val = xs[[p2id]]
+            val = ifelse(is.null(val), "<not-there>", val)
+            return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
+              dep$param$id, dep$parent$id, dep$cond$type, str_collapse(dep$cond$rhs), p2id, val))
           }
         }
       }
@@ -187,18 +197,17 @@ ParamSet = R6Class("ParamSet",
 
     assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL),
 
-    add_dependency = function(dep) {
-      assert_r6(dep, "Dependency")
-      # check that dependency makes sense
-      assert_choice(dep$parent_id, self$ids())
-      assert_choice(dep$node_id, self$ids())
-      # add dependency to member list
+    add_dep = function(id, on, cond) {
+      assert_choice(id, self$ids())
+      assert_choice(on, self$ids())
+      p1 = self$params[[id]]
+      p2 = self$params[[on]]
+      dep = Dependency$new(p1, p2, cond)
       self$deps = c(self$deps, list(dep))
       invisible(self)
     },
 
     # printer, prints the set as a datatable, with the option to hide some cols
-    # FIXME: print something about deps
     print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf("ParamSet: %s", self$set_id)
       if (self$is_empty) {
@@ -208,8 +217,12 @@ ParamSet = R6Class("ParamSet",
         assert_subset(hide.cols, names(d))
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
+      # FIXME: printer for  is not so great, we could add that to the table-print
+      if (self$has_deps)
+        catf("Dependendent params: %s", map_chr(deps, c("param", "id")))
       if (!is.null(self$trafo)) {
         catf("Trafo is set:")
+        # FIXME: printing the function is bad
         print(self$trafo)
       }
     }

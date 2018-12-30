@@ -50,13 +50,7 @@ th_paramset_repeated = function() {
 
 th_paramset_deps = function() {
   ps = th_paramset_full()
-  ps$add_dependency(Dependency$new(
-    node_id = "th_param_fct", parent_id = "th_param_lgl",
-    condition = cond_equal(TRUE)
-  ))
-  ps$add_dependency(Dependency$new(
-    node_id = "th_param_dbl", parent_id = "th_param_fct",
-    condition = cond_choice(c("a", "b"))
-  ))
+  ps$add_dep("th_param_fct", on = "th_param_lgl", cond_equal(TRUE))
+  ps$add_dep("th_param_dbl", on = "th_param_fct", cond_anyof(c("a", "b")))
   return(ps)
 }
