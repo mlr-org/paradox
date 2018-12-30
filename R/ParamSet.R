@@ -6,8 +6,6 @@
 #      It has to return a \code{data.table} object with the same number of rows as \code{x}, the number and names of the columns can be completely different.
 #
 
-# FIXME: add_dep rename first arg to "for"
-
 #' @title ParamSet
 #'
 #' @description
@@ -250,7 +248,7 @@ ParamSet = R6Class("ParamSet",
     defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
-    # FIXME: doc is_number and is_categ
+    # FIXME: doc is_number and is_categ? or can we remove these 2? they suck a bit
     is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
     is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
     trafo = function(f) {
