@@ -66,6 +66,7 @@
 #' * `deps_on`          :: `data.table` \cr
 #'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`).
 #'   List all (direct) dependency parents of a param, through parameter IDs.
+#'   Table has one row per param and is in the same order as `ids()`.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
@@ -207,10 +208,8 @@ ParamSet = R6Class("ParamSet",
       } else {
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
-        if (self$has_deps) {  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          dtab = self$deps_on
-          d = merge(d, dtab, by = "id", all.x = TRUE) # left outer join d, dtab (dtab is incomplete)
-        }
+        if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
+          d = d[self$deps_on, on = "id"]
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -274,8 +273,12 @@ ParamSet = R6Class("ParamSet",
     has_trafo = function() !is.null(private$.trafo),
     has_deps = function() length(self$deps) > 0L,
     deps_on = function() {
+      ids = self$ids()
       dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id)))
-      dtab[, .(dep_parent = list(unlist(dep_parent))), by = id] # join par-charvecs rows with same ids
+      dtab = dtab[, .(dep_parent = list(unlist(dep_parent))), by = id] # join par-charvecs rows with same ids
+      # add all ids with no deps
+      dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L))))
+      dtab[ids, on = "id"] # reorder in order of ids
     }
   ),
 

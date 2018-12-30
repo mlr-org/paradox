@@ -70,3 +70,25 @@ test_that("adding 2 sets with deps works", {
   expect_true(ps1$test(list(x2 = "a", y2 = 1)))
   expect_false(ps1$test(list(x2 = "b", y2 = 1)))
 })
+
+test_that("deps_on", {
+  ps = ParamSet$new(list(
+    ParamFct$new("a", values = c("a", "b")),
+    ParamFct$new("b", values = c("a", "b")),
+    ParamFct$new("c", values = c("a", "b")),
+    ParamFct$new("d", values = c("a", "b"))
+  ))
+  ps$add_dep("a", on = "b", cond_equal("a"))
+  ps$add_dep("a", on = "c", cond_equal("a"))
+  ps$add_dep("b", on = "c", cond_equal("a"))
+
+  d = ps$deps_on
+  dd = rbindlist(list(
+    list(id = "a", dep_parent = list(c("b", "c"))),
+    list(id = "b", dep_parent = list(c("c"))),
+    list(id = "c", dep_parent = list(character(0L))),
+    list(id = "d", dep_parent = list(character(0L)))
+  ))
+  expect_equal(d, dd)
+})
+
