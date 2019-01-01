@@ -24,6 +24,7 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
       self$samplers = samplers
       pss = map(samplers, "param_set")
       self$param_set = Reduce(function(ps1, ps2) ps1$add(ps2), pss)
+      assert_paramset(self$param_set, no_deps = TRUE) # must_bounded and untyped should be check by the sapler, or if the sampler still works, then ok
     }
   ),
 

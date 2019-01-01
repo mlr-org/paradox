@@ -1,5 +1,3 @@
-#FIXME: check that multoivar samplers right now cannot handle deps
-
 #' @title Sampler
 #' @format [R6Class] object. Abstract base class.
 #'
