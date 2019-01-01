@@ -35,7 +35,7 @@ th_paramset_repeated = function() {
 
 th_paramset_deps = function() {
   ps = th_paramset_full()
-  ps$add_dep("th_param_fct", on = "th_param_lgl", cond_equal(TRUE))
-  ps$add_dep("th_param_dbl", on = "th_param_fct", cond_anyof(c("a", "b")))
+  ps$add_dep("th_param_fct", on = "th_param_lgl", CondEqual$new(TRUE))
+  ps$add_dep("th_param_dbl", on = "th_param_fct", CondAnyOf$new(c("a", "b")))
   return(ps)
 }

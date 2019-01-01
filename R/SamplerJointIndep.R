@@ -38,5 +38,3 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
 
 
 
-
-

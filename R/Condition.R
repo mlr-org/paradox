@@ -6,49 +6,57 @@
 #' @section Public members / active bindings:
 #' * `type`          :: `character(1)`
 #'   Name / type of the condition. Read-only.
-#' * `fun`           :: `function(lhs, rhs) -> logical(1)`
-#'   Function to check if condition is satisfied.
-#'   The `lhs` during check will be bound to the value of the parent param,
-#'   the `rhs` to the defined constant in this object.
-#'   Read-only.
-#' * `rhs`           :: `any`
-#'   The right-hand-side of the condition, that we compare to, to check if it is satisfied.
+#'
+#' @section Public methods:
+#' * `new(type, rhs)` \cr
+#'   `character(1)`, `any` -> `self`
+#'   Abstract constructor, called by inheriting subclasses.
+#' * `test`          :: `function(x) -> logical(n)`
+#'   Checks if condition is satisfied.
+#'   Called on a vector of parent param values.
 #'
 #' @section Currently implemented simple conditions:
-#' * `cond_equal(rhs)`
+#' * `CondEqual$new(rhs)`
 #'   Parent must be equal to `rhs`.
-#' * `cond_any(rhs)`
+#' * `CondAnyOf$new(rhs)`
 #'   Parent must be any value of `rhs`.
 #'
-#' @name Dependency
-#' @aliases cond_equal cond_anyof
+#' @name Condition
+#' @aliases CondEqual CondAnyOf
 #' @export
 Condition = R6Class("Condition",
   public = list(
-    rhs = NULL,
-
-    initialize = function(type, fun, rhs) {
+    initialize = function(type, rhs) {
       private$.type = assert_string(type)
-      private$.fun = assert_function(fun)
-      self$rhs = rhs
+      private$.rhs = rhs
     },
 
-    eval = function(parent_val) self$fun(parent_val, self$rhs)
+    test = function(x) stop("abstract")
   ),
 
   active = list(
-    type = function() private$.type,
-    fun = function() private$.fun
+    type = function() private$.type
   ),
 
   private = list(
     .type = NULL,
-    .fun = NULL
+    .rhs = NULL
   )
 )
 
 #' @export
-cond_equal = function(rhs) Condition$new("equal", identical, rhs)
+CondEqual = R6Class("CondEqual", inherit = Condition,
+  public = list(
+    initialize = function(rhs) super$initialize("equal", rhs),
+    test = function(x) x == private$.rhs
+  )
+)
 
 #' @export
-cond_anyof = function(rhs) Condition$new("anyof", test_choice, rhs)
+CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
+  public = list(
+    initialize = function(rhs) super$initialize("anyof", rhs),
+    test = function(x) x %in% private$.rhs
+  )
+)
+

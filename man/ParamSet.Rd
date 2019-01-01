@@ -76,6 +76,7 @@ Has the set param dependencies?
 \item \code{deps_on}          :: \code{data.table} \cr
 Table has cols \code{id} (\code{character(1)}) and \code{dep_parent} (\code{list} of \code{character}).
 List all (direct) dependency parents of a param, through parameter IDs.
+Table has one row per param and is in the same order as \code{ids()}.
 }
 }
 

@@ -173,7 +173,7 @@ ParamSet = R6Class("ParamSet",
           # we are ONLY ok if:
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
-          ok = (p1id %in% nxs && p2id %in% nxs && dep$cond$eval(xs[[p2id]])) ||
+          ok = (p1id %in% nxs && p2id %in% nxs && dep$cond$test(xs[[p2id]])) ||
                (p1id %nin% nxs)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
@@ -279,6 +279,8 @@ ParamSet = R6Class("ParamSet",
       # add all ids with no deps
       dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L))))
       dtab[ids, on = "id"] # reorder in order of ids
+      # FIXME: add a further col which contains the dep objects, indexed by the parent
+
     }
   ),
 

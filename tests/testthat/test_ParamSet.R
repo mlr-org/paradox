@@ -162,7 +162,7 @@ test_that("ParamSet$clone can be deep", {
   expect_equal(ps1$lower, c(x = 1, y = NA))
 
   # now lets add a dep, see if that gets clones properly
-  ps1$add_dep("x", on = "y", cond_equal("a"))
+  ps1$add_dep("x", on = "y", CondEqual$new("a"))
   ps2 = ps1$clone(deep = TRUE)
   ps2$deps[[1L]]$param$id = "foo"
   expect_equal(ps2$deps[[1L]]$param$id, "foo")
