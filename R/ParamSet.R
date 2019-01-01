@@ -43,6 +43,12 @@
 #' * `defaults`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
+#' * is_number           :: named `logical`
+#'   Position is TRUE iff Param is dbl or int.
+#'   Named with param IDs. Read-only.
+#' * is_categ          :: named `logical`
+#'   Position is TRUE iff Param is fct or lgl.
+#'   Named with param IDs. Read-only.
 #' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
 #'   Transformation function. Settable. We do a bit of magic here for user convenience:
 #'   On write: User has to pass a `function(x, param_set)`, where x is a data.table with atomic param-columns, and it
@@ -239,8 +245,8 @@ ParamSet = R6Class("ParamSet",
     defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
-    is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
-    is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
+    is_number = function() private$get_member_with_idnames("is_number", as.logical),
+    is_categ = function() private$get_member_with_idnames("is_categ", as.logical),
     trafo = function(f) {
       if (missing(f)) {
         private$.trafo

@@ -224,6 +224,13 @@ test_that("ParamSet$defaults", {
   expect_equal(ps$defaults, list(x = NULL))
 })
 
+test_that("is_number / is_categ", {
+  expect_equal(th_paramset_full()$is_number,
+    c(th_param_int = TRUE, th_param_dbl = TRUE, th_param_fct = FALSE, th_param_lgl = FALSE))
+  expect_equal(th_paramset_full()$is_categ,
+    c(th_param_int = FALSE, th_param_dbl = FALSE, th_param_fct = TRUE, th_param_lgl = TRUE))
+})
+
 test_that("ParamSet$ids", {
   ps = ParamSet$new(list(
     ParamDbl$new(id = "x", lower = 1, tags = c("t1")),

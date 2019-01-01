@@ -30,6 +30,10 @@
 #'    Data type when values of this param is stored in a data table or sampled. Read-only.
 #' * `tags`             :: `character` \cr
 #'   Can be used to group and subset params.
+#' * is_number          :: `logical(1)`
+#'   TRUE iff Param is dbl or int.
+#' * is_categ           :: `logical(1)`
+#'   TRUE iff Param is fct or lgl.
 #'
 #' @section Public methods:
 #' * `Param$new(id, special_vals = list(), default = NO_DEF, tags = character(0L))` \cr
@@ -139,7 +143,9 @@ Param = R6Class("Param",
   ),
 
   active = list(
-    class = function() class(self)[[1L]]
+    class = function() class(self)[[1L]],
+    is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
+    is_categ = function() self$class %in% c("ParamFct", "ParamLgl")
   ),
 
   private = list(
