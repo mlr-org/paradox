@@ -157,7 +157,7 @@ ParamSet = R6Class("ParamSet",
         pids = unlist(d$dep_parent)
         pids_not_there = setdiff(pids, ids)
         if (length(pids_not_there) > 0L)
-         stopf("Subsetting so that dependencies on params exist which would be gone: %s", str_collapse(pids_not_there))
+         stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
       self$params = self$params[ids]
       invisible(self)
