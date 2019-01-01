@@ -37,6 +37,9 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
   res = imap(grid_vec, function(value, id) param_set$params[[id]]$qunif(x = value))
-  res = do.call(function(...) CJ(..., sorted = FALSE), res) #FIXME: Will throw error if res has sorted column.
-  return(res)
+  # the un / renaming sucks a bit here, caused by dotdotdot-interface of CJ. would like to have a better way, but dont know
+  # FIXME: mini helper in mlr3misc for this?
+  ns = names(res); res = unname(res)
+  res = do.call(CJ, c(res, sorted = FALSE))
+  set_names(res, ns)
 }
