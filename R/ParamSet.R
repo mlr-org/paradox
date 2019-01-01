@@ -239,7 +239,6 @@ ParamSet = R6Class("ParamSet",
     defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
-    # FIXME: doc is_number and is_categ? or can we remove these 2? they suck a bit
     is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
     is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
     trafo = function(f) {
@@ -279,7 +278,6 @@ ParamSet = R6Class("ParamSet",
       # add all ids with no deps
       dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L))))
       dtab[ids, on = "id"] # reorder in order of ids
-      # FIXME: add a further col which contains the dep objects, indexed by the parent
 
     }
   ),

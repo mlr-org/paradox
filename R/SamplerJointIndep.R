@@ -29,8 +29,7 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
   ),
 
   private = list(
-      # FIXME: unname should ne needed, added an issue in ml3misc
-    .sample = function(n) map_dtc(unname(self$samplers), function(s) s$sample(n)),
+    .sample = function(n) map_dtc(self$samplers, function(s) s$sample(n)),
     .print = function() catf("Independent comps: %i", length(self$samplers))
   )
 )
