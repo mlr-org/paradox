@@ -151,6 +151,14 @@ ParamSet = R6Class("ParamSet",
 
     subset = function(ids) {
       assert_subset(ids, self$ids())
+      if (self$has_deps) { # check that all required / leftover parents are still in new ids
+        d = self$deps_on
+        d = d[ids, on = "id"]
+        pids = unlist(d$dep_parent)
+        pids_not_there = setdiff(pids, ids)
+        if (length(pids_not_there) > 0L)
+         stopf("Subsetting so that dependencies on params exist which would be gone: %s", str_collapse(pids_not_there))
+      }
       self$params = self$params[ids]
       invisible(self)
     },

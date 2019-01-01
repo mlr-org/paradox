@@ -53,6 +53,12 @@ Named with param IDs. Read-only.
 \item \code{defaults}          :: named \code{list} \cr
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
+\item is_number           :: named \code{logical}
+Position is TRUE iff Param is dbl or int.
+Named with param IDs. Read-only.
+\item is_categ          :: named \code{logical}
+Position is TRUE iff Param is fct or lgl.
+Named with param IDs. Read-only.
 \item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
 Transformation function. Settable. We do a bit of magic here for user convenience:
 On write: User has to pass a \code{function(x, param_set)}, where x is a data.table with atomic param-columns, and it

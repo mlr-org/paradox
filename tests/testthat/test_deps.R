@@ -92,3 +92,21 @@ test_that("deps_on", {
   expect_equal(d, dd)
 })
 
+test_that("subsetting with deps works", {
+  ps = ParamSet$new(list(
+    ParamFct$new("a", values = c("a", "b")),
+    ParamFct$new("b", values = c("a", "b")),
+    ParamFct$new("c", values = c("a", "b")),
+    ParamFct$new("d", values = c("a", "b"))
+  ))
+  ps$add_dep("a", on = "b", CondEqual$new("a"))
+  ps$add_dep("a", on = "c", CondEqual$new("a"))
+  ps$add_dep("b", on = "c", CondEqual$new("a"))
+
+  ps$clone(deep = TRUE)$subset("d")
+  ps$clone(deep = TRUE)$subset(c("a", "b", "c"))
+  expect_error(ps$clone(deep = TRUE)$subset(c("a", "c")), "Subsetting so that dependencies")
+  expect_error(ps$clone(deep = TRUE)$subset(c("a")), "Subsetting so that dependencies")
+})
+
+

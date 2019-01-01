@@ -44,6 +44,10 @@ Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid de
 Data type when values of this param is stored in a data table or sampled. Read-only.
 \item \code{tags}             :: \code{character} \cr
 Can be used to group and subset params.
+\item is_number          :: \code{logical(1)}
+TRUE iff Param is dbl or int.
+\item is_categ           :: \code{logical(1)}
+TRUE iff Param is fct or lgl.
 }
 }
 
