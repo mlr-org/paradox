@@ -288,14 +288,17 @@ ParamSet = R6Class("ParamSet",
     has_deps = function() length(self$deps) > 0L,
     deps_on = function() {
       ids = self$ids()
-      dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))
-      # join par-charvecs rows with same ids, and join dep-objects in a single list
-      # FIXME: a call to flatten would be best here
-      dtab = dtab[, .(dep_parent = list(unlist(dep_parent)), deps = list(unlist(deps))), by = id]
+      if (self$has_deps) {
+        dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))
+        # join par-charvecs rows with same ids, and join dep-objects in a single list
+        # FIXME: a call to flatten would be best here
+        dtab = dtab[, .(dep_parent = list(unlist(dep_parent)), deps = list(unlist(deps))), by = id]
+      } else {
+        dtab = NULL
+      }
       # add all ids with no deps
       dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L)), deps = list(list())))
       dtab[ids, on = "id"] # reorder in order of ids
-
     }
   ),
 

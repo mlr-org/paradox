@@ -75,9 +75,16 @@ test_that("deps_on", {
   ps = ParamSet$new(list(
     ParamFct$new("a", values = c("a", "b")),
     ParamFct$new("b", values = c("a", "b")),
-    ParamFct$new("c", values = c("a", "b")),
-    ParamFct$new("d", values = c("a", "b"))
+    ParamFct$new("c", values = c("a", "b"))
   ))
+  d = ps$deps_on
+  dd = rbindlist(list(
+    list(id = "a", dep_parent = list(character(0L)), deps = list(list())),
+    list(id = "b", dep_parent = list(character(0L)), deps = list(list())),
+    list(id = "c", dep_parent = list(character(0L)), deps = list(list()))
+  ))
+  expect_equal(d, dd)
+
   ps$add_dep("a", on = "b", CondEqual$new("a"))
   ps$add_dep("a", on = "c", CondEqual$new("a"))
   ps$add_dep("b", on = "c", CondEqual$new("a"))
@@ -86,8 +93,7 @@ test_that("deps_on", {
   dd = rbindlist(list(
     list(id = "a", dep_parent = list(c("b", "c")), deps = list(ps$deps[1:2])),
     list(id = "b", dep_parent = list(c("c")), deps = list(ps$deps[3])),
-    list(id = "c", dep_parent = list(character(0L)), deps = list(list())),
-    list(id = "d", dep_parent = list(character(0L)), deps = list(list()))
+    list(id = "c", dep_parent = list(character(0L)), deps = list(list()))
   ))
   expect_equal(d, dd)
 })
