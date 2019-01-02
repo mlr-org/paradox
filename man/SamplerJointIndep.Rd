@@ -28,8 +28,8 @@ list of \link{Sampler} -> \code{self}
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerUnif}},
-  \code{\link{Sampler}}
+Other Sampler: \code{\link{SamplerHierachical}},
+  \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }
 \concept{Sampler}
 \keyword{datasets}

@@ -42,7 +42,8 @@ Inheriting sublcasses have to implement thus, called from \code{sample()}
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerJointIndep}},
+Other Sampler: \code{\link{SamplerHierachical}},
+  \code{\link{SamplerJointIndep}},
   \code{\link{SamplerUnif}}
 }
 \concept{Sampler}
