@@ -70,9 +70,10 @@
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
 #' * `deps_on`          :: `data.table` \cr
-#'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`).
+#'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`) and `dep` (list of [Dependency]).
 #'   List all (direct) dependency parents of a param, through parameter IDs.
 #'   Table has one row per param and is in the same order as `ids()`.
+#'   The last col lists all dependencies that the row-ID has.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
@@ -287,10 +288,12 @@ ParamSet = R6Class("ParamSet",
     has_deps = function() length(self$deps) > 0L,
     deps_on = function() {
       ids = self$ids()
-      dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id)))
-      dtab = dtab[, .(dep_parent = list(unlist(dep_parent))), by = id] # join par-charvecs rows with same ids
+      dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))
+      # join par-charvecs rows with same ids, and join dep-objects in a single list
+      # FIXME: a call to flatten would be best here
+      dtab = dtab[, .(dep_parent = list(unlist(dep_parent)), deps = list(unlist(deps))), by = id]
       # add all ids with no deps
-      dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L))))
+      dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L)), deps = list(list())))
       dtab[ids, on = "id"] # reorder in order of ids
 
     }

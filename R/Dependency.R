@@ -31,7 +31,12 @@ Dependency = R6Class("Dependency",
       self$param = assert_param(param)
       self$parent = assert_param(parent, cl = c("ParamFct", "ParamLgl"))
       self$cond = assert_r6(cond, "Condition")
+    },
+
+    print = function(...) {
+      catf("Dependency: For='%s', on='%s', cond='%s'", self$param$id, self$parent$id, self$cond$type)
     }
+
   )
 )
 

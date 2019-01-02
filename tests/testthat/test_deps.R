@@ -84,10 +84,10 @@ test_that("deps_on", {
 
   d = ps$deps_on
   dd = rbindlist(list(
-    list(id = "a", dep_parent = list(c("b", "c"))),
-    list(id = "b", dep_parent = list(c("c"))),
-    list(id = "c", dep_parent = list(character(0L))),
-    list(id = "d", dep_parent = list(character(0L)))
+    list(id = "a", dep_parent = list(c("b", "c")), deps = list(ps$deps[1:2])),
+    list(id = "b", dep_parent = list(c("c")), deps = list(ps$deps[3])),
+    list(id = "c", dep_parent = list(character(0L)), deps = list(list())),
+    list(id = "d", dep_parent = list(character(0L)), deps = list(list()))
   ))
   expect_equal(d, dd)
 })

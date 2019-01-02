@@ -80,9 +80,10 @@ Parameter dependency objects, each element of the list is internally created by 
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
 \item \code{deps_on}          :: \code{data.table} \cr
-Table has cols \code{id} (\code{character(1)}) and \code{dep_parent} (\code{list} of \code{character}).
+Table has cols \code{id} (\code{character(1)}) and \code{dep_parent} (\code{list} of \code{character}) and \code{dep} (list of \link{Dependency}).
 List all (direct) dependency parents of a param, through parameter IDs.
 Table has one row per param and is in the same order as \code{ids()}.
+The last col lists all dependencies that the row-ID has.
 }
 }
 
