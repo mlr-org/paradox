@@ -1,6 +1,7 @@
 language: r
 sudo: false
 cache: packages
+
 env:
   matrix:
   - _R_CHECK_LENGTH_1_CONDITION_=true
