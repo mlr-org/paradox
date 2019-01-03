@@ -131,4 +131,8 @@ Compact representation as datatable. Col types are: \cr
 }
 }
 
+\section{<USAGE>}{
+NA
+}
+
 \keyword{datasets}

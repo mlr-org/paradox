@@ -50,11 +50,11 @@ SamplerHierachical = R6Class("SamplerHierachical", inherit = Sampler,
         # and set values in x to NA which where the dep is not OK
         deps = private$.deps_on[param_id, on = "id"]$deps[[1L]]
         for (d in deps) {
-          pcol = res[[d$parent$id]]
+          pcol = res[[d$parent$id]][[1]] # NB: res is a list of dts (with ncol==1)
           is_ok = !is.na(pcol) & d$cond$test(pcol) # we are ok if parent was active and cond on parent is OK
           x[!is_ok] = as(NA, d$param$storage_type)
         }
-        res[[param_id]] = x #
+        res[[param_id]] = x
       }
       res = do.call(cbind, unname(res))
       return(res)

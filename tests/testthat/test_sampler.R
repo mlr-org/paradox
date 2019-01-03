@@ -75,4 +75,23 @@ test_that("SamplerUnif", {
   }
 })
 
+test_that("SamplerUnif works with deps", {
+  ps = th_paramset_deps()
+  s = SamplerUnif$new(ps)
+  d = s$sample(1000)
+  expect_data_table(d, nrows = 1000, ncols = 4L, any.missing = TRUE)
+  expect_true(anyNA(d))
+  # jj = ((d$th_param_fct %in% c("c", NA_character_) & is.na(d$th_param_dbl))
+    # | (d$th_param_fct %in% c("a", "b") & !is.na(d$th_param_dbl)))
+  # print(d[!jj,])
+  expect_true(all((d$th_param_fct %in% c("c", NA_character_) & is.na(d$th_param_dbl))
+    | (d$th_param_fct %in% c("a", "b") & !is.na(d$th_param_dbl))))
+  expect_names(names(d), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
+  #FIXME: here, a better version of transpose should be called
+  xs = map(transpose(d), function(x) Filter(Negate(is_scalar_na), x))
+  expect_true(all(map_lgl(xs, ps$test)))
+})
+
+
+
 

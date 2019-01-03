@@ -4,19 +4,21 @@
 \alias{generate_design_random}
 \title{Generate a random design.}
 \usage{
-generate_design_random(param_set, n = 1L)
+generate_design_random(param_set, n)
 }
 \arguments{
 \item{param_set}{\link{ParamSet}.}
 
 \item{n}{\code{integer(1)} \cr
-Number of points to draw randomly. Defaults to 1.}
+Number of points to draw randomly.}
 }
 \value{
 \link{data.table}
 }
 \description{
 Generates a design with randomly drawn points.
+Internally uses \link{SamplerUnif}, hence, also works for param sets with dependencies.
+If dependencies do not hold, values are set to NA in the resulting data.table.
 }
 \seealso{
 Other generate_design: \code{\link{generate_design_grid}},
