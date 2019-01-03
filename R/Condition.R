@@ -48,7 +48,7 @@ Condition = R6Class("Condition",
 CondEqual = R6Class("CondEqual", inherit = Condition,
   public = list(
     initialize = function(rhs) super$initialize("equal", rhs),
-    test = function(x) x == private$.rhs
+    test = function(x) !is.na(x) & x == private$.rhs
   )
 )
 
@@ -56,7 +56,7 @@ CondEqual = R6Class("CondEqual", inherit = Condition,
 CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
   public = list(
     initialize = function(rhs) super$initialize("anyof", rhs),
-    test = function(x) x %in% private$.rhs
+    test = function(x) !is.na(x) & x %in% private$.rhs
   )
 )
 
