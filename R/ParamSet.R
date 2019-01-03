@@ -93,6 +93,7 @@
 #'   Three checkmate-like check-functions. Take a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
+#'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
 #'   `character(1)`, `character(1)`, [Condition] -> `self`
 #'    Adds a [Dependency] to this set, so that param `id` now depends on param `on`.
