@@ -2,6 +2,7 @@ context("ParamSet")
 
 test_that("simple active bindings work", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_untyped(),
