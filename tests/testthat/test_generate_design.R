@@ -2,6 +2,7 @@ context("generate_design")
 
 test_that("generate_design_random", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()
@@ -17,6 +18,7 @@ test_that("generate_design_random", {
 
 test_that("generate_design_grid", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()
@@ -49,6 +51,7 @@ test_that("check generate_design_grid against concrete expectation", {
 
 test_that("generate_design_lhs", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()

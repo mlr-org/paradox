@@ -56,6 +56,7 @@ test_that("SamplerJointIndep", {
 
 test_that("SamplerUnif", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()
@@ -71,7 +72,7 @@ test_that("SamplerUnif", {
     expect_equal(colnames(d), ps$ids(), info = info)
     expect_true(all(map_lgl(transpose(d), ps$test)), info = info)
     expect_output(print(s), "Sampler:")
-    expect_output(print(s), str_collapse(ps$ids()[2])) # check that we at least see an id
+    expect_output(print(s), str_collapse(ps$ids()[1])) # check that we at least see an id
   }
 })
 
