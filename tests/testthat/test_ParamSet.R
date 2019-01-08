@@ -168,6 +168,9 @@ test_that("ParamSet$clone can be deep", {
   ps2$deps[[1L]]$param$id = "foo"
   expect_equal(ps2$deps[[1L]]$param$id, "foo")
   expect_equal(ps1$deps[[1L]]$param$id, "x")
+
+  ps = ParamSet$new()
+  expect_equal(ps, ps$clone(deep = TRUE))
 })
 
 test_that("ParamSet$is_bounded", {
