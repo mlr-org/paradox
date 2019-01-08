@@ -193,7 +193,7 @@ ParamSet = R6Class("ParamSet",
                (p1id %nin% nxs)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
-            val = if (is.null(val)) "<not-there>" else val
+            val = ifelse(is.null(val), "<not-there>", val)
             return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
               dep$param$id, dep$parent$id, dep$cond$type, str_collapse(dep$cond$rhs), p2id, val))
           }

@@ -108,15 +108,12 @@ Param = R6Class("Param",
     check = function(x) {
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
       ch = private$.check(x)
-      if (isTRUE(ch) || has_element(self$special_vals, x))
-        TRUE
-      else
-        ch
+      ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
     },
 
-    assert = function(x, .var.name = vname(x)) makeAssertion(x, self$check(x), .var.name, NULL),
+    assert = function(x) makeAssertionFunction(self$check)(x),
 
-    test = function(x) makeTest(res = self$check(x)),
+    test = function(x) makeTestFunction(self$check)(x),
 
     rep = function(n) {
       assert_count(n)
