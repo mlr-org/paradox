@@ -19,14 +19,16 @@ SamplerUnif$new(ps2)  # XXX
 # ------
 
 s = SamplerUnif$new(ps)$sample(10000)
-hist(s$test_cnt)
+hist(s$test_cnt, freq = TRUE)
 plot(table(s$test_int))
 plot(table(s$test_lgl))
+plot(table(s$test_dsc))
 
 s = generate_design_lhs(ps, 1000)
 hist(s$test_cnt)
 plot(table(s$test_int))
 plot(table(s$test_lgl))
+plot(table(s$test_dsc))
 
 # ------
 
@@ -64,6 +66,22 @@ plot(s$test_cnt1, s$test_cnt2)
 
 # ------
 
+ps2 = ParamSet$new(
+  list(
+    ParamInt$new("test_int1", lower = 0, upper = 10),
+    ParamInt$new("test_int2", lower = 0, upper = 10)
+  )
+)
+
+s = generate_design_lhs(ps2, 8000)
+plot(s$test_int1 + rnorm(nrow(s), sd=.2), s$test_int2 + rnorm(nrow(s), sd=.2))
+
+s = generate_design_random(ps2, 8000)
+plot(s$test_int1 + rnorm(nrow(s), sd=.2), s$test_int2 + rnorm(nrow(s), sd=.2))
+
+
+# ------
+
 ps3 = ParamSet$new(
   list(
     ParamFct$new("test_dsc", values = as.character(0:9)),
@@ -91,9 +109,9 @@ ps3$add_dep("test_cnt", on = "test_dsc", CondEqual$new("0"))
 s = generate_design_random(ps3, 1000)
 plot(s$test_dsc, s$test_cnt)
 
-s$test_cnt[is.na(s$test_cnt)] = runif(sum(is.na(s$test_cnt)))
+s$test_cnt[is.na(s$test_cnt)] = -2 + runif(sum(is.na(s$test_cnt)))
 plot(s$test_dsc, s$test_cnt)
 
-s$test_dsc = as.numeric(s$test_dsc) + runif(nrow(s))
+s$test_dsc = as.numeric(s$test_dsc) + runif(nrow(s)) / 2
 plot(s$test_dsc, s$test_cnt)
 
