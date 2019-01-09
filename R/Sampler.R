@@ -38,8 +38,8 @@ Sampler = R6Class("Sampler",
 
     sample = function(n) {
       assert_count(n, positive = TRUE) # we do argcheck on toplevel
-      private$.sample(n)
-    },
+      make_paradox_design(private$.sample(n)
+    )},
 
     print = function(...) {
       catf("Sampler: %s", class(self)[[1L]])
