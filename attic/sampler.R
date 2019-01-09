@@ -137,8 +137,23 @@ plot(Sampler1DCateg$new(ps$params$test_lgl, prob = c(.1, .9))$sample(1000))
 
 Sampler1DTruncNorm$new(ps$params$test_int)  # XXX
 
+sampler = Sampler1DTruncNorm$new(ps$params$test_cnt)
+rnd = sampler$sample(10000000)[[1]]
+hist(rnd, breaks=1000)
 
-Sampler1DTruncNorm$new(ps$params$test_dbl)
+sampler$mean = .2
+sampler$sd = 1
+rnd = sampler$sample(10000000)[[1]]
+hist(rnd, breaks=1000)
+
+sampler$mean = -.2
+sampler$sd = .1
+rnd = sampler$sample(10000000)[[1]]
+hist(rnd, breaks=1000)
+
+
+
+
 
 
 
