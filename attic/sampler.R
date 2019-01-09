@@ -18,7 +18,7 @@ SamplerUnif$new(ps2)  # XXX
 
 # ------
 
-s = SamplerUnif$new(ps)$sample(10000)
+s = SamplerUnif$new(ps)$sample(1000)
 hist(s$test_cnt, freq = TRUE)
 plot(table(s$test_int))
 plot(table(s$test_lgl))
