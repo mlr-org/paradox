@@ -1,3 +1,11 @@
+th_paramset_dbl1 = function() {
+  ParamSet$new(
+    params = list(
+      th_param_dbl()
+    )
+  )
+}
+
 th_paramset_full = function() {
   ParamSet$new(
     params = list(

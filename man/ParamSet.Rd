@@ -107,6 +107,7 @@ Changes the current set to the set of passed IDs.
 Three checkmate-like check-functions. Take a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of \code{x}.
 \item \code{add_dep(id, on, cond)} \cr
 \code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self}
 Adds a \link{Dependency} to this set, so that param \code{id} now depends on param \code{on}.

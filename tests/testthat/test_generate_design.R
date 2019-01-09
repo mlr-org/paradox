@@ -2,6 +2,7 @@ context("generate_design")
 
 test_that("generate_design_random", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()
@@ -17,6 +18,7 @@ test_that("generate_design_random", {
 
 test_that("generate_design_grid", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()
@@ -43,12 +45,13 @@ test_that("check generate_design_grid against concrete expectation", {
     ParamFct$new("y", values = c("a", "b"))
   ))
   d = generate_design_grid(ps, resolution = 3)
-  expect_equal(d, data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b")))
+  expect_equal(d, make_paradox_design(data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b"))))
 })
 
 
 test_that("generate_design_lhs", {
   ps_list = list(
+    th_paramset_dbl1(),
     th_paramset_full(),
     th_paramset_repeated(),
     th_paramset_numeric()

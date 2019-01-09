@@ -109,7 +109,7 @@
 ParamSet = R6Class("ParamSet",
   public = list(
     params = NULL,
-    deps = NULL, # a list of Dependency objects
+    deps = list(), # a list of Dependency objects
 
     initialize = function(params = list()) {
       assert_list(params, types = "Param")
