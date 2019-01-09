@@ -1,3 +1,6 @@
+# doc the idiom that you usually run a trafo after getting a design, then transpose it
+# doc the trafo should not be passed NA values, do we want to do some asserts here?
+
 #' @title ParamSet
 #'
 #' @description
