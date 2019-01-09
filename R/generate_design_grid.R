@@ -41,5 +41,5 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # FIXME: mini helper in mlr3misc for this?
   ns = names(res); res = unname(res)
   res = do.call(CJ, c(res, sorted = FALSE))
-  set_names(res, ns)
+  make_paradox_design(set_names(res, ns))
 }
