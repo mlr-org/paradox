@@ -256,32 +256,30 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.trafo
       } else {
-        private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
+        # force(f)
+        # if (is.null(f))
+          # f = function(x, param_set) return(x)
+        # else
+          assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
+        private$.trafo = f
+        # FIXME: the code here is a bit bullshitty. maybe we can rely on a dt being a list?
+        # tried to make it convenient for the user here
+        # private$.trafo = function(x) {
+        #   if (is.list(x) && !is.data.table(x)) {
+        #     x = as.data.table(x)
+        #     xlist = TRUE
+        #   } else {
+        #     assert_data_table(x)
+        #     xlist = FALSE
+        #   }
+        #   assert_set_equal(names(x), self$ids())
+        #   result = f(x = x, param_set = self)
+        #   assert_data_table(result, nrow = nrow(x))
+        #   if (xlist)
+        #     result = as.list(result)
+        #   return(result)
+        # }
       }
-      force(f)
--        if (is.null(f))
--          f = function(x, param_set) return(x)
--        else
--          assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
--        # FIXME: the code here is a bit bullshitty. maybe we can rely on a dt being a list?
--        # tried to make it convenient for the user here
--        private$.trafo = function(x) {
--          if (is.list(x) && !is.data.table(x)) {
--            x = as.data.table(x)
--            xlist = TRUE
--          } else {
--            assert_data_table(x)
--            xlist = FALSE
--          }
--          assert_set_equal(names(x), self$ids())
--          result = f(x = x, param_set = self)
--          assert_data_table(result, nrow = nrow(x))
--          if (xlist)
--            result = as.list(result)
--          return(result)
--        }
-+        private$.trafo = assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
-       }
     },
     has_trafo = function() !is.null(private$.trafo),
     has_deps = function() length(self$deps) > 0L,

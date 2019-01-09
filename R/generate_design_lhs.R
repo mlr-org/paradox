@@ -25,6 +25,6 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   d = lhs_fun(n, k = param_set$length)
   colnames(d) = ids
   d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
-  make_paradox_design(set_names(d, ids))
+  make_paradox_design(set_names(d, ids), param_set)
 }
 
