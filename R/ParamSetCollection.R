@@ -1,13 +1,11 @@
-# FIXME: we need to be able to set a trafo in the complete collection, but maybe then no
-# trafos should exist on the individuell sets?
-
 # FIXME: check get deps, and on deps
 
-# FIXME: can we cache the params in the collection? so we dont have to build them all on the fly?
-
 # FIXME: we need to be able to add deps across the sets, i fear. especially for the brnaching
+# can we somehow provide some sugar fox this?
 
 # FIXME: if we add deps, what format / names do we have to use to stay valied?
+
+# FIXME: test subset
 
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
@@ -15,6 +13,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_list(sets, types = "ParamSet")
       setids = map_chr(sets, "set_id")
       assert_names(setids, type = "unique")
+      if (any(map_lgl(sets, "has_trafo")))  # we need to be a ble to have a trafo on the collection, not sure how to mix this with indivdual trafos yet.
+        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       private$.sets = sets
       private$build_params()
       private$build_deps()

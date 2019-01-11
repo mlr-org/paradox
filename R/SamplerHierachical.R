@@ -23,7 +23,7 @@ SamplerHierachical = R6Class("SamplerHierachical", inherit = Sampler,
       assert_list(samplers, types = "Sampler1D")
       ids1 = param_set$ids()
       ids2 = map_chr(samplers, function(s) s$param$id)
-      if(!setequal(ids1, ids2))
+      if (!setequal(ids1, ids2))
         stop("IDs of params in samplers to not correspond to IDs of params in set!")
       super$initialize(param_set)
       private$.deps_on = param_set$deps_on # compute that once
