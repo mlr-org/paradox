@@ -9,7 +9,8 @@
 ParamSet
 }
 \description{
-A set of \link{Param} objects.
+A set of \link{Param} objects. Please note that when creating a set or adding to it, the params of the
+resulting set have to be uniquely named with IDs with valid R names.
 }
 \section{Public members / active bindings}{
 

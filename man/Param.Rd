@@ -40,6 +40,8 @@ This is only used in feasibility checks, neither in generating designs nor sampl
 \item \code{default}          :: \code{any} \cr
 Default value. Can be from param domain or \code{special_vals}.
 Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid default.
+\item \code{has_default}      :: \code{logical(1)} \cr
+Is a default there?
 \item \code{storage_type}     :: \code{character(1)} \cr
 Data type when values of this param is stored in a data table or sampled. Read-only.
 \item \code{tags}             :: \code{character} \cr

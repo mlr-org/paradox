@@ -1,5 +1,17 @@
 context("Param")
 
+
+test_that("basic properties", {
+  p1 = ParamDbl$new("x", default = 4)
+  p2 = ParamFct$new("y", values = c("a", "b"))
+  expect_true(p1$has_default)
+  expect_false(p2$has_default)
+  expect_true(p1$is_number)
+  expect_false(p2$is_number)
+  expect_false(p1$is_categ)
+  expect_true(p2$is_categ)
+})
+
 test_that("check and assert work", {
   # test-funcion should be tested in individual test_Param<type> files
   # here we briefly check all 3 to see if they work in principle
