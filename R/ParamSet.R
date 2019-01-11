@@ -118,8 +118,10 @@ ParamSet = R6Class("ParamSet",
 
     initialize = function(params = list()) {
       assert_list(params, types = "Param")
+      ids = map_chr(params, "id")
+      assert_names(ids, type = "strict")
       self$params = map(params, function(p) p$clone(deep = TRUE))
-      names(self$params) = map_chr(params, "id")
+      names(self$params) = ids
       self$set_id = "paramset"
     },
 
@@ -127,9 +129,7 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (test_r6(p, "Param")) # level-up param to set
         p = ParamSet$new(list(p))
-      ids_inboth = intersect(self$ids(), p$ids())
-      if (length(ids_inboth) > 0L)
-        stopf("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
+      assert_names(c(self$ids(), p$ids()), type = "strict")
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
