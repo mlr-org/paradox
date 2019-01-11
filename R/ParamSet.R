@@ -210,6 +210,8 @@ ParamSet = R6Class("ParamSet",
     add_dep = function(id, on, cond) {
       assert_choice(id, self$ids())
       assert_choice(on, self$ids())
+      if (id == on)
+        stopf("A param cannot depend on itself!")
       p1 = self$params[[id]]
       p2 = self$params[[on]]
       dep = Dependency$new(p1, p2, cond)
