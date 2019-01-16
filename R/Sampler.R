@@ -14,7 +14,7 @@
 #'   Abstract, only inheriting subclasses call this.
 #'   Param set is cloned on construction.
 #' * `sample(n)` \cr
-#'   `integer(1)` -> [data.table]
+#'   `integer(1)` -> [Design]
 #'   Sample n values from the distribution.
 #'
 #' @section Private methods / Internals:
@@ -38,7 +38,7 @@ Sampler = R6Class("Sampler",
 
     sample = function(n) {
       assert_count(n, positive = TRUE) # we do argcheck on toplevel
-      make_paradox_design(private$.sample(n), ps = self$param_set)
+      Design$new(self$param_set, private$.sample(n))
     },
 
     print = function(...) {
