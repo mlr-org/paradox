@@ -61,19 +61,14 @@ Named with param IDs. Read-only.
 Position is TRUE iff Param is fct or lgl.
 Named with param IDs. Read-only.
 \item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
-Transformation function. Settable. We do a bit of magic here for user convenience:
-On write: User has to pass a \code{function(x, param_set)}, where x is a data.table with atomic param-columns, and it
-must also returns a data.table.
-The function is responsible to transform feasible configurations (rows) into
+Transformation function. Settable.
+User has to pass a \code{function(x, param_set)}, of the form \code{named list}, \link{ParamSet} -> \code{named list}.
+The function is responsible to transform a feasible configuration into
 another encoding, before potentially evaluating the configuration with the target algorithm.
-For the output-datatable, not many things have to hold.
-It needs to have unique column names, and the target algorithm has to accept the configuration-rows.
-Note that you can also create list-cols in the return value if you need to transform to complex objects.
+For the output, not many things have to hold.
+It needs to have unique names, and the target algorithm has to accept the configuration.
 For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-The user is responsible to transform this as he likes,
-and has access to the \code{param_set} (e.g. to access tags or other stuff)
-On read: Returns a \code{function(x)}, which does exactly what the user passed "on read",
-but also allows a list-interface, and auto-passes the param set.
+Is NULL by default, and you can set it to NULL to switch the transformation off.
 \item \code{has_trafo}         :: \code{logical(1)} \cr
 Has the set a trafo` function?
 \item \code{deps}              :: list of \link{Dependency} \cr

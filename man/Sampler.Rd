@@ -27,7 +27,7 @@ Domain / support of the distribution we want to sample from.
 Abstract, only inheriting subclasses call this.
 Param set is cloned on construction.
 \item \code{sample(n)} \cr
-\code{integer(1)} -> \link{data.table}
+\code{integer(1)} -> \link{Design}
 Sample n values from the distribution.
 }
 }

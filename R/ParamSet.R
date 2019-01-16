@@ -51,19 +51,14 @@
 #'   Position is TRUE iff Param is fct or lgl.
 #'   Named with param IDs. Read-only.
 #' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
-#'   Transformation function. Settable. We do a bit of magic here for user convenience:
-#'   On write: User has to pass a `function(x, param_set)`, where x is a data.table with atomic param-columns, and it
-#'   must also returns a data.table.
-#'   The function is responsible to transform feasible configurations (rows) into
+#'   Transformation function. Settable.
+#'   User has to pass a `function(x, param_set)`, of the form `named list`, [ParamSet] -> `named list`.
+#'   The function is responsible to transform a feasible configuration into
 #'   another encoding, before potentially evaluating the configuration with the target algorithm.
-#'   For the output-datatable, not many things have to hold.
-#'   It needs to have unique column names, and the target algorithm has to accept the configuration-rows.
-#'   Note that you can also create list-cols in the return value if you need to transform to complex objects.
+#'   For the output, not many things have to hold.
+#'   It needs to have unique names, and the target algorithm has to accept the configuration.
 #'   For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-#'   The user is responsible to transform this as he likes,
-#'   and has access to the `param_set` (e.g. to access tags or other stuff)
-#'   On read: Returns a `function(x)`, which does exactly what the user passed "on read",
-#'   but also allows a list-interface, and auto-passes the param set.
+#'   Is NULL by default, and you can set it to NULL to switch the transformation off.
 #' * `has_trafo`         :: `logical(1)` \cr
 #'   Has the set a trafo` function?
 #' * `deps`              :: list of [Dependency] \cr
@@ -264,28 +259,8 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.trafo
       } else {
-        force(f)
-        if (is.null(f))
-          f = function(x, param_set) return(x)
-        else
           assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
-        # FIXME: the code here is a bit bullshitty. maybe we can rely on a dt being a list?
-        # tried to make it convenient for the user here
-        private$.trafo = function(x) {
-          if (is.list(x) && !is.data.table(x)) {
-            x = as.data.table(x)
-            xlist = TRUE
-          } else {
-            assert_data_table(x)
-            xlist = FALSE
-          }
-          assert_set_equal(names(x), self$ids())
-          result = f(x = x, param_set = self)
-          assert_data_table(result, nrow = nrow(x))
-          if (xlist)
-            result = as.list(result)
-          return(result)
-        }
+        private$.trafo = f
       }
     },
     has_trafo = function() !is.null(private$.trafo),

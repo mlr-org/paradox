@@ -11,8 +11,9 @@ test_that("generate_design_random", {
   for (ps in ps_list) {
     info = ps$id
     d = generate_design_random(ps, n = 5L)
-    expect_data_table(d, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
-    expect_true(all(map_lgl(transpose(d), ps$test)), info = info) # check that all rows are feasible
+    dd = d$data
+    expect_data_table(dd, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
+    expect_true(all(map_lgl(d$transpose(), ps$test)), info = info) # check that all rows are feasible
   }
 })
 
@@ -28,13 +29,14 @@ test_that("generate_design_grid", {
     info = ps$id
     reso = 3L
     d = generate_design_grid(ps, resolution = reso)
-    expect_data_table(d, any.missing = FALSE, info = info)
+    dd = d$data
+    expect_data_table(d$data, any.missing = FALSE, info = info)
     # compute length of design as product of resolution (for all numbers) * product of nlevels
     nrows = ps$nlevels
     nrows[ps$is_number] = reso
     nrows = prod(nrows)
-    expect_equal(nrow(d), nrows, info = info)
-    expect_true(all(map_lgl(transpose(d), ps$test)), info = info) # check that all rows are feasible
+    expect_equal(nrow(dd), nrows, info = info)
+    expect_true(all(map_lgl(d$transpose(), ps$test)), info = info) # check that all rows are feasible
   }
 })
 
@@ -45,7 +47,7 @@ test_that("check generate_design_grid against concrete expectation", {
     ParamFct$new("y", values = c("a", "b"))
   ))
   d = generate_design_grid(ps, resolution = 3)
-  expect_equal(d, make_paradox_design(data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b"))))
+  expect_equal(d$data, data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b")))
 })
 
 
@@ -60,9 +62,9 @@ test_that("generate_design_lhs", {
   for (ps in ps_list) {
     info = ps$id
     d = generate_design_lhs(ps, 10)
-    expect_data_table(d, nrows = 10, any.missing = FALSE, info = info)
-    xs = mlr3misc::transpose(d)
-    expect_true(all(map_lgl(xs, ps$test)), info = info)
+    dd = d$data
+    expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
+    expect_true(all(map_lgl(d$transpose(), ps$test)), info = info)
   }
 })
 
@@ -77,8 +79,9 @@ test_that("generate_design_random works with deps", {
   # call is a very lightweight wrapper around Sampler, so we test it briefly and test SamplerUnif in its test-file
   ps = th_paramset_deps()
   d = generate_design_random(ps, n = 5L)
-  expect_data_table(d, nrows = 5L, ncols = 4L)
-  expect_names(names(d), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
+  dd = d$data
+  expect_data_table(dd, nrows = 5L, ncols = 4L)
+  expect_names(names(dd), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
 })
 
 

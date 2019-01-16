@@ -45,7 +45,8 @@ SamplerHierachical = R6Class("SamplerHierachical", inherit = Sampler,
       for (j in 1:k) { # walk thru all sampler, toposorted order, and sample a col of size n
         s = self$samplers[[j]]
         param_id = s$param$id
-        x = s$sample(n)
+        # FIXME: could we call .sample here?
+        x = s$sample(n)$data
         # walk thru all deps (they were sampled before us, topo!),
         # and set values in x to NA which where the dep is not OK
         deps = private$.deps_on[param_id, on = "id"]$deps[[1L]]
