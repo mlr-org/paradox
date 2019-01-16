@@ -27,7 +27,7 @@ test_that("simple active bindings work", {
   expect_string(psc$check(list(th_param_dbl = 1, th_param_int = 2)), "must be subset")
 
   d = generate_design_random(psc, n = 10L)
-  expect_data_table(d, nrows = 10, ncols = 5L)
+  expect_data_table(d$data, nrows = 10, ncols = 5L)
 
   # FIXME: make issue to test this, when we have better design / transpose
   # psc$trafo = function(x, param_set) {

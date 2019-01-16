@@ -18,7 +18,8 @@ test_that("trafo", {
   expect_true(ps$has_trafo)
   expect_output(print(ps), "Trafo is set")
   d1 = generate_design_grid(ps, resolution = 4)
-  d2 = ps$trafo(d1)
+  dd1 = d1$data
+  d2 = ps$trafo(dd1)
   expect_numeric(d2$x, lower = 0)
   expect_numeric(d2$w1, lower = 0, upper = 1)
   expect_numeric(d2$w2, lower = 0, upper = 1)

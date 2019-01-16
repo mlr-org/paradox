@@ -26,6 +26,8 @@
 #' * `default`          :: `any` \cr
 #'    Default value. Can be from param domain or `special_vals`.
 #'    Has value `NO_DEF` if no default is there - `NULL` could be a valid default.
+#' * `has_default`      :: `logical(1)` \cr
+#'    Is a default there?
 #' * `storage_type`     :: `character(1)` \cr
 #'    Data type when values of this param is stored in a data table or sampled. Read-only.
 #' * `tags`             :: `character` \cr
@@ -101,7 +103,7 @@ Param = R6Class("Param",
       self$special_vals = special_vals
       self$default = default
       self$tags = tags
-      if (is_proper_default(default)) # check that default is feasible
+      if (!is_nodefault(default)) # check that default is feasible
         self$assert(default)
     },
 
@@ -140,12 +142,13 @@ Param = R6Class("Param",
       assert_true(self$is_bounded)
       private$.qunif(x)
     }
-  ),
+  ) ,
 
   active = list(
     class = function() class(self)[[1L]],
     is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
-    is_categ = function() self$class %in% c("ParamFct", "ParamLgl")
+    is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
+    has_default = function() !is_nodefault(self$default)
   ),
 
   private = list(
