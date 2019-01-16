@@ -5,7 +5,7 @@
 
 # FIXME: if we add deps, what format / names do we have to use to stay valied?
 
-# FIXME: test subset
+#FIXME: test that params sets on contru dont have travo
 
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
@@ -22,7 +22,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
     add = function(p) stop("not allowed"),
 
-    add_dep = function(p) stop("not allowed")
+    add_dep = function(p) stop("not allowed"),
+
+    subset = function(ids) stop("not allowed")
 
   ),
 

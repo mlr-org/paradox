@@ -52,3 +52,15 @@ test_that("simple active bindings work", {
 
 })
 
+test_that("some operations are not allowed", {
+  ps1 = th_paramset_dbl1()
+  ps1$set_id = "s1"
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+
+  expect_error(psc$subset("foo"), "not allowed")
+  expect_error(psc$add(th_param_dbl), "not allowed")
+  expect_error(psc$add(th_paramset_dbl1), "not allowed")
+})
+
