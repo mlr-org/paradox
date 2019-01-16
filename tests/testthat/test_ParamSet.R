@@ -68,11 +68,6 @@ test_that("ParamSet$add_param_set", {
   ps2$add(ps1)
   expect_equal(ps2$length, n1)
 
-  # adding 2 sets, full and numeric, results in a clash
-  ps1 = th_paramset_numeric()$clone(deep = TRUE)
-  ps2 = th_paramset_full()$clone(deep = TRUE)
-  expect_error(ps1$add(ps2), "Name clash")
-
   # adding 2 sets, numeric and untyped, makes them larger
   ps1 = th_paramset_numeric()$clone(deep = TRUE)
   ps2 = th_paramset_untyped()$clone(deep = TRUE)
@@ -109,6 +104,15 @@ test_that("ParamSet$check", {
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
   expect_error(ps$set_id <- "$foo" , "naming convention")
+})
+
+test_that("ParamSets cannot have duplicated ids", {
+  p1 = ParamDbl$new("x1")
+  p2 = ParamDbl$new("x1")
+  expect_error(ParamSet$new(list(p1, p2)), "duplicated")
+  ps = ParamSet$new(list(p1))
+  expect_error(ps$add(p2), "duplicated")
+  expect_error(ps$add(ParamSet$new(list(p2))), "duplicated")
 })
 
 test_that("ParamSet$print", {

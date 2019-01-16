@@ -117,4 +117,8 @@ test_that("subsetting with deps works", {
   expect_error(ps$clone(deep = TRUE)$subset(c("a")), "Subsetting so that dependencies")
 })
 
+test_that("cannot add a dep on yourself", {
+  ps = ParamSet$new(list(ParamFct$new("x", values = c("a"))))
+  expect_error(ps$add_dep("x", on = "x", CondEqual$new("a")), "depend on itself")
 
+})

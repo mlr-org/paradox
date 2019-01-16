@@ -1,7 +1,8 @@
 #' @title ParamSet
 #'
 #' @description
-#' A set of [Param] objects.
+#' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
+#' resulting set have to be uniquely named with IDs with valid R names.
 #'
 #' @section Public members / active bindings:
 #' * `set_id`            :: `character(1)`
@@ -113,8 +114,10 @@ ParamSet = R6Class("ParamSet",
 
     initialize = function(params = list()) {
       assert_list(params, types = "Param")
+      ids = map_chr(params, "id")
+      assert_names(ids, type = "strict")
       self$params = map(params, function(p) p$clone(deep = TRUE))
-      names(self$params) = map_chr(params, "id")
+      names(self$params) = ids
       self$set_id = "paramset"
     },
 
@@ -122,9 +125,7 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (test_r6(p, "Param")) # level-up param to set
         p = ParamSet$new(list(p))
-      ids_inboth = intersect(self$ids(), p$ids())
-      if (length(ids_inboth) > 0L)
-        stopf("Name clash when adding. These ids are in both sets: %s", str_collapse(ids_inboth))
+      assert_names(c(self$ids(), p$ids()), type = "strict")
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
@@ -204,6 +205,8 @@ ParamSet = R6Class("ParamSet",
     add_dep = function(id, on, cond) {
       assert_choice(id, self$ids())
       assert_choice(on, self$ids())
+      if (id == on)
+        stopf("A param cannot depend on itself!")
       p1 = self$params[[id]]
       p2 = self$params[[on]]
       dep = Dependency$new(p1, p2, cond)
@@ -247,7 +250,7 @@ ParamSet = R6Class("ParamSet",
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     special_vals = function() private$get_member_with_idnames("special_vals", as.list),
-    defaults = function() Filter(is_proper_default, private$get_member_with_idnames("default", as.list)),
+    defaults = function() Filter(Negate(is_nodefault), private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
     is_number = function() private$get_member_with_idnames("is_number", as.logical),
