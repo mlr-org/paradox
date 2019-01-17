@@ -55,5 +55,27 @@ test_that("some operations are not allowed", {
   expect_error(psc$subset("foo"), "not allowed")
   expect_error(psc$add(th_param_dbl), "not allowed")
   expect_error(psc$add(th_paramset_dbl1), "not allowed")
+  expect_error(psc$set_id, "not allowed")
 })
 
+test_that("deps", {
+  ps1 = ParamSet$new(list(
+    ParamFct$new("f", values = c("a", "b")),
+    ParamDbl$new("d")
+  ))
+  ps1$set_id = "ps1"
+  ps1$add_dep("d", on = "f", CondEqual$new("a"))
+
+  ps2 = ParamSet$new(list(
+    ParamFct$new("f", values = c("a", "b")),
+    ParamDbl$new("d")
+  ))
+  ps2$set_id = "ps2"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+  depon = psc$deps_on
+  print(depon)
+  expect_data_table(depon, nrows = 4, ncols = 3)
+  expect_equal(depon$id, c("ps1.f", "ps1.d", "ps2.f", "ps2.d"))
+  expect_equal(depon[id == "ps1.f",]$dep_parent[[1L]], character(0L))
+  expect_equal(depon[id == "ps1.d",]$dep_parent[[1L]], "ps1.f")
+})
