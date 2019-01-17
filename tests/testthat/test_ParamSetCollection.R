@@ -29,27 +29,20 @@ test_that("simple active bindings work", {
   d = generate_design_random(psc, n = 10L)
   expect_data_table(d$data, nrows = 10, ncols = 5L)
 
-  # FIXME: make issue to test this, when we have better design / transpose
-  # psc$trafo = function(x, param_set) {
-  #   x$s2.th_param_int = 99
-  #   return(x)
-  # }
-  # expect_true(psc$has_trafo)
-  # d = generate_design_random(psc, n = 10L)
-  # expect_data_table(d, nrows = 10, ncols = 5L)
-  # xs = transpose(d, trafo = TRUE)
-  # for (i in 1:10) {
-  #   x = xs[[i]]
-  #   print(x)
-  #   expect_list(x, len = 5)
-  #   expect_names(names(x), permutation.of = psc$ids())
-  #   expect_equal(x$s2.th_param_int, 99)
-  # }
-
-
-  # expect_data_table(d, nrows = 10, ncols = 5L)
-  # expect_true(all(d$th_param_int == 99))
-
+  psc$trafo = function(x, param_set) {
+    x$s2.th_param_int = 99
+    return(x)
+  }
+  expect_true(psc$has_trafo)
+  d = generate_design_random(psc, n = 10L)
+  expect_data_table(d$data, nrows = 10, ncols = 5L)
+  xs = d$transpose(trafo = TRUE)
+  for (i in 1:10) {
+    x = xs[[i]]
+    expect_list(x, len = 5)
+    expect_names(names(x), permutation.of = psc$ids())
+    expect_equal(x$s2.th_param_int, 99)
+  }
 })
 
 test_that("some operations are not allowed", {
