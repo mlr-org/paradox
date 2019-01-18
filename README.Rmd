@@ -119,8 +119,9 @@ ps$trafo = function(x, param_set) {
   return(x)
 }
 ps_smplr = SamplerUnif$new(ps)
-x = ps_smplr$sample(5)
-xt = ps$trafo(x$data)
+x = ps_smplr$sample(3)
+xst = x$transpose(trafo = TRUE)
+xst
 ```
 
 ### Advanced Transformations
