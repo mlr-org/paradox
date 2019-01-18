@@ -46,25 +46,33 @@ ps = ParamSet$new(
 ```
 
 Draw random samples / create random design:
+
 ```{r pssample}
-ps$sample(3)
+smplr = SamplerUnif$new(ps)
+smplr$sample(3)
+
+generate_design_random(ps, 3)
 ```
 
 Generate LHS Design:
+
 ```{r pslhs}
-ps$generate_lhs_design(3)
+generate_design_lhs(ps, 3)
 ```
 
 Generate Grid Design:
+
 ```{r psgrid}
-ps$generate_grid_design(resolution = 2)
+generate_design_grid(ps, resolution = 2)
 ```
 
 Properties of the parameters within the ParamSet:
+
 ```{r psprobs}
+ps$ids()
 ps$values
-ps$param_classes
 ps$nlevels
+ps$is_number
 ```
 
 ### Numeric ParamSet
@@ -73,21 +81,18 @@ Things you can do on an all numeric ParamSet:
 
 ```{r psnumeric}
 ps = ParamSet$new(
-  params = c(
-    list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
-  )
+  params = list(ParamInt$new(id = "z", lower = -10, upper = 10))
 )
-
+x_ps = ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
+ps$add(x_ps)
 ps$lower
 ps$upper
-ps$range
 ```
 
 The usage of `Parameter$repeat()` generates tags that indicate to which group the parameters belong to:
 
 ```{r psnumerictags}
-ps$member_tags
+ps$tags
 ```
 
 This becomes useful if you want to do operations on parameters of one group like with transformations.
@@ -107,29 +112,17 @@ ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
     ParamDbl$new(id = "x", lower = 0, upper = 1)
-  ),
-  trafo = function(x, dict, tags) {
-    x$z = 2^x$z
-    x$x = round(x$x * dict$p)
-    return(x)
-  }
+  )
 )
-(x = ps$sample(3))
+ps$trafo = function(x, param_set) {
+  x$z = 2^x$z
+  return(x)
+}
+ps_smplr = SamplerUnif$new(ps)
+x = ps_smplr$sample(5)
+xt = ps$trafo(x$data)
 ```
 
-The transformation uses the dictionary and will fail if none is supplied:
-
-```{r pstransscale2, error = TRUE}
-ps$transform(x)
-```
-
-The dictionary can always be changed:
-```{r pstransscale3}
-ps$dictionary = list(p = 10)
-ps$transform(x)
-ps$dictionary = list(p = 1000)
-ps$transform(x)
-```
 ### Advanced Transformations
 
 The following creates a ParamSet with a transformation that scales the `x` values and returns them as a vector.
