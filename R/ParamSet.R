@@ -266,6 +266,8 @@ ParamSet = R6Class("ParamSet",
     has_trafo = function() !is.null(private$.trafo),
     has_deps = function() length(self$deps) > 0L,
     deps_on = function() {
+      if (self$is_empty)
+        return(data.table(id = character(0L), dep_parent = character(0L), deps = list()))
       ids = self$ids()
       if (self$has_deps) {
         dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))

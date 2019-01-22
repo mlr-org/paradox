@@ -87,8 +87,8 @@ test_that("empty paramset", {
   expect_equal(ps$length, 0)
   expect_equal(ps$ids(), character(0L))
   expect_equal(ps$lower, set_names(numeric(0L), character(0L)))
+  expect_data_table(ps$deps_on, nrow = 0L, ncol = 3L)
 })
-
 
 test_that("ParamSet$check", {
   ps = th_paramset_numeric()
