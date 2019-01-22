@@ -222,6 +222,9 @@ ParamSet = R6Class("ParamSet",
         assert_subset(hide.cols, names(d))
         if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
           d = d[self$deps_on, on = "id"]
+        v = named_list(d$id) # add param_vals to last col of print-dt as list col
+        v = insert_named(v, private$.param_vals)
+        d$value = v
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -280,6 +283,17 @@ ParamSet = R6Class("ParamSet",
       # add all ids with no deps
       dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L)), deps = list(list())))
       dtab[ids, on = "id"] # reorder in order of ids
+    },
+    # FIXME: add parvals to printer
+    param_vals = function(xs) {
+      if (missing(xs)) {
+        return(private$.param_vals)
+      } else {
+        assert_list(xs)
+        assert_names(names(xs), subset.of = self$ids())
+        self$assert(xs)
+        private$.param_vals = xs
+      }
     }
   ),
 
@@ -288,6 +302,7 @@ ParamSet = R6Class("ParamSet",
     .trafo = NULL,
     .params = NULL,
     .deps = list(), # a list of Dependency objects
+    .param_vals = list(),
 
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
