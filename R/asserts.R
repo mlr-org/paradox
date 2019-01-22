@@ -28,7 +28,7 @@ assert_paramset = function(param_set, cl = "Param", no_untyped = FALSE, must_bou
   if (no_untyped && ("ParamUty" %in% param_set$class))
     stop("ParamSet contains untyped params!")
   if (must_bounded && !all(param_set$is_bounded))
-    stop("ParamSet contains bounded params!")
+    stop("ParamSet contains unbounded params!")
   if (no_deps && param_set$has_deps)
     stop("ParamSet contains dependencies!")
   invisible(param_set)
