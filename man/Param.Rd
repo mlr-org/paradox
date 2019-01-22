@@ -74,11 +74,12 @@ from its defined set of categorical values.
 \item \code{Param$Lgl$new(id, special_vals, default, tags)} \cr
 \code{character(1)}, \code{list}, \code{any}, \code{character} -> self
 Constructor for logical-scalar-params.
-\item \code{ParamUty$new(id, default, tags)} \cr
-\code{character(1)}, \code{any}, \code{character} -> self
+\item \code{ParamUty$new(id, default, tags, custom_check)} \cr
+\code{character(1)}, \code{any}, \code{character}, \code{function(x)} -> self
 Untyped parameters, can be used to bypass any complicated feasibility checks, when
 a param is of truly complex type, as checks for this param are always feasible.
 OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
+User can pass a \code{custom_check} to specify feasibility checks for custom types.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 A value is feasible if it is of the same \code{storage_type}, inside of the bounds or from \code{special_vals}.
