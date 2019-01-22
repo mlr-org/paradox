@@ -32,6 +32,8 @@ Design = R6Class("Design",
       assert_data_table(data, ncols = param_set$length)
       assert_names(colnames(data), permutation.of = param_set$ids())
       self$param_set = param_set
+      # FIXME: this works in general but is not really fast, as we generate the col first, then overwrite it, OTOH this is really robust
+      imap(param_set$param_vals, function(v, n) set(data, j = n, value = v))
       self$data = data
     },
 
