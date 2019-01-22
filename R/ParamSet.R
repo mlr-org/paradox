@@ -109,15 +109,13 @@
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
-    params = NULL,
-    deps = list(), # a list of Dependency objects
 
     initialize = function(params = list()) {
       assert_list(params, types = "Param")
       ids = map_chr(params, "id")
       assert_names(ids, type = "strict")
-      self$params = map(params, function(p) p$clone(deep = TRUE))
-      names(self$params) = ids
+      private$.params = map(params, function(p) p$clone(deep = TRUE))
+      names(private$.params) = ids
       self$set_id = "paramset"
     },
 
@@ -129,8 +127,8 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(p$trafo))
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
-      self$params = c(self$params, ps2$params)
-      self$deps = c(self$deps, ps2$deps)
+      private$.params = c(private$.params, ps2$params)
+      private$.deps = c(private$.deps, ps2$deps)
       invisible(self)
     },
 
@@ -157,7 +155,7 @@ ParamSet = R6Class("ParamSet",
         if (length(pids_not_there) > 0L)
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
-      self$params = self$params[ids]
+      private$.params = private$.params[ids]
       invisible(self)
     },
 
@@ -210,7 +208,7 @@ ParamSet = R6Class("ParamSet",
       p1 = self$params[[id]]
       p2 = self$params[[on]]
       dep = Dependency$new(p1, p2, cond)
-      self$deps = c(self$deps, list(dep))
+      private$.deps = c(private$.deps, list(dep))
       invisible(self)
     },
 
@@ -232,6 +230,8 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
+    params = function() private$.params,
+    deps = function() private$.deps,
     set_id = function(v) {
       if (missing(v)) {
         private$.set_id
@@ -284,14 +284,16 @@ ParamSet = R6Class("ParamSet",
   private = list(
     .set_id = NULL,
     .trafo = NULL,
+    .params = NULL,
+    .deps = list(), # a list of Dependency objects
 
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
 
     deep_clone = function(name, value) {
       switch(name,
-        "params" = map(value, function(x) x$clone(deep = TRUE)),
-        "deps" = map(value, function(x) x$clone(deep = TRUE)),
+        ".params" = map(value, function(x) x$clone(deep = TRUE)),
+        ".deps" = map(value, function(x) x$clone(deep = TRUE)),
         value
       )
     }

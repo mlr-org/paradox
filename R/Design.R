@@ -36,6 +36,7 @@ Design = R6Class("Design",
     },
 
     print = function(...) { # simply print the included dt
+      # FIXME: maybe show that this is not JUST a dt.
       print(self$data)
     },
 
