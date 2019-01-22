@@ -62,13 +62,13 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           pp$id = paste(s$set_id, p$id, sep = ".")
           copy_map[i, c("addr", "new_obj") := list(address(p), list(pp))]
         }
-        print(copy_map)
+        # print(copy_map)
         # d = s$deps_on
         for (d in s$deps) {
           dd = d$clone(deep = TRUE)
           dd$param = copy_map[addr == address(dd$param), "new_obj"]
           dd$parent = copy_map[addr == address(dd$parent), "new_obj"]
-          print(dd)
+          # print(dd)
         }
       }
       # private$.params = unlist(map(private$.sets, function(s)  {
