@@ -36,7 +36,7 @@ Design = R6Class("Design",
     },
 
     print = function(...) { # simply print the included dt
-      # FIXME: maybe show that this is not JUST a dt.
+      catf("<Design> with %i rows:", nrow(self$data))
       print(self$data)
     },
 
