@@ -11,5 +11,7 @@ test_that("ParamUty", {
   expect_true(p$check(FALSE))
   expect_string(p$check(NULL), "foo")
   expect_true(p$check(NA))
-})
 
+  p = ParamUty$new(id = "x", default = Inf)
+  expect_true(p$check())
+})
