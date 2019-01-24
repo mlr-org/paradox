@@ -4,12 +4,15 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     custom_check = NULL,
 
     initialize = function(id, default = NO_DEF, tags = character(0L), custom_check = NULL) {
-      super$initialize(id, special_vals = list(), default = default, tags = tags)
+      # super class calls private$.check, so this must be set BEFORE
+      # we initialize the super class
       if (is.null(custom_check))
         custom_check = function(x) TRUE
       else
         assert_function(custom_check, "x")
       self$custom_check = custom_check
+
+      super$initialize(id, special_vals = list(), default = default, tags = tags)
     }
   ),
 

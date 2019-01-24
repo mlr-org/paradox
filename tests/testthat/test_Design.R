@@ -7,7 +7,7 @@ test_that("transpose works", {
   ))
   ps$add_dep("i", on = "f", CondEqual$new("a"))
   data = data.table(f = c("a", "b"), i = c(1L, NA))
-  d = Design$new(ps, data)
+  d = Design$new(ps, data, remove_dupl = FALSE)
   xs = d$transpose(filter_na = FALSE)
   expect_equal(xs, list(list(f = "a", i = 1L), list(f = "b", i = NA_integer_)))
   xs = d$transpose(filter_na = TRUE)
