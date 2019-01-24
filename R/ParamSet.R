@@ -156,6 +156,7 @@ ParamSet = R6Class("ParamSet",
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
       private$.params = private$.params[ids]
+      private$.param_vals = private$.param_vals[ids]
       invisible(self)
     },
 
