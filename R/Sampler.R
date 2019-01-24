@@ -38,7 +38,7 @@ Sampler = R6Class("Sampler",
 
     sample = function(n) {
       assert_count(n, positive = TRUE) # we do argcheck on toplevel
-      Design$new(self$param_set, private$.sample(n))
+      Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE)
     },
 
     print = function(...) {

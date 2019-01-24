@@ -68,20 +68,28 @@ test_that("generate_design_lhs", {
   }
 })
 
-test_that("generate_design (grid and lhs) does not work with deps", {
+test_that("generate_design_lhs does not work with deps", {
   ps = th_paramset_deps()
-  expect_error(generate_design_grid(ps, resolution = 2), "dependencies")
   expect_error(generate_design_lhs(ps, n = 5L), "dependencies")
 })
 
 #
-test_that("generate_design_random works with deps", {
+test_that("generate_design_random and grid works with deps", {
   # call is a very lightweight wrapper around Sampler, so we test it briefly and test SamplerUnif in its test-file
   ps = th_paramset_deps()
+
   d = generate_design_random(ps, n = 5L)
   dd = d$data
   expect_data_table(dd, nrows = 5L, ncols = 4L)
   expect_names(names(dd), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
+
+  d = generate_design_grid(ps, resolution = 4L)
+  dd = d$data
+  # 4 (i) * ( (TRUE) (2 * 4 + 1) + (FALSE) (1))
+  expect_data_table(dd, nrows = 40L, ncols = 4L)
+  expect_names(names(dd), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
+  expect_true(all(ifelse(dd$th_param_fct %in% c("a", "b", NA) & dd$th_param_lgl,
+    !is.na(dd$th_param_dbl), is.na(dd$th_param_dbl))))
 })
 
 
