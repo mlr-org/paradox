@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+<meta name="generator" content="pandoc" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<meta name="author" content="Martin Binder" />
+
+
+<title>Introduction to Paradox</title>
+
+
+
+<style type="text/css">code{white-space: pre;}</style>
+<style type="text/css" data-origin="pandoc">
+a.sourceLine { display: inline-block; line-height: 1.25; }
+a.sourceLine { pointer-events: none; color: inherit; text-decoration: inherit; }
+a.sourceLine:empty { height: 1.2em; position: absolute; }
+.sourceCode { overflow: visible; }
+code.sourceCode { white-space: pre; position: relative; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+code.sourceCode { white-space: pre-wrap; }
+a.sourceLine { text-indent: -1em; padding-left: 1em; }
+}
+pre.numberSource a.sourceLine
+  { position: relative; }
+pre.numberSource a.sourceLine:empty
+  { position: absolute; }
+pre.numberSource a.sourceLine::before
+  { content: attr(data-line-number);
+    position: absolute; left: -5em; text-align: right; vertical-align: baseline;
+    border: none; pointer-events: all;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+    color: #aaaaaa;
+  }
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa;  padding-left: 4px; }
+div.sourceCode
+  {  }
+@media screen {
+a.sourceLine::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } /* Alert */
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } /* Annotation */
+code span.at { color: #7d9029; } /* Attribute */
+code span.bn { color: #40a070; } /* BaseN */
+code span.bu { } /* BuiltIn */
+code span.cf { color: #007020; font-weight: bold; } /* ControlFlow */
+code span.ch { color: #4070a0; } /* Char */
+code span.cn { color: #880000; } /* Constant */
+code span.co { color: #60a0b0; font-style: italic; } /* Comment */
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } /* CommentVar */
+code span.do { color: #ba2121; font-style: italic; } /* Documentation */
+code span.dt { color: #902000; } /* DataType */
+code span.dv { color: #40a070; } /* DecVal */
+code span.er { color: #ff0000; font-weight: bold; } /* Error */
+code span.ex { } /* Extension */
+code span.fl { color: #40a070; } /* Float */
+code span.fu { color: #06287e; } /* Function */
+code span.im { } /* Import */
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } /* Information */
+code span.kw { color: #007020; font-weight: bold; } /* Keyword */
+code span.op { color: #666666; } /* Operator */
+code span.ot { color: #007020; } /* Other */
+code span.pp { color: #bc7a00; } /* Preprocessor */
+code span.sc { color: #4070a0; } /* SpecialChar */
+code span.ss { color: #bb6688; } /* SpecialString */
+code span.st { color: #4070a0; } /* String */
+code span.va { color: #19177c; } /* Variable */
+code span.vs { color: #4070a0; } /* VerbatimString */
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } /* Warning */
+
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    for (var j = 0; j < rules.length; j++) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") continue;
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' || rule.style.backgroundColor === '') continue;
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#header {
+text-align: center;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; }  code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Introduction to Paradox</h1>
+<h4 class="author"><em>Martin Binder</em></h4>
+
+
+<div id="TOC">
+<ul>
+<li><a href="#what-is-paradox">What is <code>paradox</code></a></li>
+<li><a href="#reference-based-objects">Reference Based Objects</a></li>
+<li><a href="#defining-a-parameter-space">Defining a Parameter Space</a><ul>
+<li><a href="#single-parameters">Single Parameters</a></li>
+<li><a href="#parameter-sets">Parameter Sets</a></li>
+<li><a href="#vector-parameters">Vector Parameters</a></li>
+</ul></li>
+<li><a href="#parameter-sampling">Parameter Sampling</a><ul>
+<li><a href="#grid-design">Grid Design</a></li>
+<li><a href="#parameter-design">Parameter Design</a></li>
+<li><a href="#random-sampling">Random Sampling</a></li>
+<li><a href="#generalised-sampling-the-sampler-class">Generalised Sampling: The <code>Sampler</code> Class</a></li>
+</ul></li>
+<li><a href="#parameter-transformation">Parameter Transformation</a></li>
+</ul>
+</div>
+
+<div id="what-is-paradox" class="section level3">
+<h3>What is <code>paradox</code></h3>
+<p>The <code>paradox</code> package offers a language for the description of <em>parameter spaces</em>, as well as tools for useful operations on these parameter spaces. A parameter space is often useful when describing a set of sensible input values for an R function, the set of possible values that slots of a configuration object can take, and the search space of an optimization process. The tools provided by the <code>paradox</code> package therefore relate to parameter checking—verifying that a set of parameters satisfies the conditions of a parameter space—and parameter sampling—generating parameter values that lie in the parameter space for systematic exploration of program behaviour relating to these parameters.</p>
+<p><code>paradox</code> is, by its nature, an auxiliary package that derives its usefulness from other packages that make use of it. It is heavily utilized in other <a href="https://github.com/mlr-org">mlr-org</a> packages such as <a href="https://github.com/mlr-org/mlr3"><code>mlr3</code></a>, <a href="https://github.com/mlr-org/mlr3pipelines"><code>mlr3pipelines</code></a>, and <a href="https://github.com/mlr-org/mlr3tuning"><code>mlr3tuning</code></a>.</p>
+</div>
+<div id="reference-based-objects" class="section level3">
+<h3>Reference Based Objects</h3>
+<p><code>paradox</code> is the spiritual successor to the <a href="https://github.com/berndbischl/ParamHelpers"><code>ParamHelpers</code></a> package and was written from scratch using the <strong>“<a href="https://r6.r-lib.org/">R6</a>”</strong> class system. The most important consequence of this is that all objects created in <code>paradox</code> are “reference-based”, unlike most other objects in R. When a change is made to a <code>ParamSet</code> object, for example by adding a parameter using the <code>$add()</code> function, all variables that point to the <code>ParamSet</code> will contain the changed object. To create an independent copy of a <code>ParamSet</code>, the <code>$clone()</code> method needs to be used:</p>
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb1-1" data-line-number="1">ps &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>()</a>
+<a class="sourceLine" id="cb1-2" data-line-number="2"><span class="kw">print</span>(ps)</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt; Empty.</code></pre>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb3-1" data-line-number="1">ps2 &lt;-<span class="st"> </span>ps</a>
+<a class="sourceLine" id="cb3-2" data-line-number="2">ps3 &lt;-<span class="st"> </span>ps<span class="op">$</span><span class="kw">clone</span>(<span class="dt">deep =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb3-3" data-line-number="3">ps<span class="op">$</span><span class="kw">add</span>(ParamLgl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;a&quot;</span>))</a>
+<a class="sourceLine" id="cb3-4" data-line-number="4"><span class="kw">print</span>(ps)  <span class="co"># ps was changed</span></a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;    id    class lower upper      values     default
+#&gt; 1:  a ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;</code></pre>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb5-1" data-line-number="1"><span class="kw">print</span>(ps2) <span class="co"># contains the same reference as ps</span></a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;    id    class lower upper      values     default
+#&gt; 1:  a ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;</code></pre>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb7-1" data-line-number="1"><span class="kw">print</span>(ps3) <span class="co"># is a &quot;clone&quot; of the old (empty) ps</span></a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt; Empty.</code></pre>
+</div>
+<div id="defining-a-parameter-space" class="section level2">
+<h2>Defining a Parameter Space</h2>
+<div id="single-parameters" class="section level3">
+<h3>Single Parameters</h3>
+<p>The basic building block for describing parameter spaces is the <code>Param</code> class. It represents a single parameter, which usually can take a single atomic value. Consider, for example, trying to configer the <code>rpart</code> package’s <code>rpart.control</code> object. It has various components (<code>minsplit</code>, <code>cp</code>, …) that all take a single value, and that would all be represented by a different instance of a <code>Param</code> object.</p>
+<p>The <code>Param</code> class has various subclasses that represent different value types: * <strong><code>ParamInt</code></strong>: Integer numbers * <strong><code>ParamDbl</code></strong>: Real numbers * <strong><code>ParamFct</code></strong>: String values from a set of possible values, similar to R <code>factor</code>s * <strong><code>ParamLgl</code></strong>: Truth values (<code>TRUE</code> / <code>FALSE</code>), as <code>logical</code>s in R * <strong><code>ParamUty</code></strong>: Parameter that can take any value</p>
+<p>A particular instance of a parameter is created by calling the attached <code>$new()</code> function:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb9-1" data-line-number="1">parA &lt;-<span class="st"> </span>ParamLgl<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">&quot;A&quot;</span>)</a>
+<a class="sourceLine" id="cb9-2" data-line-number="2">parB &lt;-<span class="st"> </span>ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">&quot;B&quot;</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">10</span>, <span class="dt">tags =</span> <span class="kw">c</span>(<span class="st">&quot;tag1&quot;</span>, <span class="st">&quot;tag2&quot;</span>))</a>
+<a class="sourceLine" id="cb9-3" data-line-number="3">parC &lt;-<span class="st"> </span>ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">&quot;C&quot;</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">4</span>, <span class="dt">special_vals =</span> <span class="kw">list</span>(<span class="ot">NULL</span>))</a>
+<a class="sourceLine" id="cb9-4" data-line-number="4">parD &lt;-<span class="st"> </span>ParamFct<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">&quot;D&quot;</span>, <span class="dt">values =</span> <span class="kw">c</span>(<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>, <span class="st">&quot;z&quot;</span>), <span class="dt">default =</span> <span class="st">&quot;y&quot;</span>)</a>
+<a class="sourceLine" id="cb9-5" data-line-number="5">parE &lt;-<span class="st"> </span>ParamUty<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">&quot;E&quot;</span>, <span class="dt">custom_check =</span> <span class="cf">function</span>(x) checkmate<span class="op">::</span><span class="kw">checkFunction</span>(x))</a></code></pre></div>
+<p>Every parameter must have an <code>id</code>—its name within the parameter set—, and may also have a default value (<code>default</code>), a list of values that are accepted even if they do not conform to the type (<code>special_vals</code>), and <code>tags</code> that can be used to organize parameters. The numeric (<code>Int</code> and <code>Dbl</code>) parameters furthermore allow for specification of a <code>lower</code> and <code>upper</code> bound, while the <code>Fct</code> parameter must be given a vector of <code>values</code> that define the possible states its parameter can take. The <code>Uty</code> parameter can also have a <code>custom_check</code> function that must return <code>TRUE</code> when a value is acceptable and may return an error description otherwise. The example above defines <code>parE</code> as a parameter that only accepts functions.</p>
+<p>All values that are given to the constructor are then accessible from the object for inspection using <code>$</code>. Although all these values can be changed for a parameter after construction, this may be a bad and should be avoided when possible; instead, a new parameter should usually be constructed. Besides the possible values that can be given to a constructor, there are also the <code>$class</code>, <code>$nlevels</code>, <code>$is_bounded</code>, <code>$has_default</code>, <code>$storage_type</code>, <code>is_number</code> and <code>is_categ</code> slots that give information about a parameter. A list of all slots can be found in <code>?Param</code>.</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb10-1" data-line-number="1">parB<span class="op">$</span>lower</a></code></pre></div>
+<pre><code>#&gt; [1] 0</code></pre>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb12-1" data-line-number="1">parA<span class="op">$</span>values</a></code></pre></div>
+<pre><code>#&gt; [1]  TRUE FALSE</code></pre>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">parE<span class="op">$</span>class</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;ParamUty&quot;</code></pre>
+<p>It is also possible to get all information of a <code>Param</code> in form of a <code>data.table</code> by calling <code>as.data.table</code>.</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1"><span class="kw">as.data.table</span>(parA)</a></code></pre></div>
+<pre><code>#&gt;    id    class lower upper      values nlevels is_bounded special_vals
+#&gt; 1:  A ParamLgl    NA    NA  TRUE,FALSE       2       TRUE       &lt;list&gt;
+#&gt;        default storage_type tags
+#&gt; 1: &lt;NoDefault&gt;      logical</code></pre>
+<div id="type-range-checking" class="section level4">
+<h4>Type / Range Checking</h4>
+<p>A <code>Param</code> object offers the possibility to check whether a value satisfies its condition, i.e. is of the right type, and also falls within the range of allowed values, using the <code>test()</code>, <code>check()</code>, and <code>assert()</code> functions. <code>test()</code> should be used within conditional checks and returns <code>TRUE</code> or <code>FALSE</code>, while <code>check()</code> returns an error description when a value does not conform to the parameter (and thus plays well with the <a href="https://github.com/mllg/checkmate"><code>checkmate</code></a><code>::assert()</code> function). <code>assert()</code> will throw an error whenever a value does not fit.</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb18-1" data-line-number="1">parA<span class="op">$</span><span class="kw">test</span>(<span class="ot">FALSE</span>)</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1">parA<span class="op">$</span><span class="kw">test</span>(<span class="st">&quot;FALSE&quot;</span>)</a></code></pre></div>
+<pre><code>#&gt; [1] FALSE</code></pre>
+<div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb22-1" data-line-number="1">parA<span class="op">$</span><span class="kw">check</span>(<span class="st">&quot;FALSE&quot;</span>)</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;Must be of type 'logical flag', not 'character'&quot;</code></pre>
+<p>Instead of testing single parameters, it is often more convenient to check a whole set of parameters using a <code>ParamSet</code>.</p>
+</div>
+</div>
+<div id="parameter-sets" class="section level3">
+<h3>Parameter Sets</h3>
+<p>The ordered collection of parameters is handled in a <code>ParamSet</code><a href="#fn1" class="footnote-ref" id="fnref1"><sup>1</sup></a>. It is initialized using the <code>$new()</code> function and optionally takes a list of <code>Param</code>s as argument. Parameters can also be added to the constructed <code>ParamSet</code> using the <code>$add()</code> function. It is even possible to add whole <code>ParamSet</code>s to other <code>ParamSet</code>s.</p>
+<div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1">ps &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(parA, parB))</a>
+<a class="sourceLine" id="cb24-2" data-line-number="2">ps<span class="op">$</span><span class="kw">add</span>(parC)</a>
+<a class="sourceLine" id="cb24-3" data-line-number="3">ps<span class="op">$</span><span class="kw">add</span>(ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(parD, parE)))</a>
+<a class="sourceLine" id="cb24-4" data-line-number="4">ps</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;    id    class lower upper      values     default
+#&gt; 1:  A ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;
+#&gt; 2:  B ParamInt     0    10             &lt;NoDefault&gt;
+#&gt; 3:  C ParamDbl     0     4             &lt;NoDefault&gt;
+#&gt; 4:  D ParamFct    NA    NA       x,y,z           y
+#&gt; 5:  E ParamUty    NA    NA             &lt;NoDefault&gt;</code></pre>
+<p>The individual parameters can be accessed through the <code>$params</code> slot. It is also possible to get information about all parameters in a vectorized fashion using mostly the same slots as for individual <code>$Param</code>s, as listed in <code>?ParamSet</code>.</p>
+<p>It is possible to easily create subset <code>ParamSet</code>s using the <code>$subset</code> method. Be aware that it modifies a paramset in-place, so a “clone” must be created first if the original parameter should not be modified.</p>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb26-1" data-line-number="1">psSmall &lt;-<span class="st"> </span>ps<span class="op">$</span><span class="kw">clone</span>()</a>
+<a class="sourceLine" id="cb26-2" data-line-number="2">psSmall<span class="op">$</span><span class="kw">subset</span>(<span class="kw">c</span>(<span class="st">&quot;A&quot;</span>, <span class="st">&quot;B&quot;</span>, <span class="st">&quot;C&quot;</span>))</a>
+<a class="sourceLine" id="cb26-3" data-line-number="3"><span class="kw">print</span>(psSmall)</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;    id    class lower upper      values     default
+#&gt; 1:  A ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;
+#&gt; 2:  B ParamInt     0    10             &lt;NoDefault&gt;
+#&gt; 3:  C ParamDbl     0     4             &lt;NoDefault&gt;</code></pre>
+<p>Just as for <code>Param</code>s, and much more usefully, it is possible to get the <code>ParamSet</code> as a <code>data.table</code>. This makes it easy to subset parameters on certain conditions and aggregate information about them, using the variety of methods provided by <code>data.table</code>.</p>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb28-1" data-line-number="1"><span class="kw">as.data.table</span>(ps)</a></code></pre></div>
+<pre><code>#&gt;    id    class lower upper      values nlevels is_bounded special_vals
+#&gt; 1:  A ParamLgl    NA    NA  TRUE,FALSE       2       TRUE       &lt;list&gt;
+#&gt; 2:  B ParamInt     0    10                  11       TRUE       &lt;list&gt;
+#&gt; 3:  C ParamDbl     0     4                 Inf       TRUE       &lt;list&gt;
+#&gt; 4:  D ParamFct    NA    NA       x,y,z       3       TRUE       &lt;list&gt;
+#&gt; 5:  E ParamUty    NA    NA                 Inf      FALSE       &lt;list&gt;
+#&gt;        default storage_type      tags
+#&gt; 1: &lt;NoDefault&gt;      logical          
+#&gt; 2: &lt;NoDefault&gt;      integer tag1,tag2
+#&gt; 3: &lt;NoDefault&gt;      numeric          
+#&gt; 4:           y    character          
+#&gt; 5: &lt;NoDefault&gt;         list</code></pre>
+<div id="type-range-checking-1" class="section level4">
+<h4>Type / Range Checking</h4>
+<p>As individual <code>Param</code>s, the <code>ParamSet</code> provides <code>test()</code>, <code>check()</code> and <code>assert()</code> functions that allow for type and range checking of parameters. They take a named list as an argument with values that are checked against the respective parameters. The list does not need to be complete, however: It is possible to check only a subset of parameters.</p>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb30-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">TRUE</span>, <span class="dt">B =</span> <span class="dv">0</span>, <span class="dt">E =</span> identity))</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;A: Must be of type 'logical flag', not 'double'&quot;</code></pre>
+<div class="sourceCode" id="cb34"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb34-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">Z =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;Must be a subset of set {A,B,C,D,E}&quot;</code></pre>
+</div>
+<div id="dependencies" class="section level4">
+<h4>Dependencies</h4>
+<p>It is often the case that certain parameters are irrelevant or should not be given depending on values of other parameters. An example would be a parameter that switches a certain algorithm feature (for example regularisation) on or off, combined with another parameter that controls the behaviour of that feature (e.g. a regularisation parameter)—the second parameter would be said to <em>depend</em> on the first parameter having the value <code>TRUE</code>. A dependency can be added using the <code>$add_dep</code> method, which takes both the ids of the “depender” and “dependee” parameters as well as a <strong><code>Condition</code></strong> object. The <code>Condition</code> object represents the check to be performed on the dependee; currently it can be created using <code>CondEqual$new</code> and <code>CondAnyOf$new</code>.</p>
+<p>Multiple dependencies can be added, and parameters that depend on others can again be depended on, as long as no cyclic dependencies are introduced. The consequence of dependencies are twofold: For one, the <code>$check()</code>, <code>$test()</code> and <code>$assert()</code> tests will not accept the presence of a parameter if its dependency is not met. Furthermore, when sampling or creating grid designs from a <code>ParamSet</code>, the dependencies will be respected (see <a href="#parameter-sampling">Parameter Sampling</a>).</p>
+<div class="sourceCode" id="cb36"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb36-1" data-line-number="1">ps<span class="op">$</span><span class="kw">add_dep</span>(<span class="st">&quot;D&quot;</span>, <span class="st">&quot;A&quot;</span>, CondEqual<span class="op">$</span><span class="kw">new</span>(<span class="ot">FALSE</span>))</a>
+<a class="sourceLine" id="cb36-2" data-line-number="2">ps<span class="op">$</span><span class="kw">add_dep</span>(<span class="st">&quot;B&quot;</span>, <span class="st">&quot;D&quot;</span>, CondAnyOf<span class="op">$</span><span class="kw">new</span>(<span class="kw">c</span>(<span class="st">&quot;x&quot;</span>, <span class="st">&quot;y&quot;</span>)))</a></code></pre></div>
+<div class="sourceCode" id="cb37"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb37-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">D =</span> <span class="st">&quot;x&quot;</span>, <span class="dt">B =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<div class="sourceCode" id="cb39"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb39-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">D =</span> <span class="st">&quot;z&quot;</span>, <span class="dt">B =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;Condition for 'B' not ok: D anyof ; instead: D=z&quot;</code></pre>
+<div class="sourceCode" id="cb41"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb41-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">B =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;Condition for 'B' not ok: D anyof ; instead: D=&lt;not-there&gt;&quot;</code></pre>
+<div class="sourceCode" id="cb43"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb43-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">TRUE</span>, <span class="dt">B =</span> <span class="dv">1</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] &quot;Condition for 'B' not ok: D anyof ; instead: D=&lt;not-there&gt;&quot;</code></pre>
+<div class="sourceCode" id="cb45"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb45-1" data-line-number="1">ps<span class="op">$</span><span class="kw">check</span>(<span class="kw">list</span>(<span class="dt">A =</span> <span class="ot">TRUE</span>))</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<p>Internally, the dependencies are represented as <strong><code>Dependency</code></strong> object, which can be listed using the <code>$deps</code> slot. The dependencies can also be listed through the <code>$deps_on</code> slot that returns a <code>data.table</code> containing dependency information.</p>
+<div class="sourceCode" id="cb47"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb47-1" data-line-number="1">ps<span class="op">$</span>deps</a></code></pre></div>
+<pre><code>#&gt; [[1]]
+#&gt; Dependency: For='D', on='A', cond='equal'
+#&gt; 
+#&gt; [[2]]
+#&gt; Dependency: For='B', on='D', cond='anyof'</code></pre>
+<div class="sourceCode" id="cb49"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb49-1" data-line-number="1">ps<span class="op">$</span>deps_on</a></code></pre></div>
+<pre><code>#&gt;    id dep_parent   deps
+#&gt; 1:  A            &lt;list&gt;
+#&gt; 2:  B          D &lt;list&gt;
+#&gt; 3:  C            &lt;list&gt;
+#&gt; 4:  D          A &lt;list&gt;
+#&gt; 5:  E            &lt;list&gt;</code></pre>
+</div>
+</div>
+<div id="vector-parameters" class="section level3">
+<h3>Vector Parameters</h3>
+<p>Unlike in the old <code>ParamHelpers</code> package, there are no more vectorial parameters. Instead, it is now possible to create multiple copies of a single parameter using the <code>$rep</code> function. This creates a <code>ParamSet</code> consisting of multiple copies of the parameter, which can then (optionally) be added to another <code>ParamSet</code>.</p>
+<div class="sourceCode" id="cb51"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb51-1" data-line-number="1">ps2d &lt;-<span class="st"> </span>ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;x&quot;</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)<span class="op">$</span><span class="kw">rep</span>(<span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb51-2" data-line-number="2"><span class="kw">print</span>(ps2d)</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;         id    class lower upper values     default
+#&gt; 1: x_rep_1 ParamDbl     0     1        &lt;NoDefault&gt;
+#&gt; 2: x_rep_2 ParamDbl     0     1        &lt;NoDefault&gt;</code></pre>
+<div class="sourceCode" id="cb53"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb53-1" data-line-number="1">ps<span class="op">$</span><span class="kw">add</span>(ps2d)</a>
+<a class="sourceLine" id="cb53-2" data-line-number="2"><span class="kw">print</span>(ps)</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;         id    class lower upper      values     default dep_parent   deps
+#&gt; 1:       A ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;            &lt;list&gt;
+#&gt; 2:       B ParamInt     0    10             &lt;NoDefault&gt;          D &lt;list&gt;
+#&gt; 3:       C ParamDbl     0     4             &lt;NoDefault&gt;            &lt;list&gt;
+#&gt; 4:       D ParamFct    NA    NA       x,y,z           y          A &lt;list&gt;
+#&gt; 5:       E ParamUty    NA    NA             &lt;NoDefault&gt;            &lt;list&gt;
+#&gt; 6: x_rep_1 ParamDbl     0     1             &lt;NoDefault&gt;            &lt;list&gt;
+#&gt; 7: x_rep_2 ParamDbl     0     1             &lt;NoDefault&gt;            &lt;list&gt;</code></pre>
+<p>Another option is to use <code>ParamUty</code>, which also works for parameters of variable length.</p>
+</div>
+</div>
+<div id="parameter-sampling" class="section level2">
+<h2>Parameter Sampling</h2>
+<p>It is often useful to have a list of possible parameter values that can be systematically iterated through, for example to find parameter values for which an algorithm performs particularly well (tuning). <code>paradox</code> offers a variety of functions that allow creating evenly-spaced parameter values in a “grid” design as well as random sampling. In the latter case, it is possible to influence the sampling distribution in more or less fine detail.</p>
+<p>A point to always keep in mind while sampling is that only parameters that are bounded can be sampled from. This excludes <code>ParamUty</code>, as well as <code>ParamInt</code> and <code>ParamDbl</code> if they have infinite lower or upper bounds.</p>
+<div id="grid-design" class="section level3">
+<h3>Grid Design</h3>
+<p>The <strong><code>generate_design_grid()</code></strong> function is used to create grid designs that contain all combinations of parameter values—all possible values for <code>ParamLgl</code> and <code>ParamFct</code>, and values with a given resolution for <code>ParamInt</code> and <code>ParamDbl</code>. The resolution can be given for all numeric parameters, or for specific named parameters through the <code>param_resolutions</code> parameter.</p>
+<div class="sourceCode" id="cb55"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb55-1" data-line-number="1">design &lt;-<span class="st"> </span><span class="kw">generate_design_grid</span>(psSmall, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb55-2" data-line-number="2"><span class="kw">print</span>(design)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 8 rows:
+#&gt;        A  B C
+#&gt; 1:  TRUE  0 0
+#&gt; 2:  TRUE  0 4
+#&gt; 3:  TRUE 10 0
+#&gt; 4:  TRUE 10 4
+#&gt; 5: FALSE  0 0
+#&gt; 6: FALSE  0 4
+#&gt; 7: FALSE 10 0
+#&gt; 8: FALSE 10 4</code></pre>
+<div class="sourceCode" id="cb57"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb57-1" data-line-number="1"><span class="co"># generate_design_grid(psSmall, param_resolutions = c(B = 1, C = 2))  ## </span><span class="al">FIXME</span><span class="co">: wait for mllg/checkmate#157 to be fixed</span></a></code></pre></div>
+</div>
+<div id="parameter-design" class="section level3">
+<h3>Parameter Design</h3>
+<p>Functions that sample the parameter space fundamentally return an object of the <strong><code>Design</code></strong> class. These objects contain the sampled data as a <code>data.table</code> under the <code>$data</code> slot, and also offer conversion to a list of parameter-values using the <code>$transpose()</code> function.</p>
+<div class="sourceCode" id="cb58"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb58-1" data-line-number="1">design<span class="op">$</span><span class="kw">transpose</span>()[[<span class="dv">1</span>]]</a></code></pre></div>
+<pre><code>#&gt; $A
+#&gt; [1] TRUE
+#&gt; 
+#&gt; $B
+#&gt; [1] 0
+#&gt; 
+#&gt; $C
+#&gt; [1] 0</code></pre>
+<div class="sourceCode" id="cb60"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb60-1" data-line-number="1">design<span class="op">$</span><span class="kw">transpose</span>()[[<span class="dv">2</span>]]</a></code></pre></div>
+<pre><code>#&gt; $A
+#&gt; [1] TRUE
+#&gt; 
+#&gt; $B
+#&gt; [1] 0
+#&gt; 
+#&gt; $C
+#&gt; [1] 4</code></pre>
+</div>
+<div id="random-sampling" class="section level3">
+<h3>Random Sampling</h3>
+<p><code>paradox</code> offers different methods for random sampling, which vary in the degree to which they can be configured. The easiest way to get a uniformly random sample of parameters is <strong><code>generate_design_random</code></strong>. It is also possible to create “latin hypercube” sampled parameter values using <strong><code>generate_design_lhs</code></strong>, which utilizes the <a href="https://github.com/bertcarnell/lhs">lhs</a> package. LHS-sampling creates low-discrepancy sampled values that cover the parameter space more evenly than purely random values.</p>
+<div class="sourceCode" id="cb62"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb62-1" data-line-number="1">pvrand &lt;-<span class="st"> </span><span class="kw">generate_design_random</span>(ps2d, <span class="dv">500</span>)</a>
+<a class="sourceLine" id="cb62-2" data-line-number="2">pvlhs &lt;-<span class="st"> </span><span class="kw">generate_design_lhs</span>(ps2d, <span class="dv">500</span>)</a></code></pre></div>
+<div class="sourceCode" id="cb63"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb63-1" data-line-number="1"><span class="kw">plot</span>(pvrand<span class="op">$</span>data)</a></code></pre></div>
+<p><img src="data:image/png;base64,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" /><!-- --></p>
+<div class="sourceCode" id="cb64"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb64-1" data-line-number="1"><span class="kw">plot</span>(pvlhs<span class="op">$</span>data)</a></code></pre></div>
+<p><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAASAAAAEgCAMAAAAjXV6yAAADAFBMVEUAAAABAQECAgIDAwMEBAQFBQUGBgYHBwcICAgJCQkKCgoLCwsMDAwNDQ0ODg4PDw8QEBARERESEhITExMUFBQVFRUWFhYXFxcYGBgZGRkaGhobGxscHBwdHR0eHh4fHx8gICAhISEiIiIjIyMkJCQlJSUmJiYnJycoKCgpKSkqKiorKyssLCwtLS0uLi4vLy8wMDAxMTEyMjIzMzM0NDQ1NTU2NjY3Nzc4ODg5OTk6Ojo7Ozs8PDw9PT0+Pj4/Pz9AQEBBQUFCQkJDQ0NERERFRUVGRkZHR0dISEhJSUlKSkpLS0tMTExNTU1OTk5PT09QUFBRUVFSUlJTU1NUVFRVVVVWVlZXV1dYWFhZWVlaWlpbW1tcXFxdXV1eXl5fX19gYGBhYWFiYmJjY2NkZGRlZWVmZmZnZ2doaGhpaWlqampra2tsbGxtbW1ubm5vb29wcHBxcXFycnJzc3N0dHR1dXV2dnZ3d3d4eHh5eXl6enp7e3t8fHx9fX1+fn5/f3+AgICBgYGCgoKDg4OEhISFhYWGhoaHh4eIiIiJiYmKioqLi4uMjIyNjY2Ojo6Pj4+QkJCRkZGSkpKTk5OUlJSVlZWWlpaXl5eYmJiZmZmampqbm5ucnJydnZ2enp6fn5+goKChoaGioqKjo6OkpKSlpaWmpqanp6eoqKipqamqqqqrq6usrKytra2urq6vr6+wsLCxsbGysrKzs7O0tLS1tbW2tra3t7e4uLi5ubm6urq7u7u8vLy9vb2+vr6/v7/AwMDBwcHCwsLDw8PExMTFxcXGxsbHx8fIyMjJycnKysrLy8vMzMzNzc3Ozs7Pz8/Q0NDR0dHS0tLT09PU1NTV1dXW1tbX19fY2NjZ2dna2trb29vc3Nzd3d3e3t7f39/g4ODh4eHi4uLj4+Pk5OTl5eXm5ubn5+fo6Ojp6enq6urr6+vs7Ozt7e3u7u7v7+/w8PDx8fHy8vLz8/P09PT19fX29vb39/f4+Pj5+fn6+vr7+/v8/Pz9/f3+/v7////isF19AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAgAElEQVR4nOyddXwUydb3M+4+0+MTd3d3dyFKEoKEJLhDgrslSHCHAIu7hLC4u7uzuAQIxGXmvN2T3fvcvXdhgL1cns/75PfHTHV3Vct3uqpOVZ2q0YM2fVF6P/sG/rerDZAOtQHSoTZAOtQGSIfaAOlQGyAdagOkQ22AdKgNkA61AdKhNkA61AZIh9oA6VAbIB1qA6RDbYB0qA2QDrUB0qE2QDrUBkiH2gDpUBsgHWoDpENtgHSoDZAOtQHSoTZAOtQGSIfaAOlQGyAdagOkQ22AdKgNkA61AdKhNkA61AZIh9oA6VAbIB1qA6RDbYB0qA2QDrUB0qE2QDrUBkiH2gDpUBsgHWoDpENtgHSoDZAOtQHSoTZAOtQGSIfaAOlQGyAdagOkQ22AdKgNkA61AdKhNkA61AZIh9oA6VAbIB1qA6RDbYB0qA2QDrUB0qE2QDrUBkiH2gDpUBsgHWoDpENtgHSoDZAOtQHSoTZAOtQGSIf+w4D6O/+LnKytnP5134/T11/K59XPAeSx/PyfNFpoZMYdcO78F7TvrPbr3NT2qWPPfC7Sqd7WUo9ZXzrN+fM7QtkUy2l/ceDM3EFTD/4e3jVz/hHs2/TKTwJ06k+bqyyvAtxzK2nd2tglYcTvP9zBNJekTeh3TSFHxOyE7vzg4z1jdpjdi9bD1Zo/n7bBI+nk480Wo//iirfmjtveggXuSUreN/5qPku797ejT/8R46qNd68EyTosWNtVEh0ono+G7H42oAYtCcvj2Oc9EfYEjdFuS7YOQPZje4abrji33qkDaELbv4SPQ8xrIb8bxmRUIvrRPF3BZGU9Px1v7DKypvVsc2Oxz7fI43+9nqZQ2n24r8MDeF4RMQ7b8YhXC3A3SOYrDX8IcGrymF21Br+g+69JLqOfHTOr0aPmG//bgI79I2uTFmt33Aili5EZLe9Iv77BNsW9Ok56Pj1ajQaPKBrRu5W/R4P1duX77bB9kDIHuFqgdSyUSKfQW/BxlEBedv9sJ4sPmofou5C4QXva7OVv8vWZnju0GwcTrUMXr3D+gAZnOBcg4VRRGbbb/SR80p+thpYS4w+ZJkNGeJj7aaNP6gVQydUCL/f+bwNquvBHdqdrAd0TL3qQLSMJ+Pgg4cAmGIkfvLw3YnlAG9fjKEBxH21wRs9JQ7SBsrhJhBV1WEj/zKYpCBaqpvbCtvOjxIYKo20Re7Txuk1WFT6uLreYiobHmay6Xh4o2Int17CiP4H+XqOd8Hwgx3/enHRt7LiE2Ab0WIiRdmtXNDRucNYGKwU/L4sxtYByJ9wUT3o8DS9wXFQZ3f+g1A7dd5Vw7NagxD5nErcAjByjjVyWPXmQNhBDH8AMNzgH8JEiaufJTP0EsN82HDvSl34dfUENkoqgZpiVkO41ENv5jHd39xzhWzTUQtMWb0+JG+CJY0Qv/0NIH+aqaKS1zCvhXse+lpHfYV+L2vdiGOCj76PBO4Y/G5D9xYQ5AI4exTLx2NMsd+YxbKfcTzJ2S7GK5auwjQqDminJ6X7jj1o2o0e2sGbC4OQNho0t/oKXsCwrtz3ADncMUAvPFEtaYSsus+10NteO1kl7FTNupBO9E1rYgGkIWiAnUXG0QFEy04kgWeKGFuQ2AdpYowjlB9EM+JowdsUpTa2dXZcPGqMCRSVAn14/G5DTOW4lnCBwfJHjueZEEtWwB3pbkXi0AFdH4UY9vVpAHKzfcWM/ivlrP6PoEWcN9RugId1EnmrK3o2WX/JKXiU8pHVed7blkSADO18z+ayC7sXLeWfFx4rp5exlMK1XZhc02FXUWGUwcRJlH8NDc94JpyeZj5b186hoOQfVArxXoHAq7MCR7Az0VQm2aHF3CHHO25tuWfmzAfUqotdMMGSyFlHjYQoxbNSDAQZvwNYcSS6wInXrh0boSEES7GzPFFoZRAmJeO4+LNFBhGiA87sBEGGClH7Mx3MS7e0m4s9jh2pomojFJ97Be3u2U8n7M0bsZ7DH4xPn4gsYaGMe7dleKW43xXEf9E7gr0FjP0nGER02lMtkfdJafnMZwXR/WJgQoJjaFzvTkyhB2NR6+NmAnstVxZIdvMDf+PZrWeYXpXehz+A9rIHbR0+f570yC41whHBp64UWWEdAa936m+SFWKJIZCsYjpU+iLMOwRMI1NLePC8ZUXoYO7TU3ppAT35wRZZJDvMj2eDoyW+bHSKIComc++SAQu4zdxclO6drpjIcb1sBdyXZXvOsiVaMJ3Ux9pMGEMVaiygwv+DBE/T7l9YC/OcC+rWTrxyHt5srR/IHmZKPw3KkQ2euQRDFx1+YE9Y3Z+MNOEDSxu5MbMK+fOSzhy+qkBk0Qt+C/m6ZzRvsqgINUNvxxJ0O4WSB2/ipTLPj/fuVSBxXNitN8Cwy+1r/QOjPx/tZGop2eyNZC2Mt4j0QE2+LVYiVRZ/0InO0HrgqkqNnrijsh1+vvdSAMIKh0mALxC34+YC6WyzeN4NOU+ozrRyNZKFoETLD14w/yRnZAc/cSHj3ZMPoiaRKLHYg8nHvyvOQSKb7upKoZ1Amzq7EZb0k56E7FSuCIUg4I4hNEbNfwBPJikJKZXZszqTT/G791KYnOUvNK663rFcULI6CIwZ4PG2s0adzokQFkyRAK4i7sXicch5a6lQTFmlvzFWV4nXsoCLAueGnA9prhT3bAnKcrGt3M+OeSO1bx8ilaYbEitOmXv6IntVraM4gx4fs/wgfFA6y0GxzL3LxlUl9E6hYDdych4sdhVbLI7iP0K1rbNQMONWOQp/eBFe82ThWt0/up9XEVwoVz1ogPovGeId71ujiL13DVJFInvninXCrHeUOak9LZjvaTfYe+CSDiqfMQTndxx9VL3WkycW/m+Y/FtDHW01fANRjBhaoo0jR8mUbNa1LTNpAzRrxJXIErOB6GZNodCdDCy4HoVAdJBGErWjF5oRHY8Jhkip6ZhO0owxahJYVh/Ev4eX1CexTMEe1rCM/3gM1HstxQoZAtfG8WYxbJleI174ZT/Q0UM2Vk8ljrplxZqCmkSafHbdTUzDmBfekuC9T4CG7F0MP21+M8LS310Ju/rGAdiXHrIUFFD3qeM1fR0ABtf+lNSS1SHa2qKAlqvQUfM/zzVT2ReQ2uNLOCHc+nC4shRvTTIs65ohT+gfxRCfQ0gIx4UyIsYykqBw6I6UwxFyl4stwsoa3gsewhPQmaRpoTNlR1S892O7poS23Re9E7N6Jfc+X0O+oy7mn3rNrYBb+XrqUw+P4sM39bOe7j4FX/aiCoaghtJ7q3f2QCMNTX0dV/1BAG/Rco8gDmeP2DCMt/SygkZi1q67F/XJ545mGZMqMAwQx1jSIEAwYgNpwNtCzGOReu9A9tyXex96um7ZzsmW/MeNFxwqT3dgcyurqUKchPDu3ozxfr/aF/E6b49D2hinXSHGzF+lqnjQlFid2LSmVlkFHnM/KIjazZ4CTOd2ZG4kahDjOtBfZNoSyA1ZEPTw5CbWYeJMOzN7wBpJXN4HF/qthdLrc/o8b/TGAHLphkCajoSLHzwJ6hBy6GcUk681FN9d4cqpAfkj0HOAMzm7Q2XYkZOrkPlU0xhismS8K24KluYAzGNmREiW+CTCbgW7vLgwNUHeYjoaaHejF2Zq5pPBePDxO0h3gwfptE/y45h2uonSDbPn6GYr9DGFPprEz8gJ2slU2SXi7EtHNgGTS0MaJBlVvCaauPZKR7mwKPWC2kD3zYQnPcM4PBURHDd0aPTRDwB7GZwHBfjnZ09HBnz8LoH1aBMBoV/v2lxqyc7wlHMl4GwklzlAvfohZyKE3dD+mRfZdCCOLevdRUtCXACYytWc55PvC/hIWeCmj0+SqeICpHU4yh2uPzQtGnzf40tQ+tljPytjoxIuzUpUnuk/eJWe8vVDG8NeniRjXBOIJJYZmKhraEIHxRNbDptViJzuRPP3+A8EPrcVMpgCc1luBhmZZfB4QJPZcfrzlnR0xswciewyVgUKShEnVTxzICFODegKJYO+5eIWEJ6cTBvnbZXI64FY+nZrN+FWBphwsxE5y0YwoJfbV9oKFrHPu6HTq5UrxdbCw1JZ7FsrF8osrxB3DXF+iVcUS+/Hovo0mDJKFK44XcxI/RW0xIELGOsEikmhWZPHUuma+gTkaZSW5tS+uFfyPAjSR2neM3Ev2a+V2wbAvAJJjJuvLYJKBPjkMIGmA2rlAyU3Z2IXA7j4zH1mOP3edy1+/nUkxHKRZn+HAMcASJucS1A9mIBz09byOKLdBrmwwuvcE1cHLFk8jkrizNVG2WU+gMo9wH9ZKQz0pLB5CT3jQN7xfJfbko+MkKzxWLWJLuj4QFPc280odo1mUVeYclMxgEft5oBGqcC+xy7yXxfTf9+MANQ+Xifppuujp6UXXfgGQDDPuA4a7nIVDhInvubUl1t16XjVGy0zbGX1KX96nHQBrdyMbPPMeBzsLQg6KmlL3MQFvSKY6chkFS+14aGn+1oBy+u1YQsz5I1G4hKvNt93HykrFOBwpCitmqypKyZQyaCgRCiYQ+RLlylpL4z2wT7E/XulJD88nG3Wif4LoxZusyNPvnTXbhHVHfiBiZsExhLq0xCKz5QfbQQeXn/ncodYshprzt1WPee8nBSAEC465/0NpT5GeoL8Hd0zXwmPvcbdG4OLSJVRSg/l+ND8RVNm7skyfZVl77PwIbzxiO/Oxzmp4r1KI6Fh94O/HxDq2KdaWB5oeTuNbaa9ziHDQOKR3FMtXlWO4cJlc2oWF5r8KSyYO6Z2rIBLJlFsdXA4qqPSOSInICSsT5tvw5jQ2ilWzARr9F/x4S7qh5q/3Y4BahhJJxhkeduPt0g/tEnJIc99q8GlHVC9ypbjIRRONHUQR3oLn6kwzBpcoNtlpz/jNMagkiB/G0hYSV4zA8pr2VL6H7utj3+wbLDpbwuWwtB3SEyn313brujBLBfW7SrftZpfDsWyvaO5rvjbNLtzrq+J1NVKFHmvoa9mvK3EDFguErAPqhhS8syuJRKNpG2blwT8eUPqf0jU/+EMMFFBW4OoAKhGX5x9QBYekfLwpkkM7lTUYGqkEpGNvO/ZYiptzuEtoEV6sD4clhNHQsnZAdzKHQI9rb8gLJDZ1iS0YVAG/8d8sVp1D3wthMW7KvGHeFFvtpe7zafZz5jrgA1FbSwN78a02vf5jrD8SzUI8O5+hW507wkDSo81RNUn5wxN9IrbZ0smcPQDPfdLbaWNft/7xgBbm/vPWMaM/hJ8Cp03QmrRxFc5cFiDbZWrxzkUZxpUw/WtgH8t8k79F7JQI4upcVuwJtoAhsHdlkKrPn62Gdrir3Nsc9oX3ZfjRKlrcKBsv8zx9b5K59z2Io2LFzlmyofZSj1jh1nRmZAb5V38mKzyFWFf/69L9TdKnK83QbF/BtTQlGURvAGhSCFytFJ3RO6kIB6iX38DS3vs9f26I+amN1WKsR+yRKIfGnzOCRPwNYrYutaAmizNyRTxHwzl7Z0vF/JfwfpANhXKm7tLZpzihs6uwj9wCfP1HFIyBUXHEeU+zRVRuLHIcesVNMW8cict88m61LBmn71ncCHMpz6B6Ml+qh+tX/SiaYD/UOKCzj0oONVMVUhEx8uhZEf80diO+q3o43MICc30yk0a2mleAWHebtvzJK8ut3wGo5WG99rte55Bs9fsvA5pYiH5P7LM6ydKhozcfGqV3phrrec78ZfFquhBLuoQWh8V4wOVz6B57Z+DCPsJjFWM+XCdY2cvjTU+QsR5szXnhKPQ97C/kWXIcs5X88AKlwK4s0X2ZEH++sUfIQyD5EiiC3CVW+F7vPq3lc7uw7SXO/pPQlN1SMCP/Mf/CEg5mp9+juK3enIvTZsAmmiVDZkNjToRvBtQ8gqZHG4yZZiu++Eo9GWrG0NOjmBQ+/Dygvc5owdFtXvaM4/LZVrgg7yT/+P2EEIeCtwXEKDTGG8uUgZYpm3en6nWsathlyPTrJm4XzSCqYRTR04DBXH6cox0eekPerv1ql9eN3X0HPBWN77RQLiKw+FQLFfu3Q9twNRO6oI9MTIvns4NPybyqQLMKhxmBz+SMS7W7TV1V7X3x9rMG0tyw09jy7NkOsxYx56p3Tyk23PXtgKYS+2/qR+ykC9BFurJb6aqVs3oa8S5/FpDat2sVDPc3/AjpJDaFJrUL1ExIHszFM3ulSING5IvHz+pVN8I/1LyLtKzyXrBe7sHfNu06Qnhw2Dh2Qc6UW/wQPbLzZqy4naI1nCO5eeahDnHLQ6UXUFw2RvWjo0YSOP4C3MqL6JvSgvcOyz8L54T90agavLbb+QVbTPcMy64DuKMUkQj0vh9B44tL/HWJAVk7RAKrE78dkFkRllBvuw5AAZF1rYHmjJDPAoIPPRimdOrJZ7cl5/jjkP686C4GqGmdPw1mdtoyZv596DTA0dCHT7l9LopLVOF6WqQ33dhC9E4r2Udj+vsShYpR+6yK11LpFMkygIeEFfA6QSkRMH+Z26d4pywYmrrQSBaW0WJFiTNAKiF6b6lywhLbCdjFDdA9mlXOOIfJbzkf0e2PMlED/VnHIM12N5sOnh59Ff6tP7PjtwNi7MY+swzrvgyIvemP0DHu5wGhb/7d2/Y4FkksWghvB7N5Y7EOsaJxWwez5qGBHSIReppaipcG7FcAc2STv5mRK0NII/GoAi4DTz3h7tGLRExuybBQ9p8ukmHnuzPBSCnpOLMvR4JWAFUMqnxXNymB3B6mEScafIA3smG0601z2oW5MO9DvpNLn3OJzpZYsmmZJLA9pXHY33889/RbgM4K7T3uCP92QK7YKwqvkcwvA3Lp/kdojPuXAEGlcvK1UXaCUCycJZ/Ye8EncDQKGJlClHfyNm+vbceFKo7fNIJHHPEwJTJOdPYAvYffUnhtEpqe9HLxWDI24rrVD08m8w5hkR/ok1LRZklPHJr5zrl0oAuHnAjXw9ORHBhmMHtPIItxzyFh015zCs+Ryi9qBo0PZlhDO3+C2NLq7eDJeXKSldDt3CR6v7VPoNFn6bcDGq/XbTNqM+wmZA35EqBNuMilJ2/dPr0yibDpr2P8DmhcPvqx09sU6zZ2woXOyJCnMmai4bcWnRZu9q7Aopyg5x0IvGA//UUsjZj7G0B3OqP5yWGJaANebMLH7UVjnBfzbl4SKTHjd4dVYge+r5EttUNzqRGOwZVQkGTZIUnXheh58iM8s0cKYl5fznIo5ZubnQTNmnZGlDFoYcQwTH+1jsM2d6NQHwCsE/EFdBN2hEW2+tsBtRSx9bA+850yvS/WYrsC9TDhgso/E+F3QHGopQFNtm6zAAYRy0MEjgyavrbMncmwi2NY3auc2X2ClxEDR6K6rJyV4IkdKbfCy5h8nEBEroOjepjnQliZ8BX4FCg/To3nuRfC26P31d1ozp7zaMZ0hwYYmgdW/fP3zt1dC+0XgsQVsRs5XcKN8pFMS/TYMNaK4LMjQsxC89VdrqiHwGxUA9QJKbWVk9sh2uH9b7eDGh9oe5KaD6ANufNfiP/++r59V9999rAWUM00RfAq9Gd6ouKGW3BHoy/Oxfc2LtjhZ0IEYI61XNx1bm98HzvhgE+H3QKE2nHDVcmEmPGbzhNpytkyAp6AGnn07ajh+9SbRDflJFoJqtA4l9PsWdbBBQjTdXie4UtwmU6w6x6qP0paVkhDf7FbkqfuM9xe8Byboevkm4wQ9hCnnHtHrHEkiduzVJY1k6xtrBxw/z5A/yyHr0z7GUA3VDlZ7oGeH6FWubfiuts+9MFC6ATiOmha6WWBPnODKz7v0QbToSKfx06+I3sQqFj3UYtfL8PwSgA+CU/mlR7Es65XEsmKwAUtGlLs8sfwjpYGlbH6dEM6+lLelQmQ4Z/gLVs8xcS3kzXBOGCSTJ7xPNQin/nao49VfMtsxbtbvr0M71YXSvUU5hUlzHlQff2AjfZNfSv86YDcl0G1Ra+Mvhf8cpuL+TSq/3rxikY/iWKEZZQjIk1sgFWI0iDyV3AKBPW2MTOSU5Xzz2z2jh01YiASE4H31Y6PmasYNELOnX1BkQfx2pGa5YQsCwdk9vge2LDpQaYksGB/YEQmNOxfdkgRBrDS1onpmOHBTX8Sg2cIQi+3V5rbUFB7J2D9R/7rtxz26P5l19jDWuY6ss2Qpp8M6KkYLW3e9xbhzOe19A56uMtiNmUsbDU4K8clTeS4NSSOaUoXeK9Fc6BHqztTr9JzvnQ8K2dYP3ixc0+Kkwm675p4natsu2wntDggrXVzLW0CY/oj2OOyJQRaklgsqRTfrk+XVRfRspjZGSp7ifQI5oz27+1EzmxKyLOszvXee8pJ/YCxzSMPWlxxUeODuKTl7UJOfYwyCfuOQvo/CehSa/I6GnrvfNReGyMh2ycanIW7+OSiCU6NV42t7Ugj/D3eg58gqvN2UFsfH2N/pOnNaLH8E0pmHkH1+MMiBlmAt/1ttjlbKPDmao3TRVwLBK3P1L7pSliiMv708OpNFlOVZRby7Lxs8DPlwOX2JC7z2C2Oy2m+IMeeWz3Fphlm0vh6BKVgaGmgxIVnEmoi4G9YEeDzyWPLzwX0Dn0i9eJgfeZOKI/A9t1mCMrQhzxHvwCadNfVhCRD1l7o2XUugVGwyD6pY9hb3mss2hAHu/nucgETJ+Yy2lf39RYTvV3EM9anpHdeOnJxP2rmCn2XNM3rnaF4A6LnMzT+CdpAyYuWMe438JPjhsC6MPNrHLmRE1e+e78xjWkS9Ai1pOkGDkvgVYR0iQx7aYw9mCR+ViNM7/1zAUFqj8aYwM3Ona0H7m1tkAQo0SbA2ni9iegrss5XL/nQMVW7IjJ+2J1wjiUh9GM5atk2nd+x2XkjQxi4VB1FHhBfPV4Ry3XeATctwsduoTJdVHphmhaDCqdwYSCPsyDoV+ysWX7zpssm70CoRGsasu4Es+sj58P2/m4fNWtt8LiYJ/VlgwaSy8+LF9e8wMmxwV6NSNKt6nR4rGZewU8G9CFGJu4oGaiuUpzgvXh6+L66C21Jpb+dVOaguAp1/lgjpaZsGCEI/a66UWZvQaQPrzBzjBWzFgdjp2gOIlFZ6fc41oFDAYaRbohOnl+QHSO+AYcQiWxZoO8RRcJk9HH368t+gSt9gmie9+2oXVgMnIGStSRKXAFj7Y+lyDJE+vFTHXE9NVcjqQQ9U6yDoJxSjJ6/2bG83aKfDAggPmM5VhX1nl7E5vup5OID4SSi1cbnbmbSwYZZDOwQ2sZo7ZMM4F16zI0ioWbMOGfpYO2uDcYl6m3htAQV05aCx3lg3aQT+8f5LHp5gSJOX6GGskDJmSeeLjymeMxCRIGTbm9xiuQpb7g6kihMs5ZK3qvfRHvEVOdNcQ4i29Wadl5buAbGIwH85U12Q+pgvI9p7U8H9Lv/wohRdqlOFLEf8gpMLqDb6h2c/tlMHtX9AtQnZLqiduPoUHo0Wo8pVWUti8ULeK2O9vMDgjs7zBUsIdsrljxm+7PQdshIiod9R2SwwUjs+H2DCWK2o4Wp7yuZ4Y1plAr9XccFKjt46uKqkopMRrjPV8yBcgGr3dyGdqkRm92aDhp3UzK9SXhSu3NZTGuqidbj7HsAfTqz6QRmr8Lub8Xy2+Q/RJmNbY/Pnju8rAYCh/qieQFtY44DXms3pHtw2ttPsTJ6jmHWB7Npm5GB4WRZb2i2pNKZ7obB1iThfDibwXCRcm9qjN1D8Hthcvoc51x4I1RFDYTbTCJmUlbFEgOMCUMuNEV50KzHca2g3BUKWFR7bpq4o/dOBwY7c/nqY+tCbGsLWTIcOWTENGQfnBeI5i6LnKx4U3M9Qutu/h2ANKNYaCuLPvQzfi1f1P0hf4isnSoxHh80rp0yjMFERmGv87o0cDp2s2zNg0auDPM/PRHuuy+HrsTjo6KZiTW22yE9L+WD0RrIbqfgpwn0w7ZKBUqSlNlV2Kev4tFTnv7zhdknKcoERwGld+64O1FWA6DcTXIJNKV0ksKIsqqJol5gOORylfjCL6loE55ib5/prhLkxqW9hpUCvKzDXdSU54ypqbcc0W1kw0jL+u8ENAk3+NqHm0Pxk74D0P9Im8WO6f/qZhREwy0Yl5rlgBJa1AlmieQdMqSOLlqvXjjhYTO4FpbLlVs3umqWZn8czive4wfPRU+P2+MjUWsnx3JFMzwMIUkHvYNTKj0G2Vg849rWcwUkRkZnDtnyA5yznZmDNjlI/IM3uxFiqFMFOPep+z014UsA9hEs7kBLL708k2b45Lza3XVe3uB9xTQ6QzUmlcZkpz6H7wRk3ur0XvgZr4RvAZRXCup7awQhm2/IP6RMe7VQ2a2qh5U4p7uZIDkBi6QpUwWiX7N6hqxR+3TdZCpQ4kleXgGMqHdQJMYiTApNgdvBfBy1c+V5SW7sFCcm1hH1G6PL9SxbUyJaArSYTEcbv1MIPdHdB0k0Wk6eoaeBR6wv2oqYzJyJSBghkQzDaYWKfpoJOJ+FU8yI1Ldww8dKSUu/B98JqBmn7SSHXby/DygKK8RWZvSdAYOtC614UtNUKaPywYq5p3bT8KqsB1c8mGxW7BPYEVwyAKp6EQj09KeTCTiXsd0kx8MFc64CvOQ5vpXPXcDx7OAVny++Ak/5LNQkH8c4jzb6hUSGyXY4LZCunEThMIZWPismMx4D7AylEopRPtW++lXwsh5WuPv2n4RmQ5WFnXUMh8KqgVtiVkj/EtHR7wSkUeVrvwti/z6gzljP6uIucTlhbmFmOPeFLbCFgI0mHUaIfU27CHiB5j0njbNurDdIG/Ls3Dn8fLRcmu5JOIM5y5G53ZXdWqCrQGpk4Xl9uoCMczyDlvNrSSmLhjCiABZaH2EmHTXYvM/RxZ/OG9GbTpVnuLc6c1UIu9dDKZ8oFI5V14/j4QlFaO6+xippubzTZ5rQJM2ir5X4I+y0+05AsIeWvKcucssAACAASURBVOn4phTqtvPnzzf+PUD7DGbOOXFWQYypOFNC0o4kVJEwzy77tSzNdh8ycfDHbe7qwC1wkcJg8HEkrHfJextF2Gu1FSHZaUxV8NTJVFdZ+8sazCWTd3+rM1WQadkj2MvNt0UtuwaR7CWjyQJRMKE4txjqnNe1iCO1lz7pmiGzY4qLpVf8xoXEGx1oL3RqfBzHwJwIQocSPER6eMEszJ5+9Z2A9P5J/zZv7ZsAqQew6M5SBUFeBZqVFKa21jAOA7SRNrQDeoceOLHztODEbr0XeFP6Tv3lOslXA89ZbLzQOJzqteNZlCqAQB542FWADe899Jc5WuxrfDsA7+g7YyLZ9JIUbiCbEoi4iQ073JGd4n2wJqG7pzE2oNfU0b3stHRRDYzXH8cwtOwB6kV0PJVN3YgeG0K1hRbSEyLWM2fw8DsB3f8nNX8phU5Apb4fro3L9+MksR0lnp1UR7D96fxQBz4eQW2+zmLi49PRQQOIenSaBC1vwIadsMDaOC9cPVtia3wd4M4I3AeAJYHSWzAdYabpcSrqdhnrY6PqFSwZPUm4BtZGU1pgSZfhhb8ozJxJGf25gqx7V1XkTlkiInatU50I1lifNtjL9tyxknVDMyY+/hOYOvtloRa8oPk7AaFquP/dYP4ZkK12cLyBcLL64gu4SF2xP0Jlw+gl9IhmhLnWnzEaTWs+OFLO4V6G2D6yd40pxiQrG0owES08U8jeWMoOfGhe0glBem+TOPQ44uqHp3mWM7U59RUZzzGQLJkQH4DmY6/ZYoW/VO5v0H1fHINElB4EeIDTNmPVlKFn97+BXYoeaNXnTOnYnWPdnsXmIYsDWw46T4TvBTRXidOD4Fl/HxDrkzbIHbZ38f6mJg6Dl9+J50J8BDDbIWTm5GwzR5F+b2Oc6CmkrOk0fXJ0c3qAlIsMR7L76JPGrQ7U9xdFv7KLXrIIIZCNftEcDICQnVBL0/p2rCGOk5Qdt3Khnn1VUW7A8lajLwQVm7T4Kp+i7Se01XY4r5NQXIMEvXuar8JopYTMHWVcUHwXlnPoRAJPf/N3AlqK67pSD0bgFn5Fom1vvgTIUOtVoWETXHO9zZMiuEO6Tnn2i2rkhQ8wj8Pks1aPcAo0ERlPCIMFUd3FBEV30Rj/cNWd31bO7N2exe8zypxqnIkN9Ca2E+3DCq7K7nOr+uDInL5VYMpoOB/B5VF4PZDwUDrOYUgOMpuuncu7kH0H+1pFHnj2wiiOzLr7h/dxPGUjqNcUOIdNFLN6dEc2v+QbbqmDk4bbvw+QVT+oRDcG2XxNov1fAjQoB2uulJBGyb1iuLT5WttwkpDkyJbT6OQ0HzBBCxqnoGbB60Yl1R+ZwsR16M4gWKTOr/cYbz47t/fWh0Tyhw+X5qneELH524Xe/hvdAmnhz3LdPxC6aC8iDiUX7pzNZneetOwZtE5CLKaVYD9aIcJiyLp6bn3fjSFnEBLho7f/fDtr4qlT+km9aSK6tnze6/J9gOjlWkDln3GA1mpLVqv0grOyPg+o2s934epsbibUHO/vw5Zjk44/Snhev0lCbYZleyND6LUtMySqTw6XXvDFZiQrbuqoc3Q8bbIXK3SEtrUOnXECEo3o95Bv+uFqrJCGYxF8T6WaDlQq8KUdUourNRzBgf4x3TrlK9G4DTLUcHsZaozzQebCOMqA385kOCJoTd7yrMWRkxrbuXmqWQ+0yKotK3Qd2Dq7t4n8fX3STqO0gMbafSHybrqeswcqPUsPj88DAs3arpkzctB2UbpX+YBgch5a+iTKTbuOBFvOwyp+Il5C4iRl2rCOF/LaoyXfwAp36/ZWEo6nX6+BxdqTlOKSl59uLFZxCoWMzPZIXxp6Bjg1NTqBZVe2Pkc530aCxTphSBmzthuDhPe67d8/Kl7cUZxG6IS9u2l8bXbbSnSX4aiiiEdpawTo2/XKkYlzxXqjP9HhuwAtJ40/pfdmKXn6l2LfdnbDLv7lLNaqQaMvTLVuhL5TI1gH3hjRSEycsb4UzQ7x6xX81WdKpZ6IpZ2nBtRmZAJRT3hp8hC4pz/b0N4k/QZ4ChJQI7heFQBW7buVvod4JZwd33/FRIc0ZMaT55mkCiZWIpfQcO3YTJvM5RwShT+o6dV4HwSbzKte6k1xQG/yDk+q1hDHI1UwYJz1dXiptJpuMtoCbYoviPk+QKiVjpqIlMIvd3c0DWHO/zpAY4n2Cnqfx9LbHx2pLLLsJBixDg8dCxCbk5huNnySM3GIEZHQt6pB6BBmY9TfvmspfGLIeH1vz0byOcM76ufnI1KXwwzt5JwN+K4Gw6bFU9m/3UtXypJ4rwKmPIPdpmNcXMlWsiao81Fqe5tuS3LQLBcUNNZKQBtzOZixB8DkcsoKuCymr7zZN0NcJsXT8a4e3GvfBajpcX3NmfUH3+pMcFgZ+fIrAFUYdDbw7mrLKPkww81COd+jBXp758hXq98JvPfCsXFFW8Qu1zVxhjZL/LjCC9xaT/ZTOMKf9CgK8eGRPaKfXRkn8Yp10Sdr5yO04EV34EmWOa51noX1RITAlFqHKO6X9gJX1H6ahHVztyzwpnNuwvQ4zbieNd1ItsbY5PnJIcNGwjoK3oBLEgw1ObmJhsebOgZ/V5drA2/zV6b4kCb8CkAhG+GEjzyPtV3axc6R1SMy/GQ5ESczs7AZ4nKu8UkLHGetBqgrJDLoxvy+LhZUs3knndjPAZ4vVNETOaL5rnNb3LfV0QZg5zpJS0Po4qJqMjanGappVpcqBzvggz7URbPJnMym+mxC8JwPPuHuPcxpZcF7tiD3LsWREQvMVGjpzvBJJfrcXjiM7WB0BpzKoidZajKGfQ8gKEz46r7EtX3v6AQkQx/2g2Khl2h/iemiNPOcLBsCn8diSDgvkxzpSuaAMVztHS4xHg2PpiRTiIgRPhTr06hR7LS7nOkqQE6ER2lgGPVM5bXDJgInOt39EFjZ7MmPLIijYw0U8FQ1e0WJ3zk7R5rKI9hmHHuv0IaqdjiG1OHUHsmShNkFBGzG1QP+ROeBUDsjw5TJhsvyT8JnzJqr5t8FaKOv/ZDpM1F9VbIvedprZXoT/bjphCdxAh5eIssMO3CMIxdqaqFglJR1DCrbcw0AaxSt9PNQQ5PpKqvBm6+aW+6CD6sjXnNq1UvFeLP2+1vgOYeKJ+JdyMMam7YrtlvaEtwi+dRWn94y/OIgTU8L0XOGqXPDiyKaeA32A/u4jNeA6SG12SWIpk4udSTZlLqcvWOQtWYiHqfPxPPTWmh173nfBUjyh74q2Z897U/8Y/UXQmtFDb8aCSNWakaJqFYdkK3RvgrjO+lUM6zuWenUabvKPU5Gp3PobuWQURoaf22fTXQ0+nSrvMX6XCrPAcsbfXEhnd3tLm8lLX7yvEqg71EN6g1iE8PLKxdevo3XLsnRQGAnrMjjWLBxftoyhaYtriIimCNvSZqG+DUfXUiOpQZt2hPP2uKHGZxKHEGOa4eUusFxp+8C9E/6kn/Q7/qzp33D+T+v/gLDzBeowuychKKJ7nBRIGgaIjMzstc65JYar4O6Uzsq6KK0Z+WGvsiC65PMiOxirAfqrJFYZG1M5KLGyj0Wdy7AL0pt12w91SpF4Uul6Ul6ak8uzD6w5wWs8Y8OtVfIIzYzUOvyzhAFERscnELIzqaRqQaxFVZuWTgiNosFXIz5LdiEx2n4GRF9MqlHXnrO+7uA/va42A3Ze6ge4UE0udVkuvqdu8krs3LYSSc49atsdPLDWpAQ5z5uEEtKwGXmSPuq9/lq026gn2m6dkA0D23s9BcstYgsHkRhYr7AdbRuc+Msu//C92Q/wOJ54iyChQGis9M4OeeerDfCl8FC8eiBOPFw2M9GzfaaEtzmd9KtsNfCQowN+h9h0LuF2dKMWghhLCKdSMWxJjb8UEC6PO1Rzeyh3bALQ1snNBJVjzYGDiKu5IkdBY5pc9G22fM0HIna6XVyZ6urUBVYUq/Eum9q7LWFyy4xcV4hSZJUsiKOJefqe9wDsEebm3Vw3HSIaVwVwDJezxiBSJoDI9mj6gEtl/k+zDvVMUlSqgvNUmum2BiNzH6132BkVC42Q/22MR4xCwsibzbBjE9Kyd3bsfE/DNDXeNqjGt86HzHcAZ5JFm6w4LlHgUVFema8tYXlhGKz3Btm+aTUmv527Gr7S/BmhYFmP1uicpZ15Wjr0ZfEOJZx3uZUA/HlvJTEWVZNsIGQn6SuUAYiJLp4IRgIsF+oklMbuC6dbkylGTszWBxpftNeLovHS8bemf5JJDwBb7FV2iMErfDKjCy6NEItnYkWjwtssXGnZsujPwjQV3nao9oSpN1IZT8cMggqZMfl7EFcr6BaeO1OLOqrtOPjLKyWAbjJH/Ofpgm89JwN03skBfN2W++H8iCJocx9RYVVDTi4PkFuO2XajRxkmmpCZDkGdqwtpbozOHpBm9BXYT6vg/lJaLhnUpGxpnt8WCbcQQZn5k0b5KXRPI5KUqY+0qzhkNmWxpH7lcLr7YzzO7Hxm1pq3dnarpjBk38QoK/ztAdotBw7MjQ4ESlB5Flx+sfho7sNZz36esQMIQPUhnqMrzst2ageSrEvdilseCIJp2Nj8icUu6TpZutmC4IIH6Gn2UCEwJkBte3xBETf9Tj/8St+HfQalM+Sc+Y5ZdwySmGPEprVwSX5fsWN5an3DKD3mCEjjxi+tO0lEOMJs5Xv4CjPjymMkeIluE5Pz89fdlffhM5STNbeZeGEHwToaz3t4RiN6aoUiW48t0tbi1XC2Yu4ZzIQGnGCM/rjd8VxGZHrPVh0YocKtGbr3tMiaxSWyPbiThKDFXr+LmsStISzmbgQw6u3kIB1aJ1pMtyu1GtntOQUclnSYVSji9miLQ5wg5o6n08Xk4dVStfy6szdqCXqqWKRKF5WaiHuajg3KIFY+GgqT7jNJA8Z0WvsUU5VvXp2EpaL1XYHfxCgr/a0Tyy+X35dvTgApiUO9XbK28RZ1Ik8/PVJBakAIC2O7N04W/riveUYrshqTojrB/niJDTNY9sV65LUaOu0jhEAcwIbJlAbV9kM6CHC1okJ3rbBRI9k5skPu27+3KhLF+ow5AxqOBFJ1rj8B6FFp2QsNpXZM9jtwwVC8MKqk+4Lk050YQXLAZy3pK2bZceVzCpiWmpaZqnw5JSnL9LDNT8I0Nd62qtp2OwMaGJ9ukO2WLXTQM8gjmoucLfBj6M7ItQ5xkEJV/rlhJmqhjqy6IUtENIjE57HSUmmSsxl70kWFedudeC1l4vdEqUhV+tJM7C4wVSAGjrd6BkDoHqMCbHvi5dH778nbDiTnVH9knvTQpWcH6qBbum9CJfQTMw/pg/7ZXLzix/Y6qCKBg6H0MUg0fGXgoBrr7LIeE5RzQ+rxb7S0x5z4MQkf5Y1YpglSTLYAmSmy09f9FLwVs4MYAU0TLKkMDrbfYJb0iW8GSe2k8w8BHlpHWEG4QE8lE7oZynAWyEjNDs7iVTjGrAWSfbS7YEHRKOPjqQLL6H2eG/a01SRr4ElLpgnNxXF0QVTeC2N/hFbfPA0OjIBYLaBtLuJHWm4fJRkH6tLZ4dH5HlXYXOgBGsfqbsOxW7t2wH9keDQl/2DvsLTvnFeDmMs9lhPBc3Cl/Bc2AiKR9JVqA03lMUbnMELET4FKA9LRpvz4EvkBesTmQJ9Kj6sFjbSSB4e49eJ7981oe7E1rox6Uqj0wPPPxI9LxkAT3r5+pPwRozu25AASWEDfJLrFb9/OlE4j3f7lgVaccxBeLj9/JMOqP2cxcXx0338FvAo+MgF8dQeZlB3eJK01bVkf+D3ASINx3pb3ub8vUmsmJ+0edKKVJ7Va6j0Ce5Peg1HfdfncwdFzEQbeVFL6V2SSUpW0HPoPN73KGqjOK6S85WSsNo+Sb+K63s6DVHS8WSXc/DaA2ciCLkzy8AkwmrBEKZgISzpgJ79k1EoYpEkph5Yz3Ic3F3O0MecGmf42MEnNpqnX/HPm8AC4/FuD8ZKO5ag70pZioRgdg+OGhDSNuj7elERrfV2IOD7AG2SWxzXLBMYfrN72b8Cip+IeWPRZbEMRv9pPNHRs3TvEnomwlUCeFiOLpeE2AdGizqYfsxYeOWBTwX47HY/LHm8sBN4L9avLmtfI7VbD81Og2WivlEUS+F1KO8YGuoJmjLGyEtQmu6y6eK6467l0/sdmDJ3h/lCWu/TFwfjPEwDPXKb6gcIZSktUGGohyPFJWkbNBBnVyq0ZuBEcvyIdzazWZZYc7nvd2Yx+NSXZEkeWve3+KCA6pjaU9yljTJC6581KmQga23kAFjJ5hLxeLNaoyOa5RQi1/hdS0e8pRFxRSGZjndzOfgAeRPXsW+L/ypIyuwKO7zfcE9NHxU0yFh70mrGC0+PCAYv1luZhVXTI8bOz92YE5VjUZY82N3RGr/17q++YkOOEh8c5lTZz1Ff83E8G/NV0YBlwqNyo75nJQwvlmA45LGyhs0doXz9nYAax1IE4q/tVvw8oBfS1hArXbuG1kIy2QrvtmtDOMF62+UdVAMFfOwSCZVcGBw8TJzPJxLnNSfkEVe/dKcQzBICI1rgAscXxnXzxhorSx04o05igOjhozRwpQtPgJoZleuntxt3i+K0YncRzrIM4KrAH43S4mmWtMhkC/RLF2ViQ6159H0zTYkCKiJ3JrtdGS1qFx6Fno9EppBo3+ujeMhcuLJpAiXq0d8E1MTRDrs+FgW39svm0rbdLgpPHU0+CJi3PY6Akx+EekoxZVb1g3n+BFeAw0LEXVLkL2Tjhqlb7t2NV3K5tJmoPXRZYMjqYZT7umWNj/BQcekFOKsI1ayVJPemq4oMLTbdP6jEXYDDJoQgbBbzDHIjnJX0WklBPLCR72M2TF68kyUDX7Eqa6VIKKYa4Dsek8SUfVSfFn3nG4TrgFlkt33pfxMQ9MyofzssVBqeib1BR+fY6mtXcp1JxZanOcohbHyxRlqRR0qRpyqOoMYwcdGGfJ5Iz16W8aFJpVgqM0EIpR92GdTCoYki/TVLTDoQmRTqOI71wN6G2W/ZnpHCS+eDMzZRN+yJNPafbcziEVhhq2zysZl66OnfjYrDOWk7zo7bmFQsP7Yu1JPnbdyZykzx2hraT9JDhN1DzoLvA/R7P7xm3t8FVJcho9siQbFGxm+f+9vF0Ziq9+pF4UwWtmKMx2Ar74ewT0Ysu2oJ+6UfHyj5uSmTPvymtxGrYJ7gCY5y3202iyDP2d0imsyIqfFiUwk++XQaWrrWx+eZ13oIKNZzmoGLuZpuM6EwCTO3+sMn43LIo7xXby0aVSYVjjYmGo0b6Ne/ev+6bqPKMhYxRqTqq5PYucdYDC2a1q6Gn7oSp3H+wmsAPTwlivA0xbHnQq5MqW8pV86CRkrB2GKBkRjXHlpkiyeaFzUz4+FJey5Zb6W2p4Ow5thvAJdUGk0QgphY17VPMmq6YgK1ZOUc+Dg2gBBSm7BVexkrtG2y0eioTff2piusfJg8kgOSnermM3Eo01wp3Nl8yY5SFCcLTOMbzs2AzYjStszFNcVH0jr9qsvc/z4g9Z9Wf7mvwvbdHc0t4vZbjNonq/WtZx1X++QIXtaS5G+PmTgk4RTn6z2I0U5SJcdgo3zcUonAcgSa5BKudRE/QWUL5y1cVFixcIJ9u4NhL13AduB5GOAyjNJbF2kL4e+rMDo4wbVo4jmDUAViztRHHst53boquvpJZsq5jCSnzqTLABfYoukA9+jKDhtBs0aMs53SCNdEz//7gI788+ovcB77pcaJcynODPRFOuLAwXHmauBdF5KARh79AqmAc6wusj5pp+NoUvv4bQIyw+f0Ahvub6MsSDjtyvwtzLfL6MteriYPAEaw3LRskYTkNo8iGbRaABN9LdEiuGob3xYvxFEcnixPAo5Ry9O4Qk3PQvbJeYtuQDcWwIcWKLGwQMvUek/c+NvlPu4+KPjuLqqufBOTAmQj/PcB/Y+wLPaOWwPbLN8ecj2rMm8+Lt15jL3MbRzADbbp6CSidQEcNxlqnMh5CCfEVTXMQdyYbWi62WSKkDfK2mAwqO8VWxlHkNMR4UbLIBKJgPfhPlJEVDMdtubnrp9A6W0wzI1CxFtf2UwqRh5+Ui2ldoItktewM6B13YlBeG0hXSo+PICpZKR7OEj5Al/z+Munxf6pcH+iIv0l/HRAkB3bUei13L6sxdDsaPhqdaz3uOfsrRWWKrRtsYlIEZpshvEs3OxOkr2wnVBgNNQ2Hf2BLW1PV8MZEWuySkjEpzVl9T+DP9MYRJI5kPMZYYYWwZwMxFKSNICgX8q1LVrlOtKqwX1LJxOFikM0dLRBy//N0WzMW7RlOEnrg+grTimredIEIeFu5b8d8LO2IgvnYuSWdYD/BYAm0rlsc6ILWqtTAtglrlFXkFSilzteid7hE3Nau180B0LpONuS9/AJYXwqGNPk0W/NabLWrLwnxYvTZgVF9Kn08CR5+4gHN8/AESnUp01LKCE2yEW4Ld/LRi2+mX0gctUxLsPm5hQmi3OkfmlevkdJYhHatpOxiPRSqHEnBVjEG16AyzwjzK5vdt4xuXWq1brU/wWAHiAvbjsNeWK/bTKPQsGHo8Z5BoPiJxA5zYLdSBJhsY+50VJJjJn5qaIAXhg8lKRzkGgK4xfs/x9A1RHOpYRd5L5Xb2BKN5ndhK2eG4LdhrmwBQLnQqgMmARm7aF5kM+ByQPUYjMyJ+JCiYmzcdQEP6bdTXfvFJFJ3LNkPJ/Cv9cY6tdPNk6cVqS9rem992hH5SD/j6koPxPQ3K4Av7jUzLEJWaHf6MW6smMQdRh/207Ly8b10tN7lSbTiOGq8dVhDEq4jCZaCHMZFKJsIAvPNVymURPXxpsG6yPSo9haFRv1b6yUHKk35lgf/biSgHdpJwgesswz6Jy1A9Wdn3XbJGAlesWXiDNCMuhfNSRLvZWXi40eXpbErsXa8okM3/NFrU6ti3PVNhZ2obNmyyv/FwCagDaXNb304wnp8hNwm8V0HMCgGr7W2Cyn/Opd67X4cChbghYa5zmyAWMcHyP3Q7bMSbkqnoYvPq2QkPE2+U1rCWwcd1OVxTQ/PEHY/i6s0rPtHKrYqXLrIOo1KYUqkm6GSYZCZnuKB1bcfGQztX4CVcyW2t9bAYjD1tvNgBkPgjjtn09A9qzFMg+mCZnzDyw/E9BG7U2dsWbPwVpFCSSEQdxflNy8z5DQ0VzVXQ2bQqzR/UV5TtBiO7NXicEh5dGUOeBhS2bicsLxCVsNxvNpQgG/SNPRiD16nHi6kapn/4pqGEnVR2ugBxwCPWXpMScunkm08HvyJJ2OJyzVWpncD02URswjQk2jic1FHS1ueh56HcafsD1Eoc+9I7wPHy+8Tpz2vwFQndEi9I4P8NBSWvOwkmMG4LPiGYmuIglT+Wde93a2JGPL5uQmd0Ef113uyOEtBf2HYDfN+ZL7if0koXzdUnEaoR27dxeHhiO2EkMcybKfh/N92MDjTlg7XKikGSiJjFyjSV1H+g50kufJy5lO2JpozwQa8MswIskG9KVMcPh4h9F1q1ETvGGZEizFLuGm2vkcL8Y6/rFE20+txW6522R5CmOoG2YKDPm4BICrEjF9SVdVgbV3gbTo/HYyaR9AKEFgnP9SE5GenAJg8OCgfp8ScD/5XOiup5944QFXTJtgzNmNFjELmamWzTDLXp1nNndw+rCIEZ5BAL31V40boi7mE1hGO6BHiuDOvtXhAwGCyQMenPDAlcAgRSGJrMJWdjPnXz/2FMDZcWhIqK/Ii4sMV/9oQF8xNq85O0GcPDsGz734ZDhOcApgqZIYNOYTRM8UIjmx4rkxBEcBkfHr/WGy9cibj67hG4OCRQe7Ty5j3gLPJAKaS+JZz7nvImeIKqHRnKiksTeATV+5paFj3m1mrRut85SrhGNGJwGaOAPQd7U2lUJRMhgJlcfN72YZGqTj56MF9USa8NrT3n6R9DjtfQ3E9d6XJVON7Pzab/KPBPSVY/OgtliH+duyKcrcAo9ogMGe2dju2d2pJ1bsrAQ1e7/g2nZZUqE5Y306k8O29WSMr04iMe0kXS9R2f1H6dNC19tAz0nxOUUBbPtdH+JxMpK1NFFxcLxAOADvwQ/g4iSD1S/VwNQ2PPdSk+dcbOwTMVXrsAfk9FJfk6hg1gZk1JFxVJ52hMGW0a9O+DifegnuSH8goK8dm4cLWDF8zAXza6mLJBaNlBhqX7vpPajo5/5hA3i77dEm07qh/aWq8TVwLzznTjwVT05rrG7naN2NSIl1sMePhiscmsswMpHf+Ko9lUEQFsI46aBcHH4tnMlzwll3Y0qYCQxt/3IEC1uqolmRELgSa0jYs6MP39sow7NnX54kmsPH1mqqohQ4knBshIK+cJyqHwfoa8fmYXcUnPSm4i2xX+uReMKYCdpuLI33ZpNz9YnW44eSjRzR1zFO5IJTYO6O9YobYHfoaTu2DYt0f69BKJtsslJUeYNLtYthSokP7IruIXKqQTXcnNSLYIHmwMYUB5po5rZeNANJ6fPnN+kBOZH97l9lGonaIwvRt4UQENFpoIjFcXfIffjJjLa9CeYQPKNXUaZYE+uhjvb3l8f5rL56bP6q6SHpxhphX+paaJmM5i6Nu8Q4eHS7QPUi+8yE5ifek8cQKxssJjStEnZXYj9op6VARZtSH69VW4537lwDZxRPUlYP74CsKzJrMuaZ/ZJBOECK9TXg+OzhmFkOGmCclqnckhs/4mVIVyYOTyCbLS8fK0JMjoZknVPuH0Zl2CFcRlqoZM1N2K3wJxBpYheajwZC5p8g3IYZrXNOfwygrx6br9PnZF2EeZQ4Oo9IKtXAeOM0FYFm/OltJzIOL+BP1LRQJDYGd36VuZdnYROwcpZB61/wrMUnmLorD8IcxCHGiPsrNCJXJ1l5tvfvApYsh4dVO4xI2DXh0wAACYRJREFUPbZPnXYG7Fsfswv7UNO7kSRsesoCoqSxehCLQ3AlYEv61crIhFRVtPB0uc/7yeIqa9t3cEsitepVoLz/AwF97dj8ZaNQnIrjKIuj4ERZm+3HPESwjnx10FLnfjWMfblGNVBACSAzCNJ9owsW56JPI799Wsmy6l15k2MBPYoPIZXw2CouaghsiNOn2gXm9UZNxDBGFlrpO+BxQvEc9QV6axtLjnk9xE8mh2xaaIGLa0CvkUD24wlD38JaGTc0+52z+T3zTVAbU5YYh8RGCv1UJvlbn/1AQF85Nt9itk5NXl+kmtS7EFu9/TV/Ro724GpvPwCzy5Ayf4cd//XorsdFL94ZhOXB9cCuqxRzjKMSECfGOTgru99+CexQ1FyRJrlsutwLR6P0RYt4OznXPYDDsBwhTlTZSoZ6YNZzMw77nfyOKCYbU03YDsbXYL5x0szO4thY8PLmfuokURCE8856MRms2D7Pd5S/BnOpfSiS+e7HAfq6VfBOOQB4bYEd4c5l2sUBI/Ja/9Nwl8lYgPFRDYtyO0VHwSnjuqxl8ERAZ+iX1oiuQ/3UKAM+Vm0vQRx8Io3Q5lpPYu853ZEVqnD/4x/OML2rTx+Onxe+582ifvRH6sDUe3A/DY85H3UuRaZ51VYRF5VZqx1Nt2wPOedI8MRboYb64xjJnvPideqCIfbMlRqo70g6hGb/nqE/EtDv+qIj+Wb0xT8sWX/Zylim7UONGeuqPVjkMww17rKNQ934pmh9nOvabtiBgAQNeqozrf3pN3naxvdL/5iNWO9X76FTekx7CYMmLHTmOjpj05AMrgiwitz3CNSOUpKVI/0w55gzQoPAPZpiQ6SvvA8hF+oNVqsd56pE2NLAh0mn4xfDE+Thc5ab0odvOBY7fYvx5f/2ku3Ppvxj9ResU/00toT4aV8KQdgRO/pR+NR5OFq3bkPWW2FV7AmDdgnYv0Bq1vAFvou0lv+R1r/6/E2swkb1bota/0W2c+v/40zUljdXxRsB9H20/rOe2r9vbQQ4i8x7V7Way2ck2fo8ejlOnqhCn/uKjTcrnKF1USjnGXKWTZDMA3A7/ejYW/fWf4HFVu/57y7Zfucfq7/wsEKhxQLzbPnouOK+eFEL3AvoAy8SpGGWNichJfhM7ZXEQPUNMeasvtyo/vcTVHK11tuK2EnSkWUDRKtb9xZ31X7FtjoinHYRmJHDMMKP+P/404qb8XxO6Jkqu36nsLxsdXFYBvrdPFix8bFL9MZfByHHTzBD+mOzIpywhlmwdpFUiNr+s/+p96pJ7NTBcrSddD2EIRVNw7ptHu+93oL58NjRrSahtc1WeWS+m8P1f6TrGfkC4IDsBFwf0WH8k993vpGuQeul2UZ/4Ki8c1cy5V3jXvN/m5q91ANzaVtmq6kN8lrwS47iKnqp+cmhhWjbPV07Q/Ce9i9rpiZj4fvYwug/q7H6+18ZN6waNEU7JwfqX/x1xE+7Fhxq+Z/NppFcByPTvf8S6aKzRYyR/91/2vMonU9z3f5vZ9P0Ug6ZGmN6Aw1tyGs/rfqfDt0Wz/jQWGGKTdeAOvf4/dcXyrFy8mc1Vj0KF6LKTsn6ktpF/sXOjKiEzN+Dgf/YmRkTEPuvETPDU/8ieZSjlXeGNpQU9ecj8SoyURDQGm7vIuHKhmK3KP9JjdXFeZgQheWXJON88bA5/ouHLZmqLx6Wcv9tl8U/hc2I2lvs/fFHANLdWG1V4pYvnmZl9hcP13xpZjqq3//4+XNamPfFw78vdvvV+g83Vlv1fxaQ7sZqq/7PAtLdWG3V/1lAuhurrfq/C0hnY7VV/5cBfZXaAOlQGyAdStn5xcNrO33xcL2OpRxjPrvug1bLun/x8Ievm/f+D/0QQB9avni4SYcVW/nlw+/VXzzc+Olvnf1f9UMA/f+kNkA61AZIh9oA6VAbIB1qA6RDbYB0qA2QDrUB0qE2QDrUBkiH2gDp0H8U0CZXTuClv9z45tSodn+50+RLyZsnmzGcNn5T8s/pPwloF67bxgjGk7/Y+ObUqG7TP7Pi8FckH06ZtKtA7++tkfC7/pOAAiMA6pRD/2Ljm1MDNDnrfROgPyWXYf/67Jr8Lek/p/8goPd6mLtKgdm/b3xzalRD3Jy/BdCfk4sw95qomG9I/1n9BwFd18OWSShl/PvGN6cGOMy84/EtgP6cvJ/8TO2m1qVf/67+g4D262ErqK3Sq/63jW9ODR9U8+GbAP05ucZLT09v4Dck/7z+g4D+X3t3F9JUGMdx/DnFnC9IyYIORUGvOJAKoq60i3aVXQR1URDUjV5FMAgZ2hs0DYKIMhjVhcZuIiySyBlM8mYRQlcFYTRE6C4tIazUYk/nscnO2dp+O+vENs7veyF7jvyZfHC4yXPOiYtJ42tUfMlZ2J6Wxw9Je0DW8Y4Ng4mrjcXcvwDmINAboW6o0e/NXdiefqC2ItoCsoy/EOr+GmFvsTs4CuUg0GdNnSJ5dlvuwvZ0MH0PneHSxgeF+s/86PKr7l9z8s/8waPGW7Stob8s7E6/HzPyB8by3r+j8PiEeCrVm6Gl4sfz5iRQbHU4cbJpSsq7JxYyi5KmVbZeYtbxdt/t5+c9YVs/fZ4c/agxtH9NQL3b7xDzmUVp09IukGX8W/eOht33SrldY078sAoiEIhAIAKBCAQiEIhAIAKBCAQiEIhAIAKBCAQiEIhAIAKBCAQiEIhAIAKBCAQiEIhAIAKBCAQiEKiageK518lxvioG+rXPmT1khatkoEXz9pVU1onCHyMHHNpkV7gKAYpr41I+8piueqQPdTdNy/t7G1oGpEyK0c2a/5p5ItbaWusiIHmqefHrxgumA3rbkaEf/Z5LsaAWMYDqOofPaZetM9vdBDSz7kqwecF0QN+VkvO+XuNR5yYD6JjxoKvRekq8q4Bk1OtJmNd6SG2lezU7OxvVFpJCXY7nrZiwjLgLaMnnt+wI029I+TC9l/NDUii8OWG9apG7gPrW1wyY1/pNtZ03vYvzz2/QO/HSMuIqoEnv4x7fjOmAAvrkVSdgXAwYQOqePD31c5YZNwGl2trl9y2nTUcUkAzV9Ma6tFsGUO2Zke5VWecOuQkoUjcl5TMxnjmyDJS63lLvv6NeYk8Or93Zl7Vt1U1AoKR4Xa6nJhCosoBG9qxkBVkByvf9/1hlAeXr5/RiuZ66OoDKGIFABAIRCEQgEIFABAIRCEQgEIFABAIRCEQgEIFABAIRCEQgEIFABAIRCEQg0G/ysqtaFs8bFAAAAABJRU5ErkJggg==" /><!-- --></p>
+</div>
+<div id="generalised-sampling-the-sampler-class" class="section level3">
+<h3>Generalised Sampling: The <code>Sampler</code> Class</h3>
+<p>It may sometimes be desirable to make a more detailed specifications for parameter sampling. <code>paradox</code> uses the <strong><code>Sampler</code></strong> abstract base-class for sampling, which has many different subclasses that can be parameterised and combined to control the sampling process. It is even possible to create further sublcasses of the <code>Sampler</code> class (or of one of <em>its</em> subclasses) for even more possibilities.</p>
+<p>Every <code>Sampler</code> object has a <code>sample()</code> function, which takes one argument, the number of instances to sample, and returns a <a href="#parameter-design"><code>Design</code></a> object.</p>
+<div id="d-samplers" class="section level4">
+<h4>1D-Samplers</h4>
+<p>There is a variety of samplers that sample values for a single parameter. These are <code>Sampler1DUnif</code> (uniform sampling), <code>Sampler1DCateg</code> (sampling for categorical parameters), <code>Sampler1DTruncNorm</code> (normally distributed sampling, truncated at parameter bounds), and <code>Sampler1DRfun</code> (arbitrary 1D sampling, provided a random function is provided). These are initialised with a single parameter, and can then be used to sample values.</p>
+<div class="sourceCode" id="cb65"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb65-1" data-line-number="1">sampA &lt;-<span class="st"> </span>Sampler1DCateg<span class="op">$</span><span class="kw">new</span>(parA)</a>
+<a class="sourceLine" id="cb65-2" data-line-number="2">sampA<span class="op">$</span><span class="kw">sample</span>(<span class="dv">5</span>)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 5 rows:
+#&gt;        A
+#&gt; 1: FALSE
+#&gt; 2:  TRUE
+#&gt; 3:  TRUE
+#&gt; 4:  TRUE
+#&gt; 5: FALSE</code></pre>
+</div>
+<div id="hierarchical-sampler" class="section level4">
+<h4>Hierarchical Sampler</h4>
+<p>The <strong><code>SamplerHierachical</code></strong> sampler is an auxiliary sampler that combines many 1D-Samplers to get a combined distribution. Its name “hierarchical” implies that it is able to respect parameter dependencies.</p>
+<div class="sourceCode" id="cb67"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb67-1" data-line-number="1">psSmall<span class="op">$</span><span class="kw">add_dep</span>(<span class="st">&quot;B&quot;</span>, <span class="st">&quot;A&quot;</span>, CondEqual<span class="op">$</span><span class="kw">new</span>(<span class="ot">TRUE</span>))</a>
+<a class="sourceLine" id="cb67-2" data-line-number="2">sampH &lt;-<span class="st"> </span>SamplerHierachical<span class="op">$</span><span class="kw">new</span>(psSmall,</a>
+<a class="sourceLine" id="cb67-3" data-line-number="3">  <span class="kw">list</span>(Sampler1DCateg<span class="op">$</span><span class="kw">new</span>(parA),</a>
+<a class="sourceLine" id="cb67-4" data-line-number="4">    Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(parB),</a>
+<a class="sourceLine" id="cb67-5" data-line-number="5">    Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(parC))</a>
+<a class="sourceLine" id="cb67-6" data-line-number="6">)</a>
+<a class="sourceLine" id="cb67-7" data-line-number="7">sampled &lt;-<span class="st"> </span>sampH<span class="op">$</span><span class="kw">sample</span>(<span class="dv">1000</span>)</a>
+<a class="sourceLine" id="cb67-8" data-line-number="8"><span class="kw">table</span>(sampled<span class="op">$</span>data[, <span class="kw">c</span>(<span class="st">&quot;A&quot;</span>, <span class="st">&quot;B&quot;</span>)], <span class="dt">useNA =</span> <span class="st">&quot;ifany&quot;</span>)</a></code></pre></div>
+<pre><code>#&gt;        B
+#&gt; A         0   1   2   3   4   5   6   7   8   9  10 &lt;NA&gt;
+#&gt;   FALSE   0   0   0   0   0   0   0   0   0   0   0  515
+#&gt;   TRUE   44  39  37  42  35  47  52  49  52  36  52    0</code></pre>
+</div>
+<div id="joint-sampler" class="section level4">
+<h4>Joint Sampler</h4>
+<p>Another way of combining samplers is the <strong><code>SamplerJointIndep</code></strong>. It also makes it possible to combine <code>Sampler</code>s that are not 1D. However, it currently can not handle <code>ParamSet</code>s with dependencies.</p>
+<div class="sourceCode" id="cb69"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb69-1" data-line-number="1">sampJ &lt;-<span class="st"> </span>SamplerJointIndep<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb69-2" data-line-number="2">  <span class="kw">list</span>(Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;x&quot;</span>, <span class="dv">0</span>, <span class="dv">1</span>)),</a>
+<a class="sourceLine" id="cb69-3" data-line-number="3">    Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;y&quot;</span>, <span class="dv">0</span>, <span class="dv">1</span>)))</a>
+<a class="sourceLine" id="cb69-4" data-line-number="4">)</a>
+<a class="sourceLine" id="cb69-5" data-line-number="5">sampJ<span class="op">$</span><span class="kw">sample</span>(<span class="dv">5</span>)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 5 rows:
+#&gt;            x         y
+#&gt; 1: 0.8531149 0.2356097
+#&gt; 2: 0.1089113 0.7731274
+#&gt; 3: 0.2439085 0.7588550
+#&gt; 4: 0.4162510 0.1117413
+#&gt; 5: 0.5684106 0.3631070</code></pre>
+</div>
+<div id="samplerunif" class="section level4">
+<h4>SamplerUnif</h4>
+<p>The <code>Sampler</code> used in <code>generate_design_random</code> is the <code>SamplerUnif</code> sampler, which corresponds to a <code>HierarchicalSampler</code> of <code>Sampler1DUnif</code> of all parameters.</p>
+</div>
+</div>
+</div>
+<div id="parameter-transformation" class="section level2">
+<h2>Parameter Transformation</h2>
+<p>While the different <code>Sapmler</code>s allow for a wide specification of parameter distributions, there are cases where the simplest way of getting a desired distribution is to sample parameters from a simple distribution (such as the uniform distribution) and then transform them. This can be done by assigning a function to the <code>$trafo</code> slot of a <code>ParamSet</code> The <code>$trafo</code> function must take two parameters: the list of parameter values as <code>x</code>, and the <code>ParamSet</code> as <code>param_set</code>, and must return a list of parameter values.</p>
+<p>The transformation is performed when calling the <code>$transpose</code> function of the <code>Design</code> object returned by a <code>Sampler</code>. The following, for example, creates a parameter that is exponentially distributed:</p>
+<div class="sourceCode" id="cb71"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb71-1" data-line-number="1">psexp &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;par&quot;</span>, <span class="dv">0</span>, <span class="dv">1</span>)))</a>
+<a class="sourceLine" id="cb71-2" data-line-number="2">psexp<span class="op">$</span>trafo &lt;-<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
+<a class="sourceLine" id="cb71-3" data-line-number="3">  x<span class="op">$</span>par &lt;-<span class="st"> </span><span class="op">-</span><span class="kw">log</span>(x<span class="op">$</span>par)</a>
+<a class="sourceLine" id="cb71-4" data-line-number="4">  x</a>
+<a class="sourceLine" id="cb71-5" data-line-number="5">}</a>
+<a class="sourceLine" id="cb71-6" data-line-number="6">design &lt;-<span class="st"> </span><span class="kw">generate_design_random</span>(psexp, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb71-7" data-line-number="7"><span class="kw">print</span>(design)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 2 rows:
+#&gt;          par
+#&gt; 1: 0.6431882
+#&gt; 2: 0.9267588</code></pre>
+<div class="sourceCode" id="cb73"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb73-1" data-line-number="1">design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a></code></pre></div>
+<pre><code>#&gt; [[1]]
+#&gt; [[1]]$par
+#&gt; [1] 0.4413179
+#&gt; 
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]]$par
+#&gt; [1] 0.07606189</code></pre>
+<p>Usually the design created with one <code>ParamSet</code> is used to set up other objects that themselves have a <code>ParamSet</code> which defines the values they take. The <code>ParamSet</code>s that can be used for random sampling, however, are restricted in some ways: They must have finite bounds, and they may not contain untyped (<code>ParamUty</code>) parameters. <code>$trafo</code> provides the glue for these situations. There is relatively little constraint on the trafo function’s return value, so it is possible to return values that have different bounds or even types than the original <code>ParamSet</code>. It is even possible to remove parameters and add others.</p>
+<p>Suppose, for example, that a certain method requires a <em>function</em> as a parameter, for example a function that summarises its data in a certain way. The user can pass functions like <code>median</code> or <code>mean</code>, but could also pass quantiles or something completely different. This method would probably use the following <code>ParamSet</code>:</p>
+<div class="sourceCode" id="cb75"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb75-1" data-line-number="1">methodPS &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(ParamUty<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;fun&quot;</span>, <span class="dt">custom_check =</span> <span class="cf">function</span>(x) checkmate<span class="op">::</span><span class="kw">checkFunction</span>(x, <span class="dt">nargs =</span> <span class="dv">1</span>))))</a>
+<a class="sourceLine" id="cb75-2" data-line-number="2"><span class="kw">print</span>(methodPS)</a></code></pre></div>
+<pre><code>#&gt; ParamSet: paramset
+#&gt;     id    class lower upper values     default
+#&gt; 1: fun ParamUty    NA    NA        &lt;NoDefault&gt;</code></pre>
+<p>If one wanted to sample this method, using one of four functions, a way to do this would be</p>
+<div class="sourceCode" id="cb77"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb77-1" data-line-number="1">samplingPS &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(</a>
+<a class="sourceLine" id="cb77-2" data-line-number="2">  ParamFct<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;fun&quot;</span>, <span class="kw">c</span>(<span class="st">&quot;mean&quot;</span>, <span class="st">&quot;median&quot;</span>, <span class="st">&quot;min&quot;</span>, <span class="st">&quot;max&quot;</span>))))</a>
+<a class="sourceLine" id="cb77-3" data-line-number="3">samplingPS<span class="op">$</span>trafo &lt;-<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
+<a class="sourceLine" id="cb77-4" data-line-number="4">  <span class="co"># x$fun is a `character(1)`,</span></a>
+<a class="sourceLine" id="cb77-5" data-line-number="5">  <span class="co"># in particular one of 'mean', 'median', 'min', 'max'.</span></a>
+<a class="sourceLine" id="cb77-6" data-line-number="6">  <span class="co"># We want to turn it into a function!</span></a>
+<a class="sourceLine" id="cb77-7" data-line-number="7">  x<span class="op">$</span>fun &lt;-<span class="st"> </span><span class="kw">list</span>(<span class="dt">mean =</span> mean, <span class="dt">median =</span> median, <span class="dt">min =</span> min, <span class="dt">max =</span> max)[[x<span class="op">$</span>fun]]</a>
+<a class="sourceLine" id="cb77-8" data-line-number="8">  x</a>
+<a class="sourceLine" id="cb77-9" data-line-number="9">}</a>
+<a class="sourceLine" id="cb77-10" data-line-number="10">design &lt;-<span class="st"> </span><span class="kw">generate_design_random</span>(samplingPS, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb77-11" data-line-number="11"><span class="kw">print</span>(design)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 2 rows:
+#&gt;     fun
+#&gt; 1:  max
+#&gt; 2: mean</code></pre>
+<p>To get a single value (and check that it fits to <code>methodPS</code>, one the <code>$transpose</code> function is used.</p>
+<div class="sourceCode" id="cb79"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb79-1" data-line-number="1">xvals &lt;-<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb79-2" data-line-number="2"><span class="kw">print</span>(xvals[[<span class="dv">1</span>]])</a></code></pre></div>
+<pre><code>#&gt; $fun
+#&gt; function (..., na.rm = FALSE)  .Primitive(&quot;max&quot;)</code></pre>
+<div class="sourceCode" id="cb81"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb81-1" data-line-number="1">methodPS<span class="op">$</span><span class="kw">check</span>(xvals[[<span class="dv">1</span>]])</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<div class="sourceCode" id="cb83"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb83-1" data-line-number="1">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a></code></pre></div>
+<pre><code>#&gt; [1] 10</code></pre>
+<p>Imagine now, that a different kind of parametrisation of the function is desired: The user wants to give a function that selects a certain quantile. In that case the <code>$transpose</code> function could generate a function in a different way. For interpretability, the parameter is called <code>&quot;quantile&quot;</code> before transformation, and the <code>&quot;fun&quot;</code> parameter is generated on the fly.</p>
+<div class="sourceCode" id="cb85"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb85-1" data-line-number="1">samplingPS2 &lt;-<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw">list</span>(ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">&quot;quantile&quot;</span>, <span class="dv">0</span>, <span class="dv">1</span>)))</a>
+<a class="sourceLine" id="cb85-2" data-line-number="2">samplingPS2<span class="op">$</span>trafo &lt;-<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
+<a class="sourceLine" id="cb85-3" data-line-number="3">  <span class="co"># x$quantile is a `numeric(1)` between 0 and 1.</span></a>
+<a class="sourceLine" id="cb85-4" data-line-number="4">  <span class="co"># We want to turn it into a function!</span></a>
+<a class="sourceLine" id="cb85-5" data-line-number="5">  <span class="kw">list</span>(<span class="dt">fun =</span> <span class="cf">function</span>(input) <span class="kw">quantile</span>(input, x<span class="op">$</span>quantile))</a>
+<a class="sourceLine" id="cb85-6" data-line-number="6">}</a>
+<a class="sourceLine" id="cb85-7" data-line-number="7">design &lt;-<span class="st"> </span><span class="kw">generate_design_random</span>(samplingPS2, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb85-8" data-line-number="8"><span class="kw">print</span>(design)</a></code></pre></div>
+<pre><code>#&gt; &lt;Design&gt; with 2 rows:
+#&gt;     quantile
+#&gt; 1: 0.1144178
+#&gt; 2: 0.3774416</code></pre>
+<div class="sourceCode" id="cb87"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb87-1" data-line-number="1">xvals &lt;-<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb87-2" data-line-number="2"><span class="kw">print</span>(xvals[[<span class="dv">1</span>]])</a></code></pre></div>
+<pre><code>#&gt; $fun
+#&gt; function (input) 
+#&gt; quantile(input, x$quantile)
+#&gt; &lt;environment: 0x55ae20946db8&gt;</code></pre>
+<div class="sourceCode" id="cb89"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb89-1" data-line-number="1">methodPS<span class="op">$</span><span class="kw">check</span>(xvals[[<span class="dv">1</span>]])</a></code></pre></div>
+<pre><code>#&gt; [1] TRUE</code></pre>
+<div class="sourceCode" id="cb91"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb91-1" data-line-number="1">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a></code></pre></div>
+<pre><code>#&gt; 11.44178% 
+#&gt;   2.02976</code></pre>
+</div>
+<div class="footnotes">
+<hr />
+<ol>
+<li id="fn1"><p>Although the name is suggestive of a “Set”-valued <code>Param</code>, this is unrelated to the other objects that follow the <code>ParamXxx</code> naming scheme.<a href="#fnref1" class="footnote-back">↩</a></p></li>
+</ol>
+</div>
+
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
