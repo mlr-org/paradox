@@ -34,6 +34,9 @@ Design = R6Class("Design",
       assert_names(colnames(data), permutation.of = param_set$ids())
       self$param_set = param_set
       # FIXME: this works in general but is not really fast, as we generate the col first, then overwrite it, OTOH this is really robust
+      # set fixed param vals to their constant values
+      # FIXME: this might also be problematic for LHS
+      # do we still create an LHS like this?
       imap(param_set$param_vals, function(v, n) set(data, j = n, value = v))
       self$data = data
       if (param_set$has_deps)
