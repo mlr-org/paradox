@@ -19,9 +19,10 @@ of configurations somehow produced from the former - e.g., by calling a
 \section{Public methods}{
 
 \itemize{
-\item \code{new(param_set, data)} \cr
-\link{ParamSet}, \link{data.table} -> \code{self}
-Note that both arguments are NOT cloned on construction!
+\item \code{new(param_set, data, remove_dupl)} \cr
+\link{ParamSet}, \link{data.table}, \code{logical(1)} -> \code{self}
+Note that the first 2 arguments are NOT cloned on construction!
+Has an option to remove duplicated rows.
 \item \code{transpose(filter_na = TRUE, trafo = FALSE)}
 \code{logical(1)}, \code{logical(1)} -> \code{list} of \code{list}
 Converts \code{data} into a list of lists of row-configurations, possibly removes NA entries of

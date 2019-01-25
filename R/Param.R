@@ -56,11 +56,12 @@
 #' * `Param$Lgl$new(id, special_vals, default, tags)` \cr
 #'   `character(1)`, `list`, `any`, `character` -> self
 #'    Constructor for logical-scalar-params.
-#' * `ParamUty$new(id, default, tags)` \cr
-#'   `character(1)`, `any`, `character` -> self
+#' * `ParamUty$new(id, default, tags, custom_check)` \cr
+#'   `character(1)`, `any`, `character`, `function(x)` -> self
 #'   Untyped parameters, can be used to bypass any complicated feasibility checks, when
 #'   a param is of truly complex type, as checks for this param are always feasible.
 #'   OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
+#'   User can pass a `custom_check` to specify feasibility checks for custom types.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
 #'    A value is feasible if it is of the same `storage_type`, inside of the bounds or from `special_vals`.

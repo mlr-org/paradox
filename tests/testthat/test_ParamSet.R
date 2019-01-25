@@ -87,8 +87,8 @@ test_that("empty paramset", {
   expect_equal(ps$length, 0)
   expect_equal(ps$ids(), character(0L))
   expect_equal(ps$lower, set_names(numeric(0L), character(0L)))
+  expect_data_table(ps$deps_on, nrow = 0L, ncol = 3L)
 })
-
 
 test_that("ParamSet$check", {
   ps = th_paramset_numeric()
@@ -162,14 +162,16 @@ test_that("ParamSet$clone can be deep", {
   p2 = ParamFct$new("y", values = c("a", "b"))
   ps1 = ParamSet$new(list(p1, p2))
   ps2 = ps1$clone(deep = TRUE)
-  ps2$params[["x"]]$lower = 9
+  pp = ps2$params[["x"]]
+  pp$lower = 9
   expect_equal(ps2$lower, c(x = 9, y = NA))
   expect_equal(ps1$lower, c(x = 1, y = NA))
 
   # now lets add a dep, see if that gets clones properly
   ps1$add_dep("x", on = "y", CondEqual$new("a"))
   ps2 = ps1$clone(deep = TRUE)
-  ps2$deps[[1L]]$param$id = "foo"
+  d = ps2$deps[[1L]]
+  d$param$id = "foo"
   expect_equal(ps2$deps[[1L]]$param$id, "foo")
   expect_equal(ps1$deps[[1L]]$param$id, "x")
 

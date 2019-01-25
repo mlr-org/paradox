@@ -16,7 +16,7 @@
 #' @family generate_design
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
-  assert_paramset(param_set, no_untyped = TRUE, no_deps = TRUE)
+  assert_paramset(param_set, no_untyped = TRUE)
 
   if (!xor(is.null(resolution), is.null(param_resolutions)))
     stop("You must specify resolution (x)or param_resolutions!")
@@ -41,5 +41,5 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # FIXME: mini helper in mlr3misc for this?
   ns = names(res); res = unname(res)
   res = do.call(CJ, c(res, sorted = FALSE))
-  Design$new(param_set, set_names(res, ids))
+  Design$new(param_set, set_names(res, ids), remove_dupl = TRUE)
 }
