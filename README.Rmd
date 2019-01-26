@@ -10,7 +10,7 @@ output: github_document
 
 ```{r setup, include=FALSE}
 set.seed(123)
-knitr::opts_chunk$set(cache = TRUE, collapse = TRUE, comment = "#>")
+knitr::opts_chunk$set(cache = FALSE, collapse = TRUE, comment = "#>")
 library(paradox)
 ```
 
