@@ -16,8 +16,9 @@ library(paradox)
 
 Universal Parameter Space Description and Tools
 
+* [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-* [Documentation](https://mlr-org.github.io/paradox)
+* [Documentation](https://mlr-org.github.io/paradox/)
 
 ## Installation
 ```{r inst, eval=FALSE}
@@ -76,7 +77,7 @@ ps$upper
 
 ### "Vector" Parameters
 
-Sometimes it is useful to have multiple copies of a parameter, akin to a vector. The `Param$rep()` creates a `ParamSet` with repeated entries of the `Param`.
+Sometimes it is useful to have multiple copies of a parameter, akin to a vector. The `Param$rep()` function creates a `ParamSet` with repeated entries of the parameter.
 
 ```{r psnumeric}
 ps = ParamSet$new(
