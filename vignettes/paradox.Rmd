@@ -17,7 +17,7 @@ set.seed(8008135)
 
 knitr::opts_chunk$set(
   cache = TRUE,
-  collapse = FALSE,
+  collapse = TRUE,
   comment = "#>"
 )
 ```
@@ -37,6 +37,8 @@ print(ps)
 ps2 <- ps
 ps3 <- ps$clone(deep = TRUE)
 ps$add(ParamLgl$new("a"))
+```
+```{r}
 print(ps)  # ps was changed
 print(ps2) # contains the same reference as ps
 print(ps3) # is a "clone" of the old (empty) ps
@@ -155,6 +157,8 @@ Unlike in the old `ParamHelpers` package, there are no more vectorial parameters
 ```{r}
 ps2d <- ParamDbl$new("x", lower = 0, upper = 1)$rep(2)
 print(ps2d)
+```
+```{r}
 ps$add(ps2d)
 print(ps)
 ```
@@ -182,6 +186,8 @@ Functions that sample the parameter space fundamentally return an object of the 
 
 ```{r}
 design$transpose()[[1]]
+```
+```{r}
 design$transpose()[[2]]
 ```
 
@@ -193,11 +199,10 @@ design$transpose()[[2]]
 pvrand <- generate_design_random(ps2d, 500)
 pvlhs <- generate_design_lhs(ps2d, 500)
 ```
-```{r}
-plot(pvrand$data)
-```
-```{r}
-plot(pvlhs$data)
+```{r, echo = FALSE, out.width="47%", fig.show = "hold", fig.width = 4, fig.height = 4}
+par(mar=c(4, 4, 2, 1))
+plot(pvrand$data, main = "'random' design")
+plot(pvlhs$data, main = "'lhs' design")
 ```
 
 ### Generalised Sampling: The `Sampler` Class
@@ -303,6 +308,8 @@ samplingPS2$trafo <- function(x, param_set) {
 }
 design <- generate_design_random(samplingPS2, 2)
 print(design)
+```
+```{r}
 xvals <- design$transpose(trafo = TRUE)
 print(xvals[[1]])
 methodPS$check(xvals[[1]])
