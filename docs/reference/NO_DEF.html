@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Authors • paradox</title>
+<title>Extra data type for "no default value". — NO_DEF • paradox</title>
 
 <!-- jquery -->
 <script src="https://code.jquery.com/jquery-3.1.0.min.js" integrity="sha384-nrOSfDHtoPMzJHjVTdCopGqIqeYETSXhZDFyniQ8ZHcVy08QesyHcnOUpMpqnmWq" crossorigin="anonymous"></script>
@@ -25,12 +25,19 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sticky-kit/1.1.3/sticky-kit.min.js" integrity="sha256-c4Rlo1ZozqTPE2RLuvbusY3+SU1pQaJC0TjuhygMipw=" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
-<link href="pkgdown.css" rel="stylesheet">
-<script src="pkgdown.js"></script>
+<link href="../pkgdown.css" rel="stylesheet">
+<script src="../pkgdown.js"></script>
 
 
 
-<meta property="og:title" content="Authors" />
+<meta property="og:title" content="Extra data type for "no default value". — NO_DEF" />
+
+<meta property="og:description" content="Special new data type for no-default. Not often needed by the end-user, mainly internal.
+NoDefault: R6 factory for type.
+NO_DEF: Singelton object for type, used in Param.
+is_nodefault: Is an object of type 'no default'?
+" />
+<meta name="twitter:card" content="summary" />
 
 
 
@@ -46,7 +53,7 @@
   </head>
 
   <body>
-    <div class="container template-authors">
+    <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
@@ -57,7 +64,7 @@
         <span class="icon-bar"></span>
       </button>
       <span class="navbar-brand">
-        <a class="navbar-link" href="index.html">paradox</a>
+        <a class="navbar-link" href="../index.html">paradox</a>
         <span class="label label-default" data-toggle="tooltip" data-placement="bottom" title="Released package">0.1</span>
       </span>
     </div>
@@ -65,16 +72,16 @@
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="index.html">
+  <a href="../index.html">
     <span class="fa fa-home fa-lg"></span>
      
   </a>
 </li>
 <li>
-  <a href="articles/paradox.html">Get started</a>
+  <a href="../articles/paradox.html">Get started</a>
 </li>
 <li>
-  <a href="reference/index.html">Reference</a>
+  <a href="../reference/index.html">Reference</a>
 </li>
       </ul>
       
@@ -95,34 +102,33 @@
       </header>
 
 <div class="row">
-  <div class="contents col-md-9">
+  <div class="col-md-9 contents">
     <div class="page-header">
-      <h1>Authors</h1>
+    <h1>Extra data type for "no default value".</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/NoDefault.R'><code>R/NoDefault.R</code></a></small>
+    <div class="hidden name"><code>NO_DEF.Rd</code></div>
     </div>
 
-    <ul class="list-unstyled">
-      <li>
-        <p><strong>Jakob Richter</strong>. Maintainer, author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Xudong Sun</strong>. Author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Michel Lang</strong>. Author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Bernd Bischl</strong>. Author. 
-        </p>
-      </li>
-    </ul>
+    <div class="ref-description">
+    
+    <p>Special new data type for no-default. Not often needed by the end-user, mainly internal.</p><ul>
+<li><p><code>NoDefault</code>: R6 factory for type.</p></li>
+<li><p><code>NO_DEF</code>: Singelton object for type, used in <a href='Param.html'>Param</a>.</p></li>
+<li><p><code>is_nodefault</code>: Is an object of type 'no default'?</p></li>
+</ul>
+    
+    </div>
+
+        
 
   </div>
+  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
+    <h2>Contents</h2>
+    <ul class="nav nav-pills nav-stacked">
+                </ul>
 
+  </div>
 </div>
-
 
       <footer>
       <div class="copyright">
