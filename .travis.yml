@@ -14,7 +14,7 @@ r_github_packages:
 - jimhester/covr
 - hadley/pkgdown
 before_script:
-- R --no-save <<< 'library("devtools"); document(); library("rmarkdown"); render("README.Rmd")'
+- R --no-save <<< 'library("devtools"); document(); library("knitr"); knit("README.Rmd")'
 after_success:
 - 'if [[ "$TRAVIS_PULL_REQUEST" == "false" && "$TRAVIS_BRANCH" == "master" && "$TRAVIS_R_VERSION_STRING" == "release" && "$TRAVIS_EVENT_TYPE" != "cron" ]] ; then
     R --no-save <<< "devtools::install(); pkgdown::build_site()";
