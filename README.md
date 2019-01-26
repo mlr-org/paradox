@@ -1,23 +1,24 @@
-
+---
+output: github_document
+---
 # paradox
 
-[![Build Status
-Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
-[![Build Status
-Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox)
-[![Coverage
-Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
+[![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
+[![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox)
+[![Coverage Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
 
-Universal Parameter Space Description and
-    Tools
 
-  - [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
-  - [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-  - [Documentation](https://mlr-org.github.io/paradox/)
+
+
+Universal Parameter Space Description and Tools
+
+* [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
+* [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
+* [Documentation](https://mlr-org.github.io/paradox/)
 
 ## Installation
 
-``` r
+```r
 devtools::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
@@ -25,15 +26,14 @@ devtools::install_github("mlr-org/paradox", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-  - integer numbers (“`Int`”)
-  - real-valued numbers (“`Dbl`”)
-  - truth values `TRUE` or `FALSE` (“`Lgl`”)
-  - categorical values from a set of possible strings (“`Fct`”)
-  - further types are only possible by using transformations.
+* integer numbers ("`Int`")
+* real-valued numbers ("`Dbl`")
+* truth values `TRUE` or `FALSE` ("`Lgl`")
+* categorical values from a set of possible strings ("`Fct`")
+* further types are only possible by using transformations.
 
-<!-- end list -->
 
-``` r
+```r
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
@@ -46,7 +46,8 @@ ps = ParamSet$new(
 
 Draw random samples / create random design:
 
-``` r
+
+```r
 generate_design_random(ps, 3)
 #> <Design> with 3 rows:
 #>    z         x  flag methods
@@ -57,7 +58,8 @@ generate_design_random(ps, 3)
 
 Generate LHS Design:
 
-``` r
+
+```r
 generate_design_lhs(ps, 3)
 #> <Design> with 3 rows:
 #>    z          x  flag methods
@@ -68,7 +70,8 @@ generate_design_lhs(ps, 3)
 
 Generate Grid Design:
 
-``` r
+
+```r
 generate_design_grid(ps, resolution = 2)
 #> <Design> with 24 rows:
 #>     z   x  flag methods
@@ -84,7 +87,8 @@ generate_design_grid(ps, resolution = 2)
 
 Properties of the parameters within the ParamSet:
 
-``` r
+
+```r
 ps$ids()
 #> [1] "z"       "x"       "flag"    "methods"
 ps$values
@@ -115,11 +119,10 @@ ps$upper
 
 ### Parameter Checks
 
-Check that a parameter satisfies all conditions of a `ParamSet`, using
-`$test()` (returns `FALSE` on mismatch), `$check()` (returns error
-description on mismatch), and `$assert()` (throws error on mismatch):
+Check that a parameter satisfies all conditions of a `ParamSet`, using `$test()` (returns `FALSE` on mismatch), `$check()` (returns error description on mismatch), and `$assert()` (throws error on mismatch):
 
-``` r
+
+```r
 ps$test(list(z = 1, x = 1))
 #> [1] TRUE
 ps$test(list(z = -1, x = 1))
@@ -134,15 +137,13 @@ ps$assert(list(z = -1, x = 1))
 
 Transformations are functions with a fixed signature.
 
-  - `x` A named list of parameter values
-  - `param_set` the `ParamSet` used to create the design
+* `x` A named list of parameter values
+* `param_set` the `ParamSet` used to create the design
 
-Transformations can be used to change the distributions of sampled
-parameters. For example, to sample values between 2^-3 and 2^3 in a
-log2-uniform distribution, one can sample uniformly between -3 and 3 and
-exponentiate the random value inside the transformation.
+Transformations can be used to change the distributions of sampled parameters. For example, to sample values between 2^-3 and 2^3 in a log2-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
 
-``` r
+
+```r
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
