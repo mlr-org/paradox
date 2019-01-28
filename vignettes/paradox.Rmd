@@ -16,7 +16,7 @@ library("paradox")
 set.seed(8008135)
 
 knitr::opts_chunk$set(
-  cache = TRUE,
+  cache = FALSE,
   collapse = TRUE,
   comment = "#>"
 )
