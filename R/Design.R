@@ -51,7 +51,7 @@ Design = R6Class("Design",
     transpose = function(filter_na = TRUE, trafo = FALSE) {
       assert_flag(filter_na)
       assert_flag(trafo)
-      xs = mlr3misc::transpose(self$data)
+      xs = transpose(self$data)
       if (filter_na)
         xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
       if (trafo) {
