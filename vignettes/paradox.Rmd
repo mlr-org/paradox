@@ -32,9 +32,9 @@ The **`paradox`** package offers a language for the description of *parameter sp
 
 `paradox` is the spiritual successor to the [`ParamHelpers`](https://github.com/berndbischl/ParamHelpers) package and was written from scratch using the "[R6](https://r6.r-lib.org/)" class system. The most important consequence of this is that all objects created in `paradox` are "reference-based", unlike most other objects in R. When a change is made to a `ParamSet` object, for example by adding a parameter using the `$add()` function, all variables that point to this `ParamSet` will contain the changed object. To create an independent copy of a `ParamSet`, the `$clone()` method needs to be used:
 ```{r}
-ps <- ParamSet$new()
-ps2 <- ps
-ps3 <- ps$clone(deep = TRUE)
+ps = ParamSet$new()
+ps2 = ps
+ps3 = ps$clone(deep = TRUE)
 print(ps) # the same for ps2 and ps3
 ```
 ```{r}
@@ -62,11 +62,11 @@ The `Param` class has various subclasses that represent different value types:
 
 A particular instance of a parameter is created by calling the attached `$new()` function:
 ```{r}
-parA <- ParamLgl$new(id = "A")
-parB <- ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2"))
-parC <- ParamDbl$new(id = "C", lower = 0, upper = 4, special_vals = list(NULL))
-parD <- ParamFct$new(id = "D", values = c("x", "y", "z"), default = "y")
-parE <- ParamUty$new(id = "E", custom_check = function(x) checkmate::checkFunction(x))
+parA = ParamLgl$new(id = "A")
+parB = ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2"))
+parC = ParamDbl$new(id = "C", lower = 0, upper = 4, special_vals = list(NULL))
+parD = ParamFct$new(id = "D", values = c("x", "y", "z"), default = "y")
+parE = ParamUty$new(id = "E", custom_check = function(x) checkmate::checkFunction(x))
 ```
 Every parameter must have an **`id`**---its name within the parameter set---, and may also have a default value (**`default`**), a list of values that are accepted even if they do not conform to the type (**`special_vals`**), and **`tags`** that can be used to organize parameters. The numeric (`Int` and `Dbl`) parameters furthermore allow for specification of a **`lower`** and **`upper`** bound, while the `Fct` parameter must be given a vector of **`values`** that define the possible states its parameter can take. The `Uty` parameter can also have a **`custom_check`** function that must return `TRUE` when a value is acceptable and may return a `character(1)` error description otherwise. The example above defines `parE` as a parameter that only accepts functions.
 
@@ -98,7 +98,7 @@ Instead of testing single parameters, it is often more convenient to check a who
 
 The ordered collection of parameters is handled in a **`ParamSet`**^[Although the name is suggestive of a "Set"-valued `Param`, this is unrelated to the other objects that follow the `ParamXxx` naming scheme.]. It is initialized using the `$new()` function and optionally takes a list of `Param`s as argument. Parameters can also be added to the constructed `ParamSet` using the **`$add()`** function. It is even possible to add whole `ParamSet`s to other `ParamSet`s.
 ```{r}
-ps <- ParamSet$new(list(parA, parB))
+ps = ParamSet$new(list(parA, parB))
 ps$add(parC)
 ps$add(ParamSet$new(list(parD, parE)))
 print(ps)
@@ -108,7 +108,7 @@ The individual parameters can be accessed through the **`$params`** slot. It is 
 
 It is possible to reduce `ParamSet`s using the **`$subset`** method. Be aware that it modifies a paramset in-place, so a "clone" must be created first if the original `ParamSet` should not be modified.
 ```{r}
-psSmall <- ps$clone()
+psSmall = ps$clone()
 psSmall$subset(c("A", "B", "C"))
 print(psSmall)
 ```
@@ -164,7 +164,7 @@ ps$deps_on
 Unlike in the old `ParamHelpers` package, there are no more vectorial parameters in `paradox`. Instead, it is now possible to create multiple copies of a single parameter using the **`$rep`** function. This creates a `ParamSet` consisting of multiple copies of the parameter, which can then (optionally) be added to another `ParamSet`.
 
 ```{r}
-ps2d <- ParamDbl$new("x", lower = 0, upper = 1)$rep(2)
+ps2d = ParamDbl$new("x", lower = 0, upper = 1)$rep(2)
 print(ps2d)
 ```
 ```{r}
@@ -188,7 +188,7 @@ Functions that sample the parameter space fundamentally return an object of the 
 
 The **`generate_design_grid()`** function is used to create grid designs that contain all combinations of parameter values---all possible values for `ParamLgl` and `ParamFct`, and values with a given resolution for `ParamInt` and `ParamDbl`. The resolution can be given for all numeric parameters, or for specific named parameters through the **`param_resolutions`** parameter.
 ```{r}
-design <- generate_design_grid(psSmall, 2)
+design = generate_design_grid(psSmall, 2)
 print(design)
 # generate_design_grid(psSmall, param_resolutions = c(B = 1, C = 2))  ## FIXME: wait for mllg/checkmate#157 to be fixed
 ```
@@ -198,8 +198,8 @@ print(design)
 `paradox` offers different methods for random sampling, which vary in the degree to which they can be configured. The easiest way to get a uniformly random sample of parameters is **`generate_design_random`**. It is also possible to create "[latin hypercube](https://en.wikipedia.org/wiki/Latin_hypercube_sampling)" sampled parameter values using **`generate_design_lhs`**, which utilizes the [lhs](https://github.com/bertcarnell/lhs) package. LHS-sampling creates low-discrepancy sampled values that cover the parameter space more evenly than purely random values.
 
 ```{r}
-pvrand <- generate_design_random(ps2d, 500)
-pvlhs <- generate_design_lhs(ps2d, 500)
+pvrand = generate_design_random(ps2d, 500)
+pvlhs = generate_design_lhs(ps2d, 500)
 ```
 ```{r, echo = FALSE, out.width="45%", fig.show = "hold", fig.width = 4, fig.height = 4}
 par(mar=c(4, 4, 2, 1))
@@ -218,7 +218,7 @@ Every `Sampler` object has a **`sample()`** function, which takes one argument, 
 There is a variety of samplers that sample values for a single parameter. These are **`Sampler1DUnif`** (uniform sampling), **`Sampler1DCateg`** (sampling for categorical parameters), **`Sampler1DTruncNorm`** (normally distributed sampling, truncated at parameter bounds), and **`Sampler1DRfun`** (arbitrary 1D sampling, given a random-function). These are initialised with a single `Param`, and can then be used to sample values.
 
 ```{r}
-sampA <- Sampler1DCateg$new(parA)
+sampA = Sampler1DCateg$new(parA)
 sampA$sample(5)
 ```
 
@@ -230,12 +230,12 @@ The following example shows how this works: The `Int` parameter `B` depends on t
 
 ```{r}
 psSmall$add_dep("B", "A", CondEqual$new(TRUE))
-sampH <- SamplerHierachical$new(psSmall,
+sampH = SamplerHierachical$new(psSmall,
   list(Sampler1DCateg$new(parA),
     Sampler1DUnif$new(parB),
     Sampler1DUnif$new(parC))
 )
-sampled <- sampH$sample(1000)
+sampled = sampH$sample(1000)
 table(sampled$data[, c("A", "B")], useNA = "ifany")
 ```
 
@@ -244,7 +244,7 @@ table(sampled$data[, c("A", "B")], useNA = "ifany")
 Another way of combining samplers is the **`SamplerJointIndep`**. It also makes it possible to combine `Sampler`s that are not 1D. However, it currently can not handle `ParamSet`s with dependencies.
 
 ```{r}
-sampJ <- SamplerJointIndep$new(
+sampJ = SamplerJointIndep$new(
   list(Sampler1DUnif$new(ParamDbl$new("x", 0, 1)),
     Sampler1DUnif$new(ParamDbl$new("y", 0, 1)))
 )
@@ -261,12 +261,12 @@ While the different `Sapmler`s allow for a wide specification of parameter distr
 
 The transformation is performed when calling the **`$transpose`** function of the `Design` object returned by a `Sampler` with the **`trafo`** param set to `TRUE`. The following, for example, creates a parameter that is exponentially distributed:
 ```{r}
-psexp <- ParamSet$new(list(ParamDbl$new("par", 0, 1)))
-psexp$trafo <- function(x, param_set) {
-  x$par <- -log(x$par)
+psexp = ParamSet$new(list(ParamDbl$new("par", 0, 1)))
+psexp$trafo = function(x, param_set) {
+  x$par = -log(x$par)
   x
 }
-design <- generate_design_random(psexp, 2)
+design = generate_design_random(psexp, 2)
 print(design)
 design$transpose(trafo = TRUE)
 ```
@@ -277,7 +277,7 @@ Usually the design created with one `ParamSet` is then used to configure other o
 
 Suppose, for example, that a certain method requires a *function* as a parameter, for example a function that summarises its data in a certain way. The user can pass functions like `median` or `mean`, but could also pass quantiles or something completely different. This method would probably use the following `ParamSet`:
 ```{r}
-methodPS <- ParamSet$new(
+methodPS = ParamSet$new(
   list(
     ParamUty$new("fun",
       custom_check = function(x) checkmate::checkFunction(x, nargs = 1))
@@ -287,27 +287,27 @@ print(methodPS)
 ```
 If one wanted to sample this method, using one of four functions, a way to do this would be
 ```{r}
-samplingPS <- ParamSet$new(
+samplingPS = ParamSet$new(
   list(
     ParamFct$new("fun", c("mean", "median", "min", "max"))
   )
 )
 
-samplingPS$trafo <- function(x, param_set) {
+samplingPS$trafo = function(x, param_set) {
   # x$fun is a `character(1)`,
   # in particular one of 'mean', 'median', 'min', 'max'.
   # We want to turn it into a function!
-  x$fun <- list(mean = mean, median = median, min = min, max = max)[[x$fun]]
+  x$fun = list(mean = mean, median = median, min = min, max = max)[[x$fun]]
   x
 }
 ```
 ```{r}
-design <- generate_design_random(samplingPS, 2)
+design = generate_design_random(samplingPS, 2)
 print(design)
 ```
 Note that the `Design` only contains the column "`fun`" as a `character` column. To get a single value as a *function*, the `$transpose` function is used.
 ```{r}
-xvals <- design$transpose(trafo = TRUE)
+xvals = design$transpose(trafo = TRUE)
 print(xvals[[1]])
 ```
 We can now check that it fits the requirements set by `methodPS`, and that `fun` it is in fact a function:
@@ -318,25 +318,25 @@ xvals[[1]]$fun(1:10)
 
 Imagine now that a different kind of parameterisation of the function is desired: The user wants to give a function that selects a certain quantile, where the quantile is set by a parameter. In that case the `$transpose` function could generate a function in a different way. For interpretability, the parameter is called "`quantile`" before transformation, and the "`fun`" parameter is generated on the fly.
 ```{r}
-samplingPS2 <- ParamSet$new(
+samplingPS2 = ParamSet$new(
   list(
     ParamDbl$new("quantile", 0, 1)
   )
 )
 
-samplingPS2$trafo <- function(x, param_set) {
+samplingPS2$trafo = function(x, param_set) {
   # x$quantile is a `numeric(1)` between 0 and 1.
   # We want to turn it into a function!
   list(fun = function(input) quantile(input, x$quantile))
 }
 ```
 ```{r}
-design <- generate_design_random(samplingPS2, 2)
+design = generate_design_random(samplingPS2, 2)
 print(design)
 ```
 The `Design` now contains the column "`quantile`" that will be used by the `$transpose` function to create the `fun` parameter. We also check that it fits the requirement set by `methodPS`, and that it is a function.
 ```{r}
-xvals <- design$transpose(trafo = TRUE)
+xvals = design$transpose(trafo = TRUE)
 print(xvals[[1]])
 methodPS$check(xvals[[1]])
 xvals[[1]]$fun(1:10)
