@@ -197,7 +197,12 @@ The **`generate_design_grid()`** function is used to create grid designs that co
 ```{r}
 design = generate_design_grid(psSmall, 2)
 print(design)
-# generate_design_grid(psSmall, param_resolutions = c(B = 1, C = 2))  ## FIXME: wait for mllg/checkmate#157 to be fixed
+```
+```{r}
+generate_design_grid(psSmall, param_resolutions = c(A = 1, B = 1, C = 2))
+```
+```{r, echo = FALSE}
+# FIXME: remove 'A = 1' from above as soon as issue #178 is fixed
 ```
 
 ### Random Sampling
