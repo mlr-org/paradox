@@ -17,22 +17,26 @@
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
   assert_paramset(param_set, no_untyped = TRUE)
-
-  if (!xor(is.null(resolution), is.null(param_resolutions)))
-    stop("You must specify resolution (x)or param_resolutions!")
   ids = param_set$ids()
-  if (!is.null(resolution)) {
-    # create param_resolutions list, constant entry, same length as ids and named with ids
-    resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
-    param_resolutions = set_names(rep.int(resolution, param_set$length), ids)
-  } else {
-    param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
-    assert_names(names(param_resolutions), permutation.of = ids)
-  }
+  ids_num = ids[param_set$is_number]
 
+  if (length(ids_num) > 0L) { # if only categ we dont need to check
+    if(!xor(is.null(resolution), is.null(param_resolutions)))
+      stop("You must specify resolution (x)or param_resolutions!")
+    if (!is.null(resolution)) {
+    # create param_resolutions list, constant entry, same length as ids and named with ids
+      resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
+      param_resolutions = set_names(rep.int(resolution, param_set$length), ids)
+    } else {
+      param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
+      assert_names(names(param_resolutions), permutation.of = ids_num) # user only needs to pass num params (categ resolutions are overwritten anyway)
+    }
+  } else {
+    param_resolutions = integer(0L)
+  }
   # overwrite the resolution for categorical stuff with the number of levels they have
   isc = param_set$is_categ
-  param_resolutions[isc] = param_set$nlevels[isc]
+  param_resolutions = insert_named(param_resolutions,  param_set$nlevels[isc])
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
   grid_vec = lapply(param_resolutions, function(r) seq(0, 1, length.out = r))
