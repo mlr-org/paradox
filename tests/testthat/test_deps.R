@@ -122,3 +122,17 @@ test_that("cannot add a dep on yourself", {
   expect_error(ps$add_dep("x", on = "x", CondEqual$new("a")), "depend on itself")
 
 })
+
+
+test_that("we can also dep on integer", {
+  ps = ParamSet$new(list(
+    ParamInt$new("i", lower = 0, upper = 9),
+    ParamDbl$new("d", lower = 0, upper = 9)
+  ))
+  ps$add_dep("d", on = "i", CondAnyOf$new(1:3))
+
+  expect_true(ps$check(list(i = 2, d = 5)))
+  expect_string(ps$check(list(i = 5, d = 5)))
+})
+
+

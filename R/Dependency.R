@@ -29,7 +29,7 @@ Dependency = R6Class("Dependency",
 
     initialize = function(param, parent, cond) {
       self$param = assert_param(param)
-      self$parent = assert_param(parent, cl = c("ParamFct", "ParamLgl"))
+      self$parent = assert_param(parent)
       self$cond = assert_r6(cond, "Condition")
     },
 
