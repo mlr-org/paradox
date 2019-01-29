@@ -221,7 +221,7 @@ ParamSet = R6Class("ParamSet",
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          d = d[self$deps_on, on = "id"]
+          d = d[self$deps_on[, c("id", "dep_parent")], on = "id"]
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
