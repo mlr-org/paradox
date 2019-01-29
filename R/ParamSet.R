@@ -41,7 +41,7 @@
 #' * `tags`              :: named `list` of `character` \cr
 #'   Can be used to group and subset params.
 #'   Named with param IDs. Read-only.
-#' * `defaults`          :: named `list` \cr
+#' * `default`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
 #' * is_number           :: named `logical`
@@ -250,7 +250,7 @@ ParamSet = R6Class("ParamSet",
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     special_vals = function() private$get_member_with_idnames("special_vals", as.list),
-    defaults = function() Filter(Negate(is_nodefault), private$get_member_with_idnames("default", as.list)),
+    default = function() Filter(Negate(is_nodefault), private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
     is_number = function() private$get_member_with_idnames("is_number", as.logical),
