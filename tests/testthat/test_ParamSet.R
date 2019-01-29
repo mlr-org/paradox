@@ -99,6 +99,10 @@ test_that("ParamSet$check", {
   expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
+
+  ps = ParamLgl$new("x")$rep(2)
+  ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
+  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "not ok: x_rep_2 equal TRUE")
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {

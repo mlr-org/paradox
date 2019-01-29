@@ -24,7 +24,7 @@ test_that("simple active bindings work", {
   # expect_false(psc$has_deps)
   # expect_false(psc$has_trafo)
   # expect_true(psc$check(list(s1.th_param_dbl = 1, s2.th_param_int = 2)))
-  # expect_string(psc$check(list(th_param_dbl = 1, th_param_int = 2)), "must be subset")
+  # expect_string(psc$check(list(th_param_dbl = 1, th_param_int = 2)), fixed = "must be subset")
 
   # d = generate_design_random(psc, n = 10L)
   # expect_data_table(d$data, nrows = 10, ncols = 5L)

@@ -6,6 +6,8 @@
 #' @section Public members / active bindings:
 #' * `type`          :: `character(1)`
 #'   Name / type of the condition. Read-only.
+#' * `rhs`          :: `any`
+#'   Right-hand-side of the condition.
 #'
 #' @section Public methods:
 #' * `new(type, rhs)` \cr
@@ -35,7 +37,8 @@ Condition = R6Class("Condition",
   ),
 
   active = list(
-    type = function() private$.type
+    type = function() private$.type,
+    rhs = function() private$.rhs
   ),
 
   private = list(
