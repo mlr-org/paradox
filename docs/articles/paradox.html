@@ -224,17 +224,17 @@
 <div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb13-1" data-line-number="1">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">D =</span> <span class="st">"x"</span>, <span class="dt">B =</span> <span class="dv">1</span>))          <span class="co"># OK: all dependencies met</span></a>
 <a class="sourceLine" id="cb13-2" data-line-number="2"><span class="co">#&gt; [1] TRUE</span></a>
 <a class="sourceLine" id="cb13-3" data-line-number="3">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">D =</span> <span class="st">"z"</span>, <span class="dt">B =</span> <span class="dv">1</span>))          <span class="co"># B's dependency is not met</span></a>
-<a class="sourceLine" id="cb13-4" data-line-number="4"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof ; instead: D=z"</span></a>
+<a class="sourceLine" id="cb13-4" data-line-number="4"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof x, y; instead: D=z"</span></a>
 <a class="sourceLine" id="cb13-5" data-line-number="5">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">B =</span> <span class="dv">1</span>))                   <span class="co"># B's dependency is not met</span></a>
-<a class="sourceLine" id="cb13-6" data-line-number="6"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof ; instead: D=&lt;not-there&gt;"</span></a>
+<a class="sourceLine" id="cb13-6" data-line-number="6"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof x, y; instead: D=&lt;not-there&gt;"</span></a>
 <a class="sourceLine" id="cb13-7" data-line-number="7">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">FALSE</span>, <span class="dt">D =</span> <span class="st">"z"</span>))                 <span class="co"># OK: B is absent</span></a>
 <a class="sourceLine" id="cb13-8" data-line-number="8"><span class="co">#&gt; [1] TRUE</span></a>
 <a class="sourceLine" id="cb13-9" data-line-number="9">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">TRUE</span>))                           <span class="co"># OK: neither B nor D present</span></a>
 <a class="sourceLine" id="cb13-10" data-line-number="10"><span class="co">#&gt; [1] TRUE</span></a>
 <a class="sourceLine" id="cb13-11" data-line-number="11">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">TRUE</span>, <span class="dt">D =</span> <span class="st">"x"</span>, <span class="dt">B =</span> <span class="dv">1</span>))           <span class="co"># D's dependency is not met</span></a>
-<a class="sourceLine" id="cb13-12" data-line-number="12"><span class="co">#&gt; [1] "Condition for 'D' not ok: A equal ; instead: A=TRUE"</span></a>
+<a class="sourceLine" id="cb13-12" data-line-number="12"><span class="co">#&gt; [1] "Condition for 'D' not ok: A equal FALSE; instead: A=TRUE"</span></a>
 <a class="sourceLine" id="cb13-13" data-line-number="13">ps<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">A =</span> <span class="ot">TRUE</span>, <span class="dt">B =</span> <span class="dv">1</span>))                    <span class="co"># B's dependency is not met</span></a>
-<a class="sourceLine" id="cb13-14" data-line-number="14"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof ; instead: D=&lt;not-there&gt;"</span></a></code></pre></div>
+<a class="sourceLine" id="cb13-14" data-line-number="14"><span class="co">#&gt; [1] "Condition for 'B' not ok: D anyof x, y; instead: D=&lt;not-there&gt;"</span></a></code></pre></div>
 <p>Internally, the dependencies are represented as <strong><code>Dependency</code></strong> object, which can be listed in the <strong><code>$deps</code></strong> slot. The dependencies can also be accessed through the <strong><code>$deps_on</code></strong> slot, which returns a <code>data.table</code> containing dependency information.</p>
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb14-1" data-line-number="1">ps<span class="op">$</span>deps</a>
 <a class="sourceLine" id="cb14-2" data-line-number="2"><span class="co">#&gt; [[1]]</span></a>
@@ -264,14 +264,14 @@
 <div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb16-1" data-line-number="1">ps<span class="op">$</span><span class="kw">add</span>(ps2d)</a>
 <a class="sourceLine" id="cb16-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(ps)</a>
 <a class="sourceLine" id="cb16-3" data-line-number="3"><span class="co">#&gt; ParamSet: paramset</span></a>
-<a class="sourceLine" id="cb16-4" data-line-number="4"><span class="co">#&gt;         id    class lower upper      values     default dep_parent   deps</span></a>
-<a class="sourceLine" id="cb16-5" data-line-number="5"><span class="co">#&gt; 1:       A ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;            &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-6" data-line-number="6"><span class="co">#&gt; 2:       B ParamInt     0    10             &lt;NoDefault&gt;          D &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-7" data-line-number="7"><span class="co">#&gt; 3:       C ParamDbl     0     4             &lt;NoDefault&gt;            &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-8" data-line-number="8"><span class="co">#&gt; 4:       D ParamFct    NA    NA       x,y,z           y          A &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-9" data-line-number="9"><span class="co">#&gt; 5:       E ParamUty    NA    NA             &lt;NoDefault&gt;            &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-10" data-line-number="10"><span class="co">#&gt; 6: x_rep_1 ParamDbl     0     1             &lt;NoDefault&gt;            &lt;list&gt;</span></a>
-<a class="sourceLine" id="cb16-11" data-line-number="11"><span class="co">#&gt; 7: x_rep_2 ParamDbl     0     1             &lt;NoDefault&gt;            &lt;list&gt;</span></a></code></pre></div>
+<a class="sourceLine" id="cb16-4" data-line-number="4"><span class="co">#&gt;         id    class lower upper      values     default dep_parent</span></a>
+<a class="sourceLine" id="cb16-5" data-line-number="5"><span class="co">#&gt; 1:       A ParamLgl    NA    NA  TRUE,FALSE &lt;NoDefault&gt;           </span></a>
+<a class="sourceLine" id="cb16-6" data-line-number="6"><span class="co">#&gt; 2:       B ParamInt     0    10             &lt;NoDefault&gt;          D</span></a>
+<a class="sourceLine" id="cb16-7" data-line-number="7"><span class="co">#&gt; 3:       C ParamDbl     0     4             &lt;NoDefault&gt;           </span></a>
+<a class="sourceLine" id="cb16-8" data-line-number="8"><span class="co">#&gt; 4:       D ParamFct    NA    NA       x,y,z           y          A</span></a>
+<a class="sourceLine" id="cb16-9" data-line-number="9"><span class="co">#&gt; 5:       E ParamUty    NA    NA             &lt;NoDefault&gt;           </span></a>
+<a class="sourceLine" id="cb16-10" data-line-number="10"><span class="co">#&gt; 6: x_rep_1 ParamDbl     0     1             &lt;NoDefault&gt;           </span></a>
+<a class="sourceLine" id="cb16-11" data-line-number="11"><span class="co">#&gt; 7: x_rep_2 ParamDbl     0     1             &lt;NoDefault&gt;</span></a></code></pre></div>
 <p>It is also possible to use a <code>ParamUty</code> to accept vectorial parameters, which also works for parameters of variable length. A <code>ParamSet</code> containing a <code>ParamUty</code> can be used for parameter checking, but not for <a href="#parameter-sampling">sampling</a>, however. To sample values for a method that needs a vectorial parameter, it is advised to use a <a href="#transformation-between-types">parameter transformation</a> function that creates a vector from atomic values.</p>
 <p>Assembling a vector from repeated parameters is aided by the parameter’s <code>$tags</code>: Parameters that were generated by the <code>$rep()</code> command automatically get tagged as belonging to a group of repeated parameters:</p>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb17-1" data-line-number="1">ps<span class="op">$</span>tags</a>
@@ -323,13 +323,13 @@
 <a class="sourceLine" id="cb18-10" data-line-number="10"><span class="co">#&gt; 6: FALSE  0 4</span></a>
 <a class="sourceLine" id="cb18-11" data-line-number="11"><span class="co">#&gt; 7: FALSE 10 0</span></a>
 <a class="sourceLine" id="cb18-12" data-line-number="12"><span class="co">#&gt; 8: FALSE 10 4</span></a></code></pre></div>
-<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="kw"><a href="../reference/generate_design_grid.html">generate_design_grid</a></span>(psSmall, <span class="dt">param_resolutions =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="dt">A =</span> <span class="dv">1</span>, <span class="dt">B =</span> <span class="dv">1</span>, <span class="dt">C =</span> <span class="dv">2</span>))</a>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb19-1" data-line-number="1"><span class="kw"><a href="../reference/generate_design_grid.html">generate_design_grid</a></span>(psSmall, <span class="dt">param_resolutions =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="dt">B =</span> <span class="dv">1</span>, <span class="dt">C =</span> <span class="dv">2</span>))</a>
 <a class="sourceLine" id="cb19-2" data-line-number="2"><span class="co">#&gt; &lt;Design&gt; with 4 rows:</span></a>
-<a class="sourceLine" id="cb19-3" data-line-number="3"><span class="co">#&gt;        A B C</span></a>
-<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="co">#&gt; 1:  TRUE 0 0</span></a>
-<a class="sourceLine" id="cb19-5" data-line-number="5"><span class="co">#&gt; 2:  TRUE 0 4</span></a>
-<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="co">#&gt; 3: FALSE 0 0</span></a>
-<a class="sourceLine" id="cb19-7" data-line-number="7"><span class="co">#&gt; 4: FALSE 0 4</span></a></code></pre></div>
+<a class="sourceLine" id="cb19-3" data-line-number="3"><span class="co">#&gt;    A B     C</span></a>
+<a class="sourceLine" id="cb19-4" data-line-number="4"><span class="co">#&gt; 1: 0 0  TRUE</span></a>
+<a class="sourceLine" id="cb19-5" data-line-number="5"><span class="co">#&gt; 2: 0 0 FALSE</span></a>
+<a class="sourceLine" id="cb19-6" data-line-number="6"><span class="co">#&gt; 3: 0 4  TRUE</span></a>
+<a class="sourceLine" id="cb19-7" data-line-number="7"><span class="co">#&gt; 4: 0 4 FALSE</span></a></code></pre></div>
 </div>
 <div id="random-sampling" class="section level3">
 <h3 class="hasAnchor">
@@ -337,7 +337,7 @@
 <p><code>paradox</code> offers different methods for random sampling, which vary in the degree to which they can be configured. The easiest way to get a uniformly random sample of parameters is <strong><code>generate_design_random</code></strong>. It is also possible to create “<a href="https://en.wikipedia.org/wiki/Latin_hypercube_sampling">latin hypercube</a>” sampled parameter values using <strong><code>generate_design_lhs</code></strong>, which utilizes the <a href="https://github.com/bertcarnell/lhs">lhs</a> package. LHS-sampling creates low-discrepancy sampled values that cover the parameter space more evenly than purely random values.</p>
 <div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb20-1" data-line-number="1">pvrand =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_random.html">generate_design_random</a></span>(ps2d, <span class="dv">500</span>)</a>
 <a class="sourceLine" id="cb20-2" data-line-number="2">pvlhs =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_lhs.html">generate_design_lhs</a></span>(ps2d, <span class="dv">500</span>)</a></code></pre></div>
-<p><img src="paradox_files/figure-html/unnamed-chunk-22-1.png" width="45%"><img src="paradox_files/figure-html/unnamed-chunk-22-2.png" width="45%"></p>
+<p><img src="paradox_files/figure-html/unnamed-chunk-21-1.png" width="45%"><img src="paradox_files/figure-html/unnamed-chunk-21-2.png" width="45%"></p>
 </div>
 <div id="generalised-sampling-the-sampler-class" class="section level3">
 <h3 class="hasAnchor">
@@ -361,10 +361,10 @@
 <div id="hierarchical-sampler" class="section level4">
 <h4 class="hasAnchor">
 <a href="#hierarchical-sampler" class="anchor"></a>Hierarchical Sampler</h4>
-<p>The <strong><code>SamplerHierachical</code></strong> sampler is an auxiliary sampler that combines many 1D-Samplers to get a combined distribution. Its name “hierarchical” implies that it is able to respect parameter dependencies: Parameters only get sampled when their dependencies are met.</p>
+<p>The <strong><code>SamplerHierarchical</code></strong> sampler is an auxiliary sampler that combines many 1D-Samplers to get a combined distribution. Its name “hierarchical” implies that it is able to respect parameter dependencies: Parameters only get sampled when their dependencies are met.</p>
 <p>The following example shows how this works: The <code>Int</code> parameter <code>B</code> depends on the <code>Lgl</code> parameter <code>A</code> being <code>TRUE</code>. <code>A</code> is sampled to be <code>TRUE</code> in about half the cases, in which case <code>B</code> takes a value between 0 and 10. In the cases where <code>A</code> is <code>FALSE</code>, <code>B</code> is set to <code>NA</code>.</p>
 <div class="sourceCode" id="cb22"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb22-1" data-line-number="1">psSmall<span class="op">$</span><span class="kw">add_dep</span>(<span class="st">"B"</span>, <span class="st">"A"</span>, CondEqual<span class="op">$</span><span class="kw">new</span>(<span class="ot">TRUE</span>))</a>
-<a class="sourceLine" id="cb22-2" data-line-number="2">sampH =<span class="st"> </span>SamplerHierachical<span class="op">$</span><span class="kw">new</span>(psSmall,</a>
+<a class="sourceLine" id="cb22-2" data-line-number="2">sampH =<span class="st"> </span>SamplerHierarchical<span class="op">$</span><span class="kw">new</span>(psSmall,</a>
 <a class="sourceLine" id="cb22-3" data-line-number="3">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(Sampler1DCateg<span class="op">$</span><span class="kw">new</span>(parA),</a>
 <a class="sourceLine" id="cb22-4" data-line-number="4">    Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(parB),</a>
 <a class="sourceLine" id="cb22-5" data-line-number="5">    Sampler1DUnif<span class="op">$</span><span class="kw">new</span>(parC))</a>
@@ -404,7 +404,7 @@
 <h2 class="hasAnchor">
 <a href="#parameter-transformation" class="anchor"></a>Parameter Transformation</h2>
 <p>While the different <code>Sapmler</code>s allow for a wide specification of parameter distributions, there are cases where the simplest way of getting a desired distribution is to sample parameters from a simple distribution (such as the uniform distribution) and then transform them. This can be done by assigning a function to the <strong><code>$trafo</code></strong> slot of a <code>ParamSet</code>. The <code>$trafo</code> function is called with two parameters: the list of parameter values to be transformed as <strong><code>x</code></strong>, and the <code>ParamSet</code> itself as <strong><code>param_set</code></strong>; it must return a list of transformed parameter values.</p>
-<p>The transformation is performed when calling the <strong><code>$transpose</code></strong> function of the <code>Design</code> object returned by a <code>Sampler</code> with the <strong><code>trafo</code></strong> param set to <code>TRUE</code>. The following, for example, creates a parameter that is exponentially distributed:</p>
+<p>The transformation is performed when calling the <strong><code>$transpose</code></strong> function of the <code>Design</code> object returned by a <code>Sampler</code> with the <strong><code>trafo</code></strong> param set to <code>TRUE</code> (the default). The following, for example, creates a parameter that is exponentially distributed:</p>
 <div class="sourceCode" id="cb24"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb24-1" data-line-number="1">psexp =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">"par"</span>, <span class="dv">0</span>, <span class="dv">1</span>)))</a>
 <a class="sourceLine" id="cb24-2" data-line-number="2">psexp<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
 <a class="sourceLine" id="cb24-3" data-line-number="3">  x<span class="op">$</span>par =<span class="st"> </span><span class="op">-</span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/Log">log</a></span>(x<span class="op">$</span>par)</a>
@@ -416,7 +416,7 @@
 <a class="sourceLine" id="cb24-9" data-line-number="9"><span class="co">#&gt;          par</span></a>
 <a class="sourceLine" id="cb24-10" data-line-number="10"><span class="co">#&gt; 1: 0.6431882</span></a>
 <a class="sourceLine" id="cb24-11" data-line-number="11"><span class="co">#&gt; 2: 0.9267588</span></a>
-<a class="sourceLine" id="cb24-12" data-line-number="12">design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a>
+<a class="sourceLine" id="cb24-12" data-line-number="12">design<span class="op">$</span><span class="kw">transpose</span>()  <span class="co"># trafo is TRUE</span></a>
 <a class="sourceLine" id="cb24-13" data-line-number="13"><span class="co">#&gt; [[1]]</span></a>
 <a class="sourceLine" id="cb24-14" data-line-number="14"><span class="co">#&gt; [[1]]$par</span></a>
 <a class="sourceLine" id="cb24-15" data-line-number="15"><span class="co">#&gt; [1] 0.4413179</span></a>
@@ -425,81 +425,91 @@
 <a class="sourceLine" id="cb24-18" data-line-number="18"><span class="co">#&gt; [[2]]</span></a>
 <a class="sourceLine" id="cb24-19" data-line-number="19"><span class="co">#&gt; [[2]]$par</span></a>
 <a class="sourceLine" id="cb24-20" data-line-number="20"><span class="co">#&gt; [1] 0.07606189</span></a></code></pre></div>
+<p>Compare this to <code>$transpose()</code> without transformation:</p>
+<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">FALSE</span>)</a>
+<a class="sourceLine" id="cb25-2" data-line-number="2"><span class="co">#&gt; [[1]]</span></a>
+<a class="sourceLine" id="cb25-3" data-line-number="3"><span class="co">#&gt; [[1]]$par</span></a>
+<a class="sourceLine" id="cb25-4" data-line-number="4"><span class="co">#&gt; [1] 0.6431882</span></a>
+<a class="sourceLine" id="cb25-5" data-line-number="5"><span class="co">#&gt; </span></a>
+<a class="sourceLine" id="cb25-6" data-line-number="6"><span class="co">#&gt; </span></a>
+<a class="sourceLine" id="cb25-7" data-line-number="7"><span class="co">#&gt; [[2]]</span></a>
+<a class="sourceLine" id="cb25-8" data-line-number="8"><span class="co">#&gt; [[2]]$par</span></a>
+<a class="sourceLine" id="cb25-9" data-line-number="9"><span class="co">#&gt; [1] 0.9267588</span></a></code></pre></div>
 <div id="transformation-between-types" class="section level3">
 <h3 class="hasAnchor">
 <a href="#transformation-between-types" class="anchor"></a>Transformation between Types</h3>
 <p>Usually the design created with one <code>ParamSet</code> is then used to configure other objects that themselves have a <code>ParamSet</code> which defines the values they take. The <code>ParamSet</code>s that can be used for random sampling, however, are restricted in some ways: They must have finite bounds, and they may not contain untyped (<code>ParamUty</code>) parameters. <code>$trafo</code> provides the glue for these situations. There is relatively little constraint on the trafo function’s return value, so it is possible to return values that have different bounds or even types than the original <code>ParamSet</code>. It is even possible to remove some parameters and add new ones.</p>
 <p>Suppose, for example, that a certain method requires a <em>function</em> as a parameter, for example a function that summarises its data in a certain way. The user can pass functions like <code>median</code> or <code>mean</code>, but could also pass quantiles or something completely different. This method would probably use the following <code>ParamSet</code>:</p>
-<div class="sourceCode" id="cb25"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb25-1" data-line-number="1">methodPS =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb25-2" data-line-number="2">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
-<a class="sourceLine" id="cb25-3" data-line-number="3">    ParamUty<span class="op">$</span><span class="kw">new</span>(<span class="st">"fun"</span>,</a>
-<a class="sourceLine" id="cb25-4" data-line-number="4">      <span class="dt">custom_check =</span> <span class="cf">function</span>(x) checkmate<span class="op">::</span><span class="kw"><a href="https://www.rdocumentation.org/packages/checkmate/topics/checkFunction">checkFunction</a></span>(x, <span class="dt">nargs =</span> <span class="dv">1</span>))</a>
-<a class="sourceLine" id="cb25-5" data-line-number="5">  )</a>
-<a class="sourceLine" id="cb25-6" data-line-number="6">)</a>
-<a class="sourceLine" id="cb25-7" data-line-number="7"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(methodPS)</a>
-<a class="sourceLine" id="cb25-8" data-line-number="8"><span class="co">#&gt; ParamSet: paramset</span></a>
-<a class="sourceLine" id="cb25-9" data-line-number="9"><span class="co">#&gt;     id    class lower upper values     default</span></a>
-<a class="sourceLine" id="cb25-10" data-line-number="10"><span class="co">#&gt; 1: fun ParamUty    NA    NA        &lt;NoDefault&gt;</span></a></code></pre></div>
-<p>If one wanted to sample this method, using one of four functions, a way to do this would be</p>
-<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb26-1" data-line-number="1">samplingPS =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
+<div class="sourceCode" id="cb26"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb26-1" data-line-number="1">methodPS =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
 <a class="sourceLine" id="cb26-2" data-line-number="2">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
-<a class="sourceLine" id="cb26-3" data-line-number="3">    ParamFct<span class="op">$</span><span class="kw">new</span>(<span class="st">"fun"</span>, <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"min"</span>, <span class="st">"max"</span>))</a>
-<a class="sourceLine" id="cb26-4" data-line-number="4">  )</a>
-<a class="sourceLine" id="cb26-5" data-line-number="5">)</a>
-<a class="sourceLine" id="cb26-6" data-line-number="6"></a>
-<a class="sourceLine" id="cb26-7" data-line-number="7">samplingPS<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
-<a class="sourceLine" id="cb26-8" data-line-number="8">  <span class="co"># x$fun is a `character(1)`,</span></a>
-<a class="sourceLine" id="cb26-9" data-line-number="9">  <span class="co"># in particular one of 'mean', 'median', 'min', 'max'.</span></a>
-<a class="sourceLine" id="cb26-10" data-line-number="10">  <span class="co"># We want to turn it into a function!</span></a>
-<a class="sourceLine" id="cb26-11" data-line-number="11">  x<span class="op">$</span>fun =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">mean =</span> mean, <span class="dt">median =</span> median, <span class="dt">min =</span> min, <span class="dt">max =</span> max)[[x<span class="op">$</span>fun]]</a>
-<a class="sourceLine" id="cb26-12" data-line-number="12">  x</a>
-<a class="sourceLine" id="cb26-13" data-line-number="13">}</a></code></pre></div>
-<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">design =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_random.html">generate_design_random</a></span>(samplingPS, <span class="dv">2</span>)</a>
-<a class="sourceLine" id="cb27-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(design)</a>
-<a class="sourceLine" id="cb27-3" data-line-number="3"><span class="co">#&gt; &lt;Design&gt; with 2 rows:</span></a>
-<a class="sourceLine" id="cb27-4" data-line-number="4"><span class="co">#&gt;     fun</span></a>
-<a class="sourceLine" id="cb27-5" data-line-number="5"><span class="co">#&gt; 1:  max</span></a>
-<a class="sourceLine" id="cb27-6" data-line-number="6"><span class="co">#&gt; 2: mean</span></a></code></pre></div>
+<a class="sourceLine" id="cb26-3" data-line-number="3">    ParamUty<span class="op">$</span><span class="kw">new</span>(<span class="st">"fun"</span>,</a>
+<a class="sourceLine" id="cb26-4" data-line-number="4">      <span class="dt">custom_check =</span> <span class="cf">function</span>(x) checkmate<span class="op">::</span><span class="kw"><a href="https://www.rdocumentation.org/packages/checkmate/topics/checkFunction">checkFunction</a></span>(x, <span class="dt">nargs =</span> <span class="dv">1</span>))</a>
+<a class="sourceLine" id="cb26-5" data-line-number="5">  )</a>
+<a class="sourceLine" id="cb26-6" data-line-number="6">)</a>
+<a class="sourceLine" id="cb26-7" data-line-number="7"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(methodPS)</a>
+<a class="sourceLine" id="cb26-8" data-line-number="8"><span class="co">#&gt; ParamSet: paramset</span></a>
+<a class="sourceLine" id="cb26-9" data-line-number="9"><span class="co">#&gt;     id    class lower upper values     default</span></a>
+<a class="sourceLine" id="cb26-10" data-line-number="10"><span class="co">#&gt; 1: fun ParamUty    NA    NA        &lt;NoDefault&gt;</span></a></code></pre></div>
+<p>If one wanted to sample this method, using one of four functions, a way to do this would be</p>
+<div class="sourceCode" id="cb27"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb27-1" data-line-number="1">samplingPS =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb27-2" data-line-number="2">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
+<a class="sourceLine" id="cb27-3" data-line-number="3">    ParamFct<span class="op">$</span><span class="kw">new</span>(<span class="st">"fun"</span>, <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(<span class="st">"mean"</span>, <span class="st">"median"</span>, <span class="st">"min"</span>, <span class="st">"max"</span>))</a>
+<a class="sourceLine" id="cb27-4" data-line-number="4">  )</a>
+<a class="sourceLine" id="cb27-5" data-line-number="5">)</a>
+<a class="sourceLine" id="cb27-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb27-7" data-line-number="7">samplingPS<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
+<a class="sourceLine" id="cb27-8" data-line-number="8">  <span class="co"># x$fun is a `character(1)`,</span></a>
+<a class="sourceLine" id="cb27-9" data-line-number="9">  <span class="co"># in particular one of 'mean', 'median', 'min', 'max'.</span></a>
+<a class="sourceLine" id="cb27-10" data-line-number="10">  <span class="co"># We want to turn it into a function!</span></a>
+<a class="sourceLine" id="cb27-11" data-line-number="11">  x<span class="op">$</span>fun =<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">mean =</span> mean, <span class="dt">median =</span> median, <span class="dt">min =</span> min, <span class="dt">max =</span> max)[[x<span class="op">$</span>fun]]</a>
+<a class="sourceLine" id="cb27-12" data-line-number="12">  x</a>
+<a class="sourceLine" id="cb27-13" data-line-number="13">}</a></code></pre></div>
+<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb28-1" data-line-number="1">design =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_random.html">generate_design_random</a></span>(samplingPS, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb28-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(design)</a>
+<a class="sourceLine" id="cb28-3" data-line-number="3"><span class="co">#&gt; &lt;Design&gt; with 2 rows:</span></a>
+<a class="sourceLine" id="cb28-4" data-line-number="4"><span class="co">#&gt;     fun</span></a>
+<a class="sourceLine" id="cb28-5" data-line-number="5"><span class="co">#&gt; 1:  max</span></a>
+<a class="sourceLine" id="cb28-6" data-line-number="6"><span class="co">#&gt; 2: mean</span></a></code></pre></div>
 <p>Note that the <code>Design</code> only contains the column “<code>fun</code>” as a <code>character</code> column. To get a single value as a <em>function</em>, the <code>$transpose</code> function is used.</p>
-<div class="sourceCode" id="cb28"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb28-1" data-line-number="1">xvals =<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb28-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(xvals[[<span class="dv">1</span>]])</a>
-<a class="sourceLine" id="cb28-3" data-line-number="3"><span class="co">#&gt; $fun</span></a>
-<a class="sourceLine" id="cb28-4" data-line-number="4"><span class="co">#&gt; function (..., na.rm = FALSE)  .Primitive("max")</span></a></code></pre></div>
+<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">xvals =<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>()</a>
+<a class="sourceLine" id="cb29-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(xvals[[<span class="dv">1</span>]])</a>
+<a class="sourceLine" id="cb29-3" data-line-number="3"><span class="co">#&gt; $fun</span></a>
+<a class="sourceLine" id="cb29-4" data-line-number="4"><span class="co">#&gt; function (..., na.rm = FALSE)  .Primitive("max")</span></a></code></pre></div>
 <p>We can now check that it fits the requirements set by <code>methodPS</code>, and that <code>fun</code> it is in fact a function:</p>
-<div class="sourceCode" id="cb29"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb29-1" data-line-number="1">methodPS<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(xvals[[<span class="dv">1</span>]])</a>
-<a class="sourceLine" id="cb29-2" data-line-number="2"><span class="co">#&gt; [1] TRUE</span></a>
-<a class="sourceLine" id="cb29-3" data-line-number="3">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb29-4" data-line-number="4"><span class="co">#&gt; [1] 10</span></a></code></pre></div>
+<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb30-1" data-line-number="1">methodPS<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(xvals[[<span class="dv">1</span>]])</a>
+<a class="sourceLine" id="cb30-2" data-line-number="2"><span class="co">#&gt; [1] TRUE</span></a>
+<a class="sourceLine" id="cb30-3" data-line-number="3">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb30-4" data-line-number="4"><span class="co">#&gt; [1] 10</span></a></code></pre></div>
 <p>Imagine now that a different kind of parameterisation of the function is desired: The user wants to give a function that selects a certain quantile, where the quantile is set by a parameter. In that case the <code>$transpose</code> function could generate a function in a different way. For interpretability, the parameter is called “<code>quantile</code>” before transformation, and the “<code>fun</code>” parameter is generated on the fly.</p>
-<div class="sourceCode" id="cb30"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb30-1" data-line-number="1">samplingPS2 =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
-<a class="sourceLine" id="cb30-2" data-line-number="2">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
-<a class="sourceLine" id="cb30-3" data-line-number="3">    ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">"quantile"</span>, <span class="dv">0</span>, <span class="dv">1</span>)</a>
-<a class="sourceLine" id="cb30-4" data-line-number="4">  )</a>
-<a class="sourceLine" id="cb30-5" data-line-number="5">)</a>
-<a class="sourceLine" id="cb30-6" data-line-number="6"></a>
-<a class="sourceLine" id="cb30-7" data-line-number="7">samplingPS2<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
-<a class="sourceLine" id="cb30-8" data-line-number="8">  <span class="co"># x$quantile is a `numeric(1)` between 0 and 1.</span></a>
-<a class="sourceLine" id="cb30-9" data-line-number="9">  <span class="co"># We want to turn it into a function!</span></a>
-<a class="sourceLine" id="cb30-10" data-line-number="10">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">fun =</span> <span class="cf">function</span>(input) <span class="kw"><a href="https://www.rdocumentation.org/packages/stats/topics/quantile">quantile</a></span>(input, x<span class="op">$</span>quantile))</a>
-<a class="sourceLine" id="cb30-11" data-line-number="11">}</a></code></pre></div>
-<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1">design =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_random.html">generate_design_random</a></span>(samplingPS2, <span class="dv">2</span>)</a>
-<a class="sourceLine" id="cb31-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(design)</a>
-<a class="sourceLine" id="cb31-3" data-line-number="3"><span class="co">#&gt; &lt;Design&gt; with 2 rows:</span></a>
-<a class="sourceLine" id="cb31-4" data-line-number="4"><span class="co">#&gt;     quantile</span></a>
-<a class="sourceLine" id="cb31-5" data-line-number="5"><span class="co">#&gt; 1: 0.1144178</span></a>
-<a class="sourceLine" id="cb31-6" data-line-number="6"><span class="co">#&gt; 2: 0.3774416</span></a></code></pre></div>
+<div class="sourceCode" id="cb31"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb31-1" data-line-number="1">samplingPS2 =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</a>
+<a class="sourceLine" id="cb31-2" data-line-number="2">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(</a>
+<a class="sourceLine" id="cb31-3" data-line-number="3">    ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="st">"quantile"</span>, <span class="dv">0</span>, <span class="dv">1</span>)</a>
+<a class="sourceLine" id="cb31-4" data-line-number="4">  )</a>
+<a class="sourceLine" id="cb31-5" data-line-number="5">)</a>
+<a class="sourceLine" id="cb31-6" data-line-number="6"></a>
+<a class="sourceLine" id="cb31-7" data-line-number="7">samplingPS2<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</a>
+<a class="sourceLine" id="cb31-8" data-line-number="8">  <span class="co"># x$quantile is a `numeric(1)` between 0 and 1.</span></a>
+<a class="sourceLine" id="cb31-9" data-line-number="9">  <span class="co"># We want to turn it into a function!</span></a>
+<a class="sourceLine" id="cb31-10" data-line-number="10">  <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">fun =</span> <span class="cf">function</span>(input) <span class="kw"><a href="https://www.rdocumentation.org/packages/stats/topics/quantile">quantile</a></span>(input, x<span class="op">$</span>quantile))</a>
+<a class="sourceLine" id="cb31-11" data-line-number="11">}</a></code></pre></div>
+<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">design =<span class="st"> </span><span class="kw"><a href="../reference/generate_design_random.html">generate_design_random</a></span>(samplingPS2, <span class="dv">2</span>)</a>
+<a class="sourceLine" id="cb32-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(design)</a>
+<a class="sourceLine" id="cb32-3" data-line-number="3"><span class="co">#&gt; &lt;Design&gt; with 2 rows:</span></a>
+<a class="sourceLine" id="cb32-4" data-line-number="4"><span class="co">#&gt;     quantile</span></a>
+<a class="sourceLine" id="cb32-5" data-line-number="5"><span class="co">#&gt; 1: 0.1144178</span></a>
+<a class="sourceLine" id="cb32-6" data-line-number="6"><span class="co">#&gt; 2: 0.3774416</span></a></code></pre></div>
 <p>The <code>Design</code> now contains the column “<code>quantile</code>” that will be used by the <code>$transpose</code> function to create the <code>fun</code> parameter. We also check that it fits the requirement set by <code>methodPS</code>, and that it is a function.</p>
-<div class="sourceCode" id="cb32"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb32-1" data-line-number="1">xvals =<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>(<span class="dt">trafo =</span> <span class="ot">TRUE</span>)</a>
-<a class="sourceLine" id="cb32-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(xvals[[<span class="dv">1</span>]])</a>
-<a class="sourceLine" id="cb32-3" data-line-number="3"><span class="co">#&gt; $fun</span></a>
-<a class="sourceLine" id="cb32-4" data-line-number="4"><span class="co">#&gt; function (input) </span></a>
-<a class="sourceLine" id="cb32-5" data-line-number="5"><span class="co">#&gt; quantile(input, x$quantile)</span></a>
-<a class="sourceLine" id="cb32-6" data-line-number="6"><span class="co">#&gt; &lt;environment: 0x55704c05d510&gt;</span></a>
-<a class="sourceLine" id="cb32-7" data-line-number="7">methodPS<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(xvals[[<span class="dv">1</span>]])</a>
-<a class="sourceLine" id="cb32-8" data-line-number="8"><span class="co">#&gt; [1] TRUE</span></a>
-<a class="sourceLine" id="cb32-9" data-line-number="9">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
-<a class="sourceLine" id="cb32-10" data-line-number="10"><span class="co">#&gt; 11.44178% </span></a>
-<a class="sourceLine" id="cb32-11" data-line-number="11"><span class="co">#&gt;   2.02976</span></a></code></pre></div>
+<div class="sourceCode" id="cb33"><pre class="sourceCode r"><code class="sourceCode r"><a class="sourceLine" id="cb33-1" data-line-number="1">xvals =<span class="st"> </span>design<span class="op">$</span><span class="kw">transpose</span>()</a>
+<a class="sourceLine" id="cb33-2" data-line-number="2"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/print">print</a></span>(xvals[[<span class="dv">1</span>]])</a>
+<a class="sourceLine" id="cb33-3" data-line-number="3"><span class="co">#&gt; $fun</span></a>
+<a class="sourceLine" id="cb33-4" data-line-number="4"><span class="co">#&gt; function (input) </span></a>
+<a class="sourceLine" id="cb33-5" data-line-number="5"><span class="co">#&gt; quantile(input, x$quantile)</span></a>
+<a class="sourceLine" id="cb33-6" data-line-number="6"><span class="co">#&gt; &lt;environment: 0x55fdca5f6990&gt;</span></a>
+<a class="sourceLine" id="cb33-7" data-line-number="7">methodPS<span class="op">$</span><span class="kw"><a href="https://www.rdocumentation.org/packages/utils/topics/PkgUtils">check</a></span>(xvals[[<span class="dv">1</span>]])</a>
+<a class="sourceLine" id="cb33-8" data-line-number="8"><span class="co">#&gt; [1] TRUE</span></a>
+<a class="sourceLine" id="cb33-9" data-line-number="9">xvals[[<span class="dv">1</span>]]<span class="op">$</span><span class="kw">fun</span>(<span class="dv">1</span><span class="op">:</span><span class="dv">10</span>)</a>
+<a class="sourceLine" id="cb33-10" data-line-number="10"><span class="co">#&gt; 11.44178% </span></a>
+<a class="sourceLine" id="cb33-11" data-line-number="11"><span class="co">#&gt;   2.02976</span></a></code></pre></div>
 </div>
 </div>
 <div class="footnotes">

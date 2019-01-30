@@ -134,7 +134,7 @@ of configurations somehow produced from the former - e.g., by calling a
 <a href='ParamSet.html'>ParamSet</a>, data.table, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>self</code>
 Note that the first 2 arguments are NOT cloned on construction!
 Has an option to remove duplicated rows.</p></li>
-<li><p><code>transpose(filter_na = TRUE, trafo = FALSE)</code>
+<li><p><code>transpose(filter_na = TRUE, trafo = TRUE)</code>
 <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>list</code> of <code>list</code>
 Converts <code>data</code> into a list of lists of row-configurations, possibly removes NA entries of
 inactive parameter values due to unsatisfied dependencies,
