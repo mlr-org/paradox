@@ -41,7 +41,7 @@
 #' * `tags`              :: named `list` of `character` \cr
 #'   Can be used to group and subset params.
 #'   Named with param IDs. Read-only.
-#' * `defaults`          :: named `list` \cr
+#' * `default`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
 #' * is_number           :: named `logical`
@@ -221,7 +221,7 @@ ParamSet = R6Class("ParamSet",
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
         if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          d = d[self$deps_on, on = "id"]
+          d = d[self$deps_on[, c("id", "dep_parent")], on = "id"]
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -250,7 +250,7 @@ ParamSet = R6Class("ParamSet",
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     special_vals = function() private$get_member_with_idnames("special_vals", as.list),
-    defaults = function() Filter(Negate(is_nodefault), private$get_member_with_idnames("default", as.list)),
+    default = function() Filter(Negate(is_nodefault), private$get_member_with_idnames("default", as.list)),
     tags = function() private$get_member_with_idnames("tags", as.list),
     storage_type = function() private$get_member_with_idnames("storage_type", as.character),
     is_number = function() private$get_member_with_idnames("is_number", as.logical),

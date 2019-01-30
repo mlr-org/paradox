@@ -23,7 +23,7 @@ of configurations somehow produced from the former - e.g., by calling a
 \link{ParamSet}, \link{data.table}, \code{logical(1)} -> \code{self}
 Note that the first 2 arguments are NOT cloned on construction!
 Has an option to remove duplicated rows.
-\item \code{transpose(filter_na = TRUE, trafo = FALSE)}
+\item \code{transpose(filter_na = TRUE, trafo = TRUE)}
 \code{logical(1)}, \code{logical(1)} -> \code{list} of \code{list}
 Converts \code{data} into a list of lists of row-configurations, possibly removes NA entries of
 inactive parameter values due to unsatisfied dependencies,

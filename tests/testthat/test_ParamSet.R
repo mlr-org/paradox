@@ -27,8 +27,8 @@ test_that("simple active bindings work", {
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, types = "character", info = info)
     expect_names(names(ps$tags), identical.to = ps$ids(), info = info)
-    expect_list(ps$defaults, names = "strict", info = info)
-    expect_names(names(ps$defaults), subset.of = ps$ids(), info = info)
+    expect_list(ps$default, names = "strict", info = info)
+    expect_names(names(ps$default), subset.of = ps$ids(), info = info)
   }
   ps = th_paramset_full()
   expect_equal(ps$ids(), c('th_param_int', 'th_param_dbl', 'th_param_fct', 'th_param_lgl'))
@@ -99,6 +99,10 @@ test_that("ParamSet$check", {
   expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
+
+  ps = ParamLgl$new("x")$rep(2)
+  ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
+  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "not ok: x_rep_2 equal TRUE")
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
@@ -219,19 +223,19 @@ test_that("as.data.table", {
   expect_equal(unname(ps$values), d$values)
 })
 
-test_that("ParamSet$defaults", {
+test_that("ParamSet$default", {
   ps = ParamSet$new(list(
     ParamDbl$new("x", lower = 1, upper = 3, default = 2),
     ParamInt$new("y", lower = 1, upper = 3)
   ))
-  expect_equal(ps$defaults, list(x = 2))
+  expect_equal(ps$default, list(x = 2))
   expect_error(ParamDbl$new("x", lower = 1, upper = 3, default = 4))
   expect_error(ParamDbl$new("x", lower = 1, upper = 3, default = NULL))
   ps = ParamSet$new(list(
     ParamDbl$new("x", lower = 1, upper = 3, special_vals = list(NULL), default = NULL),
     ParamInt$new("y", lower = 1, upper = 3)
   ))
-  expect_equal(ps$defaults, list(x = NULL))
+  expect_equal(ps$default, list(x = NULL))
 })
 
 test_that("is_number / is_categ", {

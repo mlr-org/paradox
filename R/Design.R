@@ -14,7 +14,7 @@
 #'   [ParamSet], [data.table], `logical(1)` -> `self`
 #'   Note that the first 2 arguments are NOT cloned on construction!
 #'   Has an option to remove duplicated rows.
-#' * `transpose(filter_na = TRUE, trafo = FALSE)`
+#' * `transpose(filter_na = TRUE, trafo = TRUE)`
 #'   `logical(1)`, `logical(1)` -> `list` of `list`
 #'   Converts `data` into a list of lists of row-configurations, possibly removes NA entries of
 #'   inactive parameter values due to unsatisfied dependencies,
@@ -48,16 +48,14 @@ Design = R6Class("Design",
       print(self$data)
     },
 
-    transpose = function(filter_na = TRUE, trafo = FALSE) {
+    transpose = function(filter_na = TRUE, trafo = TRUE) {
       assert_flag(filter_na)
       assert_flag(trafo)
+      ps = self$param_set
       xs = mlr3misc::transpose(self$data)
       if (filter_na)
         xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
-      if (trafo) {
-        ps = self$param_set
-        if (!ps$has_trafo)
-          stopf("Design was not generated from a param set with a trafo!")
+      if (ps$has_trafo && trafo) {
         xs = map(xs, function(x) ps$trafo(x, ps))
       }
       return(xs)

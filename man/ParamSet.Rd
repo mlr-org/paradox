@@ -51,7 +51,7 @@ Named with param IDs. Read-only.
 \item \code{tags}              :: named \code{list} of \code{character} \cr
 Can be used to group and subset params.
 Named with param IDs. Read-only.
-\item \code{defaults}          :: named \code{list} \cr
+\item \code{default}          :: named \code{list} \cr
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
 \item is_number           :: named \code{logical}

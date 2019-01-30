@@ -4,13 +4,13 @@
 \name{SamplerUnif}
 \alias{SamplerUnif}
 \title{Sampler: Multivariate uniform.}
-\format{\link{R6Class} object. Inherits from \link{SamplerHierachical}.}
+\format{\link{R6Class} object. Inherits from \link{SamplerHierarchical}.}
 \usage{
 SamplerUnif
 }
 \description{
 Uniform random sampling for arbitrary (bounded) param sets.
-Constructs 1 uniform sampler per param, then passes them to \link{SamplerHierachical}.
+Constructs 1 uniform sampler per param, then passes them to \link{SamplerHierarchical}.
 Hence, also works for param sets with dependencies.
 }
 \section{Public methods}{
@@ -22,7 +22,7 @@ Hence, also works for param sets with dependencies.
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerHierachical}},
+Other Sampler: \code{\link{SamplerHierarchical}},
   \code{\link{SamplerJointIndep}}, \code{\link{Sampler}}
 }
 \concept{Sampler}

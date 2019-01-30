@@ -18,6 +18,8 @@ Condition object, to specify the condition in a dependency.
 \itemize{
 \item \code{type}          :: \code{character(1)}
 Name / type of the condition. Read-only.
+\item \code{rhs}          :: \code{any}
+Right-hand-side of the condition.
 }
 }
 

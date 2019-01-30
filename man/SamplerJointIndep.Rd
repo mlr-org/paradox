@@ -28,7 +28,7 @@ list of \link{Sampler} -> \code{self}
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerHierachical}},
+Other Sampler: \code{\link{SamplerHierarchical}},
   \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }
 \concept{Sampler}
