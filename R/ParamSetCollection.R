@@ -1,8 +1,3 @@
-# FIXME: we need to be able to add deps across the sets, i fear. especially for the brnaching
-# can we somehow provide some sugar fox this?
-
-#FIXME: test that params sets on contru dont have travo
-
 #' @title ParamSetCollection
 #' @format [R6Class] object. Inherits from [ParamSet].
 #'
