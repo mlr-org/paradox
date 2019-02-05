@@ -36,8 +36,6 @@ Design = R6Class("Design",
       self$data = data
       if (param_set$has_deps)
         private$set_deps_to_na()
-      # FIXME: this can be problematic, as we now might generate designs which do not have
-      # enough rows anymore, as the user requested? create an issue!
       # NB: duplicated rows can happen to to NA setting
       if (remove_dupl)
         self$data = unique(self$data) # remove duplicated rows

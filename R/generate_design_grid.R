@@ -49,5 +49,5 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # FIXME: mini helper in mlr3misc for this?
   ns = names(res); res = unname(res)
   res = do.call(CJ, c(res, sorted = FALSE))
-  Design$new(param_set, set_names(res, ids), remove_dupl = TRUE)
+  Design$new(param_set, set_names(res, ids), remove_dupl = TRUE) # user wants no dupls, remove
 }
