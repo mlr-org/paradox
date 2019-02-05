@@ -8,7 +8,7 @@
 #'
 #' @section Public methods:
 #' * `new(param_set, samplers)` \cr
-#'   [ParamSet], list of [Sampler] -> `self`
+#'   [ParamSet], list of [Sampler] -> `self` \cr
 #'   User has to pass one [Sampler1D] per param in set, which specifies its distribution.
 #'
 #' @name SamplerHierarchical

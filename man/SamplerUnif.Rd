@@ -17,7 +17,7 @@ Hence, also works for param sets with dependencies.
 
 \itemize{
 \item \code{new(param_set)} \cr
-\link{ParamSet} -> \code{self}
+\link{ParamSet} -> \code{self} \cr
 }
 }
 

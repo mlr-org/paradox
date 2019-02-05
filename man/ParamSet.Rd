@@ -15,31 +15,31 @@ resulting set have to be uniquely named with IDs with valid R names.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{set_id}            :: \code{character(1)}
+\item \code{set_id}            :: \code{character(1)} \cr
 ID of this param set. Settable.
-\item \code{params}            :: named list of \link{Param}
+\item \code{params}            :: named list of \link{Param} \cr
 Contained parameters, named with their respective IDs.
 NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-\item \code{length}            :: \code{integer(1)}
+\item \code{length}            :: \code{integer(1)} \cr
 Number of contained params. Read-only.
-\item \code{is_empty}          :: \code{logical(1)}
+\item \code{is_empty}          :: \code{logical(1)} \cr
 Is the param set empty? Read-only.
-\item \code{class}             :: named \code{character}
+\item \code{class}             :: named \code{character} \cr
 Param classes of contained parameters.
 Named with param IDs. Read-only.
-\item \code{lower}             :: named \link{double}
+\item \code{lower}             :: named \link{double} \cr
 Lower bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{upper}             :: named \link{double}
+\item \code{upper}             :: named \link{double} \cr
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{values}            :: named \code{list}
+\item \code{values}            :: named \code{list} \cr
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.
-\item \code{nlevels}           :: named \link{double}
+\item \code{nlevels}           :: named \link{double} \cr
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 Named with param IDs. Read-only.
-\item \code{is_bounded}        :: named \code{logical(1)}
+\item \code{is_bounded}        :: named \code{logical(1)} \cr
 Do all parameters have finite bounds?
 Named with param IDs. Read-only.
 \item \code{special_vals}      :: named \code{list} of \code{list} \cr
@@ -54,10 +54,10 @@ Named with param IDs. Read-only.
 \item \code{default}          :: named \code{list} \cr
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.
-\item is_number           :: named \code{logical}
+\item is_number           :: named \code{logical} \cr
 Position is TRUE iff Param is dbl or int.
 Named with param IDs. Read-only.
-\item is_categ          :: named \code{logical}
+\item is_categ          :: named \code{logical} \cr
 Position is TRUE iff Param is fct or lgl.
 Named with param IDs. Read-only.
 \item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
@@ -87,17 +87,17 @@ The last col lists all dependencies that the row-ID has.
 
 \itemize{
 \item \code{new(params)} \cr
-list of \link{Param} -> \code{self}
+list of \link{Param} -> \code{self} \cr
 Deep-clones all passed param objects.
 \item \code{ids(class = NULL, is_bounded = NULL, tags = NULL)} \cr
-\code{character}, \code{logical(1)}, \code{character} -> \code{character}
+\code{character}, \code{logical(1)}, \code{character} -> \code{character} \cr
 Retrieves IDs of contained params based on some selections, \code{NULL} means no restriction.
 \code{class} and \code{tags} can be sets.
 \item \code{add(param_set)} \cr
-\link{Param} | \link{ParamSet} -> \code{self}
+\link{Param} | \link{ParamSet} -> \code{self} \cr
 Adds a single param or another set to this set, all params are cloned.
 \item \code{subset(ids)} \cr
-\code{character} -> \code{self}
+\code{character} -> \code{self} \cr
 Changes the current set to the set of passed IDs.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
 Three checkmate-like check-functions. Take a named list.
@@ -105,7 +105,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \item \code{add_dep(id, on, cond)} \cr
-\code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self}
+\code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self} \cr
 Adds a \link{Dependency} to this set, so that param \code{id} now depends on param \code{on}.
 }
 }

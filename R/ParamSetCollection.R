@@ -16,7 +16,7 @@
 #'
 #' @section Public methods:
 #' * `new(sets)` \cr
-#'   list of [ParamSet] -> `self`
+#'   list of [ParamSet] -> `self` \cr
 #'   Parameter objects are cloned.
 #'
 #' @name ParamSetCollection

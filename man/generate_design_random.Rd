@@ -7,7 +7,7 @@
 generate_design_random(param_set, n)
 }
 \arguments{
-\item{param_set}{\link{ParamSet}.}
+\item{param_set}{\link{ParamSet} \cr}
 
 \item{n}{\code{integer(1)} \cr
 Number of points to draw randomly.}

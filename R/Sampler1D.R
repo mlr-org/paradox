@@ -5,7 +5,7 @@
 #' 1D sampler, abstract base class and inheriting concrete implementations.
 #'
 #' @section Public members / active bindings:
-#' * `param`            :: [Param]
+#' * `param`            :: [Param] \cr
 #'   Quick access to the one param in the set.
 #'
 #' @section Currently implenented samplers:

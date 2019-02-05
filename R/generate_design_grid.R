@@ -6,7 +6,7 @@
 #' always produce a grid over all their valid levels.
 #' NB2: For number params the endpoints of the params are always included in the grid.
 #'
-#' @param param_set :: [ParamSet].
+#' @param param_set :: [ParamSet] \cr
 #' @param resolution :: `integer(1)` \cr
 #'   Global resolution for all params.
 #' @param param_resolutions :: named `integer` \cr

@@ -11,11 +11,11 @@
 #'
 #' @section Public methods:
 #' * `new(param_set, data, remove_dupl)` \cr
-#'   [ParamSet], [data.table], `logical(1)` -> `self`
+#'   [ParamSet], [data.table], `logical(1)` -> `self` \cr
 #'   Note that the first 2 arguments are NOT cloned on construction!
 #'   Has an option to remove duplicated rows.
-#' * `transpose(filter_na = TRUE, trafo = TRUE)`
-#'   `logical(1)`, `logical(1)` -> `list` of `list`
+#' * `transpose(filter_na = TRUE, trafo = TRUE)` \cr
+#'   `logical(1)`, `logical(1)` -> `list` of `list` \cr
 #'   Converts `data` into a list of lists of row-configurations, possibly removes NA entries of
 #'   inactive parameter values due to unsatisfied dependencies,
 #'   and possibly calls the `trafo` function of the param set.

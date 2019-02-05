@@ -16,7 +16,7 @@ A collection of multiple \link{ParamSet} objects.
 
 \itemize{
 \item \code{new(sets)} \cr
-list of \link{ParamSet} -> \code{self}
+list of \link{ParamSet} -> \code{self} \cr
 Parameter objects are cloned.
 }
 }

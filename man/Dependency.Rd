@@ -18,11 +18,11 @@ the param set maintains an internal list of Dependency objects.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{param}             :: \link{Param}
+\item \code{param}             :: \link{Param} \cr
 The dependent param.
-\item \code{parent}            :: \link{Param}
+\item \code{parent}            :: \link{Param} \cr
 The (categorical) param this param depends on.
-\item \code{cond}              :: \link{Condition}
+\item \code{cond}              :: \link{Condition} \cr
 Condition of the dependency.
 }
 }
@@ -31,7 +31,7 @@ Condition of the dependency.
 
 \itemize{
 \item \code{new(param, parent, cond)} \cr
-\link{Param}, \link{Param} \link{Condition} -> \code{self}
+\link{Param}, \link{Param} \link{Condition} -> \code{self} \cr
 }
 }
 

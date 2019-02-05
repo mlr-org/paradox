@@ -14,7 +14,7 @@ Create joint, independent sampler out of multiple other samplers.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{param_set}            :: \link{ParamSet}
+\item \code{param_set}            :: \link{ParamSet} \cr
 Combined param sets all passed samplers.
 }
 }
@@ -23,7 +23,7 @@ Combined param sets all passed samplers.
 
 \itemize{
 \item \code{new(samplers)} \cr
-list of \link{Sampler} -> \code{self}
+list of \link{Sampler} -> \code{self} \cr
 }
 }
 

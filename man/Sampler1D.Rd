@@ -18,7 +18,7 @@ Sampler1D
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{param}            :: \link{Param}
+\item \code{param}            :: \link{Param} \cr
 Quick access to the one param in the set.
 }
 }

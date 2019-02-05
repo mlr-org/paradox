@@ -32,9 +32,9 @@
 #'    Data type when values of this param is stored in a data table or sampled. Read-only.
 #' * `tags`             :: `character` \cr
 #'   Can be used to group and subset params.
-#' * is_number          :: `logical(1)`
+#' * is_number          :: `logical(1)` \cr
 #'   TRUE iff Param is dbl or int.
-#' * is_categ           :: `logical(1)`
+#' * is_categ           :: `logical(1)` \cr
 #'   TRUE iff Param is fct or lgl.
 #'
 #' @section Public methods:
@@ -43,21 +43,21 @@
 #'   Constructor of abstract base class, only called by inheriting classes.
 #'   See meaning of `id`, `special_vals`, `default`, `tags` in member section.
 #' * `Param$Dbl$new(id, lower, upper, special_vals, default, tags)` \cr
-#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
+#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self \cr
 #'    Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.
 #' * `Param$Int$new(id, lower, upper, special_vals, default, tags)` \cr
-#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self
+#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self \cr
 #'    Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
 #'   `lower` is set to its integer ceiling and 'upper' to its integer floor value.
 #' * `ParamFct$new(id, values, special_vals, default, tags)` \cr
-#'   `character(1)`, `character`, `list`, `any`, `character` -> self
+#'   `character(1)`, `character`, `list`, `any`, `character` -> self \cr
 #'    Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
 #'    from its defined set of categorical values.
 #' * `Param$Lgl$new(id, special_vals, default, tags)` \cr
-#'   `character(1)`, `list`, `any`, `character` -> self
+#'   `character(1)`, `list`, `any`, `character` -> self \cr
 #'    Constructor for logical-scalar-params.
 #' * `ParamUty$new(id, default, tags, custom_check)` \cr
-#'   `character(1)`, `any`, `character`, `function(x)` -> self
+#'   `character(1)`, `any`, `character`, `function(x)` -> self \cr
 #'   Untyped parameters, can be used to bypass any complicated feasibility checks, when
 #'   a param is of truly complex type, as checks for this param are always feasible.
 #'   OTOH we cannot perform meaningful operations like sampling or generating designs with this param.

@@ -5,21 +5,21 @@
 #' Random sampler for an arbitrary [ParamSet].
 #'
 #' @section Public members / active bindings:
-#' * `param_set`            :: [ParamSet]
+#' * `param_set`            :: [ParamSet] \cr
 #'   Domain / support of the distribution we want to sample from.
 #'
 #' @section Public methods:
 #' * `new(param_set)` \cr
-#'   [ParamSet] -> `self`
+#'   [ParamSet] -> `self` \cr
 #'   Abstract, only inheriting subclasses call this.
 #'   Param set is cloned on construction.
 #' * `sample(n)` \cr
-#'   `integer(1)` -> [Design]
+#'   `integer(1)` -> [Design] \cr
 #'   Sample n values from the distribution.
 #'
 #' @section Private methods / Internals:
 #' * `.sample(n)` \cr
-#'   `integer(1)` -> [data.table]
+#'   `integer(1)` -> [data.table] \cr
 #'   Inheriting sublcasses have to implement thus, called from `sample()`
 #'
 #' @name Sampler

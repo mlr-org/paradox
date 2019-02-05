@@ -8,7 +8,7 @@ generate_design_grid(param_set, resolution = NULL,
   param_resolutions = NULL)
 }
 \arguments{
-\item{param_set}{:: \link{ParamSet}.}
+\item{param_set}{:: \link{ParamSet} \cr}
 
 \item{resolution}{:: \code{integer(1)} \cr
 Global resolution for all params.}

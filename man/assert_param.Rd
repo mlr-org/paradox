@@ -10,13 +10,13 @@ assert_param(param, cl = "Param", no_untyped = FALSE,
 \arguments{
 \item{param}{\link{Param} \cr}
 
-\item{cl}{\code{character}
+\item{cl}{\code{character} \cr
 Allowed subclasses.}
 
-\item{no_untyped}{\code{logical(1)}
+\item{no_untyped}{\code{logical(1)} \cr
 No unytped params allowed?}
 
-\item{must_bounded}{\code{logical(1)}
+\item{must_bounded}{\code{logical(1)} \cr
 Only bounded params allowed?}
 }
 \description{

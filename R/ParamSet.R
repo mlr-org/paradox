@@ -5,31 +5,31 @@
 #' resulting set have to be uniquely named with IDs with valid R names.
 #'
 #' @section Public members / active bindings:
-#' * `set_id`            :: `character(1)`
+#' * `set_id`            :: `character(1)` \cr
 #'   ID of this param set. Settable.
-#' * `params`            :: named list of [Param]
+#' * `params`            :: named list of [Param] \cr
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#' * `length`            :: `integer(1)`
+#' * `length`            :: `integer(1)` \cr
 #'   Number of contained params. Read-only.
-#' * `is_empty`          :: `logical(1)`
+#' * `is_empty`          :: `logical(1)` \cr
 #'   Is the param set empty? Read-only.
-#' * `class`             :: named `character`
+#' * `class`             :: named `character` \cr
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
-#' * `lower`             :: named [double]
+#' * `lower`             :: named [double] \cr
 #'   Lower bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `upper`             :: named [double]
+#' * `upper`             :: named [double] \cr
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `values`            :: named `list`
+#' * `values`            :: named `list` \cr
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
-#' * `nlevels`           :: named [double]
+#' * `nlevels`           :: named [double] \cr
 #'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 #'   Named with param IDs. Read-only.
-#' * `is_bounded`        :: named `logical(1)`
+#' * `is_bounded`        :: named `logical(1)` \cr
 #'   Do all parameters have finite bounds?
 #'   Named with param IDs. Read-only.
 #' * `special_vals`      :: named `list` of `list` \cr
@@ -44,10 +44,10 @@
 #' * `default`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
-#' * is_number           :: named `logical`
+#' * is_number           :: named `logical` \cr
 #'   Position is TRUE iff Param is dbl or int.
 #'   Named with param IDs. Read-only.
-#' * is_categ          :: named `logical`
+#' * is_categ          :: named `logical` \cr
 #'   Position is TRUE iff Param is fct or lgl.
 #'   Named with param IDs. Read-only.
 #' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
@@ -73,17 +73,17 @@
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
-#'   list of [Param] -> `self`
+#'   list of [Param] -> `self` \cr
 #'   Deep-clones all passed param objects.
 #' * `ids(class = NULL, is_bounded = NULL, tags = NULL)` \cr
-#'   `character`, `logical(1)`, `character` -> `character`
+#'   `character`, `logical(1)`, `character` -> `character` \cr
 #'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
 #'   `class` and `tags` can be sets.
 #' * `add(param_set)` \cr
-#'   [Param] | [ParamSet] -> `self`
+#'   [Param] | [ParamSet] -> `self` \cr
 #'   Adds a single param or another set to this set, all params are cloned.
 #' * `subset(ids)` \cr
-#'   `character` -> `self`
+#'   `character` -> `self` \cr
 #'   Changes the current set to the set of passed IDs.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'   Three checkmate-like check-functions. Take a named list.
@@ -91,7 +91,7 @@
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
-#'   `character(1)`, `character(1)`, [Condition] -> `self`
+#'   `character(1)`, `character(1)`, [Condition] -> `self` \cr
 #'    Adds a [Dependency] to this set, so that param `id` now depends on param `on`.
 #'
 #' @section S3 methods and type converters:
