@@ -73,6 +73,7 @@ Is NULL by default, and you can set it to NULL to switch the transformation off.
 Has the set a trafo` function?
 \item \code{deps}              :: list of \link{Dependency} \cr
 Parameter dependency objects, each element of the list is internally created by a call to \code{add_dep}.
+Settable, if you want to remove dependencies or perform other changes.
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
 \item \code{deps_on}          :: \code{data.table} \cr
