@@ -71,16 +71,13 @@ For convenience, the self-paramset is also passed in, if you need some info from
 Is NULL by default, and you can set it to NULL to switch the transformation off.
 \item \code{has_trafo}         :: \code{logical(1)} \cr
 Has the set a trafo` function?
-\item \code{deps}              :: list of \link{Dependency} \cr
-Parameter dependency objects, each element of the list is internally created by a call to \code{add_dep}.
-Settable, if you want to remove dependencies or perform other changes.
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
-\item \code{deps_on}          :: \code{data.table} \cr
-Table has cols \code{id} (\code{character(1)}) and \code{dep_parent} (\code{list} of \code{character}) and \code{dep} (list of \link{Dependency}).
-List all (direct) dependency parents of a param, through parameter IDs.
-Table has one row per param and is in the same order as \code{ids()}.
-The last col lists all dependencies that the row-ID has.
+\item \code{deps}          :: \code{data.table} \cr
+Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
+Lists all (direct) dependency parents of a param, through parameter IDs.
+Internally created by a call to \code{add_dep}.
+Settable, if you want to remove dependencies or perform other changes.
 }
 }
 
@@ -107,7 +104,7 @@ all individual param constraints are satisfied and all dependencies are satisfie
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \item \code{add_dep(id, on, cond)} \cr
 \code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self} \cr
-Adds a \link{Dependency} to this set, so that param \code{id} now depends on param \code{on}.
+Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.
 }
 }
 
