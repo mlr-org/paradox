@@ -285,8 +285,10 @@ ParamSet = R6Class("ParamSet",
         return(private$.param_vals)
       } else {
         assert_list(xs)
-        assert_names(names(xs), subset.of = self$ids())
-        self$assert(xs)
+        if (length(xs) > 0L) {
+          assert_names(names(xs), subset.of = self$ids())
+          self$assert(xs)
+        }
         private$.param_vals = xs
       }
     },
