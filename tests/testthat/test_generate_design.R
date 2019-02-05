@@ -40,6 +40,47 @@ test_that("generate_design_grid", {
   }
 })
 
+test_that("generate_design_grid with different resolutions and egde cases", {
+  ps = ParamSet$new(list(ParamFct$new("f", values = letters[1:2])))
+  d = generate_design_grid(ps)
+  expect_data_table(d$data, any.missing = FALSE, nrow = 2, ncol = 1)
+
+  ps = ParamSet$new(list(
+    ParamFct$new("f", values = letters[1:2]),
+    ParamDbl$new("d", lower = 0, upper = 1)
+  ))
+  d = generate_design_grid(ps, param_resolutions = c(d = 3))
+  expect_data_table(d$data, any.missing = FALSE, nrow = 6, ncol = 2)
+
+  ps = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamInt$new("y", lower = 0, upper = 10)
+  ))
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 6, ncol = 2)
+  expect_equal(length(unique(dd$x)), 2)
+  expect_equal(length(unique(dd$y)), 3)
+
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(x = 4, y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 12, ncol = 2)
+  expect_equal(length(unique(dd$x)), 4)
+  expect_equal(length(unique(dd$y)), 3)
+
+  ps = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamInt$new("y", lower = 0, upper = 10),
+    ParamLgl$new("z")
+  ))
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 12, ncol = 3)
+  expect_equal(length(unique(dd$x)), 2)
+  expect_equal(length(unique(dd$y)), 3)
+  expect_equal(length(unique(dd$z)), 2)
+})
+
 test_that("check generate_design_grid against concrete expectation", {
 
   ps = ParamSet$new(list(

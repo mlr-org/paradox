@@ -12,6 +12,8 @@ test_that("transpose works", {
   expect_equal(xs, list(list(f = "a", i = 1L), list(f = "b", i = NA_integer_)))
   xs = d$transpose(filter_na = TRUE)
   expect_equal(xs, list(list(f = "a", i = 1L), list(f = "b")))
+  xs2 = d$transpose(filter_na = TRUE, trafo = TRUE)
+  expect_equal(xs, xs2)
 
   # now a trafo, with a dep
   ps$trafo = function(x, param_set) {

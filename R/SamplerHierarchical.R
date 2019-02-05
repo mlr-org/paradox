@@ -1,4 +1,4 @@
-#' @title Sampler: Multivariate hierachical.
+#' @title Sampler: Multivariate hierarchical.
 #' @format [R6Class] object. Inherits from [Sampler].
 #'
 #' @description
@@ -8,13 +8,13 @@
 #'
 #' @section Public methods:
 #' * `new(param_set, samplers)` \cr
-#'   [ParamSet], list of [Sampler] -> `self`
+#'   [ParamSet], list of [Sampler] -> `self` \cr
 #'   User has to pass one [Sampler1D] per param in set, which specifies its distribution.
 #'
-#' @name SamplerHierachical
+#' @name SamplerHierarchical
 #' @family Sampler
 #' @export
-SamplerHierachical = R6Class("SamplerHierachical", inherit = Sampler,
+SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
   public = list(
     samplers = NULL,
 

@@ -9,7 +9,7 @@ test_that("ParamUty", {
   p = ParamUty$new(id = "x", custom_check = function(x)
     if(is.null(x)) "foo" else TRUE)
   expect_true(p$check(FALSE))
-  expect_string(p$check(NULL), "foo")
+  expect_string(p$check(NULL), fixed = "foo")
   expect_true(p$check(NA))
 
   p = ParamUty$new(id = "x", default = Inf)

@@ -2,7 +2,7 @@ context("sampling")
 
 test_that("1d samplers: basic tests", {
   samplers = list(
-    ParamDbl = list(Sampler1DUnif, Sampler1DTruncNorm),
+    ParamDbl = list(Sampler1DUnif, Sampler1DNormal),
     ParamInt = list(Sampler1DUnif),
     ParamFct = list(Sampler1DUnif, Sampler1DCateg),
     ParamLgl = list(Sampler1DUnif, Sampler1DCateg)
