@@ -25,6 +25,13 @@ test_that("basic example works", {
   ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("a"))
   ps$add_dep("th_param_int", on = "th_param_lgl", CondEqual$new(TRUE))
   expect_output(print(ps),"th_param_fct,th_param_lgl")
+
+  # test that we can remove deps
+  ps$deps = ps$deps[-1]
+  expect_true(ps$has_deps)
+  expect_data_table(ps$deps_on, nrow = 4)
+  ps$deps = ps$deps[-1]
+  expect_false(ps$has_deps)
 })
 
 test_that("nested deps work", {

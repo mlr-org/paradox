@@ -63,6 +63,7 @@
 #'   Has the set a trafo` function?
 #' * `deps`              :: list of [Dependency] \cr
 #'   Parameter dependency objects, each element of the list is internally created by a call to `add_dep`.
+#'   Settable, if you want to remove dependencies or perform other changes.
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
 #' * `deps_on`          :: `data.table` \cr
@@ -231,7 +232,14 @@ ParamSet = R6Class("ParamSet",
 
   active = list(
     params = function() private$.params,
-    deps = function() private$.deps,
+    deps = function(v) {
+      if (missing(v)) {
+        private$.deps
+      } else {
+        assert_list(v, "Dependency")
+        private$.deps = v
+      }
+    },
     set_id = function(v) {
       if (missing(v)) {
         private$.set_id
