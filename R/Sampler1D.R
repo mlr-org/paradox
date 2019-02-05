@@ -14,17 +14,18 @@
 #' * `Sampler1DCateg$new(param, prob = NULL)` \cr
 #'   Categorical distribution, for a fct or lgl param.
 #'   `prob` is a numeric vector of `nlevels` probabilities, which is uniform by default.
-#' * `Sampler1DTruncNorm$new(param)` \cr
-#'   Normal sampling (truncated) for (bounded) doubles.
+#' * `Sampler1DNormal$new(param, mean = NULL, sd = NULL)` \cr
+#'   Normal sampling (potentially truncated) for doubles.
 #'   Has member variables `mean` and 'sd' which you can change to influence sampling,
 #'   they are initialized to `mean=mean(range)` and `sd=span/4`.
+#'   A truncated normal is used if the param is bounded on both sides.
 #' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
 #'   Arbitrary sampling from 1D rng functions from R.
 #'   Pass e.g. `rfun=rexp` to sample from exponential distribution.
 #'   `trunc = TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
 #'
 #' @name Sampler1D
-#' @aliases Sampler1DUnif Sampler1DCateg Sampler1DTruncNorm Sampler1DRfun
+#' @aliases Sampler1DUnif Sampler1DCateg Sampler1DNormal Sampler1DRfun
 #' @family Sampler
 #' NULL
 
@@ -131,14 +132,20 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
 )
 
 #' @export
-Sampler1DTruncNorm = R6Class("Sampler1DTruncNorm", inherit = Sampler1DRfun,
+Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
   public = list(
-    initialize = function(param) {
-      assert_param(param, "ParamDbl", must_bounded = TRUE)
-      super$initialize(param, trunc = TRUE,
+    initialize = function(param, mean = NULL, sd = NULL) {
+      assert_param(param, "ParamDbl")
+      if ((is.null(mean) || is.null(sd)) && !param$is_bounded)
+        stop("If 'mean' or 'sd' are not set, param must be bounded!")
+      if (is.null(mean))
+        mean = mean(param$range)
+      self$mean = mean
+      if (is.null(sd))
+        sd = param$span / 4
+      self$sd = sd
+      super$initialize(param, trunc = TRUE,  # we always trunc, this should not hurt for unbounded params
         rfun = function(n) rnorm(n, mean = self$mean, sd = self$sd))
-      private$.mean = mean(self$param$range)
-      private$.sd = self$param$span / 4
     }
   ),
 
