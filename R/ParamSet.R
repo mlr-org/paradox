@@ -61,16 +61,13 @@
 #'   Is NULL by default, and you can set it to NULL to switch the transformation off.
 #' * `has_trafo`         :: `logical(1)` \cr
 #'   Has the set a trafo` function?
-#' * `deps`              :: list of [Dependency] \cr
-#'   Parameter dependency objects, each element of the list is internally created by a call to `add_dep`.
-#'   Settable, if you want to remove dependencies or perform other changes.
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
-#' * `deps_on`          :: `data.table` \cr
-#'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`) and `dep` (list of [Dependency]).
-#'   List all (direct) dependency parents of a param, through parameter IDs.
-#'   Table has one row per param and is in the same order as `ids()`.
-#'   The last col lists all dependencies that the row-ID has.
+#' * `deps`          :: `data.table` \cr
+#'   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and `cond` ([Condition]).
+#'   Lists all (direct) dependency parents of a param, through parameter IDs.
+#'   Internally created by a call to `add_dep`.
+#'   Settable, if you want to remove dependencies or perform other changes.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
@@ -93,7 +90,7 @@
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
 #'   `character(1)`, `character(1)`, [Condition] -> `self` \cr
-#'    Adds a [Dependency] to this set, so that param `id` now depends on param `on`.
+#'    Adds a dependency to this set, so that param `id` now depends on param `on`.
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()` \cr
@@ -129,7 +126,7 @@ ParamSet = R6Class("ParamSet",
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
       private$.params = c(private$.params, ps2$params)
-      private$.deps = c(private$.deps, ps2$deps)
+      private$.deps = rbind(private$.deps, ps2$deps)
       invisible(self)
     },
 
@@ -149,10 +146,8 @@ ParamSet = R6Class("ParamSet",
     subset = function(ids) {
       assert_subset(ids, self$ids())
       if (self$has_deps) { # check that all required / leftover parents are still in new ids
-        d = self$deps_on
-        d = d[ids, on = "id"]
-        pids = unlist(d$dep_parent)
-        pids_not_there = setdiff(pids, ids)
+        parents = unique(self$deps[id %in% ids, "on"][[1L]])
+        pids_not_there = setdiff(parents, ids)
         if (length(pids_not_there) > 0L)
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
@@ -178,19 +173,21 @@ ParamSet = R6Class("ParamSet",
       # check dependencies
       nxs = names(xs)
       if (self$has_deps) {
-        for (dep in self$deps) {
-          p1id = dep$param$id
-          p2id = dep$parent$id
+        deps = self$deps
+        for (j in seq_row(self$deps)) {
+          p1id = deps$id[j]
+          p2id = deps$on[j]
           # we are ONLY ok if:
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
-          ok = (p1id %in% nxs && p2id %in% nxs && dep$cond$test(xs[[p2id]])) ||
+          cond = deps$cond[[j]]
+          ok = (p1id %in% nxs && p2id %in% nxs && cond$test(xs[[p2id]])) ||
                (p1id %nin% nxs)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
             return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
-              dep$param$id, dep$parent$id, dep$cond$type, str_collapse(dep$cond$rhs), p2id, val))
+              p1id, p2id, cond$type, str_collapse(cond$rhs), p2id, val))
           }
         }
       }
@@ -206,10 +203,7 @@ ParamSet = R6Class("ParamSet",
       assert_choice(on, self$ids())
       if (id == on)
         stopf("A param cannot depend on itself!")
-      p1 = self$params[[id]]
-      p2 = self$params[[on]]
-      dep = Dependency$new(p1, p2, cond)
-      private$.deps = c(private$.deps, list(dep))
+      private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
 
@@ -221,8 +215,10 @@ ParamSet = R6Class("ParamSet",
       } else {
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
-        if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          d = d[self$deps_on[, c("id", "dep_parent")], on = "id"]
+        if (self$has_deps) { # add a nice extra charvec-col to the tab, which lists all parents-ids
+          dd = self$deps[, .(parents = list(unlist(on))), by = id]
+          d = merge(d, dd, on = "id", all.x = TRUE)
+        }
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -236,7 +232,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(v)) {
         private$.deps
       } else {
-        assert_list(v, "Dependency")
+        assert_data_table(v)
         private$.deps = v
       }
     },
@@ -272,30 +268,14 @@ ParamSet = R6Class("ParamSet",
       }
     },
     has_trafo = function() !is.null(private$.trafo),
-    has_deps = function() length(self$deps) > 0L,
-    deps_on = function() {
-      if (self$is_empty)
-        return(data.table(id = character(0L), dep_parent = character(0L), deps = list()))
-      ids = self$ids()
-      if (self$has_deps) {
-        dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))
-        # join par-charvecs rows with same ids, and join dep-objects in a single list
-        # FIXME: a call to flatten would be best here
-        dtab = dtab[, .(dep_parent = list(unlist(dep_parent)), deps = list(unlist(deps))), by = id]
-      } else {
-        dtab = NULL
-      }
-      # add all ids with no deps
-      dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L)), deps = list(list())))
-      dtab[ids, on = "id"] # reorder in order of ids
-    }
+    has_deps = function() nrow(private$.deps) > 0L
   ),
 
   private = list(
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
-    .deps = list(), # a list of Dependency objects
+    .deps = data.table(id = character(0L), on = character(0L), cond = list()),
 
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
@@ -303,7 +283,7 @@ ParamSet = R6Class("ParamSet",
     deep_clone = function(name, value) {
       switch(name,
         ".params" = map(value, function(x) x$clone(deep = TRUE)),
-        ".deps" = map(value, function(x) x$clone(deep = TRUE)),
+        ".deps" = copy(value),
         value
       )
     }

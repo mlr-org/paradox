@@ -66,17 +66,21 @@ Design = R6Class("Design",
     # and set values in x to NA which where the dep is not OK
     set_deps_to_na = function(remove_dupl) {
       ps = self$param_set
-      deps_on = ps$deps_on
-      graph = deps_on[,1:2]
+      graph = ps$deps[, 1:2]
       colnames(graph) = c("id", "parents")
+      # we need to make sure that every param has a (maybe empty) row in the graph table
+      fillin = data.table(id = ps$ids(), parents = list(character(0L)))
+      graph = rbind(graph, fillin[fillin$id %nin% graph$id,])
+      graph = graph[, .(parents = list(unlist(parents))), by = id]
       topo = topo_sort(graph)
       pids_sorted = topo$id
       for (param_id in pids_sorted) {
-        deps = deps_on[param_id, on = "id"]$deps[[1L]]
-        for (d in deps) {
-          pcol = self$data[[d$parent$id]]
-          not_ok = which(is.na(pcol) | !d$cond$test(pcol)) # we are ok if parent was active and cond on parent is OK
-          set(self$data, not_ok, j = param_id, value = as(NA, d$param$storage_type))
+        param = ps$params[[param_id]]
+        dd = ps$deps[id == param_id,]
+        for (j in seq_row(dd)) {
+          pcol = self$data[[dd$on[j]]]
+          not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol)) # we are ok if parent was active and cond on parent is OK
+          set(self$data, not_ok, j = param_id, value = as(NA, param$storage_type))
         }
       }
     }
