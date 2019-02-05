@@ -37,6 +37,34 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   ),
 
+  active = list(
+    param_vals = function(xs) {
+      if (missing(xs)) {
+        vals = lapply(private$.sets, function(s) {
+          v = s$param_vals
+          if (length(v) > 0L)
+            names(v) = paste(s$set_id, names(v), sep = ".")
+          return(v)
+        })
+        return(unlist(vals, recursive = FALSE))
+      } else {
+        assert_list(xs)
+        self$assert(xs) # make sure everything is valid and feasible
+        # extract everything before 1st dot
+        set_ids = stri_split_fixed(names(xs), ".", n = 1L, tokens_only = TRUE)[[1L]]
+        xs = split(xs, set_ids) # partition xs into parts wrt to setids
+        for (s in private$.sets) {
+          # retrieve sublist for each set, then assign it in set (after removing prefix)
+          pv = xs[[s$set_id]]
+          if (is.null(pv))
+            pv = list()
+          names(pv) = stri_replace_first_fixed(names(pv), paste0(s$set_id, "."), "")
+          s$param_vals = pv
+        }
+      }
+    }
+  ),
+
   private = list(
     .sets = NULL,
     build_internal = function() {

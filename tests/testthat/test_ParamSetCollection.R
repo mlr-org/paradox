@@ -76,3 +76,24 @@ test_that("deps", {
   expect_data_table(d, nrows = 1, ncols = 3)
   expect_equal(d$id, c("ps1.d"))
 })
+
+test_that("param_vals", {
+  ps1 = ParamSet$new(list(
+    ParamFct$new("f", values = c("a", "b")),
+    ParamDbl$new("d", lower = 1, upper = 8)
+  ))
+  ps1$set_id = "foo"
+  ps2 = ParamSet$new(list(
+    ParamFct$new("f", values = c("a", "b")),
+    ParamDbl$new("d", lower = 1, upper = 8)
+  ))
+  ps2$set_id = "bar"
+  pcs = ParamSetCollection$new(list(ps1, ps2))
+  expect_equal(pcs$param_vals, list())
+  ps2$param_vals = list(d = 3)
+  expect_equal(pcs$param_vals, list(bar.d = 3))
+  pcs$param_vals = list(foo.d = 8)
+  expect_equal(pcs$param_vals, list(foo.d = 3))
+  expect_equal(ps1$param_vals, list(d = 3))
+  expect_equal(p21$param_vals, list())
+})
