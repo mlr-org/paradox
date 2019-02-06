@@ -59,11 +59,7 @@ test_that("printer works", {
   for (p in th_paramset_full()$params) {
     info = p$id
     s = capture_output(print(p))
-    expect_true(stri_detect_fixed(s, p$id), info = info)
-    expect_true(stri_detect_fixed(s, class(p)[1L]), info = info)
+    expect_true(grepl(p$id, s, fixed = TRUE), info = info)
+    expect_true(grepl(class(p)[1L], s, fixed = TRUE), info = info)
   }
 })
-
-
-
-

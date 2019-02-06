@@ -128,10 +128,10 @@ test_that("ParamSet$print", {
   ps = th_paramset_numeric()
   expect_output(print(ps), "ParamSet:")
   s = capture_output(print(ps))
-  expect_true(stri_detect_fixed(s, "ParamInt"))
-  expect_true(stri_detect_fixed(s, "ParamDbl"))
+  expect_true(grepl("ParamInt", s, fixed = TRUE))
+  expect_true(grepl("ParamDbl", s, fixed = TRUE))
   s = capture_output(print(ps, hide.cols = c("class")))
-  expect_false(stri_detect_fixed(s, "ParamInt"))
+  expect_false(grepl("ParamInt", s, fixed = TRUE))
 
   # iterate through more complex PS and check that printer works by at least calling it
   ps_list = list(

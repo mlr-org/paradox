@@ -79,14 +79,14 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         assert_list(xs)
         self$assert(xs) # make sure everything is valid and feasible
         # extract everything before 1st dot
-        set_ids = stri_split_fixed(names(xs), ".", n = 1L, tokens_only = TRUE)[[1L]]
+        set_ids = sub("^([^.]+)\\..+", "\\1", names(xs))
         xs = split(xs, set_ids) # partition xs into parts wrt to setids
         for (s in private$.sets) {
           # retrieve sublist for each set, then assign it in set (after removing prefix)
           pv = xs[[s$set_id]]
           if (is.null(pv))
             pv = list()
-          names(pv) = stri_replace_first_fixed(names(pv), paste0(s$set_id, "."), "")
+          names(pv) = sub(sprintf("^%s.", s$set_id), "", names(pv))
           s$param_vals = pv
         }
       }
