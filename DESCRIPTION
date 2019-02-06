@@ -29,8 +29,7 @@ Suggests:
     knitr,
     rmarkdown,
     testthat,
-    roxygen2,
-    stringi
+    roxygen2
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 6.1.1
 VignetteBuilder: knitr
