@@ -79,7 +79,7 @@ parE$class
 
 It is also possible to get all information of a `Param` in form of a `data.table` by calling **`as.data.table`**.
 
-```{r, R.options(width = 120)}
+```{r, R.options=list(width = 120)}
 as.data.table(parA)
 ```
 
