@@ -62,3 +62,12 @@ test_that("param_vals calls assert", {
   expect_error(ps$param_vals <- list(d = 9), "not <= 1")
 })
 
+test_that("required params are checked", {
+  ps = ParamSet$new(list(
+    ParamDbl$new(id = "d", lower = 0, upper = 1, tags = "required"),
+    ParamInt$new(id = "i", lower = 1, upper = 3)
+  ))
+  expect_error(ps$param_vals <- list(i = 2), "Missing required")
+})
+
+

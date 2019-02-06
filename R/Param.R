@@ -3,6 +3,9 @@
 #'
 #' @description
 #' Abstract base class for params and inheriting concrete param subclasses.
+#' * Tags: Currently, tags can be used by users in a very custom manner, but one tag is
+#'   specifically handled: 'required' implied that the parameters has to be given
+#'   when setting `param_vals` in [ParamSet].
 #'
 #' @section Public members / active bindings:
 #' * `id`               :: `character(1)` \cr

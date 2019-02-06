@@ -15,6 +15,11 @@ Param
 }
 \description{
 Abstract base class for params and inheriting concrete param subclasses.
+\itemize{
+\item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
+specifically handled: 'required' implied that the parameters has to be given
+when setting \code{param_vals} in \link{ParamSet}.
+}
 }
 \section{Public members / active bindings}{
 

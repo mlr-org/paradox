@@ -173,9 +173,14 @@ ParamSet = R6Class("ParamSet",
         return(ok)
       if (length(xs) == 0)
         return(TRUE) # a empty list is always feasible
-      # check each parameters feasibility
       ns = names(xs)
       ids = self$ids()
+      # check that all 'required' params are there
+      required = self$ids(tags = "required")
+      required = setdiff(required, ns)
+      if (length(required) > 0L)
+        stopf("Missing required parameters: %s", str_collapse(required))
+      # check each parameters feasibility
       for (n in ns) {
         if (n %nin% ids)
           return(sprintf("Parameter '%s' not available.%s", n, did_you_mean(n, ids)))
@@ -184,7 +189,6 @@ ParamSet = R6Class("ParamSet",
           return(paste0(n,": ",ch))
       }
       # check dependencies
-      nxs = names(xs)
       if (self$has_deps) {
         deps = self$deps
         for (j in seq_row(self$deps)) {
@@ -194,8 +198,8 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% nxs && p2id %in% nxs && cond$test(xs[[p2id]])) ||
-               (p1id %nin% nxs)
+          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+               (p1id %nin% ns)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
