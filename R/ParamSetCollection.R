@@ -30,7 +30,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (any(map_lgl(sets, "has_trafo")))  # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       private$.sets = sets
-      private$build_internal()
       self$set_id = "Collection"
     },
 
@@ -41,6 +40,32 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   ),
 
   active = list(
+    params = function(v) {
+      private$.params = list()
+      # clone each param into new params-list and prefix id
+      ps_all = lapply(private$.sets, function(s) {
+        ss = s$clone()
+        ps = ss$params
+        set_names(ps, paste(s$set_id, names(ps), sep = "."))
+      })
+      ps_all = unlist(ps_all, recursive = FALSE)
+      imap(ps_all, function(x, n) x$id = n)
+      return(ps_all)
+    },
+
+    deps = function(v) {
+      d_all = lapply(private$.sets, function(s) {
+        # copy all deps and rename ids to prefixed versions
+        dd = copy(s$deps)
+        ids_old = s$ids()
+        ids_new = paste(s$set_id, ids_old, sep = ".")
+        dd$id = map_values(dd$id, ids_old, ids_new)
+        dd$on = map_values(dd$on, ids_old, ids_new)
+        return(dd)
+      })
+      rbindlist(c(d_all, list(private$.deps)))
+    },
+
     param_vals = function(xs) {
       if (missing(xs)) {
         vals = lapply(private$.sets, function(s) {
@@ -69,26 +94,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   ),
 
   private = list(
-    .sets = NULL,
-    build_internal = function() {
-      deps_list = list()
-      for (s in private$.sets) { # iter thru sets
-        n = s$length
-        ids_old = s$ids()
-        ids_new = paste(s$set_id, ids_old, sep = ".")
-        for (i in seq_len(n)) { # clone each param into new params-list and prefix id
-          p = s$params[[i]]$clone()
-          p$id = ids_new[i]
-          private$.params[[length(private$.params) + 1L]] = p
-        }
-        # copy all deps and rename ids to prefixed versions
-        d = copy(s$deps)
-        d$id = map_values(d$id, ids_old, ids_new)
-        d$on = map_values(d$on, ids_old, ids_new)
-        deps_list[[length(deps_list) + 1L]] = d
-      }
-      names(private$.params) = map_chr(private$.params, "id")
-      private$.deps = rbindlist(deps_list)
-    }
+    .sets = NULL
   )
 )

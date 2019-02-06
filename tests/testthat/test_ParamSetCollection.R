@@ -14,15 +14,20 @@ test_that("simple active bindings work", {
 
   expect_class(psc, "ParamSetCollection")
   expect_equal(psc$length, ps1$length + ps2$length)
-  p = psc$params[[2L]]; p = p$clone()
-  p$id = "th_param_int"
-  expect_equal(p, ps2$params[[1L]])
+  # FIXME: der cloning krams sieht hier komisch aus und sollte wohl in einen etxra test?
+  # p = psc$params[[2L]]; p = p$clone()
+  # p$id = "th_param_int"
+  # expect_equal(p, ps2$params[[1L]])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids())))
   expect_equal(psc$lower, my_c(ps1$lower, ps2$lower))
   d = as.data.table(psc)
   expect_data_table(d, nrows = 5)
   expect_false(psc$has_deps)
   expect_false(psc$has_trafo)
+
+  d = as.data.table(psc)
+  expect_equal(d$id, c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids())))
+
   expect_true(psc$check(list(s1.th_param_dbl = 1, s2.th_param_int = 2)))
   expect_string(psc$check(list(th_param_dbl = 1, th_param_int = 2)), fixed = "not avail")
 

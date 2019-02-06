@@ -48,6 +48,13 @@ test_that("param_vals", {
   dd = d$data
   expect_data_table(dd, nrows = 10, ncols = 3)
   expect_true(all(dd$f == "a"))
+
+  # sampler
+  s = SamplerUnif$new(ps)
+  d = s$sample(9)
+  dd = d$data
+  expect_data_table(dd, nrows = 9, ncols = 3)
+  expect_true(all(dd$f == "a"))
 })
 
 test_that("param_vals calls assert", {

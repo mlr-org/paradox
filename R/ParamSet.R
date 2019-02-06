@@ -216,8 +216,9 @@ ParamSet = R6Class("ParamSet",
     assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL),
 
     add_dep = function(id, on, cond) {
-      assert_choice(id, self$ids())
-      assert_choice(on, self$ids())
+      ids = self$ids()
+      assert_choice(id, ids)
+      assert_choice(on, ids)
       if (id == on)
         stopf("A param cannot depend on itself!")
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
