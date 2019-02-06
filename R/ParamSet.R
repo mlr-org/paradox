@@ -161,19 +161,20 @@ ParamSet = R6Class("ParamSet",
     },
 
     check = function(xs) {
-      ok = check_list(xs)
+      ok = check_list(xs, names = "unique")
       if (!isTRUE(ok))
         return(ok)
       if (length(xs) == 0)
         return(TRUE) # a empty list is always feasible
-      ok = check_names(names(xs), subset.of = self$ids())
-      if (!isTRUE(ok))
-        return(ok)
       # check each parameters feasibility
-      for (id in names(xs)) {
-        ch = self$params[[id]]$check(xs[[id]])
+      ns = names(xs)
+      ids = self$ids()
+      for (n in ns) {
+        if (n %nin% ids)
+          return(sprintf("Parameter '%s' not available.%s", n, did_you_mean(n, ids)))
+        ch = self$params[[n]]$check(xs[[n]])
         if (test_string(ch)) # we failed a check, return string
-          return(paste0(id,": ",ch))
+          return(paste0(n,": ",ch))
       }
       # check dependencies
       nxs = names(xs)
@@ -284,13 +285,9 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.param_vals)
       } else {
-        assert_list(xs)
-        if (length(xs) > 0L) {
-          assert_names(names(xs), subset.of = self$ids())
-          self$assert(xs)
-        }
-        private$.param_vals = xs
+        self$assert(xs)
       }
+      private$.param_vals = xs
     },
     has_deps = function() nrow(private$.deps) > 0L
   ),
