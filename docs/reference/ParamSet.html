@@ -33,7 +33,9 @@
 <meta property="og:title" content="ParamSet — ParamSet" />
 
 <meta property="og:description" content="A set of Param objects. Please note that when creating a set or adding to it, the params of the
-resulting set have to be uniquely named with IDs with valid R names." />
+resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
+variable param_vals which can be used to store an active configuration / or to partially fix
+some parameters to constant values (regarding subsequent sampling or generation of designs)." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -111,7 +113,9 @@ resulting set have to be uniquely named with IDs with valid R names." />
     <div class="ref-description">
     
     <p>A set of <a href='Param.html'>Param</a> objects. Please note that when creating a set or adding to it, the params of the
-resulting set have to be uniquely named with IDs with valid R names.</p>
+resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
+variable <code>param_vals</code> which can be used to store an active configuration / or to partially fix
+some parameters to constant values (regarding subsequent sampling or generation of designs).</p>
     
     </div>
 
@@ -125,31 +129,31 @@ resulting set have to be uniquely named with IDs with valid R names.</p>
 
     
     <ul>
-<li><p><code>set_id</code>            :: <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>
+<li><p><code>set_id</code>            :: <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code> <br />
 ID of this param set. Settable.</p></li>
-<li><p><code>params</code>            :: named list of <a href='Param.html'>Param</a>
+<li><p><code>params</code>            :: named list of <a href='Param.html'>Param</a> <br />
 Contained parameters, named with their respective IDs.
 NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.</p></li>
-<li><p><code>length</code>            :: <code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code>
+<li><p><code>length</code>            :: <code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code> <br />
 Number of contained params. Read-only.</p></li>
-<li><p><code>is_empty</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>
+<li><p><code>is_empty</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 Is the param set empty? Read-only.</p></li>
-<li><p><code>class</code>             :: named <code>character</code>
+<li><p><code>class</code>             :: named <code>character</code> <br />
 Param classes of contained parameters.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>lower</code>             :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a>
+<li><p><code>lower</code>             :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a> <br />
 Lower bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>upper</code>             :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a>
+<li><p><code>upper</code>             :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a> <br />
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>values</code>            :: named <code>list</code>
+<li><p><code>values</code>            :: named <code>list</code> <br />
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>nlevels</code>           :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a>
+<li><p><code>nlevels</code>           :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a> <br />
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>is_bounded</code>        :: named <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>
+<li><p><code>is_bounded</code>        :: named <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 Do all parameters have finite bounds?
 Named with param IDs. Read-only.</p></li>
 <li><p><code>special_vals</code>      :: named <code>list</code> of <code>list</code> <br />
@@ -164,10 +168,10 @@ Named with param IDs. Read-only.</p></li>
 <li><p><code>default</code>          :: named <code>list</code> <br />
 Default values of all params. If no default exists, element is not present.
 Named with param IDs. Read-only.</p></li>
-<li><p>is_number           :: named <code>logical</code>
+<li><p>is_number           :: named <code>logical</code> <br />
 Position is TRUE iff Param is dbl or int.
 Named with param IDs. Read-only.</p></li>
-<li><p>is_categ          :: named <code>logical</code>
+<li><p>is_categ          :: named <code>logical</code> <br />
 Position is TRUE iff Param is fct or lgl.
 Named with param IDs. Read-only.</p></li>
 <li><p><code>trafo</code>             :: <code>function(x, param_set)</code> -&gt; named <code>list</code> <br />
@@ -181,15 +185,18 @@ For convenience, the self-paramset is also passed in, if you need some info from
 Is NULL by default, and you can set it to NULL to switch the transformation off.</p></li>
 <li><p><code>has_trafo</code>         :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 Has the set a trafo` function?</p></li>
-<li><p><code>deps</code>              :: list of <a href='Dependency.html'>Dependency</a> <br />
-Parameter dependency objects, each element of the list is internally created by a call to <code>add_dep</code>.</p></li>
 <li><p><code>has_deps</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 Has the set param dependencies?</p></li>
-<li><p><code>deps_on</code>          :: <code>data.table</code> <br />
-Table has cols <code>id</code> (<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>) and <code>dep_parent</code> (<code>list</code> of <code>character</code>) and <code>dep</code> (list of <a href='Dependency.html'>Dependency</a>).
-List all (direct) dependency parents of a param, through parameter IDs.
-Table has one row per param and is in the same order as <code>ids()</code>.
-The last col lists all dependencies that the row-ID has.</p></li>
+<li><p><code>deps</code>          :: <code>data.table</code> <br />
+Table has cols <code>id</code> (<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>) and <code>on</code> (<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>) and <code>cond</code> (<a href='Condition.html'>Condition</a>).
+Lists all (direct) dependency parents of a param, through parameter IDs.
+Internally created by a call to <code>add_dep</code>.
+Settable, if you want to remove dependencies or perform other changes.</p></li>
+<li><p><code>param_vals</code>         :: named <code>list</code> <br />
+Currently set / fixed parameter values.
+Settable, and feasibility of values will be checked when you set them.
+You do not have to set values for all parameters, but only for a subset.
+When you set values, all previously set values will be unset / removed.</p></li>
 </ul>
     
     <h2 class="hasAnchor" id="public-methods"><a class="anchor" href="#public-methods"></a>Public methods</h2>
@@ -197,17 +204,17 @@ The last col lists all dependencies that the row-ID has.</p></li>
     
     <ul>
 <li><p><code>new(params)</code> <br />
-list of <a href='Param.html'>Param</a> -&gt; <code>self</code>
+list of <a href='Param.html'>Param</a> -&gt; <code>self</code> <br />
 Deep-clones all passed param objects.</p></li>
 <li><p><code>ids(class = NULL, is_bounded = NULL, tags = NULL)</code> <br />
-<code>character</code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>, <code>character</code> -&gt; <code>character</code>
+<code>character</code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>, <code>character</code> -&gt; <code>character</code> <br />
 Retrieves IDs of contained params based on some selections, <code>NULL</code> means no restriction.
 <code>class</code> and <code>tags</code> can be sets.</p></li>
 <li><p><code>add(param_set)</code> <br />
-<a href='Param.html'>Param</a> | ParamSet -&gt; <code>self</code>
+<a href='Param.html'>Param</a> | ParamSet -&gt; <code>self</code> <br />
 Adds a single param or another set to this set, all params are cloned.</p></li>
 <li><p><code><a href='https://www.rdocumentation.org/packages/base/topics/subset'>subset(ids)</a></code> <br />
-<code>character</code> -&gt; <code>self</code>
+<code>character</code> -&gt; <code>self</code> <br />
 Changes the current set to the set of passed IDs.</p></li>
 <li><p><code>test(x)</code>, <code><a href='https://www.rdocumentation.org/packages/utils/topics/PkgUtils'>check(x)</a></code>, <code>assert(x)</code> <br />
 Three checkmate-like check-functions. Take a named list.
@@ -215,8 +222,8 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p></li>
 <li><p><code>add_dep(id, on, cond)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <a href='Condition.html'>Condition</a> -&gt; <code>self</code>
-Adds a <a href='Dependency.html'>Dependency</a> to this set, so that param <code>id</code> now depends on param <code>on</code>.</p></li>
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <a href='Condition.html'>Condition</a> -&gt; <code>self</code> <br />
+Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p></li>
 </ul>
     
     <h2 class="hasAnchor" id="s-methods-and-type-converters"><a class="anchor" href="#s-methods-and-type-converters"></a>S3 methods and type converters</h2>

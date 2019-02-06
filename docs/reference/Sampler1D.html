@@ -123,7 +123,7 @@
 
     
     <ul>
-<li><p><code>param</code>            :: <a href='Param.html'>Param</a>
+<li><p><code>param</code>            :: <a href='Param.html'>Param</a> <br />
 Quick access to the one param in the set.</p></li>
 </ul>
     
@@ -136,10 +136,11 @@ Uniform random for arbitrary (bounded) params.</p></li>
 <li><p><code>Sampler1DCateg$new(param, prob = NULL)</code> <br />
 Categorical distribution, for a fct or lgl param.
 <code>prob</code> is a numeric vector of <code>nlevels</code> probabilities, which is uniform by default.</p></li>
-<li><p><code>Sampler1DTruncNorm$new(param)</code> <br />
-Normal sampling (truncated) for (bounded) doubles.
+<li><p><code>Sampler1DNormal$new(param, mean = NULL, sd = NULL)</code> <br />
+Normal sampling (potentially truncated) for doubles.
 Has member variables <code>mean</code> and 'sd' which you can change to influence sampling,
-they are initialized to <code>mean=mean(range)</code> and <code>sd=span/4</code>.</p></li>
+they are initialized to <code>mean=mean(range)</code> and <code>sd=span/4</code>.
+A truncated normal is used if the param is bounded on both sides.</p></li>
 <li><p><code>Sampler1DRfun(param, rfun, trunc = TRUE)</code> <br />
 Arbitrary sampling from 1D rng functions from R.
 Pass e.g. <code>rfun=rexp</code> to sample from exponential distribution.

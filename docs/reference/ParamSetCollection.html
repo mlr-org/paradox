@@ -33,9 +33,14 @@
 <meta property="og:title" content="ParamSetCollection — ParamSetCollection" />
 
 <meta property="og:description" content="A collection of multiple ParamSet objects.
-In order to ensure unique param names, every param in the collection is named
+The collection is basically a light-weight wrapper / container around references to multiple sets.
+In order to ensure unique param names, every param in the collection is referred to with
 &quot;&amp;lt;set_id&amp;gt;.&amp;lt;param_id&amp;gt;&quot;.
 The following state-changing methods are not allowed for a collection: add, subset.
+When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a param_vals state.
+This also implies that if you directly change param_vals in one of the referenced sets,
+this change is reflected in the collection.
 " />
 <meta name="twitter:card" content="summary" />
 
@@ -114,9 +119,14 @@ The following state-changing methods are not allowed for a collection: add, subs
     <div class="ref-description">
     
     <p>A collection of multiple <a href='ParamSet.html'>ParamSet</a> objects.</p><ul>
-<li><p>In order to ensure unique param names, every param in the collection is named
+<li><p>The collection is basically a light-weight wrapper / container around references to multiple sets.</p></li>
+<li><p>In order to ensure unique param names, every param in the collection is referred to with
 "&lt;set_id&gt;.&lt;param_id&gt;".</p></li>
 <li><p>The following state-changing methods are not allowed for a collection: <code>add</code>, <code>subset</code>.</p></li>
+<li><p>When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a <code>param_vals</code> state.
+This also implies that if you directly change <code>param_vals</code> in one of the referenced sets,
+this change is reflected in the collection.</p></li>
 </ul>
     
     </div>
@@ -131,7 +141,7 @@ The following state-changing methods are not allowed for a collection: add, subs
     
     <ul>
 <li><p><code>new(sets)</code> <br />
-list of <a href='ParamSet.html'>ParamSet</a> -&gt; <code>self</code>
+list of <a href='ParamSet.html'>ParamSet</a> -&gt; <code>self</code> <br />
 Parameter objects are cloned.</p></li>
 </ul>
     

@@ -32,7 +32,11 @@
 
 <meta property="og:title" content="Param Object — Param" />
 
-<meta property="og:description" content="Abstract base class for params and inheriting concrete param subclasses." />
+<meta property="og:description" content="Abstract base class for params and inheriting concrete param subclasses.
+Tags: Currently, tags can be used by users in a very custom manner, but one tag is
+specifically handled: 'required' implied that the parameters has to be given
+when setting param_vals in ParamSet.
+" />
 <meta name="twitter:card" content="summary" />
 
 
@@ -109,7 +113,11 @@
 
     <div class="ref-description">
     
-    <p>Abstract base class for params and inheriting concrete param subclasses.</p>
+    <p>Abstract base class for params and inheriting concrete param subclasses.</p><ul>
+<li><p>Tags: Currently, tags can be used by users in a very custom manner, but one tag is
+specifically handled: 'required' implied that the parameters has to be given
+when setting <code>param_vals</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
+</ul>
     
     </div>
 
@@ -150,9 +158,9 @@ Is a default there?</p></li>
 Data type when values of this param is stored in a data table or sampled. Read-only.</p></li>
 <li><p><code>tags</code>             :: <code>character</code> <br />
 Can be used to group and subset params.</p></li>
-<li><p>is_number          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>
+<li><p>is_number          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 TRUE iff Param is dbl or int.</p></li>
-<li><p>is_categ           :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>
+<li><p>is_categ           :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 TRUE iff Param is fct or lgl.</p></li>
 </ul>
     
@@ -165,21 +173,21 @@ TRUE iff Param is fct or lgl.</p></li>
 Constructor of abstract base class, only called by inheriting classes.
 See meaning of <code>id</code>, <code>special_vals</code>, <code>default</code>, <code>tags</code> in member section.</p></li>
 <li><p><code>Param$Dbl$new(id, lower, upper, special_vals, default, tags)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self <br />
 Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.</p></li>
 <li><p><code>Param$Int$new(id, lower, upper, special_vals, default, tags)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self <br />
 Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
 <code>lower</code> is set to its integer ceiling and 'upper' to its integer floor value.</p></li>
 <li><p><code>ParamFct$new(id, values, special_vals, default, tags)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>character</code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>character</code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self <br />
 Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
 from its defined set of categorical values.</p></li>
 <li><p><code>Param$Lgl$new(id, special_vals, default, tags)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>list</code>, <code>any</code>, <code>character</code> -&gt; self <br />
 Constructor for logical-scalar-params.</p></li>
 <li><p><code>ParamUty$new(id, default, tags, custom_check)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>any</code>, <code>character</code>, <code>function(x)</code> -&gt; self
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>any</code>, <code>character</code>, <code>function(x)</code> -&gt; self <br />
 Untyped parameters, can be used to bypass any complicated feasibility checks, when
 a param is of truly complex type, as checks for this param are always feasible.
 OTOH we cannot perform meaningful operations like sampling or generating designs with this param.

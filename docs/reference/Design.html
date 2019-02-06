@@ -131,11 +131,11 @@ of configurations somehow produced from the former - e.g., by calling a
     
     <ul>
 <li><p><code>new(param_set, data, remove_dupl)</code> <br />
-<a href='ParamSet.html'>ParamSet</a>, data.table, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>self</code>
+<a href='ParamSet.html'>ParamSet</a>, data.table, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>self</code> <br />
 Note that the first 2 arguments are NOT cloned on construction!
 Has an option to remove duplicated rows.</p></li>
-<li><p><code>transpose(filter_na = TRUE, trafo = TRUE)</code>
-<code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>list</code> of <code>list</code>
+<li><p><code>transpose(filter_na = TRUE, trafo = TRUE)</code> <br />
+<code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code>, <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> -&gt; <code>list</code> of <code>list</code> <br />
 Converts <code>data</code> into a list of lists of row-configurations, possibly removes NA entries of
 inactive parameter values due to unsatisfied dependencies,
 and possibly calls the <code>trafo</code> function of the param set.</p></li>

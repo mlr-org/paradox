@@ -123,9 +123,9 @@
 
     
     <ul>
-<li><p><code>type</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>
+<li><p><code>type</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code> <br />
 Name / type of the condition. Read-only.</p></li>
-<li><p><code>rhs</code>          :: <code>any</code>
+<li><p><code>rhs</code>          :: <code>any</code> <br />
 Right-hand-side of the condition.</p></li>
 </ul>
     
@@ -134,9 +134,9 @@ Right-hand-side of the condition.</p></li>
     
     <ul>
 <li><p><code>new(type, rhs)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>any</code> -&gt; <code>self</code>
+<code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code>, <code>any</code> -&gt; <code>self</code> <br />
 Abstract constructor, called by inheriting subclasses.</p></li>
-<li><p><code>test</code>          :: <code>function(x) -&gt; logical(n)</code>
+<li><p><code>test</code>          :: <code>function(x) -&gt; logical(n)</code> <br />
 Checks if condition is satisfied.
 Called on a vector of parent param values.</p></li>
 </ul>
@@ -145,9 +145,9 @@ Called on a vector of parent param values.</p></li>
 
     
     <ul>
-<li><p><code>CondEqual$new(rhs)</code>
+<li><p><code>CondEqual$new(rhs)</code> <br />
 Parent must be equal to <code>rhs</code>.</p></li>
-<li><p><code>CondAnyOf$new(rhs)</code>
+<li><p><code>CondAnyOf$new(rhs)</code> <br />
 Parent must be any value of <code>rhs</code>.</p></li>
 </ul>
     

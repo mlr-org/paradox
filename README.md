@@ -156,7 +156,7 @@ ps$trafo = function(x, param_set) {
 }
 ps_smplr = SamplerUnif$new(ps)
 x = ps_smplr$sample(2)
-xst = x$transpose(trafo = TRUE)
+xst = x$transpose()
 xst
 #> [[1]]
 #> [[1]]$z

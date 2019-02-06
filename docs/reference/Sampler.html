@@ -123,7 +123,7 @@
 
     
     <ul>
-<li><p><code>param_set</code>            :: <a href='ParamSet.html'>ParamSet</a>
+<li><p><code>param_set</code>            :: <a href='ParamSet.html'>ParamSet</a> <br />
 Domain / support of the distribution we want to sample from.</p></li>
 </ul>
     
@@ -132,11 +132,11 @@ Domain / support of the distribution we want to sample from.</p></li>
     
     <ul>
 <li><p><code>new(param_set)</code> <br />
-<a href='ParamSet.html'>ParamSet</a> -&gt; <code>self</code>
+<a href='ParamSet.html'>ParamSet</a> -&gt; <code>self</code> <br />
 Abstract, only inheriting subclasses call this.
 Param set is cloned on construction.</p></li>
 <li><p><code><a href='https://www.rdocumentation.org/packages/base/topics/sample'>sample(n)</a></code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code> -&gt; <a href='Design.html'>Design</a>
+<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code> -&gt; <a href='Design.html'>Design</a> <br />
 Sample n values from the distribution.</p></li>
 </ul>
     
@@ -145,7 +145,7 @@ Sample n values from the distribution.</p></li>
     
     <ul>
 <li><p><code>.sample(n)</code> <br />
-<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code> -&gt; data.table
+<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code> -&gt; data.table <br />
 Inheriting sublcasses have to implement thus, called from <code><a href='https://www.rdocumentation.org/packages/base/topics/sample'>sample()</a></code></p></li>
 </ul>
     
