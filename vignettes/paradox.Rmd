@@ -153,10 +153,9 @@ ps$check(list(A = TRUE, D = "x", B = 1))           # D's dependency is not met
 ps$check(list(A = TRUE, B = 1))                    # B's dependency is not met
 ```
 
-Internally, the dependencies are represented as **`Dependency`** object, which can be listed in the **`$deps`** slot. The dependencies can also be accessed through the **`$deps_on`** slot, which returns a `data.table` containing dependency information.
+Internally, the dependencies are represented as a `data.table`, which can be accessed listed in the **`$deps`** slot. This `data.table` can even be mutated, for example to remove dependencies. There are no sanity checks done when the `$deps` slot is changed this way, so be careful.
 ```{r}
 ps$deps
-ps$deps_on
 ```
 
 ### Vector Parameters
@@ -185,7 +184,7 @@ ps$tags
 
 It is often useful to have a list of possible parameter values that can be systematically iterated through, for example to find parameter values for which an algorithm performs particularly well (tuning). `paradox` offers a variety of functions that allow creating evenly-spaced parameter values in a "grid" design as well as random sampling. In the latter case, it is possible to influence the sampling distribution in more or less fine detail.
 
-A point to always keep in mind while sampling is that only parameters that are bounded can be sampled from. This excludes `ParamUty`, as well as `ParamInt` and `ParamDbl` if they have infinite lower or upper bounds.
+A point to always keep in mind while sampling is that only numerical and factorial parameters that are bounded can be sampled from, i.e. not `ParamUty`. Furthermore, for most samplers `ParamInt` and `ParamDbl` must have finite lower and upper bounds.
 
 ### Parameter Designs
 
@@ -212,8 +211,8 @@ pvlhs = generate_design_lhs(ps2d, 500)
 ```
 ```{r, echo = FALSE, out.width="45%", fig.show = "hold", fig.width = 4, fig.height = 4}
 par(mar=c(4, 4, 2, 1))
-plot(pvrand$data, main = "'random' design")
-plot(pvlhs$data, main = "'lhs' design")
+plot(pvrand$data, main = "'random' design", xlim = c(0, 1), ylim=c(0, 1))
+plot(pvlhs$data, main = "'lhs' design", xlim = c(0, 1), ylim=c(0, 1))
 ```
 
 ### Generalised Sampling: The `Sampler` Class
@@ -224,7 +223,7 @@ Every `Sampler` object has a **`sample()`** function, which takes one argument, 
 
 #### 1D-Samplers
 
-There is a variety of samplers that sample values for a single parameter. These are **`Sampler1DUnif`** (uniform sampling), **`Sampler1DCateg`** (sampling for categorical parameters), **`Sampler1DTruncNorm`** (normally distributed sampling, truncated at parameter bounds), and **`Sampler1DRfun`** (arbitrary 1D sampling, given a random-function). These are initialised with a single `Param`, and can then be used to sample values.
+There is a variety of samplers that sample values for a single parameter. These are **`Sampler1DUnif`** (uniform sampling), **`Sampler1DCateg`** (sampling for categorical parameters), **`Sampler1DNormal`** (normally distributed sampling, truncated at parameter bounds), and **`Sampler1DRfun`** (arbitrary 1D sampling, given a random-function). These are initialised with a single `Param`, and can then be used to sample values.
 
 ```{r}
 sampA = Sampler1DCateg$new(parA)
