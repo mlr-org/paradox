@@ -4,23 +4,23 @@
 #' Condition object, to specify the condition in a dependency.
 #'
 #' @section Public members / active bindings:
-#' * `type`          :: `character(1)`
+#' * `type`          :: `character(1)` \cr
 #'   Name / type of the condition. Read-only.
-#' * `rhs`          :: `any`
+#' * `rhs`          :: `any` \cr
 #'   Right-hand-side of the condition.
 #'
 #' @section Public methods:
 #' * `new(type, rhs)` \cr
-#'   `character(1)`, `any` -> `self`
+#'   `character(1)`, `any` -> `self` \cr
 #'   Abstract constructor, called by inheriting subclasses.
-#' * `test`          :: `function(x) -> logical(n)`
+#' * `test`          :: `function(x) -> logical(n)` \cr
 #'   Checks if condition is satisfied.
 #'   Called on a vector of parent param values.
 #'
 #' @section Currently implemented simple conditions:
-#' * `CondEqual$new(rhs)`
+#' * `CondEqual$new(rhs)` \cr
 #'   Parent must be equal to `rhs`.
-#' * `CondAnyOf$new(rhs)`
+#' * `CondAnyOf$new(rhs)` \cr
 #'   Parent must be any value of `rhs`.
 #'
 #' @name Condition

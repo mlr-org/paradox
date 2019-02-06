@@ -8,7 +8,7 @@
 #'
 #' @section Public methods:
 #' * `new(param_set)` \cr
-#'   [ParamSet] -> `self`
+#'   [ParamSet] -> `self` \cr
 #'
 #' @name SamplerUnif
 #' @family Sampler

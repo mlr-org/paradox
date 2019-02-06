@@ -1,35 +1,39 @@
+#FIXME: was ist mit so krams wie nvlevels usw? das wollen wir nicht änern oder?
+
 #' @title ParamSet
 #'
 #' @description
 #' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
-#' resulting set have to be uniquely named with IDs with valid R names.
+#' resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
+#' variable `param_vals` which can be used to store an active configuration / or to partially fix
+#' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
-#' * `set_id`            :: `character(1)`
+#' * `set_id`            :: `character(1)` \cr
 #'   ID of this param set. Settable.
-#' * `params`            :: named list of [Param]
+#' * `params`            :: named list of [Param] \cr
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#' * `length`            :: `integer(1)`
+#' * `length`            :: `integer(1)` \cr
 #'   Number of contained params. Read-only.
-#' * `is_empty`          :: `logical(1)`
+#' * `is_empty`          :: `logical(1)` \cr
 #'   Is the param set empty? Read-only.
-#' * `class`             :: named `character`
+#' * `class`             :: named `character` \cr
 #'   Param classes of contained parameters.
 #'   Named with param IDs. Read-only.
-#' * `lower`             :: named [double]
+#' * `lower`             :: named [double] \cr
 #'   Lower bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `upper`             :: named [double]
+#' * `upper`             :: named [double] \cr
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `values`            :: named `list`
+#' * `values`            :: named `list` \cr
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
-#' * `nlevels`           :: named [double]
+#' * `nlevels`           :: named [double] \cr
 #'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
 #'   Named with param IDs. Read-only.
-#' * `is_bounded`        :: named `logical(1)`
+#' * `is_bounded`        :: named `logical(1)` \cr
 #'   Do all parameters have finite bounds?
 #'   Named with param IDs. Read-only.
 #' * `special_vals`      :: named `list` of `list` \cr
@@ -44,10 +48,10 @@
 #' * `default`          :: named `list` \cr
 #'   Default values of all params. If no default exists, element is not present.
 #'   Named with param IDs. Read-only.
-#' * is_number           :: named `logical`
+#' * is_number           :: named `logical` \cr
 #'   Position is TRUE iff Param is dbl or int.
 #'   Named with param IDs. Read-only.
-#' * is_categ          :: named `logical`
+#' * is_categ          :: named `logical` \cr
 #'   Position is TRUE iff Param is fct or lgl.
 #'   Named with param IDs. Read-only.
 #' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
@@ -61,29 +65,32 @@
 #'   Is NULL by default, and you can set it to NULL to switch the transformation off.
 #' * `has_trafo`         :: `logical(1)` \cr
 #'   Has the set a trafo` function?
-#' * `deps`              :: list of [Dependency] \cr
-#'   Parameter dependency objects, each element of the list is internally created by a call to `add_dep`.
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
-#' * `deps_on`          :: `data.table` \cr
-#'   Table has cols `id` (`character(1)`) and `dep_parent` (`list` of `character`) and `dep` (list of [Dependency]).
-#'   List all (direct) dependency parents of a param, through parameter IDs.
-#'   Table has one row per param and is in the same order as `ids()`.
-#'   The last col lists all dependencies that the row-ID has.
+#' * `deps`          :: `data.table` \cr
+#'   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and `cond` ([Condition]).
+#'   Lists all (direct) dependency parents of a param, through parameter IDs.
+#'   Internally created by a call to `add_dep`.
+#'   Settable, if you want to remove dependencies or perform other changes.
+#' * `param_vals`         :: named `list` \cr
+#'   Currently set / fixed parameter values.
+#'   Settable, and feasibility of values will be checked when you set them.
+#'   You do not have to set values for all parameters, but only for a subset.
+#'   When you set values, all previously set values will be unset / removed.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
-#'   list of [Param] -> `self`
+#'   list of [Param] -> `self` \cr
 #'   Deep-clones all passed param objects.
 #' * `ids(class = NULL, is_bounded = NULL, tags = NULL)` \cr
-#'   `character`, `logical(1)`, `character` -> `character`
+#'   `character`, `logical(1)`, `character` -> `character` \cr
 #'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
 #'   `class` and `tags` can be sets.
 #' * `add(param_set)` \cr
-#'   [Param] | [ParamSet] -> `self`
+#'   [Param] | [ParamSet] -> `self` \cr
 #'   Adds a single param or another set to this set, all params are cloned.
 #' * `subset(ids)` \cr
-#'   `character` -> `self`
+#'   `character` -> `self` \cr
 #'   Changes the current set to the set of passed IDs.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
 #'   Three checkmate-like check-functions. Take a named list.
@@ -91,8 +98,8 @@
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
-#'   `character(1)`, `character(1)`, [Condition] -> `self`
-#'    Adds a [Dependency] to this set, so that param `id` now depends on param `on`.
+#'   `character(1)`, `character(1)`, [Condition] -> `self` \cr
+#'    Adds a dependency to this set, so that param `id` now depends on param `on`.
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()` \cr
@@ -128,7 +135,8 @@ ParamSet = R6Class("ParamSet",
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
       private$.params = c(private$.params, ps2$params)
-      private$.deps = c(private$.deps, ps2$deps)
+      private$.param_vals = c(private$.param_vals, ps2$param_vals)
+      private$.deps = rbind(private$.deps, ps2$deps)
       invisible(self)
     },
 
@@ -148,48 +156,55 @@ ParamSet = R6Class("ParamSet",
     subset = function(ids) {
       assert_subset(ids, self$ids())
       if (self$has_deps) { # check that all required / leftover parents are still in new ids
-        d = self$deps_on
-        d = d[ids, on = "id"]
-        pids = unlist(d$dep_parent)
-        pids_not_there = setdiff(pids, ids)
+        parents = unique(self$deps[id %in% ids, "on"][[1L]])
+        pids_not_there = setdiff(parents, ids)
         if (length(pids_not_there) > 0L)
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
       private$.params = private$.params[ids]
+      ids2 = intersect(ids, names(private$.param_vals)) # restrict to ids already in pvals
+      private$.param_vals = private$.param_vals[ids2]
       invisible(self)
     },
 
     check = function(xs) {
-      ok = check_list(xs)
+      ok = check_list(xs, names = "unique")
       if (!isTRUE(ok))
         return(ok)
       if (length(xs) == 0)
         return(TRUE) # a empty list is always feasible
-      ok = check_names(names(xs), subset.of = self$ids())
-      if (!isTRUE(ok))
-        return(ok)
+      ns = names(xs)
+      ids = self$ids()
+      # check that all 'required' params are there
+      required = self$ids(tags = "required")
+      required = setdiff(required, ns)
+      if (length(required) > 0L)
+        stopf("Missing required parameters: %s", str_collapse(required))
       # check each parameters feasibility
-      for (id in names(xs)) {
-        ch = self$params[[id]]$check(xs[[id]])
+      for (n in ns) {
+        if (n %nin% ids)
+          return(sprintf("Parameter '%s' not available.%s", n, did_you_mean(n, ids)))
+        ch = self$params[[n]]$check(xs[[n]])
         if (test_string(ch)) # we failed a check, return string
-          return(paste0(id,": ",ch))
+          return(paste0(n,": ",ch))
       }
       # check dependencies
-      nxs = names(xs)
       if (self$has_deps) {
-        for (dep in self$deps) {
-          p1id = dep$param$id
-          p2id = dep$parent$id
+        deps = self$deps
+        for (j in seq_row(self$deps)) {
+          p1id = deps$id[j]
+          p2id = deps$on[j]
           # we are ONLY ok if:
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
-          ok = (p1id %in% nxs && p2id %in% nxs && dep$cond$test(xs[[p2id]])) ||
-               (p1id %nin% nxs)
+          cond = deps$cond[[j]]
+          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+               (p1id %nin% ns)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
             return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
-              dep$param$id, dep$parent$id, dep$cond$type, str_collapse(dep$cond$rhs), p2id, val))
+              p1id, p2id, cond$type, str_collapse(cond$rhs), p2id, val))
           }
         }
       }
@@ -205,10 +220,7 @@ ParamSet = R6Class("ParamSet",
       assert_choice(on, self$ids())
       if (id == on)
         stopf("A param cannot depend on itself!")
-      p1 = self$params[[id]]
-      p2 = self$params[[on]]
-      dep = Dependency$new(p1, p2, cond)
-      private$.deps = c(private$.deps, list(dep))
+      private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
 
@@ -220,8 +232,13 @@ ParamSet = R6Class("ParamSet",
       } else {
         d = as.data.table(self)
         assert_subset(hide.cols, names(d))
-        if (self$has_deps)  # add a nice extra charvec-col to the tab, which lists all parents-ids
-          d = d[self$deps_on[, c("id", "dep_parent")], on = "id"]
+        if (self$has_deps) { # add a nice extra charvec-col to the tab, which lists all parents-ids
+          dd = self$deps[, .(parents = list(unlist(on))), by = id]
+          d = merge(d, dd, on = "id", all.x = TRUE)
+        }
+        v = named_list(d$id) # add param_vals to last col of print-dt as list col
+        v = insert_named(v, self$param_vals)
+        d$value = list(v)
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -231,7 +248,14 @@ ParamSet = R6Class("ParamSet",
 
   active = list(
     params = function() private$.params,
-    deps = function() private$.deps,
+    deps = function(v) {
+      if (missing(v)) {
+        private$.deps
+      } else {
+        assert_data_table(v)
+        private$.deps = v
+      }
+    },
     set_id = function(v) {
       if (missing(v)) {
         private$.set_id
@@ -264,38 +288,30 @@ ParamSet = R6Class("ParamSet",
       }
     },
     has_trafo = function() !is.null(private$.trafo),
-    has_deps = function() length(self$deps) > 0L,
-    deps_on = function() {
-      if (self$is_empty)
-        return(data.table(id = character(0L), dep_parent = character(0L), deps = list()))
-      ids = self$ids()
-      if (self$has_deps) {
-        dtab = map_dtr(self$deps, function(d) data.table(id = d$param$id, dep_parent = list(d$parent$id), deps = list(list(d))))
-        # join par-charvecs rows with same ids, and join dep-objects in a single list
-        # FIXME: a call to flatten would be best here
-        dtab = dtab[, .(dep_parent = list(unlist(dep_parent)), deps = list(unlist(deps))), by = id]
+    param_vals = function(xs) {
+      if (missing(xs)) {
+        return(private$.param_vals)
       } else {
-        dtab = NULL
+        self$assert(xs)
       }
-      # add all ids with no deps
-      dtab = rbind(dtab, data.table(id = setdiff(ids, dtab$id), dep_parent = list(character(0L)), deps = list(list())))
-      dtab[ids, on = "id"] # reorder in order of ids
-    }
+      private$.param_vals = xs
+    },
+    has_deps = function() nrow(private$.deps) > 0L
   ),
 
   private = list(
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
-    .deps = list(), # a list of Dependency objects
-
+    .param_vals = list(),
+    .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),
 
     deep_clone = function(name, value) {
       switch(name,
         ".params" = map(value, function(x) x$clone(deep = TRUE)),
-        ".deps" = map(value, function(x) x$clone(deep = TRUE)),
+        ".deps" = copy(value),
         value
       )
     }

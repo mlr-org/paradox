@@ -5,12 +5,12 @@
 #' Create joint, independent sampler out of multiple other samplers.
 #'
 #' @section Public members / active bindings:
-#' * `param_set`            :: [ParamSet]
+#' * `param_set`            :: [ParamSet] \cr
 #'    Combined param sets all passed samplers.
 #'
 #' @section Public methods:
 #' * `new(samplers)` \cr
-#'   list of [Sampler] -> `self`
+#'   list of [Sampler] -> `self` \cr
 #'
 #' @name SamplerJointIndep
 #' @family Sampler

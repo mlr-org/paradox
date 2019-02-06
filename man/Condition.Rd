@@ -16,9 +16,9 @@ Condition object, to specify the condition in a dependency.
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{type}          :: \code{character(1)}
+\item \code{type}          :: \code{character(1)} \cr
 Name / type of the condition. Read-only.
-\item \code{rhs}          :: \code{any}
+\item \code{rhs}          :: \code{any} \cr
 Right-hand-side of the condition.
 }
 }
@@ -27,9 +27,9 @@ Right-hand-side of the condition.
 
 \itemize{
 \item \code{new(type, rhs)} \cr
-\code{character(1)}, \code{any} -> \code{self}
+\code{character(1)}, \code{any} -> \code{self} \cr
 Abstract constructor, called by inheriting subclasses.
-\item \code{test}          :: \code{function(x) -> logical(n)}
+\item \code{test}          :: \code{function(x) -> logical(n)} \cr
 Checks if condition is satisfied.
 Called on a vector of parent param values.
 }
@@ -38,9 +38,9 @@ Called on a vector of parent param values.
 \section{Currently implemented simple conditions}{
 
 \itemize{
-\item \code{CondEqual$new(rhs)}
+\item \code{CondEqual$new(rhs)} \cr
 Parent must be equal to \code{rhs}.
-\item \code{CondAnyOf$new(rhs)}
+\item \code{CondAnyOf$new(rhs)} \cr
 Parent must be any value of \code{rhs}.
 }
 }

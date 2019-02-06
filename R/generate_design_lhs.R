@@ -3,7 +3,7 @@
 #' @description
 #' Generate a space-filling design using Latin hypercube sampling.
 #'
-#' @param param_set :: [ParamSet].
+#' @param param_set :: [ParamSet]. \cr
 #' @param n :: `integer(1)` \cr
 #'   Number of points to sample.
 #' @param lhs_fun :: `function(n, k)` \cr
@@ -25,6 +25,6 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   d = lhs_fun(n, k = param_set$length)
   colnames(d) = ids
   d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
-  Design$new(param_set, set_names(d, ids), remove_dupl = TRUE)
+  Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # user wants n-points, dont remove
 }
 

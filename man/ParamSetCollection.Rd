@@ -7,16 +7,21 @@
 \description{
 A collection of multiple \link{ParamSet} objects.
 \itemize{
-\item In order to ensure unique param names, every param in the collection is named
+\item The collection is basically a light-weight wrapper / container around references to multiple sets.
+\item In order to ensure unique param names, every param in the collection is referred to with
 "<set_id>.<param_id>".
 \item The following state-changing methods are not allowed for a collection: \code{add}, \code{subset}.
+\item When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a \code{param_vals} state.
+This also implies that if you directly change \code{param_vals} in one of the referenced sets,
+this change is reflected in the collection.
 }
 }
 \section{Public methods}{
 
 \itemize{
 \item \code{new(sets)} \cr
-list of \link{ParamSet} -> \code{self}
+list of \link{ParamSet} -> \code{self} \cr
 Parameter objects are cloned.
 }
 }

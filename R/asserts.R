@@ -1,10 +1,10 @@
 #' @title Assertion for Param
 #' @param param [Param] \cr
-#' @param cl `character`
+#' @param cl `character` \cr
 #'   Allowed subclasses.
-#' @param no_untyped `logical(1)`
+#' @param no_untyped `logical(1)` \cr
 #'   No unytped params allowed?
-#' @param must_bounded `logical(1)`
+#' @param must_bounded `logical(1)` \cr
 #'   Only bounded params allowed?
 #' @export
 assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = FALSE) {
@@ -19,7 +19,7 @@ assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = 
 #' @title Assertion for ParamSet
 #' @param param_set [ParamSet] \cr
 #' @inheritParams assert_param
-#' @param no_deps `logical(1)`
+#' @param no_deps `logical(1)` \cr
 #'   Np dependencies allowed?
 #' @export
 assert_paramset = function(param_set, cl = "Param", no_untyped = FALSE, must_bounded = FALSE, no_deps = FALSE) {

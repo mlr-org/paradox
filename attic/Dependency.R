@@ -8,16 +8,16 @@
 #' the param set maintains an internal list of Dependency objects.
 #'
 #' @section Public members / active bindings:
-#' * `param`             :: [Param]
+#' * `param`             :: [Param] \cr
 #'   The dependent param.
-#' * `parent`            :: [Param]
+#' * `parent`            :: [Param] \cr
 #'   The (categorical) param this param depends on.
-#' * `cond`              :: [Condition]
+#' * `cond`              :: [Condition] \cr
 #'   Condition of the dependency.
 #'
 #' @section Public methods:
 #' * `new(param, parent, cond)` \cr
-#'   [Param], [Param] [Condition] -> `self`
+#'   [Param], [Param] [Condition] -> `self` \cr
 #'
 #' @name Dependency
 #' @export

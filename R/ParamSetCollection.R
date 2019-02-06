@@ -1,22 +1,20 @@
-# FIXME: check get deps, and on deps
-
-# FIXME: we need to be able to add deps across the sets, i fear. especially for the brnaching
-# can we somehow provide some sugar fox this?
-
-#FIXME: test that params sets on contru dont have travo
-
 #' @title ParamSetCollection
 #' @format [R6Class] object. Inherits from [ParamSet].
 #'
 #' @description
 #' A collection of multiple [ParamSet] objects.
-#' * In order to ensure unique param names, every param in the collection is named
+#' * The collection is basically a light-weight wrapper / container around references to multiple sets.
+#' * In order to ensure unique param names, every param in the collection is referred to with
 #'   "<set_id>.<param_id>".
 #' * The following state-changing methods are not allowed for a collection: `add`, `subset`.
+#' * When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+#'   contained param set references. The collection itself does not maintain a `param_vals` state.
+#'   This also implies that if you directly change `param_vals` in one of the referenced sets,
+#'   this change is reflected in the collection.
 #'
 #' @section Public methods:
 #' * `new(sets)` \cr
-#'   list of [ParamSet] -> `self`
+#'   list of [ParamSet] -> `self` \cr
 #'   Parameter objects are cloned.
 #'
 #' @name ParamSetCollection
@@ -32,60 +30,65 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (any(map_lgl(sets, "has_trafo")))  # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       private$.sets = sets
-      private$build_params()
-      private$build_deps()
+      private$build_internal()
+      self$set_id = "Collection"
     },
 
     add = function(p) stop("not allowed"),
-
-    add_dep = function(p) stop("not allowed"),
 
     subset = function(ids) stop("not allowed")
 
   ),
 
   active = list(
-    set_id = function(v) stopf("not allowed")
+    param_vals = function(xs) {
+      if (missing(xs)) {
+        vals = lapply(private$.sets, function(s) {
+          v = s$param_vals
+          if (length(v) > 0L)
+            names(v) = paste(s$set_id, names(v), sep = ".")
+          return(v)
+        })
+        return(unlist(vals, recursive = FALSE))
+      } else {
+        assert_list(xs)
+        self$assert(xs) # make sure everything is valid and feasible
+        # extract everything before 1st dot
+        set_ids = stri_split_fixed(names(xs), ".", n = 1L, tokens_only = TRUE)[[1L]]
+        xs = split(xs, set_ids) # partition xs into parts wrt to setids
+        for (s in private$.sets) {
+          # retrieve sublist for each set, then assign it in set (after removing prefix)
+          pv = xs[[s$set_id]]
+          if (is.null(pv))
+            pv = list()
+          names(pv) = stri_replace_first_fixed(names(pv), paste0(s$set_id, "."), "")
+          s$param_vals = pv
+        }
+      }
+    }
   ),
 
   private = list(
     .sets = NULL,
-    # FIXME: can we somehow void copying all the params and changing them?
-    # FIXME: we need to copy params AND deps and the same time and change refs
-    build_params = function() {
-      for (s in private$.sets) {
+    build_internal = function() {
+      deps_list = list()
+      for (s in private$.sets) { # iter thru sets
         n = s$length
-        copy_map = data.table(addr = character(n), new_obj = vector("list", n))
-        for (i in seq_len(n)) {
-          p = s$params[[i]]
-          pp = p$clone(deep = TRUE)
-          pp$id = paste(s$set_id, p$id, sep = ".")
-          copy_map[i, c("addr", "new_obj") := list(address(p), list(pp))]
+        ids_old = s$ids()
+        ids_new = paste(s$set_id, ids_old, sep = ".")
+        for (i in seq_len(n)) { # clone each param into new params-list and prefix id
+          p = s$params[[i]]$clone()
+          p$id = ids_new[i]
+          private$.params[[length(private$.params) + 1L]] = p
         }
-        # print(copy_map)
-        # d = s$deps_on
-        for (d in s$deps) {
-          dd = d$clone(deep = TRUE)
-          dd$param = copy_map[addr == address(dd$param), "new_obj"]
-          dd$parent = copy_map[addr == address(dd$parent), "new_obj"]
-          # print(dd)
-        }
+        # copy all deps and rename ids to prefixed versions
+        d = copy(s$deps)
+        d$id = map_values(d$id, ids_old, ids_new)
+        d$on = map_values(d$on, ids_old, ids_new)
+        deps_list[[length(deps_list) + 1L]] = d
       }
-      # private$.params = unlist(map(private$.sets, function(s)  {
-        # ps = map(s$params, function(p) p$clone(deep = TRUE))
-        # for (p in ps)
-          # p$id = paste(s$set_id, p$id, sep = ".")
-        # set_names(ps, map_chr(ps, "id"))
-      # }), recursive = FALSE)
-    },
-
-    build_deps = function() {
-      private$.deps = unlist(map(private$.sets, function(s)  {
-        ps = map(s$deps, function(p) p$clone(deep = TRUE))
-      }), recursive = FALSE)
-      # for (d in deps) {
-        # d$param
-      # }
+      names(private$.params) = map_chr(private$.params, "id")
+      private$.deps = rbindlist(deps_list)
     }
   )
 )

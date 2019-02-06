@@ -10,16 +10,16 @@ assert_paramset(param_set, cl = "Param", no_untyped = FALSE,
 \arguments{
 \item{param_set}{\link{ParamSet} \cr}
 
-\item{cl}{\code{character}
+\item{cl}{\code{character} \cr
 Allowed subclasses.}
 
-\item{no_untyped}{\code{logical(1)}
+\item{no_untyped}{\code{logical(1)} \cr
 No unytped params allowed?}
 
-\item{must_bounded}{\code{logical(1)}
+\item{must_bounded}{\code{logical(1)} \cr
 Only bounded params allowed?}
 
-\item{no_deps}{\code{logical(1)}
+\item{no_deps}{\code{logical(1)} \cr
 Np dependencies allowed?}
 }
 \description{
