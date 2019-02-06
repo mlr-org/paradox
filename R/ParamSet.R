@@ -231,13 +231,10 @@ ParamSet = R6Class("ParamSet",
         if (self$has_deps) { # add a nice extra charvec-col to the tab, which lists all parents-ids
           dd = self$deps[, .(parents = list(unlist(on))), by = id]
           d = merge(d, dd, on = "id", all.x = TRUE)
-          v = named_list(d$id) # add param_vals to last col of print-dt as list col
-          v = insert_named(v, private$.param_vals)
-          # FIXME: what is correct here? this does not work,
-          # without the "list(v)", if v = list(NULL) ??
-          # ADD UNIT TEST
-          d$value = list(v)
         }
+        v = named_list(d$id) # add param_vals to last col of print-dt as list col
+        v = insert_named(v, self$param_vals)
+        d$value = list(v)
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
       if (!is.null(self$trafo))
@@ -287,7 +284,6 @@ ParamSet = R6Class("ParamSet",
       }
     },
     has_trafo = function() !is.null(private$.trafo),
-    # FIXME: add parvals to printer
     param_vals = function(xs) {
       if (missing(xs)) {
         return(private$.param_vals)

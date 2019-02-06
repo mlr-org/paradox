@@ -17,6 +17,8 @@ test_that("param_vals", {
   ps2$param_vals = list(d = 0.5)
   expect_true(ps$check(list(d = 1, f = "a")))
   expect_equal(ps2$param_vals, list(d = 0.5))
+  # check printer
+  expect_output(print(ps2), "d.*<NoDefault>.*0.5")
 
   ps2 = ps$clone()
   ps2$subset(ids = c("i"))
