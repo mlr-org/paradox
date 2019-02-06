@@ -79,7 +79,7 @@ parE$class
 
 It is also possible to get all information of a `Param` in form of a `data.table` by calling **`as.data.table`**.
 
-```{r}
+```{r, R.options(width = 120)}
 as.data.table(parA)
 ```
 
@@ -115,7 +115,7 @@ print(psSmall)
 
 Just as for `Param`s, and much more usefully, it is possible to get the `ParamSet` as a `data.table` using `as.data.table`. This makes it easy to subset parameters on certain conditions and aggregate information about them, using the variety of methods provided by `data.table`.
 
-```{r}
+```{r, R.options=list(width = 120)}
 as.data.table(ps)
 ```
 
