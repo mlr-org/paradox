@@ -4,7 +4,9 @@
 #'
 #' @description
 #' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
-#' resulting set have to be uniquely named with IDs with valid R names.
+#' resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
+#' variable `param_vals` which can be used to store an active configuration / or to partially fix
+#' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
 #' * `set_id`            :: `character(1)` \cr
@@ -70,6 +72,11 @@
 #'   Lists all (direct) dependency parents of a param, through parameter IDs.
 #'   Internally created by a call to `add_dep`.
 #'   Settable, if you want to remove dependencies or perform other changes.
+#' * `param_vals`         :: named `list` \cr
+#'   Currently set / fixed parameter values.
+#'   Settable, and feasibility of values will be checked when you set them.
+#'   You do not have to set values for all parameters, but only for a subset.
+#'   When you set values, all previously set values will be unset / removed.
 #'
 #' @section Public methods:
 #' * `new(params)` \cr
