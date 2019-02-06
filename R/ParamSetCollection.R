@@ -3,9 +3,14 @@
 #'
 #' @description
 #' A collection of multiple [ParamSet] objects.
-#' * In order to ensure unique param names, every param in the collection is named
+#' * The collection is basically a light-weight wrapper / container around references to multiple sets.
+#' * In order to ensure unique param names, every param in the collection is referred to with
 #'   "<set_id>.<param_id>".
 #' * The following state-changing methods are not allowed for a collection: `add`, `subset`.
+#' * When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+#'   contained param set references. The collection itself does not maintain a `param_vals` state.
+#'   This also implies that if you directly change `param_vals` in one of the referenced sets,
+#'   this change is reflected in the collection.
 #'
 #' @section Public methods:
 #' * `new(sets)` \cr
