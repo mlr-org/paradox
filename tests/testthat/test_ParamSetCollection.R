@@ -75,6 +75,12 @@ test_that("deps", {
   d = psc$deps
   expect_data_table(d, nrows = 1, ncols = 3)
   expect_equal(d$id, c("ps1.d"))
+
+  # check deps across sets
+  psc$add_dep("ps2.d", on = "ps1.f", CondEqual$new("a"))
+  expect_data_table(psc$deps, nrows = 2, ncols = 3)
+  expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
+  expect_string(psc$check(list(ps2.d = 0)))
 })
 
 test_that("param_vals", {

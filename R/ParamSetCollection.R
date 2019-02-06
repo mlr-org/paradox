@@ -36,8 +36,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
     add = function(p) stop("not allowed"),
 
-    add_dep = function(p) stop("not allowed"),
-
     subset = function(ids) stop("not allowed")
 
   ),
