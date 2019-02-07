@@ -295,6 +295,7 @@ ParamSet = R6Class("ParamSet",
       } else {
         self$assert(xs)
       }
+      if (length(xs) == 0L) xs = named_list()
       private$.param_vals = xs
     },
     has_deps = function() nrow(private$.deps) > 0L

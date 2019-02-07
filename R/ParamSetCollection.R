@@ -43,7 +43,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     params = function(v) {
       if (length(private$.sets) == 0L)
         return(named_list())
-      private$.params = list()
+      private$.params = named_list()
       # clone each param into new params-list and prefix id
       ps_all = lapply(private$.sets, function(s) {
         ss = s$clone(deep = TRUE)
@@ -53,6 +53,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         return(ps)
       })
       ps_all = unlist(ps_all, recursive = FALSE)
+      if (length(ps_all) == 0L)  # unlist before drops names for empty list....
+        ps_all = named_list()
       imap(ps_all, function(x, n) x$id = n)
       return(ps_all)
     },

@@ -8,7 +8,7 @@ test_that("param_vals", {
   ))
   # make sure we accept empty list, and not only a "named list"
   ps$param_vals = list()
-  expect_equal(ps$param_vals, list())
+  expect_equal(ps$param_vals, named_list())
   ps$param_vals = list(d = 1, f = "a")
   expect_true(ps$check(list(d = 0, f = "a")))
   ps2 = ps$clone()
