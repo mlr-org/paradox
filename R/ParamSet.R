@@ -5,7 +5,7 @@
 #' @description
 #' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
 #' resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-#' variable `vals` which can be used to store an active configuration / or to partially fix
+#' variable `param_vals` which can be used to store an active configuration / or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
@@ -72,7 +72,7 @@
 #'   Lists all (direct) dependency parents of a param, through parameter IDs.
 #'   Internally created by a call to `add_dep`.
 #'   Settable, if you want to remove dependencies or perform other changes.
-#' * `vals`         :: named `list` \cr
+#' * `param_vals`         :: named `list` \cr
 #'   Currently set / fixed parameter values.
 #'   Settable, and feasibility of values will be checked when you set them.
 #'   You do not have to set values for all parameters, but only for a subset.
@@ -135,7 +135,7 @@ ParamSet = R6Class("ParamSet",
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
       private$.params = c(private$.params, ps2$params)
-      private$.vals = c(private$.vals, ps2$vals)
+      private$.param_vals = c(private$.param_vals, ps2$param_vals)
       private$.deps = rbind(private$.deps, ps2$deps)
       invisible(self)
     },
@@ -162,8 +162,8 @@ ParamSet = R6Class("ParamSet",
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
       private$.params = private$.params[ids]
-      ids2 = intersect(ids, names(private$.vals)) # restrict to ids already in pvals
-      private$.vals = private$.vals[ids2]
+      ids2 = intersect(ids, names(private$.param_vals)) # restrict to ids already in pvals
+      private$.param_vals = private$.param_vals[ids2]
       invisible(self)
     },
 
@@ -237,8 +237,8 @@ ParamSet = R6Class("ParamSet",
           dd = self$deps[, .(parents = list(unlist(on))), by = id]
           d = merge(d, dd, on = "id", all.x = TRUE)
         }
-        v = named_list(d$id) # add vals to last col of print-dt as list col
-        v = insert_named(v, self$vals)
+        v = named_list(d$id) # add param_vals to last col of print-dt as list col
+        v = insert_named(v, self$param_vals)
         d$value = list(v)
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
@@ -289,14 +289,14 @@ ParamSet = R6Class("ParamSet",
       }
     },
     has_trafo = function() !is.null(private$.trafo),
-    vals = function(xs) {
+    param_vals = function(xs) {
       if (missing(xs)) {
-        return(private$.vals)
+        return(private$.param_vals)
       } else {
         self$assert(xs)
       }
       if (length(xs) == 0L) xs = named_list()
-      private$.vals = xs
+      private$.param_vals = xs
     },
     has_deps = function() nrow(private$.deps) > 0L
   ),
@@ -305,7 +305,7 @@ ParamSet = R6Class("ParamSet",
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
-    .vals = named_list(),
+    .param_vals = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),

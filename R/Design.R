@@ -37,7 +37,7 @@ Design = R6Class("Design",
       # set fixed param vals to their constant values
       # FIXME: this might also be problematic for LHS
       # do we still create an LHS like this?
-      imap(param_set$vals, function(v, n) set(data, j = n, value = v))
+      imap(param_set$param_vals, function(v, n) set(data, j = n, value = v))
       self$data = data
       if (param_set$has_deps)
         private$set_deps_to_na()

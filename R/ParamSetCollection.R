@@ -7,9 +7,9 @@
 #' * In order to ensure unique param names, every param in the collection is referred to with
 #'   "<set_id>.<param_id>".
 #' * The following state-changing methods are not allowed for a collection: `add`, `subset`.
-#' * When you either ask for 'vals' or set them, the operation is delegated to the individual,
-#'   contained param set references. The collection itself does not maintain a `vals` state.
-#'   This also implies that if you directly change `vals` in one of the referenced sets,
+#' * When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
+#'   contained param set references. The collection itself does not maintain a `param_vals` state.
+#'   This also implies that if you directly change `param_vals` in one of the referenced sets,
 #'   this change is reflected in the collection.
 #'
 #' @section Public methods:
@@ -73,10 +73,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)))
     },
 
-    vals = function(xs) {
+    param_vals = function(xs) {
       if (missing(xs)) {
         vals = lapply(private$.sets, function(s) {
-          v = s$vals
+          v = s$param_vals
           if (length(v) > 0L)
             names(v) = paste(s$set_id, names(v), sep = ".")
           return(v)
@@ -96,7 +96,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           if (is.null(pv))
             pv = list()
           names(pv) = sub(sprintf("^%s.", s$set_id), "", names(pv))
-          s$vals = pv
+          s$param_vals = pv
         }
       }
     }

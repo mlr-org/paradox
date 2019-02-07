@@ -113,7 +113,7 @@ test_that("deps", {
   expect_equal(ps2clone, ps2)
 })
 
-test_that("vals", {
+test_that("param_vals", {
 
   ps1 = ParamSet$new(list(
     ParamFct$new("f", values = c("a", "b")),
@@ -130,16 +130,16 @@ test_that("vals", {
   ps2clone = ps2$clone(deep = TRUE)
 
   pcs = ParamSetCollection$new(list(ps1, ps2))
-  expect_equal(pcs$vals, named_list())
-  ps2$vals = list(d = 3)
-  expect_equal(pcs$vals, list(bar.d = 3))
-  pcs$vals = list(foo.d = 8)
-  expect_equal(pcs$vals, list(foo.d = 8))
-  expect_equal(ps1$vals, list(d = 8))
-  expect_equal(ps2$vals, named_list())
+  expect_equal(pcs$param_vals, named_list())
+  ps2$param_vals = list(d = 3)
+  expect_equal(pcs$param_vals, list(bar.d = 3))
+  pcs$param_vals = list(foo.d = 8)
+  expect_equal(pcs$param_vals, list(foo.d = 8))
+  expect_equal(ps1$param_vals, list(d = 8))
+  expect_equal(ps2$param_vals, named_list())
 
-  ps1clone$vals$d = 8
-  ps2$vals = list()
+  ps1clone$param_vals$d = 8
+  ps2$param_vals = list()
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
 
@@ -171,7 +171,7 @@ test_that("no problems if we name the list of sets", {
 test_that("no warning in printer, see issue 208", {
   ps = ParamSet$new(list(ParamDbl$new("test1")))
   psc = ParamSetCollection$new(list(ps))
-  psc$vals = list(paramset.test1 = 1)
+  psc$param_vals = list(paramset.test1 = 1)
   expect_warning(capture_output(print(ps)), NA)
 })
 
@@ -179,10 +179,10 @@ test_that("no warning in printer, see issue 208", {
 test_that("collection reflects direct paramset$set_id change", {
   ps = ParamSet$new(list(ParamDbl$new("d")))
   psc = ParamSetCollection$new(list(ps))
-  ps$vals = list(d = 1)
-  expect_equal(psc$vals, list(paramset.d = 1))
+  ps$param_vals = list(d = 1)
+  expect_equal(psc$param_vals, list(paramset.d = 1))
   ps$set_id = "foo"
-  expect_equal(psc$vals, list(foo.d = 1))
+  expect_equal(psc$param_vals, list(foo.d = 1))
   expect_equal(psc$params, list(foo.d = ParamDbl$new("foo.d")))
 })
 
@@ -193,10 +193,10 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
   ps2 = ParamSet$new(list(ParamDbl$new("d2")))
   ps2$set_id = "s2"
   psc = ParamSetCollection$new(list(ps1, ps2))
-  expect_equal(psc$vals, named_list())
-  psc$vals$s1.d1 = 1
-  expect_equal(psc$vals, list(s1.d1 = 1))
-  psc$vals$s2.d2 = 2
-  expect_equal(psc$vals, list(s1.d1 = 1, s2.d2 = 2))
+  expect_equal(psc$param_vals, named_list())
+  psc$param_vals$s1.d1 = 1
+  expect_equal(psc$param_vals, list(s1.d1 = 1))
+  psc$param_vals$s2.d2 = 2
+  expect_equal(psc$param_vals, list(s1.d1 = 1, s2.d2 = 2))
 })
 
