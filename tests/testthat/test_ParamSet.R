@@ -108,7 +108,7 @@ test_that("ParamSet$check", {
 
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
-  expect_error(ps$set_id <- "$foo" , "naming convention")
+  expect_error(ps$set_id <- "$foo" , "Must comply")
 })
 
 test_that("ParamSets cannot have duplicated ids", {

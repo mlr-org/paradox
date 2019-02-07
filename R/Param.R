@@ -98,7 +98,7 @@ Param = R6Class("Param",
     tags = NULL,
 
     initialize = function(id, special_vals, default, tags) {
-      assert_string(id)
+      assert_id(id)
       assert_names(id, type = "strict")
       assert_list(special_vals)
       assert_character(tags, any.missing = FALSE, unique = TRUE)

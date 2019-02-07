@@ -261,7 +261,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(v)) {
         private$.set_id
       } else {
-        assert_string(v)
+        assert_id(v)
         assert_names(v, type = "strict")
         private$.set_id = v
       }
