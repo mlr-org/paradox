@@ -130,7 +130,7 @@ test_that("param_vals", {
   ps2clone = ps2$clone(deep = TRUE)
 
   pcs = ParamSetCollection$new(list(ps1, ps2))
-  expect_equal(pcs$param_vals, list())
+  expect_equal(pcs$param_vals, named_list())
   ps2$param_vals = list(d = 3)
   expect_equal(pcs$param_vals, list(bar.d = 3))
   pcs$param_vals = list(foo.d = 8)
@@ -184,5 +184,19 @@ test_that("collection reflects direct paramset$set_id change", {
   ps$set_id = "foo"
   expect_equal(psc$param_vals, list(foo.d = 1))
   expect_equal(psc$params, list(foo.d = ParamDbl$new("foo.d")))
+})
+
+
+test_that("collection allows state-change setting of paramvals, see issue 205", {
+  ps1 = ParamSet$new(list(ParamDbl$new("d1")))
+  ps1$set_id = "s1"
+  ps2 = ParamSet$new(list(ParamDbl$new("d2")))
+  ps2$set_id = "s2"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+  expect_equal(psc$param_vals, named_list())
+  psc$param_vals$s1.d1 = 1
+  expect_equal(psc$param_vals, list(s1.d1 = 1))
+  psc$param_vals$s2.d2 = 2
+  expect_equal(psc$param_vals, list(s1.d1 = 1, s2.d2 = 2))
 })
 

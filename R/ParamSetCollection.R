@@ -81,7 +81,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
             names(v) = paste(s$set_id, names(v), sep = ".")
           return(v)
         })
-        return(unlist(vals, recursive = FALSE))
+        vals = unlist(vals, recursive = FALSE)
+        if (length(vals) == 0L) return(named_list()) # this is bullshit
+        return(vals)
       } else {
         assert_list(xs)
         self$assert(xs) # make sure everything is valid and feasible
