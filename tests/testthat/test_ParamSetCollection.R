@@ -167,3 +167,10 @@ test_that("no problems if we name the list of sets", {
   psc = ParamSetCollection$new(list(prefix = ps))
   expect_equal(names(psc$params), "paramset.test1")
 })
+
+test_that("no warning in printer, see issue 208", {
+  ps = ParamSet$new(list(ParamDbl$new("test1")))
+  psc = ParamSetCollection$new(list(ps))
+  psc$param_vals = list(paramset.test1 = 1)
+  expect_warning(print(ps1), NA)
+})
