@@ -29,6 +29,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_names(setids, type = "unique")
       if (any(map_lgl(sets, "has_trafo")))  # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+      names(sets) = NULL # we drop names here, otherwise a problem happens when we unlist in AB "params"
       private$.sets = sets
       self$set_id = "Collection"
     },

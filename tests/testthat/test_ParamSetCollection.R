@@ -161,3 +161,9 @@ test_that("empty collections", {
   expect_data_table(as.data.table(psc), nrow = 0L)
 })
 
+
+test_that("no problems if we name the list of sets", {
+  ps = ParamSet$new(list(ParamDbl$new("test1")))
+  psc = ParamSetCollection$new(list(prefix = ps))
+  expect_equal(names(psc$params), "paramset.test1")
+})
