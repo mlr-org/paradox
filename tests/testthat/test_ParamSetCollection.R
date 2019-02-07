@@ -174,3 +174,15 @@ test_that("no warning in printer, see issue 208", {
   psc$param_vals = list(paramset.test1 = 1)
   expect_warning(capture_output(print(ps)), NA)
 })
+
+
+test_that("collection reflects direct paramset$set_id change", {
+  ps = ParamSet$new(list(ParamDbl$new("d")))
+  psc = ParamSetCollection$new(list(ps))
+  ps$param_vals = list(d = 1)
+  expect_equal(psc$param_vals, list(paramset.d = 1))
+  ps$set_id = "foo"
+  expect_equal(psc$param_vals, list(foo.d = 1))
+  expect_equal(psc$params, list(foo.d = ParamDbl$new("foo.d")))
+})
+

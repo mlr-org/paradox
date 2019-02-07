@@ -31,7 +31,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       names(sets) = NULL # we drop names here, otherwise a problem happens when we unlist in AB "params"
       private$.sets = sets
-      self$set_id = "Collection"
+      self$set_id = "collection"
     },
 
     add = function(p) stop("not allowed"),
