@@ -1,11 +1,15 @@
 context("ParamSetCollection")
 
 test_that("simple active bindings work", {
+
   ps1 = th_paramset_dbl1()
   ps1$set_id = "s1"
   ps2 = th_paramset_full()
   ps2$set_id = "s2"
   psc = ParamSetCollection$new(list(ps1, ps2))
+
+  ps1clone = ps1$clone(deep = TRUE)
+  ps2clone = ps2$clone(deep = TRUE)
 
   my_c = function(xs1, xs2) {  # littler helper to join to ps-result and prefix names
     ns = c(paste0("s1.", names(xs1)), paste0("s2.", names(xs2)))
@@ -48,10 +52,22 @@ test_that("simple active bindings work", {
     expect_names(names(x), permutation.of = psc$ids())
     expect_equal(x$s2.th_param_int, 99)
   }
+
+  # ps1 and ps2 should not be changed
+  expect_equal(ps1, ps1clone)
+  expect_equal(ps2, ps2clone)
+
+  expect_output(print(psc), "s1\\.th_param_dbl.*s2\\.th_param_int.*s2\\.th_param_dbl.*s2\\.th_param_fct.*s2\\.th_param_lgl.*")
+
+  # ps1 and ps2 should not be changed by printing
+  expect_equal(ps1, ps1clone)
+  expect_equal(ps2, ps2clone)
+
 })
 
 
 test_that("some operations are not allowed", {
+
   ps1 = th_paramset_dbl1()
   ps1$set_id = "s1"
   ps2 = th_paramset_full()
@@ -64,6 +80,7 @@ test_that("some operations are not allowed", {
 })
 
 test_that("deps", {
+
   ps1 = ParamSet$new(list(
     ParamFct$new("f", values = c("a", "b")),
     ParamDbl$new("d")
@@ -76,6 +93,10 @@ test_that("deps", {
     ParamDbl$new("d")
   ))
   ps2$set_id = "ps2"
+
+  ps1clone = ps1$clone(deep = TRUE)
+  ps2clone = ps2$clone(deep = TRUE)
+
   psc = ParamSetCollection$new(list(ps1, ps2))
   d = psc$deps
   expect_data_table(d, nrows = 1, ncols = 3)
@@ -86,9 +107,14 @@ test_that("deps", {
   expect_data_table(psc$deps, nrows = 2, ncols = 3)
   expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
   expect_string(psc$check(list(ps2.d = 0)))
+
+  # ps1 and ps2 should not be changed
+  expect_equal(ps1clone, ps1)
+  expect_equal(ps2clone, ps2)
 })
 
 test_that("param_vals", {
+
   ps1 = ParamSet$new(list(
     ParamFct$new("f", values = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
@@ -99,6 +125,10 @@ test_that("param_vals", {
     ParamDbl$new("d", lower = 1, upper = 8)
   ))
   ps2$set_id = "bar"
+
+  ps1clone = ps1$clone(deep = TRUE)
+  ps2clone = ps2$clone(deep = TRUE)
+
   pcs = ParamSetCollection$new(list(ps1, ps2))
   expect_equal(pcs$param_vals, list())
   ps2$param_vals = list(d = 3)
@@ -107,4 +137,10 @@ test_that("param_vals", {
   expect_equal(pcs$param_vals, list(foo.d = 8))
   expect_equal(ps1$param_vals, list(d = 8))
   expect_equal(ps2$param_vals, set_names(list(), character(0)))
+
+  ps1clone$param_vals$d = 8
+  ps2$param_vals = list()
+  expect_equal(ps1clone, ps1)
+  expect_equal(ps2clone, ps2)
+
 })
