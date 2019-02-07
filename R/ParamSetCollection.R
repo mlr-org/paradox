@@ -44,7 +44,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.params = list()
       # clone each param into new params-list and prefix id
       ps_all = lapply(private$.sets, function(s) {
-        ss = s$clone()
+        ss = s$clone(deep = TRUE)
         ps = ss$params
         set_names(ps, paste(s$set_id, names(ps), sep = "."))
       })
