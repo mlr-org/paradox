@@ -117,7 +117,7 @@
 ParamSet = R6Class("ParamSet",
   public = list(
 
-    initialize = function(params = list()) {
+    initialize = function(params = named_list()) {
       assert_list(params, types = "Param")
       ids = map_chr(params, "id")
       assert_names(ids, type = "strict")
@@ -304,7 +304,7 @@ ParamSet = R6Class("ParamSet",
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
-    .param_vals = list(),
+    .param_vals = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),

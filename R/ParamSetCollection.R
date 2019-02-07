@@ -41,12 +41,16 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   active = list(
     params = function(v) {
+      if (length(private$.sets) == 0L)
+        return(named_list())
       private$.params = list()
       # clone each param into new params-list and prefix id
       ps_all = lapply(private$.sets, function(s) {
         ss = s$clone(deep = TRUE)
         ps = ss$params
-        set_names(ps, paste(s$set_id, names(ps), sep = "."))
+        if (length(ps) > 0L) # paste with empty vec creates a string...
+          names(ps) = paste(s$set_id, names(ps), sep = ".")
+        return(ps)
       })
       ps_all = unlist(ps_all, recursive = FALSE)
       imap(ps_all, function(x, n) x$id = n)

@@ -136,7 +136,7 @@ test_that("param_vals", {
   pcs$param_vals = list(foo.d = 8)
   expect_equal(pcs$param_vals, list(foo.d = 8))
   expect_equal(ps1$param_vals, list(d = 8))
-  expect_equal(ps2$param_vals, set_names(list(), character(0)))
+  expect_equal(ps2$param_vals, named_list())
 
   ps1clone$param_vals$d = 8
   ps2$param_vals = list()
@@ -144,3 +144,20 @@ test_that("param_vals", {
   expect_equal(ps2clone, ps2)
 
 })
+
+test_that("empty collections", {
+  # no paramsets
+  psc = ParamSetCollection$new(list())
+  expect_equal(psc$length, 0L)
+  expect_equal(psc$params, named_list())
+  expect_equal(psc$ids(), character(0L))
+  expect_data_table(as.data.table(psc), nrow = 0L)
+
+  # 1 empty paramset
+  psc = ParamSetCollection$new(list(ParamSet$new()))
+  expect_equal(psc$length, 0L)
+  expect_equal(psc$params, named_list())
+  expect_equal(psc$ids(), character(0L))
+  expect_data_table(as.data.table(psc), nrow = 0L)
+})
+
