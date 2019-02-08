@@ -16,6 +16,7 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   active = list(
     values = function() NULL,
+    levels = function() NULL,
     nlevels = function() diff(self$range) + 1L,
     is_bounded = function() all(is.finite(self$range)),
     storage_type = function() "integer",

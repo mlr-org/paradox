@@ -9,7 +9,7 @@ test_that("generate_design_random", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     d = generate_design_random(ps, n = 5L)
     dd = d$data
     expect_data_table(dd, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
@@ -26,7 +26,7 @@ test_that("generate_design_grid", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     reso = 3L
     d = generate_design_grid(ps, resolution = reso)
     dd = d$data
@@ -101,7 +101,7 @@ test_that("generate_design_lhs", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     d = generate_design_lhs(ps, 10)
     dd = d$data
     expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
@@ -132,5 +132,3 @@ test_that("generate_design_random and grid works with deps", {
   expect_true(all(ifelse(dd$th_param_fct %in% c("a", "b", NA) & dd$th_param_lgl,
     !is.na(dd$th_param_dbl), is.na(dd$th_param_dbl))))
 })
-
-

@@ -65,7 +65,7 @@ test_that("SamplerUnif", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     s = SamplerUnif$new(ps)
     # as the ps is constructed in the sampler, we cannot expect ps$id to be the same
     expect_equal(s$param_set$params, ps$params)
