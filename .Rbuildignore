@@ -24,3 +24,4 @@ README.md
 README.Rmd
 todo-files
 attic
+^pkgdown$
