@@ -11,9 +11,9 @@ A collection of multiple \link{ParamSet} objects.
 \item In order to ensure unique param names, every param in the collection is referred to with
 "<set_id>.<param_id>".
 \item The following state-changing methods are not allowed for a collection: \code{add}, \code{subset}.
-\item When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
-contained param set references. The collection itself does not maintain a \code{param_vals} state.
-This also implies that if you directly change \code{param_vals} in one of the referenced sets,
+\item When you either ask for 'values' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a \code{values} state.
+This also implies that if you directly change \code{values} in one of the referenced sets,
 this change is reflected in the collection.
 }
 }

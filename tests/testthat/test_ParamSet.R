@@ -9,7 +9,7 @@ test_that("simple active bindings work", {
     th_paramset_numeric()
   )
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     expect_class(ps, "ParamSet", info = info)
     expect_int(ps$length, lower = 0L, info = info)
     expect_character(ps$ids(), info = info)
@@ -21,8 +21,8 @@ test_that("simple active bindings work", {
     expect_names(names(ps$lower), identical.to = ps$ids(), info = info)
     expect_numeric(ps$upper, any.missing = TRUE, info = info)
     expect_names(names(ps$upper), identical.to = ps$ids(), info = info)
-    expect_list(ps$values, info = info)
-    expect_names(names(ps$values), identical.to = ps$ids(), info = info)
+    expect_list(ps$levels, info = info)
+    expect_names(names(ps$levels), identical.to = ps$ids(), info = info)
     expect_flag(ps$is_bounded, info = info)
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, types = "character", info = info)
@@ -108,7 +108,7 @@ test_that("ParamSet$check", {
 
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
-  expect_error(ps$set_id <- "$foo" , "naming convention")
+  expect_error(ps$set_id <- "$foo" , "Must comply")
 })
 
 test_that("ParamSets cannot have duplicated ids", {
@@ -128,10 +128,10 @@ test_that("ParamSet$print", {
   ps = th_paramset_numeric()
   expect_output(print(ps), "ParamSet:")
   s = capture_output(print(ps))
-  expect_true(stri_detect_fixed(s, "ParamInt"))
-  expect_true(stri_detect_fixed(s, "ParamDbl"))
+  expect_true(grepl("ParamInt", s, fixed = TRUE))
+  expect_true(grepl("ParamDbl", s, fixed = TRUE))
   s = capture_output(print(ps, hide.cols = c("class")))
-  expect_false(stri_detect_fixed(s, "ParamInt"))
+  expect_false(grepl("ParamInt", s, fixed = TRUE))
 
   # iterate through more complex PS and check that printer works by at least calling it
   ps_list = list(
@@ -164,7 +164,7 @@ test_that("ParamSet does a deep copy of param on add", {
 
 test_that("ParamSet$clone can be deep", {
   p1 = ParamDbl$new("x", lower = 1, upper = 3)
-  p2 = ParamFct$new("y", values = c("a", "b"))
+  p2 = ParamFct$new("y", levels = c("a", "b"))
   ps1 = ParamSet$new(list(p1, p2))
   ps2 = ps1$clone(deep = TRUE)
   pp = ps2$params[["x"]]
@@ -206,7 +206,7 @@ test_that("ParamSet$add_param", {
   expect_equal(ps$length, 1L)
   expect_equal(ps$ids(), "x")
   expect_equal(ps$lower, c(x = 1))
-  ps$add(ParamFct$new("y", values = c("a")))
+  ps$add(ParamFct$new("y", levels = c("a")))
   expect_equal(ps$length, 2L)
   expect_equal(ps$ids(), c("x", "y"))
   expect_equal(ps$lower, c(x = 1, y = NA))
@@ -220,7 +220,7 @@ test_that("as.data.table", {
   expect_data_table(d, nrow = 4, ncol = 11)
   expect_equal(ps$ids(), d$id)
   expect_equal(unname(ps$lower), d$lower)
-  expect_equal(unname(ps$values), d$values)
+  expect_equal(unname(ps$levels), d$levels)
 })
 
 test_that("ParamSet$default", {
@@ -249,7 +249,7 @@ test_that("ParamSet$ids", {
   ps = ParamSet$new(list(
     ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
     ParamInt$new(id = "y", lower = 1, upper = 2),
-    ParamFct$new(id = "z", values = letters[1:3], tags = c("t1"))
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
   ))
   expect_equal(ps$ids(), c("x", "y", "z"))
   expect_equal(ps$ids(class = c("ParamInt", "ParamFct")), c("y", "z"))

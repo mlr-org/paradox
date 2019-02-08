@@ -56,13 +56,13 @@ test_that("nested deps work", {
 
 test_that("adding 2 sets with deps works", {
   ps1 = ParamSet$new(list(
-    ParamFct$new("x1", values = c("a", "b")),
+    ParamFct$new("x1", levels = c("a", "b")),
     ParamDbl$new("y1")
   ))
   ps1$add_dep("y1", on = "x1", CondEqual$new("a"))
 
   ps2 = ParamSet$new(list(
-    ParamFct$new("x2", values = c("a", "b")),
+    ParamFct$new("x2", levels = c("a", "b")),
     ParamDbl$new("y2")
   ))
   ps2$add_dep("y2", on = "x2", CondEqual$new("a"))
@@ -81,10 +81,10 @@ test_that("adding 2 sets with deps works", {
 
 test_that("subsetting with deps works", {
   ps = ParamSet$new(list(
-    ParamFct$new("a", values = c("a", "b")),
-    ParamFct$new("b", values = c("a", "b")),
-    ParamFct$new("c", values = c("a", "b")),
-    ParamFct$new("d", values = c("a", "b"))
+    ParamFct$new("a", levels = c("a", "b")),
+    ParamFct$new("b", levels = c("a", "b")),
+    ParamFct$new("c", levels = c("a", "b")),
+    ParamFct$new("d", levels = c("a", "b"))
   ))
   ps$add_dep("a", on = "b", CondEqual$new("a"))
   ps$add_dep("a", on = "c", CondEqual$new("a"))
@@ -97,7 +97,7 @@ test_that("subsetting with deps works", {
 })
 
 test_that("cannot add a dep on yourself", {
-  ps = ParamSet$new(list(ParamFct$new("x", values = c("a"))))
+  ps = ParamSet$new(list(ParamFct$new("x", levels = c("a"))))
   expect_error(ps$add_dep("x", on = "x", CondEqual$new("a")), "depend on itself")
 
 })

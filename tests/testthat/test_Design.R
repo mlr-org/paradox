@@ -2,7 +2,7 @@ context("Design")
 
 test_that("transpose works", {
   ps = ParamSet$new(list(
-    ParamFct$new("f", values = c("a", "b")),
+    ParamFct$new("f", levels = c("a", "b")),
     ParamInt$new("i", lower = 1, upper = 5)
   ))
   ps$add_dep("i", on = "f", CondEqual$new("a"))

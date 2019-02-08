@@ -5,7 +5,7 @@
 #' Abstract base class for params and inheriting concrete param subclasses.
 #' * Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 #'   specifically handled: 'required' implied that the parameters has to be given
-#'   when setting `param_vals` in [ParamSet].
+#'   when setting `values` in [ParamSet].
 #'
 #' @section Public members / active bindings:
 #' * `id`               :: `character(1)` \cr
@@ -16,8 +16,8 @@
 #'    Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
 #' * `upper`            :: `numeric(1)` \cr
 #'    Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
-#' * `values`           :: `character` | `logical` | `NULL` \cr
-#'    Allowed values for categorical params, NULL if param is not categorical.
+#' * `levels`           :: `character` | `logical` | `NULL` \cr
+#'    Allowed levels for categorical params, NULL if param is not categorical.
 #' * `nlevels`          :: `numeric(1)` \cr
 #'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
 #' * `is_bounded`       :: `logical(1)` \cr
@@ -32,7 +32,7 @@
 #' * `has_default`      :: `logical(1)` \cr
 #'    Is a default there?
 #' * `storage_type`     :: `character(1)` \cr
-#'    Data type when values of this param is stored in a data table or sampled. Read-only.
+#'    Data type when values of this param are stored in a data table or sampled. Read-only.
 #' * `tags`             :: `character` \cr
 #'   Can be used to group and subset params.
 #' * is_number          :: `logical(1)` \cr
@@ -98,7 +98,7 @@ Param = R6Class("Param",
     tags = NULL,
 
     initialize = function(id, special_vals, default, tags) {
-      assert_string(id)
+      assert_id(id)
       assert_names(id, type = "strict")
       assert_list(special_vals)
       assert_character(tags, any.missing = FALSE, unique = TRUE)
@@ -168,7 +168,7 @@ as.data.table.Param = function(x, ...) {
     class = x$class,
     lower = x$lower,
     upper = x$upper,
-    values = list(x$values),
+    levels = list(x$levels),
     nlevels = x$nlevels,
     is_bounded = x$is_bounded,
     special_vals = list(x$special_vals),

@@ -11,7 +11,7 @@ ParamSet
 \description{
 A set of \link{Param} objects. Please note that when creating a set or adding to it, the params of the
 resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-variable \code{param_vals} which can be used to store an active configuration / or to partially fix
+variable \code{values} which can be used to store an active configuration / or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs).
 }
 \section{Public members / active bindings}{
@@ -35,7 +35,7 @@ Named with param IDs. Read-only.
 \item \code{upper}             :: named \link{double} \cr
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.
-\item \code{values}            :: named \code{list} \cr
+\item \code{levels}            :: named \code{list} \cr
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.
 \item \code{nlevels}           :: named \link{double} \cr
@@ -80,7 +80,7 @@ Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.
-\item \code{param_vals}         :: named \code{list} \cr
+\item \code{values}         :: named \code{list} \cr
 Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
@@ -123,7 +123,7 @@ Compact representation as datatable. Col types are: \cr
 \itemize{
 \item id: character
 \item lower, upper: double
-\item values: list col, with NULL elements
+\item levels: list col, with NULL elements
 \item special_vals: list col of list
 \item is_bounded: logical
 \item default: list col, with NULL elements
