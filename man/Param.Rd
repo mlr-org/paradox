@@ -18,11 +18,7 @@ Abstract base class for params and inheriting concrete param subclasses.
 \itemize{
 \item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 specifically handled: 'required' implied that the parameters has to be given
-<<<<<<< HEAD
 when setting \code{values} in \link{ParamSet}.
-=======
-when setting \code{vals} in \link{ParamSet}.
->>>>>>> a81fd98c7eadf76129054f7a88c0096c2b357cf5
 }
 }
 \section{Public members / active bindings}{
