@@ -12,6 +12,10 @@
 #'   contained param set references. The collection itself does not maintain a `values` state.
 #'   This also implies that if you directly change `values` in one of the referenced sets,
 #'   this change is reflected in the collection.
+#' * Dependencies: It is possible to currently handle dependencies a) regarding parameters inside of the same set - in this case simply
+#'   add the dependency to the set, best before adding the set to the collection b) across sets, where a param from one set depends on the state
+#'   of a param from another set - in this case add call `add_dep` on the collection.
+#'   If you call `deps` on the collection, you are returned a complete table of dependencies, from sets and across sets.
 #'
 #' @section Public methods:
 #' * `new(sets)` \cr
