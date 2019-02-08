@@ -30,6 +30,8 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  
 <meta property="og:title" content="Function reference" />
 
 
@@ -60,7 +62,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Github Version">0.1</span>
       </span>
     </div>
 
@@ -71,6 +73,9 @@
     <span class="fa fa-home fa-lg"></span>
      
   </a>
+</li>
+<li>
+  <a href="../articles/paradox.html">Get started</a>
 </li>
 <li>
   <a href="../reference/index.html">Reference</a>
@@ -117,39 +122,27 @@
       <tr>
         
         <td>
-          <p><code><a href="OptPath.html">OptPath</a></code> </p>
+          <p><code><a href="Condition.html">Condition</a></code> </p>
         </td>
-        <td><p>OptPath Object</p></td>
+        <td><p>Dependency condition</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="ParamBase.html">ParamBase</a></code> </p>
+          <p><code><a href="Design.html">Design</a></code> </p>
         </td>
-        <td><p>ParamBase Object</p></td>
+        <td><p>Design of configurations</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="ParamCategorical.html">ParamCategorical</a></code> </p>
+          <p><code><a href="NO_DEF.html">NO_DEF</a></code> </p>
         </td>
-        <td><p>Categorical Parameter Object</p></td>
+        <td><p>Extra data type for "no default value".</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="ParamFlag.html">ParamFlag</a></code> </p>
+          <p><code><a href="Param.html">Param</a></code> </p>
         </td>
-        <td><p>Flag Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamInt.html">ParamInt</a></code> </p>
-        </td>
-        <td><p>Integer Parameter Object</p></td>
-      </tr><tr>
-        
-        <td>
-          <p><code><a href="ParamReal.html">ParamReal</a></code> </p>
-        </td>
-        <td><p>Real Parameter Object</p></td>
+        <td><p>Param Object</p></td>
       </tr><tr>
         
         <td>
@@ -159,33 +152,69 @@
       </tr><tr>
         
         <td>
-          <p><code><a href="ParamUntyped.html">ParamUntyped</a></code> </p>
+          <p><code><a href="ParamSetCollection.html">ParamSetCollection</a></code> </p>
         </td>
-        <td><p>Untyped Parameter Object</p></td>
+        <td><p>ParamSetCollection</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="as.data.frame.OptPath.html">as.data.frame(<i>&lt;OptPath&gt;</i>)</a></code> </p>
+          <p><code><a href="Sampler.html">Sampler</a></code> </p>
         </td>
-        <td><p>Convert optimization path to data.frame.</p></td>
+        <td><p>Sampler</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="design_to_list.html">design_to_list()</a></code> </p>
+          <p><code><a href="Sampler1D.html">Sampler1D</a></code> </p>
         </td>
-        <td><p>Convert Design to List</p></td>
+        <td><p>Sampler</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="repeat_param.html">repeat_param()</a></code> </p>
+          <p><code><a href="SamplerHierarchical.html">SamplerHierarchical</a></code> </p>
         </td>
-        <td><p>Repeat a single Parameter</p></td>
+        <td><p>Sampler: Multivariate hierarchical.</p></td>
       </tr><tr>
         
         <td>
-          <p><code><a href="trafo_on_repeated_param.html">trafo_on_repeated_param()</a></code> </p>
+          <p><code><a href="SamplerJointIndep.html">SamplerJointIndep</a></code> </p>
         </td>
-        <td><p>A helper to create trafo functions for repeated parameters.</p></td>
+        <td><p>Sampler: Multivariate joint independent.</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="SamplerUnif.html">SamplerUnif</a></code> </p>
+        </td>
+        <td><p>Sampler: Multivariate uniform.</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="assert_param.html">assert_param()</a></code> </p>
+        </td>
+        <td><p>Assertion for Param</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="assert_paramset.html">assert_paramset()</a></code> </p>
+        </td>
+        <td><p>Assertion for ParamSet</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="generate_design_grid.html">generate_design_grid()</a></code> </p>
+        </td>
+        <td><p>Generate a grid design.</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="generate_design_lhs.html">generate_design_lhs()</a></code> </p>
+        </td>
+        <td><p>Generate a space-filling LHS design</p></td>
+      </tr><tr>
+        
+        <td>
+          <p><code><a href="generate_design_random.html">generate_design_random()</a></code> </p>
+        </td>
+        <td><p>Generate a random design.</p></td>
       </tr>
     </tbody>
     </table>
@@ -205,7 +234,7 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.2.0.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.3.0.9000.</p>
 </div>
       </footer>
    </div>

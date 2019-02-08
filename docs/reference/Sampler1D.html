@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Authors • paradox</title>
+<title>Sampler — Sampler1D • paradox</title>
 
 <!-- jquery -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
@@ -25,14 +25,17 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/sticky-kit/1.1.3/sticky-kit.min.js" integrity="sha256-c4Rlo1ZozqTPE2RLuvbusY3+SU1pQaJC0TjuhygMipw=" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
-<link href="pkgdown.css" rel="stylesheet">
-<script src="pkgdown.js"></script>
+<link href="../pkgdown.css" rel="stylesheet">
+<script src="../pkgdown.js"></script>
 
 
 
-  <link href="extra.css" rel="stylesheet">
+  <link href="../extra.css" rel="stylesheet">
   
-<meta property="og:title" content="Authors" />
+<meta property="og:title" content="Sampler — Sampler1D" />
+
+<meta property="og:description" content="1D sampler, abstract base class and inheriting concrete implementations." />
+<meta name="twitter:card" content="summary" />
 
 
 
@@ -49,7 +52,7 @@
   </head>
 
   <body>
-    <div class="container template-authors">
+    <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
@@ -61,7 +64,7 @@
         <span class="icon-bar"></span>
       </button>
       <span class="navbar-brand">
-        <a class="navbar-link" href="index.html">paradox</a>
+        <a class="navbar-link" href="../index.html">paradox</a>
         <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Github Version">0.1</span>
       </span>
     </div>
@@ -69,16 +72,16 @@
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="index.html">
+  <a href="../index.html">
     <span class="fa fa-home fa-lg"></span>
      
   </a>
 </li>
 <li>
-  <a href="articles/paradox.html">Get started</a>
+  <a href="../articles/paradox.html">Get started</a>
 </li>
 <li>
-  <a href="reference/index.html">Reference</a>
+  <a href="../reference/index.html">Reference</a>
 </li>
       </ul>
       
@@ -99,34 +102,68 @@
       </header>
 
 <div class="row">
-  <div class="contents col-md-9">
+  <div class="col-md-9 contents">
     <div class="page-header">
-      <h1>Authors</h1>
+    <h1>Sampler</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/Sampler1D.R'><code>R/Sampler1D.R</code></a></small>
+    <div class="hidden name"><code>Sampler1D.Rd</code></div>
     </div>
 
-    <ul class="list-unstyled">
-      <li>
-        <p><strong>Jakob Richter</strong>. Maintainer, author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Xudong Sun</strong>. Author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Michel Lang</strong>. Author. 
-        </p>
-      </li>
-      <li>
-        <p><strong>Bernd Bischl</strong>. Author. 
-        </p>
-      </li>
-    </ul>
+    <div class="ref-description">
+    
+    <p>1D sampler, abstract base class and inheriting concrete implementations.</p>
+    
+    </div>
+
+    <pre class="usage"><span class='no'>Sampler1D</span></pre>
+        
+    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
+
+    <p>R6Class object. Inherits from <a href='Sampler.html'>Sampler</a>.</p>
+    
+    <h2 class="hasAnchor" id="public-members-active-bindings"><a class="anchor" href="#public-members-active-bindings"></a>Public members / active bindings</h2>
+
+    
+    <ul>
+<li><p><code>param</code>            :: <a href='Param.html'>Param</a> <br />
+Quick access to the one param in the set.</p></li>
+</ul>
+    
+    <h2 class="hasAnchor" id="currently-implenented-samplers"><a class="anchor" href="#currently-implenented-samplers"></a>Currently implenented samplers</h2>
+
+    
+    <ul>
+<li><p><code>Sampler1DUnif$new(param)</code> <br />
+Uniform random for arbitrary (bounded) params.</p></li>
+<li><p><code>Sampler1DCateg$new(param, prob = NULL)</code> <br />
+Categorical distribution, for a fct or lgl param.
+<code>prob</code> is a numeric vector of <code>nlevels</code> probabilities, which is uniform by default.</p></li>
+<li><p><code>Sampler1DNormal$new(param, mean = NULL, sd = NULL)</code> <br />
+Normal sampling (potentially truncated) for doubles.
+Has member variables <code>mean</code> and 'sd' which you can change to influence sampling,
+they are initialized to <code>mean=mean(range)</code> and <code>sd=span/4</code>.
+A truncated normal is used if the param is bounded on both sides.</p></li>
+<li><p><code>Sampler1DRfun(param, rfun, trunc = TRUE)</code> <br />
+Arbitrary sampling from 1D rng functions from R.
+Pass e.g. <code>rfun=rexp</code> to sample from exponential distribution.
+<code>trunc = TRUE</code> enables naive rejection sampling, so we stay inside of [lower, upper].</p></li>
+</ul>
+    
 
   </div>
+  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
+    <h2>Contents</h2>
+    <ul class="nav nav-pills nav-stacked">
+      
+      <li><a href="#format">Format</a></li>
 
+      <li><a href="#public-members-active-bindings">Public members / active bindings</a></li>
+
+      <li><a href="#currently-implenented-samplers">Currently implenented samplers</a></li>
+          </ul>
+
+  </div>
 </div>
-
 
       <footer>
       <div class="copyright">

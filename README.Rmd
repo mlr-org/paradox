@@ -10,14 +10,15 @@ output: github_document
 
 ```{r setup, include=FALSE}
 set.seed(123)
-knitr::opts_chunk$set(cache = TRUE, collapse = FALSE, warning = FALSE, error = FALSE)
+knitr::opts_chunk$set(cache = FALSE, collapse = TRUE, comment = "#>")
 library(paradox)
 ```
 
 Universal Parameter Space Description and Tools
 
+* [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-* [Documentation](https://mlr-org.github.io/paradox)
+* [Documentation](https://mlr-org.github.io/paradox/)
 
 ## Installation
 ```{r inst, eval=FALSE}
@@ -28,159 +29,85 @@ devtools::install_github("mlr-org/paradox", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* _int_egers
-* _real_-valued numbers
-* _flag_ for `TRUE`/`FALSE`
-* _categorical_ values, namely characters.
-* Further types are only possible by using transformations.
+* integer numbers ("`Int`")
+* real-valued numbers ("`Dbl`")
+* truth values `TRUE` or `FALSE` ("`Lgl`")
+* categorical values from a set of possible strings ("`Fct`")
+* further types are only possible by using transformations.
 
 ```{r ps}
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamDbl$new(id = "x", lower = -10, upper = 10),
-    ParamLgl$new(id = "switch"),
-    ParamFct$new(id = "methods", values = c("a","b","c"))
+    ParamLgl$new(id = "flag"),
+    ParamFct$new(id = "methods", levels = c("a","b","c"))
   )
 )
 ```
 
 Draw random samples / create random design:
+
 ```{r pssample}
-ps$sample(3)
+generate_design_random(ps, 3)
 ```
 
 Generate LHS Design:
+
 ```{r pslhs}
-ps$generate_lhs_design(3)
+generate_design_lhs(ps, 3)
 ```
 
 Generate Grid Design:
-```{r psgrid}
-ps$generate_grid_design(resolution = 2)
+
+```{r psgrid, R.options=list(max.print=30)}
+generate_design_grid(ps, resolution = 2)
 ```
 
 Properties of the parameters within the ParamSet:
+
 ```{r psprobs}
-ps$values
-ps$param_classes
+ps$ids()
+ps$levels
 ps$nlevels
-```
-
-### Numeric ParamSet
-
-Things you can do on an all numeric ParamSet:
-
-```{r psnumeric}
-ps = ParamSet$new(
-  params = c(
-    list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
-  )
-)
-
+ps$is_number
 ps$lower
 ps$upper
-ps$range
 ```
 
-The usage of `Parameter$repeat()` generates tags that indicate to which group the parameters belong to:
+### Parameter Checks
 
-```{r psnumerictags}
-ps$member_tags
+Check that a parameter satisfies all conditions of a `ParamSet`, using `$test()` (returns `FALSE` on mismatch), `$check()` (returns error description on mismatch), and `$assert()` (throws error on mismatch):
+
+```{r, error = TRUE}
+ps$test(list(z = 1, x = 1))
+ps$test(list(z = -1, x = 1))
+ps$check(list(z = -1, x = 1))
+ps$assert(list(z = -1, x = 1))
 ```
-
-This becomes useful if you want to do operations on parameters of one group like with transformations.
 
 ### Transformations
 
 Transformations are functions with a fixed signature.
 
-* `x` A `data.table` of parameter values. Each column contains a vector of parameter values of a single parameter.
-* `dict` An environment, that can be accessed using the `$` operator. It can contains values that don't belong to any parameter but are important for transformations.
-* `tags` A list of the tags for each parameter. Each parameter can have various tags indicating additional characteristics.
+* `x` A named list of parameter values
+* `param_set` the `ParamSet` used to create the design
 
-Transformations are useful to scale parameters:
+Transformations can be used to change the distributions of sampled parameters. For example, to sample values between 2^-3 and 2^3 in a log2-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
 
 ```{r pstransscale}
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),
     ParamDbl$new(id = "x", lower = 0, upper = 1)
-  ),
-  trafo = function(x, dict, tags) {
-    x$z = 2^x$z
-    x$x = round(x$x * dict$p)
-    return(x)
-  }
-)
-(x = ps$sample(3))
-```
-
-The transformation uses the dictionary and will fail if none is supplied:
-
-```{r pstransscale2, error = TRUE}
-ps$transform(x)
-```
-
-The dictionary can always be changed:
-```{r pstransscale3}
-ps$dictionary = list(p = 10)
-ps$transform(x)
-ps$dictionary = list(p = 1000)
-ps$transform(x)
-```
-### Advanced Transformations
-
-The following creates a ParamSet with a transformation that scales the `x` values and returns them as a vector.
-The original parameters will be removed from the trafo result.
-Keep in mind that `z` stays untouched and remains after the transformation.
-
-```{r psnumtrans}
-ps = ParamSet$new(
-  params = c(
-    list(ParamInt$new(id = "z", lower = -10, upper = 10)),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(2L)
-  ),
-  trafo = function(x, dict, tags) {
-    scale = function(x1, x2) c(x1, x2) / sqrt(x1^2+x2^2)
-    x$x = Map(scale, x$x_repeated_1, x$x_repeated_2)
-    x$x_repeated_1 = NULL
-    x$x_repeated_2 = NULL
-    return(x)
-  }
-)
-```
-
-The output of all value generating functions won't change for a ParamSet that has a `trafo` function.
-Instead these outputs can be put into `ps$transform()` to obtain the desired parameter values.
-
-```{r psnumtrans2}
-x = ps$generate_lhs_design(3)
-ps$transform(x)
-```
-
-For more advanced transformations on repeated parameters you can use `trafo_on_repeated_param()`:
-
-```{r trafo_on_repeated_param}
-ps = ParamSet$new(
-  params = c(
-    list(
-      ParamLgl$new(id = "switch"),
-      ParamInt$new(id = "z", lower = 1, upper = 4)
-    ),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)$rep(4L)
-  ),
-  trafo = trafo_on_repeated_param(
-    fun = function(x, dict, tags) {
-      scale = function(z, ...) {
-        x = c(...)[1:z]
-        x / sum(x)
-      }
-      res = do.call(Map, c(list(f = scale, z = dict$z), as.list(x)))
-      list(x = res)
-    }, repeated_param_id = "x", additional_params = "z")
   )
-(x = ps$sample(3))
-ps$transform(x)
+)
+ps$trafo = function(x, param_set) {
+  x$z = 2^x$z
+  return(x)
+}
+ps_smplr = SamplerUnif$new(ps)
+x = ps_smplr$sample(2)
+xst = x$transpose()
+xst
 ```
