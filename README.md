@@ -39,7 +39,7 @@ ps = ParamSet$new(
     ParamInt$new(id = "z", lower = 1, upper = 3),
     ParamDbl$new(id = "x", lower = -10, upper = 10),
     ParamLgl$new(id = "flag"),
-    ParamFct$new(id = "methods", values = c("a","b","c"))
+    ParamFct$new(id = "methods", levels = c("a","b","c"))
   )
 )
 ```
@@ -91,7 +91,7 @@ Properties of the parameters within the ParamSet:
 ```r
 ps$ids()
 #> [1] "z"       "x"       "flag"    "methods"
-ps$values
+ps$levels
 #> $z
 #> NULL
 #> 
