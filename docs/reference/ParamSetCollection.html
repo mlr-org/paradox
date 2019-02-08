@@ -30,16 +30,19 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  
 <meta property="og:title" content="ParamSetCollection — ParamSetCollection" />
 
 <meta property="og:description" content="A collection of multiple ParamSet objects.
 The collection is basically a light-weight wrapper / container around references to multiple sets.
 In order to ensure unique param names, every param in the collection is referred to with
 &quot;&amp;lt;set_id&amp;gt;.&amp;lt;param_id&amp;gt;&quot;.
-The following state-changing methods are not allowed for a collection: add, subset.
-When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
-contained param set references. The collection itself does not maintain a param_vals state.
-This also implies that if you directly change param_vals in one of the referenced sets,
+Operation subset is currently not allowed.
+Operation add currently only works when adding complete sets not single params.
+When you either ask for 'values' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a values state.
+This also implies that if you directly change values in one of the referenced sets,
 this change is reflected in the collection.
 " />
 <meta name="twitter:card" content="summary" />
@@ -72,7 +75,7 @@ this change is reflected in the collection.
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Github Version">0.1</span>
       </span>
     </div>
 
@@ -122,10 +125,11 @@ this change is reflected in the collection.
 <li><p>The collection is basically a light-weight wrapper / container around references to multiple sets.</p></li>
 <li><p>In order to ensure unique param names, every param in the collection is referred to with
 "&lt;set_id&gt;.&lt;param_id&gt;".</p></li>
-<li><p>The following state-changing methods are not allowed for a collection: <code>add</code>, <code>subset</code>.</p></li>
-<li><p>When you either ask for 'param_vals' or set them, the operation is delegated to the individual,
-contained param set references. The collection itself does not maintain a <code>param_vals</code> state.
-This also implies that if you directly change <code>param_vals</code> in one of the referenced sets,
+<li><p>Operation <code>subset</code> is currently not allowed.</p></li>
+<li><p>Operation <code>add</code> currently only works when adding complete sets not single params.</p></li>
+<li><p>When you either ask for 'values' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a <code>values</code> state.
+This also implies that if you directly change <code>values</code> in one of the referenced sets,
 this change is reflected in the collection.</p></li>
 </ul>
     
@@ -143,6 +147,9 @@ this change is reflected in the collection.</p></li>
 <li><p><code>new(sets)</code> <br />
 list of <a href='ParamSet.html'>ParamSet</a> -&gt; <code>self</code> <br />
 Parameter objects are cloned.</p></li>
+<li><p>remove_sets(ids) <br />
+<code>character</code> -&gt; <code>self</code> <br />
+Removes sets of given ids from collection.</p></li>
 </ul>
     
 

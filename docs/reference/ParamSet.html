@@ -30,11 +30,13 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  
 <meta property="og:title" content="ParamSet — ParamSet" />
 
 <meta property="og:description" content="A set of Param objects. Please note that when creating a set or adding to it, the params of the
 resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-variable param_vals which can be used to store an active configuration / or to partially fix
+variable values which can be used to store an active configuration / or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs)." />
 <meta name="twitter:card" content="summary" />
 
@@ -66,7 +68,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Github Version">0.1</span>
       </span>
     </div>
 
@@ -114,7 +116,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
     
     <p>A set of <a href='Param.html'>Param</a> objects. Please note that when creating a set or adding to it, the params of the
 resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-variable <code>param_vals</code> which can be used to store an active configuration / or to partially fix
+variable <code>values</code> which can be used to store an active configuration / or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs).</p>
     
     </div>
@@ -147,7 +149,7 @@ Named with param IDs. Read-only.</p></li>
 <li><p><code>upper</code>             :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a> <br />
 Upper bounds of parameters, NA if param is not a number.
 Named with param IDs. Read-only.</p></li>
-<li><p><code>values</code>            :: named <code>list</code> <br />
+<li><p><code>levels</code>            :: named <code>list</code> <br />
 List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 Named with param IDs. Read-only.</p></li>
 <li><p><code>nlevels</code>           :: named <a href='https://www.rdocumentation.org/packages/base/topics/double'>double</a> <br />
@@ -192,7 +194,7 @@ Table has cols <code>id</code> (<code><a href='https://www.rdocumentation.org/pa
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to <code>add_dep</code>.
 Settable, if you want to remove dependencies or perform other changes.</p></li>
-<li><p><code>param_vals</code>         :: named <code>list</code> <br />
+<li><p><code>values</code>         :: named <code>list</code> <br />
 Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
@@ -234,7 +236,7 @@ Adds a dependency to this set, so that param <code>id</code> now depends on para
 Compact representation as datatable. Col types are: <br /></p><ul>
 <li><p>id: character</p></li>
 <li><p>lower, upper: double</p></li>
-<li><p>values: list col, with NULL elements</p></li>
+<li><p>levels: list col, with NULL elements</p></li>
 <li><p>special_vals: list col of list</p></li>
 <li><p>is_bounded: logical</p></li>
 <li><p>default: list col, with NULL elements</p></li>

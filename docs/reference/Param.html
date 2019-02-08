@@ -30,12 +30,14 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  
 <meta property="og:title" content="Param Object — Param" />
 
 <meta property="og:description" content="Abstract base class for params and inheriting concrete param subclasses.
 Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 specifically handled: 'required' implied that the parameters has to be given
-when setting param_vals in ParamSet.
+when setting values in ParamSet.
 " />
 <meta name="twitter:card" content="summary" />
 
@@ -67,7 +69,7 @@ when setting param_vals in ParamSet.
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.1</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Github Version">0.1</span>
       </span>
     </div>
 
@@ -116,7 +118,7 @@ when setting param_vals in ParamSet.
     <p>Abstract base class for params and inheriting concrete param subclasses.</p><ul>
 <li><p>Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 specifically handled: 'required' implied that the parameters has to be given
-when setting <code>param_vals</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
+when setting <code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
 </ul>
     
     </div>
@@ -139,8 +141,8 @@ Param R6 class name. Read-only.</p></li>
 Lower bound for dbl/int params, can be -Inf. NA if param is not a number.</p></li>
 <li><p><code>upper</code>            :: <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code> <br />
 Upper bound for dbl/int params, can be +Inf. NA if param is not a number.</p></li>
-<li><p><code>values</code>           :: <code>character</code> | <code>logical</code> | <code>NULL</code> <br />
-Allowed values for categorical params, NULL if param is not categorical.</p></li>
+<li><p><code>levels</code>           :: <code>character</code> | <code>logical</code> | <code>NULL</code> <br />
+Allowed levels for categorical params, NULL if param is not categorical.</p></li>
 <li><p><code>nlevels</code>          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/numeric'>numeric(1)</a></code> <br />
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.</p></li>
 <li><p><code>is_bounded</code>       :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
@@ -155,7 +157,7 @@ Has value <code>NO_DEF</code> if no default is there - <code>NULL</code> could b
 <li><p><code>has_default</code>      :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
 Is a default there?</p></li>
 <li><p><code>storage_type</code>     :: <code><a href='https://www.rdocumentation.org/packages/base/topics/character'>character(1)</a></code> <br />
-Data type when values of this param is stored in a data table or sampled. Read-only.</p></li>
+Data type when values of this param are stored in a data table or sampled. Read-only.</p></li>
 <li><p><code>tags</code>             :: <code>character</code> <br />
 Can be used to group and subset params.</p></li>
 <li><p>is_number          :: <code><a href='https://www.rdocumentation.org/packages/base/topics/logical'>logical(1)</a></code> <br />
