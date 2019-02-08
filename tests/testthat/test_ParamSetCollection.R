@@ -1,6 +1,6 @@
 context("ParamSetCollection")
 
-test_that("simple active bindings work", {
+test_that("ParamSet basic stuff works", {
 
   ps1 = th_paramset_dbl1()
   ps1$set_id = "s1"
@@ -18,10 +18,10 @@ test_that("simple active bindings work", {
 
   expect_class(psc, "ParamSetCollection")
   expect_equal(psc$length, ps1$length + ps2$length)
-  # FIXME: der cloning krams sieht hier komisch aus und sollte wohl in einen etxra test?
-  # p = psc$params[[2L]]; p = p$clone()
-  # p$id = "th_param_int"
-  # expect_equal(p, ps2$params[[1L]])
+  # check that param internally in collection is constructed correctly
+  p = psc$params[[2L]]; p = p$clone()
+  p$id = "th_param_int"
+  expect_equal(p, ps2$params[[1L]])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids())))
   expect_equal(psc$lower, my_c(ps1$lower, ps2$lower))
   d = as.data.table(psc)
@@ -63,8 +63,16 @@ test_that("simple active bindings work", {
   expect_equal(ps1, ps1clone)
   expect_equal(ps2, ps2clone)
 
+  # adding a set
+  ps3 = ParamSet$new(list(ParamDbl$new("x")))
+  ps3$set_id = "s3"
+  psc$add(ps3)
+  expect_equal(psc$length, ps1$length + ps2$length + ps3$length)
+  expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), paste0("s3.", ps3$ids())))
+  psc$remove_sets("s1")
+  expect_equal(psc$length, ps2$length + ps3$length)
+  expect_equal(psc$ids(), c(paste0("s2.", ps2$ids()), paste0("s3.", ps3$ids())))
 })
-
 
 test_that("some operations are not allowed", {
 
@@ -75,8 +83,7 @@ test_that("some operations are not allowed", {
   psc = ParamSetCollection$new(list(ps1, ps2))
 
   expect_error(psc$subset("foo"), "not allowed")
-  expect_error(psc$add(th_param_dbl), "not allowed")
-  expect_error(psc$add(th_paramset_dbl1), "not allowed")
+  expect_error(psc$add(th_param_dbl()), "ParamSet")
 })
 
 test_that("deps", {
