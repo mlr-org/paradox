@@ -6,7 +6,8 @@
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
 #' * In order to ensure unique param names, every param in the collection is referred to with
 #'   "<set_id>.<param_id>".
-#' * The following state-changing methods are not allowed for a collection: `add`, `subset`.
+#' * Operation `subset` is currently not allowed.
+#' * Operation `add` currently only works when adding complete sets not single params.
 #' * When you either ask for 'values' or set them, the operation is delegated to the individual,
 #'   contained param set references. The collection itself does not maintain a `values` state.
 #'   This also implies that if you directly change `values` in one of the referenced sets,
@@ -16,6 +17,9 @@
 #' * `new(sets)` \cr
 #'   list of [ParamSet] -> `self` \cr
 #'   Parameter objects are cloned.
+#' * remove_sets(ids) \cr
+#'   `character` -> `self` \cr
+#'   Removes sets of given ids from collection.
 #'
 #' @name ParamSetCollection
 NULL
@@ -27,14 +31,28 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_list(sets, types = "ParamSet")
       setids = map_chr(sets, "set_id")
       assert_names(setids, type = "unique")
+      names(sets) = setids
       if (any(map_lgl(sets, "has_trafo")))  # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
-      names(sets) = NULL # we drop names here, otherwise a problem happens when we unlist in AB "params"
       private$.sets = sets
       self$set_id = "collection"
     },
 
-    add = function(p) stop("not allowed"),
+    add = function(p) {
+      assert_r6(p, "ParamSet")
+      setids = map_chr(private$.sets, "set_id")
+      if (p$set_id %in% setids)
+        stopf("Setid '%s' already present in collection!", p$set_id)
+      if (p$has_trafo)
+        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+      private$.sets[[length(private$.sets) + 1L]] = p
+    },
+
+    remove_sets = function(ids) {
+      assert_subset(ids, names(private$.sets))
+      private$.sets[ids] = NULL
+      return(self)
+    },
 
     subset = function(ids) stop("not allowed")
 
@@ -53,6 +71,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           names(ps) = paste(s$set_id, names(ps), sep = ".")
         return(ps)
       })
+      names(ps_all) = NULL
       ps_all = unlist(ps_all, recursive = FALSE)
       if (length(ps_all) == 0L)  # unlist before drops names for empty list....
         ps_all = named_list()
@@ -81,6 +100,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
             names(v) = paste(s$set_id, names(v), sep = ".")
           return(v)
         })
+        names(vals) = NULL
         vals = unlist(vals, recursive = FALSE)
         if (length(vals) == 0L) return(named_list()) # this is bullshit
         return(vals)
