@@ -62,10 +62,10 @@ Generate LHS Design:
 ```r
 generate_design_lhs(ps, 3)
 #> <Design> with 3 rows:
-#>    z          x  flag methods
-#> 1: 1  0.4842227 FALSE       a
-#> 2: 3 -9.7196031  TRUE       c
-#> 3: 2  7.9520227 FALSE       b
+#>    z         x  flag methods
+#> 1: 1 -3.984673  TRUE       b
+#> 2: 2  7.938035 FALSE       a
+#> 3: 3  1.969783  TRUE       c
 ```
 
 Generate Grid Design:
