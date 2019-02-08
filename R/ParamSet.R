@@ -5,7 +5,7 @@
 #' @description
 #' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
 #' resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-#' variable `param_vals` which can be used to store an active configuration / or to partially fix
+#' variable `values` which can be used to store an active configuration / or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
@@ -27,7 +27,7 @@
 #' * `upper`             :: named [double] \cr
 #'   Upper bounds of parameters, NA if param is not a number.
 #'   Named with param IDs. Read-only.
-#' * `values`            :: named `list` \cr
+#' * `levels`            :: named `list` \cr
 #'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
 #'   Named with param IDs. Read-only.
 #' * `nlevels`           :: named [double] \cr
@@ -72,7 +72,7 @@
 #'   Lists all (direct) dependency parents of a param, through parameter IDs.
 #'   Internally created by a call to `add_dep`.
 #'   Settable, if you want to remove dependencies or perform other changes.
-#' * `param_vals`         :: named `list` \cr
+#' * `values`         :: named `list` \cr
 #'   Currently set / fixed parameter values.
 #'   Settable, and feasibility of values will be checked when you set them.
 #'   You do not have to set values for all parameters, but only for a subset.
@@ -106,7 +106,7 @@
 #'   Compact representation as datatable. Col types are: \cr
 #'     - id: character
 #'     - lower, upper: double
-#'     - values: list col, with NULL elements
+#'     - levels: list col, with NULL elements
 #'     - special_vals: list col of list
 #'     - is_bounded: logical
 #'     - default: list col, with NULL elements
@@ -135,7 +135,7 @@ ParamSet = R6Class("ParamSet",
         stop("Cannot add a param set with a trafo.")
       ps2 = p$clone(deep = TRUE)
       private$.params = c(private$.params, ps2$params)
-      private$.param_vals = c(private$.param_vals, ps2$param_vals)
+      private$.values = c(private$.values, ps2$values)
       private$.deps = rbind(private$.deps, ps2$deps)
       invisible(self)
     },
@@ -162,8 +162,8 @@ ParamSet = R6Class("ParamSet",
          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
       }
       private$.params = private$.params[ids]
-      ids2 = intersect(ids, names(private$.param_vals)) # restrict to ids already in pvals
-      private$.param_vals = private$.param_vals[ids2]
+      ids2 = intersect(ids, names(private$.values)) # restrict to ids already in pvals
+      private$.values = private$.values[ids2]
       invisible(self)
     },
 
@@ -237,8 +237,8 @@ ParamSet = R6Class("ParamSet",
           dd = self$deps[, .(parents = list(unlist(on))), by = id]
           d = merge(d, dd, on = "id", all.x = TRUE)
         }
-        v = named_list(d$id) # add param_vals to last col of print-dt as list col
-        v = insert_named(v, self$param_vals)
+        v = named_list(d$id) # add values to last col of print-dt as list col
+        v = insert_named(v, self$values)
         d$value = list(v)
         print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
       }
@@ -271,7 +271,7 @@ ParamSet = R6Class("ParamSet",
     class = function() private$get_member_with_idnames("class", as.character),
     lower = function() private$get_member_with_idnames("lower", as.double),
     upper = function() private$get_member_with_idnames("upper", as.double),
-    values = function() private$get_member_with_idnames("values", as.list),
+    levels = function() private$get_member_with_idnames("levels", as.list),
     nlevels = function() private$get_member_with_idnames("nlevels", as.double),
     is_bounded = function() all(map_lgl(self$params, "is_bounded")),
     special_vals = function() private$get_member_with_idnames("special_vals", as.list),
@@ -289,14 +289,14 @@ ParamSet = R6Class("ParamSet",
       }
     },
     has_trafo = function() !is.null(private$.trafo),
-    param_vals = function(xs) {
+    values = function(xs) {
       if (missing(xs)) {
-        return(private$.param_vals)
+        return(private$.values)
       } else {
         self$assert(xs)
       }
       if (length(xs) == 0L) xs = named_list()
-      private$.param_vals = xs
+      private$.values = xs
     },
     has_deps = function() nrow(private$.deps) > 0L
   ),
@@ -305,7 +305,7 @@ ParamSet = R6Class("ParamSet",
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
-    .param_vals = named_list(),
+    .values = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enfore a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), self$ids()),

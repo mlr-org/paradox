@@ -82,14 +82,14 @@ test_that("some operations are not allowed", {
 test_that("deps", {
 
   ps1 = ParamSet$new(list(
-    ParamFct$new("f", values = c("a", "b")),
+    ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d")
   ))
   ps1$set_id = "ps1"
   ps1$add_dep("d", on = "f", CondEqual$new("a"))
 
   ps2 = ParamSet$new(list(
-    ParamFct$new("f", values = c("a", "b")),
+    ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d")
   ))
   ps2$set_id = "ps2"
@@ -113,15 +113,15 @@ test_that("deps", {
   expect_equal(ps2clone, ps2)
 })
 
-test_that("param_vals", {
+test_that("values", {
 
   ps1 = ParamSet$new(list(
-    ParamFct$new("f", values = c("a", "b")),
+    ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
   ))
   ps1$set_id = "foo"
   ps2 = ParamSet$new(list(
-    ParamFct$new("f", values = c("a", "b")),
+    ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
   ))
   ps2$set_id = "bar"
@@ -130,16 +130,16 @@ test_that("param_vals", {
   ps2clone = ps2$clone(deep = TRUE)
 
   pcs = ParamSetCollection$new(list(ps1, ps2))
-  expect_equal(pcs$param_vals, named_list())
-  ps2$param_vals = list(d = 3)
-  expect_equal(pcs$param_vals, list(bar.d = 3))
-  pcs$param_vals = list(foo.d = 8)
-  expect_equal(pcs$param_vals, list(foo.d = 8))
-  expect_equal(ps1$param_vals, list(d = 8))
-  expect_equal(ps2$param_vals, named_list())
+  expect_equal(pcs$values, named_list())
+  ps2$values = list(d = 3)
+  expect_equal(pcs$values, list(bar.d = 3))
+  pcs$values = list(foo.d = 8)
+  expect_equal(pcs$values, list(foo.d = 8))
+  expect_equal(ps1$values, list(d = 8))
+  expect_equal(ps2$values, named_list())
 
-  ps1clone$param_vals$d = 8
-  ps2$param_vals = list()
+  ps1clone$values$d = 8
+  ps2$values = list()
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
 
@@ -171,7 +171,7 @@ test_that("no problems if we name the list of sets", {
 test_that("no warning in printer, see issue 208", {
   ps = ParamSet$new(list(ParamDbl$new("test1")))
   psc = ParamSetCollection$new(list(ps))
-  psc$param_vals = list(paramset.test1 = 1)
+  psc$values = list(paramset.test1 = 1)
   expect_warning(capture_output(print(ps)), NA)
 })
 
@@ -179,10 +179,10 @@ test_that("no warning in printer, see issue 208", {
 test_that("collection reflects direct paramset$set_id change", {
   ps = ParamSet$new(list(ParamDbl$new("d")))
   psc = ParamSetCollection$new(list(ps))
-  ps$param_vals = list(d = 1)
-  expect_equal(psc$param_vals, list(paramset.d = 1))
+  ps$values = list(d = 1)
+  expect_equal(psc$values, list(paramset.d = 1))
   ps$set_id = "foo"
-  expect_equal(psc$param_vals, list(foo.d = 1))
+  expect_equal(psc$values, list(foo.d = 1))
   expect_equal(psc$params, list(foo.d = ParamDbl$new("foo.d")))
 })
 
@@ -193,10 +193,10 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
   ps2 = ParamSet$new(list(ParamDbl$new("d2")))
   ps2$set_id = "s2"
   psc = ParamSetCollection$new(list(ps1, ps2))
-  expect_equal(psc$param_vals, named_list())
-  psc$param_vals$s1.d1 = 1
-  expect_equal(psc$param_vals, list(s1.d1 = 1))
-  psc$param_vals$s2.d2 = 2
-  expect_equal(psc$param_vals, list(s1.d1 = 1, s2.d2 = 2))
+  expect_equal(psc$values, named_list())
+  psc$values$s1.d1 = 1
+  expect_equal(psc$values, list(s1.d1 = 1))
+  psc$values$s2.d2 = 2
+  expect_equal(psc$values, list(s1.d1 = 1, s2.d2 = 2))
 })
 

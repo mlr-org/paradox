@@ -125,7 +125,7 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
 
   private = list(
     .sample = function(n) {
-      s = sample(self$param$values, n, replace = TRUE, prob = self$prob)
+      s = sample(self$param$levels, n, replace = TRUE, prob = self$prob)
       super$as_dt_col(s)
     }
   )

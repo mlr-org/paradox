@@ -3,7 +3,7 @@ context("Param")
 
 test_that("basic properties", {
   p1 = ParamDbl$new("x", default = 4)
-  p2 = ParamFct$new("y", values = c("a", "b"))
+  p2 = ParamFct$new("y", levels = c("a", "b"))
   expect_true(p1$has_default)
   expect_false(p2$has_default)
   expect_true(p1$is_number)
@@ -37,7 +37,7 @@ test_that("special_vals work for all Param subclasses", {
   for (cl in class) {
     for (special_vals in special_vals_list) {
       if (cl$classname == "ParamFct") {
-        p = cl$new(id = paste0('test.', cl$classname), special_vals = special_vals, values = letters[11:20])
+        p = cl$new(id = paste0('test.', cl$classname), special_vals = special_vals, levels = letters[11:20])
       } else {
         p = cl$new(id = paste0('test.', cl$classname), special_vals = special_vals)
       }

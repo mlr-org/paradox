@@ -21,8 +21,8 @@ test_that("simple active bindings work", {
     expect_names(names(ps$lower), identical.to = ps$ids(), info = info)
     expect_numeric(ps$upper, any.missing = TRUE, info = info)
     expect_names(names(ps$upper), identical.to = ps$ids(), info = info)
-    expect_list(ps$values, info = info)
-    expect_names(names(ps$values), identical.to = ps$ids(), info = info)
+    expect_list(ps$levels, info = info)
+    expect_names(names(ps$levels), identical.to = ps$ids(), info = info)
     expect_flag(ps$is_bounded, info = info)
     expect_numeric(ps$nlevels, any.missing = FALSE, lower = 1, info = info)
     expect_list(ps$tags, types = "character", info = info)
@@ -164,7 +164,7 @@ test_that("ParamSet does a deep copy of param on add", {
 
 test_that("ParamSet$clone can be deep", {
   p1 = ParamDbl$new("x", lower = 1, upper = 3)
-  p2 = ParamFct$new("y", values = c("a", "b"))
+  p2 = ParamFct$new("y", levels = c("a", "b"))
   ps1 = ParamSet$new(list(p1, p2))
   ps2 = ps1$clone(deep = TRUE)
   pp = ps2$params[["x"]]
@@ -206,7 +206,7 @@ test_that("ParamSet$add_param", {
   expect_equal(ps$length, 1L)
   expect_equal(ps$ids(), "x")
   expect_equal(ps$lower, c(x = 1))
-  ps$add(ParamFct$new("y", values = c("a")))
+  ps$add(ParamFct$new("y", levels = c("a")))
   expect_equal(ps$length, 2L)
   expect_equal(ps$ids(), c("x", "y"))
   expect_equal(ps$lower, c(x = 1, y = NA))
@@ -220,7 +220,7 @@ test_that("as.data.table", {
   expect_data_table(d, nrow = 4, ncol = 11)
   expect_equal(ps$ids(), d$id)
   expect_equal(unname(ps$lower), d$lower)
-  expect_equal(unname(ps$values), d$values)
+  expect_equal(unname(ps$levels), d$levels)
 })
 
 test_that("ParamSet$default", {
@@ -249,7 +249,7 @@ test_that("ParamSet$ids", {
   ps = ParamSet$new(list(
     ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
     ParamInt$new(id = "y", lower = 1, upper = 2),
-    ParamFct$new(id = "z", values = letters[1:3], tags = c("t1"))
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
   ))
   expect_equal(ps$ids(), c("x", "y", "z"))
   expect_equal(ps$ids(class = c("ParamInt", "ParamFct")), c("y", "z"))

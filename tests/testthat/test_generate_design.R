@@ -41,12 +41,12 @@ test_that("generate_design_grid", {
 })
 
 test_that("generate_design_grid with different resolutions and egde cases", {
-  ps = ParamSet$new(list(ParamFct$new("f", values = letters[1:2])))
+  ps = ParamSet$new(list(ParamFct$new("f", levels = letters[1:2])))
   d = generate_design_grid(ps)
   expect_data_table(d$data, any.missing = FALSE, nrow = 2, ncol = 1)
 
   ps = ParamSet$new(list(
-    ParamFct$new("f", values = letters[1:2]),
+    ParamFct$new("f", levels = letters[1:2]),
     ParamDbl$new("d", lower = 0, upper = 1)
   ))
   d = generate_design_grid(ps, param_resolutions = c(d = 3))
@@ -85,7 +85,7 @@ test_that("check generate_design_grid against concrete expectation", {
 
   ps = ParamSet$new(list(
     ParamDbl$new("x", lower = 1, upper = 3),
-    ParamFct$new("y", values = c("a", "b"))
+    ParamFct$new("y", levels = c("a", "b"))
   ))
   d = generate_design_grid(ps, resolution = 3)
   expect_equal(d$data, data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b")))

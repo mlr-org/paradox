@@ -22,7 +22,7 @@ test_that("1d samplers: basic tests", {
       if (p$class %in% c("ParamInt", "ParamDbl"))
         expect_true(all(d1 >= p$lower & d1 <= p$upper), info = info)
       if (p$class %in% c("ParamFct"))
-        expect_true(all(d1 %in% p$values), info = info)
+        expect_true(all(d1 %in% p$levels), info = info)
       expect_output(print(s), "Sampler:")
     }
   }

@@ -18,7 +18,7 @@ Abstract base class for params and inheriting concrete param subclasses.
 \itemize{
 \item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 specifically handled: 'required' implied that the parameters has to be given
-when setting \code{param_vals} in \link{ParamSet}.
+when setting \code{values} in \link{ParamSet}.
 }
 }
 \section{Public members / active bindings}{
@@ -32,8 +32,8 @@ Param R6 class name. Read-only.
 Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
 \item \code{upper}            :: \code{numeric(1)} \cr
 Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
-\item \code{values}           :: \code{character} | \code{logical} | \code{NULL} \cr
-Allowed values for categorical params, NULL if param is not categorical.
+\item \code{levels}           :: \code{character} | \code{logical} | \code{NULL} \cr
+Allowed levels for categorical params, NULL if param is not categorical.
 \item \code{nlevels}          :: \code{numeric(1)} \cr
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
 \item \code{is_bounded}       :: \code{logical(1)} \cr
@@ -48,7 +48,7 @@ Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid de
 \item \code{has_default}      :: \code{logical(1)} \cr
 Is a default there?
 \item \code{storage_type}     :: \code{character(1)} \cr
-Data type when values of this param is stored in a data table or sampled. Read-only.
+Data type when values of this param are stored in a data table or sampled. Read-only.
 \item \code{tags}             :: \code{character} \cr
 Can be used to group and subset params.
 \item is_number          :: \code{logical(1)} \cr
