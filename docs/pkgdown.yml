@@ -1,6 +1,5 @@
-pandoc: 2.0.6
+pandoc: '2.2'
 pkgdown: 1.3.0.9000
-pkgdown_sha: 36225ba775f4a5ee9fea4e83cbd64fac71b17da8
-articles:
-  paradox: paradox.html
+pkgdown_sha: 7e788c41d20ab28d4bf97556e18382391d359c9f
+articles: []
 

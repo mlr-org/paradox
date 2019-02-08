@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>ParamSet — ParamSet • paradox</title>
+<title>Integer Parameter Object — ParamInt • paradox</title>
 
 <!-- jquery -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
@@ -30,9 +30,9 @@
 
 
 
-<meta property="og:title" content="ParamSet — ParamSet" />
+<meta property="og:title" content="Integer Parameter Object — ParamInt" />
 
-<meta property="og:description" content="A R6Class to represent set of parameters." />
+<meta property="og:description" content="A R6Class to represent Integer parameters." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -99,18 +99,18 @@
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>ParamSet</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/ParamSet.R'><code>R/ParamSet.R</code></a></small>
-    <div class="hidden name"><code>ParamSet.Rd</code></div>
+    <h1>Integer Parameter Object</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/ParamInt.R'><code>R/ParamInt.R</code></a></small>
+    <div class="hidden name"><code>ParamInt.Rd</code></div>
     </div>
 
     <div class="ref-description">
     
-    <p>A <code><a href='https://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent set of parameters.</p>
+    <p>A <code><a href='https://www.rdocumentation.org/packages/R6/topics/R6Class'>R6Class</a></code> to represent Integer parameters.</p>
     
     </div>
 
-    <pre class="usage"><span class='no'>ParamSet</span></pre>
+    <pre class="usage"><span class='no'>ParamInt</span></pre>
         
     <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
 
@@ -118,64 +118,51 @@
     
     <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
-    <p>[<code>ParamSet</code>].</p>
+    <p>[<code>ParamInt</code>].</p>
     
     <h2 class="hasAnchor" id="member-variables"><a class="anchor" href="#member-variables"></a>Member Variables</h2>
 
     
     <dl class='dl-horizontal'>
-  <dt>params</dt><dd><p>[<code>list</code>] <br />
-  List of the Params</p></dd>
-  <dt>trafo</dt><dd><p>[<code>function(x, dict, tags)</code>] <br />
-    A function that returns a list of transformed x values.
-    Has to work vectorized and also return untransformed x values.
-    The function takes a list <code>x</code> of all parameter values, additionally the dictionary linked to the <code>ParamSet</code>.
-    <code>tags</code> is a named list that contains the tags for each Param in <code>x</code>.</p></dd>
-  <dt>restriction</dt><dd><p>[<code>quote</code>] <br />
-    A quoted expression (<code><a href='https://www.rdocumentation.org/packages/base/topics/substitute'>quote()</a></code>) that is evaluated on all parameter values to check if they are feasible.
-    It has to be evaluated to <code>TRUE</code> so that the parameter value is valid.
-    The expression has to work on vectors of values.</p></dd>
+  <dt>lower</dt><dd><p>[<code>integer(1)|-Inf</code>] <br />
+    Upper boundary.</p></dd>
+  <dt>upper</dt><dd><p>[<code>integer(1)|-Inf</code>] <br />
+    Lower boundary.</p></dd>
 </dl>
+    <p>Inherited from <code>ParamBase</code>:</p>
+    <dl class='dl-horizontal'>
+  <dt>default</dt><dd><p>[<code>any</code>] <br />
+    default value.</p></dd>
+  <dt>special_vals</dt><dd><p>[<code>any</code>] <br />
+    Special values this parameter is allowed to take that are within the defined space.</p></dd>
+</dl>
+    <p>Inherited from <code>ParamNode</code>:</p>
     
     <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
 
     
+    <p><em>none</em></p>
+<p>Inherited from <code>ParamBase</code></p>
     <dl class='dl-horizontal'>
-  <dt>generate_lhs_design(n, lhs_function)</dt><dd><p>[<code>function</code>] <br />
-    Function to generate a LHS design.</p></dd>
-  <dt>generate_grid_design(resolution, param_resolutions, n)</dt><dd><p>[<code>function</code>] <br />
-    <dl class='dl-horizontal'>
-      <dt>resolution</dt><dd><p>[<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code>] for each parameter universally</p></dd>
-      <dt>param_resolutions</dt><dd><p>[<code>integer</code>] for each parameter individually. Has to be a named vector.</p></dd>
-      <dt>n</dt><dd><p>[<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code>] size of design. Will be tried to match by optimizing \(r^k * (r-1)^(p-k) - n\). <code>r</code> = resolution, <code>p</code> = total number of parameters.</p></dd>
-    </dl></p></dd>
+  <dt>sampleVector(n)</dt><dd><p>[<code>function</code>] <br />
+    samples <code>n</code> Parameter Values.</p></dd>
+  <dt>denorm_vector(x)</dt><dd><p>[<code>function</code>] <br />
+    Takes a vector with values between <code>[0,1]</code> and maps them to values of the Parameter.</p></dd>
 </dl>
+    <p>Inherited from <code>ParamNode</code>:</p>
     
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active Bindings</h2>
 
     
-    <dl class='dl-horizontal'>
-  <dt>ids</dt><dd><p>[<code>character</code>] <br />
-    ids of the Parameters in this ParamSet.</p></dd>
-  <dt>storage_types</dt><dd><p>[<code>character</code>] <br />
-    How is a Value of this Parameter stored as an R-object?</p></dd>
-  <dt>values</dt><dd><p>[<code>list</code>] <br />
-    For any discrete Parameter return the values. Also works for Integers.</p></dd>
-  <dt>lower</dt><dd><p>[<code>numeric</code>] <br />
-    For each numeric Parameter return the lower boundary. <code>NA</code> for other Parameters.</p></dd>
-  <dt>upper</dt><dd><p>[<code>numeric</code>] <br />
-    Same as for <code>lower</code></p></dd>
-  <dt>param_classes</dt><dd><p>[<code>character</code>] <br />
-    The <code>R6</code> class name of each Parameter.</p></dd>
-  <dt>range</dt><dd><p>[<code>data.table</code>] <br />
-    A <code>data.table</code> with the columns <code>id</code>, <code>lower</code>, <code>upper</code>.</p></dd>
-  <dt>length</dt><dd><p>[<code><a href='https://www.rdocumentation.org/packages/base/topics/integer'>integer(1)</a></code>] <br />
-    The number of parameters.</p></dd>
-  <dt>nlevels</dt><dd><p>[<code>integer</code>] <br />
-    For each discrete Parameter return the number of different values.</p></dd>
-  <dt>member_tags</dt><dd><p>[<code>list</code>] <br />
-    The <code>tags</code> of each Parameter.</p></dd>
-</dl>
+    <p><em>none</em></p>
+<p>Inherited from <code>ParamBase</code></p>
+    <p><em>none</em></p>
+    
+    <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
+
+    <div class='dont-index'><p>Other ParamBase: <code><a href='ParamBase.html'>ParamBase</a></code>,
+  <code><a href='ParamCategorical.html'>ParamCategorical</a></code>, <code><a href='ParamFlag.html'>ParamFlag</a></code>,
+  <code><a href='ParamReal.html'>ParamReal</a></code>, <code><a href='ParamUntyped.html'>ParamUntyped</a></code></p></div>
     
 
   </div>
@@ -192,6 +179,8 @@
       <li><a href="#methods">Methods</a></li>
 
       <li><a href="#active-bindings">Active Bindings</a></li>
+
+      <li><a href="#see-also">See also</a></li>
           </ul>
 
   </div>
