@@ -11,7 +11,11 @@ ParamSet
 \description{
 A set of \link{Param} objects. Please note that when creating a set or adding to it, the params of the
 resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
+<<<<<<< HEAD
 variable \code{values} which can be used to store an active configuration / or to partially fix
+=======
+variable \code{vals} which can be used to store an active configuration / or to partially fix
+>>>>>>> a81fd98c7eadf76129054f7a88c0096c2b357cf5
 some parameters to constant values (regarding subsequent sampling or generation of designs).
 }
 \section{Public members / active bindings}{
@@ -80,7 +84,11 @@ Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.
+<<<<<<< HEAD
 \item \code{values}         :: named \code{list} \cr
+=======
+\item \code{vals}         :: named \code{list} \cr
+>>>>>>> a81fd98c7eadf76129054f7a88c0096c2b357cf5
 Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
