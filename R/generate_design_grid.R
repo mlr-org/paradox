@@ -30,7 +30,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
       par_res = set_names(rep.int(resolution, param_set$length), ids)
     }
     if (!is.null(param_resolutions)) {
-      param_resolutions = assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
+      assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
       assert_names(names(param_resolutions), subset.of = ids_num) # user only needs to pass num params (categ resolutions are overwritten anyway)
       par_res = insert_named(par_res, param_resolutions)
     }
