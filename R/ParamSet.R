@@ -171,8 +171,6 @@ ParamSet = R6Class("ParamSet",
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok))
         return(ok)
-      if (length(xs) == 0)
-        return(TRUE) # a empty list is always feasible
       ns = names(xs)
       ids = self$ids()
       # check that all 'required' params are there
@@ -180,6 +178,8 @@ ParamSet = R6Class("ParamSet",
       required = setdiff(required, ns)
       if (length(required) > 0L)
         return(sprintf("Missing required parameters: %s", str_collapse(required)))
+      if (length(xs) == 0)
+        return(TRUE) # a empty list is always feasible, if all req params are there
       # check each parameters feasibility
       for (n in ns) {
         if (n %nin% ids)

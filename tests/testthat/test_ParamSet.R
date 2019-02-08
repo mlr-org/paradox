@@ -265,6 +265,7 @@ test_that("required tag", {
   expect_equal(ps$ids(), c("x", "y"))
   expect_equal(ps$ids(tags = "required"), "x")
   expect_true(ps$check(list(x = 1, y = 1)))
+  expect_string(ps$check(list()), pattern = "Missing")
   expect_string(ps$check(list(y = 1)), pattern = "Missing")
 })
 
