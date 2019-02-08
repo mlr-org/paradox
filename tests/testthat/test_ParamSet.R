@@ -9,7 +9,7 @@ test_that("simple active bindings work", {
     th_paramset_numeric()
   )
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     expect_class(ps, "ParamSet", info = info)
     expect_int(ps$length, lower = 0L, info = info)
     expect_character(ps$ids(), info = info)

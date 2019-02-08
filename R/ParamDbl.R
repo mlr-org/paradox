@@ -16,6 +16,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
 
   active = list(
     values = function() NULL,
+    levels = function() NULL,
     nlevels = function() Inf,
     is_bounded = function() all(is.finite(self$range)),
     storage_type = function() "numeric",

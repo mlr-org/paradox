@@ -20,6 +20,7 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     lower = function() NA_real_,
     upper = function() NA_real_,
     values = function() NULL,
+    levels = function() NULL,
     nlevels = function() Inf,
     is_bounded = function() FALSE,
     storage_type = function() "list"
