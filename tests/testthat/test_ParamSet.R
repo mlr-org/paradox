@@ -257,3 +257,15 @@ test_that("ParamSet$ids", {
   expect_equal(ps$ids(is_bounded = TRUE), c("y", "z"))
 })
 
+test_that("required tag", {
+  ps = ParamSet$new(list(
+    ParamDbl$new(id = "x", tags = c("required")),
+    ParamInt$new(id = "y")
+  ))
+  expect_equal(ps$ids(), c("x", "y"))
+  expect_equal(ps$ids(tags = "required"), "x")
+  expect_true(ps$check(list(x = 1, y = 1)))
+  expect_string(ps$check(list(y = 1)), pattern = "Missing")
+})
+
+

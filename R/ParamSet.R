@@ -179,7 +179,7 @@ ParamSet = R6Class("ParamSet",
       required = self$ids(tags = "required")
       required = setdiff(required, ns)
       if (length(required) > 0L)
-        stopf("Missing required parameters: %s", str_collapse(required))
+        return(sprintf("Missing required parameters: %s", str_collapse(required)))
       # check each parameters feasibility
       for (n in ns) {
         if (n %nin% ids)
