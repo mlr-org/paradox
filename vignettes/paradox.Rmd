@@ -65,15 +65,15 @@ A particular instance of a parameter is created by calling the attached `$new()`
 parA = ParamLgl$new(id = "A")
 parB = ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2"))
 parC = ParamDbl$new(id = "C", lower = 0, upper = 4, special_vals = list(NULL))
-parD = ParamFct$new(id = "D", values = c("x", "y", "z"), default = "y")
+parD = ParamFct$new(id = "D", levels = c("x", "y", "z"), default = "y")
 parE = ParamUty$new(id = "E", custom_check = function(x) checkmate::checkFunction(x))
 ```
-Every parameter must have an **`id`**---its name within the parameter set---, and may also have a default value (**`default`**), a list of values that are accepted even if they do not conform to the type (**`special_vals`**), and **`tags`** that can be used to organize parameters. The numeric (`Int` and `Dbl`) parameters furthermore allow for specification of a **`lower`** and **`upper`** bound, while the `Fct` parameter must be given a vector of **`values`** that define the possible states its parameter can take. The `Uty` parameter can also have a **`custom_check`** function that must return `TRUE` when a value is acceptable and may return a `character(1)` error description otherwise. The example above defines `parE` as a parameter that only accepts functions.
+Every parameter must have an **`id`**---its name within the parameter set---, and may also have a default value (**`default`**), a list of values that are accepted even if they do not conform to the type (**`special_vals`**), and **`tags`** that can be used to organize parameters. The numeric (`Int` and `Dbl`) parameters furthermore allow for specification of a **`lower`** and **`upper`** bound, while the `Fct` parameter must be given a vector of **`levels`** that define the possible states its parameter can take. The `Uty` parameter can also have a **`custom_check`** function that must return `TRUE` when a value is acceptable and may return a `character(1)` error description otherwise. The example above defines `parE` as a parameter that only accepts functions.
 
 All values that are given to the constructor are then accessible from the object for inspection using `$`. Although all these values can be changed for a parameter after construction, this may be a bad idea and should be avoided when possible; instead, a new parameter should usually be constructed. Besides the possible values that can be given to a constructor, there are also the **`$class`**, **`$nlevels`**, **`$is_bounded`**, **`$has_default`**, **`$storage_type`**, **`$is_number`** and **`$is_categ`** slots that give information about a parameter. A list of all slots can be found in `?Param`.
 ```{r}
 parB$lower
-parA$values
+parA$levels
 parE$class
 ```
 
@@ -104,7 +104,7 @@ ps$add(ParamSet$new(list(parD, parE)))
 print(ps)
 ```
 
-The individual parameters can be accessed through the **`$params`** slot. It is also possible to get information about all parameters in a vectorized fashion using mostly the same slots as for individual `Param`s (i.e. `$class`, `$values` etc.), see `?ParamSet` for details.
+The individual parameters can be accessed through the **`$params`** slot. It is also possible to get information about all parameters in a vectorized fashion using mostly the same slots as for individual `Param`s (i.e. `$class`, `$levels` etc.), see `?ParamSet` for details.
 
 It is possible to reduce `ParamSet`s using the **`$subset`** method. Be aware that it modifies a paramset in-place, so a "clone" must be created first if the original `ParamSet` should not be modified.
 ```{r}
@@ -127,6 +127,19 @@ Similar to individual `Param`s, the `ParamSet` provides **`$test()`**, **`$check
 ps$check(list(A = TRUE, B = 0, E = identity))
 ps$check(list(A = 1))
 ps$check(list(Z = 1))
+```
+
+#### Values in a `ParamSet`
+
+Although a `ParamSet` fundamentally represents a value space, it also has a slot **`$values`** that can contain a point within that space. This is useful because many things that define a parameter space need similar operations (like parameter checking) that can be simplified. The `$values` slot contains a named list that is always checked against parameter constraints. When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` slot of its `$param_set` that needs to be used.
+
+```{r}
+ps$values = list(A = TRUE, B = 0)
+ps$values$B = 1
+print(ps$values)
+```
+```{r, error = TRUE}
+ps$values$B = 100
 ```
 
 #### Dependencies
