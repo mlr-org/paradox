@@ -141,16 +141,22 @@ ParamSet = R6Class("ParamSet",
     },
 
     ids = function(class = NULL, is_bounded = NULL, tags = NULL) {
+      ids = names(self$params)
       if (is.null(class) && is.null(is_bounded) && is.null(tags))
-        return(names(self$params))
+        return(ids)
       assert_character(class, any.missing = FALSE, null.ok = TRUE)
       assert_flag(is_bounded, null.ok = TRUE)
       assert_character(tags, any.missing = FALSE, null.ok = TRUE)
-      d = as.data.table(self)
-      pc = class; isb = is_bounded; tgs = tags # rename for dt, sucks
-      d[  (is.null(pc) | d$class %in% pc) &
-          (is.null(isb) | is_bounded %in% isb) &
-          (is.null(tgs) | d$tags %in% tgs), id]
+
+      ii = rep(TRUE, length(ids))
+      if (!is.null(class))
+        ii = ii & self$class %in% class
+      if (!is.null(is_bounded))
+        ii = ii & map_lgl(self$params, "is_bounded")
+      if (!is.null(tags))
+        ii = ii & map_lgl(self$tags, function(required, set) all(required %in% set), required = tags)
+
+      ids[ii]
     },
 
     subset = function(ids) {

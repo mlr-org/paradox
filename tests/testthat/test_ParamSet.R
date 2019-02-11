@@ -268,5 +268,3 @@ test_that("required tag", {
   expect_string(ps$check(list()), pattern = "Missing")
   expect_string(ps$check(list(y = 1)), pattern = "Missing")
 })
-
-
