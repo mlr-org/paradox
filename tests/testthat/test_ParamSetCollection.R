@@ -207,3 +207,33 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
   expect_equal(psc$values, list(s1.d1 = 1, s2.d2 = 2))
 })
 
+test_that("set_id inference in values assignment works now", {
+
+  psa = ParamSet$new(list(ParamDbl$new("parama")))
+  psa$set_id = "a.b"
+
+  psb = ParamSet$new(list(ParamDbl$new("paramb")))
+  psb$set_id = "b"
+
+  psc = ParamSet$new(list(ParamDbl$new("paramc")))
+  psc$set_id = "c"
+
+  pscol1 = ParamSetCollection$new(list(psb, psc))
+  pscol1$set_id = "a"
+
+  pscol2 = ParamSetCollection$new(list(psa, pscol1))
+
+  pstest = ParamSet$new(list(ParamDbl$new("paramc")))
+  pstest$set_id = "a.c"
+
+  expect_error(pscol2$add(pstest), "nameclashes.* a\\.c\\.paramc")
+
+  pscol2$values = list(a.c.paramc = 3, a.b.parama = 1, a.b.paramb = 2)
+
+  expect_equal(psa$values, list(parama = 1))
+  expect_equal(psb$values, list(paramb = 2))
+  expect_equal(psc$values, list(paramc = 3))
+  expect_equal(pscol1$values, list(b.paramb = 2, c.paramc = 3))
+  expect_equal(pscol2$values, list(a.b.parama = 1, a.b.paramb = 2, a.c.paramc = 3))
+
+})

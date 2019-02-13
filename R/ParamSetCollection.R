@@ -49,6 +49,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         stopf("Setid '%s' already present in collection!", p$set_id)
       if (p$has_trafo)
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+      nameclashes = intersect(sprintf("%s.%s", p$set_id, names(p$params)), names(self$params))
+      if (length(nameclashes)) {
+        stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
+      }
+
       private$.sets[[length(private$.sets) + 1L]] = p
     },
 
@@ -111,15 +116,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       } else {
         assert_list(xs)
         self$assert(xs) # make sure everything is valid and feasible
-        # extract everything before 1st dot
-        set_ids = sub("^([^.]+)\\..+", "\\1", names(xs))
-        xs = split(xs, set_ids) # partition xs into parts wrt to setids
+
         for (s in private$.sets) {
           # retrieve sublist for each set, then assign it in set (after removing prefix)
-          pv = xs[[s$set_id]]
-          if (is.null(pv))
-            pv = list()
-          names(pv) = sub(sprintf("^%s.", s$set_id), "", names(pv))
+          psids = sprintf("%s.%s", s$set_id, names(s$params))
+          pv = xs[intersect(psids, names(xs))]
+          names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
           s$values = pv
         }
       }
