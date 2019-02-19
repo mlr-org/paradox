@@ -1,6 +1,3 @@
----
-output: github_document
----
 # paradox
 
 [![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
@@ -130,7 +127,7 @@ ps$test(list(z = -1, x = 1))
 ps$check(list(z = -1, x = 1))
 #> [1] "z: Element 0 is not >= 1"
 ps$assert(list(z = -1, x = 1))
-#> Error in eval(expr, envir, enclos): Assertion on 'x' failed: z: Element 0 is not >= 1.
+#> Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 0 is not >= 1.
 ```
 
 ### Transformations
