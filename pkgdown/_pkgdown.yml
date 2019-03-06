@@ -1,11 +1,17 @@
+url: https://paradox.mlr-org.com
+
 template:
   params:
     bootswatch: cosmo
+  path: pkgdown/templates
+  assets: pkgdown/assets
+  default_assets: false
 
 development:
   mode: unreleased
+  destination: devel
   version_label: default
-  version_tooltip: "Github Version"
+  version_tooltip: "Github version"
 
 toc:
   depth: 3
