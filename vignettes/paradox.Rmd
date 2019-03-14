@@ -323,7 +323,7 @@ samplingPS$trafo = function(x, param_set) {
   # x$fun is a `character(1)`,
   # in particular one of 'mean', 'median', 'min', 'max'.
   # We want to turn it into a function!
-  x$fun = list(mean = mean, median = median, min = min, max = max)[[x$fun]]
+  x$fun = get(x$fun, mode = "function")
   x
 }
 ```
