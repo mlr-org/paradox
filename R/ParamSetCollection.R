@@ -98,7 +98,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         dd$on = map_values(dd$on, ids_old, ids_new)
         return(dd)
       })
-      rbindlist(c(d_all, list(private$.deps)))
+      rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
     values = function(xs) {

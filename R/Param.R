@@ -134,11 +134,11 @@ Param = R6Class("Param",
       ParamSet$new(ps)
     },
 
-    print = function(..., hide.cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
+    print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = as.data.table(ParamSet$new(list(self)))
-      assert_subset(hide.cols, names(d))
-      print(d[, setdiff(colnames(d), hide.cols), with = FALSE])
+      assert_subset(hide_cols, names(d))
+      print(d[, setdiff(colnames(d), hide_cols), with = FALSE])
     },
 
     qunif = function(x) {

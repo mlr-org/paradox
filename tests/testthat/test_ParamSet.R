@@ -130,7 +130,7 @@ test_that("ParamSet$print", {
   s = capture_output(print(ps))
   expect_true(grepl("ParamInt", s, fixed = TRUE))
   expect_true(grepl("ParamDbl", s, fixed = TRUE))
-  s = capture_output(print(ps, hide.cols = c("class")))
+  s = capture_output(print(ps, hide_cols = c("class")))
   expect_false(grepl("ParamInt", s, fixed = TRUE))
 
   # iterate through more complex PS and check that printer works by at least calling it
@@ -272,5 +272,5 @@ test_that("required tag", {
 test_that("required tag, empty param set (#219)", {
   ps = ParamSet$new()
   ps$ids()
-  ps$ids(tags = "required")
+  expect_identical(ps$ids(tags = "required"), character(0))
 })

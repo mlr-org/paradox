@@ -76,5 +76,3 @@ test_that("required params are checked", {
   ))
   expect_error(ps$values <- list(i = 2), "Missing required")
 })
-
-
