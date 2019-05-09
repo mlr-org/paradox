@@ -1,7 +1,6 @@
 context("ParamSetCollection")
 
 test_that("ParamSet basic stuff works", {
-
   ps1 = th_paramset_dbl1()
   ps1$set_id = "s1"
   ps2 = th_paramset_full()
@@ -11,7 +10,8 @@ test_that("ParamSet basic stuff works", {
   ps1clone = ps1$clone(deep = TRUE)
   ps2clone = ps2$clone(deep = TRUE)
 
-  my_c = function(xs1, xs2) {  # littler helper to join to ps-result and prefix names
+  my_c = function(xs1, xs2) {
+    # littler helper to join to ps-result and prefix names
     ns = c(paste0("s1.", names(xs1)), paste0("s2.", names(xs2)))
     set_names(c(xs1, xs2), ns)
   }
@@ -19,7 +19,8 @@ test_that("ParamSet basic stuff works", {
   expect_class(psc, "ParamSetCollection")
   expect_equal(psc$length, ps1$length + ps2$length)
   # check that param internally in collection is constructed correctly
-  p = psc$params[[2L]]; p = p$clone()
+  p = psc$params[[2L]]
+  p = p$clone()
   p$id = "th_param_int"
   expect_equal(p, ps2$params[[1L]])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids())))
@@ -75,7 +76,6 @@ test_that("ParamSet basic stuff works", {
 })
 
 test_that("some operations are not allowed", {
-
   ps1 = th_paramset_dbl1()
   ps1$set_id = "s1"
   ps2 = th_paramset_full()
@@ -87,7 +87,6 @@ test_that("some operations are not allowed", {
 })
 
 test_that("deps", {
-
   ps1 = ParamSet$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d")
@@ -121,7 +120,6 @@ test_that("deps", {
 })
 
 test_that("values", {
-
   ps1 = ParamSet$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
@@ -149,7 +147,6 @@ test_that("values", {
   ps2$values = list()
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
-
 })
 
 test_that("empty collections", {
@@ -208,7 +205,6 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
 })
 
 test_that("set_id inference in values assignment works now", {
-
   psa = ParamSet$new(list(ParamDbl$new("parama")))
   psa$set_id = "a.b"
 
@@ -235,5 +231,4 @@ test_that("set_id inference in values assignment works now", {
   expect_equal(psc$values, list(paramc = 3))
   expect_equal(pscol1$values, list(b.paramb = 2, c.paramc = 3))
   expect_equal(pscol2$values, list(a.b.parama = 1, a.b.paramb = 2, a.c.paramc = 3))
-
 })

@@ -98,6 +98,7 @@ Param = R6Class("Param",
     tags = NULL,
 
     initialize = function(id, special_vals, default, tags) {
+
       assert_id(id)
       assert_names(id, type = "strict")
       assert_list(special_vals)
@@ -107,8 +108,9 @@ Param = R6Class("Param",
       self$special_vals = special_vals
       self$default = default
       self$tags = tags
-      if (!is_nodefault(default)) # check that default is feasible
+      if (!is_nodefault(default)) { # check that default is feasible
         self$assert(default)
+      }
     },
 
     check = function(x) {
@@ -145,8 +147,7 @@ Param = R6Class("Param",
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
       private$.qunif(x)
-    }
-  ) ,
+    }),
 
   active = list(
     class = function() class(self)[[1L]],

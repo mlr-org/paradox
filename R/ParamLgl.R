@@ -3,8 +3,7 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(
     initialize = function(id, special_vals = list(), default = NO_DEF, tags = character(0L)) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    }
-  ),
+    }),
 
   active = list(
     lower = function() NA_real_,
@@ -20,4 +19,3 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
     .qunif = function(x) x < 0.5
   )
 )
-

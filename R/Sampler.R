@@ -45,11 +45,10 @@ Sampler = R6Class("Sampler",
       catf("Sampler: %s", class(self)[[1L]])
       catf("For params: %s", str_trunc(str_collapse(self$param_set$ids()), width = 40L))
       private$.print()
-    }
-  ),
+    }),
   private = list(
     .sample = function(n) stop("abstract"), # inheriting classes have to implement this
-    .print = function() {} # inheriting classes can overwrite to add lines
+    .print = function() {
+    } # inheriting classes can overwrite to add lines
   )
 )
-

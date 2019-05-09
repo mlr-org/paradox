@@ -17,8 +17,9 @@ test_that("transpose works", {
 
   # now a trafo, with a dep
   ps$trafo = function(x, param_set) {
-    if (!is.null(x$i))
+    if (!is.null(x$i)) {
       x$i = x$i + 10
+    }
     return(x)
   }
   xs = d$transpose(trafo = TRUE, filter_na = FALSE)
@@ -26,4 +27,3 @@ test_that("transpose works", {
   xs = d$transpose(trafo = TRUE, filter_na = TRUE)
   expect_equal(xs, list(list(f = "a", i = 11L), list(f = "b")))
 })
-

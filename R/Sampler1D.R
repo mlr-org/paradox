@@ -32,10 +32,9 @@
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   public = list(
-    initialize = function(param)  {
+    initialize = function(param) {
       super$initialize(ParamSet$new(list(param)))
-    }
-  ),
+    }),
 
   active = list(
     param = function() self$param_set$params[[1]]
@@ -46,18 +45,16 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     as_dt_col = function(x) {
       x = as(x, self$param$storage_type)
       set_names(data.table(x), self$param$id)
-    }
-  )
+    })
 )
 
 #' @export
 Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   public = list(
-    initialize = function(param)  {
+    initialize = function(param) {
       assert_param(param, no_untyped = TRUE, must_bounded = TRUE)
       super$initialize(param)
-    }
-  ),
+    }),
 
   private = list(
     .sample = function(n) private$as_dt_col(self$param$qunif(runif(n))) # sample by doing qunif(u)
@@ -78,16 +75,16 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
       assert_flag(trunc)
       self$rfun = rfun
       self$trunc = trunc
-    }
-  ),
+    }),
 
   private = list(
     # maybe we want an option to use my truncation here, as this slows stuff down somewhat and there are some real truncated rngs in R
     .sample = function(n) {
-      if (self$trunc)
+      if (self$trunc) {
         s = private$sample_truncated(n, self$rfun)
-      else
+      } else {
         s = self$rfun(n = n)
+      }
       super$as_dt_col(s)
     },
 
@@ -95,15 +92,15 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     sample_truncated = function(n, rfun) {
       r = numeric(0L)
       for (i in 1:1000) {
-        s = rfun(n = 2*n)
+        s = rfun(n = 2 * n)
         s = s[s >= self$param$lower & s <= self$param$upper]
         r = c(r, s)
-        if (length(r) >= n)
+        if (length(r) >= n) {
           return(r[1:n])
+        }
       }
       stopf("Tried rejection sampling 1000x. Giving up.")
-    }
-  )
+    })
 )
 
 #' @export
@@ -115,20 +112,19 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
       assert_multi_class(param, c("ParamFct", "ParamLgl"))
       super$initialize(param)
       k = param$nlevels
-      if (is.null(prob))
-        prob = rep(1/k, k)
+      if (is.null(prob)) {
+        prob = rep(1 / k, k)
+      }
       assert_numeric(prob, lower = 0, upper = 1, len = k)
       assert_true(all.equal(sum(prob), 1))
       self$prob = prob
-    }
-  ),
+    }),
 
   private = list(
     .sample = function(n) {
       s = sample(self$param$levels, n, replace = TRUE, prob = self$prob)
       super$as_dt_col(s)
-    }
-  )
+    })
 )
 
 #' @export
@@ -136,18 +132,20 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
   public = list(
     initialize = function(param, mean = NULL, sd = NULL) {
       assert_param(param, "ParamDbl")
-      if ((is.null(mean) || is.null(sd)) && !param$is_bounded)
+      if ((is.null(mean) || is.null(sd)) && !param$is_bounded) {
         stop("If 'mean' or 'sd' are not set, param must be bounded!")
-      if (is.null(mean))
+      }
+      if (is.null(mean)) {
         mean = mean(param$range)
+      }
       self$mean = mean
-      if (is.null(sd))
+      if (is.null(sd)) {
         sd = param$span / 4
+      }
       self$sd = sd
-      super$initialize(param, trunc = TRUE,  # we always trunc, this should not hurt for unbounded params
+      super$initialize(param, trunc = TRUE, # we always trunc, this should not hurt for unbounded params
         rfun = function(n) rnorm(n, mean = self$mean, sd = self$sd))
-    }
-  ),
+    }),
 
   active = list(
     mean = function(v) if (missing(v)) private$.mean else private$.mean = assert_number(v),
@@ -159,4 +157,3 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
     .sd = NULL
   )
 )
-

@@ -65,8 +65,8 @@ test_that("values calls assert", {
     ParamInt$new(id = "i", lower = 1, upper = 3),
     ParamFct$new(id = "f", levels = letters[1:3])
   ))
-  expect_error(ps$values <- list(xxx = 1), "not available")
-  expect_error(ps$values <- list(d = 9), "not <= 1")
+  expect_error(ps$values = list(xxx = 1), "not available")
+  expect_error(ps$values = list(d = 9), "not <= 1")
 })
 
 test_that("required params are checked", {
@@ -74,5 +74,5 @@ test_that("required params are checked", {
     ParamDbl$new(id = "d", lower = 0, upper = 1, tags = "required"),
     ParamInt$new(id = "i", lower = 1, upper = 3)
   ))
-  expect_error(ps$values <- list(i = 2), "Missing required")
+  expect_error(ps$values = list(i = 2), "Missing required")
 })

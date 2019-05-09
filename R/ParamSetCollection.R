@@ -36,8 +36,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       setids = map_chr(sets, "set_id")
       assert_names(setids, type = "unique")
       names(sets) = setids
-      if (any(map_lgl(sets, "has_trafo")))  # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
+      if (any(map_lgl(sets, "has_trafo"))) { # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+      }
       private$.sets = sets
       self$set_id = "collection"
     },
@@ -45,10 +46,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     add = function(p) {
       assert_r6(p, "ParamSet")
       setids = map_chr(private$.sets, "set_id")
-      if (p$set_id %in% setids)
+      if (p$set_id %in% setids) {
         stopf("Setid '%s' already present in collection!", p$set_id)
-      if (p$has_trafo)
+      }
+      if (p$has_trafo) {
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+      }
       nameclashes = intersect(sprintf("%s.%s", p$set_id, names(p$params)), names(self$params))
       if (length(nameclashes)) {
         stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
@@ -69,21 +72,24 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   active = list(
     params = function(v) {
-      if (length(private$.sets) == 0L)
+      if (length(private$.sets) == 0L) {
         return(named_list())
+      }
       private$.params = named_list()
       # clone each param into new params-list and prefix id
       ps_all = lapply(private$.sets, function(s) {
         ss = s$clone(deep = TRUE)
         ps = ss$params
-        if (length(ps) > 0L) # paste with empty vec creates a string...
+        if (length(ps) > 0L) { # paste with empty vec creates a string...
           names(ps) = paste(s$set_id, names(ps), sep = ".")
+        }
         return(ps)
       })
       names(ps_all) = NULL
       ps_all = unlist(ps_all, recursive = FALSE)
-      if (length(ps_all) == 0L)  # unlist before drops names for empty list....
+      if (length(ps_all) == 0L) { # unlist before drops names for empty list....
         ps_all = named_list()
+      }
       imap(ps_all, function(x, n) x$id = n)
       return(ps_all)
     },
@@ -105,8 +111,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (missing(xs)) {
         vals = lapply(private$.sets, function(s) {
           v = s$values
-          if (length(v) > 0L)
+          if (length(v) > 0L) {
             names(v) = paste(s$set_id, names(v), sep = ".")
+          }
           return(v)
         })
         names(vals) = NULL
@@ -125,8 +132,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           s$values = pv
         }
       }
-    }
-  ),
+    }),
 
   private = list(
     .sets = NULL

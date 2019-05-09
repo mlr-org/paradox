@@ -31,9 +31,9 @@ test_that("simple active bindings work", {
     expect_names(names(ps$default), subset.of = ps$ids(), info = info)
   }
   ps = th_paramset_full()
-  expect_equal(ps$ids(), c('th_param_int', 'th_param_dbl', 'th_param_fct', 'th_param_lgl'))
-  expect_equal(ps$lower, c(th_param_int=-10, th_param_dbl=-10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
-  expect_equal(ps$upper, c(th_param_int=10, th_param_dbl=10, th_param_fct=NA_real_, th_param_lgl=NA_real_))
+  expect_equal(ps$ids(), c("th_param_int", "th_param_dbl", "th_param_fct", "th_param_lgl"))
+  expect_equal(ps$lower, c(th_param_int = -10, th_param_dbl = -10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
+  expect_equal(ps$upper, c(th_param_int = 10, th_param_dbl = 10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
 })
 
 test_that("ParamSet$subset", {
@@ -108,7 +108,7 @@ test_that("ParamSet$check", {
 
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
-  expect_error(ps$set_id <- "$foo" , "Must comply")
+  expect_error(ps$set_id = "$foo", "Must comply")
 })
 
 test_that("ParamSets cannot have duplicated ids", {

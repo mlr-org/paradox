@@ -27,18 +27,18 @@ test_that("is_bounded works", {
 test_that("qunif", {
   n = 100000L
   testit = function(a, b) {
+
     p = ParamInt$new("x", lower = a, upper = b)
     k = p$nlevels
-    expect_equal(k, b-a+1)
+    expect_equal(k, b - a + 1)
     u = runif(n)
     v1 = p$qunif(u)
     expect_setequal(unique(v1), a:b) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))
-    p = rep(1/k, k)
+    p = rep(1 / k, k)
     expect_lte(max(abs(freqs - p)), 0.01)
   }
   testit(1, 12)
   testit(-2, 1)
 })
-

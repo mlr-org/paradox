@@ -19,11 +19,9 @@ test_that("qunif", {
     expect_setequal(unique(v1), p$levels) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))
-    p = rep(1/k, k)
+    p = rep(1 / k, k)
     expect_lte(max(abs(freqs - p)), 0.01)
   }
   testit(c("f", "g"))
   testit(letters[2:9])
 })
-
-

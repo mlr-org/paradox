@@ -24,7 +24,4 @@ test_that("trafo", {
   expect_numeric(d2$w1, lower = 0, upper = 1)
   expect_numeric(d2$w2, lower = 0, upper = 1)
   expect_equal(d2$w1 + d2$w2, rep(1, nrow(d2)))
-
 })
-
-

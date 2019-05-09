@@ -62,4 +62,3 @@ CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
     test = function(x) !is.na(x) & x %in% private$.rhs
   )
 )
-

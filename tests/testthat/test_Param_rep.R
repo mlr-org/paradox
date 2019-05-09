@@ -29,7 +29,3 @@ test_that("rep params deep copies", {
   expect_equal(p$lower, 99)
   expect_equal(ps$params[["x_rep_1"]]$lower, 1)
 })
-
-
-
-

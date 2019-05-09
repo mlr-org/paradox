@@ -29,6 +29,7 @@ Design = R6Class("Design",
     data = NULL,
 
     initialize = function(param_set, data, remove_dupl) {
+
       assert_paramset(param_set)
       assert_data_table(data, ncols = param_set$length)
       assert_names(colnames(data), permutation.of = param_set$ids())
@@ -39,14 +40,17 @@ Design = R6Class("Design",
       # do we still create an LHS like this?
       imap(param_set$values, function(v, n) set(data, j = n, value = v))
       self$data = data
-      if (param_set$has_deps)
+      if (param_set$has_deps) {
         private$set_deps_to_na()
+      }
       # NB: duplicated rows can happen to to NA setting
-      if (remove_dupl)
-        self$data = unique(self$data) # remove duplicated rows
+      if (remove_dupl) {
+        self$data = unique(self$data)
+      } # remove duplicated rows
     },
 
-    print = function(...) { # simply print the included dt
+    print = function(...) {
+      # simply print the included dt
       catf("<Design> with %i rows:", nrow(self$data))
       print(self$data)
     },
@@ -56,38 +60,38 @@ Design = R6Class("Design",
       assert_flag(trafo)
       ps = self$param_set
       xs = mlr3misc::transpose(self$data)
-      if (filter_na)
+      if (filter_na) {
         xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
+      }
       if (ps$has_trafo && trafo) {
         xs = map(xs, function(x) ps$trafo(x, ps))
       }
       return(xs)
-    }
-  ),
+    }),
 
   private = list(
     # function to set unsatisfied deps to NA in the design dt "data":
     # walk thru all params, toposorted order, then walk thru all deps
     # and set values in x to NA which where the dep is not OK
     set_deps_to_na = function(remove_dupl) {
+
       ps = self$param_set
       graph = ps$deps[, 1:2]
       colnames(graph) = c("id", "parents")
       # we need to make sure that every param has a (maybe empty) row in the graph table
       fillin = data.table(id = ps$ids(), parents = list(character(0L)))
-      graph = rbind(graph, fillin[fillin$id %nin% graph$id,])
+      graph = rbind(graph, fillin[fillin$id %nin% graph$id, ])
       graph = graph[, .(parents = list(unlist(parents))), by = id]
       topo = topo_sort(graph)
       pids_sorted = topo$id
       for (param_id in pids_sorted) {
         param = ps$params[[param_id]]
-        dd = ps$deps[id == param_id,]
+        dd = ps$deps[id == param_id, ]
         for (j in seq_row(dd)) {
           pcol = self$data[[dd$on[j]]]
           not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol)) # we are ok if parent was active and cond on parent is OK
           set(self$data, not_ok, j = param_id, value = as(NA, param$storage_type))
         }
       }
-    }
-  )
+    })
 )

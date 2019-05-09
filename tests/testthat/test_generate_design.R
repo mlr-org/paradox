@@ -82,7 +82,6 @@ test_that("generate_design_grid with different resolutions and egde cases", {
 })
 
 test_that("check generate_design_grid against concrete expectation", {
-
   ps = ParamSet$new(list(
     ParamDbl$new("x", lower = 1, upper = 3),
     ParamFct$new("y", levels = c("a", "b"))

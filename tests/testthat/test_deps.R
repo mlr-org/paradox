@@ -24,12 +24,12 @@ test_that("basic example works", {
   ps = th_paramset_full()
   ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("a"))
   ps$add_dep("th_param_int", on = "th_param_lgl", CondEqual$new(TRUE))
-  expect_output(print(ps),"th_param_fct,th_param_lgl")
+  expect_output(print(ps), "th_param_fct,th_param_lgl")
 
   # test that we can remove deps
-  ps$deps = ps$deps[-1,]
+  ps$deps = ps$deps[-1, ]
   expect_true(ps$has_deps)
-  ps$deps = ps$deps[-1,]
+  ps$deps = ps$deps[-1, ]
   expect_false(ps$has_deps)
 })
 
@@ -99,7 +99,6 @@ test_that("subsetting with deps works", {
 test_that("cannot add a dep on yourself", {
   ps = ParamSet$new(list(ParamFct$new("x", levels = c("a"))))
   expect_error(ps$add_dep("x", on = "x", CondEqual$new("a")), "depend on itself")
-
 })
 
 
@@ -113,5 +112,3 @@ test_that("we can also dep on integer", {
   expect_true(ps$check(list(i = 2, d = 5)))
   expect_string(ps$check(list(i = 5, d = 5)))
 })
-
-

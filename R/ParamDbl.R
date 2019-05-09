@@ -11,8 +11,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
       self$lower = lower
       self$upper = upper
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    }
-  ),
+    }),
 
   active = list(
     values = function() NULL,
@@ -26,6 +25,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
 
   private = list(
     .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
-    .qunif = function(x) x*self$span + self$lower
+    .qunif = function(x) x * self$span + self$lower
   )
 )

@@ -7,8 +7,7 @@ ParamFct = R6Class("ParamFct", inherit = Param,
       assert_character(levels, any.missing = FALSE, unique = TRUE)
       self$levels = levels
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    }
-  ),
+    }),
 
   active = list(
     lower = function() NA_real_,
@@ -24,7 +23,5 @@ ParamFct = R6Class("ParamFct", inherit = Param,
     .qunif = function(x) {
       z = floor(x * self$nlevels * (1 - 1e-16)) + 1 # make sure we dont map to upper+1
       self$levels[z]
-    }
-  )
+    })
 )
-

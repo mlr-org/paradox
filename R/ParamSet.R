@@ -1,4 +1,4 @@
-#FIXME: was ist mit so krams wie nvlevels usw? das wollen wir nicht änern oder?
+# FIXME: was ist mit so krams wie nvlevels usw? das wollen wir nicht änern oder?
 
 #' @title ParamSet
 #'
@@ -125,6 +125,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     add = function(p) {
+
       assert_multi_class(p, c("Param", "ParamSet"))
       p = if (inherits(p, "Param")) { # level-up param to set
         ParamSet$new(list(p))
@@ -134,8 +135,9 @@ ParamSet = R6Class("ParamSet",
 
       nn = c(names(self$params), names(p$params))
       assert_names(nn, type = "strict")
-      if (!is.null(p$trafo))
+      if (!is.null(p$trafo)) {
         stop("Cannot add a param set with a trafo.")
+      }
       private$.params = c(private$.params, p$params)
       private$.values = c(private$.values, p$values)
       private$.deps = rbind(private$.deps, p$deps)
@@ -143,9 +145,11 @@ ParamSet = R6Class("ParamSet",
     },
 
     ids = function(class = NULL, is_bounded = NULL, tags = NULL) {
+
       ids = names(self$params)
-      if (is.null(class) && is.null(is_bounded) && is.null(tags))
+      if (is.null(class) && is.null(is_bounded) && is.null(tags)) {
         return(ids)
+      }
 
       ii = rep(TRUE, length(ids))
 
@@ -173,8 +177,9 @@ ParamSet = R6Class("ParamSet",
       if (self$has_deps) { # check that all required / leftover parents are still in new ids
         parents = unique(self$deps[id %in% ids, "on"][[1L]])
         pids_not_there = setdiff(parents, ids)
-        if (length(pids_not_there) > 0L)
-         stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
+        if (length(pids_not_there) > 0L) {
+          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
+        }
       }
       private$.params = private$.params[ids]
       ids2 = union(intersect(ids, names(private$.values)), setdiff(names(private$.values), param_ids)) # restrict to ids already in pvals
@@ -183,28 +188,34 @@ ParamSet = R6Class("ParamSet",
     },
 
     check = function(xs) {
+
       ok = check_list(xs, names = "unique")
-      if (!isTRUE(ok))
+      if (!isTRUE(ok)) {
         return(ok)
+      }
       ns = names(xs)
       ids = names(self$params)
 
       # check that all 'required' params are there
       required = setdiff(self$ids(tags = "required"), ns)
-      if (length(required) > 0L)
+      if (length(required) > 0L) {
         return(sprintf("Missing required parameters: %s", str_collapse(required)))
-      if (length(xs) == 0)
-        return(TRUE) # a empty list is always feasible, if all req params are there
+      }
+      if (length(xs) == 0) {
+        return(TRUE)
+      } # a empty list is always feasible, if all req params are there
 
       extra = wf(ns %nin% ids)
-      if (length(extra))
+      if (length(extra)) {
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
+      }
 
       # check each parameters feasibility
       for (n in ns) {
         ch = self$params[[n]]$check(xs[[n]])
-        if (test_string(ch)) # we failed a check, return string
+        if (test_string(ch)) { # we failed a check, return string
           return(paste0(n, ": ", ch))
+        }
       }
 
       # check dependencies
@@ -218,7 +229,7 @@ ParamSet = R6Class("ParamSet",
           # - if param is not there
           cond = deps$cond[[j]]
           ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-               (p1id %nin% ns)
+            (p1id %nin% ns)
           if (isFALSE(ok)) {
             val = xs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
@@ -239,8 +250,9 @@ ParamSet = R6Class("ParamSet",
       ids = names(self$params)
       assert_choice(id, ids)
       assert_choice(on, ids)
-      if (id == on)
+      if (id == on) {
         stopf("A param cannot depend on itself!")
+      }
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
@@ -262,10 +274,10 @@ ParamSet = R6Class("ParamSet",
         d$value = list(v)
         print(d[, setdiff(colnames(d), hide_cols), with = FALSE])
       }
-      if (!is.null(self$trafo))
-        catf("Trafo is set.") # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
-    }
-  ),
+      if (!is.null(self$trafo)) {
+        catf("Trafo is set.")
+      } # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
+    }),
 
   active = list(
     params = function() {
@@ -350,7 +362,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.trafo
       } else {
-          assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
+        assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
         private$.trafo = f
       }
     },
@@ -360,8 +372,9 @@ ParamSet = R6Class("ParamSet",
     },
 
     values = function(xs) {
-      if (missing(xs))
+      if (missing(xs)) {
         return(private$.values)
+      }
 
       self$assert(xs)
       if (length(xs) == 0L) xs = named_list()
@@ -374,8 +387,7 @@ ParamSet = R6Class("ParamSet",
 
     extra_values = function() {
       private$.values[names(private$.values) %nin% names(private$.params)]
-    }
-  ),
+    }),
 
   private = list(
     .set_id = NULL,
@@ -392,8 +404,7 @@ ParamSet = R6Class("ParamSet",
         ".deps" = copy(value),
         value
       )
-    }
-  )
+    })
 )
 
 #' @export

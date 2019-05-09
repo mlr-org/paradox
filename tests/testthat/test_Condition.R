@@ -9,5 +9,3 @@ test_that("Condition", {
   y = cond$test(c("a", "b", "c", NA_character_))
   expect_equal(y, c(TRUE, TRUE, FALSE, FALSE))
 })
-
-

@@ -16,11 +16,10 @@ NULL
 #' @export
 NoDefault = R6Class("NoDefault",
   public = list(
-    initialize = function() {}
-  ),
+    initialize = function() {
+    }),
 )
 
 #' @export
 NO_DEF = NoDefault$new()
 is_nodefault = function(x) test_r6(x, "NoDefault")
-

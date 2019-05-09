@@ -23,19 +23,15 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
       assert_list(samplers, types = "Sampler1D")
       ids1 = param_set$ids()
       ids2 = map_chr(samplers, function(s) s$param$id)
-      if (!setequal(ids1, ids2))
+      if (!setequal(ids1, ids2)) {
         stop("IDs of params in samplers to not correspond to IDs of params in set!")
+      }
       super$initialize(param_set)
       self$samplers = samplers
-    }
-  ),
+    }),
   private = list(
     # samples independently from the 1d distributions
     # dependencies are actually handled when in "sample" we create the Design, then set entries to NA
     .sample = function(n) map_dtc(self$samplers, function(s) s$sample(n)$data)
   )
 )
-
-
-
-
