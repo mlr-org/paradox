@@ -11,7 +11,8 @@ ParamInt = R6Class("ParamInt", inherit = Param,
       self$lower = ceiling(lower)
       self$upper = floor(upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    }),
+    }
+  ),
 
   active = list(
     values = function() NULL,

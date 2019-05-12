@@ -27,7 +27,8 @@ SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
       pss[[1L]] = pss[[1]]$clone() # we need to clone, add will clone later, too, otherwise we change the 1set in place
       self$param_set = Reduce(function(ps1, ps2) ps1$add(ps2), pss)
       assert_paramset(self$param_set, no_deps = TRUE) # must_bounded and untyped should be check by the sapler, or if the sampler still works, then ok
-    }),
+    }
+  ),
 
   private = list(
     # FIXME: would be nice if we could call .sample here instead of sample, for less type conversion and peed, but .sample is private. make it public? also not great...

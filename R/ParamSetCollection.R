@@ -132,7 +132,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           s$values = pv
         }
       }
-    }),
+    }
+  ),
 
   private = list(
     .sets = NULL

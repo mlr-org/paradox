@@ -28,7 +28,8 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
       }
       super$initialize(param_set)
       self$samplers = samplers
-    }),
+    }
+  ),
   private = list(
     # samples independently from the 1d distributions
     # dependencies are actually handled when in "sample" we create the Design, then set entries to NA

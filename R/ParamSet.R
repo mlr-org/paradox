@@ -277,7 +277,8 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(self$trafo)) {
         catf("Trafo is set.")
       } # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
-    }),
+    }
+  ),
 
   active = list(
     params = function() {
@@ -387,7 +388,8 @@ ParamSet = R6Class("ParamSet",
 
     extra_values = function() {
       private$.values[names(private$.values) %nin% names(private$.params)]
-    }),
+    }
+  ),
 
   private = list(
     .set_id = NULL,
@@ -404,7 +406,8 @@ ParamSet = R6Class("ParamSet",
         ".deps" = copy(value),
         value
       )
-    })
+    }
+  )
 )
 
 #' @export

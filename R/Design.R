@@ -67,7 +67,8 @@ Design = R6Class("Design",
         xs = map(xs, function(x) ps$trafo(x, ps))
       }
       return(xs)
-    }),
+    }
+  ),
 
   private = list(
     # function to set unsatisfied deps to NA in the design dt "data":
@@ -93,5 +94,6 @@ Design = R6Class("Design",
           set(self$data, not_ok, j = param_id, value = as(NA, param$storage_type))
         }
       }
-    })
+    }
+  )
 )

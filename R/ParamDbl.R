@@ -11,7 +11,8 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
       self$lower = lower
       self$upper = upper
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    }),
+    }
+  ),
 
   active = list(
     values = function() NULL,

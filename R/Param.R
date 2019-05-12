@@ -147,7 +147,8 @@ Param = R6Class("Param",
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
       private$.qunif(x)
-    }),
+    }
+  ),
 
   active = list(
     class = function() class(self)[[1L]],

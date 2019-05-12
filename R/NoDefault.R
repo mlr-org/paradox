@@ -17,7 +17,8 @@ NULL
 NoDefault = R6Class("NoDefault",
   public = list(
     initialize = function() {
-    }),
+    }
+  ),
 )
 
 #' @export
