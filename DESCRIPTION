@@ -6,7 +6,7 @@ Authors@R: c(
     person("Jakob", "Richter", NULL, "code@jakob-r.de", role = c("cre", "aut")),
     person("Xudong", "Sun", NULL, "smilesun.east@gmail.com", role = c("aut")),
     person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut")),
-    person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.de", role = c("aut"))
+    person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.net", role = c("aut"))
     )
 Description:
   Easily define parameter spaces, constraints and dependencies for
