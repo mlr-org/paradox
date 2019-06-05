@@ -30,7 +30,7 @@ Design = R6Class("Design",
 
     initialize = function(param_set, data, remove_dupl) {
 
-      assert_paramset(param_set)
+      assert_param_set(param_set)
       assert_data_table(data, ncols = param_set$length)
       assert_names(colnames(data), permutation.of = param_set$ids())
       self$param_set = param_set

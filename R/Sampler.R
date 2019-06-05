@@ -32,7 +32,7 @@ Sampler = R6Class("Sampler",
 
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
     initialize = function(param_set) {
-      assert_paramset(param_set, no_untyped = TRUE)
+      assert_param_set(param_set, no_untyped = TRUE)
       self$param_set = param_set$clone(deep = TRUE)
     },
 

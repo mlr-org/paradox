@@ -17,7 +17,7 @@
 #' @export
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
 
-  assert_paramset(param_set, no_untyped = TRUE)
+  assert_param_set(param_set, no_untyped = TRUE)
   ids = param_set$ids()
   ids_num = ids[param_set$is_number]
 

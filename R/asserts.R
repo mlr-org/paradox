@@ -24,7 +24,7 @@ assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = 
 #' @param no_deps `logical(1)` \cr
 #'   Np dependencies allowed?
 #' @export
-assert_paramset = function(param_set, cl = "Param", no_untyped = FALSE, must_bounded = FALSE, no_deps = FALSE) {
+assert_param_set = function(param_set, cl = "Param", no_untyped = FALSE, must_bounded = FALSE, no_deps = FALSE) {
   assert_r6(param_set, "ParamSet")
   assert_list(param_set$params, types = cl)
   if (no_untyped && ("ParamUty" %in% param_set$class)) {

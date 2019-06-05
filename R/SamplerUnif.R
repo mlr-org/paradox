@@ -16,7 +16,7 @@
 SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,
   public = list(
     initialize = function(param_set) {
-      assert_paramset(param_set, must_bounded = TRUE, no_deps = FALSE, no_untyped = TRUE)
+      assert_param_set(param_set, must_bounded = TRUE, no_deps = FALSE, no_untyped = TRUE)
       samplers = lapply(param_set$params, Sampler1DUnif$new)
       super$initialize(param_set, samplers)
     }
