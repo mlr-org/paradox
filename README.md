@@ -12,6 +12,7 @@ Universal Parameter Space Description and Tools
 * [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
 * [Documentation](https://mlr-org.github.io/paradox/)
+* [mlr3 Book](https://mlr3book.mlr-org.com/paradox.html)
 
 ## Installation
 
