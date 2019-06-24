@@ -35,6 +35,7 @@ test_that("is_bounded works", {
 })
 
 test_that("qunif", {
+  set.seed(8008135)
   n = 50000L
   testit = function(a, b) {
 
