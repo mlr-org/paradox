@@ -9,7 +9,7 @@
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
-#' * `set_id`            :: `character(1)` \cr
+#' * `set_id`            :: `character(1) | NULL` \cr
 #'   ID of this param set. Settable.
 #' * `params`            :: named list of [Param] \cr
 #'   Contained parameters, named with their respective IDs.
@@ -121,7 +121,7 @@ ParamSet = R6Class("ParamSet",
       ids = map_chr(params, "id")
       assert_names(ids, type = "strict")
       private$.params = set_names(map(params, function(p) p$clone(deep = TRUE)), ids)
-      self$set_id = "paramset"
+      self$set_id = ""
     },
 
     add = function(p) {
@@ -297,8 +297,10 @@ ParamSet = R6Class("ParamSet",
       if (missing(v)) {
         private$.set_id
       } else {
-        assert_id(v)
-        assert_names(v, type = "strict")
+        if (!identical(v, "")) {
+          assert_id(v)
+          assert_names(v, type = "strict")
+        }
         private$.set_id = v
       }
     },

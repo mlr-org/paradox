@@ -5,7 +5,9 @@
 #' A collection of multiple [ParamSet] objects.
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
 #' * In order to ensure unique param names, every param in the collection is referred to with
-#'   "<set_id>.<param_id>".
+#'   "<set_id>.<param_id>". Parameters from ParamSets with no (i.e. `NULL`) `$set_id` are referenced
+#'   directly. Multiple ParamSets with `$set_id` `NULL` can be combined, but their parameter names
+#'   must be unique.
 #' * Operation `subset` is currently not allowed.
 #' * Operation `add` currently only works when adding complete sets not single params.
 #' * When you either ask for 'values' or set them, the operation is delegated to the individual,
@@ -31,22 +33,27 @@ NULL
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
-    initialize = function(sets) {
+      initialize = function(sets) {
       assert_list(sets, types = "ParamSet")
-      setids = map_chr(sets, "set_id")
+      sets = split(sets, map_lgl(sets, function(x) x$set_id == ""))
+      nameless_sets = sets$`TRUE`
+      named_sets = sets$`FALSE`
+      setids = map_chr(named_sets, "set_id")
       assert_names(setids, type = "unique")
-      names(sets) = setids
+      assert_names(unlist(map(nameless_sets, function(x) names(x$params))), type = "unique")
       if (any(map_lgl(sets, "has_trafo"))) { # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       }
+      names(sets) = map(sets, "set_id")
       private$.sets = sets
-      self$set_id = "collection"
+      self$set_id = ""
     },
 
     add = function(p) {
       assert_r6(p, "ParamSet")
-      setids = map_chr(private$.sets, "set_id")
-      if (p$set_id %in% setids) {
+      if (p$set_id == "") {
+        unnamed_set_parnames = map(private$.sets[names(private$.sets) == ""], function(x) names(x$params))
+      } else if (p$set_id %in% names(private$.sets)) {
         stopf("Setid '%s' already present in collection!", p$set_id)
       }
       if (p$has_trafo) {
@@ -56,14 +63,15 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (length(nameclashes)) {
         stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
       }
-
-      private$.sets[[length(private$.sets) + 1L]] = p
+      private$.sets = c(private$.sets, list(p))
+      names(private$.sets)[length(private$.sets)] = p$set_id
+      invisible(self)
     },
 
     remove_sets = function(ids) {
       assert_subset(ids, names(private$.sets))
       private$.sets[ids] = NULL
-      return(self)
+      invisible(self)
     },
 
     subset = function(ids) stop("not allowed")
@@ -77,21 +85,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
       private$.params = named_list()
       # clone each param into new params-list and prefix id
-      ps_all = lapply(private$.sets, function(s) {
-        ss = s$clone(deep = TRUE)
-        ps = ss$params
-        if (length(ps) > 0L) { # paste with empty vec creates a string...
-          names(ps) = paste(s$set_id, names(ps), sep = ".")
-        }
-        return(ps)
-      })
-      names(ps_all) = NULL
-      ps_all = unlist(ps_all, recursive = FALSE)
-      if (length(ps_all) == 0L) { # unlist before drops names for empty list....
-        ps_all = named_list()
-      }
+      ps_all = lapply(private$.sets, function(s) s$clone(deep = TRUE)$params)
+      ps_all = unlist(ps_all, recursive = FALSE) %??% named_list()
       imap(ps_all, function(x, n) x$id = n)
-      return(ps_all)
+      ps_all
     },
 
     deps = function(v) {
@@ -99,39 +96,37 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # copy all deps and rename ids to prefixed versions
         dd = copy(s$deps)
         ids_old = s$ids()
-        ids_new = paste(s$set_id, ids_old, sep = ".")
-        dd$id = map_values(dd$id, ids_old, ids_new)
-        dd$on = map_values(dd$on, ids_old, ids_new)
-        return(dd)
+        if (s$set_id != "") {
+          ids_new = sprintf("%s.%s", s$set_id, ids_old)
+          dd$id = map_values(dd$id, ids_old, ids_new)
+          dd$on = map_values(dd$on, ids_old, ids_new)
+        }
+        dd
       })
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
     values = function(xs) {
-      if (missing(xs)) {
-        vals = lapply(private$.sets, function(s) {
-          v = s$values
-          if (length(v) > 0L) {
-            names(v) = paste(s$set_id, names(v), sep = ".")
-          }
-          return(v)
-        })
-        names(vals) = NULL
-        vals = unlist(vals, recursive = FALSE)
-        if (length(vals) == 0L) return(named_list()) # this is bullshit
-        return(vals)
-      } else {
+      if (!missing(xs)) {
         assert_list(xs)
         self$assert(xs) # make sure everything is valid and feasible
 
         for (s in private$.sets) {
           # retrieve sublist for each set, then assign it in set (after removing prefix)
-          psids = sprintf("%s.%s", s$set_id, names(s$params))
+          psids = names(s$params)
+          if (s$set_id != "") {
+            psids = sprintf("%s.%s", s$set_id, psids)
+          }
           pv = xs[intersect(psids, names(xs))]
-          names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
+          if (s$set_id != "") {
+            names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
+          }
           s$values = pv
         }
       }
+      vals = map(private$.sets, "values")
+      vals = unlist(vals, recursive = FALSE)
+      vals %??% named_list()
     }
   ),
 
