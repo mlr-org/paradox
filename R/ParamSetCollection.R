@@ -5,8 +5,8 @@
 #' A collection of multiple [ParamSet] objects.
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
 #' * In order to ensure unique param names, every param in the collection is referred to with
-#'   "<set_id>.<param_id>". Parameters from ParamSets with no (i.e. `NULL`) `$set_id` are referenced
-#'   directly. Multiple ParamSets with `$set_id` `NULL` can be combined, but their parameter names
+#'   "<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. `""`) `$set_id` are referenced
+#'   directly. Multiple ParamSets with `$set_id` `""` can be combined, but their parameter names
 #'   must be unique.
 #' * Operation `subset` is currently not allowed.
 #' * Operation `add` currently only works when adding complete sets not single params.

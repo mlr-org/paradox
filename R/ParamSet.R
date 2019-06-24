@@ -9,8 +9,8 @@
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section Public members / active bindings:
-#' * `set_id`            :: `character(1) | NULL` \cr
-#'   ID of this param set. Settable.
+#' * `set_id`            :: `character(1)` \cr
+#'   ID of this param set. Default `""`. Settable.
 #' * `params`            :: named list of [Param] \cr
 #'   Contained parameters, named with their respective IDs.
 #'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
