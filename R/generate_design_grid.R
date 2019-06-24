@@ -48,10 +48,6 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # then do a crossproduct
   grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
   res = imap(grid_vec, function(value, id) param_set$params[[id]]$qunif(x = value))
-  # the un / renaming sucks a bit here, caused by dotdotdot-interface of CJ. would like to have a better way, but dont know
-  # FIXME: mini helper in mlr3misc for this?
-  ns = names(res)
-  res = unname(res)
-  res = do.call(CJ, c(res, sorted = FALSE))
-  Design$new(param_set, set_names(res, ids), remove_dupl = TRUE) # user wants no dupls, remove
+  res = cross_join(res, sorted = FALSE)
+  Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
 }
