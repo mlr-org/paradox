@@ -9,7 +9,7 @@ test_that("generate_design_random", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     d = generate_design_random(ps, n = 5L)
     dd = d$data
     expect_data_table(dd, any.missing = FALSE, nrow = 5L, ncol = ps$length, info = info)
@@ -26,7 +26,7 @@ test_that("generate_design_grid", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     reso = 3L
     d = generate_design_grid(ps, resolution = reso)
     dd = d$data
@@ -40,11 +40,51 @@ test_that("generate_design_grid", {
   }
 })
 
-test_that("check generate_design_grid against concrete expectation", {
+test_that("generate_design_grid with different resolutions and egde cases", {
+  ps = ParamSet$new(list(ParamFct$new("f", levels = letters[1:2])))
+  d = generate_design_grid(ps)
+  expect_data_table(d$data, any.missing = FALSE, nrow = 2, ncol = 1)
 
   ps = ParamSet$new(list(
+    ParamFct$new("f", levels = letters[1:2]),
+    ParamDbl$new("d", lower = 0, upper = 1)
+  ))
+  d = generate_design_grid(ps, param_resolutions = c(d = 3))
+  expect_data_table(d$data, any.missing = FALSE, nrow = 6, ncol = 2)
+
+  ps = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamInt$new("y", lower = 0, upper = 10)
+  ))
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 6, ncol = 2)
+  expect_equal(length(unique(dd$x)), 2)
+  expect_equal(length(unique(dd$y)), 3)
+
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(x = 4, y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 12, ncol = 2)
+  expect_equal(length(unique(dd$x)), 4)
+  expect_equal(length(unique(dd$y)), 3)
+
+  ps = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamInt$new("y", lower = 0, upper = 10),
+    ParamLgl$new("z")
+  ))
+  d = generate_design_grid(ps, resolution = 2, param_resolutions = c(y = 3))
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrow = 12, ncol = 3)
+  expect_equal(length(unique(dd$x)), 2)
+  expect_equal(length(unique(dd$y)), 3)
+  expect_equal(length(unique(dd$z)), 2)
+})
+
+test_that("check generate_design_grid against concrete expectation", {
+  ps = ParamSet$new(list(
     ParamDbl$new("x", lower = 1, upper = 3),
-    ParamFct$new("y", values = c("a", "b"))
+    ParamFct$new("y", levels = c("a", "b"))
   ))
   d = generate_design_grid(ps, resolution = 3)
   expect_equal(d$data, data.table(x = c(1, 1, 2, 2, 3, 3), y = c("a", "b", "a", "b", "a", "b")))
@@ -60,7 +100,7 @@ test_that("generate_design_lhs", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     d = generate_design_lhs(ps, 10)
     dd = d$data
     expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
@@ -91,5 +131,3 @@ test_that("generate_design_random and grid works with deps", {
   expect_true(all(ifelse(dd$th_param_fct %in% c("a", "b", NA) & dd$th_param_lgl,
     !is.na(dd$th_param_dbl), is.na(dd$th_param_dbl))))
 })
-
-

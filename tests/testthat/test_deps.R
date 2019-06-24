@@ -24,7 +24,13 @@ test_that("basic example works", {
   ps = th_paramset_full()
   ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("a"))
   ps$add_dep("th_param_int", on = "th_param_lgl", CondEqual$new(TRUE))
-  expect_output(print(ps),"th_param_fct,th_param_lgl")
+  expect_output(print(ps), "th_param_fct,th_param_lgl")
+
+  # test that we can remove deps
+  ps$deps = ps$deps[-1, ]
+  expect_true(ps$has_deps)
+  ps$deps = ps$deps[-1, ]
+  expect_false(ps$has_deps)
 })
 
 test_that("nested deps work", {
@@ -50,13 +56,13 @@ test_that("nested deps work", {
 
 test_that("adding 2 sets with deps works", {
   ps1 = ParamSet$new(list(
-    ParamFct$new("x1", values = c("a", "b")),
+    ParamFct$new("x1", levels = c("a", "b")),
     ParamDbl$new("y1")
   ))
   ps1$add_dep("y1", on = "x1", CondEqual$new("a"))
 
   ps2 = ParamSet$new(list(
-    ParamFct$new("x2", values = c("a", "b")),
+    ParamFct$new("x2", levels = c("a", "b")),
     ParamDbl$new("y2")
   ))
   ps2$add_dep("y2", on = "x2", CondEqual$new("a"))
@@ -64,48 +70,21 @@ test_that("adding 2 sets with deps works", {
   ps1$add(ps2)
   expect_equal(ps1$length, 4L)
   expect_true(ps1$has_deps)
-  expect_equal(length(ps1$deps), 2L)
+  expect_data_table(ps1$deps, nrow = 2)
   # do a few feasibility checks on larger set
-  expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y1 = 1)))
+  expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y2 = 1)))
   expect_true(ps1$test(list(x1 = "a", y1 = 1)))
   expect_false(ps1$test(list(x1 = "b", y1 = 1)))
   expect_true(ps1$test(list(x2 = "a", y2 = 1)))
   expect_false(ps1$test(list(x2 = "b", y2 = 1)))
 })
 
-test_that("deps_on", {
-  ps = ParamSet$new(list(
-    ParamFct$new("a", values = c("a", "b")),
-    ParamFct$new("b", values = c("a", "b")),
-    ParamFct$new("c", values = c("a", "b"))
-  ))
-  d = ps$deps_on
-  dd = rbindlist(list(
-    list(id = "a", dep_parent = list(character(0L)), deps = list(list())),
-    list(id = "b", dep_parent = list(character(0L)), deps = list(list())),
-    list(id = "c", dep_parent = list(character(0L)), deps = list(list()))
-  ))
-  expect_equal(d, dd)
-
-  ps$add_dep("a", on = "b", CondEqual$new("a"))
-  ps$add_dep("a", on = "c", CondEqual$new("a"))
-  ps$add_dep("b", on = "c", CondEqual$new("a"))
-
-  d = ps$deps_on
-  dd = rbindlist(list(
-    list(id = "a", dep_parent = list(c("b", "c")), deps = list(ps$deps[1:2])),
-    list(id = "b", dep_parent = list(c("c")), deps = list(ps$deps[3])),
-    list(id = "c", dep_parent = list(character(0L)), deps = list(list()))
-  ))
-  expect_equal(d, dd)
-})
-
 test_that("subsetting with deps works", {
   ps = ParamSet$new(list(
-    ParamFct$new("a", values = c("a", "b")),
-    ParamFct$new("b", values = c("a", "b")),
-    ParamFct$new("c", values = c("a", "b")),
-    ParamFct$new("d", values = c("a", "b"))
+    ParamFct$new("a", levels = c("a", "b")),
+    ParamFct$new("b", levels = c("a", "b")),
+    ParamFct$new("c", levels = c("a", "b")),
+    ParamFct$new("d", levels = c("a", "b"))
   ))
   ps$add_dep("a", on = "b", CondEqual$new("a"))
   ps$add_dep("a", on = "c", CondEqual$new("a"))
@@ -118,7 +97,18 @@ test_that("subsetting with deps works", {
 })
 
 test_that("cannot add a dep on yourself", {
-  ps = ParamSet$new(list(ParamFct$new("x", values = c("a"))))
+  ps = ParamSet$new(list(ParamFct$new("x", levels = c("a"))))
   expect_error(ps$add_dep("x", on = "x", CondEqual$new("a")), "depend on itself")
+})
 
+
+test_that("we can also dep on integer", {
+  ps = ParamSet$new(list(
+    ParamInt$new("i", lower = 0, upper = 9),
+    ParamDbl$new("d", lower = 0, upper = 9)
+  ))
+  ps$add_dep("d", on = "i", CondAnyOf$new(1:3))
+
+  expect_true(ps$check(list(i = 2, d = 5)))
+  expect_string(ps$check(list(i = 5, d = 5)))
 })

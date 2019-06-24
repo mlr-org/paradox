@@ -5,7 +5,7 @@ test_that("trafo", {
     ParamDbl$new("x", lower = -3, upper = 3),
     ParamDbl$new("w1", lower = 7, upper = 9),
     ParamDbl$new("w2", lower = 7, upper = 9),
-    ParamFct$new("f", values = c("a", "b"))
+    ParamFct$new("f", levels = c("a", "b"))
   ))
   expect_false(ps$has_trafo)
   ps$trafo = function(x, param_set) {
@@ -24,7 +24,4 @@ test_that("trafo", {
   expect_numeric(d2$w1, lower = 0, upper = 1)
   expect_numeric(d2$w2, lower = 0, upper = 1)
   expect_equal(d2$w1 + d2$w2, rep(1, nrow(d2)))
-
 })
-
-

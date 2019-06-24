@@ -7,17 +7,30 @@
 \description{
 A collection of multiple \link{ParamSet} objects.
 \itemize{
-\item In order to ensure unique param names, every param in the collection is named
+\item The collection is basically a light-weight wrapper / container around references to multiple sets.
+\item In order to ensure unique param names, every param in the collection is referred to with
 "<set_id>.<param_id>".
-\item The following state-changing methods are not allowed for a collection: \code{add}, \code{subset}.
+\item Operation \code{subset} is currently not allowed.
+\item Operation \code{add} currently only works when adding complete sets not single params.
+\item When you either ask for 'values' or set them, the operation is delegated to the individual,
+contained param set references. The collection itself does not maintain a \code{values} state.
+This also implies that if you directly change \code{values} in one of the referenced sets,
+this change is reflected in the collection.
+\item Dependencies: It is possible to currently handle dependencies a) regarding parameters inside of the same set - in this case simply
+add the dependency to the set, best before adding the set to the collection b) across sets, where a param from one set depends on the state
+of a param from another set - in this case add call \code{add_dep} on the collection.
+If you call \code{deps} on the collection, you are returned a complete table of dependencies, from sets and across sets.
 }
 }
 \section{Public methods}{
 
 \itemize{
 \item \code{new(sets)} \cr
-list of \link{ParamSet} -> \code{self}
+list of \link{ParamSet} -> \code{self} \cr
 Parameter objects are cloned.
+\item remove_sets(ids) \cr
+\code{character} -> \code{self} \cr
+Removes sets of given ids from collection.
 }
 }
 

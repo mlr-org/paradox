@@ -5,21 +5,21 @@
 #' Random sampler for an arbitrary [ParamSet].
 #'
 #' @section Public members / active bindings:
-#' * `param_set`            :: [ParamSet]
+#' * `param_set`            :: [ParamSet] \cr
 #'   Domain / support of the distribution we want to sample from.
 #'
 #' @section Public methods:
 #' * `new(param_set)` \cr
-#'   [ParamSet] -> `self`
+#'   [ParamSet] -> `self` \cr
 #'   Abstract, only inheriting subclasses call this.
 #'   Param set is cloned on construction.
 #' * `sample(n)` \cr
-#'   `integer(1)` -> [Design]
+#'   `integer(1)` -> [Design] \cr
 #'   Sample n values from the distribution.
 #'
 #' @section Private methods / Internals:
 #' * `.sample(n)` \cr
-#'   `integer(1)` -> [data.table]
+#'   `integer(1)` -> [data.table] \cr
 #'   Inheriting sublcasses have to implement thus, called from `sample()`
 #'
 #' @name Sampler
@@ -32,13 +32,13 @@ Sampler = R6Class("Sampler",
 
     # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
     initialize = function(param_set) {
-      assert_paramset(param_set, no_untyped = TRUE)
+      assert_param_set(param_set, no_untyped = TRUE)
       self$param_set = param_set$clone(deep = TRUE)
     },
 
     sample = function(n) {
       assert_count(n, positive = TRUE) # we do argcheck on toplevel
-      Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE)
+      Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE) # user wants n points, dont remove
     },
 
     print = function(...) {
@@ -49,7 +49,7 @@ Sampler = R6Class("Sampler",
   ),
   private = list(
     .sample = function(n) stop("abstract"), # inheriting classes have to implement this
-    .print = function() {} # inheriting classes can overwrite to add lines
+    .print = function() {
+    } # inheriting classes can overwrite to add lines
   )
 )
-

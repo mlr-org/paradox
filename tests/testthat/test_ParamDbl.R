@@ -37,6 +37,7 @@ test_that("is_bounded works", {
 test_that("qunif", {
   n = 50000L
   testit = function(a, b) {
+
     # simulate from param, simulate directly from runif
     # then check that the estimated ecdfs from both distribs are nearly the same (L1 dist)
     p = ParamDbl$new("x", lower = a, upper = b)
@@ -52,4 +53,3 @@ test_that("qunif", {
   testit(1, 12)
   testit(-2, 1)
 })
-

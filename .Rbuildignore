@@ -1,3 +1,5 @@
+^tic\.R$
+^\.travis\.yml$
 .github
 .gitignore
 .ignore
@@ -24,3 +26,4 @@ README.md
 README.Rmd
 todo-files
 attic
+^pkgdown$

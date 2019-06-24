@@ -2,7 +2,7 @@ context("sampling")
 
 test_that("1d samplers: basic tests", {
   samplers = list(
-    ParamDbl = list(Sampler1DUnif, Sampler1DTruncNorm),
+    ParamDbl = list(Sampler1DUnif, Sampler1DNormal),
     ParamInt = list(Sampler1DUnif),
     ParamFct = list(Sampler1DUnif, Sampler1DCateg),
     ParamLgl = list(Sampler1DUnif, Sampler1DCateg)
@@ -19,10 +19,12 @@ test_that("1d samplers: basic tests", {
       expect_data_table(d, ncols = 1L, nrows = n, info = info)
       d1 = d[[1]]
       expect_is(d1, p$storage_type, info = info)
-      if (p$class %in% c("ParamInt", "ParamDbl"))
+      if (p$class %in% c("ParamInt", "ParamDbl")) {
         expect_true(all(d1 >= p$lower & d1 <= p$upper), info = info)
-      if (p$class %in% c("ParamFct"))
-        expect_true(all(d1 %in% p$values), info = info)
+      }
+      if (p$class %in% c("ParamFct")) {
+        expect_true(all(d1 %in% p$levels), info = info)
+      }
       expect_output(print(s), "Sampler:")
     }
   }
@@ -65,7 +67,7 @@ test_that("SamplerUnif", {
   )
 
   for (ps in ps_list) {
-    info = ps$id
+    info = ps$set_id
     s = SamplerUnif$new(ps)
     # as the ps is constructed in the sampler, we cannot expect ps$id to be the same
     expect_equal(s$param_set$params, ps$params)
@@ -87,7 +89,7 @@ test_that("SamplerUnif works with deps", {
   expect_data_table(dd, nrows = 1000, ncols = 4L, any.missing = TRUE)
   expect_true(anyNA(dd))
   expect_true(all((dd$th_param_fct %in% c("c", NA_character_) & is.na(dd$th_param_dbl))
-    | (dd$th_param_fct %in% c("a", "b") & !is.na(dd$th_param_dbl))))
+  | (dd$th_param_fct %in% c("a", "b") & !is.na(dd$th_param_dbl))))
   expect_names(names(dd), permutation.of = c("th_param_int", "th_param_dbl", "th_param_lgl", "th_param_fct"))
   expect_true(all(map_lgl(d$transpose(filter_na = TRUE), ps$test)))
 })

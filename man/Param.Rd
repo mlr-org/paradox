@@ -15,6 +15,11 @@ Param
 }
 \description{
 Abstract base class for params and inheriting concrete param subclasses.
+\itemize{
+\item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
+specifically handled: 'required' implied that the parameters has to be given
+when setting \code{values} in \link{ParamSet}.
+}
 }
 \section{Public members / active bindings}{
 
@@ -27,8 +32,8 @@ Param R6 class name. Read-only.
 Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
 \item \code{upper}            :: \code{numeric(1)} \cr
 Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
-\item \code{values}           :: \code{character} | \code{logical} | \code{NULL} \cr
-Allowed values for categorical params, NULL if param is not categorical.
+\item \code{levels}           :: \code{character} | \code{logical} | \code{NULL} \cr
+Allowed levels for categorical params, NULL if param is not categorical.
 \item \code{nlevels}          :: \code{numeric(1)} \cr
 Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
 \item \code{is_bounded}       :: \code{logical(1)} \cr
@@ -43,12 +48,12 @@ Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid de
 \item \code{has_default}      :: \code{logical(1)} \cr
 Is a default there?
 \item \code{storage_type}     :: \code{character(1)} \cr
-Data type when values of this param is stored in a data table or sampled. Read-only.
+Data type when values of this param are stored in a data table or sampled. Read-only.
 \item \code{tags}             :: \code{character} \cr
 Can be used to group and subset params.
-\item is_number          :: \code{logical(1)}
+\item is_number          :: \code{logical(1)} \cr
 TRUE iff Param is dbl or int.
-\item is_categ           :: \code{logical(1)}
+\item is_categ           :: \code{logical(1)} \cr
 TRUE iff Param is fct or lgl.
 }
 }
@@ -61,21 +66,21 @@ TRUE iff Param is fct or lgl.
 Constructor of abstract base class, only called by inheriting classes.
 See meaning of \code{id}, \code{special_vals}, \code{default}, \code{tags} in member section.
 \item \code{Param$Dbl$new(id, lower, upper, special_vals, default, tags)} \cr
-\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.
 \item \code{Param$Int$new(id, lower, upper, special_vals, default, tags)} \cr
-\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self
+\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
 \code{lower} is set to its integer ceiling and 'upper' to its integer floor value.
 \item \code{ParamFct$new(id, values, special_vals, default, tags)} \cr
-\code{character(1)}, \code{character}, \code{list}, \code{any}, \code{character} -> self
+\code{character(1)}, \code{character}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
 from its defined set of categorical values.
 \item \code{Param$Lgl$new(id, special_vals, default, tags)} \cr
-\code{character(1)}, \code{list}, \code{any}, \code{character} -> self
+\code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
 Constructor for logical-scalar-params.
 \item \code{ParamUty$new(id, default, tags, custom_check)} \cr
-\code{character(1)}, \code{any}, \code{character}, \code{function(x)} -> self
+\code{character(1)}, \code{any}, \code{character}, \code{function(x)} -> self \cr
 Untyped parameters, can be used to bypass any complicated feasibility checks, when
 a param is of truly complex type, as checks for this param are always feasible.
 OTOH we cannot perform meaningful operations like sampling or generating designs with this param.

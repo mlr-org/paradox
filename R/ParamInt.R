@@ -1,5 +1,5 @@
 #' @export
-ParamInt = R6Class( "ParamInt", inherit = Param,
+ParamInt = R6Class("ParamInt", inherit = Param,
   public = list(
     lower = NULL,
     upper = NULL,
@@ -16,6 +16,7 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   active = list(
     values = function() NULL,
+    levels = function() NULL,
     nlevels = function() diff(self$range) + 1L,
     is_bounded = function() all(is.finite(self$range)),
     storage_type = function() "integer",
@@ -25,6 +26,6 @@ ParamInt = R6Class( "ParamInt", inherit = Param,
 
   private = list(
     .check = function(x) checkInt(x, lower = self$lower, upper = self$upper),
-    .qunif = function(x) floor(x * self$nlevels * (1 - 1e-16)) + self$lower  # make sure we dont map to upper+1
+    .qunif = function(x) floor(x * self$nlevels * (1 - 1e-16)) + self$lower # make sure we dont map to upper+1
   )
 )

@@ -9,7 +9,7 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
   active = list(
     lower = function() NA_real_,
     upper = function() NA_real_,
-    values = function() c(TRUE, FALSE),
+    levels = function() c(TRUE, FALSE),
     nlevels = function() 2L,
     is_bounded = function() TRUE,
     storage_type = function() "logical"
@@ -20,4 +20,3 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
     .qunif = function(x) x < 0.5
   )
 )
-

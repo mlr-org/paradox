@@ -6,6 +6,7 @@
 #' @importFrom utils head tail getFromNamespace
 NULL
 
-.onLoad = function(libname, pkgname) { #nocov start
+.onLoad = function(libname, pkgname) {
+  # nocov start
   backports::import(pkgname)
-} #nocov end
+} # nocov end

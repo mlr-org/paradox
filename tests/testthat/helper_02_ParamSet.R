@@ -13,8 +13,8 @@ th_paramset_full = function() {
       th_param_dbl(),
       th_param_fct(),
       th_param_lgl()
-      )
     )
+  )
 }
 
 th_paramset_untyped = function() {

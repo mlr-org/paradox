@@ -5,7 +5,7 @@
 \alias{Sampler1D}
 \alias{Sampler1DUnif}
 \alias{Sampler1DCateg}
-\alias{Sampler1DTruncNorm}
+\alias{Sampler1DNormal}
 \alias{Sampler1DRfun}
 \title{Sampler}
 \format{\link{R6Class} object. Inherits from \link{Sampler}.}
@@ -18,7 +18,7 @@ Sampler1D
 \section{Public members / active bindings}{
 
 \itemize{
-\item \code{param}            :: \link{Param}
+\item \code{param}            :: \link{Param} \cr
 Quick access to the one param in the set.
 }
 }
@@ -31,10 +31,11 @@ Uniform random for arbitrary (bounded) params.
 \item \code{Sampler1DCateg$new(param, prob = NULL)} \cr
 Categorical distribution, for a fct or lgl param.
 \code{prob} is a numeric vector of \code{nlevels} probabilities, which is uniform by default.
-\item \code{Sampler1DTruncNorm$new(param)} \cr
-Normal sampling (truncated) for (bounded) doubles.
+\item \code{Sampler1DNormal$new(param, mean = NULL, sd = NULL)} \cr
+Normal sampling (potentially truncated) for doubles.
 Has member variables \code{mean} and 'sd' which you can change to influence sampling,
 they are initialized to \code{mean=mean(range)} and \code{sd=span/4}.
+A truncated normal is used if the param is bounded on both sides.
 \item \code{Sampler1DRfun(param, rfun, trunc = TRUE)} \cr
 Arbitrary sampling from 1D rng functions from R.
 Pass e.g. \code{rfun=rexp} to sample from exponential distribution.
