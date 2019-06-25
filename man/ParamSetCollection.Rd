@@ -9,7 +9,9 @@ A collection of multiple \link{ParamSet} objects.
 \itemize{
 \item The collection is basically a light-weight wrapper / container around references to multiple sets.
 \item In order to ensure unique param names, every param in the collection is referred to with
-"<set_id>.<param_id>".
+"<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. \code{""}) \code{$set_id} are referenced
+directly. Multiple ParamSets with \code{$set_id} \code{""} can be combined, but their parameter names
+must be unique.
 \item Operation \code{subset} is currently not allowed.
 \item Operation \code{add} currently only works when adding complete sets not single params.
 \item When you either ask for 'values' or set them, the operation is delegated to the individual,
