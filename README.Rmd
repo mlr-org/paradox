@@ -17,9 +17,11 @@ Universal Parameter Space Description and Tools
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
 * [Documentation](https://mlr-org.github.io/paradox/)
 
+**For an exhaustive introduction, please take a look at the [mlr3book](https://mlr3book.mlr-org.com).**
+
 ## Installation
 ```{r inst, eval=FALSE}
-devtools::install_github("mlr-org/paradox", dependencies = TRUE)
+remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
 ## Usage
