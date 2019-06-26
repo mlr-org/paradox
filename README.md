@@ -11,7 +11,8 @@ Universal Parameter Space Description and Tools
 
 * [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-* [Documentation](https://mlr-org.github.io/paradox/)
+
+For an easy to follow tutorial on how to use paradox to encode parameter spaces, please have a look at its chapter in the [book](https://mlr3book.mlr-org.com/paradox.html).
 
 ## Installation
 
