@@ -171,6 +171,11 @@ ParamSet = R6Class("ParamSet",
       ids[ii]
     },
 
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL) {
+      values = self$values
+      values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+    },
+
     subset = function(ids) {
       param_ids = names(self$params)
       assert_subset(ids, param_ids)
