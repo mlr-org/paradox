@@ -86,6 +86,11 @@
 #'   `character`, `logical(1)`, `character` -> `character` \cr
 #'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
 #'   `class` and `tags` can be sets.
+#' * `get_values(class = NULL, is_bounded = NULL, tags = NULL)` \cr
+#'   `character`, `logical(1)`, `character` -> named `list` \cr
+#'   Retrieves parameter values based on some selections, `NULL` means no restriction and is
+#'   equivalent to `$values`.
+#'   `class` and `tags` can be sets.
 #' * `add(param_set)` \cr
 #'   [Param] | [ParamSet] -> `self` \cr
 #'   Adds a single param or another set to this set, all params are cloned.
