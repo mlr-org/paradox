@@ -380,6 +380,10 @@ ParamSet = R6Class("ParamSet",
       }
 
       self$assert(xs)
+      xs = Reduce(function(val, fun) {
+        val = fun(val)
+        self$assert(val)
+      }, self$callbacks, xs)
       if (length(xs) == 0L) xs = named_list()
       private$.values = xs
     },
@@ -390,6 +394,14 @@ ParamSet = R6Class("ParamSet",
 
     extra_values = function() {
       private$.values[names(private$.values) %nin% names(private$.params)]
+    },
+
+    callbacks = function(val) {
+      if (!missing(val)) {
+        assert_list(val, types = "function", any.missing = FALSE)
+        private$.callbacks = val
+      }
+      private$.callbacks
     }
   ),
 
@@ -399,6 +411,7 @@ ParamSet = R6Class("ParamSet",
     .params = NULL,
     .values = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
+    .callbacks = list(),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), names(self$params)),
 
