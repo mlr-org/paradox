@@ -274,3 +274,110 @@ test_that("required tag, empty param set (#219)", {
   ps$ids()
   expect_identical(ps$ids(tags = "required"), character(0))
 })
+
+test_that("callbacks", {
+  ps = ParamSet$new(list(
+    ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
+    ParamInt$new(id = "y", lower = 1, upper = 2),
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
+  ))
+  ps$callbacks[[1]] = function(x) {
+    x$x = 2
+    x
+  }
+  expect_equal(ps$values, named_list())
+  ps$values$y = 1
+  expect_equal(ps$values, list(y = 1, x = 2))
+  ps$values$x = 1
+  expect_equal(ps$values, list(y = 1, x = 2))
+  ps$callbacks[[2]] = function(x) {
+    x$x = 1
+    x
+  }
+  ps$values$y = 1
+  expect_equal(ps$values, list(y = 1, x = 1))
+  ps$callbacks[[2]] = function(x) {
+    x$x = 0
+    x
+  }
+  expect_error({ps$values = list(y = 1)}, "is not >= 1")
+
+  ps$callbacks[[2]] = function(x) {
+    x$x = 1
+    x
+  }
+  ps$callbacks[[1]] = function(x) {
+    x$x = 0
+    x
+  }
+  ps$values = list(y = 2)
+  expect_equal(ps$values, list(y = 2, x = 1))
+  ps$callbacks[[1]] = NULL
+  ps$values = list(y = 1, x = 2)
+  expect_equal(ps$values, list(y = 1, x = 1))
+})
+
+test_that("callbacks on ParamSetCollection", {
+
+  psetset = function() {
+    ps = ParamSet$new(list(ParamUty$new("paramset", custom_check = function(x) check_class(x, "ParamSet", null.ok = TRUE))))
+    psc = ParamSetCollection$new(list(ps))
+
+    psc$callbacks[[1]] = function(x) {
+      prevset = psc$values$paramset
+      newset = x$paramset
+      if (is.null(newset)) {
+        x$paramset = prevset
+      } else if (!identical(x$paramset, prevset)) {
+        psc$params$paramset$assert(newset)
+        psc$remove_sets("")
+        psc$add(ps)
+        psc$add(newset)
+        x$paramset = NULL
+        if (identical(x, prevset$values)) {
+          x = newset$values
+        }
+        x$paramset = newset
+      }
+      x
+    }
+    psc
+  }
+
+  ps = psetset()
+
+  ps1 = ParamSet$new(list(
+    ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
+    ParamInt$new(id = "y", lower = 1, upper = 2),
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
+  ))
+
+  ps2 = ParamDbl$new("a")$rep(3)
+
+  expect_equal(names(ps$params), "paramset")
+
+  ps$values$paramset = ps1
+
+  expect_equal(names(ps$params), c("paramset", "x", "y", "z"))
+
+  ps$values$x = 1
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  ps$values = list(paramset = ps2, a_rep_1 = 0)
+
+  expect_equal(ps$values, list(paramset = ps2, a_rep_1 = 0))
+
+  ps$values$paramset = ps1
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+  ps$values
+
+  # TODO: the problem here is an ambiguity: the user probably wants to do ps$values$paramset = ps2, without
+  # having to worry about needing to unset x and setting a_rep_1 in the same motion, but building up such
+  # values list to assign is laborious. On the other hand, if psA and psB both have a parameter x, then
+  # > psB$values = list(x = 2)
+  # > ps$values = list(paramset = psA, x = 1)
+  # > ps$values = list(paramset = psB, x = 1)
+  # would leave should psB$values$x at '2' (because the last line is not distinguishable from
+  # > ps$values$paramset = psB
+  # )
+})

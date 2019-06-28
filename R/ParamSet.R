@@ -379,11 +379,9 @@ ParamSet = R6Class("ParamSet",
         return(private$.values)
       }
 
+      xs = Reduce(function(val, fun) fun(val), self$callbacks, xs)
       self$assert(xs)
-      xs = Reduce(function(val, fun) {
-        val = fun(val)
-        self$assert(val)
-      }, self$callbacks, xs)
+
       if (length(xs) == 0L) xs = named_list()
       private$.values = xs
     },
