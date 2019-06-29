@@ -326,18 +326,20 @@ test_that("callbacks on ParamSetCollection", {
     psc$callbacks[[1]] = function(x) {
       prevset = psc$values$paramset
       newset = x$paramset
-      if (is.null(newset)) {
-        x$paramset = prevset
-      } else if (!identical(x$paramset, prevset)) {
+      if (!identical(x$paramset, prevset)) {
         psc$params$paramset$assert(newset)
+        if (!is.null(newset)) {
+          xcpy = x
+          xcpy$paramset = NULL
+          newset$assert(xcpy)
+        } else {
+          ParamSet$new()$assert(x)
+        }
         psc$remove_sets("")
         psc$add(ps)
-        psc$add(newset)
-        x$paramset = NULL
-        if (identical(x, prevset$values)) {
-          x = newset$values
+        if (!is.null(newset)) {
+          psc$add(newset)
         }
-        x$paramset = newset
       }
       x
     }
@@ -367,17 +369,35 @@ test_that("callbacks on ParamSetCollection", {
 
   expect_equal(ps$values, list(paramset = ps2, a_rep_1 = 0))
 
-  ps$values$paramset = ps1
-  expect_equal(ps$values, list(paramset = ps1, x = 1))
-  ps$values
-
-  # TODO: the problem here is an ambiguity: the user probably wants to do ps$values$paramset = ps2, without
-  # having to worry about needing to unset x and setting a_rep_1 in the same motion, but building up such
-  # values list to assign is laborious. On the other hand, if psA and psB both have a parameter x, then
+  # The problem here is that there is an ambiguity. suppose
   # > psB$values = list(x = 2)
   # > ps$values = list(paramset = psA, x = 1)
-  # > ps$values = list(paramset = psB, x = 1)
-  # would leave should psB$values$x at '2' (because the last line is not distinguishable from
-  # > ps$values$paramset = psB
-  # )
+  # Now the command
+  # (A) > ps$values = list(paramset = psB, x = 1)
+  # and the command
+  # (B) > ps$values$paramset = psB
+  # are functionally the same, but in case (B) we wished we could
+  # keep the parameter values of psB. However, because (A) is done
+  # by things like tuning, it takes precedent and must work as
+  # expected. Therefore the following throws an error.
+  expect_error({ps$values$paramset = ps1}, "a_rep_1.* not available")
+
+  expect_equal(ps$values, list(paramset = ps2, a_rep_1 = 0))
+
+  ps$values = c(list(paramset = ps1), ps1$values)
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  expect_error({ps$values = list(x = 2)}, "Parameter 'x' not available")
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  expect_error({ps$values$paramset = NULL}, "Parameter 'x' not available")
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  ps$values = list()
+
+  expect_equal(ps$values, named_list())
+
 })
