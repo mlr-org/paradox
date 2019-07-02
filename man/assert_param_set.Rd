@@ -14,7 +14,7 @@ assert_param_set(param_set, cl = "Param", no_untyped = FALSE,
 Allowed subclasses.}
 
 \item{no_untyped}{\code{logical(1)} \cr
-No unytped params allowed?}
+No untyped params allowed?}
 
 \item{must_bounded}{\code{logical(1)} \cr
 Only bounded params allowed?}

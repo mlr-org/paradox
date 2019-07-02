@@ -71,12 +71,12 @@
 #' * `qunif(x)` \cr
 #'   `numeric(n)` -> `vector(n)` \cr
 #'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the param.
-#'   Think of: quantile function or the usecse to map a uniform-\[0,1\] random variable into a uniform sample from this param.
+#'   Think of: quantile function or the use case to map a uniform-\[0,1\] random variable into a uniform sample from this param.
 #' * `rep(n)` \cr
 #'   `integer(1)` -> [ParamSet] \cr
 #'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
 #'
-#' @section Further public methods for ParamDbl, ParamInt:
+#' @section Further public methods for [ParamDbl], [ParamInt]:
 #' * `range`            :: `numeric(2)` \cr
 #'   Lower and upper bound as 2-dim-vector.
 #' * `span`            :: `numeric(1)` \cr
@@ -84,7 +84,7 @@
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()` \cr
-#'   Converts param to datatable with 1 row. See [ParamSet].
+#'   Converts param to `data.table()` with 1 row. See [ParamSet].
 #'
 #' @name Param
 #' @aliases ParamDbl ParamInt ParamFct ParamLgl ParamUty

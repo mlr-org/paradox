@@ -91,14 +91,14 @@ A value is feasible if it is of the same \code{storage_type}, inside of the boun
 \item \code{qunif(x)} \cr
 \code{numeric(n)} -> \code{vector(n)} \cr
 Takes values from [0,1] and map them, regularly distributed, to the domain of the param.
-Think of: quantile function or the usecse to map a uniform-[0,1] random variable into a uniform sample from this param.
+Think of: quantile function or the use case to map a uniform-[0,1] random variable into a uniform sample from this param.
 \item \code{rep(n)} \cr
 \code{integer(1)} -> \link{ParamSet} \cr
 Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>" and gets additional tag "<id>_rep".
 }
 }
 
-\section{Further public methods for ParamDbl, ParamInt}{
+\section{Further public methods for \link{ParamDbl}, \link{ParamInt}}{
 
 \itemize{
 \item \code{range}            :: \code{numeric(2)} \cr
@@ -112,7 +112,7 @@ Difference of \code{upper - lower}.
 
 \itemize{
 \item \code{as.data.table()} \cr
-Converts param to datatable with 1 row. See \link{ParamSet}.
+Converts param to \code{data.table()} with 1 row. See \link{ParamSet}.
 }
 }
 

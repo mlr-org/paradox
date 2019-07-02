@@ -3,7 +3,7 @@
 #' @param cl `character` \cr
 #'   Allowed subclasses.
 #' @param no_untyped `logical(1)` \cr
-#'   No unytped params allowed?
+#'   No untyped params allowed?
 #' @param must_bounded `logical(1)` \cr
 #'   Only bounded params allowed?
 #' @export
