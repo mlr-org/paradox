@@ -26,13 +26,9 @@ Imports:
     R6
 Suggests:
     lhs,
-    knitr,
-    rmarkdown,
-    testthat,
-    roxygen2
+    testthat
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 6.1.1
-VignetteBuilder: knitr
 Encoding: UTF-8
 Remotes:
     mlr-org/mlr3misc
