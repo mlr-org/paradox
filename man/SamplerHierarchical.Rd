@@ -23,7 +23,8 @@ User has to pass one \link{Sampler1D} per param in set, which specifies its dist
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerJointIndep}},
+Other Sampler: \code{\link{Sampler1D}},
+  \code{\link{SamplerJointIndep}},
   \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }
 \concept{Sampler}

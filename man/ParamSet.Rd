@@ -98,6 +98,11 @@ Deep-clones all passed param objects.
 \code{character}, \code{logical(1)}, \code{character} -> \code{character} \cr
 Retrieves IDs of contained params based on some selections, \code{NULL} means no restriction.
 \code{class} and \code{tags} can be sets.
+\item \code{get_values(class = NULL, is_bounded = NULL, tags = NULL)} \cr
+\code{character}, \code{logical(1)}, \code{character} -> named \code{list} \cr
+Retrieves parameter values based on some selections, \code{NULL} means no restriction and is
+equivalent to \code{$values}.
+\code{class} and \code{tags} can be sets.
 \item \code{add(param_set)} \cr
 \link{Param} | \link{ParamSet} -> \code{self} \cr
 Adds a single param or another set to this set, all params are cloned.

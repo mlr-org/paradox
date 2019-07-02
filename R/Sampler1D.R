@@ -1,4 +1,5 @@
 #' @title Sampler
+#'
 #' @format [R6Class] object. Inherits from [Sampler].
 #'
 #' @description
@@ -8,17 +9,17 @@
 #' * `param`            :: [Param] \cr
 #'   Quick access to the one param in the set.
 #'
-#' @section Currently implenented samplers:
+#' @section Currently implemented samplers:
 #' * `Sampler1DUnif$new(param)` \cr
-#'   Uniform random for arbitrary (bounded) params.
+#'   Uniform random for arbitrary (bounded) parameters.
 #' * `Sampler1DCateg$new(param, prob = NULL)` \cr
-#'   Categorical distribution, for a fct or lgl param.
+#'   Categorical distribution, for a fct or lgl parameter.
 #'   `prob` is a numeric vector of `nlevels` probabilities, which is uniform by default.
 #' * `Sampler1DNormal$new(param, mean = NULL, sd = NULL)` \cr
 #'   Normal sampling (potentially truncated) for doubles.
 #'   Has member variables `mean` and 'sd' which you can change to influence sampling,
 #'   they are initialized to `mean=mean(range)` and `sd=span/4`.
-#'   A truncated normal is used if the param is bounded on both sides.
+#'   A truncated normal is used if the parameter is bounded on both sides.
 #' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
 #'   Arbitrary sampling from 1D rng functions from R.
 #'   Pass e.g. `rfun=rexp` to sample from exponential distribution.
@@ -27,7 +28,7 @@
 #' @name Sampler1D
 #' @aliases Sampler1DUnif Sampler1DCateg Sampler1DNormal Sampler1DRfun
 #' @family Sampler
-#' NULL
+NULL
 
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class

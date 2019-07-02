@@ -22,7 +22,8 @@ Hence, also works for param sets with dependencies.
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerHierarchical}},
+Other Sampler: \code{\link{Sampler1D}},
+  \code{\link{SamplerHierarchical}},
   \code{\link{SamplerJointIndep}}, \code{\link{Sampler}}
 }
 \concept{Sampler}
