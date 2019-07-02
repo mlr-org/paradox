@@ -257,6 +257,23 @@ test_that("ParamSet$ids", {
   expect_equal(ps$ids(is_bounded = TRUE), c("y", "z"))
 })
 
+test_that("ParamSet$get_values", {
+  ps = ParamSet$new(list(
+    ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
+    ParamInt$new(id = "y", lower = 1, upper = 2),
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
+  ))
+  expect_equal(ps$get_values(), named_list())
+  expect_equal(ps$get_values(class = c("ParamInt", "ParamFct")), named_list())
+  ps$values$x = 1
+  expect_equal(ps$get_values(class = c("ParamInt", "ParamFct")), named_list())
+  expect_equal(ps$get_values(is_bounded = TRUE), named_list())
+  ps$values$y = 2
+  expect_equal(ps$get_values(), list(x = 1, y = 2))
+  expect_equal(ps$get_values(class = c("ParamInt", "ParamFct")), list(y = 2))
+  expect_equal(ps$get_values(is_bounded = TRUE), list(y = 2))
+})
+
 test_that("required tag", {
   ps = ParamSet$new(list(
     ParamDbl$new(id = "x", tags = c("required")),
