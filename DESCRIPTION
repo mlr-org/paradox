@@ -3,9 +3,9 @@ Type: Package
 Title: Define and Work with Parameter Spaces for Complex Algorithms
 Version: 0.1
 Authors@R: c(
-    person("Jakob", "Richter", NULL, "code@jakob-r.de", role = c("cre", "aut")),
+    person("Jakob", "Richter", NULL, "code@jakob-r.de", role = c("aut")),
     person("Xudong", "Sun", NULL, "smilesun.east@gmail.com", role = c("aut")),
-    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("aut")),
+    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("cre", "aut")),
     person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.net", role = c("aut"))
     )
 Description:
