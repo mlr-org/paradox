@@ -1,22 +1,32 @@
-Package: paradox
 Type: Package
-Title: Define and Work with Parameter Spaces for Complex Algorithms
+Package: paradox
+Title: Define and Work with Parameter Spaces for Complex
+    Algorithms
 Version: 0.9.0
-Authors@R: c(
-    person("Michel", "Lang", NULL, "michellang@gmail.com", role = c("cre", "aut")),
-    person("Jakob", "Richter", NULL, "code@jakob-r.de", role = c("aut")),
-    person("Xudong", "Sun", NULL, "smilesun.east@gmail.com", role = c("aut")),
-    person("Bernd", "Bischl", NULL, "bernd_bischl@gmx.net", role = c("aut"))
-    )
-Description:
-  Easily define parameter spaces, constraints and dependencies for
-  arbitrary algorithms, to program on such spaces.
-  Also includes statistical designs and random samplers.
-  This package is the successor of the 'ParamHelpers' package.
+Authors@R: 
+    c(person(given = "Michel",
+             family = "Lang",
+             role = c("cre", "aut"),
+             email = "michellang@gmail.com"),
+      person(given = "Jakob",
+             family = "Richter",
+             role = "aut",
+             email = "code@jakob-r.de"),
+      person(given = "Xudong",
+             family = "Sun",
+             role = "aut",
+             email = "smilesun.east@gmail.com"),
+      person(given = "Bernd",
+             family = "Bischl",
+             role = "aut",
+             email = "bernd_bischl@gmx.net"))
+Description: Easily define parameter spaces, constraints
+    and dependencies for arbitrary algorithms, to program on such spaces.
+    Also includes statistical designs and random samplers.  This package
+    is the successor of the 'ParamHelpers' package.
 License: MIT + file LICENSE
 URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
-NeedsCompilation: no
 Imports:
     backports,
     checkmate,
@@ -26,11 +36,12 @@ Imports:
 Suggests:
     lhs,
     testthat
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 6.1.1
-Encoding: UTF-8
 Remotes:
     mlr-org/mlr3misc
+Encoding: UTF-8
+NeedsCompilation: no
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 6.1.1
 Collate:
     'Condition.R'
     'Design.R'
