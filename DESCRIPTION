@@ -17,11 +17,10 @@ License: MIT + file LICENSE
 URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
 NeedsCompilation: no
-Depends:
-    data.table
 Imports:
     backports,
     checkmate,
+    data.table,
     mlr3misc,
     R6
 Suggests:
