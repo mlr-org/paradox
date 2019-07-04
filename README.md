@@ -1,7 +1,3 @@
----
-output: github_document
----
-
 # paradox
 
 [![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
