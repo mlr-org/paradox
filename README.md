@@ -1,5 +1,10 @@
+---
+output: github_document
+---
+
 # paradox
 
+[![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
 [![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
 [![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox)
 [![Coverage Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
@@ -11,13 +16,14 @@ Universal Parameter Space Description and Tools
 
 * [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
 * [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
+* [Documentation](https://mlr-org.github.io/paradox/)
 
-For an easy to follow tutorial on how to use paradox to encode parameter spaces, please have a look at its chapter in the [book](https://mlr3book.mlr-org.com/paradox.html).
+**For an exhaustive introduction, please take a look at the [mlr3book](https://mlr3book.mlr-org.com).**
 
 ## Installation
 
 ```r
-devtools::install_github("mlr-org/paradox", dependencies = TRUE)
+remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
 ## Usage
@@ -48,10 +54,11 @@ Draw random samples / create random design:
 ```r
 generate_design_random(ps, 3)
 #> <Design> with 3 rows:
-#>    z         x  flag methods
-#> 1: 1  7.660348 FALSE       b
-#> 2: 3  8.809346 FALSE       c
-#> 3: 2 -9.088870 FALSE       b
+#>        z         x   flag methods
+#>    <int>     <num> <lgcl>  <char>
+#> 1:     1  7.660348  FALSE       b
+#> 2:     3  8.809346  FALSE       c
+#> 3:     2 -9.088870  FALSE       b
 ```
 
 Generate LHS Design:
@@ -60,10 +67,11 @@ Generate LHS Design:
 ```r
 generate_design_lhs(ps, 3)
 #> <Design> with 3 rows:
-#>    z         x  flag methods
-#> 1: 1 -3.984673  TRUE       b
-#> 2: 2  7.938035 FALSE       a
-#> 3: 3  1.969783  TRUE       c
+#>        z         x   flag methods
+#>    <num>     <num> <lgcl>  <char>
+#> 1:     1 -3.984673   TRUE       b
+#> 2:     2  7.938035  FALSE       a
+#> 3:     3  1.969783   TRUE       c
 ```
 
 Generate Grid Design:
@@ -72,15 +80,15 @@ Generate Grid Design:
 ```r
 generate_design_grid(ps, resolution = 2)
 #> <Design> with 24 rows:
-#>     z   x  flag methods
-#>  1: 1 -10  TRUE       a
-#>  2: 1 -10  TRUE       b
-#>  3: 1 -10  TRUE       c
-#>  4: 1 -10 FALSE       a
-#>  5: 1 -10 FALSE       b
-#>  6: 1 -10 FALSE       c
-#>  7: 1  10  TRUE       a
-#>  [ reached getOption("max.print") -- omitted 18 rows ]
+#>         z     x   flag methods
+#>     <num> <num> <lgcl>  <char>
+#>  1:     1   -10   TRUE       a
+#>  2:     1   -10   TRUE       b
+#>  3:     1   -10   TRUE       c
+#>  4:     1   -10  FALSE       a
+#>  5:     1   -10  FALSE       b
+#>  6:     1   -10  FALSE       c
+#>  [ reached getOption("max.print") -- omitted 19 rows ]
 ```
 
 Properties of the parameters within the ParamSet:

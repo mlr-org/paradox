@@ -4,9 +4,8 @@
 #' @importFrom R6 R6Class
 #' @importFrom stats runif
 #' @importFrom utils head tail getFromNamespace
-NULL
+"_PACKAGE"
 
-.onLoad = function(libname, pkgname) {
-  # nocov start
+.onLoad = function(libname, pkgname) { # nocov start
   backports::import(pkgname)
 } # nocov end

@@ -11,17 +11,17 @@ Authors@R: c(
 Description:
   Easily define parameter spaces, constraints and dependencies for
   arbitrary algorithms, to program on such spaces.
-  Statistical designs and random samplers can be constructed.
-  paradox is a successor of the 'ParamHelpers' package.
+  Also includes statistical designs and random samplers.
+  This package is the successor of the 'ParamHelpers' package.
 License: MIT + file LICENSE
-URL: https://github.com/mlr-org/paradox
+URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
 NeedsCompilation: no
 Depends:
     data.table
 Imports:
-    backports (>= 1.1.1),
-    checkmate (>= 1.8.4),
+    backports,
+    checkmate,
     mlr3misc,
     R6
 Suggests:
