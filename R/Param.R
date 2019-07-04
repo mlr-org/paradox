@@ -4,92 +4,58 @@
 #' @format [R6::R6Class] object.
 #'
 #' @description
-#' Abstract base class for parameters and inheriting concrete param subclasses.
-#' * Tags: Currently, tags can be used by users in a very custom manner, but one tag is
-#'   specifically handled: 'required' implied that the parameters has to be given
-#'   when setting `values` in [ParamSet].
+#' Abstract base class for parameters.
 #'
-#' @section Public members / active bindings:
-#' * `id`               :: `character(1)` \cr
-#'    ID of this param.
-#' * `class`           :: `character(1)` \cr
-#'    Param R6 class name. Read-only.
-#' * `lower`            :: `numeric(1)` \cr
-#'    Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
-#' * `upper`            :: `numeric(1)` \cr
-#'    Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
-#' * `levels`           :: `character` | `logical` | `NULL` \cr
-#'    Allowed levels for categorical params, NULL if param is not categorical.
-#' * `nlevels`          :: `numeric(1)` \cr
-#'    Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
-#' * `is_bounded`       :: `logical(1)` \cr
-#'    Does param have a finitely bounded domain? Read-only.
-#' * `special_vals`     :: `list` \cr
+#' @section Construction:
+#' ```
+#' Param$new(id, special_vals, default, tags)
+#' ```
+#'
+#' * `id` :: `character(1)`\cr
+#'   ID of this parameter.
+#' * `special_vals` :: `list()`\cr
 #'   Arbitrary special values this parameter is allowed to take, to make it feasible.
-#'   This allows extending the domain of the param.
-#'   This is only used in feasibility checks, neither in generating designs nor sampling.
-#' * `default`          :: `any` \cr
-#'    Default value. Can be from param domain or `special_vals`.
-#'    Has value `NO_DEF` if no default is there - `NULL` could be a valid default.
-#' * `has_default`      :: `logical(1)` \cr
-#'    Is a default there?
-#' * `storage_type`     :: `character(1)` \cr
-#'    Data type when values of this param are stored in a data table or sampled. Read-only.
-#' * `tags`             :: `character` \cr
-#'   Can be used to group and subset params.
-#' * is_number          :: `logical(1)` \cr
-#'   TRUE iff Param is dbl or int.
-#' * is_categ           :: `logical(1)` \cr
-#'   TRUE iff Param is fct or lgl.
+#'   This allows extending the domain of the parameter.
+#'   Note that these values are only used in feasibility checks, neither in generating designs nor sampling.
+#' * `default` :: `any` \cr
+#'   Default value. Can be from the domain of the parameter or an element of `special_vals`.
+#'   Has value [NO_DEF] if no default exists. `NULL` can be a valid default.
+#' * `tags` :: `character()`\cr
+#'   Arbitrary tags to group and subset parameters. Some tags serve a special purpose:
+#'   * `"required"` implies that the parameters has to be given when setting `values` in [ParamSet].
 #'
-#' @section Public methods:
-#' * `Param$new(id, special_vals = list(), default = NO_DEF, tags = character(0L))` \cr
-#'   `character(1)`, `list`, `any`, `character` -> self \cr
-#'   Constructor of abstract base class, only called by inheriting classes.
-#'   See meaning of `id`, `special_vals`, `default`, `tags` in member section.
-#' * `Param$Dbl$new(id, lower, upper, special_vals, default, tags)` \cr
-#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self \cr
-#'    Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.
-#' * `Param$Int$new(id, lower, upper, special_vals, default, tags)` \cr
-#'   `character(1)`, `numeric(1)`, `numeric(1)`, `list`, `any`, `character` -> self \cr
-#'    Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
-#'   `lower` is set to its integer ceiling and 'upper' to its integer floor value.
-#' * `ParamFct$new(id, values, special_vals, default, tags)` \cr
-#'   `character(1)`, `character`, `list`, `any`, `character` -> self \cr
-#'    Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
-#'    from its defined set of categorical values.
-#' * `Param$Lgl$new(id, special_vals, default, tags)` \cr
-#'   `character(1)`, `list`, `any`, `character` -> self \cr
-#'    Constructor for logical-scalar-params.
-#' * `ParamUty$new(id, default, tags, custom_check)` \cr
-#'   `character(1)`, `any`, `character`, `function(x)` -> self \cr
-#'   Untyped parameters, can be used to bypass any complicated feasibility checks, when
-#'   a param is of truly complex type, as checks for this param are always feasible.
-#'   OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
-#'   User can pass a `custom_check` to specify feasibility checks for custom types.
-#' * `test(x)`, `check(x)`, `assert(x)` \cr
-#'    Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
-#'    A value is feasible if it is of the same `storage_type`, inside of the bounds or from `special_vals`.
-#' * `qunif(x)` \cr
+#'
+#' @section Fields:
+#' * `class` :: `character(1)`\cr
+#'    R6 class name. Read-only.
+#' * `is_number` :: `logical(1)`\cr
+#'   TRUE if the parameter is of type `"dbl"` or `"int"`.
+#' * `is_categ` :: `logical(1)`\cr
+#'   TRUE if the parameter is of type `"fct"` or `"lgl"`.
+#' * `has_default` :: `logical(1)`\cr
+#'    Is there a default value?
+#' * `storage_type` :: `character(1)` \cr
+#'    Data type when values of this parameter are stored in a data table or sampled.
+#'
+#' @section Methods:
+#' * `test(x)`, `check(x)`, `assert(x)`\cr
+#'    Three \pkg{checkmate}-like check-functions.
+#'    Take a value from the domain of the parameter, and check if it is feasible.
+#'    A value is feasible if it is of the same `storage_type`, inside of the bounds or element of `special_vals`.
+#' * `qunif(x)`\cr
 #'   `numeric(n)` -> `vector(n)` \cr
-#'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the param.
+#'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the parameter.
 #'   Think of: quantile function or the use case to map a uniform-\[0,1\] random variable into a uniform sample from this param.
-#' * `rep(n)` \cr
-#'   `integer(1)` -> [ParamSet] \cr
-#'   Repeats this param n-times (by cloning); each param is named "<id>_rep_<k>" and gets additional tag "<id>_rep".
+#' * `rep(n)`\cr
+#'   `integer(1)` -> [ParamSet]\cr
+#'   Repeats this parameter n-times (by cloning).
+#'   Each parameter is named "<id>_rep_<k>" and gets the additional tag "<id>_rep".
 #'
-#' @section Further public methods for [ParamDbl], [ParamInt]:
-#' * `range`            :: `numeric(2)` \cr
-#'   Lower and upper bound as 2-dim-vector.
-#' * `span`            :: `numeric(1)` \cr
-#'   Difference of `upper - lower`.
-#'
-#' @section S3 methods and type converters:
+#' @section S3 methods:
 #' * `as.data.table()` \cr
 #'   Converts param to `data.table()` with 1 row. See [ParamSet].
 #'
-#' @aliases ParamDbl ParamInt ParamFct ParamLgl ParamUty
-#' @family Param
+#' @family Params
 #' @export
 Param = R6Class("Param",
   public = list(
@@ -99,7 +65,6 @@ Param = R6Class("Param",
     tags = NULL,
 
     initialize = function(id, special_vals, default, tags) {
-
       assert_id(id)
       assert_names(id, type = "strict")
       assert_list(special_vals)

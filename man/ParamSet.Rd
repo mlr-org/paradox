@@ -72,7 +72,7 @@ It needs to have unique names, and the target algorithm has to accept the config
 For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
 Is NULL by default, and you can set it to NULL to switch the transformation off.
 \item \code{has_trafo}         :: \code{logical(1)} \cr
-Has the set a trafo` function?
+Has the set a \code{trafo} function?
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
 \item \code{deps}          :: \code{data.table} \cr

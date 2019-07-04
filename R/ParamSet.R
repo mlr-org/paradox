@@ -64,7 +64,7 @@
 #'   For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
 #'   Is NULL by default, and you can set it to NULL to switch the transformation off.
 #' * `has_trafo`         :: `logical(1)` \cr
-#'   Has the set a trafo` function?
+#'   Has the set a `trafo` function?
 #' * `has_deps`          :: `logical(1)` \cr
 #'   Has the set param dependencies?
 #' * `deps`          :: `data.table` \cr

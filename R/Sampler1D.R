@@ -19,7 +19,8 @@
 #' * `Sampler1DNormal$new(param, mean = NULL, sd = NULL)` \cr
 #'   Normal sampling (potentially truncated) for doubles.
 #'   Has member variables `mean` and 'sd' which you can change to influence sampling,
-#'   they are initialized to `mean=mean(range)` and `sd=span/4`.
+#'   they are initialized to `mean=mean(c(param$lower, param$upper))` and
+#'   `sd=(param$upper - param$lower)/4`.
 #'   A truncated normal is used if the parameter is bounded on both sides.
 #' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
 #'   Arbitrary sampling from 1D rng functions from R.
@@ -142,11 +143,11 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
         stop("If 'mean' or 'sd' are not set, param must be bounded!")
       }
       if (is.null(mean)) {
-        mean = mean(param$range)
+        mean = mean(c(param$lower, param$upper))
       }
       self$mean = mean
       if (is.null(sd)) {
-        sd = param$span / 4
+        sd = (param$upper - param$lower) / 4
       }
       self$sd = sd
       super$initialize(param, trunc = TRUE, # we always trunc, this should not hurt for unbounded params

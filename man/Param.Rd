@@ -3,109 +3,67 @@
 \docType{data}
 \name{Param}
 \alias{Param}
-\alias{ParamDbl}
-\alias{ParamInt}
-\alias{ParamFct}
-\alias{ParamLgl}
-\alias{ParamUty}
 \title{Param Object}
 \format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
-Abstract base class for parameters and inheriting concrete param subclasses.
-\itemize{
-\item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
-specifically handled: 'required' implied that the parameters has to be given
-when setting \code{values} in \link{ParamSet}.
+Abstract base class for parameters.
 }
+\section{Construction}{
+\preformatted{Param$new(id, special_vals, default, tags)
 }
-\section{Public members / active bindings}{
-
 \itemize{
-\item \code{id}               :: \code{character(1)} \cr
-ID of this param.
-\item \code{class}           :: \code{character(1)} \cr
-Param R6 class name. Read-only.
-\item \code{lower}            :: \code{numeric(1)} \cr
-Lower bound for dbl/int params, can be -Inf. NA if param is not a number.
-\item \code{upper}            :: \code{numeric(1)} \cr
-Upper bound for dbl/int params, can be +Inf. NA if param is not a number.
-\item \code{levels}           :: \code{character} | \code{logical} | \code{NULL} \cr
-Allowed levels for categorical params, NULL if param is not categorical.
-\item \code{nlevels}          :: \code{numeric(1)} \cr
-Number of categorical levels per parameter, Inf for unbounded ints or any dbl. Read-only.
-\item \code{is_bounded}       :: \code{logical(1)} \cr
-Does param have a finitely bounded domain? Read-only.
-\item \code{special_vals}     :: \code{list} \cr
+\item \code{id} :: \code{character(1)}\cr
+ID of this parameter.
+\item \code{special_vals} :: \code{list()}\cr
 Arbitrary special values this parameter is allowed to take, to make it feasible.
-This allows extending the domain of the param.
-This is only used in feasibility checks, neither in generating designs nor sampling.
-\item \code{default}          :: \code{any} \cr
-Default value. Can be from param domain or \code{special_vals}.
-Has value \code{NO_DEF} if no default is there - \code{NULL} could be a valid default.
-\item \code{has_default}      :: \code{logical(1)} \cr
-Is a default there?
-\item \code{storage_type}     :: \code{character(1)} \cr
-Data type when values of this param are stored in a data table or sampled. Read-only.
-\item \code{tags}             :: \code{character} \cr
-Can be used to group and subset params.
-\item is_number          :: \code{logical(1)} \cr
-TRUE iff Param is dbl or int.
-\item is_categ           :: \code{logical(1)} \cr
-TRUE iff Param is fct or lgl.
+This allows extending the domain of the parameter.
+Note that these values are only used in feasibility checks, neither in generating designs nor sampling.
+\item \code{default} :: \code{any} \cr
+Default value. Can be from the domain of the parameter or an element of \code{special_vals}.
+Has value \link{NO_DEF} if no default exists. \code{NULL} can be a valid default.
+\item \code{tags} :: \code{character()}\cr
+Arbitrary tags to group and subset parameters. Some tags serve a special purpose:
+\itemize{
+\item \code{"required"} implies that the parameters has to be given when setting \code{values} in \link{ParamSet}.
+}
 }
 }
 
-\section{Public methods}{
+\section{Fields}{
 
 \itemize{
-\item \code{Param$new(id, special_vals = list(), default = NO_DEF, tags = character(0L))} \cr
-\code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
-Constructor of abstract base class, only called by inheriting classes.
-See meaning of \code{id}, \code{special_vals}, \code{default}, \code{tags} in member section.
-\item \code{Param$Dbl$new(id, lower, upper, special_vals, default, tags)} \cr
-\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self \cr
-Constructor for double-scalar-params. Box-constraint bounds can be set, or be Inf.
-\item \code{Param$Int$new(id, lower, upper, special_vals, default, tags)} \cr
-\code{character(1)}, \code{numeric(1)}, \code{numeric(1)}, \code{list}, \code{any}, \code{character} -> self \cr
-Constructor for int-scalar-params. Box-constraint bounds can be set, or be Inf;
-\code{lower} is set to its integer ceiling and 'upper' to its integer floor value.
-\item \code{ParamFct$new(id, values, special_vals, default, tags)} \cr
-\code{character(1)}, \code{character}, \code{list}, \code{any}, \code{character} -> self \cr
-Constructor for categorical/factor-like params; slight misnomer as it accepts only strings,
-from its defined set of categorical values.
-\item \code{Param$Lgl$new(id, special_vals, default, tags)} \cr
-\code{character(1)}, \code{list}, \code{any}, \code{character} -> self \cr
-Constructor for logical-scalar-params.
-\item \code{ParamUty$new(id, default, tags, custom_check)} \cr
-\code{character(1)}, \code{any}, \code{character}, \code{function(x)} -> self \cr
-Untyped parameters, can be used to bypass any complicated feasibility checks, when
-a param is of truly complex type, as checks for this param are always feasible.
-OTOH we cannot perform meaningful operations like sampling or generating designs with this param.
-User can pass a \code{custom_check} to specify feasibility checks for custom types.
-\item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
-Three checkmate-like check-functions. Take a value from the domain of the param, and check if it is feasible.
-A value is feasible if it is of the same \code{storage_type}, inside of the bounds or from \code{special_vals}.
-\item \code{qunif(x)} \cr
+\item \code{class} :: \code{character(1)}\cr
+R6 class name. Read-only.
+\item \code{is_number} :: \code{logical(1)}\cr
+TRUE if the parameter is of type \code{"dbl"} or \code{"int"}.
+\item \code{is_categ} :: \code{logical(1)}\cr
+TRUE if the parameter is of type \code{"fct"} or \code{"lgl"}.
+\item \code{has_default} :: \code{logical(1)}\cr
+Is there a default value?
+\item \code{storage_type} :: \code{character(1)} \cr
+Data type when values of this parameter are stored in a data table or sampled.
+}
+}
+
+\section{Methods}{
+
+\itemize{
+\item \code{test(x)}, \code{check(x)}, \code{assert(x)}\cr
+Three \pkg{checkmate}-like check-functions.
+Take a value from the domain of the parameter, and check if it is feasible.
+A value is feasible if it is of the same \code{storage_type}, inside of the bounds or element of \code{special_vals}.
+\item \code{qunif(x)}\cr
 \code{numeric(n)} -> \code{vector(n)} \cr
-Takes values from [0,1] and map them, regularly distributed, to the domain of the param.
+Takes values from [0,1] and map them, regularly distributed, to the domain of the parameter.
 Think of: quantile function or the use case to map a uniform-[0,1] random variable into a uniform sample from this param.
-\item \code{rep(n)} \cr
-\code{integer(1)} -> \link{ParamSet} \cr
-Repeats this param n-times (by cloning); each param is named "<id>\emph{rep}<k>" and gets additional tag "<id>_rep".
+\item \code{rep(n)}\cr
+\code{integer(1)} -> \link{ParamSet}\cr
+Repeats this parameter n-times (by cloning).
+Each parameter is named "<id>\emph{rep}<k>" and gets the additional tag "<id>_rep".
 }
 }
 
-\section{Further public methods for \link{ParamDbl}, \link{ParamInt}}{
-
-\itemize{
-\item \code{range}            :: \code{numeric(2)} \cr
-Lower and upper bound as 2-dim-vector.
-\item \code{span}            :: \code{numeric(1)} \cr
-Difference of \code{upper - lower}.
-}
-}
-
-\section{S3 methods and type converters}{
+\section{S3 methods}{
 
 \itemize{
 \item \code{as.data.table()} \cr
@@ -113,5 +71,10 @@ Converts param to \code{data.table()} with 1 row. See \link{ParamSet}.
 }
 }
 
-\concept{Param}
+\seealso{
+Other Params: \code{\link{ParamDbl}},
+  \code{\link{ParamFct}}, \code{\link{ParamInt}},
+  \code{\link{ParamLgl}}, \code{\link{ParamUty}}
+}
+\concept{Params}
 \keyword{datasets}

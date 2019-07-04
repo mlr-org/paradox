@@ -31,7 +31,8 @@ Categorical distribution, for a fct or lgl parameter.
 \item \code{Sampler1DNormal$new(param, mean = NULL, sd = NULL)} \cr
 Normal sampling (potentially truncated) for doubles.
 Has member variables \code{mean} and 'sd' which you can change to influence sampling,
-they are initialized to \code{mean=mean(range)} and \code{sd=span/4}.
+they are initialized to \code{mean=mean(c(param$lower, param$upper))} and
+\code{sd=(param$upper - param$lower)/4}.
 A truncated normal is used if the parameter is bounded on both sides.
 \item \code{Sampler1DRfun(param, rfun, trunc = TRUE)} \cr
 Arbitrary sampling from 1D rng functions from R.

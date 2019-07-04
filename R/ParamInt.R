@@ -1,27 +1,61 @@
+#' @title Integer Parameter
+#'
+#' @usage NULL
+#' @format [R6::R6Class] object inheriting from [Param].
+#'
+#' @description
+#' A [Param] to describe integer parameters.
+#'
+#' @section Construction:
+#' ```
+#' ParamInt$new(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character())
+#' ```
+#' Arguments of [Param], and additionally:
+#'
+#' * `lower` :: `numeric(1)`\cr
+#'   Lower bound, can be `-Inf`.
+#' * `upper` :: `numeric(1)`\cr
+#'   Upper bound can be `+Inf`.
+#'
+#' @section Fields:
+#' Fields of [Param], and additionally:
+#'
+#' * `lower` :: `numeric(1)`\cr
+#'   Lower bound.
+#' * `upper` :: `numeric(1)`\cr
+#'   Upper bound.
+#' * `levels` :: `NULL`\cr
+#'   Allowed levels.
+#'   Always `NULL` for this parameter.
+#' * `nlevels` :: `integer(1)` \cr
+#'   Number of categorical levels.
+#'   Here, the number integers in the range `[lower, upper]`, or `Inf` if unbounded.
+#' * `is_bounded` :: `logical(1)`\cr
+#'   Are the bounds finite?
+#'
+#' @section Methods:
+#' See [Param].
+#'
+#' @family Params
 #' @export
 ParamInt = R6Class("ParamInt", inherit = Param,
   public = list(
     lower = NULL,
     upper = NULL,
 
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(0L)) {
-      assert_number(lower)
-      assert_number(upper)
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
+      self$lower = assert_number(lower)
+      self$upper = assert_number(upper)
       assert_true(lower <= upper)
-      self$lower = ceiling(lower)
-      self$upper = floor(upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
 
   active = list(
-    values = function() NULL,
     levels = function() NULL,
-    nlevels = function() diff(self$range) + 1L,
-    is_bounded = function() all(is.finite(self$range)),
-    storage_type = function() "integer",
-    range = function() c(self$lower, self$upper),
-    span = function() self$upper - self$lower
+    nlevels = function() (self$upper - self$lower) + 1L,
+    is_bounded = function() is.finite(self$lower) && is.finite(self$upper),
+    storage_type = function() "integer"
   ),
 
   private = list(
