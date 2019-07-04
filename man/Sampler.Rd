@@ -4,10 +4,7 @@
 \name{Sampler}
 \alias{Sampler}
 \title{Sampler}
-\format{\link{R6Class} object. Abstract base class.}
-\usage{
-Sampler
-}
+\format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
 Random sampler for an arbitrary \link{ParamSet}.
 }

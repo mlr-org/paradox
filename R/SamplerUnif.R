@@ -1,5 +1,7 @@
 #' @title Sampler: Multivariate uniform.
-#' @format [R6Class] object. Inherits from [SamplerHierarchical].
+#'
+#' @usage NULL
+#' @format [R6Class] object inheriting from [SamplerHierarchical].
 #'
 #' @description
 #' Uniform random sampling for arbitrary (bounded) param sets.
@@ -10,7 +12,6 @@
 #' * `new(param_set)` \cr
 #'   [ParamSet] -> `self` \cr
 #'
-#' @name SamplerUnif
 #' @family Sampler
 #' @export
 SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,

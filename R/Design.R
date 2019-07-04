@@ -1,5 +1,8 @@
 #' @title Design of configurations
 #'
+#' @usage NULL
+#' @format [R6::R6Class] object.
+#'
 #' @description
 #' A lightweight wrapper around a [ParamSet] and a [data.table], where the latter is a design
 #' of configurations somehow produced from the former - e.g., by calling a
@@ -19,10 +22,7 @@
 #'   Converts `data` into a list of lists of row-configurations, possibly removes NA entries of
 #'   inactive parameter values due to unsatisfied dependencies,
 #'   and possibly calls the `trafo` function of the param set.
-#' @name Design
 #' @export
-NULL
-
 Design = R6Class("Design",
   public = list(
     param_set = NULL,

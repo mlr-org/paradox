@@ -1,6 +1,7 @@
 #' @title Sampler
 #'
-#' @format [R6Class] object. Inherits from [Sampler].
+#' @usage NULL
+#' @format [R6Class] object inheriting from [Sampler].
 #'
 #' @description
 #' 1D sampler, abstract base class and inheriting concrete implementations.
@@ -25,11 +26,8 @@
 #'   Pass e.g. `rfun=rexp` to sample from exponential distribution.
 #'   `trunc = TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
 #'
-#' @name Sampler1D
 #' @aliases Sampler1DUnif Sampler1DCateg Sampler1DNormal Sampler1DRfun
 #' @family Sampler
-NULL
-
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   public = list(

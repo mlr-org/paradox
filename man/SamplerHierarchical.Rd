@@ -4,10 +4,7 @@
 \name{SamplerHierarchical}
 \alias{SamplerHierarchical}
 \title{Sampler: Multivariate hierarchical.}
-\format{\link{R6Class} object. Inherits from \link{Sampler}.}
-\usage{
-SamplerHierarchical
-}
+\format{\link{R6Class} object inheriting from \link{Sampler}.}
 \description{
 Hierarchical sampling for arbitrary param sets with dependencies, where the user specifies 1D samplers per param.
 Dependencies are topologically sorted, parameters are then sampled in topological order,

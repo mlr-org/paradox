@@ -1,5 +1,7 @@
 #' @title ParamSetCollection
-#' @format [R6Class] object. Inherits from [ParamSet].
+#'
+#' @usage NULL
+#' @format [R6::R6Class] object inheriting from [ParamSet].
 #'
 #' @description
 #' A collection of multiple [ParamSet] objects.
@@ -27,13 +29,10 @@
 #'   `character` -> `self` \cr
 #'   Removes sets of given ids from collection.
 #'
-#' @name ParamSetCollection
-NULL
-
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
-      initialize = function(sets) {
+    initialize = function(sets) {
       assert_list(sets, types = "ParamSet")
       split_sets = split(sets, map_lgl(sets, function(x) x$set_id == ""))
       nameless_sets = split_sets$`TRUE`

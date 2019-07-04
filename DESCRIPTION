@@ -32,3 +32,25 @@ RoxygenNote: 6.1.1
 Encoding: UTF-8
 Remotes:
     mlr-org/mlr3misc
+Collate:
+    'Condition.R'
+    'Design.R'
+    'NoDefault.R'
+    'Param.R'
+    'ParamDbl.R'
+    'ParamFct.R'
+    'ParamInt.R'
+    'ParamLgl.R'
+    'ParamSet.R'
+    'ParamSetCollection.R'
+    'ParamUty.R'
+    'Sampler.R'
+    'Sampler1D.R'
+    'SamplerHierarchical.R'
+    'SamplerJointIndep.R'
+    'SamplerUnif.R'
+    'asserts.R'
+    'generate_design_grid.R'
+    'generate_design_lhs.R'
+    'generate_design_random.R'
+    'zzz.R'

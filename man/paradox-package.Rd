@@ -14,7 +14,7 @@ Easily define parameter spaces, constraints and dependencies for
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/mlr-org/paradox}
+  \item \url{https://paradox.mlr-org.com}
   \item Report bugs at \url{https://github.com/mlr-org/paradox/issues}
 }
 

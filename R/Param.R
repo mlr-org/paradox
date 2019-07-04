@@ -1,8 +1,10 @@
 #' @title Param Object
-#' @format [R6Class] object.
+#'
+#' @usage NULL
+#' @format [R6::R6Class] object.
 #'
 #' @description
-#' Abstract base class for params and inheriting concrete param subclasses.
+#' Abstract base class for parameters and inheriting concrete param subclasses.
 #' * Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 #'   specifically handled: 'required' implied that the parameters has to be given
 #'   when setting `values` in [ParamSet].
@@ -86,7 +88,6 @@
 #' * `as.data.table()` \cr
 #'   Converts param to `data.table()` with 1 row. See [ParamSet].
 #'
-#' @name Param
 #' @aliases ParamDbl ParamInt ParamFct ParamLgl ParamUty
 #' @family Param
 #' @export

@@ -117,7 +117,6 @@
 #'     - default: list col, with NULL elements
 #'     - storage_type: character
 #'     - tags: list col of character vectors
-#' @name ParamSet
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(

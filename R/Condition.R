@@ -1,5 +1,8 @@
 #' @title Dependency condition
 #'
+#' @usage NULL
+#' @format [R6::R6Class] object.
+#'
 #' @description
 #' Condition object, to specify the condition in a dependency.
 #'
@@ -23,7 +26,6 @@
 #' * `CondAnyOf$new(rhs)` \cr
 #'   Parent must be any value of `rhs`.
 #'
-#' @name Condition
 #' @aliases CondEqual CondAnyOf
 #' @export
 Condition = R6Class("Condition",

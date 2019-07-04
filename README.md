@@ -8,11 +8,7 @@
 
 
 
-Universal Parameter Space Description and Tools
-
-* [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
-* [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-* [Documentation](https://mlr-org.github.io/paradox/)
+Universal Parameter Space Description and Tools.
 
 **For an exhaustive introduction, please take a look at the [mlr3book](https://mlr3book.mlr-org.com).**
 
@@ -26,10 +22,10 @@ remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* integer numbers ("`Int`")
-* real-valued numbers ("`Dbl`")
-* truth values `TRUE` or `FALSE` ("`Lgl`")
-* categorical values from a set of possible strings ("`Fct`")
+* integer numbers (`"int"`)
+* real-valued numbers (`"dbl"`)
+* truth values `TRUE` or `FALSE` (`"lgl"`)
+* categorical values from a set of possible strings (`"fct"`)
 * further types are only possible by using transformations.
 
 
@@ -87,7 +83,7 @@ generate_design_grid(ps, resolution = 2)
 #>  [ reached getOption("max.print") -- omitted 19 rows ]
 ```
 
-Properties of the parameters within the ParamSet:
+Properties of the parameters within the `ParamSet`:
 
 
 ```r
@@ -142,7 +138,7 @@ Transformations are functions with a fixed signature.
 * `x` A named list of parameter values
 * `param_set` the `ParamSet` used to create the design
 
-Transformations can be used to change the distributions of sampled parameters. For example, to sample values between 2^-3 and 2^3 in a log2-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
+Transformations can be used to change the distributions of sampled parameters. For example, to sample values between $2^-3$ and $2^3$ in a $log\_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
 
 
 ```r

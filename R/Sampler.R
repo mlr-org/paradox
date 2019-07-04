@@ -1,5 +1,7 @@
 #' @title Sampler
-#' @format [R6Class] object. Abstract base class.
+#'
+#' @usage NULL
+#' @format [R6::R6Class] object.
 #'
 #' @description
 #' Random sampler for an arbitrary [ParamSet].
@@ -22,10 +24,8 @@
 #'   `integer(1)` -> [data.table] \cr
 #'   Inheriting sublcasses have to implement thus, called from `sample()`
 #'
-#' @name Sampler
 #' @family Sampler
 #' @export
-
 Sampler = R6Class("Sampler",
   public = list(
     param_set = NULL,

@@ -9,12 +9,9 @@
 \alias{ParamLgl}
 \alias{ParamUty}
 \title{Param Object}
-\format{\link{R6Class} object.}
-\usage{
-Param
-}
+\format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
-Abstract base class for params and inheriting concrete param subclasses.
+Abstract base class for parameters and inheriting concrete param subclasses.
 \itemize{
 \item Tags: Currently, tags can be used by users in a very custom manner, but one tag is
 specifically handled: 'required' implied that the parameters has to be given

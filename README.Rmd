@@ -12,11 +12,7 @@ knitr::opts_chunk$set(cache = FALSE, collapse = TRUE, comment = "#>")
 library(paradox)
 ```
 
-Universal Parameter Space Description and Tools
-
-* [Introduction](https://mlr-org.github.io/paradox/articles/paradox.html)
-* [Issues and Bugs](https://github.com/mlr-org/paradox/issues)
-* [Documentation](https://mlr-org.github.io/paradox/)
+Universal Parameter Space Description and Tools.
 
 **For an exhaustive introduction, please take a look at the [mlr3book](https://mlr3book.mlr-org.com).**
 

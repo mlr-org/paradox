@@ -6,10 +6,7 @@
 \alias{CondEqual}
 \alias{CondAnyOf}
 \title{Dependency condition}
-\format{An object of class \code{R6ClassGenerator} of length 24.}
-\usage{
-Condition
-}
+\format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
 Condition object, to specify the condition in a dependency.
 }

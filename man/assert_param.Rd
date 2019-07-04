@@ -2,23 +2,35 @@
 % Please edit documentation in R/asserts.R
 \name{assert_param}
 \alias{assert_param}
-\title{Assertion for Param}
+\alias{assert_param_set}
+\title{Assertions for Params and ParamSets}
 \usage{
 assert_param(param, cl = "Param", no_untyped = FALSE,
   must_bounded = FALSE)
+
+assert_param_set(param_set, cl = "Param", no_untyped = FALSE,
+  must_bounded = FALSE, no_deps = FALSE)
 }
 \arguments{
-\item{param}{\link{Param} \cr}
+\item{param}{(\link{Param}).}
 
-\item{cl}{\code{character} \cr
+\item{cl}{\code{character()}\cr
 Allowed subclasses.}
 
-\item{no_untyped}{\code{logical(1)} \cr
-No untyped params allowed?}
+\item{no_untyped}{(\code{logical(1)})\cr
+Are untyped \link{Param}s allowed?}
 
-\item{must_bounded}{\code{logical(1)} \cr
-Only bounded params allowed?}
+\item{must_bounded}{(\code{logical(1)})\cr
+Only bounded \link{Param}s allowed?}
+
+\item{param_set}{\link{ParamSet}.}
+
+\item{no_deps}{(\code{logical(1)})\cr
+Are dependencies allowed?}
+}
+\value{
+The checked object, invisibly.
 }
 \description{
-Assertion for Param
+Assertions for Params and ParamSets
 }

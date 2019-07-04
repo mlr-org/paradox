@@ -4,10 +4,7 @@
 \name{SamplerJointIndep}
 \alias{SamplerJointIndep}
 \title{Sampler: Multivariate joint independent.}
-\format{\link{R6Class} object. Inherits from \link{Sampler}.}
-\usage{
-SamplerJointIndep
-}
+\format{\link{R6Class} object inheriting from \link{Sampler}.}
 \description{
 Create joint, independent sampler out of multiple other samplers.
 }

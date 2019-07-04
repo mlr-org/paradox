@@ -1,5 +1,7 @@
 #' @title Sampler: Multivariate joint independent.
-#' @format [R6Class] object. Inherits from [Sampler].
+#'
+#' @usage NULL
+#' @format [R6Class] object inheriting from [Sampler].
 #'
 #' @description
 #' Create joint, independent sampler out of multiple other samplers.
@@ -12,7 +14,6 @@
 #' * `new(samplers)` \cr
 #'   list of [Sampler] -> `self` \cr
 #'
-#' @name SamplerJointIndep
 #' @family Sampler
 #' @export
 SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
