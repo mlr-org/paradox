@@ -3,7 +3,6 @@
 #' @import mlr3misc
 #' @importFrom R6 R6Class
 #' @importFrom stats runif
-#' @importFrom utils head tail getFromNamespace
 "_PACKAGE"
 
 .onLoad = function(libname, pkgname) { # nocov start
