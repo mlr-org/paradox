@@ -29,10 +29,10 @@ remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* integer numbers ("`Int`")
-* real-valued numbers ("`Dbl`")
-* truth values `TRUE` or `FALSE` ("`Lgl`")
-* categorical values from a set of possible strings ("`Fct`")
+* integer numbers (`"int"`)
+* real-valued numbers (`"dbl"`)
+* truth values `TRUE` or `FALSE` (`"lgl"`)
+* categorical values from a set of possible strings (`"fct"`)
 * further types are only possible by using transformations.
 
 ```{r ps}
@@ -64,7 +64,7 @@ Generate Grid Design:
 generate_design_grid(ps, resolution = 2)
 ```
 
-Properties of the parameters within the ParamSet:
+Properties of the parameters within the `ParamSet`:
 
 ```{r psprobs}
 ps$ids()
