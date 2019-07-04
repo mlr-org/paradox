@@ -53,7 +53,8 @@
 #'
 #' @section S3 methods:
 #' * `as.data.table()` \cr
-#'   Converts param to `data.table()` with 1 row. See [ParamSet].
+#'   [Param] -> [data.table::data.table()]\cr
+#'   Converts param to [data.table::data.table()] with 1 row. See [ParamSet].
 #'
 #' @family Params
 #' @export
