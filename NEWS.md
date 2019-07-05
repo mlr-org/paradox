@@ -1,3 +1,3 @@
-# paradox 0.9.0
+# paradox 0.1.0
 
 * Initial release.
