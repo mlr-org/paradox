@@ -3,7 +3,7 @@
 \name{assert_param}
 \alias{assert_param}
 \alias{assert_param_set}
-\title{Assertions for Params and ParamSets}
+\title{Assertions for Params and ParamSets.}
 \usage{
 assert_param(param, cl = "Param", no_untyped = FALSE,
   must_bounded = FALSE)
@@ -14,7 +14,7 @@ assert_param_set(param_set, cl = "Param", no_untyped = FALSE,
 \arguments{
 \item{param}{(\link{Param}).}
 
-\item{cl}{\code{character()}\cr
+\item{cl}{(\code{character()})\cr
 Allowed subclasses.}
 
 \item{no_untyped}{(\code{logical(1)})\cr
@@ -32,5 +32,5 @@ Are dependencies allowed?}
 The checked object, invisibly.
 }
 \description{
-Assertions for Params and ParamSets
+Assertions for Params and ParamSets.
 }
