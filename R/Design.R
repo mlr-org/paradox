@@ -1,22 +1,30 @@
-#' @title Design of configurations
+#' @title Design of Configurations
 #'
 #' @usage NULL
 #' @format [R6::R6Class] object.
 #'
 #' @description
-#' A lightweight wrapper around a [ParamSet] and a [data.table], where the latter is a design
-#' of configurations somehow produced from the former - e.g., by calling a
-#' `generate_design` function or sampling.
+#' A lightweight wrapper around a [ParamSet] and a [data.table], where the
+#' latter is a design of configurations produced from the former - e.g.,
+#' by calling a `generate_design` function or sampling.
 #'
-#' @section Public members / active bindings:
-#' * `param_set`       :: [ParamSet]
-#' * `data`            :: [data.table]
+#' @section Construction:
 #'
-#' @section Public methods:
-#' * `new(param_set, data, remove_dupl)` \cr
-#'   [ParamSet], [data.table], `logical(1)` -> `self` \cr
-#'   Note that the first 2 arguments are NOT cloned on construction!
-#'   Has an option to remove duplicated rows.
+#' c = Design$new(param_set, data, remove_dupl)
+#'
+#' Note that the first 2 arguments are NOT cloned during construction!
+#'
+#' * `param_set::ParamSet` \cr
+#'   ParamSet.
+#'
+#' * `data::data.table::data.table()` \cr
+#'   Right-hand-side of the condition.
+#'
+#' * `remove_dupl::logical(1)` \cr
+#'   Whether to remove duplicates or not.
+#'
+#' @section Methods:
+#'
 #' * `transpose(filter_na = TRUE, trafo = TRUE)` \cr
 #'   `logical(1)`, `logical(1)` -> `list` of `list` \cr
 #'   Converts `data` into a list of lists of row-configurations, possibly removes NA entries of
