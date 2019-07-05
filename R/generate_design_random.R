@@ -1,4 +1,4 @@
-#' @title Generate a random design.
+#' @title Generate a Random Design.
 #'
 #' @description
 #' Generates a design with randomly drawn points.

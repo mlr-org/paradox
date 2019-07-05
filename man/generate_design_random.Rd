@@ -2,7 +2,7 @@
 % Please edit documentation in R/generate_design_random.R
 \name{generate_design_random}
 \alias{generate_design_random}
-\title{Generate a random design.}
+\title{Generate a Random Design.}
 \usage{
 generate_design_random(param_set, n)
 }
