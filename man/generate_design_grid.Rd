@@ -2,7 +2,7 @@
 % Please edit documentation in R/generate_design_grid.R
 \name{generate_design_grid}
 \alias{generate_design_grid}
-\title{Generate a grid design.}
+\title{Generate a Grid Design.}
 \usage{
 generate_design_grid(param_set, resolution = NULL,
   param_resolutions = NULL)
@@ -20,10 +20,10 @@ Resolution per param, named by param ID.}
 \link{data.table}
 }
 \description{
-Generate a grid with specified resolution in the parameter space.
-NB1: The resolution for categorical parameters is ignored, these parameters
+Generate a grid with a specified resolution in the parameter space.
+The resolution for categorical parameters is ignored, these parameters
 always produce a grid over all their valid levels.
-NB2: For number params the endpoints of the params are always included in the grid.
+For number params the endpoints of the params are always included in the grid.
 }
 \seealso{
 Other generate_design: \code{\link{generate_design_lhs}},
