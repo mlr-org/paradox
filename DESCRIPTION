@@ -36,8 +36,6 @@ Imports:
 Suggests:
     lhs,
     testthat
-Remotes:
-    mlr-org/mlr3misc
 Encoding: UTF-8
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE)
