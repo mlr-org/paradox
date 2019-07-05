@@ -8,7 +8,9 @@
 #'
 #' @section Construction:
 #'
+#' ```
 #' c = Condition$new(type, rhs)
+#' ```
 #'
 #' * `type::character(1)` \cr
 #'   Name / type of the condition. Read-only.

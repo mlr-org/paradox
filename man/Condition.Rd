@@ -11,9 +11,8 @@
 Condition object, to specify the condition in a dependency.
 }
 \section{Construction}{
-
-
-c = Condition$new(type, rhs)
+\preformatted{c = Condition$new(type, rhs)
+}
 \itemize{
 \item \code{type::character(1)} \cr
 Name / type of the condition. Read-only.

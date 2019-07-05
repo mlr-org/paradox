@@ -11,9 +11,8 @@ latter is a design of configurations produced from the former - e.g.,
 by calling a \code{generate_design} function or sampling.
 }
 \section{Construction}{
-
-
-c = Design$new(param_set, data, remove_dupl)
+\preformatted{c = Design$new(param_set, data, remove_dupl)
+}
 
 Note that the first 2 arguments are NOT cloned during construction!
 \itemize{

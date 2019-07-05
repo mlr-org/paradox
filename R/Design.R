@@ -10,7 +10,9 @@
 #'
 #' @section Construction:
 #'
+#' ```
 #' c = Design$new(param_set, data, remove_dupl)
+#' ```
 #'
 #' Note that the first 2 arguments are NOT cloned during construction!
 #'
