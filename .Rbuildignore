@@ -1,3 +1,4 @@
+^LICENSE$
 ^tic\.R$
 ^\.travis\.yml$
 .github
@@ -21,9 +22,5 @@
 ^README\.Rmd$
 ^vignettes/.+\.html$
 appveyor.yml
-man-roxygen
-README.md
-README.Rmd
-todo-files
-attic
+^attic$
 ^pkgdown$
