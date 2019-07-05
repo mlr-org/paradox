@@ -1,109 +1,110 @@
-# FIXME: was ist mit so krams wie nvlevels usw? das wollen wir nicht änern oder?
-
 #' @title ParamSet
 #'
 #' @description
-#' A set of [Param] objects. Please note that when creating a set or adding to it, the params of the
-#' resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-#' variable `values` which can be used to store an active configuration / or to partially fix
+#' A set of [Param] objects.
+#' Please note that when creating a set or adding to it, the parameters of the
+#' resulting set have to be uniquely named with IDs with valid R names.
+#' The set also contains a member variable `values` which can be used to store an active configuration / or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
-#' @section Public members / active bindings:
-#' * `set_id`            :: `character(1)` \cr
+#' @section Construction:
+#' ```
+#' ParamSet$new(params = named_list())
+#' ```
+#'
+#' * `params` :: named `list()`\cr
+#'   List of [Param], named with their respective ID.
+#'   Parameters are cloned.
+#'
+#' @section Fields:
+#' * `set_id` :: `character(1)` \cr
 #'   ID of this param set. Default `""`. Settable.
-#' * `params`            :: named list of [Param] \cr
-#'   Contained parameters, named with their respective IDs.
-#'   NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-#' * `length`            :: `integer(1)` \cr
-#'   Number of contained params. Read-only.
-#' * `is_empty`          :: `logical(1)` \cr
-#'   Is the param set empty? Read-only.
-#' * `class`             :: named `character` \cr
-#'   Param classes of contained parameters.
-#'   Named with param IDs. Read-only.
-#' * `lower`             :: named [double] \cr
-#'   Lower bounds of parameters, NA if param is not a number.
-#'   Named with param IDs. Read-only.
-#' * `upper`             :: named [double] \cr
-#'   Upper bounds of parameters, NA if param is not a number.
-#'   Named with param IDs. Read-only.
-#' * `levels`            :: named `list` \cr
-#'   List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
-#'   Named with param IDs. Read-only.
-#' * `nlevels`           :: named [double] \cr
-#'   Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
-#'   Named with param IDs. Read-only.
-#' * `is_bounded`        :: named `logical(1)` \cr
+#' * `length` :: `integer(1)` \cr
+#'   Number of contained [Param]s.
+#' * `is_empty` :: `logical(1)` \cr
+#'   Is the `ParamSet` empty?
+#' * `class` :: named `character()` \cr
+#'   Classes of contained parameters, named with parameter IDs.
+#' * `lower` :: named `double()` \cr
+#'   Lower bounds of parameters (`NA` if parameter is not numeric).
+#'   Named with parameter IDs.
+#' * `upper` :: named `double()` \cr
+#'   Upper bounds of parameters (`NA` if parameter is not numeric).
+#'   Named with parameter IDs.
+#' * `levels` :: named `list()` \cr
+#'   List of character vectors of allowed categorical values of contained parameters.
+#'   `NULL` if the parameter is not categorical.
+#'   Named with parameter IDs.
+#' * `nlevels` :: named `integer()` \cr
+#'   Number of categorical levels per parameter, `Inf` for double parameters or unbounded integer parameters.
+#'   Named with param IDs.
+#' * `is_bounded` :: named `logical(1)` \cr
 #'   Do all parameters have finite bounds?
-#'   Named with param IDs. Read-only.
-#' * `special_vals`      :: named `list` of `list` \cr
+#'   Named with parameter IDs.
+#' * `special_vals` :: named `list()` of `list()` \cr
 #'   Special values for all parameters.
-#'   Named with param IDs. Read-only.
-#' * `storage_type`      :: `character` \cr
-#'   Data types of params when stored in tables.
-#'   Named with param IDs. Read-only.
-#' * `tags`              :: named `list` of `character` \cr
-#'   Can be used to group and subset params.
-#'   Named with param IDs. Read-only.
-#' * `default`          :: named `list` \cr
-#'   Default values of all params. If no default exists, element is not present.
-#'   Named with param IDs. Read-only.
-#' * is_number           :: named `logical` \cr
-#'   Position is TRUE iff Param is dbl or int.
-#'   Named with param IDs. Read-only.
+#'   Named with parameter IDs.
+#' * `storage_type` :: `character()` \cr
+#'   Data types of parameters when stored in tables.
+#'   Named with parameter IDs.
+#' * `tags` :: named `list()` of `character()` \cr
+#'   Can be used to group and subset parameters.
+#'   Named with parameter IDs.
+#' * `default` :: named `list()` \cr
+#'   Default values of all parameters.
+#'   If no default exists, element is not present.
+#'   Named with parameter IDs.
+#' * is_number :: named `logical()` \cr
+#'   Position is TRUE for [ParamDbl] and [ParamInt].
+#'   Named with parameter IDs.
 #' * is_categ          :: named `logical` \cr
-#'   Position is TRUE iff Param is fct or lgl.
-#'   Named with param IDs. Read-only.
-#' * `trafo`             :: `function(x, param_set)` -> named `list` \cr
-#'   Transformation function. Settable.
-#'   User has to pass a `function(x, param_set)`, of the form `named list`, [ParamSet] -> `named list`.
-#'   The function is responsible to transform a feasible configuration into
-#'   another encoding, before potentially evaluating the configuration with the target algorithm.
-#'   For the output, not many things have to hold.
-#'   It needs to have unique names, and the target algorithm has to accept the configuration.
-#'   For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-#'   Is NULL by default, and you can set it to NULL to switch the transformation off.
-#' * `has_trafo`         :: `logical(1)` \cr
-#'   Has the set a `trafo` function?
-#' * `has_deps`          :: `logical(1)` \cr
-#'   Has the set param dependencies?
-#' * `deps`          :: [data.table::data.table()] \cr
+#'   Position is TRUE for [ParamFct] and [ParamLgl].
+#'   Named with parameter IDs.
+#' * `has_deps` :: `logical(1)` \cr
+#'   Has the set parameter dependencies?
+#' * `deps` :: [data.table::data.table()] \cr
 #'   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and `cond` ([Condition]).
 #'   Lists all (direct) dependency parents of a param, through parameter IDs.
 #'   Internally created by a call to `add_dep`.
 #'   Settable, if you want to remove dependencies or perform other changes.
-#' * `values`         :: named `list` \cr
+#' * `values`         :: named `list()` \cr
 #'   Currently set / fixed parameter values.
 #'   Settable, and feasibility of values will be checked when you set them.
 #'   You do not have to set values for all parameters, but only for a subset.
 #'   When you set values, all previously set values will be unset / removed.
+#' * `trafo` :: `function(x, param_set)`\cr
+#'   Transformation function. Settable.
+#'   User has to pass a `function(x, param_set)`, of the form \cr
+#'   (named `list()`, [ParamSet]) -> named `list()`.\cr
+#'   The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+#'   For the output, not many things have to hold.
+#'   It needs to have unique names, and the target algorithm has to accept the configuration.
+#'   For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+#'   Is NULL by default, and you can set it to NULL to switch the transformation off.
+#' * `has_trafo` :: `logical(1)` \cr
+#'   Has the set a `trafo` function?
 #'
 #' @section Public methods:
-#' * `new(params)` \cr
-#'   list of [Param] -> `self` \cr
-#'   Deep-clones all passed param objects.
 #' * `ids(class = NULL, is_bounded = NULL, tags = NULL)` \cr
-#'   `character`, `logical(1)`, `character` -> `character` \cr
-#'   Retrieves IDs of contained params based on some selections, `NULL` means no restriction.
-#'   `class` and `tags` can be sets.
+#'   (`character`, `logical(1)`, `character()`) -> `character()` \cr
+#'   Retrieves IDs of contained parameters based on some filter criteria selections, `NULL` means no restriction.
 #' * `get_values(class = NULL, is_bounded = NULL, tags = NULL)` \cr
-#'   `character`, `logical(1)`, `character` -> named `list` \cr
+#'   (`character()`, `logical(1)`, `character()`) -> named `list()` \cr
 #'   Retrieves parameter values based on some selections, `NULL` means no restriction and is
 #'   equivalent to `$values`.
-#'   `class` and `tags` can be sets.
 #' * `add(param_set)` \cr
-#'   [Param] | [ParamSet] -> `self` \cr
+#'   ([Param] | [ParamSet]) -> `self` \cr
 #'   Adds a single param or another set to this set, all params are cloned.
 #' * `subset(ids)` \cr
-#'   `character` -> `self` \cr
+#'   `character()` -> `self` \cr
 #'   Changes the current set to the set of passed IDs.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
-#'   Three checkmate-like check-functions. Take a named list.
+#'   Three \pkg{checkmate}-like check-functions. Takes a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
-#'   `character(1)`, `character(1)`, [Condition] -> `self` \cr
+#'   (`character(1)`, `character(1)`, [Condition]) -> `self` \cr
 #'    Adds a dependency to this set, so that param `id` now depends on param `on`.
 #'
 #' @section S3 methods and type converters:

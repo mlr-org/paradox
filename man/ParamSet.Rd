@@ -9,113 +9,117 @@
 ParamSet
 }
 \description{
-A set of \link{Param} objects. Please note that when creating a set or adding to it, the params of the
-resulting set have to be uniquely named with IDs with valid R names. The set also contains a member
-variable \code{values} which can be used to store an active configuration / or to partially fix
+A set of \link{Param} objects.
+Please note that when creating a set or adding to it, the parameters of the
+resulting set have to be uniquely named with IDs with valid R names.
+The set also contains a member variable \code{values} which can be used to store an active configuration / or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs).
 }
-\section{Public members / active bindings}{
+\section{Construction}{
+\preformatted{ParamSet$new(params = named_list())
+}
+\itemize{
+\item \code{params} :: named \code{list()}\cr
+List of \link{Param}, named with their respective ID.
+Parameters are cloned.
+}
+}
+
+\section{Fields}{
 
 \itemize{
-\item \code{set_id}            :: \code{character(1)} \cr
+\item \code{set_id} :: \code{character(1)} \cr
 ID of this param set. Default \code{""}. Settable.
-\item \code{params}            :: named list of \link{Param} \cr
-Contained parameters, named with their respective IDs.
-NB: The returned list contains references, so you can potentially change the objects of the param set by writing to them.
-\item \code{length}            :: \code{integer(1)} \cr
-Number of contained params. Read-only.
-\item \code{is_empty}          :: \code{logical(1)} \cr
-Is the param set empty? Read-only.
-\item \code{class}             :: named \code{character} \cr
-Param classes of contained parameters.
-Named with param IDs. Read-only.
-\item \code{lower}             :: named \link{double} \cr
-Lower bounds of parameters, NA if param is not a number.
-Named with param IDs. Read-only.
-\item \code{upper}             :: named \link{double} \cr
-Upper bounds of parameters, NA if param is not a number.
-Named with param IDs. Read-only.
-\item \code{levels}            :: named \code{list} \cr
-List of character vectors of allowed categorical values of contained parameters, NULL if param is not categorical.
-Named with param IDs. Read-only.
-\item \code{nlevels}           :: named \link{double} \cr
-Number of categorical levels per parameter, Inf for unbounded ints or any dbl.
-Named with param IDs. Read-only.
-\item \code{is_bounded}        :: named \code{logical(1)} \cr
+\item \code{length} :: \code{integer(1)} \cr
+Number of contained \link{Param}s.
+\item \code{is_empty} :: \code{logical(1)} \cr
+Is the \code{ParamSet} empty?
+\item \code{class} :: named \code{character()} \cr
+Classes of contained parameters, named with parameter IDs.
+\item \code{lower} :: named \code{double()} \cr
+Lower bounds of parameters (\code{NA} if parameter is not numeric).
+Named with parameter IDs.
+\item \code{upper} :: named \code{double()} \cr
+Upper bounds of parameters (\code{NA} if parameter is not numeric).
+Named with parameter IDs.
+\item \code{levels} :: named \code{list()} \cr
+List of character vectors of allowed categorical values of contained parameters.
+\code{NULL} if the parameter is not categorical.
+Named with parameter IDs.
+\item \code{nlevels} :: named \code{integer()} \cr
+Number of categorical levels per parameter, \code{Inf} for double parameters or unbounded integer parameters.
+Named with param IDs.
+\item \code{is_bounded} :: named \code{logical(1)} \cr
 Do all parameters have finite bounds?
-Named with param IDs. Read-only.
-\item \code{special_vals}      :: named \code{list} of \code{list} \cr
+Named with parameter IDs.
+\item \code{special_vals} :: named \code{list()} of \code{list()} \cr
 Special values for all parameters.
-Named with param IDs. Read-only.
-\item \code{storage_type}      :: \code{character} \cr
-Data types of params when stored in tables.
-Named with param IDs. Read-only.
-\item \code{tags}              :: named \code{list} of \code{character} \cr
-Can be used to group and subset params.
-Named with param IDs. Read-only.
-\item \code{default}          :: named \code{list} \cr
-Default values of all params. If no default exists, element is not present.
-Named with param IDs. Read-only.
-\item is_number           :: named \code{logical} \cr
-Position is TRUE iff Param is dbl or int.
-Named with param IDs. Read-only.
+Named with parameter IDs.
+\item \code{storage_type} :: \code{character()} \cr
+Data types of parameters when stored in tables.
+Named with parameter IDs.
+\item \code{tags} :: named \code{list()} of \code{character()} \cr
+Can be used to group and subset parameters.
+Named with parameter IDs.
+\item \code{default} :: named \code{list()} \cr
+Default values of all parameters.
+If no default exists, element is not present.
+Named with parameter IDs.
+\item is_number :: named \code{logical()} \cr
+Position is TRUE for \link{ParamDbl} and \link{ParamInt}.
+Named with parameter IDs.
 \item is_categ          :: named \code{logical} \cr
-Position is TRUE iff Param is fct or lgl.
-Named with param IDs. Read-only.
-\item \code{trafo}             :: \code{function(x, param_set)} -> named \code{list} \cr
-Transformation function. Settable.
-User has to pass a \code{function(x, param_set)}, of the form \code{named list}, \link{ParamSet} -> \code{named list}.
-The function is responsible to transform a feasible configuration into
-another encoding, before potentially evaluating the configuration with the target algorithm.
-For the output, not many things have to hold.
-It needs to have unique names, and the target algorithm has to accept the configuration.
-For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-Is NULL by default, and you can set it to NULL to switch the transformation off.
-\item \code{has_trafo}         :: \code{logical(1)} \cr
-Has the set a \code{trafo} function?
-\item \code{has_deps}          :: \code{logical(1)} \cr
-Has the set param dependencies?
-\item \code{deps}          :: \code{\link[data.table:data.table]{data.table::data.table()}} \cr
+Position is TRUE for \link{ParamFct} and \link{ParamLgl}.
+Named with parameter IDs.
+\item \code{has_deps} :: \code{logical(1)} \cr
+Has the set parameter dependencies?
+\item \code{deps} :: \code{\link[data.table:data.table]{data.table::data.table()}} \cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.
-\item \code{values}         :: named \code{list} \cr
+\item \code{values}         :: named \code{list()} \cr
 Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
 When you set values, all previously set values will be unset / removed.
+\item \code{trafo} :: \code{function(x, param_set)}\cr
+Transformation function. Settable.
+User has to pass a \code{function(x, param_set)}, of the form \cr
+(named \code{list()}, \link{ParamSet}) -> named \code{list()}.\cr
+The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+For the output, not many things have to hold.
+It needs to have unique names, and the target algorithm has to accept the configuration.
+For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+Is NULL by default, and you can set it to NULL to switch the transformation off.
+\item \code{has_trafo} :: \code{logical(1)} \cr
+Has the set a \code{trafo} function?
 }
 }
 
 \section{Public methods}{
 
 \itemize{
-\item \code{new(params)} \cr
-list of \link{Param} -> \code{self} \cr
-Deep-clones all passed param objects.
 \item \code{ids(class = NULL, is_bounded = NULL, tags = NULL)} \cr
-\code{character}, \code{logical(1)}, \code{character} -> \code{character} \cr
-Retrieves IDs of contained params based on some selections, \code{NULL} means no restriction.
-\code{class} and \code{tags} can be sets.
+(\code{character}, \code{logical(1)}, \code{character()}) -> \code{character()} \cr
+Retrieves IDs of contained parameters based on some filter criteria selections, \code{NULL} means no restriction.
 \item \code{get_values(class = NULL, is_bounded = NULL, tags = NULL)} \cr
-\code{character}, \code{logical(1)}, \code{character} -> named \code{list} \cr
+(\code{character()}, \code{logical(1)}, \code{character()}) -> named \code{list()} \cr
 Retrieves parameter values based on some selections, \code{NULL} means no restriction and is
 equivalent to \code{$values}.
-\code{class} and \code{tags} can be sets.
 \item \code{add(param_set)} \cr
-\link{Param} | \link{ParamSet} -> \code{self} \cr
+(\link{Param} | \link{ParamSet}) -> \code{self} \cr
 Adds a single param or another set to this set, all params are cloned.
 \item \code{subset(ids)} \cr
-\code{character} -> \code{self} \cr
+\code{character()} -> \code{self} \cr
 Changes the current set to the set of passed IDs.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
-Three checkmate-like check-functions. Take a named list.
+Three \pkg{checkmate}-like check-functions. Takes a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \item \code{add_dep(id, on, cond)} \cr
-\code{character(1)}, \code{character(1)}, \link{Condition} -> \code{self} \cr
+(\code{character(1)}, \code{character(1)}, \link{Condition}) -> \code{self} \cr
 Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.
 }
 }
