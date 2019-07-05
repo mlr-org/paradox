@@ -2,22 +2,22 @@
 % Please edit documentation in R/generate_design_grid.R
 \name{generate_design_grid}
 \alias{generate_design_grid}
-\title{Generate a Grid Design.}
+\title{Generate a Grid Design}
 \usage{
 generate_design_grid(param_set, resolution = NULL,
   param_resolutions = NULL)
 }
 \arguments{
-\item{param_set}{:: \link{ParamSet} \cr}
+\item{param_set}{:: \link{ParamSet}.}
 
-\item{resolution}{:: \code{integer(1)} \cr
-Global resolution for all params.}
+\item{resolution}{:: \code{integer(1)}\cr
+Global resolution for all \link{Param}s.}
 
-\item{param_resolutions}{:: named \code{integer} \cr
-Resolution per param, named by param ID.}
+\item{param_resolutions}{:: named \code{integer()} \cr
+Resolution per \link{Param}, named by parameter ID.}
 }
 \value{
-\link{data.table}
+(\code{\link[data.table:data.table]{data.table::data.table()}}).
 }
 \description{
 Generate a grid with a specified resolution in the parameter space.

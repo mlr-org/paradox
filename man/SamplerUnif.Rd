@@ -3,23 +3,33 @@
 \docType{data}
 \name{SamplerUnif}
 \alias{SamplerUnif}
-\title{Sampler: Multivariate uniform.}
-\format{\link{R6Class} object inheriting from \link{SamplerHierarchical}.}
+\title{SamplerUnif Class}
+\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{SamplerHierarchical}.}
 \description{
-Uniform random sampling for arbitrary (bounded) param sets.
-Constructs 1 uniform sampler per param, then passes them to \link{SamplerHierarchical}.
-Hence, also works for param sets with dependencies.
+Uniform random sampling for an arbitrary (bounded) \link{ParamSet}.
+Constructs 1 uniform sampler per \link{Param}, then passes them to \link{SamplerHierarchical}.
+Hence, also works for \link{ParamSet}s sets with dependencies.
 }
-\section{Public methods}{
+\section{Construction}{
 
-\itemize{
-\item \code{new(param_set)} \cr
-\link{ParamSet} -> \code{self} \cr
+See \link{Sampler}.
 }
+
+\section{Fields}{
+
+See \link{Sampler}.
+}
+
+\section{Methods}{
+
+See \link{Sampler}.
 }
 
 \seealso{
-Other Sampler: \code{\link{Sampler1D}},
+Other Sampler: \code{\link{Sampler1DCateg}},
+  \code{\link{Sampler1DNormal}},
+  \code{\link{Sampler1DRfun}}, \code{\link{Sampler1DUnif}},
+  \code{\link{Sampler1D}},
   \code{\link{SamplerHierarchical}},
   \code{\link{SamplerJointIndep}}, \code{\link{Sampler}}
 }

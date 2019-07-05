@@ -108,7 +108,7 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
 #' @section Fields:
 #' See [Sampler1D].
 #' Additionally, the class provides:
-#' * `rfun` :: `function`\cr
+#' * `rfun` :: `function()`\cr
 #'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
 #' * `trunc` :: `logical(1)`\cr
 #'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].

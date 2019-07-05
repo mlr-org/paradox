@@ -14,8 +14,8 @@ Condition object, to specify the condition in a dependency.
 \preformatted{c = Condition$new(type, rhs)
 }
 \itemize{
-\item \code{type::character(1)} \cr
-Name / type of the condition. Read-only.
+\item \code{type} :: \code{character(1)} \cr
+Name / type of the condition.
 \item \code{rhs::any} \cr
 Right-hand-side of the condition.
 }

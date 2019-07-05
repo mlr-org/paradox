@@ -3,7 +3,7 @@
 \name{assert_param}
 \alias{assert_param}
 \alias{assert_param_set}
-\title{Assertions for Params and ParamSets.}
+\title{Assertions for Params and ParamSets}
 \usage{
 assert_param(param, cl = "Param", no_untyped = FALSE,
   must_bounded = FALSE)
@@ -32,5 +32,5 @@ Are dependencies allowed?}
 The checked object, invisibly.
 }
 \description{
-Assertions for Params and ParamSets.
+Assertions for Params and ParamSets
 }

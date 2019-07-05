@@ -3,13 +3,13 @@
 #' @description
 #' Generate a space-filling design using Latin hypercube sampling.
 #'
-#' @param param_set :: [ParamSet]. \cr
+#' @param param_set :: [ParamSet].
 #' @param n :: `integer(1)` \cr
 #'   Number of points to sample.
 #' @param lhs_fun :: `function(n, k)` \cr
 #'   Function to use to generate a LHS sample, with n samples and k values per param.
-#'   LHS functions are implemented in package \pkg{lhs}, default is to use [lhs::maximinLHS].
-#' @return [data.table]
+#'   LHS functions are implemented in package \pkg{lhs}, default is to use [lhs::maximinLHS()].
+#' @return ([data.table::data.table()]).
 #'
 #' @family generate_design
 #' @export

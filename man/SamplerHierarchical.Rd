@@ -3,25 +3,44 @@
 \docType{data}
 \name{SamplerHierarchical}
 \alias{SamplerHierarchical}
-\title{Sampler: Multivariate hierarchical.}
-\format{\link{R6Class} object inheriting from \link{Sampler}.}
+\title{SamplerHierarchical Class}
+\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.}
 \description{
 Hierarchical sampling for arbitrary param sets with dependencies, where the user specifies 1D samplers per param.
 Dependencies are topologically sorted, parameters are then sampled in topological order,
-and if dependencies do not hold, values are set to NA in the resulting data.table.
+and if dependencies do not hold, values are set to \code{NA} in the resulting \code{data.table}.
 }
-\section{Public methods}{
-
+\section{Construction}{
+\preformatted{smpl = SamplerHierarchical$new(param_set, samplers)
+}
 \itemize{
-\item \code{new(param_set, samplers)} \cr
-\link{ParamSet}, list of \link{Sampler} -> \code{self} \cr
-User has to pass one \link{Sampler1D} per param in set, which specifies its distribution.
+\item \code{param_set} :: \link{ParamSet}\cr
+Domain / support of the distribution we want to sample from.
+\item \code{samplers} :: \code{list()}\cr
+List of \link{Sampler1D} objects that gives a Sampler for each \link{Param} in the \code{param_set}.
 }
+}
+
+\section{Fields}{
+
+See \link{Sampler}.
+Additionally, the class provides:
+\itemize{
+\item \code{samplers} :: \code{list()}\cr
+List of \link{Sampler1D} objects that gives a Sampler for each \link{Param} in the \code{param_set}.
+}
+}
+
+\section{Methods}{
+
+See \link{Sampler}.
 }
 
 \seealso{
-Other Sampler: \code{\link{Sampler1D}},
-  \code{\link{SamplerJointIndep}},
+Other Sampler: \code{\link{Sampler1DCateg}},
+  \code{\link{Sampler1DNormal}},
+  \code{\link{Sampler1DRfun}}, \code{\link{Sampler1DUnif}},
+  \code{\link{Sampler1D}}, \code{\link{SamplerJointIndep}},
   \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }
 \concept{Sampler}

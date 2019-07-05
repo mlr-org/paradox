@@ -42,7 +42,7 @@ Parameter objects are cloned.
 \section{Methods}{
 
 \itemize{
-\item remove_sets(ids) \cr
+\item remove_sets(ids)\cr
 \code{character()} -> \code{self} \cr
 Removes sets of given ids from collection.
 }

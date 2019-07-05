@@ -1,4 +1,4 @@
-#' @title Assertions for Params and ParamSets.
+#' @title Assertions for Params and ParamSets
 #'
 #' @param param ([Param]).
 #' @param cl (`character()`)\cr

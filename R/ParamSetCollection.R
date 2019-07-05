@@ -35,7 +35,7 @@
 #'
 #' @section Methods:
 #'
-#' * remove_sets(ids) \cr
+#' * remove_sets(ids)\cr
 #'   `character()` -> `self` \cr
 #'   Removes sets of given ids from collection.
 #'

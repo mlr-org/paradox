@@ -1,14 +1,14 @@
-#' @title Generate a Random Design.
+#' @title Generate a Random Design
 #'
 #' @description
 #' Generates a design with randomly drawn points.
-#' Internally uses [SamplerUnif], hence, also works for param sets with dependencies.
-#' If dependencies do not hold, values are set to NA in the resulting data.table.
+#' Internally uses [SamplerUnif], hence, also works for [ParamSet]s with dependencies.
+#' If dependencies do not hold, values are set to `NA` in the resulting data.table.
 #'
-#' @param param_set [ParamSet] \cr
-#' @param n `integer(1)` \cr
+#' @param param_set :: [ParamSet].
+#' @param n :: `integer(1)` \cr
 #'   Number of points to draw randomly.
-#' @return [data.table]
+#' @return ([data.table::data.table()]).
 #'
 #' @family generate_design
 #' @export

@@ -4,9 +4,9 @@
 #' @format [R6::R6Class] inheriting from [SamplerHierarchical].
 #'
 #' @description
-#' Uniform random sampling for arbitrary (bounded) param sets.
-#' Constructs 1 uniform sampler per param, then passes them to [SamplerHierarchical].
-#' Hence, also works for param sets with dependencies.
+#' Uniform random sampling for an arbitrary (bounded) [ParamSet].
+#' Constructs 1 uniform sampler per [Param], then passes them to [SamplerHierarchical].
+#' Hence, also works for [ParamSet]s sets with dependencies.
 #'
 #' @section Construction:
 #' See [Sampler].

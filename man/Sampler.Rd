@@ -3,16 +3,26 @@
 \docType{data}
 \name{Sampler}
 \alias{Sampler}
-\title{Sampler}
+\title{Sampler Class}
 \format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
-Random sampler for an arbitrary \link{ParamSet}.
+This is the abstract base class for sampling objects like \link{Sampler1D}, \link{SamplerHierarchical} or \link{SamplerJointIndep}.
 }
 \section{Construction}{
-\preformatted{s = Sampler$new(param_set)
+
+Note: This object is typically constructed via a derived classes.\preformatted{smpl = Sampler$new(param_set)
 }
 \itemize{
-\item \code{param_set}            :: \link{ParamSet} \cr
+\item \code{param_set} :: \link{ParamSet}\cr
+Domain / support of the distribution we want to sample from.
+ParamSet is cloned on construction.
+}
+}
+
+\section{Fields}{
+
+\itemize{
+\item \code{param_set} :: \link{ParamSet}\cr
 Domain / support of the distribution we want to sample from.
 }
 }
@@ -22,12 +32,15 @@ Domain / support of the distribution we want to sample from.
 \itemize{
 \item \code{sample(n)} \cr
 \code{integer(1)} -> \link{Design} \cr
-Sample n values from the distribution.
+Sample \code{n} values from the distribution.
 }
 }
 
 \seealso{
-Other Sampler: \code{\link{Sampler1D}},
+Other Sampler: \code{\link{Sampler1DCateg}},
+  \code{\link{Sampler1DNormal}},
+  \code{\link{Sampler1DRfun}}, \code{\link{Sampler1DUnif}},
+  \code{\link{Sampler1D}},
   \code{\link{SamplerHierarchical}},
   \code{\link{SamplerJointIndep}},
   \code{\link{SamplerUnif}}

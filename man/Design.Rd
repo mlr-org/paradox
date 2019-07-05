@@ -6,9 +6,9 @@
 \title{Design of Configurations}
 \format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
-A lightweight wrapper around a \link{ParamSet} and a \link{data.table}, where the
+A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
-by calling a \code{generate_design} function or sampling.
+by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
 }
 \section{Construction}{
 \preformatted{c = Design$new(param_set, data, remove_dupl)
@@ -16,12 +16,20 @@ by calling a \code{generate_design} function or sampling.
 
 Note that the first 2 arguments are NOT cloned during construction!
 \itemize{
-\item \code{param_set::ParamSet} \cr
-ParamSet.
-\item \code{data::data.table::data.table()} \cr
-Right-hand-side of the condition.
-\item \code{remove_dupl::logical(1)} \cr
-Whether to remove duplicates or not.
+\item \code{param_set} :: \code{ParamSet}.
+\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Right hand side of the condition.
+\item \code{remove_dupl} :: \code{logical(1)}\cr
+Remove duplicates?
+}
+}
+
+\section{Fields}{
+
+\itemize{
+\item \code{param_set} :: \code{ParamSet}.
+\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Stored \code{data}.
 }
 }
 
@@ -29,10 +37,10 @@ Whether to remove duplicates or not.
 
 \itemize{
 \item \code{transpose(filter_na = TRUE, trafo = TRUE)} \cr
-\code{logical(1)}, \code{logical(1)} -> \code{list} of \code{list} \cr
-Converts \code{data} into a list of lists of row-configurations, possibly removes NA entries of
-inactive parameter values due to unsatisfied dependencies,
-and possibly calls the \code{trafo} function of the param set.
+(\code{logical(1)}, \code{logical(1)}) -> \code{list()} of \code{list()} \cr
+Converts \code{data} into a list of lists of row-configurations,
+possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
+and possibly calls the \code{trafo} function of the \link{ParamSet}.
 }
 }
 

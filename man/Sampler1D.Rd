@@ -3,46 +3,41 @@
 \docType{data}
 \name{Sampler1D}
 \alias{Sampler1D}
-\alias{Sampler1DUnif}
-\alias{Sampler1DCateg}
-\alias{Sampler1DNormal}
-\alias{Sampler1DRfun}
-\title{Sampler}
-\format{\link{R6Class} object inheriting from \link{Sampler}.}
+\title{Sampler1D Class}
+\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.}
 \description{
-1D sampler, abstract base class and inheriting concrete implementations.
+1D sampler, abstract base class for Sampler like \link{Sampler1DUnif}, \link{Sampler1DRfun}, \link{Sampler1DCateg} and \link{Sampler1DNormal}.
 }
-\section{Public members / active bindings}{
+\section{Construction}{
 
+Note: This object is typically constructed via a derived classes, e.g. \link{Sampler1DUnif}, \link{Sampler1DRfun}, \link{Sampler1DCateg} or \link{Sampler1DNormal}.\preformatted{smpl = Sampler1D$new(param)
+}
 \itemize{
-\item \code{param}            :: \link{Param} \cr
-Quick access to the one param in the set.
+\item \code{param} :: \link{Param}\cr
+Domain / support of the distribution we want to sample from.
 }
 }
 
-\section{Currently implemented samplers}{
+\section{Fields}{
 
+See \link{Sampler}.
+Additionally, the class provides:
 \itemize{
-\item \code{Sampler1DUnif$new(param)} \cr
-Uniform random for arbitrary (bounded) parameters.
-\item \code{Sampler1DCateg$new(param, prob = NULL)} \cr
-Categorical distribution, for a fct or lgl parameter.
-\code{prob} is a numeric vector of \code{nlevels} probabilities, which is uniform by default.
-\item \code{Sampler1DNormal$new(param, mean = NULL, sd = NULL)} \cr
-Normal sampling (potentially truncated) for doubles.
-Has member variables \code{mean} and 'sd' which you can change to influence sampling,
-they are initialized to \code{mean=mean(c(param$lower, param$upper))} and
-\code{sd=(param$upper - param$lower)/4}.
-A truncated normal is used if the parameter is bounded on both sides.
-\item \code{Sampler1DRfun(param, rfun, trunc = TRUE)} \cr
-Arbitrary sampling from 1D rng functions from R.
-Pass e.g. \code{rfun=rexp} to sample from exponential distribution.
-\code{trunc = TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
+\item \code{param} :: \link{Param}\cr
+Returns the one Parameter that is sampled from.
 }
+}
+
+\section{Methods}{
+
+See \link{Sampler}.
 }
 
 \seealso{
-Other Sampler: \code{\link{SamplerHierarchical}},
+Other Sampler: \code{\link{Sampler1DCateg}},
+  \code{\link{Sampler1DNormal}},
+  \code{\link{Sampler1DRfun}}, \code{\link{Sampler1DUnif}},
+  \code{\link{SamplerHierarchical}},
   \code{\link{SamplerJointIndep}},
   \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }

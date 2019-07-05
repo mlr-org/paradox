@@ -4,10 +4,10 @@
 #' @format [R6::R6Class] object.
 #'
 #' @description
-#' This is the abstract base class for sampling objects like [Sampler1D], [SamplerHierarchical] and [SamplerJointIndep].
+#' This is the abstract base class for sampling objects like [Sampler1D], [SamplerHierarchical] or [SamplerJointIndep].
 #'
 #' @section Construction:
-#' Note: This object is typically constructed via a derived classes, e.g. [Sampler1D], [SamplerHierarchical] or [SamplerJointIndep].
+#' Note: This object is typically constructed via a derived classes.
 #'
 #' ```
 #' smpl = Sampler$new(param_set)
@@ -24,7 +24,7 @@
 #' @section Methods:
 #' * `sample(n)` \cr
 #'   `integer(1)` -> [Design] \cr
-#'   Sample n values from the distribution.
+#'   Sample `n` values from the distribution.
 #'
 #' @family Sampler
 #' @export
