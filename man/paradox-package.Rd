@@ -4,12 +4,13 @@
 \name{paradox-package}
 \alias{paradox}
 \alias{paradox-package}
-\title{paradox: Define and Work with Parameter Spaces for Complex Algorithms}
+\title{paradox: Define and Work with Parameter Spaces for Complex
+    Algorithms}
 \description{
-Easily define parameter spaces, constraints and dependencies for
-  arbitrary algorithms, to program on such spaces.
-  Also includes statistical designs and random samplers.
-  This package is the successor of the 'ParamHelpers' package.
+Easily define parameter spaces, constraints
+    and dependencies for arbitrary algorithms, to program on such spaces.
+    Also includes statistical designs and random samplers.  This package
+    is the successor of the 'ParamHelpers' package.
 }
 \seealso{
 Useful links:

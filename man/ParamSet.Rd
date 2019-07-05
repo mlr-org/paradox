@@ -75,7 +75,7 @@ Is NULL by default, and you can set it to NULL to switch the transformation off.
 Has the set a \code{trafo} function?
 \item \code{has_deps}          :: \code{logical(1)} \cr
 Has the set param dependencies?
-\item \code{deps}          :: \code{data.table} \cr
+\item \code{deps}          :: \code{\link[data.table:data.table]{data.table::data.table()}} \cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.

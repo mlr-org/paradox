@@ -67,7 +67,8 @@ Each parameter is named "<id>\emph{rep}<k>" and gets the additional tag "<id>_re
 
 \itemize{
 \item \code{as.data.table()} \cr
-Converts param to \code{data.table()} with 1 row. See \link{ParamSet}.
+\link{Param} -> \code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Converts param to \code{\link[data.table:data.table]{data.table::data.table()}} with 1 row. See \link{ParamSet}.
 }
 }
 
