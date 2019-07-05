@@ -1,4 +1,4 @@
-#' @title Generate a space-filling LHS design
+#' @title Generate a Space-Filling LHS Design
 #'
 #' @description
 #' Generate a space-filling design using Latin hypercube sampling.

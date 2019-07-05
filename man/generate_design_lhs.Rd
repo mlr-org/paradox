@@ -2,7 +2,7 @@
 % Please edit documentation in R/generate_design_lhs.R
 \name{generate_design_lhs}
 \alias{generate_design_lhs}
-\title{Generate a space-filling LHS design}
+\title{Generate a Space-Filling LHS Design}
 \usage{
 generate_design_lhs(param_set, n, lhs_fun = NULL)
 }
