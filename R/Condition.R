@@ -1,4 +1,4 @@
-#' @title Dependency condition
+#' @title Dependency Condition
 #'
 #' @usage NULL
 #' @format [R6::R6Class] object.
@@ -6,17 +6,20 @@
 #' @description
 #' Condition object, to specify the condition in a dependency.
 #'
-#' @section Public members / active bindings:
-#' * `type`          :: `character(1)` \cr
+#' @section Construction:
+#'
+#' c = Condition$new(type, rhs)
+#'
+#' * `type::character(1)` \cr
 #'   Name / type of the condition. Read-only.
-#' * `rhs`          :: `any` \cr
+#'
+#' * `rhs::any` \cr
 #'   Right-hand-side of the condition.
 #'
-#' @section Public methods:
-#' * `new(type, rhs)` \cr
-#'   `character(1)`, `any` -> `self` \cr
-#'   Abstract constructor, called by inheriting subclasses.
-#' * `test`          :: `function(x) -> logical(n)` \cr
+#' @section Methods:
+#'
+#' * `test(function(x))`\cr
+#'   `??? -> logical(n)` \cr
 #'   Checks if condition is satisfied.
 #'   Called on a vector of parent param values.
 #'
