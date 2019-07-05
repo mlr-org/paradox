@@ -8,33 +8,21 @@
 \description{
 Random sampler for an arbitrary \link{ParamSet}.
 }
-\section{Public members / active bindings}{
-
+\section{Construction}{
+\preformatted{s = Sampler$new(param_set)
+}
 \itemize{
 \item \code{param_set}            :: \link{ParamSet} \cr
 Domain / support of the distribution we want to sample from.
 }
 }
 
-\section{Public methods}{
+\section{Methods}{
 
 \itemize{
-\item \code{new(param_set)} \cr
-\link{ParamSet} -> \code{self} \cr
-Abstract, only inheriting subclasses call this.
-Param set is cloned on construction.
 \item \code{sample(n)} \cr
 \code{integer(1)} -> \link{Design} \cr
 Sample n values from the distribution.
-}
-}
-
-\section{Private methods / Internals}{
-
-\itemize{
-\item \code{.sample(n)} \cr
-\code{integer(1)} -> \link{data.table} \cr
-Inheriting sublcasses have to implement thus, called from \code{sample()}
 }
 }
 
