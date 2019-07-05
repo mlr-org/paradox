@@ -5,28 +5,27 @@
 \alias{Condition}
 \alias{CondEqual}
 \alias{CondAnyOf}
-\title{Dependency condition}
+\title{Dependency Condition}
 \format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
 Condition object, to specify the condition in a dependency.
 }
-\section{Public members / active bindings}{
-
+\section{Construction}{
+\preformatted{c = Condition$new(type, rhs)
+}
 \itemize{
-\item \code{type}          :: \code{character(1)} \cr
-Name / type of the condition. Read-only.
-\item \code{rhs}          :: \code{any} \cr
+\item \code{type} :: \code{character(1)} \cr
+Name / type of the condition.
+\item \code{rhs::any} \cr
 Right-hand-side of the condition.
 }
 }
 
-\section{Public methods}{
+\section{Methods}{
 
 \itemize{
-\item \code{new(type, rhs)} \cr
-\code{character(1)}, \code{any} -> \code{self} \cr
-Abstract constructor, called by inheriting subclasses.
-\item \code{test}          :: \code{function(x) -> logical(n)} \cr
+\item \code{test(function(x))}\cr
+\code{??? -> logical(n)} \cr
 Checks if condition is satisfied.
 Called on a vector of parent param values.
 }

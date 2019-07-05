@@ -1,17 +1,17 @@
-#' @title Generate a grid design.
+#' @title Generate a Grid Design
 #'
 #' @description
-#' Generate a grid with specified resolution in the parameter space.
-#' NB1: The resolution for categorical parameters is ignored, these parameters
+#' Generate a grid with a specified resolution in the parameter space.
+#' The resolution for categorical parameters is ignored, these parameters
 #' always produce a grid over all their valid levels.
-#' NB2: For number params the endpoints of the params are always included in the grid.
+#' For number params the endpoints of the params are always included in the grid.
 #'
-#' @param param_set :: [ParamSet] \cr
-#' @param resolution :: `integer(1)` \cr
-#'   Global resolution for all params.
-#' @param param_resolutions :: named `integer` \cr
-#'   Resolution per param, named by param ID.
-#' @return [data.table]
+#' @param param_set :: [ParamSet].
+#' @param resolution :: `integer(1)`\cr
+#'   Global resolution for all [Param]s.
+#' @param param_resolutions :: named `integer()` \cr
+#'   Resolution per [Param], named by parameter ID.
+#' @return ([data.table::data.table()]).
 #'
 #' @family generate_design
 #' @export

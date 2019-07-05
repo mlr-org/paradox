@@ -3,29 +3,40 @@
 \docType{data}
 \name{SamplerJointIndep}
 \alias{SamplerJointIndep}
-\title{Sampler: Multivariate joint independent.}
-\format{\link{R6Class} object inheriting from \link{Sampler}.}
+\title{SamplerJointIndep Class}
+\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.}
 \description{
 Create joint, independent sampler out of multiple other samplers.
 }
-\section{Public members / active bindings}{
-
+\section{Construction}{
+\preformatted{smpl = SamplerJointIndep$new(samplers)
+}
 \itemize{
-\item \code{param_set}            :: \link{ParamSet} \cr
-Combined param sets all passed samplers.
+\item \code{samplers} :: \code{list()}\cr
+List of \link{Sampler} objects.
 }
 }
 
-\section{Public methods}{
+\section{Fields}{
 
+See \link{Sampler}.
+Additionally, the class provides:
 \itemize{
-\item \code{new(samplers)} \cr
-list of \link{Sampler} -> \code{self} \cr
+\item \code{samplers} :: \code{list()}\cr
+List of \link{Sampler} objects.
 }
+}
+
+\section{Methods}{
+
+See \link{Sampler}.
 }
 
 \seealso{
-Other Sampler: \code{\link{Sampler1D}},
+Other Sampler: \code{\link{Sampler1DCateg}},
+  \code{\link{Sampler1DNormal}},
+  \code{\link{Sampler1DRfun}}, \code{\link{Sampler1DUnif}},
+  \code{\link{Sampler1D}},
   \code{\link{SamplerHierarchical}},
   \code{\link{SamplerUnif}}, \code{\link{Sampler}}
 }

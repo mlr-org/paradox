@@ -14,7 +14,7 @@ assert_param_set(param_set, cl = "Param", no_untyped = FALSE,
 \arguments{
 \item{param}{(\link{Param}).}
 
-\item{cl}{\code{character()}\cr
+\item{cl}{(\code{character()})\cr
 Allowed subclasses.}
 
 \item{no_untyped}{(\code{logical(1)})\cr

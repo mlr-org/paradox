@@ -3,33 +3,44 @@
 \docType{data}
 \name{Design}
 \alias{Design}
-\title{Design of configurations}
+\title{Design of Configurations}
 \format{\link[R6:R6Class]{R6::R6Class} object.}
 \description{
-A lightweight wrapper around a \link{ParamSet} and a \link{data.table}, where the latter is a design
-of configurations somehow produced from the former - e.g., by calling a
-\code{generate_design} function or sampling.
+A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
+latter is a design of configurations produced from the former - e.g.,
+by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
 }
-\section{Public members / active bindings}{
+\section{Construction}{
+\preformatted{c = Design$new(param_set, data, remove_dupl)
+}
+
+Note that the first 2 arguments are NOT cloned during construction!
+\itemize{
+\item \code{param_set} :: \code{ParamSet}.
+\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Right hand side of the condition.
+\item \code{remove_dupl} :: \code{logical(1)}\cr
+Remove duplicates?
+}
+}
+
+\section{Fields}{
 
 \itemize{
-\item \code{param_set}       :: \link{ParamSet}
-\item \code{data}            :: \link{data.table}
+\item \code{param_set} :: \code{ParamSet}.
+\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Stored \code{data}.
 }
 }
 
-\section{Public methods}{
+\section{Methods}{
 
 \itemize{
-\item \code{new(param_set, data, remove_dupl)} \cr
-\link{ParamSet}, \link{data.table}, \code{logical(1)} -> \code{self} \cr
-Note that the first 2 arguments are NOT cloned on construction!
-Has an option to remove duplicated rows.
 \item \code{transpose(filter_na = TRUE, trafo = TRUE)} \cr
-\code{logical(1)}, \code{logical(1)} -> \code{list} of \code{list} \cr
-Converts \code{data} into a list of lists of row-configurations, possibly removes NA entries of
-inactive parameter values due to unsatisfied dependencies,
-and possibly calls the \code{trafo} function of the param set.
+(\code{logical(1)}, \code{logical(1)}) -> \code{list()} of \code{list()} \cr
+Converts \code{data} into a list of lists of row-configurations,
+possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
+and possibly calls the \code{trafo} function of the \link{ParamSet}.
 }
 }
 

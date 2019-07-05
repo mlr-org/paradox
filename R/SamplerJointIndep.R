@@ -1,18 +1,27 @@
-#' @title Sampler: Multivariate joint independent.
+#' @title SamplerJointIndep Class
 #'
 #' @usage NULL
-#' @format [R6Class] object inheriting from [Sampler].
+#' @format [R6::R6Class] inheriting from [Sampler].
 #'
 #' @description
 #' Create joint, independent sampler out of multiple other samplers.
 #'
-#' @section Public members / active bindings:
-#' * `param_set`            :: [ParamSet] \cr
-#'    Combined param sets all passed samplers.
+#' @section Construction:
+#' ```
+#' smpl = SamplerJointIndep$new(samplers)
+#' ```
 #'
-#' @section Public methods:
-#' * `new(samplers)` \cr
-#'   list of [Sampler] -> `self` \cr
+#' * `samplers` :: `list()`\cr
+#'   List of [Sampler] objects.
+#'
+#' @section Fields:
+#' See [Sampler].
+#' Additionally, the class provides:
+#' * `samplers` :: `list()`\cr
+#'   List of [Sampler] objects.
+#'
+#' @section Methods:
+#' See [Sampler].
 #'
 #' @family Sampler
 #' @export

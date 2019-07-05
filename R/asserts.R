@@ -1,7 +1,7 @@
 #' @title Assertions for Params and ParamSets
 #'
 #' @param param ([Param]).
-#' @param cl `character()`\cr
+#' @param cl (`character()`)\cr
 #'   Allowed subclasses.
 #' @param no_untyped (`logical(1)`)\cr
 #'   Are untyped [Param]s allowed?

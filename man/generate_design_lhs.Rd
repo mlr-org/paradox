@@ -2,22 +2,22 @@
 % Please edit documentation in R/generate_design_lhs.R
 \name{generate_design_lhs}
 \alias{generate_design_lhs}
-\title{Generate a space-filling LHS design}
+\title{Generate a Space-Filling LHS Design}
 \usage{
 generate_design_lhs(param_set, n, lhs_fun = NULL)
 }
 \arguments{
-\item{param_set}{:: \link{ParamSet}. \cr}
+\item{param_set}{:: \link{ParamSet}.}
 
 \item{n}{:: \code{integer(1)} \cr
 Number of points to sample.}
 
 \item{lhs_fun}{:: \code{function(n, k)} \cr
 Function to use to generate a LHS sample, with n samples and k values per param.
-LHS functions are implemented in package \pkg{lhs}, default is to use \link[lhs:maximinLHS]{lhs::maximinLHS}.}
+LHS functions are implemented in package \pkg{lhs}, default is to use \code{\link[lhs:maximinLHS]{lhs::maximinLHS()}}.}
 }
 \value{
-\link{data.table}
+(\code{\link[data.table:data.table]{data.table::data.table()}}).
 }
 \description{
 Generate a space-filling design using Latin hypercube sampling.
