@@ -44,6 +44,9 @@ Always \code{TRUE} for this parameter.
 See \link{Param}.
 }
 
+\examples{
+ParamFct$new("f", levels = letters[1:3])
+}
 \seealso{
 Other Params: \code{\link{ParamDbl}},
   \code{\link{ParamInt}}, \code{\link{ParamLgl}},

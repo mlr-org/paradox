@@ -38,6 +38,8 @@
 #'
 #' @family Params
 #' @export
+#' @examples
+#' ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
 ParamDbl = R6Class("ParamDbl", inherit = Param,
   public = list(
     lower = NULL,

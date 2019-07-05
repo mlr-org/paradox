@@ -36,6 +36,8 @@
 #'
 #' @family Params
 #' @export
+#' @examples
+#' ParamLgl$new("flag", default = TRUE)
 ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(
     initialize = function(id, special_vals = list(), default = NO_DEF, tags = character()) {

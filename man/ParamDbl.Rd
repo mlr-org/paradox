@@ -45,6 +45,9 @@ Are the bounds finite?
 See \link{Param}.
 }
 
+\examples{
+ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
+}
 \seealso{
 Other Params: \code{\link{ParamFct}},
   \code{\link{ParamInt}}, \code{\link{ParamLgl}},

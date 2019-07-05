@@ -38,6 +38,8 @@
 #'
 #' @family Params
 #' @export
+#' @examples
+#' ParamInt$new("count", lower = 0, upper = 10, default = 1)
 ParamInt = R6Class("ParamInt", inherit = Param,
   public = list(
     lower = NULL,

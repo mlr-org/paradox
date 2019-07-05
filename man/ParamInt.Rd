@@ -45,6 +45,9 @@ Are the bounds finite?
 See \link{Param}.
 }
 
+\examples{
+ParamInt$new("count", lower = 0, upper = 10, default = 1)
+}
 \seealso{
 Other Params: \code{\link{ParamDbl}},
   \code{\link{ParamFct}}, \code{\link{ParamLgl}},

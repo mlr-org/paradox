@@ -37,6 +37,8 @@
 #'
 #' @family Params
 #' @export
+#' @examples
+#' ParamFct$new("f", levels = letters[1:3])
 ParamFct = R6Class("ParamFct", inherit = Param,
   public = list(
     levels = NULL,

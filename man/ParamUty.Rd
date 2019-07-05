@@ -46,6 +46,9 @@ Always \code{FALSE} for this parameter.
 See \link{Param}.
 }
 
+\examples{
+ParamUty$new("untyped", default = Inf)
+}
 \seealso{
 Other Params: \code{\link{ParamDbl}},
   \code{\link{ParamFct}}, \code{\link{ParamInt}},

@@ -42,6 +42,9 @@ Always \code{TRUE} for this parameter.
 See \link{Param}.
 }
 
+\examples{
+ParamLgl$new("flag", default = TRUE)
+}
 \seealso{
 Other Params: \code{\link{ParamDbl}},
   \code{\link{ParamFct}}, \code{\link{ParamInt}},

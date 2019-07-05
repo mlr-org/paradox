@@ -38,6 +38,8 @@
 #'
 #' @family Params
 #' @export
+#' @examples
+#' ParamUty$new("untyped", default = Inf)
 ParamUty = R6Class("ParamUty", inherit = Param,
   public = list(
     custom_check = NULL,
