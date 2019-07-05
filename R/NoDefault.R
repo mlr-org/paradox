@@ -6,8 +6,8 @@
 #' Special new data type for no-default. Not often needed by the end-user, mainly internal.
 #'
 #' * `NoDefault`: R6 factory for type.
-#' * `NO_DEF`: Singleton object for type, used in [Param].
-#' * `is_nodefault`: Is an object of type 'no default'?
+#' * `NO_DEF`: R6 Singleton object for type, used in [Param].
+#' * `is_nodefault()`: Is an object of type 'no default'?
 #'
 #' @name NO_DEF
 #' @aliases NoDefault is_nodefault
