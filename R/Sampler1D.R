@@ -1,33 +1,30 @@
-#' @title Sampler
+#' @title Sampler1D Class
 #'
 #' @usage NULL
-#' @format [R6Class] object inheriting from [Sampler].
+#' @format [R6::R6Class] inheriting from [Sampler].
 #'
 #' @description
-#' 1D sampler, abstract base class and inheriting concrete implementations.
+#' 1D sampler, abstract base class for Sampler like [Sampler1DUnif], [Sampler1DRfun], [Sampler1DCateg] and [Sampler1DNormal].
 #'
-#' @section Public members / active bindings:
-#' * `param`            :: [Param] \cr
-#'   Quick access to the one param in the set.
+#' @section Construction:
+#' Note: This object is typically constructed via a derived classes, e.g. [Sampler1DUnif], [Sampler1DRfun], [Sampler1DCateg] or [Sampler1DNormal].
 #'
-#' @section Currently implemented samplers:
-#' * `Sampler1DUnif$new(param)` \cr
-#'   Uniform random for arbitrary (bounded) parameters.
-#' * `Sampler1DCateg$new(param, prob = NULL)` \cr
-#'   Categorical distribution, for a fct or lgl parameter.
-#'   `prob` is a numeric vector of `nlevels` probabilities, which is uniform by default.
-#' * `Sampler1DNormal$new(param, mean = NULL, sd = NULL)` \cr
-#'   Normal sampling (potentially truncated) for doubles.
-#'   Has member variables `mean` and 'sd' which you can change to influence sampling,
-#'   they are initialized to `mean=mean(c(param$lower, param$upper))` and
-#'   `sd=(param$upper - param$lower)/4`.
-#'   A truncated normal is used if the parameter is bounded on both sides.
-#' * `Sampler1DRfun(param, rfun, trunc = TRUE)` \cr
-#'   Arbitrary sampling from 1D rng functions from R.
-#'   Pass e.g. `rfun=rexp` to sample from exponential distribution.
-#'   `trunc = TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
+#' ```
+#' smpl = Sampler1D$new(param)
+#' ```
 #'
-#' @aliases Sampler1DUnif Sampler1DCateg Sampler1DNormal Sampler1DRfun
+#' * `param` :: [Param]\cr
+#'   Domain / support of the distribution we want to sample from.
+#'
+#' @section Fields:
+#' See [Sampler].
+#' Additionally, the class provides:
+#' * `param` :: [Param]\cr
+#'   Returns the one Parameter that is sampled from.
+#'
+#' @section Methods:
+#' See [Sampler].
+#'
 #' @family Sampler
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
@@ -50,6 +47,29 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   )
 )
 
+#' @title Sampler1DUnif Class
+#'
+#' @usage NULL
+#' @format [R6::R6Class] inheriting from [Sampler1D].
+#'
+#' @description
+#' Uniform random sampler for arbitrary (bounded) parameters.
+#'
+#' @section Construction:
+#' ```
+#' smpl = Sampler1DUnif$new(param)
+#' ```
+#'
+#' * `param` :: [Param]\cr
+#'   Domain / support of the distribution we want to sample from.
+#'
+#' @section Fields:
+#' See [Sampler1D].
+#'
+#' @section Methods:
+#' See [Sampler1D].
+#'
+#' @family Sampler
 #' @export
 Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   public = list(
@@ -65,6 +85,38 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
 )
 
 
+#' @title Sampler1DRfun Class
+#'
+#' @usage NULL
+#' @format [R6::R6Class] inheriting from [Sampler1D].
+#'
+#' @description
+#' Arbitrary sampling from 1D RNG functions from R.
+#'
+#' @section Construction:
+#' ```
+#' smpl = Sampler1DRfun$new(param, rfun, trunc = TRUE)
+#' ```
+#'
+#' * `param` :: [Param]\cr
+#'   Domain / support of the distribution we want to sample from.
+#' * `rfun` :: `function`\cr
+#'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
+#' * `trunc` :: `logical(1)`\cr
+#'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
+#'
+#' @section Fields:
+#' See [Sampler1D].
+#' Additionally, the class provides:
+#' * `rfun` :: `function`\cr
+#'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
+#' * `trunc` :: `logical(1)`\cr
+#'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
+#'
+#' @section Methods:
+#' See [Sampler1D].
+#'
+#' @family Sampler
 #' @export
 Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
   public = list(
@@ -108,6 +160,34 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
   )
 )
 
+#' @title Sampler1DCateg Class
+#'
+#' @usage NULL
+#' @format [R6::R6Class] inheriting from [Sampler1D].
+#'
+#' @description
+#' Sampling from a discrete distribution, for a [ParamFct] or [ParamLgl].
+#'
+#' @section Construction:
+#' ```
+#' smpl = Sampler1DCateg$new(param, prob = NULL)
+#' ```
+#'
+#' * `param` :: [Param]\cr
+#'   Domain / support of the distribution we want to sample from.
+#' * `prob` :: `numeric()`\cr
+#'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
+#'
+#' @section Fields:
+#' See [Sampler1D].
+#' Additionally, the class provides:
+#' * `prob` :: `numeric(n)`\cr
+#'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
+#'
+#' @section Methods:
+#' See [Sampler1D].
+#'
+#' @family Sampler
 #' @export
 Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
   public = list(
@@ -134,6 +214,40 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
   )
 )
 
+#' @title Sampler1DNormal Class
+#'
+#' @usage NULL
+#' @format [R6::R6Class] inheriting from [Sampler1D].
+#'
+#' @description
+#' Normal sampling (potentially truncated) for [ParamDbl].
+#'
+#' @section Construction:
+#' ```
+#' smpl = Sampler1DNormal$new(param, mean = NULL, sd = NULL)
+#' ```
+#'
+#' * `mean` :: `numeric(1)`\cr
+#'   Mean parameter of the normal distribution.
+#'   Default is `mean(c(param$lower, param$upper)`.
+#' * `sd` :: `numeric(1)`\cr
+#'   SD parameter of the normal distribution.
+#'   Default is `(param$upper - param$lower)/4`.
+#'
+#' @section Fields:
+#' See [Sampler1D].
+#' Additionally, the class provides:
+#' * `mean` :: `numeric(1)`\cr
+#'   Mean parameter of the normal distribution.
+#'   Default is `mean(c(param$lower, param$upper)`.
+#' * `sd` :: `numeric(1)`\cr
+#'   SD parameter of the normal distribution.
+#'   Default is `(param$upper - param$lower)/4`.
+#'
+#' @section Methods:
+#' See [Sampler1D].
+#'
+#' @family Sampler
 #' @export
 Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
   public = list(

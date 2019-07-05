@@ -1,22 +1,27 @@
-#' @title Sampler
+#' @title Sampler Class
 #'
 #' @usage NULL
 #' @format [R6::R6Class] object.
 #'
 #' @description
-#' Random sampler for an arbitrary [ParamSet].
+#' This is the abstract base class for sampling objects like [Sampler1D], [SamplerHierarchical] and [SamplerJointIndep].
 #'
 #' @section Construction:
+#' Note: This object is typically constructed via a derived classes, e.g. [Sampler1D], [SamplerHierarchical] or [SamplerJointIndep].
 #'
 #' ```
-#' s = Sampler$new(param_set)
+#' smpl = Sampler$new(param_set)
 #' ```
 #'
-#' * `param_set`            :: [ParamSet] \cr
+#' * `param_set` :: [ParamSet]\cr
+#'   Domain / support of the distribution we want to sample from.
+#'   ParamSet is cloned on construction.
+#'
+#' @section Fields:
+#' * `param_set` :: [ParamSet]\cr
 #'   Domain / support of the distribution we want to sample from.
 #'
 #' @section Methods:
-#'
 #' * `sample(n)` \cr
 #'   `integer(1)` -> [Design] \cr
 #'   Sample n values from the distribution.
@@ -27,7 +32,6 @@ Sampler = R6Class("Sampler",
   public = list(
     param_set = NULL,
 
-    # params.cl allows asserting params of only a certain type, vector of multiple entries is OK
     initialize = function(param_set) {
       assert_param_set(param_set, no_untyped = TRUE)
       self$param_set = param_set$clone(deep = TRUE)

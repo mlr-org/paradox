@@ -1,16 +1,21 @@
-#' @title Sampler: Multivariate uniform.
+#' @title SamplerUnif Class
 #'
 #' @usage NULL
-#' @format [R6Class] object inheriting from [SamplerHierarchical].
+#' @format [R6::R6Class] inheriting from [SamplerHierarchical].
 #'
 #' @description
 #' Uniform random sampling for arbitrary (bounded) param sets.
 #' Constructs 1 uniform sampler per param, then passes them to [SamplerHierarchical].
 #' Hence, also works for param sets with dependencies.
 #'
-#' @section Public methods:
-#' * `new(param_set)` \cr
-#'   [ParamSet] -> `self` \cr
+#' @section Construction:
+#' See [Sampler].
+#'
+#' @section Fields:
+#' See [Sampler].
+#'
+#' @section Methods:
+#' See [Sampler].
 #'
 #' @family Sampler
 #' @export

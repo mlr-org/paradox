@@ -1,17 +1,31 @@
-#' @title Sampler: Multivariate hierarchical.
+#' @title SamplerHierarchical Class
 #'
 #' @usage NULL
-#' @format [R6Class] object inheriting from [Sampler].
+#' @format [R6::R6Class] inheriting from [Sampler].
 #'
 #' @description
 #' Hierarchical sampling for arbitrary param sets with dependencies, where the user specifies 1D samplers per param.
 #' Dependencies are topologically sorted, parameters are then sampled in topological order,
-#' and if dependencies do not hold, values are set to NA in the resulting data.table.
+#' and if dependencies do not hold, values are set to `NA` in the resulting `data.table`.
 #'
-#' @section Public methods:
-#' * `new(param_set, samplers)` \cr
-#'   [ParamSet], list of [Sampler] -> `self` \cr
-#'   User has to pass one [Sampler1D] per param in set, which specifies its distribution.
+#' @section Construction:
+#' ```
+#' smpl = SamplerHierarchical$new(param_set, samplers)
+#' ```
+#'
+#' * `param_set` :: [ParamSet]\cr
+#'   Domain / support of the distribution we want to sample from.
+#' * `samplers` :: `list()`\cr
+#'   List of [Sampler1D] objects that gives a Sampler for each [Param] in the `param_set`.
+#'
+#' @section Fields:
+#' See [Sampler].
+#' Additionally, the class provides:
+#' * `samplers` :: `list()`\cr
+#'   List of [Sampler1D] objects that gives a Sampler for each [Param] in the `param_set`.
+#'
+#' @section Methods:
+#' See [Sampler].
 #'
 #' @family Sampler
 #' @export
