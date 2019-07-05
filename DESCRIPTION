@@ -24,7 +24,7 @@ Description: Easily define parameter spaces, constraints
     and dependencies for arbitrary algorithms, to program on such spaces.
     Also includes statistical designs and random samplers.  This package
     is the successor of the 'ParamHelpers' package.
-License: MIT + file LICENSE
+License: LGPL-3
 URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
 Imports:
