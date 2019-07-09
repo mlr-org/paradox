@@ -7,10 +7,10 @@
 \title{paradox: Define and Work with Parameter Spaces for Complex
     Algorithms}
 \description{
-Easily define parameter spaces, constraints
-    and dependencies for arbitrary algorithms, to program on such spaces.
-    Also includes statistical designs and random samplers.  This package
-    is the successor of the 'ParamHelpers' package.
+Define parameter spaces, constraints and
+    dependencies for arbitrary algorithms, to program on such spaces. Also
+    includes statistical designs and random samplers.  This package is the
+    successor of the 'ParamHelpers' package.
 }
 \seealso{
 Useful links:
@@ -21,13 +21,14 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Michel Lang \email{michellang@gmail.com}
+\strong{Maintainer}: Michel Lang \email{michellang@gmail.com} (0000-0001-9754-0393)
 
 Authors:
 \itemize{
-  \item Jakob Richter \email{code@jakob-r.de}
-  \item Xudong Sun \email{smilesun.east@gmail.com}
-  \item Bernd Bischl \email{bernd_bischl@gmx.net}
+  \item Bernd Bischl \email{bernd_bischl@gmx.net} (0000-0001-6002-6980)
+  \item Jakob Richter \email{jakob1richter@gmail.com} (0000-0003-4481-5554)
+  \item Xudong Sun \email{smilesun.east@gmail.com} (0000-0003-3269-2307)
+  \item Martin Binder \email{mlr.developer@mb706.com}
 }
 
 }

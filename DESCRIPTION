@@ -7,23 +7,31 @@ Authors@R:
     c(person(given = "Michel",
              family = "Lang",
              role = c("cre", "aut"),
-             email = "michellang@gmail.com"),
-      person(given = "Jakob",
-             family = "Richter",
-             role = "aut",
-             email = "code@jakob-r.de"),
-      person(given = "Xudong",
-             family = "Sun",
-             role = "aut",
-             email = "smilesun.east@gmail.com"),
+             email = "michellang@gmail.com",
+             comment = c(ORCID = "0000-0001-9754-0393")),
       person(given = "Bernd",
              family = "Bischl",
              role = "aut",
-             email = "bernd_bischl@gmx.net"))
-Description: Easily define parameter spaces, constraints
-    and dependencies for arbitrary algorithms, to program on such spaces.
-    Also includes statistical designs and random samplers.  This package
-    is the successor of the 'ParamHelpers' package.
+             email = "bernd_bischl@gmx.net",
+             comment = c(ORCID = "0000-0001-6002-6980")),
+      person(given = "Jakob",
+             family = "Richter",
+             role = "aut",
+             email = "jakob1richter@gmail.com",
+             comment = c(ORCID = "0000-0003-4481-5554")),
+      person(given = "Xudong",
+             family = "Sun",
+             role = "aut",
+             email = "smilesun.east@gmail.com",
+             comment = c(ORCID = "0000-0003-3269-2307")),
+      person(given = "Martin",
+             family = "Binder",
+             role = "aut",
+             email = "mlr.developer@mb706.com"))
+Description: Define parameter spaces, constraints and
+    dependencies for arbitrary algorithms, to program on such spaces. Also
+    includes statistical designs and random samplers.  This package is the
+    successor of the 'ParamHelpers' package.
 License: LGPL-3
 URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
