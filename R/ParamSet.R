@@ -118,6 +118,23 @@
 #'     - default: list col, with NULL elements
 #'     - storage_type: character
 #'     - tags: list col of character vectors
+#' @examples
+#' ps = ParamSet$new(
+#'   params = list(
+#'     ParamDbl$new("d", lower = -5, upper = 5, default = 0),
+#'     ParamFct$new("f", levels = letters[1:3])
+#'   )
+#' )
+#'
+#' ps$trafo = function(x, param_set) {
+#'   x$d = 2^d
+#'   return(x)
+#' }
+#'
+#' ps$add(ParamInt$new("i", lower = 0L, upper = 16L))
+#'
+#' ps$check(list(d = 2.1, f = "a", i = 3L))
+#'
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
