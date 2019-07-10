@@ -30,8 +30,8 @@ Authors@R:
              email = "mlr.developer@mb706.com"))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
-    includes statistical designs and random samplers.  This package is the
-    successor of the 'ParamHelpers' package.
+    includes statistical designs and random samplers. Objects are implemented
+    as 'R6' classes.
 License: LGPL-3
 URL: https://paradox.mlr-org.com
 BugReports: https://github.com/mlr-org/paradox/issues
