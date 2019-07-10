@@ -15,6 +15,12 @@
 #'
 #' @family generate_design
 #' @export
+#' @examples
+#' ps = ParamSet$new(list(
+#'   ParamDbl$new("ratio", lower = 0, upper = 1),
+#'   ParamFct$new("letters", levels = letters[1:3])
+#' ))
+#' generate_design_grid(ps, 10)
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
 
   assert_param_set(param_set, no_untyped = TRUE)

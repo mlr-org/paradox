@@ -22,6 +22,13 @@ LHS functions are implemented in package \pkg{lhs}, default is to use \code{\lin
 \description{
 Generate a space-filling design using Latin hypercube sampling.
 }
+\examples{
+ps = ParamSet$new(list(
+  ParamDbl$new("ratio", lower = 0, upper = 1),
+  ParamFct$new("letters", levels = letters[1:3])
+))
+generate_design_lhs(ps, 10)
+}
 \seealso{
 Other generate_design: \code{\link{generate_design_grid}},
   \code{\link{generate_design_random}}

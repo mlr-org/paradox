@@ -25,6 +25,13 @@ The resolution for categorical parameters is ignored, these parameters
 always produce a grid over all their valid levels.
 For number params the endpoints of the params are always included in the grid.
 }
+\examples{
+ps = ParamSet$new(list(
+  ParamDbl$new("ratio", lower = 0, upper = 1),
+  ParamFct$new("letters", levels = letters[1:3])
+))
+generate_design_grid(ps, 10)
+}
 \seealso{
 Other generate_design: \code{\link{generate_design_lhs}},
   \code{\link{generate_design_random}}

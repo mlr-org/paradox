@@ -13,6 +13,12 @@
 #'
 #' @family generate_design
 #' @export
+#' @examples
+#' ps = ParamSet$new(list(
+#'   ParamDbl$new("ratio", lower = 0, upper = 1),
+#'   ParamFct$new("letters", levels = letters[1:3])
+#' ))
+#' generate_design_lhs(ps, 10)
 generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
 
   require_namespaces("lhs") # actually we MAY do not need to load this, if user passes another lhs_fun (not from LHS)
