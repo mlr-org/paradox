@@ -70,7 +70,7 @@ test_that("adding 2 sets with deps works", {
   ps1$add(ps2)
   expect_equal(ps1$length, 4L)
   expect_true(ps1$has_deps)
-  expect_data_table(ps1$deps, nrow = 2)
+  expect_data_table(ps1$deps, nrows = 2)
   # do a few feasibility checks on larger set
   expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y2 = 1)))
   expect_true(ps1$test(list(x1 = "a", y1 = 1)))

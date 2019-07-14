@@ -87,7 +87,7 @@ test_that("empty paramset", {
   expect_equal(ps$length, 0)
   expect_equal(ps$ids(), character(0L))
   expect_equal(ps$lower, set_names(numeric(0L), character(0L)))
-  expect_data_table(ps$deps, nrow = 0L, ncol = 3L)
+  expect_data_table(ps$deps, nrows = 0L, ncols = 3L)
 })
 
 test_that("ParamSet$check", {
@@ -214,10 +214,10 @@ test_that("ParamSet$add_param", {
 
 test_that("as.data.table", {
   d = as.data.table(ParamSet$new())
-  expect_data_table(d, nrow = 0)
+  expect_data_table(d, nrows = 0)
   ps = th_paramset_full()
   d = as.data.table(ps)
-  expect_data_table(d, nrow = 4, ncol = 11)
+  expect_data_table(d, nrows = 4, ncols = 11)
   expect_equal(ps$ids(), d$id)
   expect_equal(unname(ps$lower), d$lower)
   expect_equal(unname(ps$levels), d$levels)

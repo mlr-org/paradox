@@ -168,14 +168,14 @@ test_that("empty collections", {
   expect_equal(psc$length, 0L)
   expect_equal(psc$params, named_list())
   expect_equal(psc$ids(), character(0L))
-  expect_data_table(as.data.table(psc), nrow = 0L)
+  expect_data_table(as.data.table(psc), nrows = 0L)
 
   # 1 empty paramset
   psc = ParamSetCollection$new(list(ParamSet$new()))
   expect_equal(psc$length, 0L)
   expect_equal(psc$params, named_list())
   expect_equal(psc$ids(), character(0L))
-  expect_data_table(as.data.table(psc), nrow = 0L)
+  expect_data_table(as.data.table(psc), nrows = 0L)
 })
 
 
