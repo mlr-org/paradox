@@ -10,7 +10,7 @@
 
 Universal Parameter Space Description and Tools.
 
-**For an exhaustive introduction, please take a look at the [mlr3book](https://mlr3book.mlr-org.com).**
+** Check the [mlr3book paradox chapter](https://mlr3book.mlr-org.com/paradox.html) for an exhaustive introduction. **
 
 ## Installation
 
@@ -138,7 +138,8 @@ Transformations are functions with a fixed signature.
 * `x` A named list of parameter values
 * `param_set` the `ParamSet` used to create the design
 
-Transformations can be used to change the distributions of sampled parameters. For example, to sample values between $2^-3$ and $2^3$ in a $log\_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
+Transformations can be used to change the distributions of sampled parameters.
+For example, to sample values between $2^-3$ and $2^3$ in a $log_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
 
 
 ```r
