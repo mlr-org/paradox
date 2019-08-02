@@ -1,20 +1,21 @@
+
 # paradox
 
+[![Build Status
+Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
 [![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
-[![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
-[![Build Status Windows](https://ci.appveyor.com/api/projects/status/m26qhpq99cka8l1b?svg=true)](https://ci.appveyor.com/project/jakob-r/paradox)
-[![Coverage Status](https://coveralls.io/repos/github/mlr-org/paradox/badge.svg?branch=master)](https://coveralls.io/github/mlr-org/paradox?branch=master)
-
-
-
+[![codecov](https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg)](https://codecov.io/gh/mlr-org/paradox)
+[![StackOverflow](https://img.shields.io/badge/stackoverflow-mlr3-orange.svg)](https://stackoverflow.com/questions/tagged/mlr3)
 
 Universal Parameter Space Description and Tools.
 
-** Check the [mlr3book paradox chapter](https://mlr3book.mlr-org.com/paradox.html) for an exhaustive introduction. **
+\*\* Check the [mlr3book paradox
+chapter](https://mlr3book.mlr-org.com/paradox.html) for an exhaustive
+introduction. \*\*
 
 ## Installation
 
-```r
+``` r
 remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 ```
 
@@ -22,14 +23,15 @@ remotes::install_github("mlr-org/paradox", dependencies = TRUE)
 
 Create a simple ParamSet using all supported Parameter Types:
 
-* integer numbers (`"int"`)
-* real-valued numbers (`"dbl"`)
-* truth values `TRUE` or `FALSE` (`"lgl"`)
-* categorical values from a set of possible strings (`"fct"`)
-* further types are only possible by using transformations.
+  - integer numbers (`"int"`)
+  - real-valued numbers (`"dbl"`)
+  - truth values `TRUE` or `FALSE` (`"lgl"`)
+  - categorical values from a set of possible strings (`"fct"`)
+  - further types are only possible by using transformations.
 
+<!-- end list -->
 
-```r
+``` r
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = 1, upper = 3),
@@ -42,8 +44,7 @@ ps = ParamSet$new(
 
 Draw random samples / create random design:
 
-
-```r
+``` r
 generate_design_random(ps, 3)
 #> <Design> with 3 rows:
 #>        z         x   flag methods
@@ -55,8 +56,7 @@ generate_design_random(ps, 3)
 
 Generate LHS Design:
 
-
-```r
+``` r
 generate_design_lhs(ps, 3)
 #> <Design> with 3 rows:
 #>        z         x   flag methods
@@ -68,8 +68,7 @@ generate_design_lhs(ps, 3)
 
 Generate Grid Design:
 
-
-```r
+``` r
 generate_design_grid(ps, resolution = 2)
 #> <Design> with 24 rows:
 #>         z     x   flag methods
@@ -85,8 +84,7 @@ generate_design_grid(ps, resolution = 2)
 
 Properties of the parameters within the `ParamSet`:
 
-
-```r
+``` r
 ps$ids()
 #> [1] "z"       "x"       "flag"    "methods"
 ps$levels
@@ -117,10 +115,11 @@ ps$upper
 
 ### Parameter Checks
 
-Check that a parameter satisfies all conditions of a `ParamSet`, using `$test()` (returns `FALSE` on mismatch), `$check()` (returns error description on mismatch), and `$assert()` (throws error on mismatch):
+Check that a parameter satisfies all conditions of a `ParamSet`, using
+`$test()` (returns `FALSE` on mismatch), `$check()` (returns error
+description on mismatch), and `$assert()` (throws error on mismatch):
 
-
-```r
+``` r
 ps$test(list(z = 1, x = 1))
 #> [1] TRUE
 ps$test(list(z = -1, x = 1))
@@ -135,14 +134,15 @@ ps$assert(list(z = -1, x = 1))
 
 Transformations are functions with a fixed signature.
 
-* `x` A named list of parameter values
-* `param_set` the `ParamSet` used to create the design
+  - `x` A named list of parameter values
+  - `param_set` the `ParamSet` used to create the design
 
-Transformations can be used to change the distributions of sampled parameters.
-For example, to sample values between $2^-3$ and $2^3$ in a $log_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
+Transformations can be used to change the distributions of sampled
+parameters. For example, to sample values between \(2^-3\) and \(2^3\)
+in a \(log_2\)-uniform distribution, one can sample uniformly between -3
+and 3 and exponentiate the random value inside the transformation.
 
-
-```r
+``` r
 ps = ParamSet$new(
   params = list(
     ParamInt$new(id = "z", lower = -3, upper = 3),

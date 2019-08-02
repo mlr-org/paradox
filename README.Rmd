@@ -1,3 +1,7 @@
+---
+output: github_document
+---
+
 # paradox
 
 [![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
