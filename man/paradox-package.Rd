@@ -16,6 +16,7 @@ Define parameter spaces, constraints and
 Useful links:
 \itemize{
   \item \url{https://paradox.mlr-org.com}
+  \item \url{https://github.com/mlr-org/paradox}
   \item Report bugs at \url{https://github.com/mlr-org/paradox/issues}
 }
 
