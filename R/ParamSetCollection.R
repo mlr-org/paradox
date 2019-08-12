@@ -43,6 +43,7 @@
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
     initialize = function(sets) {
+
       assert_list(sets, types = "ParamSet")
       split_sets = split(sets, map_lgl(sets, function(x) x$set_id == ""))
       nameless_sets = split_sets$`TRUE`
@@ -94,6 +95,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   active = list(
     params = function(v) {
+
       sets = private$.sets
       names(sets) = map_chr(sets, "set_id")
       if (length(sets) == 0L) {
