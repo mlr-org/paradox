@@ -16,7 +16,7 @@ The set also contains a member variable \code{values} which can be used to store
 some parameters to constant values (regarding subsequent sampling or generation of designs).
 }
 \section{Construction}{
-\preformatted{ParamSet$new(params = named_list())
+\preformatted{ParamSet$set(params = named_list())
 }
 \itemize{
 \item \code{params} :: named \code{list()}\cr
@@ -143,10 +143,10 @@ Compact representation as datatable. Col types are: \cr
 }
 
 \examples{
-ps = ParamSet$new(
+ps = ParamSet$set(
   params = list(
-    ParamDbl$new("d", lower = -5, upper = 5, default = 0),
-    ParamFct$new("f", levels = letters[1:3])
+    ParamDbl$set("d", lower = -5, upper = 5, default = 0),
+    ParamFct$set("f", levels = letters[1:3])
   )
 )
 
@@ -155,9 +155,8 @@ ps$trafo = function(x, param_set) {
   return(x)
 }
 
-ps$add(ParamInt$new("i", lower = 0L, upper = 16L))
+ps$add(ParamInt$set("i", lower = 0L, upper = 16L))
 
 ps$check(list(d = 2.1, f = "a", i = 3L))
-
 }
 \keyword{datasets}

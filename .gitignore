@@ -9,3 +9,4 @@ README.md
 vignettes/*.html
 vignettes/*.R
 vignettes/*_files/
+.DS_Store

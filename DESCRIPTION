@@ -41,10 +41,12 @@ Imports:
     checkmate,
     data.table,
     mlr3misc,
-    R6
+    R6,
+    set6
 Suggests:
     lhs,
     testthat
+Remotes: RaphaelS1/set6
 Encoding: UTF-8
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE)
@@ -53,14 +55,8 @@ Collate:
     'Condition.R'
     'Design.R'
     'NoDefault.R'
-    'Param.R'
-    'ParamDbl.R'
-    'ParamFct.R'
-    'ParamInt.R'
-    'ParamLgl.R'
     'ParamSet.R'
     'ParamSetCollection.R'
-    'ParamUty.R'
     'Sampler.R'
     'Sampler1D.R'
     'SamplerHierarchical.R'
