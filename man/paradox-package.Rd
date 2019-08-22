@@ -9,8 +9,8 @@
 \description{
 Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
-    includes statistical designs and random samplers. Objects are implemented
-    as 'R6' classes.
+    includes statistical designs and random samplers. Objects are
+    implemented as 'R6' classes.
 }
 \seealso{
 Useful links:
