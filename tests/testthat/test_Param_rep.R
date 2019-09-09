@@ -16,8 +16,9 @@ test_that("rep params work", {
   expect_equal(ps$length, 3L)
   expect_subset(ps$class, "ParamFct")
   expect_equal(ps$ids(), c("kk_rep_1", "kk_rep_2", "kk_rep_3"))
-  for (id in ps$ids())
+  for (id in ps$ids()) {
     expect_equal(ps$params[[id]]$levels, c("a", "b"))
+  }
 })
 
 

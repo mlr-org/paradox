@@ -134,7 +134,6 @@
 #' ps$add(ParamInt$new("i", lower = 0L, upper = 16L))
 #'
 #' ps$check(list(d = 2.1, f = "a", i = 3L))
-#'
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
