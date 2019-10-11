@@ -276,6 +276,7 @@ ParamSet = R6Class("ParamSet",
       ids = names(self$params)
       assert_choice(id, ids)
       assert_choice(on, ids)
+      assert_r6(cond, "Condition")
       if (id == on) {
         stopf("A param cannot depend on itself!")
       }
