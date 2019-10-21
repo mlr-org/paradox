@@ -4,6 +4,8 @@ output: github_document
 
 # paradox
 
+Universal Parameter Space Description and Tools.
+
 [![Build Status Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
 [![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
 [![codecov](https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg)](https://codecov.io/gh/mlr-org/paradox)
@@ -15,8 +17,6 @@ set.seed(123)
 knitr::opts_chunk$set(cache = FALSE, collapse = TRUE, comment = "#>")
 library(paradox)
 ```
-
-Universal Parameter Space Description and Tools.
 
 ** Check the [mlr3book paradox chapter](https://mlr3book.mlr-org.com/paradox.html) for an exhaustive introduction. **
 
