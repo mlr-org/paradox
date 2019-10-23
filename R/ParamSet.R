@@ -280,6 +280,9 @@ ParamSet = R6Class("ParamSet",
       if (id == on) {
         stopf("A param cannot depend on itself!")
       }
+      for (rhs_val in cond$rhs) {
+        self$params[[on]]$assert(rhs_val)
+      }
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
