@@ -280,6 +280,10 @@ ParamSet = R6Class("ParamSet",
       if (id == on) {
         stopf("A param cannot depend on itself!")
       }
+      feasible_on_values = map_lgl(cond$rhs, self$params[[on]]$test)
+      if (any(!feasible_on_values)) {
+        stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
+      }
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
