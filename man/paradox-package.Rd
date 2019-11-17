@@ -22,13 +22,13 @@ Useful links:
 
 }
 \author{
-\strong{Maintainer}: Michel Lang \email{michellang@gmail.com} (0000-0001-9754-0393)
+\strong{Maintainer}: Michel Lang \email{michellang@gmail.com} (\href{https://orcid.org/0000-0001-9754-0393}{ORCID})
 
 Authors:
 \itemize{
-  \item Bernd Bischl \email{bernd_bischl@gmx.net} (0000-0001-6002-6980)
-  \item Jakob Richter \email{jakob1richter@gmail.com} (0000-0003-4481-5554)
-  \item Xudong Sun \email{smilesun.east@gmail.com} (0000-0003-3269-2307)
+  \item Bernd Bischl \email{bernd_bischl@gmx.net} (\href{https://orcid.org/0000-0001-6002-6980}{ORCID})
+  \item Jakob Richter \email{jakob1richter@gmail.com} (\href{https://orcid.org/0000-0003-4481-5554}{ORCID})
+  \item Xudong Sun \email{smilesun.east@gmail.com} (\href{https://orcid.org/0000-0003-3269-2307}{ORCID})
   \item Martin Binder \email{mlr.developer@mb706.com}
 }
 

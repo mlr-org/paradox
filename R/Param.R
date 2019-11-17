@@ -49,7 +49,7 @@
 #' * `rep(n)`\cr
 #'   `integer(1)` -> [ParamSet]\cr
 #'   Repeats this parameter n-times (by cloning).
-#'   Each parameter is named "<id>_rep_<k>" and gets the additional tag "<id>_rep".
+#'   Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
 #'
 #' @section S3 methods:
 #' * `as.data.table()` \cr
