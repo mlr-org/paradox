@@ -37,7 +37,7 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
     for(i in seq(length(ids))) {
       data[, (ids[i]) := do.call(type[i], list(0))]
     }
-    return(Design$new(ps, data, remove_dupl = FALSE))
+    return(Design$new(param_set, data, remove_dupl = FALSE))
   }
 
   ids = param_set$ids()
