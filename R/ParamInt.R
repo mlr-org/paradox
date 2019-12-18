@@ -46,14 +46,16 @@ ParamInt = R6Class("ParamInt", inherit = Param,
     upper = NULL,
 
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
-      if (!is.infinite(lower)) {
-        assert_int(lower)
+      if (isTRUE(is.infinite(lower))) {
+        self$lower = lower
+      } else {
+        self$lower = assert_int(lower)
       }
-      if (!is.infinite(upper)) {
-        assert_int(upper)
+      if (isTRUE(is.infinite(upper))) {
+        self$upper = upper
+      } else {
+        self$upper = assert_int(upper)
       }
-      self$lower = lower
-      self$upper = upper
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
