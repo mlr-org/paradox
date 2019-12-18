@@ -26,8 +26,19 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
     lhs_fun = lhs::maximinLHS
   }
   assert_param_set(param_set, no_untyped = TRUE, no_deps = TRUE)
-  n = assert_count(n, positive = TRUE, coerce = TRUE)
+  n = assert_count(n, coerce = TRUE)
   assert_function(lhs_fun, args = c("n", "k"))
+
+  if(n == 0) {
+    data = data.table(NULL)
+    ids = param_set$ids()
+    type = param_set$storage_type
+
+    for(i in seq(length(ids))) {
+      data[, (ids[i]) := do.call(type[i], list(0))]
+    }
+    return(Design$new(param_set, data, remove_dupl = FALSE))
+  }
 
   ids = param_set$ids()
   d = lhs_fun(n, k = param_set$length)
