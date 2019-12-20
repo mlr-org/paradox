@@ -42,6 +42,8 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  <script src="../extra.js"></script>
 
 <meta property="og:title" content="Generate a Grid Design — generate_design_grid" />
 <meta property="og:description" content="Generate a grid with a specified resolution in the parameter space.
@@ -80,27 +82,32 @@ For number params the endpoints of the params are always included in the grid." 
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Development version">0.1.0.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Version">0.1.0</span>
       </span>
     </div>
 
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="../reference/index.html">Reference</a>
+  <a href="../reference/index.html">
+    <span class="fa fa fa fa-file-alt"></span>
+     
+    Reference
+  </a>
 </li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
+<li>
+  <a href="https://mlr3book.mlr-org.com">
+    <span class="fa fa fa fa-link"></span>
+     
+    mlr3book
+  </a>
+</li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
         <li>
-  <a href="https://github.com/mlr-org/paradox">
-    <span class="fab fa fab fa-github fa-lg"></span>
-     
-  </a>
-</li>
-<li>
   <a href="https://mlr-org.slack.com">
     <span class="fab fa fab fa-slack"></span>
      
@@ -132,7 +139,7 @@ For number params the endpoints of the params are always included in the grid." 
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Generate a Grid Design</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/generate_design_grid.R'><code>R/generate_design_grid.R</code></a></small>
+    
     <div class="hidden name"><code>generate_design_grid.Rd</code></div>
     </div>
 
@@ -143,7 +150,8 @@ always produce a grid over all their valid levels.
 For number params the endpoints of the params are always included in the grid.</p>
     </div>
 
-    <pre class="usage"><span class='fu'>generate_design_grid</span>(<span class='no'>param_set</span>, <span class='kw'>resolution</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>param_resolutions</span> <span class='kw'>=</span> <span class='kw'>NULL</span>)</pre>
+    <pre class="usage"><span class='fu'>generate_design_grid</span>(<span class='no'>param_set</span>, <span class='kw'>resolution</span> <span class='kw'>=</span> <span class='kw'>NULL</span>,
+  <span class='kw'>param_resolutions</span> <span class='kw'>=</span> <span class='kw'>NULL</span>)</pre>
 
     <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
@@ -169,9 +177,8 @@ Resolution per <a href='Param.html'>Param</a>, named by parameter ID.</p></td>
     <p>(<code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code>).</p>
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
-    <div class='dont-index'><p>Other generate_design: 
-<code><a href='generate_design_lhs.html'>generate_design_lhs</a>()</code>,
-<code><a href='generate_design_random.html'>generate_design_random</a>()</code></p></div>
+    <div class='dont-index'><p>Other generate_design: <code><a href='generate_design_lhs.html'>generate_design_lhs</a></code>,
+  <code><a href='generate_design_random.html'>generate_design_random</a></code></p></div>
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
     <pre class="examples"><div class='input'><span class='no'>ps</span> <span class='kw'>=</span> <span class='no'>ParamSet</span>$<span class='fu'>new</span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(

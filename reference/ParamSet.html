@@ -42,6 +42,8 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  <script src="../extra.js"></script>
 
 <meta property="og:title" content="ParamSet — ParamSet" />
 <meta property="og:description" content="A set of Param objects.
@@ -81,27 +83,32 @@ some parameters to constant values (regarding subsequent sampling or generation 
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Development version">0.1.0.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Version">0.1.0</span>
       </span>
     </div>
 
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="../reference/index.html">Reference</a>
+  <a href="../reference/index.html">
+    <span class="fa fa fa fa-file-alt"></span>
+     
+    Reference
+  </a>
 </li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
+<li>
+  <a href="https://mlr3book.mlr-org.com">
+    <span class="fa fa fa fa-link"></span>
+     
+    mlr3book
+  </a>
+</li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
         <li>
-  <a href="https://github.com/mlr-org/paradox">
-    <span class="fab fa fab fa-github fa-lg"></span>
-     
-  </a>
-</li>
-<li>
   <a href="https://mlr-org.slack.com">
     <span class="fab fa fab fa-slack"></span>
      
@@ -133,7 +140,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>ParamSet</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/ParamSet.R'><code>R/ParamSet.R</code></a></small>
+    
     <div class="hidden name"><code>ParamSet.Rd</code></div>
     </div>
 
@@ -145,8 +152,12 @@ The set also contains a member variable <code>values</code> which can be used to
 some parameters to constant values (regarding subsequent sampling or generation of designs).</p>
     </div>
 
+    <pre class="usage"><span class='no'>ParamSet</span></pre>
 
 
+    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
+
+    <p>An object of class <code>R6ClassGenerator</code> of length 24.</p>
     <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
 
     
@@ -293,11 +304,13 @@ Compact representation as datatable. Col types are: <br /></p><ul>
 
 <span class='no'>ps</span>$<span class='fu'>add</span>(<span class='no'>ParamInt</span>$<span class='fu'>new</span>(<span class='st'>"i"</span>, <span class='kw'>lower</span> <span class='kw'>=</span> <span class='fl'>0L</span>, <span class='kw'>upper</span> <span class='kw'>=</span> <span class='fl'>16L</span>))
 
-<span class='no'>ps</span>$<span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(<span class='kw'>d</span> <span class='kw'>=</span> <span class='fl'>2.1</span>, <span class='kw'>f</span> <span class='kw'>=</span> <span class='st'>"a"</span>, <span class='kw'>i</span> <span class='kw'>=</span> <span class='fl'>3L</span>))</div><div class='output co'>#&gt; [1] TRUE</div></pre>
+<span class='no'>ps</span>$<span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(<span class='kw'>d</span> <span class='kw'>=</span> <span class='fl'>2.1</span>, <span class='kw'>f</span> <span class='kw'>=</span> <span class='st'>"a"</span>, <span class='kw'>i</span> <span class='kw'>=</span> <span class='fl'>3L</span>))</div><div class='output co'>#&gt; [1] TRUE</div><div class='input'>
+</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
     <h2>Contents</h2>
     <ul class="nav nav-pills nav-stacked">
+      <li><a href="#format">Format</a></li>
       <li><a href="#construction">Construction</a></li>
       <li><a href="#fields">Fields</a></li>
       <li><a href="#public-methods">Public methods</a></li>

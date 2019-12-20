@@ -42,6 +42,8 @@
 
 
 
+  <link href="../extra.css" rel="stylesheet">
+  <script src="../extra.js"></script>
 
 <meta property="og:title" content="Untyped Parameter — ParamUty" />
 <meta property="og:description" content="A Param to describe untyped parameters." />
@@ -77,27 +79,32 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Development version">0.1.0.9000</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Version">0.1.0</span>
       </span>
     </div>
 
     <div id="navbar" class="navbar-collapse collapse">
       <ul class="nav navbar-nav">
         <li>
-  <a href="../reference/index.html">Reference</a>
+  <a href="../reference/index.html">
+    <span class="fa fa fa fa-file-alt"></span>
+     
+    Reference
+  </a>
 </li>
 <li>
   <a href="../news/index.html">Changelog</a>
 </li>
+<li>
+  <a href="https://mlr3book.mlr-org.com">
+    <span class="fa fa fa fa-link"></span>
+     
+    mlr3book
+  </a>
+</li>
       </ul>
       <ul class="nav navbar-nav navbar-right">
         <li>
-  <a href="https://github.com/mlr-org/paradox">
-    <span class="fab fa fab fa-github fa-lg"></span>
-     
-  </a>
-</li>
-<li>
   <a href="https://mlr-org.slack.com">
     <span class="fab fa fab fa-slack"></span>
      
@@ -129,7 +136,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Untyped Parameter</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/ParamUty.R'><code>R/ParamUty.R</code></a></small>
+    
     <div class="hidden name"><code>ParamUty.Rd</code></div>
     </div>
 
@@ -182,12 +189,9 @@ Always <code>FALSE</code> for this parameter.</p></li>
 <p>See <a href='Param.html'>Param</a>.</p>
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
-    <div class='dont-index'><p>Other Params: 
-<code><a href='ParamDbl.html'>ParamDbl</a></code>,
-<code><a href='ParamFct.html'>ParamFct</a></code>,
-<code><a href='ParamInt.html'>ParamInt</a></code>,
-<code><a href='ParamLgl.html'>ParamLgl</a></code>,
-<code><a href='Param.html'>Param</a></code></p></div>
+    <div class='dont-index'><p>Other Params: <code><a href='ParamDbl.html'>ParamDbl</a></code>,
+  <code><a href='ParamFct.html'>ParamFct</a></code>, <code><a href='ParamInt.html'>ParamInt</a></code>,
+  <code><a href='ParamLgl.html'>ParamLgl</a></code>, <code><a href='Param.html'>Param</a></code></p></div>
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
     <pre class="examples"><div class='input'><span class='no'>ParamUty</span>$<span class='fu'>new</span>(<span class='st'>"untyped"</span>, <span class='kw'>default</span> <span class='kw'>=</span> <span class='fl'>Inf</span>)</div><div class='output co'>#&gt;         id    class lower upper levels default
