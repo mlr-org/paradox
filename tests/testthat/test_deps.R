@@ -35,7 +35,7 @@ test_that("basic example works", {
 
 test_that("nested deps work", {
   ps = th_paramset_full()
-  ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new(c("b", "c")))
+  ps$add_dep("th_param_int", on = "th_param_fct", CondAnyOf$new(c("b", "c")))
   ps$add_dep("th_param_dbl", on = "th_param_lgl", CondEqual$new(TRUE))
   ps$add_dep("th_param_lgl", on = "th_param_fct", CondEqual$new("c"))
 
@@ -43,7 +43,7 @@ test_that("nested deps work", {
   expect_string(ps$check(x1), fixed = "Condition for 'th_param_int'")
   x2 = list(th_param_int = 1, th_param_fct = "b")
   expect_true(ps$check(x2))
-  x3 = list(th_param_int = 1, th_param_fct = "c")
+  x3 = list(th_param_int = 1, th_param_fct = "a")
   expect_string(ps$check(x3), fixed = "Condition for 'th_param_int'")
   x4 = list(th_param_fct = "a")
   expect_true(ps$check(x4))
