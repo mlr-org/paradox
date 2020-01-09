@@ -112,6 +112,8 @@ Changes the current set to the set of passed IDs.
 Three \pkg{checkmate}-like check-functions. Takes a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
+Please note that a dependency for param B , which depends on Param A, can be satisfied in two ways:
+Either A is set correctly in 'x' or A's default value satisfies the dependency condition and A is unset in 'x'.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \item \code{add_dep(id, on, cond)} \cr
 (\code{character(1)}, \code{character(1)}, \link{Condition}) -> \code{self} \cr

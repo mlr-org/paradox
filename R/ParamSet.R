@@ -102,6 +102,8 @@
 #'   Three \pkg{checkmate}-like check-functions. Takes a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
+#'   Please note that a dependency for param B , which depends on Param A, can be satisfied in two ways:
+#'   Either A is set correctly in 'x' or A's default value satisfies the dependency condition and A is unset in 'x'.
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
 #'   (`character(1)`, `character(1)`, [Condition]) -> `self` \cr
@@ -246,6 +248,11 @@ ParamSet = R6Class("ParamSet",
 
 
       # check dependencies
+      # this is a bit more complex. sometimes users set param B to a value, where B depends on param A. A is not set by the user,
+      # but its default value is already ok in the sense that B's condition if fulfilled.
+      # hence, to simulate this for the check, we do this.
+      # we insert all new user values into the default vector. then run thru all condiztion in the set. if a condition is places on a param
+      # whioch the user has passed, we check if its ok in the extended settings-vector
       defs = self$default
       vals_with_defs = insert_named(defs, xs)
       ids_passed_params = names(xs)

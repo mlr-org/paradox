@@ -118,3 +118,39 @@ test_that("deps make sense", {
   expect_error(ps$add_dep("th_param_lgl", "th_param_fct", CondEqual$new("d")), "Condition has infeasible values for th_param_fct")
   expect_error(ps$add_dep("th_param_lgl", "th_param_int", CondAnyOf$new(5:15)), "Condition has infeasible values for th_param_int")
 })
+
+
+test_that("deps / check works inplicitly on defaults", {
+  # see also this issue https://github.com/mlr-org/paradox/issues/259
+
+  # no defaults, simpler case, we just check 'whats really passed by the user'
+  ps = ParamSet$new(list(
+    ParamFct$new("x", levels = c("a", "b")),
+    ParamDbl$new("y")
+  ))
+  ps$add_dep("y", on = "x", CondEqual$new("a"))
+  expect_true(ps$check(list(x = "a", y = 1)))
+  expect_string(ps$check(list(x = "b", y = 1)), pattern = "Condition")
+  expect_string(ps$check(list(y = 1)), pattern = "Condition")
+
+  # we now set a default on "x" (which implicitly allows 'y')
+  ps = ParamSet$new(list(
+    ParamFct$new("x", levels = c("a", "b"), default = "a"),
+    ParamDbl$new("y")
+  ))
+  ps$add_dep("y", on = "x", CondEqual$new("a"))
+  expect_true(ps$check(list(x = "a", y = 1)))
+  expect_string(ps$check(list(x = "b", y = 1)), pattern = "Condition")
+  expect_true(ps$check(list(y = 1)))
+
+  # we now set a default on "x" (which not implicitly allows 'y')
+  ps = ParamSet$new(list(
+    ParamFct$new("x", levels = c("a", "b"), default = "b"),
+    ParamDbl$new("y")
+  ))
+  ps$add_dep("y", on = "x", CondEqual$new("a"))
+  expect_true(ps$check(list(x = "a", y = 1)))
+  expect_string(ps$check(list(x = "b", y = 1)), pattern = "Condition")
+  expect_string(ps$check(list(y = 1)), pattern = "Condition")
+})
+
