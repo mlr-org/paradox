@@ -244,6 +244,10 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
+      defs = self$default
+      vals_with_defs = insert_named(defs, xs)
+      ns = names(vals_with_defs)
+
       # check dependencies
       if (self$has_deps) {
         deps = self$deps
@@ -254,10 +258,10 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+          ok = (p1id %in% ns && p2id %in% ns && cond$test(vals_with_defs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
-            val = xs[[p2id]]
+            val = vals_with_defs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
             return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
               p1id, p2id, cond$type, str_collapse(cond$rhs), p2id, val))
