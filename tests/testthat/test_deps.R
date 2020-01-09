@@ -3,13 +3,13 @@ context("Dependencies")
 test_that("basic example works", {
   ps = th_paramset_full()
   expect_false(ps$has_deps)
-  ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("a"))
+  ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("b"))
   expect_true(ps$has_deps)
   x = list(th_param_int = 1)
   expect_string(ps$check(x), fixed = "Condition for 'th_param_int'")
-  x = list(th_param_int = 1, th_param_fct = "a")
-  expect_true(ps$check(x))
   x = list(th_param_int = 1, th_param_fct = "b")
+  expect_true(ps$check(x))
+  x = list(th_param_int = 1, th_param_fct = "a")
   expect_string(ps$check(x), fixed = "Condition for 'th_param_int'")
   x = list(th_param_int = NA, th_param_fct = "b")
   expect_string(ps$check(x), fixed = "May not be NA")
@@ -35,7 +35,7 @@ test_that("basic example works", {
 
 test_that("nested deps work", {
   ps = th_paramset_full()
-  ps$add_dep("th_param_int", on = "th_param_fct", CondAnyOf$new(c("a", "b")))
+  ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new(c("b", "c")))
   ps$add_dep("th_param_dbl", on = "th_param_lgl", CondEqual$new(TRUE))
   ps$add_dep("th_param_lgl", on = "th_param_fct", CondEqual$new("c"))
 

@@ -244,11 +244,13 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-      defs = self$default
-      vals_with_defs = insert_named(defs, xs)
-      ns = names(vals_with_defs)
 
       # check dependencies
+      defs = self$default
+      vals_with_defs = insert_named(defs, xs)
+      ids_passed_params = names(xs)
+      ids_passed_and_defs = names(vals_with_defs)
+
       if (self$has_deps) {
         deps = self$deps
         for (j in seq_row(self$deps)) {
@@ -258,8 +260,8 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(vals_with_defs[[p2id]])) ||
-            (p1id %nin% ns)
+          ok = (p1id %in% ids_passed_params && p2id %in% ids_passed_and_defs && cond$test(vals_with_defs[[p2id]])) ||
+            (p1id %nin% ids_passed_params)
           if (isFALSE(ok)) {
             val = vals_with_defs[[p2id]]
             val = ifelse(is.null(val), "<not-there>", val)
