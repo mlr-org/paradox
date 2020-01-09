@@ -291,3 +291,130 @@ test_that("required tag, empty param set (#219)", {
   ps$ids()
   expect_identical(ps$ids(tags = "required"), character(0))
 })
+
+test_that("callbacks", {
+  ps = ParamSet$new(list(
+    ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
+    ParamInt$new(id = "y", lower = 1, upper = 2),
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
+  ))
+  ps$callbacks[[1]] = function(x) {
+    x$x = 2
+    x
+  }
+  expect_equal(ps$values, named_list())
+  ps$values$y = 1
+  expect_equal(ps$values, list(y = 1, x = 2))
+  ps$values$x = 1
+  expect_equal(ps$values, list(y = 1, x = 2))
+  ps$callbacks[[2]] = function(x) {
+    x$x = 1
+    x
+  }
+  ps$values$y = 1
+  expect_equal(ps$values, list(y = 1, x = 1))
+  ps$callbacks[[2]] = function(x) {
+    x$x = 0
+    x
+  }
+  expect_error({ps$values = list(y = 1)}, "is not >= 1")
+
+  ps$callbacks[[2]] = function(x) {
+    x$x = 1
+    x
+  }
+  ps$callbacks[[1]] = function(x) {
+    x$x = 0
+    x
+  }
+  ps$values = list(y = 2)
+  expect_equal(ps$values, list(y = 2, x = 1))
+  ps$callbacks[[1]] = NULL
+  ps$values = list(y = 1, x = 2)
+  expect_equal(ps$values, list(y = 1, x = 1))
+})
+
+test_that("callbacks on ParamSetCollection", {
+
+  psetset = function() {
+    ps = ParamSet$new(list(ParamUty$new("paramset", custom_check = function(x) check_class(x, "ParamSet", null.ok = TRUE))))
+    psc = ParamSetCollection$new(list(ps))
+
+    psc$callbacks[[1]] = function(x) {
+      prevset = psc$values$paramset
+      newset = x$paramset
+      if (!identical(x$paramset, prevset)) {
+        psc$params$paramset$assert(newset)
+        if (!is.null(newset)) {
+          xcpy = x
+          xcpy$paramset = NULL
+          newset$assert(xcpy)
+        } else {
+          ParamSet$new()$assert(x)
+        }
+        psc$remove_sets("")
+        psc$add(ps)
+        if (!is.null(newset)) {
+          psc$add(newset)
+        }
+      }
+      x
+    }
+    psc
+  }
+
+  ps = psetset()
+
+  ps1 = ParamSet$new(list(
+    ParamDbl$new(id = "x", lower = 1, tags = c("t1")),
+    ParamInt$new(id = "y", lower = 1, upper = 2),
+    ParamFct$new(id = "z", levels = letters[1:3], tags = c("t1"))
+  ))
+
+  ps2 = ParamDbl$new("a")$rep(3)
+
+  expect_equal(names(ps$params), "paramset")
+
+  ps$values$paramset = ps1
+
+  expect_equal(names(ps$params), c("paramset", "x", "y", "z"))
+
+  ps$values$x = 1
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  ps$values = list(paramset = ps2, a_rep_1 = 0)
+
+  expect_equal(ps$values, list(paramset = ps2, a_rep_1 = 0))
+
+  # The problem here is that there is an ambiguity. suppose
+  # > psB$values = list(x = 2)
+  # > ps$values = list(paramset = psA, x = 1)
+  # Now the command
+  # (A) > ps$values = list(paramset = psB, x = 1)
+  # and the command
+  # (B) > ps$values$paramset = psB
+  # are functionally the same, but in case (B) we wished we could
+  # keep the parameter values of psB. However, because (A) is done
+  # by things like tuning, it takes precedent and must work as
+  # expected. Therefore the following throws an error.
+  expect_error({ps$values$paramset = ps1}, "a_rep_1.* not available")
+
+  expect_equal(ps$values, list(paramset = ps2, a_rep_1 = 0))
+
+  ps$values = c(list(paramset = ps1), ps1$values)
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  expect_error({ps$values = list(x = 2)}, "Parameter 'x' not available")
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  expect_error({ps$values$paramset = NULL}, "Parameter 'x' not available")
+
+  expect_equal(ps$values, list(paramset = ps1, x = 1))
+
+  ps$values = list()
+
+  expect_equal(ps$values, named_list())
+
+})

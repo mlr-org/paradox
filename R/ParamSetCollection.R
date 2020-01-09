@@ -126,13 +126,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
 
     values = function(xs) {
-      sets = private$.sets
-      names(sets) = map_chr(sets, "set_id")
       if (!missing(xs)) {
-        assert_list(xs)
+        xs = Reduce(function(val, fun) fun(val), self$callbacks, xs)
         self$assert(xs) # make sure everything is valid and feasible
 
-        for (s in sets) {
+        for (s in private$.sets) {
           # retrieve sublist for each set, then assign it in set (after removing prefix)
           psids = names(s$params)
           if (s$set_id != "") {
@@ -145,6 +143,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           s$values = pv
         }
       }
+      sets = private$.sets
+      names(sets) = map_chr(sets, "set_id")
       vals = map(sets, "values")
       vals = unlist(vals, recursive = FALSE)
       if (!length(vals)) vals = named_list()
