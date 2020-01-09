@@ -4,8 +4,7 @@
 \alias{generate_design_grid}
 \title{Generate a Grid Design}
 \usage{
-generate_design_grid(param_set, resolution = NULL,
-  param_resolutions = NULL)
+generate_design_grid(param_set, resolution = NULL, param_resolutions = NULL)
 }
 \arguments{
 \item{param_set}{:: \link{ParamSet}.}
@@ -33,7 +32,8 @@ ps = ParamSet$new(list(
 generate_design_grid(ps, 10)
 }
 \seealso{
-Other generate_design: \code{\link{generate_design_lhs}},
-  \code{\link{generate_design_random}}
+Other generate_design: 
+\code{\link{generate_design_lhs}()},
+\code{\link{generate_design_random}()}
 }
 \concept{generate_design}

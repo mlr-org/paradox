@@ -5,11 +5,15 @@
 \alias{assert_param_set}
 \title{Assertions for Params and ParamSets}
 \usage{
-assert_param(param, cl = "Param", no_untyped = FALSE,
-  must_bounded = FALSE)
+assert_param(param, cl = "Param", no_untyped = FALSE, must_bounded = FALSE)
 
-assert_param_set(param_set, cl = "Param", no_untyped = FALSE,
-  must_bounded = FALSE, no_deps = FALSE)
+assert_param_set(
+  param_set,
+  cl = "Param",
+  no_untyped = FALSE,
+  must_bounded = FALSE,
+  no_deps = FALSE
+)
 }
 \arguments{
 \item{param}{(\link{Param}).}

@@ -19,6 +19,17 @@
 #' ))
 #' generate_design_random(ps, 10)
 generate_design_random = function(param_set, n) {
+  if(n == 0) {
+    data = data.table(NULL)
+    ids = param_set$ids()
+    type = param_set$storage_type
+
+    for(i in seq(length(ids))) {
+      data[, (ids[i]) := do.call(type[i], list(0))]
+    }
+    return(Design$new(param_set, data, remove_dupl = FALSE))
+  }
+
   # arg checks done by SamplerUnif and sample
   SamplerUnif$new(param_set)$sample(n)
 }

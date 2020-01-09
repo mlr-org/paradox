@@ -28,7 +28,8 @@ ps = ParamSet$new(list(
 generate_design_random(ps, 10)
 }
 \seealso{
-Other generate_design: \code{\link{generate_design_grid}},
-  \code{\link{generate_design_lhs}}
+Other generate_design: 
+\code{\link{generate_design_grid}()},
+\code{\link{generate_design_lhs}()}
 }
 \concept{generate_design}

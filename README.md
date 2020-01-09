@@ -1,22 +1,24 @@
 
 # paradox
 
+Package website: [release](https://paradox.mlr-org.com/) |
+[dev](https://paradox.mlr-org.com/dev)
+
 Universal Parameter Space Description and Tools.
 
-[![Build Status
-Linux](https://travis-ci.org/mlr-org/paradox.svg?branch=master)](https://travis-ci.org/mlr-org/paradox)
+<!-- badges: start -->
+
+[![Build
+Status](https://img.shields.io/travis/mlr-org/paradox/master?label=Linux&logo=travis&style=flat-square)](https://travis-ci.org/mlr-org/paradox)
 [![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
 [![codecov](https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg)](https://codecov.io/gh/mlr-org/paradox)
 [![StackOverflow](https://img.shields.io/badge/stackoverflow-mlr3-orange.svg)](https://stackoverflow.com/questions/tagged/mlr3)
-
-\*\* Check the [mlr3book paradox
-chapter](https://mlr3book.mlr-org.com/paradox.html) for an exhaustive
-introduction. \*\*
+<!-- badges: end -->
 
 ## Installation
 
 ``` r
-remotes::install_github("mlr-org/paradox", dependencies = TRUE)
+remotes::install_github("mlr-org/paradox")
 ```
 
 ## Usage
@@ -170,3 +172,6 @@ xst
 #> [[2]]$x
 #> [1] 0.3688455
 ```
+
+Further documentation can be found in the
+[mlr3book](https://mlr3book.mlr-org.com/paradox.html).

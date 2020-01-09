@@ -14,6 +14,9 @@ test_that("constructor works", {
 
   # check some invalid arg settings
   expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
+  expect_error(ParamInt$new(id = "x", lower = 1.5), "not 'double'")
+  expect_error(ParamInt$new(id = "x", upper = NULL), "not 'NULL'")
+  expect_error(ParamInt$new(id = "x", upper = 1.5), "not 'double'")
   expect_error(ParamInt$new(id = "x", lower = 1, upper = 0), "lower <= upper")
   expect_error(ParamInt$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
 })

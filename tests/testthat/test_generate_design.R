@@ -131,3 +131,19 @@ test_that("generate_design_random and grid works with deps", {
   expect_true(all(ifelse(dd$th_param_fct %in% c("a", "b", NA) & dd$th_param_lgl,
     !is.na(dd$th_param_dbl), is.na(dd$th_param_dbl))))
 })
+
+test_that("generate_design_random with zero rows", {
+  ps = th_paramset_full()
+
+  d = generate_design_random(ps, n = 0)
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+})
+
+test_that("generate_design_lhs with zero rows", {
+  ps = th_paramset_full()
+
+  d = generate_design_lhs(ps, n = 0)
+  dd = d$data
+  expect_data_table(dd, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+})
