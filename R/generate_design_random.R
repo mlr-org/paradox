@@ -8,7 +8,7 @@
 #' @param param_set :: [ParamSet].
 #' @param n :: `integer(1)` \cr
 #'   Number of points to draw randomly.
-#' @return ([data.table::data.table()]).
+#' @return [Design].
 #'
 #' @family generate_design
 #' @export

@@ -11,7 +11,7 @@
 #'   Global resolution for all [Param]s.
 #' @param param_resolutions :: named `integer()` \cr
 #'   Resolution per [Param], named by parameter ID.
-#' @return ([data.table::data.table()]).
+#' @return [Design].
 #'
 #' @family generate_design
 #' @export

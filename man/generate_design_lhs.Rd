@@ -17,7 +17,7 @@ Function to use to generate a LHS sample, with n samples and k values per param.
 LHS functions are implemented in package \pkg{lhs}, default is to use \code{\link[lhs:maximinLHS]{lhs::maximinLHS()}}.}
 }
 \value{
-(\code{\link[data.table:data.table]{data.table::data.table()}}).
+\link{Design}.
 }
 \description{
 Generate a space-filling design using Latin hypercube sampling.

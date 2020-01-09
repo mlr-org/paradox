@@ -17,7 +17,7 @@ Global resolution for all \link{Param}s.}
 Resolution per \link{Param}, named by parameter ID.}
 }
 \value{
-(\code{\link[data.table:data.table]{data.table::data.table()}}).
+\link{Design}.
 }
 \description{
 Generate a grid with a specified resolution in the parameter space.

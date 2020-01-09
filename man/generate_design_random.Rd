@@ -13,7 +13,7 @@ generate_design_random(param_set, n)
 Number of points to draw randomly.}
 }
 \value{
-(\code{\link[data.table:data.table]{data.table::data.table()}}).
+\link{Design}.
 }
 \description{
 Generates a design with randomly drawn points.
