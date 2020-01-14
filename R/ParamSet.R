@@ -312,7 +312,10 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
-    params = function() {
+    params = function(rhs) {
+      if (!missing(rhs) && !identical(rhs, private$.params)) {
+        stop("$params is read-only.")
+      }
       private$.params
     },
 
