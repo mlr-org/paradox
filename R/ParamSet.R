@@ -417,10 +417,6 @@ ParamSet = R6Class("ParamSet",
 
     has_deps = function() {
       nrow(private$.deps) > 0L
-    },
-
-    extra_values = function() {
-      private$.values[names(private$.values) %nin% names(private$.params)]
     }
   ),
 
