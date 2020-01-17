@@ -103,7 +103,7 @@ test_that("ParamSet$check", {
 
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
-  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "not ok: x_rep_2 equal TRUE")
+  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "x_rep_2 = TRUE")
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {

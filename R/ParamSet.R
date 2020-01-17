@@ -257,10 +257,14 @@ ParamSet = R6Class("ParamSet",
           ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
+            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
             val = xs[[p2id]]
-            val = ifelse(is.null(val), "<not-there>", val)
-            return(sprintf("Condition for '%s' not ok: %s %s %s; instead: %s=%s",
-              p1id, p2id, cond$type, str_collapse(cond$rhs), p2id, val))
+            if (is.null(val)) {
+              message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
+            } else {
+              message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+            }
+            return(message)
           }
         }
       }
