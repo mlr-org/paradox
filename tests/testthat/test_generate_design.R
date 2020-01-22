@@ -134,16 +134,19 @@ test_that("generate_design_random and grid works with deps", {
 
 test_that("generate_design_random with zero rows", {
   ps = th_paramset_full()
-
   d = generate_design_random(ps, n = 0)
-  dd = d$data
-  expect_data_table(dd, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
 })
 
 test_that("generate_design_lhs with zero rows", {
   ps = th_paramset_full()
-
   d = generate_design_lhs(ps, n = 0)
-  dd = d$data
-  expect_data_table(dd, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
 })
+
+test_that("generate_design_grid with zero rows", {
+  ps = th_paramset_full()
+  d = generate_design_grid(ps, resolution = 0)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+})
+

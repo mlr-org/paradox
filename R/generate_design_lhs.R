@@ -29,19 +29,12 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   n = assert_count(n, coerce = TRUE)
   assert_function(lhs_fun, args = c("n", "k"))
 
-  if(n == 0) {
-    data = data.table(NULL)
-    ids = param_set$ids()
-    type = param_set$storage_type
-
-    for(i in seq(length(ids))) {
-      data[, (ids[i]) := do.call(type[i], list(0))]
-    }
-    return(Design$new(param_set, data, remove_dupl = FALSE))
-  }
-
   ids = param_set$ids()
-  d = lhs_fun(n, k = param_set$length)
+  if (n == 0) {
+    d = matrix(nrow = 0, ncol = param_set$length)
+  } else {
+    d = lhs_fun(n, k = param_set$length)
+  }
   colnames(d) = ids
   d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
   Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # user wants n-points, dont remove
