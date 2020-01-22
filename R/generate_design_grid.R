@@ -34,7 +34,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
     }
     if (!is.null(resolution)) {
       # create param_resolutions list, constant entry, same length as ids and named with ids
-      resolution = assert_count(resolution, positive = TRUE, coerce = TRUE)
+      resolution = assert_count(resolution, coerce = TRUE)
       par_res = set_names(rep.int(resolution, param_set$length), ids)
     }
     if (!is.null(param_resolutions)) {

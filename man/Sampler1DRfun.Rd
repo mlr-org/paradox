@@ -13,7 +13,7 @@ Arbitrary sampling from 1D RNG functions from R.
 \itemize{
 \item \code{param} :: \link{Param}\cr
 Domain / support of the distribution we want to sample from.
-\item \code{rfun} :: \verb{function}\cr
+\item \code{rfun} :: \code{function}\cr
 Random number generator function, e.g. \code{rexp} to sample from exponential distribution.
 \item \code{trunc} :: \code{logical(1)}\cr
 \code{TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
