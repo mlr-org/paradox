@@ -41,15 +41,24 @@ Condition = R6Class("Condition",
       self$rhs = rhs
     },
 
-    test = function(x) stop("abstract")
-  )
+    test = function(x) stop("abstract"),
+
+    as_string = function(lhs_chr = "x") {
+      sprintf("%s %s %s", lhs_chr, self$type, str_collapse(self$rhs))
+    },
+
+    print = function(...) {
+      catf("%s: %s", class(self)[1L], self$as_string())
+    }
+  ),
 )
 
 #' @export
 CondEqual = R6Class("CondEqual", inherit = Condition,
   public = list(
     initialize = function(rhs) super$initialize("equal", rhs),
-    test = function(x) !is.na(x) & x == self$rhs
+    test = function(x) !is.na(x) & x == self$rhs,
+    as_string = function(lhs_chr = "x") sprintf("%s = %s", lhs_chr, as.character(self$rhs))
   )
 )
 
@@ -57,6 +66,7 @@ CondEqual = R6Class("CondEqual", inherit = Condition,
 CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
   public = list(
     initialize = function(rhs) super$initialize("anyof", rhs),
-    test = function(x) !is.na(x) & x %in% self$rhs
+    test = function(x) !is.na(x) & x %in% self$rhs,
+    as_string = function(lhs_chr = "x") sprintf("%s \u2208 {%s}", lhs_chr, str_collapse(self$rhs))
   )
 )
