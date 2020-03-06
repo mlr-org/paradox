@@ -14,7 +14,10 @@ A \link{Param} to describe untyped parameters.
 Arguments of \link{Param}, and additionally:
 \itemize{
 \item \code{custom_check} :: \verb{function()}\cr
-Custom function to check the feasibility. Defaults to \code{NULL}.
+Custom function to check the feasibility.
+Function which checks the input.
+Must return 'TRUE' if the input is valid and a string with the error message otherwise.
+Defaults to \code{NULL}, which means that no check is performed.
 }
 }
 

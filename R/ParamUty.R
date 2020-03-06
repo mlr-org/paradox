@@ -12,7 +12,10 @@
 #' ```
 #' Arguments of [Param], and additionally:
 #' * `custom_check` :: `function()`\cr
-#'   Custom function to check the feasibility. Defaults to `NULL`.
+#'   Custom function to check the feasibility.
+#'   Function which checks the input.
+#'   Must return 'TRUE' if the input is valid and a string with the error message otherwise.
+#'   Defaults to `NULL`, which means that no check is performed.
 #'
 #' @section Fields:
 #' Fields of [Param], and additionally:
