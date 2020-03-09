@@ -92,6 +92,8 @@ test_that("check generate_design_grid against concrete expectation", {
 
 
 test_that("generate_design_lhs", {
+  skip_if_not_installed("lhs")
+
   ps_list = list(
     th_paramset_dbl1(),
     th_paramset_full(),
@@ -109,6 +111,8 @@ test_that("generate_design_lhs", {
 })
 
 test_that("generate_design_lhs does not work with deps", {
+  skip_if_not_installed("lhs")
+
   ps = th_paramset_deps()
   expect_error(generate_design_lhs(ps, n = 5L), "dependencies")
 })
@@ -139,6 +143,8 @@ test_that("generate_design_random with zero rows", {
 })
 
 test_that("generate_design_lhs with zero rows", {
+  skip_if_not_installed("lhs")
+
   ps = th_paramset_full()
   d = generate_design_lhs(ps, n = 0)
   expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
