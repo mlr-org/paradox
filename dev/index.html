@@ -196,9 +196,9 @@
 <span id="cb7-3"><a href="#cb7-3"></a>ps<span class="op">$</span><span class="kw">test</span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
 <span id="cb7-4"><a href="#cb7-4"></a><span class="co">#&gt; [1] FALSE</span></span>
 <span id="cb7-5"><a href="#cb7-5"></a>ps<span class="op">$</span><span class="kw"><a href="https://rdrr.io/r/utils/PkgUtils.html">check</a></span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-6"><a href="#cb7-6"></a><span class="co">#&gt; [1] "z: Element 0 is not &gt;= 1"</span></span>
+<span id="cb7-6"><a href="#cb7-6"></a><span class="co">#&gt; [1] "z: Element 1 is not &gt;= 1"</span></span>
 <span id="cb7-7"><a href="#cb7-7"></a>ps<span class="op">$</span><span class="kw">assert</span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-8"><a href="#cb7-8"></a><span class="co">#&gt; Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 0 is not &gt;= 1.</span></span></code></pre></div>
+<span id="cb7-8"><a href="#cb7-8"></a><span class="co">#&gt; Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not &gt;= 1.</span></span></code></pre></div>
 </div>
 <div id="transformations" class="section level3">
 <h3 class="hasAnchor">
@@ -277,8 +277,9 @@
   <div class="dev-status">
 <h2>Dev status</h2>
 <ul class="list-unstyled">
-<li><a href="https://travis-ci.org/mlr-org/paradox"><img src="https://img.shields.io/travis/mlr-org/paradox/master?label=Linux&amp;logo=travis&amp;style=flat-square" alt="Build Status"></a></li>
+<li><a href="https://github.com/mlr-org/paradox/actions"><img src="https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg" alt="R build status"></a></li>
 <li><a href="https://cran.r-project.org/package=paradox"><img src="https://www.r-pkg.org/badges/version/paradox" alt="CRAN"></a></li>
+<li><a href="https://cran.r-project.org/web/checks/check_results_paradox.html"><img src="https://cranchecks.info/badges/worst/paradox" alt="Cran Checks"></a></li>
 <li><a href="https://codecov.io/gh/mlr-org/paradox"><img src="https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg" alt="codecov"></a></li>
 <li><a href="https://stackoverflow.com/questions/tagged/mlr3"><img src="https://img.shields.io/badge/stackoverflow-mlr3-orange.svg" alt="StackOverflow"></a></li>
 </ul>
