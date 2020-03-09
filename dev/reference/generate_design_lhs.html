@@ -182,7 +182,10 @@ LHS functions are implemented in package <span class="pkg">lhs</span>, default i
   <span class='no'>ParamDbl</span>$<span class='fu'>new</span>(<span class='st'>"ratio"</span>, <span class='kw'>lower</span> <span class='kw'>=</span> <span class='fl'>0</span>, <span class='kw'>upper</span> <span class='kw'>=</span> <span class='fl'>1</span>),
   <span class='no'>ParamFct</span>$<span class='fu'>new</span>(<span class='st'>"letters"</span>, <span class='kw'>levels</span> <span class='kw'>=</span> <span class='no'>letters</span>[<span class='fl'>1</span>:<span class='fl'>3</span>])
 ))
-<span class='fu'>generate_design_lhs</span>(<span class='no'>ps</span>, <span class='fl'>10</span>)</div><div class='output co'>#&gt; &lt;Design&gt; with 10 rows:
+
+<span class='kw'>if</span> (<span class='fu'><a href='https://rdrr.io/r/base/ns-load.html'>requireNamespace</a></span>(<span class='st'>"lhs"</span>, <span class='kw'>quietly</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>)) {
+  <span class='fu'>generate_design_lhs</span>(<span class='no'>ps</span>, <span class='fl'>10</span>)
+}</div><div class='output co'>#&gt; &lt;Design&gt; with 10 rows:
 #&gt;          ratio letters
 #&gt;  1: 0.25185566       b
 #&gt;  2: 0.18461201       b
