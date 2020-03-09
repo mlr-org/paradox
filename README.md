@@ -8,9 +8,11 @@ Universal Parameter Space Description and Tools.
 
 <!-- badges: start -->
 
-[![Build
-Status](https://img.shields.io/travis/mlr-org/paradox/master?label=Linux&logo=travis&style=flat-square)](https://travis-ci.org/mlr-org/paradox)
+[![R build
+status](https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg)](https://github.com/mlr-org/paradox/actions)
 [![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
+[![Cran
+Checks](https://cranchecks.info/badges/worst/paradox)](https://cran.r-project.org/web/checks/check_results_paradox.html)
 [![codecov](https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg)](https://codecov.io/gh/mlr-org/paradox)
 [![StackOverflow](https://img.shields.io/badge/stackoverflow-mlr3-orange.svg)](https://stackoverflow.com/questions/tagged/mlr3)
 <!-- badges: end -->
@@ -125,9 +127,9 @@ ps$test(list(z = 1, x = 1))
 ps$test(list(z = -1, x = 1))
 #> [1] FALSE
 ps$check(list(z = -1, x = 1))
-#> [1] "z: Element 0 is not >= 1"
+#> [1] "z: Element 1 is not >= 1"
 ps$assert(list(z = -1, x = 1))
-#> Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 0 is not >= 1.
+#> Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not >= 1.
 ```
 
 ### Transformations
