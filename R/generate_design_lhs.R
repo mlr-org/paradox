@@ -18,11 +18,14 @@
 #'   ParamDbl$new("ratio", lower = 0, upper = 1),
 #'   ParamFct$new("letters", levels = letters[1:3])
 #' ))
-#' generate_design_lhs(ps, 10)
+#'
+#' if (requireNamespace("lhs", quietly = TRUE)) {
+#'   generate_design_lhs(ps, 10)
+#' }
 generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
 
-  require_namespaces("lhs") # actually we MAY do not need to load this, if user passes another lhs_fun (not from LHS)
   if (is.null(lhs_fun)) {
+    require_namespaces("lhs")
     lhs_fun = lhs::maximinLHS
   }
   assert_param_set(param_set, no_untyped = TRUE, no_deps = TRUE)

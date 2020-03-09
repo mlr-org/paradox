@@ -59,6 +59,7 @@ generate_design_random(ps, 3)
 Generate LHS Design:
 
 ```{r pslhs}
+requireNamespace("lhs")
 generate_design_lhs(ps, 3)
 ```
 

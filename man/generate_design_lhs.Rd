@@ -27,7 +27,10 @@ ps = ParamSet$new(list(
   ParamDbl$new("ratio", lower = 0, upper = 1),
   ParamFct$new("letters", levels = letters[1:3])
 ))
-generate_design_lhs(ps, 10)
+
+if (requireNamespace("lhs", quietly = TRUE)) {
+  generate_design_lhs(ps, 10)
+}
 }
 \seealso{
 Other generate_design: 

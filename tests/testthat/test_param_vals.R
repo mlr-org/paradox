@@ -44,10 +44,12 @@ test_that("values", {
   expect_data_table(dd, nrows = 100, ncols = 3)
   expect_true(all(dd$f == "a"))
 
-  d = generate_design_lhs(ps, n = 10)
-  dd = d$data
-  expect_data_table(dd, nrows = 10, ncols = 3)
-  expect_true(all(dd$f == "a"))
+  if (requireNamespace("lhs", quietly = TRUE)) {
+    d = generate_design_lhs(ps, n = 10)
+    dd = d$data
+    expect_data_table(dd, nrows = 10, ncols = 3)
+    expect_true(all(dd$f == "a"))
+  }
 
   # sampler
   s = SamplerUnif$new(ps)
