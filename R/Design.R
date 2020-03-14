@@ -8,6 +8,9 @@
 #' latter is a design of configurations produced from the former - e.g.,
 #' by calling a [generate_design_grid()] or by sampling.
 #'
+#' Feasibility of the given `data` is checked, except possibly for dependencies: If the
+#' `enforce_dependencies` flag is set, then parameters with unmet dependencies are set to `NA`.
+#'
 #' @section Construction:
 #' ```
 #' c = Design$new(param_set, data, remove_dupl)
@@ -19,8 +22,12 @@
 #' * `data` :: [data.table::data.table()]\cr
 #'   Right hand side of the condition.
 #'
+#' * `enforce_dependencies` :: `logical(1)`\cr
+#'   Whether to set parameters whose dependencies are not met to `NA`.
+#'   Default `FALSE` (will throw an error if dependencies are not satisfied).
+#'
 #' * `remove_dupl` :: `logical(1)`\cr
-#'   Remove duplicates?
+#'   Remove duplicates? Default `FALSE`.
 #'
 #' @section Fields:
 #' * `param_set` :: `ParamSet`.
@@ -41,7 +48,7 @@ Design = R6Class("Design",
     param_set = NULL,
     data = NULL,
 
-    initialize = function(param_set, data, remove_dupl) {
+    initialize = function(param_set, data, enforce_dependencies = FALSE, remove_dupl = FALSE) {
 
       assert_param_set(param_set)
       assert_data_table(data, ncols = param_set$length)
@@ -53,9 +60,10 @@ Design = R6Class("Design",
       # do we still create an LHS like this?
       imap(param_set$values, function(v, n) set(data, j = n, value = v))
       self$data = data
-      if (param_set$has_deps) {
+      if (enforce_dependencies && param_set$has_deps) {
         private$set_deps_to_na()
       }
+      param_set$assert(self$data)
       # NB: duplicated rows can happen to to NA setting
       if (remove_dupl) {
         self$data = unique(self$data)

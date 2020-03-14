@@ -40,5 +40,5 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   }
   colnames(d) = ids
   d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
-  Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # user wants n-points, dont remove
+  Design$new(param_set, set_names(d, ids), enforce_dependencies = TRUE, remove_dupl = FALSE) # user wants n-points, dont remove
 }

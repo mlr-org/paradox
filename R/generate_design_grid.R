@@ -55,5 +55,5 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
   res = imap(grid_vec, function(value, id) param_set$params[[id]]$qunif(x = value))
   res = cross_join(res, sorted = FALSE)
-  Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
+  Design$new(param_set, res, enforce_dependencies = TRUE, remove_dupl = TRUE) # user wants no dupls, remove
 }

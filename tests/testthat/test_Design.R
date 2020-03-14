@@ -27,3 +27,15 @@ test_that("transpose works", {
   xs = d$transpose(trafo = TRUE, filter_na = TRUE)
   expect_equal(xs, list(list(f = "a", i = 11L), list(f = "b")))
 })
+
+test_that("design throws if data is bad", {
+
+  ps = ParamSet$new(list(
+    ParamFct$new("f", levels = c("a", "b")),
+    ParamInt$new("i", lower = 1, upper = 5)
+  ))
+  data = data.table(f = c("a", "b"), i = c(1, 10))
+
+  expect_error(Design$new(ps, data), "Line 2.*is not <= 5")
+
+})
