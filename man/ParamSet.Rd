@@ -109,10 +109,12 @@ Adds a single param or another set to this set, all params are cloned.
 \code{character()} -> \code{self} \cr
 Changes the current set to the set of passed IDs.
 \item \code{test(x)}, \code{check(x)}, \code{assert(x)} \cr
-Three \pkg{checkmate}-like check-functions. Takes a named list.
+Three \pkg{checkmate}-like check-functions. Takes a point as a named list, \emph{or} a \code{data.frame} of points.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
+Params for which dependencies are not satisfied should not be part of \code{x}.\cr
+If the given value is a \code{data.frame}, then each line is checked independently. \code{NA} values are
+counted as parameters not given at all for the sake of dependencies and \code{"requires"} tags.
 \item \code{add_dep(id, on, cond)} \cr
 (\code{character(1)}, \code{character(1)}, \link{Condition}) -> \code{self} \cr
 Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.

@@ -3,7 +3,9 @@
 \name{Sampler1DNormal}
 \alias{Sampler1DNormal}
 \title{Sampler1DNormal Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.
+}
 \description{
 Normal sampling (potentially truncated) for \link{ParamDbl}.
 }

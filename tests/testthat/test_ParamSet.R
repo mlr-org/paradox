@@ -101,6 +101,11 @@ test_that("ParamSet$check", {
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
 
+  expect_character(ps$check(data.frame(th_param_dbl = 5, new_param = NA)), fixed = "not available")
+  expect_character(ps$check(data.frame(th_param_dbl = 5, th_param_intx = NA)), fixed = "Did you mean")
+  expect_match(ps$check(data.frame(th_param_dbl = c(5, 5), th_param_int = c(5, 15))), "ine 2.*not <= 10")
+  expect_true(ps$check(data.frame(th_param_dbl = 5)))
+
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
   expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "x_rep_2 = TRUE")

@@ -3,7 +3,9 @@
 \name{Sampler1DUnif}
 \alias{Sampler1DUnif}
 \title{Sampler1DUnif Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.
+}
 \description{
 Uniform random sampler for arbitrary (bounded) parameters.
 }

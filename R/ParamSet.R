@@ -99,10 +99,12 @@
 #'   `character()` -> `self` \cr
 #'   Changes the current set to the set of passed IDs.
 #' * `test(x)`, `check(x)`, `assert(x)` \cr
-#'   Three \pkg{checkmate}-like check-functions. Takes a named list.
+#'   Three \pkg{checkmate}-like check-functions. Takes a point as a named list, *or* a `data.frame` of points.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
-#'   Params for which dependencies are not satisfied should not be part of `x`.
+#'   Params for which dependencies are not satisfied should not be part of `x`.\cr
+#'   If the given value is a `data.frame`, then each line is checked independently. `NA` values are
+#'   counted as parameters not given at all for the sake of dependencies and `"requires"` tags.
 #' * `add_dep(id, on, cond)` \cr
 #'   (`character(1)`, `character(1)`, [Condition]) -> `self` \cr
 #'    Adds a dependency to this set, so that param `id` now depends on param `on`.
@@ -214,8 +216,10 @@ ParamSet = R6Class("ParamSet",
     },
 
     check = function(xs) {
-
-      ok = check_list(xs, names = "unique")
+      if (!is.list(xs)) {
+        return("xs must be a named list or a data.frame")
+      }
+      ok = if (is.data.frame(xs)) TRUE else check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
         return(ok)
       }
@@ -236,40 +240,17 @@ ParamSet = R6Class("ParamSet",
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
 
-      # check each parameters feasibility
-      for (n in ns) {
-        ch = self$params[[n]]$check(xs[[n]])
-        if (test_string(ch)) { # we failed a check, return string
-          return(paste0(n, ": ", ch))
-        }
-      }
-
-      # check dependencies
-      if (self$has_deps) {
-        deps = self$deps
-        for (j in seq_row(self$deps)) {
-          p1id = deps$id[j]
-          p2id = deps$on[j]
-          # we are ONLY ok if:
-          # - if param is there, then parent must be there, then cond must be true
-          # - if param is not there
-          cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-            (p1id %nin% ns)
-          if (isFALSE(ok)) {
-            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
-            val = xs[[p2id]]
-            if (is.null(val)) {
-              message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
-            } else {
-              message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
-            }
-            return(message)
+      if (is.data.frame(xs)) {
+        xs = transpose_list(xs)
+        xs = map(xs, discard, is.na)
+        for (line in seq_along(xs)) {
+          checked = private$.check_params(xs[[line]])
+          if (test_string(checked)) {
+            return(sprintf("Line %s infeasible: %s", line, checked))
           }
         }
-      }
-
-      return(TRUE) # we passed all checks
+      } 
+      private$.check_params(xs)
     },
 
     test = function(xs) makeTest(res = self$check(xs)),
@@ -442,6 +423,44 @@ ParamSet = R6Class("ParamSet",
         ".deps" = copy(value),
         value
       )
+    },
+    # call checks for all $params and $deps. This is called once for self$check(<list>) but multiple times for self$check(<data.frame>)
+    .check_params = function(xs) {
+      ns = names(xs)
+      # check each parameters feasibility
+      for (n in ns) {
+        ch = self$params[[n]]$check(xs[[n]])
+        if (test_string(ch)) { # we failed a check, return string
+          return(paste0(n, ": ", ch))
+        }
+      }
+
+      # check dependencies
+      if (self$has_deps) {
+        deps = self$deps
+        for (j in seq_row(self$deps)) {
+          p1id = deps$id[j]
+          p2id = deps$on[j]
+          # we are ONLY ok if:
+          # - if param is there, then parent must be there, then cond must be true
+          # - if param is not there
+          cond = deps$cond[[j]]
+          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+            (p1id %nin% ns)
+          if (isFALSE(ok)) {
+            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
+            val = xs[[p2id]]
+            if (is.null(val)) {
+              message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
+            } else {
+              message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+            }
+            return(message)
+          }
+        }
+      }
+
+      return(TRUE) # we passed all checks
     }
   )
 )

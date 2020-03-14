@@ -5,7 +5,9 @@
 \alias{CondEqual}
 \alias{CondAnyOf}
 \title{Dependency Condition}
-\format{\link[R6:R6Class]{R6::R6Class} object.}
+\format{
+\link[R6:R6Class]{R6::R6Class} object.
+}
 \description{
 Condition object, to specify the condition in a dependency.
 }
