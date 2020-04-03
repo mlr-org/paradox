@@ -438,8 +438,15 @@ ParamSet = R6Class("ParamSet",
 
     deep_clone = function(name, value) {
       switch(name,
-        ".params" = map(value, function(x) x$clone(deep = TRUE)),
-        ".deps" = copy(value),
+        .params = map(value, function(x) x$clone(deep = TRUE)),
+        .deps = copy(value),
+        .values = map(value, function(x)
+          # clones R6 objects in values, leave other things as they are
+          if (is.environment(x) && !is.null(x$.__enclos_env__)) {
+            x$clone(deep = TRUE)
+          } else {
+            x
+          }),
         value
       )
     }
