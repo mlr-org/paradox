@@ -291,3 +291,18 @@ test_that("required tag, empty param set (#219)", {
   ps$ids()
   expect_identical(ps$ids(tags = "required"), character(0))
 })
+
+test_that("paramset clones properly", {
+  ps = ParamSet$new()
+  ps$add(ParamFct$new("a", levels = letters[1:3]))
+  ps$add(ParamFct$new("b", levels = letters[1:3]))
+  ps$add_dep("a", "b", CondAnyOf$new(letters[1:2]))
+  ps2 = ps$clone(deep = TRUE)
+
+  expect_equal(ps, ps2)
+
+  ps$deps$cond[[1]]$rhs = c("b", "c")
+
+  expect_equal(ps$deps$cond[[1]]$rhs, c("b", "c"))
+  expect_equal(ps2$deps$cond[[1]]$rhs, c("a", "b"))
+})
