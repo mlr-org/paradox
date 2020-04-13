@@ -3,7 +3,9 @@
 \name{Sampler1DCateg}
 \alias{Sampler1DCateg}
 \title{Sampler1DCateg Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.
+}
 \description{
 Sampling from a discrete distribution, for a \link{ParamFct} or \link{ParamLgl}.
 }

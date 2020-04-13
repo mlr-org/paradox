@@ -3,7 +3,9 @@
 \name{ParamSetCollection}
 \alias{ParamSetCollection}
 \title{ParamSetCollection}
-\format{\link[R6:R6Class]{R6::R6Class} object inheriting from \link{ParamSet}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} object inheriting from \link{ParamSet}.
+}
 \description{
 A collection of multiple \link{ParamSet} objects.
 \itemize{

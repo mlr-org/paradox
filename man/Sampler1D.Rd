@@ -3,7 +3,9 @@
 \name{Sampler1D}
 \alias{Sampler1D}
 \title{Sampler1D Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.
+}
 \description{
 1D sampler, abstract base class for Sampler like \link{Sampler1DUnif}, \link{Sampler1DRfun}, \link{Sampler1DCateg} and \link{Sampler1DNormal}.
 }

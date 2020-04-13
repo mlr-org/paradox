@@ -3,7 +3,9 @@
 \name{Sampler}
 \alias{Sampler}
 \title{Sampler Class}
-\format{\link[R6:R6Class]{R6::R6Class} object.}
+\format{
+\link[R6:R6Class]{R6::R6Class} object.
+}
 \description{
 This is the abstract base class for sampling objects like \link{Sampler1D}, \link{SamplerHierarchical} or \link{SamplerJointIndep}.
 }

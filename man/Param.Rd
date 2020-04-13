@@ -3,7 +3,9 @@
 \name{Param}
 \alias{Param}
 \title{Param Object}
-\format{\link[R6:R6Class]{R6::R6Class} object.}
+\format{
+\link[R6:R6Class]{R6::R6Class} object.
+}
 \description{
 Abstract base class for parameters.
 }
