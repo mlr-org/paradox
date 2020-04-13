@@ -13,7 +13,8 @@
 <link rel="apple-touch-icon" type="image/png" sizes="120x120" href="apple-touch-icon-120x120.png">
 <link rel="apple-touch-icon" type="image/png" sizes="76x76" href="apple-touch-icon-76x76.png">
 <link rel="apple-touch-icon" type="image/png" sizes="60x60" href="apple-touch-icon-60x60.png">
-<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script><!-- Bootstrap --><link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/journal/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script><!-- bootstrap-toc --><link rel="stylesheet" href="bootstrap-toc.css">
+<script src="bootstrap-toc.js"></script><!-- Bootstrap --><link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/journal/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
 <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.1/css/all.min.css" integrity="sha256-PbSmjxuVAzJ6FPvNYsrXygfGhNJYyZ2GktDbkMBqQZg=" crossorigin="anonymous">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.11.1/css/v4-shims.min.css" integrity="sha256-A6jcAdwFD48VMjlI3GDxUd+eCQa7/KWy6G9oe/ovaPA=" crossorigin="anonymous">
 <!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js" integrity="sha256-FiZwavyI2V6+EXO1U+xzLG3IKldpiTFf3153ea9zikQ=" crossorigin="anonymous"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.9.4/headroom.min.js" integrity="sha256-DJFC1kqIhelURkuza0AvYal5RxMtpzLjFhsnVIeuk+U=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.9.4/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- pkgdown --><link href="pkgdown.css" rel="stylesheet">
@@ -31,7 +32,7 @@
 <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
 <![endif]-->
 </head>
-<body>
+<body data-spy="scroll" data-target="#toc">
     <div class="container template-home">
       <header><div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
@@ -45,7 +46,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org"></a>
-        <a class="navbar-brand" href="index.html">paradox <small>v0.1.0.9000</small></a>
+        <a class="navbar-brand" href="index.html">paradox <small>v0.1.0-9000</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -68,7 +69,7 @@
   </a>
 </li>
         <li>
-  <a href="https://github.com/mlr-org/paradox">
+  <a href="https://github.com/mlr-org/paradox/">
     <span class="fab fa fab fa-github fa-lg"></span>
      
   </a>
@@ -109,11 +110,11 @@
 <p>Package website: <a href="https://paradox.mlr-org.com/">release</a> | <a href="https://paradox.mlr-org.com/dev">dev</a></p>
 <p>Universal Parameter Space Description and Tools.</p>
 <!-- badges: start -->
-
+<p><a href="https://github.com/mlr-org/paradox/actions"><img src="https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg" alt="R build status"></a> <a href="https://cran.r-project.org/package=paradox"><img src="https://www.r-pkg.org/badges/version/paradox" alt="CRAN"></a> <a href="https://cran.r-project.org/web/checks/check_results_paradox.html"><img src="https://cranchecks.info/badges/worst/paradox" alt="Cran Checks"></a> <a href="https://codecov.io/gh/mlr-org/paradox"><img src="https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg" alt="codecov"></a> <a href="https://stackoverflow.com/questions/tagged/mlr3"><img src="https://img.shields.io/badge/stackoverflow-mlr3-orange.svg" alt="StackOverflow"></a> <!-- badges: end --></p>
 <div id="installation" class="section level2">
 <h2 class="hasAnchor">
 <a href="#installation" class="anchor"></a>Installation</h2>
-<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1"></a>remotes<span class="op">::</span><span class="kw"><a href="https://remotes.r-lib.org/reference/install_github.html">install_github</a></span>(<span class="st">"mlr-org/paradox"</span>)</span></code></pre></div>
+<div class="sourceCode" id="cb1"><pre class="r"><span class="kw pkg">remotes</span><span class="kw ns">::</span><span class="fu"><a href="https://remotes.r-lib.org/reference/install_github.html">install_github</a></span>(<span class="st">"mlr-org/paradox"</span>)</pre></div>
 </div>
 <div id="usage" class="section level2">
 <h2 class="hasAnchor">
@@ -126,79 +127,79 @@
 <li>categorical values from a set of possible strings (<code>"fct"</code>)</li>
 <li>further types are only possible by using transformations.</li>
 </ul>
-<!-- end list --><div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1"></a>ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</span>
-<span id="cb2-2"><a href="#cb2-2"></a>  <span class="dt">params =</span> <span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(</span>
-<span id="cb2-3"><a href="#cb2-3"></a>    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">1</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</span>
-<span id="cb2-4"><a href="#cb2-4"></a>    ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">-10</span>, <span class="dt">upper =</span> <span class="dv">10</span>),</span>
-<span id="cb2-5"><a href="#cb2-5"></a>    ParamLgl<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"flag"</span>),</span>
-<span id="cb2-6"><a href="#cb2-6"></a>    ParamFct<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"methods"</span>, <span class="dt">levels =</span> <span class="kw"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))</span>
-<span id="cb2-7"><a href="#cb2-7"></a>  )</span>
-<span id="cb2-8"><a href="#cb2-8"></a>)</span></code></pre></div>
+<!-- end list --><div class="sourceCode" id="cb2"><pre class="r"><span class="no">ps</span> <span class="kw">=</span> <span class="no">ParamSet</span>$<span class="fu">new</span>(
+  <span class="kw">params</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(
+    <span class="no">ParamInt</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"z"</span>, <span class="kw">lower</span> <span class="kw">=</span> <span class="fl">1</span>, <span class="kw">upper</span> <span class="kw">=</span> <span class="fl">3</span>),
+    <span class="no">ParamDbl</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"x"</span>, <span class="kw">lower</span> <span class="kw">=</span> -<span class="fl">10</span>, <span class="kw">upper</span> <span class="kw">=</span> <span class="fl">10</span>),
+    <span class="no">ParamLgl</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"flag"</span>),
+    <span class="no">ParamFct</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"methods"</span>, <span class="kw">levels</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html">c</a></span>(<span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span>))
+  )
+)</pre></div>
 <p>Draw random samples / create random design:</p>
-<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1"></a><span class="kw"><a href="reference/generate_design_random.html">generate_design_random</a></span>(ps, <span class="dv">3</span>)</span>
-<span id="cb3-2"><a href="#cb3-2"></a><span class="co">#&gt; &lt;Design&gt; with 3 rows:</span></span>
-<span id="cb3-3"><a href="#cb3-3"></a><span class="co">#&gt;    z         x  flag methods</span></span>
-<span id="cb3-4"><a href="#cb3-4"></a><span class="co">#&gt; 1: 1  7.660348 FALSE       b</span></span>
-<span id="cb3-5"><a href="#cb3-5"></a><span class="co">#&gt; 2: 3  8.809346 FALSE       c</span></span>
-<span id="cb3-6"><a href="#cb3-6"></a><span class="co">#&gt; 3: 2 -9.088870 FALSE       b</span></span></code></pre></div>
+<div class="sourceCode" id="cb3"><pre class="r"><span class="fu"><a href="reference/generate_design_random.html">generate_design_random</a></span>(<span class="no">ps</span>, <span class="fl">3</span>)
+<span class="co">#&gt; &lt;Design&gt; with 3 rows:</span>
+<span class="co">#&gt;    z         x  flag methods</span>
+<span class="co">#&gt; 1: 1  7.660348 FALSE       b</span>
+<span class="co">#&gt; 2: 3  8.809346 FALSE       c</span>
+<span class="co">#&gt; 3: 2 -9.088870 FALSE       b</span></pre></div>
 <p>Generate LHS Design:</p>
-<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1"></a><span class="kw"><a href="reference/generate_design_lhs.html">generate_design_lhs</a></span>(ps, <span class="dv">3</span>)</span>
-<span id="cb4-2"><a href="#cb4-2"></a><span class="co">#&gt; &lt;Design&gt; with 3 rows:</span></span>
-<span id="cb4-3"><a href="#cb4-3"></a><span class="co">#&gt;    z         x  flag methods</span></span>
-<span id="cb4-4"><a href="#cb4-4"></a><span class="co">#&gt; 1: 1 -3.984673  TRUE       b</span></span>
-<span id="cb4-5"><a href="#cb4-5"></a><span class="co">#&gt; 2: 2  7.938035 FALSE       a</span></span>
-<span id="cb4-6"><a href="#cb4-6"></a><span class="co">#&gt; 3: 3  1.969783  TRUE       c</span></span></code></pre></div>
+<div class="sourceCode" id="cb4"><pre class="r"><span class="fu"><a href="reference/generate_design_lhs.html">generate_design_lhs</a></span>(<span class="no">ps</span>, <span class="fl">3</span>)
+<span class="co">#&gt; &lt;Design&gt; with 3 rows:</span>
+<span class="co">#&gt;    z         x  flag methods</span>
+<span class="co">#&gt; 1: 1 -3.984673  TRUE       b</span>
+<span class="co">#&gt; 2: 2  7.938035 FALSE       a</span>
+<span class="co">#&gt; 3: 3  1.969783  TRUE       c</span></pre></div>
 <p>Generate Grid Design:</p>
-<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1"></a><span class="kw"><a href="reference/generate_design_grid.html">generate_design_grid</a></span>(ps, <span class="dt">resolution =</span> <span class="dv">2</span>)</span>
-<span id="cb5-2"><a href="#cb5-2"></a><span class="co">#&gt; &lt;Design&gt; with 24 rows:</span></span>
-<span id="cb5-3"><a href="#cb5-3"></a><span class="co">#&gt;     z   x  flag methods</span></span>
-<span id="cb5-4"><a href="#cb5-4"></a><span class="co">#&gt;  1: 1 -10  TRUE       a</span></span>
-<span id="cb5-5"><a href="#cb5-5"></a><span class="co">#&gt;  2: 1 -10  TRUE       b</span></span>
-<span id="cb5-6"><a href="#cb5-6"></a><span class="co">#&gt;  3: 1 -10  TRUE       c</span></span>
-<span id="cb5-7"><a href="#cb5-7"></a><span class="co">#&gt;  4: 1 -10 FALSE       a</span></span>
-<span id="cb5-8"><a href="#cb5-8"></a><span class="co">#&gt;  5: 1 -10 FALSE       b</span></span>
-<span id="cb5-9"><a href="#cb5-9"></a><span class="co">#&gt;  6: 1 -10 FALSE       c</span></span>
-<span id="cb5-10"><a href="#cb5-10"></a><span class="co">#&gt;  7: 1  10  TRUE       a</span></span>
-<span id="cb5-11"><a href="#cb5-11"></a><span class="co">#&gt;  [ reached getOption("max.print") -- omitted 18 rows ]</span></span></code></pre></div>
+<div class="sourceCode" id="cb5"><pre class="r"><span class="fu"><a href="reference/generate_design_grid.html">generate_design_grid</a></span>(<span class="no">ps</span>, <span class="kw">resolution</span> <span class="kw">=</span> <span class="fl">2</span>)
+<span class="co">#&gt; &lt;Design&gt; with 24 rows:</span>
+<span class="co">#&gt;     z   x  flag methods</span>
+<span class="co">#&gt;  1: 1 -10  TRUE       a</span>
+<span class="co">#&gt;  2: 1 -10  TRUE       b</span>
+<span class="co">#&gt;  3: 1 -10  TRUE       c</span>
+<span class="co">#&gt;  4: 1 -10 FALSE       a</span>
+<span class="co">#&gt;  5: 1 -10 FALSE       b</span>
+<span class="co">#&gt;  6: 1 -10 FALSE       c</span>
+<span class="co">#&gt;  7: 1  10  TRUE       a</span>
+<span class="co">#&gt;  [ reached getOption("max.print") -- omitted 18 rows ]</span></pre></div>
 <p>Properties of the parameters within the <code>ParamSet</code>:</p>
-<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1"></a>ps<span class="op">$</span><span class="kw">ids</span>()</span>
-<span id="cb6-2"><a href="#cb6-2"></a><span class="co">#&gt; [1] "z"       "x"       "flag"    "methods"</span></span>
-<span id="cb6-3"><a href="#cb6-3"></a>ps<span class="op">$</span>levels</span>
-<span id="cb6-4"><a href="#cb6-4"></a><span class="co">#&gt; $z</span></span>
-<span id="cb6-5"><a href="#cb6-5"></a><span class="co">#&gt; NULL</span></span>
-<span id="cb6-6"><a href="#cb6-6"></a><span class="co">#&gt; </span></span>
-<span id="cb6-7"><a href="#cb6-7"></a><span class="co">#&gt; $x</span></span>
-<span id="cb6-8"><a href="#cb6-8"></a><span class="co">#&gt; NULL</span></span>
-<span id="cb6-9"><a href="#cb6-9"></a><span class="co">#&gt; </span></span>
-<span id="cb6-10"><a href="#cb6-10"></a><span class="co">#&gt; $flag</span></span>
-<span id="cb6-11"><a href="#cb6-11"></a><span class="co">#&gt; [1]  TRUE FALSE</span></span>
-<span id="cb6-12"><a href="#cb6-12"></a><span class="co">#&gt; </span></span>
-<span id="cb6-13"><a href="#cb6-13"></a><span class="co">#&gt; $methods</span></span>
-<span id="cb6-14"><a href="#cb6-14"></a><span class="co">#&gt; [1] "a" "b" "c"</span></span>
-<span id="cb6-15"><a href="#cb6-15"></a>ps<span class="op">$</span>nlevels</span>
-<span id="cb6-16"><a href="#cb6-16"></a><span class="co">#&gt;       z       x    flag methods </span></span>
-<span id="cb6-17"><a href="#cb6-17"></a><span class="co">#&gt;       3     Inf       2       3</span></span>
-<span id="cb6-18"><a href="#cb6-18"></a>ps<span class="op">$</span>is_number</span>
-<span id="cb6-19"><a href="#cb6-19"></a><span class="co">#&gt;       z       x    flag methods </span></span>
-<span id="cb6-20"><a href="#cb6-20"></a><span class="co">#&gt;    TRUE    TRUE   FALSE   FALSE</span></span>
-<span id="cb6-21"><a href="#cb6-21"></a>ps<span class="op">$</span>lower</span>
-<span id="cb6-22"><a href="#cb6-22"></a><span class="co">#&gt;       z       x    flag methods </span></span>
-<span id="cb6-23"><a href="#cb6-23"></a><span class="co">#&gt;       1     -10      NA      NA</span></span>
-<span id="cb6-24"><a href="#cb6-24"></a>ps<span class="op">$</span>upper</span>
-<span id="cb6-25"><a href="#cb6-25"></a><span class="co">#&gt;       z       x    flag methods </span></span>
-<span id="cb6-26"><a href="#cb6-26"></a><span class="co">#&gt;       3      10      NA      NA</span></span></code></pre></div>
+<div class="sourceCode" id="cb6"><pre class="r"><span class="no">ps</span>$<span class="fu">ids</span>()
+<span class="co">#&gt; [1] "z"       "x"       "flag"    "methods"</span>
+<span class="no">ps</span>$<span class="no">levels</span>
+<span class="co">#&gt; $z</span>
+<span class="co">#&gt; NULL</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; $x</span>
+<span class="co">#&gt; NULL</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; $flag</span>
+<span class="co">#&gt; [1]  TRUE FALSE</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; $methods</span>
+<span class="co">#&gt; [1] "a" "b" "c"</span>
+<span class="no">ps</span>$<span class="no">nlevels</span>
+<span class="co">#&gt;       z       x    flag methods </span>
+<span class="co">#&gt;       3     Inf       2       3</span>
+<span class="no">ps</span>$<span class="no">is_number</span>
+<span class="co">#&gt;       z       x    flag methods </span>
+<span class="co">#&gt;    TRUE    TRUE   FALSE   FALSE</span>
+<span class="no">ps</span>$<span class="no">lower</span>
+<span class="co">#&gt;       z       x    flag methods </span>
+<span class="co">#&gt;       1     -10      NA      NA</span>
+<span class="no">ps</span>$<span class="no">upper</span>
+<span class="co">#&gt;       z       x    flag methods </span>
+<span class="co">#&gt;       3      10      NA      NA</span></pre></div>
 <div id="parameter-checks" class="section level3">
 <h3 class="hasAnchor">
 <a href="#parameter-checks" class="anchor"></a>Parameter Checks</h3>
 <p>Check that a parameter satisfies all conditions of a <code>ParamSet</code>, using <code>$test()</code> (returns <code>FALSE</code> on mismatch), <code>$check()</code> (returns error description on mismatch), and <code>$assert()</code> (throws error on mismatch):</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1"></a>ps<span class="op">$</span><span class="kw">test</span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-2"><a href="#cb7-2"></a><span class="co">#&gt; [1] TRUE</span></span>
-<span id="cb7-3"><a href="#cb7-3"></a>ps<span class="op">$</span><span class="kw">test</span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-4"><a href="#cb7-4"></a><span class="co">#&gt; [1] FALSE</span></span>
-<span id="cb7-5"><a href="#cb7-5"></a>ps<span class="op">$</span><span class="kw"><a href="https://rdrr.io/r/utils/PkgUtils.html">check</a></span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-6"><a href="#cb7-6"></a><span class="co">#&gt; [1] "z: Element 1 is not &gt;= 1"</span></span>
-<span id="cb7-7"><a href="#cb7-7"></a>ps<span class="op">$</span><span class="kw">assert</span>(<span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="dt">z =</span> <span class="dv">-1</span>, <span class="dt">x =</span> <span class="dv">1</span>))</span>
-<span id="cb7-8"><a href="#cb7-8"></a><span class="co">#&gt; Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not &gt;= 1.</span></span></code></pre></div>
+<div class="sourceCode" id="cb7"><pre class="r"><span class="no">ps</span>$<span class="fu">test</span>(<span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">z</span> <span class="kw">=</span> <span class="fl">1</span>, <span class="kw">x</span> <span class="kw">=</span> <span class="fl">1</span>))
+<span class="co">#&gt; [1] TRUE</span>
+<span class="no">ps</span>$<span class="fu">test</span>(<span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">z</span> <span class="kw">=</span> -<span class="fl">1</span>, <span class="kw">x</span> <span class="kw">=</span> <span class="fl">1</span>))
+<span class="co">#&gt; [1] FALSE</span>
+<span class="no">ps</span>$<span class="fu"><a href="https://rdrr.io/r/utils/PkgUtils.html">check</a></span>(<span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">z</span> <span class="kw">=</span> -<span class="fl">1</span>, <span class="kw">x</span> <span class="kw">=</span> <span class="fl">1</span>))
+<span class="co">#&gt; [1] "z: Element 1 is not &gt;= 1"</span>
+<span class="no">ps</span>$<span class="fu">assert</span>(<span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(<span class="kw">z</span> <span class="kw">=</span> -<span class="fl">1</span>, <span class="kw">x</span> <span class="kw">=</span> <span class="fl">1</span>))
+<span class="co">#&gt; Error in eval(expr, envir, enclos): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not &gt;= 1.</span></pre></div>
 </div>
 <div id="transformations" class="section level3">
 <h3 class="hasAnchor">
@@ -211,34 +212,34 @@
 <code>param_set</code> the <code>ParamSet</code> used to create the design</li>
 </ul>
 <p>Transformations can be used to change the distributions of sampled parameters. For example, to sample values between <span class="math inline">2<sup>−</sup>3</span> and <span class="math inline">2<sup>3</sup></span> in a <span class="math inline"><em>l</em><em>o</em><em>g</em><sub>2</sub></span>-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1"></a>ps =<span class="st"> </span>ParamSet<span class="op">$</span><span class="kw">new</span>(</span>
-<span id="cb8-2"><a href="#cb8-2"></a>  <span class="dt">params =</span> <span class="kw"><a href="https://rdrr.io/r/base/list.html">list</a></span>(</span>
-<span id="cb8-3"><a href="#cb8-3"></a>    ParamInt<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"z"</span>, <span class="dt">lower =</span> <span class="dv">-3</span>, <span class="dt">upper =</span> <span class="dv">3</span>),</span>
-<span id="cb8-4"><a href="#cb8-4"></a>    ParamDbl<span class="op">$</span><span class="kw">new</span>(<span class="dt">id =</span> <span class="st">"x"</span>, <span class="dt">lower =</span> <span class="dv">0</span>, <span class="dt">upper =</span> <span class="dv">1</span>)</span>
-<span id="cb8-5"><a href="#cb8-5"></a>  )</span>
-<span id="cb8-6"><a href="#cb8-6"></a>)</span>
-<span id="cb8-7"><a href="#cb8-7"></a>ps<span class="op">$</span>trafo =<span class="st"> </span><span class="cf">function</span>(x, param_set) {</span>
-<span id="cb8-8"><a href="#cb8-8"></a>  x<span class="op">$</span>z =<span class="st"> </span><span class="dv">2</span><span class="op">^</span>x<span class="op">$</span>z</span>
-<span id="cb8-9"><a href="#cb8-9"></a>  <span class="kw"><a href="https://rdrr.io/r/base/function.html">return</a></span>(x)</span>
-<span id="cb8-10"><a href="#cb8-10"></a>}</span>
-<span id="cb8-11"><a href="#cb8-11"></a>ps_smplr =<span class="st"> </span>SamplerUnif<span class="op">$</span><span class="kw">new</span>(ps)</span>
-<span id="cb8-12"><a href="#cb8-12"></a>x =<span class="st"> </span>ps_smplr<span class="op">$</span><span class="kw"><a href="https://rdrr.io/r/base/sample.html">sample</a></span>(<span class="dv">2</span>)</span>
-<span id="cb8-13"><a href="#cb8-13"></a>xst =<span class="st"> </span>x<span class="op">$</span><span class="kw">transpose</span>()</span>
-<span id="cb8-14"><a href="#cb8-14"></a>xst</span>
-<span id="cb8-15"><a href="#cb8-15"></a><span class="co">#&gt; [[1]]</span></span>
-<span id="cb8-16"><a href="#cb8-16"></a><span class="co">#&gt; [[1]]$z</span></span>
-<span id="cb8-17"><a href="#cb8-17"></a><span class="co">#&gt; [1] 0.125</span></span>
-<span id="cb8-18"><a href="#cb8-18"></a><span class="co">#&gt; </span></span>
-<span id="cb8-19"><a href="#cb8-19"></a><span class="co">#&gt; [[1]]$x</span></span>
-<span id="cb8-20"><a href="#cb8-20"></a><span class="co">#&gt; [1] 0.4137243</span></span>
-<span id="cb8-21"><a href="#cb8-21"></a><span class="co">#&gt; </span></span>
-<span id="cb8-22"><a href="#cb8-22"></a><span class="co">#&gt; </span></span>
-<span id="cb8-23"><a href="#cb8-23"></a><span class="co">#&gt; [[2]]</span></span>
-<span id="cb8-24"><a href="#cb8-24"></a><span class="co">#&gt; [[2]]$z</span></span>
-<span id="cb8-25"><a href="#cb8-25"></a><span class="co">#&gt; [1] 0.5</span></span>
-<span id="cb8-26"><a href="#cb8-26"></a><span class="co">#&gt; </span></span>
-<span id="cb8-27"><a href="#cb8-27"></a><span class="co">#&gt; [[2]]$x</span></span>
-<span id="cb8-28"><a href="#cb8-28"></a><span class="co">#&gt; [1] 0.3688455</span></span></code></pre></div>
+<div class="sourceCode" id="cb8"><pre class="r"><span class="no">ps</span> <span class="kw">=</span> <span class="no">ParamSet</span>$<span class="fu">new</span>(
+  <span class="kw">params</span> <span class="kw">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html">list</a></span>(
+    <span class="no">ParamInt</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"z"</span>, <span class="kw">lower</span> <span class="kw">=</span> -<span class="fl">3</span>, <span class="kw">upper</span> <span class="kw">=</span> <span class="fl">3</span>),
+    <span class="no">ParamDbl</span>$<span class="fu">new</span>(<span class="kw">id</span> <span class="kw">=</span> <span class="st">"x"</span>, <span class="kw">lower</span> <span class="kw">=</span> <span class="fl">0</span>, <span class="kw">upper</span> <span class="kw">=</span> <span class="fl">1</span>)
+  )
+)
+<span class="no">ps</span>$<span class="no">trafo</span> <span class="kw">=</span> <span class="kw">function</span>(<span class="no">x</span>, <span class="no">param_set</span>) {
+  <span class="no">x</span>$<span class="no">z</span> <span class="kw">=</span> <span class="fl">2</span>^<span class="no">x</span>$<span class="no">z</span>
+  <span class="fu"><a href="https://rdrr.io/r/base/function.html">return</a></span>(<span class="no">x</span>)
+}
+<span class="no">ps_smplr</span> <span class="kw">=</span> <span class="no">SamplerUnif</span>$<span class="fu">new</span>(<span class="no">ps</span>)
+<span class="no">x</span> <span class="kw">=</span> <span class="no">ps_smplr</span>$<span class="fu"><a href="https://rdrr.io/r/base/sample.html">sample</a></span>(<span class="fl">2</span>)
+<span class="no">xst</span> <span class="kw">=</span> <span class="no">x</span>$<span class="fu">transpose</span>()
+<span class="no">xst</span>
+<span class="co">#&gt; [[1]]</span>
+<span class="co">#&gt; [[1]]$z</span>
+<span class="co">#&gt; [1] 0.125</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; [[1]]$x</span>
+<span class="co">#&gt; [1] 0.4137243</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; [[2]]</span>
+<span class="co">#&gt; [[2]]$z</span>
+<span class="co">#&gt; [1] 0.5</span>
+<span class="co">#&gt; </span>
+<span class="co">#&gt; [[2]]$x</span>
+<span class="co">#&gt; [1] 0.3688455</span></pre></div>
 <p>Further documentation can be found in the <a href="https://mlr3book.mlr-org.com/paradox.html">mlr3book</a>.</p>
 </div>
 </div>
@@ -251,7 +252,7 @@
 <ul class="list-unstyled">
 <li>Download from CRAN at <br><a href="https://cloud.r-project.org/package=paradox">https://​cloud.r-project.org/​package=paradox</a>
 </li>
-<li>Browse source code at <br><a href="https://github.com/mlr-org/paradox">https://​github.com/​mlr-org/​paradox</a>
+<li>Browse source code at <br><a href="https://github.com/mlr-org/paradox/">https://​github.com/​mlr-org/​paradox/​</a>
 </li>
 <li>Report a bug at <br><a href="https://github.com/mlr-org/paradox/issues">https://​github.com/​mlr-org/​paradox/​issues</a>
 </li>
@@ -274,17 +275,7 @@
 </ul>
 </div>
 
-  <div class="dev-status">
-<h2>Dev status</h2>
-<ul class="list-unstyled">
-<li><a href="https://github.com/mlr-org/paradox/actions"><img src="https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg" alt="R build status"></a></li>
-<li><a href="https://cran.r-project.org/package=paradox"><img src="https://www.r-pkg.org/badges/version/paradox" alt="CRAN"></a></li>
-<li><a href="https://cran.r-project.org/web/checks/check_results_paradox.html"><img src="https://cranchecks.info/badges/worst/paradox" alt="Cran Checks"></a></li>
-<li><a href="https://codecov.io/gh/mlr-org/paradox"><img src="https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg" alt="codecov"></a></li>
-<li><a href="https://stackoverflow.com/questions/tagged/mlr3"><img src="https://img.shields.io/badge/stackoverflow-mlr3-orange.svg" alt="StackOverflow"></a></li>
-</ul>
-</div>
-</div>
+  </div>
 </div>
 
 
@@ -293,7 +284,7 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.4.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
 </div>
 
       </footer>

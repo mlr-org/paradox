@@ -19,6 +19,10 @@
 <!-- jquery -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 
+<!-- bootstrap-toc -->
+<link rel="stylesheet" href="../bootstrap-toc.css">
+<script src="../bootstrap-toc.js"></script>
+
 <!-- Bootstrap -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/journal/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
 
@@ -84,7 +88,7 @@ If you call deps on the collection, you are returned a complete table of depende
 
   </head>
 
-  <body>
+  <body data-spy="scroll" data-target="#toc">
     <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
@@ -99,7 +103,7 @@ If you call deps on the collection, you are returned a complete table of depende
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.1.0.9000</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.1.0-9000</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -122,7 +126,7 @@ If you call deps on the collection, you are returned a complete table of depende
   </a>
 </li>
         <li>
-  <a href="https://github.com/mlr-org/paradox">
+  <a href="https://github.com/mlr-org/paradox/">
     <span class="fab fa fab fa-github fa-lg"></span>
      
   </a>
@@ -196,8 +200,7 @@ of a param from another set - in this case add call <code>add_dep</code> on the 
     <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
 
     
-<pre>ParamSetCollection$new(sets)
-</pre>
+<pre><span class='no'>ParamSetCollection</span>$<span class='fu'>new</span>(<span class='no'>sets</span>)</pre>
 <ul>
 <li><p><code>sets</code> :: list of <a href='ParamSet.html'>ParamSet</a><br />
 Parameter objects are cloned.</p></li>
@@ -216,13 +219,9 @@ Removes sets of given ids from collection.</p></li>
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
-    <h2>Contents</h2>
-    <ul class="nav nav-pills nav-stacked">
-      <li><a href="#format">Format</a></li>
-      <li><a href="#construction">Construction</a></li>
-      <li><a href="#methods">Methods</a></li>
-    </ul>
-
+    <nav id="toc" data-toggle="toc" class="sticky-top">
+      <h2 data-toc-skip>Contents</h2>
+    </nav>
   </div>
 </div>
 
@@ -233,7 +232,7 @@ Removes sets of given ids from collection.</p></li>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.4.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
 </div>
 
       </footer>
