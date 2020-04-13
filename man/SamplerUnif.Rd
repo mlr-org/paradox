@@ -3,7 +3,9 @@
 \name{SamplerUnif}
 \alias{SamplerUnif}
 \title{SamplerUnif Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{SamplerHierarchical}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{SamplerHierarchical}.
+}
 \description{
 Uniform random sampling for an arbitrary (bounded) \link{ParamSet}.
 Constructs 1 uniform sampler per \link{Param}, then passes them to \link{SamplerHierarchical}.

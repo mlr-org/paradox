@@ -3,7 +3,9 @@
 \name{SamplerJointIndep}
 \alias{SamplerJointIndep}
 \title{SamplerJointIndep Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.
+}
 \description{
 Create joint, independent sampler out of multiple other samplers.
 }

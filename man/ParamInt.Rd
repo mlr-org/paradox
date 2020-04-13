@@ -3,7 +3,9 @@
 \name{ParamInt}
 \alias{ParamInt}
 \title{Integer Parameter}
-\format{\link[R6:R6Class]{R6::R6Class} object inheriting from \link{Param}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} object inheriting from \link{Param}.
+}
 \description{
 A \link{Param} to describe integer parameters.
 }

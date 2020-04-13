@@ -3,7 +3,9 @@
 \name{Sampler1DRfun}
 \alias{Sampler1DRfun}
 \title{Sampler1DRfun Class}
-\format{\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.}
+\format{
+\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.
+}
 \description{
 Arbitrary sampling from 1D RNG functions from R.
 }

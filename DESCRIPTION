@@ -48,7 +48,7 @@ Suggests:
 Encoding: UTF-8
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE, r6 = FALSE)
-RoxygenNote: 7.0.2
+RoxygenNote: 7.1.0
 Collate:
     'Condition.R'
     'Design.R'
