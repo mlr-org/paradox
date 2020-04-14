@@ -19,6 +19,10 @@
 <!-- jquery -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
 
+<!-- bootstrap-toc -->
+<link rel="stylesheet" href="../bootstrap-toc.css">
+<script src="../bootstrap-toc.js"></script>
+
 <!-- Bootstrap -->
 <link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/journal/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
 
@@ -42,8 +46,6 @@
 
 
 
-  <link href="../extra.css" rel="stylesheet">
-  <script src="../extra.js"></script>
 
 <meta property="og:title" content="Dependency Condition — Condition" />
 <meta property="og:description" content="Condition object, to specify the condition in a dependency." />
@@ -65,7 +67,7 @@
 
   </head>
 
-  <body>
+  <body data-spy="scroll" data-target="#toc">
     <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
@@ -77,14 +79,14 @@
         <span class="icon-bar"></span>
         <span class="icon-bar"></span>
       </button>
-      <span class="navbar-brand">
-        <a class="navbar-link" href="../index.html">paradox</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Version">0.1.0</span>
-      </span>
-    </div>
 
+      <div class="navbar-brand-container">
+        <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.2.0</small></a>
+      </div>
+    </div>
     <div id="navbar" class="navbar-collapse collapse">
-      <ul class="nav navbar-nav">
+      <ul class="nav navbar-nav navbar-right">
         <li>
   <a href="../reference/index.html">
     <span class="fa fa fa fa-file-alt"></span>
@@ -102,16 +104,20 @@
     mlr3book
   </a>
 </li>
-      </ul>
-      <ul class="nav navbar-nav navbar-right">
         <li>
-  <a href="https://mlr-org.slack.com">
-    <span class="fab fa fab fa-slack"></span>
+  <a href="https://github.com/mlr-org/paradox/">
+    <span class="fab fa fab fa-github fa-lg"></span>
      
   </a>
 </li>
 <li>
-  <a href="https://stackoverflow.com/questions/tagged/mlr">
+  <a href="https://lmmisld-lmu-stats-slds.srv.mwn.de/mlr_invite/">
+    <span class="fa fa fa fa-comments"></span>
+     
+  </a>
+</li>
+<li>
+  <a href="https://stackoverflow.com/questions/tagged/mlr3">
     <span class="fab fa fab fa-stack-overflow"></span>
      
   </a>
@@ -136,7 +142,7 @@
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Dependency Condition</h1>
-    
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/Condition.R'><code>R/Condition.R</code></a></small>
     <div class="hidden name"><code>Condition.Rd</code></div>
     </div>
 
@@ -152,8 +158,7 @@
     <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
 
     
-<pre>c = Condition$new(type, rhs)
-</pre>
+<pre><span class='no'>c</span> <span class='kw'>=</span> <span class='no'>Condition</span>$<span class='fu'>new</span>(<span class='no'>type</span>, <span class='no'>rhs</span>)</pre>
 <ul>
 <li><p><code>type</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code> <br />
 Name / type of the condition.</p></li>
@@ -185,15 +190,10 @@ Parent must be any value of <code>rhs</code>.</p></li>
 
 
   </div>
-  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
-    <h2>Contents</h2>
-    <ul class="nav nav-pills nav-stacked">
-      <li><a href="#format">Format</a></li>
-      <li><a href="#construction">Construction</a></li>
-      <li><a href="#methods">Methods</a></li>
-      <li><a href="#currently-implemented-simple-conditions">Currently implemented simple conditions</a></li>
-    </ul>
-
+  <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
+    <nav id="toc" data-toggle="toc" class="sticky-top">
+      <h2 data-toc-skip>Contents</h2>
+    </nav>
   </div>
 </div>
 
@@ -204,7 +204,7 @@ Parent must be any value of <code>rhs</code>.</p></li>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.4.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
 </div>
 
       </footer>
