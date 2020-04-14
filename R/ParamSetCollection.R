@@ -39,6 +39,7 @@
 #'   `character()` -> `self` \cr
 #'   Removes sets of given ids from collection.
 #'
+#' @include ParamSet.R
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(

@@ -70,4 +70,5 @@ Collate:
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
+    'reexports.R'
     'zzz.R'

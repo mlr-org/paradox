@@ -146,7 +146,7 @@ ps = ParamSet$new(
 )
 
 ps$trafo = function(x, param_set) {
-  x$d = 2^d
+  x$d = 2^x$d
   return(x)
 }
 

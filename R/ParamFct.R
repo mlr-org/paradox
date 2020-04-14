@@ -36,6 +36,7 @@
 #' See [Param].
 #'
 #' @family Params
+#' @include Param.R
 #' @export
 #' @examples
 #' ParamFct$new("f", levels = letters[1:3])

@@ -37,6 +37,7 @@
 #' See [Param].
 #'
 #' @family Params
+#' @include Param.R
 #' @export
 #' @examples
 #' ParamInt$new("count", lower = 0, upper = 10, default = 1)

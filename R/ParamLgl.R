@@ -35,6 +35,7 @@
 #' See [Param].
 #'
 #' @family Params
+#' @include Param.R
 #' @export
 #' @examples
 #' ParamLgl$new("flag", default = TRUE)

@@ -26,6 +26,7 @@
 #' See [Sampler].
 #'
 #' @family Sampler
+#' @include Sampler.R
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   public = list(

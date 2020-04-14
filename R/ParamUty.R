@@ -40,6 +40,7 @@
 #' See [Param].
 #'
 #' @family Params
+#' @include Param.R
 #' @export
 #' @examples
 #' ParamUty$new("untyped", default = Inf)

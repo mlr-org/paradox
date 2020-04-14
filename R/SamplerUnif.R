@@ -18,6 +18,7 @@
 #' See [Sampler].
 #'
 #' @family Sampler
+#' @include SamplerHierarchical.R
 #' @export
 SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,
   public = list(

@@ -24,6 +24,7 @@
 #' See [Sampler].
 #'
 #' @family Sampler
+#' @include Sampler.R
 #' @export
 SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
   public = list(

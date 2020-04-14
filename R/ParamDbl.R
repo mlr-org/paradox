@@ -37,6 +37,7 @@
 #' See [Param].
 #'
 #' @family Params
+#' @include Param.R
 #' @export
 #' @examples
 #' ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
