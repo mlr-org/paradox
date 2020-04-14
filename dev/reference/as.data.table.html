@@ -6,7 +6,9 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Param Object — Param • paradox</title>
+<title>Re-export of <code>as.data.table</code>
+
+See <a href='https://Rdatatable.gitlab.io/data.table/reference/as.data.table.html'>data.table::as.data.table</a>. — as.data.table • paradox</title>
 
 <!-- favicons -->
 <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
@@ -47,8 +49,11 @@
 
 
 
-<meta property="og:title" content="Param Object — Param" />
-<meta property="og:description" content="Abstract base class for parameters." />
+<meta property="og:title" content="Re-export of <code>as.data.table</code>
+
+See <a href='https://Rdatatable.gitlab.io/data.table/reference/as.data.table.html'>data.table::as.data.table</a>. — as.data.table" />
+<meta property="og:description" content="Re-export of as.data.table
+See data.table::as.data.table." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -141,94 +146,20 @@
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Param Object</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/Param.R'><code>R/Param.R</code></a></small>
-    <div class="hidden name"><code>Param.Rd</code></div>
+    <h1>Re-export of <code>as.data.table</code>
+
+See <a href='https://Rdatatable.gitlab.io/data.table/reference/as.data.table.html'>data.table::as.data.table</a>.</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/reexports.R'><code>R/reexports.R</code></a></small>
+    <div class="hidden name"><code>as.data.table.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    <p>Abstract base class for parameters.</p>
+    <p>Re-export of <code>as.data.table</code></p>
+<p>See <a href='https://Rdatatable.gitlab.io/data.table/reference/as.data.table.html'>data.table::as.data.table</a>.</p>
     </div>
 
 
 
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
-
-    <p><a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6::R6Class</a> object.</p>
-    <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
-
-    
-<pre><span class='no'>Param</span>$<span class='fu'>new</span>(<span class='no'>id</span>, <span class='no'>special_vals</span>, <span class='no'>default</span>, <span class='no'>tags</span>)</pre>
-<ul>
-<li><p><code>id</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code><br />
-ID of this parameter.</p></li>
-<li><p><code>special_vals</code> :: <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code><br />
-Arbitrary special values this parameter is allowed to take, to make it feasible.
-This allows extending the domain of the parameter.
-Note that these values are only used in feasibility checks, neither in generating designs nor sampling.</p></li>
-<li><p><code>default</code> :: <code>any</code> <br />
-Default value. Can be from the domain of the parameter or an element of <code>special_vals</code>.
-Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a valid default.</p></li>
-<li><p><code>tags</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code><br />
-Arbitrary tags to group and subset parameters. Some tags serve a special purpose:</p><ul>
-<li><p><code>"required"</code> implies that the parameters has to be given when setting <code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
-</ul></li>
-</ul>
-
-    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
-
-    
-
-<ul>
-<li><p><code>class</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code><br />
-R6 class name. Read-only.</p></li>
-<li><p><code>is_number</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-TRUE if the parameter is of type <code>"dbl"</code> or <code>"int"</code>.</p></li>
-<li><p><code>is_categ</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-TRUE if the parameter is of type <code>"fct"</code> or <code>"lgl"</code>.</p></li>
-<li><p><code>has_default</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-Is there a default value?</p></li>
-<li><p><code>storage_type</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code> <br />
-Data type when values of this parameter are stored in a data table or sampled.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-
-<ul>
-<li><p><code>test(x)</code>, <code><a href='https://rdrr.io/r/utils/PkgUtils.html'>check(x)</a></code>, <code>assert(x)</code><br />
-Three <span class="pkg">checkmate</span>-like check-functions.
-Take a value from the domain of the parameter, and check if it is feasible.
-A value is feasible if it is of the same <code>storage_type</code>, inside of the bounds or element of <code>special_vals</code>.</p></li>
-<li><p><code><a href='https://rdrr.io/r/stats/Uniform.html'>qunif(x)</a></code><br />
-<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(n)</a></code> -&gt; <code><a href='https://rdrr.io/r/base/vector.html'>vector(n)</a></code> <br />
-Takes values from [0,1] and map them, regularly distributed, to the domain of the parameter.
-Think of: quantile function or the use case to map a uniform-[0,1] random variable into a uniform sample from this param.</p></li>
-<li><p><code><a href='https://rdrr.io/r/base/rep.html'>rep(n)</a></code><br />
-<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code> -&gt; <a href='ParamSet.html'>ParamSet</a><br />
-Repeats this parameter n-times (by cloning).
-Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_rep".</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="s-methods"><a class="anchor" href="#s-methods"></a>S3 methods</h2>
-
-    
-
-<ul>
-<li><p><code><a href='as.data.table.html'>as.data.table()</a></code> <br />
-Param -&gt; <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code><br />
-Converts param to <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code> with 1 row. See <a href='ParamSet.html'>ParamSet</a>.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
-
-    <div class='dont-index'><p>Other Params: 
-<code><a href='ParamDbl.html'>ParamDbl</a></code>,
-<code><a href='ParamFct.html'>ParamFct</a></code>,
-<code><a href='ParamInt.html'>ParamInt</a></code>,
-<code><a href='ParamLgl.html'>ParamLgl</a></code>,
-<code><a href='ParamUty.html'>ParamUty</a></code></p></div>
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">

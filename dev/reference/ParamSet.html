@@ -276,7 +276,7 @@ Adds a dependency to this set, so that param <code>id</code> now depends on para
     
 
 <ul>
-<li><p><code>as.data.table()</code> <br />
+<li><p><code><a href='as.data.table.html'>as.data.table()</a></code> <br />
 Compact representation as datatable. Col types are: <br /></p><ul>
 <li><p>id: character</p></li>
 <li><p>lower, upper: double</p></li>
@@ -299,7 +299,7 @@ Compact representation as datatable. Col types are: <br /></p><ul>
 )
 
 <span class='no'>ps</span>$<span class='no'>trafo</span> <span class='kw'>=</span> <span class='kw'>function</span>(<span class='no'>x</span>, <span class='no'>param_set</span>) {
-  <span class='no'>x</span>$<span class='no'>d</span> <span class='kw'>=</span> <span class='fl'>2</span>^<span class='no'>d</span>
+  <span class='no'>x</span>$<span class='no'>d</span> <span class='kw'>=</span> <span class='fl'>2</span>^<span class='no'>x</span>$<span class='no'>d</span>
   <span class='fu'><a href='https://rdrr.io/r/base/function.html'>return</a></span>(<span class='no'>x</span>)
 }
 
