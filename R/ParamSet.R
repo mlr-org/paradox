@@ -102,6 +102,7 @@
 #'   Three \pkg{checkmate}-like check-functions. Takes a named list.
 #'   A point x is feasible, if it configures a subset of params,
 #'   all individual param constraints are satisfied and all dependencies are satisfied.
+#'   Dependencies on parameters that are not given are checked against `$default` values.
 #'   Params for which dependencies are not satisfied should not be part of `x`.
 #' * `add_dep(id, on, cond)` \cr
 #'   (`character(1)`, `character(1)`, [Condition]) -> `self` \cr
@@ -247,6 +248,7 @@ ParamSet = R6Class("ParamSet",
       # check dependencies
       if (self$has_deps) {
         deps = self$deps
+        def = self$default
         for (j in seq_row(self$deps)) {
           p1id = deps$id[j]
           p2id = deps$on[j]
@@ -254,8 +256,10 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-            (p1id %nin% ns)
+          ok = p1id %in% ns &&
+            (p2id %in% ns && cond$test(xs[[p2id]]) ||
+              p2id %nin% ns && p2id %in% names(def) && cond$test(def[[p2id]]) ||
+            p1id %nin% ns
           if (isFALSE(ok)) {
             message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
             val = xs[[p2id]]
