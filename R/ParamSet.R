@@ -258,7 +258,7 @@ ParamSet = R6Class("ParamSet",
           cond = deps$cond[[j]]
           ok = p1id %in% ns &&
             (p2id %in% ns && cond$test(xs[[p2id]]) ||
-              p2id %nin% ns && p2id %in% names(def) && cond$test(def[[p2id]]) ||
+              p2id %nin% ns && p2id %in% names(def) && cond$test(def[[p2id]])) ||
             p1id %nin% ns
           if (isFALSE(ok)) {
             message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
