@@ -10,7 +10,8 @@ Universal Parameter Space Description and Tools.
 
 [![R build
 status](https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg)](https://github.com/mlr-org/paradox/actions)
-[![CRAN](https://www.r-pkg.org/badges/version/paradox)](https://cran.r-project.org/package=paradox)
+[![CRAN
+status](https://www.r-pkg.org/badges/version/paradox)](https://CRAN.R-project.org/package=paradox)
 [![Cran
 Checks](https://cranchecks.info/badges/worst/paradox)](https://cran.r-project.org/web/checks/check_results_paradox.html)
 [![codecov](https://codecov.io/gh/mlr-org/paradox/branch/master/graph/badge.svg)](https://codecov.io/gh/mlr-org/paradox)
@@ -60,6 +61,8 @@ generate_design_random(ps, 3)
 Generate LHS Design:
 
 ``` r
+requireNamespace("lhs")
+#> Loading required namespace: lhs
 generate_design_lhs(ps, 3)
 #> <Design> with 3 rows:
 #>    z         x  flag methods
