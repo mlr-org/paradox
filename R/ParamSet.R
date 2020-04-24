@@ -444,13 +444,22 @@ ParamSet = R6Class("ParamSet",
           value$cond = lapply(value$cond, function(x) x$clone(deep = TRUE))
           value
         },
-        .values = map(value, function(x)
+        .values = map(value, function(x) {
           # clones R6 objects in values, leave other things as they are
-          if (is.environment(x) && !is.null(x$.__enclos_env__)) {
+          
+          # safely get .__enclos_env, errors if packages overwrite `$` i.e. in reticulate.
+          # https://github.com/rstudio/reticulate/blob/master/R/python.R L 343
+          get_enclos_env = function(x) {
+            out = try(x$.__enclos_env__)
+            if (inherits(out, "try-error")) return(NULL)
+            out
+          }
+          
+          if (is.environment(x) && !is.null(get_enclos_env(x))) {
             x$clone(deep = TRUE)
           } else {
             x
-          }),
+          }}),
         value
       )
     }
