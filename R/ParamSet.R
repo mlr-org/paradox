@@ -450,6 +450,8 @@ ParamSet = R6Class("ParamSet",
           # safely get .__enclos_env, errors if packages overwrite `$` i.e. in reticulate.
           # https://github.com/rstudio/reticulate/blob/master/R/python.R L 343
           get_enclos_env = function(x) {
+            if (inherits(x, "python.builtin.object"))
+              return(NULL)
             out = try(x$.__enclos_env__)
             if (inherits(out, "try-error")) return(NULL)
             out
