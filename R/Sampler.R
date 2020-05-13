@@ -42,8 +42,12 @@ Sampler = R6Class("Sampler",
       Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE) # user wants n points, dont remove
     },
 
+    format = function() {
+      sprintf("<%s>", class(self)[1L])
+    },
+
     print = function(...) {
-      catf("Sampler: %s", class(self)[[1L]])
+      catf(format(self))
       catf("For params: %s", str_trunc(str_collapse(self$param_set$ids()), width = 40L))
       private$.print()
     }

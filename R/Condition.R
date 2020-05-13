@@ -47,6 +47,10 @@ Condition = R6Class("Condition",
       sprintf("%s %s %s", lhs_chr, self$type, str_collapse(self$rhs))
     },
 
+    format = function() {
+      sprintf("<%s:%s>", class(self)[1L], self$type)
+    },
+
     print = function(...) {
       catf("%s: %s", class(self)[1L], self$as_string())
     }

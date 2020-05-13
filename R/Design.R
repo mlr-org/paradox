@@ -62,6 +62,10 @@ Design = R6Class("Design",
       } # remove duplicated rows
     },
 
+    format = function() {
+      sprintf("<%s>", class(self)[1L])
+    },
+
     print = function(...) {
       # simply print the included dt
       catf("<Design> with %i rows:", nrow(self$data))

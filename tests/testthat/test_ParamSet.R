@@ -123,7 +123,7 @@ test_that("ParamSets cannot have duplicated ids", {
 test_that("ParamSet$print", {
   ps = ParamSet$new()
   ps$set_id = "foo"
-  expect_output(print(ps), "ParamSet: foo")
+  expect_output(print(ps), "<ParamSet:foo>")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
   expect_output(print(ps), "ParamSet:")

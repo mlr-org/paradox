@@ -104,6 +104,10 @@ Param = R6Class("Param",
       ParamSet$new(ps)
     },
 
+    format = function() {
+      sprintf("<%s:%s>", class(self)[1L], self$id)
+    },
+
     print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = as.data.table(ParamSet$new(list(self)))
