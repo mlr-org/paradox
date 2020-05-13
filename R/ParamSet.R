@@ -293,7 +293,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     format = function() {
-      if (nzchar(self$set_id)) {
+      if (!nzchar(self$set_id)) {
         sprintf("<%s>", class(self)[1L])
       } else {
         sprintf("<%s:%s>", class(self)[1L], self$set_id)
