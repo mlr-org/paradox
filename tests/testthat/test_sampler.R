@@ -25,7 +25,7 @@ test_that("1d samplers: basic tests", {
       if (p$class %in% c("ParamFct")) {
         expect_true(all(d1 %in% p$levels), info = info)
       }
-      expect_output(print(s), "Sampler:")
+      expect_output(print(s), "<Sampler")
     }
   }
 })
@@ -54,7 +54,7 @@ test_that("SamplerJointIndep", {
   expect_numeric(dd$th_param_dbl, lower = -10, upper = 10)
   expect_character(dd$th_param_fct)
   expect_true(all(map_lgl(d$transpose(), ps$test)))
-  expect_output(print(s), "Sampler:")
+  expect_output(print(s), "<SamplerJointIndep>")
   expect_output(print(s), "Independent comps: 2")
 })
 
@@ -76,7 +76,7 @@ test_that("SamplerUnif", {
     expect_data_table(dd, nrows = 10, any.missing = FALSE, info = info)
     expect_equal(colnames(dd), ps$ids(), info = info)
     expect_true(all(map_lgl(d$transpose(), ps$test)), info = info)
-    expect_output(print(s), "Sampler:")
+    expect_output(print(s), "<SamplerUnif>")
     expect_output(print(s), str_collapse(ps$ids()[1])) # check that we at least see an id
   }
 })

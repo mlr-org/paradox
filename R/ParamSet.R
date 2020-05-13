@@ -292,9 +292,17 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
+    format = function() {
+      if (!nzchar(self$set_id)) {
+        sprintf("<%s>", class(self)[1L])
+      } else {
+        sprintf("<%s:%s>", class(self)[1L], self$set_id)
+      }
+    },
+
     # printer, prints the set as a datatable, with the option to hide some cols
     print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
-      catf("ParamSet: %s", self$set_id)
+      catf(format(self))
       if (self$is_empty) {
         catf("Empty.")
       } else {

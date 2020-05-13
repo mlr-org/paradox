@@ -31,6 +31,7 @@ test_that("simple active bindings work", {
     expect_names(names(ps$default), subset.of = ps$ids(), info = info)
   }
   ps = th_paramset_full()
+  expect_output(print(ps), "<ParamSet>")
   expect_equal(ps$ids(), c("th_param_int", "th_param_dbl", "th_param_fct", "th_param_lgl"))
   expect_equal(ps$lower, c(th_param_int = -10, th_param_dbl = -10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
   expect_equal(ps$upper, c(th_param_int = 10, th_param_dbl = 10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
@@ -123,10 +124,10 @@ test_that("ParamSets cannot have duplicated ids", {
 test_that("ParamSet$print", {
   ps = ParamSet$new()
   ps$set_id = "foo"
-  expect_output(print(ps), "ParamSet: foo")
+  expect_output(print(ps), "<ParamSet:foo>")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
-  expect_output(print(ps), "ParamSet:")
+  expect_output(print(ps), "<ParamSet>")
   s = capture_output(print(ps))
   expect_true(grepl("ParamInt", s, fixed = TRUE))
   expect_true(grepl("ParamDbl", s, fixed = TRUE))
@@ -140,7 +141,7 @@ test_that("ParamSet$print", {
     th_paramset_untyped()
   )
   for (ps in ps_list) {
-    expect_output(print(ps), "ParamSet:")
+    expect_output(print(ps), "<ParamSet>")
   }
 })
 
