@@ -98,10 +98,12 @@ Has the set a \code{trafo} function?
 \item \code{ids(class = NULL, is_bounded = NULL, tags = NULL)} \cr
 (\code{character}, \code{logical(1)}, \code{character()}) -> \code{character()} \cr
 Retrieves IDs of contained parameters based on some filter criteria selections, \code{NULL} means no restriction.
+Only returns IDs of parameters that satisfy all conditions.
 \item \code{get_values(class = NULL, is_bounded = NULL, tags = NULL)} \cr
 (\code{character()}, \code{logical(1)}, \code{character()}) -> named \code{list()} \cr
 Retrieves parameter values based on some selections, \code{NULL} means no restriction and is
 equivalent to \verb{$values}.
+Only returns values of parameters that satisfy all conditions.
 \item \code{add(param_set)} \cr
 (\link{Param} | \link{ParamSet}) -> \code{self} \cr
 Adds a single param or another set to this set, all params are cloned.
