@@ -3,7 +3,12 @@
 #' @description
 #' This is the abstract base class for parameter objects like [ParamDbl] and
 #' [ParamFct].
-
+#'
+#' @template param_id
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
+#' 
 #' @section S3 methods:
 #' * `as.data.table()`\cr
 #'   [Param] -> [data.table::data.table()]\cr
@@ -34,23 +39,6 @@ Param = R6Class("Param",
     #'
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [ParamDbl].
-    #'
-    #' @param id (`character(1)`)\cr
-    #'   Identifier of the object.
-    #' @param special_vals (`list()`)\cr
-    #'   Arbitrary special values this parameter is allowed to take, to make it
-    #'   feasible. This allows extending the domain of the parameter. Note that
-    #'   these values are only used in feasibility checks, neither in generating
-    #'   designs nor sampling.
-    #' @param default (`any`)\cr
-    #'   Default value. Can be from the domain of the parameter or an element of
-    #'   `special_vals`. Has value [NO_DEF] if no default exists. `NULL` can be a
-    #'   valid default.
-    #' @param tags (`character()`)\cr
-    #'   Arbitrary tags to group and subset parameters. Some tags serve a special
-    #'   purpose:\cr
-    #'   * `"required"` implies that the parameters has to be given when setting
-    #'     `values` in [ParamSet].
     initialize = function(id, special_vals, default, tags) {
 
       assert_id(id)
@@ -103,6 +91,7 @@ Param = R6Class("Param",
 
     #' @description
     #' Repeats this parameter n-times (by cloning).
+    #' Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
     #'
     #' @param n (`integer(1)`)
     #' @return [ParamSet]
@@ -169,11 +158,7 @@ Param = R6Class("Param",
 
     #' @field has_default (`logical(1)`)\cr
     #' Is there a default value?
-    has_default = function() !is_nodefault(self$default),
-
-    #' @field storage_type (`character(1)`)\cr
-    #' Data type when values of this parameter are stored in a data table or sampled.
-    storage_type = function() character(1)
+    has_default = function() !is_nodefault(self$default)
   ),
 
   private = list(

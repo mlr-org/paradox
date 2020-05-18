@@ -56,9 +56,6 @@ R6 class name. Read-only.}
 
 \item{\code{has_default}}{(\code{logical(1)})\cr
 Is there a default value?}
-
-\item{\code{storage_type}}{(\code{character(1)})\cr
-Data type when values of this parameter are stored in a data table or sampled.}
 }
 \if{html}{\out{</div>}}
 }
@@ -190,6 +187,7 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \if{latex}{\out{\hypertarget{method-rep}{}}}
 \subsection{Method \code{rep()}}{
 Repeats this parameter n-times (by cloning).
+Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_rep".
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Param$rep(n)}\if{html}{\out{</div>}}
 }

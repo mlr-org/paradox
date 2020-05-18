@@ -1,37 +1,14 @@
 #' @title Integer Parameter
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object inheriting from [Param].
-#'
 #' @description
 #' A [Param] to describe integer parameters.
 #'
-#' @section Construction:
-#' ```
-#' ParamInt$new(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character())
-#' ```
-#' Arguments of [Param], and additionally:
-#'
-#' * `lower` :: `numeric(1)`\cr
-#'   Lower bound, can be `-Inf`.
-#' * `upper` :: `numeric(1)`\cr
-#'   Upper bound can be `+Inf`.
-#'
-#' @section Fields:
-#' Fields of [Param], and additionally:
-#'
-#' * `lower` :: `numeric(1)`\cr
-#'   Lower bound.
-#' * `upper` :: `numeric(1)`\cr
-#'   Upper bound.
-#' * `levels` :: `NULL`\cr
-#'   Allowed levels.
-#'   Always `NULL` for this parameter.
-#' * `nlevels` :: `integer(1)` \cr
-#'   Number of categorical levels.
-#'   Here, the number integers in the range `[lower, upper]`, or `Inf` if unbounded.
-#' * `is_bounded` :: `logical(1)`\cr
-#'   Are the bounds finite?
+#' @template param_id
+#' @template param_lower
+#' @template param_upper
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
 #'
 #' @section Methods:
 #' See [Param].
@@ -43,9 +20,14 @@
 #' ParamInt$new("count", lower = 0, upper = 10, default = 1)
 ParamInt = R6Class("ParamInt", inherit = Param,
   public = list(
+    #' @template field_lower
     lower = NULL,
+
+    #' @template field_upper
     upper = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
       if (isTRUE(is.infinite(lower))) {
         self$lower = lower
@@ -63,9 +45,13 @@ ParamInt = R6Class("ParamInt", inherit = Param,
   ),
 
   active = list(
+    #' @template field_levels
     levels = function() NULL,
+    #' @template field_nlevels
     nlevels = function() (self$upper - self$lower) + 1L,
+    #' @template field_is_bounded
     is_bounded = function() is.finite(self$lower) && is.finite(self$upper),
+    #' @template field_storage_type
     storage_type = function() "integer"
   ),
 
