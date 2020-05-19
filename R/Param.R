@@ -126,7 +126,13 @@ Param = R6Class("Param",
     class = function() class(self)[[1L]],
     is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
     is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
-    has_default = function() !is_nodefault(self$default)
+    has_default = function() !is_nodefault(self$default),
+    levels = function() NULL,
+    nlevels = function() length(self$levels),
+    is_bounded = function() NULL,
+    lower = function() NA_real_,
+    upper = function() NA_real_,
+    storage_type = function() NULL
   ),
 
   private = list(
