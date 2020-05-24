@@ -8,8 +8,8 @@ Universal Parameter Space Description and Tools.
 
 <!-- badges: start -->
 
-[![R build
-status](https://github.com/mlr-org/paradox/workflows/R-CMD-check/badge.svg)](https://github.com/mlr-org/paradox/actions)
+[![R CMD Check via
+{tic}](https://github.com/mlr-org/paradox/workflows/R%20CMD%20Check%20via%20%7Btic%7D/badge.svg?branch=master)](https://github.com/mlr-org/paradox/actions)
 [![CRAN
 status](https://www.r-pkg.org/badges/version/paradox)](https://CRAN.R-project.org/package=paradox)
 [![Cran
