@@ -15,7 +15,7 @@
 ParamUty = R6Class("ParamUty", inherit = Param,
   public = list(
     #' @field custom_check (`function()`)\cr
-    #'   Custom function to check the feasibility.
+    #' Custom function to check the feasibility.
     custom_check = NULL,
 
     #' @description

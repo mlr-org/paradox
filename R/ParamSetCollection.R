@@ -1,8 +1,5 @@
 #' @title ParamSetCollection
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object inheriting from [ParamSet].
-#'
 #' @description
 #' A collection of multiple [ParamSet] objects.
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
@@ -18,31 +15,21 @@
 #'   this change is reflected in the collection.
 #' * Dependencies: It is possible to currently handle dependencies
 #'      * regarding parameters inside of the same set - in this case simply
-#'   add the dependency to the set, best before adding the set to the collection
+#'        add the dependency to the set, best before adding the set to the collection
 #'      * across sets, where a param from one set depends on the state
-#'   of a param from another set - in this case add call `add_dep` on the collection.
+#'        of a param from another set - in this case add call `add_dep` on the collection.
 #'
 #'   If you call `deps` on the collection, you are returned a complete table of dependencies, from sets and across sets.
-#'
-#' @section Construction:
-#'
-#' ```
-#' ParamSetCollection$new(sets)
-#' ```
-#'
-#' * `sets` :: list of [ParamSet]\cr
-#'   Parameter objects are cloned.
-#'
-#' @section Methods:
-#'
-#' * remove_sets(ids)\cr
-#'   `character()` -> `self` \cr
-#'   Removes sets of given ids from collection.
 #'
 #' @include ParamSet.R
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param sets (`list()` of [ParamSet])\cr
+    #'   Parameter objects are cloned.
     initialize = function(sets) {
 
       assert_list(sets, types = "ParamSet")
@@ -64,6 +51,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
     },
 
+    #' @description
+    #' Adds a set to this collection.
+    #'
+    #' @param p ([ParamSet]).
     add = function(p) {
       assert_r6(p, "ParamSet")
       setnames = map_chr(private$.sets, "set_id")
@@ -83,6 +74,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       invisible(self)
     },
 
+    #' @description
+    #' Removes sets of given ids from collection.
+    #'
+    #' @param ids (`character()`).
     remove_sets = function(ids) {
       setnames = map_chr(private$.sets, "set_id")
       assert_subset(ids, setnames)
@@ -90,11 +85,16 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       invisible(self)
     },
 
+    #' @description
+    #' Only included for consistency. Not allowed to perform on [ParamSetCollection]s.
+    #'
+    #' @param ids (`character()`).
     subset = function(ids) stop("not allowed")
 
   ),
 
   active = list(
+    #' @template field_params
     params = function(v) {
 
       sets = private$.sets
@@ -111,6 +111,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       ps_all
     },
 
+    #' @template field_deps
     deps = function(v) {
       d_all = lapply(private$.sets, function(s) {
         # copy all deps and rename ids to prefixed versions
@@ -126,6 +127,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
+    #' @template field_values
     values = function(xs) {
       sets = private$.sets
       names(sets) = map_chr(sets, "set_id")

@@ -128,7 +128,7 @@ the same \code{storage_type}, inside of the bounds or element of
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{x}}{(\code{any})}
+\item{\code{x}}{(\code{any}).}
 }
 \if{html}{\out{</div>}}
 }
@@ -151,7 +151,7 @@ is of the same \code{storage_type}, inside of the bounds or element of
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{x}}{(\code{any})}
+\item{\code{x}}{(\code{any}).}
 }
 \if{html}{\out{</div>}}
 }
@@ -174,7 +174,7 @@ the same \code{storage_type}, inside of the bounds or element of
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{x}}{(\code{any})}
+\item{\code{x}}{(\code{any}).}
 }
 \if{html}{\out{</div>}}
 }
@@ -195,12 +195,12 @@ Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_re
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{n}}{(\code{integer(1)})}
+\item{\code{n}}{(\code{integer(1)}).}
 }
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-\link{ParamSet}
+\link{ParamSet}.
 }
 }
 \if{html}{\out{<hr>}}
@@ -228,7 +228,7 @@ Printer.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{...}}{(ignored)}
+\item{\code{...}}{(ignored).}
 
 \item{\code{hide_cols}}{(\code{character()})\cr
 Which fields should not be printed? Default is \code{"nlevels"},
@@ -252,7 +252,7 @@ param.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{x}}{(\code{numeric(1)})}
+\item{\code{x}}{(\code{numeric(1)}).}
 }
 \if{html}{\out{</div>}}
 }

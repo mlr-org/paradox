@@ -1,35 +1,22 @@
 #' @title SamplerJointIndep Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler].
-#'
 #' @description
 #' Create joint, independent sampler out of multiple other samplers.
-#'
-#' @section Construction:
-#' ```
-#' smpl = SamplerJointIndep$new(samplers)
-#' ```
-#'
-#' * `samplers` :: `list()`\cr
-#'   List of [Sampler] objects.
-#'
-#' @section Fields:
-#' See [Sampler].
-#' Additionally, the class provides:
-#' * `samplers` :: `list()`\cr
-#'   List of [Sampler] objects.
-#'
-#' @section Methods:
-#' See [Sampler].
 #'
 #' @family Sampler
 #' @include Sampler.R
 #' @export
 SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
   public = list(
+    #' @field samplers (`list()`)\cr
+    #' List of [Sampler] objects.
     samplers = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param samplers (`list()`)\cr
+    #'   List of [Sampler] objects.
     initialize = function(samplers) {
       assert_list(samplers, types = "Sampler")
       self$samplers = samplers

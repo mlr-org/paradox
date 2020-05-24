@@ -3,45 +3,120 @@
 \name{Design}
 \alias{Design}
 \title{Design of Configurations}
-\format{
-\link[R6:R6Class]{R6::R6Class} object.
-}
 \description{
 A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
 by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
 }
-\section{Construction}{
-\preformatted{c = Design$new(param_set, data, remove_dupl)
-}
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{param_set}}{(\link{ParamSet}).}
 
-Note that the first 2 arguments are NOT cloned during construction!
-\itemize{
-\item \code{param_set} :: \code{ParamSet}.
-\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
-Right hand side of the condition.
-\item \code{remove_dupl} :: \code{logical(1)}\cr
-Remove duplicates?
+\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored \code{data}.}
 }
+\if{html}{\out{</div>}}
 }
-
-\section{Fields}{
-
-\itemize{
-\item \code{param_set} :: \code{ParamSet}.
-\item \code{data} :: \code{\link[data.table:data.table]{data.table::data.table()}}\cr
-Stored \code{data}.
-}
-}
-
 \section{Methods}{
-
+\subsection{Public methods}{
 \itemize{
-\item \code{transpose(filter_na = TRUE, trafo = TRUE)} \cr
-(\code{logical(1)}, \code{logical(1)}) -> \code{list()} of \code{list()} \cr
+\item \href{#method-new}{\code{Design$new()}}
+\item \href{#method-format}{\code{Design$format()}}
+\item \href{#method-print}{\code{Design$print()}}
+\item \href{#method-transpose}{\code{Design$transpose()}}
+\item \href{#method-clone}{\code{Design$clone()}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Design$new(param_set, data, remove_dupl)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{param_set}}{(\link{ParamSet}).}
+
+\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored \code{data}.}
+
+\item{\code{remove_dupl}}{(\code{logical(1)})\cr
+Remove duplicates?}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-format"></a>}}
+\if{latex}{\out{\hypertarget{method-format}{}}}
+\subsection{Method \code{format()}}{
+Helper for print outputs.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Design$format()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-print"></a>}}
+\if{latex}{\out{\hypertarget{method-print}{}}}
+\subsection{Method \code{print()}}{
+Printer.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Design$print(...)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(ignored).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-transpose"></a>}}
+\if{latex}{\out{\hypertarget{method-transpose}{}}}
+\subsection{Method \code{transpose()}}{
 Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
 and possibly calls the \code{trafo} function of the \link{ParamSet}.
-}
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{filter_na}}{(\code{logical(1)})\cr
+Should \code{NA} entries of inactive parameter values due to unsatisfied
+dependencies be removed?}
+
+\item{\code{trafo}}{(\code{logical(1)})\cr
+Should the \code{trafo} function of the \link{ParamSet} be called?}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Design$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

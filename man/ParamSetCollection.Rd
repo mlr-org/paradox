@@ -3,9 +3,6 @@
 \name{ParamSetCollection}
 \alias{ParamSetCollection}
 \title{ParamSetCollection}
-\format{
-\link[R6:R6Class]{R6::R6Class} object inheriting from \link{ParamSet}.
-}
 \description{
 A collection of multiple \link{ParamSet} objects.
 \itemize{
@@ -31,21 +28,137 @@ of a param from another set - in this case add call \code{add_dep} on the collec
 If you call \code{deps} on the collection, you are returned a complete table of dependencies, from sets and across sets.
 }
 }
-\section{Construction}{
-\preformatted{ParamSetCollection$new(sets)
+\section{Super class}{
+\code{\link[paradox:ParamSet]{paradox::ParamSet}} -> \code{ParamSetCollection}
 }
-\itemize{
-\item \code{sets} :: list of \link{ParamSet}\cr
-Parameter objects are cloned.
-}
-}
+\section{Active bindings}{
+\if{html}{\out{<div class="r6-active-bindings">}}
+\describe{
+\item{\code{params}}{(named \code{list()})\cr
+List of \link{Param}, named with their respective ID.}
 
+\item{\code{deps}}{\code{\link[data.table:data.table]{data.table::data.table()}}\cr
+Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
+Lists all (direct) dependency parents of a param, through parameter IDs.
+Internally created by a call to \code{add_dep}.
+Settable, if you want to remove dependencies or perform other changes.}
+
+\item{\code{values}}{(named \code{list()})\cr
+Currently set / fixed parameter values.
+Settable, and feasibility of values will be checked when you set them.
+You do not have to set values for all parameters, but only for a subset.
+When you set values, all previously set values will be unset / removed.}
+}
+\if{html}{\out{</div>}}
+}
 \section{Methods}{
-
+\subsection{Public methods}{
 \itemize{
-\item remove_sets(ids)\cr
-\code{character()} -> \code{self} \cr
-Removes sets of given ids from collection.
+\item \href{#method-new}{\code{ParamSetCollection$new()}}
+\item \href{#method-add}{\code{ParamSetCollection$add()}}
+\item \href{#method-remove_sets}{\code{ParamSetCollection$remove_sets()}}
+\item \href{#method-subset}{\code{ParamSetCollection$subset()}}
+\item \href{#method-clone}{\code{ParamSetCollection$clone()}}
 }
+}
+\if{html}{
+\out{<details ><summary>Inherited methods</summary>}
+\itemize{
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep">}\href{../../paradox/html/ParamSet.html#method-add_dep}{\code{paradox::ParamSet$add_dep()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert">}\href{../../paradox/html/ParamSet.html#method-assert}{\code{paradox::ParamSet$assert()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check">}\href{../../paradox/html/ParamSet.html#method-check}{\code{paradox::ParamSet$check()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format">}\href{../../paradox/html/ParamSet.html#method-format}{\code{paradox::ParamSet$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
+}
+\out{</details>}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{sets}}{(\code{list()} of \link{ParamSet})\cr
+Parameter objects are cloned.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-add"></a>}}
+\if{latex}{\out{\hypertarget{method-add}{}}}
+\subsection{Method \code{add()}}{
+Adds a set to this collection.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$add(p)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{p}}{(\link{ParamSet}).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-remove_sets"></a>}}
+\if{latex}{\out{\hypertarget{method-remove_sets}{}}}
+\subsection{Method \code{remove_sets()}}{
+Removes sets of given ids from collection.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$remove_sets(ids)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()}).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-subset"></a>}}
+\if{latex}{\out{\hypertarget{method-subset}{}}}
+\subsection{Method \code{subset()}}{
+Only included for consistency. Not allowed to perform on \link{ParamSetCollection}s.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$subset(ids)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()}).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

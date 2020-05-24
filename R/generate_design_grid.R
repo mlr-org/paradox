@@ -6,10 +6,10 @@
 #' always produce a grid over all their valid levels.
 #' For number params the endpoints of the params are always included in the grid.
 #'
-#' @param param_set :: [ParamSet].
-#' @param resolution :: `integer(1)`\cr
+#' @param param_set ([ParamSet]).
+#' @param resolution (`integer(1)`)\cr
 #'   Global resolution for all [Param]s.
-#' @param param_resolutions :: named `integer()` \cr
+#' @param param_resolutions (named `integer()`)\cr
 #'   Resolution per [Param], named by parameter ID.
 #' @return [Design].
 #'

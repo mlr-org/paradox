@@ -61,7 +61,7 @@ Param = R6Class("Param",
     #' the same `storage_type`, inside of the bounds or element of
     #' `special_vals`.
     #'
-    #' @param x (`any`)
+    #' @param x (`any`).
     #' @return If successful `TRUE`, if not a string with the error message.
     check = function(x) {
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
@@ -75,7 +75,7 @@ Param = R6Class("Param",
     #' is of the same `storage_type`, inside of the bounds or element of
     #' `special_vals`.
     #'
-    #' @param x (`any`)
+    #' @param x (`any`).
     #' @return If successful `x` invisibly, if not an error message.
     assert = function(x) makeAssertionFunction(self$check)(x),
 
@@ -85,7 +85,7 @@ Param = R6Class("Param",
     #' the same `storage_type`, inside of the bounds or element of
     #' `special_vals`.
     #'
-    #' @param x (`any`)
+    #' @param x (`any`).
     #' @return If successful `TRUE`, if not `FALSE`.
     test = function(x) makeTestFunction(self$check)(x),
 
@@ -93,8 +93,8 @@ Param = R6Class("Param",
     #' Repeats this parameter n-times (by cloning).
     #' Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
     #'
-    #' @param n (`integer(1)`)
-    #' @return [ParamSet]
+    #' @param n (`integer(1)`).
+    #' @return [ParamSet].
     rep = function(n) {
       assert_count(n)
       pid = self$id
@@ -117,7 +117,7 @@ Param = R6Class("Param",
     #' @description
     #' Printer.
     #'
-    #' @param ... (ignored)
+    #' @param ... (ignored).
     #' @param hide_cols (`character()`)\cr
     #'   Which fields should not be printed? Default is `"nlevels"`,
     #'   `"is_bounded"`, `"special_vals"`, `"tags"`, and `"storage_type"`.
@@ -134,7 +134,7 @@ Param = R6Class("Param",
     #' map a uniform-\[0,1\] random variable into a uniform sample from this
     #' param.
     #'
-    #' @param x (`numeric(1)`)
+    #' @param x (`numeric(1)`).
     #' @return Value of the domain of the parameter.
     qunif = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
