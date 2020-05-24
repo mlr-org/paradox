@@ -21,7 +21,7 @@ assert_param = function(param, cl = "Param", no_untyped = FALSE, must_bounded = 
   invisible(param)
 }
 
-#' @param param_set [ParamSet].
+#' @param param_set ([ParamSet]).
 #' @param no_deps (`logical(1)`)\cr
 #'   Are dependencies allowed?
 #' @rdname assert_param

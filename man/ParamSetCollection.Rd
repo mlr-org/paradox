@@ -37,7 +37,7 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
-\item{\code{deps}}{\code{\link[data.table:data.table]{data.table::data.table()}}\cr
+\item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.

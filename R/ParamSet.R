@@ -241,7 +241,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param id (`character(1)`).
     #' @param on (`character(1)`).
-    #' @param cond [Condition].
+    #' @param cond ([Condition]).
     add_dep = function(id, on, cond) {
       ids = names(self$params)
       assert_choice(id, ids)
