@@ -1,46 +1,28 @@
 #' @title Design of Configurations
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object.
-#'
 #' @description
 #' A lightweight wrapper around a [ParamSet] and a [data.table::data.table()], where the
 #' latter is a design of configurations produced from the former - e.g.,
 #' by calling a [generate_design_grid()] or by sampling.
 #'
-#' @section Construction:
-#' ```
-#' c = Design$new(param_set, data, remove_dupl)
-#' ```
-#' Note that the first 2 arguments are NOT cloned during construction!
-#'
-#' * `param_set` :: `ParamSet`.
-#'
-#' * `data` :: [data.table::data.table()]\cr
-#'   Right hand side of the condition.
-#'
-#' * `remove_dupl` :: `logical(1)`\cr
-#'   Remove duplicates?
-#'
-#' @section Fields:
-#' * `param_set` :: `ParamSet`.
-#'
-#' * `data` :: [data.table::data.table()]\cr
-#'   Stored `data`.
-#'
-#' @section Methods:
-#'
-#' * `transpose(filter_na = TRUE, trafo = TRUE)` \cr
-#'   (`logical(1)`, `logical(1)`) -> `list()` of `list()` \cr
-#'   Converts `data` into a list of lists of row-configurations,
-#'   possibly removes `NA` entries of inactive parameter values due to unsatisfied dependencies,
-#'   and possibly calls the `trafo` function of the [ParamSet].
 #' @export
 Design = R6Class("Design",
   public = list(
+    #' @field param_set ([ParamSet]).
     param_set = NULL,
+
+    #' @field data ([data.table::data.table()])\cr
+    #' Stored `data`.
     data = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param param_set ([ParamSet]).
+    #' @param data ([data.table::data.table()])\cr
+    #'   Stored `data`.
+    #' @param remove_dupl (`logical(1)`)\cr
+    #'   Remove duplicates?
     initialize = function(param_set, data, remove_dupl) {
 
       assert_param_set(param_set)
@@ -62,16 +44,33 @@ Design = R6Class("Design",
       } # remove duplicated rows
     },
 
+    
+    #' @description
+    #' Helper for print outputs.
     format = function() {
       sprintf("<%s>", class(self)[1L])
     },
 
+    #' @description
+    #' Printer.
+    #'
+    #' @param ... (ignored).
     print = function(...) {
       # simply print the included dt
       catf("<Design> with %i rows:", nrow(self$data))
       print(self$data)
     },
 
+    #' @description
+    #' Converts `data` into a list of lists of row-configurations,
+    #' possibly removes `NA` entries of inactive parameter values due to unsatisfied dependencies,
+    #' and possibly calls the `trafo` function of the [ParamSet].
+    #'
+    #' @param filter_na (`logical(1)`)\cr
+    #'   Should `NA` entries of inactive parameter values due to unsatisfied
+    #'   dependencies be removed?
+    #' @param trafo (`logical(1)`)\cr
+    #'   Should the `trafo` function of the [ParamSet] be called?
     transpose = function(filter_na = TRUE, trafo = TRUE) {
       assert_flag(filter_na)
       assert_flag(trafo)

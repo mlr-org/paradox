@@ -3,36 +3,9 @@
 \name{SamplerJointIndep}
 \alias{SamplerJointIndep}
 \title{SamplerJointIndep Class}
-\format{
-\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler}.
-}
 \description{
 Create joint, independent sampler out of multiple other samplers.
 }
-\section{Construction}{
-\preformatted{smpl = SamplerJointIndep$new(samplers)
-}
-\itemize{
-\item \code{samplers} :: \code{list()}\cr
-List of \link{Sampler} objects.
-}
-}
-
-\section{Fields}{
-
-See \link{Sampler}.
-Additionally, the class provides:
-\itemize{
-\item \code{samplers} :: \code{list()}\cr
-List of \link{Sampler} objects.
-}
-}
-
-\section{Methods}{
-
-See \link{Sampler}.
-}
-
 \seealso{
 Other Sampler: 
 \code{\link{Sampler1DCateg}},
@@ -45,3 +18,66 @@ Other Sampler:
 \code{\link{Sampler}}
 }
 \concept{Sampler}
+\section{Super class}{
+\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{SamplerJointIndep}
+}
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{samplers}}{(\code{list()})\cr
+List of \link{Sampler} objects.}
+}
+\if{html}{\out{</div>}}
+}
+\section{Methods}{
+\subsection{Public methods}{
+\itemize{
+\item \href{#method-new}{\code{SamplerJointIndep$new()}}
+\item \href{#method-clone}{\code{SamplerJointIndep$clone()}}
+}
+}
+\if{html}{
+\out{<details open ><summary>Inherited methods</summary>}
+\itemize{
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format">}\href{../../paradox/html/Sampler.html#method-format}{\code{paradox::Sampler$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print">}\href{../../paradox/html/Sampler.html#method-print}{\code{paradox::Sampler$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample">}\href{../../paradox/html/Sampler.html#method-sample}{\code{paradox::Sampler$sample()}}\out{</span>}
+}
+\out{</details>}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SamplerJointIndep$new(samplers)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{samplers}}{(\code{list()})\cr
+List of \link{Sampler} objects.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SamplerJointIndep$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

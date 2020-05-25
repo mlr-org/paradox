@@ -3,40 +3,9 @@
 \name{Sampler}
 \alias{Sampler}
 \title{Sampler Class}
-\format{
-\link[R6:R6Class]{R6::R6Class} object.
-}
 \description{
 This is the abstract base class for sampling objects like \link{Sampler1D}, \link{SamplerHierarchical} or \link{SamplerJointIndep}.
 }
-\section{Construction}{
-
-Note: This object is typically constructed via a derived classes.\preformatted{smpl = Sampler$new(param_set)
-}
-\itemize{
-\item \code{param_set} :: \link{ParamSet}\cr
-Domain / support of the distribution we want to sample from.
-ParamSet is cloned on construction.
-}
-}
-
-\section{Fields}{
-
-\itemize{
-\item \code{param_set} :: \link{ParamSet}\cr
-Domain / support of the distribution we want to sample from.
-}
-}
-
-\section{Methods}{
-
-\itemize{
-\item \code{sample(n)} \cr
-\code{integer(1)} -> \link{Design} \cr
-Sample \code{n} values from the distribution.
-}
-}
-
 \seealso{
 Other Sampler: 
 \code{\link{Sampler1DCateg}},
@@ -49,3 +18,108 @@ Other Sampler:
 \code{\link{SamplerUnif}}
 }
 \concept{Sampler}
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{param_set}}{(\link{ParamSet})\cr
+Domain / support of the distribution we want to sample from.}
+}
+\if{html}{\out{</div>}}
+}
+\section{Methods}{
+\subsection{Public methods}{
+\itemize{
+\item \href{#method-new}{\code{Sampler$new()}}
+\item \href{#method-sample}{\code{Sampler$sample()}}
+\item \href{#method-format}{\code{Sampler$format()}}
+\item \href{#method-print}{\code{Sampler$print()}}
+\item \href{#method-clone}{\code{Sampler$clone()}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+
+Note that this object is typically constructed via derived classes,
+e.g., \link{Sampler1D}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler$new(param_set)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{param_set}}{(\link{ParamSet})\cr
+Domain / support of the distribution we want to sample from.
+ParamSet is cloned on construction.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-sample"></a>}}
+\if{latex}{\out{\hypertarget{method-sample}{}}}
+\subsection{Method \code{sample()}}{
+Sample \code{n} values from the distribution.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler$sample(n)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{n}}{(\code{integer(1)}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\link{Design}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-format"></a>}}
+\if{latex}{\out{\hypertarget{method-format}{}}}
+\subsection{Method \code{format()}}{
+Helper for print outputs.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler$format()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-print"></a>}}
+\if{latex}{\out{\hypertarget{method-print}{}}}
+\subsection{Method \code{print()}}{
+Printer.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler$print(...)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(ignored).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

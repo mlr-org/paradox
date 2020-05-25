@@ -3,42 +3,9 @@
 \name{Sampler1DRfun}
 \alias{Sampler1DRfun}
 \title{Sampler1DRfun Class}
-\format{
-\link[R6:R6Class]{R6::R6Class} inheriting from \link{Sampler1D}.
-}
 \description{
 Arbitrary sampling from 1D RNG functions from R.
 }
-\section{Construction}{
-\preformatted{smpl = Sampler1DRfun$new(param, rfun, trunc = TRUE)
-}
-\itemize{
-\item \code{param} :: \link{Param}\cr
-Domain / support of the distribution we want to sample from.
-\item \code{rfun} :: \code{function}\cr
-Random number generator function, e.g. \code{rexp} to sample from exponential distribution.
-\item \code{trunc} :: \code{logical(1)}\cr
-\code{TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
-}
-}
-
-\section{Fields}{
-
-See \link{Sampler1D}.
-Additionally, the class provides:
-\itemize{
-\item \code{rfun} :: \verb{function()}\cr
-Random number generator function, e.g. \code{rexp} to sample from exponential distribution.
-\item \code{trunc} :: \code{logical(1)}\cr
-\code{TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].
-}
-}
-
-\section{Methods}{
-
-See \link{Sampler1D}.
-}
-
 \seealso{
 Other Sampler: 
 \code{\link{Sampler1DCateg}},
@@ -51,3 +18,75 @@ Other Sampler:
 \code{\link{Sampler}}
 }
 \concept{Sampler}
+\section{Super classes}{
+\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:Sampler1D]{paradox::Sampler1D}} -> \code{Sampler1DRfun}
+}
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{rfun}}{(\verb{function()})\cr
+Random number generator function.}
+
+\item{\code{trunc}}{(\code{logical(1)})\cr
+\code{TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].}
+}
+\if{html}{\out{</div>}}
+}
+\section{Methods}{
+\subsection{Public methods}{
+\itemize{
+\item \href{#method-new}{\code{Sampler1DRfun$new()}}
+\item \href{#method-clone}{\code{Sampler1DRfun$clone()}}
+}
+}
+\if{html}{
+\out{<details open ><summary>Inherited methods</summary>}
+\itemize{
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format">}\href{../../paradox/html/Sampler.html#method-format}{\code{paradox::Sampler$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print">}\href{../../paradox/html/Sampler.html#method-print}{\code{paradox::Sampler$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample">}\href{../../paradox/html/Sampler.html#method-sample}{\code{paradox::Sampler$sample()}}\out{</span>}
+}
+\out{</details>}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler1DRfun$new(param, rfun, trunc = TRUE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{param}}{(\link{Param})\cr
+Domain / support of the distribution we want to sample from.}
+
+\item{\code{rfun}}{(\verb{function()})\cr
+Random number generator function, e.g. \code{rexp} to sample from exponential distribution.}
+
+\item{\code{trunc}}{(\code{logical(1)})\cr
+\code{TRUE} enables naive rejection sampling, so we stay inside of [lower, upper].}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Sampler1DRfun$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

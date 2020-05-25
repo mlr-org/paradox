@@ -18,3 +18,4 @@
 ^tic\.R$
 ^\.ccache$
 ^\.github$
+^man-roxygen$

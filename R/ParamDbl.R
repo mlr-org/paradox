@@ -1,40 +1,14 @@
 #' @title Numerical Parameter
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object inheriting from [Param].
-#'
 #' @description
 #' A [Param] to describe real-valued parameters.
 #'
-#' @section Construction:
-#' ```
-#' ParamDbl$new(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character())
-#' ```
-#' Arguments of [Param], and additionally:
-#'
-#' * `lower` :: `numeric(1)`\cr
-#'   Lower bound, can be `-Inf`.
-#' * `upper` :: `numeric(1)`\cr
-#'   Upper bound can be `+Inf`.
-#'
-#' @section Fields:
-#' Fields of [Param], and additionally:
-#'
-#' * `lower` :: `numeric(1)`\cr
-#'   Lower bound.
-#' * `upper` :: `numeric(1)`\cr
-#'   Upper bound.
-#' * `levels` :: `NULL`\cr
-#'   Allowed levels.
-#'   Always `NULL` for this parameter.
-#' * `nlevels` :: `Inf` \cr
-#'   Number of categorical levels.
-#'   Always `Inf` for this parameter.
-#' * `is_bounded` :: `logical(1)`\cr
-#'   Are the bounds finite?
-#'
-#' @section Methods:
-#' See [Param].
+#' @template param_id
+#' @template param_lower
+#' @template param_upper
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
 #'
 #' @family Params
 #' @include Param.R
@@ -43,9 +17,14 @@
 #' ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
 ParamDbl = R6Class("ParamDbl", inherit = Param,
   public = list(
+    #' @template field_lower
     lower = NULL,
+
+    #' @template field_upper
     upper = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
       self$lower = assert_number(lower)
       self$upper = assert_number(upper)
@@ -55,9 +34,13 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   ),
 
   active = list(
+    #' @template field_levels
     levels = function() NULL,
+    #' @template field_nlevels
     nlevels = function() Inf,
+    #' @template field_is_bounded
     is_bounded = function() is.finite(self$lower) && is.finite(self$upper),
+    #' @template field_storage_type
     storage_type = function() "numeric"
   ),
 

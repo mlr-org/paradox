@@ -5,33 +5,9 @@
 \alias{CondEqual}
 \alias{CondAnyOf}
 \title{Dependency Condition}
-\format{
-\link[R6:R6Class]{R6::R6Class} object.
-}
 \description{
 Condition object, to specify the condition in a dependency.
 }
-\section{Construction}{
-\preformatted{c = Condition$new(type, rhs)
-}
-\itemize{
-\item \code{type} :: \code{character(1)} \cr
-Name / type of the condition.
-\item \code{rhs::any} \cr
-Right-hand-side of the condition.
-}
-}
-
-\section{Methods}{
-
-\itemize{
-\item \verb{test(function(x))}\cr
-\verb{??? -> logical(n)} \cr
-Checks if condition is satisfied.
-Called on a vector of parent param values.
-}
-}
-
 \section{Currently implemented simple conditions}{
 
 \itemize{
@@ -42,3 +18,129 @@ Parent must be any value of \code{rhs}.
 }
 }
 
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{type}}{(\code{character(1)})\cr
+Name / type of the condition.}
+
+\item{\code{rhs}}{(\code{any})\cr
+Right-hand-side of the condition.}
+}
+\if{html}{\out{</div>}}
+}
+\section{Methods}{
+\subsection{Public methods}{
+\itemize{
+\item \href{#method-new}{\code{Condition$new()}}
+\item \href{#method-test}{\code{Condition$test()}}
+\item \href{#method-as_string}{\code{Condition$as_string()}}
+\item \href{#method-format}{\code{Condition$format()}}
+\item \href{#method-print}{\code{Condition$print()}}
+\item \href{#method-clone}{\code{Condition$clone()}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$new(type, rhs)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{type}}{(\code{character(1)})\cr
+Name / type of the condition.}
+
+\item{\code{rhs}}{(\code{any})\cr
+Right-hand-side of the condition.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-test"></a>}}
+\if{latex}{\out{\hypertarget{method-test}{}}}
+\subsection{Method \code{test()}}{
+Checks if condition is satisfied.
+Called on a vector of parent param values.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$test(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{vector()}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{logical(1)}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-as_string"></a>}}
+\if{latex}{\out{\hypertarget{method-as_string}{}}}
+\subsection{Method \code{as_string()}}{
+Conversion helper for print outputs.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$as_string(lhs_chr = "x")}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{lhs_chr}}{(\code{character(1)})}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-format"></a>}}
+\if{latex}{\out{\hypertarget{method-format}{}}}
+\subsection{Method \code{format()}}{
+Helper for print outputs.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$format()}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-print"></a>}}
+\if{latex}{\out{\hypertarget{method-print}{}}}
+\subsection{Method \code{print()}}{
+Printer.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$print(...)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(ignored).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Condition$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}
