@@ -446,18 +446,10 @@ ParamSet = R6Class("ParamSet",
         },
         .values = map(value, function(x) {
           # clones R6 objects in values, leave other things as they are
-          
+
           # safely get .__enclos_env, errors if packages overwrite `$` i.e. in reticulate.
           # https://github.com/rstudio/reticulate/blob/master/R/python.R L 343
-          get_enclos_env = function(x) {
-            if (inherits(x, "python.builtin.object"))
-              return(NULL)
-            out = try(x$.__enclos_env__)
-            if (inherits(out, "try-error")) return(NULL)
-            out
-          }
-          
-          if (is.environment(x) && !is.null(get_enclos_env(x))) {
+          if (is.environment(x) && !is.null(tryCatch(x$.__enclos_env__, error = function(e) NULL))) {
             x$clone(deep = TRUE)
           } else {
             x
