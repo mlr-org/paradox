@@ -246,35 +246,26 @@ ParamSet = R6Class("ParamSet",
     #' @param xdt ([data.table::data.table]).
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt) {
-      message =  map(transpose(xdt), function(x) {
-       names(x) = names(xdt)
-       self$check(as.list(x))
-      })
+      xss = transpose_list(xdt)
+      for (xs in xss) {
+        ok = self$check(xs)
+        if (!isTRUE(ok)) {
+          return(ok)
+        }
+      }
 
-     if(is.logical(message)) {
-       return(TRUE)
-     } else {
-       return(message[[1]])
-     }
+      return(TRUE)
     },
 
     #' @description
-    #' \pkg{checkmate}-like test-function. Takes a [data.table::data.table]
-    #' where rows are points and columns are parameters. A point x is feasible,
-    #' if it configures a subset of params, all individual param constraints are
-    #' satisfied and all dependencies are satisfied. Params for which
-    #' dependencies are not satisfied should not be part of `x`.
+    #' \pkg{checkmate}-like test-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
     #' @return If successful `TRUE`, if not `FALSE`.
     test_dt = function(xdt) makeTest(res = self$check_dt(xdt)),
 
     #' @description
-    #' \pkg{checkmate}-like assert-function. Takes a [data.table::data.table]
-    #' where rows are points and columns are parameters. A point x is feasible,
-    #' if it configures a subset of params, all individual param constraints are
-    #' satisfied and all dependencies are satisfied. Params for which
-    #' dependencies are not satisfied should not be part of `x`.
+    #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
     #' @param .var.name (`character(1)`)\cr
@@ -542,7 +533,8 @@ ParamSet = R6Class("ParamSet",
             x$clone(deep = TRUE)
           } else {
             x
-          }}),
+          }
+        }),
         value
       )
     }

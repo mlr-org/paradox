@@ -366,11 +366,7 @@ If successful \code{TRUE}, if not a string with the error message.
 \if{html}{\out{<a id="method-test_dt"></a>}}
 \if{latex}{\out{\hypertarget{method-test_dt}{}}}
 \subsection{Method \code{test_dt()}}{
-\pkg{checkmate}-like test-function. Takes a \link[data.table:data.table]{data.table::data.table}
-where rows are points and columns are parameters. A point x is feasible,
-if it configures a subset of params, all individual param constraints are
-satisfied and all dependencies are satisfied. Params for which
-dependencies are not satisfied should not be part of \code{x}.
+\pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt)}\if{html}{\out{</div>}}
 }
@@ -390,11 +386,7 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \if{html}{\out{<a id="method-assert_dt"></a>}}
 \if{latex}{\out{\hypertarget{method-assert_dt}{}}}
 \subsection{Method \code{assert_dt()}}{
-\pkg{checkmate}-like assert-function. Takes a \link[data.table:data.table]{data.table::data.table}
-where rows are points and columns are parameters. A point x is feasible,
-if it configures a subset of params, all individual param constraints are
-satisfied and all dependencies are satisfied. Params for which
-dependencies are not satisfied should not be part of \code{x}.
+\pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, .var.name = vname(xdt))}\if{html}{\out{</div>}}
 }
