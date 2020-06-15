@@ -270,12 +270,13 @@ ParamSet = R6Class("ParamSet",
     test_dt = function(xdt) makeTest(res = self$check_dt(xdt)),
 
     #' @description
-    #' \pkg{checkmate}-like assert-function. Takes a named list.
-    #' A point x is feasible, if it configures a subset of params,
-    #' all individual param constraints are satisfied and all dependencies are satisfied.
-    #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' \pkg{checkmate}-like assert-function. Takes a [data.table::data.table]
+    #' where rows are points and columns are parameters. A point x is feasible,
+    #' if it configures a subset of params, all individual param constraints are
+    #' satisfied and all dependencies are satisfied. Params for which
+    #' dependencies are not satisfied should not be part of `x`.
     #'
-    #' @param xs (named `list()`).
+    #' @param xdt ([data.table::data.table]).
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
