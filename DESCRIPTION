@@ -30,7 +30,7 @@ Authors@R:
              email = "mlr.developer@mb706.com"),
       person(given = "Marc",
              family = "Becker",
-             role = "aut",
+             role = "ctb",
              email = "marcbecker@posteo.de",
              comment = c(ORCID = "0000-0002-8115-0400")))
 Description: Define parameter spaces, constraints and
