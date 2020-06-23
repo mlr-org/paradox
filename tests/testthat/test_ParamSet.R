@@ -329,5 +329,5 @@ test_that("ParamSet$check_dt", {
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, FALSE))
   expect_character(ps$check_dt(xdt), fixed = "x_rep_1 = TRUE")
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
-  expect_true(ps$check_dt(xdt)) #FIXME, should check to ok
+  expect_true(ps$check_dt(xdt))
 })
