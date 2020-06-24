@@ -30,7 +30,11 @@ Authors:
   \item Jakob Richter \email{jakob1richter@gmail.com} (\href{https://orcid.org/0000-0003-4481-5554}{ORCID})
   \item Xudong Sun \email{smilesun.east@gmail.com} (\href{https://orcid.org/0000-0003-3269-2307}{ORCID})
   \item Martin Binder \email{mlr.developer@mb706.com}
-  \item Marc Becker \email{marcbecker@posteo.de} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID})
+}
+
+Other contributors:
+\itemize{
+  \item Marc Becker \email{marcbecker@posteo.de} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
 }
 
 }

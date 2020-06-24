@@ -241,12 +241,12 @@ ParamSet = R6Class("ParamSet",
     #' where rows are points and columns are parameters. A point x is feasible,
     #' if it configures a subset of params, all individual param constraints are
     #' satisfied and all dependencies are satisfied. Params for which
-    #' dependencies are not satisfied should not be part of `x`.
+    #' dependencies are not satisfied should be set to `NA` in `xdt`.
     #'
     #' @param xdt ([data.table::data.table]).
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt) {
-      xss = transpose_list(xdt)
+      xss = transpose(xdt, trafo = FALSE)
       for (xs in xss) {
         xs[is.na(xs)] = NULL
         ok = self$check(xs)

@@ -346,7 +346,7 @@ If successful \code{xs} invisibly, if not an error message.
 where rows are points and columns are parameters. A point x is feasible,
 if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
-dependencies are not satisfied should not be part of \code{x}.
+dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt)}\if{html}{\out{</div>}}
 }
