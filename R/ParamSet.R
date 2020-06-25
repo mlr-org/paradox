@@ -248,7 +248,6 @@ ParamSet = R6Class("ParamSet",
     check_dt = function(xdt) {
       xss = transpose(xdt, trafo = FALSE)
       for (xs in xss) {
-        xs[is.na(xs)] = NULL
         ok = self$check(xs)
         if (!isTRUE(ok)) {
           return(ok)

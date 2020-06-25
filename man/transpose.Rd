@@ -14,14 +14,14 @@ Rows are points and columns are parameters.}
 If \code{trafo = TRUE}, used to call trafo function.}
 
 \item{filter_na}{(\code{logical(1)})\cr
-Should \code{NA} entries of inactive parameter values due to unsatisfied
-dependencies be removed?}
+Should \code{NA} entries of inactive parameter values be removed due to
+unsatisfied dependencies?}
 
 \item{trafo}{(\code{logical(1)})\cr
 Should the \code{trafo} function of the \link{ParamSet} be called?}
 }
 \description{
-Converts \link[data.table:data.table]{data.table::data.table} into a list of lists of row-configurations,
-possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
-and possibly calls the \code{trafo} function of the \link{ParamSet}.
+Converts \link[data.table:data.table]{data.table::data.table} into a list of lists of points, possibly
+removes \code{NA} entries of inactive parameter values due to unsatisfied
+dependencies, and possibly calls the \code{trafo} function of the \link{ParamSet}.
 }

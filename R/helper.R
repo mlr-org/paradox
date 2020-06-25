@@ -1,9 +1,9 @@
 #' @title transpose
 #'
 #' @description
-#' Converts [data.table::data.table] into a list of lists of row-configurations,
-#' possibly removes `NA` entries of inactive parameter values due to unsatisfied dependencies,
-#' and possibly calls the `trafo` function of the [ParamSet].
+#' Converts [data.table::data.table] into a list of lists of points, possibly
+#' removes `NA` entries of inactive parameter values due to unsatisfied
+#' dependencies, and possibly calls the `trafo` function of the [ParamSet].
 #'
 #' @param data ([data.table::data.table])\cr
 #' Rows are points and columns are parameters.
@@ -12,10 +12,11 @@
 #' If `trafo = TRUE`, used to call trafo function.
 #'
 #' @param filter_na (`logical(1)`)\cr
-#'   Should `NA` entries of inactive parameter values due to unsatisfied
-#'   dependencies be removed?
+#' Should `NA` entries of inactive parameter values be removed due to
+#' unsatisfied dependencies?
+#'
 #' @param trafo (`logical(1)`)\cr
-#'   Should the `trafo` function of the [ParamSet] be called?
+#' Should the `trafo` function of the [ParamSet] be called?
 transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   assert_data_table(data)
   assert_flag(filter_na)
