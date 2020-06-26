@@ -27,7 +27,12 @@ Authors@R:
       person(given = "Martin",
              family = "Binder",
              role = "aut",
-             email = "mlr.developer@mb706.com"))
+             email = "mlr.developer@mb706.com"),
+      person(given = "Marc",
+             family = "Becker",
+             role = "ctb",
+             email = "marcbecker@posteo.de",
+             comment = c(ORCID = "0000-0002-8115-0400")))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
     includes statistical designs and random samplers. Objects are
@@ -70,5 +75,6 @@ Collate:
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
+    'helper.R'
     'reexports.R'
     'zzz.R'

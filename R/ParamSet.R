@@ -237,6 +237,44 @@ ParamSet = R6Class("ParamSet",
     assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL),
 
     #' @description
+    #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
+    #' where rows are points and columns are parameters. A point x is feasible,
+    #' if it configures a subset of params, all individual param constraints are
+    #' satisfied and all dependencies are satisfied. Params for which
+    #' dependencies are not satisfied should be set to `NA` in `xdt`.
+    #'
+    #' @param xdt ([data.table::data.table]).
+    #' @return If successful `TRUE`, if not a string with the error message.
+    check_dt = function(xdt) {
+      xss = transpose(xdt, trafo = FALSE)
+      for (xs in xss) {
+        ok = self$check(xs)
+        if (!isTRUE(ok)) {
+          return(ok)
+        }
+      }
+
+      return(TRUE)
+    },
+
+    #' @description
+    #' \pkg{checkmate}-like test-function (s. `$check_dt()`).
+    #'
+    #' @param xdt ([data.table::data.table]).
+    #' @return If successful `TRUE`, if not `FALSE`.
+    test_dt = function(xdt) makeTest(res = self$check_dt(xdt)),
+
+    #' @description
+    #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
+    #'
+    #' @param xdt ([data.table::data.table]).
+    #' @param .var.name (`character(1)`)\cr
+    #'   Name of the checked object to print in error messages.\cr
+    #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
+    #' @return If successful `xs` invisibly, if not an error message.
+    assert_dt = function(xdt, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt), .var.name, NULL),
+
+    #' @description
     #' Adds a dependency to this set, so that param `id` now depends on param `on`.
     #'
     #' @param id (`character(1)`).
@@ -495,7 +533,8 @@ ParamSet = R6Class("ParamSet",
             x$clone(deep = TRUE)
           } else {
             x
-          }}),
+          }
+        }),
         value
       )
     }

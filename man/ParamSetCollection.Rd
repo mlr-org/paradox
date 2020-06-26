@@ -66,12 +66,15 @@ When you set values, all previously set values will be unset / removed.}
 \itemize{
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep">}\href{../../paradox/html/ParamSet.html#method-add_dep}{\code{paradox::ParamSet$add_dep()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert">}\href{../../paradox/html/ParamSet.html#method-assert}{\code{paradox::ParamSet$assert()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt">}\href{../../paradox/html/ParamSet.html#method-assert_dt}{\code{paradox::ParamSet$assert_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check">}\href{../../paradox/html/ParamSet.html#method-check}{\code{paradox::ParamSet$check()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt">}\href{../../paradox/html/ParamSet.html#method-check_dt}{\code{paradox::ParamSet$check_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format">}\href{../../paradox/html/ParamSet.html#method-format}{\code{paradox::ParamSet$format()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
 }
 \out{</details>}
 }

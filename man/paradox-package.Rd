@@ -32,4 +32,9 @@ Authors:
   \item Martin Binder \email{mlr.developer@mb706.com}
 }
 
+Other contributors:
+\itemize{
+  \item Marc Becker \email{marcbecker@posteo.de} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
+}
+
 }

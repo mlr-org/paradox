@@ -151,6 +151,9 @@ Has the set parameter dependencies?}
 \item \href{#method-check}{\code{ParamSet$check()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
+\item \href{#method-check_dt}{\code{ParamSet$check_dt()}}
+\item \href{#method-test_dt}{\code{ParamSet$test_dt()}}
+\item \href{#method-assert_dt}{\code{ParamSet$assert_dt()}}
 \item \href{#method-add_dep}{\code{ParamSet$add_dep()}}
 \item \href{#method-format}{\code{ParamSet$format()}}
 \item \href{#method-print}{\code{ParamSet$print()}}
@@ -324,6 +327,74 @@ Params for which dependencies are not satisfied should not be part of \code{x}.
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xs}}{(named \code{list()}).}
+
+\item{\code{.var.name}}{(\code{character(1)})\cr
+Name of the checked object to print in error messages.\cr
+Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+If successful \code{xs} invisibly, if not an error message.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-check_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-check_dt}{}}}
+\subsection{Method \code{check_dt()}}{
+\pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
+where rows are points and columns are parameters. A point x is feasible,
+if it configures a subset of params, all individual param constraints are
+satisfied and all dependencies are satisfied. Params for which
+dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+If successful \code{TRUE}, if not a string with the error message.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-test_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-test_dt}{}}}
+\subsection{Method \code{test_dt()}}{
+\pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+If successful \code{TRUE}, if not \code{FALSE}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-assert_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-assert_dt}{}}}
+\subsection{Method \code{assert_dt()}}{
+\pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, .var.name = vname(xdt))}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table}).}
 
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
