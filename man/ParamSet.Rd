@@ -116,6 +116,12 @@ Named with parameter IDs.}
 Position is TRUE for \link{ParamFct} and \link{ParamLgl}.
 Named with parameter IDs.}
 
+\item{\code{is_numeric}}{(\code{logical(1)})\cr
+Is \code{TRUE} if all parameters are \link{ParamDbl} or \link{ParamInt}.}
+
+\item{\code{is_categorical}}{(\code{logical(1)})\cr
+Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
+
 \item{\code{trafo}}{(\verb{function(x, param_set)})\cr
 Transformation function. Settable.
 User has to pass a \verb{function(x, param_set)}, of the form\cr
