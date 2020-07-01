@@ -241,9 +241,9 @@ test_that("ParamSet$default", {
 
 test_that("is_number / is_categ / is_numeric / is_categoric", {
   expect_equal(th_paramset_full()$is_number,
-               c(th_param_int = TRUE, th_param_dbl = TRUE, th_param_fct = FALSE, th_param_lgl = FALSE))
+    c(th_param_int = TRUE, th_param_dbl = TRUE, th_param_fct = FALSE, th_param_lgl = FALSE))
   expect_equal(th_paramset_full()$is_categ,
-               c(th_param_int = FALSE, th_param_dbl = FALSE, th_param_fct = TRUE, th_param_lgl = TRUE))
+    c(th_param_int = FALSE, th_param_dbl = FALSE, th_param_fct = TRUE, th_param_lgl = TRUE))
   expect_equal(th_paramset_numeric()$is_numeric, TRUE)
   expect_equal(th_paramset_full()$is_numeric, FALSE)
   expect_equal(th_paramset_categorical()$is_categorical, TRUE)
