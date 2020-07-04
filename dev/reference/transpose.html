@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Sampler Class — Sampler • paradox</title>
+<title>transpose — transpose • paradox</title>
 
 <!-- favicons -->
 <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
@@ -47,8 +47,10 @@
 
 
 
-<meta property="og:title" content="Sampler Class — Sampler" />
-<meta property="og:description" content="This is the abstract base class for sampling objects like Sampler1D, SamplerHierarchical or SamplerJointIndep." />
+<meta property="og:title" content="transpose — transpose" />
+<meta property="og:description" content="Converts data.table::data.table into a list of lists of points, possibly
+removes NA entries of inactive parameter values due to unsatisfied
+dependencies, and possibly calls the trafo function of the ParamSet." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -141,99 +143,44 @@
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Sampler Class</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/Sampler.R'><code>R/Sampler.R</code></a></small>
-    <div class="hidden name"><code>Sampler.Rd</code></div>
+    <h1>transpose</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/helper.R'><code>R/helper.R</code></a></small>
+    <div class="hidden name"><code>transpose.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    <p>This is the abstract base class for sampling objects like <a href='Sampler1D.html'>Sampler1D</a>, <a href='SamplerHierarchical.html'>SamplerHierarchical</a> or <a href='SamplerJointIndep.html'>SamplerJointIndep</a>.</p>
+    <p>Converts <a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a> into a list of lists of points, possibly
+removes <code>NA</code> entries of inactive parameter values due to unsatisfied
+dependencies, and possibly calls the <code>trafo</code> function of the <a href='ParamSet.html'>ParamSet</a>.</p>
     </div>
 
+    <pre class="usage"><span class='fu'>transpose</span>(<span class='no'>data</span>, <span class='kw'>ps</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>filter_na</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>, <span class='kw'>trafo</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>)</pre>
 
-
-    <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
-
-    <div class='dont-index'><p>Other Sampler: 
-<code><a href='Sampler1DCateg.html'>Sampler1DCateg</a></code>,
-<code><a href='Sampler1DNormal.html'>Sampler1DNormal</a></code>,
-<code><a href='Sampler1DRfun.html'>Sampler1DRfun</a></code>,
-<code><a href='Sampler1DUnif.html'>Sampler1DUnif</a></code>,
-<code><a href='Sampler1D.html'>Sampler1D</a></code>,
-<code><a href='SamplerHierarchical.html'>SamplerHierarchical</a></code>,
-<code><a href='SamplerJointIndep.html'>SamplerJointIndep</a></code>,
-<code><a href='SamplerUnif.html'>SamplerUnif</a></code></p></div>
-    <h2 class="hasAnchor" id="public-fields"><a class="anchor" href="#public-fields"></a>Public fields</h2>
-
-    <p><div class="r6-fields"></p><dl'>
-<dt><code>param_set</code></dt><dd><p>(<a href='ParamSet.html'>ParamSet</a>)<br />
-Domain / support of the distribution we want to sample from.</p></dd>
-
-</dl><p></div></p>
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-<h3>Public methods</h3>
-
-<ul>
-<li><p><a href='#method-new'><code>Sampler$new()</code></a></p></li>
-<li><p><a href='#method-sample'><code>Sampler$sample()</code></a></p></li>
-<li><p><a href='#method-format'><code>Sampler$format()</code></a></p></li>
-<li><p><a href='#method-print'><code>Sampler$print()</code></a></p></li>
-<li><p><a href='#method-clone'><code>Sampler$clone()</code></a></p></li>
-</ul>
-<p><hr>
-<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p>
-<p>Note that this object is typically constructed via derived classes,
-e.g., <a href='Sampler1D.html'>Sampler1D</a>.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>Sampler</span>$<span class='fu'>new</span>(<span class='no'>param_set</span>)</pre><p></div></p>
-
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
-<dt><code>param_set</code></dt><dd><p>(<a href='ParamSet.html'>ParamSet</a>)<br />
-Domain / support of the distribution we want to sample from.
-ParamSet is cloned on construction.</p></dd>
-
-</dl><p></div></p>
-<p><hr>
-<a id="method-sample"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/sample.html'>sample()</a></code></h3>
-<p>Sample <code>n</code> values from the distribution.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>Sampler</span>$<span class='fu'><a href='https://rdrr.io/r/base/sample.html'>sample</a></span>(<span class='no'>n</span>)</pre><p></div></p>
-
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
-<dt><code>n</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code>).</p></dd>
-
-</dl><p></div></p>
-<h3>Returns</h3>
-<p><a href='Design.html'>Design</a>.</p>
-<p><hr>
-<a id="method-format"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/format.html'>format()</a></code></h3>
-<p>Helper for print outputs.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>Sampler</span>$<span class='fu'><a href='https://rdrr.io/r/base/format.html'>format</a></span>()</pre><p></div></p>
-
-<p><hr>
-<a id="method-print"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/print.html'>print()</a></code></h3>
-<p>Printer.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>Sampler</span>$<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span>(<span class='no'>...</span>)</pre><p></div></p>
-
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
-<dt><code>...</code></dt><dd><p>(ignored).</p></dd>
-
-</dl><p></div></p>
-<p><hr>
-<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
-<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>Sampler</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
-
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
-<dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
-
-</dl><p></div></p>
-
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
+    <table class="ref-arguments">
+    <colgroup><col class="name" /><col class="desc" /></colgroup>
+    <tr>
+      <th>data</th>
+      <td><p>(<a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>)<br />
+Rows are points and columns are parameters.</p></td>
+    </tr>
+    <tr>
+      <th>ps</th>
+      <td><p>(<a href='ParamSet.html'>ParamSet</a>)<br />
+If <code>trafo = TRUE</code>, used to call trafo function.</p></td>
+    </tr>
+    <tr>
+      <th>filter_na</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Should <code>NA</code> entries of inactive parameter values be removed due to
+unsatisfied dependencies?</p></td>
+    </tr>
+    <tr>
+      <th>trafo</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Should the <code>trafo</code> function of the <a href='ParamSet.html'>ParamSet</a> be called?</p></td>
+    </tr>
+    </table>
 
 
   </div>
