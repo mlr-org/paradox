@@ -1,7 +1,9 @@
 # paradox 0.2.0.9000
 
-- Same as previous version.
-
+* New function `transpose()` converts `data.table` of parameter values to a list of lists.
+* New methods `ParamSet$check_dt()`, `$assert_dt()` and `test_dt()` can check a `data.table` for valid parameter values.
+* Documentation updated.
+* Unified style for object printers.
 
 # paradox 0.2.0
 
