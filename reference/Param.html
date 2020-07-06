@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Param Object — Param • paradox</title>
+<title>Param Class — Param • paradox</title>
 
 <!-- favicons -->
 <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
@@ -47,8 +47,9 @@
 
 
 
-<meta property="og:title" content="Param Object — Param" />
-<meta property="og:description" content="Abstract base class for parameters." />
+<meta property="og:title" content="Param Class — Param" />
+<meta property="og:description" content="This is the abstract base class for parameter objects like ParamDbl and
+ParamFct." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -82,7 +83,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.2.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.3.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -141,82 +142,24 @@
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Param Object</h1>
+    <h1>Param Class</h1>
     <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/Param.R'><code>R/Param.R</code></a></small>
     <div class="hidden name"><code>Param.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    <p>Abstract base class for parameters.</p>
+    <p>This is the abstract base class for parameter objects like <a href='ParamDbl.html'>ParamDbl</a> and
+<a href='ParamFct.html'>ParamFct</a>.</p>
     </div>
 
 
-
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
-
-    <p><a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6::R6Class</a> object.</p>
-    <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
-
-    
-<pre><span class='no'>Param</span>$<span class='fu'>new</span>(<span class='no'>id</span>, <span class='no'>special_vals</span>, <span class='no'>default</span>, <span class='no'>tags</span>)</pre>
-<ul>
-<li><p><code>id</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code><br />
-ID of this parameter.</p></li>
-<li><p><code>special_vals</code> :: <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code><br />
-Arbitrary special values this parameter is allowed to take, to make it feasible.
-This allows extending the domain of the parameter.
-Note that these values are only used in feasibility checks, neither in generating designs nor sampling.</p></li>
-<li><p><code>default</code> :: <code>any</code> <br />
-Default value. Can be from the domain of the parameter or an element of <code>special_vals</code>.
-Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a valid default.</p></li>
-<li><p><code>tags</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code><br />
-Arbitrary tags to group and subset parameters. Some tags serve a special purpose:</p><ul>
-<li><p><code>"required"</code> implies that the parameters has to be given when setting <code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
-</ul></li>
-</ul>
-
-    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
-
-    
-
-<ul>
-<li><p><code>class</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code><br />
-R6 class name. Read-only.</p></li>
-<li><p><code>is_number</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-TRUE if the parameter is of type <code>"dbl"</code> or <code>"int"</code>.</p></li>
-<li><p><code>is_categ</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-TRUE if the parameter is of type <code>"fct"</code> or <code>"lgl"</code>.</p></li>
-<li><p><code>has_default</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code><br />
-Is there a default value?</p></li>
-<li><p><code>storage_type</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code> <br />
-Data type when values of this parameter are stored in a data table or sampled.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-
-<ul>
-<li><p><code>test(x)</code>, <code><a href='https://rdrr.io/r/utils/PkgUtils.html'>check(x)</a></code>, <code>assert(x)</code><br />
-Three <span class="pkg">checkmate</span>-like check-functions.
-Take a value from the domain of the parameter, and check if it is feasible.
-A value is feasible if it is of the same <code>storage_type</code>, inside of the bounds or element of <code>special_vals</code>.</p></li>
-<li><p><code><a href='https://rdrr.io/r/stats/Uniform.html'>qunif(x)</a></code><br />
-<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(n)</a></code> -&gt; <code><a href='https://rdrr.io/r/base/vector.html'>vector(n)</a></code> <br />
-Takes values from [0,1] and map them, regularly distributed, to the domain of the parameter.
-Think of: quantile function or the use case to map a uniform-[0,1] random variable into a uniform sample from this param.</p></li>
-<li><p><code><a href='https://rdrr.io/r/base/rep.html'>rep(n)</a></code><br />
-<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code> -&gt; <a href='ParamSet.html'>ParamSet</a><br />
-Repeats this parameter n-times (by cloning).
-Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_rep".</p></li>
-</ul>
 
     <h2 class="hasAnchor" id="s-methods"><a class="anchor" href="#s-methods"></a>S3 methods</h2>
 
     
 
 <ul>
-<li><p><code><a href='as.data.table.html'>as.data.table()</a></code> <br />
+<li><p><code><a href='as.data.table.html'>as.data.table()</a></code><br />
 Param -&gt; <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code><br />
 Converts param to <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code> with 1 row. See <a href='ParamSet.html'>ParamSet</a>.</p></li>
 </ul>
@@ -229,6 +172,193 @@ Converts param to <code><a href='https://Rdatatable.gitlab.io/data.table/referen
 <code><a href='ParamInt.html'>ParamInt</a></code>,
 <code><a href='ParamLgl.html'>ParamLgl</a></code>,
 <code><a href='ParamUty.html'>ParamUty</a></code></p></div>
+    <h2 class="hasAnchor" id="public-fields"><a class="anchor" href="#public-fields"></a>Public fields</h2>
+
+    <p><div class="r6-fields"></p><dl'>
+<dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Identifier of the object.</p></dd>
+
+<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Arbitrary special values this parameter is allowed to take.</p></dd>
+
+<dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
+Default value.</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Arbitrary tags to group and subset parameters.</p></dd>
+
+</dl><p></div></p>
+    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
+
+    <p><div class="r6-active-bindings"></p><dl'>
+<dt><code>class</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+R6 class name. Read-only.</p></dd>
+
+<dt><code>is_number</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+<code>TRUE</code> if the parameter is of type <code>"dbl"</code> or <code>"int"</code>.</p></dd>
+
+<dt><code>is_categ</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+<code>TRUE</code> if the parameter is of type <code>"fct"</code> or <code>"lgl"</code>.</p></dd>
+
+<dt><code>has_default</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Is there a default value?</p></dd>
+
+</dl><p></div></p>
+    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
+
+    
+<h3>Public methods</h3>
+
+<ul>
+<li><p><a href='#method-new'><code>Param$new()</code></a></p></li>
+<li><p><a href='#method-check'><code>Param$check()</code></a></p></li>
+<li><p><a href='#method-assert'><code>Param$assert()</code></a></p></li>
+<li><p><a href='#method-test'><code>Param$test()</code></a></p></li>
+<li><p><a href='#method-rep'><code>Param$rep()</code></a></p></li>
+<li><p><a href='#method-format'><code>Param$format()</code></a></p></li>
+<li><p><a href='#method-print'><code>Param$print()</code></a></p></li>
+<li><p><a href='#method-qunif'><code>Param$qunif()</code></a></p></li>
+<li><p><a href='#method-clone'><code>Param$clone()</code></a></p></li>
+</ul>
+<p><hr>
+<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p>
+<p>Note that this object is typically constructed via derived classes,
+e.g., <a href='ParamDbl.html'>ParamDbl</a>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'>new</span>(<span class='no'>id</span>, <span class='no'>special_vals</span>, <span class='no'>default</span>, <span class='no'>tags</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Identifier of the object.</p></dd>
+
+<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.</p></dd>
+
+<dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
+Default value. Can be from the domain of the parameter or an element of
+<code>special_vals</code>. Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a
+valid default.</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Arbitrary tags to group and subset parameters. Some tags serve a special
+purpose:<br />
+<ul>
+<li><p><code>"required"</code> implies that the parameters has to be given when setting
+<code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
+</ul></p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-check"></a></p><h3>Method <code><a href='https://rdrr.io/r/utils/PkgUtils.html'>check()</a></code></h3>
+<p><span class="pkg">checkmate</span>-like check-function. Take a value from the domain of the
+parameter, and check if it is feasible. A value is feasible if it is of
+the same <code>storage_type</code>, inside of the bounds or element of
+<code>special_vals</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='no'>x</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>x</code></dt><dd><p>(<code>any</code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+<p><hr>
+<a id="method-assert"></a></p><h3>Method <code>assert()</code></h3>
+<p><span class="pkg">checkmate</span>-like assert-function. Take a value from the domain of
+the parameter, and assert if it is feasible. A value is feasible if it
+is of the same <code>storage_type</code>, inside of the bounds or element of
+<code>special_vals</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'>assert</span>(<span class='no'>x</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>x</code></dt><dd><p>(<code>any</code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>x</code> invisibly, if not an error message.</p>
+<p><hr>
+<a id="method-test"></a></p><h3>Method <code>test()</code></h3>
+<p><span class="pkg">checkmate</span>-like test-function. Take a value from the domain of the
+parameter, and test if it is feasible. A value is feasible if it is of
+the same <code>storage_type</code>, inside of the bounds or element of
+<code>special_vals</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'>test</span>(<span class='no'>x</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>x</code></dt><dd><p>(<code>any</code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
+<p><hr>
+<a id="method-rep"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/rep.html'>rep()</a></code></h3>
+<p>Repeats this parameter n-times (by cloning).
+Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_rep".</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'><a href='https://rdrr.io/r/base/rep.html'>rep</a></span>(<span class='no'>n</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>n</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p><a href='ParamSet.html'>ParamSet</a>.</p>
+<p><hr>
+<a id="method-format"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/format.html'>format()</a></code></h3>
+<p>Helper for print outputs.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'><a href='https://rdrr.io/r/base/format.html'>format</a></span>()</pre><p></div></p>
+
+<p><hr>
+<a id="method-print"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/print.html'>print()</a></code></h3>
+<p>Printer.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span>(
+  <span class='no'>...</span>,
+  <span class='kw'>hide_cols</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span>(<span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span>)
+)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>...</code></dt><dd><p>(ignored).</p></dd>
+
+<dt><code>hide_cols</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Which fields should not be printed? Default is <code>"nlevels"</code>,
+<code>"is_bounded"</code>, <code>"special_vals"</code>, <code>"tags"</code>, and <code>"storage_type"</code>.</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-qunif"></a></p><h3>Method <code><a href='https://rdrr.io/r/stats/Uniform.html'>qunif()</a></code></h3>
+<p>Takes values from [0,1] and maps them, regularly distributed, to the
+domain of the parameter. Think of: quantile function or the use case to
+map a uniform-[0,1] random variable into a uniform sample from this
+param.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'><a href='https://rdrr.io/r/stats/Uniform.html'>qunif</a></span>(<span class='no'>x</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>x</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>Value of the domain of the parameter.</p>
+<p><hr>
+<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Param</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
+
+</dl><p></div></p>
+
+
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
@@ -245,7 +375,7 @@ Converts param to <code><a href='https://Rdatatable.gitlab.io/data.table/referen
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
 </div>
 
       </footer>

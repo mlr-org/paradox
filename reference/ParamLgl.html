@@ -82,7 +82,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.2.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.3.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -152,42 +152,6 @@
 
 
 
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
-
-    <p><a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6::R6Class</a> object inheriting from <a href='Param.html'>Param</a>.</p>
-    <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
-
-    
-<pre><span class='no'>ParamLgl</span>$<span class='fu'>new</span>(<span class='no'>id</span>, <span class='kw'>special_vals</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(), <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>, <span class='kw'>tags</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>())</pre>
-
-<p>See Arguments of <a href='Param.html'>Param</a>.</p>
-    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
-
-    
-
-<p>Fields of <a href='Param.html'>Param</a>, and additionally:</p><ul>
-<li><p><code>lower</code> :: <code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code><br />
-Lower bound.
-Always <code>NA</code> for this parameter.</p></li>
-<li><p><code>upper</code> :: <code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code><br />
-Upper bound.
-Always <code>NA</code> for this parameter.</p></li>
-<li><p><code>levels</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(2)</a></code><br />
-Allowed levels.
-Always <code><a href='https://rdrr.io/r/base/c.html'>c(TRUE, FALSE)</a></code> for this parameter.</p></li>
-<li><p><code>nlevels</code> :: <code>Inf</code> <br />
-Number of categorical levels.
-Always 2 for this parameter.</p></li>
-<li><p><code>is_bounded</code> :: <code>TRUE</code><br />
-Are the bounds finite?
-Always <code>TRUE</code> for this parameter.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-
-<p>See <a href='Param.html'>Param</a>.</p>
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
     <div class='dont-index'><p>Other Params: 
@@ -196,6 +160,108 @@ Always <code>TRUE</code> for this parameter.</p></li>
 <code><a href='ParamInt.html'>ParamInt</a></code>,
 <code><a href='ParamUty.html'>ParamUty</a></code>,
 <code><a href='Param.html'>Param</a></code></p></div>
+    <h2 class="hasAnchor" id="super-class"><a class="anchor" href="#super-class"></a>Super class</h2>
+
+    <p><code><a href='Param.html'>paradox::Param</a></code> -&gt; <code>ParamLgl</code></p>
+    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
+
+    <p><div class="r6-active-bindings"></p><dl'>
+<dt><code>lower</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Lower bound.
+Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, ParamLgl and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
+
+<dt><code>upper</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Upper bound.
+Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, ParamLgl and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
+
+<dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> | <code>NULL</code>)<br />
+Set of allowed levels.
+Always <code>NULL</code> for <a href='ParamDbl.html'>ParamDbl</a>, <a href='ParamInt.html'>ParamInt</a> and <a href='ParamUty.html'>ParamUty</a>.
+Always <code><a href='https://rdrr.io/r/base/c.html'>c(TRUE, FALSE)</a></code> for ParamLgl.</p></dd>
+
+<dt><code>nlevels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code> | <code>Inf</code>)<br />
+Number of categorical levels.
+Always <code>Inf</code> for <a href='ParamDbl.html'>ParamDbl</a> and <a href='ParamUty.html'>ParamUty</a>.
+The number of integers in the range <code>[lower, upper]</code>, or <code>Inf</code> if unbounded for <a href='ParamInt.html'>ParamInt</a>.
+Always <code>2</code> for ParamLgl.</p></dd>
+
+<dt><code>is_bounded</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Are the bounds finite?
+Always <code>TRUE</code> for <a href='ParamFct.html'>ParamFct</a> and ParamLgl.
+Always <code>FALSE</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
+
+<dt><code>storage_type</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Data type when values of this parameter are stored in a data table or sampled.
+Always <code>"numeric"</code> for <a href='ParamDbl.html'>ParamDbl</a>.
+Always <code>"character"</code> for <a href='ParamFct.html'>ParamFct</a>.
+Always <code>"integer"</code> for <a href='ParamInt.html'>ParamInt</a>.
+Always <code>"logical"</code> for ParamLgl.
+Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
+
+</dl><p></div></p>
+    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
+
+    
+<h3>Public methods</h3>
+
+<ul>
+<li><p><a href='#method-new'><code>ParamLgl$new()</code></a></p></li>
+<li><p><a href='#method-clone'><code>ParamLgl$clone()</code></a></p></li>
+</ul>
+<p><details ><summary>Inherited methods</summary>
+<ul>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert"><a href='../../paradox/html/Param.html#method-assert'><code>paradox::Param$assert()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check"><a href='../../paradox/html/Param.html#method-check'><code>paradox::Param$check()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format"><a href='../../paradox/html/Param.html#method-format'><code>paradox::Param$format()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print"><a href='../../paradox/html/Param.html#method-print'><code>paradox::Param$print()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif"><a href='../../paradox/html/Param.html#method-qunif'><code>paradox::Param$qunif()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep"><a href='../../paradox/html/Param.html#method-rep'><code>paradox::Param$rep()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test"><a href='../../paradox/html/Param.html#method-test'><code>paradox::Param$test()</code></a></span></p></li>
+</ul>
+</details>
+
+<hr>
+<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamLgl</span>$<span class='fu'>new</span>(<span class='no'>id</span>, <span class='kw'>special_vals</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(), <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>, <span class='kw'>tags</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>())</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Identifier of the object.</p></dd>
+
+<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.</p></dd>
+
+<dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
+Default value. Can be from the domain of the parameter or an element of
+<code>special_vals</code>. Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a
+valid default.</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Arbitrary tags to group and subset parameters. Some tags serve a special
+purpose:<br />
+<ul>
+<li><p><code>"required"</code> implies that the parameters has to be given when setting
+<code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
+</ul></p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamLgl</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
+
+</dl><p></div></p>
+
+
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
     <pre class="examples"><div class='input'><span class='no'>ParamLgl</span>$<span class='fu'>new</span>(<span class='st'>"flag"</span>, <span class='kw'>default</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>)</div><div class='output co'>#&gt;      id    class lower upper      levels default
@@ -215,7 +281,7 @@ Always <code>TRUE</code> for this parameter.</p></li>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
 </div>
 
       </footer>

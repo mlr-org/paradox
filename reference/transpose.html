@@ -6,7 +6,7 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Extra data type for "no default value" — NO_DEF • paradox</title>
+<title>transpose — transpose • paradox</title>
 
 <!-- favicons -->
 <link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png">
@@ -47,14 +47,10 @@
 
 
 
-<meta property="og:title" content="Extra data type for "no default value" — NO_DEF" />
-<meta property="og:description" content="Special new data type for no-default.
-Not often needed by the end-user, mainly internal.
-NoDefault: R6 factory.
-NO_DEF: R6 Singleton object for type, used in Param.
-is_nodefault(): Is an object of type 'no default'?
-
-" />
+<meta property="og:title" content="transpose — transpose" />
+<meta property="og:description" content="Converts data.table::data.table into a list of lists of points, possibly
+removes NA entries of inactive parameter values due to unsatisfied
+dependencies, and possibly calls the trafo function of the ParamSet." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -147,22 +143,44 @@ is_nodefault(): Is an object of type 'no default'?
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
-    <h1>Extra data type for "no default value"</h1>
-    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/NoDefault.R'><code>R/NoDefault.R</code></a></small>
-    <div class="hidden name"><code>NO_DEF.Rd</code></div>
+    <h1>transpose</h1>
+    <small class="dont-index">Source: <a href='https://github.com/mlr-org/paradox/blob/master/R/helper.R'><code>R/helper.R</code></a></small>
+    <div class="hidden name"><code>transpose.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    <p>Special new data type for no-default.
-Not often needed by the end-user, mainly internal.</p><ul>
-<li><p><code>NoDefault</code>: R6 factory.</p></li>
-<li><p><code>NO_DEF</code>: R6 Singleton object for type, used in <a href='Param.html'>Param</a>.</p></li>
-<li><p><code>is_nodefault()</code>: Is an object of type 'no default'?</p></li>
-</ul>
-
+    <p>Converts <a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a> into a list of lists of points, possibly
+removes <code>NA</code> entries of inactive parameter values due to unsatisfied
+dependencies, and possibly calls the <code>trafo</code> function of the <a href='ParamSet.html'>ParamSet</a>.</p>
     </div>
 
+    <pre class="usage"><span class='fu'>transpose</span>(<span class='no'>data</span>, <span class='kw'>ps</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>filter_na</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>, <span class='kw'>trafo</span> <span class='kw'>=</span> <span class='fl'>TRUE</span>)</pre>
 
+    <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
+    <table class="ref-arguments">
+    <colgroup><col class="name" /><col class="desc" /></colgroup>
+    <tr>
+      <th>data</th>
+      <td><p>(<a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>)<br />
+Rows are points and columns are parameters.</p></td>
+    </tr>
+    <tr>
+      <th>ps</th>
+      <td><p>(<a href='ParamSet.html'>ParamSet</a>)<br />
+If <code>trafo = TRUE</code>, used to call trafo function.</p></td>
+    </tr>
+    <tr>
+      <th>filter_na</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Should <code>NA</code> entries of inactive parameter values be removed due to
+unsatisfied dependencies?</p></td>
+    </tr>
+    <tr>
+      <th>trafo</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Should the <code>trafo</code> function of the <a href='ParamSet.html'>ParamSet</a> be called?</p></td>
+    </tr>
+    </table>
 
 
   </div>

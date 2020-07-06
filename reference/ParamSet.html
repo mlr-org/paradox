@@ -86,7 +86,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.2.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.3.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -160,124 +160,14 @@ some parameters to constant values (regarding subsequent sampling or generation 
 
 
 
-    <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
-
-    
-<pre><span class='no'>ParamSet</span>$<span class='fu'>new</span>(<span class='kw'>params</span> <span class='kw'>=</span> <span class='fu'>named_list</span>())</pre>
-<ul>
-<li><p><code>params</code> :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code><br />
-List of <a href='Param.html'>Param</a>, named with their respective ID.
-Parameters are cloned.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
-
-    
-
-<ul>
-<li><p><code>set_id</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code> <br />
-ID of this param set. Default <code>""</code>. Settable.</p></li>
-<li><p><code>length</code> :: <code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code> <br />
-Number of contained <a href='Param.html'>Param</a>s.</p></li>
-<li><p><code>is_empty</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code> <br />
-Is the <code>ParamSet</code> empty?</p></li>
-<li><p><code>class</code> :: named <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> <br />
-Classes of contained parameters, named with parameter IDs.</p></li>
-<li><p><code>lower</code> :: named <code><a href='https://rdrr.io/r/base/double.html'>double()</a></code> <br />
-Lower bounds of parameters (<code>NA</code> if parameter is not numeric).
-Named with parameter IDs.</p></li>
-<li><p><code>upper</code> :: named <code><a href='https://rdrr.io/r/base/double.html'>double()</a></code> <br />
-Upper bounds of parameters (<code>NA</code> if parameter is not numeric).
-Named with parameter IDs.</p></li>
-<li><p><code>levels</code> :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> <br />
-List of character vectors of allowed categorical values of contained parameters.
-<code>NULL</code> if the parameter is not categorical.
-Named with parameter IDs.</p></li>
-<li><p><code>nlevels</code> :: named <code><a href='https://rdrr.io/r/base/integer.html'>integer()</a></code> <br />
-Number of categorical levels per parameter, <code>Inf</code> for double parameters or unbounded integer parameters.
-Named with param IDs.</p></li>
-<li><p><code>is_bounded</code> :: named <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code> <br />
-Do all parameters have finite bounds?
-Named with parameter IDs.</p></li>
-<li><p><code>special_vals</code> :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> of <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> <br />
-Special values for all parameters.
-Named with parameter IDs.</p></li>
-<li><p><code>storage_type</code> :: <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> <br />
-Data types of parameters when stored in tables.
-Named with parameter IDs.</p></li>
-<li><p><code>tags</code> :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> of <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> <br />
-Can be used to group and subset parameters.
-Named with parameter IDs.</p></li>
-<li><p><code>default</code> :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> <br />
-Default values of all parameters.
-If no default exists, element is not present.
-Named with parameter IDs.</p></li>
-<li><p>is_number :: named <code><a href='https://rdrr.io/r/base/logical.html'>logical()</a></code> <br />
-Position is TRUE for <a href='ParamDbl.html'>ParamDbl</a> and <a href='ParamInt.html'>ParamInt</a>.
-Named with parameter IDs.</p></li>
-<li><p>is_categ          :: named <code>logical</code> <br />
-Position is TRUE for <a href='ParamFct.html'>ParamFct</a> and <a href='ParamLgl.html'>ParamLgl</a>.
-Named with parameter IDs.</p></li>
-<li><p><code>has_deps</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code> <br />
-Has the set parameter dependencies?</p></li>
-<li><p><code>deps</code> :: <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code> <br />
-Table has cols <code>id</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>on</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>cond</code> (<a href='Condition.html'>Condition</a>).
-Lists all (direct) dependency parents of a param, through parameter IDs.
-Internally created by a call to <code>add_dep</code>.
-Settable, if you want to remove dependencies or perform other changes.</p></li>
-<li><p><code>values</code>         :: named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> <br />
-Currently set / fixed parameter values.
-Settable, and feasibility of values will be checked when you set them.
-You do not have to set values for all parameters, but only for a subset.
-When you set values, all previously set values will be unset / removed.</p></li>
-<li><p><code>trafo</code> :: <code>function(x, param_set)</code><br />
-Transformation function. Settable.
-User has to pass a <code>function(x, param_set)</code>, of the form <br />
-(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>, ParamSet) -&gt; named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>.<br />
-The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
-For the output, not many things have to hold.
-It needs to have unique names, and the target algorithm has to accept the configuration.
-For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-Is NULL by default, and you can set it to NULL to switch the transformation off.</p></li>
-<li><p><code>has_trafo</code> :: <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code> <br />
-Has the set a <code>trafo</code> function?</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="public-methods"><a class="anchor" href="#public-methods"></a>Public methods</h2>
-
-    
-
-<ul>
-<li><p><code>ids(class = NULL, is_bounded = NULL, tags = NULL)</code> <br />
-(<code>character</code>, <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>, <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>) -&gt; <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> <br />
-Retrieves IDs of contained parameters based on some filter criteria selections, <code>NULL</code> means no restriction.</p></li>
-<li><p><code>get_values(class = NULL, is_bounded = NULL, tags = NULL)</code> <br />
-(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>, <code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>, <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>) -&gt; named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> <br />
-Retrieves parameter values based on some selections, <code>NULL</code> means no restriction and is
-equivalent to <code>$values</code>.</p></li>
-<li><p><code>add(param_set)</code> <br />
-(<a href='Param.html'>Param</a> | ParamSet) -&gt; <code>self</code> <br />
-Adds a single param or another set to this set, all params are cloned.</p></li>
-<li><p><code><a href='https://rdrr.io/r/base/subset.html'>subset(ids)</a></code> <br />
-<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> -&gt; <code>self</code> <br />
-Changes the current set to the set of passed IDs.</p></li>
-<li><p><code>test(x)</code>, <code><a href='https://rdrr.io/r/utils/PkgUtils.html'>check(x)</a></code>, <code>assert(x)</code> <br />
-Three <span class="pkg">checkmate</span>-like check-functions. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of <code>x</code>.</p></li>
-<li><p><code>add_dep(id, on, cond)</code> <br />
-(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>, <code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>, <a href='Condition.html'>Condition</a>) -&gt; <code>self</code> <br />
-Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p></li>
-</ul>
-
     <h2 class="hasAnchor" id="s-methods-and-type-converters"><a class="anchor" href="#s-methods-and-type-converters"></a>S3 methods and type converters</h2>
 
     
 
 <ul>
-<li><p><code><a href='as.data.table.html'>as.data.table()</a></code> <br />
-Compact representation as datatable. Col types are: <br /></p><ul>
+<li><p><code><a href='as.data.table.html'>as.data.table()</a></code><br />
+ParamSet -&gt; <code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code><br />
+Compact representation as datatable. Col types are:<br /></p><ul>
 <li><p>id: character</p></li>
 <li><p>lower, upper: double</p></li>
 <li><p>levels: list col, with NULL elements</p></li>
@@ -288,6 +178,330 @@ Compact representation as datatable. Col types are: <br /></p><ul>
 <li><p>tags: list col of character vectors</p></li>
 </ul></li>
 </ul>
+
+    <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
+
+    <p><div class="r6-active-bindings"></p><dl'>
+<dt><code>params</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+List of <a href='Param.html'>Param</a>, named with their respective ID.</p></dd>
+
+<dt><code>deps</code></dt><dd><p>(<code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code>)<br />
+Table has cols <code>id</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>on</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>cond</code> (<a href='Condition.html'>Condition</a>).
+Lists all (direct) dependency parents of a param, through parameter IDs.
+Internally created by a call to <code>add_dep</code>.
+Settable, if you want to remove dependencies or perform other changes.</p></dd>
+
+<dt><code>set_id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+ID of this param set. Default <code>""</code>. Settable.</p></dd>
+
+<dt><code>length</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/integer.html'>integer(1)</a></code>)<br />
+Number of contained <a href='Param.html'>Param</a>s.</p></dd>
+
+<dt><code>is_empty</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Is the <code>ParamSet</code> empty?</p></dd>
+
+<dt><code>class</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Classes of contained parameters, named with parameter IDs.</p></dd>
+
+<dt><code>lower</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/double.html'>double()</a></code>)<br />
+Lower bounds of parameters (<code>NA</code> if parameter is not numeric).
+Named with parameter IDs.</p></dd>
+
+<dt><code>upper</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/double.html'>double()</a></code>)<br />
+Upper bounds of parameters (<code>NA</code> if parameter is not numeric).
+Named with parameter IDs.</p></dd>
+
+<dt><code>levels</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+List of character vectors of allowed categorical values of contained parameters.
+<code>NULL</code> if the parameter is not categorical.
+Named with parameter IDs.</p></dd>
+
+<dt><code>nlevels</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/integer.html'>integer()</a></code>)<br />
+Number of categorical levels per parameter, <code>Inf</code> for double parameters or unbounded integer parameters.
+Named with param IDs.</p></dd>
+
+<dt><code>is_bounded</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/logical.html'>logical()</a></code>)<br />
+Do all parameters have finite bounds?
+Named with parameter IDs.</p></dd>
+
+<dt><code>special_vals</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> of <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Special values for all parameters.
+Named with parameter IDs.</p></dd>
+
+<dt><code>default</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Default values of all parameters.
+If no default exists, element is not present.
+Named with parameter IDs.</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code> of <code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Can be used to group and subset parameters.
+Named with parameter IDs.</p></dd>
+
+<dt><code>storage_type</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Data types of parameters when stored in tables.
+Named with parameter IDs.</p></dd>
+
+<dt><code>is_number</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/logical.html'>logical()</a></code>)<br />
+Position is TRUE for <a href='ParamDbl.html'>ParamDbl</a> and <a href='ParamInt.html'>ParamInt</a>.
+Named with parameter IDs.</p></dd>
+
+<dt><code>is_categ</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/logical.html'>logical()</a></code>)<br />
+Position is TRUE for <a href='ParamFct.html'>ParamFct</a> and <a href='ParamLgl.html'>ParamLgl</a>.
+Named with parameter IDs.</p></dd>
+
+<dt><code>trafo</code></dt><dd><p>(<code>function(x, param_set)</code>)<br />
+Transformation function. Settable.
+User has to pass a <code>function(x, param_set)</code>, of the form<br />
+(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>, ParamSet) -&gt; named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>.<br />
+The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+For the output, not many things have to hold.
+It needs to have unique names, and the target algorithm has to accept the configuration.
+For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+Is NULL by default, and you can set it to NULL to switch the transformation off.</p></dd>
+
+<dt><code>has_trafo</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Has the set a <code>trafo</code> function?</p></dd>
+
+<dt><code>values</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Currently set / fixed parameter values.
+Settable, and feasibility of values will be checked when you set them.
+You do not have to set values for all parameters, but only for a subset.
+When you set values, all previously set values will be unset / removed.</p></dd>
+
+<dt><code>has_deps</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Has the set parameter dependencies?</p></dd>
+
+</dl><p></div></p>
+    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
+
+    
+<h3>Public methods</h3>
+
+<ul>
+<li><p><a href='#method-new'><code>ParamSet$new()</code></a></p></li>
+<li><p><a href='#method-add'><code>ParamSet$add()</code></a></p></li>
+<li><p><a href='#method-ids'><code>ParamSet$ids()</code></a></p></li>
+<li><p><a href='#method-get_values'><code>ParamSet$get_values()</code></a></p></li>
+<li><p><a href='#method-subset'><code>ParamSet$subset()</code></a></p></li>
+<li><p><a href='#method-check'><code>ParamSet$check()</code></a></p></li>
+<li><p><a href='#method-test'><code>ParamSet$test()</code></a></p></li>
+<li><p><a href='#method-assert'><code>ParamSet$assert()</code></a></p></li>
+<li><p><a href='#method-check_dt'><code>ParamSet$check_dt()</code></a></p></li>
+<li><p><a href='#method-test_dt'><code>ParamSet$test_dt()</code></a></p></li>
+<li><p><a href='#method-assert_dt'><code>ParamSet$assert_dt()</code></a></p></li>
+<li><p><a href='#method-add_dep'><code>ParamSet$add_dep()</code></a></p></li>
+<li><p><a href='#method-format'><code>ParamSet$format()</code></a></p></li>
+<li><p><a href='#method-print'><code>ParamSet$print()</code></a></p></li>
+<li><p><a href='#method-clone'><code>ParamSet$clone()</code></a></p></li>
+</ul>
+<p><hr>
+<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>new</span>(<span class='kw'>params</span> <span class='kw'>=</span> <span class='fu'>named_list</span>())</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>params</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+List of <a href='Param.html'>Param</a>, named with their respective ID.
+Parameters are cloned.</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-add"></a></p><h3>Method <code>add()</code></h3>
+<p>Adds a single param or another set to this set, all params are cloned.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>add</span>(<span class='no'>p</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>p</code></dt><dd><p>(<a href='Param.html'>Param</a> | ParamSet).</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-ids"></a></p><h3>Method <code>ids()</code></h3>
+<p>Retrieves IDs of contained parameters based on some filter criteria
+selections, <code>NULL</code> means no restriction.
+Only returns IDs of parameters that satisfy all conditions.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>ids</span>(<span class='kw'>class</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>is_bounded</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>tags</span> <span class='kw'>=</span> <span class='kw'>NULL</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>class</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+<dt><code>is_bounded</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>).</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p><code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>.</p>
+<p><hr>
+<a id="method-get_values"></a></p><h3>Method <code>get_values()</code></h3>
+<p>Retrieves parameter values based on some selections, <code>NULL</code> means no
+restriction and is equivalent to <code>$values</code>.
+Only returns values of parameters that satisfy all conditions.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>get_values</span>(<span class='kw'>class</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>is_bounded</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>tags</span> <span class='kw'>=</span> <span class='kw'>NULL</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>class</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+<dt><code>is_bounded</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>).</p></dd>
+
+<dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>Named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>.</p>
+<p><hr>
+<a id="method-subset"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/subset.html'>subset()</a></code></h3>
+<p>Changes the current set to the set of passed IDs.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'><a href='https://rdrr.io/r/base/subset.html'>subset</a></span>(<span class='no'>ids</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>ids</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-check"></a></p><h3>Method <code><a href='https://rdrr.io/r/utils/PkgUtils.html'>check()</a></code></h3>
+<p><span class="pkg">checkmate</span>-like check-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='no'>xs</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xs</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+<p><hr>
+<a id="method-test"></a></p><h3>Method <code>test()</code></h3>
+<p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>test</span>(<span class='no'>xs</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xs</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
+<p><hr>
+<a id="method-assert"></a></p><h3>Method <code>assert()</code></h3>
+<p><span class="pkg">checkmate</span>-like assert-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>assert</span>(<span class='no'>xs</span>, <span class='kw'>.var.name</span> <span class='kw'>=</span> <span class='fu'>vname</span>(<span class='no'>xs</span>))</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xs</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>).</p></dd>
+
+<dt><code>.var.name</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Name of the checked object to print in error messages.<br />
+Defaults to the heuristic implemented in <a href='https://rdrr.io/pkg/checkmate/man/vname.html'>vname</a>.</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>xs</code> invisibly, if not an error message.</p>
+<p><hr>
+<a id="method-check_dt"></a></p><h3>Method <code>check_dt()</code></h3>
+<p><span class="pkg">checkmate</span>-like check-function. Takes a <a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>
+where rows are points and columns are parameters. A point x is feasible,
+if it configures a subset of params, all individual param constraints are
+satisfied and all dependencies are satisfied. Params for which
+dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>check_dt</span>(<span class='no'>xdt</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xdt</code></dt><dd><p>(<a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+<p><hr>
+<a id="method-test_dt"></a></p><h3>Method <code>test_dt()</code></h3>
+<p><span class="pkg">checkmate</span>-like test-function (s. <code>$check_dt()</code>).</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>test_dt</span>(<span class='no'>xdt</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xdt</code></dt><dd><p>(<a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>).</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
+<p><hr>
+<a id="method-assert_dt"></a></p><h3>Method <code>assert_dt()</code></h3>
+<p><span class="pkg">checkmate</span>-like assert-function (s. <code>$check_dt()</code>).</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>assert_dt</span>(<span class='no'>xdt</span>, <span class='kw'>.var.name</span> <span class='kw'>=</span> <span class='fu'>vname</span>(<span class='no'>xdt</span>))</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>xdt</code></dt><dd><p>(<a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table</a>).</p></dd>
+
+<dt><code>.var.name</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Name of the checked object to print in error messages.<br />
+Defaults to the heuristic implemented in <a href='https://rdrr.io/pkg/checkmate/man/vname.html'>vname</a>.</p></dd>
+
+</dl><p></div></p>
+<h3>Returns</h3>
+<p>If successful <code>xs</code> invisibly, if not an error message.</p>
+<p><hr>
+<a id="method-add_dep"></a></p><h3>Method <code>add_dep()</code></h3>
+<p>Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>add_dep</span>(<span class='no'>id</span>, <span class='no'>on</span>, <span class='no'>cond</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>).</p></dd>
+
+<dt><code>on</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>).</p></dd>
+
+<dt><code>cond</code></dt><dd><p>(<a href='Condition.html'>Condition</a>).</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-format"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/format.html'>format()</a></code></h3>
+<p>Helper for print outputs.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'><a href='https://rdrr.io/r/base/format.html'>format</a></span>()</pre><p></div></p>
+
+<p><hr>
+<a id="method-print"></a></p><h3>Method <code><a href='https://rdrr.io/r/base/print.html'>print()</a></code></h3>
+<p>Printer.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span>(
+  <span class='no'>...</span>,
+  <span class='kw'>hide_cols</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span>(<span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span>)
+)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>...</code></dt><dd><p>(ignored).</p></dd>
+
+<dt><code>hide_cols</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
+Which fields should not be printed? Default is <code>"nlevels"</code>,
+<code>"is_bounded"</code>, <code>"special_vals"</code>, <code>"tags"</code>, and <code>"storage_type"</code>.</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>ParamSet</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
+
+</dl><p></div></p>
+
 
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
@@ -321,7 +535,7 @@ Compact representation as datatable. Col types are: <br /></p><ul>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
 </div>
 
       </footer>

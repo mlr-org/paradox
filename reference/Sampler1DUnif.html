@@ -82,7 +82,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.2.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.3.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -152,28 +152,6 @@
 
 
 
-    <h2 class="hasAnchor" id="format"><a class="anchor" href="#format"></a>Format</h2>
-
-    <p><a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6::R6Class</a> inheriting from <a href='Sampler1D.html'>Sampler1D</a>.</p>
-    <h2 class="hasAnchor" id="construction"><a class="anchor" href="#construction"></a>Construction</h2>
-
-    
-<pre><span class='no'>smpl</span> <span class='kw'>=</span> <span class='no'>Sampler1DUnif</span>$<span class='fu'>new</span>(<span class='no'>param</span>)</pre>
-<ul>
-<li><p><code>param</code> :: <a href='Param.html'>Param</a><br />
-Domain / support of the distribution we want to sample from.</p></li>
-</ul>
-
-    <h2 class="hasAnchor" id="fields"><a class="anchor" href="#fields"></a>Fields</h2>
-
-    
-
-<p>See <a href='Sampler1D.html'>Sampler1D</a>.</p>
-    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
-
-    
-
-<p>See <a href='Sampler1D.html'>Sampler1D</a>.</p>
     <h2 class="hasAnchor" id="see-also"><a class="anchor" href="#see-also"></a>See also</h2>
 
     <div class='dont-index'><p>Other Sampler: 
@@ -185,6 +163,49 @@ Domain / support of the distribution we want to sample from.</p></li>
 <code><a href='SamplerJointIndep.html'>SamplerJointIndep</a></code>,
 <code><a href='SamplerUnif.html'>SamplerUnif</a></code>,
 <code><a href='Sampler.html'>Sampler</a></code></p></div>
+    <h2 class="hasAnchor" id="super-classes"><a class="anchor" href="#super-classes"></a>Super classes</h2>
+
+    <p><code><a href='Sampler.html'>paradox::Sampler</a></code> -&gt; <code><a href='Sampler1D.html'>paradox::Sampler1D</a></code> -&gt; <code>Sampler1DUnif</code></p>
+    <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
+
+    
+<h3>Public methods</h3>
+
+<ul>
+<li><p><a href='#method-new'><code>Sampler1DUnif$new()</code></a></p></li>
+<li><p><a href='#method-clone'><code>Sampler1DUnif$clone()</code></a></p></li>
+</ul>
+<p><details open ><summary>Inherited methods</summary>
+<ul>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-format'><code>paradox::Sampler$format()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-print'><code>paradox::Sampler$print()</code></a></span></p></li>
+<li><p><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-sample'><code>paradox::Sampler$sample()</code></a></span></p></li>
+</ul>
+</details>
+
+<hr>
+<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Sampler1DUnif</span>$<span class='fu'>new</span>(<span class='no'>param</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>param</code></dt><dd><p>(<a href='Param.html'>Param</a>)<br />
+Domain / support of the distribution we want to sample from.</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
+<p><div class="r"></p><pre><span class='no'>Sampler1DUnif</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+
+<h3>Arguments</h3>
+<p><div class="arguments"></p><dl'>
+<dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
+
+</dl><p></div></p>
+
+
 
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
@@ -201,7 +222,7 @@ Domain / support of the distribution we want to sample from.</p></li>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.9000.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
 </div>
 
       </footer>
