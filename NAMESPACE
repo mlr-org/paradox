@@ -2,6 +2,7 @@
 
 S3method(as.data.table,Param)
 S3method(as.data.table,ParamSet)
+S3method(rd_info,ParamSet)
 export(CondAnyOf)
 export(CondEqual)
 export(Condition)

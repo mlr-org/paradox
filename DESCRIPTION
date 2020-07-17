@@ -45,9 +45,10 @@ Imports:
     backports,
     checkmate,
     data.table,
-    mlr3misc,
+    mlr3misc (>= 0.4.0),
     R6
 Suggests:
+    knitr,
     lhs,
     testthat
 Encoding: UTF-8

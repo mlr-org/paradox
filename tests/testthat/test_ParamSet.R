@@ -335,3 +335,10 @@ test_that("ParamSet$check_dt", {
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
   expect_true(ps$check_dt(xdt))
 })
+
+test_that("rd_info.ParamSet", {
+  ps = ParamSet$new()
+  expect_character(rd_info(ps))
+  ps$add(ParamFct$new("a", levels = letters[1:3]))
+  expect_character(rd_info(ps))
+})

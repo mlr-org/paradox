@@ -557,3 +557,19 @@ ParamSet = R6Class("ParamSet",
 as.data.table.ParamSet = function(x, ...) {
   map_dtr(x$params, as.data.table)
 }
+
+#' @export
+rd_info.ParamSet = function(ps) {
+  params = as.data.table(ps)
+  if (nrow(params) == 0L)
+    return ("Empty ParamSet")
+  params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
+  params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
+  params$range = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range)
+  params = params[, c("id", "storage_type", "default", "range", "levels")]
+  setnames(params, c("Id", "Type", "Default", "Range", "Levels"))
+  c(
+    "",
+    knitr::kable(params)
+  )
+}
