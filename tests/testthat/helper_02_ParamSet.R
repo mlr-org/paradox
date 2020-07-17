@@ -32,6 +32,15 @@ th_paramset_numeric = function() {
   )
 }
 
+th_paramset_categorical = function() {
+  ParamSet$new(
+    params = list(
+      th_param_fct(),
+      th_param_lgl()
+    )
+  )
+}
+
 th_paramset_repeated = function() {
   ps = ParamSet$new(
     params = c(

@@ -465,6 +465,18 @@ ParamSet = R6Class("ParamSet",
       private$get_member_with_idnames("is_categ", as.logical)
     },
 
+    #' @field is_numeric (`logical(1)`)\cr
+    #' Is `TRUE` if all parameters are [ParamDbl] or [ParamInt].
+    is_numeric = function() {
+      all(self$is_number)
+    },
+
+    #' @field is_categorical (`logical(1)`)\cr
+    #' Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
+    is_categorical = function() {
+      all(self$is_categ)
+    },
+
     #' @field trafo (`function(x, param_set)`)\cr
     #' Transformation function. Settable.
     #' User has to pass a `function(x, param_set)`, of the form\cr
