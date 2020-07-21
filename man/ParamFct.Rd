@@ -110,7 +110,11 @@ Set of allowed levels.}
 \item{\code{default}}{(\code{any})\cr
 Default value. Can be from the domain of the parameter or an element of
 \code{special_vals}. Has value \link{NO_DEF} if no default exists. \code{NULL} can be a
-valid default.}
+valid default.
+The value has no effect on \code{ParamSet$values} or the behavior of
+\code{ParamSet$check()}, \verb{$test()} or \verb{$assert()}.
+The \code{default} is intended to be used for documentation purposes.
+`}
 
 \item{\code{special_vals}}{(\code{list()})\cr
 Arbitrary special values this parameter is allowed to take, to make it

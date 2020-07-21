@@ -125,7 +125,11 @@ designs nor sampling.}
 \item{\code{default}}{(\code{any})\cr
 Default value. Can be from the domain of the parameter or an element of
 \code{special_vals}. Has value \link{NO_DEF} if no default exists. \code{NULL} can be a
-valid default.}
+valid default.
+The value has no effect on \code{ParamSet$values} or the behavior of
+\code{ParamSet$check()}, \verb{$test()} or \verb{$assert()}.
+The \code{default} is intended to be used for documentation purposes.
+`}
 
 \item{\code{tags}}{(\code{character()})\cr
 Arbitrary tags to group and subset parameters. Some tags serve a special
