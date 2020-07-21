@@ -241,7 +241,11 @@ designs nor sampling.</p></dd>
 <dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
 Default value. Can be from the domain of the parameter or an element of
 <code>special_vals</code>. Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a
-valid default.</p></dd>
+valid default.
+The value has no effect on <code>ParamSet$values</code> or the behavior of
+<code>ParamSet$check()</code>, <code>$test()</code> or <code>$assert()</code>.
+The <code>default</code> is intended to be used for documentation purposes.
+`</p></dd>
 
 <dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
 Arbitrary tags to group and subset parameters. Some tags serve a special
