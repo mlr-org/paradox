@@ -2,7 +2,7 @@ Type: Package
 Package: paradox
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
-Version: 0.4.0
+Version: 0.4.0-9000
 Authors@R:
     c(person(given = "Michel",
              family = "Lang",
