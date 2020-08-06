@@ -565,6 +565,7 @@ rd_info.ParamSet = function(ps) {
     return ("Empty ParamSet")
   params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
   params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
+  params$levels = map_chr(params$levels, str_collapse, n = 10L)
   params$range = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range)
   params = params[, c("id", "storage_type", "default", "range", "levels")]
   setnames(params, c("Id", "Type", "Default", "Range", "Levels"))
