@@ -45,12 +45,14 @@ Imports:
     backports,
     checkmate,
     data.table,
-    mlr3misc (>= 0.4.0),
+    mlr3misc (>= 0.4.0-9000),
     R6
 Suggests:
     knitr,
     lhs,
     testthat
+Remotes:
+    mlr-org/mlr3misc@leanify
 Encoding: UTF-8
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE, r6 = TRUE)
