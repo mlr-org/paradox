@@ -126,6 +126,7 @@ ParamSet = R6Class("ParamSet",
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
     },
 
+
     #' @description
     #' Changes the current set to the set of passed IDs.
     #'
@@ -294,6 +295,10 @@ ParamSet = R6Class("ParamSet",
       }
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
+    },
+
+    add_trafo = function(trafo) {
+      private$.trafo = append(private$.trafo, list(trafo))
     },
 
     #' @description
@@ -520,6 +525,16 @@ ParamSet = R6Class("ParamSet",
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }
       private$.values = xs
+    },
+
+    values_trafoed = function() {
+      v = self$values
+      if (self$has_trafo) {
+        for (tt in private$.trafo) {
+          v = tt(v, self)
+        }
+      }
+      return(v)
     },
 
     #' @field has_deps (`logical(1)`)\cr
