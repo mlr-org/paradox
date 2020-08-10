@@ -9,6 +9,10 @@
 #' * `CondAnyOf$new(rhs)` \cr
 #'   Parent must be any value of `rhs`.
 #'
+#'  @details
+#'  Internally we ensure that `rhs` is always a (general) vector, so either an atomic vector
+#   of scalar values or a list.
+#'
 #' @aliases CondEqual CondAnyOf
 #' @export
 Condition = R6Class("Condition",
@@ -28,6 +32,11 @@ Condition = R6Class("Condition",
     #'   Right-hand-side of the condition.
     initialize = function(type, rhs) {
       self$type = assert_string(type)
+      # in the code in ParamSet that uses Condition, we assume it can be indexed as a vector
+      # so we upcast here, eg. CondEqual will often only consist of single value
+      # that is normally an indexable vector, but ParamUty can have non-atomic objects
+      if (!is.vector(rhs))
+        rhs = list(rhs)
       self$rhs = rhs
     },
 
@@ -35,7 +44,7 @@ Condition = R6Class("Condition",
     #' Checks if condition is satisfied.
     #' Called on a vector of parent param values.
     #'
-    #' @param x (`vector()`).
+    #' @param x ().
     #' @return `logical(1)`.
     test = function(x) stop("abstract"),
 
@@ -51,7 +60,7 @@ Condition = R6Class("Condition",
     format = function() {
       sprintf("<%s:%s>", class(self)[1L], self$type)
     },
-    
+
     #' @description
     #' Printer.
     #'
@@ -66,7 +75,7 @@ Condition = R6Class("Condition",
 CondEqual = R6Class("CondEqual", inherit = Condition,
   public = list(
     initialize = function(rhs) super$initialize("equal", rhs),
-    test = function(x) !is.na(x) & x == self$rhs,
+    test = function(x) !is.na(x) & identical(x, self$rhs),
     as_string = function(lhs_chr = "x") sprintf("%s = %s", lhs_chr, as.character(self$rhs))
   )
 )

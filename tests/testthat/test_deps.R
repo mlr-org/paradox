@@ -118,3 +118,15 @@ test_that("deps make sense", {
   expect_error(ps$add_dep("th_param_lgl", "th_param_fct", CondEqual$new("d")), "Condition has infeasible values for th_param_fct")
   expect_error(ps$add_dep("th_param_lgl", "th_param_int", CondAnyOf$new(5:15)), "Condition has infeasible values for th_param_int")
 })
+
+
+# fixes issue 278
+test_that("deps can work with ParamUty", {
+  ps = ParamSet$new(params = list(
+    fun = ParamUty$new("fun", default = identity, custom_check = checkmate::check_function),
+    test = ParamLgl$new("bool"))
+  )
+  ps$add_dep("bool", on = "fun", cond = CondEqual$new(identity))
+  ps$check(list(fun = identity, bool = TRUE))
+})
+

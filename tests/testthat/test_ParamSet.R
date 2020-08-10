@@ -344,6 +344,7 @@ test_that("rd_info.ParamSet", {
 })
 
 
+# fixes issue 293
 test_that("ParamSet$values convert nums to ints for ParamInt", {
   pp = ParamInt$new("x")
   ps = ParamSet$new(list(pp))
