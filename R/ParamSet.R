@@ -506,9 +506,19 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.values)
       }
-
       self$assert(xs)
-      if (length(xs) == 0L) xs = named_list()
+      if (length(xs) == 0L) {
+        xs = named_list()
+      } else {
+        # convert all integer params really to storage type int
+        # this is not the greatest way to do this, evvery param should maybe have a ".convert"
+        # function, but this seems overkill for this single issue
+        # solves issue #293
+        int_ids = self$ids(class = "ParamInt")
+        int_ids = intersect(int_ids, names(xs))
+        if (length(int_ids) > 0L)
+          xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
+      }
       private$.values = xs
     },
 

@@ -342,3 +342,12 @@ test_that("rd_info.ParamSet", {
   ps$add(ParamFct$new("a", levels = letters[1:3]))
   expect_character(rd_info(ps))
 })
+
+
+test_that("ParamSet$values convert nums to ints for ParamInt", {
+  pp = ParamInt$new("x")
+  ps = ParamSet$new(list(pp))
+  ps$values$x = 2
+  expect_class(ps$values$x, "integer")
+})
+
