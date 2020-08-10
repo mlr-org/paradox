@@ -38,6 +38,12 @@
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
+
+    #' @field assert_values (`logical(1)`)\cr
+    #' Should values be checked for validity during assigment to active binding `$values`?
+    #' Default is `TRUE`, only switch this off if you know what you are doing.
+    assert_values = TRUE,
+
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -502,12 +508,12 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @template field_values
-    values = function(xs) {
+    values = function(xs, assert = TRUE) {
       if (missing(xs)) {
         return(private$.values)
       }
-
-      self$assert(xs)
+      if (self$assert_values)
+        self$assert(xs)
       if (length(xs) == 0L) xs = named_list()
       private$.values = xs
     },
