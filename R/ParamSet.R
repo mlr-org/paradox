@@ -508,7 +508,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @template field_values
-    values = function(xs, assert = TRUE) {
+    values = function(xs) {
       if (missing(xs)) {
         return(private$.values)
       }
