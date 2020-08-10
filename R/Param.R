@@ -8,7 +8,7 @@
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags
-#' 
+#'
 #' @section S3 methods:
 #' * `as.data.table()`\cr
 #'   [Param] -> [data.table::data.table()]\cr
@@ -76,7 +76,7 @@ Param = R6Class("Param",
     #' `special_vals`.
     #'
     #' @param x (`any`).
-    #' @return If successful `x` invisibly, if not an error message.
+    #' @return If successful `x` invisibly, if not an exception is raised.
     assert = function(x) makeAssertionFunction(self$check)(x),
 
     #' @description
