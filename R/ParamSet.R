@@ -147,7 +147,8 @@ ParamSet = R6Class("ParamSet",
         }
       }
       private$.params = private$.params[ids]
-      ids2 = union(intersect(ids, names(private$.values)), setdiff(names(private$.values), param_ids)) # restrict to ids already in pvals
+      # restrict to ids already in pvals
+      ids2 = union(intersect(ids, names(private$.values)), setdiff(names(private$.values), param_ids))
       private$.values = private$.values[ids2]
       invisible(self)
     },
@@ -204,7 +205,8 @@ ParamSet = R6Class("ParamSet",
           ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
-            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.", p1id, cond$as_string(p2id))
+            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
+              p1id, cond$as_string(p2id))
             val = xs[[p2id]]
             if (is.null(val)) {
               message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
@@ -240,7 +242,7 @@ ParamSet = R6Class("ParamSet",
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
     #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL),
+    assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL), # nolint
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
@@ -278,7 +280,7 @@ ParamSet = R6Class("ParamSet",
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
     #' @return If successful `xs` invisibly, if not an error message.
-    assert_dt = function(xdt, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt), .var.name, NULL),
+    assert_dt = function(xdt, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt), .var.name, NULL), # nolint
 
     #' @description
     #' Adds a dependency to this set, so that param `id` now depends on param `on`.
@@ -487,7 +489,8 @@ ParamSet = R6Class("ParamSet",
     #' Transformation function. Settable.
     #' User has to pass a `function(x, param_set)`, of the form\cr
     #' (named `list()`, [ParamSet]) -> named `list()`.\cr
-    #' The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+    #' The function is responsible to transform a feasible configuration into another encoding,
+    #' before potentially evaluating the configuration with the target algorithm.
     #' For the output, not many things have to hold.
     #' It needs to have unique names, and the target algorithm has to accept the configuration.
     #' For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
@@ -571,15 +574,15 @@ ParamSet = R6Class("ParamSet",
 )
 
 #' @export
-as.data.table.ParamSet = function(x, ...) {
+as.data.table.ParamSet = function(x, ...) { # nolint
   map_dtr(x$params, as.data.table)
 }
 
 #' @export
-rd_info.ParamSet = function(ps) {
+rd_info.ParamSet = function(ps) { # nolint
   params = as.data.table(ps)
   if (nrow(params) == 0L)
-    return ("Empty ParamSet")
+    return("Empty ParamSet")
   params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
   params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
   params$levels = map_chr(params$levels, str_collapse, n = 10L)

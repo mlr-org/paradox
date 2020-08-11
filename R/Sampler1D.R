@@ -97,7 +97,8 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
   ),
 
   private = list(
-    # maybe we want an option to use my truncation here, as this slows stuff down somewhat and there are some real truncated rngs in R
+    # maybe we want an option to use my truncation here, as this slows stuff down somewhat
+    # and there are some real truncated rngs in R
     .sample = function(n) {
       if (self$trunc) {
         s = private$sample_truncated(n, self$rfun)

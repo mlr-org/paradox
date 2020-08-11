@@ -350,4 +350,3 @@ test_that("ParamSet$values convert nums to ints for ParamInt", {
   ps$values$x = 2
   expect_class(ps$values$x, "integer")
 })
-
