@@ -30,6 +30,10 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
       self$upper = assert_number(upper)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    to_tune = function(lower = self$lower, upper = self$upper) {
+      private$.to_tune_param = ParamDbl$new(id = self$id, lower = lower, upper = upper)
     }
   ),
 

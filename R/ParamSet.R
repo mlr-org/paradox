@@ -322,13 +322,13 @@ ParamSet = R6Class("ParamSet",
     #'   Which fields should not be printed? Default is `"nlevels"`,
     #'   `"is_bounded"`, `"special_vals"`, `"tags"`, and `"storage_type"`.
     # printer, prints the set as a datatable, with the option to hide some cols
-    print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
+    print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type", "to_tune_param"), show_to_tune = TRUE) {
       catf(format(self))
       if (self$is_empty) {
         catf("Empty.")
       } else {
         d = as.data.table(self)
-        assert_subset(hide_cols, names(d))
+        assert_subset(hide_cols, c(names(d), "value"))
         if (self$has_deps) { # add a nice extra charvec-col to the tab, which lists all parents-ids
           dd = self$deps[, .(parents = list(unlist(on))), by = id]
           d = merge(d, dd, on = "id", all.x = TRUE)
@@ -341,6 +341,15 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(self$trafo)) {
         catf("Trafo is set.")
       } # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
+
+      if (show_to_tune) {
+        ttps = self$to_tune_param_set
+        if (!is.null(ttps)) {
+          catf("Associated search space set:")
+          print(ttps, hide_cols = c("nlevels", "is_bounded", "special_vals", "tags",
+            "storage_type", "to_tune_param", "default", "value"), show_to_tune = FALSE)
+        }
+      }
     }
   ),
 
@@ -536,6 +545,19 @@ ParamSet = R6Class("ParamSet",
     #' Has the set parameter dependencies?
     has_deps = function() {
       nrow(private$.deps) > 0L
+    },
+
+    to_tune_param_set = function() {
+      ps = list()
+      for (p in self$params) {
+        ttp = p$to_tune_param
+        if (!is.null(ttp))
+          ps = append(ps, list(ttp))
+      }
+      if (length(ps) == 0L)
+        return(NULL)
+      else
+        return(ParamSet$new(ps))
     }
   ),
 

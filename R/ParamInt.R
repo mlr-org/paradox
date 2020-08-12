@@ -41,6 +41,10 @@ ParamInt = R6Class("ParamInt", inherit = Param,
       }
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    to_tune = function(lower = self$lower, upper = self$upper) {
+      private$.to_tune_param = ParamInt$new(id = self$id, lower = lower, upper = upper)
     }
   ),
 

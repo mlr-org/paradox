@@ -28,6 +28,10 @@ ParamFct = R6Class("ParamFct", inherit = Param,
       assert_character(levels, any.missing = FALSE, unique = TRUE)
       self$levels = levels
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    to_tune = function(levels = self$levels) {
+      private$.to_tune_param = ParamInt$new(id = self$id, lower = lower, upper = upper)
     }
   ),
 

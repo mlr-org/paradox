@@ -158,12 +158,17 @@ Param = R6Class("Param",
 
     #' @field has_default (`logical(1)`)\cr
     #' Is there a default value?
-    has_default = function() !is_nodefault(self$default)
+    has_default = function() !is_nodefault(self$default),
+
+    #' @field to_tune_param ([`Param`])\cr
+    #' Information on how the search space for this param is defined in subsequent optimization.
+    to_tune_param = function() private$.to_tune_param
   ),
 
   private = list(
     .check = function(x) stop("abstract"),
-    .qunif = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$qunif
+    .qunif = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Param$qunif
+    .to_tune_param = NULL
   )
 )
 
@@ -180,6 +185,7 @@ as.data.table.Param = function(x, ...) { # nolint
     special_vals = list(x$special_vals),
     default = list(x$default),
     storage_type = x$storage_type,
-    tags = list(x$tags)
+    tags = list(x$tags),
+    to_tune_param = list(x$to_tune_param)
   )
 }

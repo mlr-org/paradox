@@ -19,6 +19,10 @@ ParamLgl = R6Class("ParamLgl", inherit = Param,
     #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(id, special_vals = list(), default = NO_DEF, tags = character()) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    to_tune = function() {
+      private$.to_tune_param = ParamLgl$new(id = self$id)
     }
   ),
 
