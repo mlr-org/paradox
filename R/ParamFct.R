@@ -24,7 +24,7 @@ ParamFct = R6Class("ParamFct", inherit = Param,
     #'
     #' @param levels (`character()`)\cr
     #'   Set of allowed levels.
-    initialize = function(id, levels, default = NO_DEF, special_vals = list(), tags = character()) {
+    initialize = function(id, levels, special_vals = list(), default = NO_DEF, tags = character()) {
       assert_character(levels, any.missing = FALSE, unique = TRUE)
       self$levels = levels
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
