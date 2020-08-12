@@ -1,3 +1,5 @@
+
+#' @export
 ps = function(..., .extra_trafo = NULL) {
   args = list(...)
   assert_list(args, names = "unique")
@@ -88,7 +90,8 @@ reduce_requires = function(requires_expr, paramset_names, own_name, evalenv) {
   recurse_expression(requires_expr)
 }
 
-p_int = p_dbl = p_fct = p_uty = function(..., requires, trafo) {
+#' @export
+p_int = p_dbl = p_fct = p_lgl = p_uty = function(..., requires, trafo) {
   constructor = switch(as.character(sys.call()[[1]]),
     p_int = ParamInt,
     p_dbl = ParamDbl,

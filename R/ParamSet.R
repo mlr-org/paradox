@@ -186,7 +186,15 @@ ParamSet = R6Class("ParamSet",
 
       # check each parameters feasibility
       for (n in ns) {
-        ch = self$params[[n]]$check(xs[[n]])
+        if (inherits(xs[[n]], "TuneToken")) {
+          if (!is.null(attr(xs[[n]], "ps"))) next  # paramset exists so we shut up
+          ch = tryCatch({
+            tunetoken_to_ps(xs[[n]], self$params[[n]])
+            TRUE
+          }, function(e) paste("tune token invalid:", conditionMessage(e)))
+        } else {
+          ch = self$params[[n]]$check(xs[[n]])
+        }
         if (test_string(ch)) { # we failed a check, return string
           return(paste0(n, ": ", ch))
         }
@@ -515,6 +523,12 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.values)
       }
+      for (n in names(xs)) {
+        if (inherits(xs[[n]], "TuneToken") && !identical(attr(xs[[n]], "pid"), n)) {
+          attr(xs[[n]], "pid") = n
+          attr(xs[[n]], "ps") = tunetoken_to_ps(xs[[n]], self$params[[n]])
+        }
+      }
       if (self$assert_values)
         self$assert(xs)
       if (length(xs) == 0L) {
@@ -525,7 +539,7 @@ ParamSet = R6Class("ParamSet",
         # function, but this seems overkill for this single issue
         # solves issue #293
         int_ids = self$ids(class = "ParamInt")
-        int_ids = intersect(int_ids, names(xs))
+        int_ids = discard(intersect(int_ids, names(xs)), function(n) inherits(xs[[n]], "TuneToken"))
         if (length(int_ids) > 0L)
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }
@@ -536,6 +550,14 @@ ParamSet = R6Class("ParamSet",
     #' Has the set parameter dependencies?
     has_deps = function() {
       nrow(private$.deps) > 0L
+    },
+
+    #' @field tuning_paramset\cr
+    #' a parameter set to tune over
+    tune_ps = function() {
+      tunetokens = map(keep(private$.values, inherits, "TuneToken"), attr, which = "ps")
+      assert_false(any(map_lgl(tunetokens, is.null)))
+      ParamSetCollection$new(tunetokens)
     }
   ),
 
