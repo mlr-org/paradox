@@ -230,8 +230,8 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 <p><div class="r"></p><pre><span class='no'>ParamFct</span>$<span class='fu'>new</span>(
   <span class='no'>id</span>,
   <span class='no'>levels</span>,
-  <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>,
   <span class='kw'>special_vals</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(),
+  <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>,
   <span class='kw'>tags</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>()
 )</pre><p></div></p>
 
@@ -243,6 +243,12 @@ Identifier of the object.</p></dd>
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
 Set of allowed levels.</p></dd>
 
+<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.</p></dd>
+
 <dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
 Default value. Can be from the domain of the parameter or an element of
 <code>special_vals</code>. Has value <a href='NO_DEF.html'>NO_DEF</a> if no default exists. <code>NULL</code> can be a
@@ -251,12 +257,6 @@ The value has no effect on <code>ParamSet$values</code> or the behavior of
 <code>ParamSet$check()</code>, <code>$test()</code> or <code>$assert()</code>.
 The <code>default</code> is intended to be used for documentation purposes.
 `</p></dd>
-
-<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
-Arbitrary special values this parameter is allowed to take, to make it
-feasible. This allows extending the domain of the parameter. Note that
-these values are only used in feasibility checks, neither in generating
-designs nor sampling.</p></dd>
 
 <dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
 Arbitrary tags to group and subset parameters. Some tags serve a special
