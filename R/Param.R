@@ -168,7 +168,7 @@ Param = R6Class("Param",
 )
 
 #' @export
-as.data.table.Param = function(x, ...) {
+as.data.table.Param = function(x, ...) { # nolint
   data.table(
     id = x$id,
     class = x$class,

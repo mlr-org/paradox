@@ -39,7 +39,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       setids = map_chr(named_sets, "set_id")
       assert_names(setids, type = "unique")
       assert_names(unlist(map(nameless_sets, function(x) names(x$params))) %??% character(0), type = "unique")
-      if (any(map_lgl(sets, "has_trafo"))) { # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
+      if (any(map_lgl(sets, "has_trafo"))) {
+        # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       }
       private$.sets = sets
@@ -66,7 +67,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (p$has_trafo) {
         stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       }
-      nameclashes = intersect(ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, names(p$params)), names(p$params)), names(self$params))
+      nameclashes = intersect(
+        ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, names(p$params)), names(p$params)),
+        names(self$params)
+      )
       if (length(nameclashes)) {
         stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
       }

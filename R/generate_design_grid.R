@@ -39,7 +39,8 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
     }
     if (!is.null(param_resolutions)) {
       assert_integerish(param_resolutions, lower = 1L, any.missing = FALSE, coerce = TRUE)
-      assert_names(names(param_resolutions), subset.of = ids_num) # user only needs to pass num params (categ resolutions are overwritten anyway)
+      # user only needs to pass num params (categ resolutions are overwritten anyway)
+      assert_names(names(param_resolutions), subset.of = ids_num)
       par_res = insert_named(par_res, param_resolutions)
     }
     ids_miss = setdiff(ids_num, names(par_res))

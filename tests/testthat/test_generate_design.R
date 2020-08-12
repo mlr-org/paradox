@@ -155,4 +155,3 @@ test_that("generate_design_grid with zero rows", {
   d = generate_design_grid(ps, resolution = 0)
   expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
 })
-

@@ -28,6 +28,4 @@ test_that("R6 values of ParamUty are cloned", {
   expect_true(ps$values$x$x)  # was changed to TRUE
   expect_true(psunclone$values$x$x)  # reference check: value was not cloned
   expect_null(psclone$values$x$x)  # was cloned before change --> should still be null
-
-
 })

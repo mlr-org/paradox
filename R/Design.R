@@ -29,7 +29,8 @@ Design = R6Class("Design",
       assert_data_table(data, ncols = param_set$length)
       assert_names(colnames(data), permutation.of = param_set$ids())
       self$param_set = param_set
-      # FIXME: this works in general but is not really fast, as we generate the col first, then overwrite it, OTOH this is really robust
+      # FIXME: this works in general but is not really fast, as we generate the col first, then overwrite it,
+      # OTOH this is really robust
       # set fixed param vals to their constant values
       # FIXME: this might also be problematic for LHS
       # do we still create an LHS like this?
@@ -44,7 +45,7 @@ Design = R6Class("Design",
       } # remove duplicated rows
     },
 
-    
+
     #' @description
     #' Helper for print outputs.
     format = function() {
@@ -106,7 +107,8 @@ Design = R6Class("Design",
         dd = ps$deps[id == param_id, ]
         for (j in seq_row(dd)) {
           pcol = self$data[[dd$on[j]]]
-          not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol)) # we are ok if parent was active and cond on parent is OK
+          # we are ok if parent was active and cond on parent is OK
+          not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol))
           set(self$data, not_ok, j = param_id, value = as(NA, param$storage_type))
         }
       }
