@@ -92,8 +92,8 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \if{html}{\out{<div class="r">}}\preformatted{ParamFct$new(
   id,
   levels,
-  default = NO_DEF,
   special_vals = list(),
+  default = NO_DEF,
   tags = character()
 )}\if{html}{\out{</div>}}
 }
@@ -107,6 +107,12 @@ Identifier of the object.}
 \item{\code{levels}}{(\code{character()})\cr
 Set of allowed levels.}
 
+\item{\code{special_vals}}{(\code{list()})\cr
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.}
+
 \item{\code{default}}{(\code{any})\cr
 Default value. Can be from the domain of the parameter or an element of
 \code{special_vals}. Has value \link{NO_DEF} if no default exists. \code{NULL} can be a
@@ -115,12 +121,6 @@ The value has no effect on \code{ParamSet$values} or the behavior of
 \code{ParamSet$check()}, \verb{$test()} or \verb{$assert()}.
 The \code{default} is intended to be used for documentation purposes.
 `}
-
-\item{\code{special_vals}}{(\code{list()})\cr
-Arbitrary special values this parameter is allowed to take, to make it
-feasible. This allows extending the domain of the parameter. Note that
-these values are only used in feasibility checks, neither in generating
-designs nor sampling.}
 
 \item{\code{tags}}{(\code{character()})\cr
 Arbitrary tags to group and subset parameters. Some tags serve a special

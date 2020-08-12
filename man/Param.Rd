@@ -160,7 +160,7 @@ is of the same \code{storage_type}, inside of the bounds or element of
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-If successful \code{x} invisibly, if not an error message.
+If successful \code{x} invisibly, if not an exception is raised.
 }
 }
 \if{html}{\out{<hr>}}

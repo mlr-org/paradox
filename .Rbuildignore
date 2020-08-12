@@ -19,3 +19,5 @@
 ^\.ccache$
 ^\.github$
 ^man-roxygen$
+^.travis.yml$
+^.lintr$

@@ -46,6 +46,15 @@ ps$add(ParamInt$new("i", lower = 0L, upper = 16L))
 
 ps$check(list(d = 2.1, f = "a", i = 3L))
 }
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{assert_values}}{(\code{logical(1)})\cr
+Should values be checked for validity during assigment to active binding \verb{$values}?
+Default is \code{TRUE}, only switch this off if you know what you are doing.}
+}
+\if{html}{\out{</div>}}
+}
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
@@ -126,7 +135,8 @@ Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
 Transformation function. Settable.
 User has to pass a \verb{function(x, param_set)}, of the form\cr
 (named \code{list()}, \link{ParamSet}) -> named \code{list()}.\cr
-The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+The function is responsible to transform a feasible configuration into another encoding,
+before potentially evaluating the configuration with the target algorithm.
 For the output, not many things have to hold.
 It needs to have unique names, and the target algorithm has to accept the configuration.
 For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
