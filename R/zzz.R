@@ -9,3 +9,5 @@
   # nocov start
   backports::import(pkgname)
 } # nocov end
+
+leanify_package()
