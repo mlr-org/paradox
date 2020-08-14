@@ -31,6 +31,14 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 \section{Super class}{
 \code{\link[paradox:ParamSet]{paradox::ParamSet}} -> \code{ParamSetCollection}
 }
+\section{Public fields}{
+\if{html}{\out{<div class="r6-fields">}}
+\describe{
+\item{\code{tuning}}{paramset\cr
+a parameter set to tune over}
+}
+\if{html}{\out{</div>}}
+}
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
@@ -48,6 +56,9 @@ Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
 When you set values, all previously set values will be unset / removed.}
+
+\item{\code{tuning}}{paramset\cr
+a parameter set to tune over}
 }
 \if{html}{\out{</div>}}
 }
