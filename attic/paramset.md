@@ -67,9 +67,6 @@ glrn$param_set$values = list(
 )
 
 glrn$param_set$tune_ps
-```
-
-```
 #> <ParamSetCollection>
 #>                      id    class lower upper      levels        default value
 #> 1:     branch.selection ParamFct    NA    NA pca,nothing <NoDefault[3]>
@@ -143,9 +140,6 @@ pars <- ps(
   degree = degree
 )
 pars
-```
-
-```
 #> <ParamSet>
 #>         id    class lower upper            levels        default        parents value
 #> 1:       a ParamInt     1    10                   <NoDefault[3]>
@@ -162,9 +156,6 @@ This is mostly implemented, see how trafo is already working:
 ```r
 set.seed(1)
 generate_design_random(pars, 1)$transpose()
-```
-
-```
 #> [[1]]
 #> [[1]]$a
 #> [1] 3
@@ -189,9 +180,6 @@ Dependencies also work
 
 ```r
 pars$deps
-```
-
-```
 #>        id      on           cond
 #> 1: degree  kernel <CondEqual[9]>
 #> 2: degree kernel2 <CondEqual[9]>
@@ -212,9 +200,6 @@ pars <- ps(
 
 # See how the addition happens after exp()ing:
 pars$trafo(list(a = 0, b = 0))
-```
-
-```
 #> $a
 #> [1] 1
 #>
@@ -247,9 +232,6 @@ The `ParamSet` has a `$tune_ps` active binding that creates the `ParamSet` for t
 
 ```r
 ll$param_set$tune_ps
-```
-
-```
 #> <ParamSetCollection>
 #>    id    class lower upper levels default value
 #> 1: cp ParamDbl     0     1           0.01
@@ -261,9 +243,6 @@ The printer of the `TuneToken` can indicate that the respective value of a `Para
 
 ```r
 print(ll$param_set$values)
-```
-
-```
 #> $minsplit
 #> [1] 10
 #>
@@ -313,9 +292,6 @@ lr$param_set$values = list(
   )
 )
 lr$param_set$tune_ps
-```
-
-```
 #> <ParamSetCollection>
 #>           id    class    lower    upper levels        default value
 #> 1: num.trees ParamDbl 2.302585 6.907755        <NoDefault[3]>
@@ -326,9 +302,6 @@ lr$param_set$tune_ps
 
 ```r
 generate_design_random(lr$param_set$tune_ps, 1)$transpose()
-```
-
-```
 #> [[1]]
 #> [[1]]$num.trees
 #> [1] 775
@@ -348,9 +321,6 @@ glrn$param_set$values$pca.affect_columns = tune(
 )
 
 generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
-```
-
-```
 #> [[1]]
 #> [[1]]$pca.affect_columns
 #> selector_invert(selector_name("Petal.Length"))
