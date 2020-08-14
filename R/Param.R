@@ -65,6 +65,12 @@ Param = R6Class("Param",
     #' @return If successful `TRUE`, if not a string with the error message.
     check = function(x) {
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
+      if (inherits(x, "TuneToken")) {
+        return(tryCatch({
+          tunetoken_to_ps(x, self)
+          TRUE
+        }, error = function(e) paste("tune token invalid:", conditionMessage(e))))
+      }
       ch = private$.check(x)
       ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
     },

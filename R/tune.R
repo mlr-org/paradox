@@ -1,85 +1,81 @@
-
-
-
 # Tune token
 #' @export
 tune = function(...) {
-  structure(list(...), call = sys.call(), class = "TuneToken")
+  call = sys.call()
+  if (...length() > 2) {
+    stop("tune() must have zero, one or two arguments.")
+  }
+  if (...length() == 2) {
+    type = "range"
+    content = (function(lower, upper) {
+      list(assert_number(lower), assert_number(upper))}
+    )(...)
+  } else if (...length() == 1) {
+    type = "other"
+    content = list(...)[[1]]
+    assert(
+      check_atomic_vector(content),
+      check_list(content, names = "unique"),
+      check_list(content, names = "unnamed"),
+      check_class(content, "ParamSet"),
+      check_class(content, "Param"),
+      check_class(content, "Domain")
+    )
+  } else {
+    type = "full"
+    content = list()
+  }
+
+  structure(list(content = content, call = call, type = type), class = "TuneToken")
 }
 
+#' @export
 print.TuneToken = function(x, ...) {
   if (!is.null(attr(x, "ps"))) {
     cat("Tuning over:\n")
     print(attr(x, "ps"))
   } else {
-    print(attr(x, "call"))
+    print(x$call)
   }
 }
 
 tunetoken_to_ps = function(tt, param) {
-  ttstr = deparse1(attr(tt, "call"))
-  if (length(tt) > 2) {
-    stopf("%s must have zero, one or two arguments.", ttstr)
-  }
-  if (length(tt) == 0) {
+  ttstr = deparse1(tt$call)
+  content = tt$content
+  if (tt$type == "full") {
     if (!param$is_bounded) {
       stopf("%s must give a range for unbounded parameter %s.", ttstr, param$id)
     }
-    tt = list(param$clone(deep = TRUE))
-  }
-  if (length(tt) == 2) {
+    content = param$clone(deep = TRUE)
+  } else if (tt$type == "range") {
     if (!param$is_number) {
       stopf("%s for non-numeric param must have one argument.", ttstr)
     }
-    if (!is.null(names(tt)) && !test_subset(names(tt),
-        c(names(formals(get(param$class)$public_methods$initialize))[2:3], ""))) {
-      stopf("%s should only have arguments `lower` and `upper`, or `nlevels`.", ttstr)
-    }
-    if (!param$test(tt[[1]]) || !param$test(tt[[2]])) {
+    if (!all(map_lgl(content, param$test))) {
       stopf("%s not compatible with param %s", ttstr, param$id)
     }
-    tt = list(do.call(get(param$class)$new, c(list(id = param$id), tt)))
+    content = get(param$class)$new(id = param$id, lower = content[[1]], upper = content[[2]])
   }
-  if (is.list(tt[[1]]) && identical(names(tt[[1]]), c("constructor", "constargs", "trafo", "requirements"))) {
-    names(tt) = param$id
-    tt = list(do.call(ps, tt))
+  if (inherits(content, "Domain")) {
+    content = do.call(ps, structure(list(content), names = param$id))
   }
-  if (inherits(tt[[1]], "Param")) {
-    tt = list(ParamSet$new(tt))
+  if (inherits(content, "Param")) {
+    content = ParamSet$new(list(content))
   }
-  if (!inherits(tt[[1]], "ParamSet")) {
-    if (!all(map_lgl(tt[[1]], param$test))) {
+  if (!inherits(content, "ParamSet")) {
+    if (!all(map_lgl(content, param$test))) {
       stopf("%s not compatible with param %s", ttstr, param$id)
     }
-    if (!is.null(names(tt)) && !identical(names(tt), "levels")) {
-      stopf("%s should only have arguments `lower` and `upper`, or `nlevels`.", ttstr)
-    }
-    if (is.character(tt[[1]])) {
-      tt = list(ParamSet$new(list(ParamFct$new(param$id, tt[[1]]))))
-    } else {
-      if (!test_atomic_vector(tt[[1]]) && !is.list(tt[[1]])) {
-        stopf("%s nlevels is not a vector or list.", ttstr)
-      }
-      if (is.null(names(tt[[1]]))) {
-        names(tt[[1]]) = as.character(tt[[1]])
-      }
-      fenv = new.env(parent = .GlobalEnv)
-      fenv$tt = tt[[1]]
-      trafo = function(x) tt[[x]]
-      environment(trafo) = fenv
-      tt = list(p_fct(names(tt[[1]]), trafo = trafo))
-      names(tt) = param$id
-      tt = list(do.call(ps, tt))
-    }
+    content = do.call(ps, structure(list(p_fct(levels = content)), names = param$id))
   } else {
-    testpoints = generate_design_grid(tt[[1]], 2)$transpose()
+    testpoints = generate_design_grid(content, 2)$transpose()
     if (!all(map_lgl(testpoints, function(x) {
         identical(names(x), param$id) && param$test(x[[1]])
       }))) {
       stopf("%s not compatible with param %s", ttstr, param$id)
     }
   }
-  tt[[1]]$set_id = ""
-  tt[[1]]
+  content$set_id = ""
+  content
 }
 

@@ -22,6 +22,7 @@
 #'   If you call `deps` on the collection, you are returned a complete table of dependencies, from sets and across sets.
 #'
 #' @include ParamSet.R
+#' @include helper.R
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
@@ -157,8 +158,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       vals
     },
 
+    #' @field trafo
     trafo = function() {
-      funenv = new.env(parent = .GlobalEnv)
       if (!self$has_trafo) return(NULL)
       sets = map(private$.sets, function(s) {
         psids = names(s$params)
@@ -172,9 +173,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         )
       })
       allnames = unlist(map(sets, "psids"))
-      funenv$sets = sets
-      funenv$allnames = allnames
-      retfun = function(x, param_set) {
+      crate(function(x, param_set) {
         results = list()
         for (s in sets) {
           trafo = s$trafo
@@ -193,13 +192,21 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         }
         res <- c(x[setdiff(names(x), allnames)], unlist(results, recursive = FALSE))
         res[c(intersect(names(res), names(x)), setdiff(names(res), names(x)))]  # put the names of unchanged parameters to the front
-      }
-      environment(retfun) = funenv
-      retfun
+      }, sets, allnames)
     },
 
     has_trafo = function() {
       any(map_lgl(private$.sets, "has_trafo"))
+    },
+
+    #' @field tuning paramset\cr
+    #' a parameter set to tune over
+    tune_ps = function() {
+      ParamSetCollection$new(map(private$.sets, function(s) {
+        tps = s$tune_ps
+        tps$set_id = s$set_id
+        tps
+      }))
     }
   ),
 

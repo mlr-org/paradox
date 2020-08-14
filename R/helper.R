@@ -30,3 +30,9 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   }
   return(xs)
 }
+
+crate = function(.fn, ...) {
+  environment(.fn) = list2env(parent = .GlobalEnv,
+    structure(list(...), names = map_chr(substitute(list(...)), as.character)[-1]))
+  .fn
+}

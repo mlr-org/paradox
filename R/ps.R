@@ -1,35 +1,33 @@
-
+#' @include helper.R
 #' @export
 ps = function(..., .extra_trafo = NULL) {
   args = list(...)
-  assert_list(args, names = "unique")
+  assert_list(args, names = "unique", types = c("Param", "Domain"))
   assert_function(.extra_trafo, null.ok = TRUE)
   params = imap(args, function(p, name) {
     if (inherits(p, "Param")) return(p)
-    assert_class(p$constructor, "R6ClassGenerator")
-    do.call(p$constructor$new, c(list(id = name), p$constargs))
+    invoke(p$constructor$new, id = name, .args = p$constargs)
   })
 
   paramset = ParamSet$new(params)
 
-  requirements = unlist(unname(imap(discard(args, function(x) inherits(x, "Param") || is.null(x$requirements)),
-    function(p, name) {
-      reqinfo = assert_list(p$requirements)
-      reduce_requires(reqinfo$requires_expr, names(args), name, reqinfo$env)
-    })), recursive = FALSE)
-
-  map(requirements, do.call, what = paramset$add_dep)
+  imap(args, function(p, name) {
+    if (inherits(p, "Param") || is.null(p$requirements)) return(NULL)
+    map(p$requirements, function(req) {
+      if (!req$on %in% names(args) || req$on == name) {
+        stopf("Parameter %s can not depend on %s.", name, req$on)
+      }
+      invoke(paramset$add_dep, id = name, .args = req)
+    })
+  })
 
   trafos = map(discard(args, function(x) inherits(x, "Param") || is.null(x$trafo)),
     function(p) {
       assert_function(p$trafo)
     })
-  if (length(trafos) || !is.null(.extra_trafo)) {
-    trafoenv = new.env(parent = .GlobalEnv)
-    trafoenv$trafos = trafos
-    trafoenv$.extra_trafo = .extra_trafo
 
-    trafofun = function(x, param_set) {
+  if (length(trafos) || !is.null(.extra_trafo)) {
+    paramset$trafo = crate(function(x, param_set) {
       for (trafoing in names(trafos)) {
         if (!is.null(x[[trafoing]])) {
           x[[trafoing]] = trafos[[trafoing]](x[[trafoing]])
@@ -37,26 +35,80 @@ ps = function(..., .extra_trafo = NULL) {
       }
       if (!is.null(.extra_trafo)) x = .extra_trafo(x, param_set)
       x
-    }
-    environment(trafofun) = trafoenv
-    paramset$trafo = trafofun
+    }, trafos, .extra_trafo)
   }
   paramset
 }
 
-reduce_requires = function(requires_expr, paramset_names, own_name, evalenv) {
-  if (tryCatch(length(requires_expr) == 1 ||
-        as.character(requires_expr[[1]]) %in% c("quote", "expression"),
-      error = function(e) FALSE)) {
-    requires_expr = eval(requires_expr, evalenv)
+
+#' @export
+p_int = p_dbl = p_fct = p_lgl = p_uty = p_lgl = function(..., requires = NULL, trafo = NULL) {
+  constargs = list(...)
+  if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
+
+  constructor = switch(as.character(sys.call()[[1]]),
+    p_int = ParamInt,
+    p_dbl = ParamDbl,
+    p_uty = ParamUty,
+    p_lgl = ParamLgl,
+    p_fct = {
+      extracted = (function(id, levels, ...) {
+        list(levels = levels, rest = list(...))
+      })(id = "ID", ...)
+      levels = extracted$levels
+      if (!is.character(levels)) {
+        assert(check_atomic_vector(levels), check_list(levels))
+        if (is.null(names(levels))) {
+          names(levels) = as.character(levels)
+        }
+        trafo = crate(function(x) {
+          x = levels[[x]]
+          if (!is.null(trafo)) x = trafo(x)
+          x
+        }, trafo, levels)
+        constargs = extracted$rest
+        constargs$levels = names(levels)
+      }
+      ParamFct
+    },
+    stop("Function must not be renamed.")
+  )
+
+  # check that this doesn't error
+  invoke(constructor$new, id = "ID", .args = constargs)
+
+  requires_expr = substitute(requires)
+  if (length(requires_expr) == 1 ||
+      isTRUE(as.character(requires_expr[[1]]) %in% c("quote", "expression"))) {
+    requires_expr = requires
   }
 
-  throw = function() stopf("Requirement of parameter %s is broken: '%s'", own_name, deparse1(requires_expr))
+  structure(list(
+    constructor = constructor,
+    constargs = constargs,
+    trafo = assert_function(trafo, null.ok = TRUE),
+    requirements = parse_requires(requires_expr, environment())
+  ), class = "Domain")
+}
+
+#' @export
+print.Domain = function(x, ...) {
+  print(as.call(c(list(substitute(x$new, list(x = as.symbol(x$constructor$classname))), id = "<<ID>>"), x$constargs)))
+}
+
+parse_requires = function(requires_expr, evalenv) {
+  if (is.null(requires_expr)) return(NULL)
+  throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(requires_expr), sprintf(":\n%s", msg))
 
   if (!is.language(requires_expr)) throw()
 
+  symbol_paren = as.symbol("(")
+  symbol_equal = as.symbol("==")
+  symbol_and = as.symbol("&&")
+  symbol_in = as.symbol("%in%")
+
   unpack_parens = function(expr) {
-    while (is.recursive(expr) && length(expr) && identical(expr[[1]], as.symbol("("))) expr = expr[[2]]
+    while (is.recursive(expr) && length(expr) && identical(expr[[1]], symbol_paren)) expr = expr[[2]]
     expr
   }
 
@@ -64,10 +116,13 @@ reduce_requires = function(requires_expr, paramset_names, own_name, evalenv) {
     cur_expr = unpack_parens(cur_expr)
     constructor = NULL
     if (!is.recursive(cur_expr) || length(cur_expr) <= 1) throw()
-    if (identical(cur_expr[[1]], as.symbol("&&"))) return(c(recurse_expression(cur_expr[[2]]), recurse_expression(cur_expr[[3]])))
-    if (identical(cur_expr[[1]], as.symbol("=="))) {
+    if (identical(cur_expr[[1]], symbol_and)) {
+      return(c(recurse_expression(cur_expr[[2]]), recurse_expression(cur_expr[[3]])))
+    }
+
+    if (identical(cur_expr[[1]], symbol_equal)) {
       constructor = CondEqual
-    } else if (identical(cur_expr[[1]], as.symbol("%in%"))) {
+    } else if (identical(cur_expr[[1]], symbol_in)) {
       constructor = CondAnyOf
     } else {
       throw()
@@ -75,35 +130,13 @@ reduce_requires = function(requires_expr, paramset_names, own_name, evalenv) {
 
     comparand = unpack_parens(cur_expr[[2]])
     value = unpack_parens(cur_expr[[3]])
-    if (identical(cur_expr[[1]], as.symbol("==")) && is.symbol(value) && as.character(value) %in% paramset_names) {
-      tmp <- comparand
-      comparand <- value
-      value <- tmp
-    }
-    if (!is.symbol(comparand)) throw()
-    comparand <- as.character(comparand)
-    if (!comparand %in% paramset_names || comparand == own_name) throw()
-    value <- eval(value, evalenv)
-    list(list(own_name, comparand, constructor$new(value)))
+
+    if (!is.symbol(comparand)) throw("LHS must be a parameter name")
+    comparand = as.character(comparand)
+    value = eval(value, envir = evalenv)
+    list(list(on = comparand, cond = constructor$new(value)))
   }
 
   recurse_expression(requires_expr)
 }
 
-#' @export
-p_int = p_dbl = p_fct = p_lgl = p_uty = function(..., requires, trafo) {
-  constructor = switch(as.character(sys.call()[[1]]),
-    p_int = ParamInt,
-    p_dbl = ParamDbl,
-    p_fct = ParamFct,
-    p_uty = ParamUty,
-    stop("Function must not be renamed.")
-  )
-
-  list(
-    constructor = constructor,
-    constargs = list(...),
-    trafo = if (!missing(trafo)) assert_function(trafo),
-    requirements = if (!missing(requires)) list(requires_expr = substitute(requires), env = parent.frame())
-  )
-}
