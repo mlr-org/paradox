@@ -134,6 +134,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @template field_values
     values = function(xs) {
       sets = private$.sets
+      names(sets) = map_chr(sets, "set_id")
       if (!missing(xs)) {
         assert_list(xs)
         self$assert(xs) # make sure everything is valid and feasible
