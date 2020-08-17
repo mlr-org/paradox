@@ -76,7 +76,15 @@ glrn$param_set$values = list(
 )
 
 glrn$param_set$tune_ps
-#> Error in .subset2(public_bind_env, "initialize")(...): Assertion on 'params' failed: May only contain the following types: {Param}, but element 1 has type 'character'.
+#> <ParamSet>
+#>                      id    class lower upper      levels        default value
+#> 1:     branch.selection ParamFct    NA    NA pca,nothing <NoDefault[3]>      
+#> 2:    anova.filter.frac ParamDbl   0.1     1             <NoDefault[3]>      
+#> 3:             svm.cost ParamDbl -12.0     4             <NoDefault[3]>      
+#> 4:          xgb.nrounds ParamInt   1.0   500             <NoDefault[3]>      
+#> 5:              rf.mtry ParamInt   1.0    20             <NoDefault[3]>      
+#> 6: lrn_branch.selection ParamFct    NA    NA  svm,xgb,rf <NoDefault[3]>      
+#> Trafo is set.
 ```
 
 ## The Solution
@@ -173,7 +181,7 @@ generate_design_random(pars, 1)$transpose()
 #> [[1]]$c
 #> function (x) 
 #> x
-#> <bytecode: 0x559dd8d273d0>
+#> <bytecode: 0x563f67539520>
 #> <environment: namespace:base>
 ```
 
@@ -320,7 +328,9 @@ glrn$param_set$values$pca.affect_columns = tune(
 )
 
 generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
-#> Error in .subset2(public_bind_env, "initialize")(...): Assertion on 'params' failed: May only contain the following types: {Param}, but element 1 has type 'character'.
+#> [[1]]
+#> [[1]]$pca.affect_columns
+#> selector_invert(selector_name("Petal.Length"))
 ```
 
 #### Internals
