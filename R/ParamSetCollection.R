@@ -22,7 +22,6 @@
 #'   If you call `deps` on the collection, you are returned a complete table of dependencies, from sets and across sets.
 #'
 #' @include ParamSet.R
-#' @include helper.R
 #' @export
 ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   public = list(
@@ -42,7 +41,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_names(unlist(map(nameless_sets, function(x) names(x$params))) %??% character(0), type = "unique")
       if (any(map_lgl(sets, "has_trafo"))) {
         # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
-        # stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       }
       private$.sets = sets
       self$set_id = ""
@@ -66,7 +65,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         stopf("Setid '%s' already present in collection!", p$set_id)
       }
       if (p$has_trafo) {
-        # stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
+        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
       }
       nameclashes = intersect(
         ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, names(p$params)), names(p$params)),
@@ -158,55 +157,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       vals
     },
 
-    #' @field trafo
-    trafo = function() {
-      if (!self$has_trafo) return(NULL)
-      sets = map(private$.sets, function(s) {
-        psids = names(s$params)
-        if (s$set_id != "") {
-          psids = sprintf("%s.%s", s$set_id, psids)
-        }
-        list(
-          set_id = s$set_id,
-          trafo = s$trafo,
-          psids = psids
-        )
-      })
-      allnames = unlist(map(sets, "psids"))
-      crate(function(x, param_set) {
-        results = list()
-        for (s in sets) {
-          trafo = s$trafo
-          pv = x[intersect(s$psids, names(x))]
-          if (!is.null(trafo)) {
-            # retrieve sublist for each set, then assign it in set (after removing prefix)
-            if (s$set_id != "") {
-              names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
-            }
-            pv = trafo(pv)
-            if (s$set_id != "") {
-              names(pv) = sprintf("%s.%s", s$set_id, names(pv))
-            }
-          }
-          results[[length(results) + 1]] = pv
-        }
-        res <- c(x[setdiff(names(x), allnames)], unlist(results, recursive = FALSE))
-        res[c(intersect(names(res), names(x)), setdiff(names(res), names(x)))]  # put the names of unchanged parameters to the front
-      }, sets, allnames)
-    },
-
-    has_trafo = function() {
-      any(map_lgl(private$.sets, "has_trafo"))
-    },
-
     #' @field tuning paramset\cr
     #' a parameter set to tune over
     tune_ps = function() {
-      ParamSetCollection$new(map(private$.sets, function(s) {
-        tps = s$tune_ps
-        tps$set_id = s$set_id
-        tps
-      }))
+      pars = ps_union(map(private$.sets, "tune_ps"))
+      pars$set_id = self$set_id
+      # here deps should be added if PSC ever supports them
     }
   ),
 

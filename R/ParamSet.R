@@ -543,11 +543,12 @@ ParamSet = R6Class("ParamSet",
     #' @field tuning_paramset\cr
     #' a parameter set to tune over
     tune_ps = function() {
-      ParamSetCollection$new(
-        imap(keep(private$.values, inherits, "TuneToken"), function(value, pn) {
-          tunetoken_to_ps(value, self$params[[pn]])
-        })
-      )
+      pars = ps_union(imap(keep(private$.values, inherits, "TuneToken"), function(value, pn) {
+        tunetoken_to_ps(value, self$params[[pn]])
+      }))
+      pars$set_id = self$set_id
+      map(transpose_list(self$deps[id %in% names(pars$params) & on %in% names(pars$params)]), do.call, what = pars$add_dep)
+      pars
     }
   ),
 

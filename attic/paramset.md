@@ -1,3 +1,12 @@
+---
+title: "ParamSet Tune Short Forms"
+author: "Martin Binder"
+date: "8/14/2020"
+output: pdf_document
+---
+
+
+
 ## The Problem
 
 We currently have to write a lot to define a tuning paramset. E.g. our presentation for pipelines tuning tunes a stacked learner, and the slide looks like this:
@@ -67,15 +76,7 @@ glrn$param_set$values = list(
 )
 
 glrn$param_set$tune_ps
-#> <ParamSetCollection>
-#>                      id    class lower upper      levels        default value
-#> 1:     branch.selection ParamFct    NA    NA pca,nothing <NoDefault[3]>
-#> 2:    anova.filter.frac ParamDbl   0.1     1             <NoDefault[3]>
-#> 3:             svm.cost ParamDbl -12.0     4             <NoDefault[3]>
-#> 4:          xgb.nrounds ParamInt   1.0   500             <NoDefault[3]>
-#> 5:              rf.mtry ParamInt   1.0    20             <NoDefault[3]>
-#> 6: lrn_branch.selection ParamFct    NA    NA  svm,xgb,rf <NoDefault[3]>
-#> Trafo is set.
+#> Error in .subset2(public_bind_env, "initialize")(...): Assertion on 'params' failed: May only contain the following types: {Param}, but element 1 has type 'character'.
 ```
 
 ## The Solution
@@ -142,12 +143,12 @@ pars <- ps(
 pars
 #> <ParamSet>
 #>         id    class lower upper            levels        default        parents value
-#> 1:       a ParamInt     1    10                   <NoDefault[3]>
-#> 2:       c ParamFct    NA    NA  identity,log,exp <NoDefault[3]>
-#> 3:  degree ParamInt     1     4                   <NoDefault[3]> kernel,kernel2
-#> 4:  kernel ParamFct    NA    NA polynomial,radial <NoDefault[3]>
-#> 5: kernel2 ParamFct    NA    NA polynomial,radial <NoDefault[3]>
-#> 6: kernel3 ParamFct    NA    NA polynomial,radial <NoDefault[3]>
+#> 1:       a ParamInt     1    10                   <NoDefault[3]>                     
+#> 2:       c ParamFct    NA    NA  identity,log,exp <NoDefault[3]>                     
+#> 3:  degree ParamInt     1     4                   <NoDefault[3]> kernel,kernel2      
+#> 4:  kernel ParamFct    NA    NA polynomial,radial <NoDefault[3]>                     
+#> 5: kernel2 ParamFct    NA    NA polynomial,radial <NoDefault[3]>                     
+#> 6: kernel3 ParamFct    NA    NA polynomial,radial <NoDefault[3]>                     
 #> Trafo is set.
 ```
 
@@ -159,20 +160,20 @@ generate_design_random(pars, 1)$transpose()
 #> [[1]]
 #> [[1]]$a
 #> [1] 3
-#>
+#> 
 #> [[1]]$kernel
 #> [1] "polynomial"
-#>
+#> 
 #> [[1]]$kernel2
 #> [1] "radial"
-#>
+#> 
 #> [[1]]$kernel3
 #> [1] "radial"
-#>
+#> 
 #> [[1]]$c
-#> function (x)
+#> function (x) 
 #> x
-#> <bytecode: 0x555dbac78110>
+#> <bytecode: 0x559dd8d273d0>
 #> <environment: namespace:base>
 ```
 
@@ -202,10 +203,10 @@ pars <- ps(
 pars$trafo(list(a = 0, b = 0))
 #> $a
 #> [1] 1
-#>
+#> 
 #> $b
 #> [1] 1
-#>
+#> 
 #> $c
 #> [1] 2
 ```
@@ -232,7 +233,7 @@ The `ParamSet` has a `$tune_ps` active binding that creates the `ParamSet` for t
 
 ```r
 ll$param_set$tune_ps
-#> <ParamSetCollection>
+#> <ParamSet>
 #>    id    class lower upper levels default value
 #> 1: cp ParamDbl     0     1           0.01
 ```
@@ -245,7 +246,7 @@ The printer of the `TuneToken` can indicate that the respective value of a `Para
 print(ll$param_set$values)
 #> $minsplit
 #> [1] 10
-#>
+#> 
 #> $cp
 #> Tuning over:
 #> <ParamSet>
@@ -292,20 +293,18 @@ lr$param_set$values = list(
   )
 )
 lr$param_set$tune_ps
-#> <ParamSetCollection>
+#> <ParamSet>
 #>           id    class    lower    upper levels        default value
-#> 1: num.trees ParamDbl 2.302585 6.907755        <NoDefault[3]>
-#> 2: reg.sepal ParamDbl 0.000000 1.000000        <NoDefault[3]>
-#> 3: reg.petal ParamDbl 0.000000 1.000000        <NoDefault[3]>
+#> 1: num.trees ParamDbl 2.302585 6.907755        <NoDefault[3]>      
+#> 2: reg.sepal ParamDbl 0.000000 1.000000        <NoDefault[3]>      
+#> 3: reg.petal ParamDbl 0.000000 1.000000        <NoDefault[3]>      
 #> Trafo is set.
-```
 
-```r
 generate_design_random(lr$param_set$tune_ps, 1)$transpose()
 #> [[1]]
 #> [[1]]$num.trees
 #> [1] 775
-#>
+#> 
 #> [[1]]$regularization.factor
 #> [1] 0.6607978 0.6607978 0.6291140 0.6291140
 ```
@@ -321,9 +320,7 @@ glrn$param_set$values$pca.affect_columns = tune(
 )
 
 generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
-#> [[1]]
-#> [[1]]$pca.affect_columns
-#> selector_invert(selector_name("Petal.Length"))
+#> Error in .subset2(public_bind_env, "initialize")(...): Assertion on 'params' failed: May only contain the following types: {Param}, but element 1 has type 'character'.
 ```
 
 #### Internals
