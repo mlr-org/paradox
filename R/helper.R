@@ -48,6 +48,7 @@ ps_union = function(sets) {
       s = ParamSet$new(map(s$params, function(p) {  # this works even if s is a PSC
         p = p$clone()
         p$id = sprintf("%s.%s", sid, p$id)
+        p
       }))
       names(si$forward_name_translation) = names(s$params)
       si$psids = names(s$params)

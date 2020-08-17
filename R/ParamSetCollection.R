@@ -162,6 +162,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     tune_ps = function() {
       pars = ps_union(map(private$.sets, "tune_ps"))
       pars$set_id = self$set_id
+      pars
       # here deps should be added if PSC ever supports them
     }
   ),
