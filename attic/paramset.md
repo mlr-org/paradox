@@ -257,9 +257,7 @@ print(ll$param_set$values)
 #> 
 #> $cp
 #> Tuning over:
-#> <ParamSet>
-#>    id    class lower upper levels default value
-#> 1: cp ParamDbl     0     1           0.01
+#> <entire parameter range>
 ```
 
 Nomenclature: We call `ll$param_set$params$cp` the *underlying parameter*, and `ll$param_set$tune_ps$cp` the *tuning parameter*. They could have different names or types if a `$trafo` is involved.
