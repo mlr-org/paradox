@@ -74,13 +74,17 @@ glrn$param_set$values = list(
   svm.type = "C-classification",
   svm.kernel = "radial"
 )
-#> Error in (function (xs) : Assertion on 'xs' failed: svm.cost: tune token invalid: tune(p_dbl(-12, 4, trafo = function(x) 2^x)) not compatible with param svm.cost.
 
 glrn$param_set$tune_ps
-#> Warning in structure(names(s$params), names = names(s$params)): Calling 'structure(NULL, *)' is deprecated, as NULL cannot have attributes.
-#>   Consider 'structure(list(), *)' instead.
 #> <ParamSet>
-#> Empty.
+#>                      id    class lower upper      levels        default value
+#> 1:     branch.selection ParamFct    NA    NA pca,nothing <NoDefault[3]>      
+#> 2:    anova.filter.frac ParamDbl   0.1     1             <NoDefault[3]>      
+#> 3:             svm.cost ParamDbl -12.0     4             <NoDefault[3]>      
+#> 4:          xgb.nrounds ParamInt   1.0   500             <NoDefault[3]>      
+#> 5:              rf.mtry ParamInt   1.0    20             <NoDefault[3]>      
+#> 6: lrn_branch.selection ParamFct    NA    NA  svm,xgb,rf <NoDefault[3]>      
+#> Trafo is set.
 ```
 
 ## The Solution
@@ -294,17 +298,21 @@ lr$param_set$values = list(
     )
   )
 )
-#> Error: Assertion failed. One of the following must apply:
-#>  * check_atomic_vector(content): Must be of type 'atomic vector', not 'ParamSet/R6'
-#>  * check_atomic_vector(content): Must be of type 'atomic vector', not 'ParamSet/R6'
-#>  * check_list(content): Must be of type 'list', not 'ParamSet/R6'
-#>  * check_list(content): Must be of type 'list', not 'ParamSet/R6'
 lr$param_set$tune_ps
 #> <ParamSet>
-#> Empty.
+#>           id    class    lower    upper levels        default value
+#> 1: num.trees ParamDbl 2.302585 6.907755        <NoDefault[3]>      
+#> 2: reg.sepal ParamDbl 0.000000 1.000000        <NoDefault[3]>      
+#> 3: reg.petal ParamDbl 0.000000 1.000000        <NoDefault[3]>      
+#> Trafo is set.
 
 generate_design_random(lr$param_set$tune_ps, 1)$transpose()
-#> list()
+#> [[1]]
+#> [[1]]$num.trees
+#> [1] 775
+#> 
+#> [[1]]$regularization.factor
+#> [1] 0.6607978 0.6607978 0.6291140 0.6291140
 ```
 
 `mlr3pipelines` has the `affect_columns` parameter, which is a `ParamUty` that takes any object (though often a `Selector` object). Suppose we want to do `PCA` on all columns except one of the `iris` columns:
@@ -316,10 +324,11 @@ glrn = as_learner(po("pca") %>>% lrn("classif.rpart"))
 glrn$param_set$values$pca.affect_columns = tune(
   p_fct(ts$feature_names, trafo = function(x) selector_invert(selector_name(x)))
 )
-#> Error in (function (xs) : Assertion on 'xs' failed: pca.affect_columns: tune token invalid: tune(p_fct(ts$feature_names, trafo = function(x) selector_invert(selector_name(x)))) not compatible with param pca.affect_columns.
 
 generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
-#> list()
+#> [[1]]
+#> [[1]]$pca.affect_columns
+#> selector_invert(selector_name("Petal.Length"))
 ```
 
 #### Internals
