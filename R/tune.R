@@ -12,7 +12,7 @@ tune = function(...) {
     )(...)
   } else if (...length() == 1) {
     content = list(...)[[1]]
-    if (test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
+    if (!test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
       assert(
         check_atomic_vector(content, names = "unnamed"),
         check_atomic_vector(content, names = "unique"),
