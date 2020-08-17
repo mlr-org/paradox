@@ -5,8 +5,13 @@ ps = function(..., .extra_trafo = NULL) {
   assert_list(args, names = "unique", types = c("Param", "Domain"))
   assert_function(.extra_trafo, null.ok = TRUE)
   params = imap(args, function(p, name) {
-    if (inherits(p, "Param")) return(p)
-    invoke(p$constructor$new, id = name, .args = p$constargs)
+    if (inherits(p, "Param")) {
+      p = p$clone(deep = TRUE)
+      p$id = name
+      p
+    } else {
+      invoke(p$constructor$new, id = name, .args = p$constargs)
+    }
   })
 
   paramset = ParamSet$new(params)
