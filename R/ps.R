@@ -45,7 +45,6 @@ ps = function(..., .extra_trafo = NULL) {
 p_int = p_dbl = p_fct = p_lgl = p_uty = p_lgl = function(..., requires = NULL, trafo = NULL) {
   constargs = list(...)
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
-
   constructor = switch(as.character(sys.call()[[1]]),
     p_int = ParamInt,
     p_dbl = ParamDbl,
@@ -87,13 +86,15 @@ p_int = p_dbl = p_fct = p_lgl = p_uty = p_lgl = function(..., requires = NULL, t
     constructor = constructor,
     constargs = constargs,
     trafo = assert_function(trafo, null.ok = TRUE),
-    requirements = parse_requires(requires_expr, environment())
+    requirements = parse_requires(requires_expr, environment()),
+    callsymbol = sys.call()[[1]],
+    reqtraforep = discard(as.list(sys.call())[c("trafo", "requires")], is.null)
   ), class = "Domain")
 }
 
 #' @export
 print.Domain = function(x, ...) {
-  print(as.call(c(list(substitute(x$new, list(x = as.symbol(x$constructor$classname))), id = "<<ID>>"), x$constargs)))
+  print(as.call(c(list(x$callsymbol), x$constargs, x$reqtraforep)))
 }
 
 parse_requires = function(requires_expr, evalenv) {

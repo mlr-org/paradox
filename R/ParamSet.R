@@ -515,11 +515,10 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.values)
       }
-      for (n in names(keep(xs, inherits, "TuneToken"))) {
-        attr(xs[[n]], "ps") = tunetoken_to_ps(xs[[n]], self$params[[n]])
-      }
-      if (self$assert_values)
+      if (self$assert_values) {
         self$assert(xs)
+        self$tune_ps
+      }
       if (length(xs) == 0L) {
         xs = named_list()
       } else {

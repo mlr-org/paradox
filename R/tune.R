@@ -13,10 +13,15 @@ tune = function(...) {
   } else if (...length() == 1) {
     type = "other"
     content = list(...)[[1]]
+    if (!inherits(content, "ParamSet") && !inherits(content, "Param") && !inherits(content, "Domain")) {
+      assert(
+        check_atomic_vector(content),
+        check_list(content, names = "unique"),
+        check_list(content, names = "unnamed")
+      )
+      content = p_fct(levels = content)
+    }
     assert(
-      check_atomic_vector(content),
-      check_list(content, names = "unique"),
-      check_list(content, names = "unnamed"),
       check_class(content, "ParamSet"),
       check_class(content, "Param"),
       check_class(content, "Domain")
@@ -31,12 +36,12 @@ tune = function(...) {
 
 #' @export
 print.TuneToken = function(x, ...) {
-  if (!is.null(attr(x, "ps"))) {
-    cat("Tuning over:\n")
-    print(attr(x, "ps"))
-  } else {
-    print(x$call)
-  }
+  cat("Tuning over:\n")
+  switch(x$type,
+    full = cat("<entire parameter range>\n"),
+    range = catf("range [%s, %s]", x$content[[1]], x$content[[2]]),
+    print(x$content)
+  )
 }
 
 tunetoken_to_ps = function(tt, param) {
@@ -63,10 +68,7 @@ tunetoken_to_ps = function(tt, param) {
     content = ParamSet$new(list(content))
   }
   if (!inherits(content, "ParamSet")) {
-    if (!all(map_lgl(content, param$test))) {
-      stopf("%s not compatible with param %s", ttstr, param$id)
-    }
-    content = do.call(ps, structure(list(p_fct(levels = content)), names = param$id))
+    stop("TuneToken is an invalid structure.")  # should not happen if the user doesn't manipulate the object.
   } else {
     testpoints = generate_design_grid(content, 2)$transpose()
     if (!all(map_lgl(testpoints, function(x) {
