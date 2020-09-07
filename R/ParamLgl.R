@@ -1,38 +1,12 @@
 #' @title Logical Parameter
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object inheriting from [Param].
-#'
 #' @description
 #' A [Param] to describe logical parameters.
 #'
-#' @section Construction:
-#' ```
-#' ParamLgl$new(id, special_vals = list(), default = NO_DEF, tags = character())
-#' ```
-#' See Arguments of [Param].
-#'
-#' @section Fields:
-#' Fields of [Param], and additionally:
-#'
-#' * `lower` :: `numeric(1)`\cr
-#'   Lower bound.
-#'   Always `NA` for this parameter.
-#' * `upper` :: `numeric(1)`\cr
-#'   Upper bound.
-#'   Always `NA` for this parameter.
-#' * `levels` :: `logical(2)`\cr
-#'   Allowed levels.
-#'   Always `c(TRUE, FALSE)` for this parameter.
-#' * `nlevels` :: `Inf` \cr
-#'   Number of categorical levels.
-#'   Always 2 for this parameter.
-#' * `is_bounded` :: `TRUE`\cr
-#'   Are the bounds finite?
-#'   Always `TRUE` for this parameter.
-#'
-#' @section Methods:
-#' See [Param].
+#' @template param_id
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
 #'
 #' @family Params
 #' @include Param.R
@@ -41,17 +15,25 @@
 #' ParamLgl$new("flag", default = TRUE)
 ParamLgl = R6Class("ParamLgl", inherit = Param,
   public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(id, special_vals = list(), default = NO_DEF, tags = character()) {
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
 
   active = list(
+    #' @template field_lower
     lower = function() NA_real_,
+    #' @template field_upper
     upper = function() NA_real_,
+    #' @template field_levels
     levels = function() c(TRUE, FALSE),
+    #' @template field_nlevels
     nlevels = function() 2L,
+    #' @template field_is_bounded
     is_bounded = function() TRUE,
+    #' @template field_storage_type
     storage_type = function() "logical"
   ),
 

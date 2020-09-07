@@ -31,6 +31,7 @@ test_that("simple active bindings work", {
     expect_names(names(ps$default), subset.of = ps$ids(), info = info)
   }
   ps = th_paramset_full()
+  expect_output(print(ps), "<ParamSet>")
   expect_equal(ps$ids(), c("th_param_int", "th_param_dbl", "th_param_fct", "th_param_lgl"))
   expect_equal(ps$lower, c(th_param_int = -10, th_param_dbl = -10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
   expect_equal(ps$upper, c(th_param_int = 10, th_param_dbl = 10, th_param_fct = NA_real_, th_param_lgl = NA_real_))
@@ -123,10 +124,10 @@ test_that("ParamSets cannot have duplicated ids", {
 test_that("ParamSet$print", {
   ps = ParamSet$new()
   ps$set_id = "foo"
-  expect_output(print(ps), "ParamSet: foo")
+  expect_output(print(ps), "<ParamSet:foo>")
   expect_output(print(ps), "Empty")
   ps = th_paramset_numeric()
-  expect_output(print(ps), "ParamSet:")
+  expect_output(print(ps), "<ParamSet>")
   s = capture_output(print(ps))
   expect_true(grepl("ParamInt", s, fixed = TRUE))
   expect_true(grepl("ParamDbl", s, fixed = TRUE))
@@ -140,7 +141,7 @@ test_that("ParamSet$print", {
     th_paramset_untyped()
   )
   for (ps in ps_list) {
-    expect_output(print(ps), "ParamSet:")
+    expect_output(print(ps), "<ParamSet>")
   }
 })
 
@@ -238,11 +239,15 @@ test_that("ParamSet$default", {
   expect_equal(ps$default, list(x = NULL))
 })
 
-test_that("is_number / is_categ", {
+test_that("is_number / is_categ / is_numeric / is_categoric", {
   expect_equal(th_paramset_full()$is_number,
     c(th_param_int = TRUE, th_param_dbl = TRUE, th_param_fct = FALSE, th_param_lgl = FALSE))
   expect_equal(th_paramset_full()$is_categ,
     c(th_param_int = FALSE, th_param_dbl = FALSE, th_param_fct = TRUE, th_param_lgl = TRUE))
+  expect_equal(th_paramset_numeric()$is_numeric, TRUE)
+  expect_equal(th_paramset_full()$is_numeric, FALSE)
+  expect_equal(th_paramset_categorical()$is_categorical, TRUE)
+  expect_equal(th_paramset_full()$is_categorical, FALSE)
 })
 
 test_that("ParamSet$ids", {
@@ -305,4 +310,43 @@ test_that("paramset clones properly", {
 
   expect_equal(ps$deps$cond[[1]]$rhs, c("b", "c"))
   expect_equal(ps2$deps$cond[[1]]$rhs, c("a", "b"))
+})
+
+test_that("ParamSet$check_dt", {
+  ps = th_paramset_numeric()
+  xdt = data.table()
+  expect_true(ps$check_dt(xdt))
+  xdt = data.table(th_param_int = c(1, 1), th_param_dbl = c(1, 1))
+  expect_true(ps$check_dt(xdt))
+  xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 1))
+  expect_true(ps$check_dt(xdt))
+  xdt = data.table(th_param_dbl = c(20, 20), th_param_int = c(1, 1))
+  expect_character(ps$check_dt(xdt), fixed = "th_param_dbl: Element 1 is not <= 10")
+  xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 20))
+  expect_character(ps$check_dt(xdt), fixed = "th_param_int: Element 1 is not <= 10")
+  xdt = data.table(th_param_dbl = c(1, 1), new_param = c(1, 20))
+  expect_character(ps$check_dt(xdt), fixed = "not available")
+  ps = ParamLgl$new("x")$rep(2)
+  ps$add_dep("x_rep_2", "x_rep_1", CondEqual$new(TRUE))
+  xdt = data.table(x_rep_1 = c(TRUE, TRUE), x_rep_2 = c(FALSE, TRUE))
+  expect_true(ps$check_dt(xdt))
+  xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, FALSE))
+  expect_character(ps$check_dt(xdt), fixed = "x_rep_1 = TRUE")
+  xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
+  expect_true(ps$check_dt(xdt))
+})
+
+test_that("rd_info.ParamSet", {
+  ps = ParamSet$new()
+  expect_character(rd_info(ps))
+  ps$add(ParamFct$new("a", levels = letters[1:3]))
+  expect_character(rd_info(ps))
+})
+
+
+test_that("ParamSet$values convert nums to ints for ParamInt", {
+  pp = ParamInt$new("x")
+  ps = ParamSet$new(list(pp))
+  ps$values$x = 2
+  expect_class(ps$values$x, "integer")
 })

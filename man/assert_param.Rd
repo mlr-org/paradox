@@ -27,7 +27,7 @@ Are untyped \link{Param}s allowed?}
 \item{must_bounded}{(\code{logical(1)})\cr
 Only bounded \link{Param}s allowed?}
 
-\item{param_set}{\link{ParamSet}.}
+\item{param_set}{(\link{ParamSet}).}
 
 \item{no_deps}{(\code{logical(1)})\cr
 Are dependencies allowed?}

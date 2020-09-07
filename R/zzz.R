@@ -5,7 +5,9 @@
 #' @importFrom stats runif
 "_PACKAGE"
 
-.onLoad = function(libname, pkgname) {
+.onLoad = function(libname, pkgname) { # nolint
   # nocov start
   backports::import(pkgname)
 } # nocov end
+
+leanify_package()

@@ -21,5 +21,5 @@ NoDefault = R6Class("NoDefault",
 )
 
 #' @export
-NO_DEF = NoDefault$new()
+NO_DEF = NoDefault$new() # nolint
 is_nodefault = function(x) test_r6(x, "NoDefault")

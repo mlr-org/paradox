@@ -1,41 +1,28 @@
 #' @title Sampler1D Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler].
-#'
 #' @description
 #' 1D sampler, abstract base class for Sampler like [Sampler1DUnif], [Sampler1DRfun], [Sampler1DCateg] and [Sampler1DNormal].
 #'
-#' @section Construction:
-#' Note: This object is typically constructed via a derived classes, e.g. [Sampler1DUnif], [Sampler1DRfun], [Sampler1DCateg] or [Sampler1DNormal].
-#'
-#' ```
-#' smpl = Sampler1D$new(param)
-#' ```
-#'
-#' * `param` :: [Param]\cr
-#'   Domain / support of the distribution we want to sample from.
-#'
-#' @section Fields:
-#' See [Sampler].
-#' Additionally, the class provides:
-#' * `param` :: [Param]\cr
-#'   Returns the one Parameter that is sampled from.
-#'
-#' @section Methods:
-#' See [Sampler].
+#' @template param_param
 #'
 #' @family Sampler
 #' @include Sampler.R
 #' @export
 Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' Note that this object is typically constructed via derived classes,
+    #' e.g., [Sampler1DUnif].
     initialize = function(param) {
       super$initialize(ParamSet$new(list(param)))
     }
   ),
 
   active = list(
+    #' @field param ([Param])\cr
+    #' Returns the one Parameter that is sampled from.
     param = function() self$param_set$params[[1]]
   ),
 
@@ -50,30 +37,17 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
 
 #' @title Sampler1DUnif Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler1D].
-#'
 #' @description
 #' Uniform random sampler for arbitrary (bounded) parameters.
 #'
-#' @section Construction:
-#' ```
-#' smpl = Sampler1DUnif$new(param)
-#' ```
-#'
-#' * `param` :: [Param]\cr
-#'   Domain / support of the distribution we want to sample from.
-#'
-#' @section Fields:
-#' See [Sampler1D].
-#'
-#' @section Methods:
-#' See [Sampler1D].
+#' @template param_param
 #'
 #' @family Sampler
 #' @export
 Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(param) {
       assert_param(param, no_untyped = TRUE, must_bounded = TRUE)
       super$initialize(param)
@@ -88,42 +62,30 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
 
 #' @title Sampler1DRfun Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler1D].
-#'
 #' @description
 #' Arbitrary sampling from 1D RNG functions from R.
 #'
-#' @section Construction:
-#' ```
-#' smpl = Sampler1DRfun$new(param, rfun, trunc = TRUE)
-#' ```
-#'
-#' * `param` :: [Param]\cr
-#'   Domain / support of the distribution we want to sample from.
-#' * `rfun` :: `function`\cr
-#'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
-#' * `trunc` :: `logical(1)`\cr
-#'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
-#'
-#' @section Fields:
-#' See [Sampler1D].
-#' Additionally, the class provides:
-#' * `rfun` :: `function()`\cr
-#'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
-#' * `trunc` :: `logical(1)`\cr
-#'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
-#'
-#' @section Methods:
-#' See [Sampler1D].
+#' @template param_param
 #'
 #' @family Sampler
 #' @export
 Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
   public = list(
+    #' @field rfun (`function()`)\cr
+    #' Random number generator function.
     rfun = NULL,
+
+    #' @field trunc (`logical(1)`)\cr
+    #' `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
     trunc = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param rfun (`function()`)\cr
+    #'   Random number generator function, e.g. `rexp` to sample from exponential distribution.
+    #' @param trunc (`logical(1)`)\cr
+    #'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
     initialize = function(param, rfun, trunc = TRUE) {
       assert_param(param, "ParamDbl")
       super$initialize(param)
@@ -135,7 +97,8 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
   ),
 
   private = list(
-    # maybe we want an option to use my truncation here, as this slows stuff down somewhat and there are some real truncated rngs in R
+    # maybe we want an option to use my truncation here, as this slows stuff down somewhat
+    # and there are some real truncated rngs in R
     .sample = function(n) {
       if (self$trunc) {
         s = private$sample_truncated(n, self$rfun)
@@ -163,37 +126,24 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
 
 #' @title Sampler1DCateg Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler1D].
-#'
 #' @description
 #' Sampling from a discrete distribution, for a [ParamFct] or [ParamLgl].
 #'
-#' @section Construction:
-#' ```
-#' smpl = Sampler1DCateg$new(param, prob = NULL)
-#' ```
-#'
-#' * `param` :: [Param]\cr
-#'   Domain / support of the distribution we want to sample from.
-#' * `prob` :: `numeric()`\cr
-#'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
-#'
-#' @section Fields:
-#' See [Sampler1D].
-#' Additionally, the class provides:
-#' * `prob` :: `numeric(n)`\cr
-#'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
-#'
-#' @section Methods:
-#' See [Sampler1D].
+#' @template param_param
 #'
 #' @family Sampler
 #' @export
 Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
   public = list(
+    #' @field prob (`numeric()` | NULL)\cr
+    #' Numeric vector of `param$nlevels` probabilities.
     prob = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param prob (`numeric()` | NULL)\cr
+    #'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
     initialize = function(param, prob = NULL) {
       assert_multi_class(param, c("ParamFct", "ParamLgl"))
       super$initialize(param)
@@ -217,41 +167,24 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
 
 #' @title Sampler1DNormal Class
 #'
-#' @usage NULL
-#' @format [R6::R6Class] inheriting from [Sampler1D].
-#'
 #' @description
 #' Normal sampling (potentially truncated) for [ParamDbl].
 #'
-#' @section Construction:
-#' ```
-#' smpl = Sampler1DNormal$new(param, mean = NULL, sd = NULL)
-#' ```
-#'
-#' * `mean` :: `numeric(1)`\cr
-#'   Mean parameter of the normal distribution.
-#'   Default is `mean(c(param$lower, param$upper)`.
-#' * `sd` :: `numeric(1)`\cr
-#'   SD parameter of the normal distribution.
-#'   Default is `(param$upper - param$lower)/4`.
-#'
-#' @section Fields:
-#' See [Sampler1D].
-#' Additionally, the class provides:
-#' * `mean` :: `numeric(1)`\cr
-#'   Mean parameter of the normal distribution.
-#'   Default is `mean(c(param$lower, param$upper)`.
-#' * `sd` :: `numeric(1)`\cr
-#'   SD parameter of the normal distribution.
-#'   Default is `(param$upper - param$lower)/4`.
-#'
-#' @section Methods:
-#' See [Sampler1D].
+#' @template param_param
 #'
 #' @family Sampler
 #' @export
 Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
   public = list(
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param mean (`numeric(1)`)\cr
+    #'   Mean parameter of the normal distribution.
+    #'   Default is `mean(c(param$lower, param$upper)`.
+    #' @param sd (`numeric(1)`)\cr
+    #'   SD parameter of the normal distribution.
+    #'   Default is `(param$upper - param$lower)/4`.
     initialize = function(param, mean = NULL, sd = NULL) {
       assert_param(param, "ParamDbl")
       if ((is.null(mean) || is.null(sd)) && !param$is_bounded) {
@@ -271,7 +204,12 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
   ),
 
   active = list(
+    #' @field mean (`numeric(1)`)\cr
+    #' Mean parameter of the normal distribution.
     mean = function(v) if (missing(v)) private$.mean else private$.mean = assert_number(v),
+
+    #' @field sd (`numeric(1)`)\cr
+    #' SD parameter of the normal distribution.
     sd = function(v) if (missing(v)) private$.sd else private$.sd = assert_number(v, lower = 0)
   ),
 

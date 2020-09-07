@@ -115,6 +115,8 @@ test_that("we can also dep on integer", {
 
 test_that("deps make sense", {
   ps = th_paramset_full()
-  expect_error(ps$add_dep("th_param_lgl", "th_param_fct", CondEqual$new("d")), "Condition has infeasible values for th_param_fct")
-  expect_error(ps$add_dep("th_param_lgl", "th_param_int", CondAnyOf$new(5:15)), "Condition has infeasible values for th_param_int")
+  expect_error(ps$add_dep("th_param_lgl", "th_param_fct", CondEqual$new("d")),
+    "Condition has infeasible values for th_param_fct")
+  expect_error(ps$add_dep("th_param_lgl", "th_param_int", CondAnyOf$new(5:15)),
+    "Condition has infeasible values for th_param_int")
 })

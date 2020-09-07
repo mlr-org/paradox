@@ -1,58 +1,16 @@
-#' @title Param Object
-#'
-#' @usage NULL
-#' @format [R6::R6Class] object.
+#' @title Param Class
 #'
 #' @description
-#' Abstract base class for parameters.
+#' This is the abstract base class for parameter objects like [ParamDbl] and
+#' [ParamFct].
 #'
-#' @section Construction:
-#' ```
-#' Param$new(id, special_vals, default, tags)
-#' ```
-#'
-#' * `id` :: `character(1)`\cr
-#'   ID of this parameter.
-#' * `special_vals` :: `list()`\cr
-#'   Arbitrary special values this parameter is allowed to take, to make it feasible.
-#'   This allows extending the domain of the parameter.
-#'   Note that these values are only used in feasibility checks, neither in generating designs nor sampling.
-#' * `default` :: `any` \cr
-#'   Default value. Can be from the domain of the parameter or an element of `special_vals`.
-#'   Has value [NO_DEF] if no default exists. `NULL` can be a valid default.
-#' * `tags` :: `character()`\cr
-#'   Arbitrary tags to group and subset parameters. Some tags serve a special purpose:
-#'   * `"required"` implies that the parameters has to be given when setting `values` in [ParamSet].
-#'
-#'
-#' @section Fields:
-#' * `class` :: `character(1)`\cr
-#'    R6 class name. Read-only.
-#' * `is_number` :: `logical(1)`\cr
-#'   TRUE if the parameter is of type `"dbl"` or `"int"`.
-#' * `is_categ` :: `logical(1)`\cr
-#'   TRUE if the parameter is of type `"fct"` or `"lgl"`.
-#' * `has_default` :: `logical(1)`\cr
-#'    Is there a default value?
-#' * `storage_type` :: `character(1)` \cr
-#'    Data type when values of this parameter are stored in a data table or sampled.
-#'
-#' @section Methods:
-#' * `test(x)`, `check(x)`, `assert(x)`\cr
-#'    Three \pkg{checkmate}-like check-functions.
-#'    Take a value from the domain of the parameter, and check if it is feasible.
-#'    A value is feasible if it is of the same `storage_type`, inside of the bounds or element of `special_vals`.
-#' * `qunif(x)`\cr
-#'   `numeric(n)` -> `vector(n)` \cr
-#'   Takes values from \[0,1\] and map them, regularly distributed, to the domain of the parameter.
-#'   Think of: quantile function or the use case to map a uniform-\[0,1\] random variable into a uniform sample from this param.
-#' * `rep(n)`\cr
-#'   `integer(1)` -> [ParamSet]\cr
-#'   Repeats this parameter n-times (by cloning).
-#'   Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
+#' @template param_id
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
 #'
 #' @section S3 methods:
-#' * `as.data.table()` \cr
+#' * `as.data.table()`\cr
 #'   [Param] -> [data.table::data.table()]\cr
 #'   Converts param to [data.table::data.table()] with 1 row. See [ParamSet].
 #'
@@ -60,11 +18,27 @@
 #' @export
 Param = R6Class("Param",
   public = list(
+    #' @field id (`character(1)`)\cr
+    #' Identifier of the object.
     id = NULL,
+
+    #' @field special_vals (`list()`)\cr
+    #' Arbitrary special values this parameter is allowed to take.
     special_vals = NULL,
+
+    #' @field default (`any`)\cr
+    #' Default value.
     default = NULL,
+
+    #' @field tags (`character()`)\cr
+    #' Arbitrary tags to group and subset parameters.
     tags = NULL,
 
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' Note that this object is typically constructed via derived classes,
+    #' e.g., [ParamDbl].
     initialize = function(id, special_vals, default, tags) {
 
       assert_id(id)
@@ -81,16 +55,46 @@ Param = R6Class("Param",
       }
     },
 
+    #' @description
+    #' \pkg{checkmate}-like check-function. Take a value from the domain of the
+    #' parameter, and check if it is feasible. A value is feasible if it is of
+    #' the same `storage_type`, inside of the bounds or element of
+    #' `special_vals`.
+    #'
+    #' @param x (`any`).
+    #' @return If successful `TRUE`, if not a string with the error message.
     check = function(x) {
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
       ch = private$.check(x)
       ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
     },
 
+    #' @description
+    #' \pkg{checkmate}-like assert-function. Take a value from the domain of
+    #' the parameter, and assert if it is feasible. A value is feasible if it
+    #' is of the same `storage_type`, inside of the bounds or element of
+    #' `special_vals`.
+    #'
+    #' @param x (`any`).
+    #' @return If successful `x` invisibly, if not an exception is raised.
     assert = function(x) makeAssertionFunction(self$check)(x),
 
+    #' @description
+    #' \pkg{checkmate}-like test-function. Take a value from the domain of the
+    #' parameter, and test if it is feasible. A value is feasible if it is of
+    #' the same `storage_type`, inside of the bounds or element of
+    #' `special_vals`.
+    #'
+    #' @param x (`any`).
+    #' @return If successful `TRUE`, if not `FALSE`.
     test = function(x) makeTestFunction(self$check)(x),
 
+    #' @description
+    #' Repeats this parameter n-times (by cloning).
+    #' Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
+    #'
+    #' @param n (`integer(1)`).
+    #' @return [ParamSet].
     rep = function(n) {
       assert_count(n)
       pid = self$id
@@ -104,6 +108,19 @@ Param = R6Class("Param",
       ParamSet$new(ps)
     },
 
+    #' @description
+    #' Helper for print outputs.
+    format = function() {
+      sprintf("<%s:%s>", class(self)[1L], self$id)
+    },
+
+    #' @description
+    #' Printer.
+    #'
+    #' @param ... (ignored).
+    #' @param hide_cols (`character()`)\cr
+    #'   Which fields should not be printed? Default is `"nlevels"`,
+    #'   `"is_bounded"`, `"special_vals"`, `"tags"`, and `"storage_type"`.
     print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       # this is bit bullshitty, but works by delegating to the printer of the PS
       d = as.data.table(ParamSet$new(list(self)))
@@ -111,6 +128,14 @@ Param = R6Class("Param",
       print(d[, setdiff(colnames(d), hide_cols), with = FALSE])
     },
 
+    #' @description
+    #' Takes values from \[0,1\] and maps them, regularly distributed, to the
+    #' domain of the parameter. Think of: quantile function or the use case to
+    #' map a uniform-\[0,1\] random variable into a uniform sample from this
+    #' param.
+    #'
+    #' @param x (`numeric(1)`).
+    #' @return Value of the domain of the parameter.
     qunif = function(x) {
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
@@ -119,9 +144,20 @@ Param = R6Class("Param",
   ),
 
   active = list(
+    #' @field class (`character(1)`)\cr
+    #' R6 class name. Read-only.
     class = function() class(self)[[1L]],
+
+    #' @field is_number (`logical(1)`)\cr
+    #' `TRUE` if the parameter is of type `"dbl"` or `"int"`.
     is_number = function() self$class %in% c("ParamDbl", "ParamInt"),
+
+    #' @field is_categ (`logical(1)`)\cr
+    #' `TRUE` if the parameter is of type `"fct"` or `"lgl"`.
     is_categ = function() self$class %in% c("ParamFct", "ParamLgl"),
+
+    #' @field has_default (`logical(1)`)\cr
+    #' Is there a default value?
     has_default = function() !is_nodefault(self$default)
   ),
 
@@ -132,7 +168,7 @@ Param = R6Class("Param",
 )
 
 #' @export
-as.data.table.Param = function(x, ...) {
+as.data.table.Param = function(x, ...) { # nolint
   data.table(
     id = x$id,
     class = x$class,

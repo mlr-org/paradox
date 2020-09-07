@@ -2,7 +2,7 @@ Type: Package
 Package: paradox
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
-Version: 0.2.0
+Version: 0.4.0-9000
 Authors@R:
     c(person(given = "Michel",
              family = "Lang",
@@ -27,7 +27,12 @@ Authors@R:
       person(given = "Martin",
              family = "Binder",
              role = "aut",
-             email = "mlr.developer@mb706.com"))
+             email = "mlr.developer@mb706.com"),
+      person(given = "Marc",
+             family = "Becker",
+             role = "ctb",
+             email = "marcbecker@posteo.de",
+             comment = c(ORCID = "0000-0002-8115-0400")))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
     includes statistical designs and random samplers. Objects are
@@ -40,15 +45,16 @@ Imports:
     backports,
     checkmate,
     data.table,
-    mlr3misc,
+    mlr3misc (>= 0.4.0-9000),
     R6
 Suggests:
+    knitr,
     lhs,
     testthat
 Encoding: UTF-8
 NeedsCompilation: no
-Roxygen: list(markdown = TRUE, r6 = FALSE)
-RoxygenNote: 7.1.0
+Roxygen: list(markdown = TRUE, r6 = TRUE)
+RoxygenNote: 7.1.1
 Collate:
     'Condition.R'
     'Design.R'
@@ -70,5 +76,6 @@ Collate:
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
+    'helper.R'
     'reexports.R'
     'zzz.R'

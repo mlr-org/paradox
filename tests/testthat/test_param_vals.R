@@ -18,7 +18,7 @@ test_that("values", {
   expect_true(ps$check(list(d = 1, f = "a")))
   expect_equal(ps2$values, list(d = 0.5))
   # check printer
-  expect_output(print(ps2), "d.*<NoDefault>.*0.5")
+  expect_output(print(ps2), "d.*<NoDefault(?:\\[3\\])?>.*0.5")
 
   ps2 = ps$clone()
   ps2$subset(ids = c("i"))
@@ -69,6 +69,13 @@ test_that("values calls assert", {
   ))
   expect_error(ps$values <- list(xxx = 1), "not available")
   expect_error(ps$values <- list(d = 9), "not <= 1")
+
+  # now check that we can disable assert
+  ps$assert_values = FALSE
+  ps$values = list(xxx = 1)
+  expect_equal(ps$values, list(xxx = 1))
+  ps$values = list(d = 9)
+  expect_equal(ps$values, list(d = 9))
 })
 
 test_that("required params are checked", {

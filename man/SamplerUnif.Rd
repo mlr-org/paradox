@@ -3,29 +3,11 @@
 \name{SamplerUnif}
 \alias{SamplerUnif}
 \title{SamplerUnif Class}
-\format{
-\link[R6:R6Class]{R6::R6Class} inheriting from \link{SamplerHierarchical}.
-}
 \description{
 Uniform random sampling for an arbitrary (bounded) \link{ParamSet}.
 Constructs 1 uniform sampler per \link{Param}, then passes them to \link{SamplerHierarchical}.
 Hence, also works for \link{ParamSet}s sets with dependencies.
 }
-\section{Construction}{
-
-See \link{Sampler}.
-}
-
-\section{Fields}{
-
-See \link{Sampler}.
-}
-
-\section{Methods}{
-
-See \link{Sampler}.
-}
-
 \seealso{
 Other Sampler: 
 \code{\link{Sampler1DCateg}},
@@ -38,3 +20,59 @@ Other Sampler:
 \code{\link{Sampler}}
 }
 \concept{Sampler}
+\section{Super classes}{
+\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:SamplerHierarchical]{paradox::SamplerHierarchical}} -> \code{SamplerUnif}
+}
+\section{Methods}{
+\subsection{Public methods}{
+\itemize{
+\item \href{#method-new}{\code{SamplerUnif$new()}}
+\item \href{#method-clone}{\code{SamplerUnif$clone()}}
+}
+}
+\if{html}{
+\out{<details open ><summary>Inherited methods</summary>}
+\itemize{
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format">}\href{../../paradox/html/Sampler.html#method-format}{\code{paradox::Sampler$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print">}\href{../../paradox/html/Sampler.html#method-print}{\code{paradox::Sampler$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample">}\href{../../paradox/html/Sampler.html#method-sample}{\code{paradox::Sampler$sample()}}\out{</span>}
+}
+\out{</details>}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-new"></a>}}
+\if{latex}{\out{\hypertarget{method-new}{}}}
+\subsection{Method \code{new()}}{
+Creates a new instance of this \link[R6:R6Class]{R6} class.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SamplerUnif$new(param_set)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{param_set}}{(\link{ParamSet})\cr
+Domain / support of the distribution we want to sample from.
+ParamSet is cloned on construction.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-clone}{}}}
+\subsection{Method \code{clone()}}{
+The objects of this class are cloneable with this method.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{SamplerUnif$clone(deep = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{deep}}{Whether to make a deep clone.}
+}
+\if{html}{\out{</div>}}
+}
+}
+}

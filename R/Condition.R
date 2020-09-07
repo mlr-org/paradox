@@ -1,28 +1,7 @@
 #' @title Dependency Condition
 #'
-#' @usage NULL
-#' @format [R6::R6Class] object.
-#'
 #' @description
 #' Condition object, to specify the condition in a dependency.
-#'
-#' @section Construction:
-#' ```
-#' c = Condition$new(type, rhs)
-#' ```
-#'
-#' * `type` :: `character(1)` \cr
-#'   Name / type of the condition.
-#'
-#' * `rhs::any` \cr
-#'   Right-hand-side of the condition.
-#'
-#' @section Methods:
-#'
-#' * `test(function(x))`\cr
-#'   `??? -> logical(n)` \cr
-#'   Checks if condition is satisfied.
-#'   Called on a vector of parent param values.
 #'
 #' @section Currently implemented simple conditions:
 #' * `CondEqual$new(rhs)` \cr
@@ -34,19 +13,49 @@
 #' @export
 Condition = R6Class("Condition",
   public = list(
+    #' @field type (`character(1)`)\cr
+    #' Name / type of the condition.
     type = NULL,
+    #' @field rhs (`any`)\cr
+    #' Right-hand-side of the condition.
     rhs = NULL,
+    #' @description
+    #' Creates a new instance of this [R6][R6::R6Class] class.
+    #'
+    #' @param type (`character(1)`)\cr
+    #'   Name / type of the condition.
+    #' @param rhs (`any`)\cr
+    #'   Right-hand-side of the condition.
     initialize = function(type, rhs) {
       self$type = assert_string(type)
       self$rhs = rhs
     },
 
+    #' @description
+    #' Checks if condition is satisfied.
+    #' Called on a vector of parent param values.
+    #'
+    #' @param x (`vector()`).
+    #' @return `logical(1)`.
     test = function(x) stop("abstract"),
 
+    #' @description
+    #' Conversion helper for print outputs.
+    #' @param lhs_chr (`character(1)`)
     as_string = function(lhs_chr = "x") {
       sprintf("%s %s %s", lhs_chr, self$type, str_collapse(self$rhs))
     },
 
+    #' @description
+    #' Helper for print outputs.
+    format = function() {
+      sprintf("<%s:%s>", class(self)[1L], self$type)
+    },
+
+    #' @description
+    #' Printer.
+    #'
+    #' @param ... (ignored).
     print = function(...) {
       catf("%s: %s", class(self)[1L], self$as_string())
     }
