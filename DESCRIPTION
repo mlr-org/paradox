@@ -45,7 +45,7 @@ Imports:
     backports,
     checkmate,
     data.table,
-    mlr3misc (>= 0.4.0),
+    mlr3misc (>= 0.4.0-9000),
     R6
 Suggests:
     knitr,
