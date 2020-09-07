@@ -7,6 +7,107 @@
 #' The set also contains a member variable `values` which can be used to store an active configuration / or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
+#' @section Construction:
+#' ```
+#' ParamSet$new(params = named_list())
+#' ```
+#'
+#' * `params` :: named `list()`\cr
+#'   List of [Param], named with their respective ID.
+#'   Parameters are cloned.
+#'
+#' @section Fields:
+#' * `set_id` :: `character(1)` \cr
+#'   ID of this param set. Default `""`. Settable.
+#' * `length` :: `integer(1)` \cr
+#'   Number of contained [Param]s.
+#' * `is_empty` :: `logical(1)` \cr
+#'   Is the `ParamSet` empty?
+#' * `class` :: named `character()` \cr
+#'   Classes of contained parameters, named with parameter IDs.
+#' * `lower` :: named `double()` \cr
+#'   Lower bounds of parameters (`NA` if parameter is not numeric).
+#'   Named with parameter IDs.
+#' * `upper` :: named `double()` \cr
+#'   Upper bounds of parameters (`NA` if parameter is not numeric).
+#'   Named with parameter IDs.
+#' * `levels` :: named `list()` \cr
+#'   List of character vectors of allowed categorical values of contained parameters.
+#'   `NULL` if the parameter is not categorical.
+#'   Named with parameter IDs.
+#' * `nlevels` :: named `integer()` \cr
+#'   Number of categorical levels per parameter, `Inf` for double parameters or unbounded integer parameters.
+#'   Named with param IDs.
+#' * `is_bounded` :: named `logical(1)` \cr
+#'   Do all parameters have finite bounds?
+#'   Named with parameter IDs.
+#' * `special_vals` :: named `list()` of `list()` \cr
+#'   Special values for all parameters.
+#'   Named with parameter IDs.
+#' * `storage_type` :: `character()` \cr
+#'   Data types of parameters when stored in tables.
+#'   Named with parameter IDs.
+#' * `tags` :: named `list()` of `character()` \cr
+#'   Can be used to group and subset parameters.
+#'   Named with parameter IDs.
+#' * `default` :: named `list()` \cr
+#'   Default values of all parameters.
+#'   If no default exists, element is not present.
+#'   Named with parameter IDs.
+#' * is_number :: named `logical()` \cr
+#'   Position is TRUE for [ParamDbl] and [ParamInt].
+#'   Named with parameter IDs.
+#' * is_categ          :: named `logical` \cr
+#'   Position is TRUE for [ParamFct] and [ParamLgl].
+#'   Named with parameter IDs.
+#' * `has_deps` :: `logical(1)` \cr
+#'   Has the set parameter dependencies?
+#' * `deps` :: [data.table::data.table()] \cr
+#'   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and `cond` ([Condition]).
+#'   Lists all (direct) dependency parents of a param, through parameter IDs.
+#'   Internally created by a call to `add_dep`.
+#'   Settable, if you want to remove dependencies or perform other changes.
+#' * `values`         :: named `list()` \cr
+#'   Currently set / fixed parameter values.
+#'   Settable, and feasibility of values will be checked when you set them.
+#'   You do not have to set values for all parameters, but only for a subset.
+#'   When you set values, all previously set values will be unset / removed.
+#' * `trafo` :: `function(x, param_set)`\cr
+#'   Transformation function. Settable.
+#'   User has to pass a `function(x, param_set)`, of the form \cr
+#'   (named `list()`, [ParamSet]) -> named `list()`.\cr
+#'   The function is responsible to transform a feasible configuration into another encoding, before potentially evaluating the configuration with the target algorithm.
+#'   For the output, not many things have to hold.
+#'   It needs to have unique names, and the target algorithm has to accept the configuration.
+#'   For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+#'   Is NULL by default, and you can set it to NULL to switch the transformation off.
+#' * `has_trafo` :: `logical(1)` \cr
+#'   Has the set a `trafo` function?
+#'
+#' @section Public methods:
+#' * `ids(class = NULL, is_bounded = NULL, tags = NULL)` \cr
+#'   (`character`, `logical(1)`, `character()`) -> `character()` \cr
+#'   Retrieves IDs of contained parameters based on some filter criteria selections, `NULL` means no restriction.
+#' * `get_values(class = NULL, is_bounded = NULL, tags = NULL)` \cr
+#'   (`character()`, `logical(1)`, `character()`) -> named `list()` \cr
+#'   Retrieves parameter values based on some selections, `NULL` means no restriction and is
+#'   equivalent to `$values`.
+#' * `add(param_set)` \cr
+#'   ([Param] | [ParamSet]) -> `self` \cr
+#'   Adds a single param or another set to this set, all params are cloned.
+#' * `subset(ids)` \cr
+#'   `character()` -> `self` \cr
+#'   Changes the current set to the set of passed IDs.
+#' * `test(x)`, `check(x)`, `assert(x)` \cr
+#'   Three \pkg{checkmate}-like check-functions. Takes a named list.
+#'   A point x is feasible, if it configures a subset of params,
+#'   all individual param constraints are satisfied and all dependencies are satisfied.
+#'   Dependencies on parameters that are not given are checked against `$default` values.
+#'   Params for which dependencies are not satisfied should not be part of `x`.
+#' * `add_dep(id, on, cond)` \cr
+#'   (`character(1)`, `character(1)`, [Condition]) -> `self` \cr
+#'    Adds a dependency to this set, so that param `id` now depends on param `on`.
+#'
 #' @section S3 methods and type converters:
 #' * `as.data.table()`\cr
 #'   [ParamSet] -> [data.table::data.table()]\cr
@@ -195,6 +296,7 @@ ParamSet = R6Class("ParamSet",
       # check dependencies
       if (self$has_deps) {
         deps = self$deps
+        def = self$default
         for (j in seq_row(self$deps)) {
           p1id = deps$id[j]
           p2id = deps$on[j]
@@ -202,8 +304,10 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-            (p1id %nin% ns)
+          ok = p1id %in% ns &&
+            (p2id %in% ns && cond$test(xs[[p2id]]) ||
+              p2id %nin% ns && p2id %in% names(def) && cond$test(def[[p2id]])) ||
+            p1id %nin% ns
           if (isFALSE(ok)) {
             message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
               p1id, cond$as_string(p2id))
