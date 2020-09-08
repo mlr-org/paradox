@@ -170,7 +170,7 @@
     <p><code><a href='Param.html'>paradox::Param</a></code> -&gt; <code>ParamInt</code></p>
     <h2 class="hasAnchor" id="public-fields"><a class="anchor" href="#public-fields"></a>Public fields</h2>
 
-    <p><div class="r6-fields"></p><dl'>
+    <p><div class="r6-fields"></p><dl>
 <dt><code>lower</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
 Lower bound.
 Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamLgl.html'>ParamLgl</a> and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
@@ -182,7 +182,7 @@ Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamL
 </dl><p></div></p>
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
 
-    <p><div class="r6-active-bindings"></p><dl'>
+    <p><div class="r6-active-bindings"></p><dl>
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> | <code>NULL</code>)<br />
 Set of allowed levels.
 Always <code>NULL</code> for <a href='ParamDbl.html'>ParamDbl</a>, ParamInt and <a href='ParamUty.html'>ParamUty</a>.
@@ -211,7 +211,7 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
     <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
 
     
-<h3>Public methods</h3>
+<h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Public methods</h3>
 
 <ul>
 <li><p><a href='#method-new'><code>ParamInt$new()</code></a></p></li>
@@ -230,19 +230,19 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 </details>
 
 <hr>
-<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>ParamInt</span>$<span class='fu'>new</span>(
-  <span class='no'>id</span>,
-  <span class='kw'>lower</span> <span class='kw'>=</span> -<span class='fl'>Inf</span>,
-  <span class='kw'>upper</span> <span class='kw'>=</span> <span class='fl'>Inf</span>,
-  <span class='kw'>special_vals</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(),
-  <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>,
-  <span class='kw'>tags</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>()
+<a id="method-new"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='kw'>ParamInt</span><span class='op'>$</span><span class='fu'>new</span>(
+  <span class='kw'>id</span>,
+  lower = <span class='op'>-</span><span class='fl'>Inf</span>,
+  upper = <span class='fl'>Inf</span>,
+  special_vals = <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(),
+  default = <span class='kw'>NO_DEF</span>,
+  tags = <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>()
 )</pre><p></div></p>
 
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
 <dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
 Identifier of the object.</p></dd>
 
@@ -277,12 +277,12 @@ purpose:<br />
 
 </dl><p></div></p>
 <p><hr>
-<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
-<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>ParamInt</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+<a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='kw'>ParamInt</span><span class='op'>$</span><span class='fu'>clone</span>(deep = <span class='fl'>FALSE</span>)</pre><p></div></p>
 
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
 <dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
 
 </dl><p></div></p>
@@ -290,7 +290,8 @@ purpose:<br />
 
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='no'>ParamInt</span>$<span class='fu'>new</span>(<span class='st'>"count"</span>, <span class='kw'>lower</span> <span class='kw'>=</span> <span class='fl'>0</span>, <span class='kw'>upper</span> <span class='kw'>=</span> <span class='fl'>10</span>, <span class='kw'>default</span> <span class='kw'>=</span> <span class='fl'>1</span>)</div><div class='output co'>#&gt;       id    class lower upper levels default
+    <pre class="examples"><div class='input'><span class='kw'>ParamInt</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"count"</span>, lower = <span class='fl'>0</span>, upper = <span class='fl'>10</span>, default = <span class='fl'>1</span>)
+</div><div class='output co'>#&gt;       id    class lower upper levels default
 #&gt; 1: count ParamInt     0    10              1</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
@@ -307,7 +308,7 @@ purpose:<br />
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.6.0.</p>
 </div>
 
       </footer>

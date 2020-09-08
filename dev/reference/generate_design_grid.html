@@ -156,7 +156,7 @@ always produce a grid over all their valid levels.
 For number params the endpoints of the params are always included in the grid.</p>
     </div>
 
-    <pre class="usage"><span class='fu'>generate_design_grid</span>(<span class='no'>param_set</span>, <span class='kw'>resolution</span> <span class='kw'>=</span> <span class='kw'>NULL</span>, <span class='kw'>param_resolutions</span> <span class='kw'>=</span> <span class='kw'>NULL</span>)</pre>
+    <pre class="usage"><span class='fu'>generate_design_grid</span>(<span class='kw'>param_set</span>, resolution = <span class='kw'>NULL</span>, param_resolutions = <span class='kw'>NULL</span>)</pre>
 
     <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
@@ -187,11 +187,12 @@ Resolution per <a href='Param.html'>Param</a>, named by parameter ID.</p></td>
 <code><a href='generate_design_random.html'>generate_design_random</a>()</code></p></div>
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='no'>ps</span> <span class='kw'>=</span> <span class='no'>ParamSet</span>$<span class='fu'>new</span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(
-  <span class='no'>ParamDbl</span>$<span class='fu'>new</span>(<span class='st'>"ratio"</span>, <span class='kw'>lower</span> <span class='kw'>=</span> <span class='fl'>0</span>, <span class='kw'>upper</span> <span class='kw'>=</span> <span class='fl'>1</span>),
-  <span class='no'>ParamFct</span>$<span class='fu'>new</span>(<span class='st'>"letters"</span>, <span class='kw'>levels</span> <span class='kw'>=</span> <span class='no'>letters</span>[<span class='fl'>1</span>:<span class='fl'>3</span>])
+    <pre class="examples"><div class='input'><span class='kw'>ps</span> <span class='op'>=</span> <span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(
+  <span class='kw'>ParamDbl</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"ratio"</span>, lower = <span class='fl'>0</span>, upper = <span class='fl'>1</span>),
+  <span class='kw'>ParamFct</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"letters"</span>, levels = <span class='kw'>letters</span>[<span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span>])
 ))
-<span class='fu'>generate_design_grid</span>(<span class='no'>ps</span>, <span class='fl'>10</span>)</div><div class='output co'>#&gt; &lt;Design&gt; with 30 rows:
+<span class='fu'>generate_design_grid</span>(<span class='kw'>ps</span>, <span class='fl'>10</span>)
+</div><div class='output co'>#&gt; &lt;Design&gt; with 30 rows:
 #&gt;         ratio letters
 #&gt;  1: 0.0000000       a
 #&gt;  2: 0.0000000       b
@@ -239,7 +240,7 @@ Resolution per <a href='Param.html'>Param</a>, named by parameter ID.</p></td>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.6.0.</p>
 </div>
 
       </footer>
