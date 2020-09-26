@@ -311,8 +311,8 @@ Has the set parameter dependencies?</p></dd>
 </ul>
 <p><hr>
 <a id="method-new"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span>(params = <span class='fu'>named_list</span>())</pre><p></div></p>
+<p>Creates a new instance of this <a href='https://r6.r-lib.org/reference/R6Class.html'>R6</a> class.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span>params <span class='op'>=</span> <span class='fu'>named_list</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -324,7 +324,7 @@ Parameters are cloned.</p></dd>
 <p><hr>
 <a id="method-add"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>add()</code></h3>
 <p>Adds a single param or another set to this set, all params are cloned.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>add</span>(<span class='kw'>p</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>add</span><span class='op'>(</span><span class='va'>p</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -336,7 +336,7 @@ Parameters are cloned.</p></dd>
 <p>Retrieves IDs of contained parameters based on some filter criteria
 selections, <code>NULL</code> means no restriction.
 Only returns IDs of parameters that satisfy all conditions.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>ids</span>(class = <span class='kw'>NULL</span>, is_bounded = <span class='kw'>NULL</span>, tags = <span class='kw'>NULL</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>ids</span><span class='op'>(</span>class <span class='op'>=</span> <span class='cn'>NULL</span>, is_bounded <span class='op'>=</span> <span class='cn'>NULL</span>, tags <span class='op'>=</span> <span class='cn'>NULL</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -354,7 +354,7 @@ Only returns IDs of parameters that satisfy all conditions.</p><h4 class='hasAnc
 <p>Retrieves parameter values based on some selections, <code>NULL</code> means no
 restriction and is equivalent to <code>$values</code>.
 Only returns values of parameters that satisfy all conditions.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>get_values</span>(class = <span class='kw'>NULL</span>, is_bounded = <span class='kw'>NULL</span>, tags = <span class='kw'>NULL</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>get_values</span><span class='op'>(</span>class <span class='op'>=</span> <span class='cn'>NULL</span>, is_bounded <span class='op'>=</span> <span class='cn'>NULL</span>, tags <span class='op'>=</span> <span class='cn'>NULL</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -370,7 +370,7 @@ Only returns values of parameters that satisfy all conditions.</p><h4 class='has
 <p><hr>
 <a id="method-subset"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/subset.html'>subset()</a></code></h3>
 <p>Changes the current set to the set of passed IDs.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/subset.html'>subset</a></span>(<span class='kw'>ids</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>subset</span><span class='op'>(</span><span class='va'>ids</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -383,7 +383,7 @@ Only returns values of parameters that satisfy all conditions.</p><h4 class='has
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='kw'>xs</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>check</span><span class='op'>(</span><span class='va'>xs</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -398,7 +398,7 @@ Params for which dependencies are not satisfied should not be part of <code>x</c
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>test</span>(<span class='kw'>xs</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>test</span><span class='op'>(</span><span class='va'>xs</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -413,7 +413,7 @@ Params for which dependencies are not satisfied should not be part of <code>x</c
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>assert</span>(<span class='kw'>xs</span>, .var.name = <span class='fu'>vname</span>(<span class='kw'>xs</span>))</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>assert</span><span class='op'>(</span><span class='va'>xs</span>, .var.name <span class='op'>=</span> <span class='fu'>vname</span><span class='op'>(</span><span class='va'>xs</span><span class='op'>)</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -433,7 +433,7 @@ where rows are points and columns are parameters. A point x is feasible,
 if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>check_dt</span>(<span class='kw'>xdt</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>check_dt</span><span class='op'>(</span><span class='va'>xdt</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -445,7 +445,7 @@ dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</co
 <p><hr>
 <a id="method-test_dt"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>test_dt()</code></h3>
 <p><span class="pkg">checkmate</span>-like test-function (s. <code>$check_dt()</code>).</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>test_dt</span>(<span class='kw'>xdt</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>test_dt</span><span class='op'>(</span><span class='va'>xdt</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -457,7 +457,7 @@ dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</co
 <p><hr>
 <a id="method-assert_dt"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>assert_dt()</code></h3>
 <p><span class="pkg">checkmate</span>-like assert-function (s. <code>$check_dt()</code>).</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>assert_dt</span>(<span class='kw'>xdt</span>, .var.name = <span class='fu'>vname</span>(<span class='kw'>xdt</span>))</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>assert_dt</span><span class='op'>(</span><span class='va'>xdt</span>, .var.name <span class='op'>=</span> <span class='fu'>vname</span><span class='op'>(</span><span class='va'>xdt</span><span class='op'>)</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -473,7 +473,7 @@ Defaults to the heuristic implemented in <a href='https://rdrr.io/pkg/checkmate/
 <p><hr>
 <a id="method-add_dep"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>add_dep()</code></h3>
 <p>Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>add_dep</span>(<span class='kw'>id</span>, <span class='kw'>on</span>, <span class='kw'>cond</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>add_dep</span><span class='op'>(</span><span class='va'>id</span>, <span class='va'>on</span>, <span class='va'>cond</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -487,15 +487,15 @@ Defaults to the heuristic implemented in <a href='https://rdrr.io/pkg/checkmate/
 <p><hr>
 <a id="method-format"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/format.html'>format()</a></code></h3>
 <p>Helper for print outputs.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/format.html'>format</a></span>()</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>format</span><span class='op'>(</span><span class='op'>)</span></pre><p></div></p>
 
 <p><hr>
 <a id="method-print"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/print.html'>print()</a></code></h3>
 <p>Printer.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span>(
-  <span class='kw'>...</span>,
-  hide_cols = <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span>(<span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span>)
-)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>print</span><span class='op'>(</span>
+  <span class='va'>...</span>,
+  hide_cols <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span><span class='op'>)</span>
+<span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -509,7 +509,7 @@ Which fields should not be printed? Default is <code>"nlevels"</code>,
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>clone</span>(deep = <span class='fl'>FALSE</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>clone</span><span class='op'>(</span>deep <span class='op'>=</span> <span class='cn'>FALSE</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -520,21 +520,21 @@ Which fields should not be printed? Default is <code>"nlevels"</code>,
 
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='kw'>ps</span> <span class='op'>=</span> <span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span>(
-  params = <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(
-    <span class='kw'>ParamDbl</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"d"</span>, lower = <span class='op'>-</span><span class='fl'>5</span>, upper = <span class='fl'>5</span>, default = <span class='fl'>0</span>),
-    <span class='kw'>ParamFct</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"f"</span>, levels = <span class='kw'>letters</span>[<span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span>])
-  )
-)
+    <pre class="examples"><div class='input'><span class='va'>ps</span> <span class='op'>=</span> <span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span>
+  params <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span>
+    <span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"d"</span>, lower <span class='op'>=</span> <span class='op'>-</span><span class='fl'>5</span>, upper <span class='op'>=</span> <span class='fl'>5</span>, default <span class='op'>=</span> <span class='fl'>0</span><span class='op'>)</span>,
+    <span class='va'><a href='ParamFct.html'>ParamFct</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"f"</span>, levels <span class='op'>=</span> <span class='va'>letters</span><span class='op'>[</span><span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span><span class='op'>]</span><span class='op'>)</span>
+  <span class='op'>)</span>
+<span class='op'>)</span>
 
-<span class='kw'>ps</span><span class='op'>$</span><span class='kw'>trafo</span> <span class='op'>=</span> <span class='fu'>function</span>(<span class='kw'>x</span>, <span class='kw'>param_set</span>) {
-  <span class='kw'>x</span><span class='op'>$</span><span class='kw'>d</span> <span class='op'>=</span> <span class='fl'>2</span><span class='op'>^</span><span class='kw'>x</span><span class='op'>$</span><span class='kw'>d</span>
-  <span class='fu'><a href='https://rdrr.io/r/base/function.html'>return</a></span>(<span class='kw'>x</span>)
-}
+<span class='va'>ps</span><span class='op'>$</span><span class='va'>trafo</span> <span class='op'>=</span> <span class='kw'>function</span><span class='op'>(</span><span class='va'>x</span>, <span class='va'>param_set</span><span class='op'>)</span> <span class='op'>{</span>
+  <span class='va'>x</span><span class='op'>$</span><span class='va'>d</span> <span class='op'>=</span> <span class='fl'>2</span><span class='op'>^</span><span class='va'>x</span><span class='op'>$</span><span class='va'>d</span>
+  <span class='kw'><a href='https://rdrr.io/r/base/function.html'>return</a></span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span>
+<span class='op'>}</span>
 
-<span class='kw'>ps</span><span class='op'>$</span><span class='fu'>add</span>(<span class='kw'>ParamInt</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"i"</span>, lower = <span class='fl'>0L</span>, upper = <span class='fl'>16L</span>))
+<span class='va'>ps</span><span class='op'>$</span><span class='fu'>add</span><span class='op'>(</span><span class='va'><a href='ParamInt.html'>ParamInt</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"i"</span>, lower <span class='op'>=</span> <span class='fl'>0L</span>, upper <span class='op'>=</span> <span class='fl'>16L</span><span class='op'>)</span><span class='op'>)</span>
 
-<span class='kw'>ps</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(d = <span class='fl'>2.1</span>, f = <span class='st'>"a"</span>, i = <span class='fl'>3L</span>))
+<span class='va'>ps</span><span class='op'>$</span><span class='fu'>check</span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span>d <span class='op'>=</span> <span class='fl'>2.1</span>, f <span class='op'>=</span> <span class='st'>"a"</span>, i <span class='op'>=</span> <span class='fl'>3L</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; [1] TRUE</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">

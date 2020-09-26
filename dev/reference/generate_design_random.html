@@ -154,7 +154,7 @@ Internally uses <a href='SamplerUnif.html'>SamplerUnif</a>, hence, also works fo
 If dependencies do not hold, values are set to <code>NA</code> in the resulting data.table.</p>
     </div>
 
-    <pre class="usage"><span class='fu'>generate_design_random</span>(<span class='kw'>param_set</span>, <span class='kw'>n</span>)</pre>
+    <pre class="usage"><span class='fu'>generate_design_random</span><span class='op'>(</span><span class='va'>param_set</span>, <span class='va'>n</span><span class='op'>)</span></pre>
 
     <h2 class="hasAnchor" id="arguments"><a class="anchor" href="#arguments"></a>Arguments</h2>
     <table class="ref-arguments">
@@ -180,11 +180,11 @@ Number of points to draw randomly.</p></td>
 <code><a href='generate_design_lhs.html'>generate_design_lhs</a>()</code></p></div>
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='kw'>ps</span> <span class='op'>=</span> <span class='kw'>ParamSet</span><span class='op'>$</span><span class='fu'>new</span>(<span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(
-  <span class='kw'>ParamDbl</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"ratio"</span>, lower = <span class='fl'>0</span>, upper = <span class='fl'>1</span>),
-  <span class='kw'>ParamFct</span><span class='op'>$</span><span class='fu'>new</span>(<span class='st'>"letters"</span>, levels = <span class='kw'>letters</span>[<span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span>])
-))
-<span class='fu'>generate_design_random</span>(<span class='kw'>ps</span>, <span class='fl'>10</span>)
+    <pre class="examples"><div class='input'><span class='va'>ps</span> <span class='op'>=</span> <span class='va'><a href='ParamSet.html'>ParamSet</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span>
+  <span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"ratio"</span>, lower <span class='op'>=</span> <span class='fl'>0</span>, upper <span class='op'>=</span> <span class='fl'>1</span><span class='op'>)</span>,
+  <span class='va'><a href='ParamFct.html'>ParamFct</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"letters"</span>, levels <span class='op'>=</span> <span class='va'>letters</span><span class='op'>[</span><span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span><span class='op'>]</span><span class='op'>)</span>
+<span class='op'>)</span><span class='op'>)</span>
+<span class='fu'>generate_design_random</span><span class='op'>(</span><span class='va'>ps</span>, <span class='fl'>10</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;Design&gt; with 10 rows:
 #&gt;          ratio letters
 #&gt;  1: 0.01147954       a

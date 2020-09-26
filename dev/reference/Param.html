@@ -222,10 +222,10 @@ Is there a default value?</p></dd>
 </ul>
 <p><hr>
 <a id="method-new"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p>
+<p>Creates a new instance of this <a href='https://r6.r-lib.org/reference/R6Class.html'>R6</a> class.</p>
 <p>Note that this object is typically constructed via derived classes,
 e.g., <a href='ParamDbl.html'>ParamDbl</a>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'>new</span>(<span class='kw'>id</span>, <span class='kw'>special_vals</span>, <span class='kw'>default</span>, <span class='kw'>tags</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='va'>id</span>, <span class='va'>special_vals</span>, <span class='va'>default</span>, <span class='va'>tags</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -262,7 +262,7 @@ purpose:<br />
 parameter, and check if it is feasible. A value is feasible if it is of
 the same <code>storage_type</code>, inside of the bounds or element of
 <code>special_vals</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/utils/PkgUtils.html'>check</a></span>(<span class='kw'>x</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>check</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -277,7 +277,7 @@ the same <code>storage_type</code>, inside of the bounds or element of
 the parameter, and assert if it is feasible. A value is feasible if it
 is of the same <code>storage_type</code>, inside of the bounds or element of
 <code>special_vals</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'>assert</span>(<span class='kw'>x</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>assert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -292,7 +292,7 @@ is of the same <code>storage_type</code>, inside of the bounds or element of
 parameter, and test if it is feasible. A value is feasible if it is of
 the same <code>storage_type</code>, inside of the bounds or element of
 <code>special_vals</code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'>test</span>(<span class='kw'>x</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>test</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -305,7 +305,7 @@ the same <code>storage_type</code>, inside of the bounds or element of
 <a id="method-rep"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/rep.html'>rep()</a></code></h3>
 <p>Repeats this parameter n-times (by cloning).
 Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_rep".</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/rep.html'>rep</a></span>(<span class='kw'>n</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>rep</span><span class='op'>(</span><span class='va'>n</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -317,15 +317,15 @@ Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_
 <p><hr>
 <a id="method-format"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/format.html'>format()</a></code></h3>
 <p>Helper for print outputs.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/format.html'>format</a></span>()</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>format</span><span class='op'>(</span><span class='op'>)</span></pre><p></div></p>
 
 <p><hr>
 <a id="method-print"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code><a href='https://rdrr.io/r/base/print.html'>print()</a></code></h3>
 <p>Printer.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span>(
-  <span class='kw'>...</span>,
-  hide_cols = <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span>(<span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span>)
-)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>print</span><span class='op'>(</span>
+  <span class='va'>...</span>,
+  hide_cols <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='st'>"nlevels"</span>, <span class='st'>"is_bounded"</span>, <span class='st'>"special_vals"</span>, <span class='st'>"tags"</span>, <span class='st'>"storage_type"</span><span class='op'>)</span>
+<span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -342,7 +342,7 @@ Which fields should not be printed? Default is <code>"nlevels"</code>,
 domain of the parameter. Think of: quantile function or the use case to
 map a uniform-[0,1] random variable into a uniform sample from this
 param.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'><a href='https://rdrr.io/r/stats/Uniform.html'>qunif</a></span>(<span class='kw'>x</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>qunif</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -354,7 +354,7 @@ param.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#argument
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='kw'>Param</span><span class='op'>$</span><span class='fu'>clone</span>(deep = <span class='fl'>FALSE</span>)</pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>clone</span><span class='op'>(</span>deep <span class='op'>=</span> <span class='cn'>FALSE</span><span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
