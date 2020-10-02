@@ -6,6 +6,11 @@
 \description{
 A \link{Param} to describe real-valued parameters.
 }
+\note{
+The upper and lower bounds in \verb{$check()} are expanded by
+\code{sqrt(.Machine$double.eps)} to prevent errors due to the precision of double
+values.
+}
 \examples{
 ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
 }

@@ -3,6 +3,11 @@
 #' @description
 #' A [Param] to describe real-valued parameters.
 #'
+#' @note
+#' The upper and lower bounds in `$check()` are expanded by
+#' `sqrt(.Machine$double.eps)` to prevent errors due to the precision of double
+#' values.
+#'
 #' @template param_id
 #' @template param_lower
 #' @template param_upper
@@ -45,7 +50,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+    .check = function(x) checkNumber(x, lower = self$lower - sqrt(.Machine$double.eps), upper = self$upper + sqrt(.Machine$double.eps)),
     .qunif = function(x) x * (self$upper - self$lower) + self$lower
   )
 )
