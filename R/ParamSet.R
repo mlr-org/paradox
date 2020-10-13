@@ -517,7 +517,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        self$tune_ps
+        self$tune_ps  # TODO: this is buggy because private$.values was not changed yet!
       }
       if (length(xs) == 0L) {
         xs = named_list()

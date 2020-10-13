@@ -31,6 +31,7 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   return(xs)
 }
 
+# TODO: the following may get simpler if we build a ParamSetCollection and copy from there
 ps_union = function(sets) {
   assert_list(sets, types = "ParamSet")
   assert_names(discard(map_chr(sets, "set_id"), `==`, ""), type = "unique")
