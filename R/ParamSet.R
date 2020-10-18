@@ -517,7 +517,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        self$tune_ps  # TODO: this is buggy because private$.values was not changed yet!
+        private$get_tune_ps(xs)  # check that to_tune() are valid
       }
       if (length(xs) == 0L) {
         xs = named_list()
@@ -526,6 +526,7 @@ ParamSet = R6Class("ParamSet",
         # this is not the greatest way to do this, evvery param should maybe have a ".convert"
         # function, but this seems overkill for this single issue
         # solves issue #293
+        # (Need to skip over ParamInt that have TuneToken value)
         int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, inherits, "TuneToken")))
         if (length(int_ids) > 0L)
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
@@ -540,14 +541,9 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @field tuning_paramset\cr
-    #' a parameter set to tune over
+    #' (Read-Only) A [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     tune_ps = function() {
-      pars = ps_union(imap(keep(private$.values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, self$params[[pn]])
-      }))
-      pars$set_id = self$set_id
-      map(transpose_list(self$deps[id %in% names(pars$params) & on %in% names(pars$params)]), do.call, what = pars$add_dep)
-      pars
+      private$get_tune_ps(self$values)
     }
   ),
 
@@ -559,6 +555,19 @@ ParamSet = R6Class("ParamSet",
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
     get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), names(self$params)),
+
+    # create tune_ps from values
+    get_tune_ps = function(values) {
+      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      pars = ps_union(imap(keep(values, inherits, "TuneToken"), function(value, pn) {
+        tunetoken_to_ps(value, selfparams[[pn]])
+      }))
+      pars$set_id = self$set_id
+      parsnames = names(pars$params)
+      # only add the dependencies that are also in the tuning PS
+      map(transpose_list(self$deps[id %in% parsnames & on %in% parsnames]), do.call, what = pars$add_dep)
+      pars
+    },
 
     deep_clone = function(name, value) {
       switch(name,

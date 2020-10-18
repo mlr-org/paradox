@@ -159,7 +159,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
 
     #' @field tuning paramset\cr
-    #' a parameter set to tune over
+    #' (Read-Only) A [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     tune_ps = function() {
       pars = ps_union(map(private$.sets, "tune_ps"))
       pars$set_id = self$set_id
