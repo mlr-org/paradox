@@ -153,6 +153,7 @@ crate = function(.fn, ...) {
 # 2. objects that are "visible" from the global environment
 # 3. objects that are actually R6-objects (and do not just have a `$new()` function
 get_r6_constructor = function(name, env = parent.frame()) {
+  found_in_env = dups = visible = isr6 = NULL  # pacify static check
   # data.table with <name>, <objs>, <where>, <visible>, <dups>
   candidates = do.call(data.table, getAnywhere(name))
   # reducing to columns: <objs>, <visible>
@@ -174,6 +175,5 @@ get_r6_constructor = function(name, env = parent.frame()) {
   }
   # Order of preference:
   # found_in_env, then visible, then isr6
-  found_in_env = visible = isr6 = NULL  # pacify static check
   candidates[order(found_in_env, visible, isr6, decreasing = TRUE)]$objs[[1]]
 }
