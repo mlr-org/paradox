@@ -54,3 +54,9 @@ test_that("qunif", {
   testit(1, 12)
   testit(-2, 1)
 })
+
+test_that("tolerance in check allows values at the upper bound", {
+ p =  ParamDbl$new("x", lower = log(.01), upper = log(100))
+ ub = p$qunif(1)
+ expect_true(p$check(ub))
+})
