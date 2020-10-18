@@ -1,9 +1,9 @@
 # Tune token
 #' @export
-tune = function(...) {
+to_tune = function(...) {
   call = sys.call()
   if (...length() > 2) {
-    stop("tune() must have zero, one or two arguments.")
+    stop("to_tune() must have zero, one or two arguments.")
   }
   if (...length() == 2) {
     type = "RangeTuneToken"
