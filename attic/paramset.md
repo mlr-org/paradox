@@ -64,13 +64,13 @@ or, making use of the information from the pipeline `ParamSet`:
 
 ```r
 glrn$param_set$values = list(
-  branch.selection = tune(),
-  anova.filter.frac = tune(.1, 1),
-  lrn_branch.selection = tune(),
-  rf.mtry = tune(1, 20),
-  xgb.nrounds = tune(1, 500),
+  branch.selection = to_tune(),
+  anova.filter.frac = to_tune(.1, 1),
+  lrn_branch.selection = to_tune(),
+  rf.mtry = to_tune(1, 20),
+  xgb.nrounds = to_tune(1, 500),
   xgb.verbose = 0,
-  svm.cost = tune(p_dbl(-12, 4, trafo = function(x) 2^x)),
+  svm.cost = to_tune(p_dbl(-12, 4, trafo = function(x) 2^x)),
   svm.type = "C-classification",
   svm.kernel = "radial"
 )
@@ -130,7 +130,7 @@ degree <- p_int(1, 4,
 
 #### Internals
 
-Because people are not supposed to use `Domain` outside of "sugary" usage, and in particular because they should not do any computation on these objects besides "sugar", we don't need to give these objects much inner life. They are just a `list()`, maybe with a printer (I will avoid calling things like this "`S3` objects" in this document for political reasons), with elements `constructor`, `constargs`, `trafo`, and `requirements`.
+Because people are not supposed to use `Domain` outside of "sugary" usage, and in particular because they should not do any computation on these objects besides "sugar", we don't need to give these objects much inner life. They are just a `list()`, maybe with a printer (I will avoid calling things like this "`S3` objects" in this tunedocument for political reasons), with elements `constructor`, `constargs`, `trafo`, and `requirements`.
 
 Constructing a `Param` from this is just `mlr3misc::invoke(constructor, id = <ID>, .args = constargs)`; the `trafo` and `requirements` will have to be handled in a way to be given to the resulting `ParamSet`.
 
@@ -181,7 +181,7 @@ generate_design_random(pars, 1)$transpose()
 #> [[1]]$c
 #> function (x) 
 #> x
-#> <bytecode: 0x563f67539520>
+#> <bytecode: 0x55e653ec1488>
 #> <environment: namespace:base>
 ```
 
@@ -225,7 +225,7 @@ Just call the `Param` constructors from the `Domain` objects as described above.
 
 ### Tune `ParamSet` autogeneration
 
-When defining tuning `ParamSet`s, we want to make use of the information stored in the `Learner`'s `ParamSet`. A nice way to define a tuning scenario is if we can define the fixed and variable parameters of an object at the same time. We solve this by using a `TuneToken` list-with-a-printer, constructed via `tune()`. It is given to the `$values` slot of a `ParamSet` and indicates that a parameter does not have a preset value, and instead should be tuned over.
+When defining tuning `ParamSet`s, we want to make use of the information stored in the `Learner`'s `ParamSet`. A nice way to define a tuning scenario is if we can define the fixed and variable parameters of an object at the same time. We solve this by using a `TuneToken` list-with-a-printer, constructed via `to_tune()`. It is given to the `$values` slot of a `ParamSet` and indicates that a parameter does not have a preset value, and instead should be tuned over.
 
 
 
@@ -233,7 +233,7 @@ When defining tuning `ParamSet`s, we want to make use of the information stored 
 ll <- lrn("classif.rpart")
 ll$param_set$values = list(
   minsplit = 10,
-  cp = tune()
+  cp = to_tune()
 )
 ```
 
@@ -264,15 +264,15 @@ Nomenclature: We call `ll$param_set$params$cp` the *underlying parameter*, and `
 
 ### `TuneToken`
 
-However, maybe we do not want to tune over the full range of `cp`, or maybe we want to tune over integer values of a `ParamDbl`, or we want to tune over a `ParamUty` with a transformation. The `tune()` constructor therefore admits five behaviours:
+However, maybe we do not want to tune over the full range of `cp`, or maybe we want to tune over integer values of a `ParamDbl`, or we want to tune over a `ParamUty` with a transformation. The `to_tune()` constructor therefore admits five behaviours:
 
-1. **`tune()`**: Tune over the whole range of a (bounded) `Param`.
-2. **`tune(lower, upper)`**: Tune over the (numeric or integer) `Param` with the given bounds.
-3. **`tune(value_vector_or_list)`**: Tune over the values in the given vector or list. This is done by creating a `ParamFct` tuning-`Param` with a trafo that converts to the type required by the underlying parameter.
-4. **`tune(Domain)`**: Tune over the domain, making use of the given dependencies and trafos if necessary. This is useful if the type over which we tune is different from the underlying parameter being tuned. See notes below.
-5. **`tune(ParamSet)`**: Tune over the `ParamSet`, making use of its `trafo` etc. This is useful if we tune a single (usually `ParamUty`) underlying parameter with multiple tuning parameters.
+1. **`to_tune()`**: Tune over the whole range of a (bounded) `Param`.
+2. **`to_tune(lower, upper)`**: Tune over the (numeric or integer) `Param` with the given bounds.
+3. **`to_tune(value_vector_or_list)`**: Tune over the values in the given vector or list. This is done by creating a `ParamFct` tuning-`Param` with a trafo that converts to the type required by the underlying parameter.
+4. **`to_tune(Domain)`**: Tune over the domain, making use of the given dependencies and trafos if necessary. This is useful if the type over which we tune is different from the underlying parameter being tuned. See notes below.
+5. **`to_tune(ParamSet)`**: Tune over the `ParamSet`, making use of its `trafo` etc. This is useful if we tune a single (usually `ParamUty`) underlying parameter with multiple tuning parameters.
 
-**Notes**: Why is it nice to have `tune(Domain)` instead of `tune(lower, upper, trafo)` when we need a trafo? Because
+**Notes**: Why is it nice to have `to_tune(Domain)` instead of `to_tune(lower, upper, trafo)` when we need a trafo? Because
 
 1. This functionality is overlapping a lot with `Domain` already, we get two functionalities for the price of one
 2. When we give a `trafo`, we can often expect that the tuning parameter and the underlying parameter have different types, e.g. tuning from `log(100)` to `log(1000)` with trafo `round(exp(x))` for a `ParamInt` underlying parameter where the tuning parameter is a `ParamDbl`.
@@ -286,8 +286,8 @@ round_exp = function(x) round(exp(x))  # maybe we want this in paradox
 lr <- lrn("classif.ranger")
 lr$param_set$values = list(
   mtry = 2,
-  num.trees = tune(p_dbl(log(10), log(1000), trafo = round_exp)),
-  regularization.factor = tune(
+  num.trees = to_tune(p_dbl(log(10), log(1000), trafo = round_exp)),
+  regularization.factor = to_tune(
     ps(
       reg.sepal = p_dbl(0, 1),
       reg.petal = p_dbl(0, 1),
@@ -321,7 +321,7 @@ generate_design_random(lr$param_set$tune_ps, 1)$transpose()
 ```r
 ts = tsk("iris")
 glrn = as_learner(po("pca") %>>% lrn("classif.rpart"))
-glrn$param_set$values$pca.affect_columns = tune(
+glrn$param_set$values$pca.affect_columns = to_tune(
   p_fct(ts$feature_names, trafo = function(x) selector_invert(selector_name(x)))
 )
 
@@ -334,7 +334,7 @@ generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
 #### Internals
 
 The `ParamSet$values` slot stores the `TuneToken` and uses that to create a tuning `ParamSet` whenever `$tune_ps` is queried. This is done by
-1. Generating a `ParamSet` for each individual value that is set to a `TuneToken`, using the information retrieved from the `TuneToken` (range, factor levels, etc.) and information from the `Param` itself to create the tuning parameter. E.g. `tune()` just clones the `Param`, while `tune(p_fct(...))` needs only the `$id` of the `Param` and does some validity checking.
+1. Generating a `ParamSet` for each individual value that is set to a `TuneToken`, using the information retrieved from the `TuneToken` (range, factor levels, etc.) and information from the `Param` itself to create the tuning parameter. E.g. `to_tune()` just clones the `Param`, while `to_tune(p_fct(...))` needs only the `$id` of the `Param` and does some validity checking.
 2. Putting the individual `ParamSets` gotten like this into a common `ParamSet` using a `ps_union()` function. This function goes beyond just collecting the `Param`s, and also collects `$deps` and `$trafo` so that the individual trafos of constituent `ParamSet`s are called correctly. Dependencies of the outer paramset are copied to `$tune_ps`.
 3. If we are dealing with a `GraphLearner`, then we are are already dealing with a `ParamSetCollection` on the outside (i.e. `glrn$param_set` is a `ParamSetCollection`). It must provide a `$tune_ps` active binding just as `ParamSet`. It just puts together the individual tuning paramsets using `ps_union()` as well; trafos etc. get handled transparently.
 
@@ -351,7 +351,7 @@ A `Domain` object is a representation of a single dimension of a `ParamSet`. `Do
 
 The `p_fct` function admits a `levels` argument that goes beyond the `levels` accepted by `Paramfct$new()`. Instead of a `character` vector, any atomic vector or list, optionally named, may be given. (If the value is not named, the names are inferred using `as.character()` on the values.) The resulting `Domain` will correspond to a range of values given by the names of the `levels` argument with a `trafo` that maps the `character` names to the arbitrary values of the `levels` argument.
 
-Domain objects are representations of parameter ranges that are intermediate objects to be used in short form constructions in `tune()` and `ps()`. Because of their nature, they should not be modified by the user.
+Domain objects are representations of parameter ranges that are intermediate objects to be used in short form constructions in `to_tune()` and `ps()`. Because of their nature, they should not be modified by the user.
 
 ### `ps()`
 
@@ -366,14 +366,14 @@ A `TuneToken` object can be given to a `ParamSet$values` slot as an alternative 
 
 The tuning range `ParamSet` that is constructed from the `TuneToken` values in a `ParamSet`'s `$values` slot can be accessed through the `ParamSet$tune_ps` active bindng. This is done automatically by tuners if no tuning range is given, but it is also possible to access the `$tune_ps` active binding, modify it further, and give the modified `ParamSet` to a tuning function (or do anything else with it, noone is judging you).
 
-A `TuneToken` represents the range over which the parameter whose `$values` slot it occupies should be tuned over. It can be constructed via the `tune()` function in one of several ways:
+A `TuneToken` represents the range over which the parameter whose `$values` slot it occupies should be tuned over. It can be constructed via the `to_tune()` function in one of several ways:
 
-* **`tune()`**: Indicates a parameter should be tuned over its entire range. Only applies to finite parameters (i.e. discrete or bounded numeric parameters)
-* **`tune(lower, upper)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning `lower` to `upper`. Depending on the parameter, integer (if it is a `ParamInt`) or real values (if it is a `ParamDbl`) are used.
-* **`tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a corresponding `character` vector with distinct values using `as.character`). 
-* **`tune(<Domain>)`**: The given `Domain` object indicates the range which should be tuned over. The supplied `trafo` function is used for parameter transformation.
-* **`tune(<Param>)`**: The given `Param` object indicates the range which should be tuned over.
-* **`tune(<ParamSet>)`**: The given `ParamSet` is used to tune over a single `Param`. This is useful for cases where a single evaluation-time parameter value (e.g. `ParamUty`) is constructed from multiple tuner-visible parameters (which may not be `ParamUty`). The supplied `ParamSet` should always contain a `$trafo` function, which must always return a named `list` with a single entry with the name of the `Param` that this `TuneToken` object corresponds to.
+* **`to_tune()`**: Indicates a parameter should be tuned over its entire range. Only applies to finite parameters (i.e. discrete or bounded numeric parameters)
+* **`to_tune(lower, upper)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning `lower` to `upper`. Depending on the parameter, integer (if it is a `ParamInt`) or real values (if it is a `ParamDbl`) are used.
+* **`to_tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a corresponding `character` vector with distinct values using `as.character`). 
+* **`to_tune(<Domain>)`**: The given `Domain` object indicates the range which should be tuned over. The supplied `trafo` function is used for parameter transformation.
+* **`to_tune(<Param>)`**: The given `Param` object indicates the range which should be tuned over.
+* **`to_tune(<ParamSet>)`**: The given `ParamSet` is used to tune over a single `Param`. This is useful for cases where a single evaluation-time parameter value (e.g. `ParamUty`) is constructed from multiple tuner-visible parameters (which may not be `ParamUty`). The supplied `ParamSet` should always contain a `$trafo` function, which must always return a named `list` with a single entry with the name of the `Param` that this `TuneToken` object corresponds to.
 
 ## Challenges
 
