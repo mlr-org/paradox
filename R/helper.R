@@ -157,7 +157,7 @@ get_r6_constructor = function(name, env = parent.frame()) {
   # data.table with <name>, <objs>, <where>, <visible>, <dups>
   candidates = do.call(data.table, getAnywhere(name))
   # reducing to columns: <objs>, <visible>
-  candidates = candidates[!dups | visible, .(objs, visible)]
+  candidates = candidates[!dups | visible, list(objs, visible)]
 
   # prefer object we find directly where the call expects it
   candidates[, found_in_env := FALSE]
