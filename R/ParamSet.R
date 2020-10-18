@@ -540,7 +540,7 @@ ParamSet = R6Class("ParamSet",
       nrow(private$.deps) > 0L
     },
 
-    #' @field tuning_paramset\cr
+    #' @field tune_ps ([`ParamSet`])\cr
     #' (Read-Only) A [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     tune_ps = function() {
       private$get_tune_ps(self$values)

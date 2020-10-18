@@ -52,8 +52,6 @@ ps$check(list(d = 2.1, f = "a", i = 3L))
 \item{\code{assert_values}}{(\code{logical(1)})\cr
 Should values be checked for validity during assigment to active binding \verb{$values}?
 Default is \code{TRUE}, only switch this off if you know what you are doing.}
-
-\item{\code{tuning_paramset\cr}}{a parameter set to tune over}
 }
 \if{html}{\out{</div>}}
 }
@@ -156,7 +154,8 @@ When you set values, all previously set values will be unset / removed.}
 \item{\code{has_deps}}{(\code{logical(1)})\cr
 Has the set parameter dependencies?}
 
-\item{\code{tuning_paramset\cr}}{a parameter set to tune over}
+\item{\code{tune_ps}}{(\code{\link{ParamSet}})\cr
+(Read-Only) A \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.}
 }
 \if{html}{\out{</div>}}
 }
