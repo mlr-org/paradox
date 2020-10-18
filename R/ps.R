@@ -7,7 +7,7 @@
 #'   Named arguments of [`Domain`] or [`Param`] objects. The [`ParamSet`] will be constructed of the given [`Param`]s,
 #'   or of [`Params`]s constructed from the given domains. The names of the arguments will be used as `$id`
 #'   (the `$id` of [`Param`] arguments are ignored).
-#' @param .extra.trafo (`function(x, param_set)`)\cr
+#' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.
 #' @return A [`ParamSet`] object.

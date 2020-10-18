@@ -20,6 +20,10 @@ p_lgl(...)
 p_fct(..., trafo = NULL)
 }
 \arguments{
+\item{...}{(any)\cr
+Parameters as they would be given to the corresponding constructors, e.g. \code{ParamInt$new()} for \code{p_int()}. These
+may be named or unnamed. The order is the same as for \code{ParamXxx$new(...)}, except that the \code{id} must not be given.}
+
 \item{trafo}{(\code{function})\cr
 Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
 \code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}

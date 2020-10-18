@@ -22,6 +22,9 @@
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
 #' The `Domain` object's internals are subject to change and should not be relid upon.
 #'
+#' @param ... (any)\cr
+#'   Parameters as they would be given to the corresponding constructors, e.g. `ParamInt$new()` for `p_int()`. These
+#'   may be named or unnamed. The order is the same as for `ParamXxx$new(...)`, except that the `id` must not be given.
 #' @param trafo (`function`)\cr
 #'   Single argument function performing the transformation of a parameter. When the `Domain` is used to construct a
 #'   [`ParamSet`], this transformation will be applied to the corresponding parameter as part of the `$trafo` function.

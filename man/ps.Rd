@@ -14,7 +14,7 @@ Named arguments of \code{\link{Domain}} or \code{\link{Param}} objects. The \cod
 or of \code{\link{Params}}s constructed from the given domains. The names of the arguments will be used as \verb{$id}
 (the \verb{$id} of \code{\link{Param}} arguments are ignored).}
 
-\item{.extra.trafo}{(\verb{function(x, param_set)})\cr
+\item{.extra_trafo}{(\verb{function(x, param_set)})\cr
 Transformation to set the resulting \code{\link{ParamSet}}'s \verb{$trafo} value to. This is in addition to any \code{trafo} of
 \code{\link{Domain}} objects given in \code{...}, and will be run \emph{after} transformations of individual parameters were performed.}
 }
