@@ -31,62 +31,87 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   return(xs)
 }
 
-# TODO: the following may get simpler if we build a ParamSetCollection and copy from there
+# Create a ParamSet from a list of ParamSets
+# This emulates `ParamSetCollection$new(sets)`, except that
+# - The result is a `ParamSet`, not a `ParamSetCollection`
+# - The ParamSets are allowed to have `$trafo`, which are collected together into a single function.
+# This emulates `ParamSetCollection$new(sets)`, which in particular means that the resulting ParamSet has all the Params
+# from the input `sets`, but some `$id`s are changed: If the ParamSet has a non-empty `set_id`, then the Params will
+# have their <id> changed to <set_id>.<id>. This is also reflected in deps and in `$trafo`.
+# @param sets: list of ParamSet
 ps_union = function(sets) {
   assert_list(sets, types = "ParamSet")
   assert_names(discard(map_chr(sets, "set_id"), `==`, ""), type = "unique")
-  ps = ParamSet$new()
-  setinfo = map(unname(sets), function(s) {
-    si = list(
-      trafo = s$trafo,
-      psids = names(s$params),
-      forward_name_translation = structure(names(s$params), names = names(s$params)),
-      set_id = s$set_id
-    )
-    if (s$set_id != "") {
-      sid = s$set_id
-      deps = copy(s$deps)
-      s = ParamSet$new(map(s$params, function(p) {  # this works even if s is a PSC
-        p = p$clone()
-        p$id = sprintf("%s.%s", sid, p$id)
-        p
-      }))
-      names(si$forward_name_translation) = names(s$params)
-      si$psids = names(s$params)
-      map(transpose_list(deps), function(d) {
-        s$add_dep(id = sprintf("%s.%s", sid, d$id), on = sprintf("%s.%s", sid, d$on), cond = d$cond)
-      })
+
+  psc = ParamSetCollection$new(map(sets, function(x) {
+    if (x$has_trafo) {
+      # PSC can not use ParamSet with a `$trafo` that is set.
+      x = x$clone()
+      x$trafo = NULL
     }
-    trtmp = s$trafo
-    on.exit({s$trafo = trtmp})
-    s$trafo = NULL
-    ps$add(s)
-    si
+    x
+  }))
+
+  newps = ParamSet$new()$add(psc)
+
+  # This loop collects information that is needed by the trafo.
+  # Resulting is a list of named lists, with one element per `sets` entry. Elements of the named lists are:
+  # - trafo: trafo of the given ParamSet
+  # - set_id: set_id of the given ParamSet
+  # - forward_name_translation: named `character`. Names are the Param IDs of the resulting newps,
+  #   values are the Param IDs of the original Params in the `sets` argument.
+  #   E.g. if a single ParamSet with set_id "sid" and with one Param with id "pid" is given,
+  #   then this is a `c(sid.pid = "pid")`.
+  #   Why is this needed? If the $trafo() is given a value `list(sid.pid = 1)`, then
+  #   `forward_name_translation` can be used to rename this to `list(pid = 1)`, which is what the
+  #   original trafo expects.
+  setinfo = map(unname(sets), function(s) {
+    sparams = s$params  # avoid slow ParamSetCollection $params active binding
+    sinfo = list(
+      trafo = s$trafo,
+      set_id = s$set_id,
+      forward_name_translation = names(sparams)
+    )
+    psids = names(sparams)
+    if (s$set_id != "") {
+      psids = sprintf("%s.%s", s$set_id, psids)
+    }
+    names(sinfo$forward_name_translation) = psids
+    sinfo
   })
+
   if (any(map_lgl(sets, "has_trafo"))) {
-    allnames = unlist(map(setinfo, "psids"), use.names = FALSE)
-    ps$trafo = crate(function(x, param_set) {
-      res = c(
-        list(x[setdiff(names(x), allnames)]),
-        map(setinfo, function(s) {
-          trafo = s$trafo
-          pv = x[match(names(s$forward_name_translation), names(x), nomatch = 0)]
-          if (!is.null(trafo)) {
-            # retrieve sublist of the set, assign it in set (after removing prefix)
-            names(pv) = s$forward_name_translation[names(pv)]
-            pv = trafo(pv)
-            if (s$set_id != "") {
-              names(pv) = sprintf("%s.%s", s$set_id, names(pv))
-            }
+    # allnames: names of all parameters, as seen from the outside
+    allnames = names(unlist(map(setinfo, "psids")))
+    assert_set_equal(allnames, names(newps$params))  # this should always be the case
+
+    newps$trafo = crate(function(x, param_set) {
+      res = unlist(map(setinfo, function(s) {
+        trafo = s$trafo
+        # get the parameter values that the current trafo should operate on,
+        # as identified by the names in forward_name_translation
+        pv = x[match(names(s$forward_name_translation), names(x), nomatch = 0)]
+        if (!is.null(trafo)) {
+          # translate name from "<set_id>.<param_id>" to "<param_id>"
+          names(pv) = s$forward_name_translation[names(pv)]
+          pv = trafo(pv)
+
+          # append prefix again. trafo() could have changed parameter names, so
+          # we can't use any cached name_translation magic here
+          if (s$set_id != "") {
+            names(pv) = sprintf("%s.%s", s$set_id, names(pv))
           }
-          pv
-        })
-      )
-      res = unlist(res, recursive = FALSE)
+        }
+        pv
+      }), recursive = FALSE)
+
+      # add the Params that were not translated at all, because the ParamSet doesn't know about them.
+      res = c(remove_named(x, allnames), res)
+
       res[c(intersect(names(res), names(x)), setdiff(names(res), names(x)))]  # unchanged parameter names stay in order
     }, setinfo, allnames)
   }
-  ps
+  newps
 }
 
 # Put a function in a "lean" environment that does not carry unnecessary baggage with it (e.g. references to datasets)
