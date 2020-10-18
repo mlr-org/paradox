@@ -44,11 +44,11 @@ ps = function(..., .extra_trafo = NULL) {
   params = imap(args, function(p, name) {
     if (inherits(p, "Param")) {
       p = p$clone(deep = TRUE)
-      p$id = name
-      p
     } else {
-      invoke(p$constructor$new, id = name, .args = p$constargs)
+      p = p$param$clone(deep = TRUE)
     }
+    p$id = name
+    p
   })
 
   paramset = ParamSet$new(params)
