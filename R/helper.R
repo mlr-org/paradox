@@ -155,7 +155,7 @@ crate = function(.fn, ...) {
 get_r6_constructor = function(name, env = parent.frame()) {
   found_in_env = dups = visible = isr6 = NULL  # pacify static check
   # data.table with <name>, <objs>, <where>, <visible>, <dups>
-  candidates = do.call(data.table, getAnywhere(name))
+  candidates = do.call(data.table, utils::getAnywhere(name))
   # reducing to columns: <objs>, <visible>
   candidates = candidates[!dups | visible, list(objs, visible)]
 

@@ -9,24 +9,20 @@
 \alias{p_fct}
 \title{Domain: Parameter Range without an Id}
 \usage{
-p_int(...)
+p_int(..., requires = NULL, trafo = NULL)
 
-p_dbl(...)
+p_dbl(..., requires = NULL, trafo = NULL)
 
-p_uty(...)
+p_uty(..., requires = NULL, trafo = NULL)
 
-p_lgl(...)
+p_lgl(..., requires = NULL, trafo = NULL)
 
-p_fct(..., trafo = NULL)
+p_fct(..., requires = NULL, trafo = NULL)
 }
 \arguments{
 \item{...}{(any)\cr
 Parameters as they would be given to the corresponding constructors, e.g. \code{ParamInt$new()} for \code{p_int()}. These
 may be named or unnamed. The order is the same as for \code{ParamXxx$new(...)}, except that the \code{id} must not be given.}
-
-\item{trafo}{(\code{function})\cr
-Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
-\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
 
 \item{requires}{(\code{call} | \code{expression})\cr
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
@@ -35,6 +31,10 @@ examples). The expression may be of the form \verb{<Param> == <value>} or \verb{
 dependencies according to \verb{ParamSet$add_dep(on = "<Param>", cond = CondEqual$new(<value>))} or
 \verb{ParamSet$add_dep(on = "<Param>", cond = CondAnyOf$new(<values>))}, respectively (see \code{\link{CondEqual}},
 \code{\link{CondAnyOf}}). The expression may also contain multiple conditions separated by \code{&&}.}
+
+\item{trafo}{(\code{function})\cr
+Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
+\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct

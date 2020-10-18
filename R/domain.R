@@ -60,31 +60,31 @@ NULL
 
 #' @rdname Domain
 #' @export
-p_int = function(...) {
-  domain(constructor = ParamInt, ...)
+p_int = function(..., requires = NULL, trafo = NULL) {
+  domain(constructor = ParamInt, ..., requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_dbl = function(...) {
-  domain(constructor = ParamDbl, ...)
+p_dbl = function(..., requires = NULL, trafo = NULL) {
+  domain(constructor = ParamDbl, ..., requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_uty = function(...) {
-  domain(constructor = ParamUty, ...)
+p_uty = function(..., requires = NULL, trafo = NULL) {
+  domain(constructor = ParamUty, ..., requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_lgl = function(...) {
-  domain(constructor = ParamLgl, ...)
+p_lgl = function(..., requires = NULL, trafo = NULL) {
+  domain(constructor = ParamLgl, ..., requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_fct = function(..., trafo = NULL) {
+p_fct = function(..., requires = NULL, trafo = NULL) {
   extracted = (function(id, levels, ...) {
     list(levels = levels, rest = list(...))
   })(id = "ID", ...)
@@ -104,17 +104,17 @@ p_fct = function(..., trafo = NULL) {
     constargs = extracted$rest
     constargs$levels = names(levels)
     constargs$requires = NULL
-    domain(constructor = ParamFct, ..., trafo = trafo, .constargs = constargs)
+    domain(constructor = ParamFct, requires_expr = substitute(requires), trafo = trafo, .constargs = constargs)
   } else {
-    domain(constructor = ParamFct, ..., trafo = trafo)
+    domain(constructor = ParamFct, ..., requires_expr = substitute(requires), trafo = trafo)
   }
 }
 
 # Construct the actual `Domain` object
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param .constargs: alternative to `...`.
-domain = function(constructor, ..., requires = NULL, trafo = NULL, .constargs = NULL) {
-  constargs = .constargs %??% list(...)
+domain = function(constructor, ..., requires_expr = NULL, trafo = NULL, .constargs = NULL) {
+  constargs = c(.constargs, list(...))
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
 
   # check that `...` are valid by constructing and making sure this doesn't error
@@ -122,10 +122,9 @@ domain = function(constructor, ..., requires = NULL, trafo = NULL, .constargs = 
   param = invoke(constructor$new, id = "ID", .args = constargs)
 
   # requires may be an expression, but may also be quote() or expression()
-  requires_expr = substitute(requires)
   if (length(requires_expr) == 1 ||
       isTRUE(as.character(requires_expr[[1]]) %in% c("quote", "expression"))) {
-    requires_expr = requires
+    requires_expr = eval(requires_expr, envir = parent.frame(2))
   }
 
   # repr: what to print

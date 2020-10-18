@@ -5,7 +5,7 @@
 #' The `ps()` short form constructor uses [`Domain`] objects to construct [`ParamSet`]s in a succinct and readable way.
 #' @param ... ([`Domain`] | [`Param`])\cr
 #'   Named arguments of [`Domain`] or [`Param`] objects. The [`ParamSet`] will be constructed of the given [`Param`]s,
-#'   or of [`Params`]s constructed from the given domains. The names of the arguments will be used as `$id`
+#'   or of [`Param`]s constructed from the given domains. The names of the arguments will be used as `$id`
 #'   (the `$id` of [`Param`] arguments are ignored).
 #' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
