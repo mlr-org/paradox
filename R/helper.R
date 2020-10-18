@@ -89,8 +89,65 @@ ps_union = function(sets) {
   ps
 }
 
+# Put a function in a "lean" environment that does not carry unnecessary baggage with it (e.g. references to datasets)
+#
+# @param .fn: function to crate
+# @param ...: the objects, which should be visible inside `.fn`. These objects should be given as is, not in a string
+#   or expression or anything like that.
+#
+# @examples
+# meta_f = function(z) {
+#   x = 1
+#   y = 2
+#   crate(function() {
+#     c(x, y, z)
+#   }, x)
+# }
+# x = 100
+# y = 200
+# z = 300
+# f = meta_f(1)
+# f()
+# #> [1]   1 200 300
+# ## using `x` from the crate, `y` and `z` from global env
 crate = function(.fn, ...) {
   environment(.fn) = list2env(parent = .GlobalEnv,
     structure(list(...), names = map_chr(substitute(list(...)), as.character)[-1]))
   .fn
+}
+
+# Get the R6ClassGenerator (constructor) by class name, even if the generator itself is not directly visible.
+# This is necessary to create new instances of a `Param`, because the `Param` only contains a link to its class
+# name, not its constructor.
+# @param name: name of R6 class to be found
+# @param env: environment (and its parents) to prefer
+# Uses `getAnywhere()` to find objects named `name` with a `$new` slot that is a function. An error is thrown if nothing
+# is found.
+# If multiple objects are found, the order in which they are returned is:
+# 1. object found in `env` (or its parents)
+# 2. objects that are "visible" from the global environment
+# 3. objects that are actually R6-objects (and do not just have a `$new()` function
+get_r6_constructor = function(name, env = parent.frame()) {
+  # data.table with <name>, <objs>, <where>, <visible>, <dups>
+  candidates = do.call(data.table, getAnywhere(name))
+  # reducing to columns: <objs>, <visible>
+  candidates = candidates[!dups | visible, .(objs, visible)]
+
+  # prefer object we find directly where the call expects it
+  candidates[, found_in_env := FALSE]
+  direct_found = tryCatch(get(name, envir = env), error = function(e) NULL)
+  if (!is.null(direct_found)) {
+    candidates = rbind(candidates, data.table(objs = list(direct_found), visible = TRUE, found_in_env = TRUE))
+  }
+
+  # throw away objects without a `$new()`
+  candidates = candidates[map_lgl(objs, function(o) "new" %in% names(o) && is.function(o$new))]
+  candidates[, isr6 := map_lgl(objs, is.R6Class)]
+
+  if (!nrow(candidates)) {
+    stopf("Could not find R6ClassGenerator (or any object with $new() function) named %s.", name)
+  }
+  # Order of preference:
+  # found_in_env, then visible, then isr6
+  candidates[order(found_in_env, visible, isr6, decreasing = TRUE)]$objs[[1]]
 }

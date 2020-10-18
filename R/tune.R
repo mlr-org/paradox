@@ -27,7 +27,7 @@ to_tune = function(...) {
     content = list()
   }
 
-  structure(list(content = content, call = deparse1(call)), class = c(type, "TuneToken"))
+  set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
 }
 
 #' @export
@@ -50,15 +50,11 @@ tunetoken_to_ps = function(tt, param) {
   UseMethod("tunetoken_to_ps")
 }
 
-ttcontent_to_ps = function(content, tt, param) {
-  UseMethod("ttcontent_to_ps")
-}
-
 tunetoken_to_ps.FullTuneToken = function(tt, param) {
   if (!param$is_bounded) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
-  ttcontent_to_ps(param$clone(deep = TRUE), tt, param)
+  ttcontent_to_ps(param, tt$call, param)
 }
 
 tunetoken_to_ps.RangeTuneToken = function(tt, param) {
@@ -68,34 +64,37 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   if (!all(map_lgl(tt$content, param$test))) {
     stopf("%s not compatible with param %s", tt$call, param$id)
   }
-  content = get(param$class)$new(id = param$id, lower = tt$content$lower, upper = tt$content$upper)
-  ttcontent_to_ps(content, tt, param)
+  content = get_r6_constructor(param$class)$new(id = param$id, lower = tt$content$lower, upper = tt$content$upper)
+  ttcontent_to_ps(content, tt$call, param)
 }
 
 tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
-  ttcontent_to_ps(tt$content, tt, param)
+  ttcontent_to_ps(tt$content, tt$call, param)
 }
 
-ttcontent_to_ps.Domain = function(content, tt, param) {
-  content = do.call(ps, structure(list(content), names = param$id))
-  ttcontent_to_ps(content, tt, param)
+ttcontent_to_ps = function(content, call, param) {
+  UseMethod("ttcontent_to_ps")
 }
 
-ttcontent_to_ps.Param = function(content, tt, param) {
+ttcontent_to_ps.Domain = function(content, call, param) {
+  content = do.call(ps, set_names(list(content), param$id))
+  ttcontent_to_ps(content, call, param)
+}
+
+ttcontent_to_ps.Param = function(content, call, param) {
   content = content$clone(deep = TRUE)
   content$id = param$id
   content = ParamSet$new(list(content))
-  ttcontent_to_ps(content, tt, param)
+  ttcontent_to_ps(content, call, param)
 }
 
-ttcontent_to_ps.ParamSet = function(content, tt, param) {
+ttcontent_to_ps.ParamSet = function(content, call, param) {
   testpoints = generate_design_grid(content, 2)$transpose()
   if (!all(map_lgl(testpoints, function(x) {
     identical(names(x), param$id) && param$test(x[[1]])
   }))) {
-    stopf("%s not compatible with param %s", tt$call, param$id)
+    stopf("%s not compatible with param %s", call, param$id)
   }
   content$set_id = ""
   content
 }
-
