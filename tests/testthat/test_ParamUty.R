@@ -13,7 +13,6 @@ test_that("ParamUty", {
   expect_true(p$check(NA))
 
   p = ParamUty$new(id = "x", default = Inf)
-  expect_true(p$check())
 })
 
 test_that("R6 values of ParamUty are cloned", {
