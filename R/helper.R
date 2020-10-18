@@ -70,9 +70,9 @@ ps_union = function(sets) {
     sinfo = list(
       trafo = s$trafo,
       set_id = s$set_id,
-      forward_name_translation = names(sparams)
+      forward_name_translation = names2(sparams)
     )
-    psids = names(sparams)
+    psids = names2(sparams)
     if (s$set_id != "") {
       psids = sprintf("%s.%s", s$set_id, psids)
     }
@@ -82,8 +82,8 @@ ps_union = function(sets) {
 
   if (any(map_lgl(sets, "has_trafo"))) {
     # allnames: names of all parameters, as seen from the outside
-    allnames = names(unlist(map(setinfo, "psids")))
-    assert_set_equal(allnames, names(newps$params))  # this should always be the case
+    allnames = names2(unlist(map(setinfo, "forward_name_translation")))
+    assert_set_equal(allnames, names2(newps$params))  # this should always be the case
 
     newps$trafo = crate(function(x, param_set) {
       res = unlist(map(setinfo, function(s) {

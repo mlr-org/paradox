@@ -36,10 +36,10 @@
 #' params = ps(
 #'   unbounded_integer = p_int(),
 #'   bounded_double = p_dbl(0, 10),
-#'   half_bounded_integer = p_dbl(, 1),
+#'   half_bounded_integer = p_dbl(1),
 #'   half_bounded_double = p_dbl(upper = 1),
 #'   double_with_trafo = p_dbl(-1, 1, trafo = exp),
-#'   extra_double = p_dbl(0, 1, special_vals = "xxx", tags = "tagged"),
+#'   extra_double = p_dbl(0, 1, special_vals = list("xxx"), tags = "tagged"),
 #'   factor_param = p_fct(c("a", "b", "c")),
 #'   factor_param_with_implicit_trafo = p_fct(list(a = 1, b = 2, c = list()))
 #' )
@@ -81,7 +81,7 @@ p_lgl = function(...) {
 
 #' @rdname Domain
 #' @export
-p_fct = function(..., requires = NULL, trafo = NULL) {
+p_fct = function(..., trafo = NULL) {
   extracted = (function(id, levels, ...) {
     list(levels = levels, rest = list(...))
   })(id = "ID", ...)
@@ -100,16 +100,18 @@ p_fct = function(..., requires = NULL, trafo = NULL) {
     }, trafo, levels)
     constargs = extracted$rest
     constargs$levels = names(levels)
-    invoke(domain, requires = requires, trafo = trafo, .args = constargs)
+    constargs$requires = NULL
+    domain(constructor = ParamFct, ..., trafo = trafo, .constargs = constargs)
   } else {
-    domain(constructor = ParamFct, ...)
+    domain(constructor = ParamFct, ..., trafo = trafo)
   }
 }
 
 # Construct the actual `Domain` object
 # @param Constructor: The ParamXxx to call `$new()` for.
-domain = function(constructor, ..., requires = NULL, trafo = NULL) {
-  constargs = list(...)
+# @param .constargs: alternative to `...`.
+domain = function(constructor, ..., requires = NULL, trafo = NULL, .constargs = NULL) {
+  constargs = .constargs %??% list(...)
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
 
   # check that `...` are valid by constructing and making sure this doesn't error
@@ -160,9 +162,15 @@ parse_requires = function(requires_expr, evalenv) {
   if (is.null(requires_expr)) return(NULL)
 
   # throw(): Give generic helpful error message.
-  throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(requires_expr), sprintf(":\n%s", msg))
+  throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(requires_expr), if (!is.null(msg)) sprintf(":\n%s", msg) else "")
 
   if (!is.language(requires_expr)) throw()
+  if (is.expression(requires_expr)) {
+    if (length(requires_expr) != 1) {
+      throw("given 'expression' objects must have length 1.")
+    }
+    requires_expr = requires_expr[[1]]
+  }
 
   symbol_paren = as.symbol("(")
   symbol_equal = as.symbol("==")

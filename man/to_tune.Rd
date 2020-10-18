@@ -70,8 +70,10 @@ params$values = list(
   # tune over 2..7:
   int_unbounded = to_tune(2, 7),
 
-  # tune on a log scale in range 1..100:
-  dbl = to_tune(p_dbl(log(1), log(100), trafo = exp)),
+  # tune on a log scale in range 1..10:
+  # beware: rounding errors of `exp(log(10))` give a values
+  # greater than 10, so we have to set the limit below log(10).
+  dbl = to_tune(p_dbl(log(1), log(9.999999), trafo = exp)),
 
   # nothing keeps us from tuning a dbl over integer values
   dbl_unbounded = to_tune(p_int(1, 10)),
@@ -105,6 +107,8 @@ params$values = list(
   # not all values need to be tuned!
   uty5 = 100
 )
+
+print(params$values)
 
 print(params$tune_ps)
 

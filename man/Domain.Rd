@@ -17,9 +17,13 @@ p_uty(...)
 
 p_lgl(...)
 
-p_fct(..., requires = NULL, trafo = NULL)
+p_fct(..., trafo = NULL)
 }
 \arguments{
+\item{trafo}{(\code{function})\cr
+Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
+\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
+
 \item{requires}{(\code{call} | \code{expression})\cr
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 expression (using \code{quote()}), or the expression can be entered directly and will be parsed using NSE (see
@@ -27,10 +31,6 @@ examples). The expression may be of the form \verb{<Param> == <value>} or \verb{
 dependencies according to \verb{ParamSet$add_dep(on = "<Param>", cond = CondEqual$new(<value>))} or
 \verb{ParamSet$add_dep(on = "<Param>", cond = CondAnyOf$new(<values>))}, respectively (see \code{\link{CondEqual}},
 \code{\link{CondAnyOf}}). The expression may also contain multiple conditions separated by \code{&&}.}
-
-\item{trafo}{(\code{function})\cr
-Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
-\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
@@ -56,10 +56,10 @@ The \code{Domain} object's internals are subject to change and should not be rel
 params = ps(
   unbounded_integer = p_int(),
   bounded_double = p_dbl(0, 10),
-  half_bounded_integer = p_dbl(, 1),
+  half_bounded_integer = p_dbl(1),
   half_bounded_double = p_dbl(upper = 1),
   double_with_trafo = p_dbl(-1, 1, trafo = exp),
-  extra_double = p_dbl(0, 1, special_vals = "xxx", tags = "tagged"),
+  extra_double = p_dbl(0, 1, special_vals = list("xxx"), tags = "tagged"),
   factor_param = p_fct(c("a", "b", "c")),
   factor_param_with_implicit_trafo = p_fct(list(a = 1, b = 2, c = list()))
 )
