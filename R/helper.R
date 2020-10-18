@@ -174,5 +174,6 @@ get_r6_constructor = function(name, env = parent.frame()) {
   }
   # Order of preference:
   # found_in_env, then visible, then isr6
+  found_in_env = visible = isr6 = NULL  # pacify static check
   candidates[order(found_in_env, visible, isr6, decreasing = TRUE)]$objs[[1]]
 }
