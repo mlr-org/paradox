@@ -75,7 +75,7 @@ glrn$param_set$values = list(
   svm.kernel = "radial"
 )
 
-glrn$param_set$tune_ps
+glrn$param_set$tune_ps()
 #> <ParamSet>
 #>                      id    class lower upper      levels        default value
 #> 1:     branch.selection ParamFct    NA    NA pca,nothing <NoDefault[3]>      
@@ -181,7 +181,7 @@ generate_design_random(pars, 1)$transpose()
 #> [[1]]$c
 #> function (x) 
 #> x
-#> <bytecode: 0x561938985488>
+#> <bytecode: 0x55faab526488>
 #> <environment: namespace:base>
 ```
 
@@ -237,10 +237,10 @@ ll$param_set$values = list(
 )
 ```
 
-The `ParamSet` has a `$tune_ps` active binding that creates the `ParamSet` for tuning out of this. Tuner code, like e.g. `AutoTuner` etc., call this and create a tuning paramset automatically:
+The `ParamSet` has a `$tune_ps()` active binding that creates the `ParamSet` for tuning out of this. Tuner code, like e.g. `AutoTuner` etc., call this and create a tuning paramset automatically:
 
 ```r
-ll$param_set$tune_ps
+ll$param_set$tune_ps()
 #> <ParamSet>
 #>    id    class lower upper levels default value
 #> 1: cp ParamDbl     0     1           0.01
@@ -260,7 +260,7 @@ print(ll$param_set$values)
 #> <entire parameter range>
 ```
 
-Nomenclature: We call `ll$param_set$params$cp` the *underlying parameter*, and `ll$param_set$tune_ps$cp` the *tuning parameter*. They could have different names or types if a `$trafo` is involved.
+Nomenclature: We call `ll$param_set$params$cp` the *underlying parameter*, and `ll$param_set$tune_ps()$cp` the *tuning parameter*. They could have different names or types if a `$trafo` is involved.
 
 ### `TuneToken`
 
@@ -298,7 +298,7 @@ lr$param_set$values = list(
     )
   )
 )
-lr$param_set$tune_ps
+lr$param_set$tune_ps()
 #> <ParamSet>
 #>           id    class    lower    upper levels        default value
 #> 1: num.trees ParamDbl 2.302585 6.907755        <NoDefault[3]>      
@@ -306,7 +306,7 @@ lr$param_set$tune_ps
 #> 3: reg.petal ParamDbl 0.000000 1.000000        <NoDefault[3]>      
 #> Trafo is set.
 
-generate_design_random(lr$param_set$tune_ps, 1)$transpose()
+generate_design_random(lr$param_set$tune_ps(), 1)$transpose()
 #> [[1]]
 #> [[1]]$num.trees
 #> [1] 775
@@ -325,7 +325,7 @@ glrn$param_set$values$pca.affect_columns = to_tune(
   p_fct(ts$feature_names, trafo = function(x) selector_invert(selector_name(x)))
 )
 
-generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
+generate_design_random(glrn$param_set$tune_ps(), 1)$transpose()
 #> [[1]]
 #> [[1]]$pca.affect_columns
 #> selector_invert(selector_name("Petal.Length"))
@@ -333,10 +333,10 @@ generate_design_random(glrn$param_set$tune_ps, 1)$transpose()
 
 #### Internals
 
-The `ParamSet$values` slot stores the `TuneToken` and uses that to create a tuning `ParamSet` whenever `$tune_ps` is queried. This is done by
+The `ParamSet$values` slot stores the `TuneToken` and uses that to create a tuning `ParamSet` whenever `$tune_ps()` is queried. This is done by
 1. Generating a `ParamSet` for each individual value that is set to a `TuneToken`, using the information retrieved from the `TuneToken` (range, factor levels, etc.) and information from the `Param` itself to create the tuning parameter. E.g. `to_tune()` just clones the `Param`, while `to_tune(p_fct(...))` needs only the `$id` of the `Param` and does some validity checking.
-2. Putting the individual `ParamSets` gotten like this into a common `ParamSet` using a `ps_union()` function. This function goes beyond just collecting the `Param`s, and also collects `$deps` and `$trafo` so that the individual trafos of constituent `ParamSet`s are called correctly. Dependencies of the outer paramset are copied to `$tune_ps`.
-3. If we are dealing with a `GraphLearner`, then we are are already dealing with a `ParamSetCollection` on the outside (i.e. `glrn$param_set` is a `ParamSetCollection`). It must provide a `$tune_ps` active binding just as `ParamSet`. It just puts together the individual tuning paramsets using `ps_union()` as well; trafos etc. get handled transparently.
+2. Putting the individual `ParamSets` gotten like this into a common `ParamSet` using a `ps_union()` function. This function goes beyond just collecting the `Param`s, and also collects `$deps` and `$trafo` so that the individual trafos of constituent `ParamSet`s are called correctly. Dependencies of the outer paramset are copied to `$tune_ps()`.
+3. If we are dealing with a `GraphLearner`, then we are are already dealing with a `ParamSetCollection` on the outside (i.e. `glrn$param_set` is a `ParamSetCollection`). It must provide a `$tune_ps()` active binding just as `ParamSet`. It just puts together the individual tuning paramsets using `ps_union()` as well; trafos etc. get handled transparently.
 
 ## Documentation
 
@@ -344,7 +344,7 @@ This is how the new features could be documented.
 
 ### `Domain`
 
-A `Domain` object is a representation of a single dimension of a `ParamSet`. `Domain` objects are used to construct `ParamSet`s, either through the `ps()` short form, or through the `ParamSet$tune_ps` mechanism. `Domain` corresponds to a `Param` object, except it does not have an `id`, but it *does* have a `trafo` and it does have dependencies (`requires`). For each of the base `Param` classes (`ParamInt`, `ParamDbl`, `ParamLgl`, `ParamFct`, and `ParamUty`) there is a function constructing a `Domain` object (`p_int`, `p_dbl`, `p_lgl`, `p_fct`, `p_uty`). They each have the same arguments as the corresponding `Param` `$new()` function, except without the `id` argument, and with the following additional parameters:
+A `Domain` object is a representation of a single dimension of a `ParamSet`. `Domain` objects are used to construct `ParamSet`s, either through the `ps()` short form, or through the `ParamSet$tune_ps()` mechanism. `Domain` corresponds to a `Param` object, except it does not have an `id`, but it *does* have a `trafo` and it does have dependencies (`requires`). For each of the base `Param` classes (`ParamInt`, `ParamDbl`, `ParamLgl`, `ParamFct`, and `ParamUty`) there is a function constructing a `Domain` object (`p_int`, `p_dbl`, `p_lgl`, `p_fct`, `p_uty`). They each have the same arguments as the corresponding `Param` `$new()` function, except without the `id` argument, and with the following additional parameters:
 
 * **`trafo` :: `function`**. Single argument function performing the transformation of a parameter. When the `Domain` is used to construct a `ParamSet`, this transformation will be applied to the corresponding parameter as part of the `$trafo` function.
 * **`requires` :: `call`**. An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an expression (using `quote()`), or the expression can be entered directly and will be parsed using NSE (see examples). The expression may be of the form `<Param> == <value>` or `<Param> %in% <values>`, which will result in dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual$new(<value>))` or `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf$new(<values>))`, respectively. The expression may also contain multiple conditions separated by `&&`.
@@ -360,11 +360,11 @@ The `ps()` short form constructor uses `Domain` objects to construct `ParamSet`s
 * **`...` :: `Domain` | `Param`**. Named arguments of `Domain` or `Param` objects. The `ParamSet` will be constructed of the given `Param`s, or of `Params`s constructed from the given domains. The names of the arguments will be used as `id` (the `id` of `Param` arguments are ignored).
 * **`.extra.trafo` :: `function(x, ps)`**. Transformation to set the resulting `ParamSet`'s `$trafo` value to. This is in addition to any `trafo` of `Domain` objects given in `...`, and will be run *after* transformations of individual parameters were performed.
 
-### `TuneToken` / `$tune_ps`
+### `TuneToken` / `$tune_ps()`
 
 A `TuneToken` object can be given to a `ParamSet$values` slot as an alternative to a concrete value. This indicates that the value is not given directly but should be tuned using `mlr3tuning`. If the thus parameterized object is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 
-The tuning range `ParamSet` that is constructed from the `TuneToken` values in a `ParamSet`'s `$values` slot can be accessed through the `ParamSet$tune_ps` active bindng. This is done automatically by tuners if no tuning range is given, but it is also possible to access the `$tune_ps` active binding, modify it further, and give the modified `ParamSet` to a tuning function (or do anything else with it, noone is judging you).
+The tuning range `ParamSet` that is constructed from the `TuneToken` values in a `ParamSet`'s `$values` slot can be accessed through the `ParamSet$tune_ps()` active bindng. This is done automatically by tuners if no tuning range is given, but it is also possible to access the `$tune_ps()` active binding, modify it further, and give the modified `ParamSet` to a tuning function (or do anything else with it, noone is judging you).
 
 A `TuneToken` represents the range over which the parameter whose `$values` slot it occupies should be tuned over. It can be constructed via the `to_tune()` function in one of several ways:
 
@@ -377,6 +377,6 @@ A `TuneToken` represents the range over which the parameter whose `$values` slot
 
 ## Challenges
 
-* Currently [dependencies on the `Learner`-side are broken](https://github.com/mlr-org/paradox/issues/216), but it should be investigated how they should be handled if we ever get them to work. They are currently added to the result of `$tune_ps` automatically. A question that remains is how dependencies between `Params` that are in different `ParamSets` in a `ParamSetCollection` should be handled, e.g. when a `PipeOp`'s parameter depends on a `PipeOpBranch`. `ParamSetCollection` currently doesn't support this.
+* Currently [dependencies on the `Learner`-side are broken](https://github.com/mlr-org/paradox/issues/216), but it should be investigated how they should be handled if we ever get them to work. They are currently added to the result of `$tune_ps()` automatically.
 
 * I am not sure whether `trafo = exp` should be allowed for `p_int`, and rounding should happen automatically. An alternative is to create the `round_exp` function as above.
