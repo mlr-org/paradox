@@ -60,9 +60,7 @@
 #'   int_unbounded = to_tune(2, 7),
 #'
 #'   # tune on a log scale in range 1..10:
-#'   # beware: rounding errors of `exp(log(10))` give a values
-#'   # greater than 10, so we have to set the limit below log(10).
-#'   dbl = to_tune(p_dbl(log(1), log(9.999999), trafo = exp)),
+#'   dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),
 #'
 #'   # nothing keeps us from tuning a dbl over integer values
 #'   dbl_unbounded = to_tune(p_int(1, 10)),
