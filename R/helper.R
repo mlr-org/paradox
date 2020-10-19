@@ -106,7 +106,7 @@ ps_union = function(sets) {
       }), recursive = FALSE)
 
       # add the Params that were not translated at all, because the ParamSet doesn't know about them.
-      res = c(remove_named(x, allnames), res)
+      res = c(mlr3misc::remove_named(x, allnames), res)
 
       res[c(intersect(names(res), names(x)), setdiff(names(res), names(x)))]  # unchanged parameter names stay in order
     }, setinfo, allnames)
