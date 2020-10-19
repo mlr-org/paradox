@@ -86,7 +86,7 @@ ps_union = function(sets) {
     assert_set_equal(allnames, names2(newps$params))  # this should always be the case
 
     newps$trafo = crate(function(x, param_set) {
-      res = unlist(map(setinfo, function(s) {
+      res = unlist(mlr3misc::map(setinfo, function(s) {
         trafo = s$trafo
         # get the parameter values that the current trafo should operate on,
         # as identified by the names in forward_name_translation

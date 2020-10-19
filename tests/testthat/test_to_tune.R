@@ -82,7 +82,7 @@ test_that("$check() works on TuneToken", {
   expect_string(pars$check(list(lgl = to_tune(0, 1))), "must have zero or one argument")
   expect_error(pars$tune_ps(list(lgl = to_tune(0, 1))), "must have zero or one argument")
 
-  expect_error(pars$tune_ps(list(xxx = to_tune())), "Must be a subset of .*x,y,z,z2")
+  expect_error(pars$tune_ps(list(xxx = to_tune())), "Must be a subset of .*x,xub,y,uty,uty1,fct,lgl")
 
 })
 
@@ -100,6 +100,7 @@ test_that("Tune ParamSet is created", {
   # the following is necessary because $add modifies index of the .deps table, and one of the `$values` is not named.
   pars$add(ParamSet$new())
   pars$values = list()
+  setindex(pars_tune$deps, NULL)
   pars_tune$values = list()
 
   expect_equal(pars, pars_tune)
@@ -113,6 +114,7 @@ test_that("Tune ParamSet is created", {
 
   pars_tune = pars_unbound$tune_ps(list(x = to_tune(p_int(0, 10)), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
+  setindex(pars_tune$deps, NULL)
   expect_equal(pars, pars_tune)
 
   pars_unbound_2 = ParamSet$new(list(
@@ -124,6 +126,7 @@ test_that("Tune ParamSet is created", {
 
   pars_tune = pars_unbound_2$tune_ps(list(x = to_tune(0, 10), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
+  setindex(pars_tune$deps, NULL)
   expect_equal(pars, pars_tune)
 
   pars_tune = pars_unbound$tune_ps(list(x = to_tune(ParamInt$new("z", 0, 10)), y = to_tune(ps(z = p_dbl(0, 10, special_vals = list("x")))),

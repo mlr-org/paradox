@@ -252,7 +252,7 @@ pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
     trafo = pslike$trafo %??% identity
     pname = param$id
     pslike$trafo = crate(function(x, param_set) {
-      set_names(
+      mlr3misc::set_names(
         assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),
         pname
       )
