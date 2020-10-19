@@ -216,10 +216,15 @@ pslike_to_ps.Param = function(pslike, call, param) {
 
 pslike_to_ps.ParamSet = function(pslike, call, param) {
   testpoints = generate_design_grid(pslike, 2)$transpose()
-  if (!all(map_lgl(testpoints, function(x) {
-    identical(names(x), param$id) && param$test(x[[1]])
-  }))) {
-    stopf("%s not compatible with param %s", call, param$id)
+  invalidpoints = discard(testpoints, function(x) length(x) == 1)
+  if (length(invalidpoints)) {
+    stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
+      call, param$id, capture_output(print(invalidpoints[[1]])))
+  }
+  invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
+  if (length(invalidpoints)) {
+    stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
+      call, param$id, capture_output(print(invalidpoints[[1]][[1]])), capture_output(print(param)))
   }
   pslike$set_id = ""
   pslike
