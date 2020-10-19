@@ -10,6 +10,11 @@
 #' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.
+#' @param .allow_dangling_dependencies (`logical`)\cr
+#'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
+#'   `requires = y == 0` if `y` is not present in the `ps()` call would usually throw an error, but if dangling
+#'   dependencies are allowed, the dependency is added regardless. This is usually a bad idea and mainly for internal
+#'   use. Dependencies between [`ParamSet`]s when using [`to_tune()`] can be realized using this.
 #' @return A [`ParamSet`] object.
 #' @examples
 #' pars = ps(
@@ -33,9 +38,22 @@
 #' # See how the addition happens after exp()ing:
 #' pars$trafo(list(a = 0, b = 0))
 #'
+#' pars$values = list(
+#'   a = to_tune(ps(x = p_int(0, 1),
+#'     .extra_trafo = function(x, param_set) list(a = x$x)
+#'   )),
+#'   # make 'y' depend on 'x', but they are defined in different ParamSets
+#'   # Therefore we need to allow dangling dependencies here.
+#'   b = to_tune(ps(y = p_int(0, 1, requires = x == 1),
+#'     .extra_trafo = function(x, param_set) list(b = x$y),
+#'     .allow_dangling_dependencies = TRUE
+#'   ))
+#' )
+#'
+#' pars$tune_ps()
 #' @family ParamSet construction helpers
 #' @export
-ps = function(..., .extra_trafo = NULL) {
+ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
   args = list(...)
   assert_list(args, names = "unique", types = c("Param", "Domain"))
   assert_function(.extra_trafo, null.ok = TRUE)
@@ -58,9 +76,15 @@ ps = function(..., .extra_trafo = NULL) {
     if (inherits(p, "Param") || is.null(p$requirements)) return(NULL)
     map(p$requirements, function(req) {
       if (!req$on %in% names(args) || req$on == name) {
-        stopf("Parameter %s can not depend on %s.", name, req$on)
+        if (.allow_dangling_dependencies) {
+          if (name == req$on) stop("A param cannot depend on itself!")
+          paramset$deps = rbind(paramset$deps, data.table(id = name, on = req$on, cond = list(req$cond)))
+        } else {
+          stopf("Parameter %s can not depend on %s.", name, req$on)
+        }
+      } else {
+        invoke(paramset$add_dep, id = name, .args = req)
       }
-      invoke(paramset$add_dep, id = name, .args = req)
     })
   })
 

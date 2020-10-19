@@ -6,7 +6,7 @@
 
 The \code{ps()} short form constructor uses \code{\link{Domain}} objects to construct \code{\link{ParamSet}}s in a succinct and readable way.}
 \usage{
-ps(..., .extra_trafo = NULL)
+ps(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE)
 }
 \arguments{
 \item{...}{(\code{\link{Domain}} | \code{\link{Param}})\cr
@@ -17,6 +17,12 @@ or of \code{\link{Param}}s constructed from the given domains. The names of the 
 \item{.extra_trafo}{(\verb{function(x, param_set)})\cr
 Transformation to set the resulting \code{\link{ParamSet}}'s \verb{$trafo} value to. This is in addition to any \code{trafo} of
 \code{\link{Domain}} objects given in \code{...}, and will be run \emph{after} transformations of individual parameters were performed.}
+
+\item{.allow_dangling_dependencies}{(\code{logical})\cr
+Whether dependencies depending on parameters that are not present should be allowed. A parameter \code{x} having
+\code{requires = y == 0} if \code{y} is not present in the \code{ps()} call would usually throw an error, but if dangling
+dependencies are allowed, the dependency is added regardless. This is usually a bad idea and mainly for internal
+use. Dependencies between \code{\link{ParamSet}}s when using \code{\link[=to_tune]{to_tune()}} can be realized using this.}
 }
 \value{
 A \code{\link{ParamSet}} object.
@@ -48,6 +54,19 @@ pars = ps(
 # See how the addition happens after exp()ing:
 pars$trafo(list(a = 0, b = 0))
 
+pars$values = list(
+  a = to_tune(ps(x = p_int(0, 1),
+    .extra_trafo = function(x, param_set) list(a = x$x)
+  )),
+  # make 'y' depend on 'x', but they are defined in different ParamSets
+  # Therefore we need to allow dangling dependencies here.
+  b = to_tune(ps(y = p_int(0, 1, requires = x == 1),
+    .extra_trafo = function(x, param_set) list(b = x$y),
+    .allow_dangling_dependencies = TRUE
+  ))
+)
+
+pars$tune_ps()
 }
 \seealso{
 Other ParamSet construction helpers: 

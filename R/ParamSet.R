@@ -160,14 +160,13 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
     tune_ps = function(values = self$values) {
-      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
-      pars = ps_union(imap(keep(values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, selfparams[[pn]])
-      }))
-      pars$set_id = self$set_id
-      parsnames = names(pars$params)
-      # only add the dependencies that are also in the tuning PS
-      map(transpose_list(self$deps[id %in% parsnames & on %in% parsnames]), do.call, what = pars$add_dep)
+      assert_list(values)
+      assert_names(names(values), subset.of = self$ids())
+      pars = private$get_tune_ps(values)
+      dangling_deps = pars$deps[!on %in% pars$ids()]
+      if (nrow(dangling_deps)) {
+        stopf("Dangling dependencies not allowed: Dependencies on %s dangling", str_collapse(dangling_deps$on))
+      }
       pars
     },
 
@@ -539,7 +538,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        self$tune_ps(xs)  # check that to_tune() are valid
+        private$get_tune_ps(xs)  # check that to_tune() are valid
       }
       if (length(xs) == 0L) {
         xs = named_list()
@@ -573,6 +572,28 @@ ParamSet = R6Class("ParamSet",
     get_member_with_idnames = function(member, astype) {
       params = self$params
       set_names(astype(map(params, member)), names(params))
+    },
+    get_tune_ps = function(values) {
+      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
+        tunetoken_to_ps(value, selfparams[[pn]])
+      })
+      idmapping = map(partsets, function(x) x$ids())
+      pars = ps_union(partsets)
+      pars$set_id = self$set_id
+      parsnames = names(pars$params)
+      # only add the dependencies that are also in the tuning PS
+      map(transpose_list(self$deps[id %in% names(idmapping) & on %in% names(partsets)]), function(depcandidate) {
+        onpar = partsets[[depcandidate$on]]
+        if (onpar$has_trafo || !identical(onpar$ids(), depcandidate$on)) {
+          # cannot have dependency on a parameter that is being trafo'd
+          return(NULL)
+        }
+        for (idname in idmapping[[depcandidate$id]]) {
+          pars$add_dep(idname, depcandidate$on, depcandidate$cond)
+        }
+      })
+      pars
     },
 
     deep_clone = function(name, value) {

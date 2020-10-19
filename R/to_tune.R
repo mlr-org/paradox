@@ -131,6 +131,15 @@ to_tune = function(...) {
         check_list(content, names = "unnamed")
       )
       content = p_fct(levels = content)
+    } else {
+      if (inherits(content, "Domain")) {
+        bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$is_bounded
+      } else {
+        bounded = content$is_bounded
+      }
+      if (!bounded) {
+        stop("tuning range must be bounded.")
+      }
     }
     type = "ObjectTuneToken"
   } else {
@@ -177,8 +186,14 @@ tunetoken_to_ps.FullTuneToken = function(tt, param) {
 
 tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   if (!param$is_number) {
-    stopf("%s for non-numeric param must have one argument.", tt$call)
+    stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
+  invalidpoints = discard(tt$content, param$test)
+  if (length(invalidpoints)) {
+    stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
+      tt$call, param$id, repr(invalidpoints), repr(param))
+  }
+
   if (!all(map_lgl(tt$content, param$test))) {
     stopf("%s not compatible with param %s", tt$call, param$id)
   }
@@ -204,7 +219,7 @@ pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
 }
 
 pslike_to_ps.Domain = function(pslike, call, param, usersupplied = TRUE) {
-  pslike = do.call(ps, set_names(list(pslike), param$id))
+  pslike = invoke(ps, .allow_dangling_dependencies = TRUE, .args = set_names(list(pslike), param$id))
   pslike_to_ps(pslike, call, param, usersupplied = FALSE)
 }
 
@@ -216,20 +231,25 @@ pslike_to_ps.Param = function(pslike, call, param, usersupplied = TRUE) {
 }
 
 pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
+  pslike = pslike$clone(deep = TRUE)
+  alldeps = pslike$deps
+  # temporarily hide dangling deps
+  on = NULL  # pacify static code check
+  pslike$deps = pslike$deps[on %in% pslike$ids()]
   testpoints = generate_design_grid(pslike, 2)$transpose()
+  pslike$deps = alldeps
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
     stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
-      call, param$id, capture_output(print(invalidpoints[[1]])))
+      call, param$id, reprinvalidpoints[[1]])
   }
   invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
   if (length(invalidpoints)) {
     stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
-      call, param$id, capture_output(print(invalidpoints[[1]][[1]])), capture_output(print(param)))
+      call, param$id, repr(invalidpoints[[1]][[1]]), repr(param))
   }
   if (usersupplied) {
-    pslike = pslike$clone(deep = TRUE)
-    trafo = pslike$trafo
+    trafo = pslike$trafo %??% identity
     pname = param$id
     pslike$trafo = crate(function(x, param_set) {
       set_names(
