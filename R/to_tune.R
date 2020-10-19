@@ -9,8 +9,8 @@
 #' is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 #'
 #' The tuning range [`ParamSet`] that is constructed from the `TuneToken` values in a [`ParamSet`]'s `$values` slot
-#' can be accessed through the `ParamSet$tune_ps` active bindng. This is done automatically by tuners if no tuning range
-#' is given, but it is also possible to access the `$tune_ps` active binding, modify it further, and give the modified
+#' can be accessed through the `ParamSet$tune_ps()` method. This is done automatically by tuners if no tuning range
+#' is given, but it is also possible to access the `$tune_ps()` method, modify it further, and give the modified
 #' [`ParamSet`] to a tuning function (or do anything else with it, nobody is judging you).
 #'
 #' A `TuneToken` represents the range over which the parameter whose `$values` slot it occupies should be tuned over. It
@@ -96,13 +96,13 @@
 #'
 #' print(params$values)
 #'
-#' print(params$tune_ps)
+#' print(params$tune_ps())
 #'
-#' # Change `$values` directly and generate new `tune_ps` to play around
+#' # Change `$values` directly and generate new `$tune_ps()` to play around
 #' params$values$uty3 = 8
 #' params$values$uty2 = to_tune(c(2, 4, 8))
 #'
-#' print(params$tune_ps)
+#' print(params$tune_ps())
 #'
 #' @family ParamSet construction helpers
 #' @aliases TuneToken

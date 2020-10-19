@@ -153,9 +153,6 @@ When you set values, all previously set values will be unset / removed.}
 
 \item{\code{has_deps}}{(\code{logical(1)})\cr
 Has the set parameter dependencies?}
-
-\item{\code{tune_ps}}{(\code{\link{ParamSet}})\cr
-(Read-Only) A \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -167,6 +164,7 @@ Has the set parameter dependencies?}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
+\item \href{#method-tune_ps}{\code{ParamSet$tune_ps()}}
 \item \href{#method-check}{\code{ParamSet$check()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
@@ -283,6 +281,16 @@ Changes the current set to the set of passed IDs.
 }
 \if{html}{\out{</div>}}
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-tune_ps"></a>}}
+\if{latex}{\out{\hypertarget{method-tune_ps}{}}}
+\subsection{Method \code{tune_ps()}}{
+Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$tune_ps()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-check"></a>}}

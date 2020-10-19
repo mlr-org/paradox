@@ -156,6 +156,12 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
+    tune_ps = function() {
+      private$get_tune_ps(self$values)
+    },
+
+    #' @description
     #' \pkg{checkmate}-like check-function. Takes a named list.
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
@@ -544,12 +550,6 @@ ParamSet = R6Class("ParamSet",
     #' Has the set parameter dependencies?
     has_deps = function() {
       nrow(self$deps) > 0L
-    },
-
-    #' @field tune_ps ([`ParamSet`])\cr
-    #' (Read-Only) A [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
-    tune_ps = function() {
-      private$get_tune_ps(self$values)
     }
   ),
 

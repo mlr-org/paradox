@@ -38,7 +38,7 @@ Single argument function performing the transformation of a parameter. When the 
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
-\code{\link{ParamSet}}s, either through the \code{\link[=ps]{ps()}} short form, or through the \code{\link{ParamSet}}\verb{$tune_ps} mechanism (see
+\code{\link{ParamSet}}s, either through the \code{\link[=ps]{ps()}} short form, or through the \code{\link{ParamSet}}\verb{$tune_ps()} mechanism (see
 \code{\link[=to_tune]{to_tune()}}). \code{Domain} corresponds to a \code{\link{Param}} object, except it does not have an \verb{$id}, and it \emph{does} have a
 \code{trafo} and dependencies (\code{requires}) associated with it. For each of the basic \code{\link{Param}} classes (\code{\link{ParamInt}},
 \code{\link{ParamDbl}}, \code{\link{ParamLgl}}, \code{\link{ParamFct}}, and \code{\link{ParamUty}}) there is a function constructing a \code{Domain} object

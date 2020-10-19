@@ -4,7 +4,7 @@
 #'
 #' @description
 #' A `Domain` object is a representation of a single dimension of a [`ParamSet`]. `Domain` objects are used to construct
-#' [`ParamSet`]s, either through the [`ps()`] short form, or through the [`ParamSet`]`$tune_ps` mechanism (see
+#' [`ParamSet`]s, either through the [`ps()`] short form, or through the [`ParamSet`]`$tune_ps()` mechanism (see
 #' [`to_tune()`]). `Domain` corresponds to a [`Param`] object, except it does not have an `$id`, and it *does* have a
 #' `trafo` and dependencies (`requires`) associated with it. For each of the basic [`Param`] classes ([`ParamInt`],
 #' [`ParamDbl`], [`ParamLgl`], [`ParamFct`], and [`ParamUty`]) there is a function constructing a `Domain` object

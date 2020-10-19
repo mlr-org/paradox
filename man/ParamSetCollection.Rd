@@ -48,9 +48,6 @@ Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
 When you set values, all previously set values will be unset / removed.}
-
-\item{\code{tune_ps}}{(\code{\link{ParamSet}})\cr
-(Read-Only) A \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -78,6 +75,7 @@ When you set values, all previously set values will be unset / removed.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="tune_ps">}\href{../../paradox/html/ParamSet.html#method-tune_ps}{\code{paradox::ParamSet$tune_ps()}}\out{</span>}
 }
 \out{</details>}
 }

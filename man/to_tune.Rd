@@ -20,8 +20,8 @@ alternative to a concrete value. This indicates that the value is not given dire
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 
 The tuning range \code{\link{ParamSet}} that is constructed from the \code{TuneToken} values in a \code{\link{ParamSet}}'s \verb{$values} slot
-can be accessed through the \code{ParamSet$tune_ps} active bindng. This is done automatically by tuners if no tuning range
-is given, but it is also possible to access the \verb{$tune_ps} active binding, modify it further, and give the modified
+can be accessed through the \code{ParamSet$tune_ps()} method. This is done automatically by tuners if no tuning range
+is given, but it is also possible to access the \verb{$tune_ps()} method, modify it further, and give the modified
 \code{\link{ParamSet}} to a tuning function (or do anything else with it, nobody is judging you).
 
 A \code{TuneToken} represents the range over which the parameter whose \verb{$values} slot it occupies should be tuned over. It
@@ -41,8 +41,7 @@ the range which should be tuned over. The supplied \code{trafo} function is used
 \item \strong{\verb{to_tune(<ParamSet>)}}: The given \code{\link{ParamSet}} is used to tune over a single \code{Param}. This is useful for cases
 where a single evaluation-time parameter value (e.g. \code{\link{ParamUty}}) is constructed from multiple tuner-visible
 parameters (which may not be \code{ParamUty}). The supplied \code{\link{ParamSet}} should always contain a \verb{$trafo} function,
-which must always return a named \code{list} with a single entry with the name of the \code{\link{Param}} that this \code{TuneToken}
-object corresponds to.
+which must always return a \code{list} with a single entry.
 }
 
 The \code{TuneToken} object's internals are subject to change and should not be relied upon. \code{TuneToken} objects should
@@ -71,9 +70,7 @@ params$values = list(
   int_unbounded = to_tune(2, 7),
 
   # tune on a log scale in range 1..10:
-  # beware: rounding errors of `exp(log(10))` give a values
-  # greater than 10, so we have to set the limit below log(10).
-  dbl = to_tune(p_dbl(log(1), log(9.999999), trafo = exp)),
+  dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),
 
   # nothing keeps us from tuning a dbl over integer values
   dbl_unbounded = to_tune(p_int(1, 10)),
@@ -110,13 +107,13 @@ params$values = list(
 
 print(params$values)
 
-print(params$tune_ps)
+print(params$tune_ps())
 
-# Change `$values` directly and generate new `tune_ps` to play around
+# Change `$values` directly and generate new `$tune_ps()` to play around
 params$values$uty3 = 8
 params$values$uty2 = to_tune(c(2, 4, 8))
 
-print(params$tune_ps)
+print(params$tune_ps())
 
 }
 \seealso{
