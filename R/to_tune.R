@@ -30,8 +30,7 @@
 #' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single `Param`. This is useful for cases
 #'   where a single evaluation-time parameter value (e.g. [`ParamUty`]) is constructed from multiple tuner-visible
 #'   parameters (which may not be `ParamUty`). The supplied [`ParamSet`] should always contain a `$trafo` function,
-#'   which must always return a named `list` with a single entry with the name of the [`Param`] that this `TuneToken`
-#'   object corresponds to.
+#'   which must always return a `list` with a single entry.
 #'
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
@@ -198,23 +197,25 @@ tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
 # @param pslike: thing to convert
 # @param call: to_tune()-call, for better debug message
 # @param param: `Param`, that the `pslike` refers to, and therefore needs to be compatible to
-pslike_to_ps = function(pslike, call, param) {
+# @param usersupplied: whether the `pslike` is supplied by the user (and should therefore be checked more thoroughly)
+#   This is currently used for user-supplied ParamSets, for which the trafo must be adjusted.
+pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
   UseMethod("pslike_to_ps")
 }
 
-pslike_to_ps.Domain = function(pslike, call, param) {
+pslike_to_ps.Domain = function(pslike, call, param, usersupplied = TRUE) {
   pslike = do.call(ps, set_names(list(pslike), param$id))
-  pslike_to_ps(pslike, call, param)
+  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
 }
 
-pslike_to_ps.Param = function(pslike, call, param) {
+pslike_to_ps.Param = function(pslike, call, param, usersupplied = TRUE) {
   pslike = pslike$clone(deep = TRUE)
   pslike$id = param$id
   pslike = ParamSet$new(list(pslike))
-  pslike_to_ps(pslike, call, param)
+  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
 }
 
-pslike_to_ps.ParamSet = function(pslike, call, param) {
+pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
   testpoints = generate_design_grid(pslike, 2)$transpose()
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
@@ -225,6 +226,17 @@ pslike_to_ps.ParamSet = function(pslike, call, param) {
   if (length(invalidpoints)) {
     stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
       call, param$id, capture_output(print(invalidpoints[[1]][[1]])), capture_output(print(param)))
+  }
+  if (usersupplied) {
+    pslike = pslike$clone(deep = TRUE)
+    trafo = pslike$trafo
+    pname = param$id
+    pslike$trafo = crate(function(x, param_set) {
+      set_names(
+        assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),
+        pname
+      )
+    }, trafo, pname)
   }
   pslike$set_id = ""
   pslike
