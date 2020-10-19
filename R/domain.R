@@ -122,9 +122,11 @@ domain = function(constructor, ..., requires_expr = NULL, trafo = NULL, .constar
   param = invoke(constructor$new, id = "ID", .args = constargs)
 
   # requires may be an expression, but may also be quote() or expression()
-  if (length(requires_expr) == 1 ||
-      isTRUE(as.character(requires_expr[[1]]) %in% c("quote", "expression"))) {
+  if (length(requires_expr) == 1) {
     requires_expr = eval(requires_expr, envir = parent.frame(2))
+    if (!is.language(requires_expr)) {
+      stop("'requires' argument must be an expression involving `==` or `%in%`, or must be a single variable containing a quoted expression.")
+    }
   }
 
   # repr: what to print

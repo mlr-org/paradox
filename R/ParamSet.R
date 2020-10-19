@@ -157,8 +157,18 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
-    tune_ps = function() {
-      private$get_tune_ps(self$values)
+    #'
+    #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
+    tune_ps = function(values = self$values) {
+      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      pars = ps_union(imap(keep(values, inherits, "TuneToken"), function(value, pn) {
+        tunetoken_to_ps(value, selfparams[[pn]])
+      }))
+      pars$set_id = self$set_id
+      parsnames = names(pars$params)
+      # only add the dependencies that are also in the tuning PS
+      map(transpose_list(self$deps[id %in% parsnames & on %in% parsnames]), do.call, what = pars$add_dep)
+      pars
     },
 
     #' @description
@@ -529,7 +539,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        private$get_tune_ps(xs)  # check that to_tune() are valid
+        self$tune_ps(xs)  # check that to_tune() are valid
       }
       if (length(xs) == 0L) {
         xs = named_list()
@@ -563,19 +573,6 @@ ParamSet = R6Class("ParamSet",
     get_member_with_idnames = function(member, astype) {
       params = self$params
       set_names(astype(map(params, member)), names(params))
-    },
-
-    # create tune_ps from values
-    get_tune_ps = function(values) {
-      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
-      pars = ps_union(imap(keep(values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, selfparams[[pn]])
-      }))
-      pars$set_id = self$set_id
-      parsnames = names(pars$params)
-      # only add the dependencies that are also in the tuning PS
-      map(transpose_list(self$deps[id %in% parsnames & on %in% parsnames]), do.call, what = pars$add_dep)
-      pars
     },
 
     deep_clone = function(name, value) {
