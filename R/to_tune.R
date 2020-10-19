@@ -241,7 +241,7 @@ pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
     stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
-      call, param$id, reprinvalidpoints[[1]])
+      call, param$id, repr(invalidpoints[[1]]))
   }
   invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
   if (length(invalidpoints)) {
