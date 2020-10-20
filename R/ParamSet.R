@@ -4,7 +4,8 @@
 #' A set of [Param] objects.
 #' Please note that when creating a set or adding to it, the parameters of the
 #' resulting set have to be uniquely named with IDs with valid R names.
-#' The set also contains a member variable `values` which can be used to store an active configuration / or to partially fix
+#' The set also contains a member variable `values` which can be used to store an active configuration /
+#' or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section S3 methods and type converters:
@@ -142,10 +143,11 @@ ParamSet = R6Class("ParamSet",
       assert_subset(ids, param_ids)
       deps = self$deps
       if (nrow(deps)) { # check that all required / leftover parents are still in new ids
-        parents = unique(deps[id %in% ids, "on"][[1L]])
+        parents = unique(deps[get("id") %in% ids, "on"][[1L]])
         pids_not_there = setdiff(parents, ids)
         if (length(pids_not_there) > 0L) {
-          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
+          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
+              "\nIf you still want to do that, manipulate '$deps' yourself."), str_collapse(pids_not_there))
         }
       }
       private$.params = private$.params[ids]
@@ -212,7 +214,8 @@ ParamSet = R6Class("ParamSet",
               p1id, cond$as_string(p2id))
             val = xs[[p2id]]
             if (is.null(val)) {
-              message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
+              message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
+                  "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
             } else {
               message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
             }
@@ -336,7 +339,7 @@ ParamSet = R6Class("ParamSet",
         assert_subset(hide_cols, names(d))
         deps = self$deps
         if (nrow(deps)) { # add a nice extra charvec-col to the tab, which lists all parents-ids
-          dd = deps[, .(parents = list(unlist(on))), by = id]
+          dd = deps[, list(parents = list(unlist(get("on")))), by = "id"]
           d = merge(d, dd, on = "id", all.x = TRUE)
         }
         v = named_list(d$id) # add values to last col of print-dt as list col

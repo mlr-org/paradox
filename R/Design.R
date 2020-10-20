@@ -99,12 +99,12 @@ Design = R6Class("Design",
       # we need to make sure that every param has a (maybe empty) row in the graph table
       fillin = data.table(id = ps$ids(), parents = list(character(0L)))
       graph = rbind(graph, fillin[fillin$id %nin% graph$id, ])
-      graph = graph[, .(parents = list(unlist(parents))), by = id]
+      graph = graph[, list("parents" = list(unlist(get("parents")))), by = "id"]
       topo = topo_sort(graph)
       pids_sorted = topo$id
       for (param_id in pids_sorted) {
         param = ps$params[[param_id]]
-        dd = ps$deps[id == param_id, ]
+        dd = ps$deps[get("id") == param_id, ]
         for (j in seq_row(dd)) {
           pcol = self$data[[dd$on[j]]]
           # we are ok if parent was active and cond on parent is OK
