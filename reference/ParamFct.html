@@ -82,7 +82,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.4.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.5.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -165,7 +165,7 @@
     <p><code><a href='Param.html'>paradox::Param</a></code> -&gt; <code>ParamFct</code></p>
     <h2 class="hasAnchor" id="public-fields"><a class="anchor" href="#public-fields"></a>Public fields</h2>
 
-    <p><div class="r6-fields"></p><dl'>
+    <p><div class="r6-fields"></p><dl>
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> | <code>NULL</code>)<br />
 Set of allowed levels.
 Always <code>NULL</code> for <a href='ParamDbl.html'>ParamDbl</a>, <a href='ParamInt.html'>ParamInt</a> and <a href='ParamUty.html'>ParamUty</a>.
@@ -174,7 +174,7 @@ Always <code><a href='https://rdrr.io/r/base/c.html'>c(TRUE, FALSE)</a></code> f
 </dl><p></div></p>
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
 
-    <p><div class="r6-active-bindings"></p><dl'>
+    <p><div class="r6-active-bindings"></p><dl>
 <dt><code>lower</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
 Lower bound.
 Always <code>NA</code> for ParamFct, <a href='ParamLgl.html'>ParamLgl</a> and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
@@ -206,7 +206,7 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
     <h2 class="hasAnchor" id="methods"><a class="anchor" href="#methods"></a>Methods</h2>
 
     
-<h3>Public methods</h3>
+<h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Public methods</h3>
 
 <ul>
 <li><p><a href='#method-new'><code>ParamFct$new()</code></a></p></li>
@@ -225,23 +225,29 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 </details>
 
 <hr>
-<a id="method-new"></a></p><h3>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://rdrr.io/pkg/R6/man/R6Class.html'>R6</a> class.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>ParamFct</span>$<span class='fu'>new</span>(
-  <span class='no'>id</span>,
-  <span class='no'>levels</span>,
-  <span class='kw'>default</span> <span class='kw'>=</span> <span class='no'>NO_DEF</span>,
-  <span class='kw'>special_vals</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span>(),
-  <span class='kw'>tags</span> <span class='kw'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span>()
-)</pre><p></div></p>
+<a id="method-new"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>new()</code></h3>
+<p>Creates a new instance of this <a href='https://r6.r-lib.org/reference/R6Class.html'>R6</a> class.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamFct</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span>
+  <span class='va'>id</span>,
+  <span class='va'>levels</span>,
+  special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
+  default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
+  tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>
+<span class='op'>)</span></pre><p></div></p>
 
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
 <dt><code>id</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
 Identifier of the object.</p></dd>
 
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
 Set of allowed levels.</p></dd>
+
+<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.</p></dd>
 
 <dt><code>default</code></dt><dd><p>(<code>any</code>)<br />
 Default value. Can be from the domain of the parameter or an element of
@@ -251,12 +257,6 @@ The value has no effect on <code>ParamSet$values</code> or the behavior of
 <code>ParamSet$check()</code>, <code>$test()</code> or <code>$assert()</code>.
 The <code>default</code> is intended to be used for documentation purposes.
 `</p></dd>
-
-<dt><code>special_vals</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
-Arbitrary special values this parameter is allowed to take, to make it
-feasible. This allows extending the domain of the parameter. Note that
-these values are only used in feasibility checks, neither in generating
-designs nor sampling.</p></dd>
 
 <dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>)<br />
 Arbitrary tags to group and subset parameters. Some tags serve a special
@@ -268,12 +268,12 @@ purpose:<br />
 
 </dl><p></div></p>
 <p><hr>
-<a id="method-clone"></a></p><h3>Method <code>clone()</code></h3>
-<p>The objects of this class are cloneable with this method.</p><h3>Usage</h3>
-<p><div class="r"></p><pre><span class='no'>ParamFct</span>$<span class='fu'>clone</span>(<span class='kw'>deep</span> <span class='kw'>=</span> <span class='fl'>FALSE</span>)</pre><p></div></p>
+<a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
+<p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamFct</span><span class='op'>$</span><span class='fu'>clone</span><span class='op'>(</span>deep <span class='op'>=</span> <span class='cn'>FALSE</span><span class='op'>)</span></pre><p></div></p>
 
-<h3>Arguments</h3>
-<p><div class="arguments"></p><dl'>
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
 <dt><code>deep</code></dt><dd><p>Whether to make a deep clone.</p></dd>
 
 </dl><p></div></p>
@@ -281,8 +281,9 @@ purpose:<br />
 
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='no'>ParamFct</span>$<span class='fu'>new</span>(<span class='st'>"f"</span>, <span class='kw'>levels</span> <span class='kw'>=</span> <span class='no'>letters</span>[<span class='fl'>1</span>:<span class='fl'>3</span>])</div><div class='output co'>#&gt;    id    class lower upper levels     default
-#&gt; 1:  f ParamFct    NA    NA  a,b,c &lt;NoDefault&gt;</div></pre>
+    <pre class="examples"><div class='input'><span class='va'>ParamFct</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"f"</span>, levels <span class='op'>=</span> <span class='va'>letters</span><span class='op'>[</span><span class='fl'>1</span><span class='op'>:</span><span class='fl'>3</span><span class='op'>]</span><span class='op'>)</span>
+</div><div class='output co'>#&gt;    id    class lower upper levels        default
+#&gt; 1:  f ParamFct    NA    NA  a,b,c &lt;NoDefault[3]&gt;</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
     <nav id="toc" data-toggle="toc" class="sticky-top">
@@ -298,7 +299,7 @@ purpose:<br />
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.5.1.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.6.1.</p>
 </div>
 
       </footer>
