@@ -2,6 +2,7 @@
 
 * Compact in-memory representation of R6 objects to save space when
   saving objects via saveRDS(), serialize() etc.
+* Improved performance for `ParamSetCollection`.
 
 # paradox 0.4.0
 
