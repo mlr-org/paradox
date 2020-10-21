@@ -30,7 +30,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   private = list(
     # create a 1-col-dt, named by param-id, from a data vector (from sampling), and enforce storage type
     as_dt_col = function(x) {
-      x = get(sprintf("as.%s", self$param$storage_type), mode = "function", envir = baseenv())(x)
+      x = as_type(x, self$param$storage_type)
       set_names(data.table(x), self$param$id)
     }
   )
