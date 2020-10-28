@@ -30,3 +30,13 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   }
   return(xs)
 }
+
+as_type = function(x, type) {
+  switch(type,
+    logical = as.logical(x),
+    integer = as.integer(x),
+    numeric = as.numeric(x),
+    character = as.character(x),
+    stopf("Invalid storage type '%s'", type)
+  )
+}

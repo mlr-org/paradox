@@ -43,7 +43,7 @@ test_that("ParamSet basic stuff works", {
   expect_data_table(d$data, nrows = 10, ncols = 6L)
 
   psc$trafo = function(x, param_set) {
-    x$s2.th_param_int = 99
+    x$s2.th_param_int = 99 # nolint
     return(x)
   }
   expect_true(psc$has_trafo)
@@ -61,7 +61,7 @@ test_that("ParamSet basic stuff works", {
   expect_equal(ps1, ps1clone)
   expect_equal(ps2, ps2clone)
 
-  expect_output(print(psc), "s1\\.th_param_dbl.*s2\\.th_param_int.*s2\\.th_param_dbl.*s2\\.th_param_fct.*s2\\.th_param_lgl.*th_param_dbl")
+  expect_output(print(psc), "s1\\.th_param_dbl.*s2\\.th_param_int.*s2\\.th_param_dbl.*s2\\.th_param_fct.*s2\\.th_param_lgl.*th_param_dbl") # nolint
 
   # ps1 and ps2 should not be changed by printing
   expect_equal(ps1, ps1clone)
@@ -221,9 +221,9 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
 
   psc = ParamSetCollection$new(list(ps1, ps2, ps3))
   expect_equal(psc$values, named_list())
-  psc$values$s1.d1 = 1
+  psc$values$s1.d1 = 1 # nolint
   expect_equal(psc$values, list(s1.d1 = 1))
-  psc$values$s2.d2 = 2
+  psc$values$s2.d2 = 2 # nolint
   expect_equal(psc$values, list(s1.d1 = 1, s2.d2 = 2))
   psc$values$d3 = 3
   expect_equal(psc$values, list(s1.d1 = 1, s2.d2 = 2, d3 = 3))

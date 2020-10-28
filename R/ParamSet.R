@@ -4,7 +4,8 @@
 #' A set of [Param] objects.
 #' Please note that when creating a set or adding to it, the parameters of the
 #' resulting set have to be uniquely named with IDs with valid R names.
-#' The set also contains a member variable `values` which can be used to store an active configuration / or to partially fix
+#' The set also contains a member variable `values` which can be used to store an active configuration /
+#' or to partially fix
 #' some parameters to constant values (regarding subsequent sampling or generation of designs).
 #'
 #' @section S3 methods and type converters:
@@ -92,8 +93,12 @@ ParamSet = R6Class("ParamSet",
     #' @param tags (`character()`).
     #' @return `character()`.
     ids = function(class = NULL, is_bounded = NULL, tags = NULL) {
+      assert_character(class, any.missing = FALSE, null.ok = TRUE)
+      assert_flag(is_bounded, null.ok = TRUE)
+      assert_character(tags, any.missing = FALSE, null.ok = TRUE)
 
-      ids = names(self$params)
+      params = self$params
+      ids = names(params)
       if (is.null(class) && is.null(is_bounded) && is.null(tags)) {
         return(ids)
       }
@@ -101,18 +106,15 @@ ParamSet = R6Class("ParamSet",
       ii = rep(TRUE, length(ids))
 
       if (!is.null(class)) {
-        assert_character(class, any.missing = FALSE)
-        ii = ii & self$class %in% class
+        ii = ii & map_chr(params, "class") %in% class
       }
 
       if (!is.null(is_bounded)) {
-        assert_flag(is_bounded)
-        ii = ii & map_lgl(self$params, "is_bounded")
+        ii = ii & map_lgl(params, "is_bounded")
       }
 
       if (!is.null(tags)) {
-        assert_character(tags, any.missing = FALSE)
-        ii = ii & map_lgl(self$tags, function(required, set) all(required %in% set), required = tags)
+        ii = ii & map_lgl(params, function(p) all(tags %in% p$tags))
       }
 
       ids[ii]
@@ -139,11 +141,13 @@ ParamSet = R6Class("ParamSet",
     subset = function(ids) {
       param_ids = names(self$params)
       assert_subset(ids, param_ids)
-      if (self$has_deps) { # check that all required / leftover parents are still in new ids
-        parents = unique(self$deps[id %in% ids, "on"][[1L]])
+      deps = self$deps
+      if (nrow(deps)) { # check that all required / leftover parents are still in new ids
+        parents = unique(deps[get("id") %in% ids, "on"][[1L]])
         pids_not_there = setdiff(parents, ids)
         if (length(pids_not_there) > 0L) {
-          stopf("Subsetting so that dependencies on params exist which would be gone: %s.\nIf you still want to do that, manipulate '$deps' yourself.", str_collapse(pids_not_there))
+          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
+              "\nIf you still want to do that, manipulate '$deps' yourself."), str_collapse(pids_not_there))
         }
       }
       private$.params = private$.params[ids]
@@ -167,11 +171,12 @@ ParamSet = R6Class("ParamSet",
       if (!isTRUE(ok)) {
         return(ok)
       }
+      params = self$params
       ns = names(xs)
-      ids = names(self$params)
+      ids = names(params)
 
       # check that all 'required' params are there
-      required = setdiff(self$ids(tags = "required"), ns)
+      required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
       if (length(required) > 0L) {
         return(sprintf("Missing required parameters: %s", str_collapse(required)))
       }
@@ -186,16 +191,16 @@ ParamSet = R6Class("ParamSet",
 
       # check each parameters feasibility
       for (n in ns) {
-        ch = self$params[[n]]$check(xs[[n]])
+        ch = params[[n]]$check(xs[[n]])
         if (test_string(ch)) { # we failed a check, return string
           return(paste0(n, ": ", ch))
         }
       }
 
       # check dependencies
-      if (self$has_deps) {
-        deps = self$deps
-        for (j in seq_row(self$deps)) {
+      deps = self$deps
+      if (nrow(deps)) {
+        for (j in seq_row(deps)) {
           p1id = deps$id[j]
           p2id = deps$on[j]
           # we are ONLY ok if:
@@ -209,7 +214,8 @@ ParamSet = R6Class("ParamSet",
               p1id, cond$as_string(p2id))
             val = xs[[p2id]]
             if (is.null(val)) {
-              message = sprintf("%s Instead the parameter value for '%s' is not set at all. Try setting '%s' to a value that satisfies the condition", message, p2id, p2id)
+              message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
+                  "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
             } else {
               message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
             }
@@ -289,14 +295,15 @@ ParamSet = R6Class("ParamSet",
     #' @param on (`character(1)`).
     #' @param cond ([Condition]).
     add_dep = function(id, on, cond) {
-      ids = names(self$params)
+      params = self$params
+      ids = names(params)
       assert_choice(id, ids)
       assert_choice(on, ids)
       assert_r6(cond, "Condition")
       if (id == on) {
         stopf("A param cannot depend on itself!")
       }
-      feasible_on_values = map_lgl(cond$rhs, self$params[[on]]$test)
+      feasible_on_values = map_lgl(cond$rhs, params[[on]]$test)
       if (any(!feasible_on_values)) {
         stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
       }
@@ -307,10 +314,11 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Helper for print outputs.
     format = function() {
-      if (!nzchar(self$set_id)) {
+      set_id = self$set_id
+      if (!nzchar(set_id)) {
         sprintf("<%s>", class(self)[1L])
       } else {
-        sprintf("<%s:%s>", class(self)[1L], self$set_id)
+        sprintf("<%s:%s>", class(self)[1L], set_id)
       }
     },
 
@@ -324,13 +332,14 @@ ParamSet = R6Class("ParamSet",
     # printer, prints the set as a datatable, with the option to hide some cols
     print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf(format(self))
-      if (self$is_empty) {
+      d = as.data.table(self)
+      if (!nrow(d)) {
         catf("Empty.")
       } else {
-        d = as.data.table(self)
         assert_subset(hide_cols, names(d))
-        if (self$has_deps) { # add a nice extra charvec-col to the tab, which lists all parents-ids
-          dd = self$deps[, .(parents = list(unlist(on))), by = id]
+        deps = self$deps
+        if (nrow(deps)) { # add a nice extra charvec-col to the tab, which lists all parents-ids
+          dd = deps[, list(parents = list(unlist(get("on")))), by = "id"]
           d = merge(d, dd, on = "id", all.x = TRUE)
         }
         v = named_list(d$id) # add values to last col of print-dt as list col
@@ -535,7 +544,7 @@ ParamSet = R6Class("ParamSet",
     #' @field has_deps (`logical(1)`)\cr
     #' Has the set parameter dependencies?
     has_deps = function() {
-      nrow(private$.deps) > 0L
+      nrow(self$deps) > 0L
     }
   ),
 
@@ -546,7 +555,10 @@ ParamSet = R6Class("ParamSet",
     .values = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
-    get_member_with_idnames = function(member, astype) set_names(astype(map(self$params, member)), names(self$params)),
+    get_member_with_idnames = function(member, astype) {
+      params = self$params
+      set_names(astype(map(params, member)), names(params))
+    },
 
     deep_clone = function(name, value) {
       switch(name,
