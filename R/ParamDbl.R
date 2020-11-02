@@ -50,7 +50,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) checkNumber(x, lower = self$lower - sqrt(.Machine$double.eps), upper = self$upper + sqrt(.Machine$double.eps)),
-    .qunif = function(x) x * (self$upper - self$lower) + self$lower
+    .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+    .qunif = function(x) x * self$upper - (x-1) * self$lower
   )
 )
