@@ -51,7 +51,8 @@
 <meta property="og:description" content="A set of Param objects.
 Please note that when creating a set or adding to it, the parameters of the
 resulting set have to be uniquely named with IDs with valid R names.
-The set also contains a member variable values which can be used to store an active configuration / or to partially fix
+The set also contains a member variable values which can be used to store an active configuration /
+or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs)." />
 <meta name="twitter:card" content="summary" />
 
@@ -86,7 +87,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.4.0-9000</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.5.0-9000</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -154,7 +155,8 @@ some parameters to constant values (regarding subsequent sampling or generation 
     <p>A set of <a href='Param.html'>Param</a> objects.
 Please note that when creating a set or adding to it, the parameters of the
 resulting set have to be uniquely named with IDs with valid R names.
-The set also contains a member variable <code>values</code> which can be used to store an active configuration / or to partially fix
+The set also contains a member variable <code>values</code> which can be used to store an active configuration /
+or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs).</p>
     </div>
 
@@ -298,6 +300,7 @@ Has the set parameter dependencies?</p></dd>
 <li><p><a href='#method-ids'><code>ParamSet$ids()</code></a></p></li>
 <li><p><a href='#method-get_values'><code>ParamSet$get_values()</code></a></p></li>
 <li><p><a href='#method-subset'><code>ParamSet$subset()</code></a></p></li>
+<li><p><a href='#method-tune_ps'><code>ParamSet$tune_ps()</code></a></p></li>
 <li><p><a href='#method-check'><code>ParamSet$check()</code></a></p></li>
 <li><p><a href='#method-test'><code>ParamSet$test()</code></a></p></li>
 <li><p><a href='#method-assert'><code>ParamSet$assert()</code></a></p></li>
@@ -375,6 +378,16 @@ Only returns values of parameters that satisfy all conditions.</p><h4 class='has
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
 <dt><code>ids</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-tune_ps"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>tune_ps()</code></h3>
+<p>Construct a <code>ParamSet</code> to tune over. Constructed from <code><a href='to_tune.html'>TuneToken</a></code> in <code>$values</code>, see <code><a href='to_tune.html'>to_tune()</a></code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>tune_ps</span><span class='op'>(</span>values <span class='op'>=</span> <span class='va'>self</span><span class='op'>$</span><span class='va'>values</span><span class='op'>)</span></pre><p></div></p>
+
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
+<dt><code>values</code></dt><dd><p>(<code>named list</code>): optional named list of <code><a href='to_tune.html'>TuneToken</a></code> objects to convert, in place of <code>$values</code>.</p></dd>
 
 </dl><p></div></p>
 <p><hr>
