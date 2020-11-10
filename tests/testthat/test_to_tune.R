@@ -245,6 +245,21 @@ test_that("Dependencies work", {
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE)), .allow_dangling_dependencies = TRUE)))),
     "Dependencies on z dangling")
 
+  # make sure dependency check of `pars` work with tune tokens.
+  pars$values$z = 0
+  pars$values$x = to_tune()
+  expect_equal(capture.output(print(pars$tune_ps())), capture.output(print(ps(x = p_int(0, 1)))))
+
+  pars$values$z = to_tune(p_int(0, 1))
+  pars$values$x = to_tune()
+  expect_equal(capture.output(print(pars$tune_ps())),
+    capture.output(print(ps(z = p_int(0, 1), x = p_int(0, 1, requires = z == 1)))))
+
+  pars$values$z = to_tune(p_int(0, 1))
+  pars$values$x = 1
+
+  expect_equal(capture.output(print(pars$tune_ps())), capture.output(print(ps(z = p_int(0, 1)))))
+
 })
 
 test_that("ParamSetCollection works", {

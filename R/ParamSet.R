@@ -217,8 +217,12 @@ ParamSet = R6Class("ParamSet",
       deps = self$deps
       if (nrow(deps)) {
         for (j in seq_row(deps)) {
+
           p1id = deps$id[j]
           p2id = deps$on[j]
+          if (inherits(xs[[p1id]], "TuneToken") || inherits(xs[[p2id]], "TuneToken")) {
+            next  # be lenient with dependencies when any parameter involved is a TuneToken
+          }
           # we are ONLY ok if:
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
