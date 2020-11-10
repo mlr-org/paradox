@@ -2,17 +2,17 @@ context("domain")
 
 test_that("p_xxx printers", {
   expect_output(print(p_int()), "p_int\\(\\)")
-  expect_output(print(p_int(1)), "p_int\\(1\\)")
+  expect_output(print(p_int(1)), "p_int\\(lower = 1\\)")
   expect_output(print(p_int(lower = 1)), "p_int\\(lower = 1\\)")
 
   expect_output(print(p_dbl()), "p_dbl\\(\\)")
-  expect_output(print(p_dbl(1)), "p_dbl\\(1\\)")
+  expect_output(print(p_dbl(1)), "p_dbl\\(lower = 1\\)")
   expect_output(print(p_dbl(lower = 1)), "p_dbl\\(lower = 1\\)")
 
   expect_output(print(p_lgl()), "p_lgl\\(\\)")
   expect_output(print(p_uty()), "p_uty\\(\\)")
 
-  expect_output(print(p_fct("a")), "p_fct\\(\"a\"\\)")
+  expect_output(print(p_fct("a")), "p_fct\\(levels = \"a\"\\)")
   expect_output(print(p_fct(1)), "p_fct\\(levels = \"1\"\\)")
   expect_output(print(p_fct(list(x = 1))), "p_fct\\(levels = \"x\"\\)")
 
@@ -51,7 +51,7 @@ test_that("ps(p_xxx(...)) creates ParamSets", {
   expect_equal(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
     ps(x = ParamUty$new("y", default = 1, tags = "required", custom_check = check_int)))
 
-  expect_error(p_int(id = 1), "id must not be given to")
+  expect_error(p_int(id = 1), "unused argument.*id")
 
 })
 

@@ -12,7 +12,7 @@ test_that("TuneToken printers", {
 
   expect_output(print(to_tune(c("a", "b"))), "p_fct\\(levels = c\\(\"a\", \"b\"\\)\\)")
 
-  expect_output(print(to_tune(p_dbl(1, 2))), "p_dbl\\(1, 2\\)")
+  expect_output(print(to_tune(p_dbl(1, 2))), "p_dbl\\(lower = 1, upper = 2\\)")
 
   expect_output(print(to_tune(ps(x = p_int(0, 1)))), "ParamSet.*id.*class.*lower.*upper")
 

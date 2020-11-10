@@ -71,36 +71,36 @@ NULL
 #' @rdname Domain
 #' @export
 p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
-  domain(constructor = ParamInt, constargs = list(lower = lower, upper = upper, special_vals = special_vals, default = default, tags = tags),
+  domain(constructor = ParamInt, constargs = as.list(match.call()[-1]),
     requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
-  domain(constructor = ParamDbl, constargs = list(lower = lower, upper = upper, special_vals = special_vals, default = default, tags = tags),
+  domain(constructor = ParamDbl, constargs = as.list(match.call()[-1]),
     requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
 p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, requires = NULL, trafo = NULL) {
-  domain(constructor = ParamUty, constargs = list(default = default, tags = tags, custom_check = custom_check),
+  domain(constructor = ParamUty, constargs = as.list(match.call()[-1]),
     requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
 p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
-  domain(constructor = ParamLgl, constargs = list(special_vals = special_vals, default = default, tags = tags),
+  domain(constructor = ParamLgl, constargs = as.list(match.call()[-1]),
     requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
 p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
-  constargs = list(levels = levels, special_vals = special_vals, default = default, tags = tags)
-  levels = constargs$levels
+  constargs = as.list(match.call()[-1])
+  levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
     # if the "levels" argument is not a character vector, then
     # we add a trafo.
@@ -122,6 +122,9 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param .constargs: alternative to `...`.
 domain = function(constructor, constargs, requires_expr = NULL, trafo = NULL) {
+  constargs$trafo = NULL
+  constargs$requires = NULL
+  constargs = map(constargs, eval, envir = parent.frame(2))
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
 
   # check that `...` are valid by constructing and making sure this doesn't error

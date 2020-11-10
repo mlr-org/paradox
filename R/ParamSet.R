@@ -165,6 +165,7 @@ ParamSet = R6Class("ParamSet",
       assert_list(values)
       assert_names(names(values), subset.of = self$ids())
       pars = private$get_tune_ps(values)
+      on = NULL  # pacify static code check
       dangling_deps = pars$deps[!on %in% pars$ids()]
       if (nrow(dangling_deps)) {
         stopf("Dangling dependencies not allowed: Dependencies on %s dangling", str_collapse(dangling_deps$on))
