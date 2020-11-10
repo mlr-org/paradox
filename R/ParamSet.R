@@ -586,14 +586,15 @@ ParamSet = R6Class("ParamSet",
       pars$set_id = self$set_id
       parsnames = names(pars$params)
       # only add the dependencies that are also in the tuning PS
-      map(transpose_list(self$deps[id %in% names(idmapping) & on %in% names(partsets)]), function(depcandidate) {
-        onpar = partsets[[depcandidate$on]]
-        if (onpar$has_trafo || !identical(onpar$ids(), depcandidate$on)) {
+      on = id = NULL  # pacify static code check
+      pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
+        onpar = partsets[[on]]
+        if (onpar$has_trafo || !identical(onpar$ids(), on)) {
           # cannot have dependency on a parameter that is being trafo'd
           return(NULL)
         }
-        for (idname in idmapping[[depcandidate$id]]) {
-          pars$add_dep(idname, depcandidate$on, depcandidate$cond)
+        for (idname in idmapping[[id]]) {
+          pars$add_dep(idname, on, cond)
         }
       })
       pars
