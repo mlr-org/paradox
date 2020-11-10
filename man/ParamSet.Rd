@@ -165,6 +165,7 @@ Has the set parameter dependencies?}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
+\item \href{#method-tune_ps}{\code{ParamSet$tune_ps()}}
 \item \href{#method-check}{\code{ParamSet$check()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
@@ -278,6 +279,23 @@ Changes the current set to the set of passed IDs.
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{ids}}{(\code{character()}).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-tune_ps"></a>}}
+\if{latex}{\out{\hypertarget{method-tune_ps}{}}}
+\subsection{Method \code{tune_ps()}}{
+Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$tune_ps(values = self$values)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{values}}{(\verb{named list}): optional named list of \code{\link{TuneToken}} objects to convert, in place of \verb{$values}.}
 }
 \if{html}{\out{</div>}}
 }

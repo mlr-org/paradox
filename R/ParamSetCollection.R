@@ -121,7 +121,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # copy all deps and rename ids to prefixed versions
         dd = copy(s$deps)
         ids_old = s$ids()
-        if (s$set_id != "") {
+        if (s$set_id != "" && nrow(dd)) {
           ids_new = sprintf("%s.%s", s$set_id, ids_old)
           dd$id = map_values(dd$id, ids_old, ids_new)
           dd$on = map_values(dd$on, ids_old, ids_new)

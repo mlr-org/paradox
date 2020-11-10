@@ -158,6 +158,22 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
+    #'
+    #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
+    tune_ps = function(values = self$values) {
+      assert_list(values)
+      assert_names(names(values), subset.of = self$ids())
+      pars = private$get_tune_ps(values)
+      on = NULL  # pacify static code check
+      dangling_deps = pars$deps[!on %in% pars$ids()]
+      if (nrow(dangling_deps)) {
+        stopf("Dangling dependencies not allowed: Dependencies on %s dangling", str_collapse(dangling_deps$on))
+      }
+      pars
+    },
+
+    #' @description
     #' \pkg{checkmate}-like check-function. Takes a named list.
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
@@ -524,8 +540,10 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.values)
       }
-      if (self$assert_values)
+      if (self$assert_values) {
         self$assert(xs)
+        private$get_tune_ps(xs)  # check that to_tune() are valid
+      }
       if (length(xs) == 0L) {
         xs = named_list()
       } else {
@@ -533,8 +551,8 @@ ParamSet = R6Class("ParamSet",
         # this is not the greatest way to do this, evvery param should maybe have a ".convert"
         # function, but this seems overkill for this single issue
         # solves issue #293
-        int_ids = self$ids(class = "ParamInt")
-        int_ids = intersect(int_ids, names(xs))
+        # (Need to skip over ParamInt that have TuneToken value)
+        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, inherits, "TuneToken")))
         if (length(int_ids) > 0L)
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }
@@ -558,6 +576,29 @@ ParamSet = R6Class("ParamSet",
     get_member_with_idnames = function(member, astype) {
       params = self$params
       set_names(astype(map(params, member)), names(params))
+    },
+    get_tune_ps = function(values) {
+      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
+        tunetoken_to_ps(value, selfparams[[pn]])
+      })
+      idmapping = map(partsets, function(x) x$ids())
+      pars = ps_union(partsets)
+      pars$set_id = self$set_id
+      parsnames = names(pars$params)
+      # only add the dependencies that are also in the tuning PS
+      on = id = NULL  # pacify static code check
+      pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
+        onpar = partsets[[on]]
+        if (onpar$has_trafo || !identical(onpar$ids(), on)) {
+          # cannot have dependency on a parameter that is being trafo'd
+          return(NULL)
+        }
+        for (idname in idmapping[[id]]) {
+          pars$add_dep(idname, on, cond)
+        }
+      })
+      pars
     },
 
     deep_clone = function(name, value) {
