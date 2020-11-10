@@ -4,6 +4,7 @@
 #' A [Param] to describe categorical (factor) parameters.
 #'
 #' @template param_id
+#' @template param_levels
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags

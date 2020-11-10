@@ -12,19 +12,20 @@
 #' [`Param`] `$new()` function, except without the `id` argument, and with the the additional parameters `trafo`, and
 #' `requires`.
 #'
-#' The `p_fct` function admits a `levels` argument that goes beyond the `levels` accepted by [`ParamFct`]`$new()`.
-#' Instead of a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
-#' that is not named, the names are inferred using `as.character()` on the values.) The resulting `Domain` will
-#' correspond to a range of values given by the names of the `levels` argument with a `trafo` that maps the `character`
-#' names to the arbitrary values of the `levels` argument.
-#'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
 #' The `Domain` object's internals are subject to change and should not be relid upon.
 #'
-#' @param ... (any)\cr
-#'   Parameters as they would be given to the corresponding constructors, e.g. `ParamInt$new()` for `p_int()`. These
-#'   may be named or unnamed. The order is the same as for `ParamXxx$new(...)`, except that the `id` must not be given.
+#' @template param_lower
+#' @template param_upper
+#' @param levels (`character` | `atomic` | `list`)\cr
+#'   Allowed categorical values of the parameter. If this is not a `character`, then a `trafo` is generated that
+#'   converts the names (if not given: `as.character()` of the values) of the `levels` argument to the values.
+#'   This trafo is then performed *before* the function given as the `trafo` argument.
+#' @template param_special_vals
+#' @template param_default
+#' @template param_tags
+#' @template custom_check
 #' @param trafo (`function`)\cr
 #'   Single argument function performing the transformation of a parameter. When the `Domain` is used to construct a
 #'   [`ParamSet`], this transformation will be applied to the corresponding parameter as part of the `$trafo` function.
@@ -35,6 +36,15 @@
 #'   dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual$new(<value>))` or
 #'   `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf$new(<values>))`, respectively (see [`CondEqual`],
 #'   [`CondAnyOf`]). The expression may also contain multiple conditions separated by `&&`.
+#' @return A `Domain` object.
+#'
+#' @details
+#' The `p_fct` function admits a `levels` argument that goes beyond the `levels` accepted by [`ParamFct`]`$new()`.
+#' Instead of a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
+#' that is not named, the names are inferred using `as.character()` on the values.) The resulting `Domain` will
+#' correspond to a range of values given by the names of the `levels` argument with a `trafo` that maps the `character`
+#' names to the arbitrary values of the `levels` argument.
+#'
 #' @examples
 #' params = ps(
 #'   unbounded_integer = p_int(),
@@ -60,35 +70,37 @@ NULL
 
 #' @rdname Domain
 #' @export
-p_int = function(..., requires = NULL, trafo = NULL) {
-  domain(constructor = ParamInt, ..., requires_expr = substitute(requires), trafo = trafo)
+p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+  domain(constructor = ParamInt, constargs = list(lower = lower, upper = upper, special_vals = special_vals, default = default, tags = tags),
+    requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_dbl = function(..., requires = NULL, trafo = NULL) {
-  domain(constructor = ParamDbl, ..., requires_expr = substitute(requires), trafo = trafo)
+p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+  domain(constructor = ParamDbl, constargs = list(lower = lower, upper = upper, special_vals = special_vals, default = default, tags = tags),
+    requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_uty = function(..., requires = NULL, trafo = NULL) {
-  domain(constructor = ParamUty, ..., requires_expr = substitute(requires), trafo = trafo)
+p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, requires = NULL, trafo = NULL) {
+  domain(constructor = ParamUty, constargs = list(default = default, tags = tags, custom_check = custom_check),
+    requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_lgl = function(..., requires = NULL, trafo = NULL) {
-  domain(constructor = ParamLgl, ..., requires_expr = substitute(requires), trafo = trafo)
+p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+  domain(constructor = ParamLgl, constargs = list(special_vals = special_vals, default = default, tags = tags),
+    requires_expr = substitute(requires), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_fct = function(..., requires = NULL, trafo = NULL) {
-  extracted = (function(id, levels, ...) {
-    list(levels = levels, rest = list(...))
-  })(id = "ID", ...)
-  levels = extracted$levels
+p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+  constargs = list(levels = levels, special_vals = special_vals, default = default, tags = tags)
+  levels = constargs$levels
   if (!is.character(levels)) {
     # if the "levels" argument is not a character vector, then
     # we add a trafo.
@@ -101,20 +113,15 @@ p_fct = function(..., requires = NULL, trafo = NULL) {
       if (!is.null(trafo)) x = trafo(x)
       x
     }, trafo, levels)
-    constargs = extracted$rest
     constargs$levels = names(levels)
-    constargs$requires = NULL
-    domain(constructor = ParamFct, requires_expr = substitute(requires), trafo = trafo, .constargs = constargs)
-  } else {
-    domain(constructor = ParamFct, ..., requires_expr = substitute(requires), trafo = trafo)
   }
+  domain(constructor = ParamFct, constargs = constargs, requires_expr = substitute(requires), trafo = trafo)
 }
 
 # Construct the actual `Domain` object
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param .constargs: alternative to `...`.
-domain = function(constructor, ..., requires_expr = NULL, trafo = NULL, .constargs = NULL) {
-  constargs = c(.constargs, list(...))
+domain = function(constructor, constargs, requires_expr = NULL, trafo = NULL) {
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
 
   # check that `...` are valid by constructing and making sure this doesn't error
