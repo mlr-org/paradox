@@ -2,9 +2,7 @@
 % Please edit documentation in R/ps.R
 \name{ps}
 \alias{ps}
-\title{Construct a ParamSet using Short Forms
-
-The \code{ps()} short form constructor uses \code{\link{Domain}} objects to construct \code{\link{ParamSet}}s in a succinct and readable way.}
+\title{Construct a ParamSet using Short Forms}
 \usage{
 ps(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE)
 }
@@ -28,9 +26,10 @@ use. Dependencies between \code{\link{ParamSet}}s when using \code{\link[=to_tun
 A \code{\link{ParamSet}} object.
 }
 \description{
-Construct a ParamSet using Short Forms
+The \code{ps()} short form constructor uses \code{\link{Domain}} objects (\code{p_dbl}, \code{p_fct}, ...) to construct \code{\link{ParamSet}}s in a
+succinct and readable way.
 
-The \code{ps()} short form constructor uses \code{\link{Domain}} objects to construct \code{\link{ParamSet}}s in a succinct and readable way.
+For more specifics also see the documentation of \code{\link{Domain}}.
 }
 \examples{
 pars = ps(

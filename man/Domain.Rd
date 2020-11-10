@@ -9,20 +9,80 @@
 \alias{p_fct}
 \title{Domain: Parameter Range without an Id}
 \usage{
-p_int(..., requires = NULL, trafo = NULL)
+p_int(
+  lower = -Inf,
+  upper = Inf,
+  special_vals = list(),
+  default = NO_DEF,
+  tags = character(),
+  requires = NULL,
+  trafo = NULL
+)
 
-p_dbl(..., requires = NULL, trafo = NULL)
+p_dbl(
+  lower = -Inf,
+  upper = Inf,
+  special_vals = list(),
+  default = NO_DEF,
+  tags = character(),
+  requires = NULL,
+  trafo = NULL
+)
 
-p_uty(..., requires = NULL, trafo = NULL)
+p_uty(
+  default = NO_DEF,
+  tags = character(),
+  custom_check = NULL,
+  requires = NULL,
+  trafo = NULL
+)
 
-p_lgl(..., requires = NULL, trafo = NULL)
+p_lgl(
+  special_vals = list(),
+  default = NO_DEF,
+  tags = character(),
+  requires = NULL,
+  trafo = NULL
+)
 
-p_fct(..., requires = NULL, trafo = NULL)
+p_fct(
+  levels,
+  special_vals = list(),
+  default = NO_DEF,
+  tags = character(),
+  requires = NULL,
+  trafo = NULL
+)
 }
 \arguments{
-\item{...}{(any)\cr
-Parameters as they would be given to the corresponding constructors, e.g. \code{ParamInt$new()} for \code{p_int()}. These
-may be named or unnamed. The order is the same as for \code{ParamXxx$new(...)}, except that the \code{id} must not be given.}
+\item{lower}{(\code{numeric(1)})\cr
+Lower bound, can be \code{-Inf}.}
+
+\item{upper}{(\code{numeric(1)})\cr
+Upper bound can be \code{+Inf}.}
+
+\item{special_vals}{(\code{list()})\cr
+Arbitrary special values this parameter is allowed to take, to make it
+feasible. This allows extending the domain of the parameter. Note that
+these values are only used in feasibility checks, neither in generating
+designs nor sampling.}
+
+\item{default}{(\code{any})\cr
+Default value. Can be from the domain of the parameter or an element of
+\code{special_vals}. Has value \link{NO_DEF} if no default exists. \code{NULL} can be a
+valid default.
+The value has no effect on \code{ParamSet$values} or the behavior of
+\code{ParamSet$check()}, \verb{$test()} or \verb{$assert()}.
+The \code{default} is intended to be used for documentation purposes.
+`}
+
+\item{tags}{(\code{character()})\cr
+Arbitrary tags to group and subset parameters. Some tags serve a special
+purpose:\cr
+\itemize{
+\item \code{"required"} implies that the parameters has to be given when setting
+\code{values} in \link{ParamSet}.
+}}
 
 \item{requires}{(\code{call} | \code{expression})\cr
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
@@ -35,6 +95,21 @@ dependencies according to \verb{ParamSet$add_dep(on = "<Param>", cond = CondEqua
 \item{trafo}{(\code{function})\cr
 Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
 \code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
+
+\item{custom_check}{(\verb{function()})\cr
+Custom function to check the feasibility.
+Function which checks the input.
+Must return 'TRUE' if the input is valid and a \code{character(1)} with the error message otherwise.
+This function should \emph{not} throw an error.
+Defaults to \code{NULL}, which means that no check is performed.}
+
+\item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
+Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
+converts the names (if not given: \code{as.character()} of the values) of the \code{levels} argument to the values.
+This trafo is then performed \emph{before} the function given as the \code{trafo} argument.}
+}
+\value{
+A \code{Domain} object.
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
@@ -46,15 +121,16 @@ A \code{Domain} object is a representation of a single dimension of a \code{\lin
 \code{\link{Param}} \verb{$new()} function, except without the \code{id} argument, and with the the additional parameters \code{trafo}, and
 \code{requires}.
 
+\code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
+constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user.
+The \code{Domain} object's internals are subject to change and should not be relid upon.
+}
+\details{
 The \code{p_fct} function admits a \code{levels} argument that goes beyond the \code{levels} accepted by \code{\link{ParamFct}}\verb{$new()}.
 Instead of a \code{character} vector, any atomic vector or list (optionally named) may be given. (If the value is a list
 that is not named, the names are inferred using \code{as.character()} on the values.) The resulting \code{Domain} will
 correspond to a range of values given by the names of the \code{levels} argument with a \code{trafo} that maps the \code{character}
 names to the arbitrary values of the \code{levels} argument.
-
-\code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
-constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user.
-The \code{Domain} object's internals are subject to change and should not be relid upon.
 }
 \examples{
 params = ps(
