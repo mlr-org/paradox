@@ -2,7 +2,12 @@
 
 #' @title Construct a ParamSet using Short Forms
 #'
-#' The `ps()` short form constructor uses [`Domain`] objects to construct [`ParamSet`]s in a succinct and readable way.
+#' @description
+#' The `ps()` short form constructor uses [`Domain`] objects (`p_dbl`, `p_fct`, ...) to construct [`ParamSet`]s in a
+#' succinct and readable way.
+#'
+#' For more specifics also see the documentation of [`Domain`].
+#'
 #' @param ... ([`Domain`] | [`Param`])\cr
 #'   Named arguments of [`Domain`] or [`Param`] objects. The [`ParamSet`] will be constructed of the given [`Param`]s,
 #'   or of [`Param`]s constructed from the given domains. The names of the arguments will be used as `$id`

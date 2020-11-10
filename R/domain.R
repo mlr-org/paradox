@@ -25,7 +25,7 @@
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags
-#' @template custom_check
+#' @template param_custom_check
 #' @param trafo (`function`)\cr
 #'   Single argument function performing the transformation of a parameter. When the `Domain` is used to construct a
 #'   [`ParamSet`], this transformation will be applied to the corresponding parameter as part of the `$trafo` function.

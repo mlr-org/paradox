@@ -6,7 +6,7 @@
 #' @template param_id
 #' @template param_default
 #' @template param_tags
-#' @template custom_check
+#' @template param_custom_check
 #'
 #' @family Params
 #' @include Param.R
