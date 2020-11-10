@@ -3,7 +3,7 @@ paradox
 =======
 
 Package website: [release](https://paradox.mlr-org.com/) \|
-[dev](https://paradox.mlr-org.com/dev)
+[dev](https://paradox.mlr-org.com/dev/)
 
 Universal Parameter Space Description and Tools.
 
@@ -84,26 +84,26 @@ Properties of the parameters within the `ParamSet`:
     ps$levels
     #> $z
     #> NULL
-    #> 
+    #>
     #> $x
     #> NULL
-    #> 
+    #>
     #> $flag
     #> [1]  TRUE FALSE
-    #> 
+    #>
     #> $methods
     #> [1] "a" "b" "c"
     ps$nlevels
-    #>       z       x    flag methods 
+    #>       z       x    flag methods
     #>       3     Inf       2       3
     ps$is_number
-    #>       z       x    flag methods 
+    #>       z       x    flag methods
     #>    TRUE    TRUE   FALSE   FALSE
     ps$lower
-    #>       z       x    flag methods 
+    #>       z       x    flag methods
     #>       1     -10      NA      NA
     ps$upper
-    #>       z       x    flag methods 
+    #>       z       x    flag methods
     #>       3      10      NA      NA
 
 ### Parameter Checks
@@ -151,15 +151,15 @@ inside the transformation.
     #> [[1]]
     #> [[1]]$z
     #> [1] 0.125
-    #> 
+    #>
     #> [[1]]$x
     #> [1] 0.4137243
-    #> 
-    #> 
+    #>
+    #>
     #> [[2]]
     #> [[2]]$z
     #> [1] 0.5
-    #> 
+    #>
     #> [[2]]$x
     #> [1] 0.3688455
 

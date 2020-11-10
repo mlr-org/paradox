@@ -7,7 +7,8 @@
 A set of \link{Param} objects.
 Please note that when creating a set or adding to it, the parameters of the
 resulting set have to be uniquely named with IDs with valid R names.
-The set also contains a member variable \code{values} which can be used to store an active configuration / or to partially fix
+The set also contains a member variable \code{values} which can be used to store an active configuration /
+or to partially fix
 some parameters to constant values (regarding subsequent sampling or generation of designs).
 }
 \section{S3 methods and type converters}{

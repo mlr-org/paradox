@@ -2,7 +2,7 @@
 #' @import checkmate
 #' @import mlr3misc
 #' @importFrom R6 R6Class is.R6Class
-#' @importFrom stats runif
+#' @importFrom stats runif rnorm
 "_PACKAGE"
 
 .onLoad = function(libname, pkgname) { # nolint

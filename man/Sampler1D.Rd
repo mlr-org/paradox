@@ -4,7 +4,8 @@
 \alias{Sampler1D}
 \title{Sampler1D Class}
 \description{
-1D sampler, abstract base class for Sampler like \link{Sampler1DUnif}, \link{Sampler1DRfun}, \link{Sampler1DCateg} and \link{Sampler1DNormal}.
+1D sampler, abstract base class for Sampler like \link{Sampler1DUnif}, \link{Sampler1DRfun},
+\link{Sampler1DCateg} and \link{Sampler1DNormal}.
 }
 \seealso{
 Other Sampler: 
