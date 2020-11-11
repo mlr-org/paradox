@@ -16,7 +16,7 @@ A \code{TuneToken} object.
 \description{
 \code{to_tune()} creates a \code{TuneToken} object which can be assigned to the \verb{$values} slot of a \code{\link{ParamSet}} as an
 alternative to a concrete value. This indicates that the value is not given directly but should be tuned using
-\link[bbotk:bbotk-package]{bbotk} or \link[mlr3tuning:mlr3tuning-package]{mlr3tuning}. If the thus parameterized object
+\CRANpkg{bbotk} or \CRANpkg{mlr3tuning}. If the thus parameterized object
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 
 The tuning range \code{\link{ParamSet}} that is constructed from the \code{TuneToken} values in a \code{\link{ParamSet}}'s \verb{$values} slot
