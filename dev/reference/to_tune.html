@@ -177,7 +177,7 @@ only be constructed via to_tune(), and should only be used by giving them to $va
     <div class="ref-description">
     <p><code>to_tune()</code> creates a <code>TuneToken</code> object which can be assigned to the <code>$values</code> slot of a <code><a href='ParamSet.html'>ParamSet</a></code> as an
 alternative to a concrete value. This indicates that the value is not given directly but should be tuned using
-<a href='https://bbotk.mlr-org.com/reference/bbotk-package.html'>bbotk</a> or <a href='https://mlr3tuning.mlr-org.com/reference/mlr3tuning-package.html'>mlr3tuning</a>. If the thus parameterized object
+<a href='https://CRAN.R-project.org/package=bbotk'><span class="pkg">bbotk</span></a> or <a href='https://CRAN.R-project.org/package=mlr3tuning'><span class="pkg">mlr3tuning</span></a>. If the thus parameterized object
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.</p>
 <p>The tuning range <code><a href='ParamSet.html'>ParamSet</a></code> that is constructed from the <code>TuneToken</code> values in a <code><a href='ParamSet.html'>ParamSet</a></code>'s <code>$values</code> slot
 can be accessed through the <code>ParamSet$tune_ps()</code> method. This is done automatically by tuners if no tuning range
