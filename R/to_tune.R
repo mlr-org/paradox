@@ -5,7 +5,7 @@
 #' @description
 #' `to_tune()` creates a `TuneToken` object which can be assigned to the `$values` slot of a [`ParamSet`] as an
 #' alternative to a concrete value. This indicates that the value is not given directly but should be tuned using
-#' [bbotk][bbotk::bbotk-package] or [mlr3tuning][mlr3tuning::mlr3tuning-package]. If the thus parameterized object
+#' \CRANpkg{bbotk} or \CRANpkg{mlr3tuning}. If the thus parameterized object
 #' is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 #'
 #' The tuning range [`ParamSet`] that is constructed from the `TuneToken` values in a [`ParamSet`]'s `$values` slot
