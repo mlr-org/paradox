@@ -13,6 +13,7 @@ test_that("qunif", {
     p = ParamLgl$new("x")
     u = runif(n)
     v1 = p$qunif(u)
+    expect_logical(v1, any.missing = FALSE, len = n)
     expect_setequal(unique(v1), p$levels) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))
