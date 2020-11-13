@@ -598,6 +598,14 @@ ParamSet = R6Class("ParamSet",
           # cannot have dependency on a parameter that is being trafo'd
           return(NULL)
         }
+        # remove infeasible values from condition
+        cond = cond$clone(deep = TRUE)
+        cond$rhs = keep(cond$rhs, pars$params[[on]]$test)
+        if (!length(cond$rhs)) {
+          # no value is feasible, but there may be a trafo that fixes this
+          # so we are forgiving here.
+          return(NULL)
+        }
         for (idname in idmapping[[id]]) {
           pars$add_dep(idname, on, cond)
         }

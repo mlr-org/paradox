@@ -260,6 +260,23 @@ test_that("Dependencies work", {
 
   expect_equal(capture.output(print(pars$tune_ps())), capture.output(print(ps(z = p_int(0, 1)))))
 
+  # dependency after subsetting factorials works, even if the dependency now
+  # contains infeasible values
+  largeps = ParamSet$new(list(
+    ParamFct$new("x", c("a", "b", "c")),
+    ParamLgl$new("y")
+  ))
+  largeps$add_dep("y", "x", CondAnyOf$new(c("a", "b")))
+
+  res = largeps$tune_ps(list(x = to_tune(c("a", "b")), y = to_tune()))
+  expect_equal(res$deps$cond[[1]]$rhs, c("a", "b"))
+
+  res = largeps$tune_ps(list(x = to_tune("a"), y = to_tune()))
+  expect_equal(res$deps$cond[[1]]$rhs, "a")
+
+  res = largeps$tune_ps(list(x = to_tune("c"), y = to_tune()))
+  expect_false(res$has_deps)
+
 })
 
 test_that("ParamSetCollection works", {
