@@ -44,6 +44,7 @@ test_that("qunif", {
     p = ParamDbl$new("x", lower = a, upper = b)
     u = runif(n)
     v1 = p$qunif(u)
+    expect_double(v1, any.missing = FALSE, len = n)
     v2 = runif(n, min = a, max = b)
     e1 = ecdf(v1)
     e2 = ecdf(v2)
