@@ -131,7 +131,8 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL) {
       values = self$values
-      values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+      values = values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+      discard(values, inherits, "TuneToken")
     },
 
     #' @description
