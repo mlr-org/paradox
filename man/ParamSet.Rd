@@ -251,6 +251,11 @@ Only returns IDs of parameters that satisfy all conditions.
 Retrieves parameter values based on some selections, \code{NULL} means no
 restriction and is equivalent to \verb{$values}.
 Only returns values of parameters that satisfy all conditions.
+
+This function should be used to access parameter values from "within"
+code being parameterized through this \code{ParamSet}. If the values contain
+a \code{\link{TuneToken}} object (set through \code{\link{to_tune}}), then this function
+will stop with an error.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(class = NULL, is_bounded = NULL, tags = NULL)}\if{html}{\out{</div>}}
 }

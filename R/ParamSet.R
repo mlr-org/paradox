@@ -125,6 +125,11 @@ ParamSet = R6Class("ParamSet",
     #' restriction and is equivalent to `$values`.
     #' Only returns values of parameters that satisfy all conditions.
     #'
+    #' This function should be used to access parameter values from "within"
+    #' code being parameterized through this `ParamSet`. If the values contain
+    #' a [`TuneToken`] object (set through [`to_tune`]), then this function
+    #' will stop with an error.
+    #'
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
