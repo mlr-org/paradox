@@ -37,7 +37,7 @@ test_that("FunctionParamValue may not be in variable with dependency", {
     ParamInt$new("y")
   ))
   p$add_dep("x", "y", CondEqual$new(0))
-
+  y = 2
   expect_error({p$values = list(x = 1, y = 1)}, "can only be set if the following.*y = 0")
 
   expect_error({p$values = list(x = 1, y = 0)}, NA)
