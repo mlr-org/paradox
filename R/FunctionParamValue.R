@@ -3,7 +3,7 @@
 #' @export
 FunctionParamValue = function(.fn, ...) {
   assert_function(.fn, nargs = 1)
-  set_class(crate(.fn, ...), "FunctionParamValue")
+  set_class(crate(.fn, ...), c("FunctionParamValue", "function"))
 }
 
 #' @export
