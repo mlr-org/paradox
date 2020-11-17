@@ -147,10 +147,14 @@ Is NULL by default, and you can set it to NULL to switch the transformation off.
 Has the set a \code{trafo} function?}
 
 \item{\code{values}}{(named \code{list()})\cr
-Currently set / fixed parameter values.
+Currently set parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
 When you set values, all previously set values will be unset / removed.}
+
+\item{\code{fixed_values}}{(named \code{list()})\cr
+Currently set parameter values that are not set to a \code{\link{TuneToken}}.
+This is always a (possibly improper) subset of \verb{$values}.}
 
 \item{\code{has_deps}}{(\code{logical(1)})\cr
 Has the set parameter dependencies?}

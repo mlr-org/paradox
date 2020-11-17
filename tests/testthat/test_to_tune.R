@@ -309,3 +309,19 @@ test_that("ParamSetCollection works", {
   expect_equal(generate_design_grid(psc$tune_ps(), 2)$transpose(trafo = FALSE)[[12]], list(prefix.x = 10, y1 = 1, y2 = 1, a = 1))
 
 })
+
+test_that("ParamSet$fixed_values returns values w/o TuneToken", {
+  ps1 = ParamSet$new(list(ParamInt$new("x"), ParamInt$new("y")))
+  ps1$values = list(x = 1, y = to_tune(0, 10))
+  expect_equal(ps1$values, list(x = 1, y = to_tune(0, 10)))
+  expect_equal(ps1$fixed_values, list(x = 1))
+
+})
+
+test_that("Calling Learner with TuneToken fails", {
+  l = lrn("classif.rpart")
+  expect_error(l$train(tsk("iris")), NA)
+  l$param_set$values$minsplit = to_tune(1, 10)
+  expect_error(l$train(tsk("iris")), "Object with TuneToken in \\$values was called outside of tuning")
+
+})

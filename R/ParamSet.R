@@ -131,6 +131,9 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL) {
       values = self$values
+      if (some(values, inherits, "TuneToken")) {
+        stop("Object with TuneToken in $values was called outside of tuning.")
+      }
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
     },
 
@@ -561,6 +564,13 @@ ParamSet = R6Class("ParamSet",
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }
       private$.values = xs
+    },
+
+    #' @field fixed_values (named `list()`)\cr
+    #' Currently set parameter values that are not set to a [`TuneToken`].
+    #' This is always a (possibly improper) subset of `$values`.
+    fixed_values = function(xs) {
+      discard(self$values, inherits, "TuneToken")
     },
 
     #' @field has_deps (`logical(1)`)\cr
