@@ -133,7 +133,7 @@ ParamSet = R6Class("ParamSet",
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL, env = parent.frame()) {
       values = self$values
       params = self$params
-      values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+      values = values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
       imap(values, function(x, name) {
         if (!inherits(x, "FunctionParamValue")) return(x)
         x = x(env)
