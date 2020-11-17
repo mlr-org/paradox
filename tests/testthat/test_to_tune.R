@@ -319,9 +319,9 @@ test_that("ParamSet$fixed_values returns values w/o TuneToken", {
 })
 
 test_that("Calling Learner with TuneToken fails", {
-  l = lrn("classif.rpart")
-  expect_error(l$train(tsk("iris")), NA)
-  l$param_set$values$minsplit = to_tune(1, 10)
-  expect_error(l$train(tsk("iris")), "Object with TuneToken in \\$values was called outside of tuning")
+  ps1 = ParamSet$new(list(ParamInt$new("x"), ParamInt$new("y")))
+  expect_equal(ps1$values, ps1$get_values())
+  ps1$values$y = to_tune(1, 10)
+  expect_error(ps1$get_values(), "Object with TuneToken in \\$values was called outside of tuning")
 
 })
