@@ -49,3 +49,23 @@ test_that("FunctionParamValue may not be in variable with dependency", {
 
   expect_error({p$values = list(x = 1, y = fpv)}, "y is a FunctionParamValue")
 })
+
+test_that("FunctionParamValue in Tuning PS", {
+  p = ParamSet$new(list(
+    ParamInt$new("x"),
+    ParamInt$new("y")
+  ))
+
+  p2 = p$tune_ps(list(
+    x = to_tune(0, 10),
+    y = to_tune(p_dbl(0, 1,
+      trafo = function(x) FunctionParamValue(function(env) env$scale * x, x)))
+  ))
+
+  paramval = generate_design_grid(p2, 3)$transpose()[[5]]  # 5, 0.5
+  p$values = paramval
+  expect_equal(p$get_values(env = list(scale = 100)), list(x = 5, y = 50))
+  expect_equal(p$get_values(env = list(scale = 10)), list(x = 5, y = 5))
+  expect_error(p$get_values(env = list(scale = 1)), "infeasible value.*not 'double'")
+
+})
