@@ -248,7 +248,12 @@ Retrieves parameter values based on some selections, \code{NULL} means no
 restriction and is equivalent to \verb{$values}.
 Only returns values of parameters that satisfy all conditions.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(class = NULL, is_bounded = NULL, tags = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(
+  class = NULL,
+  is_bounded = NULL,
+  tags = NULL,
+  env = parent.frame()
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -259,6 +264,8 @@ Only returns values of parameters that satisfy all conditions.
 \item{\code{is_bounded}}{(\code{logical(1)}).}
 
 \item{\code{tags}}{(\code{character()}).}
+
+\item{\code{env}}{(\code{environment} | named \code{list})}
 }
 \if{html}{\out{</div>}}
 }

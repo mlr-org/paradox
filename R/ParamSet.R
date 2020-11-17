@@ -128,10 +128,22 @@ ParamSet = R6Class("ParamSet",
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
+    #' @param env (`environment` | named `list`)
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL) {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, env = parent.frame()) {
       values = self$values
+      params = self$params
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+      imap(values, function(x, name) {
+        if (!inherits(x, "FunctionParamValue")) return(x)
+        x = x(env)
+        checked = params[[name]]$check(x)
+        if (!isTRUE(checked)) {
+          stopf("FunctionParamValue for %s resulted in infeasible value:\n%s",
+            name, checked)
+        }
+        x
+      })
     },
 
     #' @description
@@ -227,7 +239,9 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+          ok = (p1id %in% ns && p2id %in% ns &&
+                !inherits(xs[[p2id]], "FunctionParamValue") &&
+                cond$test(xs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
             message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
@@ -236,6 +250,8 @@ ParamSet = R6Class("ParamSet",
             if (is.null(val)) {
               message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
                   "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
+            } else if (inherits(val, "FunctionParamValue")) {
+              message = sprintf("%s However, %s is a FunctionParamValue. Conditions on FunctionParamValue values default to FALSE / unmet.", message, p2id)
             } else {
               message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
             }
@@ -556,7 +572,7 @@ ParamSet = R6Class("ParamSet",
         # function, but this seems overkill for this single issue
         # solves issue #293
         # (Need to skip over ParamInt that have TuneToken value)
-        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, inherits, "TuneToken")))
+        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, function(x) inherits(x, "TuneToken") || inherits(x, "FunctionParamValue"))))
         if (length(int_ids) > 0L)
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }

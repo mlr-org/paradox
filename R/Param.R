@@ -71,6 +71,7 @@ Param = R6Class("Param",
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e))))
       }
+      if (inherits(x, "FunctionParamValue")) return(TRUE)
       ch = private$.check(x)
       ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
     },

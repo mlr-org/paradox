@@ -58,6 +58,7 @@ RoxygenNote: 7.1.1
 Collate:
     'Condition.R'
     'Design.R'
+    'FunctionParamValue.R'
     'NoDefault.R'
     'Param.R'
     'ParamDbl.R'
