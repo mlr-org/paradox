@@ -20,5 +20,5 @@ test_that("Condition", {
 
   expect_error(CondAnyOf$new(list("a","b")), "Assertion on 'rhs' failed")
   expect_error(CondAnyOf$new(c("a", "b", NA_character_)), "Assertion on 'rhs' failed")
-  expect_error(CondAnyOf$new(c()), "Assertion on 'rhs' failed")
+  expect_error(CondAnyOf$new(character()), "Assertion on 'rhs' failed")
 })
