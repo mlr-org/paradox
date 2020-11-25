@@ -128,7 +128,7 @@ ParamSet = R6Class("ParamSet",
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
-    #' @param tune_token (`character(1)`).
+    #' @param tune_token (`character(1)`)\cr
     #' Return values `with`, `without` or `only` with [TuneToken]?
     #' @return Named `list()`.
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL, tune_token = "without") {
