@@ -309,3 +309,19 @@ test_that("ParamSetCollection works", {
   expect_equal(generate_design_grid(psc$tune_ps(), 2)$transpose(trafo = FALSE)[[12]], list(prefix.x = 10, y1 = 1, y2 = 1, a = 1))
 
 })
+
+test_that("ParamSet$get_values() works", {
+  pars = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamDbl$new("y", lower = 0, upper = 10),
+    ParamDbl$new("z", lower = 0, upper = 10)
+  ))
+
+  pars$values$x = to_tune()
+  pars$values$y = 2
+  pars$values$z = 2
+
+  expect_named(pars$get_values(tune_token = "with"), c("x", "y", "z"))
+  expect_named(pars$get_values(tune_token = "without"), c("y", "z"))
+  expect_named(pars$get_values(tune_token = "only"), "x")
+})

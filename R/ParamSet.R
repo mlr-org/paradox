@@ -128,9 +128,19 @@ ParamSet = R6Class("ParamSet",
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
+    #' @param tune_token (`character(1)`).
+    #' Return values `with`, `without` or `only` with [TuneToken]?
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL) {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, tune_token = "without") {
+      assert_choice(tune_token, c("without", "with", "only"))
       values = self$values
+
+      if (tune_token == "without") {
+        values = discard(values, is, "TuneToken")
+      } else if (tune_token == "only") {
+        values = keep(values, is, "TuneToken")
+      }
+
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
     },
 

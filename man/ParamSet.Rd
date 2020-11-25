@@ -248,7 +248,12 @@ Retrieves parameter values based on some selections, \code{NULL} means no
 restriction and is equivalent to \verb{$values}.
 Only returns values of parameters that satisfy all conditions.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(class = NULL, is_bounded = NULL, tags = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(
+  class = NULL,
+  is_bounded = NULL,
+  tags = NULL,
+  tune_token = "without"
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -259,6 +264,9 @@ Only returns values of parameters that satisfy all conditions.
 \item{\code{is_bounded}}{(\code{logical(1)}).}
 
 \item{\code{tags}}{(\code{character()}).}
+
+\item{\code{tune_token}}{(\code{character(1)}).
+Return values \code{with}, \code{without} or \code{only} with \link{TuneToken}?}
 }
 \if{html}{\out{</div>}}
 }
