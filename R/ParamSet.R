@@ -131,13 +131,13 @@ ParamSet = R6Class("ParamSet",
     #' @param tune_token (`character(1)`)\cr
     #' Return values `with`, `without` or `only` with [TuneToken]?
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, tune_token = "without") {
-      assert_choice(tune_token, c("without", "with", "only"))
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, type = "with_token") {
+      assert_choice(type, c("with_token", "without_token", "only_token"))
       values = self$values
 
-      if (tune_token == "without") {
+      if (type == "without_token") {
         values = discard(values, is, "TuneToken")
-      } else if (tune_token == "only") {
+      } else if (type == "only_token") {
         values = keep(values, is, "TuneToken")
       }
 
