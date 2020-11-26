@@ -252,7 +252,7 @@ Only returns values of parameters that satisfy all conditions.
   class = NULL,
   is_bounded = NULL,
   tags = NULL,
-  tune_token = "without"
+  type = "with_token"
 )}\if{html}{\out{</div>}}
 }
 
@@ -265,8 +265,8 @@ Only returns values of parameters that satisfy all conditions.
 
 \item{\code{tags}}{(\code{character()}).}
 
-\item{\code{tune_token}}{(\code{character(1)})\cr
-Return values \code{with}, \code{without} or \code{only} with \link{TuneToken}?}
+\item{\code{type}}{(\code{character(1)})\cr
+Return values \code{with_token}, \code{without_token} or \code{only_token}?}
 }
 \if{html}{\out{</div>}}
 }
