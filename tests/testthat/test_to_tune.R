@@ -324,4 +324,16 @@ test_that("ParamSet$get_values() works", {
   expect_named(pars$get_values(type = "with_token"), c("x", "y", "z"))
   expect_named(pars$get_values(type = "without_token"), c("y", "z"))
   expect_named(pars$get_values(type = "only_token"), "x")
+
+  pars = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamDbl$new("y", lower = 0, upper = 10),
+    ParamDbl$new("z", lower = 0, upper = 10)
+  ))
+
+  pars$values$y = 2
+  expect_list(pars$get_values(type = "only_token"), len = 0)
+
+  pars$values$y = to_tune()
+  expect_list(pars$get_values(type = "without_token"), len = 0)
 })
