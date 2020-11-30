@@ -14,10 +14,6 @@ test_that("Condition", {
   expect_equal(y, c(TRUE, TRUE, FALSE, FALSE))
   expect_output(print(cond), fixed = "CondAnyOf")
 
-  cond = CondAnyOf$new(c("a", NA_character_))
-  y = cond$test(c("a", "b", "c", NA_character_))
-  expect_equal(y, c(TRUE, FALSE, FALSE, TRUE))
-
   expect_error(CondAnyOf$new(list("a","b")), "Assertion on 'rhs' failed")
   expect_error(CondAnyOf$new(c("a", "b", NA_character_)), "Assertion on 'rhs' failed")
   expect_error(CondAnyOf$new(character()), "Assertion on 'rhs' failed")
