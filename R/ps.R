@@ -55,7 +55,7 @@
 #'   ))
 #' )
 #'
-#' pars$tune_ps()
+#' pars$search_space()
 #' @family ParamSet construction helpers
 #' @export
 ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {

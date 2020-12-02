@@ -20,8 +20,8 @@ alternative to a concrete value. This indicates that the value is not given dire
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 
 The tuning range \code{\link{ParamSet}} that is constructed from the \code{TuneToken} values in a \code{\link{ParamSet}}'s \verb{$values} slot
-can be accessed through the \code{ParamSet$tune_ps()} method. This is done automatically by tuners if no tuning range
-is given, but it is also possible to access the \verb{$tune_ps()} method, modify it further, and give the modified
+can be accessed through the \code{ParamSet$search_space()} method. This is done automatically by tuners if no tuning range
+is given, but it is also possible to access the \verb{$search_space()} method, modify it further, and give the modified
 \code{\link{ParamSet}} to a tuning function (or do anything else with it, nobody is judging you).
 
 A \code{TuneToken} represents the range over which the parameter whose \verb{$values} slot it occupies should be tuned over. It
@@ -109,13 +109,13 @@ params$values = list(
 
 print(params$values)
 
-print(params$tune_ps())
+print(params$search_space())
 
-# Change `$values` directly and generate new `$tune_ps()` to play around
+# Change `$values` directly and generate new `$search_space()` to play around
 params$values$uty3 = 8
 params$values$uty2 = to_tune(c(2, 4, 8))
 
-print(params$tune_ps())
+print(params$search_space())
 
 }
 \seealso{

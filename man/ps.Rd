@@ -65,7 +65,7 @@ pars$values = list(
   ))
 )
 
-pars$tune_ps()
+pars$search_space()
 }
 \seealso{
 Other ParamSet construction helpers: 

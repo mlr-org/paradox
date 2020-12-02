@@ -171,7 +171,7 @@ ParamSet = R6Class("ParamSet",
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     #'
     #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
-    tune_ps = function(values = self$values) {
+    search_space = function(values = self$values) {
       assert_list(values)
       assert_names(names(values), subset.of = self$ids())
       pars = private$get_tune_ps(values)

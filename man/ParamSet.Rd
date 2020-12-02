@@ -165,7 +165,7 @@ Has the set parameter dependencies?}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
-\item \href{#method-tune_ps}{\code{ParamSet$tune_ps()}}
+\item \href{#method-search_space}{\code{ParamSet$search_space()}}
 \item \href{#method-check}{\code{ParamSet$check()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
@@ -292,12 +292,12 @@ Changes the current set to the set of passed IDs.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-tune_ps"></a>}}
-\if{latex}{\out{\hypertarget{method-tune_ps}{}}}
-\subsection{Method \code{tune_ps()}}{
+\if{html}{\out{<a id="method-search_space"></a>}}
+\if{latex}{\out{\hypertarget{method-search_space}{}}}
+\subsection{Method \code{search_space()}}{
 Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$tune_ps(values = self$values)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$search_space(values = self$values)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
