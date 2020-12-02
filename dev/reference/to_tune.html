@@ -53,8 +53,8 @@ alternative to a concrete value. This indicates that the value is not given dire
 bbotk or mlr3tuning. If the thus parameterized object
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 The tuning range ParamSet that is constructed from the TuneToken values in a ParamSet's $values slot
-can be accessed through the ParamSet$tune_ps() method. This is done automatically by tuners if no tuning range
-is given, but it is also possible to access the $tune_ps() method, modify it further, and give the modified
+can be accessed through the ParamSet$search_space() method. This is done automatically by tuners if no tuning range
+is given, but it is also possible to access the $search_space() method, modify it further, and give the modified
 ParamSet to a tuning function (or do anything else with it, nobody is judging you).
 A TuneToken represents the range over which the parameter whose $values slot it occupies should be tuned over. It
 can be constructed via the to_tune() function in one of several ways:
@@ -180,8 +180,8 @@ alternative to a concrete value. This indicates that the value is not given dire
 <a href='https://CRAN.R-project.org/package=bbotk'><span class="pkg">bbotk</span></a> or <a href='https://CRAN.R-project.org/package=mlr3tuning'><span class="pkg">mlr3tuning</span></a>. If the thus parameterized object
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.</p>
 <p>The tuning range <code><a href='ParamSet.html'>ParamSet</a></code> that is constructed from the <code>TuneToken</code> values in a <code><a href='ParamSet.html'>ParamSet</a></code>'s <code>$values</code> slot
-can be accessed through the <code>ParamSet$tune_ps()</code> method. This is done automatically by tuners if no tuning range
-is given, but it is also possible to access the <code>$tune_ps()</code> method, modify it further, and give the modified
+can be accessed through the <code>ParamSet$search_space()</code> method. This is done automatically by tuners if no tuning range
+is given, but it is also possible to access the <code>$search_space()</code> method, modify it further, and give the modified
 <code><a href='ParamSet.html'>ParamSet</a></code> to a tuning function (or do anything else with it, nobody is judging you).</p>
 <p>A <code>TuneToken</code> represents the range over which the parameter whose <code>$values</code> slot it occupies should be tuned over. It
 can be constructed via the <code>to_tune()</code> function in one of several ways:</p><ul>
@@ -332,7 +332,7 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt; $uty5
 #&gt; [1] 100
 #&gt; </div><div class='input'>
-<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>tune_ps</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
 #&gt;                id    class lower     upper     levels        default value
 #&gt;  1:           int ParamInt 0e+00 10.000000            &lt;NoDefault[3]&gt;      
@@ -346,11 +346,11 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt;  9:          base ParamDbl 0e+00  1.000000            &lt;NoDefault[3]&gt;      
 #&gt; 10:           exp ParamInt 0e+00  3.000000            &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
-<span class='co'># Change `$values` directly and generate new `$tune_ps()` to play around</span>
+<span class='co'># Change `$values` directly and generate new `$search_space()` to play around</span>
 <span class='va'>params</span><span class='op'>$</span><span class='va'>values</span><span class='op'>$</span><span class='va'>uty3</span> <span class='op'>=</span> <span class='fl'>8</span>
 <span class='va'>params</span><span class='op'>$</span><span class='va'>values</span><span class='op'>$</span><span class='va'>uty2</span> <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='fl'>2</span>, <span class='fl'>4</span>, <span class='fl'>8</span><span class='op'>)</span><span class='op'>)</span>
 
-<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>tune_ps</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
 #&gt;               id    class lower     upper levels        default value
 #&gt; 1:           int ParamInt 0e+00 10.000000        &lt;NoDefault[3]&gt;      

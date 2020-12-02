@@ -49,7 +49,7 @@
 
 <meta property="og:title" content="Domain: Parameter Range without an Id — Domain" />
 <meta property="og:description" content="A Domain object is a representation of a single dimension of a ParamSet. Domain objects are used to construct
-ParamSets, either through the ps() short form, or through the ParamSet$tune_ps() mechanism (see
+ParamSets, either through the ps() short form, or through the ParamSet$search_space() mechanism (see
 to_tune()). Domain corresponds to a Param object, except it does not have an $id, and it does have a
 trafo and dependencies (requires) associated with it. For each of the basic Param classes (ParamInt,
 ParamDbl, ParamLgl, ParamFct, and ParamUty) there is a function constructing a Domain object
@@ -158,7 +158,7 @@ The Domain object's internals are subject to change and should not be relid upon
 
     <div class="ref-description">
     <p>A <code>Domain</code> object is a representation of a single dimension of a <code><a href='ParamSet.html'>ParamSet</a></code>. <code>Domain</code> objects are used to construct
-<code><a href='ParamSet.html'>ParamSet</a></code>s, either through the <code><a href='ps.html'>ps()</a></code> short form, or through the <code><a href='ParamSet.html'>ParamSet</a></code><code>$tune_ps()</code> mechanism (see
+<code><a href='ParamSet.html'>ParamSet</a></code>s, either through the <code><a href='ps.html'>ps()</a></code> short form, or through the <code><a href='ParamSet.html'>ParamSet</a></code><code>$search_space()</code> mechanism (see
 <code><a href='to_tune.html'>to_tune()</a></code>). <code>Domain</code> corresponds to a <code><a href='Param.html'>Param</a></code> object, except it does not have an <code>$id</code>, and it <em>does</em> have a
 <code>trafo</code> and dependencies (<code>requires</code>) associated with it. For each of the basic <code><a href='Param.html'>Param</a></code> classes (<code><a href='ParamInt.html'>ParamInt</a></code>,
 <code><a href='ParamDbl.html'>ParamDbl</a></code>, <code><a href='ParamLgl.html'>ParamLgl</a></code>, <code><a href='ParamFct.html'>ParamFct</a></code>, and <code><a href='ParamUty.html'>ParamUty</a></code>) there is a function constructing a <code>Domain</code> object
