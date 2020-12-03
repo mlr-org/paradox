@@ -1,7 +1,9 @@
-# paradox 0.5.0-9000
+# paradox 0.6.0
 
-* `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and constructors `p_dbl`, `p_int`, `p_lgl`, `p_fct`, and `p_uty`.
-* `ParamSet$search_space()` method that constructs tunable `ParamSet` from `TuneToken` objects, which are constructed with `to_tune()`.
+* `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and
+  constructors `p_dbl`, `p_int`, `p_lgl`, `p_fct`, and `p_uty`.
+* `ParamSet$search_space()` method that constructs tunable `ParamSet` from
+  `TuneToken` objects, which are constructed with `to_tune()`.
 
 # paradox 0.5.0
 
