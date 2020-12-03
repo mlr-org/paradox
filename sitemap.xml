@@ -10,6 +10,9 @@
     <loc>https://paradox.mlr-org.com/reference/Design.html</loc>
   </url>
   <url>
+    <loc>https://paradox.mlr-org.com/reference/Domain.html</loc>
+  </url>
+  <url>
     <loc>https://paradox.mlr-org.com/reference/NO_DEF.html</loc>
   </url>
   <url>
@@ -80,6 +83,12 @@
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/paradox-package.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/ps.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/to_tune.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/transpose.html</loc>

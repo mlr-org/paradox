@@ -87,7 +87,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.5.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.6.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -300,6 +300,7 @@ Has the set parameter dependencies?</p></dd>
 <li><p><a href='#method-ids'><code>ParamSet$ids()</code></a></p></li>
 <li><p><a href='#method-get_values'><code>ParamSet$get_values()</code></a></p></li>
 <li><p><a href='#method-subset'><code>ParamSet$subset()</code></a></p></li>
+<li><p><a href='#method-search_space'><code>ParamSet$search_space()</code></a></p></li>
 <li><p><a href='#method-check'><code>ParamSet$check()</code></a></p></li>
 <li><p><a href='#method-test'><code>ParamSet$test()</code></a></p></li>
 <li><p><a href='#method-assert'><code>ParamSet$assert()</code></a></p></li>
@@ -356,7 +357,12 @@ Only returns IDs of parameters that satisfy all conditions.</p><h4 class='hasAnc
 <p>Retrieves parameter values based on some selections, <code>NULL</code> means no
 restriction and is equivalent to <code>$values</code>.
 Only returns values of parameters that satisfy all conditions.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
-<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>get_values</span><span class='op'>(</span>class <span class='op'>=</span> <span class='cn'>NULL</span>, is_bounded <span class='op'>=</span> <span class='cn'>NULL</span>, tags <span class='op'>=</span> <span class='cn'>NULL</span><span class='op'>)</span></pre><p></div></p>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>get_values</span><span class='op'>(</span>
+  class <span class='op'>=</span> <span class='cn'>NULL</span>,
+  is_bounded <span class='op'>=</span> <span class='cn'>NULL</span>,
+  tags <span class='op'>=</span> <span class='cn'>NULL</span>,
+  type <span class='op'>=</span> <span class='st'>"with_token"</span>
+<span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
@@ -365,6 +371,9 @@ Only returns values of parameters that satisfy all conditions.</p><h4 class='has
 <dt><code>is_bounded</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>).</p></dd>
 
 <dt><code>tags</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+<dt><code>type</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>)<br />
+Return values <code>with_token</code>, <code>without_token</code> or <code>only_token</code>?</p></dd>
 
 </dl><p></div></p>
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Returns</h4>
@@ -377,6 +386,16 @@ Only returns values of parameters that satisfy all conditions.</p><h4 class='has
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
 <p><div class="arguments"></p><dl>
 <dt><code>ids</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code>).</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-search_space"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>search_space()</code></h3>
+<p>Construct a <code>ParamSet</code> to tune over. Constructed from <code><a href='to_tune.html'>TuneToken</a></code> in <code>$values</code>, see <code><a href='to_tune.html'>to_tune()</a></code>.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamSet</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span>values <span class='op'>=</span> <span class='va'>self</span><span class='op'>$</span><span class='va'>values</span><span class='op'>)</span></pre><p></div></p>
+
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
+<dt><code>values</code></dt><dd><p>(<code>named list</code>): optional named list of <code><a href='to_tune.html'>TuneToken</a></code> objects to convert, in place of <code>$values</code>.</p></dd>
 
 </dl><p></div></p>
 <p><hr>
