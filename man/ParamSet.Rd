@@ -252,7 +252,8 @@ Only returns values of parameters that satisfy all conditions.
   class = NULL,
   is_bounded = NULL,
   tags = NULL,
-  type = "with_token"
+  type = "with_token",
+  check_required = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -267,6 +268,9 @@ Only returns values of parameters that satisfy all conditions.
 
 \item{\code{type}}{(\code{character(1)})\cr
 Return values \code{with_token}, \code{without_token} or \code{only_token}?}
+
+\item{\code{check_required}}{(\code{logical(1)})\cr
+Check if all required parameters are set?}
 }
 \if{html}{\out{</div>}}
 }

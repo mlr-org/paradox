@@ -130,6 +130,8 @@ ParamSet = R6Class("ParamSet",
     #' @param tags (`character()`).
     #' @param type (`character(1)`)\cr
     #' Return values `with_token`, `without_token` or `only_token`?
+    #' @param check_required (`logical(1)`)\cr
+    #' Check if all required parameters are set?
     #' @return Named `list()`.
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL, 
       type = "with_token", check_required = TRUE) {
@@ -147,7 +149,7 @@ ParamSet = R6Class("ParamSet",
 
       if(check_required) {
         required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
-        if (length(required) > 0L && length(values) > 0) {
+        if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
       }
