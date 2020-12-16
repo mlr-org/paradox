@@ -131,14 +131,25 @@ ParamSet = R6Class("ParamSet",
     #' @param type (`character(1)`)\cr
     #' Return values `with_token`, `without_token` or `only_token`?
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, type = "with_token") {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, 
+      type = "with_token", check_required = TRUE) {
       assert_choice(type, c("with_token", "without_token", "only_token"))
+      assert_flag(check_required)
       values = self$values
+      params = self$params
+      ns = names(values)
 
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
         values = keep(values, is, "TuneToken")
+      }
+
+      if(check_required) {
+        required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
+        if (length(required) > 0L && length(values) > 0) {
+          stop(sprintf("Missing required parameters: %s", str_collapse(required)))
+        }
       }
 
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
@@ -200,15 +211,6 @@ ParamSet = R6Class("ParamSet",
       params = self$params
       ns = names(xs)
       ids = names(params)
-
-      # check that all 'required' params are there
-      required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
-      if (length(required) > 0L) {
-        return(sprintf("Missing required parameters: %s", str_collapse(required)))
-      }
-      if (length(xs) == 0) {
-        return(TRUE)
-      } # a empty list is always feasible, if all req params are there
 
       extra = wf(ns %nin% ids)
       if (length(extra)) {
