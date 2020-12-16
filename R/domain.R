@@ -6,11 +6,11 @@
 #' A `Domain` object is a representation of a single dimension of a [`ParamSet`]. `Domain` objects are used to construct
 #' [`ParamSet`]s, either through the [`ps()`] short form, or through the [`ParamSet`]`$search_space()` mechanism (see
 #' [`to_tune()`]). `Domain` corresponds to a [`Param`] object, except it does not have an `$id`, and it *does* have a
-#' `trafo` and dependencies (`requires`) associated with it. For each of the basic [`Param`] classes ([`ParamInt`],
+#' `trafo` and dependencies (`depends`) associated with it. For each of the basic [`Param`] classes ([`ParamInt`],
 #' [`ParamDbl`], [`ParamLgl`], [`ParamFct`], and [`ParamUty`]) there is a function constructing a `Domain` object
 #' (`p_int()`, `p_dbl()`, `p_lgl()`, `p_fct()`, `p_uty()`). They each have the same arguments as the corresponding
 #' [`Param`] `$new()` function, except without the `id` argument, and with the the additional parameters `trafo`, and
-#' `requires`.
+#' `depends`.
 #'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
@@ -29,7 +29,7 @@
 #' @param trafo (`function`)\cr
 #'   Single argument function performing the transformation of a parameter. When the `Domain` is used to construct a
 #'   [`ParamSet`], this transformation will be applied to the corresponding parameter as part of the `$trafo` function.
-#' @param requires (`call` | `expression`)\cr
+#' @param depends (`call` | `expression`)\cr
 #'   An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 #'   expression (using `quote()`), or the expression can be entered directly and will be parsed using NSE (see
 #'   examples). The expression may be of the form `<Param> == <value>` or `<Param> %in% <values>`, which will result in
@@ -70,35 +70,35 @@ NULL
 
 #' @rdname Domain
 #' @export
-p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
   domain(constructor = ParamInt, constargs = as.list(match.call()[-1]),
-    requires_expr = substitute(requires), trafo = trafo)
+    depends_expr = substitute(depends), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
   domain(constructor = ParamDbl, constargs = as.list(match.call()[-1]),
-    requires_expr = substitute(requires), trafo = trafo)
+    depends_expr = substitute(depends), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, requires = NULL, trafo = NULL) {
+p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, depends = NULL, trafo = NULL) {
   domain(constructor = ParamUty, constargs = as.list(match.call()[-1]),
-    requires_expr = substitute(requires), trafo = trafo)
+    depends_expr = substitute(depends), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
   domain(constructor = ParamLgl, constargs = as.list(match.call()[-1]),
-    requires_expr = substitute(requires), trafo = trafo)
+    depends_expr = substitute(depends), trafo = trafo)
 }
 
 #' @rdname Domain
 #' @export
-p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), requires = NULL, trafo = NULL) {
+p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
@@ -115,15 +115,15 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
     }, trafo, levels)
     constargs$levels = names(levels)
   }
-  domain(constructor = ParamFct, constargs = constargs, requires_expr = substitute(requires), trafo = trafo)
+  domain(constructor = ParamFct, constargs = constargs, depends_expr = substitute(depends), trafo = trafo)
 }
 
 # Construct the actual `Domain` object
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param .constargs: alternative to `...`.
-domain = function(constructor, constargs, requires_expr = NULL, trafo = NULL) {
+domain = function(constructor, constargs, depends_expr = NULL, trafo = NULL) {
   constargs$trafo = NULL
-  constargs$requires = NULL
+  constargs$depends = NULL
   constargs = map(constargs, eval, envir = parent.frame(2))
   if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
 
@@ -131,11 +131,11 @@ domain = function(constructor, constargs, requires_expr = NULL, trafo = NULL) {
   # The object generated here is thrown away, this is only for checks.
   param = invoke(constructor$new, id = "ID", .args = constargs)
 
-  # requires may be an expression, but may also be quote() or expression()
-  if (length(requires_expr) == 1) {
-    requires_expr = eval(requires_expr, envir = parent.frame(2))
-    if (!is.language(requires_expr)) {
-      stop("'requires' argument must be an expression involving `==` or `%in%`, or must be a single variable containing a quoted expression.")
+  # depends may be an expression, but may also be quote() or expression()
+  if (length(depends_expr) == 1) {
+    depends_expr = eval(depends_expr, envir = parent.frame(2))
+    if (!is.language(depends_expr)) {
+      stop("'depends' argument must be an expression involving `==` or `%in%`, or must be a single variable containing a quoted expression.")
     }
   }
 
@@ -144,13 +144,13 @@ domain = function(constructor, constargs, requires_expr = NULL, trafo = NULL) {
   traforep = repr$trafo
 
   repr = as.call(c(as.list(repr)[[1]], constargs))  # use cleaned up constargs
-  repr$requires = requires_expr  # put `requires` at the end, but only if not NULL
+  repr$depends = depends_expr  # put `depends` at the end, but only if not NULL
   repr$trafo = traforep  # put `trafo` at the end, but only if not NULL
 
   set_class(list(
     param = param,
     trafo = assert_function(trafo, null.ok = TRUE),
-    requirements = parse_requires(requires_expr, parent.frame(2)),
+    requirements = parse_depends(depends_expr, parent.frame(2)),
     repr = repr
   ), "Domain")
 }
@@ -166,24 +166,24 @@ print.Domain = function(x, ...) {
 # the condition should refer to.
 #
 # @example
-# parse_requires(quote(x == 1 && y %in% c("b", "c")), environment())
+# parse_depends(quote(x == 1 && y %in% c("b", "c")), environment())
 # # same as:
 # list(
 #   list(on = "x", CondEqual$new(1)),
 #   list(on = "y", CondAnyOf$new(c("b", "c")))
 # )
-parse_requires = function(requires_expr, evalenv) {
-  if (is.null(requires_expr)) return(NULL)
+parse_depends = function(depends_expr, evalenv) {
+  if (is.null(depends_expr)) return(NULL)
 
   # throw(): Give generic helpful error message.
-  throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(requires_expr), if (!is.null(msg)) sprintf(":\n%s", msg) else "")
+  throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(depends_expr), if (!is.null(msg)) sprintf(":\n%s", msg) else "")
 
-  if (!is.language(requires_expr)) throw()
-  if (is.expression(requires_expr)) {
-    if (length(requires_expr) != 1) {
+  if (!is.language(depends_expr)) throw()
+  if (is.expression(depends_expr)) {
+    if (length(depends_expr) != 1) {
       throw("given 'expression' objects must have length 1.")
     }
-    requires_expr = requires_expr[[1]]
+    depends_expr = depends_expr[[1]]
   }
 
   symbol_paren = as.symbol("(")
@@ -229,7 +229,7 @@ parse_requires = function(requires_expr, evalenv) {
     # a = 1.0
     # b = 2.0
     # ps(a = p_dbl(), b = p_dbl(),
-    #   c = p_int(requires = a == b)
+    #   c = p_int(depends = a == b)
     # )
     # would be ambiguous if we did not demand that `a` is the name of the parameter, and
     # `b` is just the value (2.0).
@@ -239,5 +239,5 @@ parse_requires = function(requires_expr, evalenv) {
     list(list(on = comparand, cond = constructor$new(value)))
   }
 
-  recurse_expression(requires_expr)
+  recurse_expression(depends_expr)
 }
