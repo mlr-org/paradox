@@ -1,3 +1,9 @@
+# paradox 0.6.0.9000
+
+* `ParamSet$get_values()` checks whether all required parameter values are set. 
+  Required parameter are not checked anymore when new values are added to the
+  parameter set.
+
 # paradox 0.6.0
 
 * `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and
