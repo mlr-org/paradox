@@ -70,6 +70,7 @@ Always \code{"list"} for \link{ParamUty}.}
 \itemize{
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert">}\href{../../paradox/html/Param.html#method-assert}{\code{paradox::Param$assert()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check">}\href{../../paradox/html/Param.html#method-check}{\code{paradox::Param$check()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="convert">}\href{../../paradox/html/Param.html#method-convert}{\code{paradox::Param$convert()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format">}\href{../../paradox/html/Param.html#method-format}{\code{paradox::Param$format()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print">}\href{../../paradox/html/Param.html#method-print}{\code{paradox::Param$print()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif">}\href{../../paradox/html/Param.html#method-qunif}{\code{paradox::Param$qunif()}}\out{</span>}
