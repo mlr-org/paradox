@@ -146,6 +146,15 @@ Param = R6Class("Param",
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
       private$.qunif(x)
+    },
+
+    #' @description
+    #' Converts a value to the closest valid param. Only for values that
+    #' pass `$check()` and mostly used internally.
+    #' @param x (`any`).
+    #' @return `x` converted to a valid type for the `Param`.
+    convert = function(x) {
+      x
     }
   ),
 

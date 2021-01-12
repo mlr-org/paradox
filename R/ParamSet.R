@@ -133,7 +133,7 @@ ParamSet = R6Class("ParamSet",
     #' @param check_required (`logical(1)`)\cr
     #' Check if all required parameters are set?
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, 
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL,
       type = "with_token", check_required = TRUE) {
       assert_choice(type, c("with_token", "without_token", "only_token"))
       assert_flag(check_required)
@@ -564,15 +564,17 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(xs) == 0L) {
         xs = named_list()
-      } else {
-        # convert all integer params really to storage type int
-        # this is not the greatest way to do this, evvery param should maybe have a ".convert"
-        # function, but this seems overkill for this single issue
-        # solves issue #293
-        # (Need to skip over ParamInt that have TuneToken value)
-        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, inherits, "TuneToken")))
-        if (length(int_ids) > 0L)
-          xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
+      } else if (self$assert_values) {  # this only makes sense when we have asserts on
+        # convert all integer params really to storage type int, move doubles to within bounds etc.
+        # solves issue #293, #317
+        params = self$params  # cache the AB
+        for (n in names(xs)) {
+          p = params[[n]]
+          x = xs[[n]]
+          if (inherits(x, "TuneToken")) next
+          if (has_element(p$special_vals, x)) next
+          xs[[n]] = p$convert(x)
+        }
       }
       private$.values = xs
     },

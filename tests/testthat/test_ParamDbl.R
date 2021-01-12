@@ -61,3 +61,10 @@ test_that("tolerance in check allows values at the upper bound", {
  ub = p$qunif(1)
  expect_true(p$check(ub))
 })
+
+test_that("tolerance for setting values", {
+  p = ParamSet$new(list(ParamDbl$new("x", lower = 0, upper = 1)))
+  p$values$x = -1e-8
+  expect_equal(p$values$x, 0)
+  expect_error({p$values$x = -1e-6}, "Element 1 is not >=")
+})
