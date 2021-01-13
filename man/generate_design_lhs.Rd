@@ -20,7 +20,9 @@ LHS functions are implemented in package \pkg{lhs}, default is to use \code{\lin
 \link{Design}.
 }
 \description{
-Generate a space-filling design using Latin hypercube sampling.
+Generate a space-filling design using Latin hypercube sampling. Dependent
+parameters whose constraints are unsatisfied generate \code{NA} entries in
+their respective columns.
 }
 \examples{
 ps = ParamSet$new(list(
