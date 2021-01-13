@@ -158,6 +158,13 @@ test_that("values", {
   ps1clone$values$d = 8
   pcs$values = list(foo.d = 8)
   ps2$values = list()
+
+  # data table adds indexes at will and comparisons fail because of that, so we have to remove them here.
+  setindex(ps1clone$deps, NULL)
+  setindex(ps2clone$deps, NULL)
+  setindex(ps1$deps, NULL)
+  setindex(ps2$deps, NULL)
+
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
 })

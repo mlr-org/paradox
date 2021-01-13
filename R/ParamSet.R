@@ -291,10 +291,10 @@ ParamSet = R6Class("ParamSet",
     #' satisfied and all dependencies are satisfied. Params for which
     #' dependencies are not satisfied should be set to `NA` in `xdt`.
     #'
-    #' @param xdt ([data.table::data.table]).
+    #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt) {
-      xss = transpose(xdt, trafo = FALSE)
+      xss = map(transpose_list(xdt), discard, is.na)
       for (xs in xss) {
         ok = self$check(xs)
         if (!isTRUE(ok)) {
