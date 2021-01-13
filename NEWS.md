@@ -6,6 +6,7 @@
 * `ParamSet$check_dt()` accepts `data.frame`s.
 * Rename `is_numeric` and `is_categorical` to `all_numeric` and
   `all_categorical`.
+* Rename `requires` to `depends`.
 
 # paradox 0.6.0
 
