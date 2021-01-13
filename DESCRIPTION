@@ -53,6 +53,8 @@ Suggests:
     lhs,
     testthat
 Encoding: UTF-8
+Config/testthat/edition: 3
+Config/testthat/parallel: true
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE, r6 = TRUE)
 RoxygenNote: 7.1.1

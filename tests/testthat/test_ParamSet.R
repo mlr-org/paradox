@@ -239,15 +239,15 @@ test_that("ParamSet$default", {
   expect_equal(ps$default, list(x = NULL))
 })
 
-test_that("is_number / is_categ / is_numeric / is_categoric", {
+test_that("is_number / is_categ / all_numeric / all_categoric", {
   expect_equal(th_paramset_full()$is_number,
     c(th_param_int = TRUE, th_param_dbl = TRUE, th_param_fct = FALSE, th_param_lgl = FALSE))
   expect_equal(th_paramset_full()$is_categ,
     c(th_param_int = FALSE, th_param_dbl = FALSE, th_param_fct = TRUE, th_param_lgl = TRUE))
-  expect_equal(th_paramset_numeric()$is_numeric, TRUE)
-  expect_equal(th_paramset_full()$is_numeric, FALSE)
-  expect_equal(th_paramset_categorical()$is_categorical, TRUE)
-  expect_equal(th_paramset_full()$is_categorical, FALSE)
+  expect_equal(th_paramset_numeric()$all_numeric, TRUE)
+  expect_equal(th_paramset_full()$all_numeric, FALSE)
+  expect_equal(th_paramset_categorical()$all_categorical, TRUE)
+  expect_equal(th_paramset_full()$all_categorical, FALSE)
 })
 
 test_that("ParamSet$ids", {
@@ -286,9 +286,15 @@ test_that("required tag", {
   ))
   expect_equal(ps$ids(), c("x", "y"))
   expect_equal(ps$ids(tags = "required"), "x")
-  expect_true(ps$check(list(x = 1, y = 1)))
-  expect_string(ps$check(list()), pattern = "Missing")
-  expect_string(ps$check(list(y = 1)), pattern = "Missing")
+  ps$values = list(y = 1)
+  expect_error(ps$get_values(),
+    regexp = "Missing required parameters: x",
+    fixed = TRUE)
+
+  ps$values = list()
+    expect_error(ps$get_values(),
+    regexp = "Missing required parameters: x",
+    fixed = TRUE)
 })
 
 test_that("required tag, empty param set (#219)", {

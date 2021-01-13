@@ -1,3 +1,12 @@
+# paradox 0.6.0.9000
+
+* `ParamSet$get_values()` checks whether all required parameter values are set. 
+  Required parameter are not checked anymore when new values are added to the
+  parameter set.
+* `ParamSet$check_dt()` accepts `data.frame`s.
+* Rename `is_numeric` and `is_categorical` to `all_numeric` and
+  `all_categorical`.
+
 # paradox 0.6.0
 
 * `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and
