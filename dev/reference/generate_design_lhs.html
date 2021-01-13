@@ -48,7 +48,9 @@
 
 
 <meta property="og:title" content="Generate a Space-Filling LHS Design — generate_design_lhs" />
-<meta property="og:description" content="Generate a space-filling design using Latin hypercube sampling." />
+<meta property="og:description" content="Generate a space-filling design using Latin hypercube sampling. Dependent
+parameters whose constraints are unsatisfied generate NA entries in
+their respective columns." />
 <meta name="twitter:card" content="summary" />
 
 
@@ -147,7 +149,9 @@
     </div>
 
     <div class="ref-description">
-    <p>Generate a space-filling design using Latin hypercube sampling.</p>
+    <p>Generate a space-filling design using Latin hypercube sampling. Dependent
+parameters whose constraints are unsatisfied generate <code>NA</code> entries in
+their respective columns.</p>
     </div>
 
     <pre class="usage"><span class='fu'>generate_design_lhs</span><span class='op'>(</span><span class='va'>param_set</span>, <span class='va'>n</span>, lhs_fun <span class='op'>=</span> <span class='cn'>NULL</span><span class='op'>)</span></pre>
