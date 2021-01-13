@@ -51,11 +51,11 @@
 <meta property="og:description" content="A Domain object is a representation of a single dimension of a ParamSet. Domain objects are used to construct
 ParamSets, either through the ps() short form, or through the ParamSet$search_space() mechanism (see
 to_tune()). Domain corresponds to a Param object, except it does not have an $id, and it does have a
-trafo and dependencies (requires) associated with it. For each of the basic Param classes (ParamInt,
+trafo and dependencies (depends) associated with it. For each of the basic Param classes (ParamInt,
 ParamDbl, ParamLgl, ParamFct, and ParamUty) there is a function constructing a Domain object
 (p_int(), p_dbl(), p_lgl(), p_fct(), p_uty()). They each have the same arguments as the corresponding
 Param $new() function, except without the id argument, and with the the additional parameters trafo, and
-requires.
+depends.
 Domain objects are representations of parameter ranges and are intermediate objects to be used in short form
 constructions in to_tune() and ps(). Because of their nature, they should not be modified by the user.
 The Domain object's internals are subject to change and should not be relid upon." />
@@ -160,11 +160,11 @@ The Domain object's internals are subject to change and should not be relid upon
     <p>A <code>Domain</code> object is a representation of a single dimension of a <code><a href='ParamSet.html'>ParamSet</a></code>. <code>Domain</code> objects are used to construct
 <code><a href='ParamSet.html'>ParamSet</a></code>s, either through the <code><a href='ps.html'>ps()</a></code> short form, or through the <code><a href='ParamSet.html'>ParamSet</a></code><code>$search_space()</code> mechanism (see
 <code><a href='to_tune.html'>to_tune()</a></code>). <code>Domain</code> corresponds to a <code><a href='Param.html'>Param</a></code> object, except it does not have an <code>$id</code>, and it <em>does</em> have a
-<code>trafo</code> and dependencies (<code>requires</code>) associated with it. For each of the basic <code><a href='Param.html'>Param</a></code> classes (<code><a href='ParamInt.html'>ParamInt</a></code>,
+<code>trafo</code> and dependencies (<code>depends</code>) associated with it. For each of the basic <code><a href='Param.html'>Param</a></code> classes (<code><a href='ParamInt.html'>ParamInt</a></code>,
 <code><a href='ParamDbl.html'>ParamDbl</a></code>, <code><a href='ParamLgl.html'>ParamLgl</a></code>, <code><a href='ParamFct.html'>ParamFct</a></code>, and <code><a href='ParamUty.html'>ParamUty</a></code>) there is a function constructing a <code>Domain</code> object
 (<code>p_int()</code>, <code>p_dbl()</code>, <code>p_lgl()</code>, <code>p_fct()</code>, <code>p_uty()</code>). They each have the same arguments as the corresponding
 <code><a href='Param.html'>Param</a></code> <code>$new()</code> function, except without the <code>id</code> argument, and with the the additional parameters <code>trafo</code>, and
-<code>requires</code>.</p>
+<code>depends</code>.</p>
 <p><code>Domain</code> objects are representations of parameter ranges and are intermediate objects to be used in short form
 constructions in <code><a href='to_tune.html'>to_tune()</a></code> and <code><a href='ps.html'>ps()</a></code>. Because of their nature, they should not be modified by the user.
 The <code>Domain</code> object's internals are subject to change and should not be relid upon.</p>
@@ -176,7 +176,7 @@ The <code>Domain</code> object's internals are subject to change and should not 
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
-  requires <span class='op'>=</span> <span class='cn'>NULL</span>,
+  depends <span class='op'>=</span> <span class='cn'>NULL</span>,
   trafo <span class='op'>=</span> <span class='cn'>NULL</span>
 <span class='op'>)</span>
 
@@ -186,7 +186,7 @@ The <code>Domain</code> object's internals are subject to change and should not 
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
-  requires <span class='op'>=</span> <span class='cn'>NULL</span>,
+  depends <span class='op'>=</span> <span class='cn'>NULL</span>,
   trafo <span class='op'>=</span> <span class='cn'>NULL</span>
 <span class='op'>)</span>
 
@@ -194,7 +194,7 @@ The <code>Domain</code> object's internals are subject to change and should not 
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
   custom_check <span class='op'>=</span> <span class='cn'>NULL</span>,
-  requires <span class='op'>=</span> <span class='cn'>NULL</span>,
+  depends <span class='op'>=</span> <span class='cn'>NULL</span>,
   trafo <span class='op'>=</span> <span class='cn'>NULL</span>
 <span class='op'>)</span>
 
@@ -202,7 +202,7 @@ The <code>Domain</code> object's internals are subject to change and should not 
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
-  requires <span class='op'>=</span> <span class='cn'>NULL</span>,
+  depends <span class='op'>=</span> <span class='cn'>NULL</span>,
   trafo <span class='op'>=</span> <span class='cn'>NULL</span>
 <span class='op'>)</span>
 
@@ -211,7 +211,7 @@ The <code>Domain</code> object's internals are subject to change and should not 
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
-  requires <span class='op'>=</span> <span class='cn'>NULL</span>,
+  depends <span class='op'>=</span> <span class='cn'>NULL</span>,
   trafo <span class='op'>=</span> <span class='cn'>NULL</span>
 <span class='op'>)</span></pre>
 
@@ -257,7 +257,7 @@ purpose:<br /></p><ul>
 </ul></td>
     </tr>
     <tr>
-      <th>requires</th>
+      <th>depends</th>
       <td><p>(<code>call</code> | <code>expression</code>)<br />
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 expression (using <code><a href='https://rdrr.io/r/base/substitute.html'>quote()</a></code>), or the expression can be entered directly and will be parsed using NSE (see

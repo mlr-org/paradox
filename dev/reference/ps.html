@@ -176,7 +176,7 @@ Transformation to set the resulting <code><a href='ParamSet.html'>ParamSet</a></
       <th>.allow_dangling_dependencies</th>
       <td><p>(<code>logical</code>)<br />
 Whether dependencies depending on parameters that are not present should be allowed. A parameter <code>x</code> having
-<code>requires = y == 0</code> if <code>y</code> is not present in the <code>ps()</code> call would usually throw an error, but if dangling
+<code>depends = y == 0</code> if <code>y</code> is not present in the <code>ps()</code> call would usually throw an error, but if dangling
 dependencies are allowed, the dependency is added regardless. This is usually a bad idea and mainly for internal
 use. Dependencies between <code><a href='ParamSet.html'>ParamSet</a></code>s when using <code><a href='to_tune.html'>to_tune()</a></code> can be realized using this.</p></td>
     </tr>
@@ -233,7 +233,7 @@ use. Dependencies between <code><a href='ParamSet.html'>ParamSet</a></code>s whe
   <span class='op'>)</span><span class='op'>)</span>,
   <span class='co'># make 'y' depend on 'x', but they are defined in different ParamSets</span>
   <span class='co'># Therefore we need to allow dangling dependencies here.</span>
-  b <span class='op'>=</span> <span class='fu'><a href='to_tune.html'>to_tune</a></span><span class='op'>(</span><span class='fu'>ps</span><span class='op'>(</span>y <span class='op'>=</span> <span class='fu'><a href='Domain.html'>p_int</a></span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>1</span>, requires <span class='op'>=</span> <span class='va'>x</span> <span class='op'>==</span> <span class='fl'>1</span><span class='op'>)</span>,
+  b <span class='op'>=</span> <span class='fu'><a href='to_tune.html'>to_tune</a></span><span class='op'>(</span><span class='fu'>ps</span><span class='op'>(</span>y <span class='op'>=</span> <span class='fu'><a href='Domain.html'>p_int</a></span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>1</span>, depends <span class='op'>=</span> <span class='va'>x</span> <span class='op'>==</span> <span class='fl'>1</span><span class='op'>)</span>,
     .extra_trafo <span class='op'>=</span> <span class='kw'>function</span><span class='op'>(</span><span class='va'>x</span>, <span class='va'>param_set</span><span class='op'>)</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span>b <span class='op'>=</span> <span class='va'>x</span><span class='op'>$</span><span class='va'>y</span><span class='op'>)</span>,
     .allow_dangling_dependencies <span class='op'>=</span> <span class='cn'>TRUE</span>
   <span class='op'>)</span><span class='op'>)</span>
