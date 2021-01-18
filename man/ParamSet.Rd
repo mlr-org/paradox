@@ -126,10 +126,10 @@ Named with parameter IDs.}
 Position is TRUE for \link{ParamFct} and \link{ParamLgl}.
 Named with parameter IDs.}
 
-\item{\code{is_numeric}}{(\code{logical(1)})\cr
+\item{\code{all_numeric}}{(\code{logical(1)})\cr
 Is \code{TRUE} if all parameters are \link{ParamDbl} or \link{ParamInt}.}
 
-\item{\code{is_categorical}}{(\code{logical(1)})\cr
+\item{\code{all_categorical}}{(\code{logical(1)})\cr
 Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
 
 \item{\code{trafo}}{(\verb{function(x, param_set)})\cr
@@ -401,7 +401,7 @@ dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table}).}
+\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).}
 }
 \if{html}{\out{</div>}}
 }

@@ -1,7 +1,9 @@
 #' @title Generate a Space-Filling LHS Design
 #'
 #' @description
-#' Generate a space-filling design using Latin hypercube sampling.
+#' Generate a space-filling design using Latin hypercube sampling. Dependent
+#' parameters whose constraints are unsatisfied generate `NA` entries in
+#' their respective columns.
 #'
 #' @param param_set ([ParamSet]).
 #' @param n (`integer(1)`) \cr
@@ -23,12 +25,11 @@
 #'   generate_design_lhs(ps, 10)
 #' }
 generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
-
   if (is.null(lhs_fun)) {
     require_namespaces("lhs")
     lhs_fun = lhs::maximinLHS
   }
-  assert_param_set(param_set, no_untyped = TRUE, no_deps = TRUE)
+  assert_param_set(param_set, no_untyped = TRUE)
   n = assert_count(n, coerce = TRUE)
   assert_function(lhs_fun, args = c("n", "k"))
 

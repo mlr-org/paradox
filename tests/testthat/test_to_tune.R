@@ -215,7 +215,7 @@ test_that("Dependencies work", {
 
   expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y1", "y2"), on = c("x", "x"), cond = list(CondEqual$new(1))))
 
-  tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, requires = y1 == 1),
+  tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = y1 == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE))))))
 
   # mixing dependencies from inside and outside
@@ -230,18 +230,18 @@ test_that("Dependencies work", {
   ))
 
   # amazing: dependencies across to_tune
-  tuneps = parsnodep$search_space(list(x = to_tune(p_int(0, 1, requires = y == 0)), y = to_tune()))
+  tuneps = parsnodep$search_space(list(x = to_tune(p_int(0, 1, depends = y == 0)), y = to_tune()))
 
   expect_equal(setindex(tuneps$deps, NULL), data.table(id = "x", on = "y", cond = list(CondEqual$new(0))))
 
 
-  tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, requires = x == 1),
+  tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = x == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE)), .allow_dangling_dependencies = TRUE))))
 
   # mixing dependencies from inside and across to_tune. I am the only person in this building capable of coding this.
   expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("x", "x", "x"), cond = list(CondEqual$new(1))))
 
-  expect_error(pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, requires = z == 1),
+  expect_error(pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = z == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE)), .allow_dangling_dependencies = TRUE)))),
     "Dependencies on z dangling")
 
@@ -253,7 +253,7 @@ test_that("Dependencies work", {
   pars$values$z = to_tune(p_int(0, 1))
   pars$values$x = to_tune()
   expect_equal(capture.output(print(pars$search_space())),
-    capture.output(print(ps(z = p_int(0, 1), x = p_int(0, 1, requires = z == 1)))))
+    capture.output(print(ps(z = p_int(0, 1), x = p_int(0, 1, depends = z == 1)))))
 
   pars$values$z = to_tune(p_int(0, 1))
   pars$values$x = 1
@@ -303,7 +303,7 @@ test_that("ParamSetCollection works", {
 
   expect_equal(generate_design_grid(psc$search_space(), 2)$transpose(trafo = FALSE)[[1]], list(prefix.x = 0, y1 = 0, y2 = 0, a = 0))
 
-  psc$values$a = to_tune(p_int(0, 1, requires = prefix.x == 10))
+  psc$values$a = to_tune(p_int(0, 1, depends = prefix.x == 10))
 
   expect_equal(generate_design_grid(psc$search_space(), 2)$transpose(trafo = FALSE)[[1]], list(prefix.x = 0, y1 = 0, y2 = 0))
   expect_equal(generate_design_grid(psc$search_space(), 2)$transpose(trafo = FALSE)[[12]], list(prefix.x = 10, y1 = 1, y2 = 1, a = 1))

@@ -15,7 +15,7 @@ p_int(
   special_vals = list(),
   default = NO_DEF,
   tags = character(),
-  requires = NULL,
+  depends = NULL,
   trafo = NULL
 )
 
@@ -25,7 +25,7 @@ p_dbl(
   special_vals = list(),
   default = NO_DEF,
   tags = character(),
-  requires = NULL,
+  depends = NULL,
   trafo = NULL
 )
 
@@ -33,7 +33,7 @@ p_uty(
   default = NO_DEF,
   tags = character(),
   custom_check = NULL,
-  requires = NULL,
+  depends = NULL,
   trafo = NULL
 )
 
@@ -41,7 +41,7 @@ p_lgl(
   special_vals = list(),
   default = NO_DEF,
   tags = character(),
-  requires = NULL,
+  depends = NULL,
   trafo = NULL
 )
 
@@ -50,7 +50,7 @@ p_fct(
   special_vals = list(),
   default = NO_DEF,
   tags = character(),
-  requires = NULL,
+  depends = NULL,
   trafo = NULL
 )
 }
@@ -84,7 +84,7 @@ purpose:\cr
 \code{values} in \link{ParamSet}.
 }}
 
-\item{requires}{(\code{call} | \code{expression})\cr
+\item{depends}{(\code{call} | \code{expression})\cr
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 expression (using \code{quote()}), or the expression can be entered directly and will be parsed using NSE (see
 examples). The expression may be of the form \verb{<Param> == <value>} or \verb{<Param> \%in\% <values>}, which will result in
@@ -115,11 +115,11 @@ A \code{Domain} object.
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
 \code{\link{ParamSet}}s, either through the \code{\link[=ps]{ps()}} short form, or through the \code{\link{ParamSet}}\verb{$search_space()} mechanism (see
 \code{\link[=to_tune]{to_tune()}}). \code{Domain} corresponds to a \code{\link{Param}} object, except it does not have an \verb{$id}, and it \emph{does} have a
-\code{trafo} and dependencies (\code{requires}) associated with it. For each of the basic \code{\link{Param}} classes (\code{\link{ParamInt}},
+\code{trafo} and dependencies (\code{depends}) associated with it. For each of the basic \code{\link{Param}} classes (\code{\link{ParamInt}},
 \code{\link{ParamDbl}}, \code{\link{ParamLgl}}, \code{\link{ParamFct}}, and \code{\link{ParamUty}}) there is a function constructing a \code{Domain} object
 (\code{p_int()}, \code{p_dbl()}, \code{p_lgl()}, \code{p_fct()}, \code{p_uty()}). They each have the same arguments as the corresponding
 \code{\link{Param}} \verb{$new()} function, except without the \code{id} argument, and with the the additional parameters \code{trafo}, and
-\code{requires}.
+\code{depends}.
 
 \code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
 constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user.

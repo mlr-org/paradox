@@ -17,7 +17,7 @@
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.
 #' @param .allow_dangling_dependencies (`logical`)\cr
 #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
-#'   `requires = y == 0` if `y` is not present in the `ps()` call would usually throw an error, but if dangling
+#'   `depends = y == 0` if `y` is not present in the `ps()` call would usually throw an error, but if dangling
 #'   dependencies are allowed, the dependency is added regardless. This is usually a bad idea and mainly for internal
 #'   use. Dependencies between [`ParamSet`]s when using [`to_tune()`] can be realized using this.
 #' @return A [`ParamSet`] object.
@@ -49,7 +49,7 @@
 #'   )),
 #'   # make 'y' depend on 'x', but they are defined in different ParamSets
 #'   # Therefore we need to allow dangling dependencies here.
-#'   b = to_tune(ps(y = p_int(0, 1, requires = x == 1),
+#'   b = to_tune(ps(y = p_int(0, 1, depends = x == 1),
 #'     .extra_trafo = function(x, param_set) list(b = x$y),
 #'     .allow_dangling_dependencies = TRUE
 #'   ))
