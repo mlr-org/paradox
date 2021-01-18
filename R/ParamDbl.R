@@ -28,13 +28,30 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     #' @template field_upper
     upper = NULL,
 
+    #' @field tolerance (`numeric(1)`)\cr
+    #' tolerance of values to accept beyond `$lower` and `$upper`.
+    #' Used both for relative and absolute tolerance.
+    tolerance = NULL,
+
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
+    #' @param tolerance (`numeric(1)`)\cr
+    #'   Initializes the `$tolerance` field that determines the
+    #    tolerance of the `lower` and `upper` values.
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps)) {
       self$lower = assert_number(lower)
       self$upper = assert_number(upper)
+      self$tolerance = assert_number(tolerance, lower = 0)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    #' @description
+    #' Restrict the value to within the allowed range. This works
+    #' in conjunction with `$tolerance`, which accepts values
+    #' slightly out of this range.
+    convert = function(x) {
+      min(max(x, self$lower), self$upper)
     }
   ),
 
@@ -50,7 +67,7 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+    .check = function(x) checkNumber(x, lower = self$lower - self$tolerance * max(1, abs(self$lower)), upper = self$upper + self$tolerance * max(1, abs(self$upper))),
     .qunif = function(x) x * self$upper - (x-1) * self$lower
   )
 )

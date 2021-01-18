@@ -41,6 +41,11 @@ ParamInt = R6Class("ParamInt", inherit = Param,
       }
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    #' Converts a value to an integer.
+    convert = function(x) {
+      as.integer(x)
     }
   ),
 
@@ -56,7 +61,7 @@ ParamInt = R6Class("ParamInt", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) checkInt(x, lower = self$lower, upper = self$upper),
+    .check = function(x) checkInt(x, lower = self$lower, upper = self$upper, tol = 1e-300),
     .qunif = function(x) as.integer(floor(x * self$nlevels * (1 - 1e-16)) + self$lower) # make sure we dont map to upper+1
   )
 )
