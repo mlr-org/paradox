@@ -46,10 +46,6 @@ Used both for relative and absolute tolerance.}
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
-\item{\code{tolerance}}{(\code{numeric(1)})\cr
-tolerance of values to accept beyond \verb{$lower} and \verb{$upper}.
-Used both for relative and absolute tolerance.}
-
 \item{\code{levels}}{(\code{character()} | \code{NULL})\cr
 Set of allowed levels.
 Always \code{NULL} for \link{ParamDbl}, \link{ParamInt} and \link{ParamUty}.
@@ -166,6 +162,14 @@ slightly out of this range.
 \if{html}{\out{<div class="r">}}\preformatted{ParamDbl$convert(x)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{numeric(1)})\cr
+Value to convert.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}

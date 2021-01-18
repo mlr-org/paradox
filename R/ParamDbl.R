@@ -50,6 +50,9 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     #' Restrict the value to within the allowed range. This works
     #' in conjunction with `$tolerance`, which accepts values
     #' slightly out of this range.
+    #'
+    #' @param x (`numeric(1)`)\cr
+    #'   Value to convert.
     convert = function(x) {
       min(max(x, self$lower), self$upper)
     }

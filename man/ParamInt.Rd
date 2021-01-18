@@ -94,7 +94,6 @@ Always \code{"list"} for \link{ParamUty}.}
 \if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
-Converts a value to an integer.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamInt$new(
   id,
@@ -148,10 +147,19 @@ purpose:\cr
 \if{html}{\out{<a id="method-convert"></a>}}
 \if{latex}{\out{\hypertarget{method-convert}{}}}
 \subsection{Method \code{convert()}}{
+Converts a value to an integer.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamInt$convert(x)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{numeric(1)})\cr
+Value to convert.}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}

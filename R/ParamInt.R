@@ -43,7 +43,10 @@ ParamInt = R6Class("ParamInt", inherit = Param,
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     },
 
+    #' @description
     #' Converts a value to an integer.
+    #' @param x (`numeric(1)`)\cr
+    #'   Value to convert.
     convert = function(x) {
       as.integer(x)
     }
