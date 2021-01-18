@@ -187,10 +187,6 @@ Used both for relative and absolute tolerance.</p></dd>
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
 
     <p><div class="r6-active-bindings"></p><dl>
-<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
-tolerance of values to accept beyond <code>$lower</code> and <code>$upper</code>.
-Used both for relative and absolute tolerance.</p></dd>
-
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> | <code>NULL</code>)<br />
 Set of allowed levels.
 Always <code>NULL</code> for ParamDbl, <a href='ParamInt.html'>ParamInt</a> and <a href='ParamUty.html'>ParamUty</a>.
@@ -296,6 +292,12 @@ in conjunction with <code>$tolerance</code>, which accepts values
 slightly out of this range.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
 <p><div class="r"></p><pre><span class='va'>ParamDbl</span><span class='op'>$</span><span class='fu'>convert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
 
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
+<dt><code>x</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Value to convert.</p></dd>
+
+</dl><p></div></p>
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
