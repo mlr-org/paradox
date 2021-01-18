@@ -215,6 +215,7 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
 <ul>
 <li><p><a href='#method-new'><code>ParamInt$new()</code></a></p></li>
+<li><p><a href='#method-convert'><code>ParamInt$convert()</code></a></p></li>
 <li><p><a href='#method-clone'><code>ParamInt$clone()</code></a></p></li>
 </ul>
 <p><details ><summary>Inherited methods</summary>
@@ -231,7 +232,8 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
 <hr>
 <a id="method-new"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>new()</code></h3>
-<p>Creates a new instance of this <a href='https://r6.r-lib.org/reference/R6Class.html'>R6</a> class.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p>Creates a new instance of this <a href='https://r6.r-lib.org/reference/R6Class.html'>R6</a> class.
+Converts a value to an integer.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
 <p><div class="r"></p><pre><span class='va'>ParamInt</span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span>
   <span class='va'>id</span>,
   lower <span class='op'>=</span> <span class='op'>-</span><span class='cn'>Inf</span>,
@@ -276,6 +278,12 @@ purpose:<br />
 </ul></p></dd>
 
 </dl><p></div></p>
+<p><hr>
+<a id="method-convert"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>convert()</code></h3>
+
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamInt</span><span class='op'>$</span><span class='fu'>convert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
+
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>

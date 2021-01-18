@@ -179,10 +179,18 @@ Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamL
 Upper bound.
 Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamLgl.html'>ParamLgl</a> and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
+<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+tolerance of values to accept beyond <code>$lower</code> and <code>$upper</code>.
+Used both for relative and absolute tolerance.</p></dd>
+
 </dl><p></div></p>
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
 
     <p><div class="r6-active-bindings"></p><dl>
+<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+tolerance of values to accept beyond <code>$lower</code> and <code>$upper</code>.
+Used both for relative and absolute tolerance.</p></dd>
+
 <dt><code>levels</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/character.html'>character()</a></code> | <code>NULL</code>)<br />
 Set of allowed levels.
 Always <code>NULL</code> for ParamDbl, <a href='ParamInt.html'>ParamInt</a> and <a href='ParamUty.html'>ParamUty</a>.
@@ -215,6 +223,7 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
 <ul>
 <li><p><a href='#method-new'><code>ParamDbl$new()</code></a></p></li>
+<li><p><a href='#method-convert'><code>ParamDbl$convert()</code></a></p></li>
 <li><p><a href='#method-clone'><code>ParamDbl$clone()</code></a></p></li>
 </ul>
 <p><details ><summary>Inherited methods</summary>
@@ -238,7 +247,8 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
   upper <span class='op'>=</span> <span class='cn'>Inf</span>,
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
-  tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>
+  tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
+  tolerance <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/MathFun.html'>sqrt</a></span><span class='op'>(</span><span class='va'>.Machine</span><span class='op'>$</span><span class='va'>double.eps</span><span class='op'>)</span>
 <span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
@@ -275,7 +285,17 @@ purpose:<br />
 <code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
 </ul></p></dd>
 
+<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Initializes the <code>$tolerance</code> field that determines the</p></dd>
+
 </dl><p></div></p>
+<p><hr>
+<a id="method-convert"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>convert()</code></h3>
+<p>Restrict the value to within the allowed range. This works
+in conjunction with <code>$tolerance</code>, which accepts values
+slightly out of this range.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamDbl</span><span class='op'>$</span><span class='fu'>convert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
+
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>

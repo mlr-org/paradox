@@ -218,6 +218,7 @@ Is there a default value?</p></dd>
 <li><p><a href='#method-format'><code>Param$format()</code></a></p></li>
 <li><p><a href='#method-print'><code>Param$print()</code></a></p></li>
 <li><p><a href='#method-qunif'><code>Param$qunif()</code></a></p></li>
+<li><p><a href='#method-convert'><code>Param$convert()</code></a></p></li>
 <li><p><a href='#method-clone'><code>Param$clone()</code></a></p></li>
 </ul>
 <p><hr>
@@ -351,6 +352,19 @@ param.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#argument
 </dl><p></div></p>
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Returns</h4>
 <p>Value of the domain of the parameter.</p>
+<p><hr>
+<a id="method-convert"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>convert()</code></h3>
+<p>Converts a value to the closest valid param. Only for values that
+pass <code>$check()</code> and mostly used internally.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>Param</span><span class='op'>$</span><span class='fu'>convert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
+
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
+<dt><code>x</code></dt><dd><p>(<code>any</code>).</p></dd>
+
+</dl><p></div></p>
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Returns</h4>
+<p><code>x</code> converted to a valid type for the <code>Param</code>.</p>
 <p><hr>
 <a id="method-clone"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>clone()</code></h3>
 <p>The objects of this class are cloneable with this method.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
