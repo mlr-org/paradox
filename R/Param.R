@@ -67,7 +67,7 @@ Param = R6Class("Param",
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
       if (inherits(x, "TuneToken")) {
         return(tryCatch({
-          tunetoken_to_ps(x, self)
+          tunetoken_to_ps(x, self, self$id)
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e))))
       }

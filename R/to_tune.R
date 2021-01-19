@@ -175,36 +175,36 @@ print.ObjectTuneToken = function(x, ...) {
 # does not go out of range.
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
-tunetoken_to_ps = function(tt, param) {
+tunetoken_to_ps = function(tt, param, id) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param) {
+tunetoken_to_ps.FullTuneToken = function(tt, param, id) {
   if (!param$is_bounded) {
-    stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
+    stopf("%s must give a range for unbounded parameter %s.", tt$call, id)
   }
-  pslike_to_ps(param, tt$call, param)
+  pslike_to_ps(param, tt$call, param, id)
 }
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param) {
+tunetoken_to_ps.RangeTuneToken = function(tt, param, id) {
   if (!param$is_number) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
   invalidpoints = discard(tt$content, param$test)
   if (length(invalidpoints)) {
     stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
-      tt$call, param$id, repr(invalidpoints), repr(param))
+      tt$call, id, repr(invalidpoints), repr(param))
   }
 
   if (!all(map_lgl(tt$content, param$test))) {
-    stopf("%s not compatible with param %s", tt$call, param$id)
+    stopf("%s not compatible with param %s", tt$call, id)
   }
-  content = get_r6_constructor(param$class)$new(id = param$id, lower = tt$content$lower, upper = tt$content$upper)
-  pslike_to_ps(content, tt$call, param)
+  content = get_r6_constructor(param$class)$new(id = id, lower = tt$content$lower, upper = tt$content$upper)
+  pslike_to_ps(content, tt$call, param, id)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
-  pslike_to_ps(tt$content, tt$call, param)
+tunetoken_to_ps.ObjectTuneToken = function(tt, param, id) {
+  pslike_to_ps(tt$content, tt$call, param, id)
 }
 
 # Convert something that is `ParamSet`-like (ParamSet, Param, or Domain) to a `ParamSet`.
@@ -216,23 +216,23 @@ tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
 # @param param: `Param`, that the `pslike` refers to, and therefore needs to be compatible to
 # @param usersupplied: whether the `pslike` is supplied by the user (and should therefore be checked more thoroughly)
 #   This is currently used for user-supplied ParamSets, for which the trafo must be adjusted.
-pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
+pslike_to_ps = function(pslike, call, param, id, usersupplied = TRUE) {
   UseMethod("pslike_to_ps")
 }
 
-pslike_to_ps.Domain = function(pslike, call, param, usersupplied = TRUE) {
-  pslike = invoke(ps, .allow_dangling_dependencies = TRUE, .args = set_names(list(pslike), param$id))
-  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
+pslike_to_ps.Domain = function(pslike, call, param, id, usersupplied = TRUE) {
+  pslike = invoke(ps, .allow_dangling_dependencies = TRUE, .args = set_names(list(pslike), id))
+  pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
 }
 
-pslike_to_ps.Param = function(pslike, call, param, usersupplied = TRUE) {
+pslike_to_ps.Param = function(pslike, call, param, id, usersupplied = TRUE) {
   pslike = pslike$clone(deep = TRUE)
-  pslike$id = param$id
+  pslike$id = id
   pslike = ParamSet$new(list(pslike))
-  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
+  pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
 }
 
-pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
+pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
   pslike = pslike$clone(deep = TRUE)
   alldeps = pslike$deps
   # temporarily hide dangling deps
@@ -243,16 +243,16 @@ pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
     stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
-      call, param$id, repr(invalidpoints[[1]]))
+      call, id, repr(invalidpoints[[1]]))
   }
   invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
   if (length(invalidpoints)) {
     stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
-      call, param$id, repr(invalidpoints[[1]][[1]]), repr(param))
+      call, id, repr(invalidpoints[[1]][[1]]), repr(param))
   }
   if (usersupplied) {
     trafo = pslike$trafo %??% identity
-    pname = param$id
+    pname = id
     pslike$trafo = crate(function(x, param_set) {
       mlr3misc::set_names(
         checkmate::assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),

@@ -71,13 +71,13 @@ ParamSet = R6Class("ParamSet",
       } else {
         p$clone(deep = TRUE)
       }
-
-      nn = c(names(self$params), names(p$params))
+      pparams = p$params
+      nn = c(names(private$.params), names(pparams))
       assert_names(nn, type = "strict")
       if (!is.null(p$trafo)) {
         stop("Cannot add a param set with a trafo.")
       }
-      private$.params = c(private$.params, p$params)
+      private$.params = c(private$.params, pparams)
       private$.values = c(private$.values, p$values)
       private$.deps = rbind(private$.deps, p$deps)
       invisible(self)
@@ -97,7 +97,7 @@ ParamSet = R6Class("ParamSet",
       assert_flag(is_bounded, null.ok = TRUE)
       assert_character(tags, any.missing = FALSE, null.ok = TRUE)
 
-      params = self$params
+      params = self$params_unid
       ids = names(params)
       if (is.null(class) && is.null(is_bounded) && is.null(tags)) {
         return(ids)
@@ -138,7 +138,7 @@ ParamSet = R6Class("ParamSet",
       assert_choice(type, c("with_token", "without_token", "only_token"))
       assert_flag(check_required)
       values = self$values
-      params = self$params
+      params = self$params_unid
       ns = names(values)
 
       if (type == "without_token") {
@@ -162,7 +162,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param ids (`character()`).
     subset = function(ids) {
-      param_ids = names(self$params)
+      param_ids = names(self$params_unid)
       assert_subset(ids, param_ids)
       deps = self$deps
       if (nrow(deps)) { # check that all required / leftover parents are still in new ids
@@ -210,7 +210,7 @@ ParamSet = R6Class("ParamSet",
       if (!isTRUE(ok)) {
         return(ok)
       }
-      params = self$params
+      params = self$params_unid
       ns = names(xs)
       ids = names(params)
 
@@ -329,7 +329,7 @@ ParamSet = R6Class("ParamSet",
     #' @param on (`character(1)`).
     #' @param cond ([Condition]).
     add_dep = function(id, on, cond) {
-      params = self$params
+      params = self$params_unid
       ids = names(params)
       assert_choice(id, ids)
       assert_choice(on, ids)
@@ -395,6 +395,12 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params
     },
+    params_unid = function(rhs) {
+      if (!missing(rhs) && !identical(rhs, private$.params)) {
+        stop("$params_unid is read-only.")
+      }
+      self$params
+    },
 
     #' @template field_deps
     deps = function(v) {
@@ -422,13 +428,13 @@ ParamSet = R6Class("ParamSet",
     #' @field length (`integer(1)`)\cr
     #' Number of contained [Param]s.
     length = function() {
-      length(self$params)
+      length(self$params_unid)
     },
 
     #' @field is_empty (`logical(1)`)\cr
     #' Is the `ParamSet` empty?
     is_empty = function() {
-      length(self$params) == 0L
+      length(self$params_unid) == 0L
     },
 
     #' @field class (named `character()`)\cr
@@ -470,7 +476,7 @@ ParamSet = R6Class("ParamSet",
     #' Do all parameters have finite bounds?
     #' Named with parameter IDs.
     is_bounded = function() {
-      all(map_lgl(self$params, "is_bounded"))
+      all(map_lgl(self$params_unid, "is_bounded"))
     },
 
     #' @field special_vals (named `list()` of `list()`)\cr
@@ -567,7 +573,7 @@ ParamSet = R6Class("ParamSet",
       } else if (self$assert_values) {  # this only makes sense when we have asserts on
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
-        params = self$params  # cache the AB
+        params = self$params_unid # cache the AB
         for (n in names(xs)) {
           p = params[[n]]
           x = xs[[n]]
@@ -598,10 +604,11 @@ ParamSet = R6Class("ParamSet",
       set_names(astype(map(params, member)), names(params))
     },
     get_tune_ps = function(values) {
-      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      selfparams = self$params_unid # cache to avoid performance hit in ParamSetCollection
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, selfparams[[pn]])
+        tunetoken_to_ps(value, selfparams[[pn]], pn)
       })
+      if (!length(partsets)) return(ParamSet$new())
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
