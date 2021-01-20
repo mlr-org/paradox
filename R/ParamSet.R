@@ -395,6 +395,7 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params
     },
+    #' @template field_params_unid
     params_unid = function(rhs) {
       if (!missing(rhs) && !identical(rhs, private$.params)) {
         stop("$params_unid is read-only.")

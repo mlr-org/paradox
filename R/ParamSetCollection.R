@@ -71,7 +71,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       pnames = names(p$params_unid)
       nameclashes = intersect(
         ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, pnames), pnames),
-        pnames
+        names(self$params_unid)
       )
       if (length(nameclashes)) {
         stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
@@ -109,6 +109,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         x
       })
     },
+    #' @template field_params_unid
     params_unid = function(v) {
       sets = private$.sets
       names(sets) = map_chr(sets, "set_id")
