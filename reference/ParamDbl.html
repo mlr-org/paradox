@@ -82,7 +82,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.6.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.7.0</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -106,7 +106,7 @@
 </li>
         <li>
   <a href="https://github.com/mlr-org/paradox/">
-    <span class="fab fa fab fa-github fa-lg"></span>
+    <span class="fab fa-github fa-lg"></span>
      
   </a>
 </li>
@@ -118,13 +118,13 @@
 </li>
 <li>
   <a href="https://stackoverflow.com/questions/tagged/mlr3">
-    <span class="fab fa fab fa-stack-overflow"></span>
+    <span class="fab fa-stack-overflow"></span>
      
   </a>
 </li>
 <li>
   <a href="https://mlr-org.com/">
-    <span class="fa fa-rss"></span>
+    <span class="fas fa-rss"></span>
      
   </a>
 </li>
@@ -179,6 +179,10 @@ Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamL
 Upper bound.
 Always <code>NA</code> for <a href='ParamFct.html'>ParamFct</a>, <a href='ParamLgl.html'>ParamLgl</a> and <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
+<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+tolerance of values to accept beyond <code>$lower</code> and <code>$upper</code>.
+Used both for relative and absolute tolerance.</p></dd>
+
 </dl><p></div></p>
     <h2 class="hasAnchor" id="active-bindings"><a class="anchor" href="#active-bindings"></a>Active bindings</h2>
 
@@ -215,6 +219,7 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
 
 <ul>
 <li><p><a href='#method-new'><code>ParamDbl$new()</code></a></p></li>
+<li><p><a href='#method-convert'><code>ParamDbl$convert()</code></a></p></li>
 <li><p><a href='#method-clone'><code>ParamDbl$clone()</code></a></p></li>
 </ul>
 <p><details ><summary>Inherited methods</summary>
@@ -238,7 +243,8 @@ Always <code>"list"</code> for <a href='ParamUty.html'>ParamUty</a>.</p></dd>
   upper <span class='op'>=</span> <span class='cn'>Inf</span>,
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
-  tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>
+  tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
+  tolerance <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/MathFun.html'>sqrt</a></span><span class='op'>(</span><span class='va'>.Machine</span><span class='op'>$</span><span class='va'>double.eps</span><span class='op'>)</span>
 <span class='op'>)</span></pre><p></div></p>
 
 <h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
@@ -274,6 +280,22 @@ purpose:<br />
 <li><p><code>"required"</code> implies that the parameters has to be given when setting
 <code>values</code> in <a href='ParamSet.html'>ParamSet</a>.</p></li>
 </ul></p></dd>
+
+<dt><code>tolerance</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Initializes the <code>$tolerance</code> field that determines the</p></dd>
+
+</dl><p></div></p>
+<p><hr>
+<a id="method-convert"></a></p><h3 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Method <code>convert()</code></h3>
+<p>Restrict the value to within the allowed range. This works
+in conjunction with <code>$tolerance</code>, which accepts values
+slightly out of this range.</p><h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Usage</h4>
+<p><div class="r"></p><pre><span class='va'>ParamDbl</span><span class='op'>$</span><span class='fu'>convert</span><span class='op'>(</span><span class='va'>x</span><span class='op'>)</span></pre><p></div></p>
+
+<h4 class='hasAnchor' id='arguments'><a class='anchor' href='#arguments'></a>Arguments</h4>
+<p><div class="arguments"></p><dl>
+<dt><code>x</code></dt><dd><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Value to convert.</p></dd>
 
 </dl><p></div></p>
 <p><hr>
