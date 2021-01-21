@@ -1,6 +1,6 @@
-# paradox 0.6.0.9000
+# paradox 0.7.0
 
-* `ParamSet$get_values()` checks whether all required parameter values are set. 
+* `ParamSet$get_values()` checks whether all required parameter values are set.
   Required parameter are not checked anymore when new values are added to the
   parameter set.
 * `ParamSet$check_dt()` accepts `data.frame`s.
