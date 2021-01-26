@@ -203,6 +203,12 @@ of a param from another set - in this case add call <code>add_dep</code> on the 
 <dt><code>params</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
 List of <a href='Param.html'>Param</a>, named with their respective ID.</p></dd>
 
+<dt><code>params_unid</code></dt><dd><p>(named <code><a href='https://rdrr.io/r/base/list.html'>list()</a></code>)<br />
+List of <a href='Param.html'>Param</a>, named with their true ID. However,
+this field has the <a href='Param.html'>Param</a>'s <code>$id</code> value set to a
+potentially invalid value. This active binding should
+only be used internally.</p></dd>
+
 <dt><code>deps</code></dt><dd><p>(<code><a href='https://Rdatatable.gitlab.io/data.table/reference/data.table.html'>data.table::data.table()</a></code>)<br />
 Table has cols <code>id</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>on</code> (<code><a href='https://rdrr.io/r/base/character.html'>character(1)</a></code>) and <code>cond</code> (<a href='Condition.html'>Condition</a>).
 Lists all (direct) dependency parents of a param, through parameter IDs.
