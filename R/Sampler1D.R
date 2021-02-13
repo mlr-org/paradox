@@ -17,7 +17,13 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [Sampler1DUnif].
     initialize = function(param) {
-      super$initialize(ParamSet$new(list(param)))
+      assert(check_r6(param, "Param"), check_r6(param, "ParamSet"))
+      if (inherits(param, "Param")) {
+        super$initialize(ParamSet$new(list(param)))
+      } else {
+        if (param$length != 1) stopf("param must contain exactly 1 Param, but contains %s", param$length)
+        super$initialize(param)
+      }
     }
   ),
 
