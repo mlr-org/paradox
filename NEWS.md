@@ -1,3 +1,7 @@
+# paradox 0.7.0-9000
+
+* `Sampler1D` also accept `ParamSet`s with one `Param` now.
+
 # paradox 0.7.0
 
 * `ParamSet$get_values()` checks whether all required parameter values are set.
