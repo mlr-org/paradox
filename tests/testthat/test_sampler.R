@@ -11,6 +11,9 @@ test_that("1d samplers: basic tests", {
   for (p in ps$params) {
     ss = samplers[[p$class]]
     for (s in ss) {
+      expect_error(s$new(ps()), "exactly 1 Param, but contains 0")
+      expect_error(s$new(ps(x = p, y = p)), "exactly 1 Param, but contains 2")
+      expect_class(s$new(ps(x = p)), "Sampler1D")
       s = s$new(p)
       info = paste(p$id, "-", class(s)[[1L]])
       n = 5L
