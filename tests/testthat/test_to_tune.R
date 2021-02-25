@@ -337,3 +337,66 @@ test_that("ParamSet$get_values() works", {
   pars$values$y = to_tune()
   expect_list(pars$get_values(type = "without_token"), len = 0)
 })
+
+test_that("partial bounds in tunetoken", {
+
+  pars = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamDbl$new("y", lower = 0),
+    ParamDbl$new("z", upper = 10)
+  ))
+
+  expect_equal(pars$search_space(list(x = to_tune()))$params[[1]], ParamInt$new("x", lower = 0, upper = 10))
+
+  expect_equal(pars$search_space(list(x = to_tune(lower = 1)))$params[[1]], ParamInt$new("x", lower = 1, upper = 10))
+  expect_equal(pars$search_space(list(x = to_tune(upper = 1)))$params[[1]], ParamInt$new("x", lower = 0, upper = 1))
+  expect_equal(pars$search_space(list(x = to_tune(lower = 1, upper = 2)))$params[[1]], ParamInt$new("x", lower = 1, upper = 2))
+
+  expect_error(pars$search_space(list(y = to_tune(lower = 1))), "y range must be bounded, but is \\[1, Inf\\]")
+  expect_equal(pars$search_space(list(y = to_tune(upper = 1)))$params[[1]], ParamDbl$new("y", lower = 0, upper = 1))
+  expect_equal(pars$search_space(list(y = to_tune(lower = 1, upper = 2)))$params[[1]], ParamDbl$new("y", lower = 1, upper = 2))
+
+  expect_error(pars$search_space(list(z = to_tune(upper = 1))), "z range must be bounded, but is \\[-Inf, 1\\]")
+  expect_equal(pars$search_space(list(z = to_tune(lower = 1)))$params[[1]], ParamDbl$new("z", lower = 1, upper = 10))
+  expect_equal(pars$search_space(list(z = to_tune(lower = 1, upper = 2)))$params[[1]], ParamDbl$new("z", lower = 1, upper = 2))
+
+  expect_output(print(to_tune()), "entire parameter range")
+  expect_output(print(to_tune(lower = 1)), "range \\[1, \\.\\.\\.]")
+  expect_output(print(to_tune(upper = 1)), "range \\[\\.\\.\\., 1]")
+  expect_output(print(to_tune(lower = 0, upper = 1)), "range \\[0, 1]")
+
+  expect_output(print(to_tune(logscale = FALSE)), "<entire parameter range>")
+  expect_output(print(to_tune(lower = 1, logscale = FALSE)), "range \\[1, \\.\\.\\.]\\n$")
+  expect_output(print(to_tune(upper = 1, logscale = FALSE)), "range \\[\\.\\.\\., 1]\\n$")
+  expect_output(print(to_tune(lower = 0, upper = 1, logscale = FALSE)), "range \\[0, 1]\\n$")
+
+})
+
+test_that("logscale in tunetoken", {
+
+  pars = ParamSet$new(list(
+    ParamInt$new("x", lower = 0, upper = 10),
+    ParamDbl$new("y", lower = 0)
+  ))
+
+  expect_equal(pars$search_space(list(x = to_tune(logscale = TRUE)))$params[[1]], ParamDbl$new("x", lower = log(.5), upper = log(11)))
+  expect_equal(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE)))$params[[1]], ParamDbl$new("y", lower = log(1), upper = log(10)))
+
+  expect_error(pars$search_space(list(y = to_tune(upper = 10, logscale = TRUE))), "When logscale is TRUE then lower bound must be strictly greater than 0")
+
+  expect_equal(
+    generate_design_grid(pars$search_space(list(x = to_tune(logscale = TRUE))), 4)$transpose(),
+    list(list(x = 0), list(x = 1), list(x = 3), list(x = 10))
+  )
+
+  expect_equal(
+    generate_design_grid(pars$search_space(list(y = to_tune(lower = 1, upper = 100, logscale = TRUE))), 3)$transpose(),
+    list(list(y = 1), list(y = 10), list(y = 100))
+  )
+
+  expect_output(print(to_tune(logscale = TRUE)), "entire parameter range \\(log scale\\)")
+  expect_output(print(to_tune(lower = 1, logscale = TRUE)), "range \\[1, \\.\\.\\.] \\(log scale\\)")
+  expect_output(print(to_tune(upper = 1, logscale = TRUE)), "range \\[\\.\\.\\., 1] \\(log scale\\)")
+  expect_output(print(to_tune(lower = 0, upper = 1, logscale = TRUE)), "range \\[0, 1] \\(log scale\\)")
+
+})
