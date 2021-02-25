@@ -16,7 +16,8 @@ p_int(
   default = NO_DEF,
   tags = character(),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  logscale = FALSE
 )
 
 p_dbl(
@@ -25,8 +26,10 @@ p_dbl(
   special_vals = list(),
   default = NO_DEF,
   tags = character(),
+  tolerance = sqrt(.Machine$double.eps),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  logscale = FALSE
 )
 
 p_uty(
@@ -94,7 +97,31 @@ dependencies according to \verb{ParamSet$add_dep(on = "<Param>", cond = CondEqua
 
 \item{trafo}{(\code{function})\cr
 Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a
-\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.}
+\code{\link{ParamSet}}, this transformation will be applied to the corresponding parameter as part of the \verb{$trafo} function.\cr
+Note that the trafo is \emph{not} inherited by \code{\link{TuneToken}}s! Defining a parameter
+with e.g. \code{p_dbl(..., trafo = ...)} will \emph{not} automatically give the \code{to_tune()} assigned to it a transformation.
+\code{trafo} only makes sense for \code{\link{ParamSet}}s that get used as search spaces for optimization or tuning, it is not useful when
+defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.}
+
+\item{logscale}{(\code{logical(1)})\cr
+Put numeric domains on a log scale. Default \code{FALSE}. Log-scale \code{Domain}s represent parameter ranges where lower and upper bounds
+are logarithmized, and where a \code{trafo} is added that exponentiates sampled values to the original scale. This is
+\emph{not} the same as setting \code{trafo = exp}, because \code{logscale = TRUE} will handle parameter bounds internally:
+a \code{p_dbl(1, 10, logscale = TRUE)} results in a \code{\link{ParamDbl}} that has lower bound \code{0}, upper bound \code{log(10)},
+and uses \code{exp} transformation on these. Therefore, the given bounds represent the bounds \emph{after} the transformation.
+(see examples).\cr
+\code{p_int()} with \code{logscale = TRUE} results in a \code{\link{ParamDbl}}, not a \code{\link{ParamInt}}, but with bounds \code{log(max(lower, 0.5))} ...
+\code{log(upper + 1)} and a trafo similar to "\code{as.integer(exp(x))}" (with additional bounds correction). The lower bound
+is lifted to \code{0.5} if \code{lower} 0 to handle the \code{lower == 0} case. The upper bound is increased to \code{log(upper + 1)}
+because the trafo would otherwise almost never generate a value of \code{upper}.\cr
+When \code{logscale} is \code{TRUE}, then upper bounds may be infinite, but lower bounds should be greater than 0 for \code{p_dbl()}
+or greater or equal 0 for \code{p_int()}.\cr
+Note that "logscale" is \emph{not} inherited by \code{\link{TuneToken}}s! Defining a parameter
+with \verb{p_dbl(... logscale = TRUE)} will \emph{not} automatically give the \code{to_tune()} assigned to it log-scale. \code{logscale}
+only makes sense for \code{\link{ParamSet}}s that get used as search spaces for optimization or tuning, it is not useful when
+defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.\cr
+\code{logscale} happens on a natural (\verb{e == 2.718282...}) basis. Be aware that using a different base (\code{log10()}/\verb{10^},
+\code{log2()}/\verb{2^}) is completely equivalent and does not change the values being sampled after transformation.}
 
 \item{custom_check}{(\verb{function()})\cr
 Custom function to check the feasibility.
@@ -151,6 +178,30 @@ params$trafo(list(
   factor_param = "c",
   factor_param_with_implicit_trafo = "c"
 ))
+
+# logscale:
+params = ps(x = p_dbl(1, 100, logscale = TRUE))
+
+# The ParamSet has bounds log(1) .. log(100):
+print(params)
+
+# When generating a equidistant grid, it is equidistant within log values
+grid = generate_design_grid(params, 3)
+print(grid)
+
+# But the values are on a log scale with desired bounds after trafo
+print(grid$transpose())
+
+# Integer parameters with logscale are `ParamDbl`s pre-trafo
+params = ps(x = p_int(0, 10, logscale = TRUE))
+print(params)
+
+grid = generate_design_grid(params, 4)
+print(grid)
+
+# ... but get transformed to integers.
+print(grid$transpose())
+
 }
 \seealso{
 Other ParamSet construction helpers: 
