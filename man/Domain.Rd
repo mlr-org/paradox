@@ -123,6 +123,9 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 \code{logscale} happens on a natural (\verb{e == 2.718282...}) basis. Be aware that using a different base (\code{log10()}/\verb{10^},
 \code{log2()}/\verb{2^}) is completely equivalent and does not change the values being sampled after transformation.}
 
+\item{tolerance}{(\code{numeric(1)})\cr
+Initializes the \verb{$tolerance} field that determines the}
+
 \item{custom_check}{(\verb{function()})\cr
 Custom function to check the feasibility.
 Function which checks the input.
