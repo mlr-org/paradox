@@ -99,6 +99,13 @@ test_that("requirements in domains", {
       y = p_dbl(depends = x == 1)
     ), simpleps)
 
+  # quote() is accepted
+  expect_equal(
+    ps(
+      x = p_int(),
+      y = p_dbl(depends = quote(x == 1))
+    ), simpleps)
+
   # using a expression variable
   reqquote = quote(x == 1)
   expect_equal(
