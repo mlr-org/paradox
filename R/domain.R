@@ -179,6 +179,9 @@ parse_depends = function(depends_expr, evalenv) {
   throw = function(msg = NULL) stopf("Requirement '%s' is broken%s", deparse1(depends_expr), if (!is.null(msg)) sprintf(":\n%s", msg) else "")
 
   if (!is.language(depends_expr)) throw()
+  if (identical(depends_expr[[1]], quote(quote))) {
+    depends_expr = depends_expr[[2]]
+  }
   if (is.expression(depends_expr)) {
     if (length(depends_expr) != 1) {
       throw("given 'expression' objects must have length 1.")
