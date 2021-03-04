@@ -201,12 +201,12 @@ use. Dependencies between <code><a href='ParamSet.html'>ParamSet</a></code>s whe
 <span class='op'>)</span>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>pars</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;    id    class lower upper levels        default value
-#&gt; 1:  a ParamInt     0    10        &lt;NoDefault[3]&gt;      
-#&gt; 2:  b ParamInt  -Inf    20        &lt;NoDefault[3]&gt;      
-#&gt; 3:  c ParamDbl  -Inf   Inf        &lt;NoDefault[3]&gt;      
-#&gt; 4:  e ParamFct    NA    NA  a,b,c &lt;NoDefault[3]&gt;      
-#&gt; 5:  f ParamUty    NA    NA        &lt;NoDefault[3]&gt;      </div><div class='input'>
+#&gt;    id    class lower upper nlevels        default value
+#&gt; 1:  a ParamInt     0    10      11 &lt;NoDefault[3]&gt;      
+#&gt; 2:  b ParamInt  -Inf    20     Inf &lt;NoDefault[3]&gt;      
+#&gt; 3:  c ParamDbl  -Inf   Inf     Inf &lt;NoDefault[3]&gt;      
+#&gt; 4:  e ParamFct    NA    NA       3 &lt;NoDefault[3]&gt;      
+#&gt; 5:  f ParamUty    NA    NA     Inf &lt;NoDefault[3]&gt;      </div><div class='input'>
 <span class='va'>pars</span> <span class='op'>=</span> <span class='fu'>ps</span><span class='op'>(</span>
   a <span class='op'>=</span> <span class='fu'><a href='Domain.html'>p_dbl</a></span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>1</span>, trafo <span class='op'>=</span> <span class='va'>exp</span><span class='op'>)</span>,
   b <span class='op'>=</span> <span class='fu'><a href='Domain.html'>p_dbl</a></span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>1</span>, trafo <span class='op'>=</span> <span class='va'>exp</span><span class='op'>)</span>,
@@ -241,9 +241,9 @@ use. Dependencies between <code><a href='ParamSet.html'>ParamSet</a></code>s whe
 
 <span class='va'>pars</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;    id    class lower upper levels        default parents value
-#&gt; 1:  x ParamInt     0     1        &lt;NoDefault[3]&gt;              
-#&gt; 2:  y ParamInt     0     1        &lt;NoDefault[3]&gt;       x      
+#&gt;    id    class lower upper nlevels        default parents value
+#&gt; 1:  x ParamInt     0     1       2 &lt;NoDefault[3]&gt;              
+#&gt; 2:  y ParamInt     0     1       2 &lt;NoDefault[3]&gt;       x      
 #&gt; Trafo is set.</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">

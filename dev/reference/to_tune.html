@@ -341,9 +341,9 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt; $uty4
 #&gt; Tuning over:
 #&gt; &lt;ParamSet&gt;
-#&gt;      id    class lower upper levels        default value
-#&gt; 1: base ParamDbl     0     1        &lt;NoDefault[3]&gt;      
-#&gt; 2:  exp ParamInt     0     3        &lt;NoDefault[3]&gt;      
+#&gt;      id    class lower upper nlevels        default value
+#&gt; 1: base ParamDbl     0     1     Inf &lt;NoDefault[3]&gt;      
+#&gt; 2:  exp ParamInt     0     3       4 &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.
 #&gt; 
 #&gt; $uty5
@@ -351,17 +351,17 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt; </div><div class='input'>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;                id    class lower     upper     levels        default value
-#&gt;  1:           int ParamInt     0 10.000000            &lt;NoDefault[3]&gt;      
-#&gt;  2: int_unbounded ParamInt     2  7.000000            &lt;NoDefault[3]&gt;      
-#&gt;  3:           dbl ParamDbl     0  2.302585            &lt;NoDefault[3]&gt;      
-#&gt;  4: dbl_unbounded ParamInt     1 10.000000            &lt;NoDefault[3]&gt;      
-#&gt;  5:           fct ParamFct    NA        NA        a,b &lt;NoDefault[3]&gt;      
-#&gt;  6:          uty1 ParamInt     2  8.000000            &lt;NoDefault[3]&gt;      
-#&gt;  7:          uty2 ParamFct    NA        NA   1,10,100 &lt;NoDefault[3]&gt;      
-#&gt;  8:          uty3 ParamFct    NA        NA exp,square &lt;NoDefault[3]&gt;      
-#&gt;  9:          base ParamDbl     0  1.000000            &lt;NoDefault[3]&gt;      
-#&gt; 10:           exp ParamInt     0  3.000000            &lt;NoDefault[3]&gt;      
+#&gt;                id    class lower     upper nlevels        default value
+#&gt;  1:           int ParamInt     0 10.000000      11 &lt;NoDefault[3]&gt;      
+#&gt;  2: int_unbounded ParamInt     2  7.000000       6 &lt;NoDefault[3]&gt;      
+#&gt;  3:           dbl ParamDbl     0  2.302585     Inf &lt;NoDefault[3]&gt;      
+#&gt;  4: dbl_unbounded ParamInt     1 10.000000      10 &lt;NoDefault[3]&gt;      
+#&gt;  5:           fct ParamFct    NA        NA       2 &lt;NoDefault[3]&gt;      
+#&gt;  6:          uty1 ParamInt     2  8.000000       7 &lt;NoDefault[3]&gt;      
+#&gt;  7:          uty2 ParamFct    NA        NA       3 &lt;NoDefault[3]&gt;      
+#&gt;  8:          uty3 ParamFct    NA        NA       2 &lt;NoDefault[3]&gt;      
+#&gt;  9:          base ParamDbl     0  1.000000     Inf &lt;NoDefault[3]&gt;      
+#&gt; 10:           exp ParamInt     0  3.000000       4 &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='co'># Change `$values` directly and generate new `$search_space()` to play around</span>
 <span class='va'>params</span><span class='op'>$</span><span class='va'>values</span><span class='op'>$</span><span class='va'>uty3</span> <span class='op'>=</span> <span class='fl'>8</span>
@@ -369,16 +369,16 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;               id    class lower     upper levels        default value
-#&gt; 1:           int ParamInt     0 10.000000        &lt;NoDefault[3]&gt;      
-#&gt; 2: int_unbounded ParamInt     2  7.000000        &lt;NoDefault[3]&gt;      
-#&gt; 3:           dbl ParamDbl     0  2.302585        &lt;NoDefault[3]&gt;      
-#&gt; 4: dbl_unbounded ParamInt     1 10.000000        &lt;NoDefault[3]&gt;      
-#&gt; 5:           fct ParamFct    NA        NA    a,b &lt;NoDefault[3]&gt;      
-#&gt; 6:          uty1 ParamInt     2  8.000000        &lt;NoDefault[3]&gt;      
-#&gt; 7:          uty2 ParamFct    NA        NA  2,4,8 &lt;NoDefault[3]&gt;      
-#&gt; 8:          base ParamDbl     0  1.000000        &lt;NoDefault[3]&gt;      
-#&gt; 9:           exp ParamInt     0  3.000000        &lt;NoDefault[3]&gt;      
+#&gt;               id    class lower     upper nlevels        default value
+#&gt; 1:           int ParamInt     0 10.000000      11 &lt;NoDefault[3]&gt;      
+#&gt; 2: int_unbounded ParamInt     2  7.000000       6 &lt;NoDefault[3]&gt;      
+#&gt; 3:           dbl ParamDbl     0  2.302585     Inf &lt;NoDefault[3]&gt;      
+#&gt; 4: dbl_unbounded ParamInt     1 10.000000      10 &lt;NoDefault[3]&gt;      
+#&gt; 5:           fct ParamFct    NA        NA       2 &lt;NoDefault[3]&gt;      
+#&gt; 6:          uty1 ParamInt     2  8.000000       7 &lt;NoDefault[3]&gt;      
+#&gt; 7:          uty2 ParamFct    NA        NA       3 &lt;NoDefault[3]&gt;      
+#&gt; 8:          base ParamDbl     0  1.000000     Inf &lt;NoDefault[3]&gt;      
+#&gt; 9:           exp ParamInt     0  3.000000       4 &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='co'># Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:</span>
 <span class='va'>params</span> <span class='op'>=</span> <span class='va'><a href='ParamSet.html'>ParamSet</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"x"</span><span class='op'>)</span><span class='op'>)</span><span class='op'>)</span>
@@ -387,8 +387,8 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;    id    class lower   upper levels        default value
-#&gt; 1:  x ParamDbl     0 4.60517        &lt;NoDefault[3]&gt;      
+#&gt;    id    class lower   upper nlevels        default value
+#&gt; 1:  x ParamDbl     0 4.60517     Inf &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span>, <span class='fl'>3</span><span class='op'>)</span>
 

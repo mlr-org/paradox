@@ -353,15 +353,15 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class='op'>)</span>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;                                  id    class lower upper levels        default
-#&gt; 1:                unbounded_integer ParamInt  -Inf   Inf        &lt;NoDefault[3]&gt;
-#&gt; 2:                   bounded_double ParamDbl     0    10        &lt;NoDefault[3]&gt;
-#&gt; 3:             half_bounded_integer ParamDbl     1   Inf        &lt;NoDefault[3]&gt;
-#&gt; 4:              half_bounded_double ParamDbl  -Inf     1        &lt;NoDefault[3]&gt;
-#&gt; 5:                double_with_trafo ParamDbl    -1     1        &lt;NoDefault[3]&gt;
-#&gt; 6:                     extra_double ParamDbl     0     1        &lt;NoDefault[3]&gt;
-#&gt; 7:                     factor_param ParamFct    NA    NA  a,b,c &lt;NoDefault[3]&gt;
-#&gt; 8: factor_param_with_implicit_trafo ParamFct    NA    NA  a,b,c &lt;NoDefault[3]&gt;
+#&gt;                                  id    class lower upper nlevels        default
+#&gt; 1:                unbounded_integer ParamInt  -Inf   Inf     Inf &lt;NoDefault[3]&gt;
+#&gt; 2:                   bounded_double ParamDbl     0    10     Inf &lt;NoDefault[3]&gt;
+#&gt; 3:             half_bounded_integer ParamDbl     1   Inf     Inf &lt;NoDefault[3]&gt;
+#&gt; 4:              half_bounded_double ParamDbl  -Inf     1     Inf &lt;NoDefault[3]&gt;
+#&gt; 5:                double_with_trafo ParamDbl    -1     1     Inf &lt;NoDefault[3]&gt;
+#&gt; 6:                     extra_double ParamDbl     0     1     Inf &lt;NoDefault[3]&gt;
+#&gt; 7:                     factor_param ParamFct    NA    NA       3 &lt;NoDefault[3]&gt;
+#&gt; 8: factor_param_with_implicit_trafo ParamFct    NA    NA       3 &lt;NoDefault[3]&gt;
 #&gt;    value
 #&gt; 1:      
 #&gt; 2:      
@@ -396,8 +396,8 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class='co'># The ParamSet has bounds log(1) .. log(100):</span>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;    id    class lower   upper levels        default value
-#&gt; 1:  x ParamDbl     0 4.60517        &lt;NoDefault[3]&gt;      
+#&gt;    id    class lower   upper nlevels        default value
+#&gt; 1:  x ParamDbl     0 4.60517     Inf &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='co'># When generating a equidistant grid, it is equidistant within log values</span>
 <span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span>, <span class='fl'>3</span><span class='op'>)</span>
@@ -428,8 +428,8 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class='va'>params</span> <span class='op'>=</span> <span class='fu'><a href='ps.html'>ps</a></span><span class='op'>(</span>x <span class='op'>=</span> <span class='fu'>p_int</span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>10</span>, logscale <span class='op'>=</span> <span class='cn'>TRUE</span><span class='op'>)</span><span class='op'>)</span>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
-#&gt;    id    class      lower    upper levels        default value
-#&gt; 1:  x ParamDbl -0.6931472 2.397895        &lt;NoDefault[3]&gt;      
+#&gt;    id    class      lower    upper nlevels        default value
+#&gt; 1:  x ParamDbl -0.6931472 2.397895     Inf &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span>, <span class='fl'>4</span><span class='op'>)</span>
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>)</span>
