@@ -1,6 +1,10 @@
 # paradox 0.7.0-9000
 
 * `Sampler1D` also accept `ParamSet`s with one `Param` now.
+* `to_tune`, `p_dbl`, and `p_int` accept `logscale` argument for tuning on a
+  logarithmic scale.
+* `to_tune` can be called with only `lower` or only `upper` now and will infer
+  the other bound if possible.
 
 # paradox 0.7.0
 

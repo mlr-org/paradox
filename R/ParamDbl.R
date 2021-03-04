@@ -14,6 +14,7 @@
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags
+#' @template param_tolerance
 #'
 #' @family Params
 #' @include Param.R
@@ -35,9 +36,6 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
 
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
-    #' @param tolerance (`numeric(1)`)\cr
-    #'   Initializes the `$tolerance` field that determines the
-    #    tolerance of the `lower` and `upper` values.
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps)) {
       self$lower = assert_number(lower)
       self$upper = assert_number(upper)

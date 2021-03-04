@@ -18,9 +18,16 @@
 #'
 #' * **`to_tune()`**: Indicates a parameter should be tuned over its entire range. Only applies to finite parameters
 #'   (i.e. discrete or bounded numeric parameters)
-#' * **`to_tune(lower, upper)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning
-#'   `lower` to `upper`. Depending on the parameter, integer (if it is a [`ParamInt`]) or real values (if it is a
-#'   [`ParamDbl`]) are used.
+#' * **`to_tune(lower, upper, logscale)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning
+#'   `lower` to `upper`, possibly on a log scale if `logscale` is se to `TRUE`. All parameters are optional, and the
+#'   parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
+#'   integer (if it is a [`ParamInt`]) or real values (if it is a [`ParamDbl`]) are used.\cr
+#'   `lower`, `upper`, and `logscale` can be given by position, except when only one of them is given, in which case
+#'   it must be named to disambiguate from the following cases.\cr
+#'   When `logscale` is `TRUE`, then a `trafo` is generated automatically that transforms to the given bounds. The
+#'   bounds are log()'d pre-trafo (see examples). See the `logscale` argument of [`Domain`] functions for more info.\cr
+#'   Note that "logscale" is *not* inherited from the [`Param`] that the `TuneToken` belongs to! Defining a parameter
+#'   with `p_dbl(... logscale = TRUE)` will *not* automatically give the `to_tune()` assigned to it log-scale.
 #' * **`to_tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any
 #'   named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 #'   corresponding `character` vector with distinct values using `as.character`).
@@ -42,6 +49,7 @@
 #'   ParamInt$new("int_unbounded"),
 #'   ParamDbl$new("dbl", 0, 10),
 #'   ParamDbl$new("dbl_unbounded"),
+#'   ParamDbl$new("dbl_bounded_below", lower = 1),
 #'   ParamFct$new("fct", c("a", "b", "c")),
 #'   ParamUty$new("uty1"),
 #'   ParamUty$new("uty2"),
@@ -58,10 +66,11 @@
 #'   # tune over 2..7:
 #'   int_unbounded = to_tune(2, 7),
 #'
-#'   # tune on a log scale in range 1..10:
-#'   # (you have to make sure exp(log(x)) does not overstep boundaries because
-#'   # of rounding errors; unfortunately paradox is your enemy here.)
-#'   dbl = to_tune(p_dbl(log(1 + 1e-10), log(10 - 1e-10), trafo = exp)),
+#'   # tune on a log scale in range 1..10;
+#'   # recognize upper bound of 10 automatically, but restrict lower bound to 1:
+#'   dbl = to_tune(lower = 1, logscale = TRUE),
+#'   ## This is equivalent to the following:
+#'   # dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),
 #'
 #'   # nothing keeps us from tuning a dbl over integer values
 #'   dbl_unbounded = to_tune(p_int(1, 10)),
@@ -106,48 +115,70 @@
 #'
 #' print(params$search_space())
 #'
+#' # Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:
+#' params = ParamSet$new(list(ParamDbl$new("x")))
+#'
+#' params$values$x = to_tune(1, 100, logscale = TRUE)
+#'
+#' print(params$search_space())
+#'
+#' grid = generate_design_grid(params$search_space(), 3)
+#'
+#' # The grid is equidistant within log-bounds pre-trafo:
+#' print(grid)
+#'
+#' # But the values are on a log scale scale with desired bounds after trafo:
+#' print(grid$transpose())
+#'
 #' @family ParamSet construction helpers
 #' @aliases TuneToken
 #' @export
 to_tune = function(...) {
   call = sys.call()
-  if (...length() > 2) {
-    stop("to_tune() must have zero, one or two arguments.")
+  if (...length() > 3) {
+    stop("to_tune() must have zero arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`).")
   }
-  if (...length() == 2) {
+  args = list(...)
+  if (...length() > 1 || any(names(args) %in% c("lower", "upper"))) {
     # Two arguments: tune over a range
     type = "RangeTuneToken"
-    content = (function(lower, upper) {
-      list(lower = assert_number(lower), upper = assert_number(upper))}
+    content = (function(lower = NULL, upper = NULL, logscale = FALSE) {
+      list(lower = assert_number(lower, null.ok = TRUE), upper = assert_number(upper, null.ok = TRUE), logscale = assert_flag(logscale))}
     )(...)
   } else if (...length() == 1) {
-    content = list(...)[[1]]
-    # one argument: tune over an object. that object can be something
-    # that can be converted to a ParamSet (ParamSet itself, Param, or Domain),
-    # otherwise it must be something that can be converted to a ParamFct Domain.
-    if (!test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
-      assert(
-        check_atomic_vector(content, names = "unnamed"),
-        check_atomic_vector(content, names = "unique"),
-        check_list(content, names = "unique"),
-        check_list(content, names = "unnamed")
-      )
-      content = p_fct(levels = content)
+    if (identical(names(args), "logscale")) {
+      assert_flag(args[[1]], .var.name = "logscale")
+      type = "FullTuneToken"
+      content = list(logscale = args[[1]])
     } else {
-      if (inherits(content, "Domain")) {
-        bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$is_bounded
+      content = args[[1]]
+      # one argument: tune over an object. that object can be something
+      # that can be converted to a ParamSet (ParamSet itself, Param, or Domain),
+      # otherwise it must be something that can be converted to a ParamFct Domain.
+      if (!test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
+        assert(
+          check_atomic_vector(content, names = "unnamed"),
+          check_atomic_vector(content, names = "unique"),
+          check_list(content, names = "unique"),
+          check_list(content, names = "unnamed")
+        )
+        content = p_fct(levels = content)
       } else {
-        bounded = content$is_bounded
+        if (inherits(content, "Domain")) {
+          bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$is_bounded
+        } else {
+          bounded = content$is_bounded
+        }
+        if (!bounded) {
+          stop("tuning range must be bounded.")
+        }
       }
-      if (!bounded) {
-        stop("tuning range must be bounded.")
-      }
+      type = "ObjectTuneToken"
     }
-    type = "ObjectTuneToken"
   } else {
     # Zero arguments: Tune over whole parameter
     type = "FullTuneToken"
-    content = list()
+    content = list(logscale = FALSE)
   }
 
   set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
@@ -155,12 +186,14 @@ to_tune = function(...) {
 
 #' @export
 print.FullTuneToken = function(x, ...) {
-  cat("Tuning over:\n<entire parameter range>\n")
+  catf("Tuning over:\n<entire parameter range%s>\n",
+    if (isTRUE(x$content$logscale)) " (log scale)" else "")
 }
 
 #' @export
 print.RangeTuneToken = function(x, ...) {
-  catf("Tuning over:\nrange [%s, %s]\n", x$content$lower, x$content$upper)
+  catf("Tuning over:\nrange [%s, %s]%s\n", x$content$lower %??% "...", x$content$upper %??% "...",
+    if (isTRUE(x$content$logscale)) " (log scale)" else "")
 }
 
 #' @export
@@ -183,23 +216,39 @@ tunetoken_to_ps.FullTuneToken = function(tt, param, id) {
   if (!param$is_bounded) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, id)
   }
-  pslike_to_ps(param, tt$call, param, id)
+  if (isTRUE(tt$content$logscale)) {
+    if (!param$is_number) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, id)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param, id)
+  } else {
+    pslike_to_ps(param, tt$call, param, id)
+  }
 }
 
 tunetoken_to_ps.RangeTuneToken = function(tt, param, id) {
   if (!param$is_number) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
-  invalidpoints = discard(tt$content, param$test)
+  invalidpoints = discard(tt$content, function(x) is.null(x) || param$test(x))
+  invalidpoints$logscale = NULL
   if (length(invalidpoints)) {
     stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
       tt$call, id, repr(invalidpoints), repr(param))
   }
 
-  if (!all(map_lgl(tt$content, param$test))) {
-    stopf("%s not compatible with param %s", tt$call, id)
+  lower = tt$content$lower %??% param$lower
+  upper = tt$content$upper %??% param$upper
+
+  if (!is.finite(lower) || !is.finite(upper)) stopf("%s range must be bounded, but is [%s, %s]", id, lower, upper)
+
+  if (isTRUE(tt$content$logscale)) {
+    # for logscale: create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about.
+    constructor = switch(param$class, ParamInt = p_int, ParamDbl = p_dbl,
+      stopf("%s: logscale for parameter %s of class %s not supported", tt$call, id, param$class))
+    content = constructor(lower = lower, upper = upper, logscale = tt$content$logscale)
+  } else {
+    # general approach: create Param object
+    content = get_r6_constructor(param$class)$new(id = id, lower = lower, upper = upper)
   }
-  content = get_r6_constructor(param$class)$new(id = id, lower = tt$content$lower, upper = tt$content$upper)
   pslike_to_ps(content, tt$call, param, id)
 }
 
