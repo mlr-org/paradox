@@ -361,10 +361,10 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param ... (ignored).
     #' @param hide_cols (`character()`)\cr
-    #'   Which fields should not be printed? Default is `"nlevels"`,
+    #'   Which fields should not be printed? Default is `"levels"`,
     #'   `"is_bounded"`, `"special_vals"`, `"tags"`, and `"storage_type"`.
     # printer, prints the set as a datatable, with the option to hide some cols
-    print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
+    print = function(..., hide_cols = c("levels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf(format(self))
       d = as.data.table(self)
       if (!nrow(d)) {
