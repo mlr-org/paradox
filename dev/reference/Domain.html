@@ -177,7 +177,8 @@ The <code>Domain</code> object's internals are subject to change and should not 
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
   depends <span class='op'>=</span> <span class='cn'>NULL</span>,
-  trafo <span class='op'>=</span> <span class='cn'>NULL</span>
+  trafo <span class='op'>=</span> <span class='cn'>NULL</span>,
+  logscale <span class='op'>=</span> <span class='cn'>FALSE</span>
 <span class='op'>)</span>
 
 <span class='fu'>p_dbl</span><span class='op'>(</span>
@@ -186,8 +187,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
   special_vals <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='op'>)</span>,
   default <span class='op'>=</span> <span class='va'>NO_DEF</span>,
   tags <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/character.html'>character</a></span><span class='op'>(</span><span class='op'>)</span>,
+  tolerance <span class='op'>=</span> <span class='fu'><a href='https://rdrr.io/r/base/MathFun.html'>sqrt</a></span><span class='op'>(</span><span class='va'>.Machine</span><span class='op'>$</span><span class='va'>double.eps</span><span class='op'>)</span>,
   depends <span class='op'>=</span> <span class='cn'>NULL</span>,
-  trafo <span class='op'>=</span> <span class='cn'>NULL</span>
+  trafo <span class='op'>=</span> <span class='cn'>NULL</span>,
+  logscale <span class='op'>=</span> <span class='cn'>FALSE</span>
 <span class='op'>)</span>
 
 <span class='fu'>p_uty</span><span class='op'>(</span>
@@ -270,7 +273,38 @@ dependencies according to <code>ParamSet$add_dep(on = "&lt;Param&gt;", cond = Co
       <th>trafo</th>
       <td><p>(<code>function</code>)<br />
 Single argument function performing the transformation of a parameter. When the <code>Domain</code> is used to construct a
-<code><a href='ParamSet.html'>ParamSet</a></code>, this transformation will be applied to the corresponding parameter as part of the <code>$trafo</code> function.</p></td>
+<code><a href='ParamSet.html'>ParamSet</a></code>, this transformation will be applied to the corresponding parameter as part of the <code>$trafo</code> function.<br />
+Note that the trafo is <em>not</em> inherited by <code><a href='to_tune.html'>TuneToken</a></code>s! Defining a parameter
+with e.g. <code>p_dbl(..., trafo = ...)</code> will <em>not</em> automatically give the <code><a href='to_tune.html'>to_tune()</a></code> assigned to it a transformation.
+<code>trafo</code> only makes sense for <code><a href='ParamSet.html'>ParamSet</a></code>s that get used as search spaces for optimization or tuning, it is not useful when
+defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.</p></td>
+    </tr>
+    <tr>
+      <th>logscale</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/logical.html'>logical(1)</a></code>)<br />
+Put numeric domains on a log scale. Default <code>FALSE</code>. Log-scale <code>Domain</code>s represent parameter ranges where lower and upper bounds
+are logarithmized, and where a <code>trafo</code> is added that exponentiates sampled values to the original scale. This is
+<em>not</em> the same as setting <code>trafo = exp</code>, because <code>logscale = TRUE</code> will handle parameter bounds internally:
+a <code>p_dbl(1, 10, logscale = TRUE)</code> results in a <code><a href='ParamDbl.html'>ParamDbl</a></code> that has lower bound <code>0</code>, upper bound <code><a href='https://rdrr.io/r/base/Log.html'>log(10)</a></code>,
+and uses <code>exp</code> transformation on these. Therefore, the given bounds represent the bounds <em>after</em> the transformation.
+(see examples).<br />
+<code>p_int()</code> with <code>logscale = TRUE</code> results in a <code><a href='ParamDbl.html'>ParamDbl</a></code>, not a <code><a href='ParamInt.html'>ParamInt</a></code>, but with bounds <code><a href='https://rdrr.io/r/base/Log.html'>log(max(lower, 0.5))</a></code> ...
+<code><a href='https://rdrr.io/r/base/Log.html'>log(upper + 1)</a></code> and a trafo similar to "<code><a href='https://rdrr.io/r/base/integer.html'>as.integer(exp(x))</a></code>" (with additional bounds correction). The lower bound
+is lifted to <code>0.5</code> if <code>lower</code> 0 to handle the <code>lower == 0</code> case. The upper bound is increased to <code><a href='https://rdrr.io/r/base/Log.html'>log(upper + 1)</a></code>
+because the trafo would otherwise almost never generate a value of <code>upper</code>.<br />
+When <code>logscale</code> is <code>TRUE</code>, then upper bounds may be infinite, but lower bounds should be greater than 0 for <code>p_dbl()</code>
+or greater or equal 0 for <code>p_int()</code>.<br />
+Note that "logscale" is <em>not</em> inherited by <code><a href='to_tune.html'>TuneToken</a></code>s! Defining a parameter
+with <code>p_dbl(... logscale = TRUE)</code> will <em>not</em> automatically give the <code><a href='to_tune.html'>to_tune()</a></code> assigned to it log-scale. <code>logscale</code>
+only makes sense for <code><a href='ParamSet.html'>ParamSet</a></code>s that get used as search spaces for optimization or tuning, it is not useful when
+defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.<br />
+<code>logscale</code> happens on a natural (<code>e == 2.718282...</code>) basis. Be aware that using a different base (<code><a href='https://rdrr.io/r/base/Log.html'>log10()</a></code>/<code>10^</code>,
+<code><a href='https://rdrr.io/r/base/Log.html'>log2()</a></code>/<code>2^</code>) is completely equivalent and does not change the values being sampled after transformation.</p></td>
+    </tr>
+    <tr>
+      <th>tolerance</th>
+      <td><p>(<code><a href='https://rdrr.io/r/base/numeric.html'>numeric(1)</a></code>)<br />
+Initializes the <code>$tolerance</code> field that determines the</p></td>
     </tr>
     <tr>
       <th>custom_check</th>
@@ -355,7 +389,79 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 #&gt; 
 #&gt; $factor_param_with_implicit_trafo
 #&gt; list()
-#&gt; </div></pre>
+#&gt; </div><div class='input'>
+<span class='co'># logscale:</span>
+<span class='va'>params</span> <span class='op'>=</span> <span class='fu'><a href='ps.html'>ps</a></span><span class='op'>(</span>x <span class='op'>=</span> <span class='fu'>p_dbl</span><span class='op'>(</span><span class='fl'>1</span>, <span class='fl'>100</span>, logscale <span class='op'>=</span> <span class='cn'>TRUE</span><span class='op'>)</span><span class='op'>)</span>
+
+<span class='co'># The ParamSet has bounds log(1) .. log(100):</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;ParamSet&gt;
+#&gt;    id    class lower   upper levels        default value
+#&gt; 1:  x ParamDbl     0 4.60517        &lt;NoDefault[3]&gt;      
+#&gt; Trafo is set.</div><div class='input'>
+<span class='co'># When generating a equidistant grid, it is equidistant within log values</span>
+<span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span>, <span class='fl'>3</span><span class='op'>)</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;Design&gt; with 3 rows:
+#&gt;           x
+#&gt; 1: 0.000000
+#&gt; 2: 2.302585
+#&gt; 3: 4.605170</div><div class='input'>
+<span class='co'># But the values are on a log scale with desired bounds after trafo</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>$</span><span class='fu'>transpose</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; [[1]]
+#&gt; [[1]]$x
+#&gt; [1] 1
+#&gt; 
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]]$x
+#&gt; [1] 10
+#&gt; 
+#&gt; 
+#&gt; [[3]]
+#&gt; [[3]]$x
+#&gt; [1] 100
+#&gt; 
+#&gt; </div><div class='input'>
+<span class='co'># Integer parameters with logscale are `ParamDbl`s pre-trafo</span>
+<span class='va'>params</span> <span class='op'>=</span> <span class='fu'><a href='ps.html'>ps</a></span><span class='op'>(</span>x <span class='op'>=</span> <span class='fu'>p_int</span><span class='op'>(</span><span class='fl'>0</span>, <span class='fl'>10</span>, logscale <span class='op'>=</span> <span class='cn'>TRUE</span><span class='op'>)</span><span class='op'>)</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;ParamSet&gt;
+#&gt;    id    class      lower    upper levels        default value
+#&gt; 1:  x ParamDbl -0.6931472 2.397895        &lt;NoDefault[3]&gt;      
+#&gt; Trafo is set.</div><div class='input'>
+<span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span>, <span class='fl'>4</span><span class='op'>)</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;Design&gt; with 4 rows:
+#&gt;             x
+#&gt; 1: -0.6931472
+#&gt; 2:  0.3372003
+#&gt; 3:  1.3675478
+#&gt; 4:  2.3978953</div><div class='input'>
+<span class='co'># ... but get transformed to integers.</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>$</span><span class='fu'>transpose</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; [[1]]
+#&gt; [[1]]$x
+#&gt; [1] 0
+#&gt; 
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]]$x
+#&gt; [1] 1
+#&gt; 
+#&gt; 
+#&gt; [[3]]
+#&gt; [[3]]$x
+#&gt; [1] 3
+#&gt; 
+#&gt; 
+#&gt; [[4]]
+#&gt; [[4]]$x
+#&gt; [1] 10
+#&gt; 
+#&gt; </div><div class='input'>
+</div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
     <nav id="toc" data-toggle="toc" class="sticky-top">

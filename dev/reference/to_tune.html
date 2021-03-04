@@ -60,9 +60,16 @@ A TuneToken represents the range over which the parameter whose $values slot it 
 can be constructed via the to_tune() function in one of several ways:
 to_tune(): Indicates a parameter should be tuned over its entire range. Only applies to finite parameters
 (i.e. discrete or bounded numeric parameters)
-to_tune(lower, upper): Indicates a numeric parameter should be tuned in the inclusive interval spanning
-lower to upper. Depending on the parameter, integer (if it is a ParamInt) or real values (if it is a
-ParamDbl) are used.
+to_tune(lower, upper, logscale): Indicates a numeric parameter should be tuned in the inclusive interval spanning
+lower to upper, possibly on a log scale if logscale is se to TRUE. All parameters are optional, and the
+parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
+integer (if it is a ParamInt) or real values (if it is a ParamDbl) are used.
+lower, upper, and logscale can be given by position, except when only one of them is given, in which case
+it must be named to disambiguate from the following cases.
+When logscale is TRUE, then a trafo is generated automatically that transforms to the given bounds. The
+bounds are log()'d pre-trafo (see examples). See the logscale argument of Domain functions for more info.
+Note that &quot;logscale&quot; is not inherited from the Param that the TuneToken belongs to! Defining a parameter
+with p_dbl(... logscale = TRUE) will not automatically give the to_tune() assigned to it log-scale.
 to_tune(levels): Indicates a parameter should be tuned through the given discrete values. levels can be any
 named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 corresponding character vector with distinct values using as.character).
@@ -187,9 +194,16 @@ is given, but it is also possible to access the <code>$search_space()</code> met
 can be constructed via the <code>to_tune()</code> function in one of several ways:</p><ul>
 <li><p><strong><code>to_tune()</code></strong>: Indicates a parameter should be tuned over its entire range. Only applies to finite parameters
 (i.e. discrete or bounded numeric parameters)</p></li>
-<li><p><strong><code>to_tune(lower, upper)</code></strong>: Indicates a numeric parameter should be tuned in the inclusive interval spanning
-<code>lower</code> to <code>upper</code>. Depending on the parameter, integer (if it is a <code><a href='ParamInt.html'>ParamInt</a></code>) or real values (if it is a
-<code><a href='ParamDbl.html'>ParamDbl</a></code>) are used.</p></li>
+<li><p><strong><code>to_tune(lower, upper, logscale)</code></strong>: Indicates a numeric parameter should be tuned in the inclusive interval spanning
+<code>lower</code> to <code>upper</code>, possibly on a log scale if <code>logscale</code> is se to <code>TRUE</code>. All parameters are optional, and the
+parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
+integer (if it is a <code><a href='ParamInt.html'>ParamInt</a></code>) or real values (if it is a <code><a href='ParamDbl.html'>ParamDbl</a></code>) are used.<br />
+<code>lower</code>, <code>upper</code>, and <code>logscale</code> can be given by position, except when only one of them is given, in which case
+it must be named to disambiguate from the following cases.<br />
+When <code>logscale</code> is <code>TRUE</code>, then a <code>trafo</code> is generated automatically that transforms to the given bounds. The
+bounds are log()'d pre-trafo (see examples). See the <code>logscale</code> argument of <code><a href='Domain.html'>Domain</a></code> functions for more info.<br />
+Note that "logscale" is <em>not</em> inherited from the <code><a href='Param.html'>Param</a></code> that the <code>TuneToken</code> belongs to! Defining a parameter
+with <code>p_dbl(... logscale = TRUE)</code> will <em>not</em> automatically give the <code>to_tune()</code> assigned to it log-scale.</p></li>
 <li><p><strong><code>to_tune(levels)</code></strong>: Indicates a parameter should be tuned through the given discrete values. <code>levels</code> can be any
 named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 corresponding <code>character</code> vector with distinct values using <code>as.character</code>).</p></li>
@@ -232,6 +246,7 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
   <span class='va'><a href='ParamInt.html'>ParamInt</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"int_unbounded"</span><span class='op'>)</span>,
   <span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"dbl"</span>, <span class='fl'>0</span>, <span class='fl'>10</span><span class='op'>)</span>,
   <span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"dbl_unbounded"</span><span class='op'>)</span>,
+  <span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"dbl_bounded_below"</span>, lower <span class='op'>=</span> <span class='fl'>1</span><span class='op'>)</span>,
   <span class='va'><a href='ParamFct.html'>ParamFct</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"fct"</span>, <span class='fu'><a href='https://rdrr.io/r/base/c.html'>c</a></span><span class='op'>(</span><span class='st'>"a"</span>, <span class='st'>"b"</span>, <span class='st'>"c"</span><span class='op'>)</span><span class='op'>)</span>,
   <span class='va'><a href='ParamUty.html'>ParamUty</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"uty1"</span><span class='op'>)</span>,
   <span class='va'><a href='ParamUty.html'>ParamUty</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"uty2"</span><span class='op'>)</span>,
@@ -248,10 +263,11 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
   <span class='co'># tune over 2..7:</span>
   int_unbounded <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span><span class='fl'>2</span>, <span class='fl'>7</span><span class='op'>)</span>,
 
-  <span class='co'># tune on a log scale in range 1..10:</span>
-  <span class='co'># (you have to make sure exp(log(x)) does not overstep boundaries because</span>
-  <span class='co'># of rounding errors; unfortunately paradox is your enemy here.)</span>
-  dbl <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span><span class='fu'><a href='Domain.html'>p_dbl</a></span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/Log.html'>log</a></span><span class='op'>(</span><span class='fl'>1</span> <span class='op'>+</span> <span class='fl'>1e-10</span><span class='op'>)</span>, <span class='fu'><a href='https://rdrr.io/r/base/Log.html'>log</a></span><span class='op'>(</span><span class='fl'>10</span> <span class='op'>-</span> <span class='fl'>1e-10</span><span class='op'>)</span>, trafo <span class='op'>=</span> <span class='va'>exp</span><span class='op'>)</span><span class='op'>)</span>,
+  <span class='co'># tune on a log scale in range 1..10;</span>
+  <span class='co'># recognize upper bound of 10 automatically, but restrict lower bound to 1:</span>
+  dbl <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span>lower <span class='op'>=</span> <span class='fl'>1</span>, logscale <span class='op'>=</span> <span class='cn'>TRUE</span><span class='op'>)</span>,
+  <span class='co'>## This is equivalent to the following:</span>
+  <span class='co'># dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),</span>
 
   <span class='co'># nothing keeps us from tuning a dbl over integer values</span>
   dbl_unbounded <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span><span class='fu'><a href='Domain.html'>p_int</a></span><span class='op'>(</span><span class='fl'>1</span>, <span class='fl'>10</span><span class='op'>)</span><span class='op'>)</span>,
@@ -291,6 +307,7 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt; Tuning over:
 #&gt; &lt;entire parameter range&gt;
 #&gt; 
+#&gt; 
 #&gt; $int_unbounded
 #&gt; Tuning over:
 #&gt; range [2, 7]
@@ -298,8 +315,8 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 #&gt; 
 #&gt; $dbl
 #&gt; Tuning over:
-#&gt; p_dbl(lower = 1.00000008269037e-10, upper = 2.30258509298405, 
-#&gt;     trafo = exp)
+#&gt; range [1, ...] (log scale)
+#&gt; 
 #&gt; 
 #&gt; $dbl_unbounded
 #&gt; Tuning over:
@@ -335,16 +352,16 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
 #&gt;                id    class lower     upper     levels        default value
-#&gt;  1:           int ParamInt 0e+00 10.000000            &lt;NoDefault[3]&gt;      
-#&gt;  2: int_unbounded ParamInt 2e+00  7.000000            &lt;NoDefault[3]&gt;      
-#&gt;  3:           dbl ParamDbl 1e-10  2.302585            &lt;NoDefault[3]&gt;      
-#&gt;  4: dbl_unbounded ParamInt 1e+00 10.000000            &lt;NoDefault[3]&gt;      
+#&gt;  1:           int ParamInt     0 10.000000            &lt;NoDefault[3]&gt;      
+#&gt;  2: int_unbounded ParamInt     2  7.000000            &lt;NoDefault[3]&gt;      
+#&gt;  3:           dbl ParamDbl     0  2.302585            &lt;NoDefault[3]&gt;      
+#&gt;  4: dbl_unbounded ParamInt     1 10.000000            &lt;NoDefault[3]&gt;      
 #&gt;  5:           fct ParamFct    NA        NA        a,b &lt;NoDefault[3]&gt;      
-#&gt;  6:          uty1 ParamInt 2e+00  8.000000            &lt;NoDefault[3]&gt;      
+#&gt;  6:          uty1 ParamInt     2  8.000000            &lt;NoDefault[3]&gt;      
 #&gt;  7:          uty2 ParamFct    NA        NA   1,10,100 &lt;NoDefault[3]&gt;      
 #&gt;  8:          uty3 ParamFct    NA        NA exp,square &lt;NoDefault[3]&gt;      
-#&gt;  9:          base ParamDbl 0e+00  1.000000            &lt;NoDefault[3]&gt;      
-#&gt; 10:           exp ParamInt 0e+00  3.000000            &lt;NoDefault[3]&gt;      
+#&gt;  9:          base ParamDbl     0  1.000000            &lt;NoDefault[3]&gt;      
+#&gt; 10:           exp ParamInt     0  3.000000            &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
 <span class='co'># Change `$values` directly and generate new `$search_space()` to play around</span>
 <span class='va'>params</span><span class='op'>$</span><span class='va'>values</span><span class='op'>$</span><span class='va'>uty3</span> <span class='op'>=</span> <span class='fl'>8</span>
@@ -353,16 +370,52 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
 </div><div class='output co'>#&gt; &lt;ParamSet&gt;
 #&gt;               id    class lower     upper levels        default value
-#&gt; 1:           int ParamInt 0e+00 10.000000        &lt;NoDefault[3]&gt;      
-#&gt; 2: int_unbounded ParamInt 2e+00  7.000000        &lt;NoDefault[3]&gt;      
-#&gt; 3:           dbl ParamDbl 1e-10  2.302585        &lt;NoDefault[3]&gt;      
-#&gt; 4: dbl_unbounded ParamInt 1e+00 10.000000        &lt;NoDefault[3]&gt;      
+#&gt; 1:           int ParamInt     0 10.000000        &lt;NoDefault[3]&gt;      
+#&gt; 2: int_unbounded ParamInt     2  7.000000        &lt;NoDefault[3]&gt;      
+#&gt; 3:           dbl ParamDbl     0  2.302585        &lt;NoDefault[3]&gt;      
+#&gt; 4: dbl_unbounded ParamInt     1 10.000000        &lt;NoDefault[3]&gt;      
 #&gt; 5:           fct ParamFct    NA        NA    a,b &lt;NoDefault[3]&gt;      
-#&gt; 6:          uty1 ParamInt 2e+00  8.000000        &lt;NoDefault[3]&gt;      
+#&gt; 6:          uty1 ParamInt     2  8.000000        &lt;NoDefault[3]&gt;      
 #&gt; 7:          uty2 ParamFct    NA        NA  2,4,8 &lt;NoDefault[3]&gt;      
-#&gt; 8:          base ParamDbl 0e+00  1.000000        &lt;NoDefault[3]&gt;      
-#&gt; 9:           exp ParamInt 0e+00  3.000000        &lt;NoDefault[3]&gt;      
+#&gt; 8:          base ParamDbl     0  1.000000        &lt;NoDefault[3]&gt;      
+#&gt; 9:           exp ParamInt     0  3.000000        &lt;NoDefault[3]&gt;      
 #&gt; Trafo is set.</div><div class='input'>
+<span class='co'># Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:</span>
+<span class='va'>params</span> <span class='op'>=</span> <span class='va'><a href='ParamSet.html'>ParamSet</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='fu'><a href='https://rdrr.io/r/base/list.html'>list</a></span><span class='op'>(</span><span class='va'><a href='ParamDbl.html'>ParamDbl</a></span><span class='op'>$</span><span class='fu'>new</span><span class='op'>(</span><span class='st'>"x"</span><span class='op'>)</span><span class='op'>)</span><span class='op'>)</span>
+
+<span class='va'>params</span><span class='op'>$</span><span class='va'>values</span><span class='op'>$</span><span class='va'>x</span> <span class='op'>=</span> <span class='fu'>to_tune</span><span class='op'>(</span><span class='fl'>1</span>, <span class='fl'>100</span>, logscale <span class='op'>=</span> <span class='cn'>TRUE</span><span class='op'>)</span>
+
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;ParamSet&gt;
+#&gt;    id    class lower   upper levels        default value
+#&gt; 1:  x ParamDbl     0 4.60517        &lt;NoDefault[3]&gt;      
+#&gt; Trafo is set.</div><div class='input'>
+<span class='va'>grid</span> <span class='op'>=</span> <span class='fu'><a href='generate_design_grid.html'>generate_design_grid</a></span><span class='op'>(</span><span class='va'>params</span><span class='op'>$</span><span class='fu'>search_space</span><span class='op'>(</span><span class='op'>)</span>, <span class='fl'>3</span><span class='op'>)</span>
+
+<span class='co'># The grid is equidistant within log-bounds pre-trafo:</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; &lt;Design&gt; with 3 rows:
+#&gt;           x
+#&gt; 1: 0.000000
+#&gt; 2: 2.302585
+#&gt; 3: 4.605170</div><div class='input'>
+<span class='co'># But the values are on a log scale scale with desired bounds after trafo:</span>
+<span class='fu'><a href='https://rdrr.io/r/base/print.html'>print</a></span><span class='op'>(</span><span class='va'>grid</span><span class='op'>$</span><span class='fu'>transpose</span><span class='op'>(</span><span class='op'>)</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; [[1]]
+#&gt; [[1]]$x
+#&gt; [1] 1
+#&gt; 
+#&gt; 
+#&gt; [[2]]
+#&gt; [[2]]$x
+#&gt; [1] 10
+#&gt; 
+#&gt; 
+#&gt; [[3]]
+#&gt; [[3]]$x
+#&gt; [1] 100
+#&gt; 
+#&gt; </div><div class='input'>
 </div></pre>
   </div>
   <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
