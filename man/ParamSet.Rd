@@ -498,7 +498,7 @@ Printer.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$print(
   ...,
-  hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")
+  hide_cols = c("levels", "is_bounded", "special_vals", "tags", "storage_type")
 )}\if{html}{\out{</div>}}
 }
 
@@ -508,7 +508,7 @@ Printer.
 \item{\code{...}}{(ignored).}
 
 \item{\code{hide_cols}}{(\code{character()})\cr
-Which fields should not be printed? Default is \code{"nlevels"},
+Which fields should not be printed? Default is \code{"levels"},
 \code{"is_bounded"}, \code{"special_vals"}, \code{"tags"}, and \code{"storage_type"}.}
 }
 \if{html}{\out{</div>}}
