@@ -107,3 +107,9 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
   expect_equal(s1$param_set, ParamSet$new(list(th_param_fct())))
   expect_equal(s2$param_set, ParamSet$new(list(th_param_dbl())))
 })
+
+test_that("Sampler1DRfun with 0 samples (#338)", {
+  s = Sampler1DRfun$new(param = ParamDbl$new("x", 0, 10), rfun = function(n) numeric(0))
+  x = s$sample(0)
+  expect_data_table(x$data, nrows = 0L, ncols = 1L)
+})
