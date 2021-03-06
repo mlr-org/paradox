@@ -1,4 +1,4 @@
-# paradox 0.7.0-9000
+# paradox 0.7.1
 
 * `Sampler1D` also accept `ParamSet`s with one `Param` now (#335).
 * Fixed sampling zero rows in `Sampler1DRfun` (#338).
