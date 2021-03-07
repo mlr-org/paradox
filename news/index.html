@@ -80,7 +80,7 @@
 
       <div class="navbar-brand-container">
         <a href="https://mlr-org.com"><img src="https://raw.githubusercontent.com/mlr-org/mlr3/master/man/figures/logo.png" id="hexlogo" alt="mlr-org" /></a>
-        <a class="navbar-brand" href="../index.html">paradox <small>v0.7.0</small></a>
+        <a class="navbar-brand" href="../index.html">paradox <small>v0.7.1</small></a>
       </div>
     </div>
     <div id="navbar" class="navbar-collapse collapse">
@@ -143,6 +143,20 @@
       <small>Source: <a href='https://github.com/mlr-org/paradox/blob/master/NEWS.md'><code>NEWS.md</code></a></small>
     </div>
 
+    <div id="paradox-071" class="section level1">
+<h1 class="page-header" data-toc-text="0.7.1">
+<a href="#paradox-071" class="anchor"></a>paradox 0.7.1<small> 2021-03-07 </small>
+</h1>
+<ul>
+<li>
+<code>Sampler1D</code> also accept <code>ParamSet</code>s with one <code>Param</code> now (<a href='https://github.com/mlr-org/paradox/issues/335'>#335</a>).</li>
+<li>Fixed sampling zero rows in <code>Sampler1DRfun</code> (<a href='https://github.com/mlr-org/paradox/issues/338'>#338</a>).</li>
+<li>
+<code><a href="../reference/to_tune.html">to_tune()</a></code>, <code><a href="../reference/Domain.html">p_dbl()</a></code>, and <code><a href="../reference/Domain.html">p_int()</a></code> accept <code>logscale</code> argument for tuning on a logarithmic scale.</li>
+<li>
+<code>to_tune</code> can be called with only <code>lower</code> or only <code>upper</code> now and will infer the other bound if possible.</li>
+</ul>
+</div>
     <div id="paradox-070" class="section level1">
 <h1 class="page-header" data-toc-text="0.7.0">
 <a href="#paradox-070" class="anchor"></a>paradox 0.7.0<small> 2021-01-23 </small>
