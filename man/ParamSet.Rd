@@ -327,13 +327,16 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_dependencies = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xs}}{(named \code{list()}).}
+
+\item{\code{check_dependencies}}{(\code{logical(1)})\cr
+Determines if dependencies are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -350,13 +353,16 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_dependencies = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xs}}{(named \code{list()}).}
+
+\item{\code{check_dependencies}}{(\code{logical(1)})\cr
+Determines if dependencies are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -373,7 +379,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, .var.name = vname(xs))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, .var.name = vname(xs), check_dependencies = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -384,6 +390,9 @@ Params for which dependencies are not satisfied should not be part of \code{x}.
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+
+\item{\code{check_dependencies}}{(\code{logical(1)})\cr
+Determines if dependencies are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -397,17 +406,20 @@ If successful \code{xs} invisibly, if not an error message.
 \subsection{Method \code{check_dt()}}{
 \pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
 where rows are points and columns are parameters. A point x is feasible,
-if it configures a subset of params, all individual param constraints are
+if it configures a subset of params, all individual param constraints ar
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_dependencies = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).}
+
+\item{\code{check_dependencies}}{(\code{logical(1)})\cr
+Determines if dependencies are checked.}
 }
 \if{html}{\out{</div>}}
 }

@@ -104,7 +104,7 @@ test_that("ParamSet$check", {
 
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
-  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "x_rep_2 = TRUE")
+  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE), check_dependencies = TRUE), fixed = "x_rep_2 = TRUE")
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
@@ -335,11 +335,11 @@ test_that("ParamSet$check_dt", {
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_2", "x_rep_1", CondEqual$new(TRUE))
   xdt = data.table(x_rep_1 = c(TRUE, TRUE), x_rep_2 = c(FALSE, TRUE))
-  expect_true(ps$check_dt(xdt))
+  expect_true(ps$check_dt(xdt), check_dependencies = TRUE)
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, FALSE))
-  expect_character(ps$check_dt(xdt), fixed = "x_rep_1 = TRUE")
+  expect_character(ps$check_dt(xdt, check_dependencies = TRUE), fixed = "x_rep_1 = TRUE")
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
-  expect_true(ps$check_dt(xdt))
+  expect_true(ps$check_dt(xdt), check_dependencies = TRUE)
 })
 
 test_that("rd_info.ParamSet", {

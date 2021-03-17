@@ -214,8 +214,11 @@ ParamSet = R6Class("ParamSet",
     #' Params for which dependencies are not satisfied should not be part of `x`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_dependencies (`logical(1)`)\cr
+    #' Determines if dependencies are checked.
     #' @return If successful `TRUE`, if not a string with the error message.
     check = function(xs, check_dependencies = FALSE) {
+      assert_flag(check_dependencies)
 
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -281,8 +284,10 @@ ParamSet = R6Class("ParamSet",
     #' Params for which dependencies are not satisfied should not be part of `x`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_dependencies (`logical(1)`)\cr
+    #' Determines if dependencies are checked.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs) makeTest(res = self$check(xs)),
+    test = function(xs, check_dependencies = FALSE) makeTest(res = self$check(xs, check_dependencies)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function. Takes a named list.
@@ -294,22 +299,28 @@ ParamSet = R6Class("ParamSet",
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
+    #' @param check_dependencies (`logical(1)`)\cr
+    #' Determines if dependencies are checked.
     #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL), # nolint
+    assert = function(xs, .var.name = vname(xs), check_dependencies = FALSE) {
+      makeAssertion(xs, self$check(xs, check_dependencies), .var.name, NULL) # nolint
+    },
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
     #' where rows are points and columns are parameters. A point x is feasible,
-    #' if it configures a subset of params, all individual param constraints are
+    #' if it configures a subset of params, all individual param constraints ar
     #' satisfied and all dependencies are satisfied. Params for which
     #' dependencies are not satisfied should be set to `NA` in `xdt`.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
+    #' @param check_dependencies (`logical(1)`)\cr
+    #' Determines if dependencies are checked.
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt) {
+    check_dt = function(xdt, check_dependencies = FALSE) {
       xss = map(transpose_list(xdt), discard, is.na)
       for (xs in xss) {
-        ok = self$check(xs)
+        ok = self$check(xs, check_dependencies)
         if (!isTRUE(ok)) {
           return(ok)
         }
