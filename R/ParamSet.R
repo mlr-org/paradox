@@ -140,6 +140,7 @@ ParamSet = R6Class("ParamSet",
       values = self$values
       params = self$params_unid
       ns = names(values)
+      deps = self$deps
 
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
@@ -147,10 +148,20 @@ ParamSet = R6Class("ParamSet",
         values = keep(values, is, "TuneToken")
       }
 
-      if(check_required) {
+      if (check_required) {
         required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
+        }
+      }
+
+      if (nrow(deps)) {
+        for (j in seq_row(deps)) {
+          p1id = deps$id[j]
+          p2id = deps$on[j]
+          cond = deps$cond[[j]]
+
+          if (p1id %in% ns && !cond$test(values[[p2id]])) values[p1id] = NULL
         }
       }
 
@@ -204,7 +215,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xs (named `list()`).
     #' @return If successful `TRUE`, if not a string with the error message.
-    check = function(xs) {
+    check = function(xs, check_dependencies = FALSE) {
 
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -228,32 +239,34 @@ ParamSet = R6Class("ParamSet",
       }
 
       # check dependencies
-      deps = self$deps
-      if (nrow(deps)) {
-        for (j in seq_row(deps)) {
+      if (check_dependencies) {
+        deps = self$deps
+        if (nrow(deps)) {
+          for (j in seq_row(deps)) {
 
-          p1id = deps$id[j]
-          p2id = deps$on[j]
-          if (inherits(xs[[p1id]], "TuneToken") || inherits(xs[[p2id]], "TuneToken")) {
-            next  # be lenient with dependencies when any parameter involved is a TuneToken
-          }
-          # we are ONLY ok if:
-          # - if param is there, then parent must be there, then cond must be true
-          # - if param is not there
-          cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-            (p1id %nin% ns)
-          if (isFALSE(ok)) {
-            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
-              p1id, cond$as_string(p2id))
-            val = xs[[p2id]]
-            if (is.null(val)) {
-              message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
-                  "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
-            } else {
-              message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+            p1id = deps$id[j]
+            p2id = deps$on[j]
+            if (inherits(xs[[p1id]], "TuneToken") || inherits(xs[[p2id]], "TuneToken")) {
+              next  # be lenient with dependencies when any parameter involved is a TuneToken
             }
-            return(message)
+            # we are ONLY ok if:
+            # - if param is there, then parent must be there, then cond must be true
+            # - if param is not there
+            cond = deps$cond[[j]]
+            ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+              (p1id %nin% ns)
+            if (isFALSE(ok)) {
+              message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
+                p1id, cond$as_string(p2id))
+              val = xs[[p2id]]
+              if (is.null(val)) {
+                message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
+                    "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
+              } else {
+                message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+              }
+              return(message)
+            }
           }
         }
       }
