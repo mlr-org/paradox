@@ -335,11 +335,11 @@ test_that("ParamSet$check_dt", {
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_2", "x_rep_1", CondEqual$new(TRUE))
   xdt = data.table(x_rep_1 = c(TRUE, TRUE), x_rep_2 = c(FALSE, TRUE))
-  expect_true(ps$check_dt(xdt), check_dependencies = TRUE)
+  expect_true(ps$check_dt(xdt, check_dependencies = TRUE))
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, FALSE))
   expect_character(ps$check_dt(xdt, check_dependencies = TRUE), fixed = "x_rep_1 = TRUE")
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
-  expect_true(ps$check_dt(xdt), check_dependencies = TRUE)
+  expect_true(ps$check_dt(xdt, check_dependencies = TRUE))
 })
 
 test_that("rd_info.ParamSet", {
