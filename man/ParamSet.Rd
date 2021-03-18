@@ -410,7 +410,7 @@ If successful \code{xs} invisibly, if not an error message.
 \subsection{Method \code{check_dt()}}{
 \pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
 where rows are points and columns are parameters. A point x is feasible,
-if it configures a subset of params, all individual param constraints ar
+if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Usage}{
