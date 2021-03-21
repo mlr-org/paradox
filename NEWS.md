@@ -1,3 +1,8 @@
+# paradox 0.7.1.9000
+
+- Same as previous version.
+
+
 # paradox 0.7.1
 
 * `Sampler1D` also accept `ParamSet`s with one `Param` now (#335).
