@@ -47,7 +47,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       nameless_sets = split_sets$`TRUE`
       named_sets = split_sets$`FALSE`
       assert_names(names2(named_sets), type = "strict")
-      assert_names(unlist(map(nameless_sets, function(x) names(x$params_unid))) %??% character(0), type = "unique")
       if (!ignore_ids) sets = unname(sets)  # when private$.sets is unnamed, then the set_ids are used.
       private$.sets = sets
       self$set_id = ""

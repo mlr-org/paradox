@@ -702,7 +702,9 @@ ParamSet = R6Class("ParamSet",
 
 #' @export
 as.data.table.ParamSet = function(x, ...) { # nolint
-  map_dtr(x$params, as.data.table)
+  punid = x$params_unid
+  id = NULL
+  map_dtr(punid, as.data.table)[, id := names(punid)][]
 }
 
 #' @export
