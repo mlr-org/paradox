@@ -160,9 +160,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
       d_all = imap(sets, function(s, id) {
         # copy all deps and rename ids to prefixed versions
-        dd = copy(s$deps)
-        ids_old = s$ids()
+        dd = s$deps
         if (id != "" && nrow(dd)) {
+          ids_old = s$ids()
           ids_new = sprintf("%s.%s", id, ids_old)
           dd$id = map_values(dd$id, ids_old, ids_new)
           dd$on = map_values(dd$on, ids_old, ids_new)
