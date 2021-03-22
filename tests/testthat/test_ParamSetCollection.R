@@ -282,3 +282,50 @@ test_that("set_id inference in values assignment works now", {
   expect_error(ParamSetCollection$new(list(pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })
+
+test_that("cloning and changing underlying params works", {
+  ps1 = th_paramset_dbl1()
+  ps1$set_id = "s1"
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+  ps3 = th_paramset_dbl1()
+  ps3$set_id = ""
+  psc1 = ParamSetCollection$new(list(ps1, ps2))
+  psc2 = ParamSetCollection$new(list(psc1, ps3))
+
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in any psc
+  expect_length(psc2$.__enclos_env__$private$.params, 0)
+
+  expect_equal(psc2$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2$params_unid[6], ps3$params[1])
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
+  expect_length(psc2$.__enclos_env__$private$.params, 0)
+
+  pe = th_paramset_dbl1()$clone(deep = TRUE)$params[[1]]
+  pe$id = "s1.th_param_dbl"
+  expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
+
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
+  expect_length(psc2$.__enclos_env__$private$.params, 6)  # but psc2 has .params now
+
+  ps1$params[[1]]$id = "test"
+  expect_equal(psc2$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
+
+  psc2_clone = psc2$clone(deep = TRUE)
+
+  psc1$remove_sets("s2")
+  expect_equal(psc2$params_unid, list(s1.th_param_dbl = ps1$params[[1]], th_param_dbl = ps3$params[[1]]))
+  expect_equal(psc2$params, list(s1.th_param_dbl = pe, th_param_dbl = ps3$params[[1]]))
+
+  ps1$add(ParamInt$new("x"))
+
+  expect_equal(psc2$params_unid, list(s1.th_param_dbl = ps1$params[[1]], s1.x = ps1$params[[2]], th_param_dbl = ps3$params[[1]]))
+  expect_equal(psc2$params, list(s1.th_param_dbl = pe, s1.x = ParamInt$new("s1.x"), th_param_dbl = ps3$params[[1]]))
+
+  expect_equal(psc2_clone$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2_clone$params_unid[6], ps3$params[1])
+  expect_equal(psc2_clone$params[1], list(s1.th_param_dbl = pe))
+  expect_equal(psc2_clone$params[6], ps3$params[1])
+
+})

@@ -125,7 +125,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       # as the original is NULL).
       changed = as.logical(imap(punid, function(x, n) !identical(private$.params_cloned[[n]], x)))
 
-      if (any(changed)) {
+      if (any(changed) || length(punid) != length(private$.params_cloned)) {  # if there was a strict subset operation we wouldn't notice it otherwise
         changed_names = truenames[changed]
         private$.params = c(private$.params[setdiff(names(private$.params), changed_names)],  # don't regenerate Params that were not changed.
           sapply(changed_names, function(u) {
