@@ -57,6 +57,12 @@ test_that("ParamSet basic stuff works", {
     expect_equal(x$s2.th_param_int, 99)
   }
 
+  # Generate cached values for comparisons
+  ps1$params
+  ps2$params
+  ps1clone$params
+  ps2clone$params
+
   # ps1 and ps2 should not be changed
   expect_equal(ps1, ps1clone)
   expect_equal(ps2, ps2clone)
@@ -164,6 +170,11 @@ test_that("values", {
   setindex(ps2clone$deps, NULL)
   setindex(ps1$deps, NULL)
   setindex(ps2$deps, NULL)
+
+  ps1$params
+  ps2$params
+  ps1clone$params
+  ps2clone$params
 
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)

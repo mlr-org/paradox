@@ -50,36 +50,55 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param params (`list()`)\cr
     #'   List of [Param], named with their respective ID.
-    #'   Parameters are cloned.
-    initialize = function(params = named_list()) {
+    #'   `params` are cloned on-demand, so the input does not need
+    #'   to be cloned.
+    #' @param ignore_ids (`logical(1)`)\cr
+    #'   Ignore `$id` slots of `params` and instead use the names instead.
+    #'   When this is `TRUE`, then `params` must be named.
+    #'   This can be used to create a `ParamSet` with certain [`Param`] `id`s
+    #'   without having to clone said [`Param`]s.
+    #'   Default `FALSE`.
+    initialize = function(params = named_list(), ignore_ids = FALSE) {
       assert_list(params, types = "Param")
-      ids = map_chr(params, "id")
-      assert_names(ids, type = "strict")
-      private$.params = set_names(map(params, function(p) p$clone(deep = TRUE)), ids)
+      if (ignore_ids) {
+        ids = names(params)
+      } else {
+        ids = map_chr(params, "id")
+        params = set_names(params, ids)
+      }
+      assert_names(ids, type = "strict", .var.name = "params")
+      private$.params_unid = params
       self$set_id = ""
     },
 
     #' @description
-    #' Adds a single param or another set to this set, all params are cloned.
+    #' Adds a single param or another set to this set, all params are cloned on-demand,
+    #' so the input does not need to be cloned.
     #'
     #' @param p ([Param] | [ParamSet]).
     add = function(p) {
 
       assert_multi_class(p, c("Param", "ParamSet"))
-      p = if (inherits(p, "Param")) { # level-up param to set
-        ParamSet$new(list(p))
+      if (inherits(p, "Param")) { # level-up param to set
+        pparams = structure(list(p), names = p$id)
+        ptrafo = NULL
+        pvalues = NULL
+        pdeps = NULL
       } else {
-        p$clone(deep = TRUE)
+        pparams = p$params_unid
+        ptrafo = p$trafo
+        pvalues = p$values
+        pdeps = p$deps
       }
-      pparams = p$params
-      nn = c(names(private$.params), names(pparams))
+
+      nn = c(names(private$.params_unid), names(pparams))
       assert_names(nn, type = "strict")
-      if (!is.null(p$trafo)) {
+      if (!is.null(ptrafo)) {
         stop("Cannot add a param set with a trafo.")
       }
-      private$.params = c(private$.params, pparams)
-      private$.values = c(private$.values, p$values)
-      private$.deps = rbind(private$.deps, p$deps)
+      private$.params_unid = c(private$.params_unid, pparams)
+      private$.values = c(private$.values, pvalues)
+      private$.deps = rbind(private$.deps, pdeps)
       invisible(self)
     },
 
@@ -173,7 +192,8 @@ ParamSet = R6Class("ParamSet",
               "\nIf you still want to do that, manipulate '$deps' yourself."), str_collapse(pids_not_there))
         }
       }
-      private$.params = private$.params[ids]
+      private$.params_unid = private$.params_unid[ids]
+      private$.params = private$.params[intersect(ids, names(private$.params))]
       # restrict to ids already in pvals
       ids2 = union(intersect(ids, names(private$.values)), setdiff(names(private$.values), param_ids))
       private$.values = private$.values[ids2]
@@ -393,14 +413,30 @@ ParamSet = R6Class("ParamSet",
       if (!missing(rhs) && !identical(rhs, private$.params)) {
         stop("$params is read-only.")
       }
+      # clone on-demand
+      punid = self$params_unid
+      truenames = names(punid)
+      uncloned = setdiff(truenames, names(private$.params))
+      if (length(uncloned)) {
+        private$.params = c(private$.params,
+          sapply(uncloned, function(u) {
+            p = punid[[u]]
+            if (p$id != u) {
+              p = p$clone(deep = TRUE)
+              p$id = u
+            }
+            p
+          }, simplify = FALSE)
+        )[truenames]
+      }
       private$.params
     },
     #' @template field_params_unid
     params_unid = function(rhs) {
-      if (!missing(rhs) && !identical(rhs, private$.params)) {
+      if (!missing(rhs) && !identical(rhs, private$.params_unid)) {
         stop("$params_unid is read-only.")
       }
-      self$params
+      private$.params_unid
     },
 
     #' @template field_deps
@@ -596,12 +632,13 @@ ParamSet = R6Class("ParamSet",
   private = list(
     .set_id = NULL,
     .trafo = NULL,
-    .params = NULL,
+    .params = named_list(),
+    .params_unid = NULL,
     .values = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
     get_member_with_idnames = function(member, astype) {
-      params = self$params
+      params = self$params_unid
       set_names(astype(map(params, member)), names(params))
     },
     get_tune_ps = function(values) {
@@ -613,7 +650,8 @@ ParamSet = R6Class("ParamSet",
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
-      parsnames = names(pars$params)
+      parsparams = pars$params_unid
+      parsnames = names(parsparams)
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
@@ -624,7 +662,7 @@ ParamSet = R6Class("ParamSet",
         }
         # remove infeasible values from condition
         cond = cond$clone(deep = TRUE)
-        cond$rhs = keep(cond$rhs, pars$params[[on]]$test)
+        cond$rhs = keep(cond$rhs, parsparams[[on]]$test)
         if (!length(cond$rhs)) {
           # no value is feasible, but there may be a trafo that fixes this
           # so we are forgiving here.
@@ -639,7 +677,7 @@ ParamSet = R6Class("ParamSet",
 
     deep_clone = function(name, value) {
       switch(name,
-        .params = map(value, function(x) x$clone(deep = TRUE)),
+        .params = named_list(),
         .deps = {
           value = copy(value)
           value$cond = lapply(value$cond, function(x) x$clone(deep = TRUE))

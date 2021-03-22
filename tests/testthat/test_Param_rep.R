@@ -21,12 +21,3 @@ test_that("rep params work", {
   }
 })
 
-
-test_that("rep params deep copies", {
-  p = ParamDbl$new(id = "x", lower = 1, upper = 3)
-  ps = p$rep(1L)
-  # lets change the first param
-  p$lower = 99
-  expect_equal(p$lower, 99)
-  expect_equal(ps$params[["x_rep_1"]]$lower, 1)
-})

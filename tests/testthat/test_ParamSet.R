@@ -145,33 +145,33 @@ test_that("ParamSet$print", {
   }
 })
 
-test_that("ParamSet does a deep copy of params on construction", {
+test_that("ParamSet does a delayed deep copy of params on construction", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
-  ps = ParamSet$new(list(p))
-  p$lower = 2
-  expect_equal(p$lower, 2)
-  expect_equal(ps$lower, c(x = 1))
-  expect_equal(ps$params[["x"]]$lower, 1)
+  ps = ParamSet$new(list(y = p), ignore_ids = TRUE)
+  expect_equal(ps$params_unid, list(y = p))
+  expect_equal(ps$params, list(y = ParamDbl$new("y", lower = 1, upper = 3)))
 })
 
-test_that("ParamSet does a deep copy of param on add", {
+test_that("ParamSet does a delayed deep copy of param on add", {
   p = ParamDbl$new("x", lower = 1, upper = 3)
-  ps = ParamSet$new(list())$add(p)
-  p$lower = 2
-  expect_equal(p$lower, 2)
-  expect_equal(ps$lower, c(x = 1))
-  expect_equal(ps$params[["x"]]$lower, 1)
+  ps = ParamSet$new(list())$add(ParamSet$new(list(y = p), ignore_ids = TRUE))
+  expect_equal(ps$params_unid, list(y = p))
+  expect_equal(ps$params, list(y = ParamDbl$new("y", lower = 1, upper = 3)))
+
 })
 
 test_that("ParamSet$clone can be deep", {
+
   p1 = ParamDbl$new("x", lower = 1, upper = 3)
   p2 = ParamFct$new("y", levels = c("a", "b"))
   ps1 = ParamSet$new(list(p1, p2))
   ps2 = ps1$clone(deep = TRUE)
-  pp = ps2$params[["x"]]
-  pp$lower = 9
-  expect_equal(ps2$lower, c(x = 9, y = NA))
-  expect_equal(ps1$lower, c(x = 1, y = NA))
+
+  p3 = ParamFct$new("z", levels = c("a", "b"))
+  ps2$add(p3)
+
+  expect_equal(ps2$params, list(x = p1, y = p2, z = p3))
+  expect_equal(ps1$params, list(x = p1, y = p2))
 
   # now lets add a dep, see if that gets clones properly
   ps1$add_dep("x", on = "y", CondEqual$new("a"))

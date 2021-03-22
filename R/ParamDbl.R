@@ -23,23 +23,12 @@
 #' ParamDbl$new("ratio", lower = 0, upper = 1, default = 0.5)
 ParamDbl = R6Class("ParamDbl", inherit = Param,
   public = list(
-    #' @template field_lower
-    lower = NULL,
-
-    #' @template field_upper
-    upper = NULL,
-
-    #' @field tolerance (`numeric(1)`)\cr
-    #' tolerance of values to accept beyond `$lower` and `$upper`.
-    #' Used both for relative and absolute tolerance.
-    tolerance = NULL,
-
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps)) {
-      self$lower = assert_number(lower)
-      self$upper = assert_number(upper)
-      self$tolerance = assert_number(tolerance, lower = 0)
+      private$.lower = assert_number(lower)
+      private$.upper = assert_number(upper)
+      private$.tolerance = assert_number(tolerance, lower = 0)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     },
@@ -52,35 +41,46 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     #' @param x (`numeric(1)`)\cr
     #'   Value to convert.
     convert = function(x) {
-      min(max(x, self$lower), self$upper)
+      min(max(x, private$.lower), private$.upper)
     }
   ),
 
   active = list(
+    #' @template field_lower
+    lower = function() private$.lower,
+    #' @template field_upper
+    upper = function() private$.upper,
+    #' @field tolerance (`numeric(1)`)\cr
+    #' tolerance of values to accept beyond `$lower` and `$upper`.
+    #' Used both for relative and absolute tolerance.
+    tolerance = function() private$.tolerance,
     #' @template field_levels
     levels = function() NULL,
     #' @template field_nlevels
     nlevels = function() Inf,
     #' @template field_is_bounded
-    is_bounded = function() is.finite(self$lower) && is.finite(self$upper),
+    is_bounded = function() is.finite(private$.lower) && is.finite(private$.upper),
     #' @template field_storage_type
     storage_type = function() "numeric"
   ),
 
   private = list(
     .check = function(x) {
-      # Accept numbers between lower and upper bound, with tolerance self$tolerance
+      # Accept numbers between lower and upper bound, with tolerance `$tolerance`
       # Tolerance is both absolute & relative tolerance (if either tolerance is
       # undercut the value is accepted:
-      # Values that go beyond the bound by less than `self$tolerance` are also
+      # Values that go beyond the bound by less than `tolerance` are also
       #   accepted (absolute tolerance)
-      # Values that go beyond the bound by less than `abs(<bound>) * self$tolerance`
+      # Values that go beyond the bound by less than `abs(<bound>) * tolerance`
       #   are also accepted (relative tolerance)
       checkNumber(x,
-        lower = self$lower - self$tolerance * max(1, abs(self$lower)),
-        upper = self$upper + self$tolerance * max(1, abs(self$upper))
+        lower = private$.lower - private$.tolerance * max(1, abs(private$.lower)),
+        upper = private$.upper + private$.tolerance * max(1, abs(private$.upper))
       )
     },
-    .qunif = function(x) x * self$upper - (x-1) * self$lower
+    .qunif = function(x) x * private$.upper - (x-1) * private$.lower,
+    .lower = NULL,
+    .upper = NULL,
+    .tolerance = NULL
   )
 )

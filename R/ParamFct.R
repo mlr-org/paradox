@@ -17,9 +17,6 @@
 ParamFct = R6Class("ParamFct", inherit = Param,
   public = list(
 
-    #' @template field_levels
-    levels = NULL,
-
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -27,18 +24,20 @@ ParamFct = R6Class("ParamFct", inherit = Param,
     #'   Set of allowed levels.
     initialize = function(id, levels, special_vals = list(), default = NO_DEF, tags = character()) {
       assert_character(levels, any.missing = FALSE, unique = TRUE)
-      self$levels = levels
+      private$.levels = levels
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
     }
   ),
 
   active = list(
+    #' @template field_levels
+    levels = function() private$.levels,
     #' @template field_lower
     lower = function() NA_real_,
     #' @template field_upper
     upper = function() NA_real_,
     #' @template field_nlevels
-    nlevels = function() length(self$levels),
+    nlevels = function() length(private$.levels),
     #' @template field_is_bounded
     is_bounded = function() TRUE,
     #' @template field_storage_type
@@ -46,11 +45,13 @@ ParamFct = R6Class("ParamFct", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) check_choice(x, choices = self$levels),
+    .check = function(x) check_choice(x, choices = private$.levels),
 
     .qunif = function(x) {
       z = floor(x * self$nlevels * (1 - 1e-16)) + 1 # make sure we dont map to upper+1
-      self$levels[z]
-    }
+      private$.levels[z]
+    },
+
+    .levels = NULL
   )
 )
