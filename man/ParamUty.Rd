@@ -21,17 +21,12 @@ Other Params:
 \section{Super class}{
 \code{\link[paradox:Param]{paradox::Param}} -> \code{ParamUty}
 }
-\section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{custom_check}}{(\verb{function()})\cr
-Custom function to check the feasibility.}
-}
-\if{html}{\out{</div>}}
-}
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
+\item{\code{custom_check}}{(\verb{function()})\cr
+Custom function to check the feasibility.}
+
 \item{\code{lower}}{(\code{numeric(1)})\cr
 Lower bound.
 Always \code{NA} for \link{ParamFct}, \link{ParamLgl} and \link{ParamUty}.}
@@ -84,6 +79,7 @@ Always \code{"list"} for \link{ParamUty}.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif">}\href{../../paradox/html/Param.html#method-qunif}{\code{paradox::Param$qunif()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep">}\href{../../paradox/html/Param.html#method-rep}{\code{paradox::Param$rep()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test">}\href{../../paradox/html/Param.html#method-test}{\code{paradox::Param$test()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="with_tags">}\href{../../paradox/html/Param.html#method-with_tags}{\code{paradox::Param$with_tags()}}\out{</span>}
 }
 \out{</details>}
 }

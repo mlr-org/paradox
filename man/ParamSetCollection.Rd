@@ -40,8 +40,10 @@ List of \link{Param}, named with their respective ID.}
 \item{\code{params_unid}}{(named \code{list()})\cr
 List of \link{Param}, named with their true ID. However,
 this field has the \link{Param}'s \verb{$id} value set to a
-potentially invalid value. This active binding should
-only be used internally.}
+potentially invalid value, and it is furthermore not
+cloned when the \code{ParamSet} is cloned. This active
+binding should be used internally, or to avoid unnecessary
+cloning when that becomes a bottleneck.}
 
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
@@ -91,14 +93,22 @@ When you set values, all previously set values will be unset / removed.}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, ignore_ids = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{sets}}{(\code{list()} of \link{ParamSet})\cr
-Parameter objects are cloned.}
+ParamSet objects are not cloned.}
+
+\item{\code{ignore_ids}}{(\code{logical(1)})\cr
+Ignore \verb{$set_id} slots of \code{sets} and instead use the names instead.
+When this is \code{TRUE}, then \code{sets} should be named when id prefixes are desired.
+This can be used to create a \code{ParamSetCollection} with changed \code{\link{ParamSet}} \code{set_id}s
+without having to clone said \code{\link{ParamSet}}s. However, when underlying \code{\link{ParamSet}}s'
+\verb{$set_id}s change, then this change is no longer reflected in the ParamSetCollection.
+Default \code{FALSE}.}
 }
 \if{html}{\out{</div>}}
 }

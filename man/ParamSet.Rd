@@ -65,8 +65,10 @@ List of \link{Param}, named with their respective ID.}
 \item{\code{params_unid}}{(named \code{list()})\cr
 List of \link{Param}, named with their true ID. However,
 this field has the \link{Param}'s \verb{$id} value set to a
-potentially invalid value. This active binding should
-only be used internally.}
+potentially invalid value, and it is furthermore not
+cloned when the \code{ParamSet} is cloned. This active
+binding should be used internally, or to avoid unnecessary
+cloning when that becomes a bottleneck.}
 
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
@@ -190,7 +192,7 @@ Has the set parameter dependencies?}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$new(params = named_list())}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$new(params = named_list(), ignore_ids = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -198,7 +200,15 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \describe{
 \item{\code{params}}{(\code{list()})\cr
 List of \link{Param}, named with their respective ID.
-Parameters are cloned.}
+\code{params} are cloned on-demand, so the input does not need
+to be cloned.}
+
+\item{\code{ignore_ids}}{(\code{logical(1)})\cr
+Ignore \verb{$id} slots of \code{params} and instead use the names instead.
+When this is \code{TRUE}, then \code{params} must be named.
+This can be used to create a \code{ParamSet} with certain \code{\link{Param}} \code{id}s
+without having to clone said \code{\link{Param}}s.
+Default \code{FALSE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -207,7 +217,8 @@ Parameters are cloned.}
 \if{html}{\out{<a id="method-add"></a>}}
 \if{latex}{\out{\hypertarget{method-add}{}}}
 \subsection{Method \code{add()}}{
-Adds a single param or another set to this set, all params are cloned.
+Adds a single param or another set to this set, all params are cloned on-demand,
+so the input does not need to be cloned.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$add(p)}\if{html}{\out{</div>}}
 }
