@@ -68,7 +68,7 @@ ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
     if (inherits(p, "Param")) p else p$param
   })
 
-  paramset = ParamSet$new(params, ignore_ids = TRUE)
+  paramset = ParamSet$new(params, ignore_ids = length(params) > 0)  # if length is 0 then no names are present
 
   # add Dependencies
   imap(args, function(p, name) {

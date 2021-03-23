@@ -88,6 +88,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # ignoring the other ParamSet's set_id in favor of names(private$.sets), so add the name here as well.
         names(set_addition) = p$set_id
       }
+      if (!is.null(private$.tags)) {
+        tagsaddition = p$tags
+        names(tagsaddition) = sprintf("%s.%s", p$set_id, names(tagsaddition))
+        private$.tags = c(private$.tags, tagsaddition)
+      }
       private$.sets = c(private$.sets, set_addition)
       invisible(self)
     },
@@ -99,6 +104,14 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     remove_sets = function(ids) {
       setnames = names(private$.sets) %??% map_chr(private$.sets, "set_id")
       assert_subset(ids, setnames)
+
+      if (!is.null(private$.tags)) {
+        droptagnames = pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
+          sprintf("%s.%s", n, names(s$tags))
+        })
+        private$.tags = private$.tags[!names(private$.tags) %in% droptagnames]
+      }
+
       private$.sets[setnames %in% ids] = NULL
       invisible(self)
     },
@@ -179,7 +192,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         if (is.null(names(sets))) {
           names(sets) = map(private$.sets, "set_id")
         }
-        private$.tags = unlist(map(sets, "tags"), recursive = FALSE)
+        private$.tags = unlist(map(sets, "tags"), recursive = FALSE) %??% named_list()
       }
       if (!missing(v)) {
         assert_list(v, any.missing = FALSE, types = "character")

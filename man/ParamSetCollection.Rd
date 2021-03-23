@@ -51,6 +51,10 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
 
+\item{\code{tags}}{(named \code{list()} of \code{character()})\cr
+Can be used to group and subset parameters.
+Named with parameter IDs.}
+
 \item{\code{values}}{(named \code{list()})\cr
 Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
@@ -108,6 +112,8 @@ When this is \code{TRUE}, then \code{sets} should be named when id prefixes are 
 This can be used to create a \code{ParamSetCollection} with changed \code{\link{ParamSet}} \code{set_id}s
 without having to clone said \code{\link{ParamSet}}s. However, when underlying \code{\link{ParamSet}}s'
 \verb{$set_id}s change, then this change is no longer reflected in the ParamSetCollection.
+Also note that the \verb{$values} will have undefined behavior when \code{sets} contains a
+single \code{\link{ParamSet}} multiple times (by reference).
 Default \code{FALSE}.}
 }
 \if{html}{\out{</div>}}

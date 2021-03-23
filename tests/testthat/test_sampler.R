@@ -112,7 +112,9 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
 
   s2_expected = ParamSet$new(list(th_param_dbl()))
   s2_expected$params
+  s2_expected$tags
   s2$param_set$params
+  s2$param_set$tags
   expect_equal(s2$param_set, s2_expected)
 })
 

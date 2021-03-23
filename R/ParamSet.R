@@ -100,7 +100,7 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params_unid = c(private$.params_unid, pparams)
       private$.values = c(private$.values, pvalues)
-      if (!is.null(private$.tags)) = private$.tags = c(private$.tags, ptags)
+      if (!is.null(private$.tags)) private$.tags = c(private$.tags, ptags)
       private$.deps = rbind(private$.deps, pdeps)
       invisible(self)
     },
@@ -680,7 +680,6 @@ ParamSet = R6Class("ParamSet",
           pars$add_dep(idname, on, cond)
         }
       })
-      pars$tags = self$tags[parsnames]
       pars
     },
 

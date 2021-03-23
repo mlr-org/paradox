@@ -22,8 +22,7 @@ test_that("ParamSet basic stuff works", {
   expect_equal(psc$length, ps1$length + ps2$length + ps3$length)
   # check that param internally in collection is constructed correctly
   p = psc$params[[2L]]
-  p = p$clone()
-  p$id = "th_param_int"
+  p = p$with_id("th_param_int")
   expect_equal(p, ps2$params[[1L]])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), ps3$ids()))
   expect_equal(psc$lower, my_c(ps1$lower, ps2$lower, ps3$lower))
@@ -62,6 +61,10 @@ test_that("ParamSet basic stuff works", {
   ps2$params
   ps1clone$params
   ps2clone$params
+  ps1$tags
+  ps2$tags
+  ps1clone$tags
+  ps2clone$tags
 
   # ps1 and ps2 should not be changed
   expect_equal(ps1, ps1clone)
@@ -175,6 +178,10 @@ test_that("values", {
   ps2$params
   ps1clone$params
   ps2clone$params
+  ps1$tags
+  ps2$tags
+  ps1clone$tags
+  ps2clone$tags
 
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
@@ -301,14 +308,13 @@ test_that("cloning and changing underlying params works", {
   expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
   expect_length(psc2$.__enclos_env__$private$.params, 0)
 
-  pe = th_paramset_dbl1()$clone(deep = TRUE)$params[[1]]
-  pe$id = "s1.th_param_dbl"
+  pe = th_paramset_dbl1()$params[[1]]$with_id("s1.th_param_dbl")
   expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
 
   expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
   expect_length(psc2$.__enclos_env__$private$.params, 6)  # but psc2 has .params now
 
-  ps1$params[[1]]$id = "test"
+  ps1$params[[1]]$.__enclos_env__$private$.id = "test"
   expect_equal(psc2$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
   expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
 

@@ -275,8 +275,7 @@ pslike_to_ps.Domain = function(pslike, call, param, id, usersupplied = TRUE) {
 }
 
 pslike_to_ps.Param = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = pslike$clone(deep = TRUE)
-  pslike$id = id
+  pslike = pslike$with_id(id)
   pslike = ParamSet$new(list(pslike))
   pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
 }
