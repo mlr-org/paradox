@@ -103,7 +103,7 @@ test_that("Tune ParamSet is created", {
   setindex(pars_tune$deps, NULL)
   pars_tune$values = list()
 
-  expect_equal(pars, pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
   pars_unbound = ParamSet$new(list(
     ParamDbl$new("x"),
@@ -115,7 +115,7 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars_unbound$search_space(list(x = to_tune(p_int(0, 10)), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
   setindex(pars_tune$deps, NULL)
-  expect_equal(pars, pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
   pars_unbound_2 = ParamSet$new(list(
     ParamInt$new("x"),
@@ -127,7 +127,7 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars_unbound_2$search_space(list(x = to_tune(0, 10), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
   setindex(pars_tune$deps, NULL)
-  expect_equal(pars, pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
   pars_tune = pars_unbound$search_space(list(x = to_tune(ParamInt$new("z", 0, 10)), y = to_tune(ps(z = p_dbl(0, 10, special_vals = list("x")))),
     fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))

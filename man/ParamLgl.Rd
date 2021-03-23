@@ -76,6 +76,8 @@ Always \code{"list"} for \link{ParamUty}.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif">}\href{../../paradox/html/Param.html#method-qunif}{\code{paradox::Param$qunif()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep">}\href{../../paradox/html/Param.html#method-rep}{\code{paradox::Param$rep()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test">}\href{../../paradox/html/Param.html#method-test}{\code{paradox::Param$test()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="with_id">}\href{../../paradox/html/Param.html#method-with_id}{\code{paradox::Param$with_id()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="with_tags">}\href{../../paradox/html/Param.html#method-with_tags}{\code{paradox::Param$with_tags()}}\out{</span>}
 }
 \out{</details>}
 }

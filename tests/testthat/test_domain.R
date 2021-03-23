@@ -23,32 +23,32 @@ test_that("p_xxx printers", {
 
 test_that("ps(p_xxx(...)) creates ParamSets", {
 
-  expect_equal(ps(x = p_int()), ParamSet$new(list(ParamInt$new("x"))))
-  expect_equal(ps(x = p_dbl()), ParamSet$new(list(ParamDbl$new("x"))))
-  expect_equal(ps(x = p_uty()), ParamSet$new(list(ParamUty$new("x"))))
-  expect_equal(ps(x = p_lgl()), ParamSet$new(list(ParamLgl$new("x"))))
-  expect_equal(ps(x = p_fct(letters)), ParamSet$new(list(ParamFct$new("x", letters))))
+  expect_equal_ps(ps(x = p_int()), ParamSet$new(list(ParamInt$new("x"))))
+  expect_equal_ps(ps(x = p_dbl()), ParamSet$new(list(ParamDbl$new("x"))))
+  expect_equal_ps(ps(x = p_uty()), ParamSet$new(list(ParamUty$new("x"))))
+  expect_equal_ps(ps(x = p_lgl()), ParamSet$new(list(ParamLgl$new("x"))))
+  expect_equal_ps(ps(x = p_fct(letters)), ParamSet$new(list(ParamFct$new("x", letters))))
 
-  expect_equal(ps(x = p_int(upper = 1, lower = 0)), ParamSet$new(list(ParamInt$new("x", 0, 1))))
-  expect_equal(ps(x = p_dbl(upper = 1, lower = 0)), ParamSet$new(list(ParamDbl$new("x", 0, 1))))
+  expect_equal_ps(ps(x = p_int(upper = 1, lower = 0)), ParamSet$new(list(ParamInt$new("x", 0, 1))))
+  expect_equal_ps(ps(x = p_dbl(upper = 1, lower = 0)), ParamSet$new(list(ParamDbl$new("x", 0, 1))))
 
-  expect_equal(ps(x = p_int(special_vals = list("x"), default = 0, tags = "required")),
+  expect_equal_ps(ps(x = p_int(special_vals = list("x"), default = 0, tags = "required")),
     ParamSet$new(list(ParamInt$new("x", special_vals = list("x"), default = 0, tags = "required"))))
-  expect_equal(ps(x = p_dbl(special_vals = list("x"), default = 0, tags = "required")),
+  expect_equal_ps(ps(x = p_dbl(special_vals = list("x"), default = 0, tags = "required")),
     ParamSet$new(list(ParamDbl$new("x", special_vals = list("x"), default = 0, tags = "required"))))
 
-  expect_equal(ps(x = p_lgl(special_vals = list("x"), default = TRUE, tags = "required")),
+  expect_equal_ps(ps(x = p_lgl(special_vals = list("x"), default = TRUE, tags = "required")),
     ParamSet$new(list(ParamLgl$new("x", special_vals = list("x"), default = TRUE, tags = "required"))))
 
-  expect_equal(ps(x = p_fct(letters, special_vals = list(0), default = 0, tags = "required")),
+  expect_equal_ps(ps(x = p_fct(letters, special_vals = list(0), default = 0, tags = "required")),
     ParamSet$new(list(ParamFct$new("x", letters, special_vals = list(0), default = 0, tags = "required"))))
 
-  expect_equal(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
+  expect_equal_ps(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
     ParamSet$new(list(ParamUty$new("x", default = 1, tags = "required", custom_check = check_int))))
 
   expect_error(ps(x = p_int(), x = p_int()), "unique names")
 
-  expect_equal(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
+  expect_equal_ps(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
     ps(x = ParamUty$new("y", default = 1, tags = "required", custom_check = check_int)))
 
   expect_error(p_int(id = 1), "unused argument.*id")
@@ -93,14 +93,14 @@ test_that("requirements in domains", {
   simpleps = ParamSet$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual$new(1))
 
   # basic equality expression
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = x == 1)
     ), simpleps)
 
   # quote() is accepted
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = quote(x == 1))
@@ -108,7 +108,7 @@ test_that("requirements in domains", {
 
   # using a expression variable
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = reqquote)
@@ -116,13 +116,13 @@ test_that("requirements in domains", {
 
   # the same for `p_fct`, which behaves slightly differently from the rest
   simpleps = ParamSet$new(list(ParamInt$new("x"), ParamFct$new("y", letters)))$add_dep("y", "x", CondEqual$new(1))
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(letters, depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(letters, depends = reqquote)
@@ -130,20 +130,20 @@ test_that("requirements in domains", {
 
   # the same for `p_fct` involving autotrafo, which behaves slightly differently from the rest
   simpleps = ps(x = p_int(), y = p_fct(list(a = 1, b = 2)))$add_dep("y", "x", CondEqual$new(1))
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(list(a = 1, b = 2), depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(list(a = 1, b = 2), depends = reqquote)
     ), simpleps)
 
   # `&&`
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = x == 1 && x == 3)
@@ -151,7 +151,7 @@ test_that("requirements in domains", {
     ParamSet$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual$new(1))$add_dep("y", "x", CondEqual$new(3)))
 
   # `&&`, `%in%`
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
@@ -161,7 +161,7 @@ test_that("requirements in domains", {
       add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b"))))
 
   # recursive dependencies
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3], depends = x == 2),
@@ -173,7 +173,7 @@ test_that("requirements in domains", {
   # `fct` with complex requirements
   complexps = ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
       add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b")))
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
@@ -181,7 +181,7 @@ test_that("requirements in domains", {
     ), complexps)
 
   # parentheses are ignored
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
@@ -189,7 +189,7 @@ test_that("requirements in domains", {
     ), complexps)
 
   # multiple dependencies on the same value
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),

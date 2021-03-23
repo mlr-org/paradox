@@ -104,8 +104,18 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
   s1 = Sampler1DCateg$new(p1)
   s2 = Sampler1DUnif$new(p2)
   s = SamplerJointIndep$new(list(s1, s2))
-  expect_equal(s1$param_set, ParamSet$new(list(th_param_fct())))
-  expect_equal(s2$param_set, ParamSet$new(list(th_param_dbl())))
+
+  s1_expected = ParamSet$new(list(th_param_fct()))
+  s1_expected$params
+  s1$param_set$params
+  expect_equal(s1$param_set, s1_expected)
+
+  s2_expected = ParamSet$new(list(th_param_dbl()))
+  s2_expected$params
+  s2_expected$tags
+  s2$param_set$params
+  s2$param_set$tags
+  expect_equal(s2$param_set, s2_expected)
 })
 
 test_that("Sampler1DRfun with 0 samples (#338)", {

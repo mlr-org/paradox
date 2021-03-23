@@ -25,8 +25,8 @@ Other Params:
 \code{\link{ParamUty}}
 }
 \concept{Params}
-\section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
+\section{Active bindings}{
+\if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
 \item{\code{id}}{(\code{character(1)})\cr
 Identifier of the object.}
@@ -39,12 +39,7 @@ Default value.}
 
 \item{\code{tags}}{(\code{character()})\cr
 Arbitrary tags to group and subset parameters.}
-}
-\if{html}{\out{</div>}}
-}
-\section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
+
 \item{\code{class}}{(\code{character(1)})\cr
 R6 class name. Read-only.}
 
@@ -67,6 +62,8 @@ Is there a default value?}
 \item \href{#method-assert}{\code{Param$assert()}}
 \item \href{#method-test}{\code{Param$test()}}
 \item \href{#method-rep}{\code{Param$rep()}}
+\item \href{#method-with_tags}{\code{Param$with_tags()}}
+\item \href{#method-with_id}{\code{Param$with_id()}}
 \item \href{#method-format}{\code{Param$format()}}
 \item \href{#method-print}{\code{Param$print()}}
 \item \href{#method-qunif}{\code{Param$qunif()}}
@@ -205,7 +202,49 @@ Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_re
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-\link{ParamSet}.
+\code{\link{ParamSet}}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-with_tags"></a>}}
+\if{latex}{\out{\hypertarget{method-with_tags}{}}}
+\subsection{Method \code{with_tags()}}{
+Creates a clone of this parameter with changed \verb{$tags} slot.
+If the tags do not change, no clone is created.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Param$with_tags(tags)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{tags}}{(\code{character}) tags of the clone.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{\link{Param}}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-with_id"></a>}}
+\if{latex}{\out{\hypertarget{method-with_id}{}}}
+\subsection{Method \code{with_id()}}{
+Creates a clone of this parameter with changed \verb{$id} slot.
+If the \code{id} does not change, no clone is created.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Param$with_id(id)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{id}}{(\code{character(1)}) id of the clone.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{\link{Param}}.
 }
 }
 \if{html}{\out{<hr>}}

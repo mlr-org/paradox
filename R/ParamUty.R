@@ -15,10 +15,6 @@
 #' ParamUty$new("untyped", default = Inf)
 ParamUty = R6Class("ParamUty", inherit = Param,
   public = list(
-    #' @field custom_check (`function()`)\cr
-    #' Custom function to check the feasibility.
-    custom_check = NULL,
-
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -31,15 +27,18 @@ ParamUty = R6Class("ParamUty", inherit = Param,
       # super class calls private$.check, so this must be set BEFORE
       # we initialize the super class
       if (is.null(custom_check)) {
-        self$custom_check = function(x) TRUE
+        private$.custom_check = function(x) TRUE
       } else {
-        self$custom_check = assert_function(custom_check, "x")
+        private$.custom_check = assert_function(custom_check, "x")
       }
       super$initialize(id, special_vals = list(), default = default, tags = tags)
     }
   ),
 
   active = list(
+    #' @field custom_check (`function()`)\cr
+    #' Custom function to check the feasibility.
+    custom_check = function() private$.custom_check,
     #' @template field_lower
     lower = function() NA_real_,
     #' @template field_upper
@@ -55,7 +54,8 @@ ParamUty = R6Class("ParamUty", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) self$custom_check(x),
-    .qunif = function(x) stop("undefined")
+    .check = function(x) private$.custom_check(x),
+    .qunif = function(x) stop("undefined"),
+    .custom_check = NULL
   )
 )

@@ -18,22 +18,6 @@
 #' @export
 Param = R6Class("Param",
   public = list(
-    #' @field id (`character(1)`)\cr
-    #' Identifier of the object.
-    id = NULL,
-
-    #' @field special_vals (`list()`)\cr
-    #' Arbitrary special values this parameter is allowed to take.
-    special_vals = NULL,
-
-    #' @field default (`any`)\cr
-    #' Default value.
-    default = NULL,
-
-    #' @field tags (`character()`)\cr
-    #' Arbitrary tags to group and subset parameters.
-    tags = NULL,
-
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -46,10 +30,10 @@ Param = R6Class("Param",
       assert_list(special_vals)
       assert_character(tags, any.missing = FALSE, unique = TRUE)
 
-      self$id = id
-      self$special_vals = special_vals
-      self$default = default
-      self$tags = tags
+      private$.id = id
+      private$.special_vals = special_vals
+      private$.default = default
+      private$.tags = tags
       if (!is_nodefault(default)) { # check that default is feasible
         self$assert(default)
       }
@@ -72,7 +56,7 @@ Param = R6Class("Param",
         }, error = function(e) paste("tune token invalid:", conditionMessage(e))))
       }
       ch = private$.check(x)
-      ifelse(isTRUE(ch) || has_element(self$special_vals, x), TRUE, ch)
+      ifelse(isTRUE(ch) || has_element(private$.special_vals, x), TRUE, ch)
     },
 
     #' @description
@@ -100,18 +84,42 @@ Param = R6Class("Param",
     #' Each parameter is named "\[id\]_rep_\[k\]" and gets the additional tag "\[id\]_rep".
     #'
     #' @param n (`integer(1)`).
-    #' @return [ParamSet].
+    #' @return [`ParamSet`].
     rep = function(n) {
       assert_count(n)
       pid = self$id
       join_id = paste0(pid, "_rep")
-      ps = replicate(n, self$clone(), simplify = FALSE)
-      for (i in 1:n) {
-        p = ps[[i]]
-        p$id = paste0(join_id, "_", i)
-        p$tags = c(p$tags, join_id)
-      }
-      ParamSet$new(ps)
+      taggedself = self$with_tags(c(self$param_tags, join_id))
+      repeatedself = structure(rep(list(taggedself), n), names = sprintf("%s_%s", join_id, seq_len(n)))
+      ParamSet$new(repeatedself, ignore_ids = TRUE)
+    },
+
+    #' @description
+    #' Creates a clone of this parameter with changed `$tags` slot.
+    #' If the tags do not change, no clone is created.
+    #' @param tags (`character`) tags of the clone.
+    #' @return [`Param`].
+    with_tags = function(tags) {
+      origtags = private$.tags
+      if (identical(tags, origtags)) return(self)
+      assert_character(tags, any.missing = FALSE, unique = TRUE)
+      on.exit({private$.tags = origtags})
+      private$.tags = tags
+      self$clone(deep = TRUE)
+    },
+
+    #' @description
+    #' Creates a clone of this parameter with changed `$id` slot.
+    #' If the `id` does not change, no clone is created.
+    #' @param id (`character(1)`) id of the clone.
+    #' @return [`Param`].
+    with_id = function(id) {
+      if (identical(id, self$id)) return(self)
+      assert_id(id)
+      origid = private$.id
+      on.exit({private$.id = origid})
+      private$.id = id
+      self$clone(deep = TRUE)
     },
 
     #' @description
@@ -159,6 +167,22 @@ Param = R6Class("Param",
   ),
 
   active = list(
+    #' @field id (`character(1)`)\cr
+    #' Identifier of the object.
+    id = function() private$.id,
+
+    #' @field special_vals (`list()`)\cr
+    #' Arbitrary special values this parameter is allowed to take.
+    special_vals = function() private$.special_vals,
+
+    #' @field default (`any`)\cr
+    #' Default value.
+    default = function() private$.default,
+
+    #' @field param_tags (`character()`)\cr
+    #' Arbitrary tags to group and subset parameters.
+    param_tags = function() private$.tags,
+
     #' @field class (`character(1)`)\cr
     #' R6 class name. Read-only.
     class = function() class(self)[[1L]],
@@ -173,12 +197,16 @@ Param = R6Class("Param",
 
     #' @field has_default (`logical(1)`)\cr
     #' Is there a default value?
-    has_default = function() !is_nodefault(self$default)
+    has_default = function() !is_nodefault(private$.default)
   ),
 
   private = list(
     .check = function(x) stop("abstract"),
-    .qunif = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$qunif
+    .qunif = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Param$qunif
+    .special_vals = NULL,
+    .default = NULL,
+    .tags = NULL,
+    .id = NULL
   )
 )
 
@@ -195,6 +223,6 @@ as.data.table.Param = function(x, ...) { # nolint
     special_vals = list(x$special_vals),
     default = list(x$default),
     storage_type = x$storage_type,
-    tags = list(x$tags)
+    tags = list(x$param_tags)
   )
 }

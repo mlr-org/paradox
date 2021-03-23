@@ -22,8 +22,7 @@ test_that("ParamSet basic stuff works", {
   expect_equal(psc$length, ps1$length + ps2$length + ps3$length)
   # check that param internally in collection is constructed correctly
   p = psc$params[[2L]]
-  p = p$clone()
-  p$id = "th_param_int"
+  p = p$with_id("th_param_int")
   expect_equal(p, ps2$params[[1L]])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), ps3$ids()))
   expect_equal(psc$lower, my_c(ps1$lower, ps2$lower, ps3$lower))
@@ -56,6 +55,16 @@ test_that("ParamSet basic stuff works", {
     expect_names(names(x), permutation.of = psc$ids())
     expect_equal(x$s2.th_param_int, 99)
   }
+
+  # Generate cached values for comparisons
+  ps1$params
+  ps2$params
+  ps1clone$params
+  ps2clone$params
+  ps1$tags
+  ps2$tags
+  ps1clone$tags
+  ps2clone$tags
 
   # ps1 and ps2 should not be changed
   expect_equal(ps1, ps1clone)
@@ -117,6 +126,11 @@ test_that("deps", {
   expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
   expect_string(psc$check(list(ps2.d = 0)))
 
+  ps1clone$tags
+  ps2clone$tags
+  ps1$tags
+  ps2$tags
+
   # ps1 and ps2 should not be changed
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
@@ -164,6 +178,15 @@ test_that("values", {
   setindex(ps2clone$deps, NULL)
   setindex(ps1$deps, NULL)
   setindex(ps2$deps, NULL)
+
+  ps1$params
+  ps2$params
+  ps1clone$params
+  ps2clone$params
+  ps1$tags
+  ps2$tags
+  ps1clone$tags
+  ps2clone$tags
 
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
@@ -270,4 +293,128 @@ test_that("set_id inference in values assignment works now", {
 
   expect_error(ParamSetCollection$new(list(pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
+})
+
+test_that("cloning and changing underlying params works", {
+  ps1 = th_paramset_dbl1()
+  ps1$set_id = "s1"
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+  ps3 = th_paramset_dbl1()
+  ps3$set_id = ""
+  psc1 = ParamSetCollection$new(list(ps1, ps2))
+  psc2 = ParamSetCollection$new(list(psc1, ps3))
+
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in any psc
+  expect_length(psc2$.__enclos_env__$private$.params, 0)
+
+  expect_equal(psc2$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2$params_unid[6], ps3$params[1])
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
+  expect_length(psc2$.__enclos_env__$private$.params, 0)
+
+  pe = th_paramset_dbl1()$params[[1]]$with_id("s1.th_param_dbl")
+  expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
+
+  expect_length(psc1$.__enclos_env__$private$.params, 0)  # has not created .params in psc1
+  expect_length(psc2$.__enclos_env__$private$.params, 6)  # but psc2 has .params now
+
+  ps1$params[[1]]$.__enclos_env__$private$.id = "test"
+  expect_equal(psc2$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2$params[1], list(s1.th_param_dbl = pe))
+
+  psc2_clone = psc2$clone(deep = TRUE)
+
+  psc1$remove_sets("s2")
+  expect_equal(psc2$params_unid, list(s1.th_param_dbl = ps1$params[[1]], th_param_dbl = ps3$params[[1]]))
+  expect_equal(psc2$params, list(s1.th_param_dbl = pe, th_param_dbl = ps3$params[[1]]))
+
+  ps1$add(ParamInt$new("x"))
+
+  expect_equal(psc2$params_unid, list(s1.th_param_dbl = ps1$params[[1]], s1.x = ps1$params[[2]], th_param_dbl = ps3$params[[1]]))
+  expect_equal(psc2$params, list(s1.th_param_dbl = pe, s1.x = ParamInt$new("s1.x"), th_param_dbl = ps3$params[[1]]))
+
+  expect_equal(psc2_clone$params_unid[1], list(s1.th_param_dbl = ps1$params[[1]]))
+  expect_equal(psc2_clone$params_unid[6], ps3$params[1])
+  expect_equal(psc2_clone$params[1], list(s1.th_param_dbl = pe))
+  expect_equal(psc2_clone$params[6], ps3$params[1])
+
+})
+
+test_that("tags shadowing works", {
+  ps1 = ParamSet$new(list(ParamInt$new("x", tags = c("a", "b")), ParamInt$new("y", tags = c("c"))))
+  ps1$set_id = "s1"
+
+  expect_equal(ps1$tags, list(x = c("a", "b"), y = "c"))
+  expect_error({ps1$tags$x = 2}, "May only contain.*character.*numeric")
+  expect_error({ps1$tags$x = NULL}, "Must be.*identical to.*x,y")
+  expect_error({ps1$tags = list(y = "c", x = "a")}, "Must be.*identical to.*x,y")
+
+  ps1$tags$x = "z"
+
+  expect_equal(ps1$params$x$param_tags, c("a", "b"))
+
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+
+  ps2$tags$th_param_int = "xx"
+
+  expect_equal(ps2$params$th_param_int$param_tags, character(0))
+
+  ps3 = th_paramset_dbl1()
+  ps3$set_id = ""
+  psc1 = ParamSetCollection$new(list(ps1, ps2))
+  psc2 = ParamSetCollection$new(list(psc1, ps3))
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
+  pscc = psc1$clone(deep = TRUE)
+  psc1$tags$s1.y = "d"
+
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  expect_equal(ps2$params$th_param_int$param_tags, character(0))
+  expect_equal(ps1$params$x$param_tags, c("a", "b"))
+
+  pscc$remove_sets("s2")
+
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c"))
+
+  pscc$add(ps2)
+
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  ps1$add(ParamInt$new("z", tags = "z2"))
+
+  expect_equal(ps1$tags, list(x = "z", y = "c", z = "z2"))
+
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  ps1$subset(c("x", "z"))
+
+  expect_equal(ps1$tags, list(x = "z", z = "z2"))
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
+  psc1$remove_sets("s2")
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", th_param_dbl = character(0)))
+  psc1$add(ps2)
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
 })
