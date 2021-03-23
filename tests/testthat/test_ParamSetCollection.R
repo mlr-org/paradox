@@ -383,4 +383,38 @@ test_that("tags shadowing works", {
   expect_equal(ps2$params$th_param_int$param_tags, character(0))
   expect_equal(ps1$params$x$param_tags, c("a", "b"))
 
+  pscc$remove_sets("s2")
+
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c"))
+
+  pscc$add(ps2)
+
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  ps1$add(ParamInt$new("z", tags = "z2"))
+
+  expect_equal(ps1$tags, list(x = "z", y = "c", z = "z2"))
+
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  ps1$subset(c("x", "z"))
+
+  expect_equal(ps1$tags, list(x = "z", z = "z2"))
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
+  psc1$remove_sets("s2")
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", th_param_dbl = character(0)))
+  psc1$add(ps2)
+  expect_equal(psc2$tags, list(s1.x = "z", s1.z = "z2", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
 })

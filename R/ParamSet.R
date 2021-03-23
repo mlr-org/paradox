@@ -180,7 +180,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' Changes the current set to the set of passed IDs.
+    #' Create a new `ParamSet` restricted to the passed IDs.
     #'
     #' @param ids (`character()`).
     subset = function(ids) {
@@ -530,9 +530,7 @@ ParamSet = R6Class("ParamSet",
       discard(private$get_member_with_idnames("default", as.list), is_nodefault)
     },
 
-    #' @field tags (named `list()` of `character()`)\cr
-    #' Can be used to group and subset parameters.
-    #' Named with parameter IDs.
+    #' @template field_tags
     tags = function(v) {
       if (is.null(private$.tags)) {
         private$.tags = private$get_member_with_idnames("param_tags", as.list)

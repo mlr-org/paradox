@@ -110,9 +110,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       setnames = names(private$.sets) %??% map_chr(private$.sets, "set_id")
       assert_subset(ids, setnames)
 
-      droptagnames = pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
+      droptagnames = unlist(pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
         sprintf("%s.%s", n, names(s$tags))
-      })
+      }), use.names = FALSE)
       private$.tags = private$.tags[!names(private$.tags) %in% droptagnames]
 
       private$.sets[setnames %in% ids] = NULL
@@ -186,15 +186,41 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
-    #' @field tags (named `list()` of `character()`)\cr
-    #' Can be used to group and subset parameters.
-    #' Named with parameter IDs.
+    #' @template field_tags
     tags = function(v) {
+      punid = self$params_unid
       if (!missing(v)) {
         assert_list(v, any.missing = FALSE, types = "character")
-        assert_names(names(v), identical.to = names(self$params_unid))
+        assert_names(names(v), identical.to = names(punid))
         private$.tags = v
       }
+      if (!identical(names(private$.tags), names(punid))) {
+        # Underlying ParamSet changed behind our backs
+        newparams = setdiff(names(punid), names(private$.tags))
+        if (length(newparams)) {
+          sets = private$.sets
+          if (is.null(names(sets))) {
+            names(sets) = map(private$.sets, "set_id")
+          }
+          newtagmap = unlist(imap(sets, function(x, n) {
+            xnames = names(x$params_unid)
+            outernames = if (n == "") xnames else sprintf("%s.%s", n, xnames)
+            if (any(outernames %in% newparams)) {
+              x$tags
+            } else {
+              NULL
+            }
+          }), recursive = FALSE)
+          newtags = newtagmap[newparams]
+        } else {
+          newtags = NULL
+        }
+        private$.tags = c(
+          private$.tags[intersect(names(private$.tags), names(punid))],
+          newtags
+        )[names(punid)]
+      }
+
       private$.tags
     },
 
