@@ -36,6 +36,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   This can be used to create a `ParamSetCollection` with changed [`ParamSet`] `set_id`s
     #'   without having to clone said [`ParamSet`]s. However, when underlying [`ParamSet`]s'
     #'   `$set_id`s change, then this change is no longer reflected in the ParamSetCollection.
+    #'   Also note that the `$values` will have undefined behavior when `sets` contains a
+    #'   single [`ParamSet`] multiple times (by reference).
     #'   Default `FALSE`.
     initialize = function(sets, ignore_ids = FALSE) {
 
@@ -127,11 +129,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (any(changed) || length(punid) != length(private$.params_cloned)) {  # if there was a strict subset operation we wouldn't notice it otherwise
         changed_names = truenames[changed]
         private$.params = c(private$.params[setdiff(names(private$.params), changed_names)],  # don't regenerate Params that were not changed.
-          sapply(changed_names, function(u) {
-            p = punid[[u]]$clone(deep = TRUE)
-            p$id = u
-            p
-          }, simplify = FALSE)
+          sapply(changed_names, function(u) punid[[u]]$with_id(u), simplify = FALSE)
         )[truenames]
       }
       private$.params_cloned = punid
@@ -170,6 +168,25 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         dd
       })
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
+    },
+
+    #' @field tags (named `list()` of `character()`)\cr
+    #' Can be used to group and subset parameters.
+    #' Named with parameter IDs.
+    tags = function(v) {
+      if (is.null(private$.tags)) {
+        sets = private$.sets
+        if (is.null(names(sets))) {
+          names(sets) = map(private$.sets, "set_id")
+        }
+        private$.tags = unlist(map(sets, "tags"), recursive = FALSE)
+      }
+      if (!missing(v)) {
+        assert_list(v, any.missing = FALSE, types = "character")
+        assert_names(names(v), identical.to = names(self$params_unid))
+        private$.tags = v
+      }
+      private$.tags
     },
 
     #' @template field_values

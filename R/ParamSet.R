@@ -81,11 +81,13 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (inherits(p, "Param")) { # level-up param to set
         pparams = structure(list(p), names = p$id)
+        ptags = structure(list(p$tags), names = p$id)
         ptrafo = NULL
         pvalues = NULL
         pdeps = NULL
       } else {
         pparams = p$params_unid
+        ptags = p$tags
         ptrafo = p$trafo
         pvalues = p$values
         pdeps = p$deps
@@ -98,6 +100,7 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params_unid = c(private$.params_unid, pparams)
       private$.values = c(private$.values, pvalues)
+      if (!is.null(private$.tags)) = private$.tags = c(private$.tags, ptags)
       private$.deps = rbind(private$.deps, pdeps)
       invisible(self)
     },
@@ -133,7 +136,7 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (!is.null(tags)) {
-        ii = ii & map_lgl(params, function(p) all(tags %in% p$tags))
+        ii = ii & map_lgl(self$tags, function(tg) all(tags %in% tg))
       }
 
       ids[ii]
@@ -167,7 +170,7 @@ ParamSet = R6Class("ParamSet",
       }
 
       if(check_required) {
-        required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
+        required = setdiff(names(keep(self$tags, function(tg) "required" %in% tg)), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
@@ -194,6 +197,7 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params_unid = private$.params_unid[ids]
       private$.params = private$.params[intersect(ids, names(private$.params))]
+      if (!is.null(private$.tags)) private$.tags = private$.tags[intersect(ids, names(private$.tags))]
       # restrict to ids already in pvals
       ids2 = union(intersect(ids, names(private$.values)), setdiff(names(private$.values), param_ids))
       private$.values = private$.values[ids2]
@@ -420,12 +424,7 @@ ParamSet = R6Class("ParamSet",
       if (length(uncloned)) {
         private$.params = c(private$.params,
           sapply(uncloned, function(u) {
-            p = punid[[u]]
-            if (p$id != u) {
-              p = p$clone(deep = TRUE)
-              p$id = u
-            }
-            p
+            punid[[u]]$with_id(u)
           }, simplify = FALSE)
         )[truenames]
       }
@@ -534,8 +533,16 @@ ParamSet = R6Class("ParamSet",
     #' @field tags (named `list()` of `character()`)\cr
     #' Can be used to group and subset parameters.
     #' Named with parameter IDs.
-    tags = function() {
-      private$get_member_with_idnames("tags", as.list)
+    tags = function(v) {
+      if (is.null(private$.tags)) {
+        private$.tags = private$get_member_with_idnames("tags", as.list)
+      }
+      if (!missing(v)) {
+        assert_list(v, any.missing = FALSE, types = "character")
+        assert_names(names(v), identical.to = names(self$params_unid))
+        private$.tags = v
+      }
+      private$.tags
     },
 
     #' @field storage_type (`character()`)\cr
@@ -635,6 +642,7 @@ ParamSet = R6Class("ParamSet",
     .params = named_list(),
     .params_unid = NULL,
     .values = named_list(),
+    .tags = NULL,
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
     get_member_with_idnames = function(member, astype) {
@@ -672,6 +680,7 @@ ParamSet = R6Class("ParamSet",
           pars$add_dep(idname, on, cond)
         }
       })
+      pars$tags = self$tags[parsnames]
       pars
     },
 
@@ -703,8 +712,8 @@ ParamSet = R6Class("ParamSet",
 #' @export
 as.data.table.ParamSet = function(x, ...) { # nolint
   punid = x$params_unid
-  id = NULL
-  map_dtr(punid, as.data.table)[, id := names(punid)][]
+  tg = x$tags
+  map_dtr(punid, as.data.table)[, `:=`(id = names(punid), tags = tg)][]
 }
 
 #' @export

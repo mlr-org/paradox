@@ -18,10 +18,6 @@
 #' @export
 Param = R6Class("Param",
   public = list(
-    #' @field id (`character(1)`)\cr
-    #' Identifier of the object.
-    id = NULL,
-
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -34,7 +30,7 @@ Param = R6Class("Param",
       assert_list(special_vals)
       assert_character(tags, any.missing = FALSE, unique = TRUE)
 
-      self$id = id
+      private$.id = id
       private$.special_vals = special_vals
       private$.default = default
       private$.tags = tags
@@ -100,13 +96,29 @@ Param = R6Class("Param",
 
     #' @description
     #' Creates a clone of this parameter with changed `$tags` slot.
+    #' If the tags do not change, no clone is created.
     #' @param tags (`character`) tags of the clone.
     #' @return [`Param`].
     with_tags = function(tags) {
-      assert_character(tags, any.missing = FALSE, unique = TRUE)
       origtags = private$.tags
+      if (identical(tags, origtags)) return(self)
+      assert_character(tags, any.missing = FALSE, unique = TRUE)
       on.exit({private$.tags = origtags})
       private$.tags = tags
+      self$clone(deep = TRUE)
+    },
+
+    #' @description
+    #' Creates a clone of this parameter with changed `$id` slot.
+    #' If the `id` does not change, no clone is created.
+    #' @param id (`character(1)`) id of the clone.
+    #' @return [`Param`].
+    with_id = function(id) {
+      if (identical(id, self$id)) return(self)
+      assert_id(id)
+      origid = private$.id
+      on.exit({private$.id = origid})
+      private$.id = id
       self$clone(deep = TRUE)
     },
 
@@ -155,6 +167,10 @@ Param = R6Class("Param",
   ),
 
   active = list(
+    #' @field id (`character(1)`)\cr
+    #' Identifier of the object.
+    id = function() private$.id,
+
     #' @field special_vals (`list()`)\cr
     #' Arbitrary special values this parameter is allowed to take.
     special_vals = function() private$.special_vals,
@@ -189,7 +205,8 @@ Param = R6Class("Param",
     .qunif = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Param$qunif
     .special_vals = NULL,
     .default = NULL,
-    .tags = NULL
+    .tags = NULL,
+    .id = NULL
   )
 )
 

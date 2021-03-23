@@ -63,18 +63,12 @@ ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
   assert_list(args, names = "unique", types = c("Param", "Domain"))
   assert_function(.extra_trafo, null.ok = TRUE)
 
-  # generate Params (with correct id) from Domain objects
+  # Extract Param from Domain objects
   params = imap(args, function(p, name) {
-    if (inherits(p, "Param")) {
-      p = p$clone(deep = TRUE)
-    } else {
-      p = p$param$clone(deep = TRUE)
-    }
-    p$id = name
-    p
+    if (inherits(p, "Param")) p else p$param
   })
 
-  paramset = ParamSet$new(params)
+  paramset = ParamSet$new(params, ignore_ids = TRUE)
 
   # add Dependencies
   imap(args, function(p, name) {
