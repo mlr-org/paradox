@@ -81,7 +81,7 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (inherits(p, "Param")) { # level-up param to set
         pparams = structure(list(p), names = p$id)
-        if (!is.null(private$.tags)) ptags = structure(list(p$tags), names = p$id)
+        if (!is.null(private$.tags)) ptags = structure(list(p$param_tags), names = p$id)
         ptrafo = NULL
         pvalues = NULL
         pdeps = NULL
@@ -535,7 +535,7 @@ ParamSet = R6Class("ParamSet",
     #' Named with parameter IDs.
     tags = function(v) {
       if (is.null(private$.tags)) {
-        private$.tags = private$get_member_with_idnames("tags", as.list)
+        private$.tags = private$get_member_with_idnames("param_tags", as.list)
       }
       if (!missing(v)) {
         assert_list(v, any.missing = FALSE, types = "character")

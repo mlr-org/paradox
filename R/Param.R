@@ -89,7 +89,7 @@ Param = R6Class("Param",
       assert_count(n)
       pid = self$id
       join_id = paste0(pid, "_rep")
-      taggedself = self$with_tags(c(self$tags, join_id))
+      taggedself = self$with_tags(c(self$param_tags, join_id))
       repeatedself = structure(rep(list(taggedself), n), names = sprintf("%s_%s", join_id, seq_len(n)))
       ParamSet$new(repeatedself, ignore_ids = TRUE)
     },
@@ -179,9 +179,9 @@ Param = R6Class("Param",
     #' Default value.
     default = function() private$.default,
 
-    #' @field tags (`character()`)\cr
+    #' @field param_tags (`character()`)\cr
     #' Arbitrary tags to group and subset parameters.
-    tags = function() private$.tags,
+    param_tags = function() private$.tags,
 
     #' @field class (`character(1)`)\cr
     #' R6 class name. Read-only.
@@ -223,6 +223,6 @@ as.data.table.Param = function(x, ...) { # nolint
     special_vals = list(x$special_vals),
     default = list(x$default),
     storage_type = x$storage_type,
-    tags = list(x$tags)
+    tags = list(x$param_tags)
   )
 }
