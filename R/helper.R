@@ -79,7 +79,7 @@ ps_union = function(sets, ignore_ids = FALSE) {
   if (length(setinfo)) {
     # allnames: names of all parameters, as seen from the outside
     allnames = names2(unlist(map(setinfo, "forward_name_translation")))
-    assert_set_equal(allnames, names2(newps$params))  # this should always be the case
+    assert_subset(allnames, names2(newps$params_unid))  # just check, this should always be the case
 
     newps$trafo = crate(function(x, param_set) {
       res = unlist(mlr3misc::map(setinfo, function(s) {
