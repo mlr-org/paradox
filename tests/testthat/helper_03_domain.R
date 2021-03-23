@@ -10,8 +10,6 @@ expect_equal_ps = function(a, b) {
   b = b$clone(deep = TRUE)
   b$params
   b$tags
-  a = as.list(a)
-  b = as.list(b)
   a$.__enclos_env__$private$.params_unid = lapply(a$.__enclos_env__$private$.params_unid, function(x) {
     x = x$clone(deep = TRUE)
     x$.__enclos_env__$private$.id = ""
@@ -22,6 +20,9 @@ expect_equal_ps = function(a, b) {
     x$.__enclos_env__$private$.id = ""
     x
   })
+  a = as.list(a)
+  b = as.list(b)
+
   expect_equal(a, b)
 }
 
