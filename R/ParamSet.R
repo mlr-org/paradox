@@ -81,13 +81,13 @@ ParamSet = R6Class("ParamSet",
       assert_multi_class(p, c("Param", "ParamSet"))
       if (inherits(p, "Param")) { # level-up param to set
         pparams = structure(list(p), names = p$id)
-        ptags = structure(list(p$tags), names = p$id)
+        if (!is.null(private$.tags)) ptags = structure(list(p$tags), names = p$id)
         ptrafo = NULL
         pvalues = NULL
         pdeps = NULL
       } else {
         pparams = p$params_unid
-        ptags = p$tags
+        if (!is.null(private$.tags)) ptags = p$tags
         ptrafo = p$trafo
         pvalues = p$values
         pdeps = p$deps
