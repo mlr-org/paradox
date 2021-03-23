@@ -49,10 +49,15 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       nameless_sets = split_sets$`TRUE`
       named_sets = split_sets$`FALSE`
       assert_names(names2(named_sets), type = "strict")
+
+      private$.tags = unlist(map(sets, "tags"), recursive = FALSE) %??% named_list()
+
       if (!ignore_ids) sets = unname(sets)  # when private$.sets is unnamed, then the set_ids are used.
       private$.sets = sets
       self$set_id = ""
       pnames = names(self$params_unid)
+
+
       dups = duplicated(pnames)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
@@ -88,11 +93,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # ignoring the other ParamSet's set_id in favor of names(private$.sets), so add the name here as well.
         names(set_addition) = p$set_id
       }
-      if (!is.null(private$.tags)) {
-        tagsaddition = p$tags
-        names(tagsaddition) = sprintf("%s.%s", p$set_id, names(tagsaddition))
-        private$.tags = c(private$.tags, tagsaddition)
-      }
+
+      tagsaddition = p$tags
+      names(tagsaddition) = sprintf("%s.%s", p$set_id, names(tagsaddition))
+      private$.tags = c(private$.tags, tagsaddition)
+
       private$.sets = c(private$.sets, set_addition)
       invisible(self)
     },
@@ -105,12 +110,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       setnames = names(private$.sets) %??% map_chr(private$.sets, "set_id")
       assert_subset(ids, setnames)
 
-      if (!is.null(private$.tags)) {
-        droptagnames = pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
-          sprintf("%s.%s", n, names(s$tags))
-        })
-        private$.tags = private$.tags[!names(private$.tags) %in% droptagnames]
-      }
+      droptagnames = pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
+        sprintf("%s.%s", n, names(s$tags))
+      })
+      private$.tags = private$.tags[!names(private$.tags) %in% droptagnames]
 
       private$.sets[setnames %in% ids] = NULL
       invisible(self)
@@ -187,13 +190,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' Can be used to group and subset parameters.
     #' Named with parameter IDs.
     tags = function(v) {
-      if (is.null(private$.tags)) {
-        sets = private$.sets
-        if (is.null(names(sets))) {
-          names(sets) = map(private$.sets, "set_id")
-        }
-        private$.tags = unlist(map(sets, "tags"), recursive = FALSE) %??% named_list()
-      }
       if (!missing(v)) {
         assert_list(v, any.missing = FALSE, types = "character")
         assert_names(names(v), identical.to = names(self$params_unid))

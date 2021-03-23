@@ -126,6 +126,11 @@ test_that("deps", {
   expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
   expect_string(psc$check(list(ps2.d = 0)))
 
+  ps1clone$tags
+  ps2clone$tags
+  ps1$tags
+  ps2$tags
+
   # ps1 and ps2 should not be changed
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
@@ -333,5 +338,49 @@ test_that("cloning and changing underlying params works", {
   expect_equal(psc2_clone$params_unid[6], ps3$params[1])
   expect_equal(psc2_clone$params[1], list(s1.th_param_dbl = pe))
   expect_equal(psc2_clone$params[6], ps3$params[1])
+
+})
+
+test_that("tags shadowing works", {
+  ps1 = ParamSet$new(list(ParamInt$new("x", tags = c("a", "b")), ParamInt$new("y", tags = c("c"))))
+  ps1$set_id = "s1"
+
+  expect_equal(ps1$tags, list(x = c("a", "b"), y = "c"))
+  expect_error({ps1$tags$x = 2}, "May only contain.*character.*numeric")
+  expect_error({ps1$tags$x = NULL}, "Must be.*identical to.*x,y")
+  expect_error({ps1$tags = list(y = "c", x = "a")}, "Must be.*identical to.*x,y")
+
+  ps1$tags$x = "z"
+
+  expect_equal(ps1$params$x$param_tags, c("a", "b"))
+
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+
+  ps2$tags$th_param_int = "xx"
+
+  expect_equal(ps2$params$th_param_int$param_tags, character(0))
+
+  ps3 = th_paramset_dbl1()
+  ps3$set_id = ""
+  psc1 = ParamSetCollection$new(list(ps1, ps2))
+  psc2 = ParamSetCollection$new(list(psc1, ps3))
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+
+  pscc = psc1$clone(deep = TRUE)
+  psc1$tags$s1.y = "d"
+
+
+  expect_equal(psc2$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0), th_param_dbl = character(0)))
+  expect_equal(psc1$tags, list(s1.x = "z", s1.y = "d", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+  expect_equal(pscc$tags, list(s1.x = "z", s1.y = "c", s2.th_param_int = "xx",
+    s2.th_param_dbl = character(0), s2.th_param_fct = character(0), s2.th_param_lgl = character(0)))
+
+  expect_equal(ps2$params$th_param_int$param_tags, character(0))
+  expect_equal(ps1$params$x$param_tags, c("a", "b"))
 
 })
