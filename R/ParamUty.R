@@ -1,61 +1,27 @@
-#' @title Untyped Parameter
-#'
-#' @description
-#' A [Param] to describe untyped parameters.
-#'
-#' @template param_id
-#' @template param_default
-#' @template param_tags
-#' @template param_custom_check
-#'
-#' @family Params
-#' @include Param.R
+
+#' @rdname Domain
 #' @export
-#' @examples
-#' ParamUty$new("untyped", default = Inf)
-ParamUty = R6Class("ParamUty", inherit = Param,
-  public = list(
-    #' @description
-    #' Creates a new instance of this [R6][R6::R6Class] class.
-    #'
-    #' @param custom_check (`function()`)\cr
-    #'   Custom function to check the feasibility.
-    #'   Function which checks the input.
-    #'   Must return 'TRUE' if the input is valid and a string with the error message otherwise.
-    #'   Defaults to `NULL`, which means that no check is performed.
-    initialize = function(id, default = NO_DEF, tags = character(), custom_check = NULL) {
-      # super class calls private$.check, so this must be set BEFORE
-      # we initialize the super class
-      if (is.null(custom_check)) {
-        private$.custom_check = function(x) TRUE
-      } else {
-        private$.custom_check = assert_function(custom_check, "x")
-      }
-      super$initialize(id, special_vals = list(), default = default, tags = tags)
-    }
-  ),
+p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
+  assert_function(custom_check, nargs = 1)
+  custom_check_result = custom_check(1)
+  assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")
+  domain(cls = "ParamUty", grouping = "ParamUty", cargo = custom_check, special_vals = special_vals, default = default, tags = tags, trafo = trafo, depends_expr = substitute(depends))
+}
 
-  active = list(
-    #' @field custom_check (`function()`)\cr
-    #' Custom function to check the feasibility.
-    custom_check = function() private$.custom_check,
-    #' @template field_lower
-    lower = function() NA_real_,
-    #' @template field_upper
-    upper = function() NA_real_,
-    #' @template field_levels
-    levels = function() NULL,
-    #' @template field_nlevels
-    nlevels = function() Inf,
-    #' @template field_is_bounded
-    is_bounded = function() FALSE,
-    #' @template field_storage_type
-    storage_type = function() "list"
-  ),
+#' @export
+domain_check.ParamUty = function(param, values, describe_error = TRUE) {
+  check_domain_vectorize(param$id, values, param$cargo, describe_error = describe_error)
+}
 
-  private = list(
-    .check = function(x) private$.custom_check(x),
-    .qunif = function(x) stop("undefined"),
-    .custom_check = NULL
-  )
-)
+#' @export
+domain_storage_type.ParamUty = function(param) rep("list", nrow(param))
+#' @export
+domain_nlevels.ParamUty = function(param) rep(Inf, nrow(param))
+#' @export
+domain_is_bounded.ParamUty = function(param) rep(FALSE, nrow(param))
+#' @export
+domain_is_number.ParamUty = function(param) rep(FALSE, nrow(param))
+#' @export
+domain_is_categ.ParamUty = function(param) rep(FALSE, nrow(param))
+#' @export
+domain_qunif.ParamUty = function(param, x) stop("undefined")

@@ -7,8 +7,6 @@
 #'   "<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. `""`) `$set_id` are referenced
 #'   directly. Multiple ParamSets with `$set_id` `""` can be combined, but their parameter names
 #'   must be unique.
-#' * Operation `subset` is currently not allowed.
-#' * Operation `add` currently only works when adding complete sets not single params.
 #' * When you either ask for 'values' or set them, the operation is delegated to the individual,
 #'   contained param set references. The collection itself does not maintain a `values` state.
 #'   This also implies that if you directly change `values` in one of the referenced sets,
@@ -30,6 +28,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'
     #' @param sets (`list()` of [ParamSet])\cr
     #'   ParamSet objects are not cloned.
+    #' @param set_id (`character(1)`)\cr
+    #'   `$set_id` of the resulting `ParamSet`. This determines the
+    #'   prefix inside [`ParamSetCollection`]. Default `""` (no prefix).
     #' @param ignore_ids (`logical(1)`)\cr
     #'   Ignore `$set_id` slots of `sets` and instead use the names instead.
     #'   When this is `TRUE`, then `sets` should be named when id prefixes are desired.
@@ -39,8 +40,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Also note that the `$values` will have undefined behavior when `sets` contains a
     #'   single [`ParamSet`] multiple times (by reference).
     #'   Default `FALSE`.
-    initialize = function(sets, ignore_ids = FALSE) {
-
+    initialize = function(sets, set_id = "", ignore_ids = FALSE) {
       assert_list(sets, types = "ParamSet")
       if (!ignore_ids) {
         names(sets) = map(sets, "set_id")
@@ -51,112 +51,26 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       assert_names(names2(named_sets), type = "strict")
 
       private$.tags = unlist(map(sets, "tags"), recursive = FALSE) %??% named_list()
-
-      if (!ignore_ids) sets = unname(sets)  # when private$.sets is unnamed, then the set_ids are used.
       private$.sets = sets
-      self$set_id = ""
+
+      if (!identical(set_id, "")) {
+        assert_id(set_id)
+        assert_names(set_id, type = "strict")
+      }
+      private$.set_id = set_id
+
       pnames = names(self$params_unid)
-
-
       dups = duplicated(pnames)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
           str_collapse(unique(pnames[dups])))
       }
-    },
-
-    #' @description
-    #' Adds a set to this collection.
-    #'
-    #' @param p ([ParamSet]).
-    add = function(p) {
-      assert_r6(p, "ParamSet")
-      setnames = names(private$.sets) %??% map_chr(private$.sets, "set_id")
-      if (p$set_id == "") {
-        unnamed_set_parnames = map(private$.sets[setnames == ""], function(x) names(x$params_unid))
-      } else if (p$set_id %in% setnames) {
-        stopf("Setid '%s' already present in collection!", p$set_id)
-      }
-      if (p$has_trafo) {
-        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
-      }
-      pnames = names(p$params_unid)
-      nameclashes = intersect(
-        ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, pnames), pnames),
-        names(self$params_unid)
-      )
-      if (length(nameclashes)) {
-        stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
-      }
-      set_addition = list(p)
-      if (!is.null(names(private$.sets))) {
-        # ignoring the other ParamSet's set_id in favor of names(private$.sets), so add the name here as well.
-        names(set_addition) = p$set_id
-      }
-
-      tagsaddition = p$tags
-      names(tagsaddition) = sprintf("%s.%s", p$set_id, names(tagsaddition))
-      private$.tags = c(private$.tags, tagsaddition)
-
-      private$.sets = c(private$.sets, set_addition)
-      invisible(self)
-    },
-
-    #' @description
-    #' Removes sets of given ids from collection.
-    #'
-    #' @param ids (`character()`).
-    remove_sets = function(ids) {
-      setnames = names(private$.sets) %??% map_chr(private$.sets, "set_id")
-      assert_subset(ids, setnames)
-
-      droptagnames = pmap(list(setnames[setnames %in% ids], private$.sets[setnames %in% ids]), function(n, s) {
-        sprintf("%s.%s", n, names(s$tags))
-      })
-      private$.tags = private$.tags[!names(private$.tags) %in% droptagnames]
-
-      private$.sets[setnames %in% ids] = NULL
-      invisible(self)
-    },
-
-    #' @description
-    #' Only included for consistency. Not allowed to perform on [ParamSetCollection]s.
-    #'
-    #' @param ids (`character()`).
-    subset = function(ids) stop("not allowed")
-
+    }
   ),
-
   active = list(
-    #' @template field_params
-    params = function(rhs) {
-      if (!missing(rhs) && !identical(rhs, private$.params)) {
-        stop("$params is read-only.")
-      }
-      # clone on-demand, whenever underlying class changed
-      punid = self$params_unid
-      truenames = names(punid)
-
-      # 'changed' can be either because an underlying ParamSet's $params changed though $add or so,
-      # or because we are calling $params for the first time (in which case all are 'changed'
-      # as the original is NULL).
-      changed = as.logical(imap(punid, function(x, n) !identical(private$.params_cloned[[n]], x)))
-
-      if (any(changed) || length(punid) != length(private$.params_cloned)) {  # if there was a strict subset operation we wouldn't notice it otherwise
-        changed_names = truenames[changed]
-        private$.params = c(private$.params[setdiff(names(private$.params), changed_names)],  # don't regenerate Params that were not changed.
-          sapply(changed_names, function(u) punid[[u]]$with_id(u), simplify = FALSE)
-        )[truenames]
-      }
-      private$.params_cloned = punid
-      private$.params
-    },
     #' @template field_params_unid
     params_unid = function(v) {
       sets = private$.sets
-      if (is.null(names(sets))) {
-        names(sets) = map(private$.sets, "set_id")
-      }
       if (length(sets) == 0L) {
         return(named_list())
       }
@@ -168,10 +82,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
     #' @template field_deps
     deps = function(v) {
-      sets = private$.sets
-      if (is.null(names(sets))) {
-        names(sets) = map(private$.sets, "set_id")
+      if (!missing(v)) {
+        stop("deps is read-only in ParamSetCollection.")
       }
+      sets = private$.sets
       d_all = imap(sets, function(s, id) {
         # copy all deps and rename ids to prefixed versions
         dd = s$deps
@@ -232,11 +146,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   private = list(
     .sets = NULL,
-    .params_cloned = NULL,
     deep_clone = function(name, value) {
       switch(name,
         .params = named_list(),
-        .params_cloned = NULL,
         .deps = {
           value = copy(value)
           value$cond = lapply(value$cond, function(x) x$clone(deep = TRUE))

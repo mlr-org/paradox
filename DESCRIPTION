@@ -67,6 +67,7 @@ Collate:
     'ParamFct.R'
     'ParamInt.R'
     'ParamLgl.R'
+    'ParamS6.R'
     'ParamSet.R'
     'ParamSetCollection.R'
     'ParamUty.R'

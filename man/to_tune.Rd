@@ -144,7 +144,7 @@ print(grid$transpose())
 }
 \seealso{
 Other ParamSet construction helpers: 
-\code{\link{Domain}},
+\code{\link{p_dbl}()},
 \code{\link{ps}()}
 }
 \concept{ParamSet construction helpers}

@@ -81,7 +81,7 @@ Design = R6Class("Design",
         xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
       }
       if (ps$has_trafo && trafo) {
-        xs = map(xs, function(x) ps$trafo(x, ps))
+        xs = map(xs, function(x) ps$trafo(x))
       }
       return(xs)
     }
@@ -102,14 +102,14 @@ Design = R6Class("Design",
       graph = graph[, list("parents" = list(unlist(get("parents")))), by = "id"]
       topo = topo_sort(graph)
       pids_sorted = topo$id
+      storage_types = ps$storage_type
       for (param_id in pids_sorted) {
-        param = ps$params[[param_id]]
         dd = ps$deps[get("id") == param_id, ]
         for (j in seq_row(dd)) {
           pcol = self$data[[dd$on[j]]]
           # we are ok if parent was active and cond on parent is OK
           not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol))
-          set(self$data, not_ok, j = param_id, value = as_type(NA, param$storage_type))
+          set(self$data, not_ok, j = param_id, value = as_type(NA, storage_types[[param_id]]))
         }
       }
     }

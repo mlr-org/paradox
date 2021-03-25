@@ -11,8 +11,6 @@ A collection of multiple \link{ParamSet} objects.
 "<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. \code{""}) \verb{$set_id} are referenced
 directly. Multiple ParamSets with \verb{$set_id} \code{""} can be combined, but their parameter names
 must be unique.
-\item Operation \code{subset} is currently not allowed.
-\item Operation \code{add} currently only works when adding complete sets not single params.
 \item When you either ask for 'values' or set them, the operation is delegated to the individual,
 contained param set references. The collection itself does not maintain a \code{values} state.
 This also implies that if you directly change \code{values} in one of the referenced sets,
@@ -34,9 +32,6 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
-\item{\code{params}}{(named \code{list()})\cr
-List of \link{Param}, named with their respective ID.}
-
 \item{\code{params_unid}}{(named \code{list()})\cr
 List of \link{Param}, named with their true ID. However,
 this field has the \link{Param}'s \verb{$id} value set to a
@@ -67,9 +62,6 @@ When you set values, all previously set values will be unset / removed.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-new}{\code{ParamSetCollection$new()}}
-\item \href{#method-add}{\code{ParamSetCollection$add()}}
-\item \href{#method-remove_sets}{\code{ParamSetCollection$remove_sets()}}
-\item \href{#method-subset}{\code{ParamSetCollection$subset()}}
 \item \href{#method-clone}{\code{ParamSetCollection$clone()}}
 }
 }
@@ -80,14 +72,22 @@ When you set values, all previously set values will be unset / removed.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert">}\href{../../paradox/html/ParamSet.html#method-assert}{\code{paradox::ParamSet$assert()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt">}\href{../../paradox/html/ParamSet.html#method-assert_dt}{\code{paradox::ParamSet$assert_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check">}\href{../../paradox/html/ParamSet.html#method-check}{\code{paradox::ParamSet$check()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies">}\href{../../paradox/html/ParamSet.html#method-check_dependencies}{\code{paradox::ParamSet$check_dependencies()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt">}\href{../../paradox/html/ParamSet.html#method-check_dt}{\code{paradox::ParamSet$check_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten">}\href{../../paradox/html/ParamSet.html#method-flatten}{\code{paradox::ParamSet$flatten()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format">}\href{../../paradox/html/ParamSet.html#method-format}{\code{paradox::ParamSet$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_levels">}\href{../../paradox/html/ParamSet.html#method-get_levels}{\code{paradox::ParamSet$get_levels()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_param">}\href{../../paradox/html/ParamSet.html#method-get_param}{\code{paradox::ParamSet$get_param()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif">}\href{../../paradox/html/ParamSet.html#method-qunif}{\code{paradox::ParamSet$qunif()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space">}\href{../../paradox/html/ParamSet.html#method-search_space}{\code{paradox::ParamSet$search_space()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset">}\href{../../paradox/html/ParamSet.html#method-subset}{\code{paradox::ParamSet$subset()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces">}\href{../../paradox/html/ParamSet.html#method-subspaces}{\code{paradox::ParamSet$subspaces()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo">}\href{../../paradox/html/ParamSet.html#method-trafo}{\code{paradox::ParamSet$trafo()}}\out{</span>}
 }
 \out{</details>}
 }
@@ -97,7 +97,7 @@ When you set values, all previously set values will be unset / removed.}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, ignore_ids = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, set_id = "", ignore_ids = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -105,6 +105,10 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \describe{
 \item{\code{sets}}{(\code{list()} of \link{ParamSet})\cr
 ParamSet objects are not cloned.}
+
+\item{\code{set_id}}{(\code{character(1)})\cr
+\verb{$set_id} of the resulting \code{ParamSet}. This determines the
+prefix inside \code{\link{ParamSetCollection}}. Default \code{""} (no prefix).}
 
 \item{\code{ignore_ids}}{(\code{logical(1)})\cr
 Ignore \verb{$set_id} slots of \code{sets} and instead use the names instead.
@@ -115,57 +119,6 @@ without having to clone said \code{\link{ParamSet}}s. However, when underlying \
 Also note that the \verb{$values} will have undefined behavior when \code{sets} contains a
 single \code{\link{ParamSet}} multiple times (by reference).
 Default \code{FALSE}.}
-}
-\if{html}{\out{</div>}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-add"></a>}}
-\if{latex}{\out{\hypertarget{method-add}{}}}
-\subsection{Method \code{add()}}{
-Adds a set to this collection.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$add(p)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{p}}{(\link{ParamSet}).}
-}
-\if{html}{\out{</div>}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-remove_sets"></a>}}
-\if{latex}{\out{\hypertarget{method-remove_sets}{}}}
-\subsection{Method \code{remove_sets()}}{
-Removes sets of given ids from collection.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$remove_sets(ids)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{ids}}{(\code{character()}).}
-}
-\if{html}{\out{</div>}}
-}
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-subset"></a>}}
-\if{latex}{\out{\hypertarget{method-subset}{}}}
-\subsection{Method \code{subset()}}{
-Only included for consistency. Not allowed to perform on \link{ParamSetCollection}s.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$subset(ids)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{ids}}{(\code{character()}).}
 }
 \if{html}{\out{</div>}}
 }

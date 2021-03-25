@@ -59,52 +59,5 @@
 #' @family ParamSet construction helpers
 #' @export
 ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
-  args = list(...)
-  assert_list(args, names = "unique", types = c("Param", "Domain"))
-  assert_function(.extra_trafo, null.ok = TRUE)
-
-  # Extract Param from Domain objects
-  params = imap(args, function(p, name) {
-    if (inherits(p, "Param")) p else p$param
-  })
-
-  paramset = ParamSet$new(params, ignore_ids = length(params) > 0)  # if length is 0 then no names are present
-
-  # add Dependencies
-  imap(args, function(p, name) {
-    if (inherits(p, "Param") || is.null(p$requirements)) return(NULL)
-    map(p$requirements, function(req) {
-      if (!req$on %in% names(args) || req$on == name) {
-        if (.allow_dangling_dependencies) {
-          if (name == req$on) stop("A param cannot depend on itself!")
-          paramset$deps = rbind(paramset$deps, data.table(id = name, on = req$on, cond = list(req$cond)))
-        } else {
-          stopf("Parameter %s can not depend on %s.", name, req$on)
-        }
-      } else {
-        invoke(paramset$add_dep, id = name, .args = req)
-      }
-    })
-  })
-
-  # add trafos
-  trafos = map(discard(args, function(x) inherits(x, "Param") || is.null(x$trafo)),
-    function(p) {
-      assert_function(p$trafo)
-    })
-  if (length(trafos) || !is.null(.extra_trafo)) {
-    # the $trafo function iterates through the trafos and applies them
-    # We put the $trafo in a crate() (helper.R) to avoid having a function
-    # with lots of things in its environment.
-    paramset$trafo = crate(function(x, param_set) {
-      for (trafoing in names(trafos)) {
-        if (!is.null(x[[trafoing]])) {
-          x[[trafoing]] = trafos[[trafoing]](x[[trafoing]])
-        }
-      }
-      if (!is.null(.extra_trafo)) x = .extra_trafo(x, param_set)
-      x
-    }, trafos, .extra_trafo)
-  }
-  paramset
+  ParamSet$new(list(...), extra_trafo = .extra_trafo, allow_dangling_dependencies = .allow_dangling_dependencies)  # if length is 0 then no names are present
 }

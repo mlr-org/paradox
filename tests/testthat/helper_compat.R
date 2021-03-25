@@ -9,3 +9,40 @@ context = function(...) suppressWarnings(testthat::context(...))
 expect_is = function(...) suppressWarnings(testthat::expect_is(...))
 expect_equivalent = function(...) suppressWarnings(testthat::expect_equivalent(...))
 library("checkmate")
+
+
+ParamInt = list(
+  new = function(id, ...) {
+    ParamSet$new(set_names(list(p_int(...)), id))
+  }
+)
+
+ParamDbl = list(
+  new = function(id, ...) {
+    ParamSet$new(set_names(list(p_dbl(...)), id))
+  }
+)
+
+ParamFct = list(
+  new = function(id, ...) {
+    ParamSet$new(set_names(list(p_fct(...)), id))
+  }
+)
+
+ParamLgl = list(
+  new = function(id, ...) {
+    ParamSet$new(set_names(list(p_lgl(...)), id))
+  }
+)
+
+ParamUty = list(
+  new = function(id, ...) {
+    ParamSet$new(set_names(list(p_uty(...)), id))
+  }
+)
+
+ParamSet_legacy = list(
+  new = function(params) {
+    ps_union(params)
+  }
+)

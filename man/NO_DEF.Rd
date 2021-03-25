@@ -9,8 +9,7 @@
 Special new data type for no-default.
 Not often needed by the end-user, mainly internal.
 \itemize{
-\item \code{NoDefault}: R6 factory.
-\item \code{NO_DEF}: R6 Singleton object for type, used in \link{Param}.
-\item \code{is_nodefault()}: Is an object of type 'no default'?
+\item \code{NO_DEF}: Singleton object for type, used in \link{Param}.
+\item \code{is_nodefault()}: Is an object the 'no default' object?
 }
 }

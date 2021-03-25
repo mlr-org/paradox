@@ -187,3 +187,25 @@ as_type = function(x, type) {
     stopf("Invalid storage type '%s'", type)
   )
 }
+
+# param:
+check_domain_vectorize = function(ids, values, checker, more_args = list(), describe_error = TRUE) {
+  break_early = FALSE
+  if (length(checker) == length(values)) {
+    errors = imap(c(list(ids, values), more_args), function(id, value, ...) {
+      if (break_early) return(FALSE)
+      ch = checker(value, ...)
+      if (isTRUE(ch)) NULL else if (describe_error) sprintf("%s: %s", ch) else break_early <<- TRUE  # nolint
+    })
+  } else {
+    errors = imap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
+      if (break_early) return(FALSE)
+      ch = chck(value, ...)
+      if (isTRUE(ch)) NULL else if (describe_error) sprintf("%s: %s", ch) else break_early <<- TRUE  # nolint
+    })
+  }
+  if (!describe_error) return(!break_early)
+  errors = unlist(errors)
+  if (!length(errors)) return(TRUE)
+  str_collapse(errors, sep = "\n")
+}

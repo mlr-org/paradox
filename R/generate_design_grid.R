@@ -54,7 +54,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
   grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) param_set$params[[id]]$qunif(x = value))
+  res = imap(grid_vec, function(value, id) param_set$qunif(setnames(data.table(value), id)))
   res = cross_join(res, sorted = FALSE)
   Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
 }

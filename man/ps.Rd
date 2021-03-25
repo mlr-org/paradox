@@ -69,7 +69,7 @@ pars$search_space()
 }
 \seealso{
 Other ParamSet construction helpers: 
-\code{\link{Domain}},
+\code{\link{p_dbl}()},
 \code{\link{to_tune}()}
 }
 \concept{ParamSet construction helpers}

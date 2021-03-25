@@ -62,22 +62,11 @@ Default is \code{TRUE}, only switch this off if you know what you are doing.}
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
-\item{\code{params_unid}}{(named \code{list()})\cr
-List of \link{Param}, named with their true ID. However,
-this field has the \link{Param}'s \verb{$id} value set to a
-potentially invalid value, and it is furthermore not
-cloned when the \code{ParamSet} is cloned. This active
-binding should be used internally, or to avoid unnecessary
-cloning when that becomes a bottleneck.}
-
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
-
-\item{\code{set_id}}{(\code{character(1)})\cr
-ID of this param set. Default \code{""}. Settable.}
 
 \item{\code{length}}{(\code{integer(1)})\cr
 Number of contained \link{Param}s.}
@@ -140,9 +129,9 @@ Is \code{TRUE} if all parameters are \link{ParamDbl} or \link{ParamInt}.}
 \item{\code{all_categorical}}{(\code{logical(1)})\cr
 Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
 
-\item{\code{trafo}}{(\verb{function(x, param_set)})\cr
+\item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
 Transformation function. Settable.
-User has to pass a \verb{function(x, param_set)}, of the form\cr
+User has to pass a \verb{function(x)}, of the form\cr
 (named \code{list()}, \link{ParamSet}) -> named \code{list()}.\cr
 The function is responsible to transform a feasible configuration into another encoding,
 before potentially evaluating the configuration with the target algorithm.
@@ -169,12 +158,18 @@ Has the set parameter dependencies?}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-new}{\code{ParamSet$new()}}
-\item \href{#method-add}{\code{ParamSet$add()}}
+\item \href{#method-trafo}{\code{ParamSet$trafo()}}
+\item \href{#method-qunif}{\code{ParamSet$qunif()}}
+\item \href{#method-get_param}{\code{ParamSet$get_param()}}
+\item \href{#method-get_levels}{\code{ParamSet$get_levels()}}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
+\item \href{#method-subspaces}{\code{ParamSet$subspaces()}}
+\item \href{#method-flatten}{\code{ParamSet$flatten()}}
 \item \href{#method-search_space}{\code{ParamSet$search_space()}}
 \item \href{#method-check}{\code{ParamSet$check()}}
+\item \href{#method-check_dependencies}{\code{ParamSet$check_dependencies()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
 \item \href{#method-check_dt}{\code{ParamSet$check_dt()}}
@@ -192,7 +187,11 @@ Has the set parameter dependencies?}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$new(params = named_list(), ignore_ids = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$new(
+  params = named_list(),
+  extra_trafo = NULL,
+  allow_dangling_dependencies = FALSE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -202,6 +201,10 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 List of \link{Param}, named with their respective ID.
 \code{params} are cloned on-demand, so the input does not need
 to be cloned.}
+
+\item{\code{set_id}}{(\code{character(1)})\cr
+\verb{$set_id} of the resulting \code{ParamSet}. This determines the
+prefix inside \code{\link{ParamSetCollection}}. Default \code{""} (no prefix).}
 
 \item{\code{ignore_ids}}{(\code{logical(1)})\cr
 Ignore \verb{$id} slots of \code{params} and instead use the names instead.
@@ -214,22 +217,40 @@ Default \code{FALSE}.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-add"></a>}}
-\if{latex}{\out{\hypertarget{method-add}{}}}
-\subsection{Method \code{add()}}{
-Adds a single param or another set to this set, all params are cloned on-demand,
-so the input does not need to be cloned.
+\if{html}{\out{<a id="method-trafo"></a>}}
+\if{latex}{\out{\hypertarget{method-trafo}{}}}
+\subsection{Method \code{trafo()}}{
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$add(p)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$trafo(x, param_set)}\if{html}{\out{</div>}}
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{p}}{(\link{Param} | \link{ParamSet}).}
 }
-\if{html}{\out{</div>}}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-qunif"></a>}}
+\if{latex}{\out{\hypertarget{method-qunif}{}}}
+\subsection{Method \code{qunif()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$qunif(x)}\if{html}{\out{</div>}}
 }
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-get_param"></a>}}
+\if{latex}{\out{\hypertarget{method-get_param}{}}}
+\subsection{Method \code{get_param()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_param(id)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-get_levels"></a>}}
+\if{latex}{\out{\hypertarget{method-get_levels}{}}}
+\subsection{Method \code{get_levels()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_levels(id)}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ids"></a>}}
@@ -239,15 +260,13 @@ Retrieves IDs of contained parameters based on some filter criteria
 selections, \code{NULL} means no restriction.
 Only returns IDs of parameters that satisfy all conditions.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$ids(class = NULL, is_bounded = NULL, tags = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$ids(class = NULL, tags = NULL, any_tags = NULL)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{class}}{(\code{character()}).}
-
-\item{\code{is_bounded}}{(\code{logical(1)}).}
 
 \item{\code{tags}}{(\code{character()}).}
 }
@@ -267,10 +286,11 @@ Only returns values of parameters that satisfy all conditions.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_values(
   class = NULL,
-  is_bounded = NULL,
   tags = NULL,
+  any_tags = NULL,
   type = "with_token",
-  check_required = TRUE
+  check_required = TRUE,
+  remove_dependencies = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -279,8 +299,6 @@ Only returns values of parameters that satisfy all conditions.
 \describe{
 \item{\code{class}}{(\code{character()}).}
 
-\item{\code{is_bounded}}{(\code{logical(1)}).}
-
 \item{\code{tags}}{(\code{character()}).}
 
 \item{\code{type}}{(\code{character(1)})\cr
@@ -288,6 +306,8 @@ Return values \code{with_token}, \code{without_token} or \code{only_token}?}
 
 \item{\code{check_required}}{(\code{logical(1)})\cr
 Check if all required parameters are set?}
+
+\item{\code{is_bounded}}{(\code{logical(1)}).}
 }
 \if{html}{\out{</div>}}
 }
@@ -299,9 +319,9 @@ Named \code{list()}.
 \if{html}{\out{<a id="method-subset"></a>}}
 \if{latex}{\out{\hypertarget{method-subset}{}}}
 \subsection{Method \code{subset()}}{
-Changes the current set to the set of passed IDs.
+Create a new \code{ParamSet} restricted to the passed IDs.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$subset(ids)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$subset(ids, allow_dangling_dependencies = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -311,6 +331,29 @@ Changes the current set to the set of passed IDs.
 }
 \if{html}{\out{</div>}}
 }
+\subsection{Returns}{
+\code{ParamSet}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-subspaces"></a>}}
+\if{latex}{\out{\hypertarget{method-subspaces}{}}}
+\subsection{Method \code{subspaces()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$subspaces(ids = private$.params$id)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-flatten"></a>}}
+\if{latex}{\out{\hypertarget{method-flatten}{}}}
+\subsection{Method \code{flatten()}}{
+Create a \code{ParamSet} from this object, even if this object itself is not
+a \code{ParamSet}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$flatten()}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-search_space"></a>}}
@@ -338,7 +381,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = FALSE, describe_error = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -353,6 +396,15 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 }
 \if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-check_dependencies"></a>}}
+\if{latex}{\out{\hypertarget{method-check_dependencies}{}}}
+\subsection{Method \code{check_dependencies()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dependencies(xs, describe_error = TRUE)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-test"></a>}}
 \if{latex}{\out{\hypertarget{method-test}{}}}
 \subsection{Method \code{test()}}{
@@ -361,7 +413,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -384,7 +436,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, .var.name = vname(xs))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, check_strict = FALSE, .var.name = vname(xs))}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -412,7 +464,7 @@ if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = FALSE, describe_error = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -432,7 +484,7 @@ If successful \code{TRUE}, if not a string with the error message.
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt, check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -452,7 +504,7 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \subsection{Method \code{assert_dt()}}{
 \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, .var.name = vname(xdt))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, check_strict = FALSE, .var.name = vname(xdt))}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
