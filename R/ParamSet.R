@@ -111,7 +111,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     qunif = function(x) {
-      assert(check_data_frame(x, types = "numeric"), check_matrix(x, mode = "numeric"))
+      assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
       if (is.matrix(x)) {
         qassert(x, "N[0,1]")
       } else {
@@ -121,9 +121,9 @@ ParamSet = R6Class("ParamSet",
       assert_names(colnames(x), type = "unique", subset.of = private$.params$id)
 
       x = t(x)
-      params = private$.params[colnames(x), on = "id"]
+      params = private$.params[rownames(x), on = "id"]
       params$result = list()
-      params[, result := as.data.frame(t(matrix(domain_qunif(.SD, x[id, ]), nrow = .N))), by = c("cls", "grouping")]
+      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))), by = c("cls", "grouping")]
       as.data.table(set_names(params$result, params$id))
     },
 
@@ -398,7 +398,7 @@ ParamSet = R6Class("ParamSet",
     check_dt = function(xdt, check_strict = FALSE, describe_error = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
-      for (is in seq_along(xss)) {
+      for (i in seq_along(xss)) {
         xs = xss[[i]]
         ok = self$check(xs, check_strict = check_strict, describe_error = describe_error)
         if (!isTRUE(ok)) {

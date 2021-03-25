@@ -68,7 +68,8 @@ domain_is_categ = function(param) {
 #' @export
 domain_qunif = function(param, x) {
   assert_string(unique(param$grouping))
-  assert(check_number(x, lower = 0, upper = 1), check_numeric(x, lower = 0, upper = 1, any.missing = FALSE, length = nrow(param)))
+  assert_numeric(x, lower = 0, upper = 1, any.missing = FALSE, min.len = nrow(param))
+  assert_true(length(x) %% length(nrow(param)) == 0)
   UseMethod("domain_qunif")
 }
 
