@@ -150,11 +150,11 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
   class(param) = c(cls, "Domain", class(param))
 
   if (!is_nodefault(default)) {
-    param_assert(param, default)
+    domain_assert(param, list(default))
   }
 
   # repr: what to print
-  constructorcall = match.call(sys.function(-1), sys.call(-1))
+  constructorcall = match.call(sys.function(-1), sys.call(-1), envir = parent.frame(2))
   trafoexpr = constructorcall$trafo
   constructorcall$trafo = NULL
   constructorcall$depends = NULL

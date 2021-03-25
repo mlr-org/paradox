@@ -453,7 +453,7 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Helper for print outputs.
     format = function() {
-      sprintf("<%s[%s]>", class(self)[1L], nrow(private$.params))
+      sprintf("<%s[%s]>", class(self)[[1L]], self$length)
     },
 
     #' @description
@@ -491,7 +491,7 @@ ParamSet = R6Class("ParamSet",
   active = list(
     data = function(v) {
       if (!missing(v)) stop("v is read-only")
-      private$.params[, list(id, class = cls, lower, upper, nlevels = self$nlevels,
+      private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
         is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags)]
     },
 
@@ -566,7 +566,7 @@ ParamSet = R6Class("ParamSet",
     #' Number of categorical levels per parameter, `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
-      set_names(private$.params[, list(id, nlevels = domain_nlevels(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", nlevels],
+      set_names(private$.params[, list(id, nlevels = domain_nlevels(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", nlevels],
         private$.params$id)
     },
 
@@ -574,7 +574,7 @@ ParamSet = R6Class("ParamSet",
     #' Do all parameters have finite bounds?
     #' Named with parameter IDs.
     is_bounded = function() {
-      set_names(private$.params[, list(id, is_bounded = domain_is_bounded(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_bounded],
+      set_names(private$.params[, list(id, is_bounded = domain_is_bounded(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_bounded],
         private$.params$id)
     },
 
@@ -609,7 +609,7 @@ ParamSet = R6Class("ParamSet",
     #' Data types of parameters when stored in tables.
     #' Named with parameter IDs.
     storage_type = function() {
-      set_names(private$.params[, list(id, storage_type = domain_storage_type(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", storage_type],
+      set_names(private$.params[, list(id, storage_type = domain_storage_type(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", storage_type],
         private$.params$id)
     },
 
@@ -617,7 +617,7 @@ ParamSet = R6Class("ParamSet",
     #' Position is TRUE for [ParamDbl] and [ParamInt].
     #' Named with parameter IDs.
     is_number = function() {
-      set_names(private$.params[, list(id, is_number = domain_is_number(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
+      set_names(private$.params[, list(id, is_number = domain_is_number(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
         private$.params$id)
     },
 
@@ -625,7 +625,7 @@ ParamSet = R6Class("ParamSet",
     #' Position is TRUE for [ParamFct] and [ParamLgl].
     #' Named with parameter IDs.
     is_categ = function() {
-      set_names(private$.params[, list(id, is_categ = domain_is_categ(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
+      set_names(private$.params[, list(id, is_categ = domain_is_categ(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
         private$.params$id)
     },
 
@@ -685,7 +685,7 @@ ParamSet = R6Class("ParamSet",
         nontt = discard(xs, inherits, "TuneToken")
         sanitised = private$.params[names(nontt), on = "id"][, values := nontt][
           !pmap_lgl(list(special_vals, values), has_element),
-          list(id, values = domain_sanitize(cbind(.SD, .BY), values)), by = c("cls", "grouping")]
+          list(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
         insert_named(xx, set_names(sanitised$values, sanitised$id))
       }
       # store with param ordering, return value with original ordering
@@ -767,6 +767,7 @@ ParamSet = R6Class("ParamSet",
 recover_domain = function(sd, by) {
   domain = as.data.table(c(by, sd))
   class(domain) = c(domain$cls, class(domain))
+  domain
 }
 
 #' @export

@@ -2,7 +2,7 @@ context("ParamDbl")
 
 test_that("constructor works", {
   p = ParamDbl$new(id = "test", lower = 1, upper = 10)
-  expect_equal(p$id, "test")
+  expect_equal(p$ids(), "test")
   expect_equal(p$lower, 1)
   expect_equal(p$upper, 10)
 

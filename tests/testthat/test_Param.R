@@ -4,8 +4,8 @@ context("Param")
 test_that("basic properties", {
   p1 = ParamDbl$new("x", default = 4)
   p2 = ParamFct$new("y", levels = c("a", "b"))
-  expect_true(p1$has_default)
-  expect_false(p2$has_default)
+  expect_equal(p1$default, list(x = 4))
+  expect_equal(p2$default, named_list())
   expect_true(p1$is_number)
   expect_false(p2$is_number)
   expect_false(p1$is_categ)
@@ -16,12 +16,12 @@ test_that("check and assert work", {
   # test-funcion should be tested in individual test_Param<type> files
   # here we briefly check all 3 to see if they work in principle
   p = ParamDbl$new("x", lower = 1, upper = 2)
-  p$assert(1)
-  expect_error(p$assert(3))
-  expect_true(p$check(1))
-  expect_string(p$check(3), fixed = "<= 2")
-  expect_true(p$test(1))
-  expect_false(p$test(3))
+  p$assert(list(x = 1))
+  expect_error(p$assert(list(x = 3)))
+  expect_true(p$check(list(x = 1)))
+  expect_string(p$check(list(x = 3)), fixed = "<= 2")
+  expect_true(p$test(list(x = 1)))
+  expect_false(p$test(list(x = 3)))
 })
 
 
@@ -42,17 +42,17 @@ test_that("special_vals work for all Param subclasses", {
         p = cl$new(id = paste0("test.", cl$classname), special_vals = special_vals)
       }
       for (special_val in special_vals) {
-        expect_true(p$test(special_val))
-        expect_false(p$test("never valid"))
-        expect_false(p$test(NA))
-        expect_false(p$test(NULL))
+        expect_true(p$test(set_names(list(special_val), paste0("test.", cl$classname))))
+        expect_false(p$test(set_names(list("never valid"), paste0("test.", cl$classname))))
+        expect_false(p$test(set_names(list(NA), paste0("test.", cl$classname))))
+        expect_false(p$test(set_names(list(NULL), paste0("test.", cl$classname))))
       }
     }
   }
 })
 
 test_that("we cannot create Params with non-strict R names", {
-  expect_error(ParamInt$new(id = "$foo"), "Must comply")
+  expect_error(ParamInt$new(id = "$foo"), "does not comply")
 })
 
 test_that("printer works", {
