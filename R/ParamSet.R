@@ -72,7 +72,7 @@ ParamSet = R6Class("ParamSet",
         private$.params = data.table(cls = character(0), grouping = character(0), cargo = list(), lower = numeric(0), upper = numeric(0), tolerance = numeric(0),
           levels = list(), special_vals = list(), default = list(), tags = list(), trafo = list(), requirements = list(), id = character(0))
       } else {
-        private$.params = rbindlist(c(list(dt0), params))[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))][,
+        private$.params = rbindlist(params)[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))][,
           # put 'id' at the beginning
           c("id", "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels", "special_vals", "default", "tags", "trafo", "has_trafo"), with = FALSE]
       }
@@ -566,7 +566,7 @@ ParamSet = R6Class("ParamSet",
     #' Number of categorical levels per parameter, `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
-      set_names(private$.params[, list(id, nlevels = domain_nlevels(.SD)), by = c("cls", "grouping")][private$.params$id, on = "id", nlevels],
+      set_names(private$.params[, list(id, nlevels = domain_nlevels(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", nlevels],
         private$.params$id)
     },
 
@@ -574,7 +574,7 @@ ParamSet = R6Class("ParamSet",
     #' Do all parameters have finite bounds?
     #' Named with parameter IDs.
     is_bounded = function() {
-      set_names(private$.params[, list(id, is_bounded = domain_is_bounded(.SD)), by = c("cls", "grouping")][private$.params$id, on = "id", is_bounded],
+      set_names(private$.params[, list(id, is_bounded = domain_is_bounded(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_bounded],
         private$.params$id)
     },
 
@@ -609,7 +609,7 @@ ParamSet = R6Class("ParamSet",
     #' Data types of parameters when stored in tables.
     #' Named with parameter IDs.
     storage_type = function() {
-      set_names(private$.params[, list(id, storage_type = domain_storage_type(.SD)), by = c("cls", "grouping")][private$.params$id, on = "id", storage_type],
+      set_names(private$.params[, list(id, storage_type = domain_storage_type(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", storage_type],
         private$.params$id)
     },
 
@@ -617,7 +617,7 @@ ParamSet = R6Class("ParamSet",
     #' Position is TRUE for [ParamDbl] and [ParamInt].
     #' Named with parameter IDs.
     is_number = function() {
-      set_names(private$.params[, list(id, is_number = domain_is_number(.SD)), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
+      set_names(private$.params[, list(id, is_number = domain_is_number(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
         private$.params$id)
     },
 
@@ -625,7 +625,7 @@ ParamSet = R6Class("ParamSet",
     #' Position is TRUE for [ParamFct] and [ParamLgl].
     #' Named with parameter IDs.
     is_categ = function() {
-      set_names(private$.params[, list(id, is_categ = domain_is_categ(.SD)), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
+      set_names(private$.params[, list(id, is_categ = domain_is_categ(cbind(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
         private$.params$id)
     },
 
@@ -685,7 +685,7 @@ ParamSet = R6Class("ParamSet",
         nontt = discard(xs, inherits, "TuneToken")
         sanitised = private$.params[names(nontt), on = "id"][, values := nontt][
           !pmap_lgl(list(special_vals, values), has_element),
-          list(id, values = domain_sanitize(.SD, values)), by = c("cls", "grouping")]
+          list(id, values = domain_sanitize(cbind(.SD, .BY), values)), by = c("cls", "grouping")]
         insert_named(xx, set_names(sanitised$values, sanitised$id))
       }
       # store with param ordering, return value with original ordering
@@ -763,6 +763,11 @@ ParamSet = R6Class("ParamSet",
     }
   )
 )
+
+recover_domain = function(sd, by) {
+  domain = as.data.table(c(by, sd))
+  class(domain) = c(domain$cls, class(domain))
+}
 
 #' @export
 as.data.table.ParamSet = function(x, ...) { # nolint
