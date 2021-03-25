@@ -123,7 +123,7 @@ NULL
 # @param constargs: arguments of constructor
 # @param constargs_override: replace these in `constargs`, but don't represent this in printer
 domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real_, levels = NULL, special_vals = list(), default = NO_DEF, tags = character(0),
-                  tolerance = NA_real_, trafo = NULL, depends_expr = NULL) {
+                  tolerance = NA_real_, trafo = NULL, storage_type = "list", depends_expr = NULL, init) {
 
   assert_string(cls)
   assert_string(grouping)
@@ -144,13 +144,18 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
     }
   }
 
+
   param = data.table(cls = cls, grouping = grouping, cargo = list(cargo), lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
     special_vals = list(special_vals),
-    default = list(default), tags = list(tags), trafo = list(trafo), requirements = list(parse_depends(depends_expr, parent.frame(2))))
+    default = list(default), tags = list(tags), trafo = list(trafo), requirements = list(parse_depends(depends_expr, parent.frame(2))),
+    storage_type = storage_type, init_given = !missing(init), init = if (!missing(init)) init)
   class(param) = c(cls, "Domain", class(param))
 
   if (!is_nodefault(default)) {
     domain_assert(param, list(default))
+  }
+  if (!missing(init)) {
+    domain_assert(param, list(init))
   }
 
   # repr: what to print

@@ -71,10 +71,16 @@ ParamSet = R6Class("ParamSet",
       if (!length(params)) {
         private$.params = data.table(cls = character(0), grouping = character(0), cargo = list(), lower = numeric(0), upper = numeric(0), tolerance = numeric(0),
           levels = list(), special_vals = list(), default = list(), tags = list(), trafo = list(), requirements = list(), id = character(0))
+        initvalues = named_list()
       } else {
-        private$.params = rbindlist(params)[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))][,
+        private$.params = rbindlist(params)[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))]
+
+        initvalues = private$.params[(init_given), list(id, init)]
+        initvalues = set_names(initvalues$init, initvalues$id)
+        private$.params = private$.params[,
           # put 'id' at the beginning
-          c("id", "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels", "special_vals", "default", "tags", "trafo", "has_trafo"), with = FALSE]
+          c("id", "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels", "special_vals", "default", "tags", "trafo", "has_trafo", "storage_type"), with = FALSE]
+
       }
       setindexv(private$.params, c("id", "cls", "grouping"))
       assert_names(colnames(private$.params), identical.to = )
@@ -95,9 +101,15 @@ ParamSet = R6Class("ParamSet",
           }
         })
       })
+      self$values = initvalues
     },
 
     trafo = function(x, param_set) {  # param_set argument only here for compatibility
+      if (!missing(param_set)) {
+        warning("Giving the `param_set` argument is deprecated!")
+      } else {
+        param_set = self  # for the .extra_trafo, in case it still has a param_set argument
+      }
       trafos = private$.params[names(x), list(id, trafo, has_trafo, value = x), on = "id", nomatch = 0][(has_trafo)]
       if (nrow(trafos)) {
         trafos = trafos[, list(value = trafo[[1]](value[[1]])), by = "id"]
@@ -105,7 +117,11 @@ ParamSet = R6Class("ParamSet",
       }
       extra_trafo = self$extra_trafo
       if (!is.null(extra_trafo)) {
-        x = extra_trafo(x)
+        if (test_function(private$.extra_trafo, args = c("x", "param_set"))) {
+          x = extra_trafo(x, param_set)
+        } else {
+          x = extra_trafo(x)
+        }
       }
       x
     },
@@ -133,8 +149,6 @@ ParamSet = R6Class("ParamSet",
       if (!nrow(paramrow)) stopf("No param with id '%s'", id)
       set_class(paramrow, c(paramrow$cls, class(paramrow)))
     },
-
-    get_levels = function(id) domain_nlevels(self$get_param(id)),
 
     #' @description
     #' Retrieves IDs of contained parameters based on some filter criteria
@@ -316,7 +330,6 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-
       if (check_strict) {
         required = setdiff(self$ids(tags = "required"), ns)
         if (length(required) > 0L) {
@@ -482,7 +495,7 @@ ParamSet = R6Class("ParamSet",
         d$value = list(v)
         print(d[, setdiff(colnames(d), hide_cols), with = FALSE])
       }
-      if (!is.null(self$trafo)) {
+      if (self$has_trafo) {
         catf("Trafo is set.")
       } # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
     }
@@ -609,15 +622,14 @@ ParamSet = R6Class("ParamSet",
     #' Data types of parameters when stored in tables.
     #' Named with parameter IDs.
     storage_type = function() {
-      set_names(private$.params[, list(id, storage_type = domain_storage_type(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", storage_type],
-        private$.params$id)
+      set_names(private$.params$storage_type, private$.params$id)
     },
 
     #' @field is_number (named `logical()`)\cr
     #' Position is TRUE for [ParamDbl] and [ParamInt].
     #' Named with parameter IDs.
     is_number = function() {
-      set_names(private$.params[, list(id, is_number = domain_is_number(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
+      set_names(private$.params[, list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
         private$.params$id)
     },
 
@@ -625,7 +637,7 @@ ParamSet = R6Class("ParamSet",
     #' Position is TRUE for [ParamFct] and [ParamLgl].
     #' Named with parameter IDs.
     is_categ = function() {
-      set_names(private$.params[, list(id, is_categ = domain_is_categ(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
+      set_names(private$.params[, list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
         private$.params$id)
     },
 
@@ -655,7 +667,11 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.extra_trafo
       } else {
-        assert_function(f, args = c("x"), null.ok = TRUE)
+        if (test_function(f, args = c("x", "param_set"))) {
+          warning("The 'param_set' argument for '.extra_trafos' is deprecated and will be removed in future versions!")
+        } else {
+          assert_function(f, args = "x", null.ok = TRUE)
+        }
         private$.extra_trafo = f
       }
     },

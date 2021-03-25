@@ -1,6 +1,6 @@
 #' @rdname Domain
 #' @export
-p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE) {
+p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init) {
   assert_number(tolerance, lower = 0)
   assert_number(lower)
   assert_number(upper)
@@ -17,8 +17,8 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
     real_upper = upper
   }
 
-  domain(cls = "ParamDbl", grouping = "ParamDbl", lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
-    depends_expr = substitute(depends))
+  domain(cls = "ParamDbl", grouping = "ParamDbl", lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo, storage_type = "numeric",
+    depends_expr = substitute(depends), init = init)
 }
 
 #' @export
@@ -40,16 +40,15 @@ domain_sanitize.ParamDbl = function(param, values) {
 }
 
 #' @export
-domain_storage_type.ParamDbl = function(param) rep("numeric", nrow(param))
-#' @export
 domain_nlevels.ParamDbl = function(param) ifelse(param$upper == param$lower, 1, Inf)
 #' @export
 domain_is_bounded.ParamDbl = function(param) is.finite(param$lower) && is.finite(param$upper)
 #' @export
-domain_is_number.ParamDbl = function(param) rep(TRUE, nrow(param))
-#' @export
-domain_is_categ.ParamDbl = function(param) rep(FALSE, nrow(param))
-#' @export
 domain_qunif.ParamDbl = function(param, x) {
   pmax(pmin(x * param$upper - (x-1) * param$lower, param$upper), param$lower)  # extra careful here w/ rounding errors
 }
+
+#' @export
+domain_is_number.ParamDbl = function(param) TRUE
+#' @export
+domain_is_categ.ParamDbl = function(param) FALSE

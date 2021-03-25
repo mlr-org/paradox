@@ -1,6 +1,6 @@
 #' @rdname Domain
 #' @export
-p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
+p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init) {
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
@@ -21,7 +21,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   }
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
-  domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, depends_expr = substitute(depends))
+  domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init)
 }
 
 #' @export
@@ -35,15 +35,9 @@ domain_check.ParamFct = function(param, values, describe_error = TRUE) {
 }
 
 #' @export
-domain_storage_type.ParamFct = function(param) rep("character", nrow(param))
-#' @export
 domain_nlevels.ParamFct = function(param) map_dbl(param$levels, length)
 #' @export
 domain_is_bounded.ParamFct = function(param) rep(TRUE, nrow(param))
-#' @export
-domain_is_number.ParamFct = function(param) rep(FALSE, nrow(param))
-#' @export
-domain_is_categ.ParamFct = function(param) rep(TRUE, nrow(param))
 #' @export
 domain_qunif.ParamFct = function(param, x) {
   nlevels = domain_nlevels(param)
@@ -51,3 +45,7 @@ domain_qunif.ParamFct = function(param, x) {
   as.character(pmap(list(param$levels, z), `[[`))
 }
 
+#' @export
+domain_is_number.ParamFct = function(param) FALSE
+#' @export
+domain_is_categ.ParamFct = function(param) TRUE

@@ -31,6 +31,13 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   return(xs)
 }
 
+ps_replicate = function(set, times = length(prefixes), prefixes = sprintf("rep%s", seq_len(times)), tag_set = FALSE, tag_params = FALSE) {
+  assert_count(times)
+  assert_character(prefixes, any.missing = FALSE, unique = TRUE, len = times)
+
+  ps_union(named_list(prefixes, set), tag_set = tag_set, tag_params = tag_params)
+}
+
 # Create a ParamSet from a list of ParamSets
 # This emulates `ParamSetCollection$new(sets)`, except that
 # - The result is a `ParamSet`, not a `ParamSetCollection`
@@ -39,7 +46,7 @@ transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
 # from the input `sets`, but some `$id`s are changed: If the ParamSet has a non-empty `set_id`, then the Params will
 # have their <id> changed to <set_id>.<id>. This is also reflected in deps and in `$trafo`.
 # @param sets: list of ParamSet
-ps_union = function(sets, ignore_ids = FALSE) {
+ps_union = function(sets, tag_set = FALSE, tag_params = FALSE) {
   assert_list(sets, types = "ParamSet")
 
   if (!ignore_ids) {

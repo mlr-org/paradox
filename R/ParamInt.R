@@ -1,7 +1,7 @@
 
 #' @rdname Domain
 #' @export
-p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE) {
+p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init) {
   assert_number(tolerance, lower = 0, upper = 0.5)
   # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
   if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
@@ -22,7 +22,8 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
   }
 
   domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
-    depends_expr = substitute(depends))
+    storage_type = "integer",
+    depends_expr = substitute(depends), init = init)
 }
 
 #' @export
@@ -59,14 +60,13 @@ domain_sanitize.ParamInt = function(param, values) {
 #' @export
 domain_nlevels.ParamInt = function(param) (param$upper - param$lower) + 1
 #' @export
-domain_storage_type.ParamInt = function(param) rep("integer", nrow(param))
-#' @export
 domain_is_bounded.ParamInt = function(param) is.finite(param$lower) && is.finite(param$upper)
-#' @export
-domain_is_number.ParamInt = function(param) rep(TRUE, nrow(param))
-#' @export
-domain_is_categ.ParamInt = function(param) rep(FALSE, nrow(param))
 #' @export
 domain_qunif.ParamInt = function(param, x) {
   pmax(pmin(as.integer(x * (param$upper + 1) - (x-1) * param$lower), param$upper), param$lower)  # extra careful here w/ rounding errors and the x == 1 case
 }
+
+#' @export
+domain_is_number.ParamInt = function(param) TRUE
+#' @export
+domain_is_categ.ParamInt = function(param) FALSE
