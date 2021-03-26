@@ -40,31 +40,56 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Also note that the `$values` will have undefined behavior when `sets` contains a
     #'   single [`ParamSet`] multiple times (by reference).
     #'   Default `FALSE`.
-    initialize = function(sets, set_id = "", ignore_ids = FALSE) {
+    initialize = function(sets) {
       assert_list(sets, types = "ParamSet")
-      if (!ignore_ids) {
-        names(sets) = map(sets, "set_id")
-      }
       split_sets = split(sets, names(sets) == "")
       nameless_sets = split_sets$`TRUE`
       named_sets = split_sets$`FALSE`
       assert_names(names2(named_sets), type = "strict")
+      assert_ids(names2(named_sets))
+      if (is.null(names(sets))) names(sets) = rep("", length(sets))
 
-      private$.tags = unlist(map(sets, "tags"), recursive = FALSE) %??% named_list()
-      private$.sets = sets
+      params = rbindlist(map(seq_along(sets), function(i) {
+        s = sets[[i]]
+        n = names2(sets)[[n]]
+        params_child = cbind(s$params, orig_id = s$params$id, owner_ps = i)
+        if (n != "") params_child$id = sprintf("%s.%s", n, params_child$id)
+        params_child
+      })
 
-      if (!identical(set_id, "")) {
-        assert_id(set_id)
-        assert_names(set_id, type = "strict")
-      }
-      private$.set_id = set_id
-
-      pnames = names(self$params_unid)
-      dups = duplicated(pnames)
+      dups = duplicated(params$id)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
           str_collapse(unique(pnames[dups])))
       }
+
+      child_trafos = map(sets, "extra_trafo")
+      child_with_trafos = which(!map_lgl(child_trafos, is.null))
+
+      if (length(child_with_trafos)) {
+        child_trafos = child_trafos[child_with_trafos]
+        private$.extra_trafo = crate(function(x) {
+          unlist(imap(child_with_trafos, function(child, trafoi) {
+            child = child_with_trafos[[trafoi]]
+            trafo = child_trafos[[trafoi]]
+            setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
+            subx = x[match(setinfo$id, names(x), nomatch = 0)]
+            names(subx) = params[names(subx), orig_id, on = "id"]
+
+            transformed = trafo(subx)
+
+            prefix = names(sets)[[child]]
+            if (prefix != "") {
+              names(transformed) = sprintf("%s.%s", prefix, names(transformed))
+            }
+          }), recursive = FALSE)
+        }, params, sets, child_trafos)
+      } else {
+        private$.extra_trafo = NULL
+      }
+
+      private$.params = params
+      private$.sets = sets
     }
   ),
   active = list(
@@ -141,19 +166,26 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       vals = unlist(vals, recursive = FALSE)
       if (!length(vals)) vals = named_list()
       vals
+    },
+
+    extra_trafo = function(f) {
+      if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
+      private$.extra_trafo
+    },
+
+    constraint = function(f) {
+      if (!missing(f)) stop("constraint is read-only in ParamSetCollection.")
+      private$.constraint
     }
   ),
 
   private = list(
     .sets = NULL,
+    .extra_trafo = NULL,
+    .constraint = NULL,
     deep_clone = function(name, value) {
       switch(name,
-        .params = named_list(),
-        .deps = {
-          value = copy(value)
-          value$cond = lapply(value$cond, function(x) x$clone(deep = TRUE))
-          value
-        },
+        .deps = copy(value),
         .sets = map(value, function(x) {
           x$clone(deep = TRUE)
         }),

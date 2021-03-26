@@ -70,20 +70,19 @@ ParamSet = R6Class("ParamSet",
 
       if (!length(params)) {
         private$.params = data.table(cls = character(0), grouping = character(0), cargo = list(), lower = numeric(0), upper = numeric(0), tolerance = numeric(0),
-          levels = list(), special_vals = list(), default = list(), tags = list(), trafo = list(), requirements = list(), id = character(0))
+          levels = list(), special_vals = list(), default = list(), trafo = list(), requirements = list(), id = character(0))
         initvalues = named_list()
       } else {
         private$.params = rbindlist(params)[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))]
 
-        initvalues = private$.params[(init_given), list(id, init)]
-        initvalues = set_names(initvalues$init, initvalues$id)
-        private$.params = private$.params[,
-          # put 'id' at the beginning
-          c("id", "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels", "special_vals", "default", "tags", "trafo", "has_trafo", "storage_type"), with = FALSE]
+        initvalues = private$.params[(init_given), set_names(init, id)]
+        private$.tags = private$.params[, set_names(tags, id)]
+
+        private$.params[, setdiff(colnames(private$.params), paramcols) := NULL]
 
       }
       setindexv(private$.params, c("id", "cls", "grouping"))
-      assert_names(colnames(private$.params), identical.to = )
+      assert_names(colnames(private$.params), identical.to = paramcols)
 
       # add Dependencies
       imap(params, function(p, name) {
@@ -120,10 +119,10 @@ ParamSet = R6Class("ParamSet",
       if (is.null(class) && is.null(tags) && is.null(any_tags)) {
         return(private$.params$id)
       }
-      .tags = tags
+      selftags = private$.tags
       ptbl[(is.null(class) | cls %in% class) &
-           (is.null(tags) | map_lgl(tags, function(tg) all(.tags %in% tg))) &
-           (is.null(any_tags) | map_lgl(tags, function(tg) any(any_tags %in% tg))),
+           (is.null(tags) | map_lgl(selftags, function(tg) all(tags %in% tg))) &
+           (is.null(any_tags) | map_lgl(selftags, function(tg) any(any_tags %in% tg))),
         id]
     },
 
@@ -173,7 +172,7 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-      values[intersect(names(values), self$ids(class = class, tags = tags, any_tags = any_tags))]
+      values[match(self$ids(class = class, tags = tags, any_tags = any_tags), names(values), nomatch = 0)]
     },
 
     trafo = function(x, param_set) {  # param_set argument only here for compatibility
@@ -187,9 +186,9 @@ ParamSet = R6Class("ParamSet",
         trafos = trafos[, list(value = trafo[[1]](value[[1]])), by = "id"]
         insert_named(x, set_names(trafos$value, trafos$id))
       }
-      extra_trafo = self$extra_trafo
+      extra_trafo = private$.extra_trafo
       if (!is.null(extra_trafo)) {
-        if (test_function(private$.extra_trafo, args = c("x", "param_set"))) {
+        if (test_function(extra_trafo, args = c("x", "param_set"))) {
           x = extra_trafo(x, param_set)
         } else {
           x = extra_trafo(x)
@@ -200,7 +199,7 @@ ParamSet = R6Class("ParamSet",
 
     test_constraint = function(x, assert_value = TRUE) {
       if (assert_value) self$assert(x)
-      assert_flag(private$.constraint(x))
+      assert_flag(is.null(private$.constraint) || private$.constraint(x))
     },
 
     test_constraint_dt = function(x, assert_value = TRUE) {
@@ -407,12 +406,13 @@ ParamSet = R6Class("ParamSet",
         }
       }
       result = ParamSet$new(extra_trafo = self$extra_trafo)
-      result$.__enclos_env__$private$.params = private$.params[id %in% ids]
+      result$.__enclos_env__$private$.params = private$.params[id %in% ids, paramcols, with = FALSE]
       result$assert_values = FALSE
       result$deps = deps
+      result$constraint = private$.constraint
       # restrict to ids already in pvals
       values = self$values
-      result$values = values[intersect(names(values), ids)]
+      result$values = values[match(ids, names(values), nomatch = 0)]
       result$assert_values = TRUE
       result
     },
@@ -420,9 +420,10 @@ ParamSet = R6Class("ParamSet",
     subspaces = function(ids = private$.params$id) {
       sapply(ids, simplify = FALSE, function(get_id) {
         result = ParamSet$new(extra_trafo = self$extra_trafo)
+        # constraint make no sense here, basically by definition
         result$.__enclos_env__$private$.params = private$.params[get_id, on = "id"]
         result$assert_values = FALSE
-        result$values = values[intersect(names(values), get_id)]
+        result$values = values[match(get_id, names(values), nomatch = 0)]
         result$assert_values = TRUE
         result
       })
@@ -517,7 +518,7 @@ ParamSet = R6Class("ParamSet",
     data = function(v) {
       if (!missing(v)) stop("v is read-only")
       private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
-        is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags)]
+        is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags = private$.tags)]
     },
 
     #' @template field_values
@@ -552,18 +553,18 @@ ParamSet = R6Class("ParamSet",
       if (!missing(v)) {
         assert_list(v, any.missing = FALSE, types = "character")
         assert_names(names(v), permutation.of = private$.params$id)
-        private$.params[names(v), tags := v]
+        private$.tags = v[match(private$.params$id, names(v), nomatch = 0)]
         return(v)
       }
-      set_names(private$.params$tags, private$.params$id)
+      private$.tags
     },
 
     #' @template field_params
     params = function(rhs) {
-      if (!missing(rhs) && !identical(rhs, private$.params)) {
+      if (!missing(rhs)) {
         stop("$params is read-only.")
       }
-      map(private$.params, self$param)  # giga-slow
+      private$.params[, paramcols, with = FALSE]
     },
 
     #' @field extra_trafo (`function(x, param_set)`)\cr
@@ -707,14 +708,10 @@ ParamSet = R6Class("ParamSet",
     .constraint = NULL,
     .params = NULL,
     .values = named_list(),
+    .tags = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
-    # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
-    get_member_with_idnames = function(member, astype) {
-      params = self$params_unid
-      set_names(astype(map(params, member)), names(params))
-    },
     get_tune_ps = function(values) {
-      selfparams = self$params_unid # cache to avoid performance hit in ParamSetCollection
+      selfparams = private$.params
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
         tunetoken_to_ps(value, selfparams[[pn]], pn)
       })
@@ -766,6 +763,8 @@ ParamSet = R6Class("ParamSet",
     }
   )
 )
+
+paramcols = c("id", "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels", "special_vals", "default", "trafo", "has_trafo", "storage_type")
 
 recover_domain = function(sd, by) {
   domain = as.data.table(c(by, sd))
