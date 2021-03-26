@@ -36,22 +36,18 @@ S6Cache = R6Class("S6Cache",
             set6::setpower(stype, "n")
           }
         } %??% stopf("Description '%s' not in set6_cache and could not be constructed.", description)  # how do we automatically generate a set from a string?
-      self$enter(set, description)
+      self$enter(self$canonicalize(set), description)
       set
     },
     canonicalize = function(object) {
       if (test_string(object, pattern = "[^ ]")) return(self$get(object) %??% stopf("Could not get object from string '%s'", object))
       assert_class(object, "Set")
       repr = self$set6_sane_repr(object)
-      alternative = private$.cache[[repr]]
-      if (!is.null(alternative)) return(alternative)  # don't use the given object when one with the same representation is already present.
-      self$enter(object)
-      object
-
+      private$.cache[[repr]] %??% object  # don't use the given object when one with the same representation is already present.
     },
     enter = function(object, description = NULL) {
       # if we were able to get the object from the description, then we mark it as evictable
-      private$.enter_lowlevel(object, description %??% self$set6_sane_repr(object), evictable = !is.null(description))
+      private$.enter_lowlevel(object, c(description, self$set6_sane_repr(object)), evictable = TRUE)
     },
     set6_sane_repr = function(object) {
       assert_r6(object, "Set")

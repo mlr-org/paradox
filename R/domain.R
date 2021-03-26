@@ -153,9 +153,11 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
 
   if (!is_nodefault(default)) {
     domain_assert(param, list(default))
+    if ("required" %in% tags) stop("A 'required' parameter can not have a 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default', but the 'required' indicates that the parameter may not be missing.")
   }
   if (!missing(init)) {
     domain_assert(param, list(init))
+    if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
   }
 
   # repr: what to print

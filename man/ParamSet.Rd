@@ -68,8 +68,7 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
 
-\item{\code{length}}{(\code{integer(1)})\cr
-Number of contained \link{Param}s.}
+\item{\code{length}}{(\code{integer(1)})\cr Number of contained \link{Param}s.}
 
 \item{\code{is_empty}}{(\code{logical(1)})\cr
 Is the \code{ParamSet} empty?}
@@ -159,9 +158,10 @@ Has the set parameter dependencies?}
 \itemize{
 \item \href{#method-new}{\code{ParamSet$new()}}
 \item \href{#method-trafo}{\code{ParamSet$trafo()}}
+\item \href{#method-test_constraint}{\code{ParamSet$test_constraint()}}
+\item \href{#method-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
 \item \href{#method-qunif}{\code{ParamSet$qunif()}}
 \item \href{#method-get_param}{\code{ParamSet$get_param()}}
-\item \href{#method-get_levels}{\code{ParamSet$get_levels()}}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
@@ -226,6 +226,24 @@ Default \code{FALSE}.}
 
 }
 \if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-test_constraint"></a>}}
+\if{latex}{\out{\hypertarget{method-test_constraint}{}}}
+\subsection{Method \code{test_constraint()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_constraint(x, assert_value = TRUE)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-test_constraint_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-test_constraint_dt}{}}}
+\subsection{Method \code{test_constraint_dt()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_constraint_dt(x, assert_value = TRUE)}\if{html}{\out{</div>}}
+}
+
+}
+\if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-qunif"></a>}}
 \if{latex}{\out{\hypertarget{method-qunif}{}}}
 \subsection{Method \code{qunif()}}{
@@ -240,15 +258,6 @@ Default \code{FALSE}.}
 \subsection{Method \code{get_param()}}{
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_param(id)}\if{html}{\out{</div>}}
-}
-
-}
-\if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-get_levels"></a>}}
-\if{latex}{\out{\hypertarget{method-get_levels}{}}}
-\subsection{Method \code{get_levels()}}{
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_levels(id)}\if{html}{\out{</div>}}
 }
 
 }

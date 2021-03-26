@@ -76,7 +76,6 @@ When you set values, all previously set values will be unset / removed.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt">}\href{../../paradox/html/ParamSet.html#method-check_dt}{\code{paradox::ParamSet$check_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten">}\href{../../paradox/html/ParamSet.html#method-flatten}{\code{paradox::ParamSet$flatten()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format">}\href{../../paradox/html/ParamSet.html#method-format}{\code{paradox::ParamSet$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_levels">}\href{../../paradox/html/ParamSet.html#method-get_levels}{\code{paradox::ParamSet$get_levels()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_param">}\href{../../paradox/html/ParamSet.html#method-get_param}{\code{paradox::ParamSet$get_param()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
@@ -86,6 +85,8 @@ When you set values, all previously set values will be unset / removed.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset">}\href{../../paradox/html/ParamSet.html#method-subset}{\code{paradox::ParamSet$subset()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces">}\href{../../paradox/html/ParamSet.html#method-subspaces}{\code{paradox::ParamSet$subspaces()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint">}\href{../../paradox/html/ParamSet.html#method-test_constraint}{\code{paradox::ParamSet$test_constraint()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint_dt">}\href{../../paradox/html/ParamSet.html#method-test_constraint_dt}{\code{paradox::ParamSet$test_constraint_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo">}\href{../../paradox/html/ParamSet.html#method-trafo}{\code{paradox::ParamSet$trafo()}}\out{</span>}
 }

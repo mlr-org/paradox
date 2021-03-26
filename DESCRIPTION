@@ -71,6 +71,7 @@ Collate:
     'ParamSet.R'
     'ParamSetCollection.R'
     'ParamUty.R'
+    'S6ObjectCache.R'
     'Sampler.R'
     'Sampler1D.R'
     'SamplerHierarchical.R'

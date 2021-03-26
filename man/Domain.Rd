@@ -20,7 +20,8 @@ p_dbl(
   tolerance = sqrt(.Machine$double.eps),
   depends = NULL,
   trafo = NULL,
-  logscale = FALSE
+  logscale = FALSE,
+  init
 )
 
 p_fct(
@@ -29,7 +30,8 @@ p_fct(
   default = NO_DEF,
   tags = character(),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  init
 )
 
 p_int(
@@ -41,7 +43,8 @@ p_int(
   tolerance = sqrt(.Machine$double.eps),
   depends = NULL,
   trafo = NULL,
-  logscale = FALSE
+  logscale = FALSE,
+  init
 )
 
 p_lgl(
@@ -49,7 +52,8 @@ p_lgl(
   default = NO_DEF,
   tags = character(),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  init
 )
 
 p_s6(
@@ -58,7 +62,8 @@ p_s6(
   default = NO_DEF,
   tags = character(),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  init
 )
 
 p_uty(
@@ -67,7 +72,8 @@ p_uty(
   default = NO_DEF,
   tags = character(),
   depends = NULL,
-  trafo = NULL
+  trafo = NULL,
+  init
 )
 }
 \arguments{

@@ -104,52 +104,6 @@ ParamSet = R6Class("ParamSet",
       self$values = initvalues
     },
 
-    trafo = function(x, param_set) {  # param_set argument only here for compatibility
-      if (!missing(param_set)) {
-        warning("Giving the `param_set` argument is deprecated!")
-      } else {
-        param_set = self  # for the .extra_trafo, in case it still has a param_set argument
-      }
-      trafos = private$.params[names(x), list(id, trafo, has_trafo, value = x), on = "id", nomatch = 0][(has_trafo)]
-      if (nrow(trafos)) {
-        trafos = trafos[, list(value = trafo[[1]](value[[1]])), by = "id"]
-        insert_named(x, set_names(trafos$value, trafos$id))
-      }
-      extra_trafo = self$extra_trafo
-      if (!is.null(extra_trafo)) {
-        if (test_function(private$.extra_trafo, args = c("x", "param_set"))) {
-          x = extra_trafo(x, param_set)
-        } else {
-          x = extra_trafo(x)
-        }
-      }
-      x
-    },
-
-    qunif = function(x) {
-      assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
-      if (is.matrix(x)) {
-        qassert(x, "N[0,1]")
-      } else {
-        qassertr(x, "N[0,1]")
-        x = as.matrix(x)
-      }
-      assert_names(colnames(x), type = "unique", subset.of = private$.params$id)
-
-      x = t(x)
-      params = private$.params[rownames(x), on = "id"]
-      params$result = list()
-      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))), by = c("cls", "grouping")]
-      as.data.table(set_names(params$result, params$id))
-    },
-
-    get_param = function(id) {
-      .id = id
-      paramrow = private$.params[id == .id]
-      if (!nrow(paramrow)) stopf("No param with id '%s'", id)
-      set_class(paramrow, c(paramrow$cls, class(paramrow)))
-    },
-
     #' @description
     #' Retrieves IDs of contained parameters based on some filter criteria
     #' selections, `NULL` means no restriction.
@@ -222,68 +176,37 @@ ParamSet = R6Class("ParamSet",
       values[intersect(names(values), self$ids(class = class, tags = tags, any_tags = any_tags))]
     },
 
-    #' @description
-    #' Create a new `ParamSet` restricted to the passed IDs.
-    #'
-    #' @param ids (`character()`).
-    #' @return `ParamSet`.
-    subset = function(ids, allow_dangling_dependencies = FALSE) {
-      param_ids = private$.params$id
-
-      assert_subset(ids, param_ids)
-      deps = self$deps
-      if (!allow_dangling_dependencies && nrow(deps)) { # check that all required / leftover parents are still in new ids
-        on = NULL
-        parents = unique(deps[id %in% ids, on])
-        pids_not_there = setdiff(parents, ids)
-        if (length(pids_not_there) > 0L) {
-          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
-              "\nIf you still want to subset, set allow_dangling_dependencies to TRUE."), str_collapse(pids_not_there))
+    trafo = function(x, param_set) {  # param_set argument only here for compatibility
+      if (!missing(param_set)) {
+        warning("Giving the `param_set` argument is deprecated!")
+      } else {
+        param_set = self  # for the .extra_trafo, in case it still has a param_set argument
+      }
+      trafos = private$.params[names(x), list(id, trafo, has_trafo, value = x), on = "id", nomatch = 0][(has_trafo)]
+      if (nrow(trafos)) {
+        trafos = trafos[, list(value = trafo[[1]](value[[1]])), by = "id"]
+        insert_named(x, set_names(trafos$value, trafos$id))
+      }
+      extra_trafo = self$extra_trafo
+      if (!is.null(extra_trafo)) {
+        if (test_function(private$.extra_trafo, args = c("x", "param_set"))) {
+          x = extra_trafo(x, param_set)
+        } else {
+          x = extra_trafo(x)
         }
       }
-      result = ParamSet$new(extra_trafo = self$extra_trafo)
-      result$.__enclos_env__$private$.params = private$.params[id %in% ids]
-      result$assert_values = FALSE
-      result$deps = deps
-      # restrict to ids already in pvals
-      values = self$values
-      result$values = values[intersect(names(values), ids)]
-      result$assert_values = TRUE
-      result
+      x
     },
 
-    subspaces = function(ids = private$.params$id) {
-      sapply(ids, simplify = FALSE, function(get_id) {
-        result = ParamSet$new(extra_trafo = self$extra_trafo)
-        result$.__enclos_env__$private$.params = private$.params[get_id, on = "id"]
-        result$assert_values = FALSE
-        result$values = values[intersect(names(values), get_id)]
-        result$assert_values = TRUE
-        result
-      })
+    test_constraint = function(x, assert_value = TRUE) {
+      if (assert_value) self$assert(x)
+      assert_flag(private$.constraint(x))
     },
 
-    #' @description
-    #' Create a `ParamSet` from this object, even if this object itself is not
-    #' a `ParamSet`.
-    flatten = function() {
-      self$subset(private$.params$id)
-    },
-
-    #' @description
-    #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
-    #'
-    #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
-    search_space = function(values = self$values) {
-      assert_list(values)
-      assert_names(names(values), subset.of = self$ids())
-      pars = private$get_tune_ps(values)
-      on = NULL  # pacify static code check
-      dangling_deps = pars$deps[!on %in% pars$ids()]
-      if (nrow(dangling_deps)) {
-        stopf("Dangling dependencies not allowed: Dependencies on %s dangling.", str_collapse(dangling_deps$on))
-      }
-      pars
+    test_constraint_dt = function(x, assert_value = TRUE) {
+      assert_data_table(x)
+      if (assert_value) self$assert_dt(x)
+      map_dbl(transpose(x), self$test_constraint)
     },
 
     #' @description
@@ -336,9 +259,10 @@ ParamSet = R6Class("ParamSet",
           return(if (describe_error) sprintf("Missing required parameters: %s", str_collapse(required)) else FALSE)
         }
         return(check_dependencies(xs, describe_error = describe_error))
+        if (!self$test_constraint(xs)) return(if (describe_error) sprintf("Constraint not fulfilled.") else FALSE)
       }
 
-      return(TRUE) # we passed all checks
+      TRUE # we passed all checks
     },
 
     check_dependencies = function(xs, describe_error = TRUE) {
@@ -357,7 +281,7 @@ ParamSet = R6Class("ParamSet",
         # - if 'id' is not there. but that is skipped (deps[id %in% ns] filter)
         if (on %in% ns && cond$test(onval)) return(NULL)
         if (!describe_error) {
-          break_early = TRUE
+          break_early <<- TRUE
           return(FALSE)
         }
         msg = sprintf("%s: can only be set if the following condition is met '%s'.",
@@ -439,6 +363,92 @@ ParamSet = R6Class("ParamSet",
     #' @return If successful `xs` invisibly, if not an error message.
     assert_dt = function(xdt, check_strict = FALSE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict), .var.name, NULL), # nolint
 
+    qunif = function(x) {
+      assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
+      if (is.matrix(x)) {
+        qassert(x, "N[0,1]")
+      } else {
+        qassertr(x, "N[0,1]")
+        x = as.matrix(x)
+      }
+      assert_names(colnames(x), type = "unique", subset.of = private$.params$id)
+
+      x = t(x)
+      params = private$.params[rownames(x), on = "id"]
+      params$result = list()
+      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))), by = c("cls", "grouping")]
+      as.data.table(set_names(params$result, params$id))
+    },
+
+    get_param = function(id) {
+      .id = id
+      paramrow = private$.params[id == .id]
+      if (!nrow(paramrow)) stopf("No param with id '%s'", id)
+      set_class(paramrow, c(paramrow$cls, class(paramrow)))
+    },
+
+    #' @description
+    #' Create a new `ParamSet` restricted to the passed IDs.
+    #'
+    #' @param ids (`character()`).
+    #' @return `ParamSet`.
+    subset = function(ids, allow_dangling_dependencies = FALSE) {
+      param_ids = private$.params$id
+
+      assert_subset(ids, param_ids)
+      deps = self$deps
+      if (!allow_dangling_dependencies && nrow(deps)) { # check that all required / leftover parents are still in new ids
+        on = NULL
+        parents = unique(deps[id %in% ids, on])
+        pids_not_there = setdiff(parents, ids)
+        if (length(pids_not_there) > 0L) {
+          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
+              "\nIf you still want to subset, set allow_dangling_dependencies to TRUE."), str_collapse(pids_not_there))
+        }
+      }
+      result = ParamSet$new(extra_trafo = self$extra_trafo)
+      result$.__enclos_env__$private$.params = private$.params[id %in% ids]
+      result$assert_values = FALSE
+      result$deps = deps
+      # restrict to ids already in pvals
+      values = self$values
+      result$values = values[intersect(names(values), ids)]
+      result$assert_values = TRUE
+      result
+    },
+
+    subspaces = function(ids = private$.params$id) {
+      sapply(ids, simplify = FALSE, function(get_id) {
+        result = ParamSet$new(extra_trafo = self$extra_trafo)
+        result$.__enclos_env__$private$.params = private$.params[get_id, on = "id"]
+        result$assert_values = FALSE
+        result$values = values[intersect(names(values), get_id)]
+        result$assert_values = TRUE
+        result
+      })
+    },
+
+    #' @description
+    #' Create a `ParamSet` from this object, even if this object itself is not
+    #' a `ParamSet`.
+    flatten = function() self$subset(private$.params$id),
+
+    #' @description
+    #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
+    #'
+    #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
+    search_space = function(values = self$values) {
+      assert_list(values)
+      assert_names(names(values), subset.of = self$ids())
+      pars = private$get_tune_ps(values)
+      on = NULL  # pacify static code check
+      dangling_deps = pars$deps[!on %in% pars$ids()]
+      if (nrow(dangling_deps)) {
+        stopf("Dangling dependencies not allowed: Dependencies on %s dangling.", str_collapse(dangling_deps$on))
+      }
+      pars
+    },
+
     #' @description
     #' Adds a dependency to this set, so that param `id` now depends on param `on`.
     #'
@@ -502,184 +512,12 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
+
+    #' @field data (`data.table`) `data.table` representation of the `ParamSet`.
     data = function(v) {
       if (!missing(v)) stop("v is read-only")
       private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
         is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags)]
-    },
-
-    #' @template field_params
-    params = function(rhs) {
-      if (!missing(rhs) && !identical(rhs, private$.params)) {
-        stop("$params is read-only.")
-      }
-      map(private$.params, self$param)  # giga-slow
-    },
-
-    #' @template field_deps
-    deps = function(v) {
-      if (missing(v)) {
-        private$.deps
-      } else {
-        assert_data_table(v)
-        if (nrow(v)) {
-          # only test for things without which things would seriously break
-          assert_names(colnames(v), identical.to = c("id", "on", "cond"))
-          assert_subset(v$id, private$.params$id)
-          assert_character(v$on, any.missing = FALSE)
-          assert_list(v$cond, types = "Condition", any.missing = FALSE)
-        } else {
-          v = data.table(id = character(0), on = character(0), cond = list())  # make sure we have the right columns
-        }
-        private$.deps = v
-      }
-    },
-
-    #' @field length (`integer(1)`)\cr
-    #' Number of contained [Param]s.
-    length = function() {
-      nrow(private$.params)
-    },
-
-    #' @field is_empty (`logical(1)`)\cr
-    #' Is the `ParamSet` empty?
-    is_empty = function() {
-      nrow(private$.params) == 0L
-    },
-
-    #' @field class (named `character()`)\cr
-    #' Classes of contained parameters, named with parameter IDs.
-    class = function() {
-      set_names(private$.params$class, private$.params$id)
-    },
-
-    #' @field lower (named `double()`)\cr
-    #' Lower bounds of parameters (`NA` if parameter is not numeric).
-    #' Named with parameter IDs.
-    lower = function() {
-      set_names(private$.params$lower, private$.params$id)
-    },
-
-    #' @field upper (named `double()`)\cr
-    #' Upper bounds of parameters (`NA` if parameter is not numeric).
-    #' Named with parameter IDs.
-    upper = function() {
-      set_names(private$.params$upper, private$.params$id)
-    },
-
-    #' @field levels (named `list()`)\cr
-    #' List of character vectors of allowed categorical values of contained parameters.
-    #' `NULL` if the parameter is not categorical.
-    #' Named with parameter IDs.
-    levels = function() {
-      set_names(private$.params$levels, private$.params$id)
-    },
-
-    #' @field nlevels (named `integer()`)\cr
-    #' Number of categorical levels per parameter, `Inf` for double parameters or unbounded integer parameters.
-    #' Named with param IDs.
-    nlevels = function() {
-      set_names(private$.params[, list(id, nlevels = domain_nlevels(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", nlevels],
-        private$.params$id)
-    },
-
-    #' @field is_bounded (named `logical()`)\cr
-    #' Do all parameters have finite bounds?
-    #' Named with parameter IDs.
-    is_bounded = function() {
-      set_names(private$.params[, list(id, is_bounded = domain_is_bounded(recover_domain(.SD, .BY))), by = c("cls", "grouping")][private$.params$id, on = "id", is_bounded],
-        private$.params$id)
-    },
-
-    #' @field special_vals (named `list()` of `list()`)\cr
-    #' Special values for all parameters.
-    #' Named with parameter IDs.
-    special_vals = function() {
-      set_names(private$.params$special_vals, private$.params$id)
-    },
-
-    #' @field default (named `list()`)\cr
-    #' Default values of all parameters.
-    #' If no default exists, element is not present.
-    #' Named with parameter IDs.
-    default = function() {
-      defaulthaving = private$.params[!map_lgl(default, is_nodefault), list(id, default)]
-      set_names(defaulthaving$default, defaulthaving$id)
-    },
-
-    #' @template field_tags
-    tags = function(v) {
-      if (!missing(v)) {
-        assert_list(v, any.missing = FALSE, types = "character")
-        assert_names(names(v), permutation.of = private$.params$id)
-        private$.params[names(v), tags := v]
-        return(v)
-      }
-      set_names(private$.params$tags, private$.params$id)
-    },
-
-    #' @field storage_type (`character()`)\cr
-    #' Data types of parameters when stored in tables.
-    #' Named with parameter IDs.
-    storage_type = function() {
-      set_names(private$.params$storage_type, private$.params$id)
-    },
-
-    #' @field is_number (named `logical()`)\cr
-    #' Position is TRUE for [ParamDbl] and [ParamInt].
-    #' Named with parameter IDs.
-    is_number = function() {
-      set_names(private$.params[, list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)), by = c("cls", "grouping")][private$.params$id, on = "id", is_number],
-        private$.params$id)
-    },
-
-    #' @field is_categ (named `logical()`)\cr
-    #' Position is TRUE for [ParamFct] and [ParamLgl].
-    #' Named with parameter IDs.
-    is_categ = function() {
-      set_names(private$.params[, list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)), by = c("cls", "grouping")][private$.params$id, on = "id", is_categ],
-        private$.params$id)
-    },
-
-    #' @field all_numeric (`logical(1)`)\cr
-    #' Is `TRUE` if all parameters are [ParamDbl] or [ParamInt].
-    all_numeric = function() {
-      all(self$is_number)
-    },
-
-    #' @field all_categorical (`logical(1)`)\cr
-    #' Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
-    all_categorical = function() {
-      all(self$is_categ)
-    },
-
-    #' @field extra_trafo (`function(x, param_set)`)\cr
-    #' Transformation function. Settable.
-    #' User has to pass a `function(x)`, of the form\cr
-    #' (named `list()`, [ParamSet]) -> named `list()`.\cr
-    #' The function is responsible to transform a feasible configuration into another encoding,
-    #' before potentially evaluating the configuration with the target algorithm.
-    #' For the output, not many things have to hold.
-    #' It needs to have unique names, and the target algorithm has to accept the configuration.
-    #' For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-    #' Is NULL by default, and you can set it to NULL to switch the transformation off.
-    extra_trafo = function(f) {
-      if (missing(f)) {
-        private$.extra_trafo
-      } else {
-        if (test_function(f, args = c("x", "param_set"))) {
-          warning("The 'param_set' argument for '.extra_trafos' is deprecated and will be removed in future versions!")
-        } else {
-          assert_function(f, args = "x", null.ok = TRUE)
-        }
-        private$.extra_trafo = f
-      }
-    },
-
-    #' @field has_trafo (`logical(1)`)\cr
-    #' Has the set a `trafo` function?
-    has_trafo = function() {
-      !is.null(private$.extra_trafo) || any(private$.params$has_trafo)
     },
 
     #' @template field_values
@@ -709,15 +547,164 @@ ParamSet = R6Class("ParamSet",
       xs
     },
 
-    #' @field has_deps (`logical(1)`)\cr
-    #' Has the set parameter dependencies?
-    has_deps = function() {
-      nrow(self$deps) > 0L
+    #' @template field_tags
+    tags = function(v) {
+      if (!missing(v)) {
+        assert_list(v, any.missing = FALSE, types = "character")
+        assert_names(names(v), permutation.of = private$.params$id)
+        private$.params[names(v), tags := v]
+        return(v)
+      }
+      set_names(private$.params$tags, private$.params$id)
+    },
+
+    #' @template field_params
+    params = function(rhs) {
+      if (!missing(rhs) && !identical(rhs, private$.params)) {
+        stop("$params is read-only.")
+      }
+      map(private$.params, self$param)  # giga-slow
+    },
+
+    #' @field extra_trafo (`function(x, param_set)`)\cr
+    #' Transformation function. Settable.
+    #' User has to pass a `function(x)`, of the form\cr
+    #' (named `list()`, [ParamSet]) -> named `list()`.\cr
+    #' The function is responsible to transform a feasible configuration into another encoding,
+    #' before potentially evaluating the configuration with the target algorithm.
+    #' For the output, not many things have to hold.
+    #' It needs to have unique names, and the target algorithm has to accept the configuration.
+    #' For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+    #' Is NULL by default, and you can set it to NULL to switch the transformation off.
+    extra_trafo = function(f) {
+      if (missing(f)) {
+        private$.extra_trafo
+      } else {
+        if (test_function(f, args = c("x", "param_set"))) {
+          warning("The 'param_set' argument for '.extra_trafos' is deprecated and will be removed in future versions!")
+        } else {
+          assert_function(f, args = "x", null.ok = TRUE)
+        }
+        private$.extra_trafo = f
+      }
+    },
+
+    constraint = function(f) {
+      if (missing(f)) {
+        private$.constraint
+      } else {
+        assert_function(f, args = x, null.ok = TRUE)
+        private$.constraint = f
+      }
+    },
+
+
+    #' @template field_deps
+    deps = function(v) {
+      if (missing(v)) {
+        private$.deps
+      } else {
+        assert_data_table(v)
+        if (nrow(v)) {
+          # only test for things without which things would seriously break
+          assert_names(colnames(v), identical.to = c("id", "on", "cond"))
+          assert_subset(v$id, private$.params$id)
+          assert_character(v$on, any.missing = FALSE)
+          assert_list(v$cond, types = "Condition", any.missing = FALSE)
+        } else {
+          v = data.table(id = character(0), on = character(0), cond = list())  # make sure we have the right columns
+        }
+        private$.deps = v
+      }
+    },
+
+    ############################
+    # ParamSet flags
+
+    #' @field length (`integer(1)`)\cr Number of contained [Param]s.
+    length = function() nrow(private$.params),
+    #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
+    is_empty = function() nrow(private$.params) == 0L,
+    #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
+    has_trafo = function() !is.null(private$.extra_trafo) || any(private$.params$has_trafo),
+    #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
+    has_deps = function() nrow(self$deps) > 0L,
+    #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
+    has_constraint = function() !is.null(private$.constraint),
+    #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [ParamDbl] or [ParamInt].
+    all_numeric = function() all(self$is_number),
+    #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
+    all_categorical = function() all(self$is_categ),
+
+
+    ############################
+    # Per-Parameter properties
+
+    #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
+    class = function() private$.params[, set_names(class, id)],
+    #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
+    lower = function() private$.params[, set_names(class, lower)],
+    #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
+    upper = function() private$.params[, set_names(class, upper)],
+    #' @field levels (named `list()` of `character`)\cr Allowed levels of categorical parameters (`NULL` for non-categoricals).
+    #' Named with parameter IDs.
+    levels = function() private$.params[, set_names(class, levels)],
+    #' @field storage_type (`character()`)\cr Data types of parameters when stored in tables. Named with parameter IDs.
+    storage_type = function() private$.params[, set_names(class, storage_type)],
+    #' @field special_vals (named `list()` of `list()`)\cr Special values for all parameters. Named with parameter IDs.
+    special_vals = function() private$.params[, set_names(class, special_vals)],
+    #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
+    #' Named with parameter IDs.
+    default = function() private$.params[!map_lgl(default, is_nodefault), set_names(default, id)],
+
+    ############################
+    # Per-Parameter class properties (S3 method call)
+
+    #' @field nlevels (named `integer()`)\cr Number of distinct levels of parameters. `Inf` for double parameters or unbounded integer parameters.
+    #' Named with param IDs.
+    nlevels = function() {
+      private$.params[,
+        list(id, nlevels = domain_nlevels(recover_domain(.SD, .BY))),
+        by = c("cls", "grouping")
+      ][
+        private$.params$id, on = "id", set_names(nlevels, id)
+      ]
+    },
+
+    #' @field is_number (named `logical()`)\cr Whether parameter is [ParamDbl] or [ParamInt]. Named with parameter IDs.
+    is_number = function() {
+      private$.params[,
+        list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)),
+        by = c("cls", "grouping")
+      ][
+        private$.params$id, on = "id", set_names(is_number, id)
+      ]
+    },
+
+    #' @field is_categ (named `logical()`)\cr Whether parameter is [ParamFct] or [ParamLgl]. Named with parameter IDs.
+    is_categ = function() {
+      private$.params[,
+        list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)),
+        by = c("cls", "grouping")
+      ][
+        private$.params$id, on = "id", set_names(is_categ, id)
+      ]
+    },
+
+    #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
+    is_bounded = function() {
+      private$.params[,
+        list(id, is_bounded = domain_is_bounded(recover_domain(.SD, .BY))),
+        by = c("cls", "grouping")
+      ][
+        private$.params$id, on = "id", set_names(is_bounded, id)
+      ]
     }
   ),
 
   private = list(
     .extra_trafo = NULL,
+    .constraint = NULL,
     .params = NULL,
     .values = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
