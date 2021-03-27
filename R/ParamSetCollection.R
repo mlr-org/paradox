@@ -40,8 +40,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Also note that the `$values` will have undefined behavior when `sets` contains a
     #'   single [`ParamSet`] multiple times (by reference).
     #'   Default `FALSE`.
-    initialize = function(sets) {
+    initialize = function(sets, tag_set = FALSE, tag_params = FALSE) {
       assert_list(sets, types = "ParamSet")
+      assert_flag(tag_set)
+      assert_flag(tag_params)
       split_sets = split(sets, names(sets) == "")
       nameless_sets = split_sets$`TRUE`
       named_sets = split_sets$`FALSE`
@@ -53,7 +55,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         s = sets[[i]]
         n = names2(sets)[[n]]
         params_child = cbind(s$params, orig_id = s$params$id, owner_ps = i)
-        if (n != "") params_child$id = sprintf("%s.%s", n, params_child$id)
+        if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
         params_child
       })
 
@@ -63,31 +65,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           str_collapse(unique(pnames[dups])))
       }
 
-      child_trafos = map(sets, "extra_trafo")
-      child_with_trafos = which(!map_lgl(child_trafos, is.null))
-
-      if (length(child_with_trafos)) {
-        child_trafos = child_trafos[child_with_trafos]
-        private$.extra_trafo = crate(function(x) {
-          unlist(imap(child_with_trafos, function(child, trafoi) {
-            child = child_with_trafos[[trafoi]]
-            trafo = child_trafos[[trafoi]]
-            setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
-            subx = x[match(setinfo$id, names(x), nomatch = 0)]
-            names(subx) = params[names(subx), orig_id, on = "id"]
-
-            transformed = trafo(subx)
-
-            prefix = names(sets)[[child]]
-            if (prefix != "") {
-              names(transformed) = sprintf("%s.%s", prefix, names(transformed))
-            }
-          }), recursive = FALSE)
-        }, params, sets, child_trafos)
-      } else {
-        private$.extra_trafo = NULL
-      }
-
+      private$.tags = combine_tags(sets, tag_sets, tag_params)
+      private$.extra_trafo = combine_trafos(sets, params)
+      private$.constraint = combine_constraints(sets, params)
       private$.params = params
       private$.sets = sets
     }
@@ -194,3 +174,71 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     }
   )
 )
+
+combine_trafos = function(sets, params) {
+  child_trafos = map(sets, "extra_trafo")
+  child_with_trafos = which(!map_lgl(child_trafos, is.null))
+  if (!length(child_with_trafos)) return(NULL)
+
+  child_trafos = child_trafos[child_with_trafos]
+  crate(function(x) {
+    unlist(imap(child_with_trafos, function(child, trafoi) {
+      child = child_with_trafos[[trafoi]]
+      trafo = child_trafos[[trafoi]]
+      setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
+      subx = x[match(setinfo$id, names(x), nomatch = 0)]
+      names(subx) = params[names(subx), orig_id, on = "id"]
+
+      transformed = trafo(subx)
+
+      prefix = names(sets)[[child]]
+      if (prefix != "") {
+        names(transformed) = sprintf("%s.%s", prefix, names(transformed))
+      }
+    }), recursive = FALSE)
+  }, params, sets, child_trafos, child_with_trafos)
+}
+
+combine_constraints = function(sets, params) {
+  child_constraints = map(sets, "constraint")
+  child_with_constraints = which(!map_lgl(child_constraints, is.null))
+  if (!length(child_with_constraints)) return(NULL)
+
+  child_constraints = child_constraints[child_with_constraints]
+  crate(function(x) {
+    for (constrainti in seq_along(child_with_constraints)) {
+      child = child_with_constraints[[constrainti]]
+      constraint = child_constraints[[constrainti]]
+      setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
+      subx = x[match(setinfo$id, names(x), nomatch = 0)]
+      names(subx) = params[names(subx), orig_id, on = "id"]
+
+      if (!constraint(x)) return(FALSE)
+    }
+    TRUE
+  }, params, sets, child_constraints, child_with_constraints)
+}
+
+combine_tags = function(sets, tag_sets, tag_params) {
+  if (tag_set) {
+    if (tag_params) {
+      unlist(imap(sets, function(s, n) {
+        add_tags = sprintf("set_%s", n)
+        imap(s$tags, function(t, tn) unique(c(t, add_tags, sprintf("param_%s", tn))))
+      }), recursive = FALSE)
+    } else {
+      unlist(imap(sets, function(s, n) {
+        add_tags = sprintf("set_%s", n)
+        imap(s$tags, function(t) unique(c(t, add_tags)))
+      }), recursive = FALSE)
+    }
+  } else {
+    if (tag_params) {
+      unlist(map(sets, function(s) {
+        imap(s$tags, function(t, tn) unique(c(t, sprintf("param_%s", tn))))
+      }), recursive = FALSE)
+    } else {
+      unlist(map(sets, "tags"), recursive = FALSE)
+    }
+  }
+}

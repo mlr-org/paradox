@@ -73,12 +73,14 @@ ParamSet = R6Class("ParamSet",
           levels = list(), special_vals = list(), default = list(), trafo = list(), requirements = list(), id = character(0))
         initvalues = named_list()
       } else {
-        private$.params = rbindlist(params)[, `:=`(id = names(params), has_trafo = !map_lgl(trafo, is.null))]
+        private$.params = rbindlist(params)
+        set(private$.params, , "id", names(params))
+        set(private$.params, , "has_trafo", !map_lgl(private$.params, is.null))
 
         initvalues = private$.params[(init_given), set_names(init, id)]
         private$.tags = private$.params[, set_names(tags, id)]
 
-        private$.params[, setdiff(colnames(private$.params), paramcols) := NULL]
+        set(private$.params, , setdiff(colnames(private$.params), paramcols), NULL)
 
       }
       setindexv(private$.params, c("id", "cls", "grouping"))
@@ -234,8 +236,11 @@ ParamSet = R6Class("ParamSet",
       }
 
       # check each parameter group's feasibility
-      ns_nontune = names(discard(xs, inherits, "TuneToken"))
-      pgroups = split(params[id %in% ns_nontune][, values := xs], by = c("cls", "grouping"))
+      xs_nontune = discard(xs, inherits, "TuneToken")
+
+      params = params[names(xs_nontune), on = "id"]
+      set(params, , "values", xs_nontune)
+      pgroups = split(params, by = c("cls", "grouping"))
       break_early = FALSE
       checkresults = map(pgroups, function(x) {
         if (break_early) return(FALSE)
@@ -375,7 +380,8 @@ ParamSet = R6Class("ParamSet",
       x = t(x)
       params = private$.params[rownames(x), on = "id"]
       params$result = list()
-      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))), by = c("cls", "grouping")]
+      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))),
+        by = c("cls", "grouping")]
       as.data.table(set_names(params$result, params$id))
     },
 
@@ -538,7 +544,7 @@ ParamSet = R6Class("ParamSet",
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
-        sanitised = private$.params[names(nontt), on = "id"][, values := nontt][
+        sanitised = set(private$.params[names(nontt), on = "id"], , "values", nontt)[
           !pmap_lgl(list(special_vals, values), has_element),
           list(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
         insert_named(xx, set_names(sanitised$values, sanitised$id))
