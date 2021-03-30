@@ -6,11 +6,10 @@ p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), de
 }
 
 #' @export
-domain_check.ParamLgl = function(param, values, describe_error = TRUE) {
+domain_check.ParamLgl = function(param, values) {
   if (qtestr(values, "B1")) {
     return(TRUE)
   }
-  if (!describe_error) return(FALSE)
   check_domain_vectorized(param$id, values, check_flag)
 }
 

@@ -11,12 +11,12 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
 }
 
 #' @export
-domain_check.ParamUty = function(param, values, describe_error = TRUE) {
+domain_check.ParamUty = function(param, values) {
   subset = !map_lgl(param$cargo, is.null)
   if (!any(subset)) return(TRUE)
   values = values[subset]
   param = param[subset]
-  check_domain_vectorize(param$id, values, param$cargo, describe_error = describe_error)
+  check_domain_vectorize(param$id, values, param$cargo)
 }
 
 #' @export

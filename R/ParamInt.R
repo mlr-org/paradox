@@ -27,9 +27,8 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 }
 
 #' @export
-domain_check.ParamInt = function(param, values, describe_error = TRUE) {
+domain_check.ParamInt = function(param, values) {
   if (!qtestr(values, "N1()")) {
-    if (!describe_error) return(FALSE)
     check_domain_vectorize(param$id, values, check_int,
       more_args = list(lower = values$lower - 0.5, upper = values$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
         tol = .51)  # we don't know the tolerances of individual values, but we do know that some values are not even (non-missing, finite) numerics
@@ -44,7 +43,6 @@ domain_check.ParamInt = function(param, values, describe_error = TRUE) {
       return(TRUE)
     }
   }
-  if (!describe_error) return(FALSE)
 
   check_domain_vectorize(param$id, values_num, check_int,
     more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values

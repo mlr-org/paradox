@@ -218,12 +218,11 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xs (named `list()`).
     #' @return If successful `TRUE`, if not a string with the error message.
-    check = function(xs, check_strict = FALSE, describe_error = TRUE) {
+    check = function(xs, check_strict = FALSE) {
       assert_flag(check_strict)
-      assert_flag(describe_error)
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
-        return(if (!describe_error) FALSE else ok)
+        return(ok)
       }
 
       params = private$.params
@@ -232,7 +231,7 @@ ParamSet = R6Class("ParamSet",
 
       extra = wf(ns %nin% ids)
       if (length(extra)) {
-        return(if (!describe_error) FALSE else sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
+        return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
 
       # check each parameter group's feasibility
@@ -241,42 +240,32 @@ ParamSet = R6Class("ParamSet",
       params = params[names(xs_nontune), on = "id"]
       set(params, , "values", xs_nontune)
       pgroups = split(params, by = c("cls", "grouping"))
-      break_early = FALSE
       checkresults = map(pgroups, function(x) {
-        if (break_early) return(FALSE)
-        ch = domain_check(set_class(x, c(x$cls[[1]], class(x))), x$values, describe_error = describe_error)
-        if (!describe_error && !ch) break_early <<- TRUE  # nolint
-        ch
+        domain_check(set_class(x, c(x$cls[[1]], class(x))), x$values)
       })
-      if (describe_error) {
-        if (break_early) return(FALSE)
-      } else {
-        checkresults = discard(checkresults, isTRUE)
-        if (length(checkresults)) {
-          return(str_collapse(checkresults), sep = "\n")
-        }
+      checkresults = discard(checkresults, isTRUE)
+      if (length(checkresults)) {
+        return(str_collapse(checkresults), sep = "\n")
       }
 
       if (check_strict) {
         required = setdiff(self$ids(tags = "required"), ns)
         if (length(required) > 0L) {
-          return(if (describe_error) sprintf("Missing required parameters: %s", str_collapse(required)) else FALSE)
+          return(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
-        return(check_dependencies(xs, describe_error = describe_error))
-        if (!self$test_constraint(xs)) return(if (describe_error) sprintf("Constraint not fulfilled.") else FALSE)
+        return(check_dependencies(xs))
+        if (!self$test_constraint(xs)) return(sprintf("Constraint not fulfilled."))
       }
 
       TRUE # we passed all checks
     },
 
-    check_dependencies = function(xs, describe_error = TRUE) {
+    check_dependencies = function(xs) {
       deps = self$deps
       if (!nrow(deps)) return(TRUE)
       params = private$.params
       ns = names(xs)
-      break_early = FALSE
       errors = pmap(deps[id %in% ns], function(id, on, cond) {
-        if (break_early) return(FALSE)
         onval = xs[[on]]
         if (inherits(xs[[id]], "TuneToken") || inherits(onval, "TuneToken")) return(NULL)
 
@@ -284,10 +273,6 @@ ParamSet = R6Class("ParamSet",
         # - if 'id' is there, then 'on' must be there, and cond must be true
         # - if 'id' is not there. but that is skipped (deps[id %in% ns] filter)
         if (on %in% ns && cond$test(onval)) return(NULL)
-        if (!describe_error) {
-          break_early <<- TRUE
-          return(FALSE)
-        }
         msg = sprintf("%s: can only be set if the following condition is met '%s'.",
           id, cond$as_string(on))
         if (is.null(onval)) {
@@ -298,7 +283,6 @@ ParamSet = R6Class("ParamSet",
         }
         msg
       })
-      if (!describe_error) return(!break_early)
       errors = unlist(errors)
       if (!length(errors)) return(TRUE)
       str_collapse(errors, sep = "\n")
@@ -312,7 +296,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xs (named `list()`).
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs, check_strict = FALSE) self$check(xs, check_strict = check_strict, describe_error = FALSE),
+    test = function(xs, check_strict = FALSE) makeTest(self$check(xs, check_strict = check_strict)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function. Takes a named list.
@@ -336,18 +320,17 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt, check_strict = FALSE, describe_error = TRUE) {
+    check_dt = function(xdt, check_strict = FALSE) {
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
       for (i in seq_along(xss)) {
         xs = xss[[i]]
-        ok = self$check(xs, check_strict = check_strict, describe_error = describe_error)
+        ok = self$check(xs, check_strict = check_strict)
         if (!isTRUE(ok)) {
-          if (!describe_error) return(FALSE)
-          msgs[[length(msgs) + 1]] = ok  # this is the fast way to grow a list in R
+          return(ok)
         }
       }
-      if (length(msgs)) msgs else TRUE
+      TRUE
     },
 
     #' @description
@@ -355,7 +338,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xdt ([data.table::data.table]).
     #' @return If successful `TRUE`, if not `FALSE`.
-    test_dt = function(xdt, check_strict = FALSE) makeTest(res = self$check_dt(xdt, check_strict = check_strict, describe_error = FALSE)),
+    test_dt = function(xdt) makeTest(res = self$check_dt(xdt, check_strict = check_strict)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
@@ -472,7 +455,7 @@ ParamSet = R6Class("ParamSet",
         stopf("A param cannot depend on itself!")
       }
 
-      feasible_on_values = map_lgl(cond$rhs, domain_check, param = self$get_param(on), describe_error = FALSE)
+      feasible_on_values = map_lgl(cond$rhs, domain_check, param = self$get_param(on))
       if (any(!feasible_on_values)) {
         stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
       }

@@ -22,15 +22,13 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 }
 
 #' @export
-domain_check.ParamDbl = function(param, values, describe_error = TRUE) {
+domain_check.ParamDbl = function(param, values) {
   lower = param$lower - param$tolerance * pmax(1, abs(param$lower))
   upper = param$upper + param$tolerance * pmax(1, abs(param$upper))
   if (qtestr(values, "N1")) {
     values_num = as.numeric(values)
     if (all(values_num >= lower) && all(values_num <= upper)) return(TRUE)
   }
-  if (!describe_error) return(FALSE)
-
   check_domain_vectorize(param$id, values, check_number, more_args = list(lower = lower, upper = upper))
 }
 

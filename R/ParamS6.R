@@ -26,13 +26,12 @@ p_s6 = function(support, special_vals = list(), default = NO_DEF, tags = charact
 }
 
 #' @export
-domain_check.ParamSet6 = function(param, values, describe_error = TRUE) {
+domain_check.ParamSet6 = function(param, values) {
   # we can rely on 'grouping' always giving us the same class
   set = set6_cache_get(param$grouping[[1]])
   if (set$contains(values, all = TRUE)) {
     return(TRUE)
   }
-  if (!describe_error) return(FALSE)
   nomatches = param$id[!set$contains(values, all = FALSE)]
   sprintf("%s: not contained in %s.", str_collapse(nomatches, sep = ", "), set$strprint())
 }

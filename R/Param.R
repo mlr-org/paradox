@@ -9,15 +9,15 @@
 #' @param x (`any`).
 #' @return If successful `TRUE`, if not a string with the error message.
 #' @export
-domain_check = function(param, values, describe_error = TRUE) {
-  if (!test_list(values, len = nrow(param))) return(if (describe_error) "values must be a list" else FALSE)
+domain_check = function(param, values) {
+  if (!test_list(values, len = nrow(param))) return("values must be a list")
   if (length(values) == 0) return(TRUE)  # happens when there are no params + values to check
   assert_string(unique(param$grouping))
   special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
   if (any(special_vals_hit)) {
     # don't annoy domain_check methods with the burdon of having to filter out
     # values that match special_values
-    Recall(param[!special_vals_hit], values[!special_vals_hit], describe_error = describe_error)
+    Recall(param[!special_vals_hit], values[!special_vals_hit])
   } else {
     UseMethod("domain_check")
   }
@@ -25,7 +25,7 @@ domain_check = function(param, values, describe_error = TRUE) {
 #' @export
 domain_assert = makeAssertionFunction(domain_check)
 #' @export
-domain_test = function(param, values) domain_check(param, values, describe_error = FALSE)
+domain_test = function(param, values) domain_check(param, values)
 
 #' @export
 domain_storage_type = function(param) {
@@ -91,22 +91,18 @@ domain_is_number.default = function(param) FALSE
 
 
 # param:
-check_domain_vectorize = function(ids, values, checker, more_args = list(), describe_error = TRUE) {
-  break_early = FALSE
+check_domain_vectorize = function(ids, values, checker, more_args = list()) {
   if (length(checker) == length(values)) {
     errors = imap(c(list(ids, values), more_args), function(id, value, ...) {
-      if (break_early) return(FALSE)
       ch = checker(value, ...)
-      if (isTRUE(ch)) NULL else if (describe_error) sprintf("%s: %s", id, ch) else break_early <<- TRUE  # nolint
+      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })
   } else {
     errors = imap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
-      if (break_early) return(FALSE)
       ch = chck(value, ...)
-      if (isTRUE(ch)) NULL else if (describe_error) sprintf("%s: %s", id, ch) else break_early <<- TRUE  # nolint
+      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })
   }
-  if (!describe_error) return(!break_early)
   errors = unlist(errors)
   if (!length(errors)) return(TRUE)
   str_collapse(errors, sep = "\n")
