@@ -73,25 +73,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     }
   ),
   active = list(
-    #' @template field_params_unid
-    params_unid = function(v) {
-      sets = private$.sets
-      if (length(sets) == 0L) {
-        return(named_list())
-      }
-      # clone each param into new params-list and prefix id
-      ps_all = lapply(sets, function(s) s$params_unid)
-      ps_all = unlist(ps_all, recursive = FALSE)
-      if (!length(ps_all)) ps_all = named_list()
-      ps_all
-    },
     #' @template field_deps
     deps = function(v) {
       if (!missing(v)) {
         stop("deps is read-only in ParamSetCollection.")
       }
-      sets = private$.sets
-      d_all = imap(sets, function(s, id) {
+      d_all = imap(private$.sets, function(s, id) {
         # copy all deps and rename ids to prefixed versions
         dd = s$deps
         if (id != "" && nrow(dd)) {
@@ -105,46 +92,23 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
-    #' @field tags (named `list()` of `character()`)\cr
-    #' Can be used to group and subset parameters.
-    #' Named with parameter IDs.
-    tags = function(v) {
-      if (!missing(v)) {
-        assert_list(v, any.missing = FALSE, types = "character")
-        assert_names(names(v), identical.to = names(self$params_unid))
-        private$.tags = v
-      }
-      private$.tags
-    },
-
     #' @template field_values
     values = function(xs) {
       sets = private$.sets
-      if (is.null(names(sets))) {
-        names(sets) = map(private$.sets, "set_id")
-      }
       if (!missing(xs)) {
         assert_list(xs)
-        self$assert(xs) # make sure everything is valid and feasible
+        # make sure everything is valid and feasible.
+        # We do this here because we don't want the loop to be aborted early and have half an update.
+        self$assert(xs)
 
-        for (i in seq_along(sets)) {
-          s = sets[[i]]
-          sid = names(sets)[[i]]
-          # retrieve sublist for each set, then assign it in set (after removing prefix)
-          psids = names(s$params_unid)
-          if (sid != "") {
-            psids = sprintf("%s.%s", sid, psids)
-          }
-          pv = xs[intersect(psids, names(xs))]
-          if (sid != "") {
-            names(pv) = substr(names(pv), nchar(sid) + 2, nchar(names(pv)))
-          }
-          s$values = pv
+        translate = private$.params[names(xs), list(orig_id, owner_ps), on = "id"]
+        set(translate, , j = "values", xs)
+        for (xtl in split(translate, by = "owner_ps")) {
+          sets[[xtl$owner_ps]]$values = set_names(xtl$values, xtl$orig_id)
         }
       }
-      vals = map(sets, "values")
-      vals = unlist(vals, recursive = FALSE)
-      if (!length(vals)) vals = named_list()
+      vals = unlist(map(sets, "values"), recursive = FALSE)
+      if (!length(vals)) return(named_list())
       vals
     },
 
