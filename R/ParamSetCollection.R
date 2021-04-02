@@ -57,7 +57,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         params_child = cbind(s$params, orig_id = s$params$id, owner_ps = i)
         if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
         params_child
-      })
+      }))
 
       dups = duplicated(params$id)
       if (any(dups)) {

@@ -61,9 +61,8 @@ ParamSet = R6Class("ParamSet",
     #'   This can be used to create a `ParamSet` with certain [`Param`] `id`s
     #'   without having to clone said [`Param`]s.
     #'   Default `FALSE`.
-    initialize = function(params = named_list(), extra_trafo = NULL, allow_dangling_dependencies = FALSE) {
+    initialize = function(params = named_list(), allow_dangling_dependencies = FALSE) {
       assert_list(params, types = "Domain")
-      self$extra_trafo = extra_trafo  # does assert in the active binding
 
       assert_names(names(params), type = "strict")
       assert_ids(names(params))
@@ -75,7 +74,7 @@ ParamSet = R6Class("ParamSet",
       } else {
         private$.params = rbindlist(params)
         set(private$.params, , "id", names(params))
-        set(private$.params, , "has_trafo", !map_lgl(private$.params, is.null))
+        set(private$.params, , "has_trafo", !map_lgl(private$.params$trafo, is.null))
 
         initvalues = private$.params[(init_given), set_names(init, id)]
         private$.tags = private$.params[, set_names(tags, id)]
