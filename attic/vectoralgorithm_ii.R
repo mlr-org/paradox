@@ -1,4 +1,8 @@
 
+library("R6")
+library("paradox")
+library("checkmate")
+
 
 
 Strategy = R6Class("Strategy",
@@ -160,17 +164,13 @@ c(svec, sa, sm)$run_vector(c(100, 200, 300, 400, 500))  # list(110, 400, 1199, 4
 
 
 svec_long = StrategyVector$new(c(
-  do.call(c, lapply(1:2000, function(x) {
-    sa = StrategyAdd$new()
-    sa$param_set$values$summand = x
-    sa
-  })),
+  StrategyAdd$new(multi_init = data.table(summand = 1:2000)),
   list(sm, sam)
 ))
 
 svec_long$run(100)
   # as.list(c(101:2100, 200, 399))
 svec_long$run_vector(1:2002)
-  # as.list(c((1:2000) * 2, 4004, 8007))
+  # as.list(c((1:2000) * 2, 4002, 8007))
 
 
