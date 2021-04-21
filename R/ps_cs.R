@@ -28,6 +28,7 @@ get_type_cs = function(x) {
 #'
 #' @export
 #' @examples
+#'\dontrun{
 #'ps = ParamSet$new(list(
 #'  ParamDbl$new("x1", lower = log(10), upper = log(20), default = log(15), tags = c("int", "log")),
 #'  ParamInt$new("x2", lower = 10, upper = 20, default = 15),
@@ -70,6 +71,7 @@ get_type_cs = function(x) {
 #'summary(dt_ps_)
 #'all(is.na(dt_ps_[x5 == FALSE][["x6"]]))  # first dependency
 #'all(is.na(dt_ps_[x6 == "c"][["x4"]]))    # second dependency
+#'}
 ps_to_cs = function(ps, json_file = NULL) {
   # FIXME: we could do some additional safety checks here
   assert_param_set(ps)
