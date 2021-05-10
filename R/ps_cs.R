@@ -82,6 +82,7 @@ wrap_default = function(default, trafo = identity) {
 #'all(is.na(dt_ps_[x6 == "c"][["x4"]]))    # second dependency
 #'}
 ps_to_cs = function(ps, json_file = NULL) {
+  # FIXME: could add an argument to ignore budget params (because most python optimizers do not use budget params in the cs
   # FIXME: we could do some additional safety checks here
   assert_param_set(ps)
   if (!is.null(json_file)) {
@@ -105,7 +106,7 @@ ps_to_cs = function(ps, json_file = NULL) {
       "uniform_int" =
         CSH$UniformIntegerHyperparameter(name = param$id, lower = param$lower, upper = param$upper, default_value = wrap_default(param$default)),
       "uniform_float" = if (all(c("int", "log") %in% param$tags)) {
-        CSH$UniformIntegerHyperparameter(name = param$id, lower = as.integer(round(exp(param$lower))), upper = as.integer(round(exp(param$upper))), default_value = wrap(param$default, trafo = function(x) as.integer(round(exp(x)))), log = TRUE)
+        CSH$UniformIntegerHyperparameter(name = param$id, lower = as.integer(round(exp(param$lower))), upper = as.integer(round(exp(param$upper))), default_value = wrap_default(param$default, trafo = function(x) as.integer(round(exp(x)))), log = TRUE)
       } else if ("log" %in% param$tags) {
         CSH$UniformFloatHyperparameter(name = param$id, lower = exp(param$lower), upper = exp(param$upper), default_value = wrap_default(param$default, trafo = exp), log = TRUE)
       } else {
