@@ -6,6 +6,15 @@ get_type_cs = function(x) {
   tlx[match(class(x)[1L], clx)]
 }
 
+wrap_default = function(default, trafo = identity) {
+  checkmate::assert_function(trafo)
+  if (checkmate::test_r6(default, classes = "NoDefault")) {
+    NULL
+  } else {
+    trafo(default)
+  }
+}
+
 #' @title Map a ParamSet to a ConfigSpace
 #'
 #' @description
@@ -94,16 +103,16 @@ ps_to_cs = function(ps, json_file = NULL) {
     param = ps$params[[i]]
     tmp = switch(get_type_cs(param),
       "uniform_int" =
-        CSH$UniformIntegerHyperparameter(name = param$id, lower = param$lower, upper = param$upper, default_value = param$default),
+        CSH$UniformIntegerHyperparameter(name = param$id, lower = param$lower, upper = param$upper, default_value = wrap_default(param$default)),
       "uniform_float" = if (all(c("int", "log") %in% param$tags)) {
-        CSH$UniformIntegerHyperparameter(name = param$id, lower = as.integer(round(exp(param$lower))), upper = as.integer(round(exp(param$upper))), default_value = as.integer(round(exp(param$default))), log = TRUE)
+        CSH$UniformIntegerHyperparameter(name = param$id, lower = as.integer(round(exp(param$lower))), upper = as.integer(round(exp(param$upper))), default_value = wrap(param$default, trafo = function(x) as.integer(round(exp(x)))), log = TRUE)
       } else if ("log" %in% param$tags) {
-        CSH$UniformFloatHyperparameter(name = param$id, lower = exp(param$lower), upper = exp(param$upper), default_value = exp(param$default), log = TRUE)
+        CSH$UniformFloatHyperparameter(name = param$id, lower = exp(param$lower), upper = exp(param$upper), default_value = wrap_default(param$default, trafo = exp), log = TRUE)
       } else {
-        CSH$UniformFloatHyperparameter(name = param$id, lower = param$lower, upper = param$upper, default_value = param$default)
+        CSH$UniformFloatHyperparameter(name = param$id, lower = param$lower, upper = param$upper, default_value = wrap_default(param$default))
       },
       "categorical" =
-        CSH$CategoricalHyperparameter(name = param$id, choices = param$levels, default_value = param$default),
+        CSH$CategoricalHyperparameter(name = param$id, choices = param$levels, default_value = wrap_default(param$default)),
     )
     cs$add_hyperparameter(tmp)
   }

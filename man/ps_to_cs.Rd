@@ -28,6 +28,7 @@ Only \link{Condition}s of class \link{CondEqual} and \link{CondAnyOf} are suppor
 Requires \CRANpkg{reticulate} and \CRANpkg{jsonlite} (if saving in json format is desired) to be installed.
 }
 \examples{
+\dontrun{
 ps = ParamSet$new(list(
  ParamDbl$new("x1", lower = log(10), upper = log(20), default = log(15), tags = c("int", "log")),
  ParamInt$new("x2", lower = 10, upper = 20, default = 15),
@@ -70,4 +71,5 @@ dt_ps_ = data.table::rbindlist(generate_design_random(ps, n = 1000L)$transpose(f
 summary(dt_ps_)
 all(is.na(dt_ps_[x5 == FALSE][["x6"]]))  # first dependency
 all(is.na(dt_ps_[x6 == "c"][["x4"]]))    # second dependency
+}
 }
