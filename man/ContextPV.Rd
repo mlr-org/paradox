@@ -23,7 +23,7 @@ names of \code{.fn} must be a subset of the \code{\link{ParamSet}}'s \verb{$cont
 }
 \examples{
 p = ps(x = p_dbl(), y = p_dbl())
-p$context = "a"
+p$context_available = "a"
 
 b = 10
 
