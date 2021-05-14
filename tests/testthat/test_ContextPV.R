@@ -80,7 +80,7 @@ test_that("ContextPV in Tuning PS", {
     ParamInt$new("y")
   ))
   p$context_available = "scale"
-  p2 = p$tune_ps(list(
+  p2 = p$search_space(list(
     x = to_tune(0, 10),
     y = to_tune(p_dbl(0, 1,
       trafo = function(x) ContextPV(function(scale) scale * x, x)))
