@@ -36,6 +36,10 @@ Always \code{NA} for \link{ParamFct}, \link{ParamLgl} and \link{ParamUty}.}
 \item{\code{upper}}{(\code{numeric(1)})\cr
 Upper bound.
 Always \code{NA} for \link{ParamFct}, \link{ParamLgl} and \link{ParamUty}.}
+
+\item{\code{tolerance}}{(\code{numeric(1)})\cr
+tolerance of values to accept beyond \verb{$lower} and \verb{$upper}.
+Used both for relative and absolute tolerance.}
 }
 \if{html}{\out{</div>}}
 }
@@ -72,6 +76,7 @@ Always \code{"list"} for \link{ParamUty}.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-new}{\code{ParamDbl$new()}}
+\item \href{#method-convert}{\code{ParamDbl$convert()}}
 \item \href{#method-clone}{\code{ParamDbl$clone()}}
 }
 }
@@ -100,7 +105,8 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
   upper = Inf,
   special_vals = list(),
   default = NO_DEF,
-  tags = character()
+  tags = character(),
+  tolerance = sqrt(.Machine$double.eps)
 )}\if{html}{\out{</div>}}
 }
 
@@ -138,6 +144,29 @@ purpose:\cr
 \item \code{"required"} implies that the parameters has to be given when setting
 \code{values} in \link{ParamSet}.
 }}
+
+\item{\code{tolerance}}{(\code{numeric(1)})\cr
+Initializes the \verb{$tolerance} field that determines the}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-convert"></a>}}
+\if{latex}{\out{\hypertarget{method-convert}{}}}
+\subsection{Method \code{convert()}}{
+Restrict the value to within the allowed range. This works
+in conjunction with \verb{$tolerance}, which accepts values
+slightly out of this range.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamDbl$convert(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{numeric(1)})\cr
+Value to convert.}
 }
 \if{html}{\out{</div>}}
 }

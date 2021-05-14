@@ -20,8 +20,8 @@ alternative to a concrete value. This indicates that the value is not given dire
 is invoked directly, without being wrapped by or given to a tuner, it will give an error.
 
 The tuning range \code{\link{ParamSet}} that is constructed from the \code{TuneToken} values in a \code{\link{ParamSet}}'s \verb{$values} slot
-can be accessed through the \code{ParamSet$tune_ps()} method. This is done automatically by tuners if no tuning range
-is given, but it is also possible to access the \verb{$tune_ps()} method, modify it further, and give the modified
+can be accessed through the \code{ParamSet$search_space()} method. This is done automatically by tuners if no tuning range
+is given, but it is also possible to access the \verb{$search_space()} method, modify it further, and give the modified
 \code{\link{ParamSet}} to a tuning function (or do anything else with it, nobody is judging you).
 
 A \code{TuneToken} represents the range over which the parameter whose \verb{$values} slot it occupies should be tuned over. It
@@ -29,9 +29,16 @@ can be constructed via the \code{to_tune()} function in one of several ways:
 \itemize{
 \item \strong{\code{to_tune()}}: Indicates a parameter should be tuned over its entire range. Only applies to finite parameters
 (i.e. discrete or bounded numeric parameters)
-\item \strong{\code{to_tune(lower, upper)}}: Indicates a numeric parameter should be tuned in the inclusive interval spanning
-\code{lower} to \code{upper}. Depending on the parameter, integer (if it is a \code{\link{ParamInt}}) or real values (if it is a
-\code{\link{ParamDbl}}) are used.
+\item \strong{\code{to_tune(lower, upper, logscale)}}: Indicates a numeric parameter should be tuned in the inclusive interval spanning
+\code{lower} to \code{upper}, possibly on a log scale if \code{logscale} is se to \code{TRUE}. All parameters are optional, and the
+parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
+integer (if it is a \code{\link{ParamInt}}) or real values (if it is a \code{\link{ParamDbl}}) are used.\cr
+\code{lower}, \code{upper}, and \code{logscale} can be given by position, except when only one of them is given, in which case
+it must be named to disambiguate from the following cases.\cr
+When \code{logscale} is \code{TRUE}, then a \code{trafo} is generated automatically that transforms to the given bounds. The
+bounds are log()'d pre-trafo (see examples). See the \code{logscale} argument of \code{\link{Domain}} functions for more info.\cr
+Note that "logscale" is \emph{not} inherited from the \code{\link{Param}} that the \code{TuneToken} belongs to! Defining a parameter
+with \verb{p_dbl(... logscale = TRUE)} will \emph{not} automatically give the \code{to_tune()} assigned to it log-scale.
 \item \strong{\code{to_tune(levels)}}: Indicates a parameter should be tuned through the given discrete values. \code{levels} can be any
 named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 corresponding \code{character} vector with distinct values using \code{as.character}).
@@ -53,6 +60,7 @@ params = ParamSet$new(list(
   ParamInt$new("int_unbounded"),
   ParamDbl$new("dbl", 0, 10),
   ParamDbl$new("dbl_unbounded"),
+  ParamDbl$new("dbl_bounded_below", lower = 1),
   ParamFct$new("fct", c("a", "b", "c")),
   ParamUty$new("uty1"),
   ParamUty$new("uty2"),
@@ -69,10 +77,11 @@ params$values = list(
   # tune over 2..7:
   int_unbounded = to_tune(2, 7),
 
-  # tune on a log scale in range 1..10:
-  # (you have to make sure exp(log(x)) does not overstep boundaries because
-  # of rounding errors; unfortunately paradox is your enemy here.)
-  dbl = to_tune(p_dbl(log(1 + 1e-10), log(10 - 1e-10), trafo = exp)),
+  # tune on a log scale in range 1..10;
+  # recognize upper bound of 10 automatically, but restrict lower bound to 1:
+  dbl = to_tune(lower = 1, logscale = TRUE),
+  ## This is equivalent to the following:
+  # dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),
 
   # nothing keeps us from tuning a dbl over integer values
   dbl_unbounded = to_tune(p_int(1, 10)),
@@ -109,13 +118,28 @@ params$values = list(
 
 print(params$values)
 
-print(params$tune_ps())
+print(params$search_space())
 
-# Change `$values` directly and generate new `$tune_ps()` to play around
+# Change `$values` directly and generate new `$search_space()` to play around
 params$values$uty3 = 8
 params$values$uty2 = to_tune(c(2, 4, 8))
 
-print(params$tune_ps())
+print(params$search_space())
+
+# Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:
+params = ParamSet$new(list(ParamDbl$new("x")))
+
+params$values$x = to_tune(1, 100, logscale = TRUE)
+
+print(params$search_space())
+
+grid = generate_design_grid(params$search_space(), 3)
+
+# The grid is equidistant within log-bounds pre-trafo:
+print(grid)
+
+# But the values are on a log scale scale with desired bounds after trafo:
+print(grid$transpose())
 
 }
 \seealso{

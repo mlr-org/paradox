@@ -68,6 +68,12 @@ corresponding to all \verb{$context_available} entries.}
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
+\item{\code{params_unid}}{(named \code{list()})\cr
+List of \link{Param}, named with their true ID. However,
+this field has the \link{Param}'s \verb{$id} value set to a
+potentially invalid value. This active binding should
+only be used internally.}
+
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
@@ -132,10 +138,10 @@ Named with parameter IDs.}
 Position is TRUE for \link{ParamFct} and \link{ParamLgl}.
 Named with parameter IDs.}
 
-\item{\code{is_numeric}}{(\code{logical(1)})\cr
+\item{\code{all_numeric}}{(\code{logical(1)})\cr
 Is \code{TRUE} if all parameters are \link{ParamDbl} or \link{ParamInt}.}
 
-\item{\code{is_categorical}}{(\code{logical(1)})\cr
+\item{\code{all_categorical}}{(\code{logical(1)})\cr
 Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
 
 \item{\code{trafo}}{(\verb{function(x, param_set)})\cr
@@ -171,7 +177,7 @@ Has the set parameter dependencies?}
 \item \href{#method-ids}{\code{ParamSet$ids()}}
 \item \href{#method-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-subset}{\code{ParamSet$subset()}}
-\item \href{#method-tune_ps}{\code{ParamSet$tune_ps()}}
+\item \href{#method-search_space}{\code{ParamSet$search_space()}}
 \item \href{#method-check}{\code{ParamSet$check()}}
 \item \href{#method-test}{\code{ParamSet$test()}}
 \item \href{#method-assert}{\code{ParamSet$assert()}}
@@ -258,6 +264,8 @@ Only returns values of parameters that satisfy all conditions.
   class = NULL,
   is_bounded = NULL,
   tags = NULL,
+  type = "with_token",
+  check_required = TRUE,
   context = parent.frame()
 )}\if{html}{\out{</div>}}
 }
@@ -270,6 +278,12 @@ Only returns values of parameters that satisfy all conditions.
 \item{\code{is_bounded}}{(\code{logical(1)}).}
 
 \item{\code{tags}}{(\code{character()}).}
+
+\item{\code{type}}{(\code{character(1)})\cr
+Return values \code{with_token}, \code{without_token} or \code{only_token}?}
+
+\item{\code{check_required}}{(\code{logical(1)})\cr
+Check if all required parameters are set?}
 
 \item{\code{context}}{(\code{environment} | named \code{list})\cr
 Must have elements named by \verb{$context_available}, which are then given to the
@@ -299,12 +313,12 @@ Changes the current set to the set of passed IDs.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-tune_ps"></a>}}
-\if{latex}{\out{\hypertarget{method-tune_ps}{}}}
-\subsection{Method \code{tune_ps()}}{
+\if{html}{\out{<a id="method-search_space"></a>}}
+\if{latex}{\out{\hypertarget{method-search_space}{}}}
+\subsection{Method \code{search_space()}}{
 Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$tune_ps(values = self$values)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$search_space(values = self$values)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -404,7 +418,7 @@ dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table}).}
+\item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).}
 }
 \if{html}{\out{</div>}}
 }
@@ -495,7 +509,7 @@ Printer.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$print(
   ...,
-  hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")
+  hide_cols = c("levels", "is_bounded", "special_vals", "tags", "storage_type")
 )}\if{html}{\out{</div>}}
 }
 
@@ -505,7 +519,7 @@ Printer.
 \item{\code{...}}{(ignored).}
 
 \item{\code{hide_cols}}{(\code{character()})\cr
-Which fields should not be printed? Default is \code{"nlevels"},
+Which fields should not be printed? Default is \code{"levels"},
 \code{"is_bounded"}, \code{"special_vals"}, \code{"tags"}, and \code{"storage_type"}.}
 }
 \if{html}{\out{</div>}}

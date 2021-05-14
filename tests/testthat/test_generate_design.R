@@ -110,11 +110,15 @@ test_that("generate_design_lhs", {
   }
 })
 
-test_that("generate_design_lhs does not work with deps", {
+test_that("generate_design_lhs works with deps", {
   skip_if_not_installed("lhs")
 
   ps = th_paramset_deps()
-  expect_error(generate_design_lhs(ps, n = 5L), "dependencies")
+  dd = generate_design_lhs(ps, n = 100L)$data
+  expect_true(all(is.na(dd[th_param_lgl == FALSE,]$th_param_fct)))
+  expect_true(!any(is.na(dd[th_param_lgl == TRUE,]$th_param_fct)))
+  expect_true(all(is.na(dd[th_param_fct == "c",]$th_param_dbl)))
+  expect_true(!any(is.na(dd[th_param_fct != "c",]$th_param_dbl)))
 })
 
 #

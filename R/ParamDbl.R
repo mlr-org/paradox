@@ -14,6 +14,7 @@
 #' @template param_special_vals
 #' @template param_default
 #' @template param_tags
+#' @template param_tolerance
 #'
 #' @family Params
 #' @include Param.R
@@ -28,13 +29,30 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
     #' @template field_upper
     upper = NULL,
 
+    #' @field tolerance (`numeric(1)`)\cr
+    #' tolerance of values to accept beyond `$lower` and `$upper`.
+    #' Used both for relative and absolute tolerance.
+    tolerance = NULL,
+
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
+    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps)) {
       self$lower = assert_number(lower)
       self$upper = assert_number(upper)
+      self$tolerance = assert_number(tolerance, lower = 0)
       assert_true(lower <= upper)
       super$initialize(id, special_vals = special_vals, default = default, tags = tags)
+    },
+
+    #' @description
+    #' Restrict the value to within the allowed range. This works
+    #' in conjunction with `$tolerance`, which accepts values
+    #' slightly out of this range.
+    #'
+    #' @param x (`numeric(1)`)\cr
+    #'   Value to convert.
+    convert = function(x) {
+      min(max(x, self$lower), self$upper)
     }
   ),
 
@@ -50,7 +68,19 @@ ParamDbl = R6Class("ParamDbl", inherit = Param,
   ),
 
   private = list(
-    .check = function(x) checkNumber(x, lower = self$lower, upper = self$upper),
+    .check = function(x) {
+      # Accept numbers between lower and upper bound, with tolerance self$tolerance
+      # Tolerance is both absolute & relative tolerance (if either tolerance is
+      # undercut the value is accepted:
+      # Values that go beyond the bound by less than `self$tolerance` are also
+      #   accepted (absolute tolerance)
+      # Values that go beyond the bound by less than `abs(<bound>) * self$tolerance`
+      #   are also accepted (relative tolerance)
+      checkNumber(x,
+        lower = self$lower - self$tolerance * max(1, abs(self$lower)),
+        upper = self$upper + self$tolerance * max(1, abs(self$upper))
+      )
+    },
     .qunif = function(x) x * self$upper - (x-1) * self$lower
   )
 )

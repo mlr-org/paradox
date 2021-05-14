@@ -16,9 +16,9 @@ test_that("p_xxx printers", {
   expect_output(print(p_fct(1)), "p_fct\\(levels = \"1\"\\)")
   expect_output(print(p_fct(list(x = 1))), "p_fct\\(levels = \"x\"\\)")
 
-  expect_output(print(p_fct(list(x = 1), requires = x == 1)), "p_fct\\(levels = \"x\"\\, requires = x == 1)")
+  expect_output(print(p_fct(list(x = 1), depends = x == 1)), "p_fct\\(levels = \"x\"\\, depends = x == 1)")
   reqquote = quote(x == 1)
-  expect_output(print(p_fct(list(x = 1), requires = reqquote)), "p_fct\\(levels = \"x\"\\, requires = x == 1)")
+  expect_output(print(p_fct(list(x = 1), depends = reqquote)), "p_fct\\(levels = \"x\"\\, depends = x == 1)")
 })
 
 test_that("ps(p_xxx(...)) creates ParamSets", {
@@ -96,7 +96,14 @@ test_that("requirements in domains", {
   expect_equal(
     ps(
       x = p_int(),
-      y = p_dbl(requires = x == 1)
+      y = p_dbl(depends = x == 1)
+    ), simpleps)
+
+  # quote() is accepted
+  expect_equal(
+    ps(
+      x = p_int(),
+      y = p_dbl(depends = quote(x == 1))
     ), simpleps)
 
   # using a expression variable
@@ -104,7 +111,7 @@ test_that("requirements in domains", {
   expect_equal(
     ps(
       x = p_int(),
-      y = p_dbl(requires = reqquote)
+      y = p_dbl(depends = reqquote)
     ), simpleps)
 
   # the same for `p_fct`, which behaves slightly differently from the rest
@@ -112,13 +119,13 @@ test_that("requirements in domains", {
   expect_equal(
     ps(
       x = p_int(),
-      y = p_fct(letters, requires = x == 1)
+      y = p_fct(letters, depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
   expect_equal(
     ps(
       x = p_int(),
-      y = p_fct(letters, requires = reqquote)
+      y = p_fct(letters, depends = reqquote)
     ), simpleps)
 
   # the same for `p_fct` involving autotrafo, which behaves slightly differently from the rest
@@ -126,20 +133,20 @@ test_that("requirements in domains", {
   expect_equal(
     ps(
       x = p_int(),
-      y = p_fct(list(a = 1, b = 2), requires = x == 1)
+      y = p_fct(list(a = 1, b = 2), depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
   expect_equal(
     ps(
       x = p_int(),
-      y = p_fct(list(a = 1, b = 2), requires = reqquote)
+      y = p_fct(list(a = 1, b = 2), depends = reqquote)
     ), simpleps)
 
   # `&&`
   expect_equal(
     ps(
       x = p_int(),
-      y = p_dbl(requires = x == 1 && x == 3)
+      y = p_dbl(depends = x == 1 && x == 3)
     ),
     ParamSet$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual$new(1))$add_dep("y", "x", CondEqual$new(3)))
 
@@ -148,7 +155,7 @@ test_that("requirements in domains", {
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
-      y = p_dbl(requires = x == 1 && z %in% c("a", "b"))
+      y = p_dbl(depends = x == 1 && z %in% c("a", "b"))
     ),
     ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
       add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b"))))
@@ -157,8 +164,8 @@ test_that("requirements in domains", {
   expect_equal(
     ps(
       x = p_int(),
-      z = p_fct(letters[1:3], requires = x == 2),
-      y = p_dbl(requires = x == 1 && z %in% c("a", "b"))
+      z = p_fct(letters[1:3], depends = x == 2),
+      y = p_dbl(depends = x == 1 && z %in% c("a", "b"))
     ),
     ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
       add_dep("z", "x", CondEqual$new(2))$add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b"))))
@@ -170,7 +177,7 @@ test_that("requirements in domains", {
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
-      y = p_fct(letters[1:3], requires = x == 1 && z %in% c("a", "b"))
+      y = p_fct(letters[1:3], depends = x == 1 && z %in% c("a", "b"))
     ), complexps)
 
   # parentheses are ignored
@@ -178,7 +185,7 @@ test_that("requirements in domains", {
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
-      y = p_fct(letters[1:3], requires = ((((x == 1)) && (z %in% c("a", "b")))))
+      y = p_fct(letters[1:3], depends = ((((x == 1)) && (z %in% c("a", "b")))))
     ), complexps)
 
   # multiple dependencies on the same value
@@ -186,15 +193,15 @@ test_that("requirements in domains", {
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
-      y = p_fct(letters[1:3], requires = ((((x == 1)) && (z %in% c("a", "b") && z == "a"))))
+      y = p_fct(letters[1:3], depends = ((((x == 1)) && (z %in% c("a", "b") && z == "a"))))
     ),
     ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
       add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b")))$
       add_dep("y", "z", CondEqual$new("a")))
 
-  expect_error(p_int(requires = 1 == x), "must be a parameter name")
-  expect_error(p_int(requires = 1), "must be an expression")
-  expect_error(p_int(requires = x != 1), "is broken")
+  expect_error(p_int(depends = 1 == x), "must be a parameter name")
+  expect_error(p_int(depends = 1), "must be an expression")
+  expect_error(p_int(depends = x != 1), "is broken")
 
 })
 
@@ -236,5 +243,58 @@ test_that("trafos in domains", {
     x$n = 1
     x
   })$trafo(list(x = 2, y = "gamma", z = 4)), list(x = exp(1), y = 2 * sqrt(3), z = 4, n = 1))
+
+})
+
+test_that("logscale in domains", {
+
+  expect_error(p_dbl(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
+  expect_error(p_int(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
+
+  expect_error(p_int(lower = 1, upper = 2.5, logscale = TRUE), "failed.*integer.*value.*not.*double")
+
+  expect_error(p_int(lower = -1, logscale = TRUE), "When logscale is TRUE then lower bound must be greater or equal 0")
+  expect_error(p_dbl(lower = 0, logscale = TRUE), "When logscale is TRUE then lower bound must be strictly greater than 0")
+  expect_error(p_int(logscale = TRUE), "When logscale is TRUE then lower bound must be greater or equal 0")
+  expect_error(p_dbl(logscale = TRUE), "When logscale is TRUE then lower bound must be strictly greater than 0")
+
+  p = ps(x = p_dbl(lower = 1, logscale = TRUE), y = p_int(lower = 1, logscale = TRUE))
+  expect_equal(p$lower, c(x = 0, y = 0))
+  expect_equal(p$upper, c(x = Inf, y = Inf))
+  expect_equal(p$trafo(list(x = 0, y = log(1.5))), list(x = 1, y = 1))
+  expect_equal(p$trafo(list(x = 0, y = log(0.001))), list(x = 1, y = 1))
+  expect_equal(p$trafo(list(x = log(10), y = log(20.5))), list(x = 10, y = 20))
+
+  p = ps(x = p_dbl(lower = 1, upper = 10, logscale = TRUE), y = p_int(lower = 0, upper = 10, logscale = TRUE))
+
+  expect_equal(p$lower, c(x = 0, y = log(.5)))
+  expect_equal(p$upper, c(x = log(10), y = log(11)))
+
+  expect_equal(p$trafo(list(x = 0, y = log(1.5))), list(x = 1, y = 1))
+  expect_equal(p$trafo(list(x = log(10), y = log(11))), list(x = 10, y = 10))
+
+  expect_equal(p$trafo(list(x = log(10), y = log(20))), list(x = 10, y = 10))
+  expect_equal(p$trafo(list(x = log(10), y = log(9.99))), list(x = 10, y = 9))
+
+  expect_equal(p$trafo(list(x = log(10), y = log(1.5))), list(x = 10, y = 1))
+
+  expect_equal(p$trafo(list(x = log(10), y = log(0.5))), list(x = 10, y = 0))
+
+  expect_equal(p$trafo(list(x = log(10), y = log(0.0001))), list(x = 10, y = 0))
+
+  expect_output(print(p_dbl(lower = 1, upper = 10, logscale = TRUE)), "^p_dbl\\(lower = 1, upper = 10, logscale = TRUE\\)$")
+  expect_output(print(p_dbl(lower = 1, logscale = TRUE)), "^p_dbl\\(lower = 1, logscale = TRUE\\)$")
+  expect_output(print(p_int(lower = 0, upper = 10, logscale = TRUE)), "^p_int\\(lower = 0, upper = 10, logscale = TRUE\\)$")
+  expect_output(print(p_int(lower = 0, logscale = TRUE)), "^p_int\\(lower = 0, logscale = TRUE\\)$")
+
+  expect_output(print(p_int(lower = 0, logscale = FALSE)), "^p_int\\(lower = 0, logscale = FALSE\\)$")
+
+  params = ps(x = p_dbl(1, 100, logscale = TRUE))
+  grid = generate_design_grid(params, 3)
+  expect_equal(grid$transpose(), list(list(x = 1), list(x = 10), list(x = 100)))
+
+  params = ps(x = p_int(0, 10, logscale = TRUE))
+  grid = generate_design_grid(params, 4)
+  expect_equal(grid$transpose(), list(list(x = 0), list(x = 1), list(x = 3), list(x = 10)))
 
 })

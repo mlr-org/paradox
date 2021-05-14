@@ -42,6 +42,19 @@ test_that("ContextPV checks range", {
 
 })
 
+test_that("ContextPV convert", {
+
+  p = ParamSet$new(list(ParamDbl$new("x", lower = 0, upper = 30)))
+  p$context_available = "x"
+
+  y = 2
+  p$values$x = ContextPV(function(x) x * y, y)
+
+  expect_equal(p$get_values(context = list(x = 10)), list(x = 20))
+  # convert to within range
+  expect_equal(p$get_values(context = list(x = 15.0000000001)), list(x = 30), tolerance = 1e-100)
+})
+
 test_that("ContextPV may not be in variable with dependency", {
   p = ParamSet$new(list(
     ParamInt$new("x"),

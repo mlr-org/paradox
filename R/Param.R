@@ -67,7 +67,7 @@ Param = R6Class("Param",
       # either we are directly feasible, or in special vals, if both are untrue return errmsg from 1st check
       if (inherits(x, "TuneToken")) {
         return(tryCatch({
-          tunetoken_to_ps(x, self)
+          tunetoken_to_ps(x, self, self$id)
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e))))
       }
@@ -147,6 +147,15 @@ Param = R6Class("Param",
       assert_numeric(x, lower = 0, upper = 1)
       assert_true(self$is_bounded)
       private$.qunif(x)
+    },
+
+    #' @description
+    #' Converts a value to the closest valid param. Only for values that
+    #' pass `$check()` and mostly used internally.
+    #' @param x (`any`).
+    #' @return `x` converted to a valid type for the `Param`.
+    convert = function(x) {
+      x
     }
   ),
 

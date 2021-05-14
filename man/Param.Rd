@@ -70,6 +70,7 @@ Is there a default value?}
 \item \href{#method-format}{\code{Param$format()}}
 \item \href{#method-print}{\code{Param$print()}}
 \item \href{#method-qunif}{\code{Param$qunif()}}
+\item \href{#method-convert}{\code{Param$convert()}}
 \item \href{#method-clone}{\code{Param$clone()}}
 }
 }
@@ -262,6 +263,27 @@ param.
 }
 \subsection{Returns}{
 Value of the domain of the parameter.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-convert"></a>}}
+\if{latex}{\out{\hypertarget{method-convert}{}}}
+\subsection{Method \code{convert()}}{
+Converts a value to the closest valid param. Only for values that
+pass \verb{$check()} and mostly used internally.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{Param$convert(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{any}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{x} converted to a valid type for the \code{Param}.
 }
 }
 \if{html}{\out{<hr>}}

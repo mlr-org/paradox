@@ -65,7 +65,10 @@ Condition = R6Class("Condition",
 #' @export
 CondEqual = R6Class("CondEqual", inherit = Condition,
   public = list(
-    initialize = function(rhs) super$initialize("equal", rhs),
+    initialize = function(rhs) {
+      assert_atomic(rhs, any.missing = FALSE, len = 1)
+      super$initialize("equal", rhs)
+    },
     test = function(x) !is.na(x) & x == self$rhs,
     as_string = function(lhs_chr = "x") sprintf("%s = %s", lhs_chr, as.character(self$rhs))
   )
@@ -74,7 +77,10 @@ CondEqual = R6Class("CondEqual", inherit = Condition,
 #' @export
 CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
   public = list(
-    initialize = function(rhs) super$initialize("anyof", rhs),
+    initialize = function(rhs) {
+      assert_atomic(rhs, any.missing = FALSE, min.len = 1, unique = TRUE)
+      super$initialize("anyof", rhs)
+    },
     test = function(x) !is.na(x) & x %in% self$rhs,
     as_string = function(lhs_chr = "x") sprintf("%s \u2208 {%s}", lhs_chr, str_collapse(self$rhs))
   )

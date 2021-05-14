@@ -78,13 +78,13 @@ ParamSet = R6Class("ParamSet",
       } else {
         p$clone(deep = TRUE)
       }
-
-      nn = c(names(self$params), names(p$params))
+      pparams = p$params
+      nn = c(names(private$.params), names(pparams))
       assert_names(nn, type = "strict")
       if (!is.null(p$trafo)) {
         stop("Cannot add a param set with a trafo.")
       }
-      private$.params = c(private$.params, p$params)
+      private$.params = c(private$.params, pparams)
       private$.values = c(private$.values, p$values)
       private$.deps = rbind(private$.deps, p$deps)
       invisible(self)
@@ -104,7 +104,7 @@ ParamSet = R6Class("ParamSet",
       assert_flag(is_bounded, null.ok = TRUE)
       assert_character(tags, any.missing = FALSE, null.ok = TRUE)
 
-      params = self$params
+      params = self$params_unid
       ids = names(params)
       if (is.null(class) && is.null(is_bounded) && is.null(tags)) {
         return(ids)
@@ -135,16 +135,40 @@ ParamSet = R6Class("ParamSet",
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
+    #' @param type (`character(1)`)\cr
+    #' Return values `with_token`, `without_token` or `only_token`?
+    #' @param check_required (`logical(1)`)\cr
+    #' Check if all required parameters are set?
     #' @param context (`environment` | named `list`)\cr
     #'   Must have elements named by `$context_available`, which are then given to the
     #'   respective arguments of [`ContextPV`] values.
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, context = parent.frame()) {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL,
+      type = "with_token", check_required = TRUE, context = parent.frame()) {
+      assert_choice(type, c("with_token", "without_token", "only_token"))
+      assert_flag(check_required)
       values = self$values
-      params = self$params
+      params = self$params_unid
+      ns = names(values)
+
+      if (type != "only_token") assert_names(names(context), type = "unique", must.include = self$context_available)
+
+      if (type == "without_token") {
+        values = discard(values, is, "TuneToken")
+      } else if (type == "only_token") {
+        values = keep(values, is, "TuneToken")
+      }
+
+      if(check_required) {
+        required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
+        if (length(required) > 0L) {
+          stop(sprintf("Missing required parameters: %s", str_collapse(required)))
+        }
+      }
+
       values = values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
 
-      assert_names(names(context), type = "unique", must.include = self$context_available)
+      if (type == "only_token") return(values)
 
       imap(values, function(x, name) {
         if (!inherits(x, "ContextPV")) return(x)
@@ -153,6 +177,9 @@ ParamSet = R6Class("ParamSet",
         if (!isTRUE(checked)) {
           stopf("ContextPV for %s resulted in infeasible value:\n%s",
             name, checked)
+        }
+        if (!has_element(params[[name]]$special_vals, x)) {
+          x = params[[name]]$convert(x)
         }
         x
       })
@@ -163,7 +190,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param ids (`character()`).
     subset = function(ids) {
-      param_ids = names(self$params)
+      param_ids = names(self$params_unid)
       assert_subset(ids, param_ids)
       deps = self$deps
       if (nrow(deps)) { # check that all required / leftover parents are still in new ids
@@ -185,7 +212,7 @@ ParamSet = R6Class("ParamSet",
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     #'
     #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
-    tune_ps = function(values = self$values) {
+    search_space = function(values = self$values) {
       assert_list(values)
       assert_names(names(values), subset.of = self$ids())
       pars = private$get_tune_ps(values)
@@ -211,18 +238,9 @@ ParamSet = R6Class("ParamSet",
       if (!isTRUE(ok)) {
         return(ok)
       }
-      params = self$params
+      params = self$params_unid
       ns = names(xs)
       ids = names(params)
-
-      # check that all 'required' params are there
-      required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
-      if (length(required) > 0L) {
-        return(sprintf("Missing required parameters: %s", str_collapse(required)))
-      }
-      if (length(xs) == 0) {
-        return(TRUE)
-      } # a empty list is always feasible, if all req params are there
 
       extra = wf(ns %nin% ids)
       if (length(extra)) {
@@ -310,10 +328,10 @@ ParamSet = R6Class("ParamSet",
     #' satisfied and all dependencies are satisfied. Params for which
     #' dependencies are not satisfied should be set to `NA` in `xdt`.
     #'
-    #' @param xdt ([data.table::data.table]).
+    #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt) {
-      xss = transpose(xdt, trafo = FALSE)
+      xss = map(transpose_list(xdt), discard, is.na)
       for (xs in xss) {
         ok = self$check(xs)
         if (!isTRUE(ok)) {
@@ -348,7 +366,7 @@ ParamSet = R6Class("ParamSet",
     #' @param on (`character(1)`).
     #' @param cond ([Condition]).
     add_dep = function(id, on, cond) {
-      params = self$params
+      params = self$params_unid
       ids = names(params)
       assert_choice(id, ids)
       assert_choice(on, ids)
@@ -380,10 +398,10 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param ... (ignored).
     #' @param hide_cols (`character()`)\cr
-    #'   Which fields should not be printed? Default is `"nlevels"`,
+    #'   Which fields should not be printed? Default is `"levels"`,
     #'   `"is_bounded"`, `"special_vals"`, `"tags"`, and `"storage_type"`.
     # printer, prints the set as a datatable, with the option to hide some cols
-    print = function(..., hide_cols = c("nlevels", "is_bounded", "special_vals", "tags", "storage_type")) {
+    print = function(..., hide_cols = c("levels", "is_bounded", "special_vals", "tags", "storage_type")) {
       catf(format(self))
       d = as.data.table(self)
       if (!nrow(d)) {
@@ -414,6 +432,13 @@ ParamSet = R6Class("ParamSet",
       }
       private$.params
     },
+    #' @template field_params_unid
+    params_unid = function(rhs) {
+      if (!missing(rhs) && !identical(rhs, private$.params)) {
+        stop("$params_unid is read-only.")
+      }
+      self$params
+    },
 
     #' @template field_deps
     deps = function(v) {
@@ -441,13 +466,13 @@ ParamSet = R6Class("ParamSet",
     #' @field length (`integer(1)`)\cr
     #' Number of contained [Param]s.
     length = function() {
-      length(self$params)
+      length(self$params_unid)
     },
 
     #' @field is_empty (`logical(1)`)\cr
     #' Is the `ParamSet` empty?
     is_empty = function() {
-      length(self$params) == 0L
+      length(self$params_unid) == 0L
     },
 
     #' @field class (named `character()`)\cr
@@ -489,7 +514,7 @@ ParamSet = R6Class("ParamSet",
     #' Do all parameters have finite bounds?
     #' Named with parameter IDs.
     is_bounded = function() {
-      all(map_lgl(self$params, "is_bounded"))
+      all(map_lgl(self$params_unid, "is_bounded"))
     },
 
     #' @field special_vals (named `list()` of `list()`)\cr
@@ -535,15 +560,15 @@ ParamSet = R6Class("ParamSet",
       private$get_member_with_idnames("is_categ", as.logical)
     },
 
-    #' @field is_numeric (`logical(1)`)\cr
+    #' @field all_numeric (`logical(1)`)\cr
     #' Is `TRUE` if all parameters are [ParamDbl] or [ParamInt].
-    is_numeric = function() {
+    all_numeric = function() {
       all(self$is_number)
     },
 
-    #' @field is_categorical (`logical(1)`)\cr
+    #' @field all_categorical (`logical(1)`)\cr
     #' Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
-    is_categorical = function() {
+    all_categorical = function() {
       all(self$is_categ)
     },
 
@@ -583,15 +608,17 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(xs) == 0L) {
         xs = named_list()
-      } else {
-        # convert all integer params really to storage type int
-        # this is not the greatest way to do this, evvery param should maybe have a ".convert"
-        # function, but this seems overkill for this single issue
-        # solves issue #293
-        # (Need to skip over ParamInt that have TuneToken value)
-        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, function(x) inherits(x, "TuneToken") || inherits(x, "ContextPV"))))
-        if (length(int_ids) > 0L)
-          xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
+      } else if (self$assert_values) {  # this only makes sense when we have asserts on
+        # convert all integer params really to storage type int, move doubles to within bounds etc.
+        # solves issue #293, #317
+        params = self$params_unid # cache the AB
+        for (n in names(xs)) {
+          p = params[[n]]
+          x = xs[[n]]
+          if (inherits(x, "TuneToken") || inherits(x, "ContextPV")) next
+          if (has_element(p$special_vals, x)) next
+          xs[[n]] = p$convert(x)
+        }
       }
       private$.values = xs
     },
@@ -615,10 +642,11 @@ ParamSet = R6Class("ParamSet",
       set_names(astype(map(params, member)), names(params))
     },
     get_tune_ps = function(values) {
-      selfparams = self$params  # cache to avoid performance hit in ParamSetCollection
+      selfparams = self$params_unid # cache to avoid performance hit in ParamSetCollection
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, selfparams[[pn]])
+        tunetoken_to_ps(value, selfparams[[pn]], pn)
       })
+      if (!length(partsets)) return(ParamSet$new())
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id

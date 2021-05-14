@@ -17,7 +17,13 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [Sampler1DUnif].
     initialize = function(param) {
-      super$initialize(ParamSet$new(list(param)))
+      assert(check_r6(param, "Param"), check_r6(param, "ParamSet"))
+      if (inherits(param, "Param")) {
+        super$initialize(ParamSet$new(list(param)))
+      } else {
+        if (param$length != 1) stopf("param must contain exactly 1 Param, but contains %s", param$length)
+        super$initialize(param)
+      }
     }
   ),
 
@@ -50,8 +56,8 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(param) {
-      assert_param(param, no_untyped = TRUE, must_bounded = TRUE)
       super$initialize(param)
+      assert_param(self$param, no_untyped = TRUE, must_bounded = TRUE)
     }
   ),
 
@@ -88,8 +94,8 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     #' @param trunc (`logical(1)`)\cr
     #'   `TRUE` enables naive rejection sampling, so we stay inside of \[lower, upper\].
     initialize = function(param, rfun, trunc = TRUE) {
-      assert_param(param, "ParamDbl")
       super$initialize(param)
+      assert_param(self$param, "ParamDbl")
       assert_function(rfun, args = "n")
       assert_flag(trunc)
       self$rfun = rfun
@@ -101,7 +107,9 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
     # maybe we want an option to use my truncation here, as this slows stuff down somewhat
     # and there are some real truncated rngs in R
     .sample = function(n) {
-      if (self$trunc) {
+      if (n == 0L) {
+        s = numeric() # skip truncation stuff, #338
+      } else if (self$trunc) {
         s = private$sample_truncated(n, self$rfun)
       } else {
         s = self$rfun(n = n)
@@ -146,8 +154,8 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
     #' @param prob (`numeric()` | NULL)\cr
     #'   Numeric vector of `param$nlevels` probabilities, which is uniform by default.
     initialize = function(param, prob = NULL) {
-      assert_multi_class(param, c("ParamFct", "ParamLgl"))
       super$initialize(param)
+      assert_multi_class(self$param, c("ParamFct", "ParamLgl"))
       k = param$nlevels
       if (is.null(prob)) {
         prob = rep(1 / k, k)
@@ -187,6 +195,9 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
     #'   SD parameter of the normal distribution.
     #'   Default is `(param$upper - param$lower)/4`.
     initialize = function(param, mean = NULL, sd = NULL) {
+      super$initialize(param, trunc = TRUE, # we always trunc, this should not hurt for unbounded params
+        rfun = function(n) rnorm(n, mean = self$mean, sd = self$sd))
+      param = self$param
       assert_param(param, "ParamDbl")
       if ((is.null(mean) || is.null(sd)) && !param$is_bounded) {
         stop("If 'mean' or 'sd' are not set, param must be bounded!")
@@ -199,8 +210,6 @@ Sampler1DNormal = R6Class("Sampler1DNormal", inherit = Sampler1DRfun,
         sd = (param$upper - param$lower) / 4
       }
       self$sd = sd
-      super$initialize(param, trunc = TRUE, # we always trunc, this should not hurt for unbounded params
-        rfun = function(n) rnorm(n, mean = self$mean, sd = self$sd))
     }
   ),
 

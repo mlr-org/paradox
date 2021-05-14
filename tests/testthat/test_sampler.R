@@ -11,6 +11,9 @@ test_that("1d samplers: basic tests", {
   for (p in ps$params) {
     ss = samplers[[p$class]]
     for (s in ss) {
+      expect_error(s$new(ps()), "exactly 1 Param, but contains 0")
+      expect_error(s$new(ps(x = p, y = p)), "exactly 1 Param, but contains 2")
+      expect_class(s$new(ps(x = p)), "Sampler1D")
       s = s$new(p)
       info = paste(p$id, "-", class(s)[[1L]])
       n = 5L
@@ -103,4 +106,10 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
   s = SamplerJointIndep$new(list(s1, s2))
   expect_equal(s1$param_set, ParamSet$new(list(th_param_fct())))
   expect_equal(s2$param_set, ParamSet$new(list(th_param_dbl())))
+})
+
+test_that("Sampler1DRfun with 0 samples (#338)", {
+  s = Sampler1DRfun$new(param = ParamDbl$new("x", 0, 10), rfun = function(n) numeric(0))
+  x = s$sample(0)
+  expect_data_table(x$data, nrows = 0L, ncols = 1L)
 })

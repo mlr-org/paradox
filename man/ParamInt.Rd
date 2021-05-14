@@ -72,6 +72,7 @@ Always \code{"list"} for \link{ParamUty}.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-new}{\code{ParamInt$new()}}
+\item \href{#method-convert}{\code{ParamInt$convert()}}
 \item \href{#method-clone}{\code{ParamInt$clone()}}
 }
 }
@@ -138,6 +139,24 @@ purpose:\cr
 \item \code{"required"} implies that the parameters has to be given when setting
 \code{values} in \link{ParamSet}.
 }}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-convert"></a>}}
+\if{latex}{\out{\hypertarget{method-convert}{}}}
+\subsection{Method \code{convert()}}{
+Converts a value to an integer.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamInt$convert(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(\code{numeric(1)})\cr
+Value to convert.}
 }
 \if{html}{\out{</div>}}
 }

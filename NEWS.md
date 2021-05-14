@@ -1,7 +1,33 @@
-# paradox 0.5.0-9000
+# paradox 0.7.1.9000
 
-* `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and constructors `p_dbl`, `p_int`, `p_lgl`, `p_fct`, and `p_uty`.
-* `ParamSet$tune_ps()` method that constructs tunable `ParamSet` from `TuneToken` objects, which are constructed with `to_tune()`.
+- Same as previous version.
+
+
+# paradox 0.7.1
+
+* `Sampler1D` also accept `ParamSet`s with one `Param` now (#335).
+* Fixed sampling zero rows in `Sampler1DRfun` (#338).
+* `to_tune()`, `p_dbl()`, and `p_int()` accept `logscale` argument for tuning on
+  a logarithmic scale.
+* `to_tune` can be called with only `lower` or only `upper` now and will infer
+  the other bound if possible.
+
+# paradox 0.7.0
+
+* `ParamSet$get_values()` checks whether all required parameter values are set.
+  Required parameter are not checked anymore when new values are added to the
+  parameter set.
+* `ParamSet$check_dt()` accepts `data.frame`s.
+* Rename `is_numeric` and `is_categorical` to `all_numeric` and
+  `all_categorical`.
+* Rename `requires` to `depends`.
+
+# paradox 0.6.0
+
+* `ps()` shortcuts for `ParamSet` construction, with new `Domain` construct and
+  constructors `p_dbl`, `p_int`, `p_lgl`, `p_fct`, and `p_uty`.
+* `ParamSet$search_space()` method that constructs tunable `ParamSet` from
+  `TuneToken` objects, which are constructed with `to_tune()`.
 
 # paradox 0.5.0
 

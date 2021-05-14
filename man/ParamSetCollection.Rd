@@ -37,6 +37,12 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
+\item{\code{params_unid}}{(named \code{list()})\cr
+List of \link{Param}, named with their true ID. However,
+this field has the \link{Param}'s \verb{$id} value set to a
+potentially invalid value. This active binding should
+only be used internally.}
+
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
@@ -73,9 +79,9 @@ When you set values, all previously set values will be unset / removed.}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space">}\href{../../paradox/html/ParamSet.html#method-search_space}{\code{paradox::ParamSet$search_space()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
 \item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="tune_ps">}\href{../../paradox/html/ParamSet.html#method-tune_ps}{\code{paradox::ParamSet$tune_ps()}}\out{</span>}
 }
 \out{</details>}
 }
