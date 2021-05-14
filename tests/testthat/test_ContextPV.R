@@ -93,3 +93,16 @@ test_that("ContextPV in Tuning PS", {
   expect_error(p$get_values(context = list(scale = 1)), "infeasible value.*not 'double'")
 
 })
+
+
+test_that("ContextPV with PSC", {
+  p = ps(x = p_dbl())
+  p$context_available = "x"
+  p$set_id = "n"
+  psc = ParamSetCollection$new(list(p))
+  expect_error({psc$values$n.x = ContextPV(function(y) x * 2)}, "Must be a subset of set \\{x\\}")
+  psc$values$n.x = ContextPV(function(x) x * 2)
+
+  expect_equal(p$get_values(context = list(x = 10)), list(x = 20))
+
+})

@@ -247,16 +247,18 @@ ParamSet = R6Class("ParamSet",
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
 
-      # check each parameters feasibility
-      for (n in ns) {
-        if (inherits(xs[[n]], "ContextPV")) {
-          ch = check_names(names(formals(args(xs[[n]]))), type = "unique", subset.of = self$context_available)
-          if (!isTRUE(ch)) ch = sprintf("Argument names of ContextPV %s", ch)
-        } else {
-          ch = params[[n]]$check(xs[[n]])
-        }
-        if (test_string(ch)) { # we failed a check, return string
-          return(paste0(n, ": ", ch))
+      # check each parameters feasibility, only necessary if we are a leaf ParamSet
+      if (!inherits(self, "ParamSetCollection")) {
+        for (n in ns) {
+          if (inherits(xs[[n]], "ContextPV")) {
+            ch = check_names(names(formals(args(xs[[n]]))), type = "unique", subset.of = self$context_available)
+            if (!isTRUE(ch)) ch = sprintf("Argument names of ContextPV %s", ch)
+          } else {
+            ch = params[[n]]$check(xs[[n]])
+          }
+          if (test_string(ch)) { # we failed a check, return string
+            return(paste0(n, ": ", ch))
+          }
         }
       }
 
