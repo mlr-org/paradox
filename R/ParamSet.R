@@ -45,6 +45,13 @@ ParamSet = R6Class("ParamSet",
     #' Default is `TRUE`, only switch this off if you know what you are doing.
     assert_values = TRUE,
 
+    #' @field context_available (`character`)\cr
+    #' Context that [`ContextPV`] values can rely on being present. When assigning a [`ContextPV`]
+    #' to a `$values` element, its argument names must be a subset of `$context_available`.
+    #' Conversely, the `context` argument of `$get_values()` must contain named elements
+    #' corresponding to all `$context_available` entries.
+    context_available = character(0),
+
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -128,18 +135,23 @@ ParamSet = R6Class("ParamSet",
     #' @param class (`character()`).
     #' @param is_bounded (`logical(1)`).
     #' @param tags (`character()`).
-    #' @param env (`environment` | named `list`)
+    #' @param context (`environment` | named `list`)\cr
+    #'   Must have elements named by `$context_available`, which are then given to the
+    #'   respective arguments of [`ContextPV`] values.
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, env = parent.frame()) {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, context = parent.frame()) {
       values = self$values
       params = self$params
       values = values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+
+      assert_names(names(context), type = "unique", must.include = self$context_available)
+
       imap(values, function(x, name) {
-        if (!inherits(x, "FunctionParamValue")) return(x)
-        x = x(env)
+        if (!inherits(x, "ContextPV")) return(x)
+        x = do.call(x, lapply(names(formals(args(x))), get, pos = context))
         checked = params[[name]]$check(x)
         if (!isTRUE(checked)) {
-          stopf("FunctionParamValue for %s resulted in infeasible value:\n%s",
+          stopf("ContextPV for %s resulted in infeasible value:\n%s",
             name, checked)
         }
         x
@@ -219,7 +231,12 @@ ParamSet = R6Class("ParamSet",
 
       # check each parameters feasibility
       for (n in ns) {
-        ch = params[[n]]$check(xs[[n]])
+        if (inherits(xs[[n]], "ContextPV")) {
+          ch = check_names(names(formals(args(xs[[n]]))), type = "unique", subset.of = self$context_available)
+          if (!isTRUE(ch)) ch = sprintf("Argument names of ContextPV %s", ch)
+        } else {
+          ch = params[[n]]$check(xs[[n]])
+        }
         if (test_string(ch)) { # we failed a check, return string
           return(paste0(n, ": ", ch))
         }
@@ -240,7 +257,7 @@ ParamSet = R6Class("ParamSet",
           # - if param is not there
           cond = deps$cond[[j]]
           ok = (p1id %in% ns && p2id %in% ns &&
-                !inherits(xs[[p2id]], "FunctionParamValue") &&
+                !inherits(xs[[p2id]], "ContextPV") &&
                 cond$test(xs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
@@ -250,8 +267,8 @@ ParamSet = R6Class("ParamSet",
             if (is.null(val)) {
               message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
                   "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
-            } else if (inherits(val, "FunctionParamValue")) {
-              message = sprintf("%s However, %s is a FunctionParamValue. Conditions on FunctionParamValue values default to FALSE / unmet.", message, p2id)
+            } else if (inherits(val, "ContextPV")) {
+              message = sprintf("%s However, %s is a ContextPV. Conditions on ContextPV values default to FALSE / unmet.", message, p2id)
             } else {
               message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
             }
@@ -572,7 +589,7 @@ ParamSet = R6Class("ParamSet",
         # function, but this seems overkill for this single issue
         # solves issue #293
         # (Need to skip over ParamInt that have TuneToken value)
-        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, function(x) inherits(x, "TuneToken") || inherits(x, "FunctionParamValue"))))
+        int_ids = intersect(self$ids(class = "ParamInt"), names(discard(xs, function(x) inherits(x, "TuneToken") || inherits(x, "ContextPV"))))
         if (length(int_ids) > 0L)
           xs[int_ids] = as.list(as.integer(unlist(xs[int_ids])))
       }
