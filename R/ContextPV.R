@@ -15,7 +15,7 @@
 #'   named in `...` will be available.
 #' @examples
 #' p = ps(x = p_dbl(), y = p_dbl())
-#' p$context_available = "a"
+#' p$context_available = c("a", "x")
 #'
 #' b = 10
 #'
