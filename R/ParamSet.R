@@ -76,14 +76,14 @@ ParamSet = R6Class("ParamSet",
         set(private$.params, , "id", names(params))
         set(private$.params, , "has_trafo", !map_lgl(private$.params$trafo, is.null))
 
-        initvalues = private$.params[(init_given), set_names(init, id)]
-        private$.tags = private$.params[, set_names(tags, id)]
+        initvalues = col_to_nl(private$.params[(init_given), list(init, id)])
+        private$.tags = col_to_nl(private$.params, "tags", "id")
 
         set(private$.params, , setdiff(colnames(private$.params), paramcols), NULL)
 
       }
       setindexv(private$.params, c("id", "cls", "grouping"))
-      assert_names(colnames(private$.params), identical.to = paramcols)
+      assert_names(colnames(private$.params), permutation.of = paramcols)
 
       # add Dependencies
       imap(params, function(p, name) {
@@ -176,12 +176,7 @@ ParamSet = R6Class("ParamSet",
       values[match(self$ids(class = class, tags = tags, any_tags = any_tags), names(values), nomatch = 0)]
     },
 
-    trafo = function(x, param_set) {  # param_set argument only here for compatibility
-      if (!missing(param_set)) {
-        warning("Giving the `param_set` argument is deprecated!")
-      } else {
-        param_set = self  # for the .extra_trafo, in case it still has a param_set argument
-      }
+    trafo = function(x, param_set = self) {
       trafos = private$.params[names(x), list(id, trafo, has_trafo, value = x), on = "id", nomatch = 0][(has_trafo)]
       if (nrow(trafos)) {
         trafos = trafos[, list(value = trafo[[1]](value[[1]])), by = "id"]
@@ -237,14 +232,14 @@ ParamSet = R6Class("ParamSet",
       xs_nontune = discard(xs, inherits, "TuneToken")
 
       params = params[names(xs_nontune), on = "id"]
-      set(params, , "values", xs_nontune)
+      set(params, , "values", list(xs_nontune))
       pgroups = split(params, by = c("cls", "grouping"))
       checkresults = map(pgroups, function(x) {
         domain_check(set_class(x, c(x$cls[[1]], class(x))), x$values)
       })
       checkresults = discard(checkresults, isTRUE)
       if (length(checkresults)) {
-        return(str_collapse(checkresults), sep = "\n")
+        return(str_collapse(checkresults, sep = "\n"))
       }
 
       if (check_strict) {
@@ -526,7 +521,7 @@ ParamSet = R6Class("ParamSet",
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
-        sanitised = set(private$.params[names(nontt), on = "id"], , "values", nontt)[
+        sanitised = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
           !pmap_lgl(list(special_vals, values), has_element),
           list(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
         insert_named(xx, set_names(sanitised$values, sanitised$id))
@@ -569,11 +564,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.extra_trafo
       } else {
-        if (test_function(f, args = c("x", "param_set"))) {
-          warning("The 'param_set' argument for '.extra_trafos' is deprecated and will be removed in future versions!")
-        } else {
-          assert_function(f, args = "x", null.ok = TRUE)
-        }
+        assert(check_function(f, args = c("x", "param_set"), null.ok = TRUE), check_function(f, args = "x", null.ok = TRUE))
         private$.extra_trafo = f
       }
     },
@@ -630,21 +621,21 @@ ParamSet = R6Class("ParamSet",
     # Per-Parameter properties
 
     #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
-    class = function() private$.params[, set_names(class, id)],
+    class = function() col_to_nl(private$.params, "class", "id"),
     #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    lower = function() private$.params[, set_names(class, lower)],
+    lower = function() col_to_nl(private$.params, "lower", "id"),
     #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    upper = function() private$.params[, set_names(class, upper)],
+    upper = function() col_to_nl(private$.params, "upper", "id"),
     #' @field levels (named `list()` of `character`)\cr Allowed levels of categorical parameters (`NULL` for non-categoricals).
     #' Named with parameter IDs.
-    levels = function() private$.params[, set_names(class, levels)],
+    levels = function() col_to_nl(private$.params, "levels", "id"),
     #' @field storage_type (`character()`)\cr Data types of parameters when stored in tables. Named with parameter IDs.
-    storage_type = function() private$.params[, set_names(class, storage_type)],
+    storage_type = function() col_to_nl(private$.params, "storage_type", "id"),
     #' @field special_vals (named `list()` of `list()`)\cr Special values for all parameters. Named with parameter IDs.
-    special_vals = function() private$.params[, set_names(class, special_vals)],
+    special_vals = function() col_to_nl(private$.params, "special_vals", "id"),
     #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
     #' Named with parameter IDs.
-    default = function() private$.params[!map_lgl(default, is_nodefault), set_names(default, id)],
+    default = function() col_to_nl(private$.params[!map_lgl(default, is_nodefault), list(default, id)]),
 
     ############################
     # Per-Parameter class properties (S3 method call)
@@ -652,42 +643,46 @@ ParamSet = R6Class("ParamSet",
     #' @field nlevels (named `integer()`)\cr Number of distinct levels of parameters. `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
-      private$.params[,
+      info = private$.params[,
         list(id, nlevels = domain_nlevels(recover_domain(.SD, .BY))),
         by = c("cls", "grouping")
       ][
-        private$.params$id, on = "id", set_names(nlevels, id)
+        private$.params$id, on = "id", list(nlevels, id)
       ]
+      col_to_nl(info)
     },
 
     #' @field is_number (named `logical()`)\cr Whether parameter is [ParamDbl] or [ParamInt]. Named with parameter IDs.
     is_number = function() {
-      private$.params[,
+      info = private$.params[,
         list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)),
         by = c("cls", "grouping")
       ][
-        private$.params$id, on = "id", set_names(is_number, id)
+        private$.params$id, on = "id", list(is_number, id)
       ]
+      col_to_nl(info)
     },
 
     #' @field is_categ (named `logical()`)\cr Whether parameter is [ParamFct] or [ParamLgl]. Named with parameter IDs.
     is_categ = function() {
-      private$.params[,
+      info = private$.params[,
         list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)),
         by = c("cls", "grouping")
       ][
-        private$.params$id, on = "id", set_names(is_categ, id)
+        private$.params$id, on = "id", list(is_categ, id)
       ]
+      col_to_nl(info)
     },
 
     #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
     is_bounded = function() {
-      private$.params[,
+      info = private$.params[,
         list(id, is_bounded = domain_is_bounded(recover_domain(.SD, .BY))),
         by = c("cls", "grouping")
       ][
-        private$.params$id, on = "id", set_names(is_bounded, id)
+        private$.params$id, on = "id", list(is_bounded, id)
       ]
+      col_to_nl(info)
     }
   ),
 
@@ -699,6 +694,7 @@ ParamSet = R6Class("ParamSet",
     .tags = named_list(),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     get_tune_ps = function(values) {
+      return(NULL)  # TODO
       selfparams = private$.params
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
         tunetoken_to_ps(value, selfparams[[pn]], pn)

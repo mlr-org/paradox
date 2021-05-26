@@ -131,6 +131,7 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
   assert_number(upper, na.ok = TRUE)
   # assert_character(levels, null.ok = TRUE)
   assert_list(special_vals)
+  if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_number(tolerance, na.ok = TRUE)
   assert_function(trafo, null.ok = TRUE)
@@ -145,10 +146,12 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
   }
 
 
+  # domain is a data.table with a few classes.
+  # setting `id` to something preliminary so that `domain_assert()` works.
   param = data.table(cls = cls, grouping = grouping, cargo = list(cargo), lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
     special_vals = list(special_vals),
     default = list(default), tags = list(tags), trafo = list(trafo), requirements = list(parse_depends(depends_expr, parent.frame(2))),
-    storage_type = storage_type, init_given = !missing(init), init = list(if (!missing(init)) init))
+    storage_type = storage_type, init_given = !missing(init), init = list(if (!missing(init)) init), id = "domain being constructed")
   class(param) = c(cls, "Domain", class(param))
 
   if (!is_nodefault(default)) {
@@ -156,6 +159,7 @@ domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real
     if ("required" %in% tags) stop("A 'required' parameter can not have a 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default', but the 'required' indicates that the parameter may not be missing.")
   }
   if (!missing(init)) {
+    if (!is.null(trafo)) stop("Initial value and trafo can not both be given at the same time.")
     domain_assert(param, list(init))
     if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
   }

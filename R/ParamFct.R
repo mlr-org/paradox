@@ -26,11 +26,11 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
 
 #' @export
 domain_check.ParamFct = function(param, values) {
-  if (testr(values, "S1")) {
+  if (qtestr(values, "S1")) {
     values_str = as.character(values)
     if (all(values_str %in% param$levels[[1]])) return(TRUE)  # this works because we have the grouping -- all 'levels' are the same here.
   }
-  check_domain_vectorized(param$ids, param, check_choice, more_args = list(choices = param$levels))
+  check_domain_vectorize(param$id, param, check_choice, more_args = list(choices = param$levels))
 }
 
 #' @export

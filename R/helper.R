@@ -46,3 +46,9 @@ as_type = function(x, type) {
   )
 }
 
+# column to named list
+col_to_nl = function(dt, col = 1, idcol = 2) {
+  data = dt[[col]]
+  names(data) = dt[[idcol]]
+  data
+}

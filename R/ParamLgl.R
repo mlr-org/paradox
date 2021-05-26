@@ -10,7 +10,7 @@ domain_check.ParamLgl = function(param, values) {
   if (qtestr(values, "B1")) {
     return(TRUE)
   }
-  check_domain_vectorized(param$id, values, check_flag)
+  check_domain_vectorize(param$id, values, check_flag)
 }
 
 #' @export
