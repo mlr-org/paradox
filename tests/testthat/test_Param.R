@@ -52,7 +52,7 @@ test_that("special_vals work for all Param subclasses", {
 })
 
 test_that("we cannot create Params with non-strict R names", {
-  expect_error(ParamInt$new(id = "$foo"), "Must comply")
+  expect_error(ParamInt$new(id = "$foo"), "comply")
 })
 
 test_that("printer works", {

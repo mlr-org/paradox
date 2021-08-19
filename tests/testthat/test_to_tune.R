@@ -82,8 +82,7 @@ test_that("$check() works on TuneToken", {
   expect_string(pars$check(list(lgl = to_tune(0, 1))), "must have zero or one argument")
   expect_error(pars$search_space(list(lgl = to_tune(0, 1))), "must have zero or one argument")
 
-  expect_error(pars$search_space(list(xxx = to_tune())), "Must be a subset of .*x,xub,y,uty,uty1,fct,lgl")
-
+  expect_error(pars$search_space(list(xxx = to_tune())), "subset of .*x,xub,y,uty,uty1,fct,lgl")
 })
 
 test_that("Tune ParamSet is created", {
