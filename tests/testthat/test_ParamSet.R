@@ -344,9 +344,9 @@ test_that("ParamSet$check_dt", {
 
 test_that("rd_info.ParamSet", {
   ps = ParamSet$new()
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
   ps$add(ParamFct$new("a", levels = letters[1:3]))
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), len = 4L)
 })
 
 

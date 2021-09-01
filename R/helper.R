@@ -17,6 +17,7 @@
 #'
 #' @param trafo (`logical(1)`)\cr
 #' Should the `trafo` function of the [ParamSet] be called?
+#' @noRd
 transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   assert_data_table(data)
   assert_flag(filter_na)
@@ -190,4 +191,9 @@ as_type = function(x, type) {
     character = as.character(x),
     stopf("Invalid storage type '%s'", type)
   )
+}
+
+capitalize = function(str) {
+  substr(str, 1L, 1L) = toupper(substr(str, 1L, 1L))
+  str
 }

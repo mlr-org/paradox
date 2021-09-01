@@ -668,18 +668,32 @@ as.data.table.ParamSet = function(x, ...) { # nolint
 }
 
 #' @export
-rd_info.ParamSet = function(ps) { # nolint
-  params = as.data.table(ps)
-  if (nrow(params) == 0L)
+rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
+  if (length(ps$params) == 0L) {
     return("Empty ParamSet")
-  params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
-  params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
-  params$levels = map_chr(params$levels, str_collapse, n = 10L)
-  params$range = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range)
-  params = params[, c("id", "storage_type", "default", "range", "levels")]
-  setnames(params, c("Id", "Type", "Default", "Range", "Levels"))
-  c(
-    "",
-    knitr::kable(params)
-  )
+  }
+
+  params = as.data.table(ps)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
+
+  if (length(descriptions)) {
+    params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
+    params[is.na(description), description := ""]
+    setcolorder(params, c("id", "description"))
+  }
+
+  set(params, i = which(map_lgl(params$default, inherits, "NoDefault")), j = "default", value = list("-"))
+
+  if (!allMissing(params$lower) || !allMissing(params$upper)) {
+    set(params, j = "range", value = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range))
+  }
+  remove_named(params, c("lower", "upper"))
+
+  if (all(lengths(params$levels) == 0L)) {
+    remove_named(params, "levels")
+  } else {
+    set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L))
+  }
+
+  setnames(params, "storage_type", "type")
+  c("", knitr::kable(params, col.names = capitalize(names(params))))
 }
