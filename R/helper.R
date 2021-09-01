@@ -115,33 +115,6 @@ ps_union = function(sets) {
   newps
 }
 
-# Put a function in a "lean" environment that does not carry unnecessary baggage with it (e.g. references to datasets)
-#
-# @param .fn: function to crate
-# @param ...: the objects, which should be visible inside `.fn`. These objects should be given as is, not in a string
-#   or expression or anything like that.
-#
-# @examples
-# meta_f = function(z) {
-#   x = 1
-#   y = 2
-#   crate(function() {
-#     c(x, y, z)
-#   }, x)
-# }
-# x = 100
-# y = 200
-# z = 300
-# f = meta_f(1)
-# f()
-# #> [1]   1 200 300
-# ## using `x` from the crate, `y` and `z` from global env
-crate = function(.fn, ...) {
-  environment(.fn) = list2env(parent = .GlobalEnv,
-    structure(list(...), names = map_chr(substitute(list(...)), as.character)[-1]))
-  .fn
-}
-
 # Get the R6ClassGenerator (constructor) by class name, even if the generator itself is not directly visible.
 # This is necessary to create new instances of a `Param`, because the `Param` only contains a link to its class
 # name, not its constructor.

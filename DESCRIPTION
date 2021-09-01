@@ -46,7 +46,7 @@ Imports:
     checkmate,
     data.table,
     methods,
-    mlr3misc (>= 0.7.0),
+    mlr3misc (>= 0.9.3),
     R6
 Suggests:
     knitr,
