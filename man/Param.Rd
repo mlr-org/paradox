@@ -31,6 +31,10 @@ Other Params:
 \item{\code{id}}{(\code{character(1)})\cr
 Identifier of the object.}
 
+\item{\code{description}}{(\code{character(1)})\cr
+String to describe this parameter. Used, for example, in \code{\link[mlr3misc:rd_info]{mlr3misc::rd_info()}} to automatically
+generate documentation for parameter sets.}
+
 \item{\code{special_vals}}{(\code{list()})\cr
 Arbitrary special values this parameter is allowed to take.}
 
