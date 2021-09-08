@@ -165,8 +165,3 @@ as_type = function(x, type) {
     stopf("Invalid storage type '%s'", type)
   )
 }
-
-capitalize = function(str) {
-  substr(str, 1L, 1L) = toupper(substr(str, 1L, 1L))
-  str
-}
