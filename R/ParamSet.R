@@ -71,14 +71,20 @@ ParamSet = R6Class("ParamSet",
       } else {
         p$clone(deep = TRUE)
       }
+
       pparams = p$params
-      nn = c(names(private$.params), names(pparams))
-      assert_names(nn, type = "strict")
+      npparams = names(pparams)
+      assert_names(npparams, type = "strict", .var.name = "Names of params")
+      ii = wf(npparams %in% names(private$.params))
+      if (length(ii)) {
+        stopf("Cannot add param with name '%s': duplicated name", npparams)
+      }
+
       if (!is.null(p$trafo)) {
         stop("Cannot add a param set with a trafo.")
       }
-      private$.params = c(private$.params, pparams)
-      private$.values = c(private$.values, p$values)
+      private$.params = insert_named(private$.params, pparams)
+      private$.values = insert_named(private$.values, p$values)
       private$.deps = rbind(private$.deps, p$deps)
       invisible(self)
     },

@@ -356,3 +356,8 @@ test_that("ParamSet$values convert nums to ints for ParamInt", {
   ps$values$x = 2
   expect_class(ps$values$x, "integer")
 })
+
+test_that("Empty ParamSets are named (#351)", {
+  pv = ps()$add(ps(x = p_lgl()))$values
+  expect_names(names(pv))
+})
