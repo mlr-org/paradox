@@ -1,87 +1,97 @@
+# -- class methods
+
+#' @describeIn Condition
+#'
+#' Used internally. Tests whether a value satisfies a given condition.
+#' Vectorizes when `x` is atomic.
+#'
+#' @param cond (`Condition`)\cr
+#'   `Condition` to use
+#' @param x (`any`)\cr
+#'   Value to test
+condition_test = function(cond, x) {
+  UseMethod("conditionTest")
+}
+
+#' @describeIn Condition
+#'
+#' Used internally. Returns a string that represents the condition for pretty
+#' printing, in the form `"<lhs> <relation> <rhs>"`, e.g. `"x == 3"` or
+#' `"param %in% {1, 2, 10}"`.
+#'
+#' @param cond (`Condition`)\cr
+#'   `Condition` to use
+#' @param lhs_chr (`character(1)`)\cr
+#'   Symbolic representation to use for `<lhs>` in the returned string.
+condition_as_string = function(cond, lhs_chr = "x") {
+  assert_string(lhs_chr)
+  UseMethod("conditionTest")
+}
+
+# -- Condition
+
 #' @title Dependency Condition
 #'
 #' @description
 #' Condition object, to specify the condition in a dependency.
 #'
+#' @param rhs (`any`)\cr
+#'   Right-hand-side of the condition.
+#' @param condition_format_string (`character(1)`)\cr
+#'   Format-string for representing the condition when pretty-printing
+#'   in `condition_as_string()`.
+#'   Should contain two `%s`, as it is used in an `sprintf()`-call with
+#'   two further string values.
+#'
 #' @section Currently implemented simple conditions:
-#' * `CondEqual$new(rhs)` \cr
-#'   Parent must be equal to `rhs`.
-#' * `CondAnyOf$new(rhs)` \cr
-#'   Parent must be any value of `rhs`.
+#' * `CondEqual(rhs)` \cr
+#'   Value must be equal to `rhs`.
+#' * `CondAnyOf(rhs)` \cr
+#'   Value must be any value of `rhs`.
 #'
 #' @aliases CondEqual CondAnyOf
 #' @export
-Condition = R6Class("Condition",
-  public = list(
-    #' @field type (`character(1)`)\cr
-    #' Name / type of the condition.
-    type = NULL,
-    #' @field rhs (`any`)\cr
-    #' Right-hand-side of the condition.
-    rhs = NULL,
-    #' @description
-    #' Creates a new instance of this [R6][R6::R6Class] class.
-    #'
-    #' @param type (`character(1)`)\cr
-    #'   Name / type of the condition.
-    #' @param rhs (`any`)\cr
-    #'   Right-hand-side of the condition.
-    initialize = function(type, rhs) {
-      self$type = assert_string(type)
-      self$rhs = rhs
-    },
+Condition = function(rhs, condition_format_string) {
+  assert_string(condition_format_string)
+  structure(list(rhs = rhs, condition_format_string = condition_format_string), class = "Condition")
+}
 
-    #' @description
-    #' Checks if condition is satisfied.
-    #' Called on a vector of parent param values.
-    #'
-    #' @param x (`vector()`).
-    #' @return `logical(1)`.
-    test = function(x) stop("abstract"),
-
-    #' @description
-    #' Conversion helper for print outputs.
-    #' @param lhs_chr (`character(1)`)
-    as_string = function(lhs_chr = "x") {
-      sprintf("%s %s %s", lhs_chr, self$type, str_collapse(self$rhs))
-    },
-
-    #' @description
-    #' Helper for print outputs.
-    format = function() {
-      sprintf("<%s:%s>", class(self)[1L], self$type)
-    },
-
-    #' @description
-    #' Printer.
-    #'
-    #' @param ... (ignored).
-    print = function(...) {
-      catf("%s: %s", class(self)[1L], self$as_string())
-    }
-  ),
-)
+condition_as_string.Condition = function(cond, lhs_chr = "x") {
+  sprintf(condition_format_string, lhs_chr, str_collapse(cond$rhs))
+}
 
 #' @export
-CondEqual = R6Class("CondEqual", inherit = Condition,
-  public = list(
-    initialize = function(rhs) {
-      assert_atomic(rhs, any.missing = FALSE, len = 1)
-      super$initialize("equal", rhs)
-    },
-    test = function(x) !is.na(x) & x == self$rhs,
-    as_string = function(lhs_chr = "x") sprintf("%s = %s", lhs_chr, as.character(self$rhs))
-  )
-)
+format.Condition = function(x, ...) {
+  sprintf("<Condition:%s>", class(x)[[1L]])
+}
 
 #' @export
-CondAnyOf = R6Class("CondAnyOf", inherit = Condition,
-  public = list(
-    initialize = function(rhs) {
-      assert_atomic(rhs, any.missing = FALSE, min.len = 1, unique = TRUE)
-      super$initialize("anyof", rhs)
-    },
-    test = function(x) !is.na(x) & x %in% self$rhs,
-    as_string = function(lhs_chr = "x") sprintf("%s \u2208 {%s}", lhs_chr, str_collapse(self$rhs))
-  )
-)
+print.Condition = function(x, ...) {
+  catf("%s: %s", class(x)[[1L]], condition_as_string(x))
+}
+
+# -- CondEqual
+
+#' @export
+CondEqual = function(rhs) {
+  assert_atomic(rhs, any.missing = FALSE, len = 1)
+  cond = Condition(rhs, "%s == %s")
+  set_class(cond, c("CondEqual", class(cond)))
+}
+
+#' @export
+condition_test.CondEqual = function(cond, x) {
+  !is.na(x) & x == cond$rhs
+}
+
+#' @export
+CondAnyOf = function(rhw) {
+  assert_atomic(rhs, any.missing = FALSE, min.len = 1, unique = TRUE)
+  cond = Condition(rhs, "%s %%in%% {%s}")
+  set_class(cond, c("CondEqual", class(cond)))
+}
+
+#' @export
+condition_test.CondAnyOf = function(cond, x) {
+  !is.na(x) & x %in% cond$rhs
+}
