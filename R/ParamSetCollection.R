@@ -40,38 +40,51 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Also note that the `$values` will have undefined behavior when `sets` contains a
     #'   single [`ParamSet`] multiple times (by reference).
     #'   Default `FALSE`.
-    initialize = function(sets, tag_set = FALSE, tag_params = FALSE) {
+    initialize = function(sets, tag_sets = FALSE, tag_params = FALSE) {
       assert_list(sets, types = "ParamSet")
       assert_flag(tag_set)
       assert_flag(tag_params)
-      split_sets = split(sets, names(sets) == "")
-      nameless_sets = split_sets$`TRUE`
-      named_sets = split_sets$`FALSE`
-      assert_names(names2(named_sets), type = "strict")
-      assert_ids(names2(named_sets))
+
       if (is.null(names(sets))) names(sets) = rep("", length(sets))
 
-      params = rbindlist(map(seq_along(sets), function(i) {
+      assert_names(names(named_sets)[names(named_sets) != ""], type = "strict")
+
+      paramtbl = rbindlist(map(seq_along(sets), function(i) {
         s = sets[[i]]
-        n = names2(sets)[[n]]
-        params_child = cbind(s$params, orig_id = s$params$id, owner_ps = i)
+        n = names(sets)[[n]]
+        params_child = s$params[, `:=`(original_id = id, owner_ps_index = i, owner_name = n)]
         if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
         params_child
       }))
 
-      dups = duplicated(params$id)
+      dups = duplicated(paramtbl$id)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
           str_collapse(unique(pnames[dups])))
       }
 
-      private$.tags = combine_tags(sets, tag_sets, tag_params)
-      private$.extra_trafo = combine_trafos(sets, params)
-      private$.constraint = combine_constraints(sets, params)
-      private$.params = params
+      if (tag_sets) paramtbl[owner_name != "", , .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
+      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
+      private$.tags = with(paramtbl, set_names(tags, id))
+
+      private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+
+      private$.translation = paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE]
+      setkeyv(private$.translation, "id")
+      setindexv(private$.translation, "original_id")
+
+      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
+      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
+      setindexv(paramtbl, c("id", "cls", "grouping"))
+      private$.params = paramtbl
+
+      private$.children_with_trafos = which(map_lgl(map(sets, "extra_trafo"), is.null))
+      private$.children_with_constraints = which(map_lgl(map(sets, "constraint"), is.null))
+
       private$.sets = sets
     }
   ),
+
   active = list(
     #' @template field_deps
     deps = function(v) {
@@ -101,10 +114,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # We do this here because we don't want the loop to be aborted early and have half an update.
         self$assert(xs)
 
-        translate = private$.params[names(xs), list(orig_id, owner_ps), on = "id"]
+        translate = private$.translation[names(xs), list(orig_id, owner_ps_index), on = "id"]
         set(translate, , j = "values", xs)
-        for (xtl in split(translate, by = "owner_ps")) {
-          sets[[xtl$owner_ps]]$values = set_names(xtl$values, xtl$orig_id)
+        for (xtl in split(translate, by = "owner_ps_index")) {
+          sets[[xtl$owner_ps_index]]$values = set_names(xtl$values, xtl$orig_id)
         }
       }
       vals = unlist(map(sets, "values"), recursive = FALSE)
@@ -114,19 +127,54 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
     extra_trafo = function(f) {
       if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
-      private$.extra_trafo
+      if (!length(private$.children_with_trafos)) return(NULL)
+      private$.extra_trafo_explicit
+
     },
 
     constraint = function(f) {
       if (!missing(f)) stop("constraint is read-only in ParamSetCollection.")
-      private$.constraint
+      if (!length(private$.children_with_constraints)) return(NULL)
+      private$.constraint_explicit
+    },
+
+    sets = function(v) {
+      if (!missing(v)) stop("sets is read-only")
+      private$.sets
     }
   ),
 
   private = list(
     .sets = NULL,
-    .extra_trafo = NULL,
-    .constraint = NULL,
+    .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = id),
+    .children_with_trafos = NULL,
+    .extra_trafo_explicit = function(x) {
+      changed = unlist(lapply(private$.children_with_trafos, function(set_index) {
+        changing_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
+        trafo = private$.sets[[set_index]]$extra_trafo
+        changing_values = x[names(x) %in% changing_ids]
+        names(changing_values) = private$.translation[names(changing_values), original_id]
+        changing_values = trafo(changing_values)
+        prefix = names(sets)[[set_index]]
+        if (prefix != "") {
+          names(changing_values) = sprintf("%s.%s", prefix, names(changing_values))
+        }
+        changing_values
+      }), recursive = FALSE)
+      unchanged_ids = private$.translation[!J(set_index), id, on = "owner_ps_index"]
+      unchanged = x[names(x) %in% unchanged_ids]
+      c(unchanged, changed)
+    },
+    .constraint_explicit = function(x) {
+      for (set_index in private$.children_with_constraints) {
+        constraining_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
+        constraint = private$.sets[[set_index]]$constraint
+        constraining_values = x[names(x) %in% changing_ids]
+        names(constraining_values) = private$.translation[names(constraining_values), original_id]
+        if (!constraint(x)) return(FALSE)
+      }
+      TRUE
+    },
     deep_clone = function(name, value) {
       switch(name,
         .deps = copy(value),
@@ -138,71 +186,3 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     }
   )
 )
-
-combine_trafos = function(sets, params) {
-  child_trafos = map(sets, "extra_trafo")
-  child_with_trafos = which(!map_lgl(child_trafos, is.null))
-  if (!length(child_with_trafos)) return(NULL)
-
-  child_trafos = child_trafos[child_with_trafos]
-  crate(function(x) {
-    unlist(imap(child_with_trafos, function(child, trafoi) {
-      child = child_with_trafos[[trafoi]]
-      trafo = child_trafos[[trafoi]]
-      setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
-      subx = x[match(setinfo$id, names(x), nomatch = 0)]
-      names(subx) = params[names(subx), orig_id, on = "id"]
-
-      transformed = trafo(subx)
-
-      prefix = names(sets)[[child]]
-      if (prefix != "") {
-        names(transformed) = sprintf("%s.%s", prefix, names(transformed))
-      }
-    }), recursive = FALSE)
-  }, params, sets, child_trafos, child_with_trafos)
-}
-
-combine_constraints = function(sets, params) {
-  child_constraints = map(sets, "constraint")
-  child_with_constraints = which(!map_lgl(child_constraints, is.null))
-  if (!length(child_with_constraints)) return(NULL)
-
-  child_constraints = child_constraints[child_with_constraints]
-  crate(function(x) {
-    for (constrainti in seq_along(child_with_constraints)) {
-      child = child_with_constraints[[constrainti]]
-      constraint = child_constraints[[constrainti]]
-      setinfo = params[data.table(owner_ps = child), c("id", "orig_id"), with = FALSE, on = "owner_ps"]
-      subx = x[match(setinfo$id, names(x), nomatch = 0)]
-      names(subx) = params[names(subx), orig_id, on = "id"]
-
-      if (!constraint(x)) return(FALSE)
-    }
-    TRUE
-  }, params, sets, child_constraints, child_with_constraints)
-}
-
-combine_tags = function(sets, tag_sets, tag_params) {
-  if (tag_set) {
-    if (tag_params) {
-      unlist(imap(sets, function(s, n) {
-        add_tags = sprintf("set_%s", n)
-        imap(s$tags, function(t, tn) unique(c(t, add_tags, sprintf("param_%s", tn))))
-      }), recursive = FALSE)
-    } else {
-      unlist(imap(sets, function(s, n) {
-        add_tags = sprintf("set_%s", n)
-        imap(s$tags, function(t) unique(c(t, add_tags)))
-      }), recursive = FALSE)
-    }
-  } else {
-    if (tag_params) {
-      unlist(map(sets, function(s) {
-        imap(s$tags, function(t, tn) unique(c(t, sprintf("param_%s", tn))))
-      }), recursive = FALSE)
-    } else {
-      unlist(map(sets, "tags"), recursive = FALSE)
-    }
-  }
-}

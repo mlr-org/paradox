@@ -73,7 +73,7 @@ ParamSet = R6Class("ParamSet",
         set(paramtbl, , "id", names(params))
       }
 
-      private$.tags = with(paramtbl, set_names(tags, id))
+      private$.tags = with(paramtbl, set_names(.tags, id))
       initvalues = with(paramtbl[(.init_given), .(init, id)], set_names(.init, id))
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
@@ -178,7 +178,7 @@ ParamSet = R6Class("ParamSet",
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
         insert_named(x, set_names(transformed, trafos$id))
       }
-      extra_trafo = private$.extra_trafo
+      extra_trafo = self$extra_trafo
       if (!is.null(extra_trafo)) {
         if (test_function(extra_trafo, args = c("x", "param_set"))) {
           x = extra_trafo(x = x, param_set = param_set)
@@ -370,7 +370,7 @@ ParamSet = R6Class("ParamSet",
       paramrow[, `:=`(
         .tags = private$.tags[[id]],
         .trafo = private$.trafos[id, trafo],
-        .requirements = list(transpose_list(private$.deps[id, .(on, cond), on = "id"])),
+        .requirements = list(transpose_list(self$deps[id, .(on, cond), on = "id"])),
         .init_given = id %in% names(values),
         .init = unname(vals[id]))
       ]
@@ -570,7 +570,7 @@ ParamSet = R6Class("ParamSet",
       result = copy(private$.params)
       result[, .tags = private$.tags]
       result[private$.trafos, .trafo := trafo, on = "id"]
-      result[private$.deps, .requirements := transpose_list(.(on, cond)), on = "id"]
+      result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(
         .init_given = id %in% names(vals),
@@ -640,7 +640,7 @@ ParamSet = R6Class("ParamSet",
     #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
     is_empty = function() nrow(private$.params) == 0L,
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
-    has_trafo = function() !is.null(private$.extra_trafo) || nrow(private$.trafos),
+    has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.trafos),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
     has_deps = function() nrow(self$deps) > 0L,
     #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
