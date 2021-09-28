@@ -94,13 +94,13 @@ domain_is_number.Domain = function(param) FALSE
 
 # param:
 check_domain_vectorize = function(ids, values, checker, more_args = list()) {
-  if (length(checker) == length(values)) {
-    errors = imap(c(list(ids, values), more_args), function(id, value, ...) {
+  if (length(checker) == 1) {
+    errors = pmap(c(list(ids, values), more_args), function(id, value, ...) {
       ch = checker(value, ...)
       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })
   } else {
-    errors = imap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
+    errors = pmap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
       ch = chck(value, ...)
       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })

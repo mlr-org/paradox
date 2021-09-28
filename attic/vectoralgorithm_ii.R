@@ -1,9 +1,6 @@
-
 library("R6")
 library("paradox")
 library("checkmate")
-
-
 
 Strategy = R6Class("Strategy",
   public = list(
@@ -34,6 +31,7 @@ Strategy = R6Class("Strategy",
     .param_set = NULL
   )
 )
+
 
 StrategyHybridVector = R6Class("StrategyHybridVector", inherits = Strategy,
   public = list(

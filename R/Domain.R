@@ -138,6 +138,7 @@ Domain = function(cls, grouping,
   assert_number(tolerance, na.ok = TRUE)
   assert_character(levels, null.ok = TRUE)
   assert_list(special_vals)
+  if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_function(trafo, null.ok = TRUE)
 
@@ -150,8 +151,10 @@ Domain = function(cls, grouping,
     }
   }
 
+  # domain is a data.table with a few classes.
+  # setting `id` to something preliminary so that `domain_assert()` works.
 
-  param = data.table(id = "", cls = cls, grouping = grouping,
+  param = data.table(id = "domain being constructed", cls = cls, grouping = grouping,
     cargo = list(cargo),
     lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
     special_vals = list(special_vals),
@@ -173,6 +176,7 @@ Domain = function(cls, grouping,
   }
 
   if (!missing(init)) {
+    if (!is.null(trafo)) stop("Initial value and trafo can not both be given at the same time.")
     domain_assert(param, list(init))
     if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
   }

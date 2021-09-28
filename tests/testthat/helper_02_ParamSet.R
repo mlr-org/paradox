@@ -1,5 +1,5 @@
 th_paramset_dbl1 = function() {
-  ParamSet$new(
+  ParamSet_legacy$new(
     params = list(
       th_param_dbl()
     )
@@ -7,7 +7,7 @@ th_paramset_dbl1 = function() {
 }
 
 th_paramset_full = function() {
-  ParamSet$new(
+  ParamSet_legacy$new(
     params = list(
       th_param_int(),
       th_param_dbl(),
@@ -18,13 +18,13 @@ th_paramset_full = function() {
 }
 
 th_paramset_untyped = function() {
-  ParamSet$new(
+  ParamSet_legacy$new(
     params = list(th_param_uty())
   )
 }
 
 th_paramset_numeric = function() {
-  ParamSet$new(
+  ParamSet_legacy$new(
     params = list(
       th_param_int(),
       th_param_dbl()
@@ -33,7 +33,7 @@ th_paramset_numeric = function() {
 }
 
 th_paramset_categorical = function() {
-  ParamSet$new(
+  ParamSet_legacy$new(
     params = list(
       th_param_fct(),
       th_param_lgl()
@@ -42,7 +42,7 @@ th_paramset_categorical = function() {
 }
 
 th_paramset_repeated = function() {
-  ps = ParamSet$new(
+  ps = ParamSet_legacy$new(
     params = c(
       list(th_param_nat(), th_param_fct())
     )

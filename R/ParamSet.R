@@ -167,12 +167,7 @@ ParamSet = R6Class("ParamSet",
       values[match(self$ids(class = class, tags = tags, any_tags = any_tags), names(values), nomatch = 0)]
     },
 
-    trafo = function(x, param_set) {  # param_set argument only here for compatibility
-      if (!missing(param_set)) {
-        warning("Giving the `param_set` argument is deprecated!")
-      } else {
-        param_set = self  # for the .extra_trafo, in case it still has a param_set argument
-      }
+    trafo = function(x, param_set = self) {
       trafos = private$.params[names(x), .(id, trafo, value = x), nomatch = 0]
       if (nrow(trafos)) {
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
@@ -230,14 +225,14 @@ ParamSet = R6Class("ParamSet",
 
       params = params[names(xs_nontune), on = "id"]
 
-      set(params, , "values", xs_nontune)
+      set(params, , "values", list(xs_nontune))
       pgroups = split(params, by = c("cls", "grouping"))
       checkresults = map(pgroups, function(x) {
         domain_check(set_class(x, c(x$cls[[1]], class(x))), x$values)
       })
       checkresults = discard(checkresults, isTRUE)
       if (length(checkresults)) {
-        return(str_collapse(checkresults), sep = "\n")
+        return(str_collapse(checkresults, sep = "\n"))
       }
 
       if (check_strict) {
@@ -539,7 +534,8 @@ ParamSet = R6Class("ParamSet",
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
-        sanitized = set(private$.params[names(nontt), on = "id"], , "values", nontt)[
+
+        sanitised = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
           !pmap_lgl(list(special_vals, values), has_element),
           .(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
         insert_named(xx, with(sanitized, set_names(values, id)))
@@ -594,11 +590,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.extra_trafo
       } else {
-        if (test_function(f, args = c("x", "param_set"))) {
-          warning("The 'param_set' argument for '.extra_trafos' is deprecated and will be removed in future versions!")
-        } else {
-          assert_function(f, args = "x", null.ok = TRUE)
-        }
+        assert(check_function(f, args = c("x", "param_set"), null.ok = TRUE), check_function(f, args = "x", null.ok = TRUE))
         private$.extra_trafo = f
       }
     },
@@ -722,6 +714,7 @@ ParamSet = R6Class("ParamSet",
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
 
     get_tune_ps = function(values) {
+      return(NULL)  # TODO
       selfparams = private$.params
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
         tunetoken_to_ps(value, selfparams[[pn]], pn)
