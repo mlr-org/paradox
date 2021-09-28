@@ -120,7 +120,7 @@ NULL
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param constargs: arguments of constructor
 # @param constargs_override: replace these in `constargs`, but don't represent this in printer
-domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real_, levels = NULL, special_vals = list(), default = NO_DEF, tags = character(0),
+Domain = function(cls, grouping, cargo = NULL, lower = NA_real_, upper = NA_real_, levels = NULL, special_vals = list(), default = NO_DEF, tags = character(0),
                   tolerance = NA_real_, trafo = NULL, storage_type = "list", depends_expr = NULL, init) {
 
   assert_string(cls)

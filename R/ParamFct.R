@@ -21,7 +21,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   }
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
-  domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init)
+  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init)
 }
 
 #' @export

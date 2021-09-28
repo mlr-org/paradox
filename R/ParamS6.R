@@ -11,7 +11,7 @@ p_s6 = function(support, special_vals = list(), default = NO_DEF, tags = charact
     storage_type = set$class
   }
 
-  domain(cls = "ParamSet6", grouping = support_description,
+  Domain(cls = "ParamSet6", grouping = support_description,
     cargo = set,
     lower = suppressWarnings(as.numeric(set$lower)),
     upper = suppressWarnings(as.numeric(set$upper)),

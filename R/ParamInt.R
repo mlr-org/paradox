@@ -21,7 +21,7 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
     real_upper = upper
   }
 
-  domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
+  Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
     storage_type = "integer",
     depends_expr = substitute(depends), init = init)
 }

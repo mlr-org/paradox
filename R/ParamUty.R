@@ -7,7 +7,7 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
     custom_check_result = custom_check(1)
     assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")
   }
-  domain(cls = "ParamUty", grouping = "ParamUty", cargo = custom_check, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
+  Domain(cls = "ParamUty", grouping = "ParamUty", cargo = custom_check, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
 }
 
 #' @export
