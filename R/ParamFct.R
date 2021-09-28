@@ -20,6 +20,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
     real_levels = levels
   }
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
+  # We escape '"' and '\' to '\"' and '\\', respectively.
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
   Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init)
 }

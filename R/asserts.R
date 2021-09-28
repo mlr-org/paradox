@@ -27,13 +27,3 @@ assert_param_set = function(param_set, cl = NULL, no_untyped = FALSE, must_bound
   }
   invisible(param_set)
 }
-
-# assert that we can use the string in list, tables, formulas
-assert_id = function(id) {
-  assert_string(id, pattern = "^[[:alpha:]]+[[:alnum:]_.]*$")
-}
-
-# assert that we can use the string in list, tables, formulas
-assert_ids = function(id) {
-  assert_character(id, pattern = "^[[:alpha:]]+[[:alnum:]_.]*$", any.missing = FALSE)
-}
