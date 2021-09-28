@@ -22,10 +22,12 @@ domain_check = function(param, values) {
     UseMethod("domain_check")
   }
 }
+
 #' @export
 domain_assert = makeAssertionFunction(domain_check)
+
 #' @export
-domain_test = function(param, values) domain_check(param, values)
+domain_test = function(param, values) isTRUE(domain_check(param, values))
 
 #' @export
 domain_storage_type = function(param) {
@@ -72,22 +74,22 @@ domain_sanitize = function(param, values) {
 }
 
 #' @export
-domain_nlevels.default = function(param) rep(Inf, nrow(param))
+domain_nlevels.Domain = function(param) rep(Inf, nrow(param))
 
 #' @export
-domain_is_bounded.default = function(param) rep(FALSE, nrow(param))
+domain_is_bounded.Domain = function(param) rep(FALSE, nrow(param))
 
 #' @export
-domain_qunif.default = function(param) stop("undefined")
+domain_qunif.Domain = function(param) stop("undefined")
 
 #' @export
-domain_sanitize.default = function(param, values) values
+domain_sanitize.Domain = function(param, values) values
 
 #' @export
-domain_is_categ.default = function(param) FALSE
+domain_is_categ.Domain = function(param) FALSE
 
 #' @export
-domain_is_number.default = function(param) FALSE
+domain_is_number.Domain = function(param) FALSE
 
 
 # param:
