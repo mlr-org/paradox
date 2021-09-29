@@ -123,11 +123,37 @@ ps_to_cs = function(ps, json_file = NULL) {
     warning("Only log trafos can be respected automatically. Please check your trafos.")
   }
 
+  # FIXME: check
+  # deps, and_conditions treated separately
+  conditions = ps$deps
+  and_conditions = which(table(conditions$id) > 1L)
+  and_conditions = conditions[id %in% names(and_conditions)]
+  rest_conditions = conditions[id %nin% and_conditions$id]
+
+  for (id in unique(and_conditions$id)) {
+    ids = which(and_conditions$id == id)
+    conds = map(ids, function(x) {
+      child = cs$get_hyperparameter(and_conditions[x, id])
+      parent = cs$get_hyperparameter(and_conditions[x, on])
+      cond = and_conditions[x, cond][[1L]]
+      cnd = if (checkmate::test_r6(cond, classes = "CondAnyOf")) {
+        CS$InCondition(child = child, parent = parent, values = cond$rhs)
+      } else if (checkmate::test_r6(cond, classes = "CondEqual")) {
+        CS$EqualsCondition(child = child, parent = parent, value = cond$rhs)
+      } else {
+        stop("Not implemented.")
+      }
+      cnd
+    })
+    cnd = mlr3misc::invoke(CS$AndConjunction, .args = conds)
+    cs$add_condition(cnd)
+  }
+
   # deps
-  for (i in seq_len(NROW(ps$deps))) {
-    child = cs$get_hyperparameter(ps$deps[i, id])
-    parent = cs$get_hyperparameter(ps$deps[i, on])
-    cond = ps$deps[i, cond][[1L]]
+  for (i in seq_len(NROW(rest_conditions))) {
+    child = cs$get_hyperparameter(rest_conditions[i, id])
+    parent = cs$get_hyperparameter(rest_conditions[i, on])
+    cond = rest_conditions[i, cond][[1L]]
     cnd = if (checkmate::test_r6(cond, classes = "CondAnyOf")) {
       CS$InCondition(child = child, parent = parent, values = cond$rhs)
     } else if (checkmate::test_r6(cond, classes = "CondEqual")) {
