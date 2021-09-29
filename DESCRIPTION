@@ -51,7 +51,9 @@ Imports:
 Suggests:
     knitr,
     lhs,
-    testthat
+    testthat,
+    reticulate,
+    jsonlite
 Encoding: UTF-8
 Config/testthat/edition: 3
 Config/testthat/parallel: false
@@ -76,12 +78,14 @@ Collate:
     'SamplerJointIndep.R'
     'SamplerUnif.R'
     'asserts.R'
+    'cs_ps.R'
     'helper.R'
     'domain.R'
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
     'ps.R'
+    'ps_cs.R'
     'reexports.R'
     'to_tune.R'
     'zzz.R'

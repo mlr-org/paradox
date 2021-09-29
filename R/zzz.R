@@ -15,4 +15,7 @@
   })
 } # nocov end
 
+# static code checks should not complain about commonly used data.table columns
+utils::globalVariables(c("id", "on"))
+
 leanify_package()
