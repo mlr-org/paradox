@@ -1,5 +1,5 @@
 Type: Package
-Package: paradox
+Package: tautology
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
 Version: 0.7.1.9000
@@ -57,12 +57,13 @@ Config/testthat/edition: 3
 Config/testthat/parallel: false
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE, r6 = TRUE)
-RoxygenNote: 7.1.1
+RoxygenNote: 7.1.2
 Collate:
     'Condition.R'
     'Design.R'
+    'Domain.R'
+    'Domain_methods.R'
     'NoDefault.R'
-    'Param.R'
     'ParamDbl.R'
     'ParamFct.R'
     'ParamInt.R'
@@ -71,19 +72,19 @@ Collate:
     'ParamSet.R'
     'ParamSetCollection.R'
     'ParamUty.R'
-    'S6ObjectCache.R'
     'Sampler.R'
     'Sampler1D.R'
     'SamplerHierarchical.R'
     'SamplerJointIndep.R'
     'SamplerUnif.R'
     'asserts.R'
-    'helper.R'
-    'domain.R'
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
+    'helper.R'
     'ps.R'
+    'ps_replicate.R'
+    'ps_union.R'
     'reexports.R'
     'to_tune.R'
     'zzz.R'

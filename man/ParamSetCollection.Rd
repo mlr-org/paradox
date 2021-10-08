@@ -27,28 +27,16 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 }
 }
 \section{Super class}{
-\code{\link[paradox:ParamSet]{paradox::ParamSet}} -> \code{ParamSetCollection}
+\code{\link[tautology:ParamSet]{tautology::ParamSet}} -> \code{ParamSetCollection}
 }
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
-\item{\code{params_unid}}{(named \code{list()})\cr
-List of \link{Param}, named with their true ID. However,
-this field has the \link{Param}'s \verb{$id} value set to a
-potentially invalid value, and it is furthermore not
-cloned when the \code{ParamSet} is cloned. This active
-binding should be used internally, or to avoid unnecessary
-cloning when that becomes a bottleneck.}
-
 \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
-
-\item{\code{tags}}{(named \code{list()} of \code{character()})\cr
-Can be used to group and subset parameters.
-Named with parameter IDs.}
 
 \item{\code{values}}{(named \code{list()})\cr
 Currently set / fixed parameter values.
@@ -68,27 +56,27 @@ When you set values, all previously set values will be unset / removed.}
 \if{html}{
 \out{<details ><summary>Inherited methods</summary>}
 \itemize{
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep">}\href{../../paradox/html/ParamSet.html#method-add_dep}{\code{paradox::ParamSet$add_dep()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert">}\href{../../paradox/html/ParamSet.html#method-assert}{\code{paradox::ParamSet$assert()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt">}\href{../../paradox/html/ParamSet.html#method-assert_dt}{\code{paradox::ParamSet$assert_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check">}\href{../../paradox/html/ParamSet.html#method-check}{\code{paradox::ParamSet$check()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies">}\href{../../paradox/html/ParamSet.html#method-check_dependencies}{\code{paradox::ParamSet$check_dependencies()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt">}\href{../../paradox/html/ParamSet.html#method-check_dt}{\code{paradox::ParamSet$check_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten">}\href{../../paradox/html/ParamSet.html#method-flatten}{\code{paradox::ParamSet$flatten()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format">}\href{../../paradox/html/ParamSet.html#method-format}{\code{paradox::ParamSet$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_param">}\href{../../paradox/html/ParamSet.html#method-get_param}{\code{paradox::ParamSet$get_param()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values">}\href{../../paradox/html/ParamSet.html#method-get_values}{\code{paradox::ParamSet$get_values()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids">}\href{../../paradox/html/ParamSet.html#method-ids}{\code{paradox::ParamSet$ids()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print">}\href{../../paradox/html/ParamSet.html#method-print}{\code{paradox::ParamSet$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif">}\href{../../paradox/html/ParamSet.html#method-qunif}{\code{paradox::ParamSet$qunif()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space">}\href{../../paradox/html/ParamSet.html#method-search_space}{\code{paradox::ParamSet$search_space()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset">}\href{../../paradox/html/ParamSet.html#method-subset}{\code{paradox::ParamSet$subset()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces">}\href{../../paradox/html/ParamSet.html#method-subspaces}{\code{paradox::ParamSet$subspaces()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test">}\href{../../paradox/html/ParamSet.html#method-test}{\code{paradox::ParamSet$test()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint">}\href{../../paradox/html/ParamSet.html#method-test_constraint}{\code{paradox::ParamSet$test_constraint()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint_dt">}\href{../../paradox/html/ParamSet.html#method-test_constraint_dt}{\code{paradox::ParamSet$test_constraint_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt">}\href{../../paradox/html/ParamSet.html#method-test_dt}{\code{paradox::ParamSet$test_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo">}\href{../../paradox/html/ParamSet.html#method-trafo}{\code{paradox::ParamSet$trafo()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="add_dep">}\href{../../tautology/html/ParamSet.html#method-add_dep}{\code{tautology::ParamSet$add_dep()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert">}\href{../../tautology/html/ParamSet.html#method-assert}{\code{tautology::ParamSet$assert()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert_dt">}\href{../../tautology/html/ParamSet.html#method-assert_dt}{\code{tautology::ParamSet$assert_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check">}\href{../../tautology/html/ParamSet.html#method-check}{\code{tautology::ParamSet$check()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dependencies">}\href{../../tautology/html/ParamSet.html#method-check_dependencies}{\code{tautology::ParamSet$check_dependencies()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dt">}\href{../../tautology/html/ParamSet.html#method-check_dt}{\code{tautology::ParamSet$check_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="flatten">}\href{../../tautology/html/ParamSet.html#method-flatten}{\code{tautology::ParamSet$flatten()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="format">}\href{../../tautology/html/ParamSet.html#method-format}{\code{tautology::ParamSet$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_param">}\href{../../tautology/html/ParamSet.html#method-get_param}{\code{tautology::ParamSet$get_param()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_values">}\href{../../tautology/html/ParamSet.html#method-get_values}{\code{tautology::ParamSet$get_values()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="ids">}\href{../../tautology/html/ParamSet.html#method-ids}{\code{tautology::ParamSet$ids()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="print">}\href{../../tautology/html/ParamSet.html#method-print}{\code{tautology::ParamSet$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="qunif">}\href{../../tautology/html/ParamSet.html#method-qunif}{\code{tautology::ParamSet$qunif()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="search_space">}\href{../../tautology/html/ParamSet.html#method-search_space}{\code{tautology::ParamSet$search_space()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subset">}\href{../../tautology/html/ParamSet.html#method-subset}{\code{tautology::ParamSet$subset()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subspaces">}\href{../../tautology/html/ParamSet.html#method-subspaces}{\code{tautology::ParamSet$subspaces()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test">}\href{../../tautology/html/ParamSet.html#method-test}{\code{tautology::ParamSet$test()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint">}\href{../../tautology/html/ParamSet.html#method-test_constraint}{\code{tautology::ParamSet$test_constraint()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint_dt">}\href{../../tautology/html/ParamSet.html#method-test_constraint_dt}{\code{tautology::ParamSet$test_constraint_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_dt">}\href{../../tautology/html/ParamSet.html#method-test_dt}{\code{tautology::ParamSet$test_dt()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="trafo">}\href{../../tautology/html/ParamSet.html#method-trafo}{\code{tautology::ParamSet$trafo()}}\out{</span>}
 }
 \out{</details>}
 }
@@ -98,7 +86,7 @@ When you set values, all previously set values will be unset / removed.}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, set_id = "", ignore_ids = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, tag_sets = FALSE, tag_params = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{

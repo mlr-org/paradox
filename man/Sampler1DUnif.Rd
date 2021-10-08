@@ -19,7 +19,7 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super classes}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:Sampler1D]{paradox::Sampler1D}} -> \code{Sampler1DUnif}
+\code{\link[tautology:Sampler]{tautology::Sampler}} -> \code{\link[tautology:Sampler1D]{tautology::Sampler1D}} -> \code{Sampler1DUnif}
 }
 \section{Methods}{
 \subsection{Public methods}{
@@ -31,9 +31,9 @@ Other Sampler:
 \if{html}{
 \out{<details open ><summary>Inherited methods</summary>}
 \itemize{
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format">}\href{../../paradox/html/Sampler.html#method-format}{\code{paradox::Sampler$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print">}\href{../../paradox/html/Sampler.html#method-print}{\code{paradox::Sampler$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample">}\href{../../paradox/html/Sampler.html#method-sample}{\code{paradox::Sampler$sample()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format">}\href{../../tautology/html/Sampler.html#method-format}{\code{tautology::Sampler$format()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print">}\href{../../tautology/html/Sampler.html#method-print}{\code{tautology::Sampler$print()}}\out{</span>}
+\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample">}\href{../../tautology/html/Sampler.html#method-sample}{\code{tautology::Sampler$sample()}}\out{</span>}
 }
 \out{</details>}
 }

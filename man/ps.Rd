@@ -4,7 +4,12 @@
 \alias{ps}
 \title{Construct a ParamSet using Short Forms}
 \usage{
-ps(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE)
+ps(
+  ...,
+  .extra_trafo = NULL,
+  .constraint = NULL,
+  .allow_dangling_dependencies = FALSE
+)
 }
 \arguments{
 \item{...}{(\code{\link{Domain}} | \code{\link{Param}})\cr
@@ -69,7 +74,7 @@ pars$search_space()
 }
 \seealso{
 Other ParamSet construction helpers: 
-\code{\link{p_dbl}()},
+\code{\link{Domain}()},
 \code{\link{to_tune}()}
 }
 \concept{ParamSet construction helpers}
