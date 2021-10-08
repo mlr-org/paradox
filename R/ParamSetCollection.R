@@ -65,7 +65,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
       if (tag_sets) paramtbl[owner_name != "", , .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
       if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
-      private$.tags = with(paramtbl, set_names(tags, id))
+      private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
 
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
@@ -146,7 +146,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
   private = list(
     .sets = NULL,
-    .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = id),
+    .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = NULL,
     .extra_trafo_explicit = function(x) {
       changed = unlist(lapply(private$.children_with_trafos, function(set_index) {

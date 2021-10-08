@@ -213,7 +213,7 @@ empty_domain = data.table(id = character(0), cls = character(0), grouping = char
   .init = list())
 
 domain_names = names(empty_domain)
-domain_names_permanent = grep("^\\.", domain_names, values = TRUE)
+domain_names_permanent = grep("^\\.", domain_names, value = TRUE)
 
 #' @export
 print.Domain = function(x, ...) {

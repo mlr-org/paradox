@@ -9,7 +9,7 @@
 
 
 # data.table-variables to announce:
-# .init_given
+# .init_given, .trafo
 
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start

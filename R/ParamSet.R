@@ -73,7 +73,8 @@ ParamSet = R6Class("ParamSet",
         set(paramtbl, , "id", names(params))
       }
 
-      private$.tags = with(paramtbl, set_names(.tags, id))
+      private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
+      setindexv(private$.tags, "tags")
       initvalues = with(paramtbl[(.init_given), .(init, id)], set_names(.init, id))
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
@@ -110,12 +111,14 @@ ParamSet = R6Class("ParamSet",
       if (is.null(class) && is.null(tags) && is.null(any_tags)) {
         return(private$.params$id)
       }
-      selftags = private$.tags
-      ptbl = private$.params
-      clsmatch = if (is.null(class)) TRUE else ptbl$cls %in% class
-      alltagmatch = if (is.null(tags)) TRUE else map_lgl(selftags, function(tg) all(tags %in% tg))
-      anytagmatch = if (is.null(any_tags)) TRUE else map_lgl(selftags, function(tg) any(any_tags %in% tg))
-      ptbl[clsmatch & tagmatch & anytagmatch, id]
+      ptbl = if (is.null(class)) private$.params else private$.params[cls %in% class, .(id)]
+      if (is.null(tags) && is.null(any_tags)) {
+        return(ptbl$id)
+      }
+      tagtbl = private$.tags[ptbl]
+      idpool = if (is.null(any_tags)) list() else list(tagtbl[tag %in% any_tags, id])
+      idpool = c(idpool, lapply(tags, function(t) tagtbl[t, id, on = "tags"]))
+      Reduce(idpool, intersect)
     },
 
     #' @description
@@ -363,7 +366,7 @@ ParamSet = R6Class("ParamSet",
 
       vals = self$values
       paramrow[, `:=`(
-        .tags = private$.tags[[id]],
+        .tags = private$.tags[id, tag],
         .trafo = private$.trafos[id, trafo],
         .requirements = list(transpose_list(self$deps[id, .(on, cond), on = "id"])),
         .init_given = id %in% names(values),
@@ -514,7 +517,7 @@ ParamSet = R6Class("ParamSet",
     data = function(v) {
       if (!missing(v)) stop("data is read-only")
       private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
-        is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags = private$.tags)]
+        is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags = self$tags)]
     },
 
     #' @template field_values
@@ -550,11 +553,12 @@ ParamSet = R6Class("ParamSet",
       if (!missing(v)) {
         assert_names(names(v), permutation.of = private$.params$id)
         assert_list(v, any.missing = FALSE, types = "character")
-        # store with param ordering, return value with original ordering
-        private$.tags = v[match(private$.params$id, names(v), nomatch = 0)]
+        private$.tags = data.table(id = rep(names(v), map_int(v, length)), tag = unlist(v), key = "id")
+        setindexv(private$.tags, "tag")
+        # return value with original ordering
         return(v)
       }
-      private$.tags
+      insert_named(named_list(private$.params$id), with(private$.tags[, list(list(tag)), by = "id"], set_names(tag, id)))
     },
 
     #' @template field_params
@@ -564,7 +568,7 @@ ParamSet = R6Class("ParamSet",
       }
 
       result = copy(private$.params)
-      result[, .tags = private$.tags]
+      result[, .tags = self$tags]
       result[private$.trafos, .trafo := trafo, on = "id"]
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
@@ -709,7 +713,7 @@ ParamSet = R6Class("ParamSet",
     .constraint = NULL,
     .params = NULL,
     .values = named_list(),
-    .tags = named_list(),
+    .tags = data.table(id = character(0L), tag = character(0), key = "id"),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
 
