@@ -14,7 +14,7 @@
 #'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
-#' The `Domain` object's internals are subject to change and should not be relid upon.
+#' The `Domain` object's internals are subject to change and should not be relied upon.
 #'
 #' @template param_lower
 #' @template param_upper
