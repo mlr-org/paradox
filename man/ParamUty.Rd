@@ -26,6 +26,9 @@ Other Params:
 \describe{
 \item{\code{custom_check}}{(\verb{function()})\cr
 Custom function to check the feasibility.}
+
+\item{\code{repr}}{(\code{character(1)})\cr
+Custom field for printing the parameter table.}
 }
 \if{html}{\out{</div>}}
 }
@@ -93,7 +96,13 @@ Always \code{"list"} for \link{ParamUty}.}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamUty$new(id, default = NO_DEF, tags = character(), custom_check = NULL)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamUty$new(
+  id,
+  default = NO_DEF,
+  tags = character(),
+  custom_check = NULL,
+  repr = substitute(default)
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -124,6 +133,9 @@ Custom function to check the feasibility.
 Function which checks the input.
 Must return 'TRUE' if the input is valid and a string with the error message otherwise.
 Defaults to \code{NULL}, which means that no check is performed.}
+
+\item{\code{repr}}{(\code{character(1)})\cr
+Custom representation string. Used for parameter table in help pages.}
 }
 \if{html}{\out{</div>}}
 }

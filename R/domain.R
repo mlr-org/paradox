@@ -157,7 +157,10 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 #' @rdname Domain
 #' @export
 p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, depends = NULL, trafo = NULL) {
-  domain(constructor = ParamUty, constargs = as.list(match.call()[-1]),
+  # For better printing of untyped parameters
+  constargs = as.list(match.call()[-1])
+  if (!missing(default)) constargs$repr = as.character(substitute(default))
+  domain(constructor = ParamUty, constargs = constargs,
     depends_expr = substitute(depends), trafo = trafo)
 }
 
