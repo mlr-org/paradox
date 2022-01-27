@@ -619,7 +619,6 @@ ParamSet = R6Class("ParamSet",
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
-      parsnames = names(pars$params)
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
@@ -683,6 +682,7 @@ rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
 
   if (length(descriptions)) {
     params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
+    description = NULL
     params[is.na(description), description := ""]
     setcolorder(params, c("id", "description"))
   }
