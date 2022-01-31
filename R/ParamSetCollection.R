@@ -60,9 +60,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     add = function(p) {
       assert_r6(p, "ParamSet")
       setnames = map_chr(private$.sets, "set_id")
-      if (p$set_id == "") {
-        unnamed_set_parnames = map(private$.sets[setnames == ""], function(x) names(x$params_unid))
-      } else if (p$set_id %in% setnames) {
+      if (p$set_id != "" && p$set_id %in% setnames) {
         stopf("Setid '%s' already present in collection!", p$set_id)
       }
       if (p$has_trafo) {
