@@ -1,10 +1,11 @@
-# paradox 0.7.1.9000
+# paradox 0.8.0.9000
+
+# paradox 0.8.0
 
 * Parameters now have a new (optional) field `description`.
 * Improved printing of parameters in documentation (#355).
 * A warning is now signaled if the package `ParamHelpers` is also loaded.
 * Fixed some links.
-
 
 # paradox 0.7.1
 
