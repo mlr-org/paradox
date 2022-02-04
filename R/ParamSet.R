@@ -622,6 +622,8 @@ ParamSet = R6Class("ParamSet",
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
+      # tune_ps cannot contain an extra trafo because it is only constructed from TuneToken
+      pars[[".__enclos_env__"]][["private"]]$.has_extra_trafo = FALSE
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
