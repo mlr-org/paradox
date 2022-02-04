@@ -184,7 +184,11 @@ Param = R6Class("Param",
 
   private = list(
     .check = function(x) stop("abstract"),
-    .qunif = function(x) stop("abstract") # should be implemented by subclasses, argcheck happens in Param$qunif
+    .qunif = function(x) stop("abstract"), # should be implemented by subclasses, argcheck happens in Param$qunif
+    # is `TRUE` when `exp()` transformation function is applied to parameter
+    .has_logscale = FALSE,
+    # is `TRUE` when transformation function is applied to parameter
+    .has_trafo = FALSE
   )
 )
 

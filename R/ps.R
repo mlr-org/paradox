@@ -112,5 +112,6 @@ ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
       x
     }, trafos, .extra_trafo)
   }
+  paramset[[".__enclos_env__"]][["private"]]$.has_extra_trafo = !is.null(.extra_trafo)
   paramset
 }
