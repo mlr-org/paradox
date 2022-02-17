@@ -60,6 +60,7 @@ Roxygen: list(markdown = TRUE, r6 = TRUE)
 RoxygenNote: 7.1.2
 Collate:
     'Condition.R'
+    'ContextPV.R'
     'Design.R'
     'NoDefault.R'
     'Param.R'

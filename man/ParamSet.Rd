@@ -53,6 +53,12 @@ ps$check(list(d = 2.1, f = "a", i = 3L))
 \item{\code{assert_values}}{(\code{logical(1)})\cr
 Should values be checked for validity during assigment to active binding \verb{$values}?
 Default is \code{TRUE}, only switch this off if you know what you are doing.}
+
+\item{\code{context_available}}{(\code{character})\cr
+Context that \code{\link{ContextPV}} values can rely on being present. When assigning a \code{\link{ContextPV}}
+to a \verb{$values} element, its argument names must be a subset of \verb{$context_available}.
+Conversely, the \code{context} argument of \verb{$get_values()} must contain named elements
+corresponding to all \verb{$context_available} entries.}
 }
 \if{html}{\out{</div>}}
 }
@@ -259,7 +265,8 @@ Only returns values of parameters that satisfy all conditions.
   is_bounded = NULL,
   tags = NULL,
   type = "with_token",
-  check_required = TRUE
+  check_required = TRUE,
+  context = parent.frame()
 )}\if{html}{\out{</div>}}
 }
 
@@ -277,6 +284,10 @@ Return values \code{with_token}, \code{without_token} or \code{only_token}?}
 
 \item{\code{check_required}}{(\code{logical(1)})\cr
 Check if all required parameters are set?}
+
+\item{\code{context}}{(\code{environment} | named \code{list})\cr
+Must have elements named by \verb{$context_available}, which are then given to the
+respective arguments of \code{\link{ContextPV}} values.}
 }
 \if{html}{\out{</div>}}
 }

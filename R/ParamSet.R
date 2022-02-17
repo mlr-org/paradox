@@ -45,6 +45,13 @@ ParamSet = R6Class("ParamSet",
     #' Default is `TRUE`, only switch this off if you know what you are doing.
     assert_values = TRUE,
 
+    #' @field context_available (`character`)\cr
+    #' Context that [`ContextPV`] values can rely on being present. When assigning a [`ContextPV`]
+    #' to a `$values` element, its argument names must be a subset of `$context_available`.
+    #' Conversely, the `context` argument of `$get_values()` must contain named elements
+    #' corresponding to all `$context_available` entries.
+    context_available = character(0),
+
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
@@ -138,14 +145,19 @@ ParamSet = R6Class("ParamSet",
     #' Return values `with_token`, `without_token` or `only_token`?
     #' @param check_required (`logical(1)`)\cr
     #' Check if all required parameters are set?
+    #' @param context (`environment` | named `list`)\cr
+    #'   Must have elements named by `$context_available`, which are then given to the
+    #'   respective arguments of [`ContextPV`] values.
     #' @return Named `list()`.
     get_values = function(class = NULL, is_bounded = NULL, tags = NULL,
-      type = "with_token", check_required = TRUE) {
+      type = "with_token", check_required = TRUE, context = parent.frame()) {
       assert_choice(type, c("with_token", "without_token", "only_token"))
       assert_flag(check_required)
       values = self$values
       params = self$params_unid
       ns = names(values)
+
+      if (type != "only_token") assert_names(names(context), type = "unique", must.include = self$context_available)
 
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
@@ -160,7 +172,23 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-      values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+      values = values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
+
+      if (type == "only_token") return(values)
+
+      imap(values, function(x, name) {
+        if (!inherits(x, "ContextPV")) return(x)
+        x = do.call(x, lapply(names(formals(args(x))), get, pos = context))
+        checked = params[[name]]$check(x)
+        if (!isTRUE(checked)) {
+          stopf("ContextPV for %s resulted in infeasible value:\n%s",
+            name, checked)
+        }
+        if (!has_element(params[[name]]$special_vals, x)) {
+          x = params[[name]]$convert(x)
+        }
+        x
+      })
     },
 
     #' @description
@@ -225,11 +253,18 @@ ParamSet = R6Class("ParamSet",
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
 
-      # check each parameters feasibility
-      for (n in ns) {
-        ch = params[[n]]$check(xs[[n]])
-        if (test_string(ch)) { # we failed a check, return string
-          return(paste0(n, ": ", ch))
+      # check each parameters feasibility, only necessary if we are a leaf ParamSet
+      if (!inherits(self, "ParamSetCollection")) {
+        for (n in ns) {
+          if (inherits(xs[[n]], "ContextPV")) {
+            ch = check_names(names(formals(args(xs[[n]]))), type = "unique", subset.of = self$context_available)
+            if (!isTRUE(ch)) ch = sprintf("Argument names of ContextPV %s", ch)
+          } else {
+            ch = params[[n]]$check(xs[[n]])
+          }
+          if (test_string(ch)) { # we failed a check, return string
+            return(paste0(n, ": ", ch))
+          }
         }
       }
 
@@ -247,7 +282,9 @@ ParamSet = R6Class("ParamSet",
           # - if param is there, then parent must be there, then cond must be true
           # - if param is not there
           cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+          ok = (p1id %in% ns && p2id %in% ns &&
+                !inherits(xs[[p2id]], "ContextPV") &&
+                cond$test(xs[[p2id]])) ||
             (p1id %nin% ns)
           if (isFALSE(ok)) {
             message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
@@ -256,6 +293,8 @@ ParamSet = R6Class("ParamSet",
             if (is.null(val)) {
               message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
                   "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
+            } else if (inherits(val, "ContextPV")) {
+              message = sprintf("%s However, %s is a ContextPV. Conditions on ContextPV values default to FALSE / unmet.", message, p2id)
             } else {
               message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
             }
@@ -584,7 +623,7 @@ ParamSet = R6Class("ParamSet",
         for (n in names(xs)) {
           p = params[[n]]
           x = xs[[n]]
-          if (inherits(x, "TuneToken")) next
+          if (inherits(x, "TuneToken") || inherits(x, "ContextPV")) next
           if (has_element(p$special_vals, x)) next
           xs[[n]] = p$convert(x)
         }
