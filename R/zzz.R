@@ -9,6 +9,10 @@
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start
   backports::import(pkgname)
+
+  register_namespace_callback(pkgname, "ParamHelpers", function(...) {
+    warning("Packages 'paradox' and 'ParamHelpers' are conflicting and should not be loaded in the same session")
+  })
 } # nocov end
 
 leanify_package()

@@ -14,7 +14,7 @@
 #'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
 #' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
-#' The `Domain` object's internals are subject to change and should not be relid upon.
+#' The `Domain` object's internals are subject to change and should not be relied upon.
 #'
 #' @template param_lower
 #' @template param_upper
@@ -157,7 +157,10 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 #' @rdname Domain
 #' @export
 p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, depends = NULL, trafo = NULL) {
-  domain(constructor = ParamUty, constargs = as.list(match.call()[-1]),
+  # For better printing of untyped parameters
+  constargs = as.list(match.call()[-1])
+  if (!missing(default)) constargs$repr = as.character(substitute(default))
+  domain(constructor = ParamUty, constargs = constargs,
     depends_expr = substitute(depends), trafo = trafo)
 }
 

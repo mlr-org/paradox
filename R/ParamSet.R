@@ -78,14 +78,20 @@ ParamSet = R6Class("ParamSet",
       } else {
         p$clone(deep = TRUE)
       }
+
       pparams = p$params
-      nn = c(names(private$.params), names(pparams))
-      assert_names(nn, type = "strict")
+      npparams = names(pparams)
+      assert_names(npparams, type = "strict", .var.name = "Names of params")
+      ii = wf(npparams %in% names(private$.params))
+      if (length(ii)) {
+        stopf("Cannot add param with name '%s': duplicated name", npparams)
+      }
+
       if (!is.null(p$trafo)) {
         stop("Cannot add a param set with a trafo.")
       }
-      private$.params = c(private$.params, pparams)
-      private$.values = c(private$.values, p$values)
+      private$.params = insert_named(private$.params, pparams)
+      private$.values = insert_named(private$.values, p$values)
       private$.deps = rbind(private$.deps, p$deps)
       invisible(self)
     },
@@ -652,7 +658,6 @@ ParamSet = R6Class("ParamSet",
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
-      parsnames = names(pars$params)
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
@@ -707,18 +712,37 @@ as.data.table.ParamSet = function(x, ...) { # nolint
 }
 
 #' @export
-rd_info.ParamSet = function(ps) { # nolint
-  params = as.data.table(ps)
-  if (nrow(params) == 0L)
+rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
+  if (length(ps$params) == 0L) {
     return("Empty ParamSet")
-  params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
-  params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
-  params$levels = map_chr(params$levels, str_collapse, n = 10L)
-  params$range = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range)
-  params = params[, c("id", "storage_type", "default", "range", "levels")]
-  setnames(params, c("Id", "Type", "Default", "Range", "Levels"))
-  c(
-    "",
-    knitr::kable(params)
-  )
+  }
+
+  params = as.data.table(ps)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
+
+  if (length(descriptions)) {
+    params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
+    description = NULL
+    params[is.na(description), description := ""]
+    setcolorder(params, c("id", "description"))
+  }
+  is_default = map_lgl(params$default, inherits, "NoDefault")
+  is_uty = params$storage_type == "list"
+  set(params, i = which(is_uty & !is_default), j = "default",
+      value = map(ps$params[!is_default & is_uty], function(x) x$repr))
+  set(params, i = which(is_uty), j = "storage_type", value = list("untyped"))
+  set(params, i = which(is_default), j = "default", value = list("-"))
+
+  if (!allMissing(params$lower) || !allMissing(params$upper)) {
+    set(params, j = "range", value = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range))
+  }
+  remove_named(params, c("lower", "upper"))
+
+  if (all(lengths(params$levels) == 0L)) {
+    remove_named(params, "levels")
+  } else {
+    set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L))
+  }
+  setnames(params, "storage_type", "type")
+  c("", knitr::kable(params, col.names = capitalize(names(params))))
 }
+

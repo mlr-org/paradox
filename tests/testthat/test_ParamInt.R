@@ -52,6 +52,6 @@ test_that("assigning integer value results in int", {
   p = ParamSet$new(list(ParamInt$new("x")))
   p$values$x = 0
   expect_equal(typeof(p$values$x), "integer")
-  expect_error({p$values$x = 1e-10}, "Must be of type.*integerish")
+  expect_error({p$values$x = 1e-10}, "be of type.*integerish")
 
 })

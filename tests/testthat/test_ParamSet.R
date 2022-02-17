@@ -109,7 +109,7 @@ test_that("ParamSet$check", {
 
 test_that("we cannot create ParamSet with non-strict R names", {
   ps = ParamSet$new()
-  expect_error(ps$set_id <- "$foo", "Must comply")
+  expect_error(ps$set_id <- "$foo", "comply")
 })
 
 test_that("ParamSets cannot have duplicated ids", {
@@ -344,9 +344,9 @@ test_that("ParamSet$check_dt", {
 
 test_that("rd_info.ParamSet", {
   ps = ParamSet$new()
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
   ps$add(ParamFct$new("a", levels = letters[1:3]))
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), len = 4L)
 })
 
 
@@ -355,4 +355,10 @@ test_that("ParamSet$values convert nums to ints for ParamInt", {
   ps = ParamSet$new(list(pp))
   ps$values$x = 2
   expect_class(ps$values$x, "integer")
+})
+
+test_that("Empty ParamSets are named (#351)", {
+  ps = ps()$add(ps(x = p_lgl()))
+  expect_names(names(ps$values), type = "strict")
+  expect_is(ps$search_space(), "ParamSet")
 })

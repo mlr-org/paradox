@@ -18,6 +18,9 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     #' @field custom_check (`function()`)\cr
     #' Custom function to check the feasibility.
     custom_check = NULL,
+    #' @field repr (`character(1)`)\cr
+    #' Custom field for printing the parameter table.
+    repr = NULL,
 
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
@@ -27,13 +30,21 @@ ParamUty = R6Class("ParamUty", inherit = Param,
     #'   Function which checks the input.
     #'   Must return 'TRUE' if the input is valid and a string with the error message otherwise.
     #'   Defaults to `NULL`, which means that no check is performed.
-    initialize = function(id, default = NO_DEF, tags = character(), custom_check = NULL) {
+    #' @param repr (`character(1)`)\cr
+    #'   Custom representation string. Used for parameter table in help pages.
+    initialize = function(id, default = NO_DEF, tags = character(), custom_check = NULL,
+                          repr = substitute(default)) {
       # super class calls private$.check, so this must be set BEFORE
       # we initialize the super class
       if (is.null(custom_check)) {
         self$custom_check = function(x) TRUE
       } else {
         self$custom_check = assert_function(custom_check, "x")
+      }
+      self$repr = if (!is_nodefault(default)) {
+         as.character(repr)
+      } else {
+        "NoDefault"
       }
       super$initialize(id, special_vals = list(), default = default, tags = tags)
     }

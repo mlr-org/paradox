@@ -22,6 +22,12 @@ Param = R6Class("Param",
     #' Identifier of the object.
     id = NULL,
 
+    #' @field description (`character(1)`)\cr
+    #' String to describe this parameter. Used, for example, in [mlr3misc::rd_info()] to automatically
+    #' generate documentation for parameter sets.
+    description = NULL,
+
+
     #' @field special_vals (`list()`)\cr
     #' Arbitrary special values this parameter is allowed to take.
     special_vals = NULL,
