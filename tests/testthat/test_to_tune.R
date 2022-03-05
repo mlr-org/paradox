@@ -378,8 +378,15 @@ test_that("logscale in tunetoken", {
     ParamDbl$new("y", lower = 0)
   ))
 
-  expect_equal(pars$search_space(list(x = to_tune(logscale = TRUE)))$params[[1]], ParamDbl$new("x", lower = log(.5), upper = log(11)))
-  expect_equal(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE)))$params[[1]], ParamDbl$new("y", lower = log(1), upper = log(10)))
+  p1 = pars$search_space(list(x = to_tune(logscale = TRUE)))$params[[1]]
+  p2 = ParamDbl$new("x", lower = log(.5), upper = log(11))
+  expect_equal(p1$lower, p2$lower)
+  expect_equal(p1$upper, p2$upper)
+
+  p1 = pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE)))$params[[1]]
+  p2 = ParamDbl$new("y", lower = log(1), upper = log(10))
+  expect_equal(p1$lower, p2$lower)
+  expect_equal(p1$upper, p2$upper)
 
   expect_error(pars$search_space(list(y = to_tune(upper = 10, logscale = TRUE))), "When logscale is TRUE then lower bound must be strictly greater than 0")
 
