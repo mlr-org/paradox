@@ -212,6 +212,8 @@ domain = function(constructor, constargs, depends_expr = NULL, trafo = NULL, con
   # check that `...` are valid by constructing and making sure this doesn't error
   # The object generated here is thrown away, this is only for checks.
   param = invoke(constructor$new, id = "ID", .args = constargs)
+  param[[".__enclos_env__"]][["private"]]$.has_logscale = isTRUE(reprargs$logscale)
+  param[[".__enclos_env__"]][["private"]]$.has_trafo = !is.null(trafo) && !isTRUE(reprargs$logscale)
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {

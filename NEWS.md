@@ -1,5 +1,8 @@
 # paradox 0.8.0.9000
 
+* Added `default_values()` function to extract default values from `ParamSet`
+  objects.
+
 # paradox 0.8.0
 
 * Parameters now have a new (optional) field `description`.

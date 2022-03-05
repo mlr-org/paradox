@@ -76,6 +76,7 @@ Collate:
     'SamplerJointIndep.R'
     'SamplerUnif.R'
     'asserts.R'
+    'default_values.R'
     'helper.R'
     'domain.R'
     'generate_design_grid.R'

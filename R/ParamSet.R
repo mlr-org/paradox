@@ -557,6 +557,7 @@ ParamSet = R6Class("ParamSet",
       } else {
         assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
         private$.trafo = f
+        private$.has_extra_trafo = TRUE
       }
     },
 
@@ -604,6 +605,8 @@ ParamSet = R6Class("ParamSet",
     .trafo = NULL,
     .params = NULL,
     .values = named_list(),
+    # is `TRUE` when function is passed to $trafo or .extra_trafo is set in ps()
+    .has_extra_trafo = FALSE,
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     # return a slot / AB, as a named vec, named with id (and can enforce a certain vec-type)
     get_member_with_idnames = function(member, astype) {
@@ -619,6 +622,8 @@ ParamSet = R6Class("ParamSet",
       idmapping = map(partsets, function(x) x$ids())
       pars = ps_union(partsets)
       pars$set_id = self$set_id
+      # tune_ps cannot contain an extra trafo because it is only constructed from TuneToken
+      pars[[".__enclos_env__"]][["private"]]$.has_extra_trafo = FALSE
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
