@@ -1,96 +1,108 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
-    <loc>https://paradox.mlr-org.com/index.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/LICENSE-text.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Condition.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/authors.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Design.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/index.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Domain.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/news/index.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/NO_DEF.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Condition.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Param.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Design.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamDbl.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Domain.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamFct.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/NO_DEF.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamInt.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Param.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamLgl.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamDbl.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamSet.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamFct.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamSetCollection.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamInt.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamUty.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamLgl.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamSet.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler1D.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamSetCollection.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler1DCateg.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/ParamUty.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler1DNormal.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler1DRfun.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler1D.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Sampler1DUnif.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler1DCateg.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/SamplerHierarchical.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler1DNormal.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/SamplerJointIndep.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler1DRfun.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/SamplerUnif.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/Sampler1DUnif.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/assert_param.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/SamplerHierarchical.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/generate_design_grid.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/SamplerJointIndep.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/generate_design_lhs.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/SamplerUnif.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/generate_design_random.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/assert_param.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/paradox-package.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/default_values.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/ps.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/generate_design_grid.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/reexports.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/generate_design_lhs.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/to_tune.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/generate_design_random.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/transpose.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/index.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/paradox-package.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/ps.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/reexports.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/to_tune.html</loc>
   </url>
 </urlset>
