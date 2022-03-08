@@ -1,4 +1,4 @@
-# paradox 0.8.0.9000
+# paradox 0.9.0
 
 * Added `default_values()` function to extract default values from `ParamSet`
   objects.
