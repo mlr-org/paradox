@@ -1,7 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
+    <loc>https://paradox.mlr-org.com/404.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/LICENSE-text.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/authors.html</loc>
+  </url>
+  <url>
     <loc>https://paradox.mlr-org.com/index.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/news/index.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/Condition.html</loc>
@@ -70,6 +82,9 @@
     <loc>https://paradox.mlr-org.com/reference/assert_param.html</loc>
   </url>
   <url>
+    <loc>https://paradox.mlr-org.com/reference/default_values.html</loc>
+  </url>
+  <url>
     <loc>https://paradox.mlr-org.com/reference/generate_design_grid.html</loc>
   </url>
   <url>
@@ -77,6 +92,9 @@
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/generate_design_random.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/index.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/paradox-package.html</loc>
@@ -89,8 +107,5 @@
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/to_tune.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/transpose.html</loc>
   </url>
 </urlset>
