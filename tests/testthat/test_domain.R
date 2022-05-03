@@ -337,6 +337,9 @@ test_that("$.extra_trafo flag works", {
   }
   expect_true(get_private(pps)$.has_extra_trafo)
 
+  pps$trafo = NULL
+  expect_false(get_private(pps)$.has_extra_trafo)
+
   pps = ps(x = p_int(1, 10))
   pps$values$x = to_tune()
   search_space = pps$search_space()
