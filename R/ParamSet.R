@@ -557,7 +557,9 @@ ParamSet = R6Class("ParamSet",
       } else {
         assert_function(f, args = c("x", "param_set"), null.ok = TRUE)
         private$.trafo = f
-        private$.has_extra_trafo = TRUE
+        # is `TRUE` when function is passed to $trafo or .extra_trafo is set in ps()
+        # reset when trafo is set to NULL
+        private$.has_extra_trafo = !is.null(f)
       }
     },
 
