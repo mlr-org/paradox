@@ -96,20 +96,27 @@ succinct and readable way.</p>
 Named arguments of <code><a href="Domain.html">Domain</a></code> or <code><a href="Param.html">Param</a></code> objects. The <code><a href="ParamSet.html">ParamSet</a></code> will be constructed of the given <code><a href="Param.html">Param</a></code>s,
 or of <code><a href="Param.html">Param</a></code>s constructed from the given domains. The names of the arguments will be used as <code>$id</code>
 (the <code>$id</code> of <code><a href="Param.html">Param</a></code> arguments are ignored).</p></dd>
+
+
 <dt>.extra_trafo</dt>
 <dd><p>(<code>function(x, param_set)</code>)<br>
 Transformation to set the resulting <code><a href="ParamSet.html">ParamSet</a></code>'s <code>$trafo</code> value to. This is in addition to any <code>trafo</code> of
 <code><a href="Domain.html">Domain</a></code> objects given in <code>...</code>, and will be run <em>after</em> transformations of individual parameters were performed.</p></dd>
+
+
 <dt>.allow_dangling_dependencies</dt>
 <dd><p>(<code>logical</code>)<br>
 Whether dependencies depending on parameters that are not present should be allowed. A parameter <code>x</code> having
 <code>depends = y == 0</code> if <code>y</code> is not present in the <code>ps()</code> call would usually throw an error, but if dangling
 dependencies are allowed, the dependency is added regardless. This is usually a bad idea and mainly for internal
 use. Dependencies between <code><a href="ParamSet.html">ParamSet</a></code>s when using <code><a href="to_tune.html">to_tune()</a></code> can be realized using this.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code><a href="ParamSet.html">ParamSet</a></code> object.</p>
+    
+
+<p>A <code><a href="ParamSet.html">ParamSet</a></code> object.</p>
     </div>
     <div class="section level2">
     <h2 id="see-also">See also<a class="anchor" aria-label="anchor" href="#see-also"></a></h2>
@@ -186,7 +193,7 @@ use. Dependencies between <code><a href="ParamSet.html">ParamSet</a></code>s whe
 </div>
 
 <div class="pkgdown-footer-right">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.3.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.4.</p>
 </div>
 
     </footer></div>

@@ -164,15 +164,21 @@ The <code>Domain</code> object's internals are subject to change and should not 
     <dl><dt>lower</dt>
 <dd><p>(<code>numeric(1)</code>)<br>
 Lower bound, can be <code>-Inf</code>.</p></dd>
+
+
 <dt>upper</dt>
 <dd><p>(<code>numeric(1)</code>)<br>
 Upper bound can be <code>+Inf</code>.</p></dd>
+
+
 <dt>special_vals</dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)<br>
 Arbitrary special values this parameter is allowed to take, to make it
 feasible. This allows extending the domain of the parameter. Note that
 these values are only used in feasibility checks, neither in generating
 designs nor sampling.</p></dd>
+
+
 <dt>default</dt>
 <dd><p>(<code>any</code>)<br>
 Default value. Can be from the domain of the parameter or an element of
@@ -182,12 +188,16 @@ The value has no effect on <code>ParamSet$values</code> or the behavior of
 <code>ParamSet$check()</code>, <code>$test()</code> or <code>$assert()</code>.
 The <code>default</code> is intended to be used for documentation purposes.
 `</p></dd>
+
+
 <dt>tags</dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>)<br>
 Arbitrary tags to group and subset parameters. Some tags serve a special
 purpose:<br></p><ul><li><p><code>"required"</code> implies that the parameters has to be given when setting
 <code>values</code> in <a href="ParamSet.html">ParamSet</a>.</p></li>
 </ul></dd>
+
+
 <dt>depends</dt>
 <dd><p>(<code>call</code> | <code>expression</code>)<br>
 An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
@@ -196,6 +206,8 @@ examples). The expression may be of the form <code>&lt;Param&gt; == &lt;value&gt
 dependencies according to <code>ParamSet$add_dep(on = "&lt;Param&gt;", cond = CondEqual$new(&lt;value&gt;))</code> or
 <code>ParamSet$add_dep(on = "&lt;Param&gt;", cond = CondAnyOf$new(&lt;values&gt;))</code>, respectively (see <code><a href="Condition.html">CondEqual</a></code>,
 <code><a href="Condition.html">CondAnyOf</a></code>). The expression may also contain multiple conditions separated by <code>&amp;&amp;</code>.</p></dd>
+
+
 <dt>trafo</dt>
 <dd><p>(<code>function</code>)<br>
 Single argument function performing the transformation of a parameter. When the <code>Domain</code> is used to construct a
@@ -204,6 +216,8 @@ Note that the trafo is <em>not</em> inherited by <code><a href="to_tune.html">Tu
 with e.g. <code>p_dbl(..., trafo = ...)</code> will <em>not</em> automatically give the <code><a href="to_tune.html">to_tune()</a></code> assigned to it a transformation.
 <code>trafo</code> only makes sense for <code><a href="ParamSet.html">ParamSet</a></code>s that get used as search spaces for optimization or tuning, it is not useful when
 defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.</p></dd>
+
+
 <dt>logscale</dt>
 <dd><p>(<code>logical(1)</code>)<br>
 Put numeric domains on a log scale. Default <code>FALSE</code>. Log-scale <code>Domain</code>s represent parameter ranges where lower and upper bounds
@@ -222,9 +236,13 @@ with <code>p_dbl(... logscale = TRUE)</code> will <em>not</em> automatically giv
 only makes sense for <code><a href="ParamSet.html">ParamSet</a></code>s that get used as search spaces for optimization or tuning, it is not useful when
 defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.<br><code>logscale</code> happens on a natural (<code>e == 2.718282...</code>) basis. Be aware that using a different base (<code><a href="https://rdrr.io/r/base/Log.html" class="external-link">log10()</a></code>/<code>10^</code>,
 <code><a href="https://rdrr.io/r/base/Log.html" class="external-link">log2()</a></code>/<code>2^</code>) is completely equivalent and does not change the values being sampled after transformation.</p></dd>
+
+
 <dt>tolerance</dt>
 <dd><p>(<code>numeric(1)</code>)<br>
 Initializes the <code>$tolerance</code> field that determines the</p></dd>
+
+
 <dt>custom_check</dt>
 <dd><p>(<code>function()</code>)<br>
 Custom function to check the feasibility.
@@ -232,15 +250,20 @@ Function which checks the input.
 Must return 'TRUE' if the input is valid and a <code>character(1)</code> with the error message otherwise.
 This function should <em>not</em> throw an error.
 Defaults to <code>NULL</code>, which means that no check is performed.</p></dd>
+
+
 <dt>levels</dt>
 <dd><p>(<code>character</code> | <code>atomic</code> | <code>list</code>)<br>
 Allowed categorical values of the parameter. If this is not a <code>character</code>, then a <code>trafo</code> is generated that
 converts the names (if not given: <code><a href="https://rdrr.io/r/base/character.html" class="external-link">as.character()</a></code> of the values) of the <code>levels</code> argument to the values.
 This trafo is then performed <em>before</em> the function given as the <code>trafo</code> argument.</p></dd>
+
 </dl></div>
     <div class="section level2">
     <h2 id="value">Value<a class="anchor" aria-label="anchor" href="#value"></a></h2>
-    <p>A <code>Domain</code> object.</p>
+    
+
+<p>A <code>Domain</code> object.</p>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
@@ -398,7 +421,7 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.3.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.4.</p>
 </div>
 
     </footer></div>
