@@ -711,6 +711,7 @@ rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
     set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L))
   }
   setnames(params, "storage_type", "type")
-  c("", knitr::kable(params, col.names = capitalize(names(params))))
+  x = c("", knitr::kable(params, col.names = capitalize(names(params))))
+  paste(x, collapse = "\n")
 }
 
