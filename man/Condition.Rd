@@ -42,7 +42,6 @@ Right-hand-side of the condition.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -63,7 +62,6 @@ Right-hand-side of the condition.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
 \subsection{Method \code{test()}}{
 Checks if condition is satisfied.
 Called on a vector of parent param values.
@@ -84,7 +82,6 @@ Called on a vector of parent param values.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-as_string"></a>}}
-\if{latex}{\out{\hypertarget{method-as_string}{}}}
 \subsection{Method \code{as_string()}}{
 Conversion helper for print outputs.
 \subsection{Usage}{
@@ -101,7 +98,6 @@ Conversion helper for print outputs.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -111,7 +107,6 @@ Helper for print outputs.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -128,7 +123,6 @@ Printer.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

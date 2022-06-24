@@ -95,7 +95,6 @@ Always \code{"list"} for \link{ParamUty}.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -153,7 +152,6 @@ Initializes the \verb{$tolerance} field that determines the}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-convert"></a>}}
-\if{latex}{\out{\hypertarget{method-convert}{}}}
 \subsection{Method \code{convert()}}{
 Restrict the value to within the allowed range. This works
 in conjunction with \verb{$tolerance}, which accepts values
@@ -173,7 +171,6 @@ Value to convert.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

@@ -186,7 +186,6 @@ Has the set parameter dependencies?}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -205,7 +204,6 @@ Parameters are cloned.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-add"></a>}}
-\if{latex}{\out{\hypertarget{method-add}{}}}
 \subsection{Method \code{add()}}{
 Adds a single param or another set to this set, all params are cloned.
 \subsection{Usage}{
@@ -222,7 +220,6 @@ Adds a single param or another set to this set, all params are cloned.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ids"></a>}}
-\if{latex}{\out{\hypertarget{method-ids}{}}}
 \subsection{Method \code{ids()}}{
 Retrieves IDs of contained parameters based on some filter criteria
 selections, \code{NULL} means no restriction.
@@ -248,7 +245,6 @@ Only returns IDs of parameters that satisfy all conditions.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-get_values"></a>}}
-\if{latex}{\out{\hypertarget{method-get_values}{}}}
 \subsection{Method \code{get_values()}}{
 Retrieves parameter values based on some selections, \code{NULL} means no
 restriction and is equivalent to \verb{$values}.
@@ -286,7 +282,6 @@ Named \code{list()}.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-subset"></a>}}
-\if{latex}{\out{\hypertarget{method-subset}{}}}
 \subsection{Method \code{subset()}}{
 Changes the current set to the set of passed IDs.
 \subsection{Usage}{
@@ -303,7 +298,6 @@ Changes the current set to the set of passed IDs.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-search_space"></a>}}
-\if{latex}{\out{\hypertarget{method-search_space}{}}}
 \subsection{Method \code{search_space()}}{
 Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
 \subsection{Usage}{
@@ -320,7 +314,6 @@ Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{Tu
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-check"></a>}}
-\if{latex}{\out{\hypertarget{method-check}{}}}
 \subsection{Method \code{check()}}{
 \pkg{checkmate}-like check-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -343,7 +336,6 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
 \subsection{Method \code{test()}}{
 \pkg{checkmate}-like test-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -366,7 +358,6 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-assert"></a>}}
-\if{latex}{\out{\hypertarget{method-assert}{}}}
 \subsection{Method \code{assert()}}{
 \pkg{checkmate}-like assert-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -393,7 +384,6 @@ If successful \code{xs} invisibly, if not an error message.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-check_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-check_dt}{}}}
 \subsection{Method \code{check_dt()}}{
 \pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
 where rows are points and columns are parameters. A point x is feasible,
@@ -417,7 +407,6 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-test_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-test_dt}{}}}
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
@@ -437,7 +426,6 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-assert_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-assert_dt}{}}}
 \subsection{Method \code{assert_dt()}}{
 \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
@@ -461,7 +449,6 @@ If successful \code{xs} invisibly, if not an error message.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-add_dep"></a>}}
-\if{latex}{\out{\hypertarget{method-add_dep}{}}}
 \subsection{Method \code{add_dep()}}{
 Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.
 \subsection{Usage}{
@@ -482,7 +469,6 @@ Adds a dependency to this set, so that param \code{id} now depends on param \cod
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -492,7 +478,6 @@ Helper for print outputs.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -516,7 +501,6 @@ Which fields should not be printed? Default is \code{"levels"},
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

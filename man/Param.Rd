@@ -80,7 +80,6 @@ Is there a default value?}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 
@@ -124,7 +123,6 @@ purpose:\cr
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-check"></a>}}
-\if{latex}{\out{\hypertarget{method-check}{}}}
 \subsection{Method \code{check()}}{
 \pkg{checkmate}-like check-function. Take a value from the domain of the
 parameter, and check if it is feasible. A value is feasible if it is of
@@ -147,7 +145,6 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-assert"></a>}}
-\if{latex}{\out{\hypertarget{method-assert}{}}}
 \subsection{Method \code{assert()}}{
 \pkg{checkmate}-like assert-function. Take a value from the domain of
 the parameter, and assert if it is feasible. A value is feasible if it
@@ -170,7 +167,6 @@ If successful \code{x} invisibly, if not an exception is raised.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
 \subsection{Method \code{test()}}{
 \pkg{checkmate}-like test-function. Take a value from the domain of the
 parameter, and test if it is feasible. A value is feasible if it is of
@@ -193,7 +189,6 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-rep"></a>}}
-\if{latex}{\out{\hypertarget{method-rep}{}}}
 \subsection{Method \code{rep()}}{
 Repeats this parameter n-times (by cloning).
 Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_rep".
@@ -214,7 +209,6 @@ Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_re
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -224,7 +218,6 @@ Helper for print outputs.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -248,7 +241,6 @@ Which fields should not be printed? Default is \code{"nlevels"},
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-qunif"></a>}}
-\if{latex}{\out{\hypertarget{method-qunif}{}}}
 \subsection{Method \code{qunif()}}{
 Takes values from [0,1] and maps them, regularly distributed, to the
 domain of the parameter. Think of: quantile function or the use case to
@@ -271,7 +263,6 @@ Value of the domain of the parameter.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-convert"></a>}}
-\if{latex}{\out{\hypertarget{method-convert}{}}}
 \subsection{Method \code{convert()}}{
 Converts a value to the closest valid param. Only for values that
 pass \verb{$check()} and mostly used internally.
@@ -292,7 +283,6 @@ pass \verb{$check()} and mostly used internally.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

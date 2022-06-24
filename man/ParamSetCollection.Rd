@@ -87,7 +87,6 @@ When you set values, all previously set values will be unset / removed.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -105,7 +104,6 @@ Parameter objects are cloned.}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-add"></a>}}
-\if{latex}{\out{\hypertarget{method-add}{}}}
 \subsection{Method \code{add()}}{
 Adds a set to this collection.
 \subsection{Usage}{
@@ -122,7 +120,6 @@ Adds a set to this collection.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-remove_sets"></a>}}
-\if{latex}{\out{\hypertarget{method-remove_sets}{}}}
 \subsection{Method \code{remove_sets()}}{
 Removes sets of given ids from collection.
 \subsection{Usage}{
@@ -139,7 +136,6 @@ Removes sets of given ids from collection.
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-subset"></a>}}
-\if{latex}{\out{\hypertarget{method-subset}{}}}
 \subsection{Method \code{subset()}}{
 Only included for consistency. Not allowed to perform on \link{ParamSetCollection}s.
 \subsection{Usage}{
@@ -156,7 +152,6 @@ Only included for consistency. Not allowed to perform on \link{ParamSetCollectio
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{
