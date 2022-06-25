@@ -110,53 +110,53 @@ The <code>Domain</code> object's internals are subject to change and should not 
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="fu">p_int</span><span class="op">(</span>
-  lower <span class="op">=</span> <span class="op">-</span><span class="cn">Inf</span>,
-  upper <span class="op">=</span> <span class="cn">Inf</span>,
-  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,
-  default <span class="op">=</span> <span class="va">NO_DEF</span>,
-  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,
-  depends <span class="op">=</span> <span class="cn">NULL</span>,
-  trafo <span class="op">=</span> <span class="cn">NULL</span>,
-  logscale <span class="op">=</span> <span class="cn">FALSE</span>
-<span class="op">)</span>
-
-<span class="fu">p_dbl</span><span class="op">(</span>
-  lower <span class="op">=</span> <span class="op">-</span><span class="cn">Inf</span>,
-  upper <span class="op">=</span> <span class="cn">Inf</span>,
-  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,
-  default <span class="op">=</span> <span class="va">NO_DEF</span>,
-  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,
-  tolerance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">double.eps</span><span class="op">)</span>,
-  depends <span class="op">=</span> <span class="cn">NULL</span>,
-  trafo <span class="op">=</span> <span class="cn">NULL</span>,
-  logscale <span class="op">=</span> <span class="cn">FALSE</span>
-<span class="op">)</span>
-
-<span class="fu">p_uty</span><span class="op">(</span>
-  default <span class="op">=</span> <span class="va">NO_DEF</span>,
-  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,
-  custom_check <span class="op">=</span> <span class="cn">NULL</span>,
-  depends <span class="op">=</span> <span class="cn">NULL</span>,
-  trafo <span class="op">=</span> <span class="cn">NULL</span>
-<span class="op">)</span>
-
-<span class="fu">p_lgl</span><span class="op">(</span>
-  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,
-  default <span class="op">=</span> <span class="va">NO_DEF</span>,
-  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,
-  depends <span class="op">=</span> <span class="cn">NULL</span>,
-  trafo <span class="op">=</span> <span class="cn">NULL</span>
-<span class="op">)</span>
-
-<span class="fu">p_fct</span><span class="op">(</span>
-  <span class="va">levels</span>,
-  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,
-  default <span class="op">=</span> <span class="va">NO_DEF</span>,
-  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,
-  depends <span class="op">=</span> <span class="cn">NULL</span>,
-  trafo <span class="op">=</span> <span class="cn">NULL</span>
-<span class="op">)</span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">p_int</span><span class="op">(</span></span>
+<span>  lower <span class="op">=</span> <span class="op">-</span><span class="cn">Inf</span>,</span>
+<span>  upper <span class="op">=</span> <span class="cn">Inf</span>,</span>
+<span>  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  default <span class="op">=</span> <span class="va">NO_DEF</span>,</span>
+<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  logscale <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu">p_dbl</span><span class="op">(</span></span>
+<span>  lower <span class="op">=</span> <span class="op">-</span><span class="cn">Inf</span>,</span>
+<span>  upper <span class="op">=</span> <span class="cn">Inf</span>,</span>
+<span>  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  default <span class="op">=</span> <span class="va">NO_DEF</span>,</span>
+<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  tolerance <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/MathFun.html" class="external-link">sqrt</a></span><span class="op">(</span><span class="va">.Machine</span><span class="op">$</span><span class="va">double.eps</span><span class="op">)</span>,</span>
+<span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  logscale <span class="op">=</span> <span class="cn">FALSE</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu">p_uty</span><span class="op">(</span></span>
+<span>  default <span class="op">=</span> <span class="va">NO_DEF</span>,</span>
+<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  custom_check <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trafo <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu">p_lgl</span><span class="op">(</span></span>
+<span>  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  default <span class="op">=</span> <span class="va">NO_DEF</span>,</span>
+<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trafo <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span>
+<span></span>
+<span><span class="fu">p_fct</span><span class="op">(</span></span>
+<span>  <span class="va">levels</span>,</span>
+<span>  special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  default <span class="op">=</span> <span class="va">NO_DEF</span>,</span>
+<span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
+<span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  trafo <span class="op">=</span> <span class="cn">NULL</span></span>
+<span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -282,17 +282,17 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span></span>
-<span class="r-in">  unbounded_integer <span class="op">=</span> <span class="fu">p_int</span><span class="op">(</span><span class="op">)</span>,</span>
-<span class="r-in">  bounded_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span>
-<span class="r-in">  half_bounded_integer <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">  half_bounded_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span>upper <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">  double_with_trafo <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span>
-<span class="r-in">  extra_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"xxx"</span><span class="op">)</span>, tags <span class="op">=</span> <span class="st">"tagged"</span><span class="op">)</span>,</span>
-<span class="r-in">  factor_param <span class="op">=</span> <span class="fu">p_fct</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in">  factor_param_with_implicit_trafo <span class="op">=</span> <span class="fu">p_fct</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span>, c <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  unbounded_integer <span class="op">=</span> <span class="fu">p_int</span><span class="op">(</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  bounded_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  half_bounded_integer <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  half_bounded_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span>upper <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  double_with_trafo <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="op">-</span><span class="fl">1</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  extra_double <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, special_vals <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"xxx"</span><span class="op">)</span>, tags <span class="op">=</span> <span class="st">"tagged"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  factor_param <span class="op">=</span> <span class="fu">p_fct</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  factor_param_with_implicit_trafo <span class="op">=</span> <span class="fu">p_fct</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">1</span>, b <span class="op">=</span> <span class="fl">2</span>, c <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>                                  id    class lower upper nlevels        default</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:                unbounded_integer ParamInt  -Inf   Inf     Inf &lt;NoDefault[3]&gt;</span>
@@ -313,13 +313,13 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 7:      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 8:      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">params</span><span class="op">$</span><span class="fu">trafo</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span class="r-in">  bounded_double <span class="op">=</span> <span class="fl">1</span>,</span>
-<span class="r-in">  double_with_trafo <span class="op">=</span> <span class="fl">1</span>,</span>
-<span class="r-in">  factor_param <span class="op">=</span> <span class="st">"c"</span>,</span>
-<span class="r-in">  factor_param_with_implicit_trafo <span class="op">=</span> <span class="st">"c"</span></span>
-<span class="r-in"><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">params</span><span class="op">$</span><span class="fu">trafo</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  bounded_double <span class="op">=</span> <span class="fl">1</span>,</span></span>
+<span class="r-in"><span>  double_with_trafo <span class="op">=</span> <span class="fl">1</span>,</span></span>
+<span class="r-in"><span>  factor_param <span class="op">=</span> <span class="st">"c"</span>,</span></span>
+<span class="r-in"><span>  factor_param_with_implicit_trafo <span class="op">=</span> <span class="st">"c"</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $bounded_double</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
@@ -332,28 +332,28 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $factor_param_with_implicit_trafo</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> list()</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># logscale:</span></span>
-<span class="r-in"><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">100</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># The ParamSet has bounds log(1) .. log(100):</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># logscale:</span></span></span>
+<span class="r-in"><span><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu">p_dbl</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">100</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># The ParamSet has bounds log(1) .. log(100):</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    id    class lower   upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:  x ParamDbl     0 4.60517     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># When generating a equidistant grid, it is equidistant within log values</span></span>
-<span class="r-in"><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span>, <span class="fl">3</span><span class="op">)</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># When generating a equidistant grid, it is equidistant within log values</span></span></span>
+<span class="r-in"><span><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span>, <span class="fl">3</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;Design&gt; with 3 rows:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>           x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1: 0.000000</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2: 2.302585</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3: 4.605170</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># But the values are on a log scale with desired bounds after trafo</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># But the values are on a log scale with desired bounds after trafo</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]$x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
@@ -369,26 +369,26 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 100</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># Integer parameters with logscale are `ParamDbl`s pre-trafo</span></span>
-<span class="r-in"><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu">p_int</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Integer parameters with logscale are `ParamDbl`s pre-trafo</span></span></span>
+<span class="r-in"><span><span class="va">params</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fu">p_int</span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    id    class      lower    upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:  x ParamDbl -0.6931472 2.397895     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span>, <span class="fl">4</span><span class="op">)</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span>, <span class="fl">4</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;Design&gt; with 4 rows:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>             x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1: -0.6931472</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2:  0.3372003</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3:  1.3675478</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4:  2.3978953</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># ... but get transformed to integers.</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># ... but get transformed to integers.</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]$x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 0</span>
@@ -409,7 +409,7 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 10</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
+<span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc"><h2>On this page</h2>

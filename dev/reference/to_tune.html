@@ -181,7 +181,7 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="fu">to_tune</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">to_tune</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -205,68 +205,68 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span class="va">params</span> <span class="op">=</span> <span class="va"><a href="ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span class="r-in">  <span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"int"</span>, <span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"int_unbounded"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl"</span>, <span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl_unbounded"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl_bounded_below"</span>, lower <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamFct.html">ParamFct</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"fct"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty1"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty2"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty3"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty4"</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty5"</span><span class="op">)</span></span>
-<span class="r-in"><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">params</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune over entire range of `int`, 0..10:</span></span>
-<span class="r-in">  int <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune over 2..7:</span></span>
-<span class="r-in">  int_unbounded <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fl">2</span>, <span class="fl">7</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune on a log scale in range 1..10;</span></span>
-<span class="r-in">  <span class="co"># recognize upper bound of 10 automatically, but restrict lower bound to 1:</span></span>
-<span class="r-in">  dbl <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">1</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="co">## This is equivalent to the following:</span></span>
-<span class="r-in">  <span class="co"># dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),</span></span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># nothing keeps us from tuning a dbl over integer values</span></span>
-<span class="r-in">  dbl_unbounded <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">10</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune over values "a" and "b" only</span></span>
-<span class="r-in">  fct <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune over integers 2..8.</span></span>
-<span class="r-in">  <span class="co"># ParamUty needs type information in form of p_xxx() in to_tune.</span></span>
-<span class="r-in">  uty1 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">8</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune uty2 like a factor, trying 1, 10, and 100:</span></span>
-<span class="r-in">  uty2 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">10</span>, <span class="fl">100</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune uty3 like a factor. The factor levels are the names of the list</span></span>
-<span class="r-in">  <span class="co"># ("exp", "square"), but the trafo will generate the values from the list.</span></span>
-<span class="r-in">  <span class="co"># This way you can tune an objective that has function-valued inputs.</span></span>
-<span class="r-in">  uty3 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>exp <span class="op">=</span> <span class="va">exp</span>, square <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># tune through multiple parameters. When doing this, the ParamSet in tune()</span></span>
-<span class="r-in">  <span class="co"># must have the trafo that generates a list with one element and the right</span></span>
-<span class="r-in">  <span class="co"># name:</span></span>
-<span class="r-in">  uty4 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span></span>
-<span class="r-in">    base <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">    exp <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">3</span><span class="op">)</span>,</span>
-<span class="r-in">    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span>
-<span class="r-in">      <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>uty4 <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">base</span> <span class="op">^</span> <span class="va">x</span><span class="op">$</span><span class="va">exp</span><span class="op">)</span></span>
-<span class="r-in">    <span class="op">}</span></span>
-<span class="r-in">  <span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in"></span>
-<span class="r-in">  <span class="co"># not all values need to be tuned!</span></span>
-<span class="r-in">  uty5 <span class="op">=</span> <span class="fl">100</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">)</span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">params</span> <span class="op">=</span> <span class="va"><a href="ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"int"</span>, <span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"int_unbounded"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl"</span>, <span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl_unbounded"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"dbl_bounded_below"</span>, lower <span class="op">=</span> <span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamFct.html">ParamFct</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"fct"</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span>, <span class="st">"c"</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty1"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty2"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty3"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty4"</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="va"><a href="ParamUty.html">ParamUty</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"uty5"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">params</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune over entire range of `int`, 0..10:</span></span></span>
+<span class="r-in"><span>  int <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune over 2..7:</span></span></span>
+<span class="r-in"><span>  int_unbounded <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fl">2</span>, <span class="fl">7</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune on a log scale in range 1..10;</span></span></span>
+<span class="r-in"><span>  <span class="co"># recognize upper bound of 10 automatically, but restrict lower bound to 1:</span></span></span>
+<span class="r-in"><span>  dbl <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">1</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="co">## This is equivalent to the following:</span></span></span>
+<span class="r-in"><span>  <span class="co"># dbl = to_tune(p_dbl(log(1), log(10), trafo = exp)),</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># nothing keeps us from tuning a dbl over integer values</span></span></span>
+<span class="r-in"><span>  dbl_unbounded <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">10</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune over values "a" and "b" only</span></span></span>
+<span class="r-in"><span>  fct <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>, <span class="st">"b"</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune over integers 2..8.</span></span></span>
+<span class="r-in"><span>  <span class="co"># ParamUty needs type information in form of p_xxx() in to_tune.</span></span></span>
+<span class="r-in"><span>  uty1 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">8</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune uty2 like a factor, trying 1, 10, and 100:</span></span></span>
+<span class="r-in"><span>  uty2 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">10</span>, <span class="fl">100</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune uty3 like a factor. The factor levels are the names of the list</span></span></span>
+<span class="r-in"><span>  <span class="co"># ("exp", "square"), but the trafo will generate the values from the list.</span></span></span>
+<span class="r-in"><span>  <span class="co"># This way you can tune an objective that has function-valued inputs.</span></span></span>
+<span class="r-in"><span>  uty3 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>exp <span class="op">=</span> <span class="va">exp</span>, square <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="va">x</span><span class="op">^</span><span class="fl">2</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># tune through multiple parameters. When doing this, the ParamSet in tune()</span></span></span>
+<span class="r-in"><span>  <span class="co"># must have the trafo that generates a list with one element and the right</span></span></span>
+<span class="r-in"><span>  <span class="co"># name:</span></span></span>
+<span class="r-in"><span>  uty4 <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    base <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    exp <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">3</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>      <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>uty4 <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">base</span> <span class="op">^</span> <span class="va">x</span><span class="op">$</span><span class="va">exp</span><span class="op">)</span></span></span>
+<span class="r-in"><span>    <span class="op">}</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span>  <span class="co"># not all values need to be tuned!</span></span></span>
+<span class="r-in"><span>  uty5 <span class="op">=</span> <span class="fl">100</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $int</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Tuning over:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;entire parameter range&gt;</span>
@@ -313,8 +313,8 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class="r-out co"><span class="r-pr">#&gt;</span> $uty5</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 100</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>                id    class lower     upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  1:           int ParamInt     0 10.000000      11 &lt;NoDefault[3]&gt;      </span>
@@ -328,12 +328,12 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class="r-out co"><span class="r-pr">#&gt;</span>  9:          base ParamDbl     0  1.000000     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 10:           exp ParamInt     0  3.000000       4 &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># Change `$values` directly and generate new `$search_space()` to play around</span></span>
-<span class="r-in"><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">uty3</span> <span class="op">=</span> <span class="fl">8</span></span>
-<span class="r-in"><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">uty2</span> <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">4</span>, <span class="fl">8</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Change `$values` directly and generate new `$search_space()` to play around</span></span></span>
+<span class="r-in"><span><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">uty3</span> <span class="op">=</span> <span class="fl">8</span></span></span>
+<span class="r-in"><span><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">uty2</span> <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fl">2</span>, <span class="fl">4</span>, <span class="fl">8</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>               id    class lower     upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:           int ParamInt     0 10.000000      11 &lt;NoDefault[3]&gt;      </span>
@@ -346,30 +346,30 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class="r-out co"><span class="r-pr">#&gt;</span> 8:          base ParamDbl     0  1.000000     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 9:           exp ParamInt     0  3.000000       4 &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:</span></span>
-<span class="r-in"><span class="va">params</span> <span class="op">=</span> <span class="va"><a href="ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"x"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">x</span> <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">100</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:</span></span></span>
+<span class="r-in"><span><span class="va">params</span> <span class="op">=</span> <span class="va"><a href="ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"x"</span><span class="op">)</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">params</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">x</span> <span class="op">=</span> <span class="fu">to_tune</span><span class="op">(</span><span class="fl">1</span>, <span class="fl">100</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    id    class lower   upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:  x ParamDbl     0 4.60517     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> Trafo is set.</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># The grid is equidistant within log-bounds pre-trafo:</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">grid</span> <span class="op">=</span> <span class="fu"><a href="generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">params</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span>, <span class="fl">3</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># The grid is equidistant within log-bounds pre-trafo:</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;Design&gt; with 3 rows:</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>           x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1: 0.000000</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2: 2.302585</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3: 4.605170</span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># But the values are on a log scale scale with desired bounds after trafo:</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># But the values are on a log scale scale with desired bounds after trafo:</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">grid</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [[1]]$x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
@@ -385,7 +385,7 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 100</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
+<span class="r-in"><span></span></span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc"><h2>On this page</h2>

@@ -86,7 +86,7 @@ succinct and readable way.</p>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="fu">ps</span><span class="op">(</span><span class="va">...</span>, .extra_trafo <span class="op">=</span> <span class="cn">NULL</span>, .allow_dangling_dependencies <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ps</span><span class="op">(</span><span class="va">...</span>, .extra_trafo <span class="op">=</span> <span class="cn">NULL</span>, .allow_dangling_dependencies <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -127,14 +127,14 @@ use. Dependencies between <code><a href="ParamSet.html">ParamSet</a></code>s whe
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span class="va">pars</span> <span class="op">=</span> <span class="fu">ps</span><span class="op">(</span></span>
-<span class="r-in">  a <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span>
-<span class="r-in">  b <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span>upper <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span>
-<span class="r-in">  c <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span class="r-in">  e <span class="op">=</span> <span class="fu"><a href="Domain.html">p_fct</a></span><span class="op">(</span><span class="va">letters</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span>,</span>
-<span class="r-in">  f <span class="op">=</span> <span class="fu"><a href="Domain.html">p_uty</a></span><span class="op">(</span>custom_check <span class="op">=</span> <span class="fu">checkmate</span><span class="fu">::</span><span class="va"><a href="https://mllg.github.io/checkmate/reference/checkFunction.html" class="external-link">check_function</a></span><span class="op">)</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">pars</span><span class="op">)</span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">pars</span> <span class="op">=</span> <span class="fu">ps</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  a <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">10</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  b <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span>upper <span class="op">=</span> <span class="fl">20</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  c <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  e <span class="op">=</span> <span class="fu"><a href="Domain.html">p_fct</a></span><span class="op">(</span><span class="va">letters</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  f <span class="op">=</span> <span class="fu"><a href="Domain.html">p_uty</a></span><span class="op">(</span>custom_check <span class="op">=</span> <span class="fu">checkmate</span><span class="fu">::</span><span class="va"><a href="https://mllg.github.io/checkmate/reference/checkFunction.html" class="external-link">check_function</a></span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">pars</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    id    class lower upper nlevels        default value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:  a ParamInt     0    10      11 &lt;NoDefault[3]&gt;      </span>
@@ -142,18 +142,18 @@ use. Dependencies between <code><a href="ParamSet.html">ParamSet</a></code>s whe
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3:  c ParamDbl  -Inf   Inf     Inf &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4:  e ParamFct    NA    NA       3 &lt;NoDefault[3]&gt;      </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 5:  f ParamUty    NA    NA     Inf &lt;NoDefault[3]&gt;      </span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">pars</span> <span class="op">=</span> <span class="fu">ps</span><span class="op">(</span></span>
-<span class="r-in">  a <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span>
-<span class="r-in">  b <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span>
-<span class="r-in">  .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">ps</span><span class="op">)</span> <span class="op">{</span></span>
-<span class="r-in">    <span class="va">x</span><span class="op">$</span><span class="va">c</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">$</span><span class="va">a</span> <span class="op">+</span> <span class="va">x</span><span class="op">$</span><span class="va">b</span></span>
-<span class="r-in">    <span class="va">x</span></span>
-<span class="r-in">  <span class="op">}</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="co"># See how the addition happens after exp()ing:</span></span>
-<span class="r-in"><span class="va">pars</span><span class="op">$</span><span class="fu">trafo</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">0</span>, b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">pars</span> <span class="op">=</span> <span class="fu">ps</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  a <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  b <span class="op">=</span> <span class="fu"><a href="Domain.html">p_dbl</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, trafo <span class="op">=</span> <span class="va">exp</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">ps</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>    <span class="va">x</span><span class="op">$</span><span class="va">c</span> <span class="op">&lt;-</span> <span class="va">x</span><span class="op">$</span><span class="va">a</span> <span class="op">+</span> <span class="va">x</span><span class="op">$</span><span class="va">b</span></span></span>
+<span class="r-in"><span>    <span class="va">x</span></span></span>
+<span class="r-in"><span>  <span class="op">}</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># See how the addition happens after exp()ing:</span></span></span>
+<span class="r-in"><span><span class="va">pars</span><span class="op">$</span><span class="fu">trafo</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="fl">0</span>, b <span class="op">=</span> <span class="fl">0</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> $a</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
@@ -163,20 +163,20 @@ use. Dependencies between <code><a href="ParamSet.html">ParamSet</a></code>s whe
 <span class="r-out co"><span class="r-pr">#&gt;</span> $c</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">pars</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span class="r-in">  a <span class="op">=</span> <span class="fu"><a href="to_tune.html">to_tune</a></span><span class="op">(</span><span class="fu">ps</span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">x</span><span class="op">)</span></span>
-<span class="r-in">  <span class="op">)</span><span class="op">)</span>,</span>
-<span class="r-in">  <span class="co"># make 'y' depend on 'x', but they are defined in different ParamSets</span></span>
-<span class="r-in">  <span class="co"># Therefore we need to allow dangling dependencies here.</span></span>
-<span class="r-in">  b <span class="op">=</span> <span class="fu"><a href="to_tune.html">to_tune</a></span><span class="op">(</span><span class="fu">ps</span><span class="op">(</span>y <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, depends <span class="op">=</span> <span class="va">x</span> <span class="op">==</span> <span class="fl">1</span><span class="op">)</span>,</span>
-<span class="r-in">    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>b <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">y</span><span class="op">)</span>,</span>
-<span class="r-in">    .allow_dangling_dependencies <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span class="r-in">  <span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">pars</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">pars</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  a <span class="op">=</span> <span class="fu"><a href="to_tune.html">to_tune</a></span><span class="op">(</span><span class="fu">ps</span><span class="op">(</span>x <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>a <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">x</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  <span class="co"># make 'y' depend on 'x', but they are defined in different ParamSets</span></span></span>
+<span class="r-in"><span>  <span class="co"># Therefore we need to allow dangling dependencies here.</span></span></span>
+<span class="r-in"><span>  b <span class="op">=</span> <span class="fu"><a href="to_tune.html">to_tune</a></span><span class="op">(</span><span class="fu">ps</span><span class="op">(</span>y <span class="op">=</span> <span class="fu"><a href="Domain.html">p_int</a></span><span class="op">(</span><span class="fl">0</span>, <span class="fl">1</span>, depends <span class="op">=</span> <span class="va">x</span> <span class="op">==</span> <span class="fl">1</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    .extra_trafo <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>b <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="va">y</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    .allow_dangling_dependencies <span class="op">=</span> <span class="cn">TRUE</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">pars</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    id    class lower upper nlevels        default parents value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 1:  x ParamInt     0     1       2 &lt;NoDefault[3]&gt;              </span>
