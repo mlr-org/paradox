@@ -179,7 +179,7 @@ ParamSet = R6Class("ParamSet",
       assert_list(dots, names = "unique")
       assert_list(.values, names = "unique")
       assert_disjunct(names(dots), names(.values))
-      new_values = c(dots, .values)
+      new_values = insert_named(dots, .values)
       if (.insert) {
         self$values = insert_named(self$values, new_values)
       } else {
