@@ -140,9 +140,14 @@ Transformations are functions with a fixed signature.
   - `param_set` the `ParamSet` used to create the design
 
 Transformations can be used to change the distributions of sampled
-parameters. For example, to sample values between \(2^-3\) and \(2^3\)
-in a \(log_2\)-uniform distribution, one can sample uniformly between -3
-and 3 and exponentiate the random value inside the transformation.
+parameters. For example, to sample values between
+![2^-3](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;2%5E-3
+"2^-3") and
+![2^3](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;2%5E3
+"2^3") in a
+![log\_2](https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&space;%5Cbg_white&space;log_2
+"log_2")-uniform distribution, one can sample uniformly between -3 and 3
+and exponentiate the random value inside the transformation.
 
 ``` r
 ps = ParamSet$new(
@@ -176,4 +181,4 @@ xst
 ```
 
 Further documentation can be found in the
-[mlr3book](https://mlr3book.mlr-org.com/pipelines.html).
+[mlr3book](https://mlr3book.mlr-org.com/05-pipelines.html).
