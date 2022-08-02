@@ -1,6 +1,7 @@
 # paradox 0.9.0.9000
 
 * Reset `.has_extra_trafo` to `FALSE` when trafo is set to `NULL`.
+* Add method set_values to conveniently add parameter values.
 
 # paradox 0.9.0
 
