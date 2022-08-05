@@ -66,21 +66,21 @@ Is there a default value?}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Param$new()}}
-\item \href{#method-check}{\code{Param$check()}}
-\item \href{#method-assert}{\code{Param$assert()}}
-\item \href{#method-test}{\code{Param$test()}}
-\item \href{#method-rep}{\code{Param$rep()}}
-\item \href{#method-format}{\code{Param$format()}}
-\item \href{#method-print}{\code{Param$print()}}
-\item \href{#method-qunif}{\code{Param$qunif()}}
-\item \href{#method-convert}{\code{Param$convert()}}
-\item \href{#method-clone}{\code{Param$clone()}}
+\item \href{#method-Param-new}{\code{Param$new()}}
+\item \href{#method-Param-check}{\code{Param$check()}}
+\item \href{#method-Param-assert}{\code{Param$assert()}}
+\item \href{#method-Param-test}{\code{Param$test()}}
+\item \href{#method-Param-rep}{\code{Param$rep()}}
+\item \href{#method-Param-format}{\code{Param$format()}}
+\item \href{#method-Param-print}{\code{Param$print()}}
+\item \href{#method-Param-qunif}{\code{Param$qunif()}}
+\item \href{#method-Param-convert}{\code{Param$convert()}}
+\item \href{#method-Param-clone}{\code{Param$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Param-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 
@@ -123,8 +123,8 @@ purpose:\cr
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-check"></a>}}
-\if{latex}{\out{\hypertarget{method-check}{}}}
+\if{html}{\out{<a id="method-Param-check"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-check}{}}}
 \subsection{Method \code{check()}}{
 \pkg{checkmate}-like check-function. Take a value from the domain of the
 parameter, and check if it is feasible. A value is feasible if it is of
@@ -146,8 +146,8 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-assert"></a>}}
-\if{latex}{\out{\hypertarget{method-assert}{}}}
+\if{html}{\out{<a id="method-Param-assert"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-assert}{}}}
 \subsection{Method \code{assert()}}{
 \pkg{checkmate}-like assert-function. Take a value from the domain of
 the parameter, and assert if it is feasible. A value is feasible if it
@@ -169,8 +169,8 @@ If successful \code{x} invisibly, if not an exception is raised.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
+\if{html}{\out{<a id="method-Param-test"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-test}{}}}
 \subsection{Method \code{test()}}{
 \pkg{checkmate}-like test-function. Take a value from the domain of the
 parameter, and test if it is feasible. A value is feasible if it is of
@@ -192,8 +192,8 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-rep"></a>}}
-\if{latex}{\out{\hypertarget{method-rep}{}}}
+\if{html}{\out{<a id="method-Param-rep"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-rep}{}}}
 \subsection{Method \code{rep()}}{
 Repeats this parameter n-times (by cloning).
 Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_rep".
@@ -213,8 +213,8 @@ Each parameter is named "[id]\emph{rep}[k]" and gets the additional tag "[id]_re
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
+\if{html}{\out{<a id="method-Param-format"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -223,8 +223,8 @@ Helper for print outputs.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
+\if{html}{\out{<a id="method-Param-print"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -247,8 +247,8 @@ Which fields should not be printed? Default is \code{"nlevels"},
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-qunif"></a>}}
-\if{latex}{\out{\hypertarget{method-qunif}{}}}
+\if{html}{\out{<a id="method-Param-qunif"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-qunif}{}}}
 \subsection{Method \code{qunif()}}{
 Takes values from [0,1] and maps them, regularly distributed, to the
 domain of the parameter. Think of: quantile function or the use case to
@@ -270,8 +270,8 @@ Value of the domain of the parameter.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-convert"></a>}}
-\if{latex}{\out{\hypertarget{method-convert}{}}}
+\if{html}{\out{<a id="method-Param-convert"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-convert}{}}}
 \subsection{Method \code{convert()}}{
 Converts a value to the closest valid param. Only for values that
 pass \verb{$check()} and mostly used internally.
@@ -291,8 +291,8 @@ pass \verb{$check()} and mostly used internally.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Param-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Param-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

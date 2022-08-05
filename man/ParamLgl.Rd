@@ -61,27 +61,27 @@ Always \code{"list"} for \link{ParamUty}.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{ParamLgl$new()}}
-\item \href{#method-clone}{\code{ParamLgl$clone()}}
+\item \href{#method-ParamLgl-new}{\code{ParamLgl$new()}}
+\item \href{#method-ParamLgl-clone}{\code{ParamLgl$clone()}}
 }
 }
-\if{html}{
-\out{<details ><summary>Inherited methods</summary>}
-\itemize{
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert">}\href{../../paradox/html/Param.html#method-assert}{\code{paradox::Param$assert()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check">}\href{../../paradox/html/Param.html#method-check}{\code{paradox::Param$check()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="convert">}\href{../../paradox/html/Param.html#method-convert}{\code{paradox::Param$convert()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format">}\href{../../paradox/html/Param.html#method-format}{\code{paradox::Param$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print">}\href{../../paradox/html/Param.html#method-print}{\code{paradox::Param$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif">}\href{../../paradox/html/Param.html#method-qunif}{\code{paradox::Param$qunif()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep">}\href{../../paradox/html/Param.html#method-rep}{\code{paradox::Param$rep()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test">}\href{../../paradox/html/Param.html#method-test}{\code{paradox::Param$test()}}\out{</span>}
-}
-\out{</details>}
-}
+\if{html}{\out{
+<details><summary>Inherited methods</summary>
+<ul>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert"><a href='../../paradox/html/Param.html#method-Param-assert'><code>paradox::Param$assert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check"><a href='../../paradox/html/Param.html#method-Param-check'><code>paradox::Param$check()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="convert"><a href='../../paradox/html/Param.html#method-Param-convert'><code>paradox::Param$convert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format"><a href='../../paradox/html/Param.html#method-Param-format'><code>paradox::Param$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print"><a href='../../paradox/html/Param.html#method-Param-print'><code>paradox::Param$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif"><a href='../../paradox/html/Param.html#method-Param-qunif'><code>paradox::Param$qunif()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep"><a href='../../paradox/html/Param.html#method-Param-rep'><code>paradox::Param$rep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test"><a href='../../paradox/html/Param.html#method-Param-test'><code>paradox::Param$test()</code></a></span></li>
+</ul>
+</details>
+}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-ParamLgl-new"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamLgl-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -121,8 +121,8 @@ purpose:\cr
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-ParamLgl-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamLgl-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

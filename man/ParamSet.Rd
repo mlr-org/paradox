@@ -166,27 +166,28 @@ Has the set parameter dependencies?}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{ParamSet$new()}}
-\item \href{#method-add}{\code{ParamSet$add()}}
-\item \href{#method-ids}{\code{ParamSet$ids()}}
-\item \href{#method-get_values}{\code{ParamSet$get_values()}}
-\item \href{#method-subset}{\code{ParamSet$subset()}}
-\item \href{#method-search_space}{\code{ParamSet$search_space()}}
-\item \href{#method-check}{\code{ParamSet$check()}}
-\item \href{#method-test}{\code{ParamSet$test()}}
-\item \href{#method-assert}{\code{ParamSet$assert()}}
-\item \href{#method-check_dt}{\code{ParamSet$check_dt()}}
-\item \href{#method-test_dt}{\code{ParamSet$test_dt()}}
-\item \href{#method-assert_dt}{\code{ParamSet$assert_dt()}}
-\item \href{#method-add_dep}{\code{ParamSet$add_dep()}}
-\item \href{#method-format}{\code{ParamSet$format()}}
-\item \href{#method-print}{\code{ParamSet$print()}}
-\item \href{#method-clone}{\code{ParamSet$clone()}}
+\item \href{#method-ParamSet-new}{\code{ParamSet$new()}}
+\item \href{#method-ParamSet-add}{\code{ParamSet$add()}}
+\item \href{#method-ParamSet-ids}{\code{ParamSet$ids()}}
+\item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
+\item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
+\item \href{#method-ParamSet-subset}{\code{ParamSet$subset()}}
+\item \href{#method-ParamSet-search_space}{\code{ParamSet$search_space()}}
+\item \href{#method-ParamSet-check}{\code{ParamSet$check()}}
+\item \href{#method-ParamSet-test}{\code{ParamSet$test()}}
+\item \href{#method-ParamSet-assert}{\code{ParamSet$assert()}}
+\item \href{#method-ParamSet-check_dt}{\code{ParamSet$check_dt()}}
+\item \href{#method-ParamSet-test_dt}{\code{ParamSet$test_dt()}}
+\item \href{#method-ParamSet-assert_dt}{\code{ParamSet$assert_dt()}}
+\item \href{#method-ParamSet-add_dep}{\code{ParamSet$add_dep()}}
+\item \href{#method-ParamSet-format}{\code{ParamSet$format()}}
+\item \href{#method-ParamSet-print}{\code{ParamSet$print()}}
+\item \href{#method-ParamSet-clone}{\code{ParamSet$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-ParamSet-new"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -204,8 +205,8 @@ Parameters are cloned.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-add"></a>}}
-\if{latex}{\out{\hypertarget{method-add}{}}}
+\if{html}{\out{<a id="method-ParamSet-add"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-add}{}}}
 \subsection{Method \code{add()}}{
 Adds a single param or another set to this set, all params are cloned.
 \subsection{Usage}{
@@ -221,8 +222,8 @@ Adds a single param or another set to this set, all params are cloned.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-ids"></a>}}
-\if{latex}{\out{\hypertarget{method-ids}{}}}
+\if{html}{\out{<a id="method-ParamSet-ids"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-ids}{}}}
 \subsection{Method \code{ids()}}{
 Retrieves IDs of contained parameters based on some filter criteria
 selections, \code{NULL} means no restriction.
@@ -247,8 +248,8 @@ Only returns IDs of parameters that satisfy all conditions.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-get_values"></a>}}
-\if{latex}{\out{\hypertarget{method-get_values}{}}}
+\if{html}{\out{<a id="method-ParamSet-get_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-get_values}{}}}
 \subsection{Method \code{get_values()}}{
 Retrieves parameter values based on some selections, \code{NULL} means no
 restriction and is equivalent to \verb{$values}.
@@ -285,8 +286,34 @@ Named \code{list()}.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-subset"></a>}}
-\if{latex}{\out{\hypertarget{method-subset}{}}}
+\if{html}{\out{<a id="method-ParamSet-set_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-set_values}{}}}
+\subsection{Method \code{set_values()}}{
+Allows to to modify (and overwrite) or replace the parameter values.
+Per default already set values are being kept unless new values are being provided.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$set_values(..., .values = list(), .insert = TRUE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(any)\cr
+Named parameter values.}
+
+\item{\code{.values}}{(named \code{list()})\cr
+Named list with parameter values. Names must not already appear in \code{...}.}
+
+\item{\code{.insert}}{(\code{logical(1)})\cr
+Whether to insert the values (old values are being kept, if not overwritten), or to
+replace all values. Default is TRUE.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-subset"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-subset}{}}}
 \subsection{Method \code{subset()}}{
 Changes the current set to the set of passed IDs.
 \subsection{Usage}{
@@ -302,8 +329,8 @@ Changes the current set to the set of passed IDs.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-search_space"></a>}}
-\if{latex}{\out{\hypertarget{method-search_space}{}}}
+\if{html}{\out{<a id="method-ParamSet-search_space"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-search_space}{}}}
 \subsection{Method \code{search_space()}}{
 Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{TuneToken}} in \verb{$values}, see \code{\link[=to_tune]{to_tune()}}.
 \subsection{Usage}{
@@ -319,8 +346,8 @@ Construct a \code{\link{ParamSet}} to tune over. Constructed from \code{\link{Tu
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-check"></a>}}
-\if{latex}{\out{\hypertarget{method-check}{}}}
+\if{html}{\out{<a id="method-ParamSet-check"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-check}{}}}
 \subsection{Method \code{check()}}{
 \pkg{checkmate}-like check-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -342,8 +369,8 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
+\if{html}{\out{<a id="method-ParamSet-test"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-test}{}}}
 \subsection{Method \code{test()}}{
 \pkg{checkmate}-like test-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -365,8 +392,8 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-assert"></a>}}
-\if{latex}{\out{\hypertarget{method-assert}{}}}
+\if{html}{\out{<a id="method-ParamSet-assert"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-assert}{}}}
 \subsection{Method \code{assert()}}{
 \pkg{checkmate}-like assert-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
@@ -392,8 +419,8 @@ If successful \code{xs} invisibly, if not an error message.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-check_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-check_dt}{}}}
+\if{html}{\out{<a id="method-ParamSet-check_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-check_dt}{}}}
 \subsection{Method \code{check_dt()}}{
 \pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
 where rows are points and columns are parameters. A point x is feasible,
@@ -416,8 +443,8 @@ If successful \code{TRUE}, if not a string with the error message.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-test_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-test_dt}{}}}
+\if{html}{\out{<a id="method-ParamSet-test_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-test_dt}{}}}
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
@@ -436,8 +463,8 @@ If successful \code{TRUE}, if not \code{FALSE}.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-assert_dt"></a>}}
-\if{latex}{\out{\hypertarget{method-assert_dt}{}}}
+\if{html}{\out{<a id="method-ParamSet-assert_dt"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-assert_dt}{}}}
 \subsection{Method \code{assert_dt()}}{
 \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
@@ -460,8 +487,8 @@ If successful \code{xs} invisibly, if not an error message.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-add_dep"></a>}}
-\if{latex}{\out{\hypertarget{method-add_dep}{}}}
+\if{html}{\out{<a id="method-ParamSet-add_dep"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-add_dep}{}}}
 \subsection{Method \code{add_dep()}}{
 Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.
 \subsection{Usage}{
@@ -481,8 +508,8 @@ Adds a dependency to this set, so that param \code{id} now depends on param \cod
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
+\if{html}{\out{<a id="method-ParamSet-format"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -491,8 +518,8 @@ Helper for print outputs.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
+\if{html}{\out{<a id="method-ParamSet-print"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -515,8 +542,8 @@ Which fields should not be printed? Default is \code{"levels"},
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-ParamSet-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

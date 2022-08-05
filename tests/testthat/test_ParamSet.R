@@ -362,3 +362,49 @@ test_that("Empty ParamSets are named (#351)", {
   expect_names(names(ps$values), type = "strict")
   expect_is(ps$search_space(), "ParamSet")
 })
+
+test_that("set_values checks inputs correctly", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  expect_error(param_set$set_values(a = 2, .values = list(a = 1)))
+  expect_error(param_set$set_values(2))
+  expect_error(param_set$set_values(.values = list(1)))
+})
+
+test_that("set_values works for ... with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(b = 2, .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  param_set$values = list(a = 1)
+  param_set$set_values(b = 2, .insert = TRUE)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$a == 1)
+})
+
+test_that("set_values works for .values with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(.values = list(b = 2), .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  param_set$values = list(a = 1)
+  param_set$set_values(.values = list(b = 2), .insert = TRUE)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$a == 1)
+})
+
+test_that("set_values works for .values and ... with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl(), c = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(b = 2, .values = list(c = 3), .insert = TRUE)
+  expect_true(param_set$values$a == 1)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$c == 3)
+
+  param_set$values = list(a = 1)
+  param_set$set_values(b = 2, .values = list(c = 3), .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$c == 3)
+})

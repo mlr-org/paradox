@@ -32,17 +32,17 @@ Right-hand-side of the condition.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Condition$new()}}
-\item \href{#method-test}{\code{Condition$test()}}
-\item \href{#method-as_string}{\code{Condition$as_string()}}
-\item \href{#method-format}{\code{Condition$format()}}
-\item \href{#method-print}{\code{Condition$print()}}
-\item \href{#method-clone}{\code{Condition$clone()}}
+\item \href{#method-Condition-new}{\code{Condition$new()}}
+\item \href{#method-Condition-test}{\code{Condition$test()}}
+\item \href{#method-Condition-as_string}{\code{Condition$as_string()}}
+\item \href{#method-Condition-format}{\code{Condition$format()}}
+\item \href{#method-Condition-print}{\code{Condition$print()}}
+\item \href{#method-Condition-clone}{\code{Condition$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Condition-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -62,8 +62,8 @@ Right-hand-side of the condition.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-test"></a>}}
-\if{latex}{\out{\hypertarget{method-test}{}}}
+\if{html}{\out{<a id="method-Condition-test"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-test}{}}}
 \subsection{Method \code{test()}}{
 Checks if condition is satisfied.
 Called on a vector of parent param values.
@@ -83,8 +83,8 @@ Called on a vector of parent param values.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-as_string"></a>}}
-\if{latex}{\out{\hypertarget{method-as_string}{}}}
+\if{html}{\out{<a id="method-Condition-as_string"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-as_string}{}}}
 \subsection{Method \code{as_string()}}{
 Conversion helper for print outputs.
 \subsection{Usage}{
@@ -100,8 +100,8 @@ Conversion helper for print outputs.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
+\if{html}{\out{<a id="method-Condition-format"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -110,8 +110,8 @@ Helper for print outputs.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
+\if{html}{\out{<a id="method-Condition-print"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -127,8 +127,8 @@ Printer.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Condition-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Condition-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{
