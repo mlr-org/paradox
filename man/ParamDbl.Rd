@@ -75,27 +75,27 @@ Always \code{"list"} for \link{ParamUty}.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{ParamDbl$new()}}
-\item \href{#method-convert}{\code{ParamDbl$convert()}}
-\item \href{#method-clone}{\code{ParamDbl$clone()}}
+\item \href{#method-ParamDbl-new}{\code{ParamDbl$new()}}
+\item \href{#method-ParamDbl-convert}{\code{ParamDbl$convert()}}
+\item \href{#method-ParamDbl-clone}{\code{ParamDbl$clone()}}
 }
 }
-\if{html}{
-\out{<details ><summary>Inherited methods</summary>}
-\itemize{
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert">}\href{../../paradox/html/Param.html#method-assert}{\code{paradox::Param$assert()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check">}\href{../../paradox/html/Param.html#method-check}{\code{paradox::Param$check()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format">}\href{../../paradox/html/Param.html#method-format}{\code{paradox::Param$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print">}\href{../../paradox/html/Param.html#method-print}{\code{paradox::Param$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif">}\href{../../paradox/html/Param.html#method-qunif}{\code{paradox::Param$qunif()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep">}\href{../../paradox/html/Param.html#method-rep}{\code{paradox::Param$rep()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test">}\href{../../paradox/html/Param.html#method-test}{\code{paradox::Param$test()}}\out{</span>}
-}
-\out{</details>}
-}
+\if{html}{\out{
+<details><summary>Inherited methods</summary>
+<ul>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="assert"><a href='../../paradox/html/Param.html#method-Param-assert'><code>paradox::Param$assert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="check"><a href='../../paradox/html/Param.html#method-Param-check'><code>paradox::Param$check()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="format"><a href='../../paradox/html/Param.html#method-Param-format'><code>paradox::Param$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="print"><a href='../../paradox/html/Param.html#method-Param-print'><code>paradox::Param$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="qunif"><a href='../../paradox/html/Param.html#method-Param-qunif'><code>paradox::Param$qunif()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="rep"><a href='../../paradox/html/Param.html#method-Param-rep'><code>paradox::Param$rep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Param" data-id="test"><a href='../../paradox/html/Param.html#method-Param-test'><code>paradox::Param$test()</code></a></span></li>
+</ul>
+</details>
+}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-ParamDbl-new"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamDbl-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -152,8 +152,8 @@ Initializes the \verb{$tolerance} field that determines the}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-convert"></a>}}
-\if{latex}{\out{\hypertarget{method-convert}{}}}
+\if{html}{\out{<a id="method-ParamDbl-convert"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamDbl-convert}{}}}
 \subsection{Method \code{convert()}}{
 Restrict the value to within the allowed range. This works
 in conjunction with \verb{$tolerance}, which accepts values
@@ -172,8 +172,8 @@ Value to convert.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-ParamDbl-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamDbl-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

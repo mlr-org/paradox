@@ -29,16 +29,16 @@ Domain / support of the distribution we want to sample from.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Sampler$new()}}
-\item \href{#method-sample}{\code{Sampler$sample()}}
-\item \href{#method-format}{\code{Sampler$format()}}
-\item \href{#method-print}{\code{Sampler$print()}}
-\item \href{#method-clone}{\code{Sampler$clone()}}
+\item \href{#method-Sampler-new}{\code{Sampler$new()}}
+\item \href{#method-Sampler-sample}{\code{Sampler$sample()}}
+\item \href{#method-Sampler-format}{\code{Sampler$format()}}
+\item \href{#method-Sampler-print}{\code{Sampler$print()}}
+\item \href{#method-Sampler-clone}{\code{Sampler$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Sampler-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 
@@ -59,8 +59,8 @@ ParamSet is cloned on construction.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-sample"></a>}}
-\if{latex}{\out{\hypertarget{method-sample}{}}}
+\if{html}{\out{<a id="method-Sampler-sample"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-sample}{}}}
 \subsection{Method \code{sample()}}{
 Sample \code{n} values from the distribution.
 \subsection{Usage}{
@@ -79,8 +79,8 @@ Sample \code{n} values from the distribution.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
+\if{html}{\out{<a id="method-Sampler-format"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -89,8 +89,8 @@ Helper for print outputs.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
+\if{html}{\out{<a id="method-Sampler-print"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -106,8 +106,8 @@ Printer.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Sampler-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{
