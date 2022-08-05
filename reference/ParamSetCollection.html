@@ -20,7 +20,7 @@ of a param from another set - in this case add call add_dep on the collection.
 
 If you call deps on the collection, you are returned a complete table of dependencies, from sets and across sets.
 
-"><title>ParamSetCollection — ParamSetCollection • paradox</title><!-- favicons --><link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png"><link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png"><link rel="apple-touch-icon" type="image/png" sizes="180x180" href="../apple-touch-icon.png"><link rel="apple-touch-icon" type="image/png" sizes="120x120" href="../apple-touch-icon-120x120.png"><link rel="apple-touch-icon" type="image/png" sizes="76x76" href="../apple-touch-icon-76x76.png"><link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png"><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.1.0/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.1.0/bootstrap.bundle.min.js"></script><link href="../deps/_Roboto-0.4.1/font.css" rel="stylesheet"><link href="../deps/_JetBrains%20Mono-0.4.1/font.css" rel="stylesheet"><link href="../deps/_Roboto%20Slab-0.4.1/font.css" rel="stylesheet"><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous"><!-- bootstrap-toc --><script src="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- search --><script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.js" integrity="sha512-zv6Ywkjyktsohkbp9bb45V6tEMoWhzFzXis+LrMehmJZZSys19Yxf1dopHx7WzIKxr5tK2dVcYmaCk2uqdjF4A==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/autocomplete.js/0.38.0/autocomplete.jquery.min.js" integrity="sha512-GU9ayf+66Xx2TmpxqJpliWbT5PiGYxpaG8rfnBEk1LL8l1KGkRShhngwdXK1UgqhAzWpZHSiYPc09/NwDQIGyg==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js" integrity="sha512-5CYOlHXGh6QpOFA/TeTylKLWfB3ftPsde7AnmhuitiTX4K5SqCLBeKro6sPS8ilsz1Q4NRx3v8Ko2IBiszzdww==" crossorigin="anonymous"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="ParamSetCollection — ParamSetCollection"><meta property="og:description" content="A collection of multiple ParamSet objects.
+"><title>ParamSetCollection — ParamSetCollection • paradox</title><!-- favicons --><link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png"><link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png"><link rel="apple-touch-icon" type="image/png" sizes="180x180" href="../apple-touch-icon.png"><link rel="apple-touch-icon" type="image/png" sizes="120x120" href="../apple-touch-icon-120x120.png"><link rel="apple-touch-icon" type="image/png" sizes="76x76" href="../apple-touch-icon-76x76.png"><link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png"><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.1.3/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.1.3/bootstrap.bundle.min.js"></script><link href="../deps/Roboto-0.4.2/font.css" rel="stylesheet"><link href="../deps/JetBrains_Mono-0.4.2/font.css" rel="stylesheet"><link href="../deps/Roboto_Slab-0.4.2/font.css" rel="stylesheet"><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous"><!-- bootstrap-toc --><script src="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- search --><script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.js" integrity="sha512-zv6Ywkjyktsohkbp9bb45V6tEMoWhzFzXis+LrMehmJZZSys19Yxf1dopHx7WzIKxr5tK2dVcYmaCk2uqdjF4A==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/autocomplete.js/0.38.0/autocomplete.jquery.min.js" integrity="sha512-GU9ayf+66Xx2TmpxqJpliWbT5PiGYxpaG8rfnBEk1LL8l1KGkRShhngwdXK1UgqhAzWpZHSiYPc09/NwDQIGyg==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js" integrity="sha512-5CYOlHXGh6QpOFA/TeTylKLWfB3ftPsde7AnmhuitiTX4K5SqCLBeKro6sPS8ilsz1Q4NRx3v8Ko2IBiszzdww==" crossorigin="anonymous"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="ParamSetCollection — ParamSetCollection"><meta property="og:description" content="A collection of multiple ParamSet objects.
 The collection is basically a light-weight wrapper / container around references to multiple sets.
 In order to ensure unique param names, every param in the collection is referred to with
 &quot;&amp;lt;set_id&amp;gt;.&amp;lt;param_id&amp;gt;&quot;. Parameters from ParamSets with empty (i.e. &quot;&quot;) $set_id are referenced
@@ -52,7 +52,7 @@ If you call deps on the collection, you are returned a complete table of depende
     
     <a class="navbar-brand me-2" href="../index.html">paradox</a>
 
-    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.9.0</small>
+    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.10.0</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -179,28 +179,29 @@ When you set values, all previously set values will be unset / removed.</p></dd>
 <div class="section">
 <h3 id="public-methods">Public methods<a class="anchor" aria-label="anchor" href="#public-methods"></a></h3>
 
-<ul><li><p><a href="#method-new"><code>ParamSetCollection$new()</code></a></p></li>
-<li><p><a href="#method-add"><code>ParamSetCollection$add()</code></a></p></li>
-<li><p><a href="#method-remove_sets"><code>ParamSetCollection$remove_sets()</code></a></p></li>
-<li><p><a href="#method-subset"><code>ParamSetCollection$subset()</code></a></p></li>
-<li><p><a href="#method-clone"><code>ParamSetCollection$clone()</code></a></p></li>
-</ul></div><p><details><summary>Inherited methods</summary><ul><li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href="ParamSet.html#method-add_dep"><code>paradox::ParamSet$add_dep()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href="ParamSet.html#method-assert"><code>paradox::ParamSet$assert()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href="ParamSet.html#method-assert_dt"><code>paradox::ParamSet$assert_dt()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href="ParamSet.html#method-check"><code>paradox::ParamSet$check()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href="ParamSet.html#method-check_dt"><code>paradox::ParamSet$check_dt()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href="ParamSet.html#method-format"><code>paradox::ParamSet$format()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href="ParamSet.html#method-get_values"><code>paradox::ParamSet$get_values()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href="ParamSet.html#method-ids"><code>paradox::ParamSet$ids()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href="ParamSet.html#method-print"><code>paradox::ParamSet$print()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href="ParamSet.html#method-search_space"><code>paradox::ParamSet$search_space()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href="ParamSet.html#method-test"><code>paradox::ParamSet$test()</code></a></span></p></li>
-<li><p><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt"><a href="ParamSet.html#method-test_dt"><code>paradox::ParamSet$test_dt()</code></a></span></p></li>
-</ul></details></p><hr><a id="method-new"></a><div class="section">
+<ul><li><p><a href="#method-ParamSetCollection-new"><code>ParamSetCollection$new()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-add"><code>ParamSetCollection$add()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-remove_sets"><code>ParamSetCollection$remove_sets()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-subset"><code>ParamSetCollection$subset()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-clone"><code>ParamSetCollection$clone()</code></a></p></li>
+</ul></div><p><details><summary>Inherited methods</summary><ul><li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href="ParamSet.html#method-add_dep"><code>paradox::ParamSet$add_dep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href="ParamSet.html#method-assert"><code>paradox::ParamSet$assert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href="ParamSet.html#method-assert_dt"><code>paradox::ParamSet$assert_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href="ParamSet.html#method-check"><code>paradox::ParamSet$check()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href="ParamSet.html#method-check_dt"><code>paradox::ParamSet$check_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href="ParamSet.html#method-format"><code>paradox::ParamSet$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href="ParamSet.html#method-get_values"><code>paradox::ParamSet$get_values()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href="ParamSet.html#method-ids"><code>paradox::ParamSet$ids()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href="ParamSet.html#method-print"><code>paradox::ParamSet$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href="ParamSet.html#method-search_space"><code>paradox::ParamSet$search_space()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href="ParamSet.html#method-set_values"><code>paradox::ParamSet$set_values()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href="ParamSet.html#method-test"><code>paradox::ParamSet$test()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt"><a href="ParamSet.html#method-test_dt"><code>paradox::ParamSet$test_dt()</code></a></span></li>
+</ul></details></p><hr><a id="method-ParamSetCollection-new"></a><div class="section">
 <h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
 <p>Creates a new instance of this <a href="https://r6.r-lib.org/reference/R6Class.html" class="external-link">R6</a> class.</p><div class="section">
 <h4 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va"><a href="../reference/ParamSetCollection.html">ParamSetCollection</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">sets</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va"><a href="../reference/ParamSetCollection.html">ParamSetCollection</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">sets</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -213,11 +214,11 @@ Parameter objects are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-add"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-add"></a><div class="section">
 <h3 id="method-add-">Method <code>add()</code><a class="anchor" aria-label="anchor" href="#method-add-"></a></h3>
 <p>Adds a set to this collection.</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -229,11 +230,11 @@ Parameter objects are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-remove_sets"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-remove_sets"></a><div class="section">
 <h3 id="method-remove-sets-">Method <code>remove_sets()</code><a class="anchor" aria-label="anchor" href="#method-remove-sets-"></a></h3>
 <p>Removes sets of given ids from collection.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">remove_sets</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">remove_sets</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -245,11 +246,11 @@ Parameter objects are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-subset"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-subset"></a><div class="section">
 <h3 id="method-subset-">Method <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code><a class="anchor" aria-label="anchor" href="#method-subset-"></a></h3>
 <p>Only included for consistency. Not allowed to perform on ParamSetCollections.</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -261,11 +262,11 @@ Parameter objects are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-clone"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -290,7 +291,7 @@ Parameter objects are cloned.</p></dd>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.3.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.6.</p>
 </div>
 
     </footer></div>

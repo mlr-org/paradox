@@ -4,7 +4,7 @@ Please note that when creating a set or adding to it, the parameters of the
 resulting set have to be uniquely named with IDs with valid R names.
 The set also contains a member variable values which can be used to store an active configuration /
 or to partially fix
-some parameters to constant values (regarding subsequent sampling or generation of designs)."><title>ParamSet — ParamSet • paradox</title><!-- favicons --><link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png"><link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png"><link rel="apple-touch-icon" type="image/png" sizes="180x180" href="../apple-touch-icon.png"><link rel="apple-touch-icon" type="image/png" sizes="120x120" href="../apple-touch-icon-120x120.png"><link rel="apple-touch-icon" type="image/png" sizes="76x76" href="../apple-touch-icon-76x76.png"><link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png"><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.1.0/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.1.0/bootstrap.bundle.min.js"></script><link href="../deps/_Roboto-0.4.1/font.css" rel="stylesheet"><link href="../deps/_JetBrains%20Mono-0.4.1/font.css" rel="stylesheet"><link href="../deps/_Roboto%20Slab-0.4.1/font.css" rel="stylesheet"><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous"><!-- bootstrap-toc --><script src="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- search --><script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.js" integrity="sha512-zv6Ywkjyktsohkbp9bb45V6tEMoWhzFzXis+LrMehmJZZSys19Yxf1dopHx7WzIKxr5tK2dVcYmaCk2uqdjF4A==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/autocomplete.js/0.38.0/autocomplete.jquery.min.js" integrity="sha512-GU9ayf+66Xx2TmpxqJpliWbT5PiGYxpaG8rfnBEk1LL8l1KGkRShhngwdXK1UgqhAzWpZHSiYPc09/NwDQIGyg==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js" integrity="sha512-5CYOlHXGh6QpOFA/TeTylKLWfB3ftPsde7AnmhuitiTX4K5SqCLBeKro6sPS8ilsz1Q4NRx3v8Ko2IBiszzdww==" crossorigin="anonymous"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="ParamSet — ParamSet"><meta property="og:description" content="A set of Param objects.
+some parameters to constant values (regarding subsequent sampling or generation of designs)."><title>ParamSet — ParamSet • paradox</title><!-- favicons --><link rel="icon" type="image/png" sizes="16x16" href="../favicon-16x16.png"><link rel="icon" type="image/png" sizes="32x32" href="../favicon-32x32.png"><link rel="apple-touch-icon" type="image/png" sizes="180x180" href="../apple-touch-icon.png"><link rel="apple-touch-icon" type="image/png" sizes="120x120" href="../apple-touch-icon-120x120.png"><link rel="apple-touch-icon" type="image/png" sizes="76x76" href="../apple-touch-icon-76x76.png"><link rel="apple-touch-icon" type="image/png" sizes="60x60" href="../apple-touch-icon-60x60.png"><script src="../deps/jquery-3.6.0/jquery-3.6.0.min.js"></script><meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"><link href="../deps/bootstrap-5.1.3/bootstrap.min.css" rel="stylesheet"><script src="../deps/bootstrap-5.1.3/bootstrap.bundle.min.js"></script><link href="../deps/Roboto-0.4.2/font.css" rel="stylesheet"><link href="../deps/JetBrains_Mono-0.4.2/font.css" rel="stylesheet"><link href="../deps/Roboto_Slab-0.4.2/font.css" rel="stylesheet"><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous"><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous"><!-- bootstrap-toc --><script src="https://cdn.rawgit.com/afeld/bootstrap-toc/v1.0.1/dist/bootstrap-toc.min.js"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- search --><script src="https://cdnjs.cloudflare.com/ajax/libs/fuse.js/6.4.6/fuse.js" integrity="sha512-zv6Ywkjyktsohkbp9bb45V6tEMoWhzFzXis+LrMehmJZZSys19Yxf1dopHx7WzIKxr5tK2dVcYmaCk2uqdjF4A==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/autocomplete.js/0.38.0/autocomplete.jquery.min.js" integrity="sha512-GU9ayf+66Xx2TmpxqJpliWbT5PiGYxpaG8rfnBEk1LL8l1KGkRShhngwdXK1UgqhAzWpZHSiYPc09/NwDQIGyg==" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mark.js/8.11.1/mark.min.js" integrity="sha512-5CYOlHXGh6QpOFA/TeTylKLWfB3ftPsde7AnmhuitiTX4K5SqCLBeKro6sPS8ilsz1Q4NRx3v8Ko2IBiszzdww==" crossorigin="anonymous"></script><!-- pkgdown --><script src="../pkgdown.js"></script><meta property="og:title" content="ParamSet — ParamSet"><meta property="og:description" content="A set of Param objects.
 Please note that when creating a set or adding to it, the parameters of the
 resulting set have to be uniquely named with IDs with valid R names.
 The set also contains a member variable values which can be used to store an active configuration /
@@ -20,7 +20,7 @@ some parameters to constant values (regarding subsequent sampling or generation 
     
     <a class="navbar-brand me-2" href="../index.html">paradox</a>
 
-    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.9.0</small>
+    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="Released version">0.10.0</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -280,27 +280,28 @@ Has the set parameter dependencies?</p></dd>
 <div class="section">
 <h3 id="public-methods">Public methods<a class="anchor" aria-label="anchor" href="#public-methods"></a></h3>
 
-<ul><li><p><a href="#method-new"><code>ParamSet$new()</code></a></p></li>
-<li><p><a href="#method-add"><code>ParamSet$add()</code></a></p></li>
-<li><p><a href="#method-ids"><code>ParamSet$ids()</code></a></p></li>
-<li><p><a href="#method-get_values"><code>ParamSet$get_values()</code></a></p></li>
-<li><p><a href="#method-subset"><code>ParamSet$subset()</code></a></p></li>
-<li><p><a href="#method-search_space"><code>ParamSet$search_space()</code></a></p></li>
-<li><p><a href="#method-check"><code>ParamSet$check()</code></a></p></li>
-<li><p><a href="#method-test"><code>ParamSet$test()</code></a></p></li>
-<li><p><a href="#method-assert"><code>ParamSet$assert()</code></a></p></li>
-<li><p><a href="#method-check_dt"><code>ParamSet$check_dt()</code></a></p></li>
-<li><p><a href="#method-test_dt"><code>ParamSet$test_dt()</code></a></p></li>
-<li><p><a href="#method-assert_dt"><code>ParamSet$assert_dt()</code></a></p></li>
-<li><p><a href="#method-add_dep"><code>ParamSet$add_dep()</code></a></p></li>
-<li><p><a href="#method-format"><code>ParamSet$format()</code></a></p></li>
-<li><p><a href="#method-print"><code>ParamSet$print()</code></a></p></li>
-<li><p><a href="#method-clone"><code>ParamSet$clone()</code></a></p></li>
-</ul></div><p></p><hr><a id="method-new"></a><div class="section">
+<ul><li><p><a href="#method-ParamSet-new"><code>ParamSet$new()</code></a></p></li>
+<li><p><a href="#method-ParamSet-add"><code>ParamSet$add()</code></a></p></li>
+<li><p><a href="#method-ParamSet-ids"><code>ParamSet$ids()</code></a></p></li>
+<li><p><a href="#method-ParamSet-get_values"><code>ParamSet$get_values()</code></a></p></li>
+<li><p><a href="#method-ParamSet-set_values"><code>ParamSet$set_values()</code></a></p></li>
+<li><p><a href="#method-ParamSet-subset"><code>ParamSet$subset()</code></a></p></li>
+<li><p><a href="#method-ParamSet-search_space"><code>ParamSet$search_space()</code></a></p></li>
+<li><p><a href="#method-ParamSet-check"><code>ParamSet$check()</code></a></p></li>
+<li><p><a href="#method-ParamSet-test"><code>ParamSet$test()</code></a></p></li>
+<li><p><a href="#method-ParamSet-assert"><code>ParamSet$assert()</code></a></p></li>
+<li><p><a href="#method-ParamSet-check_dt"><code>ParamSet$check_dt()</code></a></p></li>
+<li><p><a href="#method-ParamSet-test_dt"><code>ParamSet$test_dt()</code></a></p></li>
+<li><p><a href="#method-ParamSet-assert_dt"><code>ParamSet$assert_dt()</code></a></p></li>
+<li><p><a href="#method-ParamSet-add_dep"><code>ParamSet$add_dep()</code></a></p></li>
+<li><p><a href="#method-ParamSet-format"><code>ParamSet$format()</code></a></p></li>
+<li><p><a href="#method-ParamSet-print"><code>ParamSet$print()</code></a></p></li>
+<li><p><a href="#method-ParamSet-clone"><code>ParamSet$clone()</code></a></p></li>
+</ul></div><p></p><hr><a id="method-ParamSet-new"></a><div class="section">
 <h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
 <p>Creates a new instance of this <a href="https://r6.r-lib.org/reference/R6Class.html" class="external-link">R6</a> class.</p><div class="section">
 <h4 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va"><a href="../reference/ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>params <span class="op">=</span> <span class="fu">named_list</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va"><a href="../reference/ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>params <span class="op">=</span> <span class="fu">named_list</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -314,11 +315,11 @@ Parameters are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-add"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-add"></a><div class="section">
 <h3 id="method-add-">Method <code>add()</code><a class="anchor" aria-label="anchor" href="#method-add-"></a></h3>
 <p>Adds a single param or another set to this set, all params are cloned.</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va">p</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -330,13 +331,13 @@ Parameters are cloned.</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-ids"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-ids"></a><div class="section">
 <h3 id="method-ids-">Method <code>ids()</code><a class="anchor" aria-label="anchor" href="#method-ids-"></a></h3>
 <p>Retrieves IDs of contained parameters based on some filter criteria
 selections, <code>NULL</code> means no restriction.
 Only returns IDs of parameters that satisfy all conditions.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">ids</span><span class="op">(</span>class <span class="op">=</span> <span class="cn">NULL</span>, is_bounded <span class="op">=</span> <span class="cn">NULL</span>, tags <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">ids</span><span class="op">(</span>class <span class="op">=</span> <span class="cn">NULL</span>, is_bounded <span class="op">=</span> <span class="cn">NULL</span>, tags <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -360,19 +361,19 @@ Only returns IDs of parameters that satisfy all conditions.</p><div class="secti
 <p><code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-get_values"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-get_values"></a><div class="section">
 <h3 id="method-get-values-">Method <code>get_values()</code><a class="anchor" aria-label="anchor" href="#method-get-values-"></a></h3>
 <p>Retrieves parameter values based on some selections, <code>NULL</code> means no
 restriction and is equivalent to <code>$values</code>.
 Only returns values of parameters that satisfy all conditions.</p><div class="section">
 <h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">get_values</span><span class="op">(</span>
-  class <span class="op">=</span> <span class="cn">NULL</span>,
-  is_bounded <span class="op">=</span> <span class="cn">NULL</span>,
-  tags <span class="op">=</span> <span class="cn">NULL</span>,
-  type <span class="op">=</span> <span class="st">"with_token"</span>,
-  check_required <span class="op">=</span> <span class="cn">TRUE</span>
-<span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">get_values</span><span class="op">(</span></span>
+<span>  class <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  is_bounded <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  tags <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  type <span class="op">=</span> <span class="st">"with_token"</span>,</span>
+<span>  check_required <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -406,15 +407,44 @@ Check if all required parameters are set?</p></dd>
 <p>Named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-subset"></a><div class="section">
-<h3 id="method-subset-">Method <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code><a class="anchor" aria-label="anchor" href="#method-subset-"></a></h3>
-<p>Changes the current set to the set of passed IDs.</p><div class="section">
+</div><p></p><hr><a id="method-ParamSet-set_values"></a><div class="section">
+<h3 id="method-set-values-">Method <code>set_values()</code><a class="anchor" aria-label="anchor" href="#method-set-values-"></a></h3>
+<p>Allows to to modify (and overwrite) or replace the parameter values.
+Per default already set values are being kept unless new values are being provided.</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">set_values</span><span class="op">(</span><span class="va">...</span>, .values <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span>, .insert <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>...</code></dt>
+<dd><p>(any)<br>
+Named parameter values.</p></dd>
+
+
+<dt><code>.values</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)<br>
+Named list with parameter values. Names must not already appear in <code>...</code>.</p></dd>
+
+
+<dt><code>.insert</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to insert the values (old values are being kept, if not overwritten), or to
+replace all values. Default is TRUE.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-subset"></a><div class="section">
+<h3 id="method-subset-">Method <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code><a class="anchor" aria-label="anchor" href="#method-subset-"></a></h3>
+<p>Changes the current set to the set of passed IDs.</p><div class="section">
+<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>ids</code></dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>).</p></dd>
 
@@ -422,15 +452,15 @@ Check if all required parameters are set?</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-search_space"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-search_space"></a><div class="section">
 <h3 id="method-search-space-">Method <code>search_space()</code><a class="anchor" aria-label="anchor" href="#method-search-space-"></a></h3>
 <p>Construct a <code>ParamSet</code> to tune over. Constructed from <code><a href="to_tune.html">TuneToken</a></code> in <code>$values</code>, see <code><a href="to_tune.html">to_tune()</a></code>.</p><div class="section">
-<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span>values <span class="op">=</span> <span class="va">self</span><span class="op">$</span><span class="va">values</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span>values <span class="op">=</span> <span class="va">self</span><span class="op">$</span><span class="va">values</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
+<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>values</code></dt>
 <dd><p>(<code>named list</code>): optional named list of <code><a href="to_tune.html">TuneToken</a></code> objects to convert, in place of <code>$values</code>.</p></dd>
 
@@ -438,37 +468,14 @@ Check if all required parameters are set?</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-check"></a><div class="section">
-<h3 id="method-check-">Method <code><a href="https://rdrr.io/r/utils/PkgUtils.html" class="external-link">check()</a></code><a class="anchor" aria-label="anchor" href="#method-check-"></a></h3>
+</div><p></p><hr><a id="method-ParamSet-check"></a><div class="section">
+<h3 id="method-check-">Method <code>check()</code><a class="anchor" aria-label="anchor" href="#method-check-"></a></h3>
 <p><span class="pkg">checkmate</span>-like check-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><div class="section">
-<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
-<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
-<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
-
-
-</dl><p></p></div>
-</div>
-<div class="section">
-<h4 id="returns-2">Returns<a class="anchor" aria-label="anchor" href="#returns-2"></a></h4>
-<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
-</div>
-
-</div><p></p><hr><a id="method-test"></a><div class="section">
-<h3 id="method-test-">Method <code>test()</code><a class="anchor" aria-label="anchor" href="#method-test-"></a></h3>
-<p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><div class="section">
 <h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -480,22 +487,45 @@ Params for which dependencies are not satisfied should not be part of <code>x</c
 </dl><p></p></div>
 </div>
 <div class="section">
+<h4 id="returns-2">Returns<a class="anchor" aria-label="anchor" href="#returns-2"></a></h4>
+<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-test"></a><div class="section">
+<h3 id="method-test-">Method <code>test()</code><a class="anchor" aria-label="anchor" href="#method-test-"></a></h3>
+<p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><div class="section">
+<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
 <h4 id="returns-3">Returns<a class="anchor" aria-label="anchor" href="#returns-3"></a></h4>
 <p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-assert"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-assert"></a><div class="section">
 <h3 id="method-assert-">Method <code>assert()</code><a class="anchor" aria-label="anchor" href="#method-assert-"></a></h3>
 <p><span class="pkg">checkmate</span>-like assert-function. Takes a named list.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.</p><div class="section">
-<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="va">xs</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="va">xs</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
+<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xs</code></dt>
 <dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
 
@@ -513,19 +543,19 @@ Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkma
 <p>If successful <code>xs</code> invisibly, if not an error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-check_dt"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-check_dt"></a><div class="section">
 <h3 id="method-check-dt-">Method <code>check_dt()</code><a class="anchor" aria-label="anchor" href="#method-check-dt-"></a></h3>
 <p><span class="pkg">checkmate</span>-like check-function. Takes a <a href="https://Rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>
 where rows are points and columns are parameters. A point x is feasible,
 if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</code>.</p><div class="section">
-<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dt</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dt</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
+<h4 id="arguments-10">Arguments<a class="anchor" aria-label="anchor" href="#arguments-10"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
 <dd><p>(<a href="https://Rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a> | <code><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame()</a></code>).</p></dd>
 
@@ -537,15 +567,15 @@ dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</co
 <p>If successful <code>TRUE</code>, if not a string with the error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-test_dt"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-test_dt"></a><div class="section">
 <h3 id="method-test-dt-">Method <code>test_dt()</code><a class="anchor" aria-label="anchor" href="#method-test-dt-"></a></h3>
 <p><span class="pkg">checkmate</span>-like test-function (s. <code>$check_dt()</code>).</p><div class="section">
-<h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_dt</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_dt</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-10">Arguments<a class="anchor" aria-label="anchor" href="#arguments-10"></a></h4>
+<h4 id="arguments-11">Arguments<a class="anchor" aria-label="anchor" href="#arguments-11"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
 <dd><p>(<a href="https://Rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
 
@@ -557,15 +587,15 @@ dependencies are not satisfied should be set to <code>NA</code> in <code>xdt</co
 <p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-assert_dt"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-assert_dt"></a><div class="section">
 <h3 id="method-assert-dt-">Method <code>assert_dt()</code><a class="anchor" aria-label="anchor" href="#method-assert-dt-"></a></h3>
 <p><span class="pkg">checkmate</span>-like assert-function (s. <code>$check_dt()</code>).</p><div class="section">
-<h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert_dt</span><span class="op">(</span><span class="va">xdt</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert_dt</span><span class="op">(</span><span class="va">xdt</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-11">Arguments<a class="anchor" aria-label="anchor" href="#arguments-11"></a></h4>
+<h4 id="arguments-12">Arguments<a class="anchor" aria-label="anchor" href="#arguments-12"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
 <dd><p>(<a href="https://Rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
 
@@ -583,15 +613,15 @@ Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkma
 <p>If successful <code>xs</code> invisibly, if not an error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-add_dep"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-add_dep"></a><div class="section">
 <h3 id="method-add-dep-">Method <code>add_dep()</code><a class="anchor" aria-label="anchor" href="#method-add-dep-"></a></h3>
 <p>Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p><div class="section">
-<h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">add_dep</span><span class="op">(</span><span class="va">id</span>, <span class="va">on</span>, <span class="va">cond</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">add_dep</span><span class="op">(</span><span class="va">id</span>, <span class="va">on</span>, <span class="va">cond</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-12">Arguments<a class="anchor" aria-label="anchor" href="#arguments-12"></a></h4>
+<h4 id="arguments-13">Arguments<a class="anchor" aria-label="anchor" href="#arguments-13"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>id</code></dt>
 <dd><p>(<code>character(1)</code>).</p></dd>
 
@@ -607,26 +637,26 @@ Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkma
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-format"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-format"></a><div class="section">
 <h3 id="method-format-">Method <code><a href="https://rdrr.io/r/base/format.html" class="external-link">format()</a></code><a class="anchor" aria-label="anchor" href="#method-format-"></a></h3>
 <p>Helper for print outputs.</p><div class="section">
-<h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">format</span><span class="op">(</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">format</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 
-</div><p></p><hr><a id="method-print"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-print"></a><div class="section">
 <h3 id="method-print-">Method <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code><a class="anchor" aria-label="anchor" href="#method-print-"></a></h3>
 <p>Printer.</p><div class="section">
-<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">print</span><span class="op">(</span>
-  <span class="va">...</span>,
-  hide_cols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"levels"</span>, <span class="st">"is_bounded"</span>, <span class="st">"special_vals"</span>, <span class="st">"tags"</span>, <span class="st">"storage_type"</span><span class="op">)</span>
-<span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">print</span><span class="op">(</span></span>
+<span>  <span class="va">...</span>,</span>
+<span>  hide_cols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"levels"</span>, <span class="st">"is_bounded"</span>, <span class="st">"special_vals"</span>, <span class="st">"tags"</span>, <span class="st">"storage_type"</span><span class="op">)</span></span>
+<span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-13">Arguments<a class="anchor" aria-label="anchor" href="#arguments-13"></a></h4>
+<h4 id="arguments-14">Arguments<a class="anchor" aria-label="anchor" href="#arguments-14"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>...</code></dt>
 <dd><p>(ignored).</p></dd>
 
@@ -640,15 +670,15 @@ Which fields should not be printed? Default is <code>"levels"</code>,
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-clone"></a><div class="section">
+</div><p></p><hr><a id="method-ParamSet-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span class="va">ParamSet</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></code></pre></div><p></p></div>
+<h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-14">Arguments<a class="anchor" aria-label="anchor" href="#arguments-14"></a></h4>
+<h4 id="arguments-15">Arguments<a class="anchor" aria-label="anchor" href="#arguments-15"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 
@@ -662,21 +692,21 @@ Which fields should not be printed? Default is <code>"levels"</code>,
 
     <div class="section level2">
     <h2 id="ref-examples">Examples<a class="anchor" aria-label="anchor" href="#ref-examples"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span class="va">ps</span> <span class="op">=</span> <span class="va">ParamSet</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
-<span class="r-in">  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span class="r-in">    <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"d"</span>, lower <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>, upper <span class="op">=</span> <span class="fl">5</span>, default <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span>
-<span class="r-in">    <span class="va"><a href="ParamFct.html">ParamFct</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"f"</span>, levels <span class="op">=</span> <span class="va">letters</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span></span>
-<span class="r-in">  <span class="op">)</span></span>
-<span class="r-in"><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">ps</span><span class="op">$</span><span class="va">trafo</span> <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span>
-<span class="r-in">  <span class="va">x</span><span class="op">$</span><span class="va">d</span> <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="va">x</span><span class="op">$</span><span class="va">d</span></span>
-<span class="r-in">  <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span>
-<span class="r-in"><span class="op">}</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">ps</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"i"</span>, lower <span class="op">=</span> <span class="fl">0L</span>, upper <span class="op">=</span> <span class="fl">16L</span><span class="op">)</span><span class="op">)</span></span>
-<span class="r-in"></span>
-<span class="r-in"><span class="va">ps</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>d <span class="op">=</span> <span class="fl">2.1</span>, f <span class="op">=</span> <span class="st">"a"</span>, i <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span><span class="op">)</span></span>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="va">ps</span> <span class="op">=</span> <span class="va">ParamSet</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>    <span class="va"><a href="ParamDbl.html">ParamDbl</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"d"</span>, lower <span class="op">=</span> <span class="op">-</span><span class="fl">5</span>, upper <span class="op">=</span> <span class="fl">5</span>, default <span class="op">=</span> <span class="fl">0</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    <span class="va"><a href="ParamFct.html">ParamFct</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"f"</span>, levels <span class="op">=</span> <span class="va">letters</span><span class="op">[</span><span class="fl">1</span><span class="op">:</span><span class="fl">3</span><span class="op">]</span><span class="op">)</span></span></span>
+<span class="r-in"><span>  <span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">ps</span><span class="op">$</span><span class="va">trafo</span> <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>  <span class="va">x</span><span class="op">$</span><span class="va">d</span> <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="va">x</span><span class="op">$</span><span class="va">d</span></span></span>
+<span class="r-in"><span>  <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">}</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">ps</span><span class="op">$</span><span class="fu">add</span><span class="op">(</span><span class="va"><a href="ParamInt.html">ParamInt</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="st">"i"</span>, lower <span class="op">=</span> <span class="fl">0L</span>, upper <span class="op">=</span> <span class="fl">16L</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">ps</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>d <span class="op">=</span> <span class="fl">2.1</span>, f <span class="op">=</span> <span class="st">"a"</span>, i <span class="op">=</span> <span class="fl">3L</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] TRUE</span>
 </code></pre></div>
     </div>
@@ -689,7 +719,7 @@ Which fields should not be printed? Default is <code>"levels"</code>,
 </div>
 
 <div class="pkgdown-footer-right">
-  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.3.</p>
+  <p></p><p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.6.</p>
 </div>
 
     </footer></div>
