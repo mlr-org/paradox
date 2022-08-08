@@ -408,3 +408,36 @@ test_that("set_values works for .values and ... with correct inputs", {
   expect_true(param_set$values$b == 2)
   expect_true(param_set$values$c == 3)
 })
+
+test_that("default_values works", {
+  # errs, when no defaults are set
+  ps = ps(a = p_int())
+  expect_true(is.null(ps$default_values))
+
+  # can set defaults
+  expect_true(ps$missing_default_values)
+  ps$default_values = list(a = 2)
+  expect_true(ps$default_values$a == 2)
+  expect_true(!ps$missing_default_values)
+
+  # errs when trying to set them again
+  expect_error({ps$default_values = list()},
+    regexp = "Assertion on 'self$missing_default_values && identical(self$values",
+    fixed = TRUE
+  )
+
+  # errs when parameter values are set
+  ps = ps(a = p_int())
+  ps$values = list(a = 1)
+  expect_error({ps$default_values = list()},
+    regexp = "Assertion on 'self$missing_default_values && identical(self$values",
+    fixed = TRUE
+  )
+
+  expect_true(ps$missing_default_values)
+
+  ps = ps(a = p_int())
+  ps$default_values = list(a = 1)
+  ps$values = list(a = 2)
+  expect_true(ps$default_values$a == 1)
+})

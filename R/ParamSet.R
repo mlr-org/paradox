@@ -88,7 +88,6 @@ ParamSet = R6Class("ParamSet",
       private$.deps = rbind(private$.deps, p$deps)
       invisible(self)
     },
-
     #' @description
     #' Retrieves IDs of contained parameters based on some filter criteria
     #' selections, `NULL` means no restriction.
@@ -185,7 +184,7 @@ ParamSet = R6Class("ParamSet",
       } else {
         self$values = new_values
       }
-      return(self)
+      invisible(self)
     },
 
     #' @description
@@ -419,6 +418,27 @@ ParamSet = R6Class("ParamSet",
   ),
 
   active = list(
+    #' @field
+    #' The default values of the parameter set. Can only be set once.
+    #' If no defaults were set, this returns `NULL`.
+    #' @param xs (named `list()`)\cr
+    #'   Default parameter values.
+    default_values = function(xs) {
+      if (missing(xs)) {
+        return(private$.default_values)
+      }
+      assert_true(self$missing_default_values && identical(self$values, named_list()))
+
+      self$values = xs
+      private$.default_values = xs
+      private$.missing_default_values = FALSE
+      xs
+    },
+    #' @field
+    #' Whether the parameter set has no default values set.
+    missing_default_values = function(rhs) {
+      private$.missing_default_values
+    },
     #' @template field_params
     params = function(rhs) {
       if (!missing(rhs) && !identical(rhs, private$.params)) {
@@ -628,6 +648,8 @@ ParamSet = R6Class("ParamSet",
   ),
 
   private = list(
+    .default_values = NULL,
+    .missing_default_values = TRUE,
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
@@ -739,4 +761,5 @@ rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
   x = c("", knitr::kable(params, col.names = capitalize(names(params))))
   paste(x, collapse = "\n")
 }
+
 

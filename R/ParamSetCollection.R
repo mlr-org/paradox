@@ -89,6 +89,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       invisible(self)
     },
 
+
     #' @description
     #' Only included for consistency. Not allowed to perform on [ParamSetCollection]s.
     #'
@@ -139,29 +140,49 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
     #' @template field_values
     values = function(xs) {
-      sets = private$.sets
-      names(sets) = map_chr(sets, "set_id")
+      get_or_set(self, private, xs, "values")
+    },
+    #' @field
+    #' Default parameter values.
+    #' If at least one parameter set has no `default_values` set, this returns `NULL`.
+    #' @param xs (named `list()`)\cr
+    #'   Default parameter values.
+    default_values = function(xs) {
+      # This is important, otherwise defaults might be partially alterted, i.e. defaults are
+      # being assigned until we find a set that already has defaults.
       if (!missing(xs)) {
-        assert_list(xs)
-        self$assert(xs) # make sure everything is valid and feasible
-
-        for (s in sets) {
-          # retrieve sublist for each set, then assign it in set (after removing prefix)
-          psids = names(s$params_unid)
-          if (s$set_id != "") {
-            psids = sprintf("%s.%s", s$set_id, psids)
-          }
-          pv = xs[intersect(psids, names(xs))]
-          if (s$set_id != "") {
-            names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
-          }
-          s$values = pv
-        }
+        assert_true(self$missing_all_default_values)
+      } else if (self$missing_default_values) {
+        return(NULL)
       }
-      vals = map(sets, "values")
-      vals = unlist(vals, recursive = FALSE)
-      if (!length(vals)) vals = named_list()
-      vals
+
+      get_or_set(self, private, xs, "default_values")
+    },
+    #' @field
+    #' Is there at least one parameter set for which no defaults where set.
+    #' @param xs (named `list()`)\cr
+    #'   Default parameter values.
+    missing_default_values = function(rhs) {
+      assert_ro_binding(rhs)
+      any(map_lgl(private$.sets, "missing_default_values"))
+    },
+    #' @field
+    #' Do all parameter sets belonging to this collection miss their defaults.
+    #' @param xs (named `list()`)\cr
+    #'   Default parameter values.
+    missing_all_default_values = function(rhs) {
+      all(
+        map_lgl(
+          private$.sets,
+          function(s) {
+            if (inherits(s, "ParamSetCollection")) {
+              s$missing_all_default_values
+            } else {
+              s$missing_default_values
+            }
+          }
+        )
+      )
     }
   ),
 
@@ -169,3 +190,32 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     .sets = NULL
   )
 )
+
+
+get_or_set = function(self, private, xs, what) {
+  sets = private$.sets
+
+  names(sets) = map_chr(sets, "set_id")
+  if (!missing(xs)) {
+    assert_list(xs)
+    self$assert(xs) # make sure everything is valid and feasible
+
+    for (s in sets) {
+      # retrieve sublist for each set, then assign it in set (after removing prefix)
+      psids = names(s$params_unid)
+      if (s$set_id != "") {
+        psids = sprintf("%s.%s", s$set_id, psids)
+      }
+      pv = xs[intersect(psids, names(xs))]
+      if (s$set_id != "") {
+        names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
+      }
+      s[[what]] = pv
+    }
+  }
+  vals = map(sets, what)
+  vals = unlist(vals, recursive = FALSE)
+  if (!length(vals)) vals = named_list()
+  vals
+
+}

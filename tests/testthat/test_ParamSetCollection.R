@@ -271,3 +271,53 @@ test_that("set_id inference in values assignment works now", {
   expect_error(ParamSetCollection$new(list(pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })
+
+test_that("defaults work", {
+  # check that defaults always errs when at least one set does not have defaults
+  ps1 = ps(par = p_int())
+  ps1$set_id = "a"
+  ps2 = ps(par = p_int())
+  ps2$set_id = "b"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+  expect_true(is.null(psc$default_values))
+  ps1$default_values = list(par = 1)
+  expect_true(is.null(psc$default_values))
+  ps2$default_values = list()
+  expect_true(psc$values$a.par == 1)
+
+  # check that one cannot set the defaults for all ParamSets via the ParamSetCollection when
+  # there is a set that already has defaults
+  ps1 = ps(par = p_int())
+  ps1$set_id = "a"
+  ps1$default_values = list()
+  ps2 = ps(par = p_int())
+  ps2$set_id = "b"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+  expect_error({psc$default_values = list()},
+    regexp = "Assertion on 'self$missing_all_default_values'",
+    fixed = TRUE
+  )
+})
+
+
+test_that("Defaults for recursive collections", {
+  ps1 = ps(par = p_int())
+  ps1$set_id = "a"
+  psc1 = ParamSetCollection$new(list(ps1))
+  expect_false(!psc1$missing_default_values)
+
+  ps1$default_values = list(par = 1)
+  expect_true(psc1$default_values$a.par == 1)
+  expect_true(!psc1$missing_default_values)
+})
+
+
+test_that("Does not partially set default_values when some sets already have default_values", {
+  ps1 = ps(par = p_int())
+  ps1$set_id = "a"
+  ps2 = ps(par = p_int())
+  ps2$set_id = "b"
+  ps2$default_values = list(par = 1)
+  psc = ParamSetCollection$new(list(ps1, ps2))
+  expect_error({psc$default_values = list(a.par = 2)})
+})
