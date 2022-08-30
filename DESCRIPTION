@@ -51,6 +51,7 @@ Imports:
 Suggests:
     knitr,
     lhs,
+    spacefillr,
     testthat
 Encoding: UTF-8
 Config/testthat/edition: 3
@@ -82,6 +83,7 @@ Collate:
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
+    'generate_design_sobol.R'
     'ps.R'
     'reexports.R'
     'to_tune.R'

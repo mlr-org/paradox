@@ -30,6 +30,7 @@ generate_design_random(ps, 10)
 \seealso{
 Other generate_design: 
 \code{\link{generate_design_grid}()},
-\code{\link{generate_design_lhs}()}
+\code{\link{generate_design_lhs}()},
+\code{\link{generate_design_sobol}()}
 }
 \concept{generate_design}
