@@ -34,6 +34,7 @@ generate_design_grid(ps, 10)
 \seealso{
 Other generate_design: 
 \code{\link{generate_design_lhs}()},
-\code{\link{generate_design_random}()}
+\code{\link{generate_design_random}()},
+\code{\link{generate_design_sobol}()}
 }
 \concept{generate_design}
