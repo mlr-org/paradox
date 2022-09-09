@@ -93,8 +93,15 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' Only included for consistency. Not allowed to perform on [ParamSetCollection]s.
     #'
     #' @param ids (`character()`).
-    subset = function(ids) stop("not allowed")
+    subset = function(ids) stop("not allowed"),
 
+    #' @description
+    #' Only contained for consistency. Set the initial values of the underlying ParamSets instead.
+    #' @param ... (any)\cr
+    #'   Not used.
+    set_initial_values = function(...) {
+      stopf("Setting initial values on ParamSetCollection is currently not supported.")
+    }
   ),
 
   active = list(
@@ -106,6 +113,19 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         x$id = n
         x
       })
+    },
+    #' @field initial_values (named `list()`)\cr
+    #'   Retrieves the initial values from the contained ParamSets.
+    #'   This will return `NULL` if at least one of the ParamSets does not have `initial_values`.
+    initial_values = function(rhs) {
+      assert_ro_binding(rhs)
+      sets = private$.sets
+      names(sets) = map_chr(sets, "set_id")
+      vals = map(sets, function(s) s$initial_values)
+      if (any(map_lgl(vals, is.null))) {
+        return(NULL)
+      }
+      unlist(vals, recursive = FALSE)
     },
     #' @template field_params_unid
     params_unid = function(v) {

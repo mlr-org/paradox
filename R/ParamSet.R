@@ -189,6 +189,20 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #' Sets the initial parameter values of the ParamSet.
+    #' This function should only be called once.
+    #' @param ... (named `list()`)\cr
+    #'   Initial parameter values.
+    set_initial_values = function(...) {
+      values = list(...)
+      init_values = map(values, function(x) if (test_r6(x)) x$clone(deep = TRUE) else x)
+      values = map(values, function(x) if (test_r6(x)) x$clone(deep = TRUE) else x)
+      self$set_values(.values = values)
+      private$.initial_values = init_values
+      invisible(self)
+    },
+
+    #' @description
     #' Changes the current set to the set of passed IDs.
     #'
     #' @param ids (`character()`).
@@ -443,6 +457,14 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
+    #' @field initial_values (named `list()`)\cr
+    #'   Retrieves the initial values from the contained ParamSets.
+    #'   This will fail if the initial values were not set.
+    initial_values = function(rhs) {
+      assert_ro_binding(rhs)
+      private$.initial_values
+    },
+
     #' @field set_id (`character(1)`)\cr
     #' ID of this param set. Default `""`. Settable.
     set_id = function(v) {
@@ -631,6 +653,7 @@ ParamSet = R6Class("ParamSet",
     .set_id = NULL,
     .trafo = NULL,
     .params = NULL,
+    .initial_values = NULL,
     .values = named_list(),
     # is `TRUE` when function is passed to $trafo or .extra_trafo is set in ps()
     .has_extra_trafo = FALSE,

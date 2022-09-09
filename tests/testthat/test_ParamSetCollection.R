@@ -271,3 +271,16 @@ test_that("set_id inference in values assignment works now", {
   expect_error(ParamSetCollection$new(list(pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })
+
+test_that("set_initial_values works for ParamSetCollection", {
+  ps1 = th_paramset_dbl1()
+  ps1$set_id = "s1"
+  ps1$set_initial_values(th_param_dbl = 0.2)
+  ps2 = th_paramset_full()
+  ps2$set_id = "s2"
+  psc = ParamSetCollection$new(list(ps1, ps2))
+
+  expect_true(is.null(psc$initial_values))
+  ps2$set_initial_values(th_param_dbl = 5)
+  expect_identical(psc$initial_values, list(s1.th_param_dbl = 0.2, s2.th_param_dbl = 5))
+})

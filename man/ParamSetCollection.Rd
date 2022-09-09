@@ -37,6 +37,10 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
+\item{\code{initial_values}}{(named \code{list()})\cr
+Retrieves the initial values from the contained ParamSets.
+This will return \code{NULL} if at least one of the ParamSets does not have \code{initial_values}.}
+
 \item{\code{params_unid}}{(named \code{list()})\cr
 List of \link{Param}, named with their true ID. However,
 this field has the \link{Param}'s \verb{$id} value set to a
@@ -64,6 +68,7 @@ When you set values, all previously set values will be unset / removed.}
 \item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
 \item \href{#method-ParamSetCollection-remove_sets}{\code{ParamSetCollection$remove_sets()}}
 \item \href{#method-ParamSetCollection-subset}{\code{ParamSetCollection$subset()}}
+\item \href{#method-ParamSetCollection-set_initial_values}{\code{ParamSetCollection$set_initial_values()}}
 \item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
 }
 }
@@ -151,6 +156,24 @@ Only included for consistency. Not allowed to perform on \link{ParamSetCollectio
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{ids}}{(\code{character()}).}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetCollection-set_initial_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-set_initial_values}{}}}
+\subsection{Method \code{set_initial_values()}}{
+Only contained for consistency. Set the initial values of the underlying ParamSets instead.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$set_initial_values(...)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(any)\cr
+Not used.}
 }
 \if{html}{\out{</div>}}
 }

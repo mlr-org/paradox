@@ -74,6 +74,10 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
 
+\item{\code{initial_values}}{(named \code{list()})\cr
+Retrieves the initial values from the contained ParamSets.
+This will fail if the initial values were not set.}
+
 \item{\code{set_id}}{(\code{character(1)})\cr
 ID of this param set. Default \code{""}. Settable.}
 
@@ -171,6 +175,7 @@ Has the set parameter dependencies?}
 \item \href{#method-ParamSet-ids}{\code{ParamSet$ids()}}
 \item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
+\item \href{#method-ParamSet-set_initial_values}{\code{ParamSet$set_initial_values()}}
 \item \href{#method-ParamSet-subset}{\code{ParamSet$subset()}}
 \item \href{#method-ParamSet-search_space}{\code{ParamSet$search_space()}}
 \item \href{#method-ParamSet-check}{\code{ParamSet$check()}}
@@ -307,6 +312,25 @@ Named list with parameter values. Names must not already appear in \code{...}.}
 \item{\code{.insert}}{(\code{logical(1)})\cr
 Whether to insert the values (old values are being kept, if not overwritten), or to
 replace all values. Default is TRUE.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-set_initial_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-set_initial_values}{}}}
+\subsection{Method \code{set_initial_values()}}{
+Sets the initial parameter values of the ParamSet.
+This function should only be called once.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$set_initial_values(...)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(named \code{list()})\cr
+Initial parameter values.}
 }
 \if{html}{\out{</div>}}
 }

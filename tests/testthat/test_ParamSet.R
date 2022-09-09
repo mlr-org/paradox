@@ -408,3 +408,16 @@ test_that("set_values works for .values and ... with correct inputs", {
   expect_true(param_set$values$b == 2)
   expect_true(param_set$values$c == 3)
 })
+
+test_that("set_initial_values works for ParamSet", {
+  # basic case works
+  ps = th_paramset_dbl1()
+  ps$set_initial_values(th_param_dbl = 1)
+  expect_identical(ps$initial_values, list(th_param_dbl = 1))
+
+  # r6 objects are cloned
+  ps = ps(a = p_uty())
+  par = ParamUty$new("test")
+  ps$set_initial_values(a = par)
+  expect_false(identical(ps$values$a, par))
+})
