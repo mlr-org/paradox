@@ -419,5 +419,5 @@ test_that("set_initial_values works for ParamSet", {
   ps = ps(a = p_uty())
   par = ParamUty$new("test")
   ps$set_initial_values(a = par)
-  expect_false(identical(ps$values$a, par))
+  expect_false(identical(ps$initial_values$a, par))
 })

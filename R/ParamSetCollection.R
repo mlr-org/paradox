@@ -96,11 +96,19 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     subset = function(ids) stop("not allowed"),
 
     #' @description
-    #' Only contained for consistency. Set the initial values of the underlying ParamSets instead.
+    #' Sets the initial parameter values of the underling [ParamSet]s.
+    #' This function should only be called once.
     #' @param ... (any)\cr
     #'   Not used.
     set_initial_values = function(...) {
-      stopf("Setting initial values on ParamSetCollection is currently not supported.")
+      xs = list(...)
+      assert_list(xs)
+      self$assert(xs)
+      sets = private$.sets
+      names(sets) = map_chr(sets, "set_id")
+      set_for_paramsets(self, private, super, sets, xs, TRUE)
+      self$values = xs
+      invisible(self)
     }
   ),
 
@@ -122,9 +130,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       sets = private$.sets
       names(sets) = map_chr(sets, "set_id")
       vals = map(sets, function(s) s$initial_values)
-      if (any(map_lgl(vals, is.null))) {
-        return(NULL)
-      }
       unlist(vals, recursive = FALSE)
     },
     #' @template field_params_unid
@@ -162,21 +167,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       sets = private$.sets
       names(sets) = map_chr(sets, "set_id")
       if (!missing(xs)) {
-        assert_list(xs)
-        self$assert(xs) # make sure everything is valid and feasible
-
-        for (s in sets) {
-          # retrieve sublist for each set, then assign it in set (after removing prefix)
-          psids = names(s$params_unid)
-          if (s$set_id != "") {
-            psids = sprintf("%s.%s", s$set_id, psids)
-          }
-          pv = xs[intersect(psids, names(xs))]
-          if (s$set_id != "") {
-            names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
-          }
-          s$values = pv
-        }
+        set_for_paramsets(self, private, super, sets, xs, FALSE)
       }
       vals = map(sets, "values")
       vals = unlist(vals, recursive = FALSE)
@@ -189,3 +180,25 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     .sets = NULL
   )
 )
+
+set_for_paramsets = function (self, private, super, sets, xs, initial) {
+  assert_list(xs)
+  self$assert(xs)
+  # set values or initial values for each subset.
+  for (s in sets) {
+    psids = names(s$params_unid)
+    if (s$set_id != "") {
+      psids = sprintf("%s.%s", s$set_id, psids)
+    }
+    pv = xs[intersect(psids, names(xs))]
+    if (s$set_id != "") {
+      names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
+    }
+    if (initial) {
+      invoke(s$set_initial_values, .args = pv)
+    } else {
+      s$values = pv
+    }
+  }
+  self
+}
