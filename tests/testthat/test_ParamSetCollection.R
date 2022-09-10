@@ -282,5 +282,4 @@ test_that("set_initial_values works for ParamSetCollection", {
   expect_identical(psc1$initial_values, list(s1.th_param_dbl = 1))
   psc1$set_initial_values(s2.th_param_dbl = 2)
   expect_identical(psc1$initial_values, list(s2.th_param_dbl = 2))
-  expect_identical(psc$initial_values, list())
 })
