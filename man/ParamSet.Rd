@@ -320,7 +320,8 @@ replace all values. Default is TRUE.}
 \if{html}{\out{<a id="method-ParamSet-set_initial_values"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-set_initial_values}{}}}
 \subsection{Method \code{set_initial_values()}}{
-Sets the initial parameter values of the ParamSet.
+Sets the initial parameter values of the ParamSet. They are set in the slot \code{values} but
+are also saved and can always be accessed using the slot \code{initial_values}.
 This function should only be called once.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$set_initial_values(...)}\if{html}{\out{</div>}}

@@ -164,7 +164,8 @@ Only included for consistency. Not allowed to perform on \link{ParamSetCollectio
 \if{html}{\out{<a id="method-ParamSetCollection-set_initial_values"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-set_initial_values}{}}}
 \subsection{Method \code{set_initial_values()}}{
-Only contained for consistency. Set the initial values of the underlying ParamSets instead.
+Sets the initial parameter values of the underling \link{ParamSet}s.
+This function should only be called once.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$set_initial_values(...)}\if{html}{\out{</div>}}
 }
