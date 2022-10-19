@@ -185,7 +185,7 @@ ParamSet = R6Class("ParamSet",
       } else {
         self$values = new_values
       }
-      return(self)
+      invisible(self)
     },
 
     #' @description
