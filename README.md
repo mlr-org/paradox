@@ -181,4 +181,4 @@ xst
 ```
 
 Further documentation can be found in the
-[mlr3book](https://mlr3book.mlr-org.com/05-pipelines.html).
+[mlr3book](https://mlr3book.mlr-org.com/technical.html#paradox).
