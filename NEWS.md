@@ -1,4 +1,7 @@
-# paradox 0.10.0.9000
+# paradox 0.11.0
+
+* feat: The function `generate_design_sobol()` generates a space-filling Sobol sequence design.
+* refactor: `$set_values` returns the parameter set invisible.
 
 # paradox 0.10.0
 
