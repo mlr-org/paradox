@@ -1,3 +1,5 @@
+# paradox 0.10.0.9000
+
 # paradox 0.10.0
 
 * Reset `.has_extra_trafo` to `FALSE` when trafo is set to `NULL`.
