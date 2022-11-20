@@ -14,7 +14,7 @@ by calling a generate_design_grid() or by sampling."><meta name="robots" content
     
     <a class="navbar-brand me-2" href="../index.html">paradox</a>
 
-    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.9.0.9000</small>
+    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.10.0.9000</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -104,12 +104,12 @@ Stored <code>data</code>.</p></dd>
 <div class="section">
 <h3 id="public-methods">Public methods<a class="anchor" aria-label="anchor" href="#public-methods"></a></h3>
 
-<ul><li><p><a href="#method-new"><code>Design$new()</code></a></p></li>
-<li><p><a href="#method-format"><code>Design$format()</code></a></p></li>
-<li><p><a href="#method-print"><code>Design$print()</code></a></p></li>
-<li><p><a href="#method-transpose"><code>Design$transpose()</code></a></p></li>
-<li><p><a href="#method-clone"><code>Design$clone()</code></a></p></li>
-</ul></div><p></p><hr><a id="method-new"></a><div class="section">
+<ul><li><p><a href="#method-Design-new"><code>Design$new()</code></a></p></li>
+<li><p><a href="#method-Design-format"><code>Design$format()</code></a></p></li>
+<li><p><a href="#method-Design-print"><code>Design$print()</code></a></p></li>
+<li><p><a href="#method-Design-transpose"><code>Design$transpose()</code></a></p></li>
+<li><p><a href="#method-Design-clone"><code>Design$clone()</code></a></p></li>
+</ul></div><p></p><hr><a id="method-Design-new"></a><div class="section">
 <h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
 <p>Creates a new instance of this <a href="https://r6.r-lib.org/reference/R6Class.html" class="external-link">R6</a> class.</p><div class="section">
 <h4 id="usage">Usage<a class="anchor" aria-label="anchor" href="#usage"></a></h4>
@@ -135,7 +135,7 @@ Remove duplicates?</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-format"></a><div class="section">
+</div><p></p><hr><a id="method-Design-format"></a><div class="section">
 <h3 id="method-format-">Method <code><a href="https://rdrr.io/r/base/format.html" class="external-link">format()</a></code><a class="anchor" aria-label="anchor" href="#method-format-"></a></h3>
 <p>Helper for print outputs.</p><div class="section">
 <h4 id="usage-1">Usage<a class="anchor" aria-label="anchor" href="#usage-1"></a></h4>
@@ -143,7 +143,7 @@ Remove duplicates?</p></dd>
 </div>
 
 
-</div><p></p><hr><a id="method-print"></a><div class="section">
+</div><p></p><hr><a id="method-Design-print"></a><div class="section">
 <h3 id="method-print-">Method <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code><a class="anchor" aria-label="anchor" href="#method-print-"></a></h3>
 <p>Printer.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
@@ -159,7 +159,7 @@ Remove duplicates?</p></dd>
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-transpose"></a><div class="section">
+</div><p></p><hr><a id="method-Design-transpose"></a><div class="section">
 <h3 id="method-transpose-">Method <code>transpose()</code><a class="anchor" aria-label="anchor" href="#method-transpose-"></a></h3>
 <p>Converts <code>data</code> into a list of lists of row-configurations,
 possibly removes <code>NA</code> entries of inactive parameter values due to unsatisfied dependencies,
@@ -184,7 +184,7 @@ Should the <code>trafo</code> function of the <a href="ParamSet.html">ParamSet</
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-clone"></a><div class="section">
+</div><p></p><hr><a id="method-Design-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
 <h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>

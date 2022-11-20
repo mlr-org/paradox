@@ -44,7 +44,7 @@
     
     <a class="navbar-brand me-2" href="index.html">paradox</a>
 
-    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.9.0.9000</small>
+    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.10.0.9000</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -113,6 +113,7 @@
 <p>Package website: <a href="https://paradox.mlr-org.com/">release</a> | <a href="https://paradox.mlr-org.com/dev/">dev</a></p>
 <p>Universal Parameter Space Description and Tools.</p>
 <!-- badges: start -->
+
 <div class="section level2">
 <h2 id="installation">Installation<a class="anchor" aria-label="anchor" href="#installation"></a>
 </h2>
@@ -222,7 +223,7 @@
 <li>
 <code>param_set</code> the <code>ParamSet</code> used to create the design</li>
 </ul>
-<p>Transformations can be used to change the distributions of sampled parameters. For example, to sample values between (2^-3) and (2^3) in a (log_2)-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.</p>
+<p>Transformations can be used to change the distributions of sampled parameters. For example, to sample values between <img src="https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&amp;space;%5Cbg_white&amp;space;2%5E-3%20%222%5E-3%22" alt="2^-3"> and <img src="https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&amp;space;%5Cbg_white&amp;space;2%5E3%20%222%5E3%22" alt="2^3"> in a <img src="https://latex.codecogs.com/png.image?%5Cdpi%7B110%7D&amp;space;%5Cbg_white&amp;space;log_2%20%22log_2%22" alt="log_2">-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ps</span> <span class="op">=</span> <span class="va"><a href="reference/ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
 <span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
@@ -252,7 +253,7 @@
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]$x</span></span>
 <span><span class="co">#&gt; [1] 0.3688455</span></span></code></pre></div>
-<p>Further documentation can be found in the <a href="https://mlr3book.mlr-org.com/pipelines.html" class="external-link">mlr3book</a>.</p>
+<p>Further documentation can be found in the <a href="https://mlr3book.mlr-org.com/05-pipelines.html" class="external-link">mlr3book</a>.</p>
 </div>
 </div>
 </div>

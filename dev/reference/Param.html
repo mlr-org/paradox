@@ -12,7 +12,7 @@ ParamFct."><meta name="robots" content="noindex"><!-- mathjax --><script src="ht
     
     <a class="navbar-brand me-2" href="../index.html">paradox</a>
 
-    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.9.0.9000</small>
+    <small class="nav-text text-default me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="In-development version">0.10.0.9000</small>
 
     
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -157,17 +157,17 @@ Is there a default value?</p></dd>
 <div class="section">
 <h3 id="public-methods">Public methods<a class="anchor" aria-label="anchor" href="#public-methods"></a></h3>
 
-<ul><li><p><a href="#method-new"><code>Param$new()</code></a></p></li>
-<li><p><a href="#method-check"><code>Param$check()</code></a></p></li>
-<li><p><a href="#method-assert"><code>Param$assert()</code></a></p></li>
-<li><p><a href="#method-test"><code>Param$test()</code></a></p></li>
-<li><p><a href="#method-rep"><code>Param$rep()</code></a></p></li>
-<li><p><a href="#method-format"><code>Param$format()</code></a></p></li>
-<li><p><a href="#method-print"><code>Param$print()</code></a></p></li>
-<li><p><a href="#method-qunif"><code>Param$qunif()</code></a></p></li>
-<li><p><a href="#method-convert"><code>Param$convert()</code></a></p></li>
-<li><p><a href="#method-clone"><code>Param$clone()</code></a></p></li>
-</ul></div><p></p><hr><a id="method-new"></a><div class="section">
+<ul><li><p><a href="#method-Param-new"><code>Param$new()</code></a></p></li>
+<li><p><a href="#method-Param-check"><code>Param$check()</code></a></p></li>
+<li><p><a href="#method-Param-assert"><code>Param$assert()</code></a></p></li>
+<li><p><a href="#method-Param-test"><code>Param$test()</code></a></p></li>
+<li><p><a href="#method-Param-rep"><code>Param$rep()</code></a></p></li>
+<li><p><a href="#method-Param-format"><code>Param$format()</code></a></p></li>
+<li><p><a href="#method-Param-print"><code>Param$print()</code></a></p></li>
+<li><p><a href="#method-Param-qunif"><code>Param$qunif()</code></a></p></li>
+<li><p><a href="#method-Param-convert"><code>Param$convert()</code></a></p></li>
+<li><p><a href="#method-Param-clone"><code>Param$clone()</code></a></p></li>
+</ul></div><p></p><hr><a id="method-Param-new"></a><div class="section">
 <h3 id="method-new-">Method <code>new()</code><a class="anchor" aria-label="anchor" href="#method-new-"></a></h3>
 <p>Creates a new instance of this <a href="https://r6.r-lib.org/reference/R6Class.html" class="external-link">R6</a> class.</p>
 <p>Note that this object is typically constructed via derived classes,
@@ -213,7 +213,7 @@ purpose:<br></p><ul><li><p><code>"required"</code> implies that the parameters h
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-check"></a><div class="section">
+</div><p></p><hr><a id="method-Param-check"></a><div class="section">
 <h3 id="method-check-">Method <code>check()</code><a class="anchor" aria-label="anchor" href="#method-check-"></a></h3>
 <p><span class="pkg">checkmate</span>-like check-function. Take a value from the domain of the
 parameter, and check if it is feasible. A value is feasible if it is of
@@ -236,7 +236,7 @@ the same <code>storage_type</code>, inside of the bounds or element of
 <p>If successful <code>TRUE</code>, if not a string with the error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-assert"></a><div class="section">
+</div><p></p><hr><a id="method-Param-assert"></a><div class="section">
 <h3 id="method-assert-">Method <code>assert()</code><a class="anchor" aria-label="anchor" href="#method-assert-"></a></h3>
 <p><span class="pkg">checkmate</span>-like assert-function. Take a value from the domain of
 the parameter, and assert if it is feasible. A value is feasible if it
@@ -259,7 +259,7 @@ is of the same <code>storage_type</code>, inside of the bounds or element of
 <p>If successful <code>x</code> invisibly, if not an exception is raised.</p>
 </div>
 
-</div><p></p><hr><a id="method-test"></a><div class="section">
+</div><p></p><hr><a id="method-Param-test"></a><div class="section">
 <h3 id="method-test-">Method <code>test()</code><a class="anchor" aria-label="anchor" href="#method-test-"></a></h3>
 <p><span class="pkg">checkmate</span>-like test-function. Take a value from the domain of the
 parameter, and test if it is feasible. A value is feasible if it is of
@@ -282,7 +282,7 @@ the same <code>storage_type</code>, inside of the bounds or element of
 <p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-rep"></a><div class="section">
+</div><p></p><hr><a id="method-Param-rep"></a><div class="section">
 <h3 id="method-rep-">Method <code><a href="https://rdrr.io/r/base/rep.html" class="external-link">rep()</a></code><a class="anchor" aria-label="anchor" href="#method-rep-"></a></h3>
 <p>Repeats this parameter n-times (by cloning).
 Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_rep".</p><div class="section">
@@ -303,7 +303,7 @@ Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_
 <p><a href="ParamSet.html">ParamSet</a>.</p>
 </div>
 
-</div><p></p><hr><a id="method-format"></a><div class="section">
+</div><p></p><hr><a id="method-Param-format"></a><div class="section">
 <h3 id="method-format-">Method <code><a href="https://rdrr.io/r/base/format.html" class="external-link">format()</a></code><a class="anchor" aria-label="anchor" href="#method-format-"></a></h3>
 <p>Helper for print outputs.</p><div class="section">
 <h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
@@ -311,7 +311,7 @@ Each parameter is named "[id]<em>rep</em>[k]" and gets the additional tag "[id]_
 </div>
 
 
-</div><p></p><hr><a id="method-print"></a><div class="section">
+</div><p></p><hr><a id="method-Param-print"></a><div class="section">
 <h3 id="method-print-">Method <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code><a class="anchor" aria-label="anchor" href="#method-print-"></a></h3>
 <p>Printer.</p><div class="section">
 <h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
@@ -336,7 +336,7 @@ Which fields should not be printed? Default is <code>"nlevels"</code>,
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-qunif"></a><div class="section">
+</div><p></p><hr><a id="method-Param-qunif"></a><div class="section">
 <h3 id="method-qunif-">Method <code><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">qunif()</a></code><a class="anchor" aria-label="anchor" href="#method-qunif-"></a></h3>
 <p>Takes values from [0,1] and maps them, regularly distributed, to the
 domain of the parameter. Think of: quantile function or the use case to
@@ -359,7 +359,7 @@ param.</p><div class="section">
 <p>Value of the domain of the parameter.</p>
 </div>
 
-</div><p></p><hr><a id="method-convert"></a><div class="section">
+</div><p></p><hr><a id="method-Param-convert"></a><div class="section">
 <h3 id="method-convert-">Method <code>convert()</code><a class="anchor" aria-label="anchor" href="#method-convert-"></a></h3>
 <p>Converts a value to the closest valid param. Only for values that
 pass <code>$check()</code> and mostly used internally.</p><div class="section">
@@ -380,7 +380,7 @@ pass <code>$check()</code> and mostly used internally.</p><div class="section">
 <p><code>x</code> converted to a valid type for the <code>Param</code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-clone"></a><div class="section">
+</div><p></p><hr><a id="method-Param-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
 <h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
