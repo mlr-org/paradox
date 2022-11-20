@@ -15,7 +15,6 @@
 ^README-.*\.png$
 ^README\.Rmd$
 ^attic$
-^tic\.R$
 ^\.ccache$
 ^\.github$
 ^man-roxygen$
