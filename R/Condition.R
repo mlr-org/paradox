@@ -48,7 +48,7 @@ Condition = R6Class("Condition",
 
     #' @description
     #' Helper for print outputs.
-    format = function() {
+    format = function(...) {
       sprintf("<%s:%s>", class(self)[1L], self$type)
     },
 

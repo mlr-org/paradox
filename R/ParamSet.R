@@ -378,7 +378,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Helper for print outputs.
-    format = function() {
+    format = function(...) {
       set_id = self$set_id
       if (!nzchar(set_id)) {
         sprintf("<%s>", class(self)[1L])
