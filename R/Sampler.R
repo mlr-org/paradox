@@ -35,6 +35,7 @@ Sampler = R6Class("Sampler",
 
     #' @description
     #' Helper for print outputs.
+    #' @param ... (ignored).
     format = function(...) {
       sprintf("<%s>", class(self)[1L])
     },

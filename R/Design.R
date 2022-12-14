@@ -48,6 +48,7 @@ Design = R6Class("Design",
 
     #' @description
     #' Helper for print outputs.
+    #' @param ... (ignored).
     format = function(...) {
       sprintf("<%s>", class(self)[1L])
     },
