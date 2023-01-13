@@ -414,4 +414,14 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
   param_set$set_values(a = 1)
   param_set$set_values(a = NULL)
   expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL))
+  expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL), .insert = FALSE)
+  expect_true(length(param_set$values) == 0)
 })

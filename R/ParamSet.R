@@ -182,10 +182,8 @@ ParamSet = R6Class("ParamSet",
       new_values = insert_named(dots, .values)
       if (.insert) {
         new_values = insert_named(self$values, new_values)
-        self$values = discard(new_values, function(x) is.null(x))
-      } else {
-        self$values = new_values
-      }
+      } 
+      self$values = discard(new_values, function(x) is.null(x))
       invisible(self)
     },
 
