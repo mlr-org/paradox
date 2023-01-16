@@ -181,10 +181,9 @@ ParamSet = R6Class("ParamSet",
       assert_disjunct(names(dots), names(.values))
       new_values = insert_named(dots, .values)
       if (.insert) {
-        self$values = insert_named(self$values, new_values)
-      } else {
-        self$values = new_values
-      }
+        new_values = insert_named(self$values, new_values)
+      } 
+      self$values = discard(new_values, function(x) is.null(x))
       invisible(self)
     },
 
