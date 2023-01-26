@@ -103,3 +103,4 @@ $RECYCLE.BIN/
 *.code-workspace
 .vscode
 README.html
+cran-comments\.md
