@@ -1,5 +1,7 @@
 # paradox (development version)
 
+* feat: Add sugar function `psc()`
+
 # paradox 0.11.0
 
 * feat: The function `generate_design_sobol()` generates a space-filling Sobol sequence design.

@@ -123,7 +123,7 @@ ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
 #' Creates a [`ParamSetCollection`].
 #'
 #' @param ... (any)\cr
-#'   The [`ParamSet`]s from which to create the collection
+#'   The [`ParamSet`]s from which to create the collection.
 #' @export
 psc = function(...) {
   ParamSetCollection$new(list(...))

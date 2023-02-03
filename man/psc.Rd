@@ -8,7 +8,7 @@ psc(...)
 }
 \arguments{
 \item{...}{(any)\cr
-The \code{\link{ParamSet}}s from which to create the collection}
+The \code{\link{ParamSet}}s from which to create the collection.}
 }
 \description{
 Creates a \code{\link{ParamSetCollection}}.
