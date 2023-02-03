@@ -115,3 +115,16 @@ ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
   paramset[[".__enclos_env__"]][["private"]]$.has_extra_trafo = !is.null(.extra_trafo)
   paramset
 }
+
+
+#' @title Create a ParamSet Collection
+#'
+#' @description
+#' Creates a [`ParamSetCollection`].
+#'
+#' @param ... (any)\cr
+#'   The [`ParamSet`]s from which to create the collection.
+#' @export
+psc = function(...) {
+  ParamSetCollection$new(list(...))
+}
