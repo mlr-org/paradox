@@ -1,3 +1,10 @@
+# paradox (development version)
+
+# paradox 0.11.0
+
+* feat: The function `generate_design_sobol()` generates a space-filling Sobol sequence design.
+* refactor: `$set_values` returns the parameter set invisible.
+
 # paradox 0.10.0
 
 * Reset `.has_extra_trafo` to `FALSE` when trafo is set to `NULL`.

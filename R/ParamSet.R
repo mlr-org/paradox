@@ -181,10 +181,9 @@ ParamSet = R6Class("ParamSet",
       assert_disjunct(names(dots), names(.values))
       new_values = insert_named(dots, .values)
       if (.insert) {
-        self$values = insert_named(self$values, new_values)
-      } else {
-        self$values = new_values
-      }
+        new_values = insert_named(self$values, new_values)
+      } 
+      self$values = discard(new_values, function(x) is.null(x))
       invisible(self)
     },
 
@@ -378,7 +377,8 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Helper for print outputs.
-    format = function() {
+    #' @param ... (ignored).
+    format = function(...) {
       set_id = self$set_id
       if (!nzchar(set_id)) {
         sprintf("<%s>", class(self)[1L])

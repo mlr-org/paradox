@@ -408,3 +408,20 @@ test_that("set_values works for .values and ... with correct inputs", {
   expect_true(param_set$values$b == 2)
   expect_true(param_set$values$c == 3)
 })
+
+test_that("set_values allows to unset parameters by setting them to NULL", {
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(a = NULL)
+  expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL))
+  expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL), .insert = FALSE)
+  expect_true(length(param_set$values) == 0)
+})
