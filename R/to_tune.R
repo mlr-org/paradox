@@ -287,7 +287,7 @@ pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
   # temporarily hide dangling deps
   on = NULL  # pacify static code check
   pslike$deps = pslike$deps[on %in% pslike$ids()]
-  testpoints = generate_design_grid(pslike, 2)$transpose()
+  testpoints = generate_design_random(pslike, 10)$transpose()
   pslike$deps = alldeps
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
