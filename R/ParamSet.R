@@ -182,7 +182,7 @@ ParamSet = R6Class("ParamSet",
       new_values = insert_named(dots, .values)
       if (.insert) {
         new_values = insert_named(self$values, new_values)
-      } 
+      }
       self$values = discard(new_values, function(x) is.null(x))
       invisible(self)
     },
@@ -705,12 +705,12 @@ as.data.table.ParamSet = function(x, ...) { # nolint
 }
 
 #' @export
-rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
-  if (length(ps$params) == 0L) {
+rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
+  if (length(obj$params) == 0L) {
     return("Empty ParamSet")
   }
 
-  params = as.data.table(ps)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
+  params = as.data.table(obj)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
 
   if (length(descriptions)) {
     params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
@@ -721,7 +721,7 @@ rd_info.ParamSet = function(ps, descriptions = character(), ...) { # nolint
   is_default = map_lgl(params$default, inherits, "NoDefault")
   is_uty = params$storage_type == "list"
   set(params, i = which(is_uty & !is_default), j = "default",
-      value = map(ps$params[!is_default & is_uty], function(x) x$repr))
+      value = map(obj$params[!is_default & is_uty], function(x) x$repr))
   set(params, i = which(is_uty), j = "storage_type", value = list("untyped"))
   set(params, i = which(is_default), j = "default", value = list("-"))
 
