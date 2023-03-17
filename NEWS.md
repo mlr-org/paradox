@@ -1,6 +1,6 @@
-# paradox (development version)
+# paradox 0.11.1
 
-* feat: Add sugar function `psc()`
+* Minor bug fixes.
 
 # paradox 0.11.0
 
