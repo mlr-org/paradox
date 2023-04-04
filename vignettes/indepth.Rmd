@@ -2,7 +2,7 @@
 title: In Depth Tutorial
 output: rmarkdown::html_vignette
 vignette: >
-  %\VignetteIndexEntry{Learner Status}
+  %\VignetteIndexEntry{In Depth Tutorial}
   %\VignetteEngine{knitr::rmarkdown}
   %\VignetteEncoding{UTF-8}
 ---
