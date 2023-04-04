@@ -49,6 +49,7 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
+    rmarkdown,
     knitr,
     lhs,
     spacefillr,
