@@ -38,7 +38,7 @@ When a change is made to a `ParamSet` object, for example by adding a parameter 
 To create an independent copy of a `ParamSet`, the `$clone()` method needs to be used:
 
 ```{r technical-038}
-library("paradox
+library("paradox")
 
 ps = ParamSet$new()
 ps2 = ps
@@ -47,7 +47,7 @@ print(ps) # the same for ps2 and ps3
 ```
 
 ```{r technical-039}
-ps$add(ParamLgl$new("a)
+ps$add(ParamLgl$new("a"))
 ```
 
 ```{r technical-040}
@@ -76,11 +76,11 @@ The `Param` class has various subclasses that represent different value types:
 A particular instance of a parameter is created by calling the attached `$new()` function:
 
 ```{r technical-041}
-library("paradox
-parA = ParamLgl$new(id = "A
-parB = ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2)
+library("paradox")
+parA = ParamLgl$new(id = "A")
+parB = ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2"))
 parC = ParamDbl$new(id = "C", lower = 0, upper = 4, special_vals = list(NULL))
-parD = ParamFct$new(id = "D", levels = c("x", "y", "z, default = "y")
+parD = ParamFct$new(id = "D", levels = c("x", "y", "z"), default = "y")
 parE = ParamUty$new(id = "E", custom_check = function(x) checkmate::checkFunction(x))
 ```
 
@@ -124,8 +124,8 @@ A `Param` object offers the possibility to check whether a value satisfies its c
 
 ```{r technical-044}
 parA$test(FALSE)
-parA$test("FALSE
-parA$check("FALSE
+parA$test("FALSE")
+parA$check("FALSE")
 ```
 
 Instead of testing single parameters, it is often more convenient to check a whole set of parameters using a `ParamSet`.
@@ -152,7 +152,7 @@ Be aware that it modifies a ParamSet in-place, so a "clone" must be created firs
 
 ```{r technical-046}
 psSmall = ps$clone()
-psSmall$subset(c("A", "B", "C)
+psSmall$subset(c("A", "B", "C"))
 print(psSmall)
 ```
 
@@ -214,14 +214,14 @@ This introduces an implicit dependency of `B` on `A` being `FALSE` as well, beca
 
 ```{r technical-051}
 ps$add_dep("D", "A", CondEqual$new(FALSE))
-ps$add_dep("B", "D", CondAnyOf$new(c("x", "y))
+ps$add_dep("B", "D", CondAnyOf$new(c("x", "y")))
 ```
 
 ```{r technical-052}
 ps$check(list(A = FALSE, D = "x", B = 1))          # OK: all dependencies met
 ps$check(list(A = FALSE, D = "z", B = 1))          # B's dependency is not met
 ps$check(list(A = FALSE, B = 1))                   # B's dependency is not met
-ps$check(list(A = FALSE, D = "z)                 # OK: B is absent
+ps$check(list(A = FALSE, D = "z"))                 # OK: B is absent
 ps$check(list(A = TRUE))                           # OK: neither B nor D present
 ps$check(list(A = TRUE, D = "x", B = 1))           # D's dependency is not met
 ps$check(list(A = TRUE, B = 1))                    # B's dependency is not met
@@ -346,7 +346,7 @@ sampH = SamplerHierarchical$new(psSmall,
     Sampler1DUnif$new(parC))
 )
 sampled = sampH$sample(1000)
-table(sampled$data[, c("A", "B], useNA = "ifany")
+table(sampled$data[, c("A", "B")], useNA = "ifany")
 ```
 
 ##### Joint Sampler
@@ -427,7 +427,7 @@ If one wanted to sample this method, using one of four functions, a way to do th
 ```{r technical-067}
 samplingPS = ParamSet$new(
   list(
-    ParamFct$new("fun", c("mean", "median", "min", "max)
+    ParamFct$new("fun", c("mean", "median", "min", "max"))
   )
 )
 
@@ -435,7 +435,7 @@ samplingPS$trafo = function(x, param_set) {
   # x$fun is a `character(1)`,
   # in particular one of 'mean', 'median', 'min', 'max'.
   # We want to turn it into a function!
-  x$fun = get(x$fun, mode = "function
+  x$fun = get(x$fun, mode = "function")
   x
 }
 ```
@@ -526,7 +526,7 @@ A possible search space for the `"classif.svm"` learner could for example be:
 ```{r technical-075}
 search_space = ps(
   cost = p_dbl(lower = 0.1, upper = 10),
-  kernel = p_fct(levels = c("polynomial", "radial)
+  kernel = p_fct(levels = c("polynomial", "radial"))
 )
 print(search_space)
 ```
@@ -562,7 +562,7 @@ It is preferred to omit the labels (ex: upper = 0.1 becomes just 0.1). This way 
 Preferred:
 
 ```{r technical-076}
-search_space = ps(cost = p_dbl(0.1, 10), kernel = p_fct(c("polynomial", "radial))
+search_space = ps(cost = p_dbl(0.1, 10), kernel = p_fct(c("polynomial", "radial")))
 ```
 
 #### Transformations (`trafo`)
@@ -574,7 +574,7 @@ The resolution for categorical parameters is ignored; these parameters always pr
 For numerical parameters the endpoints of the params are always included in the grid, so if there were 3 levels for the kernel instead of 2 there would be 9 rows, or if the resolution was 4 in this example there would be 8 rows in the resulting table.
 
 ```{r technical-077}
-library("data.table
+library("data.table")
 rbindlist(generate_design_grid(search_space, 3)$transpose())
 ```
 
@@ -587,7 +587,7 @@ We can tune `cost` on a logarithmic scale by sampling on the linear scale `[-1, 
 ```{r technical-078}
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
-  kernel = p_fct(c("polynomial", "radial)
+  kernel = p_fct(c("polynomial", "radial"))
 )
 rbindlist(generate_design_grid(search_space, 3)$transpose())
 ```
@@ -601,9 +601,9 @@ It is even possible to add or remove parameters.
 ```{r technical-079}
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
-  kernel = p_fct(c("polynomial", "radial),
+  kernel = p_fct(c("polynomial", "radial")),
   .extra_trafo = function(x, param_set) {
-    if (x$kernel == "polynomial {
+    if (x$kernel == "polynomial") {
       x$cost = x$cost * 2
     }
     x
@@ -640,7 +640,7 @@ If, for example, only the values `0.1`, `3`, and `10` should be tried for the `c
 ```{r technical-081}
 search_space = ps(
   cost = p_fct(c(0.1, 3, 10)),
-  kernel = p_fct(c("polynomial", "radial)
+  kernel = p_fct(c("polynomial", "radial"))
 )
 rbindlist(generate_design_grid(search_space, 3)$transpose())
 ```
@@ -648,9 +648,9 @@ rbindlist(generate_design_grid(search_space, 3)$transpose())
 This is equivalent to the following:
 ```{r technical-082}
 search_space = ps(
-  cost = p_fct(c("0.1", "3", "10,
+  cost = p_fct(c("0.1", "3", "10"),
     trafo = function(x) list(`0.1` = 0.1, `3` = 3, `10` = 10)[[x]]),
-  kernel = p_fct(c("polynomial", "radial)
+  kernel = p_fct(c("polynomial", "radial"))
 )
 rbindlist(generate_design_grid(search_space, 3)$transpose())
 ```
@@ -662,7 +662,7 @@ This may seem silly, but makes sense when considering that factorial tuning para
 ```{r technical-083}
 search_space = ps(
   cost = p_fct(c(0.1, 3, 10)),
-  kernel = p_fct(c("polynomial", "radial)
+  kernel = p_fct(c("polynomial", "radial"))
 )
 typeof(search_space$params$cost$levels)
 ```
@@ -697,8 +697,8 @@ To tune the `degree` parameter, one would need to do the following:
 ```{r technical-085}
 search_space = ps(
   cost = p_dbl(-1, 1, trafo = function(x) 10^x),
-  kernel = p_fct(c("polynomial", "radial),
-  degree = p_int(1, 3, depends = kernel == "polynomial
+  kernel = p_fct(c("polynomial", "radial")),
+  degree = p_int(1, 3, depends = kernel == "polynomial")
 )
 rbindlist(generate_design_grid(search_space, 3)$transpose(), fill = TRUE)
 ```
@@ -713,7 +713,8 @@ It can be understood as the hyperparameters being tagged for later tuning.
 The resulting `ParamSet` used for tuning can be retrieved using the `$search_space()` method.
 
 ```{r technical-086}
-learner = lrn("classif.svm
+library("mlr3learners")
+learner = lrn("classif.svm")
 learner$param_set$values$kernel = "polynomial" # for example
 learner$param_set$values$degree = to_tune(lower = 1, upper = 3)
 
@@ -746,7 +747,7 @@ When introducing the dependency, we need to use the `degree` value from *before*
 ```{r technical-088}
 learner$param_set$values$type = "C-classification" # needs to be set because of a bug in paradox
 learner$param_set$values$cost = to_tune(c(val1 = 0.3, val2 = 0.7))
-learner$param_set$values$shrinking = to_tune(p_lgl(depends = cost == "val2)
+learner$param_set$values$shrinking = to_tune(p_lgl(depends = cost == "val2"))
 
 print(learner$param_set$search_space())
 
@@ -760,7 +761,7 @@ So if the `kernel` is tuned, then `degree` automatically gets the dependency on 
 ```{r technical-089}
 learner$param_set$values$cost = NULL
 learner$param_set$values$shrinking = NULL
-learner$param_set$values$kernel = to_tune(c("polynomial", "radial)
+learner$param_set$values$kernel = to_tune(c("polynomial", "radial"))
 
 print(learner$param_set$search_space())
 
