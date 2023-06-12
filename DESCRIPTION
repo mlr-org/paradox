@@ -50,6 +50,8 @@ Imports:
     R6
 Suggests:
     rmarkdown,
+    mlr3learners,
+    e1071,
     knitr,
     lhs,
     spacefillr,
