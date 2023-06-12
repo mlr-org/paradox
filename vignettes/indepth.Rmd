@@ -190,7 +190,7 @@ print(ps$values)
 
 The parameter constraints are automatically checked:
 
-```{r}
+```{r, error = TRUE}
 ps$values$B = 100
 ```
 
@@ -302,7 +302,7 @@ pvrand = generate_design_random(ps2d, 500)
 pvlhs = generate_design_lhs(ps2d, 500)
 ```
 
-```{r}
+```{r, echo = FALSE, out.width="45%", fig.show = "hold", fig.width = 4, fig.height = 4}
 #| layout: [[40, 40]]
 par(mar=c(4, 4, 2, 1))
 plot(pvrand$data, main = "'random' design", xlim = c(0, 1), ylim=c(0, 1))
