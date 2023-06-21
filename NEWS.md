@@ -1,3 +1,7 @@
+# paradox 0.11.1-9000
+
+* Added a vignette which was previously a chapter in the `mlr3book`
+
 # paradox 0.11.1
 
 * Minor bug fixes.
