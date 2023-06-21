@@ -14,7 +14,7 @@ toc:
 
 navbar:
   structure:
-    left:  [reference, news, book]
+    left:  [reference, news, book, tutorial]
     right: [github, mattermost, stackoverflow, rss]
   components:
     home: ~
@@ -35,4 +35,7 @@ navbar:
     rss:
       icon: fa-rss
       href: https://mlr-org.com/
+    tutorial:
+      text: Tutorial
+      href: articles/indepth.html
 
