@@ -74,13 +74,13 @@ ParamSet = R6Class("ParamSet",
       }
 
       private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
-      setindexv(private$.tags, "tags")
-      initvalues = with(paramtbl[(.init_given), .(init, id)], set_names(.init, id))
+      setindexv(private$.tags, "tag")
+      initvalues = with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
       requirements = paramtbl$.requirements
       for (row in seq_len(nrow(paramtbl))) {
-        for (req in .requirements[[row]]) {
+        for (req in requirements[[row]]) {
           invoke(self$add_dep, id = paramtbl$id[[row]], .args = rl)
         }
       }
@@ -558,7 +558,7 @@ ParamSet = R6Class("ParamSet",
         # return value with original ordering
         return(v)
       }
-      insert_named(named_list(private$.params$id), with(private$.tags[, list(list(tag)), by = "id"], set_names(tag, id)))
+      insert_named(named_list(private$.params$id), with(private$.tags[, list(tag = list(tag)), by = "id"], set_names(tag, id)))
     },
 
     #' @template field_params
