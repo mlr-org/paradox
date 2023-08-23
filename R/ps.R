@@ -59,7 +59,7 @@
 #' @family ParamSet construction helpers
 #' @export
 ps = function(..., .extra_trafo = NULL, .constraint = NULL, .allow_dangling_dependencies = FALSE) {
-  param_set = ParamSet$new(list(...), allow_dangling_dependencies = .allow_dangling_dependencies)  # if length is 0 then no names are present
+  param_set = ParamSet$new(list(...), allow_dangling_dependencies = .allow_dangling_dependencies)
   param_set$extra_trafo = .extra_trafo
   param_set$constraint = .constraint
   param_set

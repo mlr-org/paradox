@@ -47,7 +47,7 @@ ParamUty = list(
 )
 
 ParamSet_legacy = list(
-  new = function(params) {
+  new = function(params = list()) {
     ps_union(params)
   }
 )

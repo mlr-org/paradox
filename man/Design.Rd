@@ -21,16 +21,16 @@ Stored \code{data}.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Design$new()}}
-\item \href{#method-format}{\code{Design$format()}}
-\item \href{#method-print}{\code{Design$print()}}
-\item \href{#method-transpose}{\code{Design$transpose()}}
-\item \href{#method-clone}{\code{Design$clone()}}
+\item \href{#method-Design-new}{\code{Design$new()}}
+\item \href{#method-Design-format}{\code{Design$format()}}
+\item \href{#method-Design-print}{\code{Design$print()}}
+\item \href{#method-Design-transpose}{\code{Design$transpose()}}
+\item \href{#method-Design-clone}{\code{Design$clone()}}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Design-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -52,8 +52,8 @@ Remove duplicates?}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-format"></a>}}
-\if{latex}{\out{\hypertarget{method-format}{}}}
+\if{html}{\out{<a id="method-Design-format"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-format}{}}}
 \subsection{Method \code{format()}}{
 Helper for print outputs.
 \subsection{Usage}{
@@ -62,8 +62,8 @@ Helper for print outputs.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-print"></a>}}
-\if{latex}{\out{\hypertarget{method-print}{}}}
+\if{html}{\out{<a id="method-Design-print"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-print}{}}}
 \subsection{Method \code{print()}}{
 Printer.
 \subsection{Usage}{
@@ -79,8 +79,8 @@ Printer.
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-transpose"></a>}}
-\if{latex}{\out{\hypertarget{method-transpose}{}}}
+\if{html}{\out{<a id="method-Design-transpose"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-transpose}{}}}
 \subsection{Method \code{transpose()}}{
 Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
@@ -103,8 +103,8 @@ Should the \code{trafo} function of the \link{ParamSet} be called?}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Design-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

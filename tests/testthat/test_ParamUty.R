@@ -2,21 +2,21 @@ context("ParamUty")
 
 test_that("ParamUty", {
   p = ParamUty$new(id = "x")
-  expect_true(p$check(FALSE))
-  expect_true(p$check(NULL))
-  expect_true(p$check(NA))
+  expect_true(p$check(list(x = FALSE)))
+  expect_true(p$check(list(x = NULL)))
+  expect_true(p$check(list(x = NA)))
 
   p = ParamUty$new(id = "x", custom_check = function(x)
     if (is.null(x)) "foo" else TRUE)
-  expect_true(p$check(FALSE))
-  expect_string(p$check(NULL), fixed = "foo")
-  expect_true(p$check(NA))
+  expect_true(p$check(list(x = FALSE)))
+  expect_string(p$check(list(x = NULL)), fixed = "foo")
+  expect_true(p$check(list(x = NA)))
 
   p = ParamUty$new(id = "x", default = Inf)
 })
 
 test_that("R6 values of ParamUty are cloned", {
-  ps = ParamSet$new(list(ParamUty$new("x")))
+  ps = ParamSet_legacy$new(list(ParamUty$new("x")))
   ps$values$x = R6Class("testclass", public = list(x = NULL))$new()
 
   psclone = ps$clone(deep = TRUE)

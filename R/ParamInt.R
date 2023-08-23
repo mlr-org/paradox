@@ -58,10 +58,12 @@ domain_sanitize.ParamInt = function(param, values) {
 #' @export
 domain_nlevels.ParamInt = function(param) (param$upper - param$lower) + 1
 #' @export
-domain_is_bounded.ParamInt = function(param) is.finite(param$lower) && is.finite(param$upper)
+domain_is_bounded.ParamInt = function(param) is.finite(param$lower) & is.finite(param$upper)
 #' @export
 domain_qunif.ParamInt = function(param, x) {
-  pmax(pmin(as.integer(x * (param$upper + 1) - (x-1) * param$lower), param$upper), param$lower)  # extra careful here w/ rounding errors and the x == 1 case
+  # extra careful here w/ rounding errors and the x == 1 case
+  # note that as.integer alone rounds towards 0 and can not be used without 'floor' here
+  as.integer(floor(pmax(pmin(x * (param$upper + 1) - (x - 1) * param$lower, param$upper), param$lower)))
 }
 
 #' @export

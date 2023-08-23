@@ -40,7 +40,7 @@ domain_sanitize.ParamDbl = function(param, values) {
 #' @export
 domain_nlevels.ParamDbl = function(param) ifelse(param$upper == param$lower, 1, Inf)
 #' @export
-domain_is_bounded.ParamDbl = function(param) is.finite(param$lower) && is.finite(param$upper)
+domain_is_bounded.ParamDbl = function(param) is.finite(param$lower) & is.finite(param$upper)
 #' @export
 domain_qunif.ParamDbl = function(param, x) {
   pmax(pmin(x * param$upper - (x-1) * param$lower, param$upper), param$lower)  # extra careful here w/ rounding errors

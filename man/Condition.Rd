@@ -38,14 +38,14 @@ Condition object, to specify the condition in a dependency.
 }
 \section{Functions}{
 \itemize{
-\item \code{condition_test}: Used internally. Tests whether a value satisfies a given condition.
+\item \code{condition_test()}: Used internally. Tests whether a value satisfies a given condition.
 Vectorizes when \code{x} is atomic.
 
-\item \code{condition_as_string}: Used internally. Returns a string that represents the condition for pretty
+\item \code{condition_as_string()}: Used internally. Returns a string that represents the condition for pretty
 printing, in the form \code{"<lhs> <relation> <rhs>"}, e.g. \code{"x == 3"} or
 \code{"param \%in\% {1, 2, 10}"}.
-}}
 
+}}
 \section{Currently implemented simple conditions}{
 
 \itemize{

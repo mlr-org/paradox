@@ -49,40 +49,40 @@ When you set values, all previously set values will be unset / removed.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{ParamSetCollection$new()}}
-\item \href{#method-clone}{\code{ParamSetCollection$clone()}}
+\item \href{#method-ParamSetCollection-new}{\code{ParamSetCollection$new()}}
+\item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
 }
 }
-\if{html}{
-\out{<details ><summary>Inherited methods</summary>}
-\itemize{
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="add_dep">}\href{../../tautology/html/ParamSet.html#method-add_dep}{\code{tautology::ParamSet$add_dep()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert">}\href{../../tautology/html/ParamSet.html#method-assert}{\code{tautology::ParamSet$assert()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert_dt">}\href{../../tautology/html/ParamSet.html#method-assert_dt}{\code{tautology::ParamSet$assert_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check">}\href{../../tautology/html/ParamSet.html#method-check}{\code{tautology::ParamSet$check()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dependencies">}\href{../../tautology/html/ParamSet.html#method-check_dependencies}{\code{tautology::ParamSet$check_dependencies()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dt">}\href{../../tautology/html/ParamSet.html#method-check_dt}{\code{tautology::ParamSet$check_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="flatten">}\href{../../tautology/html/ParamSet.html#method-flatten}{\code{tautology::ParamSet$flatten()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="format">}\href{../../tautology/html/ParamSet.html#method-format}{\code{tautology::ParamSet$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_param">}\href{../../tautology/html/ParamSet.html#method-get_param}{\code{tautology::ParamSet$get_param()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_values">}\href{../../tautology/html/ParamSet.html#method-get_values}{\code{tautology::ParamSet$get_values()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="ids">}\href{../../tautology/html/ParamSet.html#method-ids}{\code{tautology::ParamSet$ids()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="print">}\href{../../tautology/html/ParamSet.html#method-print}{\code{tautology::ParamSet$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="qunif">}\href{../../tautology/html/ParamSet.html#method-qunif}{\code{tautology::ParamSet$qunif()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="search_space">}\href{../../tautology/html/ParamSet.html#method-search_space}{\code{tautology::ParamSet$search_space()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subset">}\href{../../tautology/html/ParamSet.html#method-subset}{\code{tautology::ParamSet$subset()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subspaces">}\href{../../tautology/html/ParamSet.html#method-subspaces}{\code{tautology::ParamSet$subspaces()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test">}\href{../../tautology/html/ParamSet.html#method-test}{\code{tautology::ParamSet$test()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint">}\href{../../tautology/html/ParamSet.html#method-test_constraint}{\code{tautology::ParamSet$test_constraint()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint_dt">}\href{../../tautology/html/ParamSet.html#method-test_constraint_dt}{\code{tautology::ParamSet$test_constraint_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_dt">}\href{../../tautology/html/ParamSet.html#method-test_dt}{\code{tautology::ParamSet$test_dt()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="trafo">}\href{../../tautology/html/ParamSet.html#method-trafo}{\code{tautology::ParamSet$trafo()}}\out{</span>}
-}
-\out{</details>}
-}
+\if{html}{\out{
+<details><summary>Inherited methods</summary>
+<ul>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="add_dep"><a href='../../tautology/html/ParamSet.html#method-ParamSet-add_dep'><code>tautology::ParamSet$add_dep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert"><a href='../../tautology/html/ParamSet.html#method-ParamSet-assert'><code>tautology::ParamSet$assert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-assert_dt'><code>tautology::ParamSet$assert_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check'><code>tautology::ParamSet$check()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dependencies"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check_dependencies'><code>tautology::ParamSet$check_dependencies()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check_dt'><code>tautology::ParamSet$check_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="flatten"><a href='../../tautology/html/ParamSet.html#method-ParamSet-flatten'><code>tautology::ParamSet$flatten()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="format"><a href='../../tautology/html/ParamSet.html#method-ParamSet-format'><code>tautology::ParamSet$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_param"><a href='../../tautology/html/ParamSet.html#method-ParamSet-get_param'><code>tautology::ParamSet$get_param()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_values"><a href='../../tautology/html/ParamSet.html#method-ParamSet-get_values'><code>tautology::ParamSet$get_values()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="ids"><a href='../../tautology/html/ParamSet.html#method-ParamSet-ids'><code>tautology::ParamSet$ids()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="print"><a href='../../tautology/html/ParamSet.html#method-ParamSet-print'><code>tautology::ParamSet$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="qunif"><a href='../../tautology/html/ParamSet.html#method-ParamSet-qunif'><code>tautology::ParamSet$qunif()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="search_space"><a href='../../tautology/html/ParamSet.html#method-ParamSet-search_space'><code>tautology::ParamSet$search_space()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subset"><a href='../../tautology/html/ParamSet.html#method-ParamSet-subset'><code>tautology::ParamSet$subset()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subspaces"><a href='../../tautology/html/ParamSet.html#method-ParamSet-subspaces'><code>tautology::ParamSet$subspaces()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test'><code>tautology::ParamSet$test()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_constraint'><code>tautology::ParamSet$test_constraint()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_constraint_dt'><code>tautology::ParamSet$test_constraint_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_dt'><code>tautology::ParamSet$test_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="trafo"><a href='../../tautology/html/ParamSet.html#method-ParamSet-trafo'><code>tautology::ParamSet$trafo()</code></a></span></li>
+</ul>
+</details>
+}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-ParamSetCollection-new"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -113,8 +113,8 @@ Default \code{FALSE}.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-ParamSetCollection-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

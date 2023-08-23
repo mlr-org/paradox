@@ -42,16 +42,16 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Default `FALSE`.
     initialize = function(sets, tag_sets = FALSE, tag_params = FALSE) {
       assert_list(sets, types = "ParamSet")
-      assert_flag(tag_set)
+      assert_flag(tag_sets)
       assert_flag(tag_params)
 
       if (is.null(names(sets))) names(sets) = rep("", length(sets))
 
-      assert_names(names(named_sets)[names(named_sets) != ""], type = "strict")
+      assert_names(names(sets)[names(sets) != ""], type = "strict")
 
       paramtbl = rbindlist(map(seq_along(sets), function(i) {
         s = sets[[i]]
-        n = names(sets)[[n]]
+        n = names(sets)[[i]]
         params_child = s$params[, `:=`(original_id = id, owner_ps_index = i, owner_name = n)]
         if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
         params_child
@@ -60,9 +60,13 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       dups = duplicated(paramtbl$id)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
-          str_collapse(unique(pnames[dups])))
+          str_collapse(unique(paramtbl$id[dups])))
       }
 
+      if (!nrow(paramtbl)) {
+        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
+        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
+      }
       if (tag_sets) paramtbl[owner_name != "", , .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
       if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
       private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
@@ -78,7 +82,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       setindexv(paramtbl, c("id", "cls", "grouping"))
       private$.params = paramtbl
 
-      private$.children_with_trafos = which(map_lgl(map(sets, "extra_trafo"), is.null))
+      private$.children_with_trafos = which(!map_lgl(map(sets, "extra_trafo"), is.null))
       private$.children_with_constraints = which(map_lgl(map(sets, "constraint"), is.null))
 
       private$.sets = sets
@@ -114,10 +118,14 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # We do this here because we don't want the loop to be aborted early and have half an update.
         self$assert(xs)
 
-        translate = private$.translation[names(xs), list(orig_id, owner_ps_index), on = "id"]
-        set(translate, , j = "values", xs)
+        translate = private$.translation[names(xs), list(original_id, owner_ps_index), on = "id"]
+        set(translate, , j = "values", list(xs))
         for (xtl in split(translate, by = "owner_ps_index")) {
-          sets[[xtl$owner_ps_index]]$values = set_names(xtl$values, xtl$orig_id)
+          sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
+        }
+        # clear the values of all sets that are not touched by xs
+        for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
+          sets[[clearing]]$values = named_list()
         }
       }
       vals = unlist(map(sets, "values"), recursive = FALSE)
@@ -148,6 +156,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     .sets = NULL,
     .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = NULL,
+    .children_with_constraints = NULL,
     .extra_trafo_explicit = function(x) {
       changed = unlist(lapply(private$.children_with_trafos, function(set_index) {
         changing_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]

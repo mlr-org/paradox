@@ -25,7 +25,7 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
       assert_param_set(param_set, no_untyped = TRUE)
       assert_list(samplers, types = "Sampler1D")
       ids1 = param_set$ids()
-      ids2 = map_chr(samplers, function(s) s$param$id)
+      ids2 = map_chr(samplers, function(s) s$param$ids())
       if (!setequal(ids1, ids2)) {
         stop("IDs of params in samplers to not correspond to IDs of params in set!")
       }

@@ -136,7 +136,7 @@ Domain = function(cls, grouping,
   assert_number(lower, na.ok = TRUE)
   assert_number(upper, na.ok = TRUE)
   assert_number(tolerance, na.ok = TRUE)
-  if (!is.logical(levels)) assert_character(levels, null.ok = TRUE)
+  if (!is.logical(levels)) assert_character(levels, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
   assert_list(special_vals)
   if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
   assert_character(tags, any.missing = FALSE, unique = TRUE)
@@ -206,11 +206,12 @@ empty_domain = data.table(id = character(0), cls = character(0), grouping = char
   special_vals = list(),
   default = list(),
   storage_type = character(0),
-  .tags = list(),
+  .tags = character(0),  # should be list(), strictly speaking, but that would lose the 'character' type information
   .trafo = list(),
   .requirements = list(),
   .init_given = logical(0),
-  .init = list())
+  .init = list()
+)
 
 domain_names = names(empty_domain)
 domain_names_permanent = grep("^\\.", domain_names, value = TRUE, invert = TRUE)

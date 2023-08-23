@@ -58,23 +58,23 @@ ParamSet = R6Class("ParamSet",
     #' @param ignore_ids (`logical(1)`)\cr
     #'   Ignore `$id` slots of `params` and instead use the names instead.
     #'   When this is `TRUE`, then `params` must be named.
-    #'   This can be used to create a `ParamSet` with certain [`Param`] `id`s
+    #'   Thisdo can be used to create a `ParamSet` with certain [`Param`] `id`s
     #'   without having to clone said [`Param`]s.
     #'   Default `FALSE`.
     initialize = function(params = named_list(), allow_dangling_dependencies = FALSE) {
       assert_list(params, types = "Domain")
 
-      assert_names(names(params), type = "strict")
+      if (length(params)) assert_names(names(params), type = "strict")
 
       if (!length(params)) {
-        paramtbl = empty_domain
+        paramtbl = copy(empty_domain)
       } else {
         paramtbl = rbindlist(params)
         set(paramtbl, , "id", names(params))
+        private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
+        setindexv(private$.tags, "tag")
       }
 
-      private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
-      setindexv(private$.tags, "tag")
       initvalues = with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
@@ -115,10 +115,10 @@ ParamSet = R6Class("ParamSet",
       if (is.null(tags) && is.null(any_tags)) {
         return(ptbl$id)
       }
-      tagtbl = private$.tags[ptbl]
+      tagtbl = private$.tags[ptbl, nomatch = 0]
       idpool = if (is.null(any_tags)) list() else list(tagtbl[tag %in% any_tags, id])
-      idpool = c(idpool, lapply(tags, function(t) tagtbl[t, id, on = "tags"]))
-      Reduce(idpool, intersect)
+      idpool = c(idpool, lapply(tags, function(t) tagtbl[t, id, on = "tag", nomatch = 0]))
+      Reduce(intersect, idpool)
     },
 
     #' @description
@@ -150,18 +150,19 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (check_required) {
-        required = setdiff(self$ids(tags = "required"), nds)
+        required = setdiff(self$ids(tags = "required"), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
       }
 
+      deps = self$deps
       if (remove_dependencies && nrow(deps)) {
         for (j in seq_row(deps)) {
           p1id = deps$id[[j]]
           p2id = deps$on[[j]]
           cond = deps$cond[[j]]
-          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(cond$test(values[[p2id]]))) {
+          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
             values[p1id] = NULL
           }
         }
@@ -171,7 +172,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     trafo = function(x, param_set = self) {
-      trafos = private$.params[names(x), .(id, trafo, value = x), nomatch = 0]
+      trafos = private$.trafos[names(x), .(id, trafo, value = x), nomatch = 0]
       if (nrow(trafos)) {
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
         insert_named(x, set_names(transformed, trafos$id))
@@ -226,12 +227,13 @@ ParamSet = R6Class("ParamSet",
       # check each parameter group's feasibility
       xs_nontune = discard(xs, inherits, "TuneToken")
 
-      params = params[names(xs_nontune), on = "id"]
+      # need to make sure we index w/ empty character instead of NULL
+      params = params[names(xs_nontune) %??% character(0), on = "id"]
 
       set(params, , "values", list(xs_nontune))
       pgroups = split(params, by = c("cls", "grouping"))
       checkresults = map(pgroups, function(x) {
-        domain_check(set_class(x, c(x$cls[[1]], class(x))), x$values)
+        domain_check(set_class(x, c(x$cls[[1]], "Domain", class(x))), x$values)
       })
       checkresults = discard(checkresults, isTRUE)
       if (length(checkresults)) {
@@ -243,7 +245,7 @@ ParamSet = R6Class("ParamSet",
         if (length(required) > 0L) {
           return(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
-        return(check_dependencies(xs))
+        return(self$check_dependencies(xs))
         if (!self$test_constraint(xs, assert_value = FALSE)) return(sprintf("Constraint not fulfilled."))
       }
 
@@ -262,14 +264,14 @@ ParamSet = R6Class("ParamSet",
         # we are ONLY ok if:
         # - if 'id' is there, then 'on' must be there, and cond must be true
         # - if 'id' is not there. but that is skipped (deps[id %in% ns] filter)
-        if (on %in% ns && cond$test(onval)) return(NULL)
+        if (on %in% ns && condition_test(cond, onval)) return(NULL)
         msg = sprintf("%s: can only be set if the following condition is met '%s'.",
-          id, cond$as_string(on))
+          id, condition_as_string(cond, on))
         if (is.null(onval)) {
           msg = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
               "Try setting '%s' to a value that satisfies the condition"), msg, on, on)
         } else {
-          msg = sprintf("%s Instead the current parameter value is: %s=%s", msg, on, as_short_string(onval))
+          msg = sprintf("%s Instead the current parameter value is: %s == %s", msg, on, as_short_string(onval))
         }
         msg
       })
@@ -369,7 +371,7 @@ ParamSet = R6Class("ParamSet",
         .tags = private$.tags[id, tag],
         .trafo = private$.trafos[id, trafo],
         .requirements = list(transpose_list(self$deps[id, .(on, cond), on = "id"])),
-        .init_given = id %in% names(values),
+        .init_given = id %in% names(vals),
         .init = unname(vals[id]))
       ]
 
@@ -378,7 +380,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Create a new `ParamSet` restricted to the passed IDs.
-    #'
+    #'  # TODO: ParamSetCollection trafo
     #' @param ids (`character()`).
     #' @return `ParamSet`.
     subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
@@ -400,8 +402,9 @@ ParamSet = R6Class("ParamSet",
 
       result$.__enclos_env__$private$.params = private$.params[ids, on = "id"]
       result$.__enclos_env__$private$.trafos = private$.trafos[ids, on = "id", nomatch = NULL]
+      result$.__enclos_env__$private$.tags = private$.tags[ids, on = "id", nomatch = NULL]
       result$assert_values = FALSE
-      result$deps = deps
+      result$deps = deps[ids, on = "id", nomatch = NULL]
       if (keep_constraint) result$constraint = self$constraint
       result$extra_trafo = self$extra_trafo
       # restrict to ids already in pvals
@@ -412,12 +415,14 @@ ParamSet = R6Class("ParamSet",
     },
 
     subspaces = function(ids = private$.params$id) {
+      values = self$values
       sapply(ids, simplify = FALSE, function(get_id) {
         result = ParamSet$new()
         result$extra_trafo = self$extra_trafo
         # constraint make no sense here, basically by definition
         result$.__enclos_env__$private$.params = private$.params[get_id, on = "id"]
         result$.__enclos_env__$private$.trafos = private$.trafos[get_id, on = "id", nomatch = NULL]
+        result$.__enclos_env__$private$.tags = private$.tags[get_id, on = "id", nomatch = NULL]
         result$assert_values = FALSE
         result$values = values[match(get_id, names(values), nomatch = 0)]
         result$assert_values = TRUE
@@ -464,7 +469,7 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (on %in% ids) {  # not necessarily true when allow_dangling_dependencies
-        feasible_on_values = map_lgl(cond$rhs, domain_check, param = self$get_param(on))
+        feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_param(on), list(x)))
         if (any(!feasible_on_values)) {
           stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
         }
@@ -538,10 +543,10 @@ ParamSet = R6Class("ParamSet",
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
 
-        sanitised = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
+        sanitized = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
           !pmap_lgl(list(special_vals, values), has_element),
           .(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
-        insert_named(xx, with(sanitized, set_names(values, id)))
+        xs = insert_named(xs, with(sanitized, set_names(values, id)))
       }
       # store with param ordering, return value with original ordering
       private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
@@ -558,7 +563,7 @@ ParamSet = R6Class("ParamSet",
         # return value with original ordering
         return(v)
       }
-      insert_named(named_list(private$.params$id), with(private$.tags[, list(tag = list(tag)), by = "id"], set_names(tag, id)))
+      insert_named(named_list(private$.params$id, character(0)), with(private$.tags[, list(tag = list(tag)), by = "id"], set_names(tag, id)))
     },
 
     #' @template field_params
@@ -568,16 +573,16 @@ ParamSet = R6Class("ParamSet",
       }
 
       result = copy(private$.params)
-      result[, .tags = self$tags]
+      result[, .tags := list(self$tags)]
       result[private$.trafos, .trafo := trafo, on = "id"]
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(
         .init_given = id %in% names(vals),
-        .init := unname(vals[id])
+        .init = unname(vals[id])
       )]
 
-      result
+      result[]
     },
 
     #' @field extra_trafo (`function(x, param_set)`)\cr
@@ -603,7 +608,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.constraint
       } else {
-        assert_function(f, args = x, null.ok = TRUE)
+        assert_function(f, args = "x", null.ok = TRUE)
         private$.constraint = f
       }
     },
@@ -645,13 +650,14 @@ ParamSet = R6Class("ParamSet",
     all_numeric = function() all(self$is_number),
     #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
     all_categorical = function() all(self$is_categ),
-
+    #' @field all_bounded (`logical(1)`)\cr Is `TRUE` if all parameters are bounded.
+    all_bounded = function() all(self$is_bounded),
 
     ############################
     # Per-Parameter properties
 
     #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
-    class = function() with(private$.params, set_names(class, id)),
+    class = function() with(private$.params, set_names(cls, id)),
     #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
     lower = function() with(private$.params, set_names(lower, id)),
     #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
@@ -774,7 +780,7 @@ ParamSet = R6Class("ParamSet",
 
 recover_domain = function(sd, by) {
   domain = as.data.table(c(by, sd))
-  class(domain) = c(domain$cls, class(domain))
+  class(domain) = c(domain$cls, "Domain", class(domain))
   domain
 }
 

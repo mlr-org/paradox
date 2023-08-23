@@ -6,7 +6,13 @@
 # from the input `sets`, but some `$id`s are changed: If the ParamSet has a non-empty `set_id`, then the Params will
 # have their <id> changed to <set_id>.<id>. This is also reflected in deps and in `$trafo`.
 # @param sets: list of ParamSet
-ps_union = function(sets, tag_set = FALSE, tag_params = FALSE) {
+ps_union = function(sets, tag_sets = FALSE, tag_params = FALSE) {
   assert_list(sets, types = "ParamSet")
-  ParamSetCollection$new(sets, tag_set = tag_set, tag_params = tag_params)$flatten()
+  if (!length(sets)) return(ParamSet$new())
+  ParamSetCollection$new(sets, tag_sets = tag_sets, tag_params = tag_params)$flatten()
+}
+
+#' @export
+c.ParamSet = function(..., .tag_sets = FALSE, .tag_params = FALSE) {
+  ps_union(list(...), tag_sets = .tag_sets, tag_params = .tag_params)
 }

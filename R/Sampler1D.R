@@ -58,7 +58,7 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
   ),
 
   private = list(
-    .sample = function(n) private$as_dt_col(self$qunif(setnames(data.table(runif(n)), self$param$ids()))) # sample by doing qunif(u)
+    .sample = function(n) self$param_set$qunif(setnames(data.table(runif(n)), self$param$ids())) # sample by doing qunif(u)
   )
 )
 

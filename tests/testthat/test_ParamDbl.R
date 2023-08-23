@@ -44,7 +44,7 @@ test_that("qunif", {
     p = ParamDbl$new("x", lower = a, upper = b)
     u = runif(n)
     v1 = p$qunif(data.table(x = u))
-    expect_data_table(v1, ncols = 1, nrow = n)
+    expect_data_table(v1, ncols = 1, nrows = n)
     expect_equal(colnames(v1), "x")
     expect_double(v1$x, any.missing = FALSE, len = n)
     v2 = runif(n, min = a, max = b)
@@ -66,7 +66,7 @@ test_that("tolerance in check allows values at the upper bound", {
 })
 
 test_that("tolerance for setting values", {
-  p = ParamSet$new(list(ParamDbl$new("x", lower = 0, upper = 1)))
+  p = ParamSet_legacy$new(list(ParamDbl$new("x", lower = 0, upper = 1)))
   p$values$x = -1e-8
   expect_equal(p$values$x, 0)
   expect_error({p$values$x = -1e-6}, "Element 1 is not >=")

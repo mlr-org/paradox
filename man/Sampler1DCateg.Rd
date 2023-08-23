@@ -32,22 +32,22 @@ Numeric vector of \code{param$nlevels} probabilities.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Sampler1DCateg$new()}}
-\item \href{#method-clone}{\code{Sampler1DCateg$clone()}}
+\item \href{#method-Sampler1DCateg-new}{\code{Sampler1DCateg$new()}}
+\item \href{#method-Sampler1DCateg-clone}{\code{Sampler1DCateg$clone()}}
 }
 }
-\if{html}{
-\out{<details open ><summary>Inherited methods</summary>}
-\itemize{
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format">}\href{../../tautology/html/Sampler.html#method-format}{\code{tautology::Sampler$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print">}\href{../../tautology/html/Sampler.html#method-print}{\code{tautology::Sampler$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample">}\href{../../tautology/html/Sampler.html#method-sample}{\code{tautology::Sampler$sample()}}\out{</span>}
-}
-\out{</details>}
-}
+\if{html}{\out{
+<details open><summary>Inherited methods</summary>
+<ul>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format"><a href='../../tautology/html/Sampler.html#method-Sampler-format'><code>tautology::Sampler$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print"><a href='../../tautology/html/Sampler.html#method-Sampler-print'><code>tautology::Sampler$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample"><a href='../../tautology/html/Sampler.html#method-Sampler-sample'><code>tautology::Sampler$sample()</code></a></span></li>
+</ul>
+</details>
+}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Sampler1DCateg-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1DCateg-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
@@ -67,8 +67,8 @@ Numeric vector of \code{param$nlevels} probabilities, which is uniform by defaul
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Sampler1DCateg-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1DCateg-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{

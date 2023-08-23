@@ -31,44 +31,51 @@ domain_test = function(param, values) isTRUE(domain_check(param, values))
 
 #' @export
 domain_storage_type = function(param) {
+  if (!nrow(param)) return(character(0))
   assert_string(unique(param$grouping))
   UseMethod("domain_storage_type")
 }
 
 #' @export
 domain_nlevels = function(param) {
+  if (!nrow(param)) return(integer(0))
   assert_string(unique(param$grouping))
   UseMethod("domain_nlevels")
 }
 
 #' @export
 domain_is_bounded = function(param) {
+  if (!nrow(param)) return(logical(0))
   assert_string(unique(param$grouping))
   UseMethod("domain_is_bounded")
 }
 
 #' @export
 domain_is_number = function(param) {
+  if (!nrow(param)) return(logical(0))
   assert_string(unique(param$grouping))
   UseMethod("domain_is_number")
 }
 
 #' @export
 domain_is_categ = function(param) {
+  if (!nrow(param)) return(logical(0))
   assert_string(unique(param$grouping))
   UseMethod("domain_is_categ")
 }
 
 #' @export
 domain_qunif = function(param, x) {
+  if (!nrow(param)) return(logical(0))
   assert_string(unique(param$grouping))
   assert_numeric(x, lower = 0, upper = 1, any.missing = FALSE, min.len = nrow(param))
   assert_true(length(x) %% length(nrow(param)) == 0)
   UseMethod("domain_qunif")
 }
 
-#' @export
+#' export
 domain_sanitize = function(param, values) {
+    if (!nrow(param)) return(values)
   assert_string(unique(param$grouping))
   UseMethod("domain_sanitize")
 }
@@ -86,20 +93,21 @@ domain_qunif.Domain = function(param) stop("undefined")
 domain_sanitize.Domain = function(param, values) values
 
 #' @export
-domain_is_categ.Domain = function(param) FALSE
+domain_is_categ.Domain = function(param) rep(FALSE, nrow(param))
 
 #' @export
-domain_is_number.Domain = function(param) FALSE
+domain_is_number.Domain = function(param) rep(FALSE, nrow(param))
 
 
 # param:
 check_domain_vectorize = function(ids, values, checker, more_args = list()) {
-  if (length(checker) == 1) {
+  if (is.function(checker)) {
     errors = pmap(c(list(ids, values), more_args), function(id, value, ...) {
       ch = checker(value, ...)
       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })
   } else {
+    # `checker` is a list of functions with the same length as `values`
     errors = pmap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
       ch = chck(value, ...)
       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)

@@ -31,7 +31,7 @@ domain_check.ParamFct = function(param, values) {
     values_str = as.character(values)
     if (all(values_str %in% param$levels[[1]])) return(TRUE)  # this works because we have the grouping -- all 'levels' are the same here.
   }
-  check_domain_vectorize(param$id, param, check_choice, more_args = list(choices = param$levels))
+  check_domain_vectorize(param$id, values, check_choice, more_args = list(choices = param$levels))
 }
 
 #' @export

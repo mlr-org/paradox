@@ -10,7 +10,7 @@
 #' @param x (`any`)\cr
 #'   Value to test
 condition_test = function(cond, x) {
-  UseMethod("conditionTest")
+  UseMethod("condition_test")
 }
 
 #' @describeIn Condition
@@ -25,7 +25,7 @@ condition_test = function(cond, x) {
 #'   Symbolic representation to use for `<lhs>` in the returned string.
 condition_as_string = function(cond, lhs_chr = "x") {
   assert_string(lhs_chr)
-  UseMethod("conditionTest")
+  UseMethod("condition_as_string")
 }
 
 # -- Condition
@@ -57,7 +57,7 @@ Condition = function(rhs, condition_format_string) {
 }
 
 condition_as_string.Condition = function(cond, lhs_chr = "x") {
-  sprintf(condition_format_string, lhs_chr, str_collapse(cond$rhs))
+  sprintf(cond$condition_format_string, lhs_chr, str_collapse(cond$rhs))
 }
 
 #' @export
@@ -85,10 +85,10 @@ condition_test.CondEqual = function(cond, x) {
 }
 
 #' @export
-CondAnyOf = function(rhw) {
+CondAnyOf = function(rhs) {
   assert_atomic(rhs, any.missing = FALSE, min.len = 1, unique = TRUE)
   cond = Condition(rhs, "%s %%in%% {%s}")
-  set_class(cond, c("CondEqual", class(cond)))
+  set_class(cond, c("CondAnyOf", class(cond)))
 }
 
 #' @export

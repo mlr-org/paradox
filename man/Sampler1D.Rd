@@ -33,22 +33,22 @@ Returns the one Parameter that is sampled from.}
 \section{Methods}{
 \subsection{Public methods}{
 \itemize{
-\item \href{#method-new}{\code{Sampler1D$new()}}
-\item \href{#method-clone}{\code{Sampler1D$clone()}}
+\item \href{#method-Sampler1D-new}{\code{Sampler1D$new()}}
+\item \href{#method-Sampler1D-clone}{\code{Sampler1D$clone()}}
 }
 }
-\if{html}{
-\out{<details open ><summary>Inherited methods</summary>}
-\itemize{
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format">}\href{../../tautology/html/Sampler.html#method-format}{\code{tautology::Sampler$format()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print">}\href{../../tautology/html/Sampler.html#method-print}{\code{tautology::Sampler$print()}}\out{</span>}
-\item \out{<span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample">}\href{../../tautology/html/Sampler.html#method-sample}{\code{tautology::Sampler$sample()}}\out{</span>}
-}
-\out{</details>}
-}
+\if{html}{\out{
+<details open><summary>Inherited methods</summary>
+<ul>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format"><a href='../../tautology/html/Sampler.html#method-Sampler-format'><code>tautology::Sampler$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print"><a href='../../tautology/html/Sampler.html#method-Sampler-print'><code>tautology::Sampler$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample"><a href='../../tautology/html/Sampler.html#method-Sampler-sample'><code>tautology::Sampler$sample()</code></a></span></li>
+</ul>
+</details>
+}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-new"></a>}}
-\if{latex}{\out{\hypertarget{method-new}{}}}
+\if{html}{\out{<a id="method-Sampler1D-new"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1D-new}{}}}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 
@@ -68,8 +68,8 @@ Domain / support of the distribution we want to sample from.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-clone"></a>}}
-\if{latex}{\out{\hypertarget{method-clone}{}}}
+\if{html}{\out{<a id="method-Sampler1D-clone"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1D-clone}{}}}
 \subsection{Method \code{clone()}}{
 The objects of this class are cloneable with this method.
 \subsection{Usage}{
