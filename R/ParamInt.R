@@ -15,14 +15,16 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
     real_lower = log(max(lower, 0.5))
     real_upper = log(upper + 1)
     cls = "ParamDbl"
+    storage_type = "numeric"
   } else {
     cls = "ParamInt"
+    storage_type = "integer"
     real_lower = lower
     real_upper = upper
   }
 
   Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
-    storage_type = "integer",
+    storage_type = storage_type,
     depends_expr = substitute(depends), init = init)
 }
 

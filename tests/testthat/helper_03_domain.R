@@ -22,3 +22,11 @@ expect_equal_ps = function(a, b) {
   expect_equal(normalize_ids(a), normalize_ids(b))
 }
 
+reset_indices = function(p) {
+
+  setindexv(p$.__enclos_env__$private$.tags, NULL)
+  setindexv(p$.__enclos_env__$private$.trafos, NULL)
+  setindexv(p$.__enclos_env__$private$.params, NULL)
+  setindexv(p$.__enclos_env__$private$.deps, NULL)
+  p
+}

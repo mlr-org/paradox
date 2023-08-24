@@ -71,29 +71,40 @@ ParamSet = R6Class("ParamSet",
       } else {
         paramtbl = rbindlist(params)
         set(paramtbl, , "id", names(params))
-        private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
-        setindexv(private$.tags, "tag")
-      }
-
-      initvalues = with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
-      private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
-
-      requirements = paramtbl$.requirements
-      private$.params = paramtbl  # self$add_dep needs this
-      for (row in seq_len(nrow(paramtbl))) {
-        for (req in requirements[[row]]) {
-          invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies, .args = req)
+        if (".tags" %in% colnames(paramtbl)) {
+          private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
+          setindexv(private$.tags, "tag")
         }
       }
 
-      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
+      # get initvalues here, so we can delete the relevant column.
+      # we only assign it later, so checks can run normally.
+      initvalues = if (".init" %in% names(paramtbl)) with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
+
+      if (".trafo" %in% names(paramtbl)) {
+        private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+      }
+
+      if (".requirements" %in% names(paramtbl)) {
+        requirements = paramtbl$.requirements
+        private$.params = paramtbl  # self$add_dep needs this
+       for (row in seq_len(nrow(paramtbl))) {
+          for (req in requirements[[row]]) {
+            invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
+              .args = req)
+          }
+        }
+      }
+
+      delendum_cols = setdiff(colnames(paramtbl), domain_names_permanent)
+      if (length(delendum_cols)) set(paramtbl, , delendum_cols, NULL)
       assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
 
       setindexv(paramtbl, c("id", "cls", "grouping"))
 
       private$.params = paramtbl  # I am 99% sure this is not necessary, but maybe set() creates a copy when deleting too many cols?
 
-      self$values = initvalues
+      if (!is.null(initvalues)) self$values = initvalues
     },
 
     #' @description
@@ -224,6 +235,14 @@ ParamSet = R6Class("ParamSet",
       extra = wf(ns %nin% ids)
       if (length(extra)) {
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
+      }
+
+      if (length(xs) && test_list(xs, types = "TuneToken")) {
+        tunecheck = tryCatch({
+          private$get_tune_ps(xs)
+          TRUE
+        }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
+        if (!isTRUE(tunecheck)) return(tunecheck)
       }
 
       # check each parameter group's feasibility
@@ -362,6 +381,11 @@ ParamSet = R6Class("ParamSet",
       as.data.table(set_names(params$result, params$id))
     },
 
+    #' @description
+    #' get the [`Domain`] object that could be used to create a given parameter.
+    #'
+    #' @param id (`character(1)`).
+    #' @return [`Domain`].
     get_param = function(id) {
       assert_string(id)
       paramrow = private$.params[id, on = "id", nomatch = NULL]
@@ -369,15 +393,16 @@ ParamSet = R6Class("ParamSet",
       if (!nrow(paramrow)) stopf("No param with id '%s'", id)
 
       vals = self$values
+      depstbl = self$deps[id, .(on, cond), on = "id", nomatch = 0]
       paramrow[, `:=`(
-        .tags = private$.tags[id, tag],
+        .tags = list(private$.tags[id, tag, nomatch = 0]),
         .trafo = private$.trafos[id, trafo],
-        .requirements = list(transpose_list(self$deps[id, .(on, cond), on = "id"])),
+        .requirements = list(if (nrow(depstbl)) transpose_list(depstbl)),  # NULL if no deps
         .init_given = id %in% names(vals),
         .init = unname(vals[id]))
       ]
 
-      set_class(paramrow, c(paramrow$cls, class(paramrow)))
+      set_class(paramrow, c(paramrow$cls, "Domain", class(paramrow)))
     },
 
     #' @description
@@ -435,7 +460,7 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Create a `ParamSet` from this object, even if this object itself is not
     #' a `ParamSet`.
-    flatten = function() self$subset(private$.params$id),
+    flatten = function() self$subset(private$.params$id, allow_dangling_dependencies = TRUE),
 
     #' @description
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
@@ -464,7 +489,7 @@ ParamSet = R6Class("ParamSet",
       params = private$.params
       ids = params$id
       assert_choice(id, ids)
-      if (allow_dangling_dependencies) assert_choice(on, ids) else assert_string(on)
+      if (allow_dangling_dependencies) assert_string(on) else assert_choice(on, ids)
       assert_class(cond, "Condition")
       if (id == on) {
         stopf("A param cannot depend on itself!")
@@ -534,9 +559,6 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        if (length(xs) && test_list(xs, types = "TuneToken")) {
-          private$get_tune_ps(xs)  # check that to_tune() are valid
-        }
       }
       if (length(xs) == 0L) {
         xs = named_list()
@@ -726,16 +748,21 @@ ParamSet = R6Class("ParamSet",
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
 
     get_tune_ps = function(values) {
-      selfparams = self$subspaces()
-      partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
-        tunetoken_to_ps(value, selfparams[[pn]], pn)
+      values = keep(values, inherits, "TuneToken")
+      if (!length(values)) return(ParamSet$new())
+      params = map(names(values), function(pn) {
+        domain = private$.params[pn, on = "id"]
+        set_class(domain, c(domain$cls, "Domain", class(domain)))
       })
-      if (!length(partsets)) return(ParamSet$new())
+      names(params) = names(values)
+
+      # package-internal S3 fails if we don't call the function indirectly here
+      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(...))
+      pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
+
+      names(partsets) = names(values)
       idmapping = map(partsets, function(x) x$ids())
-      pars = ps_union(partsets)
-      pars$set_id = self$set_id
-      parsparams = pars$params_unid
-      parsnames = names(parsparams)
+
       # only add the dependencies that are also in the tuning PS
       on = id = NULL  # pacify static code check
       pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
@@ -745,7 +772,7 @@ ParamSet = R6Class("ParamSet",
           return(NULL)
         }
         # remove infeasible values from condition
-        cond$rhs = keep(cond$rhs, parsparams[[on]]$test)
+        cond$rhs = keep(cond$rhs, function(x) partsets[[on]]$test(set_names(list(x), on)))
         if (!length(cond$rhs)) {
           # no value is feasible, but there may be a trafo that fixes this
           # so we are forgiving here.

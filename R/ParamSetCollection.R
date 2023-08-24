@@ -164,13 +164,13 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         changing_values = x[names(x) %in% changing_ids]
         names(changing_values) = private$.translation[names(changing_values), original_id]
         changing_values = trafo(changing_values)
-        prefix = names(sets)[[set_index]]
+        prefix = names(private$.sets)[[set_index]]
         if (prefix != "") {
           names(changing_values) = sprintf("%s.%s", prefix, names(changing_values))
         }
         changing_values
       }), recursive = FALSE)
-      unchanged_ids = private$.translation[!J(set_index), id, on = "owner_ps_index"]
+      unchanged_ids = private$.translation[!J(private$.children_with_trafos), id, on = "owner_ps_index"]
       unchanged = x[names(x) %in% unchanged_ids]
       c(unchanged, changed)
     },
