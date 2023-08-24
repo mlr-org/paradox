@@ -83,7 +83,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.params = paramtbl
 
       private$.children_with_trafos = which(!map_lgl(map(sets, "extra_trafo"), is.null))
-      private$.children_with_constraints = which(map_lgl(map(sets, "constraint"), is.null))
+      private$.children_with_constraints = which(!map_lgl(map(sets, "constraint"), is.null))
 
       private$.sets = sets
     }

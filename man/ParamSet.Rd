@@ -455,8 +455,7 @@ If successful \code{xs} invisibly, if not an error message.
 \if{html}{\out{<a id="method-ParamSet-subset"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-subset}{}}}
 \subsection{Method \code{subset()}}{
-Create a new `ParamSet` restricted to the passed IDs.
- # TODO: ParamSetCollection trafo
+Create a new \code{ParamSet} restricted to the passed IDs.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$subset(
   ids,

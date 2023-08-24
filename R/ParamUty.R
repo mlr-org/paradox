@@ -2,7 +2,7 @@
 #' @rdname Domain
 #' @export
 p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init) {
-  assert_function(custom_check, nargs = 1, null.ok = TRUE)
+  assert_function(custom_check, null.ok = TRUE)
   if (!is.null(custom_check)) {
     custom_check_result = custom_check(1)
     assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")

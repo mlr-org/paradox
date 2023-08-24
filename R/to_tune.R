@@ -165,9 +165,9 @@ to_tune = function(...) {
         content = p_fct(levels = content)
       } else {
         if (inherits(content, "Domain")) {
-          bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$is_bounded
+          bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$all_bounded
         } else {
-          bounded = content$is_bounded
+          bounded = content$all_bounded
         }
         if (!bounded) {
           stop("tuning range must be bounded.")
@@ -213,7 +213,7 @@ tunetoken_to_ps = function(tt, param, id) {
 }
 
 tunetoken_to_ps.FullTuneToken = function(tt, param, id) {
-  if (!param$is_bounded) {
+  if (!param$all_bounded) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, id)
   }
   if (isTRUE(tt$content$logscale)) {
@@ -228,7 +228,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, id) {
   if (!param$is_number) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
-  invalidpoints = discard(tt$content, function(x) is.null(x) || param$test(x))
+  invalidpoints = discard(tt$content, function(x) is.null(x) || param$test(set_names(list(x, param$ids())))
   invalidpoints$logscale = NULL
   if (length(invalidpoints)) {
     stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
@@ -274,14 +274,8 @@ pslike_to_ps.Domain = function(pslike, call, param, id, usersupplied = TRUE) {
   pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
 }
 
-pslike_to_ps.Param = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = pslike$with_id(id)
-  pslike = ParamSet$new(list(pslike))
-  pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
-}
-
 pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = pslike$clone(deep = TRUE)
+  pslike = pslike$flatten()
   alldeps = pslike$deps
   # temporarily hide dangling deps
   on = NULL  # pacify static code check
@@ -293,21 +287,20 @@ pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
     stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
       call, id, repr(invalidpoints[[1]]))
   }
-  invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
+  invalidpoints = discard(testpoints, function(x) param$test(x))
   if (length(invalidpoints)) {
     stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
       call, id, repr(invalidpoints[[1]][[1]]), repr(param))
   }
-  if (usersupplied) {
+  if (usersupplied && pslike$has_trafo) {
     trafo = pslike$trafo %??% identity
     pname = id
-    pslike$trafo = crate(function(x, param_set) {
+    pslike$extra_trafo = crate(function(x, param_set) {
       mlr3misc::set_names(
         checkmate::assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),
         pname
       )
     }, trafo, pname)
   }
-  pslike$set_id = ""
   pslike
 }

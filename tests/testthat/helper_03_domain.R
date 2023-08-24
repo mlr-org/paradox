@@ -13,6 +13,9 @@ expect_equal_ps = function(a, b) {
     acp$.tags = copy(acp$.tags)[, id := sprintf("x%s", match(id, original$ids()))]
     acp$.trafos = copy(acp$.trafos)[, id := sprintf("x%s", match(id, original$ids()))]
     acp$.deps[, id := sprintf("x%s", match(id, original$ids()))]
+    setindexv(acp$.params, NULL)
+    setindexv(acp$.trafos, NULL)
+    setindexv(acp$.tags, NULL)
     acl
   }
 

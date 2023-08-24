@@ -8,7 +8,7 @@ test_that("TuneToken printers", {
 
   expect_output(print(to_tune(upper = 2, 1)), "range \\[1, 2\\]")
 
-  expect_output(print(to_tune(1)), "p_fct\\(levels = \"1\"\\)")
+  expect_output(print(to_tune(1)), "p_fct\\(levels = c\\(`1` = 1\\)\\)")
 
   expect_output(print(to_tune(c("a", "b"))), "p_fct\\(levels = c\\(\"a\", \"b\"\\)\\)")
 
@@ -28,13 +28,13 @@ test_that("validity checks", {
 
   expect_error(to_tune(ps(x = p_dbl())), "must be bounded")
 
-  expect_error(ParamSet$new(list(ParamInt$new("x")))$search_space(list(x = to_tune())), "must give a range for unbounded parameter")
+  expect_error(ParamSet_legacy$new(list(ParamInt$new("x")))$search_space(list(x = to_tune())), "must give a range for unbounded parameter")
 
 })
 
 test_that("$check() works on TuneToken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamInt$new("xub"),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
@@ -88,7 +88,7 @@ test_that("$check() works on TuneToken", {
 
 test_that("Tune ParamSet is created", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
     ParamFct$new("fct", c("x", "y")),
@@ -98,14 +98,14 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars$search_space(list(x = to_tune(), y = to_tune(), fct = to_tune(), lgl = to_tune()))
 
   # the following is necessary because $add modifies index of the .deps table, and one of the `$values` is not named.
-  pars$add(ParamSet$new())
+  pars$add(ParamSet_legacy$new())
   pars$values = list()
   setindex(pars_tune$deps, NULL)
   pars_tune$values = list()
 
   expect_equal_ps(pars, pars_tune)
 
-  pars_unbound = ParamSet$new(list(
+  pars_unbound = ParamSet_legacy$new(list(
     ParamDbl$new("x"),
     ParamDbl$new("y", special_vals = list("x")),
     ParamFct$new("fct", letters),
@@ -117,7 +117,7 @@ test_that("Tune ParamSet is created", {
   setindex(pars_tune$deps, NULL)
   expect_equal_ps(pars, pars_tune)
 
-  pars_unbound_2 = ParamSet$new(list(
+  pars_unbound_2 = ParamSet_legacy$new(list(
     ParamInt$new("x"),
     ParamDbl$new("y"),
     ParamFct$new("fct", letters),
@@ -145,7 +145,7 @@ test_that("Tune ParamSet is created", {
 
 test_that("Trafo works as expected", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
     ParamFct$new("fct", c("x", "y")),
@@ -160,7 +160,7 @@ test_that("Trafo works as expected", {
   expect_equal(grid$data, data.table(lgl = "TRUE"))
   expect_equal(grid$transpose(), list(list(lgl = FALSE)))
 
-  inpars = ParamSet$new(list(
+  inpars = ParamSet_legacy$new(list(
     ParamFct$new("x", c("a", "b")),
     ParamFct$new("y", c("a", "b"))
   ))
@@ -177,7 +177,7 @@ test_that("Trafo works as expected", {
 
 test_that("Dependencies work", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
@@ -196,7 +196,7 @@ test_that("Dependencies work", {
   # all dependencies lost
   expect_equal(nrow(tuneps$deps), 0)
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
@@ -222,7 +222,7 @@ test_that("Dependencies work", {
   expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("y1", "x", "x"), cond = list(CondEqual$new(1))))
 
 
-  parsnodep = ParamSet$new(list(
+  parsnodep = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
@@ -262,7 +262,7 @@ test_that("Dependencies work", {
 
   # dependency after subsetting factorials works, even if the dependency now
   # contains infeasible values
-  largeps = ParamSet$new(list(
+  largeps = ParamSet_legacy$new(list(
     ParamFct$new("x", c("a", "b", "c")),
     ParamLgl$new("y")
   ))
@@ -281,8 +281,8 @@ test_that("Dependencies work", {
 
 test_that("ParamSetCollection works", {
 
-  ps1 = ParamSet$new(list(ParamInt$new("x"), ParamInt$new("y")))
-  ps2 = ParamSet$new(list(ParamInt$new("a")))
+  ps1 = ParamSet_legacy$new(list(ParamInt$new("x"), ParamInt$new("y")))
+  ps2 = ParamSet_legacy$new(list(ParamInt$new("a")))
 
   ps1$set_id = "prefix"
 
@@ -311,7 +311,7 @@ test_that("ParamSetCollection works", {
 })
 
 test_that("ParamSet$get_values() works", {
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10),
     ParamDbl$new("z", lower = 0, upper = 10)
@@ -325,7 +325,7 @@ test_that("ParamSet$get_values() works", {
   expect_named(pars$get_values(type = "without_token"), c("y", "z"))
   expect_named(pars$get_values(type = "only_token"), "x")
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10),
     ParamDbl$new("z", lower = 0, upper = 10)
@@ -340,7 +340,7 @@ test_that("ParamSet$get_values() works", {
 
 test_that("partial bounds in tunetoken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0),
     ParamDbl$new("z", upper = 10)
@@ -374,7 +374,7 @@ test_that("partial bounds in tunetoken", {
 
 test_that("logscale in tunetoken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0)
   ))

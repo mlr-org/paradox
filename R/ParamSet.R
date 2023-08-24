@@ -79,9 +79,10 @@ ParamSet = R6Class("ParamSet",
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
       requirements = paramtbl$.requirements
+      private$.params = paramtbl  # self$add_dep needs this
       for (row in seq_len(nrow(paramtbl))) {
         for (req in requirements[[row]]) {
-          invoke(self$add_dep, id = paramtbl$id[[row]], .args = rl)
+          invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies, .args = req)
         }
       }
 
@@ -90,7 +91,7 @@ ParamSet = R6Class("ParamSet",
 
       setindexv(paramtbl, c("id", "cls", "grouping"))
 
-      private$.params = paramtbl
+      private$.params = paramtbl  # I am 99% sure this is not necessary, but maybe set() creates a copy when deleting too many cols?
 
       self$values = initvalues
     },
@@ -172,10 +173,11 @@ ParamSet = R6Class("ParamSet",
     },
 
     trafo = function(x, param_set = self) {
-      trafos = private$.trafos[names(x), .(id, trafo, value = x), nomatch = 0]
+      trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
+      trafos[, value := x[id]]
       if (nrow(trafos)) {
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
-        insert_named(x, set_names(transformed, trafos$id))
+        x = insert_named(x, set_names(transformed, trafos$id))
       }
       extra_trafo = self$extra_trafo
       if (!is.null(extra_trafo)) {
@@ -380,7 +382,6 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Create a new `ParamSet` restricted to the passed IDs.
-    #'  # TODO: ParamSetCollection trafo
     #' @param ids (`character()`).
     #' @return `ParamSet`.
     subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
@@ -406,6 +407,7 @@ ParamSet = R6Class("ParamSet",
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
       if (keep_constraint) result$constraint = self$constraint
+      # TODO: ParamSetCollection trafo currently drags along the entire original paramset in its environment
       result$extra_trafo = self$extra_trafo
       # restrict to ids already in pvals
       values = self$values
@@ -532,7 +534,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         self$assert(xs)
-        if (test_list(xs, types = "TuneToken")) {
+        if (length(xs) && test_list(xs, types = "TuneToken")) {
           private$get_tune_ps(xs)  # check that to_tune() are valid
         }
       }
@@ -574,7 +576,7 @@ ParamSet = R6Class("ParamSet",
 
       result = copy(private$.params)
       result[, .tags := list(self$tags)]
-      result[private$.trafos, .trafo := trafo, on = "id"]
+      result[private$.trafos, .trafo := list(trafo), on = "id"]
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(
@@ -724,8 +726,7 @@ ParamSet = R6Class("ParamSet",
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
 
     get_tune_ps = function(values) {
-      return(NULL)  # TODO
-      selfparams = private$.params
+      selfparams = self$subspaces()
       partsets = imap(keep(values, inherits, "TuneToken"), function(value, pn) {
         tunetoken_to_ps(value, selfparams[[pn]], pn)
       })
@@ -744,7 +745,6 @@ ParamSet = R6Class("ParamSet",
           return(NULL)
         }
         # remove infeasible values from condition
-        cond = cond$clone(deep = TRUE)
         cond$rhs = keep(cond$rhs, parsparams[[on]]$test)
         if (!length(cond$rhs)) {
           # no value is feasible, but there may be a trafo that fixes this

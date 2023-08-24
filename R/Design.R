@@ -108,7 +108,7 @@ Design = R6Class("Design",
         for (j in seq_row(dd)) {
           pcol = self$data[[dd$on[j]]]
           # we are ok if parent was active and cond on parent is OK
-          not_ok = which(is.na(pcol) | !dd$cond[[j]]$test(pcol))
+          not_ok = which(is.na(pcol) | !condition_test(dd$cond[[j]], pcol))
           set(self$data, not_ok, j = param_id, value = as_type(NA, storage_types[[param_id]]))
         }
       }

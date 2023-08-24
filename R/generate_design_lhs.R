@@ -35,7 +35,7 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
 
   ids = param_set$ids()
   if (n == 0) {
-    d = matrix(nrow = 0, ncol = param_set$length)
+    d = matrix(numeric(0), nrow = 0, ncol = param_set$length)
   } else {
     d = lhs_fun(n, k = param_set$length)
   }
