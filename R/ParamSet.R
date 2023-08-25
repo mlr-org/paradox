@@ -846,7 +846,7 @@ as.data.table.ParamSet = function(x, ...) { # nolint
 
 #' @export
 rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
-  if (length(obj$params) == 0L) {
+  if (obj$length == 0L) {
     return("Empty ParamSet")
   }
 

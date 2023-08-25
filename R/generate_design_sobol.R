@@ -33,12 +33,12 @@ generate_design_sobol = function(param_set, n) {
 
   ids = param_set$ids()
   if (n == 0) {
-    d = matrix(nrow = 0, ncol = param_set$length)
+    d = matrix(numeric(0), nrow = 0, ncol = param_set$length)
   } else {
     seed = sample(.Machine$integer.max, size = 1L)
     d = spacefillr::generate_sobol_set(n, dim = param_set$length, seed = seed)
   }
   colnames(d) = ids
-  d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
+  d = param_set$qunif(d)
   Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # user wants n-points, dont remove
 }

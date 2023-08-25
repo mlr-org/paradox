@@ -34,7 +34,10 @@ domain_check.ParamDbl = function(param, values) {
 
 #' @export
 domain_sanitize.ParamDbl = function(param, values) {
-  as.list(min(max(as.numeric(values), param$lower), param$upper))
+  values = as.numeric(values)
+  values[values < param$lower] = param$lower
+  values[values > param$upper] = param$upper
+  as.list(values)
 }
 
 #' @export

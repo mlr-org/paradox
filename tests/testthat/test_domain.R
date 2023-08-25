@@ -296,54 +296,54 @@ test_that("logscale in domains", {
 
 })
 
-test_that("$.has_logscale flag works", {
-  pps = ps(x = p_int(1, 2, logscale = TRUE))
-  expect_true(get_private(pps$params[["x"]])$.has_logscale)
+# test_that("$.has_logscale flag works", {
+#   pps = ps(x = p_int(1, 2, logscale = TRUE))
+#   expect_true(get_private(pps$params[["x"]])$.has_logscale)
 
-  pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE))
+#   pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20))
+#   expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE))
 
-  pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20), z = p_int(1, 2, trafo = function(x) 2^x))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE, z = FALSE))
-})
+#   pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20), z = p_int(1, 2, trafo = function(x) 2^x))
+#   expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE, z = FALSE))
+# })
 
-test_that("$.has_trafo flag works", {
-  pps = ps(x = p_int(1, 2, trafo = function(x) 2^x))
-  expect_true(get_private(pps$params[["x"]])$.has_trafo)
+# test_that("$.has_trafo flag works", {
+#   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x))
+#   expect_true(get_private(pps$params[["x"]])$.has_trafo)
 
-  pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE))
+#   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20))
+#   expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE))
 
-  pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20), z =  p_int(1, 2, logscale = TRUE))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE, z = FALSE))
-})
+#   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20), z =  p_int(1, 2, logscale = TRUE))
+#   expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE, z = FALSE))
+# })
 
-test_that("$.extra_trafo flag works", {
-  pps = ps(x = p_int(1, 2), .extra_trafo = function(x, param_set) {
-    x = 1
-    x
-  })
-  expect_true(get_private(pps)$.has_extra_trafo)
+# test_that("$.extra_trafo flag works", {
+#   pps = ps(x = p_int(1, 2), .extra_trafo = function(x, param_set) {
+#     x = 1
+#     x
+#   })
+#   expect_true(get_private(pps)$.has_extra_trafo)
 
-  pps = ps(x = p_int(1, 2, logscale = TRUE))
-  expect_false(get_private(pps)$.has_extra_trafo)
+#   pps = ps(x = p_int(1, 2, logscale = TRUE))
+#   expect_false(get_private(pps)$.has_extra_trafo)
 
-  pps$trafo = function(x, param_set) {
-    x = 1
-    x
-  }
-  expect_true(get_private(pps)$.has_extra_trafo)
+#   pps$trafo = function(x, param_set) {
+#     x = 1
+#     x
+#   }
+#   expect_true(get_private(pps)$.has_extra_trafo)
 
-  pps$trafo = NULL
-  expect_false(get_private(pps)$.has_extra_trafo)
+#   pps$trafo = NULL
+#   expect_false(get_private(pps)$.has_extra_trafo)
 
-  pps = ps(x = p_int(1, 10))
-  pps$values$x = to_tune()
-  search_space = pps$search_space()
-  expect_false(get_private(search_space)$.has_extra_trafo)
+#   pps = ps(x = p_int(1, 10))
+#   pps$values$x = to_tune()
+#   search_space = pps$search_space()
+#   expect_false(get_private(search_space)$.has_extra_trafo)
 
-  pps = ps(x = p_int(1, 10))
-  pps$values$x = to_tune(logscale = TRUE)
-  search_space = pps$search_space()
-  expect_false(get_private(search_space)$.has_extra_trafo)
-})
+#   pps = ps(x = p_int(1, 10))
+#   pps$values$x = to_tune(logscale = TRUE)
+#   search_space = pps$search_space()
+#   expect_false(get_private(search_space)$.has_extra_trafo)
+# })

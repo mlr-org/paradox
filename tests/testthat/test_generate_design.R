@@ -164,14 +164,14 @@ test_that("generate_design_sobol", {
   skip_if_not_installed("spacefillr")
 
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     d = generate_design_sobol(ps, 10)
     dd = d$data
     expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
@@ -195,6 +195,6 @@ test_that("generate_design_sobol with zero rows", {
 
   ps = th_paramset_full()
   d = generate_design_sobol(ps, n = 0)
-  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
 

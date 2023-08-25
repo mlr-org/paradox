@@ -360,20 +360,20 @@ test_that("ParamSet$values convert nums to ints for ParamInt", {
 })
 
 test_that("Empty ParamSets are named (#351)", {
-  ps = ps()$add(ps(x = p_lgl()))
+  ps = ps_union(list(ps(), ps(x = p_lgl())))
   expect_names(names(ps$values), type = "strict")
   expect_is(ps$search_space(), "ParamSet")
 })
 
 test_that("set_values checks inputs correctly", {
-  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set = ps(a = p_dbl(), b = p_dbl())
   expect_error(param_set$set_values(a = 2, .values = list(a = 1)))
   expect_error(param_set$set_values(2))
   expect_error(param_set$set_values(.values = list(1)))
 })
 
 test_that("set_values works for ... with correct inputs", {
-  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set = ps(a = p_dbl(), b = p_dbl())
   param_set$values$a = 1
   param_set$set_values(b = 2, .insert = FALSE)
   expect_true(is.null(param_set$values$a))
@@ -385,7 +385,7 @@ test_that("set_values works for ... with correct inputs", {
 })
 
 test_that("set_values works for .values with correct inputs", {
-  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set = ps(a = p_dbl(), b = p_dbl())
   param_set$values$a = 1
   param_set$set_values(.values = list(b = 2), .insert = FALSE)
   expect_true(is.null(param_set$values$a))
@@ -397,7 +397,7 @@ test_that("set_values works for .values with correct inputs", {
 })
 
 test_that("set_values works for .values and ... with correct inputs", {
-  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl(), c = paradox::p_dbl())
+  param_set = ps(a = p_dbl(), b = p_dbl(), c = p_dbl())
   param_set$values$a = 1
   param_set$set_values(b = 2, .values = list(c = 3), .insert = TRUE)
   expect_true(param_set$values$a == 1)
@@ -424,6 +424,10 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
 
   param_set = ps(a = p_int())
   param_set$set_values(a = 1)
+  # .insert = FALSE can also set values to NULL
+  expect_error(param_set$set_values(.values = list(a = NULL), .insert = FALSE), "not 'NULL'")
+  param_set = ps(a = p_int(special_vals = list(NULL)))
+  param_set$set_values(a = 1)
   param_set$set_values(.values = list(a = NULL), .insert = FALSE)
-  expect_true(length(param_set$values) == 0)
+  expect_identical(param_set$values, list(a = NULL))
 })
