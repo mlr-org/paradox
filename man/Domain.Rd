@@ -62,6 +62,7 @@ p_uty(
   tags = character(),
   depends = NULL,
   trafo = NULL,
+  repr = substitute(default),
   init
 )
 }
@@ -161,7 +162,7 @@ A \code{Domain} object is a representation of a single dimension of a \code{\lin
 
 \code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
 constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user.
-The \code{Domain} object's internals are subject to change and should not be relid upon.
+The \code{Domain} object's internals are subject to change and should not be relied upon.
 }
 \details{
 The \code{p_fct} function admits a \code{levels} argument that goes beyond the \code{levels} accepted by \code{\link{ParamFct}}\verb{$new()}.

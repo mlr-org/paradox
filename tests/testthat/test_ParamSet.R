@@ -346,9 +346,9 @@ test_that("ParamSet$check_dt", {
 
 test_that("rd_info.ParamSet", {
   ps = ParamSet_legacy$new()
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))
-  expect_character(rd_info(ps))
+  expect_character(rd_info(ps), len = 1L)
 })
 
 
@@ -357,4 +357,73 @@ test_that("ParamSet$values convert nums to ints for ParamInt", {
   ps = ParamSet_legacy$new(list(pp))
   ps$values$x = 2
   expect_class(ps$values$x, "integer")
+})
+
+test_that("Empty ParamSets are named (#351)", {
+  ps = ps()$add(ps(x = p_lgl()))
+  expect_names(names(ps$values), type = "strict")
+  expect_is(ps$search_space(), "ParamSet")
+})
+
+test_that("set_values checks inputs correctly", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  expect_error(param_set$set_values(a = 2, .values = list(a = 1)))
+  expect_error(param_set$set_values(2))
+  expect_error(param_set$set_values(.values = list(1)))
+})
+
+test_that("set_values works for ... with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(b = 2, .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  param_set$values = list(a = 1)
+  param_set$set_values(b = 2, .insert = TRUE)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$a == 1)
+})
+
+test_that("set_values works for .values with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(.values = list(b = 2), .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  param_set$values = list(a = 1)
+  param_set$set_values(.values = list(b = 2), .insert = TRUE)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$a == 1)
+})
+
+test_that("set_values works for .values and ... with correct inputs", {
+  param_set = ps(a = paradox::p_dbl(), b = paradox::p_dbl(), c = paradox::p_dbl())
+  param_set$values$a = 1
+  param_set$set_values(b = 2, .values = list(c = 3), .insert = TRUE)
+  expect_true(param_set$values$a == 1)
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$c == 3)
+
+  param_set$values = list(a = 1)
+  param_set$set_values(b = 2, .values = list(c = 3), .insert = FALSE)
+  expect_true(is.null(param_set$values$a))
+  expect_true(param_set$values$b == 2)
+  expect_true(param_set$values$c == 3)
+})
+
+test_that("set_values allows to unset parameters by setting them to NULL", {
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(a = NULL)
+  expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL))
+  expect_true(length(param_set$values) == 0)
+
+  param_set = ps(a = p_int())
+  param_set$set_values(a = 1)
+  param_set$set_values(.values = list(a = NULL), .insert = FALSE)
+  expect_true(length(param_set$values) == 0)
 })

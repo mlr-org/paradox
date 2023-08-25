@@ -183,6 +183,33 @@ ParamSet = R6Class("ParamSet",
       values[match(self$ids(class = class, tags = tags, any_tags = any_tags), names(values), nomatch = 0)]
     },
 
+    #' @description
+    #' Allows to to modify (and overwrite) or replace the parameter values.
+    #' Per default already set values are being kept unless new values are being provided.
+    #'
+    #' @param ... (any)\cr
+    #'   Named parameter values.
+    #' @param .values (named `list()`)\cr
+    #'   Named list with parameter values. Names must not already appear in `...`.
+    #' @param .insert (`logical(1)`)\cr
+    #'   Whether to insert the values (old values are being kept, if not overwritten), or to
+    #'   replace all values. Default is TRUE.
+    #'
+    set_values = function(..., .values = list(), .insert = TRUE) {
+      dots = list(...)
+      assert_list(dots, names = "unique")
+      assert_list(.values, names = "unique")
+      assert_disjunct(names(dots), names(.values))
+      new_values = insert_named(dots, .values)
+      if (.insert) {
+        discarding = names(keep(new_values, is.null))
+        new_values = insert_named(self$values, new_values)
+        new_values = new_values[names(new_values) %nin% discarding]
+      }
+      self$values = new_values
+      invisible(self)
+    },
+
     trafo = function(x, param_set = self) {
       trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
       trafos[, value := x[id]]
@@ -507,6 +534,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Helper for print outputs.
+    #' @param ... (ignored).
     format = function() {
       sprintf("<%s(%s)>", class(self)[[1L]], self$length)
     },
@@ -817,18 +845,39 @@ as.data.table.ParamSet = function(x, ...) { # nolint
 }
 
 #' @export
-rd_info.ParamSet = function(ps) { # nolint
-  params = as.data.table(ps)
-  if (nrow(params) == 0L)
+rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
+  if (length(obj$params) == 0L) {
     return("Empty ParamSet")
-  params$default = replace(params$default, map_lgl(params$default, inherits, "NoDefault"), list("-"))
-  params$levels = replace(params$levels, lengths(params$levels) == 0L, list("-"))
-  params$levels = map_chr(params$levels, str_collapse, n = 10L)
-  params$range = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range)
-  params = params[, c("id", "storage_type", "default", "range", "levels")]
-  setnames(params, c("Id", "Type", "Default", "Range", "Levels"))
-  c(
-    "",
-    knitr::kable(params)
-  )
+  }
+
+  params = as.data.table(obj)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
+
+  if (length(descriptions)) {
+    params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
+    description = NULL
+    params[is.na(description), description := ""]
+    setcolorder(params, c("id", "description"))
+  }
+  is_default = map_lgl(params$default, inherits, "NoDefault")
+  is_uty = params$storage_type == "list"
+  # TODO
+  #set(params, i = which(is_uty & !is_default), j = "default",
+  #    value = map(obj$params[!is_default & is_uty], function(x) x$repr))
+  set(params, i = which(is_uty), j = "storage_type", value = list("untyped"))
+  set(params, i = which(is_default), j = "default", value = list("-"))
+
+  if (!allMissing(params$lower) || !allMissing(params$upper)) {
+    set(params, j = "range", value = pmap_chr(params[, c("lower", "upper"), with = FALSE], rd_format_range))
+  }
+  remove_named(params, c("lower", "upper"))
+
+  if (all(lengths(params$levels) == 0L)) {
+    remove_named(params, "levels")
+  } else {
+    set(params, j = "levels", value = map_chr(params$levels, str_collapse, n = 10L))
+  }
+  setnames(params, "storage_type", "type")
+  x = c("", knitr::kable(params, col.names = capitalize(names(params))))
+  paste(x, collapse = "\n")
 }
+

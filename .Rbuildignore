@@ -14,11 +14,13 @@
 ^docs$
 ^README-.*\.png$
 ^README\.Rmd$
+^README\.html$
 ^attic$
-^tic\.R$
 ^\.ccache$
 ^\.github$
 ^man-roxygen$
 ^.travis.yml$
 ^.lintr$
 ^revdep$
+
+^cran-comments\.md$

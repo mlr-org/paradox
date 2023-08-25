@@ -29,7 +29,7 @@ Right-hand-side of the condition.}
 
 \item{condition_format_string}{(\code{character(1)})\cr
 Format-string for representing the condition when pretty-printing
-in \code{condition_as_string()}.
+in \code{\link[=condition_as_string]{condition_as_string()}}.
 Should contain two \verb{\%s}, as it is used in an \code{sprintf()}-call with
 two further string values.}
 }

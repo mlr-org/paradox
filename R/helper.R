@@ -17,6 +17,7 @@
 #'
 #' @param trafo (`logical(1)`)\cr
 #' Should the `trafo` function of the [ParamSet] be called?
+#' @noRd
 transpose = function(data, ps = NULL, filter_na = TRUE, trafo = TRUE) {
   assert_data_table(data)
   assert_flag(filter_na)

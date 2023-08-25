@@ -8,7 +8,7 @@ Universal Parameter Space Description and Tools.
 
 <!-- badges: start -->
 
-[![tic](https://github.com/mlr-org/paradox/workflows/tic/badge.svg?branch=main)](https://github.com/mlr-org/paradox/actions)
+[![r-cmd-check](https://github.com/mlr-org/paradox/actions/workflows/r-cmd-check.yml/badge.svg)](https://github.com/mlr-org/paradox/actions/workflows/r-cmd-check.yml)
 [![CRAN
 Status](https://www.r-pkg.org/badges/version/paradox)](https://CRAN.R-project.org/package=paradox)
 [![StackOverflow](https://img.shields.io/badge/stackoverflow-mlr3-orange.svg)](https://stackoverflow.com/questions/tagged/mlr3)
@@ -25,11 +25,11 @@ remotes::install_github("mlr-org/paradox")
 
 Create a simple ParamSet using all supported Parameter Types:
 
--   integer numbers (`"int"`)
--   real-valued numbers (`"dbl"`)
--   truth values `TRUE` or `FALSE` (`"lgl"`)
--   categorical values from a set of possible strings (`"fct"`)
--   further types are only possible by using transformations.
+- integer numbers (`"int"`)
+- real-valued numbers (`"dbl"`)
+- truth values `TRUE` or `FALSE` (`"lgl"`)
+- categorical values from a set of possible strings (`"fct"`)
+- further types are only possible by using transformations.
 
 ``` r
 ps = ParamSet$new(
@@ -134,14 +134,13 @@ ps$assert(list(z = -1, x = 1))
 
 Transformations are functions with a fixed signature.
 
--   `x` A named list of parameter values
--   `param_set` the `ParamSet` used to create the design
+- `x` A named list of parameter values
+- `param_set` the `ParamSet` used to create the design
 
 Transformations can be used to change the distributions of sampled
-parameters. For example, to sample values between 2<sup>−</sup>3 and
-2<sup>3</sup> in a *l**o**g*<sub>2</sub>-uniform distribution, one can
-sample uniformly between -3 and 3 and exponentiate the random value
-inside the transformation.
+parameters. For example, to sample values between $2^-3$ and $2^3$ in a
+$log_2$-uniform distribution, one can sample uniformly between -3 and 3
+and exponentiate the random value inside the transformation.
 
 ``` r
 ps = ParamSet$new(
@@ -174,5 +173,4 @@ xst
 #> [1] 0.3688455
 ```
 
-Further documentation can be found in the
-[mlr3book](https://mlr3book.mlr-org.com/paradox.html).
+Further documentation can be found in the [mlr3book](https://mlr3book.mlr-org.com/technical.html#paradox).

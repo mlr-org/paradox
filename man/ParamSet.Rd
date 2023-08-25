@@ -140,6 +140,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-new}{\code{ParamSet$new()}}
 \item \href{#method-ParamSet-ids}{\code{ParamSet$ids()}}
 \item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
+\item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
 \item \href{#method-ParamSet-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
@@ -254,6 +255,32 @@ Check if all required parameters are set?}
 }
 \subsection{Returns}{
 Named \code{list()}.
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-set_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-set_values}{}}}
+\subsection{Method \code{set_values()}}{
+Allows to to modify (and overwrite) or replace the parameter values.
+Per default already set values are being kept unless new values are being provided.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$set_values(..., .values = list(), .insert = TRUE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(any)\cr
+Named parameter values.}
+
+\item{\code{.values}}{(named \code{list()})\cr
+Named list with parameter values. Names must not already appear in \code{...}.}
+
+\item{\code{.insert}}{(\code{logical(1)})\cr
+Whether to insert the values (old values are being kept, if not overwritten), or to
+replace all values. Default is TRUE.}
+}
+\if{html}{\out{</div>}}
 }
 }
 \if{html}{\out{<hr>}}
@@ -446,10 +473,21 @@ If successful \code{xs} invisibly, if not an error message.
 \if{html}{\out{<a id="method-ParamSet-get_param"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-get_param}{}}}
 \subsection{Method \code{get_param()}}{
+get the \code{\link{Domain}} object that could be used to create a given parameter.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_param(id)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{id}}{(\code{character(1)}).}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{\link{Domain}}.
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSet-subset"></a>}}
@@ -544,6 +582,13 @@ Helper for print outputs.
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$format()}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{...}}{(ignored).}
+}
+\if{html}{\out{</div>}}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSet-print"></a>}}

@@ -1,11 +1,16 @@
 
 #' @rdname Domain
 #' @export
-p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init) {
+p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, repr = substitute(default), init) {
   assert_function(custom_check, null.ok = TRUE)
   if (!is.null(custom_check)) {
     custom_check_result = custom_check(1)
     assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")
+  }
+  repr = if (!is_nodefault(default)) {
+    as.character(repr)[[1]]
+  } else {
+    "NoDefault"
   }
   Domain(cls = "ParamUty", grouping = "ParamUty", cargo = custom_check, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
 }

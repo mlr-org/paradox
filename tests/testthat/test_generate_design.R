@@ -121,7 +121,7 @@ test_that("generate_design_lhs works with deps", {
   expect_true(!any(is.na(dd[th_param_fct != "c",]$th_param_dbl)))
 })
 
-#
+
 test_that("generate_design_random and grid works with deps", {
   # call is a very lightweight wrapper around Sampler, so we test it briefly and test SamplerUnif in its test-file
   ps = th_paramset_deps()
@@ -159,3 +159,42 @@ test_that("generate_design_grid with zero rows", {
   d = generate_design_grid(ps, resolution = 0)
   expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
+
+test_that("generate_design_sobol", {
+  skip_if_not_installed("spacefillr")
+
+  ps_list = list(
+    th_paramset_dbl1(),
+    th_paramset_full(),
+    th_paramset_repeated(),
+    th_paramset_numeric()
+  )
+
+  for (ps in ps_list) {
+    info = ps$set_id
+    d = generate_design_sobol(ps, 10)
+    dd = d$data
+    expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
+    expect_true(all(map_lgl(d$transpose(), ps$test)), info = info)
+  }
+})
+
+test_that("generate_design_sobol works with deps", {
+  skip_if_not_installed("spacefillr")
+
+  ps = th_paramset_deps()
+  dd = generate_design_sobol(ps, n = 100L)$data
+  expect_true(all(is.na(dd[th_param_lgl == FALSE,]$th_param_fct)))
+  expect_true(!any(is.na(dd[th_param_lgl == TRUE,]$th_param_fct)))
+  expect_true(all(is.na(dd[th_param_fct == "c",]$th_param_dbl)))
+  expect_true(!any(is.na(dd[th_param_fct != "c",]$th_param_dbl)))
+})
+
+test_that("generate_design_sobol with zero rows", {
+  skip_if_not_installed("spacefillr")
+
+  ps = th_paramset_full()
+  d = generate_design_sobol(ps, n = 0)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+})
+

@@ -109,3 +109,5 @@ $RECYCLE.BIN/
 \#*#
 *.swp
 
+README.html
+cran-comments\.md

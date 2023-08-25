@@ -23,6 +23,7 @@ condition_test = function(cond, x) {
 #'   `Condition` to use
 #' @param lhs_chr (`character(1)`)\cr
 #'   Symbolic representation to use for `<lhs>` in the returned string.
+#' @export
 condition_as_string = function(cond, lhs_chr = "x") {
   assert_string(lhs_chr)
   UseMethod("condition_as_string")
@@ -39,7 +40,7 @@ condition_as_string = function(cond, lhs_chr = "x") {
 #'   Right-hand-side of the condition.
 #' @param condition_format_string (`character(1)`)\cr
 #'   Format-string for representing the condition when pretty-printing
-#'   in `condition_as_string()`.
+#'   in [`condition_as_string()`].
 #'   Should contain two `%s`, as it is used in an `sprintf()`-call with
 #'   two further string values.
 #'
@@ -56,6 +57,7 @@ Condition = function(rhs, condition_format_string) {
   structure(list(rhs = rhs, condition_format_string = condition_format_string), class = "Condition")
 }
 
+#' @export
 condition_as_string.Condition = function(cond, lhs_chr = "x") {
   sprintf(cond$condition_format_string, lhs_chr, str_collapse(cond$rhs))
 }

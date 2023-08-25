@@ -64,3 +64,15 @@ ps = function(..., .extra_trafo = NULL, .constraint = NULL, .allow_dangling_depe
   param_set$constraint = .constraint
   param_set
 }
+
+#' @title Create a ParamSet Collection
+#'
+#' @description
+#' Creates a [`ParamSetCollection`].
+#'
+#' @param ... (any)\cr
+#'   The [`ParamSet`]s from which to create the collection.
+#' @export
+psc = function(...) {
+  ParamSetCollection$new(list(...))
+}

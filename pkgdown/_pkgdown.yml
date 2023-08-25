@@ -1,10 +1,8 @@
 url: https://paradox.mlr-org.com
 
 template:
+  bootstrap: 5
   package: mlr3pkgdowntemplate
-  params:
-    bootswatch: journal
-  default_assets: false
 
 development:
   mode: auto
@@ -16,7 +14,7 @@ toc:
 
 navbar:
   structure:
-    left:  [reference, news, book]
+    left:  [reference, news, book, tutorial]
     right: [github, mattermost, stackoverflow, rss]
   components:
     home: ~
@@ -37,3 +35,7 @@ navbar:
     rss:
       icon: fa-rss
       href: https://mlr-org.com/
+    tutorial:
+      text: Tutorial
+      href: articles/indepth.html
+
