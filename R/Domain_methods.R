@@ -87,7 +87,7 @@ domain_nlevels.Domain = function(param) rep(Inf, nrow(param))
 domain_is_bounded.Domain = function(param) rep(FALSE, nrow(param))
 
 #' @export
-domain_qunif.Domain = function(param) stop("undefined")
+domain_qunif.Domain = function(param, x) stop("undefined")
 
 #' @export
 domain_sanitize.Domain = function(param, values) values
