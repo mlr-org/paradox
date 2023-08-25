@@ -97,6 +97,8 @@ Settable, if you want to remove dependencies or perform other changes.}
 
 \item{\code{has_trafo}}{(\code{logical(1)})\cr Whether a \code{trafo} function is present, in parameters or in \code{extra_trafo}.}
 
+\item{\code{has_extra_trafo}}{(\code{logical(1)})\cr Whether \code{extra_trafo} is set.}
+
 \item{\code{has_deps}}{(\code{logical(1)})\cr Whether the parameter dependencies are present}
 
 \item{\code{has_constraint}}{(\code{logical(1)})\cr Whether parameter constraint is set.}
@@ -122,6 +124,13 @@ Named with parameter IDs.}
 
 \item{\code{default}}{(named \code{list()})\cr Default values of all parameters. If no default exists, element is not present.
 Named with parameter IDs.}
+
+\item{\code{has_trafo_param}}{(\code{logical()})\cr Whether \code{trafo} is set for any parameter.}
+
+\item{\code{is_logscale}}{(\code{logical()})\cr Whether \code{trafo} was set to \code{logscale} during construction.\cr
+Note that this only refers to the \code{logscale} flag set during construction, e.g. \code{p_dbl(logscale = TRUE)}.
+If the parameter was set to logscale manually, e.g. through \code{p_dbl(trafo = exp)},
+this \code{is_logscale} will be \code{FALSE}.}
 
 \item{\code{nlevels}}{(named \code{integer()})\cr Number of distinct levels of parameters. \code{Inf} for double parameters or unbounded integer parameters.
 Named with param IDs.}

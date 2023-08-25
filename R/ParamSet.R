@@ -694,7 +694,7 @@ ParamSet = R6Class("ParamSet",
     is_empty = function() nrow(private$.params) == 0L,
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
     has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.trafos),
-    #' @field has_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
+    #' @field has_extra_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
     has_extra_trafo = function() !is.null(self$extra_trafo),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
     has_deps = function() nrow(self$deps) > 0L,
