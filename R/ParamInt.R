@@ -25,7 +25,7 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 
   Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
     storage_type = storage_type,
-    depends_expr = substitute(depends), init = init)
+    depends_expr = substitute(depends), init = init, cargo = if (logscale) "logscale")
 }
 
 #' @export

@@ -16,6 +16,7 @@ expect_equal_ps = function(a, b) {
     setindexv(acp$.params, NULL)
     setindexv(acp$.trafos, NULL)
     setindexv(acp$.tags, NULL)
+    setindexv(acp$.deps, NULL)
     acl
   }
 

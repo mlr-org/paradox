@@ -694,6 +694,8 @@ ParamSet = R6Class("ParamSet",
     is_empty = function() nrow(private$.params) == 0L,
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
     has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.trafos),
+    #' @field has_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
+    has_extra_trafo = function() !is.null(self$extra_trafo),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
     has_deps = function() nrow(self$deps) > 0L,
     #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
@@ -724,6 +726,13 @@ ParamSet = R6Class("ParamSet",
     #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
     #' Named with parameter IDs.
     default = function() with(private$.params[!map_lgl(default, is_nodefault), .(default, id)], set_names(default, id)),
+    #' @field has_trafo_param (`logical()`)\cr Whether `trafo` is set for any parameter.
+    has_trafo_param = function() with(private$.params, set_names(id %in% private$.trafos$id, id)),
+    #' @field is_logscale (`logical()`)\cr Whether `trafo` was set to `logscale` during construction.\cr
+    #' Note that this only refers to the `logscale` flag set during construction, e.g. `p_dbl(logscale = TRUE)`.
+    #' If the parameter was set to logscale manually, e.g. through `p_dbl(trafo = exp)`,
+    #' this `is_logscale` will be `FALSE`.
+    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & cargo == "logscale", id)),
 
     ############################
     # Per-Parameter class properties (S3 method call)

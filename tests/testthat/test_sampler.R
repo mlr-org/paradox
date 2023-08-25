@@ -112,6 +112,8 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
   setindexv(s1$param_set$.__enclos_env__$private$.params, NULL)
   setindexv(s1_expected$.__enclos_env__$private$.tags, NULL)
   setindexv(s1$param_set$.__enclos_env__$private$.tags, NULL)
+  setindexv(s1_expected$.__enclos_env__$private$.deps, NULL)
+  setindexv(s1$param_set$.__enclos_env__$private$.deps, NULL)
   expect_equal(s1$param_set, s1_expected)
 
   s2_expected = ParamSet_legacy$new(list(th_param_dbl()))
@@ -120,6 +122,8 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
   setindexv(s2$param_set$.__enclos_env__$private$.params, NULL)
   setindexv(s2_expected$.__enclos_env__$private$.tags, NULL)
   setindexv(s2$param_set$.__enclos_env__$private$.tags, NULL)
+  setindexv(s2_expected$.__enclos_env__$private$.deps, NULL)
+  setindexv(s2$param_set$.__enclos_env__$private$.deps, NULL)
 
   expect_equal(s2$param_set, s2_expected)
 })

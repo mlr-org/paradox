@@ -375,9 +375,9 @@ test_that("logscale in tunetoken", {
     ParamDbl$new("y", lower = 0)
   ))
 
-  expect_equal(reset_indices(pars$search_space(list(x = to_tune(logscale = TRUE))))$.__enclos_env__$private$.params,
+  expect_equal(reset_indices(pars$search_space(list(x = to_tune(logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
     reset_indices(ParamDbl$new("x", lower = log(.5), upper = log(11)))$.__enclos_env__$private$.params)
-  expect_equal(reset_indices(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE))))$.__enclos_env__$private$.params,
+  expect_equal(reset_indices(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
     reset_indices(ParamDbl$new("y", lower = log(1), upper = log(10)))$.__enclos_env__$private$.params)
 
   expect_error(pars$search_space(list(y = to_tune(upper = 10, logscale = TRUE))), "When logscale is TRUE then lower bound must be strictly greater than 0")
