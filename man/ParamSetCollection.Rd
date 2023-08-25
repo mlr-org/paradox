@@ -27,7 +27,7 @@ If you call \code{deps} on the collection, you are returned a complete table of 
 }
 }
 \section{Super class}{
-\code{\link[tautology:ParamSet]{tautology::ParamSet}} -> \code{ParamSetCollection}
+\code{\link[paradox:ParamSet]{paradox::ParamSet}} -> \code{ParamSetCollection}
 }
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
@@ -56,28 +56,28 @@ When you set values, all previously set values will be unset / removed.}
 \if{html}{\out{
 <details><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="add_dep"><a href='../../tautology/html/ParamSet.html#method-ParamSet-add_dep'><code>tautology::ParamSet$add_dep()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert"><a href='../../tautology/html/ParamSet.html#method-ParamSet-assert'><code>tautology::ParamSet$assert()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="assert_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-assert_dt'><code>tautology::ParamSet$assert_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check'><code>tautology::ParamSet$check()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dependencies"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check_dependencies'><code>tautology::ParamSet$check_dependencies()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="check_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-check_dt'><code>tautology::ParamSet$check_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="flatten"><a href='../../tautology/html/ParamSet.html#method-ParamSet-flatten'><code>tautology::ParamSet$flatten()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="format"><a href='../../tautology/html/ParamSet.html#method-ParamSet-format'><code>tautology::ParamSet$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_param"><a href='../../tautology/html/ParamSet.html#method-ParamSet-get_param'><code>tautology::ParamSet$get_param()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="get_values"><a href='../../tautology/html/ParamSet.html#method-ParamSet-get_values'><code>tautology::ParamSet$get_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="ids"><a href='../../tautology/html/ParamSet.html#method-ParamSet-ids'><code>tautology::ParamSet$ids()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="print"><a href='../../tautology/html/ParamSet.html#method-ParamSet-print'><code>tautology::ParamSet$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="qunif"><a href='../../tautology/html/ParamSet.html#method-ParamSet-qunif'><code>tautology::ParamSet$qunif()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="search_space"><a href='../../tautology/html/ParamSet.html#method-ParamSet-search_space'><code>tautology::ParamSet$search_space()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="set_values"><a href='../../tautology/html/ParamSet.html#method-ParamSet-set_values'><code>tautology::ParamSet$set_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subset"><a href='../../tautology/html/ParamSet.html#method-ParamSet-subset'><code>tautology::ParamSet$subset()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="subspaces"><a href='../../tautology/html/ParamSet.html#method-ParamSet-subspaces'><code>tautology::ParamSet$subspaces()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test'><code>tautology::ParamSet$test()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_constraint'><code>tautology::ParamSet$test_constraint()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_constraint_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_constraint_dt'><code>tautology::ParamSet$test_constraint_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="test_dt"><a href='../../tautology/html/ParamSet.html#method-ParamSet-test_dt'><code>tautology::ParamSet$test_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="ParamSet" data-id="trafo"><a href='../../tautology/html/ParamSet.html#method-ParamSet-trafo'><code>tautology::ParamSet$trafo()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href='../../paradox/html/ParamSet.html#method-ParamSet-add_dep'><code>paradox::ParamSet$add_dep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert'><code>paradox::ParamSet$assert()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert_dt'><code>paradox::ParamSet$assert_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check'><code>paradox::ParamSet$check()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dependencies'><code>paradox::ParamSet$check_dependencies()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dt'><code>paradox::ParamSet$check_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten"><a href='../../paradox/html/ParamSet.html#method-ParamSet-flatten'><code>paradox::ParamSet$flatten()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href='../../paradox/html/ParamSet.html#method-ParamSet-format'><code>paradox::ParamSet$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_param"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_param'><code>paradox::ParamSet$get_param()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_values'><code>paradox::ParamSet$get_values()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href='../../paradox/html/ParamSet.html#method-ParamSet-ids'><code>paradox::ParamSet$ids()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href='../../paradox/html/ParamSet.html#method-ParamSet-print'><code>paradox::ParamSet$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif"><a href='../../paradox/html/ParamSet.html#method-ParamSet-qunif'><code>paradox::ParamSet$qunif()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href='../../paradox/html/ParamSet.html#method-ParamSet-search_space'><code>paradox::ParamSet$search_space()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-set_values'><code>paradox::ParamSet$set_values()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subset'><code>paradox::ParamSet$subset()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subspaces'><code>paradox::ParamSet$subspaces()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test'><code>paradox::ParamSet$test()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint'><code>paradox::ParamSet$test_constraint()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint_dt'><code>paradox::ParamSet$test_constraint_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_dt'><code>paradox::ParamSet$test_dt()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="trafo"><a href='../../paradox/html/ParamSet.html#method-ParamSet-trafo'><code>paradox::ParamSet$trafo()</code></a></span></li>
 </ul>
 </details>
 }}

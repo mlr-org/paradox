@@ -21,7 +21,7 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super class}{
-\code{\link[tautology:Sampler]{tautology::Sampler}} -> \code{SamplerHierarchical}
+\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{SamplerHierarchical}
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
@@ -41,9 +41,9 @@ List of \link{Sampler1D} objects that gives a Sampler for each \link{Param} in t
 \if{html}{\out{
 <details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="format"><a href='../../tautology/html/Sampler.html#method-Sampler-format'><code>tautology::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="print"><a href='../../tautology/html/Sampler.html#method-Sampler-print'><code>tautology::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="tautology" data-topic="Sampler" data-id="sample"><a href='../../tautology/html/Sampler.html#method-Sampler-sample'><code>tautology::Sampler$sample()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
 </ul>
 </details>
 }}
