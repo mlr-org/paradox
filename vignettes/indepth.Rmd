@@ -286,7 +286,7 @@ generate_design_grid(ps_small, param_resolutions = c(A = 3, B = 2))
 The easiest way to get a uniformly random sample of parameters is `generate_design_random()`.
 It is also possible to create "[latin hypercube](https://en.wikipedia.org/wiki/Latin_hypercube_sampling)" sampled parameter values using `generate_design_lhs()`, which utilizes the `lhs` package.
 LHS-sampling creates low-discrepancy sampled values that cover the parameter space more evenly than purely random values.
-[Sobol sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) is also possible, using `generate_design_sobol()`.
+`generate_design_sobol()` can be used to sample using the [Sobol sequence](https://en.wikipedia.org/wiki/Sobol_sequence).
 
 ```{r}
 pvrand = generate_design_random(ps_small, 500)
@@ -559,6 +559,8 @@ These domain constructors each take some of the following arguments:
 * **`trafo`**: transformation function, see below.
 * **`depends`**: dependencies, see below.
 * **`tags`**: Further information about a parameter, used for example by the `hyperband` tuner.
+* **`init`**: .
+  Not used for tuning search spaces.
 * **`default`**: Value corresponding to default behavior when the parameter is not given.
   Not used for tuning search spaces.
 * **`special_vals`**: Valid values besides the normally accepted values for a parameter.
@@ -567,7 +569,7 @@ These domain constructors each take some of the following arguments:
   Not used for tuning search spaces.
 
 The `lower` and `upper` parameters are always in the first and second position respectively, except for `p_fct` where `levels` is in the first position.
-It is preferred to omit the labels (ex: upper = 0.1 becomes just 0.1). This way of defining a `ParamSet` is more concise than the equivalent definition above.
+It is preferred to omit the labels (ex: `upper = 0.1` becomes just `0.1`). This way of defining a `ParamSet` is more concise than the equivalent definition above.
 Preferred:
 
 ```{r}
@@ -623,7 +625,7 @@ rbindlist(generate_design_grid(search_space, 3)$transpose())
 
 The available types of search space parameters are limited: continuous, integer, discrete, and logical scalars.
 There are many machine learning algorithms, however, that take parameters of other types, for example vectors or functions.
-These can not be defined in a search space `ParamSet`, and they are often given as `ParamUty` in the `Learner`'s `ParamSet`.
+These can not be defined in a search space `ParamSet`, and they are often given as `p_uty()` in the `Learner`'s `ParamSet`.
 When trying to tune over these hyperparameters, it is necessary to perform a Transformation that changes the type of a parameter.
 
 An example is the `class.weights` parameter of the [Support Vector Machine](https://machinelearningmastery.com/cost-sensitive-svm-for-imbalanced-classification/) (SVM), which takes a named vector of class weights with one entry for each target class.
@@ -721,7 +723,7 @@ This can be done in the same way that other hyperparameters are set to specific 
 It can be understood as the hyperparameters being tagged for later tuning.
 The resulting `ParamSet` used for tuning can be retrieved using the `$search_space()` method.
 
-```{r}
+```{r, eval = FALSE}
 library("mlr3learners")
 learner = lrn("classif.svm")
 learner$param_set$values$kernel = "polynomial" # for example
@@ -737,7 +739,7 @@ rbindlist(generate_design_grid(
 It is possible to omit `lower` here, because it can be inferred from the lower bound of the `degree` parameter itself.
 For other parameters, that are already bounded, it is possible to not give any bounds at all, because their ranges are already bounded.
 An example is the logical `shrinking` hyperparameter:
-```{r}
+```{r, eval = FALSE}
 learner$param_set$values$shrinking = to_tune()
 
 print(learner$param_set$search_space())
@@ -753,7 +755,7 @@ One could, for example, tune the `cost` as above on three given special values, 
 Notice that a short form for `to_tune(<levels>)` is a short form of `to_tune(p_fct(<levels>))`.
 When introducing the dependency, we need to use the `degree` value from *before* the implicit trafo, which is the name or `as.character()` of the respective value, here `"val2"`!
 
-```{r}
+```{r, eval = FALSE}
 learner$param_set$values$type = "C-classification" # needs to be set because of a bug in paradox
 learner$param_set$values$cost = to_tune(c(val1 = 0.3, val2 = 0.7))
 learner$param_set$values$shrinking = to_tune(p_lgl(depends = cost == "val2"))
@@ -767,7 +769,7 @@ The `search_space()` picks up dependencies from the underlying `ParamSet` automa
 So if the `kernel` is tuned, then `degree` automatically gets the dependency on it, without us having to specify that.
 (Here we reset `cost` and `shrinking` to `NULL` for the sake of clarity of the generated output.)
 
-```{r}
+```{r, eval = FALSE}
 learner$param_set$values$cost = NULL
 learner$param_set$values$shrinking = NULL
 learner$param_set$values$kernel = to_tune(c("polynomial", "radial"))
@@ -782,7 +784,7 @@ This may be especially useful for vector hyperparameters that should be searched
 This `ParamSet` must, however, have an `.extra_trafo` that returns a list with a single element, because it corresponds to a single hyperparameter that is being tuned.
 Suppose the `class.weights` hyperparameter should be tuned along two dimensions:
 
-```{r}
+```{r, eval = FALSE}
 learner$param_set$values$class.weights = to_tune(
   ps(spam = p_dbl(0.1, 0.9), nonspam = p_dbl(0.1, 0.9),
     .extra_trafo = function(x, param_set) list(c(spam = x$spam, nonspam = x$nonspam))
