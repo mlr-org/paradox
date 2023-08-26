@@ -863,6 +863,7 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
   }
 
   params = as.data.table(obj)[, c("id", "storage_type", "default", "lower", "upper", "levels"), with = FALSE]
+  cargo = obj$params$cargo
 
   if (length(descriptions)) {
     params = merge(params, enframe(descriptions, name = "id", value = "description"), all.x = TRUE, by = "id")
@@ -872,9 +873,8 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
   }
   is_default = map_lgl(params$default, inherits, "NoDefault")
   is_uty = params$storage_type == "list"
-  # TODO
-  #set(params, i = which(is_uty & !is_default), j = "default",
-  #    value = map(obj$params[!is_default & is_uty], function(x) x$repr))
+  set(params, i = which(is_uty & !is_default), j = "default",
+      value = map(cargo[!is_default & is_uty], function(x) x$repr))
   set(params, i = which(is_uty), j = "storage_type", value = list("untyped"))
   set(params, i = which(is_default), j = "default", value = list("-"))
 

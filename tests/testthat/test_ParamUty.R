@@ -28,3 +28,7 @@ test_that("R6 values of ParamUty are cloned", {
   expect_true(psunclone$values$x$x)  # reference check: value was not cloned
   expect_null(psclone$values$x$x)  # was cloned before change --> should still be null
 })
+
+test_that("default NULL works", {
+  expect_equal(p_uty(default = NULL)$cargo[[1]]$repr, "NULL")
+})
