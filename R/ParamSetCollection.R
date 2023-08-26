@@ -161,9 +161,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       changed = unlist(lapply(private$.children_with_trafos, function(set_index) {
         changing_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
         trafo = private$.sets[[set_index]]$extra_trafo
-        changing_values = x[names(x) %in% changing_ids]
-        names(changing_values) = private$.translation[names(changing_values), original_id]
-        changing_values = trafo(changing_values)
+        changing_values_in = x[names(x) %in% changing_ids]
+        names(changing_values_in) = private$.translation[names(changing_values_in), original_id]
+        # input of trafo() must not be changed after the call; otherwise the trafo would have to `force()` it in
+        # some circumstances.
+        changing_values = trafo(changing_values_in)
         prefix = names(private$.sets)[[set_index]]
         if (prefix != "") {
           names(changing_values) = sprintf("%s.%s", prefix, names(changing_values))

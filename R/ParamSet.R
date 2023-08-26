@@ -219,10 +219,13 @@ ParamSet = R6Class("ParamSet",
       }
       extra_trafo = self$extra_trafo
       if (!is.null(extra_trafo)) {
+        # need to give the input of extra_trafo a different name than the output; otherwise the user would have to
+        # "force()" the x-argument of extra_trafo.
+        xin = x
         if (test_function(extra_trafo, args = c("x", "param_set"))) {
-          x = extra_trafo(x = x, param_set = param_set)
+          x = extra_trafo(x = xin, param_set = param_set)
         } else {
-          x = extra_trafo(x)
+          x = extra_trafo(xin)
         }
       }
       x

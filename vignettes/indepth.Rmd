@@ -7,13 +7,7 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
-
-
-**Note:** Many of the concepts explained here, are also covered in the [mlr3book](https://github.com/mlr-org/mlr3book/).
-
 ## Parameters (using paradox)
-
-
 
 The `paradox` package offers a language for the description of *parameter spaces*, as well as tools for useful operations on these parameter spaces.
 A parameter space is often useful when describing:
@@ -28,152 +22,141 @@ The tools provided by `paradox` therefore relate to:
 * **Parameter sampling**: Generating parameter values that lie in the parameter space for systematic exploration of program behavior depending on these parameters
 
 `paradox` is, by nature, an auxiliary package that derives its usefulness from other packages that make use of it.
-It is heavily utilized in other [mlr-org](https://github.com/mlr-org) packages such as `mlr3`, `mlr3pipelines`, and `mlr3tuning`.
+It is heavily utilized in other [mlr-org](https://github.com/mlr-org) packages such as `mlr3`, `mlr3pipelines`, `mlr3tuning` and `miesmuschel`.
 
 ### Reference Based Objects
 
-`paradox` is the spiritual successor to the `ParamHelpers` package and was written from scratch using the `R6` class system.
-The most important consequence of this is that all objects created in `paradox` are "reference-based", unlike most other objects in R.
-When a change is made to a `ParamSet` object, for example by adding a parameter using the `$add()` function, all variables that point to this `ParamSet` will contain the changed object.
-To create an independent copy of a `ParamSet`, the `$clone()` method needs to be used:
+`paradox` is the spiritual successor to the `ParamHelpers` package and was written from scratch.
+The most important consequence of this is that some objects created in `paradox` are "reference-based", unlike most other objects in R.
+When a change is made to a `ParamSet` object, for example by changing the `$values` field, all variables that point to this `ParamSet` will contain the changed object.
+To create an independent copy of a `ParamSet`, the `$clone(deep = TRUE)` method needs to be used:
 
 ```{r}
 library("paradox")
 
-ps = ParamSet$new()
-ps2 = ps
-ps3 = ps$clone(deep = TRUE)
-print(ps) # the same for ps2 and ps3
+ps1 = ps(a = p_int(init = 1))
+ps2 = ps1
+ps3 = ps1$clone(deep = TRUE)
+print(ps1) # the same for ps2 and ps3
 ```
 
 ```{r}
-ps$add(ParamLgl$new("a"))
+ps1$values$a = 2
 ```
 
 ```{r}
-print(ps)  # ps was changed
-print(ps2) # contains the same reference as ps
-print(ps3) # is a "clone" of the old (empty) ps
+print(ps1) # ps1 value of 'a' was changed
+print(ps2) # contains the same reference as ps1, so also changed
+print(ps3) # is a "clone" of the old ps1 with 'a' == 1
 ```
 
 ### Defining a Parameter Space
 
-#### Single Parameters
+#### `Domain` Representing Single Parameters
 
-The basic building block for describing parameter spaces is the **`Param`** class.
-It represents a single parameter, which usually can take a single atomic value.
+Parameter spaces are made up of individual parameters, which usually can take a single atomic value.
 Consider, for example, trying to configure the `rpart` package's `rpart.control` object.
-It has various components (`minsplit`, `cp`, ...) that all take a single value, and that would all be represented by a different instance of a `Param` object.
+It has various components (`minsplit`, `cp`, ...) that all take a single value.
 
-The `Param` class has various subclasses that represent different value types:
+These components are represented by `Domain` objects, which are constructed by calls of the form `p_xxx()`:
 
-* `ParamInt`: Integer numbers
-* `ParamDbl`: Real numbers
-* `ParamFct`: String values from a set of possible values, similar to R `factor`s
-* `ParamLgl`: Truth values (`TRUE` / `FALSE`), as `logical`s in R
-* `ParamUty`: Parameter that can take any value
+* `p_int()` for integer numbers
+* `p_dbl()` for real numbers
+* `p_fct()` for categorical values, similar to R `factor`s
+* `p_lgl()` for truth values (`TRUE` / `FALSE`), as `logical`s in R
+* `p_uty()` for parameters that can take any value
 
-A particular instance of a parameter is created by calling the attached `$new()` function:
+A `ParamSet` that represent a given set of parameters is created by calling `ps()` with named arguments that are `Domain` objects.
+While `Domain` themselves are R objects that can in principle be handled and manipulated, they should not be changed after construction.
 
 ```{r}
 library("paradox")
-parA = ParamLgl$new(id = "A")
-parB = ParamInt$new(id = "B", lower = 0, upper = 10, tags = c("tag1", "tag2"))
-parC = ParamDbl$new(id = "C", lower = 0, upper = 4, special_vals = list(NULL))
-parD = ParamFct$new(id = "D", levels = c("x", "y", "z"), default = "y")
-parE = ParamUty$new(id = "E", custom_check = function(x) checkmate::checkFunction(x))
+param_set = ps(
+  parA = p_lgl(init = FALSE),
+  parB = p_int(lower = 0, upper = 10, tags = c("tag1", "tag2")),
+  parC = p_dbl(lower = 0, upper = 4, special_vals = list(NULL)),
+  parD = p_fct(levels = c("x", "y", "z"), default = "y"),
+  parE = p_uty(custom_check = function(x) checkmate::checkFunction(x))
+)
+param_set
 ```
 
-Every parameter must have:
+Every parameter can have:
 
-* **id** - A name for the parameter within the parameter set
-* **default** - A default value
+* **default** - A default value, indicating the behaviour of something if the specific value is not given.
+* **init** - An initial value, which is set in `$values` when the `ParamSet` is created.
+  Note that this is not the same as `default`: `default` is used when a parameter is not present in `$values`, while `init` is the value that is set upon creation.
 * **special_vals** - A list of values that are accepted even if they do not conform to the type
 * **tags** - Tags that can be used to organize parameters
+* **trafo** - A transformation function that is applied to the parameter value after it has been sampled.
+  It is for example used through the `Design$transpose()` function after a `Design` was created by `generate_design_random()` or similar functions.
 
-The numeric (`Int` and `Dbl`) parameters furthermore allow for specification of a **lower** and **upper** bound.
-Meanwhile, the `Fct` parameter must be given a vector of **levels** that define the possible states its parameter can take.
-The `Uty` parameter can also have a **`custom_check`** function that must return `TRUE` when a value is acceptable and may return a `character(1)` error description otherwise.
+The numeric (`p_int()` and `p_dbl()`) parameters furthermore allow for specification of a **lower** and **upper** bound.
+Meanwhile, the `p_fct()` parameter must be given a vector of **levels** that define the possible states its parameter can take.
+The `p_uty` parameter can also have a **`custom_check`** function that must return `TRUE` when a value is acceptable and may return a `character(1)` error description otherwise.
 The example above defines `parE` as a parameter that only accepts functions.
 
-All values which are given to the constructor are then accessible from the object for inspection using `$`.
-Although all these values can be changed for a parameter after construction, this can be a bad idea and should be avoided when possible.
+All values which are given to the constructor are then accessible from the `ParamSet` for inspection using `$`.
+The `ParamSet` should be considered immutable, except for some fields such as `$values`, `$deps`, `$tags`.
+Bounds and levels should not be changed after construction.
+Instead, a new `ParamSet` should be constructed.
 
-Instead, a new parameter should be constructed.
 Besides the possible values that can be given to a constructor, there are also the `$class`, `$nlevels`, `$is_bounded`, `$has_default`, `$storage_type`, `$is_number` and `$is_categ` slots that give information about a parameter.
 
 A list of all slots can be found in `?Param`.
 
 ```{r}
-parB$lower
-parA$levels
-parE$class
+param_set$lower
+param_set$parD$levels
+param_set$class
 ```
 
-It is also possible to get all information of a `Param` as `data.table` by calling `as.data.table()`.
+It is also possible to get all information of a `ParamSet` as `data.table` by calling `as.data.table()`.
 
 ```{r}
-as.data.table(parA)
+as.data.table(param_set)
 ```
 
 ##### Type / Range Checking
 
-A `Param` object offers the possibility to check whether a value satisfies its condition, i.e. is of the right type, and also falls within the range of allowed values, using the `$test()`, `$check()`, and `$assert()` functions.
+The `ParamSet` object offers the possibility to check whether a value satisfies its condition, i.e. is of the right type, and also falls within the range of allowed values, using the `$test()`, `$check()`, and `$assert()` functions.
+Their argument must be a named list with values that are checked against the respective parameters, and it is possible to check only a subset of parameters.
 `test()` should be used within conditional checks and returns `TRUE` or `FALSE`, while `check()` returns an error description when a value does not conform to the parameter (and thus plays well with the `"checkmate::assert()"` function).
 `assert()` will throw an error whenever a value does not fit.
 
 ```{r}
-parA$test(FALSE)
-parA$test("FALSE")
-parA$check("FALSE")
+param_set$test(list(parA = FALSE, parB = 0))
+param_set$test(list(parA = "FALSE"))
+param_set$check(list(parA = "FALSE"))
 ```
-
-Instead of testing single parameters, it is often more convenient to check a whole set of parameters using a `ParamSet`.
 
 #### Parameter Sets
 
-The ordered collection of parameters is handled in a `ParamSet`^[Although the name is suggestive of a "Set"-valued `Param`, this is unrelated to the other objects that follow the `ParamXxx` naming scheme.].
-It is initialized using the `$new()` function and optionally takes a list of `Param`s as argument.
-Parameters can also be added to the constructed `ParamSet` using the `$add()` function.
-It is even possible to add whole `ParamSet`s to other `ParamSet`s.
+The ordered collection of parameters is handled in a `ParamSet`.
+It is typically created by calling `ps()`, but can also be initialized using the `ParamSet$new()` function.
+The main difference is that `ps()` takes named arguments, whereas `ParamSet$new()` takes a named list.
+The latter makes it easier to construct a `ParamSet` programmatically, but is slightly more verbose.
+
+`ParamSet`s can be combined using `c()` or `ps_union` (the latter of which takes a list), and they have a `$subset()` method that allows for subsetting.
+All of these functions return a new, cloned `ParamSet` object, and do not modify the original `ParamSet`.
 
 ```{r}
-ps = ParamSet$new(list(parA, parB))
-ps$add(parC)
-ps$add(ParamSet$new(list(parD, parE)))
-print(ps)
+ps1 = ParamSet$new(list(x = p_int(), y = p_dbl()))
+ps2 = ParamSet$new(list(z = p_fct(levels = c("a", "b", "c"))))
+ps_all = c(ps1, ps2)
+print(ps_all)
+ps_all$subset(c("x", "z"))
 ```
 
-The individual parameters can be accessed through the `$params` slot.
-It is also possible to get information about all parameters in a vectorized fashion using mostly the same slots as for individual `Param`s (i.e. `$class`, `$levels` etc.), see `?ParamSet` for details.
+`ParamSet`s of each individual parameters can be accessed through the `$subspaces()` function.
 
-It is possible to reduce `ParamSet`s using the **`$subset`** method.
-Be aware that it modifies a ParamSet in-place, so a "clone" must be created first if the original `ParamSet` should not be modified.
-
-```{r}
-psSmall = ps$clone()
-psSmall$subset(c("A", "B", "C"))
-print(psSmall)
-```
-
-Just as for `Param`s, and much more useful, it is possible to get the `ParamSet` as a `data.table` using `as.data.table()`.
+It is possible to get the `ParamSet` as a `data.table` using `as.data.table()`.
 This makes it easy to subset parameters on certain conditions and aggregate information about them, using the variety of methods provided by `data.table`.
 
 ```{r}
-as.data.table(ps)
+as.data.table(ps_all)
 ```
 
-##### Type / Range Checking
-
-Similar to individual `Param`s, the `ParamSet` provides `$test()`, `$check()` and `$assert()` functions that allow for type and range checking of parameters.
-Their argument must be a named list with values that are checked against the respective parameters.
-It is possible to check only a subset of parameters.
-
-```{r}
-ps$check(list(A = TRUE, B = 0, E = identity))
-ps$check(list(A = 1))
-ps$check(list(Z = 1))
-```
 
 ##### Values in a `ParamSet`
 
@@ -183,15 +166,15 @@ The `$values` slot contains a named list that is always checked against paramete
 When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` slot of its `$param_set` that needs to be used.
 
 ```{r}
-ps$values = list(A = TRUE, B = 0)
-ps$values$B = 1
-print(ps$values)
+ps1$values = list(x = 1, y = 1.5)
+ps1$values$y = 2.5
+print(ps1$values)
 ```
 
 The parameter constraints are automatically checked:
 
 ```{r, error = TRUE}
-ps$values$B = 100
+ps1$values$x = 1.5
 ```
 
 ##### Dependencies
@@ -202,29 +185,37 @@ The second parameter would be said to *depend* on the first parameter having the
 
 A dependency can be added using the `$add_dep` method, which takes both the ids of the "depender" and "dependee" parameters as well as a `Condition` object.
 The `Condition` object represents the check to be performed on the "dependee".
-Currently it can be created using `CondEqual$new()` and `CondAnyOf$new()`.
+Currently it can be created using `CondEqual()` and `CondAnyOf()`.
 Multiple dependencies can be added, and parameters that depend on others can again be depended on, as long as no cyclic dependencies are introduced.
 
 The consequence of dependencies are twofold:
-For one, the `$check()`, `$test()` and `$assert()` tests will not accept the presence of a parameter if its dependency is not met.
+For one, the `$check()`, `$test()` and `$assert()` tests will not accept the presence of a parameter if its dependency is not met, when the `check_strict` argument is given as `TRUE`.
 Furthermore, when sampling or creating grid designs from a `ParamSet`, the dependencies will be respected.
+
+The easiest way to set dependencies is to give the `depends` argument to the `Domain` constructor.
 
 The following example makes parameter `D` depend on parameter `A` being `FALSE`, and parameter `B` depend on parameter `D` being one of `"x"` or `"y"`.
 This introduces an implicit dependency of `B` on `A` being `FALSE` as well, because `D` does not take any value if `A` is `TRUE`.
 
 ```{r}
-ps$add_dep("D", "A", CondEqual$new(FALSE))
-ps$add_dep("B", "D", CondAnyOf$new(c("x", "y")))
+p = ps(
+  A = p_lgl(init = FALSE),
+  B = p_int(lower = 0, upper = 10, depends = D %in% c("x", "y")),
+  C = p_dbl(lower = 0, upper = 4),
+  D = p_fct(levels = c("x", "y", "z"), depends = A == FALSE)
+)
 ```
 
+Note that the `depends` argument is limited to operators `==` and `%in%`, so `D = p_fct(..., depends = !A)` would not work.
+
 ```{r}
-ps$check(list(A = FALSE, D = "x", B = 1))          # OK: all dependencies met
-ps$check(list(A = FALSE, D = "z", B = 1))          # B's dependency is not met
-ps$check(list(A = FALSE, B = 1))                   # B's dependency is not met
-ps$check(list(A = FALSE, D = "z"))                 # OK: B is absent
-ps$check(list(A = TRUE))                           # OK: neither B nor D present
-ps$check(list(A = TRUE, D = "x", B = 1))           # D's dependency is not met
-ps$check(list(A = TRUE, B = 1))                    # B's dependency is not met
+p$check(list(A = FALSE, D = "x", B = 1), check_strict = TRUE)  # OK: all dependencies met
+p$check(list(A = FALSE, D = "z", B = 1), check_strict = TRUE)  # B's dependency is not met
+p$check(list(A = FALSE, B = 1), check_strict = TRUE)           # B's dependency is not met
+p$check(list(A = FALSE, D = "z"), check_strict = TRUE)         # OK: B is absent
+p$check(list(A = TRUE), check_strict = TRUE)                   # OK: neither B nor D present
+p$check(list(A = TRUE, D = "x", B = 1), check_strict = TRUE)   # D's dependency is not met
+p$check(list(A = TRUE, B = 1), check_strict = TRUE)            # B's dependency is not met
 ```
 
 Internally, the dependencies are represented as a `data.table`, which can be accessed listed in the **`$deps`** slot.
@@ -233,33 +224,31 @@ There are no sanity checks done when the `$deps` slot is changed this way.
 Therefore it is advised to be cautious.
 
 ```{r}
-ps$deps
+p$deps
 ```
 
 #### Vector Parameters
 
 Unlike in the old `ParamHelpers` package, there are no more vectorial parameters in `paradox`.
-Instead, it is now possible to create multiple copies of a single parameter using the `$rep` function.
+Instead, it is now possible to create multiple copies of a single parameter using the `ps_replicate` function.
 This creates a `ParamSet` consisting of multiple copies of the parameter, which can then (optionally) be added to another `ParamSet`.
 
 ```{r}
-ps2d = ParamDbl$new("x", lower = 0, upper = 1)$rep(2)
+ps2d = ps_replicate(ps(x = p_dbl(lower = 0, upper = 1)), 2)
 print(ps2d)
-```
-
-```{r}
-ps$add(ps2d)
-print(ps)
 ```
 
 It is also possible to use a `ParamUty` to accept vectorial parameters, which also works for parameters of variable length.
 A `ParamSet` containing a `ParamUty` can be used for parameter checking, but not for sampling.
-To sample values for a method that needs a vectorial parameter, it is advised to use a parameter transformation function that creates a vector from atomic values.
+To sample values for a method that needs a vectorial parameter, it is advised to use an `$extra_trafo` transformation function that creates a vector from atomic values.
 
-Assembling a vector from repeated parameters is aided by the parameter's `$tags`: Parameters that were generated by the `$rep()` command automatically get tagged as belonging to a group of repeated parameters.
+Assembling a vector from repeated parameters is aided by the parameter's `$tags`: Parameters that were generated by the `pr_replicate()` command can be tagged as belonging to a group of repeated parameters.
 
 ```{r}
-ps$tags
+ps2d = ps_replicate(ps(x = p_dbl(0, 1), y = p_int(0, 10)), 2, tag_params = TRUE)
+ps2d$values = list(rep1.x = 0.2, rep2.x = 0.4, rep1.y = 3, rep2.y = 4)
+ps2d$tags
+ps2d$get_values(tags = "param_x")
 ```
 
 ### Parameter Sampling
@@ -269,7 +258,7 @@ It is often useful to have a list of possible parameter values that can be syste
 In the latter case, it is possible to influence the sampling distribution in more or less fine detail.
 
 A point to always keep in mind while sampling is that only numerical and factorial parameters that are bounded can be sampled from, i.e. not `ParamUty`.
-Furthermore, for most samplers `ParamInt` and `ParamDbl` must have finite lower and upper bounds.
+Furthermore, for most samplers `p_int()` and `p_dbl()` must have finite lower and upper bounds.
 
 #### Parameter Designs
 
@@ -282,12 +271,13 @@ The `generate_design_grid()` function is used to create grid designs that contai
 The resolution can be given for all numeric parameters, or for specific named parameters through the `param_resolutions` parameter.
 
 ```{r}
-design = generate_design_grid(psSmall, 2)
+ps_small = ps(A = p_dbl(0, 1), B = p_dbl(0, 1))
+design = generate_design_grid(ps_small, 2)
 print(design)
 ```
 
 ```{r}
-generate_design_grid(psSmall, param_resolutions = c(B = 1, C = 2))
+generate_design_grid(ps_small, param_resolutions = c(A = 3, B = 2))
 ```
 
 #### Random Sampling
@@ -296,10 +286,12 @@ generate_design_grid(psSmall, param_resolutions = c(B = 1, C = 2))
 The easiest way to get a uniformly random sample of parameters is `generate_design_random()`.
 It is also possible to create "[latin hypercube](https://en.wikipedia.org/wiki/Latin_hypercube_sampling)" sampled parameter values using `generate_design_lhs()`, which utilizes the `lhs` package.
 LHS-sampling creates low-discrepancy sampled values that cover the parameter space more evenly than purely random values.
+[Sobol sampling](https://en.wikipedia.org/wiki/Latin_hypercube_sampling) is also possible, using `generate_design_sobol()`.
 
 ```{r}
-pvrand = generate_design_random(ps2d, 500)
-pvlhs = generate_design_lhs(ps2d, 500)
+pvrand = generate_design_random(ps_small, 500)
+pvlhs = generate_design_lhs(ps_small, 500)
+pvsobol = generate_design_sobol(ps_small, 500)
 ```
 
 ```{r, echo = FALSE, out.width="45%", fig.show = "hold", fig.width = 4, fig.height = 4}
@@ -307,6 +299,7 @@ pvlhs = generate_design_lhs(ps2d, 500)
 par(mar=c(4, 4, 2, 1))
 plot(pvrand$data, main = "'random' design", xlim = c(0, 1), ylim=c(0, 1))
 plot(pvlhs$data, main = "'lhs' design", xlim = c(0, 1), ylim=c(0, 1))
+plot(pvsobol$data, main = "'sobol' design", xlim = c(0, 1), ylim=c(0, 1))
 ```
 
 #### Generalized Sampling: The `Sampler` Class
@@ -321,10 +314,10 @@ Every `Sampler` object has a `sample()` function, which takes one argument, the 
 
 There is a variety of samplers that sample values for a single parameter.
 These are `Sampler1DUnif` (uniform sampling), `Sampler1DCateg` (sampling for categorical parameters), `Sampler1DNormal` (normally distributed sampling, truncated at parameter bounds), and `Sampler1DRfun` (arbitrary 1D sampling, given a random-function).
-These are initialized with a single `Param`, and can then be used to sample values.
+These are initialized with a one-dimensional `ParamSet`, and can then be used to sample values.
 
 ```{r}
-sampA = Sampler1DCateg$new(parA)
+sampA = Sampler1DCateg$new(ps(x = p_fct(letters)))
 sampA$sample(5)
 ```
 
@@ -339,13 +332,19 @@ The following example shows how this works: The `Int` parameter `B` depends on t
 In the cases where `A` is `FALSE`, `B` is set to `NA`.
 
 ```{r}
-psSmall$add_dep("B", "A", CondEqual$new(TRUE))
-sampH = SamplerHierarchical$new(psSmall,
-  list(Sampler1DCateg$new(parA),
-    Sampler1DUnif$new(parB),
-    Sampler1DUnif$new(parC))
+p = ps(
+  A = p_lgl(),
+  B = p_int(0, 10, depends = A == TRUE)
+)
+
+p_subspaces = p$subspaces()
+
+sampH = SamplerHierarchical$new(p,
+  list(Sampler1DCateg$new(p_subspaces$A),
+    Sampler1DUnif$new(p_subspaces$B))
 )
 sampled = sampH$sample(1000)
+head(sampled$data)
 table(sampled$data[, c("A", "B")], useNA = "ifany")
 ```
 
@@ -357,8 +356,8 @@ However, `SamplerJointIndep` currently can not handle `ParamSet`s with dependenc
 
 ```{r}
 sampJ = SamplerJointIndep$new(
-  list(Sampler1DUnif$new(ParamDbl$new("x", 0, 1)),
-    Sampler1DUnif$new(ParamDbl$new("y", 0, 1)))
+  list(Sampler1DUnif$new(ps(x = p_dbl(0, 1))),
+    Sampler1DUnif$new(ps(y = p_dbl(0, 1))))
 )
 sampJ$sample(5)
 ```
@@ -370,25 +369,28 @@ The `Sampler` used in `generate_design_random()` is the `SamplerUnif` sampler, w
 ### Parameter Transformation
 
 While the different `Sampler`s allow for a wide specification of parameter distributions, there are cases where the simplest way of getting a desired distribution is to sample parameters from a simple distribution (such as the uniform distribution) and then transform them.
-This can be done by assigning a function to the `$trafo` slot of a `ParamSet`.
-The `$trafo` function is called with two parameters:
+This can be done by constructing a `Domain` with a `trafo` argument, or assigning a function to the `$extra_trafo` field of a `ParamSet`.
+The latter can also be done by passing an `.extra_trafo` argument to the `ps()` shorthand constructor.
 
-* The list of parameter values to be transformed as `x`
+A `trafo` function in a `Domain` is called with a single parameter, the value to be transformed.
+It can only operate on the dimension of a single parameter.
+
+The `$extra_trafo` function is called with two parameters:
+
+* The list of parameter values to be transformed as `x`.
+  Unlike the `Domain`'s `trafo`, the `$extra_trafo` handles the whole parameter set and can even model "interactions" between parameters.
 * The `ParamSet` itself as `param_set`
 
-The `$trafo` function must return a list of transformed parameter values.
+The `$extra_trafo` function must return a list of transformed parameter values.
 
 The transformation is performed when calling the `$transpose` function of the `Design` object returned by a `Sampler` with the `trafo` ParamSet to `TRUE` (the default).
 The following, for example, creates a parameter that is exponentially distributed:
 
 ```{r}
-psexp = ParamSet$new(list(ParamDbl$new("par", 0, 1)))
-psexp$trafo = function(x, param_set) {
-  x$par = -log(x$par)
-  x
-}
-design = generate_design_random(psexp, 2)
-print(design)
+psexp = ps(par = p_dbl(0, 1, trafo = function(x) -log(x)))
+
+design = generate_design_random(psexp, 3)
+print(design)  # not transformed: between 0 and 1
 design$transpose()  # trafo is TRUE
 ```
 
@@ -397,6 +399,18 @@ Compare this to `$transpose()` without transformation:
 ```{r}
 design$transpose(trafo = FALSE)
 ```
+
+Another way to get tihs effect, using `$extra_trafo`, would be:
+```{r}
+psexp = ps(par = p_dbl(0, 1))
+psexp$extra_trafo = function(x, param_set) {
+  x$par = -log(x$par)
+  x
+}
+```
+However, the `trafo` way is more recommended when transforming parameters independently.
+`$extra_trafo` is more useful when transforming parameters that interact in some way, or when new parameters should be generated.
+
 
 #### Transformation between Types
 
@@ -413,31 +427,18 @@ The user can pass functions like `median()` or `mean()`, but could also pass qua
 This method would probably use the following `ParamSet`:
 
 ```{r}
-methodPS = ParamSet$new(
-  list(
-    ParamUty$new("fun",
-      custom_check = function(x) checkmate::checkFunction(x, nargs = 1))
-  )
-)
+methodPS = ps(fun = p_uty(custom_check = function(x) checkmate::checkFunction(x, nargs = 1)))
+
 print(methodPS)
 ```
 
 If one wanted to sample this method, using one of four functions, a way to do this would be:
 
 ```{r}
-samplingPS = ParamSet$new(
-  list(
-    ParamFct$new("fun", c("mean", "median", "min", "max"))
-  )
+samplingPS = ps(
+  fun = p_fct(c("mean", "median", "min", "max"),
+    trafo = function(x) get(x, mode = "function"))
 )
-
-samplingPS$trafo = function(x, param_set) {
-  # x$fun is a `character(1)`,
-  # in particular one of 'mean', 'median', 'min', 'max'.
-  # We want to turn it into a function!
-  x$fun = get(x$fun, mode = "function")
-  x
-}
 ```
 
 ```{r}
@@ -460,23 +461,32 @@ methodPS$check(xvals[[1]])
 xvals[[1]]$fun(1:10)
 ```
 
+`p_fct()` has a shortcut for this kind of transformation, where a `character` is transformed into a specific set of (typically non-scalar) values.
+When its `levels` argument is given as a named `list` (or named non-`character` vector), it constructs a `Domain` that does the trafo automatically.
+A way to perform the above would therefore be:
+```{r}
+samplingPS = ps(
+  fun = p_fct(list("mean" = mean, "median" = median, "min" = min, "max" = max))
+)
+
+generate_design_random(samplingPS, 1)$transpose()
+```
+
 Imagine now that a different kind of parametrization of the function is desired:
 The user wants to give a function that selects a certain quantile, where the quantile is set by a parameter.
 In that case the `$transpose` function could generate a function in a different way.
-For interpretability, the parameter is called "`quantile`" before transformation, and the "`fun`" parameter is generated on the fly.
+
+For interpretability, the parameter should be called "`quantile`" before transformation, and the "`fun`" parameter is generated on the fly.
+We therefore use an `extra_trafo` here, given as a function to the `ps()` call.
 
 ```{r}
-samplingPS2 = ParamSet$new(
-  list(
-    ParamDbl$new("quantile", 0, 1)
-  )
+samplingPS2 = ps(quantile = p_dbl(0, 1),
+  .extra_trafo = function(x, param_set) {
+    # x$quantile is a `numeric(1)` between 0 and 1.
+    # We want to turn it into a function!
+    list(fun = function(input) quantile(input, x$quantile))
+  }
 )
-
-samplingPS2$trafo = function(x, param_set) {
-  # x$quantile is a `numeric(1)` between 0 and 1.
-  # We want to turn it into a function!
-  list(fun = function(input) quantile(input, x$quantile))
-}
 ```
 
 ```{r}
@@ -499,7 +509,6 @@ xvals[[1]]$fun(1:10)
 When running an optimization, it is important to inform the tuning algorithm about what hyperparameters are valid.
 Here the names, types, and valid ranges of each hyperparameter are important.
 All this information is communicated with objects of the class `ParamSet`, which is defined in `paradox`.
-While it is possible to create `ParamSet`-objects using its `$new`-constructor, it is much shorter and readable to use the `ps`-shortcut, which will be presented here.
 
 Note, that `ParamSet` objects exist in two contexts.
 First, `ParamSet`-objects are used to define the space of valid parameter settings for a learner (and other objects).
@@ -533,13 +542,13 @@ print(search_space)
 
 There are five domain constructors that produce a parameters when given to `ps`:
 
-| Constructor               | Description                          | Is bounded?                        | Underlying Class    |
-| :-----------------------: | :----------------------------------: | :--------------------------------: | :-----------------: |
-| `p_dbl`                   | Real valued parameter ("double")     | When `upper` and `lower` are given | `ParamDbl` |
-| `p_int`                  | Integer parameter                    | When `upper` and `lower` are given | `ParamInt` |
-| `p_fct`                   | Discrete valued parameter ("factor") | Always                             | `ParamFct` |
-| `p_lgl`                 | Logical / Boolean parameter          | Always                             | `ParamLgl` |
-| `p_uty`                   | Untyped parameter                    | Never                              | `ParamUty` |
+| Constructor               | Description                          | Is bounded?                        |
+| :-----------------------: | :----------------------------------: | :--------------------------------: |
+| `p_dbl`                   | Real valued parameter ("double")     | When `upper` and `lower` are given |
+| `p_int`                   | Integer parameter                    | When `upper` and `lower` are given |
+| `p_fct`                   | Discrete valued parameter ("factor") | Always                             |
+| `p_lgl`                   | Logical / Boolean parameter          | Always                             |
+| `p_uty`                   | Untyped parameter                    | Never                              |
 
 These domain constructors each take some of the following arguments:
 
