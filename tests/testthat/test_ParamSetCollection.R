@@ -114,8 +114,8 @@ test_that("deps", {
   # check deps across sets
   psc$add_dep("ps2.d", on = "ps1.f", CondEqual$new("a"))
   expect_data_table(psc$deps, nrows = 2, ncols = 3)
-  expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
-  expect_string(psc$check(list(ps2.d = 0)))
+  expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0), check_strict = TRUE))
+  expect_string(psc$check(list(ps2.d = 0), check_strict = TRUE))
 
   # ps1 and ps2 should not be changed
   expect_equal(ps1clone, ps1)

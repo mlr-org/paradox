@@ -260,7 +260,8 @@ Only returns values of parameters that satisfy all conditions.
   is_bounded = NULL,
   tags = NULL,
   type = "with_token",
-  check_required = TRUE
+  check_required = TRUE,
+  remove_dependencies = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -278,6 +279,9 @@ Return values \code{with_token}, \code{without_token} or \code{only_token}?}
 
 \item{\code{check_required}}{(\code{logical(1)})\cr
 Check if all required parameters are set?}
+
+\item{\code{remove_dependencies}}{(\code{logical(1)})\cr
+Determines if values of parameters with unsatisfied dependencies are removed.}
 }
 \if{html}{\out{</div>}}
 }
@@ -354,13 +358,16 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xs}}{(named \code{list()}).}
+
+\item{\code{check_strict}}{(\code{logical(1)})\cr
+Determines if dependencies and required parameters are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -377,13 +384,16 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xs}}{(named \code{list()}).}
+
+\item{\code{check_strict}}{(\code{logical(1)})\cr
+Determines if dependencies and required parameters are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -400,7 +410,7 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, .var.name = vname(xs))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, .var.name = vname(xs), check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -411,6 +421,9 @@ Params for which dependencies are not satisfied should not be part of \code{x}.
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+
+\item{\code{check_strict}}{(\code{logical(1)})\cr
+Determines if dependencies and required parameters are checked.}
 }
 \if{html}{\out{</div>}}
 }
@@ -428,13 +441,16 @@ if it configures a subset of params, all individual param constraints are
 satisfied and all dependencies are satisfied. Params for which
 dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).}
+
+\item{\code{check_strict}}{(\code{logical(1)})\cr
+Determines if dependencies and required parameters are checked.}
 }
 \if{html}{\out{</div>}}
 }

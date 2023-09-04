@@ -6,19 +6,19 @@ test_that("basic example works", {
   ps$add_dep("th_param_int", on = "th_param_fct", CondEqual$new("a"))
   expect_true(ps$has_deps)
   x = list(th_param_int = 1)
-  expect_string(ps$check(x), fixed = "The parameter 'th_param_int' can only be set")
+  expect_string(ps$check(x, check_strict = TRUE), fixed = "The parameter 'th_param_int' can only be set")
   x = list(th_param_int = 1, th_param_fct = "a")
-  expect_true(ps$check(x))
+  expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_int = 1, th_param_fct = "b")
-  expect_string(ps$check(x), fixed = "The parameter 'th_param_int' can only be set")
+  expect_string(ps$check(x, check_strict = TRUE), fixed = "The parameter 'th_param_int' can only be set")
   x = list(th_param_int = NA, th_param_fct = "b")
-  expect_string(ps$check(x), fixed = "May not be NA")
+  expect_string(ps$check(x, check_strict = TRUE), fixed = "May not be NA")
   x = list(th_param_fct = "a")
-  expect_true(ps$check(x))
+  expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_fct = "b")
-  expect_true(ps$check(x))
+  expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_dbl = 1.3)
-  expect_true(ps$check(x))
+  expect_true(ps$check(x, check_strict = TRUE))
 
   # test printer, with 2 deps
   ps = th_paramset_full()
@@ -40,17 +40,17 @@ test_that("nested deps work", {
   ps$add_dep("th_param_lgl", on = "th_param_fct", CondEqual$new("c"))
 
   x1 = list(th_param_int = 1)
-  expect_string(ps$check(x1), fixed = "The parameter 'th_param_int' can only be set")
+  expect_string(ps$check(x1, check_strict = TRUE), fixed = "The parameter 'th_param_int' can only be set")
   x2 = list(th_param_int = 1, th_param_fct = "b")
-  expect_true(ps$check(x2))
+  expect_true(ps$check(x2, check_strict = TRUE))
   x3 = list(th_param_int = 1, th_param_fct = "c")
-  expect_string(ps$check(x3), fixed = "The parameter 'th_param_int' can only be set")
+  expect_string(ps$check(x3, check_strict = TRUE), fixed = "The parameter 'th_param_int' can only be set")
   x4 = list(th_param_fct = "a")
-  expect_true(ps$check(x4))
+  expect_true(ps$check(x4, check_strict = TRUE))
   x5 = list(th_param_dbl = 1.3)
-  expect_string(ps$check(x5), fixed = "The parameter 'th_param_dbl' can only be set")
+  expect_string(ps$check(x5, check_strict = TRUE), fixed = "The parameter 'th_param_dbl' can only be set")
   x6 = list(th_param_fct = "c", th_param_lgl = TRUE, th_param_dbl = 3)
-  expect_true(ps$check(x6))
+  expect_true(ps$check(x6, check_strict = TRUE))
 })
 
 
@@ -72,11 +72,11 @@ test_that("adding 2 sets with deps works", {
   expect_true(ps1$has_deps)
   expect_data_table(ps1$deps, nrows = 2)
   # do a few feasibility checks on larger set
-  expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y2 = 1)))
-  expect_true(ps1$test(list(x1 = "a", y1 = 1)))
-  expect_false(ps1$test(list(x1 = "b", y1 = 1)))
-  expect_true(ps1$test(list(x2 = "a", y2 = 1)))
-  expect_false(ps1$test(list(x2 = "b", y2 = 1)))
+  expect_true(ps1$test(list(x1 = "a", y1 = 1, x2 = "a", y2 = 1), check_strict = TRUE))
+  expect_true(ps1$test(list(x1 = "a", y1 = 1), check_strict = TRUE))
+  expect_false(ps1$test(list(x1 = "b", y1 = 1), check_strict = TRUE))
+  expect_true(ps1$test(list(x2 = "a", y2 = 1), check_strict = TRUE))
+  expect_false(ps1$test(list(x2 = "b", y2 = 1), check_strict = TRUE))
 })
 
 test_that("subsetting with deps works", {
@@ -109,8 +109,8 @@ test_that("we can also dep on integer", {
   ))
   ps$add_dep("d", on = "i", CondAnyOf$new(1:3))
 
-  expect_true(ps$check(list(i = 2, d = 5)))
-  expect_string(ps$check(list(i = 5, d = 5)))
+  expect_true(ps$check(list(i = 2, d = 5), check_strict = TRUE))
+  expect_string(ps$check(list(i = 5, d = 5), check_strict = TRUE))
 })
 
 test_that("deps make sense", {

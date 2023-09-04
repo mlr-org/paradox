@@ -138,14 +138,18 @@ ParamSet = R6Class("ParamSet",
     #' Return values `with_token`, `without_token` or `only_token`?
     #' @param check_required (`logical(1)`)\cr
     #' Check if all required parameters are set?
+    #' @param remove_dependencies (`logical(1)`)\cr
+    #' Determines if values of parameters with unsatisfied dependencies are removed.
     #' @return Named `list()`.
-    get_values = function(class = NULL, is_bounded = NULL, tags = NULL,
-      type = "with_token", check_required = TRUE) {
+    get_values = function(class = NULL, is_bounded = NULL, tags = NULL, type = "with_token", check_required = TRUE, 
+      remove_dependencies = TRUE) {
       assert_choice(type, c("with_token", "without_token", "only_token"))
       assert_flag(check_required)
+      assert_flag(remove_dependencies)
       values = self$values
       params = self$params_unid
       ns = names(values)
+      deps = self$deps
 
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
@@ -153,13 +157,26 @@ ParamSet = R6Class("ParamSet",
         values = keep(values, is, "TuneToken")
       }
 
-      if(check_required) {
+      if (check_required) {
         required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
         }
       }
 
+      if (remove_dependencies) {
+        if (nrow(deps)) {
+          for (j in seq_row(deps)) {
+            p1id = deps$id[j]
+            p2id = deps$on[j]
+            cond = deps$cond[[j]]
+            if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(cond$test(values[[p2id]]))) {
+              values[p1id] = NULL
+              }
+          }
+        }
+      }
+      
       values[intersect(names(values), self$ids(class = class, is_bounded = is_bounded, tags = tags))]
     },
     #' @description
@@ -233,8 +250,11 @@ ParamSet = R6Class("ParamSet",
     #' Params for which dependencies are not satisfied should not be part of `x`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_strict  (`logical(1)`)\cr
+    #' Determines if dependencies and required parameters are checked.
     #' @return If successful `TRUE`, if not a string with the error message.
-    check = function(xs) {
+    check = function(xs, check_strict = FALSE) {
+      assert_flag(check_strict)
 
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -257,33 +277,41 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-      # check dependencies
-      deps = self$deps
-      if (nrow(deps)) {
-        for (j in seq_row(deps)) {
+      if (check_strict) {
+         # check required
+        required = setdiff(names(keep(params, function(p) "required" %in% p$tags)), ns)
+        if (length(required) > 0L) {
+          stop(sprintf("Missing required parameters: %s", str_collapse(required)))
+        }
 
-          p1id = deps$id[j]
-          p2id = deps$on[j]
-          if (inherits(xs[[p1id]], "TuneToken") || inherits(xs[[p2id]], "TuneToken")) {
-            next  # be lenient with dependencies when any parameter involved is a TuneToken
-          }
-          # we are ONLY ok if:
-          # - if param is there, then parent must be there, then cond must be true
-          # - if param is not there
-          cond = deps$cond[[j]]
-          ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
-            (p1id %nin% ns)
-          if (isFALSE(ok)) {
-            message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
-              p1id, cond$as_string(p2id))
-            val = xs[[p2id]]
-            if (is.null(val)) {
-              message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
-                  "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
-            } else {
-              message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+        # check dependencies
+        deps = self$deps
+        if (nrow(deps)) {
+          for (j in seq_row(deps)) {
+
+            p1id = deps$id[j]
+            p2id = deps$on[j]
+            if (inherits(xs[[p1id]], "TuneToken") || inherits(xs[[p2id]], "TuneToken")) {
+              next  # be lenient with dependencies when any parameter involved is a TuneToken
             }
-            return(message)
+            # we are ONLY ok if:
+            # - if param is there, then parent must be there, then cond must be true
+            # - if param is not there
+            cond = deps$cond[[j]]
+            ok = (p1id %in% ns && p2id %in% ns && cond$test(xs[[p2id]])) ||
+              (p1id %nin% ns)
+            if (isFALSE(ok)) {
+              message = sprintf("The parameter '%s' can only be set if the following condition is met '%s'.",
+                p1id, cond$as_string(p2id))
+              val = xs[[p2id]]
+              if (is.null(val)) {
+                message = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
+                    "Try setting '%s' to a value that satisfies the condition"), message, p2id, p2id)
+              } else {
+                message = sprintf("%s Instead the current parameter value is: %s=%s", message, p2id, val)
+              }
+              return(message)
+            }
           }
         }
       }
@@ -298,8 +326,10 @@ ParamSet = R6Class("ParamSet",
     #' Params for which dependencies are not satisfied should not be part of `x`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_strict (`logical(1)`)\cr
+    #' Determines if dependencies and required parameters are checked.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs) makeTest(res = self$check(xs)),
+    test = function(xs, check_strict = FALSE) makeTest(res = self$check(xs, check_strict)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function. Takes a named list.
@@ -311,8 +341,12 @@ ParamSet = R6Class("ParamSet",
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
+    #' @param check_strict (`logical(1)`)\cr
+    #' Determines if dependencies and required parameters are checked.
     #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, .var.name = vname(xs)) makeAssertion(xs, self$check(xs), .var.name, NULL), # nolint
+    assert = function(xs, .var.name = vname(xs), check_strict = FALSE) {
+      makeAssertion(xs, self$check(xs, check_strict), .var.name, NULL) # nolint
+    },
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
@@ -322,11 +356,13 @@ ParamSet = R6Class("ParamSet",
     #' dependencies are not satisfied should be set to `NA` in `xdt`.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
+    #' @param check_strict (`logical(1)`)\cr
+    #' Determines if dependencies and required parameters are checked.
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt) {
+    check_dt = function(xdt, check_strict = FALSE) {
       xss = map(transpose_list(xdt), discard, is.na)
       for (xs in xss) {
-        ok = self$check(xs)
+        ok = self$check(xs, check_strict)
         if (!isTRUE(ok)) {
           return(ok)
         }

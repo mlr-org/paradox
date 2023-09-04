@@ -104,7 +104,7 @@ test_that("ParamSet$check", {
 
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_1", "x_rep_2", CondEqual$new(TRUE))
-  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE)), fixed = "x_rep_2 = TRUE")
+  expect_string(ps$check(list(x_rep_1 = FALSE, x_rep_2 = FALSE), check_strict = TRUE), fixed = "x_rep_2 = TRUE")
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
@@ -277,6 +277,95 @@ test_that("ParamSet$get_values", {
   expect_equal(ps$get_values(), list(x = 1, y = 2))
   expect_equal(ps$get_values(class = c("ParamInt", "ParamFct")), list(y = 2))
   expect_equal(ps$get_values(is_bounded = TRUE), list(y = 2))
+
+  # 2 dependencies
+  pss = ps(
+    a = p_fct(c("b", "c")),
+    b = p_int(depends = a == "b"),
+    c = p_int(depends = a == "c")
+  )
+
+  pss$values$b = 1
+  expect_list(pss$get_values(), len = 0)
+  expect_equal(pss$get_values(remove_dependencies = FALSE), list(b = 1))
+
+  pss$values$a = "c"
+  expect_equal(pss$get_values(), list(a = "c"))
+  expect_equal(pss$get_values(remove_dependencies = FALSE), list(b = 1, a = "c"))
+
+  pss$values$a = "b"
+  expect_equal(pss$get_values(), list(b = 1, a = "b"))
+
+  pss$values$a = "b"
+  pss$values$b = 1
+  pss$values$c = 1
+
+  expect_equal(pss$get_values(), list(b = 1, a = "b"))
+  expect_equal(pss$get_values(remove_dependencies = FALSE), list(b = 1, a = "b", c = 1))
+
+  # 2 dependencies and tune token
+  pss = ps(
+    a = p_fct(c("b", "c")),
+    b = p_int(depends = a == "b"),
+    c = p_int(depends = a == "c")
+  )
+
+  pss$values$a = to_tune()
+  pss$values$b = 1
+  pss$values$c = 1
+
+  expect_equal(pss$get_values(), list(a = to_tune(), b = 1L, c = 1L))
+
+  # 3 dependencies
+  pss = ps(
+    a = p_fct(c("b", "c")),
+    b = p_int(depends = a == "b"),
+    c = p_int(depends = a == "c"),
+    d = p_lgl(),
+    e = p_int(depends = d == TRUE)
+  )
+
+  pss$values$a = "b"
+  pss$values$b = 1
+  pss$values$c = 1
+
+  expect_equal(pss$get_values(), list(a = "b", b = 1L))
+  expect_equal(pss$get_values(remove_dependencies = FALSE), list(a = "b", b = 1L, c = 1L))
+
+  pss$values$e = 1
+
+  expect_equal(pss$get_values(), list(a = "b", b = 1L))
+
+  pss$values$d = FALSE
+
+  expect_equal(pss$get_values(), list(a = "b", b = 1L, d = FALSE))
+
+  pss$values$d = TRUE
+
+  expect_equal(pss$get_values(), list(a = "b", b = 1L, e = 1, d = TRUE))
+
+  # nested dependencies
+  pss = ps(
+    a = p_fct(c("b", "c")),
+    b = p_int(depends = a == "b"),
+    c = p_int(depends = b == 1)
+  )
+
+  pss$values$c = 1
+  expect_list(pss$get_values(), len = 0)
+
+  pss$values$b = 1
+  expect_list(pss$get_values(), len = 0)
+
+  pss$values$a = "b"
+  expect_equal(pss$get_values(), list(c = 1, b = 1, a = "b"))
+
+  pss$values = list()
+  pss$values$b = 1
+  expect_list(pss$get_values(), len = 0)
+
+  pss$values$a = "b"
+  expect_equal(pss$get_values(), list(b = 1, a = "b"))
 })
 
 test_that("required tag", {
@@ -335,11 +424,11 @@ test_that("ParamSet$check_dt", {
   ps = ParamLgl$new("x")$rep(2)
   ps$add_dep("x_rep_2", "x_rep_1", CondEqual$new(TRUE))
   xdt = data.table(x_rep_1 = c(TRUE, TRUE), x_rep_2 = c(FALSE, TRUE))
-  expect_true(ps$check_dt(xdt))
+  expect_true(ps$check_dt(xdt, check_strict = TRUE))
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, FALSE))
-  expect_character(ps$check_dt(xdt), fixed = "x_rep_1 = TRUE")
+  expect_character(ps$check_dt(xdt, check_strict = TRUE), fixed = "x_rep_1 = TRUE")
   xdt = data.table(x_rep_1 = c(TRUE, TRUE, FALSE), x_rep_2 = c(FALSE, TRUE, NA))
-  expect_true(ps$check_dt(xdt))
+  expect_true(ps$check_dt(xdt, check_strict = TRUE))
 })
 
 test_that("rd_info.ParamSet", {
