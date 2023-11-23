@@ -37,7 +37,7 @@ ParamUty = R6Class("ParamUty", inherit = Param,
       # super class calls private$.check, so this must be set BEFORE
       # we initialize the super class
       if (is.null(custom_check)) {
-        self$custom_check = function(x) TRUE
+        self$custom_check = crate(function(x) TRUE)
       } else {
         self$custom_check = assert_function(custom_check, "x")
       }
