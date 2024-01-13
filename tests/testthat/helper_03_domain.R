@@ -10,8 +10,8 @@ expect_equal_ps = function(a, b) {
     acp = acl$.__enclos_env__$private
     acp$.params$id = sprintf("x%s", seq_len(original$length))
     names(acp$.values) = sprintf("x%s", match(names(original$values), original$ids()))
-    acp$.tags = copy(acp$.tags)[, id := sprintf("x%s", match(id, original$ids()))]
-    acp$.trafos = copy(acp$.trafos)[, id := sprintf("x%s", match(id, original$ids()))]
+    acp$.tags = setkeyv(copy(acp$.tags)[, id := sprintf("x%s", match(id, original$ids()))], key(acp$.tags))
+    acp$.trafos = setkeyv(copy(acp$.trafos)[, id := sprintf("x%s", match(id, original$ids()))], key(acp$.trafos))
     acp$.deps[, id := sprintf("x%s", match(id, original$ids()))]
     setindexv(acp$.params, NULL)
     setindexv(acp$.trafos, NULL)

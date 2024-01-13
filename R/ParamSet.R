@@ -458,9 +458,9 @@ ParamSet = R6Class("ParamSet",
       result = ParamSet$new()
 
 
-      result$.__enclos_env__$private$.params = private$.params[ids, on = "id"]
-      result$.__enclos_env__$private$.trafos = private$.trafos[ids, on = "id", nomatch = NULL]
-      result$.__enclos_env__$private$.tags = private$.tags[ids, on = "id", nomatch = NULL]
+      result$.__enclos_env__$private$.params = setindexv(private$.params[ids, on = "id"], c("id", "cls", "grouping"))
+      result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[ids, on = "id", nomatch = NULL], "id")
+      result$.__enclos_env__$private$.tags = setkeyv(private$.tags[ids, on = "id", nomatch = NULL], "id")
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
       if (keep_constraint) result$constraint = self$constraint
@@ -479,9 +479,10 @@ ParamSet = R6Class("ParamSet",
         result = ParamSet$new()
         result$extra_trafo = self$extra_trafo
         # constraint make no sense here, basically by definition
-        result$.__enclos_env__$private$.params = private$.params[get_id, on = "id"]
-        result$.__enclos_env__$private$.trafos = private$.trafos[get_id, on = "id", nomatch = NULL]
-        result$.__enclos_env__$private$.tags = private$.tags[get_id, on = "id", nomatch = NULL]
+        result$.__enclos_env__$private$.params = setindexv(private$.params[get_id, on = "id"], c("id", "cls", "grouping"))
+        # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
+        result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[get_id, on = "id", nomatch = NULL], "id")
+        result$.__enclos_env__$private$.tags = setkeyv(private$.tags[get_id, on = "id", nomatch = NULL], "id")
         result$assert_values = FALSE
         result$values = values[match(get_id, names(values), nomatch = 0)]
         result$assert_values = TRUE

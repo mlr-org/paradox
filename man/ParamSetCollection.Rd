@@ -50,6 +50,7 @@ When you set values, all previously set values will be unset / removed.}
 \subsection{Public methods}{
 \itemize{
 \item \href{#method-ParamSetCollection-new}{\code{ParamSetCollection$new()}}
+\item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
 \item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
 }
 }
@@ -109,6 +110,26 @@ without having to clone said \code{\link{ParamSet}}s. However, when underlying \
 Also note that the \verb{$values} will have undefined behavior when \code{sets} contains a
 single \code{\link{ParamSet}} multiple times (by reference).
 Default \code{FALSE}.}
+}
+\if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetCollection-add"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-add}{}}}
+\subsection{Method \code{add()}}{
+Adds a set to this collection.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$add(p, n = "", tag_sets = FALSE, tag_params = FALSE)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{p}}{(\link{ParamSet}).}
+
+\item{\code{n}}{(\code{character(1)})\cr
+Name to use. Default \code{""}.}
 }
 \if{html}{\out{</div>}}
 }

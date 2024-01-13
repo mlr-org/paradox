@@ -65,9 +65,9 @@ test_that("ParamSet basic stuff works", {
   expect_equal(ps1, ps1clone)
   expect_equal(ps2, ps2clone)
 
-  # adding a set (not really supported any more)
+  # adding a set
   ps4 = ParamSet_legacy$new(list(ParamDbl$new("x")))
-  psc = ps_union(list(psc, s4 = ps4))
+  psc = psc$add(ps4, n = "s4")
   expect_equal(psc$length, ps1$length + ps2$length + ps3$length + ps4$length)
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), ps3$ids(), paste0("s4.", ps4$ids())))
 })
@@ -215,11 +215,11 @@ test_that("set_id inference in values assignment works now", {
 
   pstest = ParamSet_legacy$new(list(ParamDbl$new("paramc")))
 
-  expect_error(ps_union(list(pscol2, a.c = pstest)), "duplicated parameter names.* a\\.c\\.paramc")
+  expect_error(pscol2$add(pstest, n = "a.c"), "would lead to nameclashes.*a\\.c\\.paramc")
 
   pstest = ParamSet_legacy$new(list(ParamDbl$new("a.c.paramc")))
 
-  expect_error(ps_union(list(pscol2, pstest)), "duplicated parameter names.* a\\.c\\.paramc")
+  expect_error(pscol2$add(pstest), "would lead to nameclashes.*a\\.c\\.paramc")
 
   pscol2$values = list(a.c.paramc = 3, a.b.parama = 1, a.b.paramb = 2)
 

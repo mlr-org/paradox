@@ -67,9 +67,9 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
         paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
       }
-      if (tag_sets) paramtbl[owner_name != "", , .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
+      if (tag_sets) paramtbl[owner_name != "", .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
       if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
-      private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
+      private$.tags = paramtbl[, .(tag = unique(unlist(.tags))), keyby = "id"]
 
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
 
@@ -86,6 +86,70 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.children_with_constraints = which(!map_lgl(map(sets, "constraint"), is.null))
 
       private$.sets = sets
+    },
+
+    #' @description
+    #' Adds a set to this collection.
+    #'
+    #' @param p ([ParamSet]).
+    #' @param n (`character(1)`)\cr
+    #'   Name to use. Default `""`.
+    add = function(p, n = "", tag_sets = FALSE, tag_params = FALSE) {
+      assert_r6(p, "ParamSet")
+      if (n != "" && n %in% names(private$.sets)) {
+        stopf("Set name '%s' already present in collection!", n)
+      }
+      pnames = p$ids()
+      nameclashes = intersect(
+        ifelse(n != "", sprintf("%s.%s", n, pnames), pnames),
+        self$ids()
+      )
+      if (length(nameclashes)) {
+        stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
+      }
+
+      new_index = length(private$.sets) + 1
+      paramtbl = p$params[, `:=`(original_id = id, owner_ps_index = new_index, owner_name = n)]
+      if (n != "") set(paramtbl, , "id", sprintf("%s.%s", n, paramtbl$id))
+
+      if (!nrow(paramtbl)) {
+        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
+        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
+      }
+      if (tag_sets && n != "") paramtbl[, .tags := map(.tags, function(x) c(x, sprintf("set_%s", n)))]
+      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
+      newtags = paramtbl[, .(tag = unique(unlist(.tags))), by = "id"]
+      if (nrow(newtags)) {
+        private$.tags = setkeyv(rbind(private$.tags, newtags), "id")
+      }
+
+      newtrafos = paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)]
+      if (nrow(newtrafos)) {
+        private$.trafos = setkeyv(rbind(private$.trafos, newtrafos), "id")
+      }
+
+      private$.translation = rbind(private$.translation, paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE])
+      setkeyv(private$.translation, "id")
+      setindexv(private$.translation, "original_id")
+
+      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
+      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
+      private$.params = rbind(private$.params, paramtbl)
+      setindexv(private$.params, c("id", "cls", "grouping"))
+
+      if (!is.null(p$extra_trafo)) {
+        entry = if (n == "") length(private$.children_with_trafos) + 1 else n
+        private$.children_with_trafos[[entry]] = new_index
+      }
+
+      if (!is.null(p$constraint)) {
+        entry = if (n == "") length(private$.children_with_constraints) + 1 else n
+        private$.children_with_constraints[[entry]] = new_index
+      }
+
+      entry = if (n == "") length(private$.sets) + 1 else n
+      private$.sets[[n]] = p
+      invisible(self)
     }
   ),
 
