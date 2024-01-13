@@ -1,3 +1,4 @@
+#' @title
 #' @export
 ps_replicate = function(set, times = length(prefixes), prefixes = sprintf("rep%s", seq_len(times)), tag_sets = FALSE, tag_params = FALSE) {
   assert_count(times)

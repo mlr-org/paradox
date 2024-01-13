@@ -8,6 +8,7 @@
 #' from the input `sets`, but some `$id`s are changed: If the ParamSet has a non-empty `set_id`, then the Params will
 #' have their <id> changed to <set_id>.<id>. This is also reflected in deps and in `$trafo`.
 #' @param sets: list of ParamSet
+#' @param tag_sets
 #' @export
 ps_union = function(sets, tag_sets = FALSE, tag_params = FALSE) {
   assert_list(sets, types = "ParamSet")

@@ -64,7 +64,7 @@ When you set values, all previously set values will be unset / removed.}
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check_dt'><code>paradox::ParamSet$check_dt()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten"><a href='../../paradox/html/ParamSet.html#method-ParamSet-flatten'><code>paradox::ParamSet$flatten()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href='../../paradox/html/ParamSet.html#method-ParamSet-format'><code>paradox::ParamSet$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_param"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_param'><code>paradox::ParamSet$get_param()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_domain"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_domain'><code>paradox::ParamSet$get_domain()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-get_values'><code>paradox::ParamSet$get_values()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="ids"><a href='../../paradox/html/ParamSet.html#method-ParamSet-ids'><code>paradox::ParamSet$ids()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="print"><a href='../../paradox/html/ParamSet.html#method-ParamSet-print'><code>paradox::ParamSet$print()</code></a></span></li>

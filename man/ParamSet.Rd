@@ -74,6 +74,9 @@ Named with parameter IDs.}
 \item{\code{params}}{(named \code{list()})\cr
 List of \link{Param}, named with their respective ID.}
 
+\item{\code{domains}}{(named \code{list} of \code{\link{Domain}})
+List of \code{\link{Domain}} objects that could be used to initialize this \code{ParamSet}.}
+
 \item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
 Transformation function. Settable.
 User has to pass a \verb{function(x)}, of the form\cr
@@ -161,7 +164,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-test_dt}{\code{ParamSet$test_dt()}}
 \item \href{#method-ParamSet-assert_dt}{\code{ParamSet$assert_dt()}}
 \item \href{#method-ParamSet-qunif}{\code{ParamSet$qunif()}}
-\item \href{#method-ParamSet-get_param}{\code{ParamSet$get_param()}}
+\item \href{#method-ParamSet-get_domain}{\code{ParamSet$get_domain()}}
 \item \href{#method-ParamSet-subset}{\code{ParamSet$subset()}}
 \item \href{#method-ParamSet-subspaces}{\code{ParamSet$subspaces()}}
 \item \href{#method-ParamSet-flatten}{\code{ParamSet$flatten()}}
@@ -479,12 +482,12 @@ If successful \code{xs} invisibly, if not an error message.
 
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-ParamSet-get_param"></a>}}
-\if{latex}{\out{\hypertarget{method-ParamSet-get_param}{}}}
-\subsection{Method \code{get_param()}}{
+\if{html}{\out{<a id="method-ParamSet-get_domain"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-get_domain}{}}}
+\subsection{Method \code{get_domain()}}{
 get the \code{\link{Domain}} object that could be used to create a given parameter.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_param(id)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$get_domain(id)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{

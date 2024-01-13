@@ -211,6 +211,8 @@ ParamSet = R6Class("ParamSet",
     },
 
     trafo = function(x, param_set = self) {
+      if (is.data.frame(x)) x = as.list(x)
+      assert_list(x, names = "unique")
       trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
       trafos[, value := x[id]]
       if (nrow(trafos)) {
@@ -416,7 +418,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param id (`character(1)`).
     #' @return [`Domain`].
-    get_param = function(id) {
+    get_domain = function(id) {
       assert_string(id)
       paramrow = private$.params[id, on = "id", nomatch = NULL]
 
@@ -526,7 +528,7 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (on %in% ids) {  # not necessarily true when allow_dangling_dependencies
-        feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_param(on), list(x)))
+        feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_domain(on), list(x)))
         if (any(!feasible_on_values)) {
           stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
         }
@@ -639,6 +641,17 @@ ParamSet = R6Class("ParamSet",
 
       result[]
     },
+
+    #' @field domains (named `list` of [`Domain`])
+    #' List of [`Domain`] objects that could be used to initialize this `ParamSet`.
+    domains = function(rhs) {
+      if (!missing(rhs)) {
+        stop("domains is read-only.")
+      }
+      nm = self$ids()
+      set_names(map(nm, self$get_domain), nm)
+    },
+
 
     #' @field extra_trafo (`function(x, param_set)`)\cr
     #' Transformation function. Settable.

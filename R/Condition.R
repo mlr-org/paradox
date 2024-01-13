@@ -97,3 +97,17 @@ CondAnyOf = function(rhs) {
 condition_test.CondAnyOf = function(cond, x) {
   !is.na(x) & x %in% cond$rhs
 }
+
+# FIXME: the following makes `condition$new()` possible for paradox transition
+# should give a deprecated warning at some point.
+#' @export
+`$.Constructor` = function(e1, e2) {
+  if (!identical(e2, "new")) {
+    stop("only 'new' element can be accessed.")
+  } else {
+    e1
+  }
+}
+
+CondEqual = structure(CondEqual, class = c("Constructor", "function"))
+CondAnyOf = structure(CondAnyOf, class = c("Constructor", "function"))
