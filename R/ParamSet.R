@@ -294,12 +294,12 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (check_strict) {
-        required = setdiff(self$ids(tags = "required"), ns)
-        if (length(required) > 0L) {
-          return(sprintf("Missing required parameters: %s", str_collapse(required)))
-        }
-        return(self$check_dependencies(xs))
+        ## required = setdiff(self$ids(tags = "required"), ns)
+        ## if (length(required) > 0L) {
+        ##   return(sprintf("Missing required parameters: %s", str_collapse(required)))
+        ## }
         if (!self$test_constraint(xs, assert_value = FALSE)) return(sprintf("Constraint not fulfilled."))
+        return(self$check_dependencies(xs))
       }
 
       TRUE # we passed all checks
