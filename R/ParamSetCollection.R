@@ -182,7 +182,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # We do this here because we don't want the loop to be aborted early and have half an update.
         self$assert(xs)
 
-        translate = private$.translation[names(xs), list(original_id, owner_ps_index), on = "id"]
+        # %??% character(0) in case xs is an empty unnamed list
+        translate = private$.translation[names(xs) %??% character(0), list(original_id, owner_ps_index), on = "id"]
         set(translate, , j = "values", list(xs))
         for (xtl in split(translate, by = "owner_ps_index")) {
           sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)

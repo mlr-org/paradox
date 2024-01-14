@@ -154,6 +154,10 @@ test_that("values", {
 
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
+
+  # resetting pcs values
+  pcs$values = list()
+  expect_list(pcs$values, len = 0)
 })
 
 test_that("empty collections", {
