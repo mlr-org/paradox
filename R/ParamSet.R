@@ -253,7 +253,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xs (named `list()`).
     #' @return If successful `TRUE`, if not a string with the error message.
-    check = function(xs, check_strict = FALSE) {
+    check = function(xs, check_strict = TRUE) {
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -341,7 +341,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xs (named `list()`).
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs, check_strict = FALSE) makeTest(self$check(xs, check_strict = check_strict)),
+    test = function(xs, check_strict = TRUE) makeTest(self$check(xs, check_strict = check_strict)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function. Takes a named list.
@@ -354,7 +354,7 @@ ParamSet = R6Class("ParamSet",
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
     #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, check_strict = FALSE, .var.name = vname(xs)) makeAssertion(xs, self$check(xs, check_strict = check_strict), .var.name, NULL),  # nolint
+    assert = function(xs, check_strict = TRUE, .var.name = vname(xs)) makeAssertion(xs, self$check(xs, check_strict = check_strict), .var.name, NULL),  # nolint
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
@@ -365,7 +365,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt, check_strict = FALSE) {
+    check_dt = function(xdt, check_strict = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
       for (i in seq_along(xss)) {
@@ -393,7 +393,7 @@ ParamSet = R6Class("ParamSet",
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
     #' @return If successful `xs` invisibly, if not an error message.
-    assert_dt = function(xdt, check_strict = FALSE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict), .var.name, NULL), # nolint
+    assert_dt = function(xdt, check_strict = TRUE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict), .var.name, NULL), # nolint
 
     qunif = function(x) {
       assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
