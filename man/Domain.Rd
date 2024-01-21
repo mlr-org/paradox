@@ -119,10 +119,10 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 Put numeric domains on a log scale. Default \code{FALSE}. Log-scale \code{Domain}s represent parameter ranges where lower and upper bounds
 are logarithmized, and where a \code{trafo} is added that exponentiates sampled values to the original scale. This is
 \emph{not} the same as setting \code{trafo = exp}, because \code{logscale = TRUE} will handle parameter bounds internally:
-a \code{p_dbl(1, 10, logscale = TRUE)} results in a \code{\link{ParamDbl}} that has lower bound \code{0}, upper bound \code{log(10)},
+a \code{p_dbl(1, 10, logscale = TRUE)} results in a parameter that has lower bound \code{0}, upper bound \code{log(10)},
 and uses \code{exp} transformation on these. Therefore, the given bounds represent the bounds \emph{after} the transformation.
 (see examples).\cr
-\code{p_int()} with \code{logscale = TRUE} results in a \code{\link{ParamDbl}}, not a \code{\link{ParamInt}}, but with bounds \code{log(max(lower, 0.5))} ...
+\code{p_int()} with \code{logscale = TRUE} results in a continuous parameter similar to \code{p_dbl()}, not an integer-valued parameter, with bounds \code{log(max(lower, 0.5))} ...
 \code{log(upper + 1)} and a trafo similar to "\code{as.integer(exp(x))}" (with additional bounds correction). The lower bound
 is lifted to \code{0.5} if \code{lower} 0 to handle the \code{lower == 0} case. The upper bound is increased to \code{log(upper + 1)}
 because the trafo would otherwise almost never generate a value of \code{upper}.\cr
@@ -152,21 +152,21 @@ A \code{Domain} object.
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
-\code{\link{ParamSet}}s, either through the \code{\link[=ps]{ps()}} short form, or through the \code{\link{ParamSet}}\verb{$search_space()} mechanism (see
-\code{\link[=to_tune]{to_tune()}}). \code{Domain} corresponds to a \code{\link{Param}} object, except it does not have an \verb{$id}, and it \emph{does} have a
-\code{trafo} and dependencies (\code{depends}) associated with it. For each of the basic \code{\link{Param}} classes (\code{\link{ParamInt}},
-\code{\link{ParamDbl}}, \code{\link{ParamLgl}}, \code{\link{ParamFct}}, and \code{\link{ParamUty}}) there is a function constructing a \code{Domain} object
-(\code{p_int()}, \code{p_dbl()}, \code{p_lgl()}, \code{p_fct()}, \code{p_uty()}). They each have the same arguments as the corresponding
-\code{\link{Param}} \verb{$new()} function, except without the \code{id} argument, and with the the additional parameters \code{trafo}, and
-\code{depends}.
+\code{\link{ParamSet}}s, either through the \code{\link[=ps]{ps()}} short form, through the \code{\link{ParamSet}} constructor itself,
+or through the \code{\link{ParamSet}}\verb{$search_space()} mechanism (see
+\code{\link[=to_tune]{to_tune()}}).
+For each of the basic parameter classes (\code{"ParamInt"}, \code{"ParamDbl"}, \code{"ParamLgl"}, \code{"ParamFct"}, and \code{"ParamUty"}) there is a function constructing a \code{Domain} object
+(\code{p_int()}, \code{p_dbl()}, \code{p_lgl()}, \code{p_fct()}, \code{p_uty()}). They each have fitting construction arguments that control their
+bounds and behavior.
 
 \code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
-constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user.
+constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user, once constructed.
 The \code{Domain} object's internals are subject to change and should not be relied upon.
 }
 \details{
-The \code{p_fct} function admits a \code{levels} argument that goes beyond the \code{levels} accepted by \code{\link{ParamFct}}\verb{$new()}.
-Instead of a \code{character} vector, any atomic vector or list (optionally named) may be given. (If the value is a list
+Although the \code{levels} values of a constructed \code{p_fct()} will always be \code{character}-valued, the \code{p_fct} function admits
+a \code{levels} argument that goes beyond this:
+Besides a \code{character} vector, any atomic vector or list (optionally named) may be given. (If the value is a list
 that is not named, the names are inferred using \code{as.character()} on the values.) The resulting \code{Domain} will
 correspond to a range of values given by the names of the \code{levels} argument with a \code{trafo} that maps the \code{character}
 names to the arbitrary values of the \code{levels} argument.
@@ -204,7 +204,7 @@ print(grid)
 # But the values are on a log scale with desired bounds after trafo
 print(grid$transpose())
 
-# Integer parameters with logscale are `ParamDbl`s pre-trafo
+# Integer parameters with logscale are `p_dbl()`s pre-trafo
 params = ps(x = p_int(0, 10, logscale = TRUE))
 print(params)
 

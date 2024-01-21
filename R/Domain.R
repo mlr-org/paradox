@@ -2,16 +2,15 @@
 #'
 #' @description
 #' A `Domain` object is a representation of a single dimension of a [`ParamSet`]. `Domain` objects are used to construct
-#' [`ParamSet`]s, either through the [`ps()`] short form, or through the [`ParamSet`]`$search_space()` mechanism (see
-#' [`to_tune()`]). `Domain` corresponds to a [`Param`] object, except it does not have an `$id`, and it *does* have a
-#' `trafo` and dependencies (`depends`) associated with it. For each of the basic [`Param`] classes ([`ParamInt`],
-#' [`ParamDbl`], [`ParamLgl`], [`ParamFct`], and [`ParamUty`]) there is a function constructing a `Domain` object
-#' (`p_int()`, `p_dbl()`, `p_lgl()`, `p_fct()`, `p_uty()`). They each have the same arguments as the corresponding
-#' [`Param`] `$new()` function, except without the `id` argument, and with the the additional parameters `trafo`, and
-#' `depends`.
+#' [`ParamSet`]s, either through the [`ps()`] short form, through the [`ParamSet`] constructor itself,
+#' or through the [`ParamSet`]`$search_space()` mechanism (see
+#' [`to_tune()`]).
+#' For each of the basic parameter classes (`"ParamInt"`, `"ParamDbl"`, `"ParamLgl"`, `"ParamFct"`, and `"ParamUty"`) there is a function constructing a `Domain` object
+#' (`p_int()`, `p_dbl()`, `p_lgl()`, `p_fct()`, `p_uty()`). They each have fitting construction arguments that control their
+#' bounds and behavior.
 #'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
-#' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
+#' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user, once constructed.
 #' The `Domain` object's internals are subject to change and should not be relied upon.
 #'
 #' @template param_lower
@@ -43,10 +42,10 @@
 #'   Put numeric domains on a log scale. Default `FALSE`. Log-scale `Domain`s represent parameter ranges where lower and upper bounds
 #'   are logarithmized, and where a `trafo` is added that exponentiates sampled values to the original scale. This is
 #'   *not* the same as setting `trafo = exp`, because `logscale = TRUE` will handle parameter bounds internally:
-#'   a `p_dbl(1, 10, logscale = TRUE)` results in a [`ParamDbl`] that has lower bound `0`, upper bound `log(10)`,
+#'   a `p_dbl(1, 10, logscale = TRUE)` results in a parameter that has lower bound `0`, upper bound `log(10)`,
 #'   and uses `exp` transformation on these. Therefore, the given bounds represent the bounds *after* the transformation.
 #'   (see examples).\cr
-#'   `p_int()` with `logscale = TRUE` results in a [`ParamDbl`], not a [`ParamInt`], but with bounds `log(max(lower, 0.5))` ...
+#'   `p_int()` with `logscale = TRUE` results in a continuous parameter similar to `p_dbl()`, not an integer-valued parameter, with bounds `log(max(lower, 0.5))` ...
 #'   `log(upper + 1)` and a trafo similar to "`as.integer(exp(x))`" (with additional bounds correction). The lower bound
 #'   is lifted to `0.5` if `lower` 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
 #'   because the trafo would otherwise almost never generate a value of `upper`.\cr
@@ -62,8 +61,9 @@
 #' @return A `Domain` object.
 #'
 #' @details
-#' The `p_fct` function admits a `levels` argument that goes beyond the `levels` accepted by [`ParamFct`]`$new()`.
-#' Instead of a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
+#' Although the `levels` values of a constructed `p_fct()` will always be `character`-valued, the `p_fct` function admits
+#' a `levels` argument that goes beyond this:
+#' Besides a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
 #' that is not named, the names are inferred using `as.character()` on the values.) The resulting `Domain` will
 #' correspond to a range of values given by the names of the `levels` argument with a `trafo` that maps the `character`
 #' names to the arbitrary values of the `levels` argument.
@@ -101,7 +101,7 @@
 #' # But the values are on a log scale with desired bounds after trafo
 #' print(grid$transpose())
 #'
-#' # Integer parameters with logscale are `ParamDbl`s pre-trafo
+#' # Integer parameters with logscale are `p_dbl()`s pre-trafo
 #' params = ps(x = p_int(0, 10, logscale = TRUE))
 #' print(params)
 #'

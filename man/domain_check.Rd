@@ -2,9 +2,15 @@
 % Please edit documentation in R/Domain_methods.R
 \name{domain_check}
 \alias{domain_check}
-\title{Check value validity}
+\alias{domain_assert}
+\alias{domain_test}
+\title{Check Value Validity}
 \usage{
 domain_check(param, values)
+
+domain_assert(param, values, .var.name = checkmate::vname(param), add = NULL)
+
+domain_test(param, values)
 }
 \arguments{
 \item{x}{(\code{any}).}
@@ -17,4 +23,11 @@ If successful \code{TRUE}, if not a string with the error message.
 A value is feasible if it is of the same \code{storage_type}, inside of the bounds or element of
 \code{special_vals}. \code{TuneToken}s are generally \emph{not} accepted, so they should be filtered out
 before the call, if present.
+
+\code{domain_check} will return \code{TRUE} for accepted values, a \code{character(1)} error message otherwise.
+
+\code{domain_test} will return \code{TRUE} for accepted values, \code{FALSE} otherwise.
+
+\code{domain_assert} will return the \code{param} argument silently for accepted values, and throw an error message otherwise.
 }
+\keyword{internal}
