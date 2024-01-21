@@ -88,6 +88,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @param p ([ParamSet]).
     #' @param n (`character(1)`)\cr
     #'   Name to use. Default `""`.
+    #' @param tag_sets (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"set_<n>"` to the newly added parameters.
+    #' @param tag_params (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
     add = function(p, n = "", tag_sets = FALSE, tag_params = FALSE) {
       assert_r6(p, "ParamSet")
       if (n != "" && n %in% names(private$.sets)) {
