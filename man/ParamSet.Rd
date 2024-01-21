@@ -54,7 +54,9 @@ pset = ps(
   f = p_fct(levels = letters[1:3])
 )
 
-ps$check(list(d = 2.1, f = "a"))
+pset$check(list(d = 2.1, f = "a"))
+
+pset$check(list(d = 2.1, f = "d"))
 }
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
