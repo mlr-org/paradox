@@ -28,7 +28,7 @@ For number params the endpoints of the params are always included in the grid.
 pset = ps(
   ratio = p_dbl(lower = 0, upper = 1),
   letters = p_fct(levels = letters[1:3])
-))
+)
 generate_design_grid(pset, 10)
 }
 \seealso{

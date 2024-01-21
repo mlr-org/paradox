@@ -16,7 +16,7 @@
 #' pset = ps(
 #'   ratio = p_dbl(lower = 0, upper = 1),
 #'   letters = p_fct(levels = letters[1:3])
-#' ))
+#' )
 #' generate_design_random(pset, 10)
 generate_design_random = function(param_set, n) {
   # arg checks done by SamplerUnif and sample

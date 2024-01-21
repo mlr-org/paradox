@@ -21,7 +21,7 @@
 #' pset = ps(
 #'   ratio = p_dbl(lower = 0, upper = 1),
 #'   letters = p_fct(levels = letters[1:3])
-#' ))
+#' )
 #'
 #' if (requireNamespace("spacefillr", quietly = TRUE)) {
 #'   generate_design_sobol(pset, 10)

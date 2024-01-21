@@ -19,7 +19,7 @@
 #' pset = ps(
 #'   ratio = p_dbl(lower = 0, upper = 1),
 #'   letters = p_fct(levels = letters[1:3])
-#' ))
+#' )
 #'
 #' if (requireNamespace("lhs", quietly = TRUE)) {
 #'   generate_design_lhs(pset, 10)

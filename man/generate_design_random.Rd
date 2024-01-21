@@ -24,7 +24,7 @@ If dependencies do not hold, values are set to \code{NA} in the resulting data.t
 pset = ps(
   ratio = p_dbl(lower = 0, upper = 1),
   letters = p_fct(levels = letters[1:3])
-))
+)
 generate_design_random(pset, 10)
 }
 \seealso{
