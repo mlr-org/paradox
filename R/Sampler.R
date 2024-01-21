@@ -9,7 +9,7 @@
 #' @export
 Sampler = R6Class("Sampler",
   public = list(
-    #' @field param_set ([ParamSet])\cr
+    #' @field param_set ([`ParamSet`])\cr
     #' Domain / support of the distribution we want to sample from.
     param_set = NULL,
 
@@ -18,6 +18,8 @@ Sampler = R6Class("Sampler",
     #'
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [Sampler1D].
+    #' @param param_set ([`ParamSet`])\cr
+    #'   The [`ParamSet`] to associated with this `Sampler`.
     initialize = function(param_set) {
       assert_param_set(param_set, no_untyped = TRUE)
       self$param_set = param_set$clone(deep = TRUE)
@@ -27,7 +29,7 @@ Sampler = R6Class("Sampler",
     #' Sample `n` values from the distribution.
     #'
     #' @param n (`integer(1)`).
-    #' @return [Design].
+    #' @return [`Design`].
     sample = function(n) {
       assert_count(n) # we do argcheck on toplevel
       Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE) # user wants n points, dont remove

@@ -8,10 +8,9 @@
 #'
 #' For more specifics also see the documentation of [`Domain`].
 #'
-#' @param ... ([`Domain`] | [`Param`])\cr
-#'   Named arguments of [`Domain`] or [`Param`] objects. The [`ParamSet`] will be constructed of the given [`Param`]s,
-#'   or of [`Param`]s constructed from the given domains. The names of the arguments will be used as `$id`
-#'   (the `$id` of [`Param`] arguments are ignored).
+#' @param ... ([`Domain`])\cr
+#'   Named arguments of [`Domain`] objects. The [`ParamSet`] will be constructed of the given [`Domain`]s,
+#'   The names of the arguments will be used as `$id()` in the resulting [`ParamSet`].
 #' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.

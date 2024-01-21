@@ -1,12 +1,12 @@
 #' @title Assertions for Params and ParamSets
 #'
-#' @param param_set ([ParamSet]).
+#' @param param_set ([`ParamSet`]).
 #' @param cl (`character()`)\cr
 #'   Allowed subclasses.
 #' @param no_untyped (`logical(1)`)\cr
-#'   Are untyped [Param]s allowed?
+#'   Are untyped [`Domain`]s allowed?
 #' @param must_bounded (`logical(1)`)\cr
-#'   Only bounded [Param]s allowed?
+#'   Only bounded [`Domain`]s allowed?
 #' @param no_deps (`logical(1)`)\cr
 #'   Are dependencies allowed?
 #' @return The checked object, invisibly.

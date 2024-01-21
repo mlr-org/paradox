@@ -1,14 +1,15 @@
 #' @title ParamSetCollection
 #'
 #' @description
-#' A collection of multiple [ParamSet] objects.
+#' A collection of multiple [`ParamSet`] objects.
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
 #' * In order to ensure unique param names, every param in the collection is referred to with
-#'   "<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. `""`) `$set_id` are referenced
-#'   directly. Multiple ParamSets with `$set_id` `""` can be combined, but their parameter names
-#'   must be unique.
+#'   "<set_id>.<param_id>", where `<set_id>` is the name of the entry a given [`ParamSet`] in the named list given during construction.
+#'   Parameters from [`ParamSet`] with empty (i.e. `""`) `set_id` are referenced
+#'   directly. Multiple [`ParamSet`]s with `set_id` `""` can be combined, but their parameter names
+#'   may not overlap to avoid name clashes.
 #' * When you either ask for 'values' or set them, the operation is delegated to the individual,
-#'   contained param set references. The collection itself does not maintain a `values` state.
+#'   contained [`ParamSet`] references. The collection itself does not maintain a `values` state.
 #'   This also implies that if you directly change `values` in one of the referenced sets,
 #'   this change is reflected in the collection.
 #' * Dependencies: It is possible to currently handle dependencies
@@ -26,20 +27,13 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
-    #' @param sets (`list()` of [ParamSet])\cr
+    #' @param sets (named `list()` of [ParamSet])\cr
     #'   ParamSet objects are not cloned.
-    #' @param set_id (`character(1)`)\cr
-    #'   `$set_id` of the resulting `ParamSet`. This determines the
-    #'   prefix inside [`ParamSetCollection`]. Default `""` (no prefix).
-    #' @param ignore_ids (`logical(1)`)\cr
-    #'   Ignore `$set_id` slots of `sets` and instead use the names instead.
-    #'   When this is `TRUE`, then `sets` should be named when id prefixes are desired.
-    #'   This can be used to create a `ParamSetCollection` with changed [`ParamSet`] `set_id`s
-    #'   without having to clone said [`ParamSet`]s. However, when underlying [`ParamSet`]s'
-    #'   `$set_id`s change, then this change is no longer reflected in the ParamSetCollection.
-    #'   Also note that the `$values` will have undefined behavior when `sets` contains a
-    #'   single [`ParamSet`] multiple times (by reference).
-    #'   Default `FALSE`.
+    #'   Names are used as "set_id" for the naming scheme of delegated parameters.
+    #' @param tag_sets (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<set_id>`.
+    #' @param tag_params (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
     initialize = function(sets, tag_sets = FALSE, tag_params = FALSE) {
       assert_list(sets, types = "ParamSet")
       assert_flag(tag_sets)
@@ -89,7 +83,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
 
     #' @description
-    #' Adds a set to this collection.
+    #' Adds a [`ParamSet`] to this collection.
     #'
     #' @param p ([ParamSet]).
     #' @param n (`character(1)`)\cr
@@ -198,6 +192,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       vals
     },
 
+    #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
       if (!length(private$.children_with_trafos)) return(NULL)
@@ -205,14 +200,18 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
     },
 
+    #' @template field_constraint
     constraint = function(f) {
       if (!missing(f)) stop("constraint is read-only in ParamSetCollection.")
       if (!length(private$.children_with_constraints)) return(NULL)
       private$.constraint_explicit
     },
 
+    #' @field sets (named `list()`)\cr
+    #' Read-only `list` of of [`ParamSet`]s contained in this `ParamSetCollection`.
+    #' This field provides direct references to the [`ParamSet`] objects.
     sets = function(v) {
-      if (!missing(v)) stop("sets is read-only")
+      if (!missing(v) && !identical(v, private$.sets)) stop("sets is read-only")
       private$.sets
     }
   ),

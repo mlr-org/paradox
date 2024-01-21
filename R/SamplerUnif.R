@@ -14,6 +14,8 @@ SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,
   public = list(
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
+    #' @param param_set ([`ParamSet`])\cr
+    #'   The [`ParamSet`] to associated with this `SamplerUnif`.
     initialize = function(param_set) {
       assert_param_set(param_set, must_bounded = TRUE, no_deps = FALSE, no_untyped = TRUE)
       samplers = lapply(param_set$subspaces(), Sampler1DUnif$new)

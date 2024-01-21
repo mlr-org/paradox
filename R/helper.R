@@ -8,7 +8,7 @@
 #' @param data ([data.table::data.table])\cr
 #' Rows are points and columns are parameters.
 #'
-#' @param ps ([ParamSet])\cr
+#' @param ps ([`ParamSet`])\cr
 #' If `trafo = TRUE`, used to call trafo function.
 #'
 #' @param filter_na (`logical(1)`)\cr

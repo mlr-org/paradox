@@ -9,14 +9,14 @@
 SamplerJointIndep = R6Class("SamplerJointIndep", inherit = Sampler,
   public = list(
     #' @field samplers (`list()`)\cr
-    #' List of [Sampler] objects.
+    #' List of [`Sampler`] objects.
     samplers = NULL,
 
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' @param samplers (`list()`)\cr
-    #'   List of [Sampler] objects.
+    #'   List of [`Sampler`] objects.
     initialize = function(samplers) {
       assert_list(samplers, types = "Sampler")
       self$samplers = samplers

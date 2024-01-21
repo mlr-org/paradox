@@ -10,21 +10,21 @@
 #' Note that non determinism is achieved by sampling the seed argument via
 #' `sample(.Machine$integer.max, size = 1L)`.
 #'
-#' @param param_set ([ParamSet]).
+#' @param param_set ([`ParamSet`]).
 #' @param n (`integer(1)`) \cr
 #'   Number of points to sample.
-#' @return [Design].
+#' @return [`Design`].
 #'
 #' @family generate_design
 #' @export
 #' @examples
-#' ps = ParamSet$new(list(
-#'   ParamDbl$new("ratio", lower = 0, upper = 1),
-#'   ParamFct$new("letters", levels = letters[1:3])
+#' pset = ps(
+#'   ratio = p_dbl(lower = 0, upper = 1),
+#'   letters = p_fct(levels = letters[1:3])
 #' ))
 #'
 #' if (requireNamespace("spacefillr", quietly = TRUE)) {
-#'   generate_design_sobol(ps, 10)
+#'   generate_design_sobol(pset, 10)
 #' }
 generate_design_sobol = function(param_set, n) {
   require_namespaces("spacefillr")

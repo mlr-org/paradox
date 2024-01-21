@@ -26,37 +26,36 @@
 #'   it must be named to disambiguate from the following cases.\cr
 #'   When `logscale` is `TRUE`, then a `trafo` is generated automatically that transforms to the given bounds. The
 #'   bounds are log()'d pre-trafo (see examples). See the `logscale` argument of [`Domain`] functions for more info.\cr
-#'   Note that "logscale" is *not* inherited from the [`Param`] that the `TuneToken` belongs to! Defining a parameter
+#'   Note that "logscale" is *not* inherited from the [`Domain`] that the `TuneToken` belongs to! Defining a parameter
 #'   with `p_dbl(... logscale = TRUE)` will *not* automatically give the `to_tune()` assigned to it log-scale.
 #' * **`to_tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any
 #'   named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 #'   corresponding `character` vector with distinct values using `as.character`).
 #' * **`to_tune(<Domain>)`**: The given [`Domain`] object (constructed e.g. with [`p_int()`] or [`p_fct()`]) indicates
 #'   the range which should be tuned over. The supplied `trafo` function is used for parameter transformation.
-#' * **`to_tune(<Param>)`**: The given [`Param`] object indicates the range which should be tuned over.
-#' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single `Param`. This is useful for cases
-#'   where a single evaluation-time parameter value (e.g. [`ParamUty`]) is constructed from multiple tuner-visible
-#'   parameters (which may not be `ParamUty`). The supplied [`ParamSet`] should always contain a `$trafo` function,
-#'   which must always return a `list` with a single entry.
+#' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single dimension. This is useful for cases
+#'   where a single evaluation-time parameter value (e.g. [`p_uty()`]) is constructed from multiple tuner-visible
+#'   parameters (which may not be [`p_uty()`]). If not one-dimensional, the supplied [`ParamSet`] should always contain a `$extra_trafo` function,
+#'   which must then always return a `list` with a single entry.
 #'
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
 #' @param ... if given, restricts the range to be tuning over, as described above.
 #' @return A `TuneToken` object.
 #' @examples
-#' params = ParamSet$new(list(
-#'   ParamInt$new("int", 0, 10),
-#'   ParamInt$new("int_unbounded"),
-#'   ParamDbl$new("dbl", 0, 10),
-#'   ParamDbl$new("dbl_unbounded"),
-#'   ParamDbl$new("dbl_bounded_below", lower = 1),
-#'   ParamFct$new("fct", c("a", "b", "c")),
-#'   ParamUty$new("uty1"),
-#'   ParamUty$new("uty2"),
-#'   ParamUty$new("uty3"),
-#'   ParamUty$new("uty4"),
-#'   ParamUty$new("uty5")
-#' ))
+#' params = ps(
+#'   int = p_int(0, 10),
+#'   int_unbounded = p_int(),
+#'   dbl = p_dbl(0, 10),
+#'   dbl_unbounded = p_dbl(),
+#'   dbl_bounded_below = p_dbl(lower = 1),
+#'   fct = p_fct(c("a", "b", "c")),
+#'   uty1 = p_uty(),
+#'   uty2 = p_uty(),
+#'   uty3 = p_uty(),
+#'   uty4 = p_uty(),
+#'   uty5 = p_uty()
+#' )
 #'
 #' params$values = list(
 #'
@@ -116,7 +115,7 @@
 #' print(params$search_space())
 #'
 #' # Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:
-#' params = ParamSet$new(list(ParamDbl$new("x")))
+#' params = ps(x = p_dbl())
 #'
 #' params$values$x = to_tune(1, 100, logscale = TRUE)
 #'
@@ -203,7 +202,7 @@ print.ObjectTuneToken = function(x, ...) {
 }
 
 # tunetoken_to_ps: Convert a `TuneToken` to a `ParamSet` that tunes over this.
-# Needs the corresponding `Param` to which the `TuneToken` refers, both to
+# Needs the corresponding `Domain` to which the `TuneToken` refers, both to
 # get the range (e.g. if `to_tune()` was used) and to verify that the `TuneToken`
 # does not go out of range.
 #
@@ -254,13 +253,12 @@ tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 
-# Convert something that is `ParamSet`-like (ParamSet, Param, or Domain) to a `ParamSet`.
-# * content is ParamSet --> verify that it is compatible with given `Param`
-# * content is Param --> Wrap in ParamSet
+# Convert something that is `ParamSet`-like (ParamSet or Domain) to a `ParamSet`.
+# * content is ParamSet --> verify that it is compatible with given `Domain`
 # * content is Domain --> Wrap in ParamSet, using ps()
 # @param pslike: thing to convert
 # @param call: to_tune()-call, for better debug message
-# @param param: `Param`, that the `pslike` refers to, and therefore needs to be compatible to
+# @param param: `Domain`, that the `pslike` refers to, and therefore needs to be compatible to
 # @param usersupplied: whether the `pslike` is supplied by the user (and should therefore be checked more thoroughly)
 #   This is currently used for user-supplied ParamSets, for which the trafo must be adjusted.
 pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {

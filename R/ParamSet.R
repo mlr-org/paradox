@@ -1,41 +1,50 @@
 #' @title ParamSet
 #'
 #' @description
-#' A set of [Param] objects.
-#' Please note that when creating a set or adding to it, the parameters of the
-#' resulting set have to be uniquely named with IDs with valid R names.
-#' The set also contains a member variable `values` which can be used to store an active configuration /
-#' or to partially fix
-#' some parameters to constant values (regarding subsequent sampling or generation of designs).
+#' An object representing the space of possible parametrizations of a function or another object.
+#' `ParamSet`s are used on the side of objects being parameterized, where they function as a configuration space determining the set of possible configurations accepted by these objects.
+#' They can also be used to specify search spaces for optimization, indicating the set of legal configurations to try out.
+#' It is often convenient to generate search spaces from configuration spaces, which can be done using the `$search_space()` method in combination with `to_tune()` / [`TuneToken`] objects.
+#'
+#' Individual dimensions of a `ParamSet` are specified by [`Domain`] objects, created as [`p_dbl()`], [`p_lgl()`] etc.
+#' The field `$values` can be used to store an active configuration or to partially fix
+#' some parameters to constant values -- the precise effect can be determined by the object being parameterized.
+#'
+#' Constructing a `ParamSet` can be done using `ParamSet$new()` in combination with a named list of [`Domain`] objects.
+#' This route is recommended when the set of dimensions (i.e. the members of this named list) is dynamically created, such as when the number of parameters is variable.
+#' `ParamSet`s can also be created using the [`ps()`] shorthand, which is the recommended way when the set of parameters is fixed.
+#' In practice, the majority of cases where a `ParamSet` is created, the [`ps()`] should be used.
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()`\cr
-#'   [ParamSet] -> [data.table::data.table()]\cr
+#'   `ParamSet` -> [data.table::data.table()]\cr
 #'   Compact representation as datatable. Col types are:\cr
 #'     - id: character
-#'     - lower, upper: double
+#'     - class: character
+#'     - lower, upper: numeric
 #'     - levels: list col, with NULL elements
-#'     - special_vals: list col of list
+#'     - nlevels: integer valued numeric
 #'     - is_bounded: logical
-#'     - default: list col, with NULL elements
+#'     - special_vals: list col of list
+#'     - default: list col
 #'     - storage_type: character
 #'     - tags: list col of character vectors
 #' @examples
-#' ps = ParamSet$new(
+#' pset = ParamSet$new(
 #'   params = list(
-#'     ParamDbl$new("d", lower = -5, upper = 5, default = 0),
-#'     ParamFct$new("f", levels = letters[1:3])
+#'     d = p_dbl(lower = -5, upper = 5, default = 0, trafo = function(x) 2^x),
+#'     f = p_fct(levels = letters[1:3])
 #'   )
 #' )
 #'
-#' ps$trafo = function(x, param_set) {
-#'   x$d = 2^x$d
-#'   return(x)
-#' }
+#' # alternative, recommended way of construction in this case since the
+#' # parameter list is not dynamic:
+#' pset = ps(
+#'   d = p_dbl(lower = -5, upper = 5, default = 0, trafo = function(x) 2^x),
+#'   f = p_fct(levels = letters[1:3])
+#' )
 #'
-#' ps$add(ParamInt$new("i", lower = 0L, upper = 16L))
-#'
-#' ps$check(list(d = 2.1, f = "a", i = 3L))
+#' ps$check(list(d = 2.1, f = "a"))
 #' @export
 ParamSet = R6Class("ParamSet",
   public = list(
@@ -48,19 +57,13 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
-    #' @param params (`list()`)\cr
-    #'   List of [Param], named with their respective ID.
-    #'   `params` are cloned on-demand, so the input does not need
-    #'   to be cloned.
-    #' @param set_id (`character(1)`)\cr
-    #'   `$set_id` of the resulting `ParamSet`. This determines the
-    #'   prefix inside [`ParamSetCollection`]. Default `""` (no prefix).
-    #' @param ignore_ids (`logical(1)`)\cr
-    #'   Ignore `$id` slots of `params` and instead use the names instead.
-    #'   When this is `TRUE`, then `params` must be named.
-    #'   Thisdo can be used to create a `ParamSet` with certain [`Param`] `id`s
-    #'   without having to clone said [`Param`]s.
-    #'   Default `FALSE`.
+    #' @param params (named `list()`)\cr
+    #'   List of [`Domain`], named with their respective ID.
+    #' @param allow_dangling_dependencies (`character(1)`)\cr
+    #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
+    #'   `depends = y == 0` if `y` is not present would usually throw an error, but if dangling
+    #'   dependencies are allowed, the dependency is added regardless. This is mainly for internal
+    #'   use.
     initialize = function(params = named_list(), allow_dangling_dependencies = FALSE) {
       assert_list(params, types = "Domain")
 
@@ -112,8 +115,14 @@ ParamSet = R6Class("ParamSet",
     #' selections, `NULL` means no restriction.
     #' Only returns IDs of parameters that satisfy all conditions.
     #'
-    #' @param class (`character()`).
+    #' @param class (`character()`)\cr
+    #'   Typically a subset of `"ParamDbl"`, `"ParamInt"`, `"ParamFct"`, `"ParamLgl"`, `"ParamUty"`.
+    #'   Other classes are possible if implemented by 3rd party packages.
+    #'   Return only IDs of dimensions with the given class.
     #' @param tags (`character()`).
+    #'   Return only IDs of dimensions that have *all* tags given in this argument.
+    #' @param any_tags (`character()`).
+    #'   Return only IDs of dimensions that have at least one of the tags given in this argument.
     #' @return `character()`.
     ids = function(class = NULL, tags = NULL, any_tags = NULL) {
       assert_character(class, any.missing = FALSE, null.ok = TRUE)
@@ -138,13 +147,16 @@ ParamSet = R6Class("ParamSet",
     #' restriction and is equivalent to `$values`.
     #' Only returns values of parameters that satisfy all conditions.
     #'
-    #' @param class (`character()`).
-    #' @param is_bounded (`logical(1)`).
-    #' @param tags (`character()`).
+    #' @param class (`character()`). See `$ids()`.
+    #' @param tags (`character()`). See `$ids()`.
+    #' @param any_tags (`character()`). See `$ids()`.
     #' @param type (`character(1)`)\cr
-    #' Return values `with_token`, `without_token` or `only_token`?
+    #'   Return values `"with_token"` (i.e. all values),
+    #    `"without_token"` (all values that are not [`TuneToken`] objects) or `"only_token"` (only [`TuneToken`] objects)?
     #' @param check_required (`logical(1)`)\cr
-    #' Check if all required parameters are set?
+    #'   Check if all required parameters are set?
+    #' @param remove_dependencies (`logical(1)`)\cr
+    #'   If `TRUE`, set values with dependencies that are not fulfilled to `NULL`.
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
@@ -210,6 +222,14 @@ ParamSet = R6Class("ParamSet",
       invisible(self)
     },
 
+    #' @description
+    #' Perform transformation specified by the `trafo` of [`Domain`] objects, as well as the `$extra_trafo` field.
+    #' @param x (named `list()` | `data.frame`)\cr
+    #'   The value(s) to be transformed.
+    #' @param param_set (`ParamSet`)\cr
+    #'   Passed to `extra_trafo()`. Note that the `extra_trafo` of `self` is used, not the `extra_trafo` of the
+    #'   `ParamSet` given in the `param_set` argument.
+    #'   In almost all cases, the default `param_set = self` should be used.
     trafo = function(x, param_set = self) {
       if (is.data.frame(x)) x = as.list(x)
       assert_list(x, names = "unique")
@@ -233,15 +253,36 @@ ParamSet = R6Class("ParamSet",
       x
     },
 
-    # assert_value: used internally, to avoid touble-asserts
+    #' @description
+    #' \pkg{checkmate}-like test-function. Takes a named list.
+    #' Return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
+    #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
+    #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
+    #' @param x (named `list()`)\cr
+    #'   The value to test.
+    #' @param assert_value (`logical(1)`)\cr
+    #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
+    #'   Should be `TRUE` unless this was already checked before.
+    #' @return `logical(1)`: Whether `x` satisfies the `$constraint`.
     test_constraint = function(x, assert_value = TRUE) {
-      if (assert_value) self$assert(x)
+      if (assert_value) self$assert(x, check_strict = FALSE)
       assert_flag(is.null(private$.constraint) || private$.constraint(x))
     },
 
+    #' @description
+    #' \pkg{checkmate}-like test-function. Takes a [`data.table`].
+    #' For each row, return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
+    #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
+    #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
+    #' @param x (`data.table`)\cr
+    #'   The values to test.
+    #' @param assert_value (`logical(1)`)\cr
+    #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
+    #'   Should be `TRUE` unless this was already checked before.
+    #' @return `logical`: For each row in `x`, whether it satisfies the `$constraint`.
     test_constraint_dt = function(x, assert_value = TRUE) {
       assert_data_table(x)
-      if (assert_value) self$assert_dt(x)
+      if (assert_value) self$assert_dt(x, check_strict = FALSE)
       map_lgl(transpose(x), self$test_constraint, assert_value = FALSE)
     },
 
@@ -250,9 +291,12 @@ ParamSet = R6Class("ParamSet",
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
     #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
     #'
     #' @param xs (named `list()`).
-    #' @return If successful `TRUE`, if not a string with the error message.
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
+    #' @return If successful `TRUE`, if not a string with an error message.
     check = function(xs, check_strict = TRUE) {
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
@@ -305,6 +349,12 @@ ParamSet = R6Class("ParamSet",
       TRUE # we passed all checks
     },
 
+    #' @description
+    #' \pkg{checkmate}-like check-function. Takes a named list.
+    #' Checks that all individual param dependencies are satisfied.
+    #'
+    #' @param xs (named `list()`).
+    #' @return If successful `TRUE`, if not a string with an error message.
     check_dependencies = function(xs) {
       deps = self$deps
       if (!nrow(deps)) return(TRUE)
@@ -338,8 +388,11 @@ ParamSet = R6Class("ParamSet",
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
     #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
     #' @return If successful `TRUE`, if not `FALSE`.
     test = function(xs, check_strict = TRUE) makeTest(self$check(xs, check_strict = check_strict)),
 
@@ -348,8 +401,11 @@ ParamSet = R6Class("ParamSet",
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
     #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
     #'
     #' @param xs (named `list()`).
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
@@ -358,12 +414,15 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
-    #' where rows are points and columns are parameters. A point x is feasible,
-    #' if it configures a subset of params, all individual param constraints are
-    #' satisfied and all dependencies are satisfied. Params for which
-    #' dependencies are not satisfied should be set to `NA` in `xdt`.
+    #' where rows are points and columns are parameters.
+    #' A point x is feasible, if it configures a subset of params,
+    #' all individual param constraints are satisfied and all dependencies are satisfied.
+    #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
@@ -382,19 +441,29 @@ ParamSet = R6Class("ParamSet",
     #' \pkg{checkmate}-like test-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test_dt = function(xdt) makeTest(res = self$check_dt(xdt, check_strict = check_strict)),
+    test_dt = function(xdt, check_strict = TRUE) makeTest(res = self$check_dt(xdt, check_strict = check_strict)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
+    #' @param check_strict (`logical(1)`)\cr
+    #'   Whether to check that constraints and dependencies are satisfied.
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
-    #' @return If successful `xs` invisibly, if not an error message.
+    #' @return If successful `xs` invisibly, if not, an error is generated.
     assert_dt = function(xdt, check_strict = TRUE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict), .var.name, NULL), # nolint
 
+    #' @description
+    #' Map a `matrix` or `data.frame` of values between 0 and 1 to proportional values inside the feasible intervals of individual parameters.
+    #'
+    #' @param x (`matrix` | `data.frame`)\cr
+    #'   Values to map. Column names must be a subset of the names of parameters.
+    #' @return `data.table`.
     qunif = function(x) {
       assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
       if (is.matrix(x)) {
@@ -440,6 +509,11 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Create a new `ParamSet` restricted to the passed IDs.
     #' @param ids (`character()`).
+    #' @param allow_dangling_dependencies (`logical(1)`)\cr
+    #'   Whether to allow subsets that cut across parameter dependencies.
+    #'   Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their `"on"` will not be present).
+    #' @param keep_constraint (`logical(1)`)\cr
+    #'   Whether to keep the `$constraint` function.
     #' @return `ParamSet`.
     subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
       param_ids = private$.params$id
@@ -473,6 +547,11 @@ ParamSet = R6Class("ParamSet",
       result
     },
 
+    #' @description
+    #' Create new one-dimensional `ParamSet`s for each dimension.
+    #' @param ids (`character()`)\cr
+    #'   IDs for which to create `ParamSet`s. Defaults to all IDs.
+    #' @return named `list()` of `ParamSet`.
     subspaces = function(ids = private$.params$id) {
       values = self$values
       sapply(ids, simplify = FALSE, function(get_id) {
@@ -492,7 +571,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' Create a `ParamSet` from this object, even if this object itself is not
-    #' a `ParamSet`.
+    #' a `ParamSet` but e.g. a [`ParamSetCollection`].
     flatten = function() self$subset(private$.params$id, allow_dangling_dependencies = TRUE),
 
     #' @description
@@ -653,17 +732,7 @@ ParamSet = R6Class("ParamSet",
       set_names(map(nm, self$get_domain), nm)
     },
 
-
-    #' @field extra_trafo (`function(x, param_set)`)\cr
-    #' Transformation function. Settable.
-    #' User has to pass a `function(x)`, of the form\cr
-    #' (named `list()`, [ParamSet]) -> named `list()`.\cr
-    #' The function is responsible to transform a feasible configuration into another encoding,
-    #' before potentially evaluating the configuration with the target algorithm.
-    #' For the output, not many things have to hold.
-    #' It needs to have unique names, and the target algorithm has to accept the configuration.
-    #' For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-    #' Is NULL by default, and you can set it to NULL to switch the transformation off.
+    #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (missing(f)) {
         private$.extra_trafo
@@ -673,6 +742,7 @@ ParamSet = R6Class("ParamSet",
       }
     },
 
+    #' @template field_constraint
     constraint = function(f) {
       if (missing(f)) {
         private$.constraint

@@ -15,7 +15,7 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' Note that this object is typically constructed via derived classes,
-    #' e.g., [Sampler1DUnif].
+    #' e.g., [`Sampler1DUnif`].
     initialize = function(param) {
       assert_r6(param, "ParamSet")
       if (param$length != 1) stopf("param must contain exactly 1 Param, but contains %s", param$length)
@@ -24,8 +24,8 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
   ),
 
   active = list(
-    #' @field param ([Param])\cr
-    #' Returns the one Parameter that is sampled from.
+    #' @field param ([`ParamSet`])\cr
+    #' Returns the one-dimensional [`ParamSet`] that is sampled from.
     param = function() self$param_set
   ),
 
