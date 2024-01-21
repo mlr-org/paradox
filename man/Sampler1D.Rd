@@ -25,8 +25,8 @@ Other Sampler:
 \section{Active bindings}{
 \if{html}{\out{<div class="r6-active-bindings">}}
 \describe{
-\item{\code{param}}{(\link{Param})\cr
-Returns the one Parameter that is sampled from.}
+\item{\code{param}}{(\code{\link{ParamSet}})\cr
+Returns the one-dimensional \code{\link{ParamSet}} that is sampled from.}
 }
 \if{html}{\out{</div>}}
 }
@@ -53,7 +53,7 @@ Returns the one Parameter that is sampled from.}
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 
 Note that this object is typically constructed via derived classes,
-e.g., \link{Sampler1DUnif}.
+e.g., \code{\link{Sampler1DUnif}}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{Sampler1D$new(param)}\if{html}{\out{</div>}}
 }
@@ -61,8 +61,9 @@ e.g., \link{Sampler1DUnif}.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{param}}{(\link{Param})\cr
-Domain / support of the distribution we want to sample from.}
+\item{\code{param}}{(\code{\link{ParamSet}})\cr
+Domain / support of the distribution we want to sample from.
+Must be one-dimensional.}
 }
 \if{html}{\out{</div>}}
 }

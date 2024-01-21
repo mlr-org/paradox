@@ -13,16 +13,16 @@ assert_param_set(
 )
 }
 \arguments{
-\item{param_set}{(\link{ParamSet}).}
+\item{param_set}{(\code{\link{ParamSet}}).}
 
 \item{cl}{(\code{character()})\cr
 Allowed subclasses.}
 
 \item{no_untyped}{(\code{logical(1)})\cr
-Are untyped \link{Param}s allowed?}
+Are untyped \code{\link{Domain}}s allowed?}
 
 \item{must_bounded}{(\code{logical(1)})\cr
-Only bounded \link{Param}s allowed?}
+Only bounded \code{\link{Domain}}s allowed?}
 
 \item{no_deps}{(\code{logical(1)})\cr
 Are dependencies allowed?}

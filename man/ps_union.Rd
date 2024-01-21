@@ -7,15 +7,51 @@
 ps_union(sets, tag_sets = FALSE, tag_params = FALSE)
 }
 \arguments{
-\item{sets:}{list of ParamSet}
+\item{sets}{(\code{list} of \code{\link{ParamSet}})\cr
+This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding \code{\link{ParamSet}}.}
+
+\item{tag_sets}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<name in "sets">}.}
+
+\item{tag_params}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
 }
 \description{
-This emulates \code{ParamSetCollection$new(sets)}, except that
-\itemize{
-\item The result is a \code{ParamSet}, not a \code{ParamSetCollection}
-\item The ParamSets are allowed to have \verb{$trafo}, which are collected together into a single function.
-This emulates \code{ParamSetCollection$new(sets)}, which in particular means that the resulting ParamSet has all the Params
-from the input \code{sets}, but some \verb{$id}s are changed: If the ParamSet has a non-empty \code{set_id}, then the Params will
-have their \if{html}{\out{<id>}} changed to <set_id>.\if{html}{\out{<id>}}. This is also reflected in deps and in \verb{$trafo}.
+This emulates \code{ParamSetCollection$new(sets)}, except that the result is a flat \code{\link{ParamSet}}, not a \code{\link{ParamSetCollection}}.
+The resulting object is decoupled from the input \code{\link{ParamSet}} objects: Unlike \code{\link{ParamSetCollection}}, changing \verb{$values} of
+the resulting object will not change the input \code{\link{ParamSet}} \verb{$values} by reference.
+
+This emulates \code{ParamSetCollection$new(sets)}, which in particular means that the resulting \code{\link{ParamSet}} has all the \code{\link{Domain}}s
+from the input \code{sets}, but some \verb{$id}s are changed: If the \code{\link{ParamSet}} is given in \code{sets} with a name, then the \code{\link{Domain}}s will
+have their \verb{<id>} changed to \verb{<name in "sets">.<id>}. This is also reflected in deps.
+
+The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synony for \code{ps_union()}.
 }
+\examples{
+ps1 = ps(x = p_dbl())
+ps1$values = list(x = 1)
+
+ps2 = ps(y = p_lgl())
+
+pu = ps_union(list(ps1, ps2))
+# same as:
+pu = c(ps1, ps2)
+
+pu
+
+pu$values
+
+pu$values$x = 2
+pu$values
+
+# p1 is unchanged:
+ps1$values
+
+# Prefixes automatically created for named elements.
+# This allows repeating components.
+pu2 = c(one = ps1, two = ps1, ps2)
+pu2
+
+pu2$values
+
 }

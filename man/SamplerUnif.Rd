@@ -51,9 +51,8 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{param_set}}{(\link{ParamSet})\cr
-Domain / support of the distribution we want to sample from.
-ParamSet is cloned on construction.}
+\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associated with this \code{SamplerUnif}.}
 }
 \if{html}{\out{</div>}}
 }

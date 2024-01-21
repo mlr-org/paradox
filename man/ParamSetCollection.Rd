@@ -4,15 +4,16 @@
 \alias{ParamSetCollection}
 \title{ParamSetCollection}
 \description{
-A collection of multiple \link{ParamSet} objects.
+A collection of multiple \code{\link{ParamSet}} objects.
 \itemize{
 \item The collection is basically a light-weight wrapper / container around references to multiple sets.
 \item In order to ensure unique param names, every param in the collection is referred to with
-"<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. \code{""}) \verb{$set_id} are referenced
-directly. Multiple ParamSets with \verb{$set_id} \code{""} can be combined, but their parameter names
-must be unique.
+"<set_id>.<param_id>", where \verb{<set_id>} is the name of the entry a given \code{\link{ParamSet}} in the named list given during construction.
+Parameters from \code{\link{ParamSet}} with empty (i.e. \code{""}) \code{set_id} are referenced
+directly. Multiple \code{\link{ParamSet}}s with \code{set_id} \code{""} can be combined, but their parameter names
+may not overlap to avoid name clashes.
 \item When you either ask for 'values' or set them, the operation is delegated to the individual,
-contained param set references. The collection itself does not maintain a \code{values} state.
+contained \code{\link{ParamSet}} references. The collection itself does not maintain a \code{values} state.
 This also implies that if you directly change \code{values} in one of the referenced sets,
 this change is reflected in the collection.
 \item Dependencies: It is possible to currently handle dependencies
@@ -43,6 +44,26 @@ Currently set / fixed parameter values.
 Settable, and feasibility of values will be checked when you set them.
 You do not have to set values for all parameters, but only for a subset.
 When you set values, all previously set values will be unset / removed.}
+
+\item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
+Transformation function. Settable.
+User has to pass a \verb{function(x)}, of the form\cr
+(named \code{list()}, \link{ParamSet}) -> named \code{list()}.\cr
+The function is responsible to transform a feasible configuration into another encoding,
+before potentially evaluating the configuration with the target algorithm.
+For the output, not many things have to hold.
+It needs to have unique names, and the target algorithm has to accept the configuration.
+For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
+Is NULL by default, and you can set it to NULL to switch the transformation off.}
+
+\item{\code{constraint}}{(\verb{function(x)})\cr
+Constraint function. Settable.
+This function must evaluate a named \code{list()} of values and determine whether it satisfies
+constraints, returning a scalar \code{logical(1)} value.}
+
+\item{\code{sets}}{(named \code{list()})\cr
+Read-only \code{list} of of \code{\link{ParamSet}}s contained in this \code{ParamSetCollection}.
+This field provides direct references to the \code{\link{ParamSet}} objects.}
 }
 \if{html}{\out{</div>}}
 }
@@ -94,22 +115,15 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{sets}}{(\code{list()} of \link{ParamSet})\cr
-ParamSet objects are not cloned.}
+\item{\code{sets}}{(named \code{list()} of \link{ParamSet})\cr
+ParamSet objects are not cloned.
+Names are used as "set_id" for the naming scheme of delegated parameters.}
 
-\item{\code{set_id}}{(\code{character(1)})\cr
-\verb{$set_id} of the resulting \code{ParamSet}. This determines the
-prefix inside \code{\link{ParamSetCollection}}. Default \code{""} (no prefix).}
+\item{\code{tag_sets}}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"set_<set_id>"} to each parameter originating from a given \code{ParamSet} given with name \verb{<set_id>}.}
 
-\item{\code{ignore_ids}}{(\code{logical(1)})\cr
-Ignore \verb{$set_id} slots of \code{sets} and instead use the names instead.
-When this is \code{TRUE}, then \code{sets} should be named when id prefixes are desired.
-This can be used to create a \code{ParamSetCollection} with changed \code{\link{ParamSet}} \code{set_id}s
-without having to clone said \code{\link{ParamSet}}s. However, when underlying \code{\link{ParamSet}}s'
-\verb{$set_id}s change, then this change is no longer reflected in the ParamSetCollection.
-Also note that the \verb{$values} will have undefined behavior when \code{sets} contains a
-single \code{\link{ParamSet}} multiple times (by reference).
-Default \code{FALSE}.}
+\item{\code{tag_params}}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -118,7 +132,7 @@ Default \code{FALSE}.}
 \if{html}{\out{<a id="method-ParamSetCollection-add"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-add}{}}}
 \subsection{Method \code{add()}}{
-Adds a set to this collection.
+Adds a \code{\link{ParamSet}} to this collection.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$add(p, n = "", tag_sets = FALSE, tag_params = FALSE)}\if{html}{\out{</div>}}
 }
@@ -130,6 +144,12 @@ Adds a set to this collection.
 
 \item{\code{n}}{(\code{character(1)})\cr
 Name to use. Default \code{""}.}
+
+\item{\code{tag_sets}}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"set_<n>"} to the newly added parameters.}
+
+\item{\code{tag_params}}{(\code{logical(1)})\cr
+Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
 }
 \if{html}{\out{</div>}}
 }

@@ -12,10 +12,9 @@ ps(
 )
 }
 \arguments{
-\item{...}{(\code{\link{Domain}} | \code{\link{Param}})\cr
-Named arguments of \code{\link{Domain}} or \code{\link{Param}} objects. The \code{\link{ParamSet}} will be constructed of the given \code{\link{Param}}s,
-or of \code{\link{Param}}s constructed from the given domains. The names of the arguments will be used as \verb{$id}
-(the \verb{$id} of \code{\link{Param}} arguments are ignored).}
+\item{...}{(\code{\link{Domain}})\cr
+Named arguments of \code{\link{Domain}} objects. The \code{\link{ParamSet}} will be constructed of the given \code{\link{Domain}}s,
+The names of the arguments will be used as \verb{$id()} in the resulting \code{\link{ParamSet}}.}
 
 \item{.extra_trafo}{(\verb{function(x, param_set)})\cr
 Transformation to set the resulting \code{\link{ParamSet}}'s \verb{$trafo} value to. This is in addition to any \code{trafo} of

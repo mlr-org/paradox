@@ -27,7 +27,7 @@ Other Sampler:
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
 \item{\code{samplers}}{(\code{list()})\cr
-List of \link{Sampler1D} objects that gives a Sampler for each \link{Param} in the \code{param_set}.}
+List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension in the \code{param_set}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -59,12 +59,11 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{param_set}}{(\link{ParamSet})\cr
-Domain / support of the distribution we want to sample from.
-ParamSet is cloned on construction.}
+\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associated with this \code{SamplerHierarchical}.}
 
 \item{\code{samplers}}{(\code{list()})\cr
-List of \link{Sampler1D} objects that gives a Sampler for each \link{Param} in the \code{param_set}.}
+List of \code{\link{Sampler1D}} objects that gives a Sampler for each \link{Param} in the \code{param_set}.}
 }
 \if{html}{\out{</div>}}
 }
