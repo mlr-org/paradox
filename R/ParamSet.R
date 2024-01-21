@@ -777,7 +777,7 @@ ParamSet = R6Class("ParamSet",
     ############################
     # ParamSet flags
 
-    #' @field length (`integer(1)`)\cr Number of contained [Param]s.
+    #' @field length (`integer(1)`)\cr Number of contained parameters.
     length = function() nrow(private$.params),
     #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
     is_empty = function() nrow(private$.params) == 0L,
@@ -789,9 +789,9 @@ ParamSet = R6Class("ParamSet",
     has_deps = function() nrow(self$deps) > 0L,
     #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
     has_constraint = function() !is.null(private$.constraint),
-    #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [ParamDbl] or [ParamInt].
+    #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_dbl()`] or [`p_int()`].
     all_numeric = function() all(self$is_number),
-    #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [ParamFct] and [ParamLgl].
+    #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_fct()`] and [`p_lgl()`].
     all_categorical = function() all(self$is_categ),
     #' @field all_bounded (`logical(1)`)\cr Is `TRUE` if all parameters are bounded.
     all_bounded = function() all(self$is_bounded),
@@ -836,7 +836,7 @@ ParamSet = R6Class("ParamSet",
       with(tmp[private$.params$id, on = "id"], set_names(nlevels, id))
     },
 
-    #' @field is_number (named `logical()`)\cr Whether parameter is [ParamDbl] or [ParamInt]. Named with parameter IDs.
+    #' @field is_number (named `logical()`)\cr Whether parameter is [`p_dbl()`] or [`p_int()`]. Named with parameter IDs.
     is_number = function() {
       tmp = private$.params[,
         list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)),
@@ -845,7 +845,7 @@ ParamSet = R6Class("ParamSet",
       with(tmp[private$.params$id, on = "id"], set_names(is_number, id))
     },
 
-    #' @field is_categ (named `logical()`)\cr Whether parameter is [ParamFct] or [ParamLgl]. Named with parameter IDs.
+    #' @field is_categ (named `logical()`)\cr Whether parameter is [`p_fct()`] or [`p_lgl()`]. Named with parameter IDs.
     is_categ = function() {
       tmp = private$.params[,
         list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)),

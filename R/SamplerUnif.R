@@ -2,7 +2,7 @@
 #'
 #' @description
 #' Uniform random sampling for an arbitrary (bounded) [ParamSet].
-#' Constructs 1 uniform sampler per [Param], then passes them to [SamplerHierarchical].
+#' Constructs 1 uniform sampler per parameter, then passes them to [SamplerHierarchical].
 #' Hence, also works for [ParamSet]s sets with dependencies.
 #'
 #' @template param_param_set

@@ -8,7 +8,7 @@
 #'
 #' @param param_set ([`ParamSet`]).
 #' @param resolution (`integer(1)`)\cr
-#'   Global resolution for all [Param]s.
+#'   Global resolution for all parameters.
 #' @param param_resolutions (named `integer()`)\cr
 #'   Resolution per [`Domain`], named by parameter ID.
 #' @return [`Design`].

@@ -132,7 +132,7 @@ Sampler1DRfun = R6Class("Sampler1DRfun", inherit = Sampler1D,
 #' @title Sampler1DCateg Class
 #'
 #' @description
-#' Sampling from a discrete distribution, for a [ParamFct] or [ParamLgl].
+#' Sampling from a discrete distribution, for a [`ParamSet`] containing a single [`p_fct()`] or [`p_lgl()`].
 #'
 #' @template param_param
 #'
@@ -173,7 +173,7 @@ Sampler1DCateg = R6Class("Sampler1DCateg", inherit = Sampler1D,
 #' @title Sampler1DNormal Class
 #'
 #' @description
-#' Normal sampling (potentially truncated) for [ParamDbl].
+#' Normal sampling (potentially truncated) for [`p_dbl()`].
 #'
 #' @template param_param
 #'

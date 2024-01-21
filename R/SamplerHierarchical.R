@@ -22,7 +22,7 @@ SamplerHierarchical = R6Class("SamplerHierarchical", inherit = Sampler,
     #' @param param_set ([`ParamSet`])\cr
     #'   The [`ParamSet`] to associated with this `SamplerHierarchical`.
     #' @param samplers (`list()`)\cr
-    #'   List of [`Sampler1D`] objects that gives a Sampler for each [Param] in the `param_set`.
+    #'   List of [`Sampler1D`] objects that gives a Sampler for each dimension in the `param_set`.
     initialize = function(param_set, samplers) {
       assert_param_set(param_set, no_untyped = TRUE)
       assert_list(samplers, types = "Sampler1D")

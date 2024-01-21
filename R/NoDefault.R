@@ -4,7 +4,7 @@
 #' Special new data type for no-default.
 #' Not often needed by the end-user, mainly internal.
 #'
-#' * `NO_DEF`: Singleton object for type, used in [Param].
+#' * `NO_DEF`: Singleton object for type, used in [`Domain`] when no default is given.
 #' * `is_nodefault()`: Is an object the 'no default' object?
 #'
 #' @name NO_DEF
