@@ -112,7 +112,7 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
 
-\item{\code{length}}{(\code{integer(1)})\cr Number of contained \link{Param}s.}
+\item{\code{length}}{(\code{integer(1)})\cr Number of contained parameters.}
 
 \item{\code{is_empty}}{(\code{logical(1)})\cr Is the \code{ParamSet} empty? Named with parameter IDs.}
 
@@ -124,9 +124,9 @@ Settable, if you want to remove dependencies or perform other changes.}
 
 \item{\code{has_constraint}}{(\code{logical(1)})\cr Whether parameter constraint is set.}
 
-\item{\code{all_numeric}}{(\code{logical(1)})\cr Is \code{TRUE} if all parameters are \link{ParamDbl} or \link{ParamInt}.}
+\item{\code{all_numeric}}{(\code{logical(1)})\cr Is \code{TRUE} if all parameters are \code{\link[=p_dbl]{p_dbl()}} or \code{\link[=p_int]{p_int()}}.}
 
-\item{\code{all_categorical}}{(\code{logical(1)})\cr Is \code{TRUE} if all parameters are \link{ParamFct} and \link{ParamLgl}.}
+\item{\code{all_categorical}}{(\code{logical(1)})\cr Is \code{TRUE} if all parameters are \code{\link[=p_fct]{p_fct()}} and \code{\link[=p_lgl]{p_lgl()}}.}
 
 \item{\code{all_bounded}}{(\code{logical(1)})\cr Is \code{TRUE} if all parameters are bounded.}
 
@@ -156,9 +156,9 @@ this \code{is_logscale} will be \code{FALSE}.}
 \item{\code{nlevels}}{(named \code{integer()})\cr Number of distinct levels of parameters. \code{Inf} for double parameters or unbounded integer parameters.
 Named with param IDs.}
 
-\item{\code{is_number}}{(named \code{logical()})\cr Whether parameter is \link{ParamDbl} or \link{ParamInt}. Named with parameter IDs.}
+\item{\code{is_number}}{(named \code{logical()})\cr Whether parameter is \code{\link[=p_dbl]{p_dbl()}} or \code{\link[=p_int]{p_int()}}. Named with parameter IDs.}
 
-\item{\code{is_categ}}{(named \code{logical()})\cr Whether parameter is \link{ParamFct} or \link{ParamLgl}. Named with parameter IDs.}
+\item{\code{is_categ}}{(named \code{logical()})\cr Whether parameter is \code{\link[=p_fct]{p_fct()}} or \code{\link[=p_lgl]{p_lgl()}}. Named with parameter IDs.}
 
 \item{\code{is_bounded}}{(named \code{logical()})\cr Whether parameters have finite bounds. Named with parameter IDs.}
 }

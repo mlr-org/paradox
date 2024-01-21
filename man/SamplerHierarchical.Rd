@@ -63,7 +63,7 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 The \code{\link{ParamSet}} to associated with this \code{SamplerHierarchical}.}
 
 \item{\code{samplers}}{(\code{list()})\cr
-List of \code{\link{Sampler1D}} objects that gives a Sampler for each \link{Param} in the \code{param_set}.}
+List of \code{\link{Sampler1D}} objects that gives a Sampler for each dimension in the \code{param_set}.}
 }
 \if{html}{\out{</div>}}
 }

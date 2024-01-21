@@ -9,7 +9,7 @@
 Special new data type for no-default.
 Not often needed by the end-user, mainly internal.
 \itemize{
-\item \code{NO_DEF}: Singleton object for type, used in \link{Param}.
+\item \code{NO_DEF}: Singleton object for type, used in \code{\link{Domain}} when no default is given.
 \item \code{is_nodefault()}: Is an object the 'no default' object?
 }
 }

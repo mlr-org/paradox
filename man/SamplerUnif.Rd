@@ -5,7 +5,7 @@
 \title{SamplerUnif Class}
 \description{
 Uniform random sampling for an arbitrary (bounded) \link{ParamSet}.
-Constructs 1 uniform sampler per \link{Param}, then passes them to \link{SamplerHierarchical}.
+Constructs 1 uniform sampler per parameter, then passes them to \link{SamplerHierarchical}.
 Hence, also works for \link{ParamSet}s sets with dependencies.
 }
 \seealso{

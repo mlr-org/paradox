@@ -4,7 +4,7 @@
 \alias{Sampler1DNormal}
 \title{Sampler1DNormal Class}
 \description{
-Normal sampling (potentially truncated) for \link{ParamDbl}.
+Normal sampling (potentially truncated) for \code{\link[=p_dbl]{p_dbl()}}.
 }
 \seealso{
 Other Sampler: 

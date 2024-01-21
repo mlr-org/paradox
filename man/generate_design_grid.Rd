@@ -10,7 +10,7 @@ generate_design_grid(param_set, resolution = NULL, param_resolutions = NULL)
 \item{param_set}{(\code{\link{ParamSet}}).}
 
 \item{resolution}{(\code{integer(1)})\cr
-Global resolution for all \link{Param}s.}
+Global resolution for all parameters.}
 
 \item{param_resolutions}{(named \code{integer()})\cr
 Resolution per \code{\link{Domain}}, named by parameter ID.}

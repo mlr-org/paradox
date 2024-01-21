@@ -4,7 +4,7 @@
 \alias{Sampler1DCateg}
 \title{Sampler1DCateg Class}
 \description{
-Sampling from a discrete distribution, for a \link{ParamFct} or \link{ParamLgl}.
+Sampling from a discrete distribution, for a \code{\link{ParamSet}} containing a single \code{\link[=p_fct]{p_fct()}} or \code{\link[=p_lgl]{p_lgl()}}.
 }
 \seealso{
 Other Sampler: 
