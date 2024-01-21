@@ -135,6 +135,10 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 \code{logscale} happens on a natural (\verb{e == 2.718282...}) basis. Be aware that using a different base (\code{log10()}/\verb{10^},
 \code{log2()}/\verb{2^}) is completely equivalent and does not change the values being sampled after transformation.}
 
+\item{init}{(\code{any})\cr
+Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
+value upon construction.}
+
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
 converts the names (if not given: \code{as.character()} of the values) of the \code{levels} argument to the values.
@@ -146,6 +150,10 @@ Function which checks the input.
 Must return 'TRUE' if the input is valid and a \code{character(1)} with the error message otherwise.
 This function should \emph{not} throw an error.
 Defaults to \code{NULL}, which means that no check is performed.}
+
+\item{repr}{(\code{language})\cr
+Symbol to use to represent the value given in \code{default}.
+The \code{deparse()} of this object is used when printing the domain, in some cases.}
 }
 \value{
 A \code{Domain} object.

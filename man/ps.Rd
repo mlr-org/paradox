@@ -20,6 +20,11 @@ The names of the arguments will be used as \verb{$id()} in the resulting \code{\
 Transformation to set the resulting \code{\link{ParamSet}}'s \verb{$trafo} value to. This is in addition to any \code{trafo} of
 \code{\link{Domain}} objects given in \code{...}, and will be run \emph{after} transformations of individual parameters were performed.}
 
+\item{.constraint}{(\verb{function(x)})\cr
+Constraint function.
+When given, this function must evaluate a named \code{list()} of values and determine whether it satisfies
+constraints, returning a scalar \code{logical(1)} value.}
+
 \item{.allow_dangling_dependencies}{(\code{logical})\cr
 Whether dependencies depending on parameters that are not present should be allowed. A parameter \code{x} having
 \code{depends = y == 0} if \code{y} is not present in the \code{ps()} call would usually throw an error, but if dangling

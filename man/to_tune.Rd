@@ -32,7 +32,7 @@ can be constructed via the \code{to_tune()} function in one of several ways:
 \item \strong{\code{to_tune(lower, upper, logscale)}}: Indicates a numeric parameter should be tuned in the inclusive interval spanning
 \code{lower} to \code{upper}, possibly on a log scale if \code{logscale} is se to \code{TRUE}. All parameters are optional, and the
 parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
-integer (if it is a \code{\link{ParamInt}}) or real values (if it is a \code{\link{ParamDbl}}) are used.\cr
+integer (if it is a \code{\link[=p_int]{p_int()}}) or real values (if it is a \code{\link[=p_dbl]{p_dbl()}}) are used.\cr
 \code{lower}, \code{upper}, and \code{logscale} can be given by position, except when only one of them is given, in which case
 it must be named to disambiguate from the following cases.\cr
 When \code{logscale} is \code{TRUE}, then a \code{trafo} is generated automatically that transforms to the given bounds. The
