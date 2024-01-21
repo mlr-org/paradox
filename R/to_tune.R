@@ -21,7 +21,7 @@
 #' * **`to_tune(lower, upper, logscale)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning
 #'   `lower` to `upper`, possibly on a log scale if `logscale` is se to `TRUE`. All parameters are optional, and the
 #'   parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
-#'   integer (if it is a [`ParamInt`]) or real values (if it is a [`ParamDbl`]) are used.\cr
+#'   integer (if it is a [`p_int()`]) or real values (if it is a [`p_dbl()`]) are used.\cr
 #'   `lower`, `upper`, and `logscale` can be given by position, except when only one of them is given, in which case
 #'   it must be named to disambiguate from the following cases.\cr
 #'   When `logscale` is `TRUE`, then a `trafo` is generated automatically that transforms to the given bounds. The

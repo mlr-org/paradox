@@ -14,6 +14,10 @@
 #' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.
+#' @param .constraint (`function(x)`)\cr
+#'   Constraint function.
+#'   When given, this function must evaluate a named `list()` of values and determine whether it satisfies
+#'   constraints, returning a scalar `logical(1)` value.
 #' @param .allow_dangling_dependencies (`logical`)\cr
 #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
 #'   `depends = y == 0` if `y` is not present in the `ps()` call would usually throw an error, but if dangling

@@ -57,6 +57,12 @@
 #'   defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.\cr
 #'   `logscale` happens on a natural (`e == 2.718282...`) basis. Be aware that using a different base (`log10()`/`10^`,
 #'   `log2()`/`2^`) is completely equivalent and does not change the values being sampled after transformation.
+#' @param repr (`language`)\cr
+#'   Symbol to use to represent the value given in `default`.
+#'   The `deparse()` of this object is used when printing the domain, in some cases.
+#' @param init (`any`)\cr
+#'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
+#'   value upon construction.
 #'
 #' @return A `Domain` object.
 #'
