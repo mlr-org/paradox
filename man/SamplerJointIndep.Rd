@@ -25,7 +25,7 @@ Other Sampler:
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
 \item{\code{samplers}}{(\code{list()})\cr
-List of \link{Sampler} objects.}
+List of \code{\link{Sampler}} objects.}
 }
 \if{html}{\out{</div>}}
 }
@@ -58,7 +58,7 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \if{html}{\out{<div class="arguments">}}
 \describe{
 \item{\code{samplers}}{(\code{list()})\cr
-List of \link{Sampler} objects.}
+List of \code{\link{Sampler}} objects.}
 }
 \if{html}{\out{</div>}}
 }

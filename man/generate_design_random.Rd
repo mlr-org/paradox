@@ -7,25 +7,25 @@
 generate_design_random(param_set, n)
 }
 \arguments{
-\item{param_set}{(\link{ParamSet}).}
+\item{param_set}{(\code{\link{ParamSet}}).}
 
 \item{n}{(\code{integer(1)})\cr
 Number of points to draw randomly.}
 }
 \value{
-\link{Design}.
+\code{\link{Design}}.
 }
 \description{
 Generates a design with randomly drawn points.
-Internally uses \link{SamplerUnif}, hence, also works for \link{ParamSet}s with dependencies.
+Internally uses \code{\link{SamplerUnif}}, hence, also works for \link{ParamSet}s with dependencies.
 If dependencies do not hold, values are set to \code{NA} in the resulting data.table.
 }
 \examples{
-ps = ParamSet$new(list(
-  ParamDbl$new("ratio", lower = 0, upper = 1),
-  ParamFct$new("letters", levels = letters[1:3])
-))
-generate_design_random(ps, 10)
+pset = ps(
+  ratio = p_dbl(lower = 0, upper = 1),
+  letters = p_fct(levels = letters[1:3])
+)
+generate_design_random(pset, 10)
 }
 \seealso{
 Other generate_design: 

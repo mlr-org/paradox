@@ -13,43 +13,40 @@ test_that("p_xxx printers", {
   expect_output(print(p_uty()), "p_uty\\(\\)")
 
   expect_output(print(p_fct("a")), "p_fct\\(levels = \"a\"\\)")
-  expect_output(print(p_fct(1)), "p_fct\\(levels = \"1\"\\)")
-  expect_output(print(p_fct(list(x = 1))), "p_fct\\(levels = \"x\"\\)")
+  expect_output(print(p_fct("1")), "p_fct\\(levels = \"1\"\\)")
+  expect_output(print(p_fct(list(x = 1))), "p_fct\\(levels = list\\(x = 1\\)\\)")
 
-  expect_output(print(p_fct(list(x = 1), depends = x == 1)), "p_fct\\(levels = \"x\"\\, depends = x == 1)")
+  expect_output(print(p_fct(list(x = 1), depends = x == 1)), "p_fct\\(levels = list\\(x = 1\\)\\, depends = x == 1)")
   reqquote = quote(x == 1)
-  expect_output(print(p_fct(list(x = 1), depends = reqquote)), "p_fct\\(levels = \"x\"\\, depends = x == 1)")
+  expect_output(print(p_fct(list(x = 1), depends = reqquote)), "p_fct\\(levels = list\\(x = 1\\)\\, depends = x == 1)")
 })
 
 test_that("ps(p_xxx(...)) creates ParamSets", {
 
-  expect_equal(ps(x = p_int()), ParamSet$new(list(ParamInt$new("x"))))
-  expect_equal(ps(x = p_dbl()), ParamSet$new(list(ParamDbl$new("x"))))
-  expect_equal(ps(x = p_uty()), ParamSet$new(list(ParamUty$new("x"))))
-  expect_equal(ps(x = p_lgl()), ParamSet$new(list(ParamLgl$new("x"))))
-  expect_equal(ps(x = p_fct(letters)), ParamSet$new(list(ParamFct$new("x", letters))))
+  expect_equal_ps(ps(x = p_int()), ParamSet_legacy$new(list(ParamInt$new("x"))))
+  expect_equal_ps(ps(x = p_dbl()), ParamSet_legacy$new(list(ParamDbl$new("x"))))
+  expect_equal_ps(ps(x = p_uty()), ParamSet_legacy$new(list(ParamUty$new("x"))))
+  expect_equal_ps(ps(x = p_lgl()), ParamSet_legacy$new(list(ParamLgl$new("x"))))
+  expect_equal_ps(ps(x = p_fct(letters)), ParamSet_legacy$new(list(ParamFct$new("x", letters))))
 
-  expect_equal(ps(x = p_int(upper = 1, lower = 0)), ParamSet$new(list(ParamInt$new("x", 0, 1))))
-  expect_equal(ps(x = p_dbl(upper = 1, lower = 0)), ParamSet$new(list(ParamDbl$new("x", 0, 1))))
+  expect_equal_ps(ps(x = p_int(upper = 1, lower = 0)), ParamSet_legacy$new(list(ParamInt$new("x", 0, 1))))
+  expect_equal_ps(ps(x = p_dbl(upper = 1, lower = 0)), ParamSet_legacy$new(list(ParamDbl$new("x", 0, 1))))
 
-  expect_equal(ps(x = p_int(special_vals = list("x"), default = 0, tags = "required")),
-    ParamSet$new(list(ParamInt$new("x", special_vals = list("x"), default = 0, tags = "required"))))
-  expect_equal(ps(x = p_dbl(special_vals = list("x"), default = 0, tags = "required")),
-    ParamSet$new(list(ParamDbl$new("x", special_vals = list("x"), default = 0, tags = "required"))))
+  expect_equal_ps(ps(x = p_int(special_vals = list("x"), default = 0, tags = "xx")),
+    ParamSet_legacy$new(list(ParamInt$new("x", special_vals = list("x"), default = 0, tags = "xx"))))
+  expect_equal_ps(ps(x = p_dbl(special_vals = list("x"), default = 0, tags = "xx")),
+    ParamSet_legacy$new(list(ParamDbl$new("x", special_vals = list("x"), default = 0, tags = "xx"))))
 
-  expect_equal(ps(x = p_lgl(special_vals = list("x"), default = TRUE, tags = "required")),
-    ParamSet$new(list(ParamLgl$new("x", special_vals = list("x"), default = TRUE, tags = "required"))))
+  expect_equal_ps(ps(x = p_lgl(special_vals = list("x"), default = TRUE, tags = "xx")),
+    ParamSet_legacy$new(list(ParamLgl$new("x", special_vals = list("x"), default = TRUE, tags = "xx"))))
 
-  expect_equal(ps(x = p_fct(letters, special_vals = list(0), default = 0, tags = "required")),
-    ParamSet$new(list(ParamFct$new("x", letters, special_vals = list(0), default = 0, tags = "required"))))
+  expect_equal_ps(ps(x = p_fct(letters, special_vals = list(0), default = 0, tags = "xx")),
+    ParamSet_legacy$new(list(ParamFct$new("x", letters, special_vals = list(0), default = 0, tags = "xx"))))
 
-  expect_equal(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
-    ParamSet$new(list(ParamUty$new("x", default = 1, tags = "required", custom_check = check_int))))
+  expect_equal_ps(ps(x = p_uty(default = 1, tags = "xx", custom_check = check_int)),
+    ParamSet_legacy$new(list(ParamUty$new("x", default = 1, tags = "xx", custom_check = check_int))))
 
   expect_error(ps(x = p_int(), x = p_int()), "unique names")
-
-  expect_equal(ps(x = p_uty(default = 1, tags = "required", custom_check = check_int)),
-    ps(x = ParamUty$new("y", default = 1, tags = "required", custom_check = check_int)))
 
   expect_error(p_int(id = 1), "unused argument.*id")
 
@@ -90,17 +87,17 @@ test_that("p_fct autotrafo", {
 
 test_that("requirements in domains", {
 
-  simpleps = ParamSet$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual$new(1))
+  simpleps = ParamSet_legacy$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual(1))
 
   # basic equality expression
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = x == 1)
     ), simpleps)
 
   # quote() is accepted
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = quote(x == 1))
@@ -108,72 +105,72 @@ test_that("requirements in domains", {
 
   # using a expression variable
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = reqquote)
     ), simpleps)
 
   # the same for `p_fct`, which behaves slightly differently from the rest
-  simpleps = ParamSet$new(list(ParamInt$new("x"), ParamFct$new("y", letters)))$add_dep("y", "x", CondEqual$new(1))
-  expect_equal(
+  simpleps = ParamSet_legacy$new(list(ParamInt$new("x"), ParamFct$new("y", letters)))$add_dep("y", "x", CondEqual(1))
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(letters, depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(letters, depends = reqquote)
     ), simpleps)
 
   # the same for `p_fct` involving autotrafo, which behaves slightly differently from the rest
-  simpleps = ps(x = p_int(), y = p_fct(list(a = 1, b = 2)))$add_dep("y", "x", CondEqual$new(1))
-  expect_equal(
+  simpleps = ps(x = p_int(), y = p_fct(list(a = 1, b = 2)))$add_dep("y", "x", CondEqual(1))
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(list(a = 1, b = 2), depends = x == 1)
     ), simpleps)
   reqquote = quote(x == 1)
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_fct(list(a = 1, b = 2), depends = reqquote)
     ), simpleps)
 
   # `&&`
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       y = p_dbl(depends = x == 1 && x == 3)
     ),
-    ParamSet$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual$new(1))$add_dep("y", "x", CondEqual$new(3)))
+    ParamSet_legacy$new(list(ParamInt$new("x"), ParamDbl$new("y")))$add_dep("y", "x", CondEqual(1))$add_dep("y", "x", CondEqual(3)))
 
   # `&&`, `%in%`
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
       y = p_dbl(depends = x == 1 && z %in% c("a", "b"))
     ),
-    ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
-      add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b"))))
+    ParamSet_legacy$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
+      add_dep("y", "x", CondEqual(1))$add_dep("y", "z", CondAnyOf(c("a", "b"))))
 
   # recursive dependencies
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3], depends = x == 2),
       y = p_dbl(depends = x == 1 && z %in% c("a", "b"))
     ),
-    ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
-      add_dep("z", "x", CondEqual$new(2))$add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b"))))
+    ParamSet_legacy$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamDbl$new("y")))$
+      add_dep("z", "x", CondEqual(2))$add_dep("y", "x", CondEqual(1))$add_dep("y", "z", CondAnyOf(c("a", "b"))))
 
   # `fct` with complex requirements
-  complexps = ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
-      add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b")))
-  expect_equal(
+  complexps = ParamSet_legacy$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
+      add_dep("y", "x", CondEqual(1))$add_dep("y", "z", CondAnyOf(c("a", "b")))
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
@@ -181,7 +178,7 @@ test_that("requirements in domains", {
     ), complexps)
 
   # parentheses are ignored
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
@@ -189,15 +186,15 @@ test_that("requirements in domains", {
     ), complexps)
 
   # multiple dependencies on the same value
-  expect_equal(
+  expect_equal_ps(
     ps(
       x = p_int(),
       z = p_fct(letters[1:3]),
       y = p_fct(letters[1:3], depends = ((((x == 1)) && (z %in% c("a", "b") && z == "a"))))
     ),
-    ParamSet$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
-      add_dep("y", "x", CondEqual$new(1))$add_dep("y", "z", CondAnyOf$new(c("a", "b")))$
-      add_dep("y", "z", CondEqual$new("a")))
+    ParamSet_legacy$new(list(ParamInt$new("x"), ParamFct$new("z", letters[1:3]), ParamFct$new("y", letters[1:3])))$
+      add_dep("y", "x", CondEqual(1))$add_dep("y", "z", CondAnyOf(c("a", "b")))$
+      add_dep("y", "z", CondEqual("a")))
 
   expect_error(p_int(depends = 1 == x), "must be a parameter name")
   expect_error(p_int(depends = 1), "must be an expression")
@@ -299,54 +296,54 @@ test_that("logscale in domains", {
 
 })
 
-test_that("$.has_logscale flag works", {
+test_that("$is_logscale flags work", {
   pps = ps(x = p_int(1, 2, logscale = TRUE))
-  expect_true(get_private(pps$params[["x"]])$.has_logscale)
+  expect_equal(pps$is_logscale, c(x = TRUE))
 
   pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE))
+  expect_equal(pps$is_logscale, c(x = TRUE, y = FALSE))
 
   pps = ps(x = p_int(1, 2, logscale = TRUE), y = p_int(10, 20), z = p_int(1, 2, trafo = function(x) 2^x))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_logscale), c(x = TRUE, y = FALSE, z = FALSE))
+  expect_equal(pps$is_logscale, c(x = TRUE, y = FALSE, z = FALSE))
 })
 
-test_that("$.has_trafo flag works", {
+test_that("$has_trafo_param flags work", {
   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x))
-  expect_true(get_private(pps$params[["x"]])$.has_trafo)
+  expect_equal(pps$has_trafo_param, c(x = TRUE))
 
   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE))
+  expect_equal(pps$has_trafo_param, c(x = TRUE, y = FALSE))
 
   pps = ps(x = p_int(1, 2, trafo = function(x) 2^x), y = p_int(10, 20), z =  p_int(1, 2, logscale = TRUE))
-  expect_equal(map_lgl(pps$params, function(param) get_private(param)$.has_trafo), c(x = TRUE, y = FALSE, z = FALSE))
+  expect_equal(pps$has_trafo_param, c(x = TRUE, y = FALSE, z = TRUE))
 })
 
-test_that("$.extra_trafo flag works", {
+test_that("$extra_trafo flag works", {
   pps = ps(x = p_int(1, 2), .extra_trafo = function(x, param_set) {
     x = 1
     x
   })
-  expect_true(get_private(pps)$.has_extra_trafo)
+  expect_true(pps$has_extra_trafo)
 
   pps = ps(x = p_int(1, 2, logscale = TRUE))
-  expect_false(get_private(pps)$.has_extra_trafo)
+  expect_false(pps$has_extra_trafo)
 
-  pps$trafo = function(x, param_set) {
+  pps$extra_trafo = function(x, param_set) {
     x = 1
     x
   }
-  expect_true(get_private(pps)$.has_extra_trafo)
+  expect_true(pps$has_extra_trafo)
 
-  pps$trafo = NULL
-  expect_false(get_private(pps)$.has_extra_trafo)
+  pps$extra_trafo = NULL
+  expect_false(pps$has_extra_trafo)
 
   pps = ps(x = p_int(1, 10))
   pps$values$x = to_tune()
   search_space = pps$search_space()
-  expect_false(get_private(search_space)$.has_extra_trafo)
+  expect_false(search_space$has_extra_trafo)
 
   pps = ps(x = p_int(1, 10))
   pps$values$x = to_tune(logscale = TRUE)
   search_space = pps$search_space()
-  expect_false(get_private(search_space)$.has_extra_trafo)
+  expect_false(search_space$has_extra_trafo)
 })

@@ -6,21 +6,21 @@
 #' always produce a grid over all their valid levels.
 #' For number params the endpoints of the params are always included in the grid.
 #'
-#' @param param_set ([ParamSet]).
+#' @param param_set ([`ParamSet`]).
 #' @param resolution (`integer(1)`)\cr
-#'   Global resolution for all [Param]s.
+#'   Global resolution for all parameters.
 #' @param param_resolutions (named `integer()`)\cr
-#'   Resolution per [Param], named by parameter ID.
-#' @return [Design].
+#'   Resolution per [`Domain`], named by parameter ID.
+#' @return [`Design`].
 #'
 #' @family generate_design
 #' @export
 #' @examples
-#' ps = ParamSet$new(list(
-#'   ParamDbl$new("ratio", lower = 0, upper = 1),
-#'   ParamFct$new("letters", levels = letters[1:3])
-#' ))
-#' generate_design_grid(ps, 10)
+#' pset = ps(
+#'   ratio = p_dbl(lower = 0, upper = 1),
+#'   letters = p_fct(levels = letters[1:3])
+#' )
+#' generate_design_grid(pset, 10)
 generate_design_grid = function(param_set, resolution = NULL, param_resolutions = NULL) {
 
   assert_param_set(param_set, no_untyped = TRUE)
@@ -54,7 +54,7 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
   grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) param_set$params[[id]]$qunif(x = value))
+  res = imap(grid_vec, function(value, id) param_set$qunif(setnames(data.table(value), id))[[1]])
   res = cross_join(res, sorted = FALSE)
   Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
 }

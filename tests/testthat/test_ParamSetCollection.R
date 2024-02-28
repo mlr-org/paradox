@@ -2,12 +2,9 @@ context("ParamSetCollection")
 
 test_that("ParamSet basic stuff works", {
   ps1 = th_paramset_dbl1()
-  ps1$set_id = "s1"
   ps2 = th_paramset_full()
-  ps2$set_id = "s2"
   ps3 = th_paramset_dbl1()
-  ps3$set_id = ""
-  psc = ParamSetCollection$new(list(ps1, ps2, ps3))
+  psc = ParamSetCollection$new(list(s1 = ps1, s2 = ps2, ps3))
 
   ps1clone = ps1$clone(deep = TRUE)
   ps2clone = ps2$clone(deep = TRUE)
@@ -21,10 +18,10 @@ test_that("ParamSet basic stuff works", {
   expect_class(psc, "ParamSetCollection")
   expect_equal(psc$length, ps1$length + ps2$length + ps3$length)
   # check that param internally in collection is constructed correctly
-  p = psc$params[[2L]]
-  p = p$clone()
+  p = psc$params[2L]
   p$id = "th_param_int"
-  expect_equal(p, ps2$params[[1L]])
+
+  expect_equal(p, ps2$params[1L])
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), ps3$ids()))
   expect_equal(psc$lower, my_c(ps1$lower, ps2$lower, ps3$lower))
   d = as.data.table(psc)
@@ -42,12 +39,13 @@ test_that("ParamSet basic stuff works", {
   d = generate_design_random(psc, n = 10L)
   expect_data_table(d$data, nrows = 10, ncols = 6L)
 
-  psc$trafo = function(x, param_set) {
+  psflat = psc$flatten()
+  psflat$extra_trafo = function(x, param_set) {
     x$s2.th_param_int = 99 # nolint
     return(x)
   }
-  expect_true(psc$has_trafo)
-  d = generate_design_random(psc, n = 10L)
+  expect_true(psflat$has_trafo)
+  d = generate_design_random(psflat, n = 10L)
   expect_data_table(d$data, nrows = 10, ncols = 6L)
   xs = d$transpose(trafo = TRUE)
   for (i in 1:10) {
@@ -68,54 +66,45 @@ test_that("ParamSet basic stuff works", {
   expect_equal(ps2, ps2clone)
 
   # adding a set
-  ps4 = ParamSet$new(list(ParamDbl$new("x")))
-  ps4$set_id = "s4"
-  psc$add(ps4)
+  ps4 = ParamSet_legacy$new(list(ParamDbl$new("x")))
+  psc = psc$add(ps4, n = "s4")
   expect_equal(psc$length, ps1$length + ps2$length + ps3$length + ps4$length)
   expect_equal(psc$ids(), c(paste0("s1.", ps1$ids()), paste0("s2.", ps2$ids()), ps3$ids(), paste0("s4.", ps4$ids())))
-  psc$remove_sets("s1")
-  expect_equal(psc$length, ps2$length + ps3$length + ps4$length)
-  expect_equal(psc$ids(), c(paste0("s2.", ps2$ids()), ps3$ids(), paste0("s4.", ps4$ids())))
 })
 
 test_that("some operations are not allowed", {
   ps1 = th_paramset_dbl1()
-  ps1$set_id = "s1"
   ps2 = th_paramset_full()
-  ps2$set_id = "s2"
-  psc = ParamSetCollection$new(list(ps1, ps2))
+  psc = ParamSetCollection$new(list(s1 = ps1, s2 = ps2))
 
-  expect_error(psc$subset("foo"), "not allowed")
-  expect_error(psc$add(th_param_dbl()), "ParamSet")
+  expect_error(psc$subset("foo"), "Must be a subset of")
 })
 
 test_that("deps", {
-  ps1 = ParamSet$new(list(
+  ps1 = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d")
   ))
-  ps1$set_id = "ps1"
-  ps1$add_dep("d", on = "f", CondEqual$new("a"))
+  ps1$add_dep("d", on = "f", CondEqual("a"))
 
-  ps2 = ParamSet$new(list(
+  ps2 = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d")
   ))
-  ps2$set_id = "ps2"
 
   ps1clone = ps1$clone(deep = TRUE)
   ps2clone = ps2$clone(deep = TRUE)
 
-  psc = ParamSetCollection$new(list(ps1, ps2))
+  psc = ParamSetCollection$new(list(ps1 = ps1, ps2 = ps2))
   d = psc$deps
   expect_data_table(d, nrows = 1, ncols = 3)
   expect_equal(d$id, c("ps1.d"))
 
   # check deps across sets
-  psc$add_dep("ps2.d", on = "ps1.f", CondEqual$new("a"))
+  psc$add_dep("ps2.d", on = "ps1.f", CondEqual("a"))
   expect_data_table(psc$deps, nrows = 2, ncols = 3)
   expect_true(psc$check(list(ps1.f = "a", ps1.d = 0, ps2.d = 0)))
-  expect_string(psc$check(list(ps2.d = 0)))
+  expect_string(psc$check(list(ps2.d = 0), check_strict = TRUE))
 
   # ps1 and ps2 should not be changed
   expect_equal(ps1clone, ps1)
@@ -123,27 +112,25 @@ test_that("deps", {
 })
 
 test_that("values", {
-  ps1 = ParamSet$new(list(
+  ps1 = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
   ))
-  ps1$set_id = "foo"
-  ps2 = ParamSet$new(list(
+  ps2 = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamDbl$new("d", lower = 1, upper = 8)
   ))
-  ps2$set_id = "bar"
-  ps3 = ParamSet$new(list(
+  ps3 = ParamSet_legacy$new(list(
     ParamDbl$new("x", lower = 1, upper = 8)
   ))
-  ps4 = ParamSet$new(list(
+  ps4 = ParamSet_legacy$new(list(
     ParamDbl$new("y", lower = 1, upper = 8)
   ))
 
   ps1clone = ps1$clone(deep = TRUE)
   ps2clone = ps2$clone(deep = TRUE)
 
-  pcs = ParamSetCollection$new(list(ps1, ps2, ps3, ps4))
+  pcs = ParamSetCollection$new(list(foo = ps1, bar = ps2, ps3, ps4))
   expect_equal(pcs$values, named_list())
   ps2$values = list(d = 3)
   expect_equal(pcs$values, list(bar.d = 3))
@@ -167,66 +154,49 @@ test_that("values", {
 
   expect_equal(ps1clone, ps1)
   expect_equal(ps2clone, ps2)
+
+  # resetting pcs values
+  pcs$values = list()
+  expect_list(pcs$values, len = 0)
 })
 
 test_that("empty collections", {
   # no paramsets
   psc = ParamSetCollection$new(list())
   expect_equal(psc$length, 0L)
-  expect_equal(psc$params, named_list())
+  expect_equal(psc$subspaces(), named_list())
   expect_equal(psc$ids(), character(0L))
   expect_data_table(as.data.table(psc), nrows = 0L)
 
   # 1 empty paramset
-  psc = ParamSetCollection$new(list(ParamSet$new()))
+  psc = ParamSetCollection$new(list(ParamSet_legacy$new()))
   expect_equal(psc$length, 0L)
-  expect_equal(psc$params, named_list())
+  expect_equal(psc$subspaces(), named_list())
   expect_equal(psc$ids(), character(0L))
   expect_data_table(as.data.table(psc), nrows = 0L)
 })
 
 
 test_that("no problems if we name the list of sets", {
-  ps = ParamSet$new(list(ParamDbl$new("test1")))
-  ps$set_id = "paramset"
-  psc = ParamSetCollection$new(list(prefix = ps))
-  expect_equal(names(psc$params), "paramset.test1")
+  ps = ParamSet_legacy$new(list(ParamDbl$new("test1")))
+  psc = ParamSetCollection$new(list(paramset = ps))
+  expect_equal(names(psc$subspaces()), "paramset.test1")
 })
 
 test_that("no warning in printer, see issue 208", {
-  ps = ParamSet$new(list(ParamDbl$new("test1")))
-  ps$set_id = "paramset"
-  psc = ParamSetCollection$new(list(ps))
+  ps = ParamSet_legacy$new(list(ParamDbl$new("test1")))
+
+  psc = ParamSetCollection$new(list(paramset = ps))
   psc$values = list(paramset.test1 = 1)
   expect_warning(capture_output(print(ps)), NA)
 })
 
-
-test_that("collection reflects direct paramset$set_id change", {
-  ps = ParamSet$new(list(ParamDbl$new("d")))
-  ps$set_id = "paramset"
-  psc = ParamSetCollection$new(list(ps))
-  ps$values = list(d = 1)
-  expect_equal(psc$values, list(paramset.d = 1))
-  ps$set_id = "foo"
-  expect_equal(psc$values, list(foo.d = 1))
-  expect_equal(psc$params, list(foo.d = ParamDbl$new("foo.d")))
-
-  ps$set_id = ""
-  expect_equal(psc$values, list(d = 1))
-  expect_equal(psc$params, list(d = ParamDbl$new("d")))
-})
-
-
 test_that("collection allows state-change setting of paramvals, see issue 205", {
-  ps1 = ParamSet$new(list(ParamDbl$new("d1")))
-  ps1$set_id = "s1"
-  ps2 = ParamSet$new(list(ParamDbl$new("d2")))
-  ps2$set_id = "s2"
-  ps3 = ParamSet$new(list(ParamDbl$new("d3")))
-  ps3$set_id = ""
+  ps1 = ParamSet_legacy$new(list(ParamDbl$new("d1")))
+  ps2 = ParamSet_legacy$new(list(ParamDbl$new("d2")))
+  ps3 = ParamSet_legacy$new(list(ParamDbl$new("d3")))
 
-  psc = ParamSetCollection$new(list(ps1, ps2, ps3))
+  psc = ParamSetCollection$new(list(s1 = ps1, s2 = ps2, ps3))
   expect_equal(psc$values, named_list())
   psc$values$s1.d1 = 1 # nolint
   expect_equal(psc$values, list(s1.d1 = 1))
@@ -237,28 +207,23 @@ test_that("collection allows state-change setting of paramvals, see issue 205", 
 })
 
 test_that("set_id inference in values assignment works now", {
-  psa = ParamSet$new(list(ParamDbl$new("parama")))
-  psa$set_id = "a.b"
+  psa = ParamSet_legacy$new(list(ParamDbl$new("parama")))
 
-  psb = ParamSet$new(list(ParamDbl$new("paramb")))
-  psb$set_id = "b"
+  psb = ParamSet_legacy$new(list(ParamDbl$new("paramb")))
 
-  psc = ParamSet$new(list(ParamDbl$new("paramc")))
-  psc$set_id = "c"
+  psc = ParamSet_legacy$new(list(ParamDbl$new("paramc")))
 
-  pscol1 = ParamSetCollection$new(list(psb, psc))
-  pscol1$set_id = "a"
+  pscol1 = ParamSetCollection$new(list(b = psb, c = psc))
 
-  pscol2 = ParamSetCollection$new(list(psa, pscol1))
+  pscol2 = ParamSetCollection$new(list(a.b = psa, a = pscol1))
 
-  pstest = ParamSet$new(list(ParamDbl$new("paramc")))
-  pstest$set_id = "a.c"
+  pstest = ParamSet_legacy$new(list(ParamDbl$new("paramc")))
 
-  expect_error(pscol2$add(pstest), "nameclashes.* a\\.c\\.paramc")
+  expect_error(pscol2$add(pstest, n = "a.c"), "would lead to nameclashes.*a\\.c\\.paramc")
 
-  pstest = ParamSet$new(list(ParamDbl$new("a.c.paramc")))
-  pstest$set_id = ""
-  expect_error(pscol2$add(pstest), "nameclashes.* a\\.c\\.paramc")
+  pstest = ParamSet_legacy$new(list(ParamDbl$new("a.c.paramc")))
+
+  expect_error(pscol2$add(pstest), "would lead to nameclashes.*a\\.c\\.paramc")
 
   pscol2$values = list(a.c.paramc = 3, a.b.parama = 1, a.b.paramb = 2)
 
@@ -268,6 +233,6 @@ test_that("set_id inference in values assignment works now", {
   expect_equal(pscol1$values, list(b.paramb = 2, c.paramc = 3))
   expect_equal(pscol2$values, list(a.b.parama = 1, a.b.paramb = 2, a.c.paramc = 3))
 
-  expect_error(ParamSetCollection$new(list(pscol1, pstest)),
+  expect_error(ParamSetCollection$new(list(a = pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })

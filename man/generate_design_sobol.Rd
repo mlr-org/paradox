@@ -7,13 +7,13 @@
 generate_design_sobol(param_set, n)
 }
 \arguments{
-\item{param_set}{(\link{ParamSet}).}
+\item{param_set}{(\code{\link{ParamSet}}).}
 
 \item{n}{(\code{integer(1)}) \cr
 Number of points to sample.}
 }
 \value{
-\link{Design}.
+\code{\link{Design}}.
 }
 \description{
 Generate a space-filling design using a Sobol sequence. Dependent
@@ -26,13 +26,13 @@ Note that non determinism is achieved by sampling the seed argument via
 \code{sample(.Machine$integer.max, size = 1L)}.
 }
 \examples{
-ps = ParamSet$new(list(
-  ParamDbl$new("ratio", lower = 0, upper = 1),
-  ParamFct$new("letters", levels = letters[1:3])
-))
+pset = ps(
+  ratio = p_dbl(lower = 0, upper = 1),
+  letters = p_fct(levels = letters[1:3])
+)
 
 if (requireNamespace("spacefillr", quietly = TRUE)) {
-  generate_design_sobol(ps, 10)
+  generate_design_sobol(pset, 10)
 }
 }
 \seealso{

@@ -8,14 +8,14 @@ test_that("1d samplers: basic tests", {
     ParamLgl = list(Sampler1DUnif, Sampler1DCateg)
   )
   ps = th_paramset_full()
-  for (p in ps$params) {
+  for (p in ps$subspaces()) {
     ss = samplers[[p$class]]
     for (s in ss) {
       expect_error(s$new(ps()), "exactly 1 Param, but contains 0")
-      expect_error(s$new(ps(x = p, y = p)), "exactly 1 Param, but contains 2")
-      expect_class(s$new(ps(x = p)), "Sampler1D")
+      expect_error(s$new(ps_union(list(x = p, y = p))), "exactly 1 Param, but contains 2")
+      expect_class(s$new(p), "Sampler1D")
       s = s$new(p)
-      info = paste(p$id, "-", class(s)[[1L]])
+      info = paste(p$ids(), "-", class(s)[[1L]])
       n = 5L
       x = s$sample(n)
       d = x$data
@@ -26,7 +26,7 @@ test_that("1d samplers: basic tests", {
         expect_true(all(d1 >= p$lower & d1 <= p$upper), info = info)
       }
       if (p$class %in% c("ParamFct")) {
-        expect_true(all(d1 %in% p$levels), info = info)
+        expect_true(all(d1 %in% p$levels[[1]]), info = info)
       }
       expect_output(print(s), "<Sampler")
     }
@@ -44,7 +44,7 @@ test_that("sampling of unif requires finite bounds", {
 test_that("SamplerJointIndep", {
   p1 = th_param_fct()
   p2 = th_param_dbl()
-  ps = ParamSet$new(list(p1, p2))
+  ps = ParamSet_legacy$new(list(p1, p2))
   s1 = Sampler1DCateg$new(p1)
   s2 = Sampler1DUnif$new(p2)
   s = SamplerJointIndep$new(list(s1, s2))
@@ -63,14 +63,14 @@ test_that("SamplerJointIndep", {
 
 test_that("SamplerUnif", {
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     s = SamplerUnif$new(ps)
     # as the ps is constructed in the sampler, we cannot expect ps$id to be the same
     expect_equal(s$param_set$params, ps$params)
@@ -100,12 +100,32 @@ test_that("SamplerUnif works with deps", {
 test_that("we had a bug where creating the joint sampler changed the ps-ref of the 1d samplers", {
   p1 = th_param_fct()
   p2 = th_param_dbl()
-  ps = ParamSet$new(list(p1, p2))
+  ps = ParamSet_legacy$new(list(p1, p2))
   s1 = Sampler1DCateg$new(p1)
   s2 = Sampler1DUnif$new(p2)
   s = SamplerJointIndep$new(list(s1, s2))
-  expect_equal(s1$param_set, ParamSet$new(list(th_param_fct())))
-  expect_equal(s2$param_set, ParamSet$new(list(th_param_dbl())))
+
+  s1_expected = ParamSet_legacy$new(list(th_param_fct()))
+
+  # reset indices: they are set but do not make the param_set unequal
+  setindexv(s1_expected$.__enclos_env__$private$.params, NULL)
+  setindexv(s1$param_set$.__enclos_env__$private$.params, NULL)
+  setindexv(s1_expected$.__enclos_env__$private$.tags, NULL)
+  setindexv(s1$param_set$.__enclos_env__$private$.tags, NULL)
+  setindexv(s1_expected$.__enclos_env__$private$.deps, NULL)
+  setindexv(s1$param_set$.__enclos_env__$private$.deps, NULL)
+  expect_equal(s1$param_set, s1_expected)
+
+  s2_expected = ParamSet_legacy$new(list(th_param_dbl()))
+
+  setindexv(s2_expected$.__enclos_env__$private$.params, NULL)
+  setindexv(s2$param_set$.__enclos_env__$private$.params, NULL)
+  setindexv(s2_expected$.__enclos_env__$private$.tags, NULL)
+  setindexv(s2$param_set$.__enclos_env__$private$.tags, NULL)
+  setindexv(s2_expected$.__enclos_env__$private$.deps, NULL)
+  setindexv(s2$param_set$.__enclos_env__$private$.deps, NULL)
+
+  expect_equal(s2$param_set, s2_expected)
 })
 
 test_that("Sampler1DRfun with 0 samples (#338)", {

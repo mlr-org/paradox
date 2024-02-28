@@ -4,17 +4,26 @@
 \alias{ps}
 \title{Construct a ParamSet using Short Forms}
 \usage{
-ps(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE)
+ps(
+  ...,
+  .extra_trafo = NULL,
+  .constraint = NULL,
+  .allow_dangling_dependencies = FALSE
+)
 }
 \arguments{
-\item{...}{(\code{\link{Domain}} | \code{\link{Param}})\cr
-Named arguments of \code{\link{Domain}} or \code{\link{Param}} objects. The \code{\link{ParamSet}} will be constructed of the given \code{\link{Param}}s,
-or of \code{\link{Param}}s constructed from the given domains. The names of the arguments will be used as \verb{$id}
-(the \verb{$id} of \code{\link{Param}} arguments are ignored).}
+\item{...}{(\code{\link{Domain}})\cr
+Named arguments of \code{\link{Domain}} objects. The \code{\link{ParamSet}} will be constructed of the given \code{\link{Domain}}s,
+The names of the arguments will be used as \verb{$id()} in the resulting \code{\link{ParamSet}}.}
 
 \item{.extra_trafo}{(\verb{function(x, param_set)})\cr
 Transformation to set the resulting \code{\link{ParamSet}}'s \verb{$trafo} value to. This is in addition to any \code{trafo} of
 \code{\link{Domain}} objects given in \code{...}, and will be run \emph{after} transformations of individual parameters were performed.}
+
+\item{.constraint}{(\verb{function(x)})\cr
+Constraint function.
+When given, this function must evaluate a named \code{list()} of values and determine whether it satisfies
+constraints, returning a scalar \code{logical(1)} value.}
 
 \item{.allow_dangling_dependencies}{(\code{logical})\cr
 Whether dependencies depending on parameters that are not present should be allowed. A parameter \code{x} having
@@ -69,7 +78,7 @@ pars$search_space()
 }
 \seealso{
 Other ParamSet construction helpers: 
-\code{\link{Domain}},
+\code{\link{Domain}()},
 \code{\link{to_tune}()}
 }
 \concept{ParamSet construction helpers}

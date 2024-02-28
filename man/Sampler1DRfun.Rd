@@ -60,8 +60,9 @@ Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{param}}{(\link{Param})\cr
-Domain / support of the distribution we want to sample from.}
+\item{\code{param}}{(\code{\link{ParamSet}})\cr
+Domain / support of the distribution we want to sample from.
+Must be one-dimensional.}
 
 \item{\code{rfun}}{(\verb{function()})\cr
 Random number generator function, e.g. \code{rexp} to sample from exponential distribution.}

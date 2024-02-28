@@ -2,14 +2,14 @@ context("generate_design")
 
 test_that("generate_design_random", {
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     d = generate_design_random(ps, n = 5L)
     dd = d$data
     expect_data_table(dd, any.missing = FALSE, nrows = 5L, ncols = ps$length, info = info)
@@ -19,14 +19,14 @@ test_that("generate_design_random", {
 
 test_that("generate_design_grid", {
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     reso = 3L
     d = generate_design_grid(ps, resolution = reso)
     dd = d$data
@@ -41,18 +41,18 @@ test_that("generate_design_grid", {
 })
 
 test_that("generate_design_grid with different resolutions and egde cases", {
-  ps = ParamSet$new(list(ParamFct$new("f", levels = letters[1:2])))
+  ps = ParamSet_legacy$new(list(ParamFct$new("f", levels = letters[1:2])))
   d = generate_design_grid(ps)
   expect_data_table(d$data, any.missing = FALSE, nrows = 2, ncols = 1)
 
-  ps = ParamSet$new(list(
+  ps = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = letters[1:2]),
     ParamDbl$new("d", lower = 0, upper = 1)
   ))
   d = generate_design_grid(ps, param_resolutions = c(d = 3))
   expect_data_table(d$data, any.missing = FALSE, nrows = 6, ncols = 2)
 
-  ps = ParamSet$new(list(
+  ps = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamInt$new("y", lower = 0, upper = 10)
   ))
@@ -68,7 +68,7 @@ test_that("generate_design_grid with different resolutions and egde cases", {
   expect_equal(length(unique(dd$x)), 4)
   expect_equal(length(unique(dd$y)), 3)
 
-  ps = ParamSet$new(list(
+  ps = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamInt$new("y", lower = 0, upper = 10),
     ParamLgl$new("z")
@@ -82,7 +82,7 @@ test_that("generate_design_grid with different resolutions and egde cases", {
 })
 
 test_that("check generate_design_grid against concrete expectation", {
-  ps = ParamSet$new(list(
+  ps = ParamSet_legacy$new(list(
     ParamDbl$new("x", lower = 1, upper = 3),
     ParamFct$new("y", levels = c("a", "b"))
   ))
@@ -95,14 +95,14 @@ test_that("generate_design_lhs", {
   skip_if_not_installed("lhs")
 
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     d = generate_design_lhs(ps, 10)
     dd = d$data
     expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
@@ -143,7 +143,7 @@ test_that("generate_design_random and grid works with deps", {
 test_that("generate_design_random with zero rows", {
   ps = th_paramset_full()
   d = generate_design_random(ps, n = 0)
-  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
 
 test_that("generate_design_lhs with zero rows", {
@@ -151,27 +151,27 @@ test_that("generate_design_lhs with zero rows", {
 
   ps = th_paramset_full()
   d = generate_design_lhs(ps, n = 0)
-  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
 
 test_that("generate_design_grid with zero rows", {
   ps = th_paramset_full()
   d = generate_design_grid(ps, resolution = 0)
-  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
 
 test_that("generate_design_sobol", {
   skip_if_not_installed("spacefillr")
 
   ps_list = list(
-    th_paramset_dbl1(),
-    th_paramset_full(),
-    th_paramset_repeated(),
-    th_paramset_numeric()
+    dbl = th_paramset_dbl1(),
+    full = th_paramset_full(),
+    repeated = th_paramset_repeated(),
+    numeric = th_paramset_numeric()
   )
 
-  for (ps in ps_list) {
-    info = ps$set_id
+  for (info in names(ps_list)) {
+    ps = ps_list[[info]]
     d = generate_design_sobol(ps, 10)
     dd = d$data
     expect_data_table(d$data, nrows = 10, any.missing = FALSE, info = info)
@@ -195,6 +195,6 @@ test_that("generate_design_sobol with zero rows", {
 
   ps = th_paramset_full()
   d = generate_design_sobol(ps, n = 0)
-  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length, info = ps$set_id)
+  expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
 })
 

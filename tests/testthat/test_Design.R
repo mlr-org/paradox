@@ -1,11 +1,11 @@
 context("Design")
 
 test_that("transpose works", {
-  ps = ParamSet$new(list(
+  ps = ParamSet_legacy$new(list(
     ParamFct$new("f", levels = c("a", "b")),
     ParamInt$new("i", lower = 1, upper = 5)
   ))
-  ps$add_dep("i", on = "f", CondEqual$new("a"))
+  ps$add_dep("i", on = "f", CondEqual("a"))
   data = data.table(f = c("a", "b"), i = c(1L, NA))
   d = Design$new(ps, data, remove_dupl = FALSE)
   xs = d$transpose(filter_na = FALSE)
@@ -16,7 +16,7 @@ test_that("transpose works", {
   expect_equal(xs, xs2)
 
   # now a trafo, with a dep
-  ps$trafo = function(x, param_set) {
+  ps$extra_trafo = function(x, param_set) {
     if (!is.null(x$i)) {
       x$i = x$i + 10
     }

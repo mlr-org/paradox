@@ -102,5 +102,12 @@ $RECYCLE.BIN/
 !.vscode/extensions.json
 *.code-workspace
 .vscode
+
+# Autosaves and Temp files
+.#*
+*~
+\#*#
+*.swp
+
 README.html
 cran-comments\.md

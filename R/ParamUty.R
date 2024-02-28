@@ -1,72 +1,37 @@
-#' @title Untyped Parameter
-#'
-#' @description
-#' A [Param] to describe untyped parameters.
-#'
-#' @template param_id
-#' @template param_default
-#' @template param_tags
-#' @template param_custom_check
-#'
-#' @family Params
-#' @include Param.R
+
+#' @rdname Domain
 #' @export
-#' @examples
-#' ParamUty$new("untyped", default = Inf)
-ParamUty = R6Class("ParamUty", inherit = Param,
-  public = list(
-    #' @field custom_check (`function()`)\cr
-    #' Custom function to check the feasibility.
-    custom_check = NULL,
-    #' @field repr (`character(1)`)\cr
-    #' Custom field for printing the parameter table.
-    repr = NULL,
+p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, repr = substitute(default), init) {
+  assert_function(custom_check, null.ok = TRUE)
+  if (!is.null(custom_check)) {
+    custom_check_result = custom_check(1)
+    assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")
+  }
+  repr = if (!is_nodefault(default)) {
+    deparse(repr)[[1]]
+  } else {
+    "NoDefault"
+  }
+  Domain(cls = "ParamUty", grouping = "ParamUty", cargo = list(custom_check = custom_check, repr = repr), special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
+}
 
-    #' @description
-    #' Creates a new instance of this [R6][R6::R6Class] class.
-    #'
-    #' @param custom_check (`function()`)\cr
-    #'   Custom function to check the feasibility.
-    #'   Function which checks the input.
-    #'   Must return 'TRUE' if the input is valid and a string with the error message otherwise.
-    #'   Defaults to `NULL`, which means that no check is performed.
-    #' @param repr (`character(1)`)\cr
-    #'   Custom representation string. Used for parameter table in help pages.
-    initialize = function(id, default = NO_DEF, tags = character(), custom_check = NULL,
-                          repr = substitute(default)) {
-      # super class calls private$.check, so this must be set BEFORE
-      # we initialize the super class
-      if (is.null(custom_check)) {
-        self$custom_check = function(x) TRUE
-      } else {
-        self$custom_check = assert_function(custom_check, "x")
-      }
-      self$repr = if (!is_nodefault(default)) {
-         as.character(repr)
-      } else {
-        "NoDefault"
-      }
-      super$initialize(id, special_vals = list(), default = default, tags = tags)
-    }
-  ),
+#' @export
+domain_check.ParamUty = function(param, values) {
+  cargo = map(param$cargo, "custom_check")
+  subset = !map_lgl(cargo, is.null)
+  if (!any(subset)) return(TRUE)
+  values = values[subset]
+  check_domain_vectorize(param$id[subset], values, cargo[subset])
+}
 
-  active = list(
-    #' @template field_lower
-    lower = function() NA_real_,
-    #' @template field_upper
-    upper = function() NA_real_,
-    #' @template field_levels
-    levels = function() NULL,
-    #' @template field_nlevels
-    nlevels = function() Inf,
-    #' @template field_is_bounded
-    is_bounded = function() FALSE,
-    #' @template field_storage_type
-    storage_type = function() "list"
-  ),
+#' @export
+domain_nlevels.ParamUty = function(param) rep(Inf, nrow(param))
+#' @export
+domain_is_bounded.ParamUty = function(param) rep(FALSE, nrow(param))
+#' @export
+domain_qunif.ParamUty = function(param, x) stop("undefined")
 
-  private = list(
-    .check = function(x) self$custom_check(x),
-    .qunif = function(x) stop("undefined")
-  )
-)
+#' @export
+domain_is_number.ParamUty = function(param) FALSE
+#' @export
+domain_is_categ.ParamUty = function(param) FALSE

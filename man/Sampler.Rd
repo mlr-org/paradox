@@ -21,7 +21,7 @@ Other Sampler:
 \section{Public fields}{
 \if{html}{\out{<div class="r6-fields">}}
 \describe{
-\item{\code{param_set}}{(\link{ParamSet})\cr
+\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
 Domain / support of the distribution we want to sample from.}
 }
 \if{html}{\out{</div>}}
@@ -51,9 +51,8 @@ e.g., \link{Sampler1D}.
 \subsection{Arguments}{
 \if{html}{\out{<div class="arguments">}}
 \describe{
-\item{\code{param_set}}{(\link{ParamSet})\cr
-Domain / support of the distribution we want to sample from.
-ParamSet is cloned on construction.}
+\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associated with this \code{Sampler}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -75,7 +74,7 @@ Sample \code{n} values from the distribution.
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-\link{Design}.
+\code{\link{Design}}.
 }
 }
 \if{html}{\out{<hr>}}

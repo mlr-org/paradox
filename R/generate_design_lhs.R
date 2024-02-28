@@ -5,24 +5,24 @@
 #' parameters whose constraints are unsatisfied generate `NA` entries in
 #' their respective columns.
 #'
-#' @param param_set ([ParamSet]).
+#' @param param_set ([`ParamSet`]).
 #' @param n (`integer(1)`) \cr
 #'   Number of points to sample.
 #' @param lhs_fun (`function(n, k)`)\cr
 #'   Function to use to generate a LHS sample, with n samples and k values per param.
 #'   LHS functions are implemented in package \pkg{lhs}, default is to use [lhs::maximinLHS()].
-#' @return [Design].
+#' @return [`Design`].
 #'
 #' @family generate_design
 #' @export
 #' @examples
-#' ps = ParamSet$new(list(
-#'   ParamDbl$new("ratio", lower = 0, upper = 1),
-#'   ParamFct$new("letters", levels = letters[1:3])
-#' ))
+#' pset = ps(
+#'   ratio = p_dbl(lower = 0, upper = 1),
+#'   letters = p_fct(levels = letters[1:3])
+#' )
 #'
 #' if (requireNamespace("lhs", quietly = TRUE)) {
-#'   generate_design_lhs(ps, 10)
+#'   generate_design_lhs(pset, 10)
 #' }
 generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   if (is.null(lhs_fun)) {
@@ -35,11 +35,11 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
 
   ids = param_set$ids()
   if (n == 0) {
-    d = matrix(nrow = 0, ncol = param_set$length)
+    d = matrix(numeric(0), nrow = 0, ncol = param_set$length)
   } else {
     d = lhs_fun(n, k = param_set$length)
   }
   colnames(d) = ids
-  d = map_dtc(ids, function(id) param_set$params[[id]]$qunif(d[, id]))
-  Design$new(param_set, set_names(d, ids), remove_dupl = FALSE) # user wants n-points, dont remove
+  d = param_set$qunif(d)
+  Design$new(param_set, d, remove_dupl = FALSE) # user wants n-points, dont remove
 }

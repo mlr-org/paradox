@@ -2,8 +2,8 @@ context("ParamFct")
 
 test_that("test if ParamFct constructor works", {
   p = ParamFct$new(id = "test", levels = c("a", "b"))
-  expect_equal(p$levels, c("a", "b"))
-  expect_equal(p$nlevels, 2L)
+  expect_equal(p$levels$test, c("a", "b"))
+  expect_equal(p$nlevels[["test"]], 2L)
 
   # we dont allow NAs as levels
   expect_error(ParamFct$new(id = "test", levels = c("a", NA)))
@@ -15,9 +15,9 @@ test_that("qunif", {
     p = ParamFct$new("x", levels = vals)
     k = p$nlevels
     u = runif(n)
-    v1 = p$qunif(u)
+    v1 = p$qunif(data.frame(x = u))$x
     expect_character(v1, any.missing = FALSE, len = n)
-    expect_setequal(unique(v1), p$levels) # check we see all levels
+    expect_setequal(unique(v1), p$levels$x) # check we see all levels
     # check that empirical frequencies are pretty much uniform
     freqs = prop.table(table(v1))
     p = rep(1 / k, k)

@@ -8,13 +8,16 @@
 #'
 #' For more specifics also see the documentation of [`Domain`].
 #'
-#' @param ... ([`Domain`] | [`Param`])\cr
-#'   Named arguments of [`Domain`] or [`Param`] objects. The [`ParamSet`] will be constructed of the given [`Param`]s,
-#'   or of [`Param`]s constructed from the given domains. The names of the arguments will be used as `$id`
-#'   (the `$id` of [`Param`] arguments are ignored).
+#' @param ... ([`Domain`])\cr
+#'   Named arguments of [`Domain`] objects. The [`ParamSet`] will be constructed of the given [`Domain`]s,
+#'   The names of the arguments will be used as `$id()` in the resulting [`ParamSet`].
 #' @param .extra_trafo (`function(x, param_set)`)\cr
 #'   Transformation to set the resulting [`ParamSet`]'s `$trafo` value to. This is in addition to any `trafo` of
 #'   [`Domain`] objects given in `...`, and will be run *after* transformations of individual parameters were performed.
+#' @param .constraint (`function(x)`)\cr
+#'   Constraint function.
+#'   When given, this function must evaluate a named `list()` of values and determine whether it satisfies
+#'   constraints, returning a scalar `logical(1)` value.
 #' @param .allow_dangling_dependencies (`logical`)\cr
 #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
 #'   `depends = y == 0` if `y` is not present in the `ps()` call would usually throw an error, but if dangling
@@ -58,64 +61,12 @@
 #' pars$search_space()
 #' @family ParamSet construction helpers
 #' @export
-ps = function(..., .extra_trafo = NULL, .allow_dangling_dependencies = FALSE) {
-  args = list(...)
-  assert_list(args, names = "unique", types = c("Param", "Domain"))
-  assert_function(.extra_trafo, null.ok = TRUE)
-
-  # generate Params (with correct id) from Domain objects
-  params = imap(args, function(p, name) {
-    if (inherits(p, "Param")) {
-      p = p$clone(deep = TRUE)
-    } else {
-      p = p$param$clone(deep = TRUE)
-    }
-    p$id = name
-    p
-  })
-
-  paramset = ParamSet$new(params)
-
-  # add Dependencies
-  imap(args, function(p, name) {
-    if (inherits(p, "Param") || is.null(p$requirements)) return(NULL)
-    map(p$requirements, function(req) {
-      if (!req$on %in% names(args) || req$on == name) {
-        if (.allow_dangling_dependencies) {
-          if (name == req$on) stop("A param cannot depend on itself!")
-          paramset$deps = rbind(paramset$deps, data.table(id = name, on = req$on, cond = list(req$cond)))
-        } else {
-          stopf("Parameter %s can not depend on %s.", name, req$on)
-        }
-      } else {
-        invoke(paramset$add_dep, id = name, .args = req)
-      }
-    })
-  })
-
-  # add trafos
-  trafos = map(discard(args, function(x) inherits(x, "Param") || is.null(x$trafo)),
-    function(p) {
-      assert_function(p$trafo)
-    })
-  if (length(trafos) || !is.null(.extra_trafo)) {
-    # the $trafo function iterates through the trafos and applies them
-    # We put the $trafo in a crate() (helper.R) to avoid having a function
-    # with lots of things in its environment.
-    paramset$trafo = crate(function(x, param_set) {
-      for (trafoing in names(trafos)) {
-        if (!is.null(x[[trafoing]])) {
-          x[[trafoing]] = trafos[[trafoing]](x[[trafoing]])
-        }
-      }
-      if (!is.null(.extra_trafo)) x = .extra_trafo(x, param_set)
-      x
-    }, trafos, .extra_trafo)
-  }
-  paramset[[".__enclos_env__"]][["private"]]$.has_extra_trafo = !is.null(.extra_trafo)
-  paramset
+ps = function(..., .extra_trafo = NULL, .constraint = NULL, .allow_dangling_dependencies = FALSE) {
+  param_set = ParamSet$new(list(...), allow_dangling_dependencies = .allow_dangling_dependencies)
+  param_set$extra_trafo = .extra_trafo
+  param_set$constraint = .constraint
+  param_set
 }
-
 
 #' @title Create a ParamSet Collection
 #'

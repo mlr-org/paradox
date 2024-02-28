@@ -6,6 +6,11 @@
 #' @importFrom methods is
 "_PACKAGE"
 
+
+
+# data.table-variables to announce:
+# .init_given, .trafo
+
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start
   backports::import(pkgname)
@@ -15,4 +20,4 @@
   })
 } # nocov end
 
-leanify_package()
+# leanify_package()

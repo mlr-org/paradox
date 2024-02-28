@@ -8,7 +8,7 @@ test_that("TuneToken printers", {
 
   expect_output(print(to_tune(upper = 2, 1)), "range \\[1, 2\\]")
 
-  expect_output(print(to_tune(1)), "p_fct\\(levels = \"1\"\\)")
+  expect_output(print(to_tune(1)), "p_fct\\(levels = c\\(`1` = 1\\)\\)")
 
   expect_output(print(to_tune(c("a", "b"))), "p_fct\\(levels = c\\(\"a\", \"b\"\\)\\)")
 
@@ -28,13 +28,13 @@ test_that("validity checks", {
 
   expect_error(to_tune(ps(x = p_dbl())), "must be bounded")
 
-  expect_error(ParamSet$new(list(ParamInt$new("x")))$search_space(list(x = to_tune())), "must give a range for unbounded parameter")
+  expect_error(ParamSet_legacy$new(list(ParamInt$new("x")))$search_space(list(x = to_tune())), "must give a range for unbounded parameter")
 
 })
 
 test_that("$check() works on TuneToken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamInt$new("xub"),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
@@ -82,12 +82,12 @@ test_that("$check() works on TuneToken", {
   expect_string(pars$check(list(lgl = to_tune(0, 1))), "must have zero or one argument")
   expect_error(pars$search_space(list(lgl = to_tune(0, 1))), "must have zero or one argument")
 
-  expect_error(pars$search_space(list(xxx = to_tune())), "subset of")
+  expect_error(pars$search_space(list(xxx = to_tune())), "ust be a subset of .*x.*xub.*y.*uty.*uty1.*fct.*lgl")
 })
 
 test_that("Tune ParamSet is created", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
     ParamFct$new("fct", c("x", "y")),
@@ -97,14 +97,13 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars$search_space(list(x = to_tune(), y = to_tune(), fct = to_tune(), lgl = to_tune()))
 
   # the following is necessary because $add modifies index of the .deps table, and one of the `$values` is not named.
-  pars$add(ParamSet$new())
-  pars$values = list()
-  setindex(pars_tune$deps, NULL)
   pars_tune$values = list()
 
-  expect_equal(pars, pars_tune)
+  reset_indices(pars)
+  reset_indices(pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
-  pars_unbound = ParamSet$new(list(
+  pars_unbound = ParamSet_legacy$new(list(
     ParamDbl$new("x"),
     ParamDbl$new("y", special_vals = list("x")),
     ParamFct$new("fct", letters),
@@ -114,9 +113,9 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars_unbound$search_space(list(x = to_tune(p_int(0, 10)), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
   setindex(pars_tune$deps, NULL)
-  expect_equal(pars, pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
-  pars_unbound_2 = ParamSet$new(list(
+  pars_unbound_2 = ParamSet_legacy$new(list(
     ParamInt$new("x"),
     ParamDbl$new("y"),
     ParamFct$new("fct", letters),
@@ -126,9 +125,9 @@ test_that("Tune ParamSet is created", {
   pars_tune = pars_unbound_2$search_space(list(x = to_tune(0, 10), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
   setindex(pars_tune$deps, NULL)
-  expect_equal(pars, pars_tune)
+  expect_equal_ps(pars, pars_tune)
 
-  pars_tune = pars_unbound$search_space(list(x = to_tune(ParamInt$new("z", 0, 10)), y = to_tune(ps(z = p_dbl(0, 10, special_vals = list("x")))),
+  pars_tune = pars_unbound$search_space(list(x = to_tune(ParamInt$new("y", 0, 10)), y = to_tune(ps(z = p_dbl(0, 10, special_vals = list("x")))),
     fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
 
   # to_tune from ps() generates messed up value order
@@ -144,7 +143,7 @@ test_that("Tune ParamSet is created", {
 
 test_that("Trafo works as expected", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
     ParamFct$new("fct", c("x", "y")),
@@ -159,11 +158,11 @@ test_that("Trafo works as expected", {
   expect_equal(grid$data, data.table(lgl = "TRUE"))
   expect_equal(grid$transpose(), list(list(lgl = FALSE)))
 
-  inpars = ParamSet$new(list(
+  inpars = ParamSet_legacy$new(list(
     ParamFct$new("x", c("a", "b")),
     ParamFct$new("y", c("a", "b"))
   ))
-  inpars$trafo = function(x, param_set) list(x$x != x$y)
+  inpars$extra_trafo = function(x, param_set) list(x$x != x$y)
   indesign = generate_design_grid(inpars)
 
   outdesign = generate_design_grid(pars$search_space(list(lgl = to_tune(inpars))))
@@ -176,16 +175,16 @@ test_that("Trafo works as expected", {
 
 test_that("Dependencies work", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
     ParamInt$new("z2", lower = 0, upper = 1)
   ))
 
-  pars$add_dep("x", "y", CondEqual$new(1))
-  pars$add_dep("x", "z", CondEqual$new(1))
-  pars$add_dep("z2", "x", CondEqual$new(1))
+  pars$add_dep("x", "y", CondEqual(1))
+  pars$add_dep("x", "z", CondEqual(1))
+  pars$add_dep("z2", "x", CondEqual(1))
 
   # if the tune paramset contains a "z2" in place of "y2", then the x->"z2" dependency is actually kept. This may be useful.
   # if some parameter depends on y, that dependency is lost. nothing we can do here.
@@ -195,33 +194,33 @@ test_that("Dependencies work", {
   # all dependencies lost
   expect_equal(nrow(tuneps$deps), 0)
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
     ParamInt$new("z2", lower = 0, upper = 1)
   ))
-  pars$add_dep("y", "x", CondEqual$new(1))
-  pars$add_dep("x", "z", CondEqual$new(1))
-  pars$add_dep("z2", "x", CondEqual$new(1))
+  pars$add_dep("y", "x", CondEqual(1))
+  pars$add_dep("x", "z", CondEqual(1))
+  pars$add_dep("z2", "x", CondEqual(1))
 
   # only the relevant dependency is kept
   tuneps = pars$search_space(list(x = to_tune(), y = to_tune()))
-  expect_equal(setindex(tuneps$deps, NULL), data.table(id = "y", on = "x", cond = list(CondEqual$new(1))))
+  expect_equal(setindex(tuneps$deps, NULL), data.table(id = "y", on = "x", cond = list(CondEqual(1))))
 
   #dependencies are kept between params, even if the dependor is trafo'd from other params
   tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1), .extra_trafo = function(x, param_set) list(abs(x$y1 - x$y2))))))
 
-  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y1", "y2"), on = c("x", "x"), cond = list(CondEqual$new(1))))
+  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y1", "y2"), on = c("x", "x"), cond = list(CondEqual(1))))
 
   tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = y1 == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE))))))
 
   # mixing dependencies from inside and outside
-  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("y1", "x", "x"), cond = list(CondEqual$new(1))))
+  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("y1", "x", "x"), cond = list(CondEqual(1))))
 
 
-  parsnodep = ParamSet$new(list(
+  parsnodep = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 1),
     ParamInt$new("y", lower = 0, upper = 1),
     ParamInt$new("z", lower = 0, upper = 1),
@@ -231,14 +230,14 @@ test_that("Dependencies work", {
   # amazing: dependencies across to_tune
   tuneps = parsnodep$search_space(list(x = to_tune(p_int(0, 1, depends = y == 0)), y = to_tune()))
 
-  expect_equal(setindex(tuneps$deps, NULL), data.table(id = "x", on = "y", cond = list(CondEqual$new(0))))
+  expect_equal(setindex(tuneps$deps, NULL), data.table(id = "x", on = "y", cond = list(CondEqual(0))))
 
 
   tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = x == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE)), .allow_dangling_dependencies = TRUE))))
 
   # mixing dependencies from inside and across to_tune. I am the only person in this building capable of coding this.
-  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("x", "x", "x"), cond = list(CondEqual$new(1))))
+  expect_equal(setindex(tuneps$deps, NULL), data.table(id = c("y2", "y1", "y2"), on = c("x", "x", "x"), cond = list(CondEqual(1))))
 
   expect_error(pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1, depends = z == 1),
     .extra_trafo = function(x, param_set) list(min(x$y1, x$y2, na.rm = TRUE)), .allow_dangling_dependencies = TRUE)))),
@@ -261,11 +260,11 @@ test_that("Dependencies work", {
 
   # dependency after subsetting factorials works, even if the dependency now
   # contains infeasible values
-  largeps = ParamSet$new(list(
+  largeps = ParamSet_legacy$new(list(
     ParamFct$new("x", c("a", "b", "c")),
     ParamLgl$new("y")
   ))
-  largeps$add_dep("y", "x", CondAnyOf$new(c("a", "b")))
+  largeps$add_dep("y", "x", CondAnyOf(c("a", "b")))
 
   res = largeps$search_space(list(x = to_tune(c("a", "b")), y = to_tune()))
   expect_equal(res$deps$cond[[1]]$rhs, c("a", "b"))
@@ -280,12 +279,10 @@ test_that("Dependencies work", {
 
 test_that("ParamSetCollection works", {
 
-  ps1 = ParamSet$new(list(ParamInt$new("x"), ParamInt$new("y")))
-  ps2 = ParamSet$new(list(ParamInt$new("a")))
+  ps1 = ParamSet_legacy$new(list(ParamInt$new("x"), ParamInt$new("y")))
+  ps2 = ParamSet_legacy$new(list(ParamInt$new("a")))
 
-  ps1$set_id = "prefix"
-
-  psc = ParamSetCollection$new(list(ps1, ps2))
+  psc = ParamSetCollection$new(list(prefix = ps1, ps2))
 
   ps1$values$x = to_tune(0, 10)
   ps1$values$y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1), .extra_trafo = function(x, param_set) list(y = x$y1 * x$y2)))
@@ -310,7 +307,7 @@ test_that("ParamSetCollection works", {
 })
 
 test_that("ParamSet$get_values() works", {
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10),
     ParamDbl$new("z", lower = 0, upper = 10)
@@ -324,7 +321,7 @@ test_that("ParamSet$get_values() works", {
   expect_named(pars$get_values(type = "without_token"), c("y", "z"))
   expect_named(pars$get_values(type = "only_token"), "x")
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0, upper = 10),
     ParamDbl$new("z", lower = 0, upper = 10)
@@ -339,25 +336,25 @@ test_that("ParamSet$get_values() works", {
 
 test_that("partial bounds in tunetoken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0),
     ParamDbl$new("z", upper = 10)
   ))
 
-  expect_equal(pars$search_space(list(x = to_tune()))$params[[1]], ParamInt$new("x", lower = 0, upper = 10))
+  expect_equal_ps(pars$search_space(list(x = to_tune())), ParamInt$new("x", lower = 0, upper = 10))
 
-  expect_equal(pars$search_space(list(x = to_tune(lower = 1)))$params[[1]], ParamInt$new("x", lower = 1, upper = 10))
-  expect_equal(pars$search_space(list(x = to_tune(upper = 1)))$params[[1]], ParamInt$new("x", lower = 0, upper = 1))
-  expect_equal(pars$search_space(list(x = to_tune(lower = 1, upper = 2)))$params[[1]], ParamInt$new("x", lower = 1, upper = 2))
+  expect_equal_ps(pars$search_space(list(x = to_tune(lower = 1))), ParamInt$new("x", lower = 1, upper = 10))
+  expect_equal_ps(pars$search_space(list(x = to_tune(upper = 1))), ParamInt$new("x", lower = 0, upper = 1))
+  expect_equal_ps(pars$search_space(list(x = to_tune(lower = 1, upper = 2))), ParamInt$new("x", lower = 1, upper = 2))
 
   expect_error(pars$search_space(list(y = to_tune(lower = 1))), "y range must be bounded, but is \\[1, Inf\\]")
-  expect_equal(pars$search_space(list(y = to_tune(upper = 1)))$params[[1]], ParamDbl$new("y", lower = 0, upper = 1))
-  expect_equal(pars$search_space(list(y = to_tune(lower = 1, upper = 2)))$params[[1]], ParamDbl$new("y", lower = 1, upper = 2))
+  expect_equal_ps(pars$search_space(list(y = to_tune(upper = 1))), ParamDbl$new("y", lower = 0, upper = 1))
+  expect_equal_ps(pars$search_space(list(y = to_tune(lower = 1, upper = 2))), ParamDbl$new("y", lower = 1, upper = 2))
 
   expect_error(pars$search_space(list(z = to_tune(upper = 1))), "z range must be bounded, but is \\[-Inf, 1\\]")
-  expect_equal(pars$search_space(list(z = to_tune(lower = 1)))$params[[1]], ParamDbl$new("z", lower = 1, upper = 10))
-  expect_equal(pars$search_space(list(z = to_tune(lower = 1, upper = 2)))$params[[1]], ParamDbl$new("z", lower = 1, upper = 2))
+  expect_equal_ps(pars$search_space(list(z = to_tune(lower = 1))), ParamDbl$new("z", lower = 1, upper = 10))
+  expect_equal_ps(pars$search_space(list(z = to_tune(lower = 1, upper = 2))), ParamDbl$new("z", lower = 1, upper = 2))
 
   expect_output(print(to_tune()), "entire parameter range")
   expect_output(print(to_tune(lower = 1)), "range \\[1, \\.\\.\\.]")
@@ -373,20 +370,15 @@ test_that("partial bounds in tunetoken", {
 
 test_that("logscale in tunetoken", {
 
-  pars = ParamSet$new(list(
+  pars = ParamSet_legacy$new(list(
     ParamInt$new("x", lower = 0, upper = 10),
     ParamDbl$new("y", lower = 0)
   ))
 
-  p1 = pars$search_space(list(x = to_tune(logscale = TRUE)))$params[[1]]
-  p2 = ParamDbl$new("x", lower = log(.5), upper = log(11))
-  expect_equal(p1$lower, p2$lower)
-  expect_equal(p1$upper, p2$upper)
-
-  p1 = pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE)))$params[[1]]
-  p2 = ParamDbl$new("y", lower = log(1), upper = log(10))
-  expect_equal(p1$lower, p2$lower)
-  expect_equal(p1$upper, p2$upper)
+  expect_equal(reset_indices(pars$search_space(list(x = to_tune(logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
+    reset_indices(ParamDbl$new("x", lower = log(.5), upper = log(11)))$.__enclos_env__$private$.params)
+  expect_equal(reset_indices(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
+    reset_indices(ParamDbl$new("y", lower = log(1), upper = log(10)))$.__enclos_env__$private$.params)
 
   expect_error(pars$search_space(list(y = to_tune(upper = 10, logscale = TRUE))), "When logscale is TRUE then lower bound must be strictly greater than 0")
 

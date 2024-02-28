@@ -1,16 +1,15 @@
 #' @title ParamSetCollection
 #'
 #' @description
-#' A collection of multiple [ParamSet] objects.
+#' A collection of multiple [`ParamSet`] objects.
 #' * The collection is basically a light-weight wrapper / container around references to multiple sets.
 #' * In order to ensure unique param names, every param in the collection is referred to with
-#'   "<set_id>.<param_id>". Parameters from ParamSets with empty (i.e. `""`) `$set_id` are referenced
-#'   directly. Multiple ParamSets with `$set_id` `""` can be combined, but their parameter names
-#'   must be unique.
-#' * Operation `subset` is currently not allowed.
-#' * Operation `add` currently only works when adding complete sets not single params.
+#'   "<set_id>.<param_id>", where `<set_id>` is the name of the entry a given [`ParamSet`] in the named list given during construction.
+#'   Parameters from [`ParamSet`] with empty (i.e. `""`) `set_id` are referenced
+#'   directly. Multiple [`ParamSet`]s with `set_id` `""` can be combined, but their parameter names
+#'   may not overlap to avoid name clashes.
 #' * When you either ask for 'values' or set them, the operation is delegated to the individual,
-#'   contained param set references. The collection itself does not maintain a `values` state.
+#'   contained [`ParamSet`] references. The collection itself does not maintain a `values` state.
 #'   This also implies that if you directly change `values` in one of the referenced sets,
 #'   this change is reflected in the collection.
 #' * Dependencies: It is possible to currently handle dependencies
@@ -28,107 +27,142 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
-    #' @param sets (`list()` of [ParamSet])\cr
-    #'   Parameter objects are cloned.
-    initialize = function(sets) {
-
+    #' @param sets (named `list()` of [ParamSet])\cr
+    #'   ParamSet objects are not cloned.
+    #'   Names are used as "set_id" for the naming scheme of delegated parameters.
+    #' @param tag_sets (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<set_id>`.
+    #' @param tag_params (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
+    initialize = function(sets, tag_sets = FALSE, tag_params = FALSE) {
       assert_list(sets, types = "ParamSet")
-      split_sets = split(sets, map_lgl(sets, function(x) x$set_id == ""))
-      nameless_sets = split_sets$`TRUE`
-      named_sets = split_sets$`FALSE`
-      setids = map_chr(named_sets, "set_id")
-      assert_names(setids, type = "unique")
-      assert_names(unlist(map(nameless_sets, function(x) names(x$params_unid))) %??% character(0), type = "unique")
-      if (any(map_lgl(sets, "has_trafo"))) {
-        # we need to be able to have a trafo on the collection, not sure how to mix this with individual trafos yet.
-        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
-      }
-      private$.sets = sets
-      self$set_id = ""
-      pnames = names(self$params_unid)
-      dups = duplicated(pnames)
+      assert_flag(tag_sets)
+      assert_flag(tag_params)
+
+      if (is.null(names(sets))) names(sets) = rep("", length(sets))
+
+      assert_names(names(sets)[names(sets) != ""], type = "strict")
+
+      paramtbl = rbindlist(map(seq_along(sets), function(i) {
+        s = sets[[i]]
+        n = names(sets)[[i]]
+        params_child = s$params[, `:=`(original_id = id, owner_ps_index = i, owner_name = n)]
+        if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
+        params_child
+      }))
+
+      dups = duplicated(paramtbl$id)
       if (any(dups)) {
         stopf("ParamSetCollection would contain duplicated parameter names: %s",
-          str_collapse(unique(pnames[dups])))
+          str_collapse(unique(paramtbl$id[dups])))
       }
+
+      if (!nrow(paramtbl)) {
+        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
+        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
+      }
+      if (tag_sets) paramtbl[owner_name != "", .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
+      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
+      private$.tags = paramtbl[, .(tag = unique(unlist(.tags))), keyby = "id"]
+
+      private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+
+      private$.translation = paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE]
+      setkeyv(private$.translation, "id")
+      setindexv(private$.translation, "original_id")
+
+      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
+      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
+      setindexv(paramtbl, c("id", "cls", "grouping"))
+      private$.params = paramtbl
+
+      private$.children_with_trafos = which(!map_lgl(map(sets, "extra_trafo"), is.null))
+      private$.children_with_constraints = which(!map_lgl(map(sets, "constraint"), is.null))
+
+      private$.sets = sets
     },
 
     #' @description
-    #' Adds a set to this collection.
+    #' Adds a [`ParamSet`] to this collection.
     #'
     #' @param p ([ParamSet]).
-    add = function(p) {
+    #' @param n (`character(1)`)\cr
+    #'   Name to use. Default `""`.
+    #' @param tag_sets (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"set_<n>"` to the newly added parameters.
+    #' @param tag_params (`logical(1)`)\cr
+    #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
+    add = function(p, n = "", tag_sets = FALSE, tag_params = FALSE) {
       assert_r6(p, "ParamSet")
-      setnames = map_chr(private$.sets, "set_id")
-      if (p$set_id != "" && p$set_id %in% setnames) {
-        stopf("Setid '%s' already present in collection!", p$set_id)
+      if (n != "" && n %in% names(private$.sets)) {
+        stopf("Set name '%s' already present in collection!", n)
       }
-      if (p$has_trafo) {
-        stop("Building a collection out sets, where a ParamSet has a trafo is currently unsupported!")
-      }
-      pnames = names(p$params_unid)
+      pnames = p$ids()
       nameclashes = intersect(
-        ifelse(p$set_id != "", sprintf("%s.%s", p$set_id, pnames), pnames),
-        names(self$params_unid)
+        ifelse(n != "", sprintf("%s.%s", n, pnames), pnames),
+        self$ids()
       )
       if (length(nameclashes)) {
         stopf("Adding parameter set would lead to nameclashes: %s", str_collapse(nameclashes))
       }
-      private$.sets = c(private$.sets, list(p))
+
+      new_index = length(private$.sets) + 1
+      paramtbl = p$params[, `:=`(original_id = id, owner_ps_index = new_index, owner_name = n)]
+      if (n != "") set(paramtbl, , "id", sprintf("%s.%s", n, paramtbl$id))
+
+      if (!nrow(paramtbl)) {
+        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
+        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
+      }
+      if (tag_sets && n != "") paramtbl[, .tags := map(.tags, function(x) c(x, sprintf("set_%s", n)))]
+      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
+      newtags = paramtbl[, .(tag = unique(unlist(.tags))), by = "id"]
+      if (nrow(newtags)) {
+        private$.tags = setkeyv(rbind(private$.tags, newtags), "id")
+      }
+
+      newtrafos = paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)]
+      if (nrow(newtrafos)) {
+        private$.trafos = setkeyv(rbind(private$.trafos, newtrafos), "id")
+      }
+
+      private$.translation = rbind(private$.translation, paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE])
+      setkeyv(private$.translation, "id")
+      setindexv(private$.translation, "original_id")
+
+      set(paramtbl, , setdiff(colnames(paramtbl), domain_names_permanent), NULL)
+      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
+      private$.params = rbind(private$.params, paramtbl)
+      setindexv(private$.params, c("id", "cls", "grouping"))
+
+      if (!is.null(p$extra_trafo)) {
+        entry = if (n == "") length(private$.children_with_trafos) + 1 else n
+        private$.children_with_trafos[[entry]] = new_index
+      }
+
+      if (!is.null(p$constraint)) {
+        entry = if (n == "") length(private$.children_with_constraints) + 1 else n
+        private$.children_with_constraints[[entry]] = new_index
+      }
+
+      entry = if (n == "") length(private$.sets) + 1 else n
+      private$.sets[[n]] = p
       invisible(self)
-    },
-
-    #' @description
-    #' Removes sets of given ids from collection.
-    #'
-    #' @param ids (`character()`).
-    remove_sets = function(ids) {
-      setnames = map_chr(private$.sets, "set_id")
-      assert_subset(ids, setnames)
-      private$.sets[setnames %in% ids] = NULL
-      invisible(self)
-    },
-
-    #' @description
-    #' Only included for consistency. Not allowed to perform on [ParamSetCollection]s.
-    #'
-    #' @param ids (`character()`).
-    subset = function(ids) stop("not allowed")
-
+    }
   ),
 
   active = list(
-    #' @template field_params
-    params = function(v) {
-      ps_all = self$params_unid
-      imap(ps_all, function(x, n) {
-        x = x$clone(deep = TRUE)
-        x$id = n
-        x
-      })
-    },
-    #' @template field_params_unid
-    params_unid = function(v) {
-      sets = private$.sets
-      names(sets) = map_chr(sets, "set_id")
-      if (length(sets) == 0L) {
-        return(named_list())
-      }
-      private$.params = named_list()
-      # clone each param into new params-list and prefix id
-      ps_all = lapply(sets, function(s) s$params_unid)
-      ps_all = unlist(ps_all, recursive = FALSE)
-      if (!length(ps_all)) ps_all = named_list()
-      ps_all
-    },
     #' @template field_deps
     deps = function(v) {
-      d_all = lapply(private$.sets, function(s) {
+      if (!missing(v)) {
+        stop("deps is read-only in ParamSetCollection.")
+      }
+      d_all = imap(private$.sets, function(s, id) {
         # copy all deps and rename ids to prefixed versions
-        dd = copy(s$deps)
-        ids_old = s$ids()
-        if (s$set_id != "" && nrow(dd)) {
-          ids_new = sprintf("%s.%s", s$set_id, ids_old)
+        dd = s$deps
+        if (id != "" && nrow(dd)) {
+          ids_old = s$ids()
+          ids_new = sprintf("%s.%s", id, ids_old)
           dd$id = map_values(dd$id, ids_old, ids_new)
           dd$on = map_values(dd$on, ids_old, ids_new)
         }
@@ -140,32 +174,94 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @template field_values
     values = function(xs) {
       sets = private$.sets
-      names(sets) = map_chr(sets, "set_id")
       if (!missing(xs)) {
         assert_list(xs)
-        self$assert(xs) # make sure everything is valid and feasible
+        # make sure everything is valid and feasible.
+        # We do this here because we don't want the loop to be aborted early and have half an update.
+        self$assert(xs)
 
-        for (s in sets) {
-          # retrieve sublist for each set, then assign it in set (after removing prefix)
-          psids = names(s$params_unid)
-          if (s$set_id != "") {
-            psids = sprintf("%s.%s", s$set_id, psids)
-          }
-          pv = xs[intersect(psids, names(xs))]
-          if (s$set_id != "") {
-            names(pv) = substr(names(pv), nchar(s$set_id) + 2, nchar(names(pv)))
-          }
-          s$values = pv
+        # %??% character(0) in case xs is an empty unnamed list
+        translate = private$.translation[names(xs) %??% character(0), list(original_id, owner_ps_index), on = "id"]
+        set(translate, , j = "values", list(xs))
+        for (xtl in split(translate, by = "owner_ps_index")) {
+          sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
+        }
+        # clear the values of all sets that are not touched by xs
+        for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
+          sets[[clearing]]$values = named_list()
         }
       }
-      vals = map(sets, "values")
-      vals = unlist(vals, recursive = FALSE)
-      if (!length(vals)) vals = named_list()
+      vals = unlist(map(sets, "values"), recursive = FALSE)
+      if (!length(vals)) return(named_list())
       vals
+    },
+
+    #' @template field_extra_trafo
+    extra_trafo = function(f) {
+      if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
+      if (!length(private$.children_with_trafos)) return(NULL)
+      private$.extra_trafo_explicit
+
+    },
+
+    #' @template field_constraint
+    constraint = function(f) {
+      if (!missing(f)) stop("constraint is read-only in ParamSetCollection.")
+      if (!length(private$.children_with_constraints)) return(NULL)
+      private$.constraint_explicit
+    },
+
+    #' @field sets (named `list()`)\cr
+    #' Read-only `list` of of [`ParamSet`]s contained in this `ParamSetCollection`.
+    #' This field provides direct references to the [`ParamSet`] objects.
+    sets = function(v) {
+      if (!missing(v) && !identical(v, private$.sets)) stop("sets is read-only")
+      private$.sets
     }
   ),
 
   private = list(
-    .sets = NULL
+    .sets = NULL,
+    .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
+    .children_with_trafos = NULL,
+    .children_with_constraints = NULL,
+    .extra_trafo_explicit = function(x) {
+      changed = unlist(lapply(private$.children_with_trafos, function(set_index) {
+        changing_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
+        trafo = private$.sets[[set_index]]$extra_trafo
+        changing_values_in = x[names(x) %in% changing_ids]
+        names(changing_values_in) = private$.translation[names(changing_values_in), original_id]
+        # input of trafo() must not be changed after the call; otherwise the trafo would have to `force()` it in
+        # some circumstances.
+        changing_values = trafo(changing_values_in)
+        prefix = names(private$.sets)[[set_index]]
+        if (prefix != "") {
+          names(changing_values) = sprintf("%s.%s", prefix, names(changing_values))
+        }
+        changing_values
+      }), recursive = FALSE)
+      unchanged_ids = private$.translation[!J(private$.children_with_trafos), id, on = "owner_ps_index"]
+      unchanged = x[names(x) %in% unchanged_ids]
+      c(unchanged, changed)
+    },
+    .constraint_explicit = function(x) {
+      for (set_index in private$.children_with_constraints) {
+        constraining_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
+        constraint = private$.sets[[set_index]]$constraint
+        constraining_values = x[names(x) %in% changing_ids]
+        names(constraining_values) = private$.translation[names(constraining_values), original_id]
+        if (!constraint(x)) return(FALSE)
+      }
+      TRUE
+    },
+    deep_clone = function(name, value) {
+      switch(name,
+        .deps = copy(value),
+        .sets = map(value, function(x) {
+          x$clone(deep = TRUE)
+        }),
+        value
+      )
+    }
   )
 )

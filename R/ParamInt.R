@@ -1,70 +1,74 @@
-#' @title Integer Parameter
-#'
-#' @description
-#' A [Param] to describe integer parameters.
-#'
-#' @template param_id
-#' @template param_lower
-#' @template param_upper
-#' @template param_special_vals
-#' @template param_default
-#' @template param_tags
-#'
-#' @section Methods:
-#' See [Param].
-#'
-#' @family Params
-#' @include Param.R
+
+#' @rdname Domain
 #' @export
-#' @examples
-#' ParamInt$new("count", lower = 0, upper = 10, default = 1)
-ParamInt = R6Class("ParamInt", inherit = Param,
-  public = list(
-    #' @template field_lower
-    lower = NULL,
+p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init) {
+  assert_number(tolerance, lower = 0, upper = 0.5)
+  # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
+  if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
+  if (!isTRUE(is.infinite(upper))) assert_int(upper, tol = 1e-300) else assert_number(upper)
+  assert_true(lower <= upper)
+  if (assert_flag(logscale)) {
+    if (!is.null(trafo)) stop("When a trafo is given then logscale must be FALSE")
+    if (lower < 0) stop("When logscale is TRUE then lower bound must be greater or equal 0")
+    trafo = crate(function(x) as.integer(max(min(exp(x), upper), lower)), lower, upper)
+    # at this point we don't want to overwrite 'lower' and 'upper, since they get used for the representation
+    real_lower = log(max(lower, 0.5))
+    real_upper = log(upper + 1)
+    cls = "ParamDbl"
+    storage_type = "numeric"
+  } else {
+    cls = "ParamInt"
+    storage_type = "integer"
+    real_lower = lower
+    real_upper = upper
+  }
 
-    #' @template field_upper
-    upper = NULL,
+  Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
+    storage_type = storage_type,
+    depends_expr = substitute(depends), init = init, cargo = if (logscale) "logscale")
+}
 
-    #' @description
-    #' Creates a new instance of this [R6][R6::R6Class] class.
-    initialize = function(id, lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character()) {
-      if (isTRUE(is.infinite(lower))) {
-        self$lower = lower
-      } else {
-        self$lower = assert_int(lower)
-      }
-      if (isTRUE(is.infinite(upper))) {
-        self$upper = upper
-      } else {
-        self$upper = assert_int(upper)
-      }
-      assert_true(lower <= upper)
-      super$initialize(id, special_vals = special_vals, default = default, tags = tags)
-    },
+#' @export
+domain_check.ParamInt = function(param, values) {
+  if (!qtestr(values, "N1()")) {
+    return(check_domain_vectorize(param$id, values, check_int,
+      more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
+        tol = .51)  # we don't know the tolerances of individual values, but we do know that some values are not even (non-missing, finite) numerics
+    ))
+  }
 
-    #' @description
-    #' Converts a value to an integer.
-    #' @param x (`numeric(1)`)\cr
-    #'   Value to convert.
-    convert = function(x) {
-      as.integer(x)
+  values_num = as.numeric(values)
+
+  if (all(abs(trunc(values_num + 0.5) - 0.5) <= param$tolerance)) {
+    values_num = round(values_num)
+    if (all(values_num >= param$lower) && all(values_num <= param$upper)) {
+      return(TRUE)
     }
-  ),
+  }
 
-  active = list(
-    #' @template field_levels
-    levels = function() NULL,
-    #' @template field_nlevels
-    nlevels = function() (self$upper - self$lower) + 1L,
-    #' @template field_is_bounded
-    is_bounded = function() is.finite(self$lower) && is.finite(self$upper),
-    #' @template field_storage_type
-    storage_type = function() "integer"
-  ),
-
-  private = list(
-    .check = function(x) checkInt(x, lower = self$lower, upper = self$upper, tol = 1e-300),
-    .qunif = function(x) as.integer(floor(x * self$nlevels * (1 - 1e-16)) + self$lower) # make sure we dont map to upper+1
+  check_domain_vectorize(param$id, values_num, check_int,
+    more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
+      tol = pmax(1e-300, param$tolerance + 2 * abs(values_num) * .Machine$double.eps))  # want to have inclusive tolerance bounds. Not sure if 2* is necessary.
   )
-)
+}
+
+#' @export
+domain_sanitize.ParamInt = function(param, values) {
+  as.list(as.integer(as.numeric(values) + 0.5))
+}
+
+#' @export
+domain_nlevels.ParamInt = function(param) (param$upper - param$lower) + 1
+#' @export
+domain_is_bounded.ParamInt = function(param) is.finite(param$lower) & is.finite(param$upper)
+#' @export
+domain_qunif.ParamInt = function(param, x) {
+  # extra careful here w/ rounding errors and the x == 1 case
+  # note that as.integer alone rounds towards 0 and can not be used without 'floor' here
+  as.integer(floor(pmax(pmin(x * (param$upper + 1) - (x - 1) * param$lower, param$upper), param$lower)))
+}
+
+#' @export
+domain_is_number.ParamInt = function(param) TRUE
+#' @export
+domain_is_categ.ParamInt = function(param) FALSE

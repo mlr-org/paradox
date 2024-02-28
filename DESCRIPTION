@@ -2,11 +2,11 @@ Type: Package
 Package: paradox
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
-Version: 0.11.1-9000
+Version: 1.0.0
 Authors@R:
     c(person(given = "Michel",
              family = "Lang",
-             role = c("cre", "aut"),
+             role = "aut",
              email = "michellang@gmail.com",
              comment = c(ORCID = "0000-0001-9754-0393")),
       person(given = "Bernd",
@@ -26,7 +26,7 @@ Authors@R:
              comment = c(ORCID = "0000-0003-3269-2307")),
       person(given = "Martin",
              family = "Binder",
-             role = "aut",
+             role = c("aut", "cre"), 
              email = "mlr.developer@mb706.com"),
       person(given = "Marc",
              family = "Becker",
@@ -66,8 +66,9 @@ VignetteBuilder: knitr
 Collate:
     'Condition.R'
     'Design.R'
+    'Domain.R'
+    'Domain_methods.R'
     'NoDefault.R'
-    'Param.R'
     'ParamDbl.R'
     'ParamFct.R'
     'ParamInt.R'
@@ -82,13 +83,14 @@ Collate:
     'SamplerUnif.R'
     'asserts.R'
     'default_values.R'
-    'helper.R'
-    'domain.R'
     'generate_design_grid.R'
     'generate_design_lhs.R'
     'generate_design_random.R'
     'generate_design_sobol.R'
+    'helper.R'
     'ps.R'
+    'ps_replicate.R'
+    'ps_union.R'
     'reexports.R'
     'to_tune.R'
     'zzz.R'

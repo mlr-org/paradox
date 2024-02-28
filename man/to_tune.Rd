@@ -32,42 +32,41 @@ can be constructed via the \code{to_tune()} function in one of several ways:
 \item \strong{\code{to_tune(lower, upper, logscale)}}: Indicates a numeric parameter should be tuned in the inclusive interval spanning
 \code{lower} to \code{upper}, possibly on a log scale if \code{logscale} is se to \code{TRUE}. All parameters are optional, and the
 parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
-integer (if it is a \code{\link{ParamInt}}) or real values (if it is a \code{\link{ParamDbl}}) are used.\cr
+integer (if it is a \code{\link[=p_int]{p_int()}}) or real values (if it is a \code{\link[=p_dbl]{p_dbl()}}) are used.\cr
 \code{lower}, \code{upper}, and \code{logscale} can be given by position, except when only one of them is given, in which case
 it must be named to disambiguate from the following cases.\cr
 When \code{logscale} is \code{TRUE}, then a \code{trafo} is generated automatically that transforms to the given bounds. The
 bounds are log()'d pre-trafo (see examples). See the \code{logscale} argument of \code{\link{Domain}} functions for more info.\cr
-Note that "logscale" is \emph{not} inherited from the \code{\link{Param}} that the \code{TuneToken} belongs to! Defining a parameter
+Note that "logscale" is \emph{not} inherited from the \code{\link{Domain}} that the \code{TuneToken} belongs to! Defining a parameter
 with \verb{p_dbl(... logscale = TRUE)} will \emph{not} automatically give the \code{to_tune()} assigned to it log-scale.
 \item \strong{\code{to_tune(levels)}}: Indicates a parameter should be tuned through the given discrete values. \code{levels} can be any
 named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 corresponding \code{character} vector with distinct values using \code{as.character}).
 \item \strong{\verb{to_tune(<Domain>)}}: The given \code{\link{Domain}} object (constructed e.g. with \code{\link[=p_int]{p_int()}} or \code{\link[=p_fct]{p_fct()}}) indicates
 the range which should be tuned over. The supplied \code{trafo} function is used for parameter transformation.
-\item \strong{\verb{to_tune(<Param>)}}: The given \code{\link{Param}} object indicates the range which should be tuned over.
-\item \strong{\verb{to_tune(<ParamSet>)}}: The given \code{\link{ParamSet}} is used to tune over a single \code{Param}. This is useful for cases
-where a single evaluation-time parameter value (e.g. \code{\link{ParamUty}}) is constructed from multiple tuner-visible
-parameters (which may not be \code{ParamUty}). The supplied \code{\link{ParamSet}} should always contain a \verb{$trafo} function,
-which must always return a \code{list} with a single entry.
+\item \strong{\verb{to_tune(<ParamSet>)}}: The given \code{\link{ParamSet}} is used to tune over a single dimension. This is useful for cases
+where a single evaluation-time parameter value (e.g. \code{\link[=p_uty]{p_uty()}}) is constructed from multiple tuner-visible
+parameters (which may not be \code{\link[=p_uty]{p_uty()}}). If not one-dimensional, the supplied \code{\link{ParamSet}} should always contain a \verb{$extra_trafo} function,
+which must then always return a \code{list} with a single entry.
 }
 
 The \code{TuneToken} object's internals are subject to change and should not be relied upon. \code{TuneToken} objects should
 only be constructed via \code{to_tune()}, and should only be used by giving them to \verb{$values} of a \code{\link{ParamSet}}.
 }
 \examples{
-params = ParamSet$new(list(
-  ParamInt$new("int", 0, 10),
-  ParamInt$new("int_unbounded"),
-  ParamDbl$new("dbl", 0, 10),
-  ParamDbl$new("dbl_unbounded"),
-  ParamDbl$new("dbl_bounded_below", lower = 1),
-  ParamFct$new("fct", c("a", "b", "c")),
-  ParamUty$new("uty1"),
-  ParamUty$new("uty2"),
-  ParamUty$new("uty3"),
-  ParamUty$new("uty4"),
-  ParamUty$new("uty5")
-))
+params = ps(
+  int = p_int(0, 10),
+  int_unbounded = p_int(),
+  dbl = p_dbl(0, 10),
+  dbl_unbounded = p_dbl(),
+  dbl_bounded_below = p_dbl(lower = 1),
+  fct = p_fct(c("a", "b", "c")),
+  uty1 = p_uty(),
+  uty2 = p_uty(),
+  uty3 = p_uty(),
+  uty4 = p_uty(),
+  uty5 = p_uty()
+)
 
 params$values = list(
 
@@ -127,7 +126,7 @@ params$values$uty2 = to_tune(c(2, 4, 8))
 print(params$search_space())
 
 # Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:
-params = ParamSet$new(list(ParamDbl$new("x")))
+params = ps(x = p_dbl())
 
 params$values$x = to_tune(1, 100, logscale = TRUE)
 
@@ -144,7 +143,7 @@ print(grid$transpose())
 }
 \seealso{
 Other ParamSet construction helpers: 
-\code{\link{Domain}},
+\code{\link{Domain}()},
 \code{\link{ps}()}
 }
 \concept{ParamSet construction helpers}

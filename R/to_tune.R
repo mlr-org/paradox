@@ -21,42 +21,41 @@
 #' * **`to_tune(lower, upper, logscale)`**: Indicates a numeric parameter should be tuned in the inclusive interval spanning
 #'   `lower` to `upper`, possibly on a log scale if `logscale` is se to `TRUE`. All parameters are optional, and the
 #'   parameter's own lower / upper bounds are used without log scale, by default. Depending on the parameter,
-#'   integer (if it is a [`ParamInt`]) or real values (if it is a [`ParamDbl`]) are used.\cr
+#'   integer (if it is a [`p_int()`]) or real values (if it is a [`p_dbl()`]) are used.\cr
 #'   `lower`, `upper`, and `logscale` can be given by position, except when only one of them is given, in which case
 #'   it must be named to disambiguate from the following cases.\cr
 #'   When `logscale` is `TRUE`, then a `trafo` is generated automatically that transforms to the given bounds. The
 #'   bounds are log()'d pre-trafo (see examples). See the `logscale` argument of [`Domain`] functions for more info.\cr
-#'   Note that "logscale" is *not* inherited from the [`Param`] that the `TuneToken` belongs to! Defining a parameter
+#'   Note that "logscale" is *not* inherited from the [`Domain`] that the `TuneToken` belongs to! Defining a parameter
 #'   with `p_dbl(... logscale = TRUE)` will *not* automatically give the `to_tune()` assigned to it log-scale.
 #' * **`to_tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any
 #'   named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 #'   corresponding `character` vector with distinct values using `as.character`).
 #' * **`to_tune(<Domain>)`**: The given [`Domain`] object (constructed e.g. with [`p_int()`] or [`p_fct()`]) indicates
 #'   the range which should be tuned over. The supplied `trafo` function is used for parameter transformation.
-#' * **`to_tune(<Param>)`**: The given [`Param`] object indicates the range which should be tuned over.
-#' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single `Param`. This is useful for cases
-#'   where a single evaluation-time parameter value (e.g. [`ParamUty`]) is constructed from multiple tuner-visible
-#'   parameters (which may not be `ParamUty`). The supplied [`ParamSet`] should always contain a `$trafo` function,
-#'   which must always return a `list` with a single entry.
+#' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single dimension. This is useful for cases
+#'   where a single evaluation-time parameter value (e.g. [`p_uty()`]) is constructed from multiple tuner-visible
+#'   parameters (which may not be [`p_uty()`]). If not one-dimensional, the supplied [`ParamSet`] should always contain a `$extra_trafo` function,
+#'   which must then always return a `list` with a single entry.
 #'
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
 #' @param ... if given, restricts the range to be tuning over, as described above.
 #' @return A `TuneToken` object.
 #' @examples
-#' params = ParamSet$new(list(
-#'   ParamInt$new("int", 0, 10),
-#'   ParamInt$new("int_unbounded"),
-#'   ParamDbl$new("dbl", 0, 10),
-#'   ParamDbl$new("dbl_unbounded"),
-#'   ParamDbl$new("dbl_bounded_below", lower = 1),
-#'   ParamFct$new("fct", c("a", "b", "c")),
-#'   ParamUty$new("uty1"),
-#'   ParamUty$new("uty2"),
-#'   ParamUty$new("uty3"),
-#'   ParamUty$new("uty4"),
-#'   ParamUty$new("uty5")
-#' ))
+#' params = ps(
+#'   int = p_int(0, 10),
+#'   int_unbounded = p_int(),
+#'   dbl = p_dbl(0, 10),
+#'   dbl_unbounded = p_dbl(),
+#'   dbl_bounded_below = p_dbl(lower = 1),
+#'   fct = p_fct(c("a", "b", "c")),
+#'   uty1 = p_uty(),
+#'   uty2 = p_uty(),
+#'   uty3 = p_uty(),
+#'   uty4 = p_uty(),
+#'   uty5 = p_uty()
+#' )
 #'
 #' params$values = list(
 #'
@@ -116,7 +115,7 @@
 #' print(params$search_space())
 #'
 #' # Notice how `logscale` applies `log()` to lower and upper bound pre-trafo:
-#' params = ParamSet$new(list(ParamDbl$new("x")))
+#' params = ps(x = p_dbl())
 #'
 #' params$values$x = to_tune(1, 100, logscale = TRUE)
 #'
@@ -165,9 +164,9 @@ to_tune = function(...) {
         content = p_fct(levels = content)
       } else {
         if (inherits(content, "Domain")) {
-          bounded = ps(x = content, .allow_dangling_dependencies = TRUE)$is_bounded
+          bounded = domain_is_bounded(content)
         } else {
-          bounded = content$is_bounded
+          bounded = content$all_bounded
         }
         if (!bounded) {
           stop("tuning range must be bounded.")
@@ -203,86 +202,78 @@ print.ObjectTuneToken = function(x, ...) {
 }
 
 # tunetoken_to_ps: Convert a `TuneToken` to a `ParamSet` that tunes over this.
-# Needs the corresponding `Param` to which the `TuneToken` refers, both to
+# Needs the corresponding `Domain` to which the `TuneToken` refers, both to
 # get the range (e.g. if `to_tune()` was used) and to verify that the `TuneToken`
 # does not go out of range.
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
-tunetoken_to_ps = function(tt, param, id) {
+# param is a data.table that is potentially modified by reference using data.table set() methods.
+tunetoken_to_ps = function(tt, param) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param, id) {
-  if (!param$is_bounded) {
-    stopf("%s must give a range for unbounded parameter %s.", tt$call, id)
+tunetoken_to_ps.FullTuneToken = function(tt, param) {
+  if (!domain_is_bounded(param)) {
+    stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
-    if (!param$is_number) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, id)
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param, id)
+    if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param)
   } else {
-    pslike_to_ps(param, tt$call, param, id)
+    pslike_to_ps(param, tt$call, param)
   }
 }
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param, id) {
-  if (!param$is_number) {
+tunetoken_to_ps.RangeTuneToken = function(tt, param) {
+  if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
-  invalidpoints = discard(tt$content, function(x) is.null(x) || param$test(x))
+  invalidpoints = discard(tt$content, function(x) is.null(x) || domain_test(param, set_names(list(x), param$id)))
   invalidpoints$logscale = NULL
   if (length(invalidpoints)) {
     stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
-      tt$call, id, repr(invalidpoints), repr(param))
+      tt$call, param$id, repr(invalidpoints), repr(param))
   }
 
-  lower = tt$content$lower %??% param$lower
-  upper = tt$content$upper %??% param$upper
+  bound_lower = tt$content$lower %??% param$lower
+  bound_upper = tt$content$upper %??% param$upper
 
-  if (!is.finite(lower) || !is.finite(upper)) stopf("%s range must be bounded, but is [%s, %s]", id, lower, upper)
-
-  if (isTRUE(tt$content$logscale)) {
-    # for logscale: create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about.
-    constructor = switch(param$class, ParamInt = p_int, ParamDbl = p_dbl,
-      stopf("%s: logscale for parameter %s of class %s not supported", tt$call, id, param$class))
-    content = constructor(lower = lower, upper = upper, logscale = tt$content$logscale)
-  } else {
-    # general approach: create Param object
-    content = get_r6_constructor(param$class)$new(id = id, lower = lower, upper = upper)
+  if (!is.finite(bound_lower) || !is.finite(bound_upper)) {
+    stopf("%s range must be bounded, but is [%s, %s]", param$id, bound_lower, bound_upper)
   }
-  pslike_to_ps(content, tt$call, param, id)
+
+  # create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about :-/
+  constructor = switch(param$cls, ParamInt = p_int, ParamDbl = p_dbl,
+    stopf("%s: logscale for parameter %s of class %s not supported", tt$call, param$id, param$class))
+  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale)
+  pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param, id) {
-  pslike_to_ps(tt$content, tt$call, param, id)
+tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
+  pslike_to_ps(tt$content, tt$call, param)
 }
 
-# Convert something that is `ParamSet`-like (ParamSet, Param, or Domain) to a `ParamSet`.
-# * content is ParamSet --> verify that it is compatible with given `Param`
-# * content is Param --> Wrap in ParamSet
+# Convert something that is `ParamSet`-like (ParamSet or Domain) to a `ParamSet`.
+# * content is ParamSet --> verify that it is compatible with given `Domain`
 # * content is Domain --> Wrap in ParamSet, using ps()
 # @param pslike: thing to convert
 # @param call: to_tune()-call, for better debug message
-# @param param: `Param`, that the `pslike` refers to, and therefore needs to be compatible to
+# @param param: `Domain`, that the `pslike` refers to, and therefore needs to be compatible to
 # @param usersupplied: whether the `pslike` is supplied by the user (and should therefore be checked more thoroughly)
 #   This is currently used for user-supplied ParamSets, for which the trafo must be adjusted.
-pslike_to_ps = function(pslike, call, param, id, usersupplied = TRUE) {
+pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
   UseMethod("pslike_to_ps")
 }
 
-pslike_to_ps.Domain = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = invoke(ps, .allow_dangling_dependencies = TRUE, .args = set_names(list(pslike), id))
-  pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
+pslike_to_ps.Domain = function(pslike, call, param, usersupplied = TRUE) {
+  # 'pslike' could be the same as 'param', i.e. a Domain with some cols missing.
+  # We could consider allowing construction of ParamSet from these unfinished domains instead.
+  pslike = ParamSet$new(structure(list(pslike), names = param$id), allow_dangling_dependencies = TRUE)
+  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
 }
 
-pslike_to_ps.Param = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = pslike$clone(deep = TRUE)
-  pslike$id = id
-  pslike = ParamSet$new(list(pslike))
-  pslike_to_ps(pslike, call, param, id, usersupplied = FALSE)
-}
-
-pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
-  pslike = pslike$clone(deep = TRUE)
+pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
+  pslike = pslike$flatten()
   alldeps = pslike$deps
   # temporarily hide dangling deps
   on = NULL  # pacify static code check
@@ -292,23 +283,26 @@ pslike_to_ps.ParamSet = function(pslike, call, param, id, usersupplied = TRUE) {
   invalidpoints = discard(testpoints, function(x) length(x) == 1)
   if (length(invalidpoints)) {
     stopf("%s for param %s does not have a trafo that reduces output to one dimension.\nExample:\n%s",
-      call, id, repr(invalidpoints[[1]]))
+      call, param$id, repr(invalidpoints[[1]]))
   }
-  invalidpoints = discard(testpoints, function(x) param$test(x[[1]]))
+
+  # do set_names because we ignore the name generated by the trafo
+  invalidpoints = discard(testpoints, function(x) domain_test(param, set_names(x, param$id)))
   if (length(invalidpoints)) {
     stopf("%s generates points that are not compatible with param %s.\nBad value:\n%s\nParameter:\n%s",
-      call, id, repr(invalidpoints[[1]][[1]]), repr(param))
+      call, param$id, repr(invalidpoints[[1]][[1]]), repr(param))
   }
   if (usersupplied) {
-    trafo = pslike$trafo %??% identity
-    pname = id
-    pslike$trafo = crate(function(x, param_set) {
+    # if the user gave us a paramset, then we need to make sure the resulting name is correct.
+    # we therefore always add a trafo here, even if the user-supplied ParamSet does not have a trafo itself
+    trafo = pslike$extra_trafo %??% identity
+    pname = param$id
+    pslike$extra_trafo = crate(function(x, param_set) {
       mlr3misc::set_names(
         checkmate::assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),
         pname
       )
     }, trafo, pname)
   }
-  pslike$set_id = ""
   pslike
 }

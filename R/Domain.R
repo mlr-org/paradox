@@ -1,19 +1,16 @@
-#' @include helper.R
-
 #' @title Domain: Parameter Range without an Id
 #'
 #' @description
 #' A `Domain` object is a representation of a single dimension of a [`ParamSet`]. `Domain` objects are used to construct
-#' [`ParamSet`]s, either through the [`ps()`] short form, or through the [`ParamSet`]`$search_space()` mechanism (see
-#' [`to_tune()`]). `Domain` corresponds to a [`Param`] object, except it does not have an `$id`, and it *does* have a
-#' `trafo` and dependencies (`depends`) associated with it. For each of the basic [`Param`] classes ([`ParamInt`],
-#' [`ParamDbl`], [`ParamLgl`], [`ParamFct`], and [`ParamUty`]) there is a function constructing a `Domain` object
-#' (`p_int()`, `p_dbl()`, `p_lgl()`, `p_fct()`, `p_uty()`). They each have the same arguments as the corresponding
-#' [`Param`] `$new()` function, except without the `id` argument, and with the the additional parameters `trafo`, and
-#' `depends`.
+#' [`ParamSet`]s, either through the [`ps()`] short form, through the [`ParamSet`] constructor itself,
+#' or through the [`ParamSet`]`$search_space()` mechanism (see
+#' [`to_tune()`]).
+#' For each of the basic parameter classes (`"ParamInt"`, `"ParamDbl"`, `"ParamLgl"`, `"ParamFct"`, and `"ParamUty"`) there is a function constructing a `Domain` object
+#' (`p_int()`, `p_dbl()`, `p_lgl()`, `p_fct()`, `p_uty()`). They each have fitting construction arguments that control their
+#' bounds and behavior.
 #'
 #' `Domain` objects are representations of parameter ranges and are intermediate objects to be used in short form
-#' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user.
+#' constructions in [`to_tune()`] and [`ps()`]. Because of their nature, they should not be modified by the user, once constructed.
 #' The `Domain` object's internals are subject to change and should not be relied upon.
 #'
 #' @template param_lower
@@ -38,17 +35,17 @@
 #'   An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 #'   expression (using `quote()`), or the expression can be entered directly and will be parsed using NSE (see
 #'   examples). The expression may be of the form `<Param> == <value>` or `<Param> %in% <values>`, which will result in
-#'   dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual$new(<value>))` or
-#'   `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf$new(<values>))`, respectively (see [`CondEqual`],
+#'   dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual(<value>))` or
+#'   `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf(<values>))`, respectively (see [`CondEqual`],
 #'   [`CondAnyOf`]). The expression may also contain multiple conditions separated by `&&`.
 #' @param logscale (`logical(1)`)\cr
 #'   Put numeric domains on a log scale. Default `FALSE`. Log-scale `Domain`s represent parameter ranges where lower and upper bounds
 #'   are logarithmized, and where a `trafo` is added that exponentiates sampled values to the original scale. This is
 #'   *not* the same as setting `trafo = exp`, because `logscale = TRUE` will handle parameter bounds internally:
-#'   a `p_dbl(1, 10, logscale = TRUE)` results in a [`ParamDbl`] that has lower bound `0`, upper bound `log(10)`,
+#'   a `p_dbl(1, 10, logscale = TRUE)` results in a parameter that has lower bound `0`, upper bound `log(10)`,
 #'   and uses `exp` transformation on these. Therefore, the given bounds represent the bounds *after* the transformation.
 #'   (see examples).\cr
-#'   `p_int()` with `logscale = TRUE` results in a [`ParamDbl`], not a [`ParamInt`], but with bounds `log(max(lower, 0.5))` ...
+#'   `p_int()` with `logscale = TRUE` results in a continuous parameter similar to `p_dbl()`, not an integer-valued parameter, with bounds `log(max(lower, 0.5))` ...
 #'   `log(upper + 1)` and a trafo similar to "`as.integer(exp(x))`" (with additional bounds correction). The lower bound
 #'   is lifted to `0.5` if `lower` 0 to handle the `lower == 0` case. The upper bound is increased to `log(upper + 1)`
 #'   because the trafo would otherwise almost never generate a value of `upper`.\cr
@@ -60,12 +57,19 @@
 #'   defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.\cr
 #'   `logscale` happens on a natural (`e == 2.718282...`) basis. Be aware that using a different base (`log10()`/`10^`,
 #'   `log2()`/`2^`) is completely equivalent and does not change the values being sampled after transformation.
+#' @param repr (`language`)\cr
+#'   Symbol to use to represent the value given in `default`.
+#'   The `deparse()` of this object is used when printing the domain, in some cases.
+#' @param init (`any`)\cr
+#'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
+#'   value upon construction.
 #'
 #' @return A `Domain` object.
 #'
 #' @details
-#' The `p_fct` function admits a `levels` argument that goes beyond the `levels` accepted by [`ParamFct`]`$new()`.
-#' Instead of a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
+#' Although the `levels` values of a constructed `p_fct()` will always be `character`-valued, the `p_fct` function admits
+#' a `levels` argument that goes beyond this:
+#' Besides a `character` vector, any atomic vector or list (optionally named) may be given. (If the value is a list
 #' that is not named, the names are inferred using `as.character()` on the values.) The resulting `Domain` will
 #' correspond to a range of values given by the names of the `levels` argument with a `trafo` that maps the `character`
 #' names to the arbitrary values of the `levels` argument.
@@ -103,7 +107,7 @@
 #' # But the values are on a log scale with desired bounds after trafo
 #' print(grid$transpose())
 #'
-#' # Integer parameters with logscale are `ParamDbl`s pre-trafo
+#' # Integer parameters with logscale are `p_dbl()`s pre-trafo
 #' params = ps(x = p_int(0, 10, logscale = TRUE))
 #' print(params)
 #'
@@ -117,103 +121,32 @@
 #' @name Domain
 NULL
 
-#' @rdname Domain
-#' @export
-p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, logscale = FALSE) {
-  if (assert_flag(logscale)) {
-    if (!is.null(trafo)) stop("When a trafo is given then logscale must be FALSE")
-    # assert_int will stop for `Inf` values
-    if (!isTRUE(is.infinite(lower))) assert_int(lower)
-    if (!isTRUE(is.infinite(upper))) assert_int(upper)
-    if (lower < 0) stop("When logscale is TRUE then lower bound must be greater or equal 0")
-    trafo = crate(function(x) as.integer(max(min(exp(x), upper), lower)), lower, upper)
-    constargs_override = list(lower = log(max(lower, 0.5)), upper = log(upper + 1))
-    constructor = ParamDbl
-  } else {
-    constructor = ParamInt
-    constargs_override = NULL
-  }
-
-  domain(constructor = constructor, constargs = as.list(match.call()[-1]),
-    depends_expr = substitute(depends), trafo = trafo, constargs_override = constargs_override)
-}
-
-#' @rdname Domain
-#' @export
-p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE) {
-  if (assert_flag(logscale)) {
-    if (!is.null(trafo)) stop("When a trafo is given then logscale must be FALSE")
-    if (assert_number(lower) <= 0) stop("When logscale is TRUE then lower bound must be strictly greater than 0")
-    trafo = exp
-    constargs_override = list(lower = log(lower), upper = log(assert_number(upper)))
-  } else {
-    constargs_override = NULL
-  }
-
-  domain(constructor = ParamDbl, constargs = as.list(match.call()[-1]),
-    depends_expr = substitute(depends), trafo = trafo, constargs_override = constargs_override)
-}
-
-#' @rdname Domain
-#' @export
-p_uty = function(default = NO_DEF, tags = character(), custom_check = NULL, depends = NULL, trafo = NULL) {
-  # For better printing of untyped parameters
-  constargs = as.list(match.call()[-1])
-  if (!missing(default)) constargs$repr = as.character(substitute(default))
-  domain(constructor = ParamUty, constargs = constargs,
-    depends_expr = substitute(depends), trafo = trafo)
-}
-
-#' @rdname Domain
-#' @export
-p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
-  domain(constructor = ParamLgl, constargs = as.list(match.call()[-1]),
-    depends_expr = substitute(depends), trafo = trafo)
-}
-
-#' @rdname Domain
-#' @export
-p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL) {
-  constargs = as.list(match.call()[-1])
-  levels = eval.parent(constargs$levels)
-  if (!is.character(levels)) {
-    # if the "levels" argument is not a character vector, then
-    # we add a trafo.
-    assert(check_atomic_vector(levels), check_list(levels))
-    if (is.null(names(levels))) {
-      names(levels) = as.character(levels)
-    }
-    trafo = crate(function(x) {
-      x = levels[[x]]
-      if (!is.null(trafo)) x = trafo(x)
-      x
-    }, trafo, levels)
-    constargs$levels = names(levels)
-  }
-  domain(constructor = ParamFct, constargs = constargs, depends_expr = substitute(depends), trafo = trafo)
-}
-
 # Construct the actual `Domain` object
 # @param Constructor: The ParamXxx to call `$new()` for.
 # @param constargs: arguments of constructor
 # @param constargs_override: replace these in `constargs`, but don't represent this in printer
-domain = function(constructor, constargs, depends_expr = NULL, trafo = NULL, constargs_override = NULL) {
-  constargs$trafo = NULL
-  constargs$depends = NULL
-  constargs = map(constargs, eval, envir = parent.frame(2))
-  reprargs = constargs
+Domain = function(cls, grouping,
+  cargo = NULL,
+  lower = NA_real_, upper = NA_real_, tolerance = NA_real_, levels = NULL,
+  special_vals = list(),
+  default = NO_DEF,
+  tags = character(0),
+  trafo = NULL,
+  depends_expr = NULL,
+  storage_type = "list",
+  init) {
 
-  constargs$logscale = NULL
-  constargs = insert_named(constargs, constargs_override)
+  assert_string(cls)
+  assert_string(grouping)
+  assert_number(lower, na.ok = TRUE)
+  assert_number(upper, na.ok = TRUE)
+  assert_number(tolerance, na.ok = TRUE)
+  if (!is.logical(levels)) assert_character(levels, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+  assert_list(special_vals)
+  if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
+  assert_character(tags, any.missing = FALSE, unique = TRUE)
+  assert_function(trafo, null.ok = TRUE)
 
-
-  if ("id" %in% names(constargs)) stop("id must not be given to p_xxx")
-
-  # check that `...` are valid by constructing and making sure this doesn't error
-  # The object generated here is thrown away, this is only for checks.
-  param = invoke(constructor$new, id = "ID", .args = constargs)
-  param[[".__enclos_env__"]][["private"]]$.has_logscale = isTRUE(reprargs$logscale)
-  param[[".__enclos_env__"]][["private"]]$.has_trafo = !is.null(trafo) && !isTRUE(reprargs$logscale)
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {
@@ -223,27 +156,94 @@ domain = function(constructor, constargs, depends_expr = NULL, trafo = NULL, con
     }
   }
 
+  # domain is a data.table with a few classes.
+  # setting `id` to something preliminary so that `domain_assert()` works.
+
+  param = data.table(id = "domain being constructed", cls = cls, grouping = grouping,
+    cargo = list(cargo),
+    lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
+    special_vals = list(special_vals),
+    default = list(default),
+    storage_type = storage_type,
+    .tags = list(tags),
+    .trafo = list(trafo),
+    .requirements = list(parse_depends(depends_expr, parent.frame(2))),
+
+    .init_given = !missing(init),
+    .init = list(if (!missing(init)) init)
+  )
+
+  class(param) = c(cls, "Domain", class(param))
+
+  if (!is_nodefault(default)) {
+    domain_assert(param, list(default))
+    if ("required" %in% tags) stop("A 'required' parameter can not have a 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default', but the 'required' indicates that the parameter may not be missing.")
+  }
+
+  if (!missing(init)) {
+    if (!is.null(trafo)) stop("Initial value and trafo can not both be given at the same time.")
+    domain_assert(param, list(init))
+    if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
+  }
+
   # repr: what to print
-  repr = sys.call(-1)
-  traforep = repr$trafo
+  # This takes the call of the shortform-constructor (such as `p_dbl()`) and inserts all the
+  # given values.
+  constructorcall = match.call(sys.function(-1), sys.call(-1), envir = parent.frame(2))
+  trafoexpr = constructorcall$trafo
+  constructorcall$trafo = NULL
+  constructorcall$depends = NULL
+  reprargs = sapply(names(constructorcall)[-1], get, pos = parent.frame(1), simplify = FALSE)
+  reprargs$depends = depends_expr
+  reprargs$trafo = trafoexpr
+  if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
+  attr(param, "repr") = as.call(c(constructorcall[[1]], reprargs))
+  set(param, , "id", repr(attr(param, "repr")))  # some ID for consistency with ParamSet$params, only for error messages.
 
-  repr = as.call(c(as.list(repr)[[1]], reprargs))  # use cleaned up constargs
-  repr$depends = depends_expr  # put `depends` at the end, but only if not NULL
-  repr$trafo = traforep  # put `trafo` at the end, but only if not NULL
-  if (isTRUE(repr$logscale)) repr$trafo = NULL  # when the user declared logscale then the trafo stays hidden.
+  assert_names(names(param), identical.to = domain_names)  # If this is not true then there is either a bug in Domain(), or empty_domain was not updated.
 
-  set_class(list(
-    param = param,
-    trafo = assert_function(trafo, null.ok = TRUE),
-    requirements = parse_depends(depends_expr, parent.frame(2)),
-    repr = repr
-  ), "Domain")
+  param
 }
+
+empty_domain = data.table(id = character(0), cls = character(0), grouping = character(0),
+  cargo = list(),
+  lower = numeric(0), upper = numeric(0), tolerance = numeric(0), levels = list(),
+  special_vals = list(),
+  default = list(),
+  storage_type = character(0),
+  .tags = character(0),  # should be list(), strictly speaking, but that would lose the 'character' type information
+  .trafo = list(),
+  .requirements = list(),
+  .init_given = logical(0),
+  .init = list()
+)
+
+domain_names = names(empty_domain)
+domain_names_permanent = grep("^\\.", domain_names, value = TRUE, invert = TRUE)
 
 #' @export
 print.Domain = function(x, ...) {
-  print(x$repr)
+  repr = attr(x, "repr")
+  if (!is.null(repr)) {
+    print(repr)
+  } else {
+    plural_rows =
+    classes = class(x)
+    if ("Domain" %in% classes) {
+      domainidx = which("Domain" == classes)[[1]]
+      classes = first(classes, domainidx - 1)
+      class(x) = last(class(x), -domainidx)
+    }
+    catf("Param%s of class%s %s:\n",
+      if (NROW(x) > 1) "s" else "",
+      if (length(classes) > 1) "es" else "",
+      str_collapse(classes, sep = ", ", quote = '"')
+    )
+    print(x)
+  }
 }
+
+
 
 # Parse the expression for requirements, as they are given to p_int, p_dbl etc.
 # We allow `==`, `%in%` `&&`, and `(`/`)` to occur in such expressions.
@@ -254,8 +254,8 @@ print.Domain = function(x, ...) {
 # parse_depends(quote(x == 1 && y %in% c("b", "c")), environment())
 # # same as:
 # list(
-#   list(on = "x", CondEqual$new(1)),
-#   list(on = "y", CondAnyOf$new(c("b", "c")))
+#   list(on = "x", CondEqual(1)),
+#   list(on = "y", CondAnyOf(c("b", "c")))
 # )
 parse_depends = function(depends_expr, evalenv) {
   if (is.null(depends_expr)) return(NULL)
@@ -324,7 +324,7 @@ parse_depends = function(depends_expr, evalenv) {
     if (!is.symbol(comparand)) throw("LHS must be a parameter name")
     comparand = as.character(comparand)
     value = eval(value, envir = evalenv)
-    list(list(on = comparand, cond = constructor$new(value)))
+    list(list(on = comparand, cond = constructor(value)))
   }
 
   recurse_expression(depends_expr)

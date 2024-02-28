@@ -2,15 +2,15 @@ context("ParamInt")
 
 test_that("constructor works", {
   p = ParamInt$new(id = "test", lower = 1L, upper = 10L)
-  expect_equal(p$id, "test")
-  expect_equal(p$lower, 1L)
-  expect_equal(p$upper, 10L)
-  expect_equal(p$nlevels, 10L)
+  expect_equal(p$ids(), "test")
+  expect_equal(p$lower[["test"]], 1L)
+  expect_equal(p$upper[["test"]], 10L)
+  expect_equal(p$nlevels[["test"]], 10L)
 
   # check that we can create param with Inf bounds
   p = ParamInt$new(id = "test", lower = 1L)
-  expect_equal(p$lower, 1L)
-  expect_equal(p$upper, Inf)
+  expect_equal(p$lower[["test"]], 1L)
+  expect_equal(p$upper[["test"]], Inf)
 
   # check some invalid arg settings
   expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
@@ -32,10 +32,10 @@ test_that("qunif", {
   testit = function(a, b) {
 
     p = ParamInt$new("x", lower = a, upper = b)
-    k = p$nlevels
+    k = p$nlevels[["x"]]
     expect_equal(k, b - a + 1)
     u = runif(n)
-    v1 = p$qunif(u)
+    v1 = p$qunif(data.frame(x = u))$x
     expect_integer(v1, any.missing = FALSE, len = n)
     expect_setequal(unique(v1), a:b) # check we see all levels
     # check that empirical frequencies are pretty much uniform
@@ -49,9 +49,9 @@ test_that("qunif", {
 
 test_that("assigning integer value results in int", {
 
-  p = ParamSet$new(list(ParamInt$new("x")))
+  p = ParamSet_legacy$new(list(ParamInt$new("x")))
   p$values$x = 0
   expect_equal(typeof(p$values$x), "integer")
-  expect_error({p$values$x = 1e-10}, "be of type.*integerish")
+  expect_error({p$values$x = 1e-2}, "be of type.*integerish")
 
 })
