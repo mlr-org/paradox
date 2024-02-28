@@ -7,6 +7,12 @@
     <loc>https://paradox.mlr-org.com/LICENSE-text.html</loc>
   </url>
   <url>
+    <loc>https://paradox.mlr-org.com/articles/indepth.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/articles/index.html</loc>
+  </url>
+  <url>
     <loc>https://paradox.mlr-org.com/authors.html</loc>
   </url>
   <url>
@@ -28,28 +34,10 @@
     <loc>https://paradox.mlr-org.com/reference/NO_DEF.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/Param.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamDbl.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamFct.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamInt.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamLgl.html</loc>
-  </url>
-  <url>
     <loc>https://paradox.mlr-org.com/reference/ParamSet.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/ParamSetCollection.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/reference/ParamUty.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/Sampler.html</loc>
@@ -79,10 +67,31 @@
     <loc>https://paradox.mlr-org.com/reference/SamplerUnif.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/reference/assert_param.html</loc>
+    <loc>https://paradox.mlr-org.com/reference/assert_param_set.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/default_values.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_check.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_is_bounded.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_is_categ.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_is_number.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_nlevels.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_qunif.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/domain_sanitize.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/generate_design_grid.html</loc>
@@ -104,6 +113,12 @@
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/ps.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/ps_replicate.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/reference/ps_union.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/reference/psc.html</loc>
