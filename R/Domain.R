@@ -65,7 +65,7 @@
 #'   value upon construction.
 #' @param aggr (`function`)\cr
 #'   Function with one argument, which is a list of parameter values.
-#'   The function specifies how this list of parameter values is aggregated to form one parameter value.
+#'   The function specifies how a list of parameter values is aggregated to form one parameter value.
 #'   This is used in the context of inner tuning. The default is to aggregate the values.
 #'
 #' @return A `Domain` object.

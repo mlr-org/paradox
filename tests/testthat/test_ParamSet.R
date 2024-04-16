@@ -431,3 +431,22 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
   param_set$set_values(.values = list(a = NULL), .insert = FALSE)
   expect_identical(param_set$values, list(a = NULL))
 })
+
+test_that("aggr", {
+  param_set = ps(
+    a = p_uty(aggr = function(x) "a"),
+    b = p_fct(levels = c("a", "b"), aggr = function(x) "b"),
+    c = p_lgl(aggr = function(x) "c"),
+    d = p_int(aggr = function(x) "d"),
+    e = p_dbl(aggr = function(x) "e")
+  )
+  expect_class(param_set, "ParamSet")
+
+  vals = param_set$aggr(list(a = list(1), b = list(1), c = list(1), d = list(1), e = list(1)))
+  expect_equal(vals, list(a = "a", b = "b", c = "c", d = "d", e = "e"))
+
+  expect_error(param_set$aggr(1), "list")
+  expect_error(param_set$aggr(list(1)), "list")
+  expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list())), "permutation")
+  expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "More than one")
+})

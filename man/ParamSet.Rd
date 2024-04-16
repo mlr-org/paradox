@@ -172,6 +172,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
+\item \href{#method-ParamSet-aggr}{\code{ParamSet$aggr()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
 \item \href{#method-ParamSet-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
 \item \href{#method-ParamSet-check}{\code{ParamSet$check()}}
@@ -337,6 +338,28 @@ Passed to \code{extra_trafo()}. Note that the \code{extra_trafo} of \code{self} 
 In almost all cases, the default \code{param_set = self} should be used.}
 }
 \if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-aggr"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-aggr}{}}}
+\subsection{Method \code{aggr()}}{
+Aggregate parameter values according to the aggregation rules.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$aggr(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(named \code{list()} of \code{list()}s)\cr
+The value(s) to be aggregated. Names are parameter values.
+The aggregation function is selected accordingly for each parameter.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+(named \code{list()})
 }
 }
 \if{html}{\out{<hr>}}

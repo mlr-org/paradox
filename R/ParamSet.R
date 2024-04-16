@@ -260,6 +260,28 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #'
+    #' Aggregate parameter values according to the aggregation rules.
+    #'
+    #' @param x (named `list()` of `list()`s)\cr
+    #'   The value(s) to be aggregated. Names are parameter values.
+    #'   The aggregation function is selected accordingly for each parameter.
+    #' @return (named `list()`)
+    aggr = function(x) {
+      assert_list(x, types = "list")
+      assert_permutation(names(x), private$.aggrs$id)
+      if (!(length(unique(lengths(x))) == 1L)) {
+        stopf("The same number of values are required for each parameter")
+      }
+      if (nrow(private$.aggrs) && !length(x[[1L]])) {
+        stopf("More than one value is required to aggregate them")
+      }
+      imap(x, function(value, .id) {
+        aggr = private$.aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
+      })
+    },
+
+    #' @description
     #' \pkg{checkmate}-like test-function. Takes a named list.
     #' Return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:

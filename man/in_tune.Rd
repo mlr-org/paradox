@@ -10,8 +10,8 @@ in_tune(..., aggr = NULL)
 \item{...}{if given, restricts the range to be tuning over, as described above.}
 
 \item{aggr}{(\code{function})\cr
-The aggregator function that determines how to aggregate a list of parameter values into one value.
-a single parameter value. The default is to average them.}
+The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
+The default is to average the values and round them up.}
 }
 \description{
 Works just like \code{\link[=to_tune]{to_tune()}}, but marks the parameter for inner tuning.

@@ -189,8 +189,8 @@ to_tune = function(...) {
 #' See [`mlr3::Learner`] for more information.
 #' @inheritParams to_tune
 #' @param aggr (`function`)\cr
-#'   The aggregator function that determines how to aggregate a list of parameter values into one value.
-#'   a single parameter value. The default is to average them.
+#'   The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
+#'   The default is to average the values and round them up.
 #' @export
 in_tune = function(..., aggr = NULL) {
   if (is.null(aggr)) {
@@ -241,8 +241,7 @@ tunetoken_to_ps = function(tt, param) {
 
 tunetoken_to_ps.InnerTuneToken = function(tt, params) {
   ps = NextMethod()
-  browser()
-  ps$tags = map(ps$tags, function(tags) union(tags, "inner_tune"))
+  ps$tags = map(ps$tags, function(tags) union(tags, "inner_tuning"))
   return(ps)
 }
 

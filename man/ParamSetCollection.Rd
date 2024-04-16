@@ -79,6 +79,7 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
 <details><summary>Inherited methods</summary>
 <ul>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href='../../paradox/html/ParamSet.html#method-ParamSet-add_dep'><code>paradox::ParamSet$add_dep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="aggr"><a href='../../paradox/html/ParamSet.html#method-ParamSet-aggr'><code>paradox::ParamSet$aggr()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert'><code>paradox::ParamSet$assert()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href='../../paradox/html/ParamSet.html#method-ParamSet-assert_dt'><code>paradox::ParamSet$assert_dt()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href='../../paradox/html/ParamSet.html#method-ParamSet-check'><code>paradox::ParamSet$check()</code></a></span></li>
