@@ -909,13 +909,15 @@ ParamSet = R6Class("ParamSet",
       values = keep(values, inherits, "TuneToken")
       if (!length(values)) return(ParamSet$new())
       params = map(names(values), function(pn) {
-        domain = self$params[pn, on = "id"]
+        domain = private$.params[pn, on = "id"]
         set_class(domain, c(domain$cls, "Domain", class(domain)))
       })
       names(params) = names(values)
 
       # package-internal S3 fails if we don't call the function indirectly here
-      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(...))
+      partsets = pmap(list(values, params), function(tt, param) {
+        tunetoken_to_ps(tt, param, param_aggr = private$.aggrs[list(param$id), "aggr", on = "id"][[1L]][[1L]])
+      })
 
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 

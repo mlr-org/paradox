@@ -231,12 +231,12 @@ print.InnerTuneToken = function(x, ...) {
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
 # param is a data.table that is potentially modified by reference using data.table set() methods.
-tunetoken_to_ps = function(tt, param) {
+tunetoken_to_ps = function(tt, param, param_aggr) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.InnerTuneToken = function(tt, param) {
-  tt$content$aggr = tt$content$aggr %??% param$.aggr
+tunetoken_to_ps.InnerTuneToken = function(tt, param, param_aggr) {
+  tt$content$aggr = tt$content$aggr %??% param_aggr
   if (is.null(tt$content$aggr)) {
     stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
   }
@@ -245,20 +245,20 @@ tunetoken_to_ps.InnerTuneToken = function(tt, param) {
   return(ps)
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param) {
+tunetoken_to_ps.FullTuneToken = function(tt, param, param_aggr) {
   if (!domain_is_bounded(param)) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
     if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param, param_aggr)
   } else {
-    pslike_to_ps(param, tt$call, param)
+    pslike_to_ps(param, tt$call, param, param_aggr)
   }
 }
 
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param) {
+tunetoken_to_ps.RangeTuneToken = function(tt, param, param_aggr) {
   if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
@@ -286,7 +286,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
+tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_aggr) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 
