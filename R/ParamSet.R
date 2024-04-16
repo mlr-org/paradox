@@ -90,6 +90,10 @@ ParamSet = R6Class("ParamSet",
         private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
       }
 
+      if (".aggr" %in% names(paramtbl)) {
+        private$.aggrs = setkeyv(paramtbl[!map_lgl(.aggr, is.null), .(id, aggr = .aggr)], "id")
+      }
+
       if (".requirements" %in% names(paramtbl)) {
         requirements = paramtbl$.requirements
         private$.params = paramtbl  # self$add_dep needs this
@@ -645,7 +649,7 @@ ParamSet = R6Class("ParamSet",
         if (nrow(deps)) { # add a nice extra charvec-col to the tab, which lists all parents-ids
           on = NULL
           dd = deps[, list(parents = list(unlist(on))), by = "id"]
-          d = merge(d, dd, on = "id", all.x = TRUE)
+          d = merge(d, dd, by = "id", all.x = TRUE)
         }
         v = named_list(d$id) # add values to last col of print-dt as list col
         v = insert_named(v, self$values)
@@ -872,6 +876,7 @@ ParamSet = R6Class("ParamSet",
     .tags = data.table(id = character(0L), tag = character(0), key = "id"),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
+    .aggrs = data.table(id = character(0L), aggr = list(), key = "id"),
 
     get_tune_ps = function(values) {
       values = keep(values, inherits, "TuneToken")

@@ -20,7 +20,8 @@ p_dbl(
   depends = NULL,
   trafo = NULL,
   logscale = FALSE,
-  init
+  init,
+  aggr = NULL
 )
 
 p_fct(
@@ -30,7 +31,8 @@ p_fct(
   tags = character(),
   depends = NULL,
   trafo = NULL,
-  init
+  init,
+  aggr = NULL
 )
 
 p_int(
@@ -43,7 +45,8 @@ p_int(
   depends = NULL,
   trafo = NULL,
   logscale = FALSE,
-  init
+  init,
+  aggr = NULL
 )
 
 p_lgl(
@@ -52,7 +55,8 @@ p_lgl(
   tags = character(),
   depends = NULL,
   trafo = NULL,
-  init
+  init,
+  aggr = NULL
 )
 
 p_uty(
@@ -63,7 +67,8 @@ p_uty(
   depends = NULL,
   trafo = NULL,
   repr = substitute(default),
-  init
+  init,
+  aggr = NULL
 )
 }
 \arguments{
@@ -138,6 +143,11 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 \item{init}{(\code{any})\cr
 Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
 value upon construction.}
+
+\item{aggr}{(\code{function})\cr
+Function with one argument, which is a list of parameter values.
+The function specifies how this list of parameter values is aggregated to form one parameter value.
+This is used in the context of inner tuning. The default is to aggregate the values.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that

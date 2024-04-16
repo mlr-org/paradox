@@ -1,3 +1,8 @@
+# dev
+
+* feat: added `aggr`(egation function) to `Domain`  which can be used for inner
+tuning.
+
 # paradox 0.12.0
 * Removed `Param` objects. `ParamSet` now uses a `data.table` internally; individual parameters are more like `Domain` objects now. `ParamSets` should be constructed using the `ps()` shorthand and `Domain` objects. This entails the following major changes:
     * `ParamSet` now supports `extra_trafo` natively; it behaves like `.extra_trafo` of the `ps()` call.

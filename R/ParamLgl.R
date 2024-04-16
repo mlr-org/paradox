@@ -1,8 +1,8 @@
 #' @rdname Domain
 #' @export
-p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init) {
+p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL) {
   Domain(cls = "ParamLgl", grouping = "ParamLgl", levels = c(TRUE, FALSE), special_vals = special_vals, default = default,
-    tags = tags, trafo = trafo, storage_type = "logical", depends_expr = substitute(depends), init = init)
+    tags = tags, trafo = trafo, storage_type = "logical", depends_expr = substitute(depends), init = init, aggr = aggr)
 }
 
 #' @export

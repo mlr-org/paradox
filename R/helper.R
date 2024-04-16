@@ -53,3 +53,11 @@ col_to_nl = function(dt, col = 1, idcol = 2) {
   names(data) = dt[[idcol]]
   data
 }
+
+default_aggr = function(x) {
+  if (!test_numeric(x[[1]], len = 1L)) {
+    stopf("Provide a custom aggregator for non-numeric and non-scalar parameters.")
+  }
+  ceiling(mean(unlist(x)))
+}
+

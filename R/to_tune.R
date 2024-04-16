@@ -183,6 +183,27 @@ to_tune = function(...) {
   set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
 }
 
+#' @title Create an Inner Tuning Token
+#' @description
+#' Works just like [`to_tune()`], but marks the parameter for inner tuning.
+#' See [`mlr3::Learner`] for more information.
+#' @inheritParams to_tune
+#' @param aggr (`function`)\cr
+#'   The aggregator function that determines how to aggregate a list of parameter values into one value.
+#'   a single parameter value. The default is to average them.
+#' @export
+in_tune = function(..., aggr = NULL) {
+  if (is.null(aggr)) {
+    aggr = default_aggr
+  } else {
+    test_function(aggr, nargs = 1L)
+  }
+  tt = to_tune(...)
+  tt$aggr = aggr
+  tt = set_class(tt, classes = c("InnerTuneToken", class(tt)))
+  return(tt)
+}
+
 #' @export
 print.FullTuneToken = function(x, ...) {
   catf("Tuning over:\n<entire parameter range%s>\n",
@@ -201,6 +222,12 @@ print.ObjectTuneToken = function(x, ...) {
   print(x$content)
 }
 
+#' @export
+print.InnerTuneToken = function(x, ...) {
+  cat("Inner ")
+  NextMethod()
+}
+
 # tunetoken_to_ps: Convert a `TuneToken` to a `ParamSet` that tunes over this.
 # Needs the corresponding `Domain` to which the `TuneToken` refers, both to
 # get the range (e.g. if `to_tune()` was used) and to verify that the `TuneToken`
@@ -210,6 +237,13 @@ print.ObjectTuneToken = function(x, ...) {
 # param is a data.table that is potentially modified by reference using data.table set() methods.
 tunetoken_to_ps = function(tt, param) {
   UseMethod("tunetoken_to_ps")
+}
+
+tunetoken_to_ps.InnerTuneToken = function(tt, params) {
+  ps = NextMethod()
+  browser()
+  ps$tags = map(ps$tags, function(tags) union(tags, "inner_tune"))
+  return(ps)
 }
 
 tunetoken_to_ps.FullTuneToken = function(tt, param) {
@@ -223,6 +257,7 @@ tunetoken_to_ps.FullTuneToken = function(tt, param) {
     pslike_to_ps(param, tt$call, param)
   }
 }
+
 
 tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   if (!domain_is_number(param)) {

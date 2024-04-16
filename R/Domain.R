@@ -63,6 +63,10 @@
 #' @param init (`any`)\cr
 #'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
 #'   value upon construction.
+#' @param aggr (`function`)\cr
+#'   Function with one argument, which is a list of parameter values.
+#'   The function specifies how this list of parameter values is aggregated to form one parameter value.
+#'   This is used in the context of inner tuning. The default is to aggregate the values.
 #'
 #' @return A `Domain` object.
 #'
@@ -134,7 +138,8 @@ Domain = function(cls, grouping,
   trafo = NULL,
   depends_expr = NULL,
   storage_type = "list",
-  init) {
+  init,
+  aggr = NULL) {
 
   assert_string(cls)
   assert_string(grouping)
@@ -146,7 +151,11 @@ Domain = function(cls, grouping,
   if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_function(trafo, null.ok = TRUE)
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
 
+  if (is.null(aggr) && "inner_tuning" %in% tags) {
+    aggr = default_aggr
+  }
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {
@@ -168,9 +177,9 @@ Domain = function(cls, grouping,
     .tags = list(tags),
     .trafo = list(trafo),
     .requirements = list(parse_depends(depends_expr, parent.frame(2))),
-
     .init_given = !missing(init),
-    .init = list(if (!missing(init)) init)
+    .init = list(if (!missing(init)) init),
+    .aggr = list(aggr)
   )
 
   class(param) = c(cls, "Domain", class(param))
@@ -215,7 +224,8 @@ empty_domain = data.table(id = character(0), cls = character(0), grouping = char
   .trafo = list(),
   .requirements = list(),
   .init_given = logical(0),
-  .init = list()
+  .init = list(),
+  .aggr = list()
 )
 
 domain_names = names(empty_domain)
