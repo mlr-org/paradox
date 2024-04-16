@@ -66,6 +66,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.tags = paramtbl[, .(tag = unique(unlist(.tags))), keyby = "id"]
 
       private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+      private$.aggrs = setkeyv(paramtbl[!map_lgl(.aggr, is.null), .(id, aggr = .aggr)], "id")
 
       private$.translation = paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE]
       setkeyv(private$.translation, "id")
@@ -124,6 +125,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       newtrafos = paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)]
       if (nrow(newtrafos)) {
         private$.trafos = setkeyv(rbind(private$.trafos, newtrafos), "id")
+      }
+      newaggrs = paramtbl[!map_lgl(.aggr, is.null), .(id, trafo = .aggr)]
+      if (nrow(newaggrs)) {
+        private$.aggrs = setkeyv(rbind(private$.aggrs, newaggrs), "id")
       }
 
       private$.translation = rbind(private$.translation, paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE])

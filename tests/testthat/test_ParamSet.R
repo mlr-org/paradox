@@ -450,3 +450,14 @@ test_that("aggr", {
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list())), "permutation")
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "More than one")
 })
+
+test_that("in_tune", {
+  param_set = ps(a = p_dbl(lower = 1, upper = 2))
+  param_set$set_values(
+    a = in_tune(lower = 1, upper = 2, aggr = function(x) 1.5)
+  )
+
+  ss = param_set$search_space()
+
+  ss$aggr(list(a = list(1, 2)))
+})

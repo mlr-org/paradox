@@ -147,7 +147,7 @@ value upon construction.}
 \item{aggr}{(\code{function})\cr
 Function with one argument, which is a list of parameter values.
 The function specifies how a list of parameter values is aggregated to form one parameter value.
-This is used in the context of inner tuning. The default is to aggregate the values.}
+This is used in the context of inner tuning. The default is to aggregate the values and round up.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that

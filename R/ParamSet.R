@@ -97,7 +97,7 @@ ParamSet = R6Class("ParamSet",
       if (".requirements" %in% names(paramtbl)) {
         requirements = paramtbl$.requirements
         private$.params = paramtbl  # self$add_dep needs this
-       for (row in seq_len(nrow(paramtbl))) {
+        for (row in seq_len(nrow(paramtbl))) {
           for (req in requirements[[row]]) {
             invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
               .args = req)
@@ -276,6 +276,7 @@ ParamSet = R6Class("ParamSet",
       if (nrow(private$.aggrs) && !length(x[[1L]])) {
         stopf("More than one value is required to aggregate them")
       }
+
       imap(x, function(value, .id) {
         aggr = private$.aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
       })
@@ -528,6 +529,7 @@ ParamSet = R6Class("ParamSet",
         .trafo = private$.trafos[id, trafo],
         .requirements = list(if (nrow(depstbl)) transpose_list(depstbl)),  # NULL if no deps
         .init_given = id %in% names(vals),
+        .aggr = private$.aggrs[id, get("aggr")],
         .init = unname(vals[id]))
       ]
 
@@ -562,6 +564,7 @@ ParamSet = R6Class("ParamSet",
 
       result$.__enclos_env__$private$.params = setindexv(private$.params[ids, on = "id"], c("id", "cls", "grouping"))
       result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[ids, on = "id", nomatch = NULL], "id")
+      result$.__enclos_env__$private$.aggrs = setkeyv(private$.aggrs[ids, on = "id", nomatch = NULL], "id")
       result$.__enclos_env__$private$.tags = setkeyv(private$.tags[ids, on = "id", nomatch = NULL], "id")
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
@@ -589,6 +592,7 @@ ParamSet = R6Class("ParamSet",
         result$.__enclos_env__$private$.params = setindexv(private$.params[get_id, on = "id"], c("id", "cls", "grouping"))
         # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
         result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[get_id, on = "id", nomatch = NULL], "id")
+        result$.__enclos_env__$private$.aggrs = setkeyv(private$.aggrs[get_id, on = "id", nomatch = NULL], "id")
         result$.__enclos_env__$private$.tags = setkeyv(private$.tags[get_id, on = "id", nomatch = NULL], "id")
         result$assert_values = FALSE
         result$values = values[match(get_id, names(values), nomatch = 0)]
@@ -740,6 +744,7 @@ ParamSet = R6Class("ParamSet",
       result = copy(private$.params)
       result[, .tags := list(self$tags)]
       result[private$.trafos, .trafo := list(trafo), on = "id"]
+      result[private$.aggrs, .aggr := list(aggr), on = "id"]
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(
@@ -904,13 +909,14 @@ ParamSet = R6Class("ParamSet",
       values = keep(values, inherits, "TuneToken")
       if (!length(values)) return(ParamSet$new())
       params = map(names(values), function(pn) {
-        domain = private$.params[pn, on = "id"]
+        domain = self$params[pn, on = "id"]
         set_class(domain, c(domain$cls, "Domain", class(domain)))
       })
       names(params) = names(values)
 
       # package-internal S3 fails if we don't call the function indirectly here
       partsets = pmap(list(values, params), function(...) tunetoken_to_ps(...))
+
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 
       names(partsets) = names(values)

@@ -66,7 +66,7 @@
 #' @param aggr (`function`)\cr
 #'   Function with one argument, which is a list of parameter values.
 #'   The function specifies how a list of parameter values is aggregated to form one parameter value.
-#'   This is used in the context of inner tuning. The default is to aggregate the values.
+#'   This is used in the context of inner tuning. The default is to aggregate the values and round up.
 #'
 #' @return A `Domain` object.
 #'
@@ -152,10 +152,6 @@ Domain = function(cls, grouping,
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_function(trafo, null.ok = TRUE)
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
-
-  if (is.null(aggr) && "inner_tuning" %in% tags) {
-    aggr = default_aggr
-  }
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {

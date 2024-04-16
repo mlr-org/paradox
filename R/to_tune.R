@@ -193,13 +193,9 @@ to_tune = function(...) {
 #'   The default is to average the values and round them up.
 #' @export
 in_tune = function(..., aggr = NULL) {
-  if (is.null(aggr)) {
-    aggr = default_aggr
-  } else {
-    test_function(aggr, nargs = 1L)
-  }
+  test_function(aggr, nargs = 1L, null.ok = TRUE)
   tt = to_tune(...)
-  tt$aggr = aggr
+  if (!is.null(aggr)) tt$content$aggr = aggr
   tt = set_class(tt, classes = c("InnerTuneToken", class(tt)))
   return(tt)
 }
@@ -239,7 +235,11 @@ tunetoken_to_ps = function(tt, param) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.InnerTuneToken = function(tt, params) {
+tunetoken_to_ps.InnerTuneToken = function(tt, param) {
+  tt$content$aggr = tt$content$aggr %??% param$.aggr
+  if (is.null(tt$content$aggr)) {
+    stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
+  }
   ps = NextMethod()
   ps$tags = map(ps$tags, function(tags) union(tags, "inner_tuning"))
   return(ps)
@@ -251,7 +251,7 @@ tunetoken_to_ps.FullTuneToken = function(tt, param) {
   }
   if (isTRUE(tt$content$logscale)) {
     if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param)
   } else {
     pslike_to_ps(param, tt$call, param)
   }
@@ -264,6 +264,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   }
   invalidpoints = discard(tt$content, function(x) is.null(x) || domain_test(param, set_names(list(x), param$id)))
   invalidpoints$logscale = NULL
+  invalidpoints$aggr = NULL
   if (length(invalidpoints)) {
     stopf("%s range not compatible with param %s.\nBad value(s):\n%s\nParameter:\n%s",
       tt$call, param$id, repr(invalidpoints), repr(param))
@@ -279,7 +280,9 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   # create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about :-/
   constructor = switch(param$cls, ParamInt = p_int, ParamDbl = p_dbl,
     stopf("%s: logscale for parameter %s of class %s not supported", tt$call, param$id, param$class))
-  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale)
+  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale,
+    aggr = tt$content$aggr)
+
   pslike_to_ps(content, tt$call, param)
 }
 
