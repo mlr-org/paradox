@@ -231,12 +231,15 @@ print.InnerTuneToken = function(x, ...) {
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
 # param is a data.table that is potentially modified by reference using data.table set() methods.
-tunetoken_to_ps = function(tt, param, param_aggr) {
+tunetoken_to_ps = function(tt, param, param_set) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.InnerTuneToken = function(tt, param, param_aggr) {
-  tt$content$aggr = tt$content$aggr %??% param_aggr
+tunetoken_to_ps.InnerTuneToken = function(tt, param, param_set) {
+  tt$content$aggr = tt$content$aggr %??% get_private(param_set)$.aggrs[list(param$id), "aggr", on = "id"][[1L]][[1L]]
+  if ("inner_tuning" %nin% param_set$tags[[param$id]]) {
+    stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
+  }
   if (is.null(tt$content$aggr)) {
     stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
   }
@@ -245,20 +248,20 @@ tunetoken_to_ps.InnerTuneToken = function(tt, param, param_aggr) {
   return(ps)
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param, param_aggr) {
+tunetoken_to_ps.FullTuneToken = function(tt, param, param_set) {
   if (!domain_is_bounded(param)) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
     if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param, param_aggr)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param, param_set)
   } else {
-    pslike_to_ps(param, tt$call, param, param_aggr)
+    pslike_to_ps(param, tt$call, param, param_set)
   }
 }
 
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param, param_aggr) {
+tunetoken_to_ps.RangeTuneToken = function(tt, param, param_set) {
   if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
@@ -286,7 +289,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, param_aggr) {
   pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_aggr) {
+tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_set) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 

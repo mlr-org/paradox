@@ -358,7 +358,7 @@ test_that("in_tune", {
   it1 = in_tune(aggr = function(x) min(unlist(x)))
   expect_equal(it1$content$aggr(list(1, 2)), 1)
   param_set = ps(
-    a = p_dbl(1, 10, aggr = default_aggr)
+    a = p_dbl(1, 10, aggr = default_aggr, tags = "inner_tuning")
   )
   param_set$set_values(a = in_tune())
   expect_class(param_set$values$a, "InnerTuneToken")

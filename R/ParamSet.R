@@ -915,9 +915,7 @@ ParamSet = R6Class("ParamSet",
       names(params) = names(values)
 
       # package-internal S3 fails if we don't call the function indirectly here
-      partsets = pmap(list(values, params), function(tt, param) {
-        tunetoken_to_ps(tt, param, param_aggr = private$.aggrs[list(param$id), "aggr", on = "id"][[1L]][[1L]])
-      })
+      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(..., param_set = param_set))
 
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 
