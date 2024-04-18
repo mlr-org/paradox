@@ -645,7 +645,7 @@ ParamSet = R6Class("ParamSet",
         if (nrow(deps)) { # add a nice extra charvec-col to the tab, which lists all parents-ids
           on = NULL
           dd = deps[, list(parents = list(unlist(on))), by = "id"]
-          d = merge(d, dd, on = "id", all.x = TRUE)
+          d = merge(d, dd, by = "id", all.x = TRUE)
         }
         v = named_list(d$id) # add values to last col of print-dt as list col
         v = insert_named(v, self$values)
