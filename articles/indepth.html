@@ -31,7 +31,7 @@
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
     
 
-    <nav class="navbar fixed-top navbar-light navbar-expand-lg bg-light"><div class="container">
+    <nav class="navbar fixed-top navbar-light navbar-expand-lg bg-light" data-bs-theme="light"><div class="container">
     
     <a class="navbar-brand me-2" href="../index.html">paradox</a>
 
@@ -658,11 +658,11 @@ values.</p>
 <pre><code><span><span class="co">## &lt;Design&gt; with 5 rows:</span></span>
 <span><span class="co">##         x</span></span>
 <span><span class="co">##    &lt;char&gt;</span></span>
-<span><span class="co">## 1:      b</span></span>
-<span><span class="co">## 2:      m</span></span>
-<span><span class="co">## 3:      y</span></span>
-<span><span class="co">## 4:      k</span></span>
-<span><span class="co">## 5:      n</span></span></code></pre>
+<span><span class="co">## 1:      f</span></span>
+<span><span class="co">## 2:      k</span></span>
+<span><span class="co">## 3:      e</span></span>
+<span><span class="co">## 4:      g</span></span>
+<span><span class="co">## 5:      f</span></span></code></pre>
 </div>
 <div class="section level5">
 <h5 id="hierarchical-sampler">Hierarchical Sampler<a class="anchor" aria-label="anchor" href="#hierarchical-sampler"></a>
@@ -695,17 +695,17 @@ takes a value between 0 and 10. In the cases where <code>A</code> is
 <pre><code><span><span class="co">##         A     B</span></span>
 <span><span class="co">##    &lt;lgcl&gt; &lt;int&gt;</span></span>
 <span><span class="co">## 1:  FALSE    NA</span></span>
-<span><span class="co">## 2:   TRUE    10</span></span>
-<span><span class="co">## 3:  FALSE    NA</span></span>
-<span><span class="co">## 4:   TRUE     6</span></span>
-<span><span class="co">## 5:   TRUE     5</span></span>
-<span><span class="co">## 6:   TRUE     7</span></span></code></pre>
+<span><span class="co">## 2:  FALSE    NA</span></span>
+<span><span class="co">## 3:   TRUE     7</span></span>
+<span><span class="co">## 4:   TRUE    10</span></span>
+<span><span class="co">## 5:   TRUE     2</span></span>
+<span><span class="co">## 6:  FALSE    NA</span></span></code></pre>
 <div class="sourceCode" id="cb68"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/table.html" class="external-link">table</a></span><span class="op">(</span><span class="va">sampled</span><span class="op">$</span><span class="va">data</span><span class="op">[</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"A"</span>, <span class="st">"B"</span><span class="op">)</span><span class="op">]</span>, useNA <span class="op">=</span> <span class="st">"ifany"</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">##        B</span></span>
 <span><span class="co">## A         0   1   2   3   4   5   6   7   8   9  10 &lt;NA&gt;</span></span>
-<span><span class="co">##   FALSE   0   0   0   0   0   0   0   0   0   0   0  501</span></span>
-<span><span class="co">##   TRUE   36  63  48  41  41  43  52  49  44  45  37    0</span></span></code></pre>
+<span><span class="co">##   FALSE   0   0   0   0   0   0   0   0   0   0   0  492</span></span>
+<span><span class="co">##   TRUE   50  45  57  49  49  38  39  47  44  42  48    0</span></span></code></pre>
 </div>
 <div class="section level5">
 <h5 id="joint-sampler">Joint Sampler<a class="anchor" aria-label="anchor" href="#joint-sampler"></a>
@@ -722,13 +722,13 @@ However, <code>SamplerJointIndep</code> currently can not handle
 <span><span class="op">)</span></span>
 <span><span class="va">sampJ</span><span class="op">$</span><span class="fu">sample</span><span class="op">(</span><span class="fl">5</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## &lt;Design&gt; with 5 rows:</span></span>
-<span><span class="co">##            x         y</span></span>
-<span><span class="co">##        &lt;num&gt;     &lt;num&gt;</span></span>
-<span><span class="co">## 1: 0.6914429 0.5291616</span></span>
-<span><span class="co">## 2: 0.4737161 0.7410233</span></span>
-<span><span class="co">## 3: 0.2399784 0.3610985</span></span>
-<span><span class="co">## 4: 0.6917826 0.5408000</span></span>
-<span><span class="co">## 5: 0.7262027 0.5646945</span></span></code></pre>
+<span><span class="co">##            x           y</span></span>
+<span><span class="co">##        &lt;num&gt;       &lt;num&gt;</span></span>
+<span><span class="co">## 1: 0.4889776 0.454001049</span></span>
+<span><span class="co">## 2: 0.2828764 0.165267821</span></span>
+<span><span class="co">## 3: 0.8167114 0.959529563</span></span>
+<span><span class="co">## 4: 0.9697799 0.003741143</span></span>
+<span><span class="co">## 5: 0.2319606 0.646213624</span></span></code></pre>
 </div>
 <div class="section level5">
 <h5 id="samplerunif">SamplerUnif<a class="anchor" aria-label="anchor" href="#samplerunif"></a>
@@ -778,42 +778,42 @@ a parameter that is exponentially distributed:</p>
 <span><span class="va">design</span> <span class="op">=</span> <span class="fu"><a href="../reference/generate_design_random.html">generate_design_random</a></span><span class="op">(</span><span class="va">psexp</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">design</span><span class="op">)</span>  <span class="co"># not transformed: between 0 and 1</span></span></code></pre></div>
 <pre><code><span><span class="co">## &lt;Design&gt; with 3 rows:</span></span>
-<span><span class="co">##           par</span></span>
-<span><span class="co">##         &lt;num&gt;</span></span>
-<span><span class="co">## 1: 0.73508744</span></span>
-<span><span class="co">## 2: 0.05077734</span></span>
-<span><span class="co">## 3: 0.30121319</span></span></code></pre>
+<span><span class="co">##          par</span></span>
+<span><span class="co">##        &lt;num&gt;</span></span>
+<span><span class="co">## 1: 0.9824873</span></span>
+<span><span class="co">## 2: 0.4098267</span></span>
+<span><span class="co">## 3: 0.7395942</span></span></code></pre>
 <div class="sourceCode" id="cb74"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">design</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span>  <span class="co"># trafo is TRUE</span></span></code></pre></div>
 <pre><code><span><span class="co">## [[1]]</span></span>
 <span><span class="co">## [[1]]$par</span></span>
-<span><span class="co">## [1] 0.3077658</span></span>
+<span><span class="co">## [1] 0.01766784</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## [[2]]</span></span>
 <span><span class="co">## [[2]]$par</span></span>
-<span><span class="co">## [1] 2.980305</span></span>
+<span><span class="co">## [1] 0.892021</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## [[3]]</span></span>
 <span><span class="co">## [[3]]$par</span></span>
-<span><span class="co">## [1] 1.199937</span></span></code></pre>
+<span><span class="co">## [1] 0.3016537</span></span></code></pre>
 <p>Compare this to <code>$transpose()</code> without transformation:</p>
 <div class="sourceCode" id="cb76"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">design</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span>trafo <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [[1]]</span></span>
 <span><span class="co">## [[1]]$par</span></span>
-<span><span class="co">## [1] 0.7350874</span></span>
+<span><span class="co">## [1] 0.9824873</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## [[2]]</span></span>
 <span><span class="co">## [[2]]$par</span></span>
-<span><span class="co">## [1] 0.05077734</span></span>
+<span><span class="co">## [1] 0.4098267</span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## </span></span>
 <span><span class="co">## [[3]]</span></span>
 <span><span class="co">## [[3]]$par</span></span>
-<span><span class="co">## [1] 0.3012132</span></span></code></pre>
+<span><span class="co">## [1] 0.7395942</span></span></code></pre>
 <p>Another way to get tihs effect, using <code>$extra_trafo</code>,
 would be:</p>
 <div class="sourceCode" id="cb78"><pre class="downlit sourceCode r">
@@ -867,8 +867,8 @@ way to do this would be:</p>
 <pre><code><span><span class="co">## &lt;Design&gt; with 2 rows:</span></span>
 <span><span class="co">##       fun</span></span>
 <span><span class="co">##    &lt;char&gt;</span></span>
-<span><span class="co">## 1:   mean</span></span>
-<span><span class="co">## 2:   mean</span></span></code></pre>
+<span><span class="co">## 1:    min</span></span>
+<span><span class="co">## 2: median</span></span></code></pre>
 <p>Note that the <code>Design</code> only contains the column
 “<code>fun</code>” as a <code>character</code> column. To get a single
 value as a <em>function</em>, the <code>$transpose</code> function is
@@ -877,10 +877,7 @@ used.</p>
 <code class="sourceCode R"><span><span class="va">xvals</span> <span class="op">=</span> <span class="va">design</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## $fun</span></span>
-<span><span class="co">## function (x, ...) </span></span>
-<span><span class="co">## UseMethod("mean")</span></span>
-<span><span class="co">## &lt;bytecode: 0x55e438292d90&gt;</span></span>
-<span><span class="co">## &lt;environment: namespace:base&gt;</span></span></code></pre>
+<span><span class="co">## function (..., na.rm = FALSE)  .Primitive("min")</span></span></code></pre>
 <p>We can now check that it fits the requirements set by
 <code>methodPS</code>, and that <code>fun</code> it is in fact a
 function:</p>
@@ -889,7 +886,7 @@ function:</p>
 <pre><code><span><span class="co">## [1] TRUE</span></span></code></pre>
 <div class="sourceCode" id="cb88"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="fu">fun</span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## [1] 5.5</span></span></code></pre>
+<pre><code><span><span class="co">## [1] 1</span></span></code></pre>
 <p><code><a href="../reference/Domain.html">p_fct()</a></code> has a shortcut for this kind of transformation,
 where a <code>character</code> is transformed into a specific set of
 (typically non-scalar) values. When its <code>levels</code> argument is
@@ -904,10 +901,10 @@ automatically. A way to perform the above would therefore be:</p>
 <span><span class="fu"><a href="../reference/generate_design_random.html">generate_design_random</a></span><span class="op">(</span><span class="va">samplingPS</span>, <span class="fl">1</span><span class="op">)</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [[1]]</span></span>
 <span><span class="co">## [[1]]$fun</span></span>
-<span><span class="co">## function (x, na.rm = FALSE, ...) </span></span>
-<span><span class="co">## UseMethod("median")</span></span>
-<span><span class="co">## &lt;bytecode: 0x55e437e211c8&gt;</span></span>
-<span><span class="co">## &lt;environment: namespace:stats&gt;</span></span></code></pre>
+<span><span class="co">## function (x, ...) </span></span>
+<span><span class="co">## UseMethod("mean")</span></span>
+<span><span class="co">## &lt;bytecode: 0x55eb88fa87e8&gt;</span></span>
+<span><span class="co">## &lt;environment: namespace:base&gt;</span></span></code></pre>
 <p>Imagine now that a different kind of parametrization of the function
 is desired: The user wants to give a function that selects a certain
 quantile, where the quantile is set by a parameter. In that case the
@@ -932,8 +929,8 @@ an <code>extra_trafo</code> here, given as a function to the
 <pre><code><span><span class="co">## &lt;Design&gt; with 2 rows:</span></span>
 <span><span class="co">##     quantile</span></span>
 <span><span class="co">##        &lt;num&gt;</span></span>
-<span><span class="co">## 1: 0.7714713</span></span>
-<span><span class="co">## 2: 0.6060997</span></span></code></pre>
+<span><span class="co">## 1: 0.6744397</span></span>
+<span><span class="co">## 2: 0.9373676</span></span></code></pre>
 <p>The <code>Design</code> now contains the column
 “<code>quantile</code>” that will be used by the <code>$transpose</code>
 function to create the <code>fun</code> parameter. We also check that it
@@ -944,14 +941,14 @@ function.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## $fun</span></span>
 <span><span class="co">## function(input) quantile(input, x$quantile)</span></span>
-<span><span class="co">## &lt;environment: 0x55e438c5a520&gt;</span></span></code></pre>
+<span><span class="co">## &lt;environment: 0x55eb89a1cc08&gt;</span></span></code></pre>
 <div class="sourceCode" id="cb97"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">methodPS</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span></code></pre></div>
 <pre><code><span><span class="co">## [1] TRUE</span></span></code></pre>
 <div class="sourceCode" id="cb99"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="fu">fun</span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span></span></code></pre></div>
-<pre><code><span><span class="co">## 77.14713% </span></span>
-<span><span class="co">##  7.943242</span></span></code></pre>
+<pre><code><span><span class="co">## 67.44397% </span></span>
+<span><span class="co">##  7.069958</span></span></code></pre>
 </div>
 </div>
 <div class="section level3">
@@ -1437,7 +1434,7 @@ along two dimensions:</p>
 
 <div class="pkgdown-footer-right">
   <p></p>
-<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.7.</p>
+<p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.0.8.</p>
 </div>
 
     </footer>
