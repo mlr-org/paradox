@@ -305,8 +305,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, param_set) {
 }
 
 tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_set) {
-  x = pslike_to_ps(tt$content, tt$call, param)
-  return(x)
+  pslike_to_ps(tt$content, tt$call, param)
 }
 
 # Convert something that is `ParamSet`-like (ParamSet or Domain) to a `ParamSet`.
