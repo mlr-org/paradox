@@ -28,7 +28,7 @@
 #'     - special_vals: list col of list
 #'     - default: list col
 #'     - storage_type: character
-#'     - tags: list col of character vectorssearch
+#'     - tags: list col of character vectors
 #' @examples
 #' pset = ParamSet$new(
 #'   params = list(

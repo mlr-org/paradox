@@ -66,7 +66,7 @@
 #' @param aggr (`function`)\cr
 #'   Function with one argument, which is a list of parameter values.
 #'   The function specifies how a list of parameter values is aggregated to form one parameter value.
-#'   This is used in the context of inner tuning. The default is to aggregate the values and round up.
+#'   This is used in the context of inner tuning, where the inner tuned values on the different resampling iterations might differ.
 #'
 #' @return A `Domain` object.
 #'

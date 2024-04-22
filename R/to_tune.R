@@ -43,7 +43,7 @@
 #' @param ... if given, restricts the range to be tuning over, as described above.
 #' @param aggr (`function`)\cr
 #'   The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
-#'   If `NULL`, the default aggregation function of the parameter will be used.\
+#'   If `NULL`, the default aggregation function of the parameter (if available) will be used.
 #' @param inner (`logical(1)`)\cr
 #'   Whether to create an inner tuning token, i.e. the value will be optimized using the `Learner`-internal tuning
 #'   mechanism, such as early stopping for XGBoost.
@@ -110,7 +110,7 @@
 #'   # not all values need to be tuned!
 #'   uty5 = 100,
 #'
-#'   # Fix value to 100, but use learner-internal tuning
+#'   # Fix value to 100, but use learner-internal tuning and default aggregation rule
 #'   p_inner = to_tune(p_fct(100), inner = TRUE))
 #' )
 #'
