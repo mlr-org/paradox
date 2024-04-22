@@ -1,6 +1,7 @@
 #' @rdname Domain
 #' @export
 p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL) {
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
@@ -22,7 +23,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
   # We escape '"' and '\' to '\"' and '\\', respectively.
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
-  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init, aggr = aggr)
+  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init, cargo = if (!is.null(aggr)) list(aggr = aggr))
 }
 
 #' @export

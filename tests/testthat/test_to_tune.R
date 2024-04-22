@@ -396,10 +396,5 @@ test_that("logscale in tunetoken", {
   expect_output(print(to_tune(lower = 1, logscale = TRUE)), "range \\[1, \\.\\.\\.] \\(log scale\\)")
   expect_output(print(to_tune(upper = 1, logscale = TRUE)), "range \\[\\.\\.\\., 1] \\(log scale\\)")
   expect_output(print(to_tune(lower = 0, upper = 1, logscale = TRUE)), "range \\[0, 1] \\(log scale\\)")
-  expect_output(print(in_tune()), "Inner")
-})
-
-test_that("inner tune", {
-  param_set = ps(a = p_int(1, 10))
-  expect_error(param_set$set_values(a = in_tune(aggr = default_aggr)), "inner tuning")
+  expect_output(print(to_tune(inner = TRUE)), "Inner")
 })

@@ -34,7 +34,7 @@ Compact representation as datatable. Col types are:\cr
 \item special_vals: list col of list
 \item default: list col
 \item storage_type: character
-\item tags: list col of character vectors
+\item tags: list col of character vectorssearch
 }
 }
 }
@@ -354,7 +354,7 @@ Aggregate parameter values according to the aggregation rules.
 \describe{
 \item{\code{x}}{(named \code{list()} of \code{list()}s)\cr
 The value(s) to be aggregated. Names are parameter values.
-The aggregation function is selected accordingly for each parameter.}
+The aggregation function is selected based on the parameter.}
 }
 \if{html}{\out{</div>}}
 }

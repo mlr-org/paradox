@@ -348,18 +348,18 @@ test_that("$extra_trafo flag works", {
   expect_false(search_space$has_extra_trafo)
 })
 
-test_that("in_tune", {
-  it = in_tune(1)
+test_that("inner", {
+  it = to_tune(1, inner = TRUE)
   expect_class(it, "InnerTuneToken")
   expect_null(it$aggr)
-  tt = in_tune(1)
+  tt = to_tune(1, inner = TRUE)
   expect_equal(it$content, tt$content)
 
-  it1 = in_tune(aggr = function(x) min(unlist(x)))
+  it1 = to_tune(aggr = function(x) min(unlist(x)))
   expect_equal(it1$content$aggr(list(1, 2)), 1)
   param_set = ps(
-    a = p_dbl(1, 10, aggr = default_aggr, tags = "inner_tuning")
+    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "inner_tuning")
   )
-  param_set$set_values(a = in_tune())
+  param_set$set_values(a = to_tune(inner = TRUE))
   expect_class(param_set$values$a, "InnerTuneToken")
 })

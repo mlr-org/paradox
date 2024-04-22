@@ -1,6 +1,7 @@
 #' @rdname Domain
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL) {
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   assert_number(tolerance, lower = 0)
   assert_number(lower)
   assert_number(upper)
@@ -17,8 +18,12 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
     real_upper = upper
   }
 
+  cargo = list()
+  if (logscale) cargo$logscale = TRUE
+  cargo$aggr = aggr
+
   Domain(cls = "ParamDbl", grouping = "ParamDbl", lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo, storage_type = "numeric",
-    depends_expr = substitute(depends), init = init, cargo = if (logscale) "logscale", aggr = aggr)
+    depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }
 
 #' @export

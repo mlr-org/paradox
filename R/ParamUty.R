@@ -3,6 +3,7 @@
 #' @export
 p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, repr = substitute(default), init, aggr = NULL) {
   assert_function(custom_check, null.ok = TRUE)
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   if (!is.null(custom_check)) {
     custom_check_result = custom_check(1)
     assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")
@@ -12,7 +13,10 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
   } else {
     "NoDefault"
   }
-  Domain(cls = "ParamUty", grouping = "ParamUty", cargo = list(custom_check = custom_check, repr = repr), special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init, aggr = aggr)
+  cargo = list(custom_check = custom_check, repr = repr)
+  cargo$aggr = aggr
+
+  Domain(cls = "ParamUty", grouping = "ParamUty", cargo = cargo, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
 }
 
 #' @export

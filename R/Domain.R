@@ -138,8 +138,7 @@ Domain = function(cls, grouping,
   trafo = NULL,
   depends_expr = NULL,
   storage_type = "list",
-  init,
-  aggr = NULL) {
+  init) {
 
   assert_string(cls)
   assert_string(grouping)
@@ -151,7 +150,6 @@ Domain = function(cls, grouping,
   if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_function(trafo, null.ok = TRUE)
-  assert_function(aggr, null.ok = TRUE, nargs = 1L)
 
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {
@@ -174,8 +172,7 @@ Domain = function(cls, grouping,
     .trafo = list(trafo),
     .requirements = list(parse_depends(depends_expr, parent.frame(2))),
     .init_given = !missing(init),
-    .init = list(if (!missing(init)) init),
-    .aggr = list(aggr)
+    .init = list(if (!missing(init)) init)
   )
 
   class(param) = c(cls, "Domain", class(param))
@@ -220,8 +217,7 @@ empty_domain = data.table(id = character(0), cls = character(0), grouping = char
   .trafo = list(),
   .requirements = list(),
   .init_given = logical(0),
-  .init = list(),
-  .aggr = list()
+  .init = list()
 )
 
 domain_names = names(empty_domain)

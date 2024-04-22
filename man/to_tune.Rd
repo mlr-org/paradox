@@ -5,10 +5,14 @@
 \alias{TuneToken}
 \title{Indicate that a Parameter Value should be Tuned}
 \usage{
-to_tune(...)
+to_tune(..., inner = !is.null(aggr), aggr = NULL)
 }
 \arguments{
 \item{...}{if given, restricts the range to be tuning over, as described above.}
+
+\item{inner}{(\code{logical(1)})\cr
+Whether to create an inner tuning token, i.e. the value will be optimized using the \code{Learner}-internal tuning
+mechanism, such as early stopping for XGBoost.}
 }
 \value{
 A \code{TuneToken} object.
@@ -65,7 +69,8 @@ params = ps(
   uty2 = p_uty(),
   uty3 = p_uty(),
   uty4 = p_uty(),
-  uty5 = p_uty()
+  uty5 = p_uty(),
+  p_inner = p_int(tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))))
 )
 
 params$values = list(
@@ -112,7 +117,10 @@ params$values = list(
   )),
 
   # not all values need to be tuned!
-  uty5 = 100
+  uty5 = 100,
+
+  # Fix value to 100, but use learner-internal tuning
+  p_inner = to_tune(p_fct(100), inner = TRUE))
 )
 
 print(params$values)

@@ -28,7 +28,7 @@
 #'     - special_vals: list col of list
 #'     - default: list col
 #'     - storage_type: character
-#'     - tags: list col of character vectors
+#'     - tags: list col of character vectorssearch
 #' @examples
 #' pset = ParamSet$new(
 #'   params = list(
@@ -88,10 +88,6 @@ ParamSet = R6Class("ParamSet",
 
       if (".trafo" %in% names(paramtbl)) {
         private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
-      }
-
-      if (".aggr" %in% names(paramtbl)) {
-        private$.aggrs = setkeyv(paramtbl[!map_lgl(.aggr, is.null), .(id, aggr = .aggr)], "id")
       }
 
       if (".requirements" %in% names(paramtbl)) {
@@ -265,20 +261,21 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param x (named `list()` of `list()`s)\cr
     #'   The value(s) to be aggregated. Names are parameter values.
-    #'   The aggregation function is selected accordingly for each parameter.
+    #'   The aggregation function is selected based on the parameter.
     #' @return (named `list()`)
     aggr = function(x) {
       assert_list(x, types = "list")
-      assert_permutation(names(x), private$.aggrs$id)
+      aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
+      assert_permutation(names(x), aggrs$id)
       if (!(length(unique(lengths(x))) == 1L)) {
         stopf("The same number of values are required for each parameter")
       }
-      if (nrow(private$.aggrs) && !length(x[[1L]])) {
-        stopf("More than one value is required to aggregate them")
+      if (nrow(aggrs) && !length(x[[1L]])) {
+        stopf("At least one value is required to aggregate them")
       }
 
       imap(x, function(value, .id) {
-        aggr = private$.aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
+        aggr = aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
       })
     },
 
@@ -529,7 +526,6 @@ ParamSet = R6Class("ParamSet",
         .trafo = private$.trafos[id, trafo],
         .requirements = list(if (nrow(depstbl)) transpose_list(depstbl)),  # NULL if no deps
         .init_given = id %in% names(vals),
-        .aggr = private$.aggrs[id, get("aggr")],
         .init = unname(vals[id]))
       ]
 
@@ -564,7 +560,6 @@ ParamSet = R6Class("ParamSet",
 
       result$.__enclos_env__$private$.params = setindexv(private$.params[ids, on = "id"], c("id", "cls", "grouping"))
       result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[ids, on = "id", nomatch = NULL], "id")
-      result$.__enclos_env__$private$.aggrs = setkeyv(private$.aggrs[ids, on = "id", nomatch = NULL], "id")
       result$.__enclos_env__$private$.tags = setkeyv(private$.tags[ids, on = "id", nomatch = NULL], "id")
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
@@ -592,7 +587,6 @@ ParamSet = R6Class("ParamSet",
         result$.__enclos_env__$private$.params = setindexv(private$.params[get_id, on = "id"], c("id", "cls", "grouping"))
         # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
         result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[get_id, on = "id", nomatch = NULL], "id")
-        result$.__enclos_env__$private$.aggrs = setkeyv(private$.aggrs[get_id, on = "id", nomatch = NULL], "id")
         result$.__enclos_env__$private$.tags = setkeyv(private$.tags[get_id, on = "id", nomatch = NULL], "id")
         result$assert_values = FALSE
         result$values = values[match(get_id, names(values), nomatch = 0)]
@@ -744,7 +738,6 @@ ParamSet = R6Class("ParamSet",
       result = copy(private$.params)
       result[, .tags := list(self$tags)]
       result[private$.trafos, .trafo := list(trafo), on = "id"]
-      result[private$.aggrs, .aggr := list(aggr), on = "id"]
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(
@@ -852,7 +845,7 @@ ParamSet = R6Class("ParamSet",
     #' Note that this only refers to the `logscale` flag set during construction, e.g. `p_dbl(logscale = TRUE)`.
     #' If the parameter was set to logscale manually, e.g. through `p_dbl(trafo = exp)`,
     #' this `is_logscale` will be `FALSE`.
-    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & cargo == "logscale", id)),
+    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & map_lgl(cargo, function(x) isTRUE(x$logscale)), id)),
 
     ############################
     # Per-Parameter class properties (S3 method call)
@@ -903,7 +896,6 @@ ParamSet = R6Class("ParamSet",
     .tags = data.table(id = character(0L), tag = character(0), key = "id"),
     .deps = data.table(id = character(0L), on = character(0L), cond = list()),
     .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
-    .aggrs = data.table(id = character(0L), aggr = list(), key = "id"),
 
     get_tune_ps = function(values) {
       values = keep(values, inherits, "TuneToken")
@@ -915,7 +907,7 @@ ParamSet = R6Class("ParamSet",
       names(params) = names(values)
 
       # package-internal S3 fails if we don't call the function indirectly here
-      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(..., param_set = param_set))
+      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(..., param_set = self))
 
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 

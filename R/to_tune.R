@@ -41,6 +41,12 @@
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
 #' @param ... if given, restricts the range to be tuning over, as described above.
+#' @param aggr (`function`)\cr
+#'   The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
+#'   If `NULL`, the default aggregation function of the parameter will be used.\
+#' @param inner (`logical(1)`)\cr
+#'   Whether to create an inner tuning token, i.e. the value will be optimized using the `Learner`-internal tuning
+#'   mechanism, such as early stopping for XGBoost.
 #' @return A `TuneToken` object.
 #' @examples
 #' params = ps(
@@ -54,7 +60,8 @@
 #'   uty2 = p_uty(),
 #'   uty3 = p_uty(),
 #'   uty4 = p_uty(),
-#'   uty5 = p_uty()
+#'   uty5 = p_uty(),
+#'   p_inner = p_int(tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))))
 #' )
 #'
 #' params$values = list(
@@ -101,7 +108,10 @@
 #'   )),
 #'
 #'   # not all values need to be tuned!
-#'   uty5 = 100
+#'   uty5 = 100,
+#'
+#'   # Fix value to 100, but use learner-internal tuning
+#'   p_inner = to_tune(p_fct(100), inner = TRUE))
 #' )
 #'
 #' print(params$values)
@@ -132,7 +142,12 @@
 #' @family ParamSet construction helpers
 #' @aliases TuneToken
 #' @export
-to_tune = function(...) {
+to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
+  test_function(aggr, nargs = 1L, null.ok = TRUE)
+  assert_flag(inner)
+  if (!is.null(aggr)) {
+    assert_true(inner)
+  }
   call = sys.call()
   if (...length() > 3) {
     stop("to_tune() must have zero arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`).")
@@ -180,24 +195,12 @@ to_tune = function(...) {
     content = list(logscale = FALSE)
   }
 
-  set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
-}
+  if (inner) {
+    type = c("InnerTuneToken", type)
+  }
+  if (!is.null(aggr)) content$aggr = aggr
 
-#' @title Create an Inner Tuning Token
-#' @description
-#' Works just like [`to_tune()`], but marks the parameter for inner tuning.
-#' See [`mlr3::Learner`] for more information.
-#' @inheritParams to_tune
-#' @param aggr (`function`)\cr
-#'   The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
-#'   The default is to average the values and round them up.
-#' @export
-in_tune = function(..., aggr = NULL) {
-  test_function(aggr, nargs = 1L, null.ok = TRUE)
-  tt = to_tune(...)
-  if (!is.null(aggr)) tt$content$aggr = aggr
-  tt = set_class(tt, classes = c("InnerTuneToken", class(tt)))
-  return(tt)
+  set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
 }
 
 #' @export
@@ -236,7 +239,7 @@ tunetoken_to_ps = function(tt, param, param_set) {
 }
 
 tunetoken_to_ps.InnerTuneToken = function(tt, param, param_set) {
-  tt$content$aggr = tt$content$aggr %??% get_private(param_set)$.aggrs[list(param$id), "aggr", on = "id"][[1L]][[1L]]
+  tt$content$aggr = tt$content$aggr %??% param_set$params[list(param$id), "cargo", on = "id"][[1L]][[1L]]$aggr
   if ("inner_tuning" %nin% param_set$tags[[param$id]]) {
     stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
   }

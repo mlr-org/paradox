@@ -2,6 +2,7 @@
 #' @rdname Domain
 #' @export
 p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL) {
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   assert_number(tolerance, lower = 0, upper = 0.5)
   # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
   if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
@@ -23,9 +24,13 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
     real_upper = upper
   }
 
+  cargo = list()
+  if (logscale) cargo$logscale = TRUE
+  cargo$aggr = aggr
+
   Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
     storage_type = storage_type,
-    depends_expr = substitute(depends), init = init, cargo = if (logscale) "logscale", aggr = aggr)
+    depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }
 
 #' @export
