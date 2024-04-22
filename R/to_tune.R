@@ -111,7 +111,7 @@
 #'   uty5 = 100,
 #'
 #'   # Fix value to 100, but use learner-internal tuning and default aggregation rule
-#'   p_inner = to_tune(p_fct(100), inner = TRUE))
+#'   p_inner = to_tune(p_fct(100), inner = TRUE)
 #' )
 #'
 #' print(params$values)

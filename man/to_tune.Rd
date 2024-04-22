@@ -13,6 +13,10 @@ to_tune(..., inner = !is.null(aggr), aggr = NULL)
 \item{inner}{(\code{logical(1)})\cr
 Whether to create an inner tuning token, i.e. the value will be optimized using the \code{Learner}-internal tuning
 mechanism, such as early stopping for XGBoost.}
+
+\item{aggr}{(\code{function})\cr
+The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
+If \code{NULL}, the default aggregation function of the parameter (if available) will be used.}
 }
 \value{
 A \code{TuneToken} object.
@@ -119,8 +123,8 @@ params$values = list(
   # not all values need to be tuned!
   uty5 = 100,
 
-  # Fix value to 100, but use learner-internal tuning
-  p_inner = to_tune(p_fct(100), inner = TRUE))
+  # Fix value to 100, but use learner-internal tuning and default aggregation rule
+  p_inner = to_tune(p_fct(100), inner = TRUE)
 )
 
 print(params$values)

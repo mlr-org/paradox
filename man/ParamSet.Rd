@@ -34,7 +34,7 @@ Compact representation as datatable. Col types are:\cr
 \item special_vals: list col of list
 \item default: list col
 \item storage_type: character
-\item tags: list col of character vectorssearch
+\item tags: list col of character vectors
 }
 }
 }
