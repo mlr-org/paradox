@@ -150,7 +150,7 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
   }
   call = sys.call()
   if (...length() > 3) {
-    stop("to_tune() must have zero arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`).")
+    stop("to_tune() must have zero ... arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`) in addition to the inner and aggr arguments.")
   }
   args = list(...)
   if (...length() > 1 || any(names(args) %in% c("lower", "upper"))) {
@@ -176,7 +176,12 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
           check_list(content, names = "unique"),
           check_list(content, names = "unnamed")
         )
-        content = p_fct(levels = content)
+        # for the printer
+        content = if (!is.null(aggr)) {
+          p_fct(levels = content, aggr = aggr)
+        } else {
+          p_fct(levels = content)
+        }
       } else {
         if (inherits(content, "Domain")) {
           bounded = domain_is_bounded(content)
@@ -195,10 +200,10 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
     content = list(logscale = FALSE)
   }
 
+  if (!is.null(aggr) && type != "ObjectTuneToken") content$aggr = aggr
   if (inner) {
     type = c("InnerTuneToken", type)
   }
-  if (!is.null(aggr)) content$aggr = aggr
 
   set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
 }
@@ -239,12 +244,19 @@ tunetoken_to_ps = function(tt, param, param_set) {
 }
 
 tunetoken_to_ps.InnerTuneToken = function(tt, param, param_set) {
-  tt$content$aggr = tt$content$aggr %??% param_set$params[list(param$id), "cargo", on = "id"][[1L]][[1L]]$aggr
-  if ("inner_tuning" %nin% param_set$tags[[param$id]]) {
-    stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
-  }
-  if (is.null(tt$content$aggr)) {
-    stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
+  if (!test_class(tt, "ObjectTuneToken")) {
+    tt$content$aggr = tt$content$aggr %??% param_set$params[list(param$id), "cargo", on = "id"][[1L]][[1L]]$aggr
+    if ("inner_tuning" %nin% param_set$tags[[param$id]]) {
+      stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
+    }
+    if (is.null(tt$content$aggr)) {
+      stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
+    }
+  } else {
+    if ("inner_tuning" %in% tt$content$.tags && "inner_tuning" %nin% param_set$tags[[param$id]]) {
+      stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
+
+    }
   }
   ps = NextMethod()
   ps$tags = map(ps$tags, function(tags) union(tags, "inner_tuning"))
@@ -293,7 +305,8 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, param_set) {
 }
 
 tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_set) {
-  pslike_to_ps(tt$content, tt$call, param)
+  x = pslike_to_ps(tt$content, tt$call, param)
+  return(x)
 }
 
 # Convert something that is `ParamSet`-like (ParamSet or Domain) to a `ParamSet`.

@@ -361,5 +361,6 @@ test_that("inner", {
     a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "inner_tuning")
   )
   param_set$set_values(a = to_tune(inner = TRUE))
+  param_set$set_values(a = to_tune(p_fct(1.2), inner = TRUE))
   expect_class(param_set$values$a, "InnerTuneToken")
 })
