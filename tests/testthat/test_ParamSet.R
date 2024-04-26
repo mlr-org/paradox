@@ -450,16 +450,3 @@ test_that("aggr", {
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list())), "permutation")
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "At least one")
 })
-
-test_that("inner", {
-  param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "inner_tuning"))
-  param_set$set_values(
-    a = to_tune(lower = 1, upper = 2, aggr = function(x) 1.5)
-  )
-  ss = param_set$search_space()
-
-  expect_equal(ss$aggr(list(a = list(1, 2))), list(a = 1.5))
-
-  param_set1 = ps(a = p_dbl(lower = 1, upper = 2))
-  expect_error(param_set1$set_values(a = to_tune(inner = TRUE)), "not eligible")
-})

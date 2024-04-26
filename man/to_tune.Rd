@@ -11,12 +11,12 @@ to_tune(..., inner = !is.null(aggr), aggr = NULL)
 \item{...}{if given, restricts the range to be tuning over, as described above.}
 
 \item{inner}{(\code{logical(1)})\cr
-Whether to create an inner tuning token, i.e. the value will be optimized using the \code{Learner}-internal tuning
-mechanism, such as early stopping for XGBoost.}
+Whether to create an inner tuning token.
+Is set to \code{TRUE} by default if \code{aggr} is provided.}
 
 \item{aggr}{(\code{function})\cr
 The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
-If \code{NULL}, the default aggregation function of the parameter (if available) will be used.}
+If \code{NULL}, the default aggregation function of the parameter (if available) is used.}
 }
 \value{
 A \code{TuneToken} object.
@@ -56,6 +56,11 @@ the range which should be tuned over. The supplied \code{trafo} function is used
 where a single evaluation-time parameter value (e.g. \code{\link[=p_uty]{p_uty()}}) is constructed from multiple tuner-visible
 parameters (which may not be \code{\link[=p_uty]{p_uty()}}). If not one-dimensional, the supplied \code{\link{ParamSet}} should always contain a \verb{$extra_trafo} function,
 which must then always return a \code{list} with a single entry.
+\item **\verb{to_tune(..., aggr = <fn>, inner = <logical>)}: Works like any of the above, but marks the parameter for
+learner-internal (inner) tuning when \code{inner = TRUE}. This does not change the behavior of the learner, but does
+affect the behavior of the tuner, which will then insert the aggregated internally tuned values into the tuning archive.
+For the \code{\link[mlr3tuning:AutoTuner]{AutoTuner}}, this implies that the final model fit will use the internally
+optimized values. This e.g. allows to combine XGBoost's earlys stopping with \code{mlr3}'s tuning packages.
 }
 
 The \code{TuneToken} object's internals are subject to change and should not be relied upon. \code{TuneToken} objects should

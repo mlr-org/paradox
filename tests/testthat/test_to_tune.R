@@ -398,3 +398,51 @@ test_that("logscale in tunetoken", {
   expect_output(print(to_tune(lower = 0, upper = 1, logscale = TRUE)), "range \\[0, 1] \\(log scale\\)")
   expect_output(print(to_tune(inner = TRUE)), "Inner")
 })
+
+
+test_that("inner and aggr", {
+  # no default aggregation function
+  param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "inner_tuning"))
+
+  # correct errors
+  expect_error(param_set$set_values(a = to_tune(inner = TRUE)), "Provide an aggregation")
+  expect_error(param_set$set_values(a = to_tune(inner = FALSE, aggr = function(x) 1)))
+
+
+  # full tune token + inner
+  expect_equal(
+    param_set$set_values(a = to_tune(aggr = function(x) -99))$search_space()$aggr(list(a = list(1, 2, 3))),
+    list(a = -99)
+  )
+
+  # logscale + inner: now allowed
+  expect_error(
+    param_set$set_values(a = to_tune(logscale = TRUE, aggr = function(x) -99)),
+    "inner tuning"
+  )
+
+  # other trafos + inner: not allowed
+  expect_error(
+    param_set$set_values(a = to_tune(ps(a = p_dbl(0, 1), .extra_trafo = function(x) 1L), aggr = function(x) -99)),
+    "inner tuning"
+  )
+
+  # param set + inner
+
+  # range + inner
+  param_set$set_values(a = to_tune(lower = 1, upper = 2, aggr = function(x) 1.5))
+  expect_equal(s$search_space()$aggr(list(a = list(1, 2))), list(a = 1.5))
+
+  # full + inner
+
+  # domain + inner
+
+
+  ## with default aggregation function
+
+  # default aggregation function is used when not overwritten
+
+
+  # can overwrite existing aggregation function
+  # check all cases
+})

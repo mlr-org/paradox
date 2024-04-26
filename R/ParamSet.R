@@ -154,7 +154,8 @@ ParamSet = R6Class("ParamSet",
     #' @param any_tags (`character()`). See `$ids()`.
     #' @param type (`character(1)`)\cr
     #'   Return values `"with_token"` (i.e. all values),
-    #    `"without_token"` (all values that are not [`TuneToken`] objects) or `"only_token"` (only [`TuneToken`] objects)?
+    #    `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects)
+    #    or `"with_inner"` (all values that are no not `InnerTuneToken`)?
     #' @param check_required (`logical(1)`)\cr
     #'   Check if all required parameters are set?
     #' @param remove_dependencies (`logical(1)`)\cr
@@ -162,7 +163,7 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
-      assert_choice(type, c("with_token", "without_token", "only_token"))
+      assert_choice(type, c("with_token", "without_token", "only_token", "inner_or_without_token"))
 
       assert_flag(check_required)
 
@@ -173,6 +174,8 @@ ParamSet = R6Class("ParamSet",
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
         values = keep(values, is, "TuneToken")
+      } else if (type == "with_inner") {
+        values = keep(values, is, "InnerTuneToken")
       }
 
       if (check_required) {
