@@ -54,7 +54,7 @@ domain_check.ParamInt = function(param, values) {
 
 #' @export
 domain_sanitize.ParamInt = function(param, values) {
-  as.list(as.integer(as.numeric(values) + 0.5))
+  as.list(as.integer(round(as.numeric(values))))
 }
 
 #' @export
