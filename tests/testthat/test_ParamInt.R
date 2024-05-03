@@ -55,3 +55,29 @@ test_that("assigning integer value results in int", {
   expect_error({p$values$x = 1e-2}, "be of type.*integerish")
 
 })
+
+test_that("integer params are not corrected to the wrong value", {
+  param_set = ps(a = p_int())
+  param_set$values$a = 100
+  expect_identical(param_set$values$a, 100L)
+  param_set$values$a = -100
+  expect_identical(param_set$values$a, -100L)
+
+})
+
+test_that("integer params are not corrected to the wrong value", {
+  param_set = ps(a = p_int(tolerance = 0.4))
+  param_set$values$a = 100.4
+  expect_identical(param_set$values$a, 100L)
+  param_set$values$a = 100.6
+  expect_identical(param_set$values$a, 101L)
+  expect_error({param_set$values$a = 100.41}, "Must be of type.*integerish.*not.*double")
+  expect_error({param_set$values$a = 100.59}, "Must be of type.*integerish.*not.*double")
+
+  param_set$values$a = -100.4
+  expect_identical(param_set$values$a, -100L)
+  param_set$values$a = -100.6
+  expect_identical(param_set$values$a, -101L)
+  expect_error({param_set$values$a = -100.41}, "Must be of type.*integerish.*not.*double")
+  expect_error({param_set$values$a = -100.59}, "Must be of type.*integerish.*not.*double")
+})
