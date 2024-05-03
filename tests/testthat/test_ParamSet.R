@@ -305,6 +305,17 @@ test_that("required tag, empty param set (#219)", {
   expect_identical(ps$ids(tags = "required"), character(0))
 })
 
+test_that("setting empty tags on empty paramset", {
+  param_set = ps()
+  nl <- structure(list(), names = character(0))
+  expect_identical(param_set$tags, nl)
+  param_set$tags = nl
+  expect_identical(param_set$tags, nl)
+  param_set$tags = list()
+  expect_identical(param_set$tags, nl)
+
+})
+
 test_that("paramset clones properly", {
   ps = ParamSet_legacy$new()
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))
