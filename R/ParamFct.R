@@ -4,9 +4,10 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
-  assert_function(in_tune_fn, null.ok = TRUE, args = c("domain", "param_set"), nargs = 2L)
-  if ("inner_tuning" %nin% tags && !is.null(in_tune_fn)) {
-    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'inner_tuning'")
+  if ("inner_tuning" %in% tags) {
+    assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
+  } else {
+    assert_true(is.null(in_tune_fn))
   }
   if (!is.character(levels)) {
     # if the "levels" argument is not a character vector, then

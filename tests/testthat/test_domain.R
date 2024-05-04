@@ -363,7 +363,7 @@ test_that("inner", {
   param_set = ps(
     a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper)
   )
-  param_set$set_values(a = to_tune(inner = TRUE))
+  param_set$set_values(a = to_tune(inner = TRUE, aggr = function(x) round(mean(unlist(x)))))
   expect_class(param_set$values$a, "InnerTuneToken")
   expect_error(param_set$set_values(a = to_tune(inner = TRUE, logscale = TRUE)), "Cannot combine")
 

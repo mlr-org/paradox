@@ -45,7 +45,7 @@
 #'   Whether to create an `InnerTuneToken`.
 #'   This is only available for parameters tagged with `"inner_tuning"`.
 #' @param aggr (`function`)\cr
-#'   Function with one argument, which is a list of parameter values.
+#'   Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
 #'   This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.
 #'   If none specified, the default aggregation function of the parameter will be used.
 #' @return A `TuneToken` object.
@@ -194,7 +194,7 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
 
   if (inner) {
     if (type == "ObjectTuneToken") {
-      stop("Inner tuning can currently not be combined with ParamSet or Domain object.")
+      stop("Inner tuning can currently not be combined with ParamSet or Domain object, specify lower and upper bounds, e.g. to_tune(upper = 100)")
     }
     if (isTRUE(content$logscale)) {
       stop("Cannot combine logscale transformation with inner tuning.")

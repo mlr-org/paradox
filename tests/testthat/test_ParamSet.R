@@ -448,7 +448,7 @@ test_that("aggr", {
   expect_error(param_set$aggr(1), "list")
   expect_error(param_set$aggr(list(1)), "list")
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list())), "permutation")
-  expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "At least one")
+  expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "but there are no")
 })
 
 test_that("convert_inner_tune_tokens", {

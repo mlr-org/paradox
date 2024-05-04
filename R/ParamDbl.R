@@ -2,9 +2,10 @@
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
-  assert_function(in_tune_fn, null.ok = "inner_tuning" %nin% tags, args = c("domain", "param_set"), nargs = 2L)
-  if ("inner_tuning" %nin% tags && !is.null(in_tune_fn)) {
-    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'inner_tuning'")
+  if ("inner_tuning" %in% tags) {
+    assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
+  } else {
+    assert_true(is.null(in_tune_fn))
   }
   assert_number(tolerance, lower = 0)
   assert_number(lower)
@@ -26,7 +27,6 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
   if (logscale) cargo$logscale = TRUE
   cargo$aggr = aggr
   if (!is.null(in_tune_fn)) cargo$in_tune_fn = in_tune_fn
-
   Domain(cls = "ParamDbl", grouping = "ParamDbl", lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo, storage_type = "numeric",
     depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }

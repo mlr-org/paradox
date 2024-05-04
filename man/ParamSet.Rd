@@ -345,7 +345,7 @@ In almost all cases, the default \code{param_set = self} should be used.}
 \if{html}{\out{<a id="method-ParamSet-aggr"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-aggr}{}}}
 \subsection{Method \code{aggr()}}{
-Aggregate parameter values according to the aggregation rules.
+Aggregate parameter values according to their aggregation rules.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$aggr(x)}\if{html}{\out{</div>}}
 }
@@ -367,12 +367,14 @@ The aggregation function is selected based on the parameter.}
 \if{html}{\out{<a id="method-ParamSet-convert_inner_tune_tokens"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-convert_inner_tune_tokens}{}}}
 \subsection{Method \code{convert_inner_tune_tokens()}}{
-Convert all \code{InnerTuneToken}s to specific parameter values.
-These transformations are defined by the \code{in_tune_fn} arguments of the \code{\link{Domain}} objects.
+Convert all \code{InnerTuneToken}s to parameter values as is defined by their \code{in_tune_fn}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$convert_inner_tune_tokens()}\if{html}{\out{</div>}}
 }
 
+\subsection{Returns}{
+(named \code{list()})
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSet-test_constraint"></a>}}

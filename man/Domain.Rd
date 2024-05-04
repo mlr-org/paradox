@@ -149,6 +149,14 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
 value upon construction.}
 
+\item{aggr}{(\code{function})\cr
+Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"inner_tuning"}.
+Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.}
+
+\item{in_tune_fn}{(\verb{function(domain, param_set)})\cr
+Function that converters a \code{Domain} object into a parameter value.
+Can onlye be given for parameters tagged with \code{"inner_tuning"}.}
+
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
 converts the names (if not given: \code{as.character()} of the values) of the \code{levels} argument to the values.
@@ -164,6 +172,9 @@ Defaults to \code{NULL}, which means that no check is performed.}
 \item{repr}{(\code{language})\cr
 Symbol to use to represent the value given in \code{default}.
 The \code{deparse()} of this object is used when printing the domain, in some cases.}
+}
+\value{
+A \code{Domain} object.
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct
@@ -228,6 +239,19 @@ print(grid)
 
 # ... but get transformed to integers.
 print(grid$transpose())
+
+
+# inner tuning
+
+param_set = ps(
+  iters = p_int(0, Inf, tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))),
+    in_tune_fn = function(domain, param_set) domain$upper)
+)
+param_set$set_values(
+  iters = to_tune(upper = 100, inner = TRUE)
+)
+param_set$convert_inner_tune_tokens()
+param_set$aggr(list(iters = list(1, 2, 3)))
 
 }
 \seealso{

@@ -260,37 +260,42 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #'
-    #' Aggregate parameter values according to the aggregation rules.
+    #' Aggregate parameter values according to their aggregation rules.
     #'
     #' @param x (named `list()` of `list()`s)\cr
     #'   The value(s) to be aggregated. Names are parameter values.
     #'   The aggregation function is selected based on the parameter.
+    #'
     #' @return (named `list()`)
     aggr = function(x) {
       assert_list(x, types = "list")
       aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
       assert_permutation(names(x), aggrs$id)
-      if (!(length(unique(lengths(x))) == 1L)) {
-        stopf("The same number of values are required for each parameter")
+      if (!nrow(aggrs)) {
+        return(named_list())
       }
-      if (nrow(aggrs) && !length(x[[1L]])) {
-        stopf("At least one value is required to aggregate them")
-      }
-
       imap(x, function(value, .id) {
+        if (!length(value)) {
+          stopf("Trying to aggregate values of parameters '%s', but there are no values", .id)
+        }
         aggr = aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
       })
     },
 
     #' @description
-    #' Convert all `InnerTuneToken`s to specific parameter values.
-    #' These transformations are defined by the `in_tune_fn` arguments of the [`Domain`] objects.
+    #' Convert all `InnerTuneToken`s to parameter values as is defined by their `in_tune_fn`.
+    #'
+    #' @return (named `list()`)
     convert_inner_tune_tokens = function() {
       inner_tune_tokens = self$get_values(type = "with_inner")
       inner_tune_ps = private$get_tune_ps(inner_tune_tokens)
 
       imap(inner_tune_ps$domains, function(token, .id) {
-        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn(token)
+        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
+        if (!is.function(converter)) {
+          stopf("No converter exists for InnerTuneToken of parameters '%s'", .id)
+        }
+        converter(token)
       })
     },
 

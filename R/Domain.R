@@ -63,6 +63,14 @@
 #' @param init (`any`)\cr
 #'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
 #'   value upon construction.
+#' @param aggr (`function`)\cr
+#'   Default aggregation function for a parameter. Can only be given for parameters tagged with `"inner_tuning"`.
+#'   Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
+#' @param in_tune_fn (`function(domain, param_set)`)\cr
+#'   Function that converters a `Domain` object into a parameter value.
+#'   Can onlye be given for parameters tagged with `"inner_tuning"`.
+#'
+#' @return A `Domain` object.
 #'
 #' @details
 #' Although the `levels` values of a constructed `p_fct()` will always be `character`-valued, the `p_fct` function admits
@@ -114,6 +122,19 @@
 #'
 #' # ... but get transformed to integers.
 #' print(grid$transpose())
+#'
+#'
+#' # inner tuning
+#'
+#' param_set = ps(
+#'   iters = p_int(0, Inf, tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))),
+#'     in_tune_fn = function(domain, param_set) domain$upper)
+#' )
+#' param_set$set_values(
+#'   iters = to_tune(upper = 100, inner = TRUE)
+#' )
+#' param_set$convert_inner_tune_tokens()
+#' param_set$aggr(list(iters = list(1, 2, 3)))
 #'
 #' @family ParamSet construction helpers
 #' @name Domain

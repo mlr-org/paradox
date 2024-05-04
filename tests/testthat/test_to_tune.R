@@ -427,22 +427,36 @@ test_that("inner and aggr", {
     "can currently not be combined"
   )
 
-  # param set + inner
-
   # range + inner
   param_set$set_values(a = to_tune(lower = 1.2, upper = 1.3, aggr = function(x) 1.5))
   expect_equal(param_set$search_space()$aggr(list(a = list(1, 2))), list(a = 1.5))
+  expect_equal(param_set$convert_inner_tune_tokens(), list(a = 1.3))
 
   # full + inner
+  param_set$set_values(a = to_tune(inner = TRUE, aggr = function(x) 1.5))
+  expect_equal(param_set$convert_inner_tune_tokens(), list(a = 2))
 
   # domain + inner
-
+  expect_error(
+    param_set$set_values(a = to_tune(p_dbl(1.21, 1.22), aggr = function(x) 1.5, inner = TRUE)),
+    "specify lower and upper"
+  )
 
   ## with default aggregation function
 
-  # default aggregation function is used when not overwritten
+  # param set + inner
+  param_set = ps(a = p_int(lower = 1, upper = 10000, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper,
+    aggr = function(x) max(unlist(x))))
 
+  # default aggregation function is used when not overwritten
+  param_set$set_values(
+    a = to_tune(inner = TRUE)
+  )
+  expect_equal(param_set$search_space()$aggr(list(a = list(1, 2, 3))), list(a = 3))
 
   # can overwrite existing aggregation function
-  # check all cases
+  param_set$set_values(
+    a = to_tune(inner = TRUE, aggr = function(x) -60)
+  )
+  expect_equal(param_set$search_space()$aggr(list(a = list(1, 2, 3))), list(a = -60))
 })
