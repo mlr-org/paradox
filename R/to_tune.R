@@ -37,21 +37,17 @@
 #'   where a single evaluation-time parameter value (e.g. [`p_uty()`]) is constructed from multiple tuner-visible
 #'   parameters (which may not be [`p_uty()`]). If not one-dimensional, the supplied [`ParamSet`] should always contain a `$extra_trafo` function,
 #'   which must then always return a `list` with a single entry.
-#' * **`to_tune(..., aggr = <fn>, inner = <logical>)`: Works like any of the above, but marks the parameter for
-#'   learner-internal (inner) tuning when `inner = TRUE`. This does not change the behavior of the learner, but does
-#'   affect the behavior of the tuner, which will then insert the aggregated internally tuned values into the tuning archive.
-#'   For the [`AutoTuner`][mlr3tuning::AutoTuner], this implies that the final model fit will use the internally
-#'   optimized values. This e.g. allows to combine XGBoost's earlys stopping with `mlr3`'s tuning packages.
 #'
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
 #' @param ... if given, restricts the range to be tuning over, as described above.
-#' @param aggr (`function`)\cr
-#'   The aggregator function that determines how to aggregate a list of parameter values into a single parameter value.
-#'   If `NULL`, the default aggregation function of the parameter (if available) is used.
 #' @param inner (`logical(1)`)\cr
-#'   Whether to create an inner tuning token.
-#'   Is set to `TRUE` by default if `aggr` is provided.
+#'   Whether to create an `InnerTuneToken`.
+#'   This is only available for parameters tagged with `"inner_tuning"`.
+#' @param aggr (`function`)\cr
+#'   Function with one argument, which is a list of parameter values.
+#'   This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.
+#'   If none specified, the default aggregation function of the parameter will be used.
 #' @return A `TuneToken` object.
 #' @examples
 #' params = ps(
@@ -65,8 +61,7 @@
 #'   uty2 = p_uty(),
 #'   uty3 = p_uty(),
 #'   uty4 = p_uty(),
-#'   uty5 = p_uty(),
-#'   p_inner = p_int(tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))))
+#'   uty5 = p_uty()
 #' )
 #'
 #' params$values = list(
@@ -113,10 +108,7 @@
 #'   )),
 #'
 #'   # not all values need to be tuned!
-#'   uty5 = 100,
-#'
-#'   # Fix value to 100, but use learner-internal tuning and default aggregation rule
-#'   p_inner = to_tune(p_fct(100), inner = TRUE)
+#'   uty5 = 100
 #' )
 #'
 #' print(params$values)
@@ -148,22 +140,16 @@
 #' @aliases TuneToken
 #' @export
 to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
-  test_function(aggr, nargs = 1L, null.ok = TRUE)
   assert_flag(inner)
   if (!is.null(aggr)) {
     assert_true(inner)
   }
+  assert_function(aggr, nargs = 1L, null.ok = TRUE)
   call = sys.call()
   if (...length() > 3) {
-    stop("to_tune() must have zero ... arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), up to three arguments (any of `lower`, `upper`, `logscale`).")
+    stop("to_tune() must have zero arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`).")
   }
   args = list(...)
-
-  if (isTRUE(args$logscale) && inner) {
-    # we could allow users to give an inverse transformation
-    stopf("Parameter transformations and inner tuning are currently not supported")
-  }
-
   if (...length() > 1 || any(names(args) %in% c("lower", "upper"))) {
     # Two arguments: tune over a range
     type = "RangeTuneToken"
@@ -180,32 +166,22 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
       # one argument: tune over an object. that object can be something
       # that can be converted to a ParamSet (ParamSet itself, Param, or Domain),
       # otherwise it must be something that can be converted to a ParamFct Domain.
-      if (!test_multi_class(content, c("ParamSet", "Domain"))) {
+      if (!test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
         assert(
           check_atomic_vector(content, names = "unnamed"),
           check_atomic_vector(content, names = "unique"),
           check_list(content, names = "unique"),
           check_list(content, names = "unnamed")
         )
-        # for the printer
-        content = if (!is.null(aggr)) {
-          p_fct(levels = content, aggr = aggr)
-        } else {
-          p_fct(levels = content)
-        }
+        content = p_fct(levels = content)
       } else {
         if (inherits(content, "Domain")) {
           bounded = domain_is_bounded(content)
-          has_trafo = !is.null(content$.trafo)
         } else {
           bounded = content$all_bounded
-          has_trafo = content$has_trafo
         }
         if (!bounded) {
           stop("tuning range must be bounded.")
-        }
-        if (has_trafo && inner) {
-          stop("Parameter transformations and inner tuning are currently not supported")
         }
       }
       type = "ObjectTuneToken"
@@ -216,9 +192,16 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
     content = list(logscale = FALSE)
   }
 
-  # for object tune token, the aggr was already consumed in the p_fct() call above
-  if (!is.null(aggr) && type != "ObjectTuneToken") content$aggr = aggr
-  if (inner) type = c("InnerTuneToken", type)
+  if (inner) {
+    if (type == "ObjectTuneToken") {
+      stop("Inner tuning can currently not be combined with ParamSet or Domain object.")
+    }
+    if (isTRUE(content$logscale)) {
+      stop("Cannot combine logscale transformation with inner tuning.")
+    }
+    type = c("InnerTuneToken", type)
+    content$aggr = aggr
+  }
 
   set_class(list(content = content, call = deparse1(call)), c(type, "TuneToken"))
 }
@@ -228,6 +211,13 @@ print.FullTuneToken = function(x, ...) {
   catf("Tuning over:\n<entire parameter range%s>\n",
     if (isTRUE(x$content$logscale)) " (log scale)" else "")
 }
+
+#' @export
+print.InnerTuneToken = function(x, ...) {
+  cat("Inner ")
+  NextMethod()
+}
+
 
 #' @export
 print.RangeTuneToken = function(x, ...) {
@@ -241,12 +231,6 @@ print.ObjectTuneToken = function(x, ...) {
   print(x$content)
 }
 
-#' @export
-print.InnerTuneToken = function(x, ...) {
-  cat("Inner ")
-  NextMethod()
-}
-
 # tunetoken_to_ps: Convert a `TuneToken` to a `ParamSet` that tunes over this.
 # Needs the corresponding `Domain` to which the `TuneToken` refers, both to
 # get the range (e.g. if `to_tune()` was used) and to verify that the `TuneToken`
@@ -254,53 +238,27 @@ print.InnerTuneToken = function(x, ...) {
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
 # param is a data.table that is potentially modified by reference using data.table set() methods.
-tunetoken_to_ps = function(tt, param, param_set) {
+tunetoken_to_ps = function(tt, param) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.InnerTuneToken = function(tt, param, param_set) {
-  if (!test_class(tt, "ObjectTuneToken")) {
-    tt$content$aggr = tt$content$aggr %??% param_set$params[list(param$id), "cargo", on = "id"][[1L]][[1L]]$aggr
-    if ("inner_tuning" %nin% param_set$tags[[param$id]]) {
-      stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
-    }
-    if (is.null(tt$content$aggr)) {
-      stopf("%s (%s): Provide an aggregation function for inner tuning.", tt$call, param$id)
-    }
-  } else {
-    if ("inner_tuning" %in% tt$content$.tags && "inner_tuning" %nin% param_set$tags[[param$id]]) {
-      stopf("%s (%s): Parameter not eligible for inner tuning", tt$call, param$id)
-
-    }
-  }
-  ps = NextMethod()
-  ps$tags = map(ps$tags, function(tags) union(tags, "inner_tuning"))
-  return(ps)
-}
-
-tunetoken_to_ps.FullTuneToken = function(tt, param, param_set) {
+tunetoken_to_ps.FullTuneToken = function(tt, param) {
   if (!domain_is_bounded(param)) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
     if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
-
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale, aggr = tt$content$aggr), tt$call), param, param_set)
+    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param)
   } else {
     if (!is.null(tt$content$aggr)) {
       # https://github.com/Rdatatable/data.table/issues/6104
-      param$cargo[[1L]][[1L]] = if (is.null(param$cargo[[1L]])) {
-        list(aggr = tt$content$aggr)
-      } else {
-        insert_named(param$cargo[[1L]], list(aggr = tt$content$aggr))
-      }
+      param$cargo[[1L]] = list(insert_named(param$cargo[[1L]], list(aggr = tt$content$aggr)))
     }
-    pslike_to_ps(param, tt$call, param, param_set)
+    pslike_to_ps(param, tt$call, param)
   }
 }
 
-
-tunetoken_to_ps.RangeTuneToken = function(tt, param, param_set) {
+tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
@@ -322,13 +280,11 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, param_set) {
   # create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about :-/
   constructor = switch(param$cls, ParamInt = p_int, ParamDbl = p_dbl,
     stopf("%s: logscale for parameter %s of class %s not supported", tt$call, param$id, param$class))
-  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale,
-    aggr = tt$content$aggr)
-
+  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale, aggr = tt$content$aggr)
   pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param, param_set) {
+tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 

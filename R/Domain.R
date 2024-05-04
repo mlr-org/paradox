@@ -63,11 +63,6 @@
 #' @param init (`any`)\cr
 #'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
 #'   value upon construction.
-#' @param aggr (`function`)\cr
-#'   Function with one argument, which is a list of parameter values.
-#'   This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.
-#'
-#' @return A `Domain` object.
 #'
 #' @details
 #' Although the `levels` values of a constructed `p_fct()` will always be `character`-valued, the `p_fct` function admits

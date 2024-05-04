@@ -1,10 +1,13 @@
 
 #' @rdname Domain
 #' @export
-p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, translator = NULL) {
+p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
   assert_number(tolerance, lower = 0, upper = 0.5)
-  assert_function(translator, null.ok = TRUE, args = c("domain", "param_set"), nargs = 2L)
+  assert_function(in_tune_fn, null.ok = TRUE, args = c("domain", "param_set"), nargs = 2L)
+  if ("inner_tuning" %nin% tags && !is.null(in_tune_fn)) {
+    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'inner_tuning'")
+  }
   # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
   if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
   if (!isTRUE(is.infinite(upper))) assert_int(upper, tol = 1e-300) else assert_number(upper)
@@ -28,7 +31,7 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
   cargo = list()
   if (logscale) cargo$logscale = TRUE
   cargo$aggr = aggr
-  if (!is.null(translator)) cargo$translator = translator
+  if (!is.null(in_tune_fn)) cargo$in_tune_fn = in_tune_fn
 
   Domain(cls = cls, grouping = cls, lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo,
     storage_type = storage_type,

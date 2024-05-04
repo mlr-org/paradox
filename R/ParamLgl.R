@@ -1,9 +1,16 @@
 #' @rdname Domain
 #' @export
-p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL) {
+p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
+  assert_function(in_tune_fn, null.ok = TRUE, args = c("domain", "param_set"), nargs = 2L)
+  if ("inner_tuning" %nin% tags && !is.null(in_tune_fn)) {
+    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'inner_tuning'")
+  }
+
+  cargo = c(aggr = aggr, in_tune_fn = in_tune_fn)
+  cargo = if (length(cargo)) cargo
   Domain(cls = "ParamLgl", grouping = "ParamLgl", levels = c(TRUE, FALSE), special_vals = special_vals, default = default,
-    tags = tags, trafo = trafo, storage_type = "logical", depends_expr = substitute(depends), init = init, cargo = if (!is.null(aggr)) list(aggr = aggr))
+    tags = tags, trafo = trafo, storage_type = "logical", depends_expr = substitute(depends), init = init, cargo = cargo)
 }
 
 #' @export

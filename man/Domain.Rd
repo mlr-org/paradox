@@ -21,7 +21,8 @@ p_dbl(
   trafo = NULL,
   logscale = FALSE,
   init,
-  aggr = NULL
+  aggr = NULL,
+  in_tune_fn = NULL
 )
 
 p_fct(
@@ -32,7 +33,8 @@ p_fct(
   depends = NULL,
   trafo = NULL,
   init,
-  aggr = NULL
+  aggr = NULL,
+  in_tune_fn = NULL
 )
 
 p_int(
@@ -46,7 +48,8 @@ p_int(
   trafo = NULL,
   logscale = FALSE,
   init,
-  aggr = NULL
+  aggr = NULL,
+  in_tune_fn = NULL
 )
 
 p_lgl(
@@ -56,7 +59,8 @@ p_lgl(
   depends = NULL,
   trafo = NULL,
   init,
-  aggr = NULL
+  aggr = NULL,
+  in_tune_fn = NULL
 )
 
 p_uty(
@@ -68,7 +72,8 @@ p_uty(
   trafo = NULL,
   repr = substitute(default),
   init,
-  aggr = NULL
+  aggr = NULL,
+  in_tune_fn = NULL
 )
 }
 \arguments{
@@ -144,10 +149,6 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
 value upon construction.}
 
-\item{aggr}{(\code{function})\cr
-Function with one argument, which is a list of parameter values.
-This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.}
-
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
 converts the names (if not given: \code{as.character()} of the values) of the \code{levels} argument to the values.
@@ -163,9 +164,6 @@ Defaults to \code{NULL}, which means that no check is performed.}
 \item{repr}{(\code{language})\cr
 Symbol to use to represent the value given in \code{default}.
 The \code{deparse()} of this object is used when printing the domain, in some cases.}
-}
-\value{
-A \code{Domain} object.
 }
 \description{
 A \code{Domain} object is a representation of a single dimension of a \code{\link{ParamSet}}. \code{Domain} objects are used to construct

@@ -163,7 +163,7 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
-      assert_choice(type, c("with_token", "without_token", "only_token", "inner_or_without_token"))
+      assert_choice(type, c("with_token", "without_token", "only_token", "with_inner"))
 
       assert_flag(check_required)
 
@@ -283,6 +283,18 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #' Convert all `InnerTuneToken`s to specific parameter values.
+    #' These transformations are defined by the `in_tune_fn` arguments of the [`Domain`] objects.
+    convert_inner_tune_tokens = function() {
+      inner_tune_tokens = self$get_values(type = "with_inner")
+      inner_tune_ps = private$get_tune_ps(inner_tune_tokens)
+
+      imap(inner_tune_ps$domains, function(token, .id) {
+        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn(token)
+      })
+    },
+
+    #' @description
     #' \pkg{checkmate}-like test-function. Takes a named list.
     #' Return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
@@ -349,6 +361,17 @@ ParamSet = R6Class("ParamSet",
         }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
         if (!isTRUE(tunecheck)) return(tunecheck)
       }
+
+      xs_innertune = keep(xs, is, "InnerTuneToken")
+      walk(names(xs_innertune), function(pid) {
+        if ("inner_tuning" %nin% self$tags[[pid]]) {
+          stopf("Trying to assign InnerTuneToken to parameter '%s' which is not tagged with 'inner_tuning'.", pid)
+        }
+        if (is.null(xs[[pid]]$content$aggr) && is.null(private$.params[pid, "cargo", on = "id"][[1L]][[1L]]$aggr)) {
+          stopf("Trying to set parameter '%s' to InnerTuneToken, but no aggregation function is available.", pid)
+        }
+      })
+
 
       # check each parameter group's feasibility
       xs_nontune = discard(xs, inherits, "TuneToken")
@@ -910,7 +933,7 @@ ParamSet = R6Class("ParamSet",
       names(params) = names(values)
 
       # package-internal S3 fails if we don't call the function indirectly here
-      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(..., param_set = self))
+      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(...))
 
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 
