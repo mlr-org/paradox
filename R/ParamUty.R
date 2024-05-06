@@ -20,7 +20,7 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
   }
   cargo = list(custom_check = custom_check, repr = repr)
   cargo$aggr = aggr
-  cargo$internal_tune_fn = in_tune_fn
+  cargo$in_tune_fn = in_tune_fn
 
   Domain(cls = "ParamUty", grouping = "ParamUty", cargo = cargo, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
 }
