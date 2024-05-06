@@ -173,7 +173,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
 \item \href{#method-ParamSet-aggr}{\code{ParamSet$aggr()}}
-\item \href{#method-ParamSet-convert_inner_tune_tokens}{\code{ParamSet$convert_inner_tune_tokens()}}
+\item \href{#method-ParamSet-convert_internal_tune_tokens}{\code{ParamSet$convert_internal_tune_tokens()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
 \item \href{#method-ParamSet-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
 \item \href{#method-ParamSet-check}{\code{ParamSet$check()}}
@@ -364,12 +364,12 @@ The aggregation function is selected based on the parameter.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-ParamSet-convert_inner_tune_tokens"></a>}}
-\if{latex}{\out{\hypertarget{method-ParamSet-convert_inner_tune_tokens}{}}}
-\subsection{Method \code{convert_inner_tune_tokens()}}{
-Convert all \code{InnerTuneToken}s to parameter values as is defined by their \code{in_tune_fn}.
+\if{html}{\out{<a id="method-ParamSet-convert_internal_tune_tokens"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-convert_internal_tune_tokens}{}}}
+\subsection{Method \code{convert_internal_tune_tokens()}}{
+Convert all \code{InternalTuneToken}s to parameter values as is defined by their \code{in_tune_fn}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$convert_inner_tune_tokens()}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$convert_internal_tune_tokens()}\if{html}{\out{</div>}}
 }
 
 \subsection{Returns}{

@@ -5,18 +5,18 @@
 \alias{TuneToken}
 \title{Indicate that a Parameter Value should be Tuned}
 \usage{
-to_tune(..., inner = !is.null(aggr), aggr = NULL)
+to_tune(..., internal = !is.null(aggr), aggr = NULL)
 }
 \arguments{
 \item{...}{if given, restricts the range to be tuning over, as described above.}
 
-\item{inner}{(\code{logical(1)})\cr
-Whether to create an \code{InnerTuneToken}.
-This is only available for parameters tagged with \code{"inner_tuning"}.}
+\item{internal}{(\code{logical(1)})\cr
+Whether to create an \code{InternalTuneToken}.
+This is only available for parameters tagged with \code{"internal_tuning"}.}
 
 \item{aggr}{(\code{function})\cr
 Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
-This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.
+This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
 If none specified, the default aggregation function of the parameter will be used.}
 }
 \value{

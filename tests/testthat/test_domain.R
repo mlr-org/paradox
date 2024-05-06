@@ -348,25 +348,25 @@ test_that("$extra_trafo flag works", {
   expect_false(search_space$has_extra_trafo)
 })
 
-test_that("inner", {
-  expect_error(to_tune(1, inner = TRUE), "can currently")
-  it = to_tune(upper = 1, inner = TRUE)
-  expect_class(it, "InnerTuneToken")
+test_that("internal", {
+  expect_error(to_tune(1, internal = TRUE), "can currently")
+  it = to_tune(upper = 1, internal = TRUE)
+  expect_class(it, "InternalTuneToken")
   expect_class(it, "RangeTuneToken")
   expect_null(it$aggr)
 
-  it1 = to_tune(upper = 1, inner = TRUE)
+  it1 = to_tune(upper = 1, internal = TRUE)
   expect_equal(it1$content, it$content)
 
   it1 = to_tune(aggr = function(x) min(unlist(x)))
   expect_equal(it1$content$aggr(list(1, 2)), 1)
   param_set = ps(
-    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper)
+    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper)
   )
-  param_set$set_values(a = to_tune(inner = TRUE, aggr = function(x) round(mean(unlist(x)))))
-  expect_class(param_set$values$a, "InnerTuneToken")
-  expect_error(param_set$set_values(a = to_tune(inner = TRUE, logscale = TRUE)), "Cannot combine")
+  param_set$set_values(a = to_tune(internal = TRUE, aggr = function(x) round(mean(unlist(x)))))
+  expect_class(param_set$values$a, "InternalTuneToken")
+  expect_error(param_set$set_values(a = to_tune(internal = TRUE, logscale = TRUE)), "Cannot combine")
 
-  expect_error(p_dbl(lower = 1, upper = 2, tags = "inner_tuning", "in_tune_fn"))
+  expect_error(p_dbl(lower = 1, upper = 2, tags = "internal_tuning", "in_tune_fn"))
 })
 

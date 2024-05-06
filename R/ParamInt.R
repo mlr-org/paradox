@@ -4,13 +4,13 @@
 p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
   assert_number(tolerance, lower = 0, upper = 0.5)
-  if ("inner_tuning" %in% tags) {
+  if ("internal_tuning" %in% tags) {
     assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
   } else {
     assert_true(is.null(in_tune_fn))
   }
-  if ("inner_tuning" %nin% tags && !is.null(in_tune_fn)) {
-    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'inner_tuning'")
+  if ("internal_tuning" %nin% tags && !is.null(in_tune_fn)) {
+    stopf("Cannot only provide 'in_tune_fn' when parameter is tagged with 'internal_tuning'")
   }
   # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
   if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)

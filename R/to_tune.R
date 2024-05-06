@@ -41,12 +41,12 @@
 #' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
 #' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
 #' @param ... if given, restricts the range to be tuning over, as described above.
-#' @param inner (`logical(1)`)\cr
-#'   Whether to create an `InnerTuneToken`.
-#'   This is only available for parameters tagged with `"inner_tuning"`.
+#' @param internal (`logical(1)`)\cr
+#'   Whether to create an `InternalTuneToken`.
+#'   This is only available for parameters tagged with `"internal_tuning"`.
 #' @param aggr (`function`)\cr
 #'   Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
-#'   This specifies how multiple parameter values are aggregated to form a single value in the context of inner tuning.
+#'   This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
 #'   If none specified, the default aggregation function of the parameter will be used.
 #' @return A `TuneToken` object.
 #' @examples
@@ -139,10 +139,10 @@
 #' @family ParamSet construction helpers
 #' @aliases TuneToken
 #' @export
-to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
-  assert_flag(inner)
+to_tune = function(..., internal = !is.null(aggr), aggr = NULL) {
+  assert_flag(internal)
   if (!is.null(aggr)) {
-    assert_true(inner)
+    assert_true(internal)
   }
   assert_function(aggr, nargs = 1L, null.ok = TRUE)
   call = sys.call()
@@ -192,14 +192,14 @@ to_tune = function(..., inner = !is.null(aggr), aggr = NULL) {
     content = list(logscale = FALSE)
   }
 
-  if (inner) {
+  if (internal) {
     if (type == "ObjectTuneToken") {
-      stop("Inner tuning can currently not be combined with ParamSet or Domain object, specify lower and upper bounds, e.g. to_tune(upper = 100)")
+      stop("Internal tuning can currently not be combined with ParamSet or Domain object, specify lower and upper bounds, e.g. to_tune(upper = 100)")
     }
     if (isTRUE(content$logscale)) {
-      stop("Cannot combine logscale transformation with inner tuning.")
+      stop("Cannot combine logscale transformation with internal tuning.")
     }
-    type = c("InnerTuneToken", type)
+    type = c("InternalTuneToken", type)
     content$aggr = aggr
   }
 
@@ -213,8 +213,8 @@ print.FullTuneToken = function(x, ...) {
 }
 
 #' @export
-print.InnerTuneToken = function(x, ...) {
-  cat("Inner ")
+print.InternalTuneToken = function(x, ...) {
+  cat("Internal ")
   NextMethod()
 }
 
@@ -258,14 +258,14 @@ tunetoken_to_ps.FullTuneToken = function(tt, param, ...) {
   }
 }
 
-tunetoken_to_ps.InnerTuneToken = function(tt, param, ...) {
-  # Calling NextMethod with additional arguments behaves weirdly, as the InnerTuneToken only works with ranges right now
+tunetoken_to_ps.InternalTuneToken = function(tt, param, ...) {
+  # Calling NextMethod with additional arguments behaves weirdly, as the InternalTuneToken only works with ranges right now
   # we just call it directly
   aggr = if (!is.null(tt$content$aggr)) tt$content$aggr else param$cargo[[1L]]$aggr
   if (is.null(aggr)) {
     stopf("%s must specify a aggregation function for parameter %s", tt$call, param$id)
   }
-  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, in_tune_fn = param$cargo[[1L]]$in_tune_fn, tags = "inner_tuning",
+  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, in_tune_fn = param$cargo[[1L]]$in_tune_fn, tags = "internal_tuning",
     aggr = aggr)
 }
 

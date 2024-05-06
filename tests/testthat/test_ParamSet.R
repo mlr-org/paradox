@@ -451,40 +451,40 @@ test_that("aggr", {
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "but there are no")
 })
 
-test_that("convert_inner_tune_tokens", {
+test_that("convert_internal_tune_tokens", {
   param_set = ps(
-    a = p_int(lower = 1, upper = 100, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper,
+    a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
       aggr = function(x) round(mean(unlist(x))))
   )
-  param_set$set_values(a = to_tune(inner = TRUE))
-  expect_identical(param_set$convert_inner_tune_tokens(), list(a = 100))
-  param_set$set_values(a = to_tune(inner = TRUE, upper = 99))
-  expect_identical(param_set$convert_inner_tune_tokens(), list(a = 99))
+  param_set$set_values(a = to_tune(internal = TRUE))
+  expect_identical(param_set$convert_internal_tune_tokens(), list(a = 100))
+  param_set$set_values(a = to_tune(internal = TRUE, upper = 99))
+  expect_identical(param_set$convert_internal_tune_tokens(), list(a = 99))
 
-  param_set$set_values(a = to_tune(inner = FALSE))
-  expect_identical(param_set$convert_inner_tune_tokens(), named_list())
+  param_set$set_values(a = to_tune(internal = FALSE))
+  expect_identical(param_set$convert_internal_tune_tokens(), named_list())
 })
 
-test_that("get_values works with inner_tune", {
+test_that("get_values works with internal_tune", {
   param_set = ps(
-    a = p_int(lower = 1, upper = 100, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper,
+    a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
       aggr = function(x) round(mean(unlist(x))))
   )
-  param_set$set_values(a = to_tune(inner = TRUE))
-  expect_list(param_set$get_values(type = "with_inner"), len = 1L)
+  param_set$set_values(a = to_tune(internal = TRUE))
+  expect_list(param_set$get_values(type = "with_internal"), len = 1L)
   param_set$set_values(a = to_tune())
-  expect_list(param_set$get_values(type = "with_inner"), len = 0L)
+  expect_list(param_set$get_values(type = "with_internal"), len = 0L)
 })
 
-test_that("InnerTuneToken is translated to 'inner_tuning' tag when creating search space", {
+test_that("InternalTuneToken is translated to 'internal_tuning' tag when creating search space", {
   param_set = ps(
-    a = p_int(0, Inf, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper, aggr = function(x) round(mean(unlist(x))))
+    a = p_int(0, Inf, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper, aggr = function(x) round(mean(unlist(x))))
   )
 
   param_set$set_values(
-    a = to_tune(upper = 100, inner = TRUE)
+    a = to_tune(upper = 100, internal = TRUE)
   )
 
   ss = param_set$search_space()
-  expect_true("inner_tuning" %in% ss$tags$a)
+  expect_true("internal_tuning" %in% ss$tags$a)
 })

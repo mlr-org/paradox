@@ -3,7 +3,7 @@
 #' @export
 p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, repr = substitute(default), init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(custom_check, null.ok = TRUE)
-  if ("inner_tuning" %in% tags) {
+  if ("internal_tuning" %in% tags) {
     assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
   } else {
     assert_true(is.null(in_tune_fn))
@@ -20,7 +20,7 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
   }
   cargo = list(custom_check = custom_check, repr = repr)
   cargo$aggr = aggr
-  cargo$inner_tune_fn = in_tune_fn
+  cargo$internal_tune_fn = in_tune_fn
 
   Domain(cls = "ParamUty", grouping = "ParamUty", cargo = cargo, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "list", depends_expr = substitute(depends), init = init)
 }

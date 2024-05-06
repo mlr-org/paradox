@@ -4,7 +4,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
-  if ("inner_tuning" %in% tags) {
+  if ("internal_tuning" %in% tags) {
     assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
   } else {
     assert_true(is.null(in_tune_fn))

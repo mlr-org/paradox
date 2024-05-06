@@ -150,12 +150,12 @@ Initial value. When this is given, then the corresponding entry in \code{ParamSe
 value upon construction.}
 
 \item{aggr}{(\code{function})\cr
-Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"inner_tuning"}.
+Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"internal_tuning"}.
 Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.}
 
 \item{in_tune_fn}{(\verb{function(domain, param_set)})\cr
 Function that converters a \code{Domain} object into a parameter value.
-Can onlye be given for parameters tagged with \code{"inner_tuning"}.}
+Can onlye be given for parameters tagged with \code{"internal_tuning"}.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
@@ -241,16 +241,16 @@ print(grid)
 print(grid$transpose())
 
 
-# inner tuning
+# internal tuning
 
 param_set = ps(
-  iters = p_int(0, Inf, tags = "inner_tuning", aggr = function(x) round(mean(unlist(x))),
+  iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
     in_tune_fn = function(domain, param_set) domain$upper)
 )
 param_set$set_values(
-  iters = to_tune(upper = 100, inner = TRUE)
+  iters = to_tune(upper = 100, internal = TRUE)
 )
-param_set$convert_inner_tune_tokens()
+param_set$convert_internal_tune_tokens()
 param_set$aggr(list(iters = list(1, 2, 3)))
 
 }

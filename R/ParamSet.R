@@ -155,7 +155,7 @@ ParamSet = R6Class("ParamSet",
     #' @param type (`character(1)`)\cr
     #'   Return values `"with_token"` (i.e. all values),
     #    `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects)
-    #    or `"with_inner"` (all values that are no not `InnerTuneToken`)?
+    #    or `"with_internal"` (all values that are no not `InternalTuneToken`)?
     #' @param check_required (`logical(1)`)\cr
     #'   Check if all required parameters are set?
     #' @param remove_dependencies (`logical(1)`)\cr
@@ -163,7 +163,7 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
-      assert_choice(type, c("with_token", "without_token", "only_token", "with_inner"))
+      assert_choice(type, c("with_token", "without_token", "only_token", "with_internal"))
 
       assert_flag(check_required)
 
@@ -174,8 +174,8 @@ ParamSet = R6Class("ParamSet",
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
         values = keep(values, is, "TuneToken")
-      } else if (type == "with_inner") {
-        values = keep(values, is, "InnerTuneToken")
+      } else if (type == "with_internal") {
+        values = keep(values, is, "InternalTuneToken")
       }
 
       if (check_required) {
@@ -283,17 +283,17 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' Convert all `InnerTuneToken`s to parameter values as is defined by their `in_tune_fn`.
+    #' Convert all `InternalTuneToken`s to parameter values as is defined by their `in_tune_fn`.
     #'
     #' @return (named `list()`)
-    convert_inner_tune_tokens = function() {
-      inner_tune_tokens = self$get_values(type = "with_inner")
-      inner_tune_ps = private$get_tune_ps(inner_tune_tokens)
+    convert_internal_tune_tokens = function() {
+      internal_tune_tokens = self$get_values(type = "with_internal")
+      internal_tune_ps = private$get_tune_ps(internal_tune_tokens)
 
-      imap(inner_tune_ps$domains, function(token, .id) {
+      imap(internal_tune_ps$domains, function(token, .id) {
         converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
         if (!is.function(converter)) {
-          stopf("No converter exists for InnerTuneToken of parameters '%s'", .id)
+          stopf("No converter exists for InternalTuneToken of parameters '%s'", .id)
         }
         converter(token)
       })
@@ -367,13 +367,13 @@ ParamSet = R6Class("ParamSet",
         if (!isTRUE(tunecheck)) return(tunecheck)
       }
 
-      xs_innertune = keep(xs, is, "InnerTuneToken")
-      walk(names(xs_innertune), function(pid) {
-        if ("inner_tuning" %nin% self$tags[[pid]]) {
-          stopf("Trying to assign InnerTuneToken to parameter '%s' which is not tagged with 'inner_tuning'.", pid)
+      xs_internaltune = keep(xs, is, "InternalTuneToken")
+      walk(names(xs_internaltune), function(pid) {
+        if ("internal_tuning" %nin% self$tags[[pid]]) {
+          stopf("Trying to assign InternalTuneToken to parameter '%s' which is not tagged with 'internal_tuning'.", pid)
         }
         if (is.null(xs[[pid]]$content$aggr) && is.null(private$.params[pid, "cargo", on = "id"][[1L]][[1L]]$aggr)) {
-          stopf("Trying to set parameter '%s' to InnerTuneToken, but no aggregation function is available.", pid)
+          stopf("Trying to set parameter '%s' to InternalTuneToken, but no aggregation function is available.", pid)
         }
       })
 

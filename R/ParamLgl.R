@@ -2,7 +2,7 @@
 #' @export
 p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL, in_tune_fn = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
-  if ("inner_tuning" %in% tags) {
+  if ("internal_tuning" %in% tags) {
     assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
   } else {
     assert_true(is.null(in_tune_fn))
