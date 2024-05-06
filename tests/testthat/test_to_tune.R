@@ -405,7 +405,7 @@ test_that("inner and aggr", {
   param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper))
 
   # correct errors
-  expect_error(param_set$set_values(a = to_tune(inner = TRUE)), "but no aggregation function is available")
+  expect_error(param_set$set_values(a = to_tune(inner = TRUE)), "aggregation")
   expect_error(param_set$set_values(a = to_tune(inner = FALSE, aggr = function(x) 1)))
 
 

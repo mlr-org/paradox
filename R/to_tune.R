@@ -238,11 +238,11 @@ print.ObjectTuneToken = function(x, ...) {
 #
 # Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
 # param is a data.table that is potentially modified by reference using data.table set() methods.
-tunetoken_to_ps = function(tt, param) {
+tunetoken_to_ps = function(tt, param, ...) {
   UseMethod("tunetoken_to_ps")
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param) {
+tunetoken_to_ps.FullTuneToken = function(tt, param, ...) {
   if (!domain_is_bounded(param)) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
@@ -258,7 +258,18 @@ tunetoken_to_ps.FullTuneToken = function(tt, param) {
   }
 }
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param) {
+tunetoken_to_ps.InnerTuneToken = function(tt, param, ...) {
+  # Calling NextMethod with additional arguments behaves weirdly, as the InnerTuneToken only works with ranges right now
+  # we just call it directly
+  aggr = if (!is.null(tt$content$aggr)) tt$content$aggr else param$cargo[[1L]]$aggr
+  if (is.null(aggr)) {
+    stopf("%s must specify a aggregation function for parameter %s", tt$call, param$id)
+  }
+  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, in_tune_fn = param$cargo[[1L]]$in_tune_fn, tags = "inner_tuning",
+    aggr = aggr)
+}
+
+tunetoken_to_ps.RangeTuneToken = function(tt, param, args = list(), ...) {
   if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
@@ -280,7 +291,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param) {
   # create p_int / p_dbl object. Doesn't work if there is a numeric param class that we don't know about :-/
   constructor = switch(param$cls, ParamInt = p_int, ParamDbl = p_dbl,
     stopf("%s: logscale for parameter %s of class %s not supported", tt$call, param$id, param$class))
-  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale, aggr = tt$content$aggr)
+  content = constructor(lower = bound_lower, upper = bound_upper, logscale = tt$content$logscale, ...)
   pslike_to_ps(content, tt$call, param)
 }
 

@@ -475,3 +475,16 @@ test_that("get_values works with inner_tune", {
   param_set$set_values(a = to_tune())
   expect_list(param_set$get_values(type = "with_inner"), len = 0L)
 })
+
+test_that("InnerTuneToken is translated to 'inner_tuning' tag when creating search space", {
+  param_set = ps(
+    a = p_int(0, Inf, tags = "inner_tuning", in_tune_fn = function(domain, param_set) domain$upper, aggr = function(x) round(mean(unlist(x))))
+  )
+
+  param_set$set_values(
+    a = to_tune(upper = 100, inner = TRUE)
+  )
+
+  ss = param_set$search_space()
+  expect_true("inner_tuning" %in% ss$tags$a)
+})
