@@ -15,14 +15,15 @@ p_s6 = function(support, special_vals = list(), default = NO_DEF, tags = charact
     cargo = set,
     lower = suppressWarnings(as.numeric(set$lower)),
     upper = suppressWarnings(as.numeric(set$upper)),
-    levels = as.list(set$elements),
+    levels = if (is.numeric(set$properties$cardinality)) as.list(set$elements),
     special_vals = special_vals,
     default = default,
     tags = tags,
     trafo = trafo,
     storage_type = storage_type,
     depends_expr = substitute(depends),
-    init = init)
+    init = init
+  )
 }
 
 #' @export
@@ -61,6 +62,7 @@ domain_qunif.ParamSet6 = function(param, x) stop("undefined")
 domain_is_number.ParamSet6 = function(param) {
   param$storage_type[[1]] != "list"
 }
+
 #' @export
 domain_is_categ.ParamSet6 = function(param) {
   set = set6_cache_get(param$grouping[[1]])
@@ -68,4 +70,12 @@ domain_is_categ.ParamSet6 = function(param) {
     set$class %nin% c("numeric", "integer") && is.finite(set$properties$cardinality)
 
   categness
+}
+
+set6_unique_repr = function(object) {
+  assert_r6(object, "Set")
+  using_unicode_for_whatever_reason = set6::useUnicode()
+  on.exit(set6::useUnicode(using_unicode_for_whatever_reason))
+  set6::useUnicode(FALSE)
+  object$strprint(n = 1e10)
 }

@@ -1,4 +1,5 @@
 
+
 S6Cache = R6Class("S6Cache",
   cloneable = FALSE,
   public = list(

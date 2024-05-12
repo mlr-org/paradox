@@ -8,11 +8,11 @@ This is the abstract base class for sampling objects like \link{Sampler1D}, \lin
 }
 \seealso{
 Other Sampler: 
+\code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
 \code{\link{Sampler1DNormal}},
 \code{\link{Sampler1DRfun}},
 \code{\link{Sampler1DUnif}},
-\code{\link{Sampler1D}},
 \code{\link{SamplerHierarchical}},
 \code{\link{SamplerJointIndep}},
 \code{\link{SamplerUnif}}
