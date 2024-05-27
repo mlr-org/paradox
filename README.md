@@ -1,7 +1,3 @@
----
-output: github_document
----
-
 # paradox
 
 Package website: [release](https://paradox.mlr-org.com/) | [dev](https://paradox.mlr-org.com/dev/)
