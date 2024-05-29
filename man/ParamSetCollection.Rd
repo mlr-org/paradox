@@ -161,10 +161,22 @@ Whether to add tags of the form \code{"param_<param_id>"} to each parameter with
 \if{html}{\out{<a id="method-ParamSetCollection-disable_internal_tuning"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSetCollection-disable_internal_tuning}{}}}
 \subsection{Method \code{disable_internal_tuning()}}{
+Set the parameter values so that internal tuning for the selected parameters is disabled.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
 }
 
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()})\cr
+The ids of the parameters for which to disable internal tuning.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{Self}
+}
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-clone"></a>}}

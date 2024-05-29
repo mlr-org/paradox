@@ -149,8 +149,15 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.sets[[n]] = p
       invisible(self)
     },
+    #' @description
+    #'
+    #' Set the parameter values so that internal tuning for the selected parameters is disabled.
+    #'
+    #' @param ids (`character()`)\cr
+    #'   The ids of the parameters for which to disable internal tuning.
+    #' @return `Self`
     disable_internal_tuning = function(ids) {
-      assert_subset(ids, self$ids())
+      assert_subset(ids, self$ids(tags = "internal_tuning"))
 
       pvs = Reduce(c, map(ids, function(id_) {
         info = private$.translation[id_, c("original_id", "owner_name"), on = "id"]

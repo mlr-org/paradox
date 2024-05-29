@@ -245,4 +245,7 @@ test_that("disable internal tuning works", {
 
   param_set$disable_internal_tuning("prefix.a")
   expect_equal(param_set$values$prefix.b, FALSE)
+  expect_error(param_set$disable_internal_tuning("b"))
+
+  expect_equal(named_list(), psc(ps())$disable_internal_tuning(character(0))$values)
 })

@@ -368,7 +368,7 @@ The aggregation function is selected based on the parameter.}
 \if{html}{\out{<a id="method-ParamSet-disable_internal_tuning"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-disable_internal_tuning}{}}}
 \subsection{Method \code{disable_internal_tuning()}}{
-Get the parameter values that disable internal tuning for those parameters passed as \code{ids}.
+Set the parameter values so that internal tuning for the selected parameters is disabled.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
 }
@@ -382,7 +382,7 @@ The ids of the parameters for which to disable internal tuning.}
 \if{html}{\out{</div>}}
 }
 \subsection{Returns}{
-(named \code{list()})
+\code{Self}
 }
 }
 \if{html}{\out{<hr>}}

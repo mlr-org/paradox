@@ -500,4 +500,5 @@ test_that("disable internal tuning", {
   expect_equal(param_set$values$b, FALSE)
 
   expect_error(param_set$disable_internal_tuning("c"))
+  expect_error(param_set$disable_internal_tuning("b"))
 })
