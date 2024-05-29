@@ -236,3 +236,13 @@ test_that("set_id inference in values assignment works now", {
   expect_error(ParamSetCollection$new(list(a = pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })
+
+test_that("disable internal tuning works", {
+  param_set = psc(prefix = ps(
+    a = p_dbl(tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper, disable_in_tune = list(b = FALSE)),
+    b = p_lgl()
+  ))
+
+  param_set$disable_internal_tuning("prefix.a")
+  expect_equal(param_set$values$prefix.b, FALSE)
+})

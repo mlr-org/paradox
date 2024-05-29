@@ -270,8 +270,8 @@ ParamSet = R6Class("ParamSet",
     aggr = function(x) {
       assert_list(x, types = "list")
       aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
-      assert_permutation(names(x), aggrs$id)
-      if (!nrow(aggrs)) {
+      assert_subset(names(x), aggrs$id)
+      if (!length(x)) {
         return(named_list())
       }
       imap(x, function(value, .id) {
@@ -280,6 +280,19 @@ ParamSet = R6Class("ParamSet",
         }
         aggr = aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
       })
+    },
+
+    #' @description
+    #'
+    #' Get the parameter values that disable internal tuning for those parameters passed as `ids`.
+    #'
+    #' @param ids (`character()`)\cr
+    #'   The ids of the parameters for which to disable internal tuning.
+    #' @return (named `list()`)
+    disable_internal_tuning = function(ids) {
+      assert_subset(ids, self$ids())
+      pvs = Reduce(c, map(private$.params[ids, "cargo", on = "id"][[1]], "disable_in_tune"))
+      self$set_values(.values = pvs)
     },
 
     #' @description

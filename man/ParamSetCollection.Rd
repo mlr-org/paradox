@@ -72,6 +72,7 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
 \itemize{
 \item \href{#method-ParamSetCollection-new}{\code{ParamSetCollection$new()}}
 \item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
+\item \href{#method-ParamSetCollection-disable_internal_tuning}{\code{ParamSetCollection$disable_internal_tuning()}}
 \item \href{#method-ParamSetCollection-clone}{\code{ParamSetCollection$clone()}}
 }
 }
@@ -155,6 +156,15 @@ Whether to add tags of the form \code{"param_<param_id>"} to each parameter with
 }
 \if{html}{\out{</div>}}
 }
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetCollection-disable_internal_tuning"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-disable_internal_tuning}{}}}
+\subsection{Method \code{disable_internal_tuning()}}{
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
+}
+
 }
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-ParamSetCollection-clone"></a>}}

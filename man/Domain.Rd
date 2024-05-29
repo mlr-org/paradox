@@ -22,7 +22,8 @@ p_dbl(
   logscale = FALSE,
   init,
   aggr = NULL,
-  in_tune_fn = NULL
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_fct(
@@ -34,7 +35,8 @@ p_fct(
   trafo = NULL,
   init,
   aggr = NULL,
-  in_tune_fn = NULL
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_int(
@@ -49,7 +51,8 @@ p_int(
   logscale = FALSE,
   init,
   aggr = NULL,
-  in_tune_fn = NULL
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_lgl(
@@ -60,7 +63,8 @@ p_lgl(
   trafo = NULL,
   init,
   aggr = NULL,
-  in_tune_fn = NULL
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_uty(
@@ -73,7 +77,8 @@ p_uty(
   repr = substitute(default),
   init,
   aggr = NULL,
-  in_tune_fn = NULL
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 }
 \arguments{
@@ -156,6 +161,10 @@ Function with one argument, which is a list of parameter values and that returns
 \item{in_tune_fn}{(\verb{function(domain, param_set)})\cr
 Function that converters a \code{Domain} object into a parameter value.
 Can onlye be given for parameters tagged with \code{"internal_tuning"}.}
+
+\item{disable_in_tune}{(named \code{list()})\cr
+The parameter values that need to be set in the \code{ParamSet} to disable the internal tuning for the parameter.
+For \code{XGBoost} this would e.g. be \code{list(early_stopping_rounds = NULL)}.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
@@ -245,7 +254,7 @@ print(grid$transpose())
 
 param_set = ps(
   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-    in_tune_fn = function(domain, param_set) domain$upper)
+    in_tune_fn = function(domain, param_set) domain$upper, disable_in_tune = list(other_param = FALSE))
 )
 param_set$set_values(
   iters = to_tune(upper = 100, internal = TRUE)

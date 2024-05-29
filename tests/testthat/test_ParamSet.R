@@ -447,14 +447,14 @@ test_that("aggr", {
 
   expect_error(param_set$aggr(1), "list")
   expect_error(param_set$aggr(list(1)), "list")
-  expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list())), "permutation")
+  expect_error(param_set$aggr(list(y = list())), "subset")
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "but there are no")
 })
 
 test_that("convert_internal_tune_tokens", {
   param_set = ps(
     a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
-      aggr = function(x) round(mean(unlist(x))))
+      aggr = function(x) round(mean(unlist(x))), disable_in_tune = list(a = 1))
   )
   param_set$set_values(a = to_tune(internal = TRUE))
   expect_identical(param_set$convert_internal_tune_tokens(), list(a = 100))
@@ -468,7 +468,7 @@ test_that("convert_internal_tune_tokens", {
 test_that("get_values works with internal_tune", {
   param_set = ps(
     a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
-      aggr = function(x) round(mean(unlist(x))))
+      aggr = function(x) round(mean(unlist(x))), disable_in_tune = list(a = 1))
   )
   param_set$set_values(a = to_tune(internal = TRUE))
   expect_list(param_set$get_values(type = "with_internal"), len = 1L)
@@ -487,4 +487,17 @@ test_that("InternalTuneToken is translated to 'internal_tuning' tag when creatin
 
   ss = param_set$search_space()
   expect_true("internal_tuning" %in% ss$tags$a)
+})
+
+test_that("disable internal tuning", {
+  param_set = ps(
+    a = p_dbl(tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper, disable_in_tune = list(b = FALSE)),
+    b = p_lgl()
+  )
+
+  expect_equal(param_set$values$b, NULL)
+  param_set$disable_internal_tuning("a")
+  expect_equal(param_set$values$b, FALSE)
+
+  expect_error(param_set$disable_internal_tuning("c"))
 })

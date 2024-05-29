@@ -148,6 +148,19 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       entry = if (n == "") length(private$.sets) + 1 else n
       private$.sets[[n]] = p
       invisible(self)
+    },
+    disable_internal_tuning = function(ids) {
+      assert_subset(ids, self$ids())
+
+      pvs = Reduce(c, map(ids, function(id_) {
+        info = private$.translation[id_, c("original_id", "owner_name"), on = "id"]
+        xs = get_private(private$.sets[[info$owner_name]])$.params[info$original_id, "cargo", on = "id"][[1L]][[1]]$disable_in_tune
+
+        if (info$owner_name == "" || is.null(xs)) return(xs)
+
+        set_names(xs, paste0(info$owner_name, ".", names(xs)))
+      })) %??% named_list()
+      self$set_values(.values = pvs)
     }
   ),
 

@@ -69,6 +69,9 @@
 #' @param in_tune_fn (`function(domain, param_set)`)\cr
 #'   Function that converters a `Domain` object into a parameter value.
 #'   Can onlye be given for parameters tagged with `"internal_tuning"`.
+#' @param disable_in_tune (named `list()`)\cr
+#'   The parameter values that need to be set in the `ParamSet` to disable the internal tuning for the parameter.
+#'   For `XGBoost` this would e.g. be `list(early_stopping_rounds = NULL)`.
 #'
 #' @return A `Domain` object.
 #'
@@ -128,7 +131,7 @@
 #'
 #' param_set = ps(
 #'   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-#'     in_tune_fn = function(domain, param_set) domain$upper)
+#'     in_tune_fn = function(domain, param_set) domain$upper, disable_in_tune = list(other_param = FALSE))
 #' )
 #' param_set$set_values(
 #'   iters = to_tune(upper = 100, internal = TRUE)
@@ -244,7 +247,6 @@ print.Domain = function(x, ...) {
   if (!is.null(repr)) {
     print(repr)
   } else {
-    plural_rows =
     classes = class(x)
     if ("Domain" %in% classes) {
       domainidx = which("Domain" == classes)[[1]]

@@ -1,7 +1,8 @@
 #' @rdname Domain
 #' @export
-p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL) {
+p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
+  assert_list(disable_in_tune, null.ok = TRUE, names = "unique")
   if ("internal_tuning" %in% tags) {
     assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
   } else {
@@ -26,7 +27,8 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
   cargo = list()
   if (logscale) cargo$logscale = TRUE
   cargo$aggr = aggr
-  if (!is.null(in_tune_fn)) cargo$in_tune_fn = in_tune_fn
+  cargo$in_tune_fn = in_tune_fn
+  cargo$disable_in_tune = disable_in_tune
   Domain(cls = "ParamDbl", grouping = "ParamDbl", lower = real_lower, upper = real_upper, special_vals = special_vals, default = default, tags = tags, tolerance = tolerance, trafo = trafo, storage_type = "numeric",
     depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }

@@ -173,6 +173,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
 \item \href{#method-ParamSet-aggr}{\code{ParamSet$aggr()}}
+\item \href{#method-ParamSet-disable_internal_tuning}{\code{ParamSet$disable_internal_tuning()}}
 \item \href{#method-ParamSet-convert_internal_tune_tokens}{\code{ParamSet$convert_internal_tune_tokens()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
 \item \href{#method-ParamSet-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
@@ -356,6 +357,27 @@ Aggregate parameter values according to their aggregation rules.
 \item{\code{x}}{(named \code{list()} of \code{list()}s)\cr
 The value(s) to be aggregated. Names are parameter values.
 The aggregation function is selected based on the parameter.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+(named \code{list()})
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-disable_internal_tuning"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-disable_internal_tuning}{}}}
+\subsection{Method \code{disable_internal_tuning()}}{
+Get the parameter values that disable internal tuning for those parameters passed as \code{ids}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()})\cr
+The ids of the parameters for which to disable internal tuning.}
 }
 \if{html}{\out{</div>}}
 }
