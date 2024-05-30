@@ -300,7 +300,7 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @return (named `list()`)
     convert_internal_tune_tokens = function() {
-      internal_tune_tokens = self$get_values(type = "with_internal")
+      internal_tune_tokens = self$get_values(type = "with_internal", check_required = FALSE)
       internal_tune_ps = private$get_tune_ps(internal_tune_tokens)
 
       imap(internal_tune_ps$domains, function(token, .id) {
