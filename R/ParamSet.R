@@ -296,17 +296,16 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' Convert all `InternalTuneToken`s to parameter values as is defined by their `in_tune_fn`.
-    #'
+    #' Convert all parameters from the search space to parameter values using the transformation given by
+    #' `in_tune_fn`.
+    #' @param search_space ([`ParamSet`])\cr
+    #'   The internal search space.
     #' @return (named `list()`)
-    convert_internal_tune_tokens = function() {
-      internal_tune_tokens = self$get_values(type = "with_internal", check_required = FALSE)
-      internal_tune_ps = private$get_tune_ps(internal_tune_tokens)
-
-      imap(internal_tune_ps$domains, function(token, .id) {
+    convert_internal_search_space = function(search_space) {
+      imap(search_space$domains, function(token, .id) {
         converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
         if (!is.function(converter)) {
-          stopf("No converter exists for InternalTuneToken of parameters '%s'", .id)
+          stopf("No converter exists for parameter '%s'", .id)
         }
         converter(token)
       })

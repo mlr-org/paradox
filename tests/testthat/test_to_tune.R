@@ -430,11 +430,11 @@ test_that("internal and aggr", {
   # range + internal
   param_set$set_values(a = to_tune(lower = 1.2, upper = 1.3, aggr = function(x) 1.5))
   expect_equal(param_set$search_space()$aggr(list(a = list(1, 2))), list(a = 1.5))
-  expect_equal(param_set$convert_internal_tune_tokens(), list(a = 1.3))
+  expect_equal(param_set$convert_internal_search_space(param_set$search_space()), list(a = 1.3))
 
   # full + internal
   param_set$set_values(a = to_tune(internal = TRUE, aggr = function(x) 1.5))
-  expect_equal(param_set$convert_internal_tune_tokens(), list(a = 2))
+  expect_equal(param_set$convert_internal_search_space(param_set$search_space()), list(a = 2))
 
   # domain + internal
   expect_error(

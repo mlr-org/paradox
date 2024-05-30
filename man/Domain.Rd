@@ -254,12 +254,13 @@ print(grid$transpose())
 
 param_set = ps(
   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-    in_tune_fn = function(domain, param_set) domain$upper, disable_in_tune = list(other_param = FALSE))
+    in_tune_fn = function(domain, param_set) domain$upper,
+    disable_in_tune = list(other_param = FALSE))
 )
 param_set$set_values(
   iters = to_tune(upper = 100, internal = TRUE)
 )
-param_set$convert_internal_tune_tokens()
+param_set$convert_internal_search_space(param_set$search_space())
 param_set$aggr(list(iters = list(1, 2, 3)))
 
 }

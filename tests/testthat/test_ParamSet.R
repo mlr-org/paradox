@@ -451,18 +451,15 @@ test_that("aggr", {
   expect_error(param_set$aggr(list(a = list(), b = list(), c = list(), d = list(), e = list())), "but there are no")
 })
 
-test_that("convert_internal_tune_tokens", {
+test_that("convert_internal_search_space", {
   param_set = ps(
     a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
       aggr = function(x) round(mean(unlist(x))), disable_in_tune = list(a = 1))
   )
   param_set$set_values(a = to_tune(internal = TRUE))
-  expect_identical(param_set$convert_internal_tune_tokens(), list(a = 100))
+  expect_identical(param_set$convert_internal_search_space(param_set$search_space()), list(a = 100))
   param_set$set_values(a = to_tune(internal = TRUE, upper = 99))
-  expect_identical(param_set$convert_internal_tune_tokens(), list(a = 99))
-
-  param_set$set_values(a = to_tune(internal = FALSE))
-  expect_identical(param_set$convert_internal_tune_tokens(), named_list())
+  expect_identical(param_set$convert_internal_search_space(param_set$search_space()), list(a = 99))
 })
 
 test_that("get_values works with internal_tune", {
