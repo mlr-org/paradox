@@ -171,6 +171,26 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       self$set_values(.values = pvs)
     },
 
+    # #' @description
+    # #' Convert all parameters from the search space to parameter values using the transformation given by
+    # #' `in_tune_fn`.
+    # #' @param search_space ([`ParamSet`])\cr
+    # #'   The internal search space.
+    # #' @return (named `list()`)
+    # convert_internal_search_space = function(search_space) {
+    #   assert_class(search_space, "ParamSet")
+
+
+      
+      
+    #   param_vals = self$values
+
+    #   Reduce(c, imap(private$.sets, function(set, prefix) {
+
+    #     set$convert_internal_search_space()
+        
+    #   })) %??% named_list()
+    # },
     #' @description
     #' Convert all parameters from the search space to parameter values using the transformation given by
     #' `in_tune_fn`.
@@ -179,7 +199,14 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @return (named `list()`)
     convert_internal_search_space = function(search_space) {
       assert_class(search_space, "ParamSet")
-      # call it on the subsets, but pass the parameter with corrected names and add the prefixes afterwards again
+      imap(search_space$domains, function(token, .id) {
+        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
+        if (!is.function(converter)) {
+          stopf("No converter exists for parameter '%s'", .id)
+        }
+        set_index = private$.translation[list(.id), "owner_ps_index", on = "id"][[1L]]
+        converter(token, private$.sets[[set_index]]$values)
+      })
     },
 
     #' @description
@@ -196,7 +223,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
           disable_in_tune = cargo$disable_in_tune
           cargo$in_tune_fn = crate(function(domain, param_vals) {
-            param_vals = set_named(param_vals, gsub(sprintf("^\\Q%s.\\E", set_id), "", names(param_vals)))
+            param_vals = set_names(param_vals, gsub(sprintf("^\\Q%s.\\E", set_id), "", names(param_vals)))
             disabled_vals = disable_in_tune(param_vals)
             set_names(disabled_vals, paste0(set_id, ".", names(disabled_vals)))
           }, disable_in_tune, set_id)

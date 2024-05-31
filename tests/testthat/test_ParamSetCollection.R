@@ -256,14 +256,15 @@ test_that("convert_internal_search_space: depends on other parameter", {
       aggr = function(x) 1, disable_in_tune = list()),
     c = p_int()
   ))
-  param_set$values$c = -1
+  param_set$values$a.c = -1
 
   search_space = ps(
-    b = p_int(upper = 1000, tags = "internal_tuning", aggr = function(x) 1)
+    a.b = p_int(upper = 1000, tags = "internal_tuning", aggr = function(x) 1)
   )
 
+  browser()
   expect_equal(
-    param_set$convert_internal_search_space(search_space)$b, 
+    param_set$convert_internal_search_space(search_space)$a.b, 
     -1000
   )
 })
@@ -303,7 +304,7 @@ test_that("convert_internal_search_space: flattening", {
   )
 })
 
-test_that("disable_in_tune: single collection", {
+test_that("disable internal tuning: single collection", {
   param_set = psc(a = ps(
     b = p_int(
       in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
@@ -316,7 +317,7 @@ test_that("disable_in_tune: single collection", {
   expect_equal(param_set$values$a.c, TRUE)
 })
 
-test_that("disable_in_tune: nested collection", {
+test_that("disable internal tuning: nested collection", {
   param_set = ps(
     a = p_int(
       in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
@@ -325,11 +326,31 @@ test_that("disable_in_tune: nested collection", {
   )
 })
 
-test_that("disable_in_tune: flattening", {
-  param_set = ps(
-    a = p_int(
+test_that("disable internal tuning: flattening", {
+  param_set = psc(a = ps(
+    b = p_int(
       in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
-      disable_in_tune = list(), aggr = function(x) 1
-    )
+      disable_in_tune = list(c = 1), aggr = function(x) 1
+    ),
+    c = p_int()
+  ))$flatten()
+
+  expect_equal(
+    param_set$disable_internal_tuning("a.b")$values$a.c,
+    1
+  )
+
+  # now with no set id
+  param_set = psc(ps(
+    b = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(c = 1), aggr = function(x) 1
+    ),
+    c = p_int()
+  ))$flatten()
+
+  expect_equal(
+    param_set$disable_internal_tuning("b")$values$c,
+    1
   )
 })
