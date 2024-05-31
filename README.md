@@ -1,23 +1,22 @@
-
 # paradox
 
-Package website: [release](https://paradox.mlr-org.com/) \|
-[dev](https://paradox.mlr-org.com/dev/)
+Package website: [release](https://paradox.mlr-org.com/) | [dev](https://paradox.mlr-org.com/dev/)
 
 Universal Parameter Space Description and Tools.
 
 <!-- badges: start -->
-
 [![r-cmd-check](https://github.com/mlr-org/paradox/actions/workflows/r-cmd-check.yml/badge.svg)](https://github.com/mlr-org/paradox/actions/workflows/r-cmd-check.yml)
-[![CRAN
-Status](https://www.r-pkg.org/badges/version/paradox)](https://CRAN.R-project.org/package=paradox)
+[![CRAN Status](https://www.r-pkg.org/badges/version/paradox)](https://CRAN.R-project.org/package=paradox)
 [![StackOverflow](https://img.shields.io/badge/stackoverflow-mlr3-orange.svg)](https://stackoverflow.com/questions/tagged/mlr3)
 [![Mattermost](https://img.shields.io/badge/chat-mattermost-orange.svg)](https://lmmisld-lmu-stats-slds.srv.mwn.de/mlr_invite/)
 <!-- badges: end -->
 
+
+
 ## Installation
 
-``` r
+
+```r
 remotes::install_github("mlr-org/paradox")
 ```
 
@@ -25,27 +24,27 @@ remotes::install_github("mlr-org/paradox")
 
 Create a simple ParamSet using all supported Parameter Types:
 
-- integer numbers (`"int"`)
-- real-valued numbers (`"dbl"`)
-- truth values `TRUE` or `FALSE` (`"lgl"`)
-- categorical values from a set of possible strings (`"fct"`)
-- further types are only possible by using transformations.
+* integer numbers (`"int"`)
+* real-valued numbers (`"dbl"`)
+* truth values `TRUE` or `FALSE` (`"lgl"`)
+* categorical values from a set of possible strings (`"fct"`)
+* further types are only possible by using transformations.
 
-``` r
-ps = ParamSet$new(
-  params = list(
-    ParamInt$new(id = "z", lower = 1, upper = 3),
-    ParamDbl$new(id = "x", lower = -10, upper = 10),
-    ParamLgl$new(id = "flag"),
-    ParamFct$new(id = "methods", levels = c("a","b","c"))
-  )
+
+```r
+pset = ps(
+  z = p_int(lower = 1, upper = 3),
+  x = p_dbl(lower = -10, upper = 10),
+  flag = p_lgl(),
+  methods = p_fct(c("a","b","c"))
 )
 ```
 
 Draw random samples / create random design:
 
-``` r
-generate_design_random(ps, 3)
+
+```r
+generate_design_random(pset, 3)
 #> <Design> with 3 rows:
 #>    z         x  flag methods
 #> 1: 1  7.660348 FALSE       b
@@ -55,10 +54,11 @@ generate_design_random(ps, 3)
 
 Generate LHS Design:
 
-``` r
+
+```r
 requireNamespace("lhs")
 #> Loading required namespace: lhs
-generate_design_lhs(ps, 3)
+generate_design_lhs(pset, 3)
 #> <Design> with 3 rows:
 #>    z         x  flag methods
 #> 1: 1 -3.984673  TRUE       b
@@ -68,8 +68,9 @@ generate_design_lhs(ps, 3)
 
 Generate Grid Design:
 
-``` r
-generate_design_grid(ps, resolution = 2)
+
+```r
+generate_design_grid(pset, resolution = 2)
 #> <Design> with 24 rows:
 #>     z   x  flag methods
 #>  1: 1 -10  TRUE       a
@@ -84,10 +85,11 @@ generate_design_grid(ps, resolution = 2)
 
 Properties of the parameters within the `ParamSet`:
 
-``` r
-ps$ids()
+
+```r
+pset$ids()
 #> [1] "z"       "x"       "flag"    "methods"
-ps$levels
+pset$levels
 #> $z
 #> NULL
 #> 
@@ -99,62 +101,59 @@ ps$levels
 #> 
 #> $methods
 #> [1] "a" "b" "c"
-ps$nlevels
+pset$nlevels
 #>       z       x    flag methods 
 #>       3     Inf       2       3
-ps$is_number
+pset$is_number
 #>       z       x    flag methods 
 #>    TRUE    TRUE   FALSE   FALSE
-ps$lower
+pset$lower
 #>       z       x    flag methods 
 #>       1     -10      NA      NA
-ps$upper
+pset$upper
 #>       z       x    flag methods 
 #>       3      10      NA      NA
 ```
 
 ### Parameter Checks
 
-Check that a parameter satisfies all conditions of a `ParamSet`, using
-`$test()` (returns `FALSE` on mismatch), `$check()` (returns error
-description on mismatch), and `$assert()` (throws error on mismatch):
+Check that a parameter satisfies all conditions of a `ParamSet`, using `$test()` (returns `FALSE` on mismatch), `$check()` (returns error description on mismatch), and `$assert()` (throws error on mismatch):
 
-``` r
-ps$test(list(z = 1, x = 1))
+
+```r
+pset$test(list(z = 1, x = 1))
 #> [1] TRUE
-ps$test(list(z = -1, x = 1))
+pset$test(list(z = -1, x = 1))
 #> [1] FALSE
-ps$check(list(z = -1, x = 1))
-#> [1] "z: Element 1 is not >= 1"
-ps$assert(list(z = -1, x = 1))
-#> Error in ps$assert(list(z = -1, x = 1)): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not >= 1.
+pset$check(list(z = -1, x = 1))
+#> [1] "z: Element 1 is not >= 0.5"
+pset$assert(list(z = -1, x = 1))
+#> Error in pset$assert(list(z = -1, x = 1)): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not >= 0.5.
 ```
 
 ### Transformations
 
 Transformations are functions with a fixed signature.
 
-- `x` A named list of parameter values
-- `param_set` the `ParamSet` used to create the design
+* `x` A named list of parameter values
+* `param_set` the `ParamSet` used to create the design
 
-Transformations can be used to change the distributions of sampled
-parameters. For example, to sample values between $2^-3$ and $2^3$ in a
-$log_2$-uniform distribution, one can sample uniformly between -3 and 3
-and exponentiate the random value inside the transformation.
+Transformations can be used to change the distributions of sampled parameters.
+For example, to sample values between $2^-3$ and $2^3$ in a $log_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
+Alternatively, `logscale = TRUE` can be set; in this case, `lower` and `upper` represent the values *after* the transformation.
 
-``` r
-ps = ParamSet$new(
-  params = list(
-    ParamInt$new(id = "z", lower = -3, upper = 3),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)
-  )
+
+```r
+pset = ps(
+  z = p_int(lower = -3, upper = 3),
+  x = p_dbl(lower = 2^-3, upper = 2^3, logscale = TRUE)
 )
-ps$trafo = function(x, param_set) {
+pset$extra_trafo = function(x, param_set) {
   x$z = 2^x$z
   return(x)
 }
-ps_smplr = SamplerUnif$new(ps)
-x = ps_smplr$sample(2)
+pset_smplr = SamplerUnif$new(pset)
+x = pset_smplr$sample(2)
 xst = x$transpose()
 xst
 #> [[1]]
@@ -162,7 +161,7 @@ xst
 #> [1] 0.125
 #> 
 #> [[1]]$x
-#> [1] 0.4137243
+#> [1] 0.6985067
 #> 
 #> 
 #> [[2]]
@@ -170,7 +169,8 @@ xst
 #> [1] 0.5
 #> 
 #> [[2]]$x
-#> [1] 0.3688455
+#> [1] 0.5795772
 ```
 
 Further documentation can be found in the [mlr3book](https://mlr3book.mlr-org.com/technical.html#paradox).
+

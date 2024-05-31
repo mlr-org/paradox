@@ -773,9 +773,10 @@ ParamSet = R6Class("ParamSet",
     #' @template field_tags
     tags = function(v) {
       if (!missing(v)) {
-        assert_names(names(v), permutation.of = private$.params$id)
         assert_list(v, any.missing = FALSE, types = "character")
-        private$.tags = data.table(id = rep(names(v), map_int(v, length)), tag = unlist(v), key = "id")
+        if (length(v)) assert_names(names(v), permutation.of = private$.params$id)
+        # as.character() to handle empty lists and resulting NULL-valures.
+        private$.tags = data.table(id = rep(as.character(names(v)), map_int(v, length)), tag = as.character(unlist(v)), key = "id")
         setindexv(private$.tags, "tag")
         # return value with original ordering
         return(v)

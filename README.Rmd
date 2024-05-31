@@ -39,44 +39,42 @@ Create a simple ParamSet using all supported Parameter Types:
 * further types are only possible by using transformations.
 
 ```{r ps}
-ps = ParamSet$new(
-  params = list(
-    ParamInt$new(id = "z", lower = 1, upper = 3),
-    ParamDbl$new(id = "x", lower = -10, upper = 10),
-    ParamLgl$new(id = "flag"),
-    ParamFct$new(id = "methods", levels = c("a","b","c"))
-  )
+pset = ps(
+  z = p_int(lower = 1, upper = 3),
+  x = p_dbl(lower = -10, upper = 10),
+  flag = p_lgl(),
+  methods = p_fct(c("a","b","c"))
 )
 ```
 
 Draw random samples / create random design:
 
 ```{r pssample}
-generate_design_random(ps, 3)
+generate_design_random(pset, 3)
 ```
 
 Generate LHS Design:
 
 ```{r pslhs}
 requireNamespace("lhs")
-generate_design_lhs(ps, 3)
+generate_design_lhs(pset, 3)
 ```
 
 Generate Grid Design:
 
 ```{r psgrid, R.options=list(max.print=30)}
-generate_design_grid(ps, resolution = 2)
+generate_design_grid(pset, resolution = 2)
 ```
 
 Properties of the parameters within the `ParamSet`:
 
 ```{r psprobs}
-ps$ids()
-ps$levels
-ps$nlevels
-ps$is_number
-ps$lower
-ps$upper
+pset$ids()
+pset$levels
+pset$nlevels
+pset$is_number
+pset$lower
+pset$upper
 ```
 
 ### Parameter Checks
@@ -84,10 +82,10 @@ ps$upper
 Check that a parameter satisfies all conditions of a `ParamSet`, using `$test()` (returns `FALSE` on mismatch), `$check()` (returns error description on mismatch), and `$assert()` (throws error on mismatch):
 
 ```{r, error = TRUE}
-ps$test(list(z = 1, x = 1))
-ps$test(list(z = -1, x = 1))
-ps$check(list(z = -1, x = 1))
-ps$assert(list(z = -1, x = 1))
+pset$test(list(z = 1, x = 1))
+pset$test(list(z = -1, x = 1))
+pset$check(list(z = -1, x = 1))
+pset$assert(list(z = -1, x = 1))
 ```
 
 ### Transformations
@@ -99,20 +97,19 @@ Transformations are functions with a fixed signature.
 
 Transformations can be used to change the distributions of sampled parameters.
 For example, to sample values between $2^-3$ and $2^3$ in a $log_2$-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.
+Alternatively, `logscale = TRUE` can be set; in this case, `lower` and `upper` represent the values *after* the transformation.
 
 ```{r pstransscale}
-ps = ParamSet$new(
-  params = list(
-    ParamInt$new(id = "z", lower = -3, upper = 3),
-    ParamDbl$new(id = "x", lower = 0, upper = 1)
-  )
+pset = ps(
+  z = p_int(lower = -3, upper = 3),
+  x = p_dbl(lower = 2^-3, upper = 2^3, logscale = TRUE)
 )
-ps$trafo = function(x, param_set) {
+pset$extra_trafo = function(x, param_set) {
   x$z = 2^x$z
   return(x)
 }
-ps_smplr = SamplerUnif$new(ps)
-x = ps_smplr$sample(2)
+pset_smplr = SamplerUnif$new(pset)
+x = pset_smplr$sample(2)
 xst = x$transpose()
 xst
 ```
