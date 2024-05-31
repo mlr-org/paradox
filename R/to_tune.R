@@ -265,7 +265,7 @@ tunetoken_to_ps.InternalTuneToken = function(tt, param, ...) {
   if (is.null(aggr)) {
     stopf("%s must specify a aggregation function for parameter %s", tt$call, param$id)
   }
-  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, in_tune_fn = param$cargo[[1L]]$in_tune_fn, tags = "internal_tuning",
+  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, tags = "internal_tuning",
     aggr = aggr)
 }
 

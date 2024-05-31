@@ -1,13 +1,6 @@
 #' @rdname Domain
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
-  assert_function(aggr, null.ok = TRUE, nargs = 1L)
-  assert_list(disable_in_tune, null.ok = TRUE, names = "unique")
-  if ("internal_tuning" %in% tags) {
-    assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
-  } else {
-    assert_true(is.null(in_tune_fn))
-  }
   assert_number(tolerance, lower = 0)
   assert_number(lower)
   assert_number(upper)

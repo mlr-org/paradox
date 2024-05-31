@@ -267,7 +267,7 @@ ParamSet = R6Class("ParamSet",
     #'   The aggregation function is selected based on the parameter.
     #'
     #' @return (named `list()`)
-    aggr = function(x) {
+    aggr_internal_tuned_values = function(x) {
       assert_list(x, types = "list")
       aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
       assert_subset(names(x), aggrs$id)
@@ -302,12 +302,15 @@ ParamSet = R6Class("ParamSet",
     #'   The internal search space.
     #' @return (named `list()`)
     convert_internal_search_space = function(search_space) {
+      assert_class(search_space, "ParamSet")
+      param_vals = self$values
+
       imap(search_space$domains, function(token, .id) {
         converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
         if (!is.function(converter)) {
           stopf("No converter exists for parameter '%s'", .id)
         }
-        converter(token)
+        converter(token, param_vals)
       })
     },
 
@@ -385,9 +388,6 @@ ParamSet = R6Class("ParamSet",
       walk(names(xs_internaltune), function(pid) {
         if ("internal_tuning" %nin% self$tags[[pid]]) {
           stopf("Trying to assign InternalTuneToken to parameter '%s' which is not tagged with 'internal_tuning'.", pid)
-        }
-        if (is.null(xs[[pid]]$content$aggr) && is.null(private$.params[pid, "cargo", on = "id"][[1L]][[1L]]$aggr)) {
-          stopf("Trying to set parameter '%s' to InternalTuneToken, but no aggregation function is available.", pid)
         }
       })
 

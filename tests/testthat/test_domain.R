@@ -361,7 +361,8 @@ test_that("internal", {
   it1 = to_tune(aggr = function(x) min(unlist(x)))
   expect_equal(it1$content$aggr(list(1, 2)), 1)
   param_set = ps(
-    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper)
+    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list())
   )
   param_set$set_values(a = to_tune(internal = TRUE, aggr = function(x) round(mean(unlist(x)))))
   expect_class(param_set$values$a, "InternalTuneToken")

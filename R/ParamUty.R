@@ -3,13 +3,6 @@
 #' @export
 p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, repr = substitute(default), init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
   assert_function(custom_check, null.ok = TRUE)
-  assert_list(disable_in_tune, null.ok = TRUE, names = "unique")
-  if ("internal_tuning" %in% tags) {
-    assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
-  } else {
-    assert_true(is.null(in_tune_fn))
-  }
-  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   if (!is.null(custom_check)) {
     custom_check_result = custom_check(1)
     assert(check_true(custom_check_result), check_string(custom_check_result), .var.name = "The result of 'custom_check()'")

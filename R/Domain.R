@@ -66,9 +66,11 @@
 #' @param aggr (`function`)\cr
 #'   Default aggregation function for a parameter. Can only be given for parameters tagged with `"internal_tuning"`.
 #'   Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
-#' @param in_tune_fn (`function(domain, param_set)`)\cr
+#' @param in_tune_fn (`function(domain, param_vals)`)\cr
 #'   Function that converters a `Domain` object into a parameter value.
 #'   Can onlye be given for parameters tagged with `"internal_tuning"`.
+#'   This function should also assert that the parameters required to enable internal tuning for the given `domain` are
+#'   set in `param_vals` (such as `early_stopping_rounds` for `XGBoost`).
 #' @param disable_in_tune (named `list()`)\cr
 #'   The parameter values that need to be set in the `ParamSet` to disable the internal tuning for the parameter.
 #'   For `XGBoost` this would e.g. be `list(early_stopping_rounds = NULL)`.
@@ -131,14 +133,16 @@
 #'
 #' param_set = ps(
 #'   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-#'     in_tune_fn = function(domain, param_set) domain$upper,
+#'     in_tune_fn = function(domain, param_vals) domain$upper,
 #'     disable_in_tune = list(other_param = FALSE))
 #' )
 #' param_set$set_values(
 #'   iters = to_tune(upper = 100, internal = TRUE)
 #' )
 #' param_set$convert_internal_search_space(param_set$search_space())
-#' param_set$aggr(list(iters = list(1, 2, 3)))
+#' param_set$aggr_internal_tuned_values(
+#'   list(iters = list(1, 2, 3))
+#' )
 #'
 #' @family ParamSet construction helpers
 #' @name Domain
@@ -158,6 +162,21 @@ Domain = function(cls, grouping,
   depends_expr = NULL,
   storage_type = "list",
   init) {
+
+  if ("internal_tuning" %in% tags) {
+    assert_true(!is.null(cargo$aggr), .var.name = "aggregation function exists")
+  }
+  assert_list(cargo$disable_in_tune, null.ok = TRUE, names = "unique")
+  assert_function(cargo$aggr, null.ok = TRUE)
+  assert_function(cargo$in_tune_fn, null.ok = TRUE)
+  if ((!is.null(cargo$in_tune_fn) || !is.null(cargo$disable_in_tune)) && "internal_tuning" %nin% tags) {
+    # we cannot check the reverse, as parameters in the search space can be tagged with 'internal_tuning'
+    # and not provide in_tune_fn or disable_in_tune
+    stopf("Arguments in_tune_fn and disable_in_tune require the tag 'internal_tuning' to be present.")
+  }
+  if ((is.null(cargo$in_tune_fn) + is.null(cargo$disable_in_tune)) == 1) {
+    stopf("Arguments in_tune_fn and disable_tune_fn must both be present")
+  }
 
   assert_string(cls)
   assert_string(grouping)

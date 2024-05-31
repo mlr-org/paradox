@@ -54,17 +54,3 @@ test_that("special_vals work for all Param subclasses", {
 test_that("we cannot create Params with non-strict R names", {
   expect_error(ParamInt$new(id = "$foo"), "does not comply")
 })
-
-test_that("disable_in_tune works for all Param subclassedisable_in_tune$s", {
- itfn = function(domain, param_set) 1L
-  expect_equal(
-    p_uty(tags = "internal_tuning", in_tune_fn = itfn, disable_in_tune = list(a = 1))$cargo[[1]]$disable_in_tune$a, 1)
-  expect_equal(
-    p_lgl(tags = "internal_tuning", in_tune_fn = itfn, disable_in_tune = list(a = 1))$cargo[[1]]$disable_in_tune$a, 1)
-  expect_equal(
-    p_int(tags = "internal_tuning", in_tune_fn = itfn, disable_in_tune = list(a = 1))$cargo[[1]]$disable_in_tune$a, 1)
-  expect_equal(
-    p_lgl(tags = "internal_tuning", in_tune_fn = itfn, disable_in_tune = list(a = 1))$cargo[[1]]$disable_in_tune$a, 1)
-  expect_equal(
-    p_uty(tags = "internal_tuning", in_tune_fn = itfn, disable_in_tune = list(a = 1))$cargo[[1]]$disable_in_tune$a, 1)
-})

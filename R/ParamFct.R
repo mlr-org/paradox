@@ -4,12 +4,6 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   assert_function(aggr, null.ok = TRUE, nargs = 1L)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
-  assert_list(disable_in_tune, null.ok = TRUE, names = "unique")
-  if ("internal_tuning" %in% tags) {
-    assert_function(in_tune_fn, null.ok = FALSE, args = c("domain", "param_set"), nargs = 2L)
-  } else {
-    assert_true(is.null(in_tune_fn))
-  }
   if (!is.character(levels)) {
     # if the "levels" argument is not a character vector, then
     # we add a trafo.
@@ -28,11 +22,14 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   }
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
   # We escape '"' and '\' to '\"' and '\\', respectively.
-  cargo = c(aggr = aggr, in_tune_fn = in_tune_fn)
-  cargo = if (length(cargo)) cargo
+  cargo = list()
   cargo$disable_in_tune = disable_in_tune
+  cargo$aggr = aggr
+  cargo$in_tune_fn = in_tune_fn
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
-  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init, cargo = cargo)
+  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals,
+    default = default, tags = tags, trafo = trafo, storage_type = "character",
+    depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }
 
 #' @export

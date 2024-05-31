@@ -402,16 +402,15 @@ test_that("logscale in tunetoken", {
 
 test_that("internal and aggr", {
   # no default aggregation function
-  param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper))
-
-  # correct errors
-  expect_error(param_set$set_values(a = to_tune(internal = TRUE)), "aggregation")
-  expect_error(param_set$set_values(a = to_tune(internal = FALSE, aggr = function(x) 1)))
+  param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+    disable_in_tune = list(), aggr = function(x) round(mean(unlist(x))))
+  )
 
 
   # full tune token + internal
   expect_equal(
-    param_set$set_values(a = to_tune(aggr = function(x) -99))$search_space()$aggr(list(a = list(1, 2, 3))),
+    param_set$set_values(a = to_tune(aggr = function(x) -99))$search_space()$aggr_internal_tuned_values(
+      list(a = list(1, 2, 3))),
     list(a = -99)
   )
 
@@ -429,7 +428,7 @@ test_that("internal and aggr", {
 
   # range + internal
   param_set$set_values(a = to_tune(lower = 1.2, upper = 1.3, aggr = function(x) 1.5))
-  expect_equal(param_set$search_space()$aggr(list(a = list(1, 2))), list(a = 1.5))
+  expect_equal(param_set$search_space()$aggr_internal_tuned_values(list(a = list(1, 2))), list(a = 1.5))
   expect_equal(param_set$convert_internal_search_space(param_set$search_space()), list(a = 1.3))
 
   # full + internal
@@ -445,18 +444,18 @@ test_that("internal and aggr", {
   ## with default aggregation function
 
   # param set + internal
-  param_set = ps(a = p_int(lower = 1, upper = 10000, tags = "internal_tuning", in_tune_fn = function(domain, param_set) domain$upper,
-    aggr = function(x) max(unlist(x))))
+  param_set = ps(a = p_int(lower = 1, upper = 10000, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+    aggr = function(x) max(unlist(x)), disable_in_tune = list()))
 
   # default aggregation function is used when not overwritten
   param_set$set_values(
     a = to_tune(internal = TRUE)
   )
-  expect_equal(param_set$search_space()$aggr(list(a = list(1, 2, 3))), list(a = 3))
+  expect_equal(param_set$search_space()$aggr_internal_tuned_values(list(a = list(1, 2, 3))), list(a = 3))
 
   # can overwrite existing aggregation function
   param_set$set_values(
     a = to_tune(internal = TRUE, aggr = function(x) -60)
   )
-  expect_equal(param_set$search_space()$aggr(list(a = list(1, 2, 3))), list(a = -60))
+  expect_equal(param_set$search_space()$aggr_internal_tuned_values(list(a = list(1, 2, 3))), list(a = -60))
 })
