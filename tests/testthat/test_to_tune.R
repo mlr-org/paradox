@@ -401,7 +401,6 @@ test_that("logscale in tunetoken", {
 
 
 test_that("internal and aggr", {
-  # no default aggregation function
   param_set = ps(a = p_dbl(lower = 1, upper = 2, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
     disable_in_tune = list(), aggr = function(x) round(mean(unlist(x))))
   )
@@ -440,8 +439,6 @@ test_that("internal and aggr", {
     param_set$set_values(a = to_tune(p_dbl(1.21, 1.22), aggr = function(x) 1.5, internal = TRUE)),
     "specify lower and upper"
   )
-
-  ## with default aggregation function
 
   # param set + internal
   param_set = ps(a = p_int(lower = 1, upper = 10000, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
