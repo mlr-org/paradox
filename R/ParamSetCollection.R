@@ -149,6 +149,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       private$.sets[[n]] = p
       invisible(self)
     },
+
     #' @description
     #'
     #' Set the parameter values so that internal tuning for the selected parameters is disabled.
@@ -159,14 +160,25 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     disable_internal_tuning = function(ids) {
       assert_subset(ids, self$ids(tags = "internal_tuning"))
 
+      full_prefix = function(param_set, id_, prefix = "") {
+        info = get_private(param_set)$.translation[id_, c("owner_name", "original_id", "owner_ps_index"), on = "id"]
+        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
+        prefix = if (info$owner_name == "") {
+          prefix
+        } else if (prefix == "") {
+          info$owner_name
+        } else {
+          paste0(prefix, ".", info$owner_name)
+        }
+
+        if (!test_class(subset, "ParamSetCollection")) return(prefix)
+
+        full_prefix(subset, info$original_id, prefix)
+      }
+
       pvs = Reduce(c, map(ids, function(id_) {
-        info = private$.translation[id_, c("original_id", "owner_name"), on = "id"]
-        xs = get_private(private$.sets[[info$owner_name]])$.params[
-          info$original_id, "cargo", on = "id"][[1L]][[1]]$disable_in_tune
-
-        if (info$owner_name == "" || is.null(xs)) return(xs)
-
-        set_names(xs, paste0(info$owner_name, ".", names(xs)))
+        xs = private$.params[list(id_), "cargo", on = "id"][[1]][[1]]$disable_in_tune
+        set_names(xs, paste0(full_prefix(self, id_), ".", names(xs)))
       })) %??% named_list()
       self$set_values(.values = pvs)
     },

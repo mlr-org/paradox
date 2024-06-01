@@ -317,12 +317,16 @@ test_that("disable internal tuning: single collection", {
 })
 
 test_that("disable internal tuning: nested collection", {
-  param_set = ps(
-    a = p_int(
+  param_set = psc(alpha = psc(a = ps(
+    b = p_int(
       in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
-      disable_in_tune = list(), aggr = function(x) 1
-    )
-  )
+      disable_in_tune = list(c = TRUE), aggr = function(x) 1
+    ),
+    c = p_lgl()
+  )))
+
+  param_set$disable_internal_tuning("alpha.a.b")
+  expect_equal(param_set$values$alpha.a.c, TRUE)
 })
 test_that("disable internal tuning: nested flattening", {
   param_set = psc(a = ps(
