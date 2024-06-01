@@ -214,25 +214,48 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     flatten = function() {
       flatps = super$flatten()
 
+      recurse_prefix = function(id_, param_set, prefix = "") {
+        info = get_private(param_set)$.translation[list(id_), c("owner_name", "owner_ps_index"), on = "id"]
+        prefix = if (info$owner_name == "") {
+          prefix
+        } else if (prefix == "") {
+          info$owner_name
+        } else {
+          paste0(prefix, ".", info$owner_name)
+        }
+        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
+        if (!test_class(subset, "ParamSetCollection")) {
+          return(list(prefix = prefix, ids = subset$ids()))
+        }
+        if (prefix != "") {
+          id_ = gsub(sprintf("^\\Q%s.\\E", prefix), "", id_)
+        }
+        recurse_prefix(id_, get_private(param_set)$.sets[[info$owner_ps_index]], prefix)
+      }
+
       flatps$.__enclos_env__$private$.params[, let(
         cargo = pmap(list(cargo = cargo, id_ = id), function(cargo, id_) {
-          if (is.null(cargo$disable_in_tune) || !length(cargo$disable_in_tune)) return(cargo)
+          if (all(map_lgl(cargo[c("disable_in_tune", "in_tune_fn")], is.null))) return(cargo)
 
-          set_id = private$.translation[list(id_), "owner_name", on = "id"][[1L]]
-          if (set_id == "") return(cargo)
+          info = recurse_prefix(id_, self)
+          prefix = info$prefix
+          if (prefix == "") return(cargo)
 
-          disable_in_tune = cargo$disable_in_tune
+          in_tune_fn = cargo$in_tune_fn
+
+          set_ids = info$ids
           cargo$in_tune_fn = crate(function(domain, param_vals) {
-            param_vals = set_names(param_vals, gsub(sprintf("^\\Q%s.\\E", set_id), "", names(param_vals)))
-            disabled_vals = disable_in_tune(param_vals)
-            set_names(disabled_vals, paste0(set_id, ".", names(disabled_vals)))
-          }, disable_in_tune, set_id)
+            param_vals = param_vals[names(param_vals) %in% paste0(prefix, ".", set_ids)]
+            names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
+            in_tune_fn(domain, param_vals)
+          }, in_tune_fn, prefix, set_ids)
 
-          cargo$disable_in_tune = set_names(
-            cargo$disable_in_tune,
-            paste0(set_id, ".", names(cargo$disable_in_tune))
-          )
-
+          if (length(cargo$disable_in_tune)) {
+            cargo$disable_in_tune = set_names(
+              cargo$disable_in_tune,
+              paste0(prefix, ".", names(cargo$disable_in_tune))
+            )
+          }
           cargo
         })
       )]
