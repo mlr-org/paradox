@@ -171,26 +171,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       self$set_values(.values = pvs)
     },
 
-    # #' @description
-    # #' Convert all parameters from the search space to parameter values using the transformation given by
-    # #' `in_tune_fn`.
-    # #' @param search_space ([`ParamSet`])\cr
-    # #'   The internal search space.
-    # #' @return (named `list()`)
-    # convert_internal_search_space = function(search_space) {
-    #   assert_class(search_space, "ParamSet")
-
-
-      
-      
-    #   param_vals = self$values
-
-    #   Reduce(c, imap(private$.sets, function(set, prefix) {
-
-    #     set$convert_internal_search_space()
-        
-    #   })) %??% named_list()
-    # },
     #' @description
     #' Convert all parameters from the search space to parameter values using the transformation given by
     #' `in_tune_fn`.
