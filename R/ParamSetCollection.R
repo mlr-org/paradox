@@ -178,6 +178,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
       pvs = Reduce(c, map(ids, function(id_) {
         xs = private$.params[list(id_), "cargo", on = "id"][[1]][[1]]$disable_in_tune
+        prefix = full_prefix(self, id_)
+        if (prefix == "") return(xs)
         set_names(xs, paste0(full_prefix(self, id_), ".", names(xs)))
       })) %??% named_list()
       self$set_values(.values = pvs)

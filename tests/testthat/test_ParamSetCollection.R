@@ -356,3 +356,16 @@ test_that("disable internal tuning: nested flattening", {
     1
   )
 })
+
+test_that("disable internal tuning without set names", {
+  param_set = psc(ps(
+    a = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(b = TRUE), aggr = function(x) 1
+    ),
+    b = p_lgl()
+  ))
+
+  param_set$disable_internal_tuning("a")
+  expect_equal(param_set$values$b, TRUE)
+})
