@@ -172,7 +172,7 @@ Named with param IDs.}
 \item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
-\item \href{#method-ParamSet-aggr}{\code{ParamSet$aggr()}}
+\item \href{#method-ParamSet-aggr_internal_tuned_values}{\code{ParamSet$aggr_internal_tuned_values()}}
 \item \href{#method-ParamSet-disable_internal_tuning}{\code{ParamSet$disable_internal_tuning()}}
 \item \href{#method-ParamSet-convert_internal_search_space}{\code{ParamSet$convert_internal_search_space()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
@@ -343,12 +343,12 @@ In almost all cases, the default \code{param_set = self} should be used.}
 }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-ParamSet-aggr"></a>}}
-\if{latex}{\out{\hypertarget{method-ParamSet-aggr}{}}}
-\subsection{Method \code{aggr()}}{
+\if{html}{\out{<a id="method-ParamSet-aggr_internal_tuned_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-aggr_internal_tuned_values}{}}}
+\subsection{Method \code{aggr_internal_tuned_values()}}{
 Aggregate parameter values according to their aggregation rules.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$aggr(x)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$aggr_internal_tuned_values(x)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{

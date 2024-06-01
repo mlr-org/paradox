@@ -158,9 +158,11 @@ value upon construction.}
 Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"internal_tuning"}.
 Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.}
 
-\item{in_tune_fn}{(\verb{function(domain, param_set)})\cr
+\item{in_tune_fn}{(\verb{function(domain, param_vals)})\cr
 Function that converters a \code{Domain} object into a parameter value.
-Can onlye be given for parameters tagged with \code{"internal_tuning"}.}
+Can only be given for parameters tagged with \code{"internal_tuning"}.
+This function should also assert that the parameters required to enable internal tuning for the given \code{domain} are
+set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost}).}
 
 \item{disable_in_tune}{(named \code{list()})\cr
 The parameter values that need to be set in the \code{ParamSet} to disable the internal tuning for the parameter.
@@ -254,15 +256,25 @@ print(grid$transpose())
 
 param_set = ps(
   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-    in_tune_fn = function(domain, param_set) domain$upper,
-    disable_in_tune = list(other_param = FALSE))
+    in_tune_fn = function(domain, param_vals) {
+      stopifnot(domain$lower <= 1)
+      stopifnot(param_vals$early_stopping == TRUE)
+      domain$upper
+    },
+    disable_in_tune = list(early_stopping = FALSE)),
+  early_stopping = p_lgl()
 )
 param_set$set_values(
-  iters = to_tune(upper = 100, internal = TRUE)
+  iters = to_tune(upper = 100, internal = TRUE),
+  early_stopping = TRUE
 )
 param_set$convert_internal_search_space(param_set$search_space())
-param_set$aggr(list(iters = list(1, 2, 3)))
+param_set$aggr_internal_tuned_values(
+  list(iters = list(1, 2, 3))
+)
 
+param_set$disable_internal_tuning("iters")
+param_set$values$early_stopping
 }
 \seealso{
 Other ParamSet construction helpers: 

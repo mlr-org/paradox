@@ -68,7 +68,7 @@
 #'   Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
 #' @param in_tune_fn (`function(domain, param_vals)`)\cr
 #'   Function that converters a `Domain` object into a parameter value.
-#'   Can onlye be given for parameters tagged with `"internal_tuning"`.
+#'   Can only be given for parameters tagged with `"internal_tuning"`.
 #'   This function should also assert that the parameters required to enable internal tuning for the given `domain` are
 #'   set in `param_vals` (such as `early_stopping_rounds` for `XGBoost`).
 #' @param disable_in_tune (named `list()`)\cr
@@ -133,17 +133,25 @@
 #'
 #' param_set = ps(
 #'   iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
-#'     in_tune_fn = function(domain, param_vals) domain$upper,
-#'     disable_in_tune = list(other_param = FALSE))
+#'     in_tune_fn = function(domain, param_vals) {
+#'       stopifnot(domain$lower <= 1)
+#'       stopifnot(param_vals$early_stopping == TRUE)
+#'       domain$upper
+#'     },
+#'     disable_in_tune = list(early_stopping = FALSE)),
+#'   early_stopping = p_lgl()
 #' )
 #' param_set$set_values(
-#'   iters = to_tune(upper = 100, internal = TRUE)
+#'   iters = to_tune(upper = 100, internal = TRUE),
+#'   early_stopping = TRUE
 #' )
 #' param_set$convert_internal_search_space(param_set$search_space())
 #' param_set$aggr_internal_tuned_values(
 #'   list(iters = list(1, 2, 3))
 #' )
 #'
+#' param_set$disable_internal_tuning("iters")
+#' param_set$values$early_stopping
 #' @family ParamSet construction helpers
 #' @name Domain
 NULL
