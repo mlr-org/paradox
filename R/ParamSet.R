@@ -744,7 +744,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(xs) == 0L) {
         xs = named_list()
-      } else if (self$assert_values) { # this only makes sense when we have asserts on
+      } else if (self$assert_values) {  # this only makes sense when we have asserts on
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
