@@ -1,8 +1,5 @@
-# dev
+# paradox 1.0.0
 
-* feat: added support for `InternalTuneToken`s
-
-# paradox 0.12.0
 * Removed `Param` objects. `ParamSet` now uses a `data.table` internally; individual parameters are more like `Domain` objects now. `ParamSets` should be constructed using the `ps()` shorthand and `Domain` objects. This entails the following major changes:
     * `ParamSet` now supports `extra_trafo` natively; it behaves like `.extra_trafo` of the `ps()` call.
     * `ParamSet` has `$constraint`
@@ -11,6 +8,7 @@
     * `Condition` objects are now S3 objects and can be constructed with `CondEqual()` and `CondAnyOf()`, instead of `CondXyz$new()`. (It is recommended to use the `Domain` interface for conditions, which has not changed)
     * `ParamSet` has new fields `$is_logscale`, `$has_trafo_param` (per-param), and `$has_trafo_param` (scalar for the whole set).
 * Added a vignette which was previously a chapter in the `mlr3book`
+* feat: added support for `InternalTuneToken`s
 
 # paradox 0.11.1
 
