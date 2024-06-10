@@ -114,5 +114,5 @@ xst = x$transpose()
 xst
 ```
 
-Further documentation can be found in the [mlr3book](https://mlr3book.mlr-org.com/technical.html#paradox).
+Further documentation can be found in the [in-depth tutorial](https://paradox.mlr-org.com/dev/articles/indepth.html)
 

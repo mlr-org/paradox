@@ -7,6 +7,10 @@ vignette: >
   %\VignetteEncoding{UTF-8}
 ---
 
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, comment = "#>", collapse = TRUE)
+```
+
 ## Parameters (using paradox)
 
 The `paradox` package offers a language for the description of *parameter spaces*, as well as tools for useful operations on these parameter spaces.
