@@ -7,7 +7,7 @@
 domain_is_categ(param)
 }
 \arguments{
-\item{x}{(\code{Domain}).}
+\item{param}{(\code{Domain}).}
 }
 \value{
 \code{logical}.

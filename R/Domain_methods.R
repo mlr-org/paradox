@@ -12,7 +12,8 @@
 #'
 #' `domain_assert` will return the `param` argument silently for accepted values, and throw an error message otherwise.
 #'
-#' @param x (`any`).
+#' @param param (`Domain`).
+#' @param values (`any`).
 #' @return If successful `TRUE`, if not a string with the error message.
 #' @keywords internal
 #' @export
@@ -60,7 +61,7 @@ domain_nlevels = function(param) {
 #' @description
 #' This should generally be `TRUE` when `lower` and `upper` are given and finite, or when the `nlevels` is finite, and `FALSE` otherwise.
 #'
-#' @param x (`Domain`).
+#' @param param (`Domain`).
 #' @return `logical`.
 #' @keywords internal
 #' @export
@@ -75,7 +76,7 @@ domain_is_bounded = function(param) {
 #' @description
 #' This should generally be `TRUE` for discrete or continuous numeric [`Domain`]s, and `FALSE` otherwise.
 #'
-#' @param x (`Domain`).
+#' @param param (`Domain`).
 #' @return `logical`.
 #' @keywords internal
 #' @export
@@ -90,7 +91,7 @@ domain_is_number = function(param) {
 #' @description
 #' This should generally be `TRUE` for categorical [`Domain`]s, such as [`p_fct()`] or [`p_lgl()`], and `FALSE` otherwise.
 #'
-#' @param x (`Domain`).
+#' @param param (`Domain`).
 #' @return `logical`.
 #' @keywords internal
 #' @export

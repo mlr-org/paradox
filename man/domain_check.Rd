@@ -13,7 +13,9 @@ domain_assert(param, values, .var.name = checkmate::vname(param), add = NULL)
 domain_test(param, values)
 }
 \arguments{
-\item{x}{(\code{any}).}
+\item{param}{(\code{Domain}).}
+
+\item{values}{(\code{any}).}
 }
 \value{
 If successful \code{TRUE}, if not a string with the error message.
