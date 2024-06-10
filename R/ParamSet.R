@@ -93,7 +93,7 @@ ParamSet = R6Class("ParamSet",
       if (".requirements" %in% names(paramtbl)) {
         requirements = paramtbl$.requirements
         private$.params = paramtbl  # self$add_dep needs this
-       for (row in seq_len(nrow(paramtbl))) {
+        for (row in seq_len(nrow(paramtbl))) {
           for (req in requirements[[row]]) {
             invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
               .args = req)
@@ -154,7 +154,8 @@ ParamSet = R6Class("ParamSet",
     #' @param any_tags (`character()`). See `$ids()`.
     #' @param type (`character(1)`)\cr
     #'   Return values `"with_token"` (i.e. all values),
-    #    `"without_token"` (all values that are not [`TuneToken`] objects) or `"only_token"` (only [`TuneToken`] objects)?
+    #    `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects)
+    #    or `"with_internal"` (all values that are no not `InternalTuneToken`)?
     #' @param check_required (`logical(1)`)\cr
     #'   Check if all required parameters are set?
     #' @param remove_dependencies (`logical(1)`)\cr
@@ -162,7 +163,7 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
-      assert_choice(type, c("with_token", "without_token", "only_token"))
+      assert_choice(type, c("with_token", "without_token", "only_token", "with_internal"))
 
       assert_flag(check_required)
 
@@ -173,6 +174,8 @@ ParamSet = R6Class("ParamSet",
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
         values = keep(values, is, "TuneToken")
+      } else if (type == "with_internal") {
+        values = keep(values, is, "InternalTuneToken")
       }
 
       if (check_required) {
@@ -256,6 +259,62 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
+    #'
+    #' Aggregate parameter values according to their aggregation rules.
+    #'
+    #' @param x (named `list()` of `list()`s)\cr
+    #'   The value(s) to be aggregated. Names are parameter values.
+    #'   The aggregation function is selected based on the parameter.
+    #'
+    #' @return (named `list()`)
+    aggr_internal_tuned_values = function(x) {
+      assert_list(x, types = "list")
+      aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
+      assert_subset(names(x), aggrs$id)
+      if (!length(x)) {
+        return(named_list())
+      }
+      imap(x, function(value, .id) {
+        if (!length(value)) {
+          stopf("Trying to aggregate values of parameters '%s', but there are no values", .id)
+        }
+        aggr = aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
+      })
+    },
+
+    #' @description
+    #'
+    #' Set the parameter values so that internal tuning for the selected parameters is disabled.
+    #'
+    #' @param ids (`character()`)\cr
+    #'   The ids of the parameters for which to disable internal tuning.
+    #' @return `Self`
+    disable_internal_tuning = function(ids) {
+      assert_subset(ids, self$ids(tags = "internal_tuning"))
+      pvs = Reduce(c, map(private$.params[ids, "cargo", on = "id"][[1]], "disable_in_tune")) %??% named_list()
+      self$set_values(.values = pvs)
+    },
+
+    #' @description
+    #' Convert all parameters from the search space to parameter values using the transformation given by
+    #' `in_tune_fn`.
+    #' @param search_space ([`ParamSet`])\cr
+    #'   The internal search space.
+    #' @return (named `list()`)
+    convert_internal_search_space = function(search_space) {
+      assert_class(search_space, "ParamSet")
+      param_vals = self$values
+
+      imap(search_space$domains, function(token, .id) {
+        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
+        if (!is.function(converter)) {
+          stopf("No converter exists for parameter '%s'", .id)
+        }
+        converter(token, param_vals)
+      })
+    },
+
+    #' @description
     #' \pkg{checkmate}-like test-function. Takes a named list.
     #' Return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
@@ -322,6 +381,14 @@ ParamSet = R6Class("ParamSet",
         }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
         if (!isTRUE(tunecheck)) return(tunecheck)
       }
+
+      xs_internaltune = keep(xs, is, "InternalTuneToken")
+      walk(names(xs_internaltune), function(pid) {
+        if ("internal_tuning" %nin% self$tags[[pid]]) {
+          stopf("Trying to assign InternalTuneToken to parameter '%s' which is not tagged with 'internal_tuning'.", pid)
+        }
+      })
+
 
       # check each parameter group's feasibility
       xs_nontune = discard(xs, inherits, "TuneToken")
@@ -822,7 +889,7 @@ ParamSet = R6Class("ParamSet",
     #' Note that this only refers to the `logscale` flag set during construction, e.g. `p_dbl(logscale = TRUE)`.
     #' If the parameter was set to logscale manually, e.g. through `p_dbl(trafo = exp)`,
     #' this `is_logscale` will be `FALSE`.
-    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & cargo == "logscale", id)),
+    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & map_lgl(cargo, function(x) isTRUE(x$logscale)), id)),
 
     ############################
     # Per-Parameter class properties (S3 method call)

@@ -236,3 +236,136 @@ test_that("set_id inference in values assignment works now", {
   expect_error(ParamSetCollection$new(list(a = pscol1, pstest)),
     "duplicated parameter.* a\\.c\\.paramc")
 })
+
+test_that("disable internal tuning works", {
+  param_set = psc(prefix = ps(
+    a = p_dbl(aggr = function(x) 10, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper, disable_in_tune = list(b = FALSE)),
+    b = p_lgl()
+  ))
+
+  param_set$disable_internal_tuning("prefix.a")
+  expect_equal(param_set$values$prefix.b, FALSE)
+  expect_error(param_set$disable_internal_tuning("b"))
+
+  expect_equal(named_list(), psc(ps())$disable_internal_tuning(character(0))$values)
+})
+
+test_that("convert_internal_search_space: depends on other parameter", {
+  param_set = psc(a = ps(
+    b = p_int(tags = "internal_tuning", in_tune_fn = function(domain, param_vals) param_vals$c * domain$upper,
+      aggr = function(x) 10, disable_in_tune = list()),
+    c = p_int()
+  ))
+  param_set$values$a.c = -1
+
+  search_space = ps(
+    a.b = p_int(upper = 1000, tags = "internal_tuning", aggr = function(x) 10)
+  )
+
+  expect_equal(
+    param_set$convert_internal_search_space(search_space)$a.b,
+    -1000
+  )
+})
+
+test_that("convert_internal_search_space: nested collections", {
+  param_set = psc(a = psc(b = ps(param = p_int(
+    in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning", disable_in_tune = list(), aggr = function(x) 10
+  ))))
+
+  search_space = ps(
+    a.b.param = p_int(upper = 99, tags = "internal_tuning", aggr = function(x) 10)
+  )
+
+  expect_equal(
+    param_set$convert_internal_search_space(search_space),
+    list(a.b.param = 99)
+  )
+})
+
+test_that("convert_internal_search_space: flattening", {
+  param_set = psc(a = psc(b = ps(
+    param = p_int(
+    in_tune_fn = function(domain, param_vals) domain$upper * param_vals$other_param, tags = "internal_tuning",
+    disable_in_tune = list(), aggr = function(x) 10),
+    other_param = p_int()
+  )))
+
+  param_set$values$a.b.other_param = -1
+
+  search_space = ps(
+    a.b.param = p_int(upper = 99, tags = "internal_tuning", aggr = function(x) 1)
+  )
+
+  expect_equal(
+    param_set$flatten()$convert_internal_search_space(search_space),
+    list(a.b.param = -99)
+  )
+})
+
+test_that("disable internal tuning: single collection", {
+  param_set = psc(a = ps(
+    b = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(c = TRUE), aggr = function(x) 1
+    ),
+    c = p_lgl()
+  ))
+
+  param_set$disable_internal_tuning("a.b")
+  expect_equal(param_set$values$a.c, TRUE)
+})
+
+test_that("disable internal tuning: nested collection", {
+  param_set = psc(alpha = psc(a = ps(
+    b = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(c = TRUE), aggr = function(x) 1
+    ),
+    c = p_lgl()
+  )))
+
+  param_set$disable_internal_tuning("alpha.a.b")
+  expect_equal(param_set$values$alpha.a.c, TRUE)
+})
+test_that("disable internal tuning: nested flattening", {
+  param_set = psc(a = ps(
+    b = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(c = 1), aggr = function(x) 1
+    ),
+    c = p_int()
+  ))$flatten()
+
+  expect_equal(
+    param_set$disable_internal_tuning("a.b")$values$a.c,
+    1
+  )
+
+  # now with no set id
+  param_set = psc(ps(
+    b = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(c = 1), aggr = function(x) 1
+    ),
+    c = p_int()
+  ))$flatten()
+
+  expect_equal(
+    param_set$disable_internal_tuning("b")$values$c,
+    1
+  )
+})
+
+test_that("disable internal tuning without set names", {
+  param_set = psc(ps(
+    a = p_int(
+      in_tune_fn = function(domain, param_vals) domain$upper, tags = "internal_tuning",
+      disable_in_tune = list(b = TRUE), aggr = function(x) 1
+    ),
+    b = p_lgl()
+  ))
+
+  param_set$disable_internal_tuning("a")
+  expect_equal(param_set$values$b, TRUE)
+})

@@ -442,3 +442,74 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
   param_set$set_values(.values = list(a = NULL), .insert = FALSE)
   expect_identical(param_set$values, list(a = NULL))
 })
+
+test_that("aggr", {
+  param_set = ps(
+    a = p_uty(aggr = function(x) "a"),
+    b = p_fct(levels = c("a", "b"), aggr = function(x) "b"),
+    c = p_lgl(aggr = function(x) "c"),
+    d = p_int(aggr = function(x) "d"),
+    e = p_dbl(aggr = function(x) "e")
+  )
+  expect_class(param_set, "ParamSet")
+
+  vals = param_set$aggr_internal_tuned_values(
+  list(a = list(1), b = list(1), c = list(1), d = list(1), e = list(1)))
+  expect_equal(vals, list(a = "a", b = "b", c = "c", d = "d", e = "e"))
+
+  expect_error(param_set$aggr_internal_tuned_values(1), "list")
+  expect_error(param_set$aggr_internal_tuned_values(list(1)), "list")
+  expect_error(param_set$aggr_internal_tuned_values(list(y = list())), "subset")
+  expect_error(param_set$aggr_internal_tuned_values(
+    list(a = list(), b = list(), c = list(), d = list(), e = list())), "but there are no")
+})
+
+test_that("convert_internal_search_space", {
+  param_set = ps(
+    a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+      aggr = function(x) round(mean(unlist(x))), disable_in_tune = list(a = 1))
+  )
+  param_set$set_values(a = to_tune(internal = TRUE))
+  expect_identical(param_set$convert_internal_search_space(param_set$search_space()), list(a = 100))
+  param_set$set_values(a = to_tune(internal = TRUE, upper = 99))
+  expect_identical(param_set$convert_internal_search_space(param_set$search_space()), list(a = 99))
+})
+
+test_that("get_values works with internal_tune", {
+  param_set = ps(
+    a = p_int(lower = 1, upper = 100, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+      aggr = function(x) round(mean(unlist(x))), disable_in_tune = list(a = 1))
+  )
+  param_set$set_values(a = to_tune(internal = TRUE))
+  expect_list(param_set$get_values(type = "with_internal"), len = 1L)
+  param_set$set_values(a = to_tune())
+  expect_list(param_set$get_values(type = "with_internal"), len = 0L)
+})
+
+test_that("InternalTuneToken is translated to 'internal_tuning' tag when creating search space", {
+  param_set = ps(
+    a = p_int(0, Inf, tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper, aggr = function(x) round(mean(unlist(x)), aggr = function(x) 1),
+      disable_in_tune = list())
+  )
+
+  param_set$set_values(
+    a = to_tune(upper = 100, internal = TRUE)
+  )
+
+  ss = param_set$search_space()
+  expect_true("internal_tuning" %in% ss$tags$a)
+})
+
+test_that("disable internal tuning", {
+  param_set = ps(
+    a = p_dbl(tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper, disable_in_tune = list(b = FALSE), aggr = function(x) 1),
+    b = p_lgl()
+  )
+
+  expect_equal(param_set$values$b, NULL)
+  param_set$disable_internal_tuning("a")
+  expect_equal(param_set$values$b, FALSE)
+
+  expect_error(param_set$disable_internal_tuning("c"))
+  expect_error(param_set$disable_internal_tuning("b"))
+})

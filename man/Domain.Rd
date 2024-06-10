@@ -20,7 +20,10 @@ p_dbl(
   depends = NULL,
   trafo = NULL,
   logscale = FALSE,
-  init
+  init,
+  aggr = NULL,
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_fct(
@@ -30,7 +33,10 @@ p_fct(
   tags = character(),
   depends = NULL,
   trafo = NULL,
-  init
+  init,
+  aggr = NULL,
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_int(
@@ -43,7 +49,10 @@ p_int(
   depends = NULL,
   trafo = NULL,
   logscale = FALSE,
-  init
+  init,
+  aggr = NULL,
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_lgl(
@@ -52,7 +61,10 @@ p_lgl(
   tags = character(),
   depends = NULL,
   trafo = NULL,
-  init
+  init,
+  aggr = NULL,
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 
 p_uty(
@@ -63,7 +75,10 @@ p_uty(
   depends = NULL,
   trafo = NULL,
   repr = substitute(default),
-  init
+  init,
+  aggr = NULL,
+  in_tune_fn = NULL,
+  disable_in_tune = NULL
 )
 }
 \arguments{
@@ -138,6 +153,20 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 \item{init}{(\code{any})\cr
 Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
 value upon construction.}
+
+\item{aggr}{(\code{function})\cr
+Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"internal_tuning"}.
+Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.}
+
+\item{in_tune_fn}{(\verb{function(domain, param_vals)})\cr
+Function that converters a \code{Domain} object into a parameter value.
+Can only be given for parameters tagged with \code{"internal_tuning"}.
+This function should also assert that the parameters required to enable internal tuning for the given \code{domain} are
+set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost}).}
+
+\item{disable_in_tune}{(named \code{list()})\cr
+The parameter values that need to be set in the \code{ParamSet} to disable the internal tuning for the parameter.
+For \code{XGBoost} this would e.g. be \code{list(early_stopping_rounds = NULL)}.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
@@ -222,6 +251,30 @@ print(grid)
 # ... but get transformed to integers.
 print(grid$transpose())
 
+
+# internal tuning
+
+param_set = ps(
+  iters = p_int(0, Inf, tags = "internal_tuning", aggr = function(x) round(mean(unlist(x))),
+    in_tune_fn = function(domain, param_vals) {
+      stopifnot(domain$lower <= 1)
+      stopifnot(param_vals$early_stopping == TRUE)
+      domain$upper
+    },
+    disable_in_tune = list(early_stopping = FALSE)),
+  early_stopping = p_lgl()
+)
+param_set$set_values(
+  iters = to_tune(upper = 100, internal = TRUE),
+  early_stopping = TRUE
+)
+param_set$convert_internal_search_space(param_set$search_space())
+param_set$aggr_internal_tuned_values(
+  list(iters = list(1, 2, 3))
+)
+
+param_set$disable_internal_tuning("iters")
+param_set$values$early_stopping
 }
 \seealso{
 Other ParamSet construction helpers: 

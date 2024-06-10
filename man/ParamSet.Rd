@@ -172,6 +172,9 @@ Named with param IDs.}
 \item \href{#method-ParamSet-get_values}{\code{ParamSet$get_values()}}
 \item \href{#method-ParamSet-set_values}{\code{ParamSet$set_values()}}
 \item \href{#method-ParamSet-trafo}{\code{ParamSet$trafo()}}
+\item \href{#method-ParamSet-aggr_internal_tuned_values}{\code{ParamSet$aggr_internal_tuned_values()}}
+\item \href{#method-ParamSet-disable_internal_tuning}{\code{ParamSet$disable_internal_tuning()}}
+\item \href{#method-ParamSet-convert_internal_search_space}{\code{ParamSet$convert_internal_search_space()}}
 \item \href{#method-ParamSet-test_constraint}{\code{ParamSet$test_constraint()}}
 \item \href{#method-ParamSet-test_constraint_dt}{\code{ParamSet$test_constraint_dt()}}
 \item \href{#method-ParamSet-check}{\code{ParamSet$check()}}
@@ -337,6 +340,71 @@ Passed to \code{extra_trafo()}. Note that the \code{extra_trafo} of \code{self} 
 In almost all cases, the default \code{param_set = self} should be used.}
 }
 \if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-aggr_internal_tuned_values"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-aggr_internal_tuned_values}{}}}
+\subsection{Method \code{aggr_internal_tuned_values()}}{
+Aggregate parameter values according to their aggregation rules.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$aggr_internal_tuned_values(x)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{x}}{(named \code{list()} of \code{list()}s)\cr
+The value(s) to be aggregated. Names are parameter values.
+The aggregation function is selected based on the parameter.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+(named \code{list()})
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-disable_internal_tuning"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-disable_internal_tuning}{}}}
+\subsection{Method \code{disable_internal_tuning()}}{
+Set the parameter values so that internal tuning for the selected parameters is disabled.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$disable_internal_tuning(ids)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()})\cr
+The ids of the parameters for which to disable internal tuning.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{Self}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSet-convert_internal_search_space"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSet-convert_internal_search_space}{}}}
+\subsection{Method \code{convert_internal_search_space()}}{
+Convert all parameters from the search space to parameter values using the transformation given by
+\code{in_tune_fn}.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$convert_internal_search_space(search_space)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{search_space}}{(\code{\link{ParamSet}})\cr
+The internal search space.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+(named \code{list()})
 }
 }
 \if{html}{\out{<hr>}}

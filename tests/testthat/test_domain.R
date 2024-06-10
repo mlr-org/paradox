@@ -347,3 +347,27 @@ test_that("$extra_trafo flag works", {
   search_space = pps$search_space()
   expect_false(search_space$has_extra_trafo)
 })
+
+test_that("internal", {
+  expect_error(to_tune(1, internal = TRUE), "can currently")
+  it = to_tune(upper = 1, internal = TRUE)
+  expect_class(it, "InternalTuneToken")
+  expect_class(it, "RangeTuneToken")
+  expect_null(it$aggr)
+
+  it1 = to_tune(upper = 1, internal = TRUE)
+  expect_equal(it1$content, it$content)
+
+  it1 = to_tune(aggr = function(x) min(unlist(x)))
+  expect_equal(it1$content$aggr(list(1, 2)), 1)
+  param_set = ps(
+    a = p_dbl(1, 10, aggr = function(x) mean(unlist(x)), tags = "internal_tuning", in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list())
+  )
+  param_set$set_values(a = to_tune(internal = TRUE, aggr = function(x) round(mean(unlist(x)))))
+  expect_class(param_set$values$a, "InternalTuneToken")
+  expect_error(param_set$set_values(a = to_tune(internal = TRUE, logscale = TRUE)), "Cannot combine")
+
+  expect_error(p_dbl(lower = 1, upper = 2, tags = "internal_tuning", "in_tune_fn"))
+})
+

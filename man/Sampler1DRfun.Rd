@@ -8,14 +8,14 @@ Arbitrary sampling from 1D RNG functions from R.
 }
 \seealso{
 Other Sampler: 
+\code{\link{Sampler}},
+\code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
 \code{\link{Sampler1DNormal}},
 \code{\link{Sampler1DUnif}},
-\code{\link{Sampler1D}},
 \code{\link{SamplerHierarchical}},
 \code{\link{SamplerJointIndep}},
-\code{\link{SamplerUnif}},
-\code{\link{Sampler}}
+\code{\link{SamplerUnif}}
 }
 \concept{Sampler}
 \section{Super classes}{

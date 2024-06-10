@@ -148,6 +148,113 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       entry = if (n == "") length(private$.sets) + 1 else n
       private$.sets[[n]] = p
       invisible(self)
+    },
+
+    #' @description
+    #'
+    #' Set the parameter values so that internal tuning for the selected parameters is disabled.
+    #'
+    #' @param ids (`character()`)\cr
+    #'   The ids of the parameters for which to disable internal tuning.
+    #' @return `Self`
+    disable_internal_tuning = function(ids) {
+      assert_subset(ids, self$ids(tags = "internal_tuning"))
+
+      full_prefix = function(param_set, id_, prefix = "") {
+        info = get_private(param_set)$.translation[id_, c("owner_name", "original_id", "owner_ps_index"), on = "id"]
+        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
+        prefix = if (info$owner_name == "") {
+          prefix
+        } else if (prefix == "") {
+          info$owner_name
+        } else {
+          paste0(prefix, ".", info$owner_name)
+        }
+
+        if (!test_class(subset, "ParamSetCollection")) return(prefix)
+
+        full_prefix(subset, info$original_id, prefix)
+      }
+
+      pvs = Reduce(c, map(ids, function(id_) {
+        xs = private$.params[list(id_), "cargo", on = "id"][[1]][[1]]$disable_in_tune
+        prefix = full_prefix(self, id_)
+        if (prefix == "") return(xs)
+        set_names(xs, paste0(full_prefix(self, id_), ".", names(xs)))
+      })) %??% named_list()
+      self$set_values(.values = pvs)
+    },
+
+    #' @description
+    #' Convert all parameters from the search space to parameter values using the transformation given by
+    #' `in_tune_fn`.
+    #' @param search_space ([`ParamSet`])\cr
+    #'   The internal search space.
+    #' @return (named `list()`)
+    convert_internal_search_space = function(search_space) {
+      assert_class(search_space, "ParamSet")
+      imap(search_space$domains, function(token, .id) {
+        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
+        if (!is.function(converter)) {
+          stopf("No converter exists for parameter '%s'", .id)
+        }
+        set_index = private$.translation[list(.id), "owner_ps_index", on = "id"][[1L]]
+        converter(token, private$.sets[[set_index]]$values)
+      })
+    },
+
+    #' @description
+    #' Create a `ParamSet` from this `ParamSetCollection`.
+    flatten = function() {
+      flatps = super$flatten()
+
+      recurse_prefix = function(id_, param_set, prefix = "") {
+        info = get_private(param_set)$.translation[list(id_), c("owner_name", "owner_ps_index"), on = "id"]
+        prefix = if (info$owner_name == "") {
+          prefix
+        } else if (prefix == "") {
+          info$owner_name
+        } else {
+          paste0(prefix, ".", info$owner_name)
+        }
+        subset = get_private(param_set)$.sets[[info$owner_ps_index]]
+        if (!test_class(subset, "ParamSetCollection")) {
+          return(list(prefix = prefix, ids = subset$ids()))
+        }
+        if (prefix != "") {
+          id_ = gsub(sprintf("^\\Q%s.\\E", prefix), "", id_)
+        }
+        recurse_prefix(id_, get_private(param_set)$.sets[[info$owner_ps_index]], prefix)
+      }
+
+      flatps$.__enclos_env__$private$.params[, let(
+        cargo = pmap(list(cargo = cargo, id_ = id), function(cargo, id_) {
+          if (all(map_lgl(cargo[c("disable_in_tune", "in_tune_fn")], is.null))) return(cargo)
+
+          info = recurse_prefix(id_, self)
+          prefix = info$prefix
+          if (prefix == "") return(cargo)
+
+          in_tune_fn = cargo$in_tune_fn
+
+          set_ids = info$ids
+          cargo$in_tune_fn = crate(function(domain, param_vals) {
+            param_vals = param_vals[names(param_vals) %in% paste0(prefix, ".", set_ids)]
+            names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
+            in_tune_fn(domain, param_vals)
+          }, in_tune_fn, prefix, set_ids)
+
+          if (length(cargo$disable_in_tune)) {
+            cargo$disable_in_tune = set_names(
+              cargo$disable_in_tune,
+              paste0(prefix, ".", names(cargo$disable_in_tune))
+            )
+          }
+          cargo
+        })
+      )]
+
+      flatps
     }
   ),
 

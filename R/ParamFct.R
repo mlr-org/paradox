@@ -1,6 +1,7 @@
 #' @rdname Domain
 #' @export
-p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init) {
+p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
+  assert_function(aggr, null.ok = TRUE, nargs = 1L)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
@@ -21,8 +22,14 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   }
   # group p_fct by levels, so the group can be checked in a vectorized fashion.
   # We escape '"' and '\' to '\"' and '\\', respectively.
+  cargo = list()
+  cargo$disable_in_tune = disable_in_tune
+  cargo$aggr = aggr
+  cargo$in_tune_fn = in_tune_fn
   grouping = str_collapse(gsub("([\\\\\"])", "\\\\\\1", sort(real_levels)), quote = '"', sep = ",")
-  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals, default = default, tags = tags, trafo = trafo, storage_type = "character", depends_expr = substitute(depends), init = init)
+  Domain(cls = "ParamFct", grouping = grouping, levels = real_levels, special_vals = special_vals,
+    default = default, tags = tags, trafo = trafo, storage_type = "character",
+    depends_expr = substitute(depends), init = init, cargo = if (length(cargo)) cargo)
 }
 
 #' @export
