@@ -46,7 +46,7 @@ domain_test = function(param, values) isTRUE(domain_check(param, values))
 #' This should be the number of discrete possible levels for discrete type [`Domain`]s such as [`p_int()`] or [`p_fct()`], and
 #' `Inf` for continuous or untyped parameters.
 #'
-#' @param x (`Domain`).
+#' @param param (`Domain`).
 #' @return `numeric`.
 #' @keywords internal
 #' @export

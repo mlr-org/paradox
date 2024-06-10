@@ -240,6 +240,7 @@ ParamSet = R6Class("ParamSet",
       if (is.data.frame(x)) x = as.list(x)
       assert_list(x, names = "unique")
       trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
+      value = NULL  # static checks
       trafos[, value := x[id]]
       if (nrow(trafos)) {
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
@@ -547,6 +548,7 @@ ParamSet = R6Class("ParamSet",
       x = t(x)
       params = private$.params[rownames(x), on = "id"]
       params$result = list()
+      result = NULL  # static checks
       params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))),
         by = c("cls", "grouping")]
       as.data.table(set_names(params$result, params$id))
@@ -750,7 +752,7 @@ ParamSet = R6Class("ParamSet",
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
         nontt = discard(xs, inherits, "TuneToken")
-
+        values = special_vals = NULL  # static checks
         sanitized = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
           !pmap_lgl(list(special_vals, values), has_element),
           .(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
