@@ -120,7 +120,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
 <span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  logscale <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  <span class="va">init</span></span>
+<span>  <span class="va">init</span>,</span>
+<span>  aggr <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  in_tune_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disable_in_tune <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">p_fct</span><span class="op">(</span></span>
@@ -130,7 +133,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
 <span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  <span class="va">init</span></span>
+<span>  <span class="va">init</span>,</span>
+<span>  aggr <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  in_tune_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disable_in_tune <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">p_int</span><span class="op">(</span></span>
@@ -143,7 +149,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
 <span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  logscale <span class="op">=</span> <span class="cn">FALSE</span>,</span>
-<span>  <span class="va">init</span></span>
+<span>  <span class="va">init</span>,</span>
+<span>  aggr <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  in_tune_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disable_in_tune <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">p_lgl</span><span class="op">(</span></span>
@@ -152,7 +161,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
 <span>  tags <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/character.html" class="external-link">character</a></span><span class="op">(</span><span class="op">)</span>,</span>
 <span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
-<span>  <span class="va">init</span></span>
+<span>  <span class="va">init</span>,</span>
+<span>  aggr <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  in_tune_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disable_in_tune <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="fu">p_uty</span><span class="op">(</span></span>
@@ -163,7 +175,10 @@ The <code>Domain</code> object's internals are subject to change and should not 
 <span>  depends <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  trafo <span class="op">=</span> <span class="cn">NULL</span>,</span>
 <span>  repr <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/substitute.html" class="external-link">substitute</a></span><span class="op">(</span><span class="va">default</span><span class="op">)</span>,</span>
-<span>  <span class="va">init</span></span>
+<span>  <span class="va">init</span>,</span>
+<span>  aggr <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  in_tune_fn <span class="op">=</span> <span class="cn">NULL</span>,</span>
+<span>  disable_in_tune <span class="op">=</span> <span class="cn">NULL</span></span>
 <span><span class="op">)</span></span></code></pre></div>
     </div>
 
@@ -255,6 +270,26 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 <dd><p>(<code>any</code>)<br>
 Initial value. When this is given, then the corresponding entry in <code>ParamSet$values</code> is initialized with this
 value upon construction.</p></dd>
+
+
+<dt>aggr</dt>
+<dd><p>(<code>function</code>)<br>
+Default aggregation function for a parameter. Can only be given for parameters tagged with <code>"internal_tuning"</code>.
+Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.</p></dd>
+
+
+<dt>in_tune_fn</dt>
+<dd><p>(<code>function(domain, param_vals)</code>)<br>
+Function that converters a <code>Domain</code> object into a parameter value.
+Can only be given for parameters tagged with <code>"internal_tuning"</code>.
+This function should also assert that the parameters required to enable internal tuning for the given <code>domain</code> are
+set in <code>param_vals</code> (such as <code>early_stopping_rounds</code> for <code>XGBoost</code>).</p></dd>
+
+
+<dt>disable_in_tune</dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)<br>
+The parameter values that need to be set in the <code>ParamSet</code> to disable the internal tuning for the parameter.
+For <code>XGBoost</code> this would e.g. be <code>list(early_stopping_rounds = NULL)</code>.</p></dd>
 
 
 <dt>levels</dt>
@@ -437,6 +472,37 @@ names to the arbitrary values of the <code>levels</code> argument.</p>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
 <span class="r-in"><span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="co"># internal tuning</span></span></span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">param_set</span> <span class="op">=</span> <span class="fu"><a href="ps.html">ps</a></span><span class="op">(</span></span></span>
+<span class="r-in"><span>  iters <span class="op">=</span> <span class="fu">p_int</span><span class="op">(</span><span class="fl">0</span>, <span class="cn">Inf</span>, tags <span class="op">=</span> <span class="st">"internal_tuning"</span>, aggr <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/Round.html" class="external-link">round</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/mean.html" class="external-link">mean</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/unlist.html" class="external-link">unlist</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>    in_tune_fn <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">domain</span>, <span class="va">param_vals</span><span class="op">)</span> <span class="op">{</span></span></span>
+<span class="r-in"><span>      <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="va">domain</span><span class="op">$</span><span class="va">lower</span> <span class="op">&lt;=</span> <span class="fl">1</span><span class="op">)</span></span></span>
+<span class="r-in"><span>      <span class="fu"><a href="https://rdrr.io/r/base/stopifnot.html" class="external-link">stopifnot</a></span><span class="op">(</span><span class="va">param_vals</span><span class="op">$</span><span class="va">early_stopping</span> <span class="op">==</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span>      <span class="va">domain</span><span class="op">$</span><span class="va">upper</span></span></span>
+<span class="r-in"><span>    <span class="op">}</span>,</span></span>
+<span class="r-in"><span>    disable_in_tune <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>early_stopping <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  early_stopping <span class="op">=</span> <span class="fu">p_lgl</span><span class="op">(</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">param_set</span><span class="op">$</span><span class="fu">set_values</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  iters <span class="op">=</span> <span class="fu"><a href="to_tune.html">to_tune</a></span><span class="op">(</span>upper <span class="op">=</span> <span class="fl">100</span>, internal <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span>,</span></span>
+<span class="r-in"><span>  early_stopping <span class="op">=</span> <span class="cn">TRUE</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">param_set</span><span class="op">$</span><span class="fu">convert_internal_search_space</span><span class="op">(</span><span class="va">param_set</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $iters</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 100</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span><span class="va">param_set</span><span class="op">$</span><span class="fu">aggr_internal_tuned_values</span><span class="op">(</span></span></span>
+<span class="r-in"><span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>iters <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="fl">1</span>, <span class="fl">2</span>, <span class="fl">3</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> $iters</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] 2</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">param_set</span><span class="op">$</span><span class="fu">disable_internal_tuning</span><span class="op">(</span><span class="st">"iters"</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">param_set</span><span class="op">$</span><span class="va">values</span><span class="op">$</span><span class="va">early_stopping</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> [1] FALSE</span>
 </code></pre></div>
     </div>
   </main><aside class="col-md-3"><nav id="toc"><h2>On this page</h2>

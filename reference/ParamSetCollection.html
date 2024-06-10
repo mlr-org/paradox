@@ -194,14 +194,17 @@ This field provides direct references to the <code><a href="ParamSet.html">Param
 
 <ul><li><p><a href="#method-ParamSetCollection-new"><code>ParamSetCollection$new()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-add"><code>ParamSetCollection$add()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-disable_internal_tuning"><code>ParamSetCollection$disable_internal_tuning()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-convert_internal_search_space"><code>ParamSetCollection$convert_internal_search_space()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-flatten"><code>ParamSetCollection$flatten()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-clone"><code>ParamSetCollection$clone()</code></a></p></li>
 </ul></div><p><details><summary>Inherited methods</summary><ul><li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="add_dep"><a href="ParamSet.html#method-add_dep"><code>paradox::ParamSet$add_dep()</code></a></span></li>
+<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="aggr_internal_tuned_values"><a href="ParamSet.html#method-aggr_internal_tuned_values"><code>paradox::ParamSet$aggr_internal_tuned_values()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert"><a href="ParamSet.html#method-assert"><code>paradox::ParamSet$assert()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="assert_dt"><a href="ParamSet.html#method-assert_dt"><code>paradox::ParamSet$assert_dt()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check"><a href="ParamSet.html#method-check"><code>paradox::ParamSet$check()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dependencies"><a href="ParamSet.html#method-check_dependencies"><code>paradox::ParamSet$check_dependencies()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="check_dt"><a href="ParamSet.html#method-check_dt"><code>paradox::ParamSet$check_dt()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="flatten"><a href="ParamSet.html#method-flatten"><code>paradox::ParamSet$flatten()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="format"><a href="ParamSet.html#method-format"><code>paradox::ParamSet$format()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_domain"><a href="ParamSet.html#method-get_domain"><code>paradox::ParamSet$get_domain()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="get_values"><a href="ParamSet.html#method-get_values"><code>paradox::ParamSet$get_values()</code></a></span></li>
@@ -276,15 +279,66 @@ Whether to add tags of the form <code>"param_&lt;param_id&gt;"</code> to each pa
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-ParamSetCollection-clone"></a><div class="section">
-<h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
-<p>The objects of this class are cloneable with this method.</p><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-disable_internal_tuning"></a><div class="section">
+<h3 id="method-disable-internal-tuning-">Method <code>disable_internal_tuning()</code><a class="anchor" aria-label="anchor" href="#method-disable-internal-tuning-"></a></h3>
+<p>Set the parameter values so that internal tuning for the selected parameters is disabled.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">disable_internal_tuning</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-2">Arguments<a class="anchor" aria-label="anchor" href="#arguments-2"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>ids</code></dt>
+<dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>)<br>
+The ids of the parameters for which to disable internal tuning.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns">Returns<a class="anchor" aria-label="anchor" href="#returns"></a></h4>
+<p><code>Self</code></p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSetCollection-convert_internal_search_space"></a><div class="section">
+<h3 id="method-convert-internal-search-space-">Method <code>convert_internal_search_space()</code><a class="anchor" aria-label="anchor" href="#method-convert-internal-search-space-"></a></h3>
+<p>Convert all parameters from the search space to parameter values using the transformation given by
+<code>in_tune_fn</code>.</p><div class="section">
+<h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">convert_internal_search_space</span><span class="op">(</span><span class="va">search_space</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-3">Arguments<a class="anchor" aria-label="anchor" href="#arguments-3"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>search_space</code></dt>
+<dd><p>(<code><a href="ParamSet.html">ParamSet</a></code>)<br>
+The internal search space.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-1">Returns<a class="anchor" aria-label="anchor" href="#returns-1"></a></h4>
+<p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSetCollection-flatten"></a><div class="section">
+<h3 id="method-flatten-">Method <code>flatten()</code><a class="anchor" aria-label="anchor" href="#method-flatten-"></a></h3>
+<p>Create a <code>ParamSet</code> from this <code>ParamSetCollection</code>.</p><div class="section">
+<h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">flatten</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+
+</div><p></p><hr><a id="method-ParamSetCollection-clone"></a><div class="section">
+<h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
+<p>The objects of this class are cloneable with this method.</p><div class="section">
+<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 

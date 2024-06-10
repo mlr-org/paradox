@@ -305,6 +305,9 @@ Named with param IDs.</p></dd>
 <li><p><a href="#method-ParamSet-get_values"><code>ParamSet$get_values()</code></a></p></li>
 <li><p><a href="#method-ParamSet-set_values"><code>ParamSet$set_values()</code></a></p></li>
 <li><p><a href="#method-ParamSet-trafo"><code>ParamSet$trafo()</code></a></p></li>
+<li><p><a href="#method-ParamSet-aggr_internal_tuned_values"><code>ParamSet$aggr_internal_tuned_values()</code></a></p></li>
+<li><p><a href="#method-ParamSet-disable_internal_tuning"><code>ParamSet$disable_internal_tuning()</code></a></p></li>
+<li><p><a href="#method-ParamSet-convert_internal_search_space"><code>ParamSet$convert_internal_search_space()</code></a></p></li>
 <li><p><a href="#method-ParamSet-test_constraint"><code>ParamSet$test_constraint()</code></a></p></li>
 <li><p><a href="#method-ParamSet-test_constraint_dt"><code>ParamSet$test_constraint_dt()</code></a></p></li>
 <li><p><a href="#method-ParamSet-check"><code>ParamSet$check()</code></a></p></li>
@@ -489,18 +492,83 @@ In almost all cases, the default <code>param_set = self</code> should be used.</
 </dl><p></p></div>
 </div>
 
+</div><p></p><hr><a id="method-ParamSet-aggr_internal_tuned_values"></a><div class="section">
+<h3 id="method-aggr-internal-tuned-values-">Method <code>aggr_internal_tuned_values()</code><a class="anchor" aria-label="anchor" href="#method-aggr-internal-tuned-values-"></a></h3>
+<p>Aggregate parameter values according to their aggregation rules.</p><div class="section">
+<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">aggr_internal_tuned_values</span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>x</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code> of <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>s)<br>
+The value(s) to be aggregated. Names are parameter values.
+The aggregation function is selected based on the parameter.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-2">Returns<a class="anchor" aria-label="anchor" href="#returns-2"></a></h4>
+<p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-disable_internal_tuning"></a><div class="section">
+<h3 id="method-disable-internal-tuning-">Method <code>disable_internal_tuning()</code><a class="anchor" aria-label="anchor" href="#method-disable-internal-tuning-"></a></h3>
+<p>Set the parameter values so that internal tuning for the selected parameters is disabled.</p><div class="section">
+<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">disable_internal_tuning</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>ids</code></dt>
+<dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>)<br>
+The ids of the parameters for which to disable internal tuning.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-3">Returns<a class="anchor" aria-label="anchor" href="#returns-3"></a></h4>
+<p><code>Self</code></p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-convert_internal_search_space"></a><div class="section">
+<h3 id="method-convert-internal-search-space-">Method <code>convert_internal_search_space()</code><a class="anchor" aria-label="anchor" href="#method-convert-internal-search-space-"></a></h3>
+<p>Convert all parameters from the search space to parameter values using the transformation given by
+<code>in_tune_fn</code>.</p><div class="section">
+<h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">convert_internal_search_space</span><span class="op">(</span><span class="va">search_space</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>search_space</code></dt>
+<dd><p>(<code>ParamSet</code>)<br>
+The internal search space.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-4">Returns<a class="anchor" aria-label="anchor" href="#returns-4"></a></h4>
+<p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)</p>
+</div>
+
 </div><p></p><hr><a id="method-ParamSet-test_constraint"></a><div class="section">
 <h3 id="method-test-constraint-">Method <code>test_constraint()</code><a class="anchor" aria-label="anchor" href="#method-test-constraint-"></a></h3>
 <p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
 Return <code>FALSE</code> if the given <code>$constraint</code> is not satisfied, <code>TRUE</code> otherwise.
 Note this is different from satisfying the bounds or types given by the <code>ParamSet</code> itself:
 If <code>x</code> does not satisfy these, an error will be thrown, given that <code>assert_value</code> is <code>TRUE</code>.</p><div class="section">
-<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_constraint</span><span class="op">(</span><span class="va">x</span>, assert_value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
+<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>x</code></dt>
 <dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)<br>
 The value to test.</p></dd>
@@ -515,7 +583,7 @@ Should be <code>TRUE</code> unless this was already checked before.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-2">Returns<a class="anchor" aria-label="anchor" href="#returns-2"></a></h4>
+<h4 id="returns-5">Returns<a class="anchor" aria-label="anchor" href="#returns-5"></a></h4>
 <p><code>logical(1)</code>: Whether <code>x</code> satisfies the <code>$constraint</code>.</p>
 </div>
 
@@ -525,12 +593,12 @@ Should be <code>TRUE</code> unless this was already checked before.</p></dd>
 For each row, return <code>FALSE</code> if the given <code>$constraint</code> is not satisfied, <code>TRUE</code> otherwise.
 Note this is different from satisfying the bounds or types given by the <code>ParamSet</code> itself:
 If <code>x</code> does not satisfy these, an error will be thrown, given that <code>assert_value</code> is <code>TRUE</code>.</p><div class="section">
-<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
+<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_constraint_dt</span><span class="op">(</span><span class="va">x</span>, assert_value <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-6">Arguments<a class="anchor" aria-label="anchor" href="#arguments-6"></a></h4>
+<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>x</code></dt>
 <dd><p>(<code>data.table</code>)<br>
 The values to test.</p></dd>
@@ -545,7 +613,7 @@ Should be <code>TRUE</code> unless this was already checked before.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-3">Returns<a class="anchor" aria-label="anchor" href="#returns-3"></a></h4>
+<h4 id="returns-6">Returns<a class="anchor" aria-label="anchor" href="#returns-6"></a></h4>
 <p><code>logical</code>: For each row in <code>x</code>, whether it satisfies the <code>$constraint</code>.</p>
 </div>
 
@@ -556,87 +624,8 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of <code>x</code>.
 Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
-<h4 id="usage-7">Usage<a class="anchor" aria-label="anchor" href="#usage-7"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
-<h4 id="arguments-7">Arguments<a class="anchor" aria-label="anchor" href="#arguments-7"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
-<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
-
-
-<dt><code>check_strict</code></dt>
-<dd><p>(<code>logical(1)</code>)<br>
-Whether to check that constraints and dependencies are satisfied.</p></dd>
-
-
-</dl><p></p></div>
-</div>
-<div class="section">
-<h4 id="returns-4">Returns<a class="anchor" aria-label="anchor" href="#returns-4"></a></h4>
-<p>If successful <code>TRUE</code>, if not a string with an error message.</p>
-</div>
-
-</div><p></p><hr><a id="method-ParamSet-check_dependencies"></a><div class="section">
-<h3 id="method-check-dependencies-">Method <code>check_dependencies()</code><a class="anchor" aria-label="anchor" href="#method-check-dependencies-"></a></h3>
-<p><span class="pkg">checkmate</span>-like check-function. Takes a named list.
-Checks that all individual param dependencies are satisfied.</p><div class="section">
-<h4 id="usage-8">Usage<a class="anchor" aria-label="anchor" href="#usage-8"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dependencies</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
-<h4 id="arguments-8">Arguments<a class="anchor" aria-label="anchor" href="#arguments-8"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
-<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
-
-
-</dl><p></p></div>
-</div>
-<div class="section">
-<h4 id="returns-5">Returns<a class="anchor" aria-label="anchor" href="#returns-5"></a></h4>
-<p>If successful <code>TRUE</code>, if not a string with an error message.</p>
-</div>
-
-</div><p></p><hr><a id="method-ParamSet-test"></a><div class="section">
-<h3 id="method-test-">Method <code>test()</code><a class="anchor" aria-label="anchor" href="#method-test-"></a></h3>
-<p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of <code>x</code>.
-Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
-<h4 id="usage-9">Usage<a class="anchor" aria-label="anchor" href="#usage-9"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
-</div>
-
-<div class="section">
-<h4 id="arguments-9">Arguments<a class="anchor" aria-label="anchor" href="#arguments-9"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
-<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
-
-
-<dt><code>check_strict</code></dt>
-<dd><p>(<code>logical(1)</code>)<br>
-Whether to check that constraints and dependencies are satisfied.</p></dd>
-
-
-</dl><p></p></div>
-</div>
-<div class="section">
-<h4 id="returns-6">Returns<a class="anchor" aria-label="anchor" href="#returns-6"></a></h4>
-<p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
-</div>
-
-</div><p></p><hr><a id="method-ParamSet-assert"></a><div class="section">
-<h3 id="method-assert-">Method <code>assert()</code><a class="anchor" aria-label="anchor" href="#method-assert-"></a></h3>
-<p><span class="pkg">checkmate</span>-like assert-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of <code>x</code>.
-Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
 <h4 id="usage-10">Usage<a class="anchor" aria-label="anchor" href="#usage-10"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
@@ -650,60 +639,49 @@ Constraints and dependencies are not checked when <code>check_strict</code> is <
 Whether to check that constraints and dependencies are satisfied.</p></dd>
 
 
-<dt><code>.var.name</code></dt>
-<dd><p>(<code>character(1)</code>)<br>
-Name of the checked object to print in error messages.<br>
-Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkmate/reference/vname.html" class="external-link">vname</a>.</p></dd>
-
-
 </dl><p></p></div>
 </div>
 <div class="section">
 <h4 id="returns-7">Returns<a class="anchor" aria-label="anchor" href="#returns-7"></a></h4>
-<p>If successful <code>xs</code> invisibly, if not an error message.</p>
+<p>If successful <code>TRUE</code>, if not a string with an error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-ParamSet-check_dt"></a><div class="section">
-<h3 id="method-check-dt-">Method <code>check_dt()</code><a class="anchor" aria-label="anchor" href="#method-check-dt-"></a></h3>
-<p><span class="pkg">checkmate</span>-like check-function. Takes a <a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>
-where rows are points and columns are parameters.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of <code>x</code>.
-Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
+</div><p></p><hr><a id="method-ParamSet-check_dependencies"></a><div class="section">
+<h3 id="method-check-dependencies-">Method <code>check_dependencies()</code><a class="anchor" aria-label="anchor" href="#method-check-dependencies-"></a></h3>
+<p><span class="pkg">checkmate</span>-like check-function. Takes a named list.
+Checks that all individual param dependencies are satisfied.</p><div class="section">
 <h4 id="usage-11">Usage<a class="anchor" aria-label="anchor" href="#usage-11"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dependencies</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-11">Arguments<a class="anchor" aria-label="anchor" href="#arguments-11"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a> | <code><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame()</a></code>).</p></dd>
-
-
-<dt><code>check_strict</code></dt>
-<dd><p>(<code>logical(1)</code>)<br>
-Whether to check that constraints and dependencies are satisfied.</p></dd>
+<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
 
 
 </dl><p></p></div>
 </div>
 <div class="section">
 <h4 id="returns-8">Returns<a class="anchor" aria-label="anchor" href="#returns-8"></a></h4>
-<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+<p>If successful <code>TRUE</code>, if not a string with an error message.</p>
 </div>
 
-</div><p></p><hr><a id="method-ParamSet-test_dt"></a><div class="section">
-<h3 id="method-test-dt-">Method <code>test_dt()</code><a class="anchor" aria-label="anchor" href="#method-test-dt-"></a></h3>
-<p><span class="pkg">checkmate</span>-like test-function (s. <code>$check_dt()</code>).</p><div class="section">
+</div><p></p><hr><a id="method-ParamSet-test"></a><div class="section">
+<h3 id="method-test-">Method <code>test()</code><a class="anchor" aria-label="anchor" href="#method-test-"></a></h3>
+<p><span class="pkg">checkmate</span>-like test-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.
+Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
 <h4 id="usage-12">Usage<a class="anchor" aria-label="anchor" href="#usage-12"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-12">Arguments<a class="anchor" aria-label="anchor" href="#arguments-12"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
 
 
 <dt><code>check_strict</code></dt>
@@ -718,17 +696,21 @@ Whether to check that constraints and dependencies are satisfied.</p></dd>
 <p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
 </div>
 
-</div><p></p><hr><a id="method-ParamSet-assert_dt"></a><div class="section">
-<h3 id="method-assert-dt-">Method <code>assert_dt()</code><a class="anchor" aria-label="anchor" href="#method-assert-dt-"></a></h3>
-<p><span class="pkg">checkmate</span>-like assert-function (s. <code>$check_dt()</code>).</p><div class="section">
+</div><p></p><hr><a id="method-ParamSet-assert"></a><div class="section">
+<h3 id="method-assert-">Method <code>assert()</code><a class="anchor" aria-label="anchor" href="#method-assert-"></a></h3>
+<p><span class="pkg">checkmate</span>-like assert-function. Takes a named list.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.
+Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
 <h4 id="usage-13">Usage<a class="anchor" aria-label="anchor" href="#usage-13"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="va">xs</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xs</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-13">Arguments<a class="anchor" aria-label="anchor" href="#arguments-13"></a></h4>
-<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+<p></p><div class="arguments"><dl><dt><code>xs</code></dt>
+<dd><p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>).</p></dd>
 
 
 <dt><code>check_strict</code></dt>
@@ -746,18 +728,104 @@ Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkma
 </div>
 <div class="section">
 <h4 id="returns-10">Returns<a class="anchor" aria-label="anchor" href="#returns-10"></a></h4>
+<p>If successful <code>xs</code> invisibly, if not an error message.</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-check_dt"></a><div class="section">
+<h3 id="method-check-dt-">Method <code>check_dt()</code><a class="anchor" aria-label="anchor" href="#method-check-dt-"></a></h3>
+<p><span class="pkg">checkmate</span>-like check-function. Takes a <a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>
+where rows are points and columns are parameters.
+A point x is feasible, if it configures a subset of params,
+all individual param constraints are satisfied and all dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of <code>x</code>.
+Constraints and dependencies are not checked when <code>check_strict</code> is <code>FALSE</code>.</p><div class="section">
+<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">check_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-14">Arguments<a class="anchor" aria-label="anchor" href="#arguments-14"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
+<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a> | <code><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame()</a></code>).</p></dd>
+
+
+<dt><code>check_strict</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to check that constraints and dependencies are satisfied.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-11">Returns<a class="anchor" aria-label="anchor" href="#returns-11"></a></h4>
+<p>If successful <code>TRUE</code>, if not a string with the error message.</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-test_dt"></a><div class="section">
+<h3 id="method-test-dt-">Method <code>test_dt()</code><a class="anchor" aria-label="anchor" href="#method-test-dt-"></a></h3>
+<p><span class="pkg">checkmate</span>-like test-function (s. <code>$check_dt()</code>).</p><div class="section">
+<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">test_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-15">Arguments<a class="anchor" aria-label="anchor" href="#arguments-15"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
+<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+
+
+<dt><code>check_strict</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to check that constraints and dependencies are satisfied.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-12">Returns<a class="anchor" aria-label="anchor" href="#returns-12"></a></h4>
+<p>If successful <code>TRUE</code>, if not <code>FALSE</code>.</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSet-assert_dt"></a><div class="section">
+<h3 id="method-assert-dt-">Method <code>assert_dt()</code><a class="anchor" aria-label="anchor" href="#method-assert-dt-"></a></h3>
+<p><span class="pkg">checkmate</span>-like assert-function (s. <code>$check_dt()</code>).</p><div class="section">
+<h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">assert_dt</span><span class="op">(</span><span class="va">xdt</span>, check_strict <span class="op">=</span> <span class="cn">TRUE</span>, .var.name <span class="op">=</span> <span class="fu">vname</span><span class="op">(</span><span class="va">xdt</span><span class="op">)</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-16">Arguments<a class="anchor" aria-label="anchor" href="#arguments-16"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
+<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+
+
+<dt><code>check_strict</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to check that constraints and dependencies are satisfied.</p></dd>
+
+
+<dt><code>.var.name</code></dt>
+<dd><p>(<code>character(1)</code>)<br>
+Name of the checked object to print in error messages.<br>
+Defaults to the heuristic implemented in <a href="https://mllg.github.io/checkmate/reference/vname.html" class="external-link">vname</a>.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns-13">Returns<a class="anchor" aria-label="anchor" href="#returns-13"></a></h4>
 <p>If successful <code>xs</code> invisibly, if not, an error is generated.</p>
 </div>
 
 </div><p></p><hr><a id="method-ParamSet-qunif"></a><div class="section">
 <h3 id="method-qunif-">Method <code><a href="https://rdrr.io/r/stats/Uniform.html" class="external-link">qunif()</a></code><a class="anchor" aria-label="anchor" href="#method-qunif-"></a></h3>
 <p>Map a <code>matrix</code> or <code>data.frame</code> of values between 0 and 1 to proportional values inside the feasible intervals of individual parameters.</p><div class="section">
-<h4 id="usage-14">Usage<a class="anchor" aria-label="anchor" href="#usage-14"></a></h4>
+<h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">qunif</span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-14">Arguments<a class="anchor" aria-label="anchor" href="#arguments-14"></a></h4>
+<h4 id="arguments-17">Arguments<a class="anchor" aria-label="anchor" href="#arguments-17"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>x</code></dt>
 <dd><p>(<code>matrix</code> | <code>data.frame</code>)<br>
 Values to map. Column names must be a subset of the names of parameters.</p></dd>
@@ -766,19 +834,19 @@ Values to map. Column names must be a subset of the names of parameters.</p></dd
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-11">Returns<a class="anchor" aria-label="anchor" href="#returns-11"></a></h4>
+<h4 id="returns-14">Returns<a class="anchor" aria-label="anchor" href="#returns-14"></a></h4>
 <p><code>data.table</code>.</p>
 </div>
 
 </div><p></p><hr><a id="method-ParamSet-get_domain"></a><div class="section">
 <h3 id="method-get-domain-">Method <code>get_domain()</code><a class="anchor" aria-label="anchor" href="#method-get-domain-"></a></h3>
 <p>get the <code><a href="Domain.html">Domain</a></code> object that could be used to create a given parameter.</p><div class="section">
-<h4 id="usage-15">Usage<a class="anchor" aria-label="anchor" href="#usage-15"></a></h4>
+<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">get_domain</span><span class="op">(</span><span class="va">id</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-15">Arguments<a class="anchor" aria-label="anchor" href="#arguments-15"></a></h4>
+<h4 id="arguments-18">Arguments<a class="anchor" aria-label="anchor" href="#arguments-18"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>id</code></dt>
 <dd><p>(<code>character(1)</code>).</p></dd>
 
@@ -786,14 +854,14 @@ Values to map. Column names must be a subset of the names of parameters.</p></dd
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-12">Returns<a class="anchor" aria-label="anchor" href="#returns-12"></a></h4>
+<h4 id="returns-15">Returns<a class="anchor" aria-label="anchor" href="#returns-15"></a></h4>
 <p><code><a href="Domain.html">Domain</a></code>.</p>
 </div>
 
 </div><p></p><hr><a id="method-ParamSet-subset"></a><div class="section">
 <h3 id="method-subset-">Method <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code><a class="anchor" aria-label="anchor" href="#method-subset-"></a></h3>
 <p>Create a new <code>ParamSet</code> restricted to the passed IDs.</p><div class="section">
-<h4 id="usage-16">Usage<a class="anchor" aria-label="anchor" href="#usage-16"></a></h4>
+<h4 id="usage-19">Usage<a class="anchor" aria-label="anchor" href="#usage-19"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span></span>
 <span>  <span class="va">ids</span>,</span>
 <span>  allow_dangling_dependencies <span class="op">=</span> <span class="cn">FALSE</span>,</span>
@@ -802,7 +870,7 @@ Values to map. Column names must be a subset of the names of parameters.</p></dd
 </div>
 
 <div class="section">
-<h4 id="arguments-16">Arguments<a class="anchor" aria-label="anchor" href="#arguments-16"></a></h4>
+<h4 id="arguments-19">Arguments<a class="anchor" aria-label="anchor" href="#arguments-19"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>ids</code></dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>).</p></dd>
 
@@ -821,19 +889,19 @@ Whether to keep the <code>$constraint</code> function.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-13">Returns<a class="anchor" aria-label="anchor" href="#returns-13"></a></h4>
+<h4 id="returns-16">Returns<a class="anchor" aria-label="anchor" href="#returns-16"></a></h4>
 <p><code>ParamSet</code>.</p>
 </div>
 
 </div><p></p><hr><a id="method-ParamSet-subspaces"></a><div class="section">
 <h3 id="method-subspaces-">Method <code>subspaces()</code><a class="anchor" aria-label="anchor" href="#method-subspaces-"></a></h3>
 <p>Create new one-dimensional <code>ParamSet</code>s for each dimension.</p><div class="section">
-<h4 id="usage-17">Usage<a class="anchor" aria-label="anchor" href="#usage-17"></a></h4>
+<h4 id="usage-20">Usage<a class="anchor" aria-label="anchor" href="#usage-20"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">subspaces</span><span class="op">(</span>ids <span class="op">=</span> <span class="va">private</span><span class="op">$</span><span class="va">.params</span><span class="op">$</span><span class="va">id</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-17">Arguments<a class="anchor" aria-label="anchor" href="#arguments-17"></a></h4>
+<h4 id="arguments-20">Arguments<a class="anchor" aria-label="anchor" href="#arguments-20"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>ids</code></dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>)<br>
 IDs for which to create <code>ParamSet</code>s. Defaults to all IDs.</p></dd>
@@ -842,7 +910,7 @@ IDs for which to create <code>ParamSet</code>s. Defaults to all IDs.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-14">Returns<a class="anchor" aria-label="anchor" href="#returns-14"></a></h4>
+<h4 id="returns-17">Returns<a class="anchor" aria-label="anchor" href="#returns-17"></a></h4>
 <p>named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code> of <code>ParamSet</code>.</p>
 </div>
 
@@ -850,7 +918,7 @@ IDs for which to create <code>ParamSet</code>s. Defaults to all IDs.</p></dd>
 <h3 id="method-flatten-">Method <code>flatten()</code><a class="anchor" aria-label="anchor" href="#method-flatten-"></a></h3>
 <p>Create a <code>ParamSet</code> from this object, even if this object itself is not
 a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">ParamSetCollection</a></code>.</p><div class="section">
-<h4 id="usage-18">Usage<a class="anchor" aria-label="anchor" href="#usage-18"></a></h4>
+<h4 id="usage-21">Usage<a class="anchor" aria-label="anchor" href="#usage-21"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">flatten</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -858,12 +926,12 @@ a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">Param
 </div><p></p><hr><a id="method-ParamSet-search_space"></a><div class="section">
 <h3 id="method-search-space-">Method <code>search_space()</code><a class="anchor" aria-label="anchor" href="#method-search-space-"></a></h3>
 <p>Construct a <code>ParamSet</code> to tune over. Constructed from <code><a href="to_tune.html">TuneToken</a></code> in <code>$values</code>, see <code><a href="to_tune.html">to_tune()</a></code>.</p><div class="section">
-<h4 id="usage-19">Usage<a class="anchor" aria-label="anchor" href="#usage-19"></a></h4>
+<h4 id="usage-22">Usage<a class="anchor" aria-label="anchor" href="#usage-22"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">search_space</span><span class="op">(</span>values <span class="op">=</span> <span class="va">self</span><span class="op">$</span><span class="va">values</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-18">Arguments<a class="anchor" aria-label="anchor" href="#arguments-18"></a></h4>
+<h4 id="arguments-21">Arguments<a class="anchor" aria-label="anchor" href="#arguments-21"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>values</code></dt>
 <dd><p>(<code>named list</code>): optional named list of <code><a href="to_tune.html">TuneToken</a></code> objects to convert, in place of <code>$values</code>.</p></dd>
 
@@ -874,12 +942,12 @@ a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">Param
 </div><p></p><hr><a id="method-ParamSet-add_dep"></a><div class="section">
 <h3 id="method-add-dep-">Method <code>add_dep()</code><a class="anchor" aria-label="anchor" href="#method-add-dep-"></a></h3>
 <p>Adds a dependency to this set, so that param <code>id</code> now depends on param <code>on</code>.</p><div class="section">
-<h4 id="usage-20">Usage<a class="anchor" aria-label="anchor" href="#usage-20"></a></h4>
+<h4 id="usage-23">Usage<a class="anchor" aria-label="anchor" href="#usage-23"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">add_dep</span><span class="op">(</span><span class="va">id</span>, <span class="va">on</span>, <span class="va">cond</span>, allow_dangling_dependencies <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-19">Arguments<a class="anchor" aria-label="anchor" href="#arguments-19"></a></h4>
+<h4 id="arguments-22">Arguments<a class="anchor" aria-label="anchor" href="#arguments-22"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>id</code></dt>
 <dd><p>(<code>character(1)</code>).</p></dd>
 
@@ -902,12 +970,12 @@ a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">Param
 </div><p></p><hr><a id="method-ParamSet-format"></a><div class="section">
 <h3 id="method-format-">Method <code><a href="https://rdrr.io/r/base/format.html" class="external-link">format()</a></code><a class="anchor" aria-label="anchor" href="#method-format-"></a></h3>
 <p>Helper for print outputs.</p><div class="section">
-<h4 id="usage-21">Usage<a class="anchor" aria-label="anchor" href="#usage-21"></a></h4>
+<h4 id="usage-24">Usage<a class="anchor" aria-label="anchor" href="#usage-24"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">format</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-20">Arguments<a class="anchor" aria-label="anchor" href="#arguments-20"></a></h4>
+<h4 id="arguments-23">Arguments<a class="anchor" aria-label="anchor" href="#arguments-23"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>...</code></dt>
 <dd><p>(ignored).</p></dd>
 
@@ -918,7 +986,7 @@ a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">Param
 </div><p></p><hr><a id="method-ParamSet-print"></a><div class="section">
 <h3 id="method-print-">Method <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code><a class="anchor" aria-label="anchor" href="#method-print-"></a></h3>
 <p>Printer.</p><div class="section">
-<h4 id="usage-22">Usage<a class="anchor" aria-label="anchor" href="#usage-22"></a></h4>
+<h4 id="usage-25">Usage<a class="anchor" aria-label="anchor" href="#usage-25"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">print</span><span class="op">(</span></span>
 <span>  <span class="va">...</span>,</span>
 <span>  hide_cols <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"levels"</span>, <span class="st">"is_bounded"</span>, <span class="st">"special_vals"</span>, <span class="st">"tags"</span>, <span class="st">"storage_type"</span><span class="op">)</span></span>
@@ -926,7 +994,7 @@ a <code>ParamSet</code> but e.g. a <code><a href="ParamSetCollection.html">Param
 </div>
 
 <div class="section">
-<h4 id="arguments-21">Arguments<a class="anchor" aria-label="anchor" href="#arguments-21"></a></h4>
+<h4 id="arguments-24">Arguments<a class="anchor" aria-label="anchor" href="#arguments-24"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>...</code></dt>
 <dd><p>(ignored).</p></dd>
 
@@ -943,12 +1011,12 @@ Which fields should not be printed? Default is <code>"levels"</code>,
 </div><p></p><hr><a id="method-ParamSet-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-23">Usage<a class="anchor" aria-label="anchor" href="#usage-23"></a></h4>
+<h4 id="usage-26">Usage<a class="anchor" aria-label="anchor" href="#usage-26"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSet</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-22">Arguments<a class="anchor" aria-label="anchor" href="#arguments-22"></a></h4>
+<h4 id="arguments-25">Arguments<a class="anchor" aria-label="anchor" href="#arguments-25"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 
