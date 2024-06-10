@@ -295,7 +295,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, args = list(), ...) {
   pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param) {
+tunetoken_to_ps.ObjectTuneToken = function(tt, param, ...) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 
