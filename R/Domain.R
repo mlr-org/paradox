@@ -197,6 +197,7 @@ Domain = function(cls, grouping,
   assert_character(tags, any.missing = FALSE, unique = TRUE)
   assert_function(trafo, null.ok = TRUE)
 
+
   # depends may be an expression, but may also be quote() or expression()
   if (length(depends_expr) == 1) {
     depends_expr = eval(depends_expr, envir = parent.frame(2))
@@ -217,6 +218,7 @@ Domain = function(cls, grouping,
     .tags = list(tags),
     .trafo = list(trafo),
     .requirements = list(parse_depends(depends_expr, parent.frame(2))),
+
     .init_given = !missing(init),
     .init = list(if (!missing(init)) init)
   )
