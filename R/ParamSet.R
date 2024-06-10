@@ -84,6 +84,7 @@ ParamSet = R6Class("ParamSet",
 
       # get initvalues here, so we can delete the relevant column.
       # we only assign it later, so checks can run normally.
+      .init_given = .init = NULL  # pacify checks
       initvalues = if (".init" %in% names(paramtbl)) with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
 
       if (".trafo" %in% names(paramtbl)) {
@@ -730,6 +731,7 @@ ParamSet = R6Class("ParamSet",
     #' @field data (`data.table`) `data.table` representation of the `ParamSet`.
     data = function(v) {
       if (!missing(v)) stop("data is read-only")
+      lower = upper = levels = special_vals = default = NULL  # static check
       private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
         is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags = self$tags)]
     },
@@ -782,6 +784,7 @@ ParamSet = R6Class("ParamSet",
       result = copy(private$.params)
       result[, .tags := list(self$tags)]
       result[private$.trafos, .trafo := list(trafo), on = "id"]
+      .requirements = NULL  # pacify static check
       result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
       vals = self$values
       result[, `:=`(

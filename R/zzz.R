@@ -11,6 +11,8 @@
 # data.table-variables to announce:
 # .init_given, .trafo
 
+utils::globalVariables(c("J", "id", "original_id", "owner_ps_index", ".tags", "tag", ".trafo", ".", "cargo", "default", "cls", "cond", "on"))
+
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start
   backports::import(pkgname)

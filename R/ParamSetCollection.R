@@ -61,6 +61,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
         paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
       }
+      owner_name = NULL  # static check
       if (tag_sets) paramtbl[owner_name != "", .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
       if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
       private$.tags = paramtbl[, .(tag = unique(unlist(.tags))), keyby = "id"]
@@ -355,7 +356,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       for (set_index in private$.children_with_constraints) {
         constraining_ids = private$.translation[J(set_index), id, on = "owner_ps_index"]
         constraint = private$.sets[[set_index]]$constraint
-        constraining_values = x[names(x) %in% changing_ids]
+        constraining_values = x[names(x) %in% constraining_ids]
         names(constraining_values) = private$.translation[names(constraining_values), original_id]
         if (!constraint(x)) return(FALSE)
       }
