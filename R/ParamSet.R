@@ -127,22 +127,10 @@ ParamSet = R6Class("ParamSet",
     #' @param any_tags (`character()`).
     #'   Return only IDs of dimensions that have at least one of the tags given in this argument.
     #' @return `character()`.
+    #' @useDynLib paradox c_paramset_ids
     ids = function(class = NULL, tags = NULL, any_tags = NULL) {
-      assert_character(class, any.missing = FALSE, null.ok = TRUE)
-      assert_character(tags, any.missing = FALSE, null.ok = TRUE)
-      assert_character(any_tags, any.missing = FALSE, null.ok = TRUE)
-
-      if (is.null(class) && is.null(tags) && is.null(any_tags)) {
-        return(private$.params$id)
-      }
-      ptbl = if (is.null(class)) private$.params else private$.params[cls %in% class, .(id)]
-      if (is.null(tags) && is.null(any_tags)) {
-        return(ptbl$id)
-      }
-      tagtbl = private$.tags[ptbl, nomatch = 0]
-      idpool = if (is.null(any_tags)) list() else list(tagtbl[tag %in% any_tags, id])
-      idpool = c(idpool, lapply(tags, function(t) tagtbl[t, id, on = "tag", nomatch = 0]))
-      Reduce(intersect, idpool)
+      # argchecks are done in C code
+      .Call("c_paramset_ids", private$.params, private$.tags, class, tags, any_tags)
     },
 
     #' @description
