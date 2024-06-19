@@ -137,7 +137,7 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(tags) == 1 && is.null(any_tags) && is.null(class)) {
         # very typical case: only 'tags' is given.
-        return(private$.tags[tags, id])
+        return(private$.tags$id[match(tags, private$.tags$tag)])
       }
       ptbl = if (is.null(class)) private$.params else private$.params[cls %in% class, .(id)]
       if (is.null(tags) && is.null(any_tags)) {
