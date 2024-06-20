@@ -817,7 +817,7 @@ ParamSet = R6Class("ParamSet",
     #' @template field_values
     values = function(xs) {
       if (missing(xs)) {
-        return(private$.values)
+        return(private$.get_values())
       }
       if (length(xs) == 0L) {
         xs = named_list()
@@ -1013,7 +1013,8 @@ ParamSet = R6Class("ParamSet",
     .store_values = function(xs) {
       # store with param ordering
       private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
-    }
+    },
+    .get_values = function() private$.values,
     .extra_trafo = NULL,
     .constraint = NULL,
     .params = NULL,
