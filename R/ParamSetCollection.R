@@ -290,7 +290,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
         # %??% character(0) in case xs is an empty unnamed list
         idx = match(names(xs) %??% character(0), private$.translation$id)
-        translate = private$.translation[idx, list(original_id, owner_ps_index)]
+        translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
         set(translate, , j = "values", list(xs))
         for (xtl in split(translate, f = translate$owner_ps_index)) {
           sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
