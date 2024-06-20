@@ -137,7 +137,9 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(tags) == 1 && is.null(any_tags) && is.null(class)) {
         # very typical case: only 'tags' is given.
-        return(private$.tags$id[private$.tags$tag == tags])
+        rv = private$.tags$id[private$.tags$tag == tags]
+        # keep original order
+        return(rv[match(private$.params$id, rv, nomatch = 0)])
       }
       ptbl = if (is.null(class)) private$.params else private$.params[cls %in% class, .(id)]
       if (is.null(tags) && is.null(any_tags)) {
@@ -825,8 +827,7 @@ ParamSet = R6Class("ParamSet",
         # solves issue #293, #317
         xs = self$assert(xs, sanitize = TRUE)
       }
-      # store with param ordering, return value with original ordering
-      private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
+      private$.store_values(xs)
       xs
     },
 
@@ -1009,6 +1010,10 @@ ParamSet = R6Class("ParamSet",
   ),
 
   private = list(
+    .store_values = function(xs) {
+      # store with param ordering
+      private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
+    }
     .extra_trafo = NULL,
     .constraint = NULL,
     .params = NULL,
