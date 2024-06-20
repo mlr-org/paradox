@@ -423,24 +423,48 @@ ParamSet = R6Class("ParamSet",
       pidx = match(names(xs_nontune), params$id)
       nonspecial = !pmap_lgl(list(params$special_vals[pidx], xs_nontune), has_element)
       pidx = pidx[nonspecial]
-      params = params[pidx]
-      set(params, , "values", list(xs_nontune[nonspecial]))
+
       if (sanitize) {
-        checks = params[, {
-            domain = recover_domain(.SD)
-            cr = domain_check(domain, values, internal = TRUE)
+        bylevels = paste0(params$cls[pidx], params$grouping[pidx])
+        if (length(unique(bylevels)) <= 7) {
+          # if we do few splits, it is faster to do the subsetting of `params` manually instead of using data.table `by`.
+          checkresults = list()
+          sanitized_list = list()
+          for (spl in split(pidx, bylevels)) {
+            values = xs[params$id[spl]]
+            spltbl = params[spl]
+            spltbl = recover_domain(spltbl)
+            cr = domain_check(spltbl, values, internal = TRUE)
             if (isTRUE(cr)) {
-              values = domain_sanitize(domain, values)
+              sanitized_list[[length(sanitized_list) + 1]] = structure(domain_sanitize(spltbl, values), names = names(values))
             }
-            list(list(cr), list(values))
-          }, by = c("cls", "grouping"),
-         .SDcols = colnames(params)]
-        checkresults = checks[[3]]
-        sanitized = unlist(checks[[4]], recursive = FALSE)
+            checkresults[[length(checkresults) + 1]] = cr
+          }
+        } else {
+
+          params = params[pidx]
+          set(params, , "values", list(xs_nontune[nonspecial]))
+
+          checks = params[, {
+              domain = recover_domain(.SD)
+              cr = domain_check(domain, values, internal = TRUE)
+              if (isTRUE(cr)) {
+                values = domain_sanitize(domain, values)
+              }
+              list(list(cr), list(structure(values, names = id)))
+            }, by = c("cls", "grouping"),
+           .SDcols = colnames(params)]
+          checkresults = checks[[3]]
+          sanitized_list = checks[[4]]
+        }
+        sanitized = unlist(sanitized_list, recursive = FALSE)
         sanitized_all = xs
-        sanitized_all[params$id] = sanitized
+        sanitized_all[names(sanitized)] = sanitized
         attr(trueret, "sanitized") = sanitized_all
       } else {
+        params = params[pidx]
+        set(params, , "values", list(xs_nontune[nonspecial]))
+
         checkresults = params[, list(list(domain_check(recover_domain(.SD), values))), by = c("cls", "grouping"),
           .SDcols = colnames(params)][[3]]  # first two cols are 'cls' and 'grouping'
       }
