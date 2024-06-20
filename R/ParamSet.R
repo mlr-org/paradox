@@ -363,13 +363,28 @@ ParamSet = R6Class("ParamSet",
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
+    #' @param sanitize (`logical(1)`)\cr
+    #'   Whether to move values that are slightly outside bounds to valid values.
+    #'   These values are accepted independent of `sanitize` (depending on the
+    #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
+    #'   is `TRUE`, the additional effect is that, should checks pass, the
+    #'   sanitized values of `xs` are added to the result as attribute `"sanitized"`.
     #' @return If successful `TRUE`, if not a string with an error message.
-    check = function(xs, check_strict = TRUE) {
+    check = function(xs, check_strict = TRUE, sanitize = FALSE) {
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
         return(ok)
       }
+
+      trueret = TRUE
+      if (sanitize) {
+        attr(trueret, "sanitized") = xs
+      }
+
+      # return early, this makes the following code easier since we don't need to consider edgecases with empty vectors.
+      if (!length(xs)) return(trueret)
+
 
       params = private$.params
       ns = names(xs)
@@ -380,12 +395,20 @@ ParamSet = R6Class("ParamSet",
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
 
-      if (length(xs) && test_list(xs, types = "TuneToken")) {
+      if (some(xs, inherits, "TuneToken")) {
         tunecheck = tryCatch({
           private$get_tune_ps(xs)
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
         if (!isTRUE(tunecheck)) return(tunecheck)
+        xs_nontune = discard(xs, inherits, "TuneToken")
+
+        # only had TuneTokens, nothing else to check here.
+        if (!length(xs_nontune)) {
+          return(trueret)
+        }
+      } else {
+        xs_nontune = xs
       }
 
       xs_internaltune = keep(xs, is, "InternalTuneToken")
@@ -397,16 +420,30 @@ ParamSet = R6Class("ParamSet",
 
 
       # check each parameter group's feasibility
-      xs_nontune = discard(xs, inherits, "TuneToken")
-
-      # need to make sure we index w/ empty character instead of NULL
-      params = params[names(xs_nontune) %??% character(0), on = "id"]
-
-      set(params, , "values", list(xs_nontune))
-      pgroups = split(params, by = c("cls", "grouping"))
-      checkresults = map(pgroups, function(x) {
-        domain_check(set_class(x, c(x$cls[[1]], "Domain", class(x))), x$values)
-      })
+      pidx = match(names(xs_nontune), params$id)
+      nonspecial = !pmap_lgl(list(params$special_vals[pidx], xs_nontune), has_element)
+      pidx = pidx[nonspecial]
+      params = params[pidx]
+      set(params, , "values", list(xs_nontune[nonspecial]))
+      if (sanitize) {
+        checks = params[, {
+            domain = recover_domain(.SD)
+            cr = domain_check(domain, values, internal = TRUE)
+            if (isTRUE(cr)) {
+              values = domain_sanitize(domain, values)
+            }
+            list(list(cr), list(values))
+          }, by = c("cls", "grouping"),
+         .SDcols = colnames(params)]
+        checkresults = checks[[3]]
+        sanitized = unlist(checks[[4]], recursive = FALSE)
+        sanitized_all = xs
+        sanitized_all[params$id] = sanitized
+        attr(trueret, "sanitized") = sanitized_all
+      } else {
+        checkresults = params[, list(list(domain_check(recover_domain(.SD), values))), by = c("cls", "grouping"),
+          .SDcols = colnames(params)][[3]]  # first two cols are 'cls' and 'grouping'
+      }
       checkresults = discard(checkresults, isTRUE)
       if (length(checkresults)) {
         return(str_collapse(checkresults, sep = "\n"))
@@ -418,10 +455,10 @@ ParamSet = R6Class("ParamSet",
         ##   return(sprintf("Missing required parameters: %s", str_collapse(required)))
         ## }
         if (!self$test_constraint(xs, assert_value = FALSE)) return(sprintf("Constraint not fulfilled."))
-        return(self$check_dependencies(xs))
+        cd = self$check_dependencies(xs)
+        if (!isTRUE(cd)) return(cd)
       }
-
-      TRUE # we passed all checks
+      trueret # we passed all checks
     },
 
     #' @description
@@ -484,8 +521,16 @@ ParamSet = R6Class("ParamSet",
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
+    #' @param sanitize (`logical(1)`)\cr
+    #'   Whether to move values that are slightly outside bounds to valid values.
+    #'   These values are accepted independent of `sanitize` (depending on the
+    #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
+    #'   is `TRUE`, the additional effect is that `xs` is converted to within bounds.
     #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, check_strict = TRUE, .var.name = vname(xs)) makeAssertion(xs, self$check(xs, check_strict = check_strict), .var.name, NULL),  # nolint
+    assert = function(xs, check_strict = TRUE, .var.name = vname(xs), sanitize = FALSE) {
+      checkresult = self$check(xs, check_strict = check_strict, sanitize = sanitize)
+      makeAssertion(if (sanitize) attr(checkresult, "sanitized") else xs, checkresult, .var.name, NULL)  # nolint
+    },
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
@@ -553,8 +598,9 @@ ParamSet = R6Class("ParamSet",
       params = private$.params[rownames(x), on = "id"]
       params$result = list()
       result = NULL  # static checks
-      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD, .BY), x[id, ]), nrow = .N))))),
-        by = c("cls", "grouping")]
+      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD), x[id, ]), nrow = .N))))),
+        by = c("cls", "grouping"),
+        .SDcols = colnames(private$.params)]
       as.data.table(set_names(params$result, params$id))
     },
 
@@ -747,20 +793,13 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.values)
       }
-      if (self$assert_values) {
-        self$assert(xs)
-      }
       if (length(xs) == 0L) {
         xs = named_list()
-      } else if (self$assert_values) {  # this only makes sense when we have asserts on
+      } else if (self$assert_values) {
+        # this only makes sense when we have asserts on
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
-        nontt = discard(xs, inherits, "TuneToken")
-        values = special_vals = NULL  # static checks
-        sanitized = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
-          !pmap_lgl(list(special_vals, values), has_element),
-          .(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
-        xs = insert_named(xs, with(sanitized, set_names(values, id)))
+        xs = self$assert(xs, sanitize = TRUE)
       }
       # store with param ordering, return value with original ordering
       private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
@@ -907,8 +946,9 @@ ParamSet = R6Class("ParamSet",
     #' Named with param IDs.
     nlevels = function() {
       tmp = private$.params[,
-        list(id, nlevels = domain_nlevels(recover_domain(.SD, .BY))),
-        by = c("cls", "grouping")
+        list(id, nlevels = domain_nlevels(recover_domain(.SD))),
+        by = c("cls", "grouping"),
+        .SDcols = colnames(private$.params)
       ]
       with(tmp[private$.params$id, on = "id"], set_names(nlevels, id))
     },
@@ -916,8 +956,9 @@ ParamSet = R6Class("ParamSet",
     #' @field is_number (named `logical()`)\cr Whether parameter is [`p_dbl()`] or [`p_int()`]. Named with parameter IDs.
     is_number = function() {
       tmp = private$.params[,
-        list(id, is_number = rep(domain_is_number(recover_domain(.SD, .BY)), .N)),
-        by = c("cls", "grouping")
+        list(id, is_number = rep(domain_is_number(recover_domain(.SD)), .N)),
+        by = c("cls", "grouping"),
+        .SDcols = colnames(private$.params)
       ]
       with(tmp[private$.params$id, on = "id"], set_names(is_number, id))
     },
@@ -925,8 +966,9 @@ ParamSet = R6Class("ParamSet",
     #' @field is_categ (named `logical()`)\cr Whether parameter is [`p_fct()`] or [`p_lgl()`]. Named with parameter IDs.
     is_categ = function() {
       tmp = private$.params[,
-        list(id, is_categ = rep(domain_is_categ(recover_domain(.SD, .BY)), .N)),
-        by = c("cls", "grouping")
+        list(id, is_categ = rep(domain_is_categ(recover_domain(.SD)), .N)),
+        by = c("cls", "grouping"),
+        .SDcols = colnames(private$.params)
       ]
       with(tmp[private$.params$id, on = "id"], set_names(is_categ, id))
     },
@@ -934,8 +976,9 @@ ParamSet = R6Class("ParamSet",
     #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
     is_bounded = function() {
       tmp = private$.params[,
-        list(id, is_bounded = domain_is_bounded(recover_domain(.SD, .BY))),
-        by = c("cls", "grouping")
+        list(id, is_bounded = domain_is_bounded(recover_domain(.SD))),
+        by = c("cls", "grouping"),
+        .SDcols = colnames(private$.params)
       ]
       with(tmp[private$.params$id, on = "id"], set_names(is_bounded, id))
     }
@@ -1008,10 +1051,9 @@ ParamSet = R6Class("ParamSet",
   )
 )
 
-recover_domain = function(sd, by) {
-  domain = as.data.table(c(by, sd))
-  class(domain) = c(domain$cls, "Domain", class(domain))
-  domain
+recover_domain = function(sd) {
+  class(sd) = c(sd$cls[1], "Domain", class(sd))
+  sd
 }
 
 #' @export

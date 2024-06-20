@@ -289,9 +289,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         self$assert(xs)
 
         # %??% character(0) in case xs is an empty unnamed list
-        translate = private$.translation[names(xs) %??% character(0), list(original_id, owner_ps_index), on = "id"]
+        idx = match(names(xs) %??% character(0), private$.translation$id)
+        translate = private$.translation[idx, list(original_id, owner_ps_index)]
         set(translate, , j = "values", list(xs))
-        for (xtl in split(translate, by = "owner_ps_index")) {
+        for (xtl in split(translate, f = translate$owner_ps_index)) {
           sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
         }
         # clear the values of all sets that are not touched by xs
