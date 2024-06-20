@@ -315,11 +315,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
       set(translate, , j = "values", list(xs))
       for (xtl in split(translate, f = translate$owner_ps_index)) {
-        sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
+        sets[[xtl$owner_ps_index[[1]]]]$.__enclos_env__$private$.store_values(set_names(xtl$values, xtl$original_id))
       }
       # clear the values of all sets that are not touched by xs
       for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
-        sets[[clearing]]$values = named_list()
+        sets[[clearing]]$.__enclos_env__$private$.store_values(named_list())
       }
     },
     .sets = NULL,
