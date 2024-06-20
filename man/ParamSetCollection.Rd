@@ -39,12 +39,6 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 Settable, if you want to remove dependencies or perform other changes.}
 
-\item{\code{values}}{(named \code{list()})\cr
-Currently set / fixed parameter values.
-Settable, and feasibility of values will be checked when you set them.
-You do not have to set values for all parameters, but only for a subset.
-When you set values, all previously set values will be unset / removed.}
-
 \item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
 Transformation function. Settable.
 User has to pass a \verb{function(x)}, of the form\cr
