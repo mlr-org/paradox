@@ -279,32 +279,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
-    #' @template field_values
-    values = function(xs) {
-      sets = private$.sets
-      if (!missing(xs)) {
-        assert_list(xs)
-        # make sure everything is valid and feasible.
-        # We do this here because we don't want the loop to be aborted early and have half an update.
-        self$assert(xs)
-
-        # %??% character(0) in case xs is an empty unnamed list
-        idx = match(names(xs) %??% character(0), private$.translation$id)
-        translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
-        set(translate, , j = "values", list(xs))
-        for (xtl in split(translate, f = translate$owner_ps_index)) {
-          sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
-        }
-        # clear the values of all sets that are not touched by xs
-        for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
-          sets[[clearing]]$values = named_list()
-        }
-      }
-      vals = unlist(map(sets, "values"), recursive = FALSE)
-      if (!length(vals)) return(named_list())
-      vals
-    },
-
     #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
@@ -330,6 +304,24 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   ),
 
   private = list(
+    .get_values = function() {
+      vals = unlist(map(private$.sets, "values"), recursive = FALSE)
+      if (length(vals)) vals else named_list()
+    },
+    .store_values = function(xs) {
+      sets = private$.sets
+      # %??% character(0) in case xs is an empty unnamed list
+      idx = match(names(xs) %??% character(0), private$.translation$id)
+      translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
+      set(translate, , j = "values", list(xs))
+      for (xtl in split(translate, f = translate$owner_ps_index)) {
+        sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
+      }
+      # clear the values of all sets that are not touched by xs
+      for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
+        sets[[clearing]]$values = named_list()
+      }
+    },
     .sets = NULL,
     .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = NULL,
