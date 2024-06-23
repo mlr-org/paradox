@@ -113,7 +113,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           trafos_child
         }
       }), prototype = structure(list(
-            id = character(0), trafo = character(0)
+            id = character(0), trafo = list()
           ), class = c("data.table", "data.frame")
         )
       )
