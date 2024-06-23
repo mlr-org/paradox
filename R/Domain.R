@@ -206,24 +206,40 @@ Domain = function(cls, grouping,
     }
   }
 
+  # repr: what to print
+  # This takes the call of the shortform-constructor (such as `p_dbl()`) and inserts all the
+  # given values.
+  constructorcall = match.call(sys.function(-1), sys.call(-1), envir = parent.frame(2))
+  trafoexpr = constructorcall$trafo
+  constructorcall$trafo = NULL
+  constructorcall$depends = NULL
+  reprargs = sapply(names(constructorcall)[-1], get, pos = parent.frame(1), simplify = FALSE)
+  reprargs$depends = depends_expr
+  reprargs$trafo = trafoexpr
+  if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
+  param_repr = as.call(c(constructorcall[[1]], reprargs))
+
   # domain is a data.table with a few classes.
   # setting `id` to something preliminary so that `domain_assert()` works.
+  # we construct this data.table as structure(list(...)), however, since this is *much* faster.
+  param = structure(list(
+      id = deparse1(param_repr, collapse = "\n", width.cutoff = 80),
+      cls = cls, grouping = grouping,
+      cargo = list(cargo),
+      lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
+      special_vals = list(special_vals),
+      default = list(default),
+      storage_type = storage_type,
+      .tags = list(tags),
+      .trafo = list(trafo),
+      .requirements = list(parse_depends(depends_expr, parent.frame(2))),
 
-  param = data.table(id = "domain being constructed", cls = cls, grouping = grouping,
-    cargo = list(cargo),
-    lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
-    special_vals = list(special_vals),
-    default = list(default),
-    storage_type = storage_type,
-    .tags = list(tags),
-    .trafo = list(trafo),
-    .requirements = list(parse_depends(depends_expr, parent.frame(2))),
-
-    .init_given = !missing(init),
-    .init = list(if (!missing(init)) init)
+      .init_given = !missing(init),
+      .init = list(if (!missing(init)) init)
+    ),
+    class = c(cls, "Domain", "data.table", "data.frame"),
+    repr = param_repr
   )
-
-  class(param) = c(cls, "Domain", class(param))
 
   if (!is_nodefault(default)) {
     domain_assert(param, list(default))
@@ -236,21 +252,8 @@ Domain = function(cls, grouping,
     if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")
   }
 
-  # repr: what to print
-  # This takes the call of the shortform-constructor (such as `p_dbl()`) and inserts all the
-  # given values.
-  constructorcall = match.call(sys.function(-1), sys.call(-1), envir = parent.frame(2))
-  trafoexpr = constructorcall$trafo
-  constructorcall$trafo = NULL
-  constructorcall$depends = NULL
-  reprargs = sapply(names(constructorcall)[-1], get, pos = parent.frame(1), simplify = FALSE)
-  reprargs$depends = depends_expr
-  reprargs$trafo = trafoexpr
-  if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
-  attr(param, "repr") = as.call(c(constructorcall[[1]], reprargs))
-  set(param, , "id", repr(attr(param, "repr")))  # some ID for consistency with ParamSet$params, only for error messages.
-
-  assert_names(names(param), identical.to = domain_names)  # If this is not true then there is either a bug in Domain(), or empty_domain was not updated.
+  # If this is not true then there is either a bug in Domain(), or empty_domain was not updated.
+  if (!identical(names(param), domain_names)) stop("Unexpected names in constructed Domain object; this is probably a bug in paradox.")
 
   param
 }

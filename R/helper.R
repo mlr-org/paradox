@@ -53,3 +53,15 @@ col_to_nl = function(dt, col = 1, idcol = 2) {
   names(data) = dt[[idcol]]
   data
 }
+
+
+# rbindlist, but
+#  (1) some optimization if only one table given and we know it is a data.table
+#  (2) if no table is given, return a prototype table.
+# Input is potentially not copied, so input should be copied itself if by-reference-modification could be an issue!
+rbindlist_proto = function(l, prototype) {
+  tbls_given = which(lengths(l) != 0)
+  if (length(tbls_given) == 0) return(prototype)
+  if (length(tbls_given) == 1) return(l[[tbls_given]])
+  rbindlist(l, use.names = TRUE)
+}

@@ -76,20 +76,46 @@ ParamSet = R6Class("ParamSet",
       } else {
         paramtbl = rbindlist(params)
         set(paramtbl, , "id", names(params))
-        if (".tags" %in% colnames(paramtbl)) {
-          private$.tags = paramtbl[, .(tag = unlist(.tags)), keyby = "id"]
-          setindexv(private$.tags, "tag")
-        }
       }
+      if (".tags" %in% colnames(paramtbl)) {
+        # fastest way to init a data.table
+        private$.tags = structure(list(
+            id = rep(paramtbl$id, lengths(paramtbl$.tags)),
+            tag = unlist(paramtbl$.tags)
+          ), class = c("data.table", "data.frame")
+        )
+      } else {
+        private$.tags = structure(list(
+            id = character(0), tag = character(0)
+          ), class = c("data.table", "data.frame")
+        )
+      }
+      setkeyv(private$.tags, "id")
+      setindexv(private$.tags, "tag")
+
 
       # get initvalues here, so we can delete the relevant column.
       # we only assign it later, so checks can run normally.
       .init_given = .init = NULL  # pacify checks
-      initvalues = if (".init" %in% names(paramtbl)) with(paramtbl[(.init_given), .(.init, id)], set_names(.init, id))
+      initvalues = if (".init" %in% names(paramtbl)) structure(
+          paramtbl$.init[paramtbl$.init_given],
+          names = paramtbl$id[paramtbl$.init_given]
+        )
 
       if (".trafo" %in% names(paramtbl)) {
-        private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+        trafo_given = lengths(paramtbl$.trafo) != 0
+        private$.trafos = structure(list(
+            id = paramtbl$id[trafo_given],
+            trafo = paramtbl$.trafo[trafo_given]
+          ), class = c("data.table", "data.frame")
+        )
+      } else {
+        private$.trafos = structure(list(
+            id = character(0), trafo = character(0)
+          ), class = c("data.table", "data.frame")
+        )
       }
+      setkeyv(private$.trafos, "id")
 
       if (".requirements" %in% names(paramtbl)) {
         requirements = paramtbl$.requirements
@@ -880,7 +906,9 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.extra_trafo
       } else {
-        assert(check_function(f, args = c("x", "param_set"), null.ok = TRUE), check_function(f, args = "x", null.ok = TRUE))
+        if (!is.null(f)) {  # for speed, since asserts below are slow apparently
+          assert(check_function(f, args = c("x", "param_set"), null.ok = TRUE), check_function(f, args = "x", null.ok = TRUE))
+        }
         private$.extra_trafo = f
       }
     },
