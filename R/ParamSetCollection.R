@@ -119,7 +119,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       )
       setkeyv(private$.trafos, "id")
 
-      private$.translation = structure(unclass(paramtbl)[c("id", "original_id", "owner_ps_index", "owner_name")],
+      private$.translation = structure(unclass(copy(paramtbl))[c("id", "original_id", "owner_ps_index", "owner_name")],
         class = c("data.table", "data.frame"))
       setkeyv(private$.translation, "id")
       setindexv(private$.translation, "original_id")
