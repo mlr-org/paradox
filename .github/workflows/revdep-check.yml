@@ -44,7 +44,7 @@ jobs:
           r-version: ${{ matrix.config.r }}
 
       - uses: supercharge/redis-github-action@1.7.0
-        if: contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), github.event_name)
+        if: contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), matrix.config.pkg)
         with:
           redis-version: 7
 
@@ -59,10 +59,10 @@ jobs:
 
       - uses: r-lib/actions/check-r-package@v2
         name: Normal check
-        if: !contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), github.event_name)
+        if: ${{ !contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), matrix.config.pkg) }}
 
       - uses: r-lib/actions/check-r-package@v2
         name: bbotk check
-        if: contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), github.event_name)
+        if: contains(fromJSON('["mlr-org/bbotk", "mlr-org/mlr3mbo"]'), matrix.config.pkg)
         with:
           args: 'c("--no-manual")' # "--as-cran" prevents to start external processes
