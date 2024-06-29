@@ -111,7 +111,7 @@ ParamSet = R6Class("ParamSet",
         )
       } else {
         private$.trafos = structure(list(
-            id = character(0), trafo = character(0)
+            id = character(0), trafo = list()
           ), class = c("data.table", "data.frame")
         )
       }
