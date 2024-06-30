@@ -181,26 +181,13 @@ only be constructed via <code>to_tune()</code>, and should only be used by givin
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">to_tune</span><span class="op">(</span><span class="va">...</span>, internal <span class="op">=</span> <span class="op">!</span><span class="fu"><a href="https://rdrr.io/r/base/NULL.html" class="external-link">is.null</a></span><span class="op">(</span><span class="va">aggr</span><span class="op">)</span>, aggr <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">to_tune</span><span class="op">(</span><span class="va">...</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
     <h2 id="arguments">Arguments<a class="anchor" aria-label="anchor" href="#arguments"></a></h2>
     <dl><dt>...</dt>
 <dd><p>if given, restricts the range to be tuning over, as described above.</p></dd>
-
-
-<dt>internal</dt>
-<dd><p>(<code>logical(1)</code>)<br>
-Whether to create an <code>InternalTuneToken</code>.
-This is only available for parameters tagged with <code>"internal_tuning"</code>.</p></dd>
-
-
-<dt>aggr</dt>
-<dd><p>(<code>function</code>)<br>
-Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
-This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
-If none specified, the default aggregation function of the parameter will be used.</p></dd>
 
 </dl></div>
     <div class="section level2">

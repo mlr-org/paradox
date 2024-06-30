@@ -126,15 +126,17 @@
 <li>further types are only possible by using transformations.</li>
 </ul>
 <div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pset</span> <span class="op">=</span> <span class="fu"><a href="reference/ps.html">ps</a></span><span class="op">(</span></span>
-<span>  z <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_int</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">1</span>, upper <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
-<span>  x <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_dbl</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">10</span>, upper <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>,</span>
-<span>  flag <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_lgl</a></span><span class="op">(</span><span class="op">)</span>,</span>
-<span>  methods <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_fct</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">ps</span> <span class="op">=</span> <span class="va"><a href="reference/ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    <span class="va">ParamInt</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"z"</span>, lower <span class="op">=</span> <span class="fl">1</span>, upper <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
+<span>    <span class="va">ParamDbl</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"x"</span>, lower <span class="op">=</span> <span class="op">-</span><span class="fl">10</span>, upper <span class="op">=</span> <span class="fl">10</span><span class="op">)</span>,</span>
+<span>    <span class="va">ParamLgl</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"flag"</span><span class="op">)</span>,</span>
+<span>    <span class="va">ParamFct</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"methods"</span>, levels <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"a"</span>,<span class="st">"b"</span>,<span class="st">"c"</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span></code></pre></div>
 <p>Draw random samples / create random design:</p>
 <div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/generate_design_random.html">generate_design_random</a></span><span class="op">(</span><span class="va">pset</span>, <span class="fl">3</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/generate_design_random.html">generate_design_random</a></span><span class="op">(</span><span class="va">ps</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;Design&gt; with 3 rows:</span></span>
 <span><span class="co">#&gt;    z         x  flag methods</span></span>
 <span><span class="co">#&gt; 1: 1  7.660348 FALSE       b</span></span>
@@ -144,7 +146,7 @@
 <div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdrr.io/r/base/ns-load.html" class="external-link">requireNamespace</a></span><span class="op">(</span><span class="st">"lhs"</span><span class="op">)</span></span>
 <span><span class="co">#&gt; Loading required namespace: lhs</span></span>
-<span><span class="fu"><a href="reference/generate_design_lhs.html">generate_design_lhs</a></span><span class="op">(</span><span class="va">pset</span>, <span class="fl">3</span><span class="op">)</span></span>
+<span><span class="fu"><a href="reference/generate_design_lhs.html">generate_design_lhs</a></span><span class="op">(</span><span class="va">ps</span>, <span class="fl">3</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;Design&gt; with 3 rows:</span></span>
 <span><span class="co">#&gt;    z         x  flag methods</span></span>
 <span><span class="co">#&gt; 1: 1 -3.984673  TRUE       b</span></span>
@@ -152,7 +154,7 @@
 <span><span class="co">#&gt; 3: 3  1.969783  TRUE       c</span></span></code></pre></div>
 <p>Generate Grid Design:</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="fu"><a href="reference/generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">pset</span>, resolution <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="fu"><a href="reference/generate_design_grid.html">generate_design_grid</a></span><span class="op">(</span><span class="va">ps</span>, resolution <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;Design&gt; with 24 rows:</span></span>
 <span><span class="co">#&gt;     z   x  flag methods</span></span>
 <span><span class="co">#&gt;  1: 1 -10  TRUE       a</span></span>
@@ -165,9 +167,9 @@
 <span><span class="co">#&gt;  [ reached getOption("max.print") -- omitted 18 rows ]</span></span></code></pre></div>
 <p>Properties of the parameters within the <code>ParamSet</code>:</p>
 <div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pset</span><span class="op">$</span><span class="fu">ids</span><span class="op">(</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">ps</span><span class="op">$</span><span class="fu">ids</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] "z"       "x"       "flag"    "methods"</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">levels</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">levels</span></span>
 <span><span class="co">#&gt; $z</span></span>
 <span><span class="co">#&gt; NULL</span></span>
 <span><span class="co">#&gt; </span></span>
@@ -179,16 +181,16 @@
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; $methods</span></span>
 <span><span class="co">#&gt; [1] "a" "b" "c"</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">nlevels</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">nlevels</span></span>
 <span><span class="co">#&gt;       z       x    flag methods </span></span>
 <span><span class="co">#&gt;       3     Inf       2       3</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">is_number</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">is_number</span></span>
 <span><span class="co">#&gt;       z       x    flag methods </span></span>
 <span><span class="co">#&gt;    TRUE    TRUE   FALSE   FALSE</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">lower</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">lower</span></span>
 <span><span class="co">#&gt;       z       x    flag methods </span></span>
 <span><span class="co">#&gt;       1     -10      NA      NA</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">upper</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">upper</span></span>
 <span><span class="co">#&gt;       z       x    flag methods </span></span>
 <span><span class="co">#&gt;       3      10      NA      NA</span></span></code></pre></div>
 <div class="section level3">
@@ -196,14 +198,14 @@
 </h3>
 <p>Check that a parameter satisfies all conditions of a <code>ParamSet</code>, using <code>$test()</code> (returns <code>FALSE</code> on mismatch), <code>$check()</code> (returns error description on mismatch), and <code>$assert()</code> (throws error on mismatch):</p>
 <div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pset</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">ps</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="fu">test</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] FALSE</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; [1] "z: Element 1 is not &gt;= 0.5"</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
-<span><span class="co">#&gt; Error in pset$assert(list(z = -1, x = 1)): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not &gt;= 0.5.</span></span></code></pre></div>
+<span><span class="va">ps</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; [1] "z: Element 1 is not &gt;= 1"</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="fu">assert</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>z <span class="op">=</span> <span class="op">-</span><span class="fl">1</span>, x <span class="op">=</span> <span class="fl">1</span><span class="op">)</span><span class="op">)</span></span>
+<span><span class="co">#&gt; Error in ps$assert(list(z = -1, x = 1)): Assertion on 'list(z = -1, x = 1)' failed: z: Element 1 is not &gt;= 1.</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="transformations">Transformations<a class="anchor" aria-label="anchor" href="#transformations"></a>
@@ -215,18 +217,20 @@
 <li>
 <code>param_set</code> the <code>ParamSet</code> used to create the design</li>
 </ul>
-<p>Transformations can be used to change the distributions of sampled parameters. For example, to sample values between <span class="math inline">2<sup>−</sup>3</span> and <span class="math inline">2<sup>3</sup></span> in a <span class="math inline"><em>l</em><em>o</em><em>g</em><sub>2</sub></span>-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation. Alternatively, <code>logscale = TRUE</code> can be set; in this case, <code>lower</code> and <code>upper</code> represent the values <em>after</em> the transformation.</p>
+<p>Transformations can be used to change the distributions of sampled parameters. For example, to sample values between <span class="math inline">2<sup>−</sup>3</span> and <span class="math inline">2<sup>3</sup></span> in a <span class="math inline"><em>l</em><em>o</em><em>g</em><sub>2</sub></span>-uniform distribution, one can sample uniformly between -3 and 3 and exponentiate the random value inside the transformation.</p>
 <div class="sourceCode" id="cb8"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="va">pset</span> <span class="op">=</span> <span class="fu"><a href="reference/ps.html">ps</a></span><span class="op">(</span></span>
-<span>  z <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_int</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="op">-</span><span class="fl">3</span>, upper <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
-<span>  x <span class="op">=</span> <span class="fu"><a href="reference/Domain.html">p_dbl</a></span><span class="op">(</span>lower <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="op">-</span><span class="fl">3</span>, upper <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="fl">3</span>, logscale <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span>
+<code class="sourceCode R"><span><span class="va">ps</span> <span class="op">=</span> <span class="va"><a href="reference/ParamSet.html">ParamSet</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span></span>
+<span>  params <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    <span class="va">ParamInt</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"z"</span>, lower <span class="op">=</span> <span class="op">-</span><span class="fl">3</span>, upper <span class="op">=</span> <span class="fl">3</span><span class="op">)</span>,</span>
+<span>    <span class="va">ParamDbl</span><span class="op">$</span><span class="fu">new</span><span class="op">(</span>id <span class="op">=</span> <span class="st">"x"</span>, lower <span class="op">=</span> <span class="fl">0</span>, upper <span class="op">=</span> <span class="fl">1</span><span class="op">)</span></span>
+<span>  <span class="op">)</span></span>
 <span><span class="op">)</span></span>
-<span><span class="va">pset</span><span class="op">$</span><span class="va">extra_trafo</span> <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span>
+<span><span class="va">ps</span><span class="op">$</span><span class="va">trafo</span> <span class="op">=</span> <span class="kw">function</span><span class="op">(</span><span class="va">x</span>, <span class="va">param_set</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">x</span><span class="op">$</span><span class="va">z</span> <span class="op">=</span> <span class="fl">2</span><span class="op">^</span><span class="va">x</span><span class="op">$</span><span class="va">z</span></span>
 <span>  <span class="kw"><a href="https://rdrr.io/r/base/function.html" class="external-link">return</a></span><span class="op">(</span><span class="va">x</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
-<span><span class="va">pset_smplr</span> <span class="op">=</span> <span class="va"><a href="reference/SamplerUnif.html">SamplerUnif</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">pset</span><span class="op">)</span></span>
-<span><span class="va">x</span> <span class="op">=</span> <span class="va">pset_smplr</span><span class="op">$</span><span class="fu">sample</span><span class="op">(</span><span class="fl">2</span><span class="op">)</span></span>
+<span><span class="va">ps_smplr</span> <span class="op">=</span> <span class="va"><a href="reference/SamplerUnif.html">SamplerUnif</a></span><span class="op">$</span><span class="fu">new</span><span class="op">(</span><span class="va">ps</span><span class="op">)</span></span>
+<span><span class="va">x</span> <span class="op">=</span> <span class="va">ps_smplr</span><span class="op">$</span><span class="fu">sample</span><span class="op">(</span><span class="fl">2</span><span class="op">)</span></span>
 <span><span class="va">xst</span> <span class="op">=</span> <span class="va">x</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="va">xst</span></span>
 <span><span class="co">#&gt; [[1]]</span></span>
@@ -234,7 +238,7 @@
 <span><span class="co">#&gt; [1] 0.125</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[1]]$x</span></span>
-<span><span class="co">#&gt; [1] 0.6985067</span></span>
+<span><span class="co">#&gt; [1] 0.4137243</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]</span></span>
@@ -242,8 +246,8 @@
 <span><span class="co">#&gt; [1] 0.5</span></span>
 <span><span class="co">#&gt; </span></span>
 <span><span class="co">#&gt; [[2]]$x</span></span>
-<span><span class="co">#&gt; [1] 0.5795772</span></span></code></pre></div>
-<p>Further documentation can be found in the <a href="https://paradox.mlr-org.com/dev/articles/indepth.html">in-depth tutorial</a></p>
+<span><span class="co">#&gt; [1] 0.3688455</span></span></code></pre></div>
+<p>Further documentation can be found in the <a href="https://mlr3book.mlr-org.com/technical.html#paradox" class="external-link">mlr3book</a>.</p>
 </div>
 </div>
 </div>
