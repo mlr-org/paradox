@@ -33,7 +33,7 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
 }
 
 #' @export
-domain_check.ParamFct = function(param, values) {
+domain_check.ParamFct = function(param, values, internal = FALSE) {
   if (qtestr(values, "S1")) {
     values_str = as.character(values)
     if (all(values_str %in% param$levels[[1]])) return(TRUE)  # this works because we have the grouping -- all 'levels' are the same here.

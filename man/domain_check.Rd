@@ -6,9 +6,15 @@
 \alias{domain_test}
 \title{Check Value Validity}
 \usage{
-domain_check(param, values)
+domain_check(param, values, internal = FALSE)
 
-domain_assert(param, values, .var.name = checkmate::vname(param), add = NULL)
+domain_assert(
+  param,
+  values,
+  internal = FALSE,
+  .var.name = checkmate::vname(param),
+  add = NULL
+)
 
 domain_test(param, values)
 }
@@ -16,6 +22,10 @@ domain_test(param, values)
 \item{param}{(\code{Domain}).}
 
 \item{values}{(\code{any}).}
+
+\item{internal}{(\code{logical(1)})\cr
+When set, function arguments are not checked for plausibility and \code{special_values} are not respected.
+This is an optimization for internal purposes and should not be used.}
 }
 \value{
 If successful \code{TRUE}, if not a string with the error message.

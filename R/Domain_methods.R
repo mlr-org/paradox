@@ -14,21 +14,26 @@
 #'
 #' @param param (`Domain`).
 #' @param values (`any`).
+#' @param internal (`logical(1)`)\cr
+#'   When set, function arguments are not checked for plausibility and `special_values` are not respected.
+#'   This is an optimization for internal purposes and should not be used.
 #' @return If successful `TRUE`, if not a string with the error message.
 #' @keywords internal
 #' @export
-domain_check = function(param, values) {
-  if (!test_list(values, len = nrow(param))) return("values must be a list")
+domain_check = function(param, values, internal = FALSE) {
   if (length(values) == 0) return(TRUE)  # happens when there are no params + values to check
-  assert_string(unique(param$grouping))
-  special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
-  if (any(special_vals_hit)) {
-    # don't annoy domain_check methods with the burdon of having to filter out
-    # values that match special_values
-    Recall(param[!special_vals_hit], values[!special_vals_hit])
-  } else {
-    UseMethod("domain_check")
+  if (!internal) {
+    if (!test_list(values, len = nrow(param))) return("values must be a list")
+    assert_string(unique(param$grouping))
+
+    special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
+    if (any(special_vals_hit)) {
+      # don't annoy domain_check methods with the burdon of having to filter out
+      # values that match special_values
+      return(Recall(param[!special_vals_hit], values[!special_vals_hit], internal = TRUE))
+    }
   }
+  UseMethod("domain_check")
 }
 
 #' @export
@@ -133,8 +138,7 @@ domain_qunif = function(param, x) {
 #' @keywords internal
 #' @export
 domain_sanitize = function(param, values) {
-    if (!nrow(param)) return(values)
-  assert_string(unique(param$grouping))
+  if (!length(values)) return(values)
   UseMethod("domain_sanitize")
 }
 

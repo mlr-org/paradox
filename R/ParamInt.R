@@ -35,7 +35,7 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 }
 
 #' @export
-domain_check.ParamInt = function(param, values) {
+domain_check.ParamInt = function(param, values, internal = FALSE) {
   if (!qtestr(values, "N1()")) {
     return(check_domain_vectorize(param$id, values, check_int,
       more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
@@ -45,11 +45,11 @@ domain_check.ParamInt = function(param, values) {
 
   values_num = as.numeric(values)
 
-  if (all(abs(trunc(values_num + 0.5) - 0.5) <= param$tolerance)) {
-    values_num = round(values_num)
-    if (all(values_num >= param$lower) && all(values_num <= param$upper)) {
-      return(TRUE)
-    }
+  rounded = round(values_num)
+  if (all(abs(values_num - rounded) <= param$tolerance &
+          rounded >= param$lower &
+          rounded <= param$upper)) {
+    return(TRUE)
   }
 
   check_domain_vectorize(param$id, values_num, check_int,

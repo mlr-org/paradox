@@ -1,3 +1,7 @@
+# paradox 1.0.0-9000
+
+* Performance improvements.
+
 # paradox 1.0.0
 
 * Removed `Param` objects. `ParamSet` now uses a `data.table` internally; individual parameters are more like `Domain` objects now. `ParamSets` should be constructed using the `ps()` shorthand and `Domain` objects. This entails the following major changes:
