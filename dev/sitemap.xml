@@ -31,28 +31,10 @@
     <loc>https://paradox.mlr-org.com/dev/reference/NO_DEF.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/Param.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/ParamDbl.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/ParamFct.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/ParamInt.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/ParamLgl.html</loc>
-  </url>
-  <url>
     <loc>https://paradox.mlr-org.com/dev/reference/ParamSet.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/ParamSetCollection.html</loc>
-  </url>
-  <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/ParamUty.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/Sampler.html</loc>
@@ -82,10 +64,31 @@
     <loc>https://paradox.mlr-org.com/dev/reference/SamplerUnif.html</loc>
   </url>
   <url>
-    <loc>https://paradox.mlr-org.com/dev/reference/assert_param.html</loc>
+    <loc>https://paradox.mlr-org.com/dev/reference/assert_param_set.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/default_values.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_check.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_is_bounded.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_is_categ.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_is_number.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_nlevels.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_qunif.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/domain_sanitize.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/generate_design_grid.html</loc>
@@ -107,6 +110,12 @@
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/ps.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/ps_replicate.html</loc>
+  </url>
+  <url>
+    <loc>https://paradox.mlr-org.com/dev/reference/ps_union.html</loc>
   </url>
   <url>
     <loc>https://paradox.mlr-org.com/dev/reference/psc.html</loc>
