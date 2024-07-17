@@ -365,7 +365,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' \pkg{checkmate}-like test-function. Takes a [`data.table`].
+    #' \pkg{checkmate}-like test-function. Takes a [`data.table`][data.table::data.table].
     #' For each row, return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.

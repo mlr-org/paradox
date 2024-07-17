@@ -439,7 +439,7 @@ Should be \code{TRUE} unless this was already checked before.}
 \if{html}{\out{<a id="method-ParamSet-test_constraint_dt"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-test_constraint_dt}{}}}
 \subsection{Method \code{test_constraint_dt()}}{
-\pkg{checkmate}-like test-function. Takes a \code{\link{data.table}}.
+\pkg{checkmate}-like test-function. Takes a \code{\link[data.table:data.table]{data.table}}.
 For each row, return \code{FALSE} if the given \verb{$constraint} is not satisfied, \code{TRUE} otherwise.
 Note this is different from satisfying the bounds or types given by the \code{ParamSet} itself:
 If \code{x} does not satisfy these, an error will be thrown, given that \code{assert_value} is \code{TRUE}.

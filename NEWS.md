@@ -1,4 +1,4 @@
-# paradox 1.0.0-9000
+# paradox 1.0.1
 
 * Performance improvements.
 
