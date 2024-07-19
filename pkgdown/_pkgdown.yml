@@ -2,6 +2,8 @@ url: https://paradox.mlr-org.com
 
 template:
   bootstrap: 5
+  light-switch: true
+  math-rendering: mathjax
   package: mlr3pkgdowntemplate
 
 development:
@@ -14,8 +16,8 @@ toc:
 
 navbar:
   structure:
-    left:  [reference, news, book, tutorial]
-    right: [github, mattermost, stackoverflow, rss]
+    left:  [reference, news, book]
+    right: [github, mattermost, stackoverflow, rss, lightswitch]
   components:
     home: ~
     reference:
@@ -31,7 +33,7 @@ navbar:
       href: https://mlr3book.mlr-org.com
     stackoverflow:
       icon: fab fa-stack-overflow
-      href: https://stackoverflow.com/questions/tagged/mlr3
+      href: https://stackoverflow.com/questions/tagged/mlr
     rss:
       icon: fa-rss
       href: https://mlr-org.com/
