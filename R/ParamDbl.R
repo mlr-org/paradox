@@ -27,7 +27,7 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 }
 
 #' @export
-domain_check.ParamDbl = function(param, values) {
+domain_check.ParamDbl = function(param, values, internal = FALSE) {
   lower = param$lower - param$tolerance * pmax(1, abs(param$lower))
   upper = param$upper + param$tolerance * pmax(1, abs(param$upper))
   if (qtestr(values, "N1")) {

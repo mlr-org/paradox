@@ -439,7 +439,7 @@ Should be \code{TRUE} unless this was already checked before.}
 \if{html}{\out{<a id="method-ParamSet-test_constraint_dt"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-test_constraint_dt}{}}}
 \subsection{Method \code{test_constraint_dt()}}{
-\pkg{checkmate}-like test-function. Takes a \code{\link{data.table}}.
+\pkg{checkmate}-like test-function. Takes a \code{\link[data.table:data.table]{data.table}}.
 For each row, return \code{FALSE} if the given \verb{$constraint} is not satisfied, \code{TRUE} otherwise.
 Note this is different from satisfying the bounds or types given by the \code{ParamSet} itself:
 If \code{x} does not satisfy these, an error will be thrown, given that \code{assert_value} is \code{TRUE}.
@@ -473,7 +473,7 @@ all individual param constraints are satisfied and all dependencies are satisfie
 Params for which dependencies are not satisfied should not be part of \code{x}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -483,6 +483,13 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{sanitize}}{(\code{logical(1)})\cr
+Whether to move values that are slightly outside bounds to valid values.
+These values are accepted independent of \code{sanitize} (depending on the
+\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
+is \code{TRUE}, the additional effect is that, should checks pass, the
+sanitized values of \code{xs} are added to the result as attribute \code{"sanitized"}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -548,7 +555,12 @@ all individual param constraints are satisfied and all dependencies are satisfie
 Params for which dependencies are not satisfied should not be part of \code{x}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(xs, check_strict = TRUE, .var.name = vname(xs))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(
+  xs,
+  check_strict = TRUE,
+  .var.name = vname(xs),
+  sanitize = FALSE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -562,6 +574,12 @@ Whether to check that constraints and dependencies are satisfied.}
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+
+\item{\code{sanitize}}{(\code{logical(1)})\cr
+Whether to move values that are slightly outside bounds to valid values.
+These values are accepted independent of \code{sanitize} (depending on the
+\code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
+is \code{TRUE}, the additional effect is that \code{xs} is converted to within bounds.}
 }
 \if{html}{\out{</div>}}
 }

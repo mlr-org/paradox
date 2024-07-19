@@ -43,13 +43,24 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
       assert_names(names(sets)[names(sets) != ""], type = "strict")
 
-      paramtbl = rbindlist(map(seq_along(sets), function(i) {
+      paramtbl = rbindlist_proto(map(seq_along(sets), function(i) {
         s = sets[[i]]
         n = names(sets)[[i]]
-        params_child = s$params[, `:=`(original_id = id, owner_ps_index = i, owner_name = n)]
-        if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
-        params_child
-      }))
+        params_child = s$.__enclos_env__$private$.params
+        if (nrow(params_child)) {
+          params_child = copy(params_child)
+          set(params_child, , "original_id", params_child$id)
+          set(params_child, , "owner_ps_index", i)
+          set(params_child, , "owner_name", n)
+          if (n != "") set(params_child, , "id", sprintf("%s.%s", n, params_child$id))
+          params_child
+        }
+      }), prototype = {
+        paramtbl = copy(empty_domain)
+        set(paramtbl, , "original_id", character(0))
+        set(paramtbl, , "owner_ps_index", integer(0))
+        set(paramtbl, , "owner_name", character(0))
+      })
 
       dups = duplicated(paramtbl$id)
       if (any(dups)) {
@@ -57,18 +68,59 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
           str_collapse(unique(paramtbl$id[dups])))
       }
 
-      if (!nrow(paramtbl)) {
-        # when paramtbl is empty, use special setup to make sure information about the `.tags` column is present.
-        paramtbl = copy(empty_domain)[, `:=`(original_id = character(0), owner_ps_index = integer(0), owner_name = character(0))]
-      }
-      owner_name = NULL  # static check
-      if (tag_sets) paramtbl[owner_name != "", .tags := pmap(list(.tags, owner_name), function(x, n) c(x, sprintf("set_%s", n)))]
-      if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
-      private$.tags = paramtbl[, .(tag = unique(unlist(.tags))), keyby = "id"]
+      alltagstables = map(seq_along(sets), function(i) {
+        s = sets[[i]]
+        n = names(sets)[[i]]
+        if (tag_sets || tag_params) {
+          ids = s$.__enclos_env__$private$.params$id
+          newids = ids
+          if (n != "") newids = sprintf("%s.%s", n, ids)
+        }
+        tags_child = s$.__enclos_env__$private$.tags
+        list(
+          if (nrow(tags_child)) {
+            tags_child = copy(tags_child)
+            if (n != "") set(tags_child, , "id", sprintf("%s.%s", n, tags_child$id))
+            tags_child
+          },
+          if (tag_sets && n != "" && length(newids)) {
+            structure(list(id = newids, tag = rep_len(sprintf("set_%s", n), length(ids))),
+              class = c("data.table", "data.frame"))
+          },
+          if (tag_params && length(newids)) {
+            structure(list(id = newids, tag = sprintf("param_%s", ids)),
+              class = c("data.table", "data.frame"))
+          }
+        )
+      })
 
-      private$.trafos = setkeyv(paramtbl[!map_lgl(.trafo, is.null), .(id, trafo = .trafo)], "id")
+      # this may introduce duplicate tags, if param_... or set_... is present before...
+      private$.tags = rbindlist_proto(unlist(alltagstables, recursive = FALSE, use.names = FALSE),
+        prototype = structure(list(
+            id = character(0), tag = character(0)
+          ), class = c("data.table", "data.frame")
+        )
+      )
+      setkeyv(private$.tags, "id")
 
-      private$.translation = paramtbl[, c("id", "original_id", "owner_ps_index", "owner_name"), with = FALSE]
+      private$.trafos = rbindlist_proto(map(seq_along(sets), function(i) {
+        s = sets[[i]]
+        n = names(sets)[[i]]
+        trafos_child = s$.__enclos_env__$private$.trafos
+        if (nrow(trafos_child)) {
+          trafos_child = copy(trafos_child)
+          if (n != "" && nrow(trafos_child)) set(trafos_child, , "id", sprintf("%s.%s", n, trafos_child$id))
+          trafos_child
+        }
+      }), prototype = structure(list(
+            id = character(0), trafo = list()
+          ), class = c("data.table", "data.frame")
+        )
+      )
+      setkeyv(private$.trafos, "id")
+
+      private$.translation = structure(unclass(copy(paramtbl))[c("id", "original_id", "owner_ps_index", "owner_name")],
+        class = c("data.table", "data.frame"))
       setkeyv(private$.translation, "id")
       setindexv(private$.translation, "original_id")
 
@@ -279,31 +331,6 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       rbindlist(c(d_all, list(private$.deps)), use.names = TRUE)
     },
 
-    #' @template field_values
-    values = function(xs) {
-      sets = private$.sets
-      if (!missing(xs)) {
-        assert_list(xs)
-        # make sure everything is valid and feasible.
-        # We do this here because we don't want the loop to be aborted early and have half an update.
-        self$assert(xs)
-
-        # %??% character(0) in case xs is an empty unnamed list
-        translate = private$.translation[names(xs) %??% character(0), list(original_id, owner_ps_index), on = "id"]
-        set(translate, , j = "values", list(xs))
-        for (xtl in split(translate, by = "owner_ps_index")) {
-          sets[[xtl$owner_ps_index[[1]]]]$values = set_names(xtl$values, xtl$original_id)
-        }
-        # clear the values of all sets that are not touched by xs
-        for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
-          sets[[clearing]]$values = named_list()
-        }
-      }
-      vals = unlist(map(sets, "values"), recursive = FALSE)
-      if (!length(vals)) return(named_list())
-      vals
-    },
-
     #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (!missing(f)) stop("extra_trafo is read-only in ParamSetCollection.")
@@ -329,6 +356,24 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
   ),
 
   private = list(
+    .get_values = function() {
+      vals = unlist(map(private$.sets, "values"), recursive = FALSE)
+      if (length(vals)) vals else named_list()
+    },
+    .store_values = function(xs) {
+      sets = private$.sets
+      # %??% character(0) in case xs is an empty unnamed list
+      idx = match(names(xs) %??% character(0), private$.translation$id)
+      translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
+      set(translate, , j = "values", list(xs))
+      for (xtl in split(translate, f = translate$owner_ps_index)) {
+        sets[[xtl$owner_ps_index[[1]]]]$.__enclos_env__$private$.store_values(set_names(xtl$values, xtl$original_id))
+      }
+      # clear the values of all sets that are not touched by xs
+      for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
+        sets[[clearing]]$.__enclos_env__$private$.store_values(named_list())
+      }
+    },
     .sets = NULL,
     .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = NULL,

@@ -21,7 +21,7 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
 }
 
 #' @export
-domain_check.ParamUty = function(param, values) {
+domain_check.ParamUty = function(param, values, internal = FALSE) {
   cargo = map(param$cargo, "custom_check")
   subset = !map_lgl(cargo, is.null)
   if (!any(subset)) return(TRUE)
