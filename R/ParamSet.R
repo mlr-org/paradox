@@ -81,7 +81,7 @@ ParamSet = R6Class("ParamSet",
         # fastest way to init a data.table
         private$.tags = structure(list(
             id = rep(paramtbl$id, lengths(paramtbl$.tags)),
-            tag = unlist(paramtbl$.tags)
+            tag = unlist(paramtbl$.tags, use.names = FALSE)
           ), class = c("data.table", "data.frame")
         )
       } else {
@@ -542,7 +542,7 @@ ParamSet = R6Class("ParamSet",
         }
         msg
       })
-      errors = unlist(errors)
+      errors = unlist(errors, use.names = FALSE)
       if (!length(errors)) return(TRUE)
       str_collapse(errors, sep = "\n")
     },
@@ -816,7 +816,7 @@ ParamSet = R6Class("ParamSet",
         deps = self$deps
         if (nrow(deps)) { # add a nice extra charvec-col to the tab, which lists all parents-ids
           on = NULL
-          dd = deps[, list(parents = list(unlist(on))), by = "id"]
+          dd = deps[, list(parents = list(unlist(on, use.names = FALSE))), by = "id"]
           d = merge(d, dd, by = "id", all.x = TRUE)
         }
         v = named_list(d$id) # add values to last col of print-dt as list col
@@ -863,7 +863,7 @@ ParamSet = R6Class("ParamSet",
         assert_list(v, any.missing = FALSE, types = "character")
         if (length(v)) assert_names(names(v), permutation.of = private$.params$id)
         # as.character() to handle empty lists and resulting NULL-valures.
-        private$.tags = data.table(id = rep(as.character(names(v)), map_int(v, length)), tag = as.character(unlist(v)), key = "id")
+        private$.tags = data.table(id = rep(as.character(names(v)), map_int(v, length)), tag = as.character(unlist(v, use.names = FALSE)), key = "id")
         setindexv(private$.tags, "tag")
         # return value with original ordering
         return(v)

@@ -175,7 +175,7 @@ check_domain_vectorize = function(ids, values, checker, more_args = list()) {
       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
     })
   }
-  errors = unlist(errors)
+  errors = unlist(errors, use.names = FALSE)
   if (!length(errors)) return(TRUE)
   str_collapse(errors, sep = "\n")
 }

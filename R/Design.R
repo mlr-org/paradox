@@ -100,7 +100,7 @@ Design = R6Class("Design",
       # we need to make sure that every param has a (maybe empty) row in the graph table
       fillin = data.table(id = ps$ids(), parents = list(character(0L)))
       graph = rbind(graph, fillin[fillin$id %nin% graph$id, ])
-      graph = graph[, list("parents" = list(unlist(get("parents")))), by = "id"]
+      graph = graph[, list("parents" = list(unlist(get("parents"), use.names = FALSE))), by = "id"]
       topo = topo_sort(graph)
       pids_sorted = topo$id
       storage_types = ps$storage_type

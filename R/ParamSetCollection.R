@@ -169,7 +169,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
       if (tag_sets && n != "") paramtbl[, .tags := map(.tags, function(x) c(x, sprintf("set_%s", n)))]
       if (tag_params) paramtbl[, .tags := pmap(list(.tags, original_id), function(x, n) c(x, sprintf("param_%s", n)))]
-      newtags = paramtbl[, .(tag = unique(unlist(.tags))), by = "id"]
+      newtags = paramtbl[, .(tag = unique(unlist(.tags, use.names = FALSE))), by = "id"]
       if (nrow(newtags)) {
         private$.tags = setkeyv(rbind(private$.tags, newtags), "id")
       }
