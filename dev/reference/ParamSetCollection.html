@@ -152,6 +152,7 @@ This field provides direct references to the <code><a href="ParamSet.html">Param
 
 <ul><li><p><a href="#method-ParamSetCollection-new"><code>ParamSetCollection$new()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-add"><code>ParamSetCollection$add()</code></a></p></li>
+<li><p><a href="#method-ParamSetCollection-subset"><code>ParamSetCollection$subset()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-disable_internal_tuning"><code>ParamSetCollection$disable_internal_tuning()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-convert_internal_search_space"><code>ParamSetCollection$convert_internal_search_space()</code></a></p></li>
 <li><p><a href="#method-ParamSetCollection-flatten"><code>ParamSetCollection$flatten()</code></a></p></li>
@@ -171,7 +172,6 @@ This field provides direct references to the <code><a href="ParamSet.html">Param
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif"><a href="ParamSet.html#method-qunif"><code>paradox::ParamSet$qunif()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href="ParamSet.html#method-search_space"><code>paradox::ParamSet$search_space()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href="ParamSet.html#method-set_values"><code>paradox::ParamSet$set_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset"><a href="ParamSet.html#method-subset"><code>paradox::ParamSet$subset()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces"><a href="ParamSet.html#method-subspaces"><code>paradox::ParamSet$subspaces()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href="ParamSet.html#method-test"><code>paradox::ParamSet$test()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint"><a href="ParamSet.html#method-test_constraint"><code>paradox::ParamSet$test_constraint()</code></a></span></li>
@@ -237,15 +237,50 @@ Whether to add tags of the form <code>"param_&lt;param_id&gt;"</code> to each pa
 </dl><p></p></div>
 </div>
 
-</div><p></p><hr><a id="method-ParamSetCollection-disable_internal_tuning"></a><div class="section">
-<h3 id="method-disable-internal-tuning-">Method <code>disable_internal_tuning()</code><a class="anchor" aria-label="anchor" href="#method-disable-internal-tuning-"></a></h3>
-<p>Set the parameter values so that internal tuning for the selected parameters is disabled.</p><div class="section">
+</div><p></p><hr><a id="method-ParamSetCollection-subset"></a><div class="section">
+<h3 id="method-subset-">Method <code><a href="https://rdrr.io/r/base/subset.html" class="external-link">subset()</a></code><a class="anchor" aria-label="anchor" href="#method-subset-"></a></h3>
+<p>Create a new <code>ParamSet</code> restricted to the passed IDs.</p><div class="section">
 <h4 id="usage-2">Usage<a class="anchor" aria-label="anchor" href="#usage-2"></a></h4>
-<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">disable_internal_tuning</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span></span>
+<span>  <span class="va">ids</span>,</span>
+<span>  allow_dangling_dependencies <span class="op">=</span> <span class="cn">FALSE</span>,</span>
+<span>  keep_constraint <span class="op">=</span> <span class="cn">TRUE</span></span>
+<span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
 <h4 id="arguments-2">Arguments<a class="anchor" aria-label="anchor" href="#arguments-2"></a></h4>
+<p></p><div class="arguments"><dl><dt><code>ids</code></dt>
+<dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>).</p></dd>
+
+
+<dt><code>allow_dangling_dependencies</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to allow subsets that cut across parameter dependencies.
+Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their <code>"on"</code> will not be present).</p></dd>
+
+
+<dt><code>keep_constraint</code></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to keep the <code>$constraint</code> function.</p></dd>
+
+
+</dl><p></p></div>
+</div>
+<div class="section">
+<h4 id="returns">Returns<a class="anchor" aria-label="anchor" href="#returns"></a></h4>
+<p><code>ParamSet</code>.</p>
+</div>
+
+</div><p></p><hr><a id="method-ParamSetCollection-disable_internal_tuning"></a><div class="section">
+<h3 id="method-disable-internal-tuning-">Method <code>disable_internal_tuning()</code><a class="anchor" aria-label="anchor" href="#method-disable-internal-tuning-"></a></h3>
+<p>Set the parameter values so that internal tuning for the selected parameters is disabled.</p><div class="section">
+<h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
+<p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">disable_internal_tuning</span><span class="op">(</span><span class="va">ids</span><span class="op">)</span></span></code></pre></div><p></p></div>
+</div>
+
+<div class="section">
+<h4 id="arguments-3">Arguments<a class="anchor" aria-label="anchor" href="#arguments-3"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>ids</code></dt>
 <dd><p>(<code><a href="https://rdrr.io/r/base/character.html" class="external-link">character()</a></code>)<br>
 The ids of the parameters for which to disable internal tuning.</p></dd>
@@ -254,7 +289,7 @@ The ids of the parameters for which to disable internal tuning.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns">Returns<a class="anchor" aria-label="anchor" href="#returns"></a></h4>
+<h4 id="returns-1">Returns<a class="anchor" aria-label="anchor" href="#returns-1"></a></h4>
 <p><code>Self</code></p>
 </div>
 
@@ -262,12 +297,12 @@ The ids of the parameters for which to disable internal tuning.</p></dd>
 <h3 id="method-convert-internal-search-space-">Method <code>convert_internal_search_space()</code><a class="anchor" aria-label="anchor" href="#method-convert-internal-search-space-"></a></h3>
 <p>Convert all parameters from the search space to parameter values using the transformation given by
 <code>in_tune_fn</code>.</p><div class="section">
-<h4 id="usage-3">Usage<a class="anchor" aria-label="anchor" href="#usage-3"></a></h4>
+<h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">convert_internal_search_space</span><span class="op">(</span><span class="va">search_space</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-3">Arguments<a class="anchor" aria-label="anchor" href="#arguments-3"></a></h4>
+<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>search_space</code></dt>
 <dd><p>(<code><a href="ParamSet.html">ParamSet</a></code>)<br>
 The internal search space.</p></dd>
@@ -276,14 +311,14 @@ The internal search space.</p></dd>
 </dl><p></p></div>
 </div>
 <div class="section">
-<h4 id="returns-1">Returns<a class="anchor" aria-label="anchor" href="#returns-1"></a></h4>
+<h4 id="returns-2">Returns<a class="anchor" aria-label="anchor" href="#returns-2"></a></h4>
 <p>(named <code><a href="https://rdrr.io/r/base/list.html" class="external-link">list()</a></code>)</p>
 </div>
 
 </div><p></p><hr><a id="method-ParamSetCollection-flatten"></a><div class="section">
 <h3 id="method-flatten-">Method <code>flatten()</code><a class="anchor" aria-label="anchor" href="#method-flatten-"></a></h3>
 <p>Create a <code>ParamSet</code> from this <code>ParamSetCollection</code>.</p><div class="section">
-<h4 id="usage-4">Usage<a class="anchor" aria-label="anchor" href="#usage-4"></a></h4>
+<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">flatten</span><span class="op">(</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
@@ -291,12 +326,12 @@ The internal search space.</p></dd>
 </div><p></p><hr><a id="method-ParamSetCollection-clone"></a><div class="section">
 <h3 id="method-clone-">Method <code>clone()</code><a class="anchor" aria-label="anchor" href="#method-clone-"></a></h3>
 <p>The objects of this class are cloneable with this method.</p><div class="section">
-<h4 id="usage-5">Usage<a class="anchor" aria-label="anchor" href="#usage-5"></a></h4>
+<h4 id="usage-6">Usage<a class="anchor" aria-label="anchor" href="#usage-6"></a></h4>
 <p></p><div class="r"><div class="sourceCode"><pre><code><span><span class="va">ParamSetCollection</span><span class="op">$</span><span class="fu">clone</span><span class="op">(</span>deep <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div><p></p></div>
 </div>
 
 <div class="section">
-<h4 id="arguments-4">Arguments<a class="anchor" aria-label="anchor" href="#arguments-4"></a></h4>
+<h4 id="arguments-5">Arguments<a class="anchor" aria-label="anchor" href="#arguments-5"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>deep</code></dt>
 <dd><p>Whether to make a deep clone.</p></dd>
 
