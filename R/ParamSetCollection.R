@@ -384,10 +384,10 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     .sets = NULL,
     .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = function() {
-      which(!map_lgl(map(sets, "extra_trafo"), is.null))
+      which(!map_lgl(map(private$.sets, "extra_trafo"), is.null))
     },
     .children_with_constraints = function() {
-      which(!map_lgl(map(sets, "constraint"), is.null))
+      which(!map_lgl(map(private$.sets, "constraint"), is.null))
     },
     .extra_trafo_explicit = function(x) {
       children_with_trafos = private$.children_with_trafos()
