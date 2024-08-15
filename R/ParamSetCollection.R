@@ -205,7 +205,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (keep_constraint) result$constraint = private$.get_constraint_detached(ids)
       result$extra_trafo = private$.get_extra_trafo_detached(ids)
       result
-    }
+    },
 
     #' @description
     #'
@@ -407,7 +407,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (!length(children_with_trafos)) return(NULL)
       sets_with_trafos = lapply(private$.sets[children_with_trafos], function(x) x$clone(deep = TRUE))  # get new objects that are detached from PSC
       crate(function(x) psc_extra_trafo(x, children_with_trafos, sets_with_trafos, translation), children_with_trafos, sets_with_trafos, translation)
-    }
+    },
     .constraint_explicit = function(x) {
       children_with_constraints = private$.children_with_constraints()
       sets_with_constraints = private$.sets[children_with_constraints]
@@ -424,7 +424,7 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (!length(children_with_constraints)) return(NULL)
       sets_with_constraints = lapply(private$.sets[children_with_constraints], function(x) x$clone(deep = TRUE))
       crate(function(x) psc_constraint(x, children_with_constraints, sets_with_constraints, translation), children_with_constraints, sets_with_constraints, translation)
-    }
+    },
     deep_clone = function(name, value) {
       switch(name,
         .deps = copy(value),
