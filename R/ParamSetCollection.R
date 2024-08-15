@@ -457,7 +457,7 @@ psc_extra_trafo = function(x, children_with_trafos, sets_with_trafos, translatio
     # input of trafo() must not be changed after the call; otherwise the trafo would have to `force()` it in
     # some circumstances.
     if (test_function(trafo, args = c("x", "param_set"))) {
-      changing_values = trafo(x = , param_set = sets_with_trafos[[i]])
+      changing_values = trafo(x = changing_values_in, param_set = sets_with_trafos[[i]])
     } else {
       changing_values = trafo(changing_values_in)
     }
