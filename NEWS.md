@@ -1,5 +1,7 @@
 # paradox 1.0.1-9000
 
+* `ParamSetCollection$flatten()` now detaches `$extra_trafo` completely from original ParamSetCollection.
+
 # paradox 1.0.1
 
 * Performance improvements.

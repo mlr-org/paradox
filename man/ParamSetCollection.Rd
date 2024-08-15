@@ -66,6 +66,7 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
 \itemize{
 \item \href{#method-ParamSetCollection-new}{\code{ParamSetCollection$new()}}
 \item \href{#method-ParamSetCollection-add}{\code{ParamSetCollection$add()}}
+\item \href{#method-ParamSetCollection-subset}{\code{ParamSetCollection$subset()}}
 \item \href{#method-ParamSetCollection-disable_internal_tuning}{\code{ParamSetCollection$disable_internal_tuning()}}
 \item \href{#method-ParamSetCollection-convert_internal_search_space}{\code{ParamSetCollection$convert_internal_search_space()}}
 \item \href{#method-ParamSetCollection-flatten}{\code{ParamSetCollection$flatten()}}
@@ -90,7 +91,6 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="qunif"><a href='../../paradox/html/ParamSet.html#method-ParamSet-qunif'><code>paradox::ParamSet$qunif()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="search_space"><a href='../../paradox/html/ParamSet.html#method-ParamSet-search_space'><code>paradox::ParamSet$search_space()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="set_values"><a href='../../paradox/html/ParamSet.html#method-ParamSet-set_values'><code>paradox::ParamSet$set_values()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subset"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subset'><code>paradox::ParamSet$subset()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="subspaces"><a href='../../paradox/html/ParamSet.html#method-ParamSet-subspaces'><code>paradox::ParamSet$subspaces()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test'><code>paradox::ParamSet$test()</code></a></span></li>
 <li><span class="pkg-link" data-pkg="paradox" data-topic="ParamSet" data-id="test_constraint"><a href='../../paradox/html/ParamSet.html#method-ParamSet-test_constraint'><code>paradox::ParamSet$test_constraint()</code></a></span></li>
@@ -149,6 +149,37 @@ Whether to add tags of the form \code{"set_<n>"} to the newly added parameters.}
 Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
 }
 \if{html}{\out{</div>}}
+}
+}
+\if{html}{\out{<hr>}}
+\if{html}{\out{<a id="method-ParamSetCollection-subset"></a>}}
+\if{latex}{\out{\hypertarget{method-ParamSetCollection-subset}{}}}
+\subsection{Method \code{subset()}}{
+Create a new \code{ParamSet} restricted to the passed IDs.
+\subsection{Usage}{
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$subset(
+  ids,
+  allow_dangling_dependencies = FALSE,
+  keep_constraint = TRUE
+)}\if{html}{\out{</div>}}
+}
+
+\subsection{Arguments}{
+\if{html}{\out{<div class="arguments">}}
+\describe{
+\item{\code{ids}}{(\code{character()}).}
+
+\item{\code{allow_dangling_dependencies}}{(\code{logical(1)})\cr
+Whether to allow subsets that cut across parameter dependencies.
+Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their \code{"on"} will not be present).}
+
+\item{\code{keep_constraint}}{(\code{logical(1)})\cr
+Whether to keep the \verb{$constraint} function.}
+}
+\if{html}{\out{</div>}}
+}
+\subsection{Returns}{
+\code{ParamSet}.
 }
 }
 \if{html}{\out{<hr>}}

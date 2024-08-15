@@ -712,7 +712,6 @@ ParamSet = R6Class("ParamSet",
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
       if (keep_constraint) result$constraint = self$constraint
-      # TODO: ParamSetCollection trafo currently drags along the entire original paramset in its environment
       result$extra_trafo = self$extra_trafo
       # restrict to ids already in pvals
       values = self$values
