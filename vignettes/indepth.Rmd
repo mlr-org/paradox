@@ -17,7 +17,7 @@ The `paradox` package offers a language for the description of *parameter spaces
 A parameter space is often useful when describing:
 
 * A set of sensible input values for an R function
-* The set of possible values that slots of a configuration object can take
+* The set of possible values that fields of a configuration object can take
 * The search space of an optimization process
 
 The tools provided by `paradox` therefore relate to:
@@ -105,13 +105,13 @@ The `ParamSet` should be considered immutable, except for some fields such as `$
 Bounds and levels should not be changed after construction.
 Instead, a new `ParamSet` should be constructed.
 
-Besides the possible values that can be given to a constructor, there are also the `$class`, `$nlevels`, `$is_bounded`, `$has_default`, `$storage_type`, `$is_number` and `$is_categ` slots that give information about a parameter.
+Besides the possible values that can be given to a constructor, there are also the `$class`, `$nlevels`, `$is_bounded`, `$has_default`, `$storage_type`, `$is_number` and `$is_categ` fields that give information about a parameter.
 
-A list of all slots can be found in `?Param`.
+A list of all fields can be found in `?ParamSet`.
 
 ```{r}
 param_set$lower
-param_set$parD$levels
+param_set$levels$parD
 param_set$class
 ```
 
@@ -164,10 +164,10 @@ as.data.table(ps_all)
 
 ##### Values in a `ParamSet`
 
-Although a `ParamSet` fundamentally represents a value space, it also has a slot `$values` that can contain a point within that space.
+Although a `ParamSet` fundamentally represents a value space, it also has a field `$values` that can contain a point within that space.
 This is useful because many things that define a parameter space need similar operations (like parameter checking) that can be simplified.
-The `$values` slot contains a named list that is always checked against parameter constraints.
-When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` slot of its `$param_set` that needs to be used.
+The `$values` field contains a named list that is always checked against parameter constraints.
+When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` field of its `$param_set` that needs to be used.
 
 ```{r}
 ps1$values = list(x = 1, y = 1.5)
@@ -222,9 +222,9 @@ p$check(list(A = TRUE, D = "x", B = 1), check_strict = TRUE)   # D's dependency 
 p$check(list(A = TRUE, B = 1), check_strict = TRUE)            # B's dependency is not met
 ```
 
-Internally, the dependencies are represented as a `data.table`, which can be accessed listed in the **`$deps`** slot.
+Internally, the dependencies are represented as a `data.table`, which can be accessed listed in the **`$deps`** field.
 This `data.table` can even be mutated, to e.g. remove dependencies.
-There are no sanity checks done when the `$deps` slot is changed this way.
+There are no sanity checks done when the `$deps` field is changed this way.
 Therefore it is advised to be cautious.
 
 ```{r}
@@ -267,7 +267,7 @@ Furthermore, for most samplers `p_int()` and `p_dbl()` must have finite lower an
 #### Parameter Designs
 
 Functions that sample the parameter space fundamentally return an object of the `Design` class.
-These objects contain the sampled data as a `data.table` under the `$data` slot, and also offer conversion to a list of parameter-values using the **`$transpose()`** function.
+These objects contain the sampled data as a `data.table` under the `$data` field, and also offer conversion to a list of parameter-values using the **`$transpose()`** function.
 
 #### Grid Design
 
