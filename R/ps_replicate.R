@@ -61,6 +61,7 @@
 ps_replicate = function(set, times = length(affixes), affixes = sprintf("rep%s", seq_len(times)), postfix = FALSE, tag_sets = FALSE, tag_params = FALSE) {
   assert_count(times)
   assert_character(affixes, any.missing = FALSE, unique = TRUE, len = times)
+  assert_flag(postfix)
 
-  ps_union(named_list(affixes, set, postfix_names = postfix), tag_sets = tag_sets, tag_params = tag_params)
+  ps_union(named_list(affixes, set), postfix_names = postfix, tag_sets = tag_sets, tag_params = tag_params)
 }
