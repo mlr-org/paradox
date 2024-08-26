@@ -54,8 +54,9 @@ By default, the resulting parameters are prefixed with the string <code>"repX.",
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
     <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ps_replicate</span><span class="op">(</span></span>
 <span>  <span class="va">set</span>,</span>
-<span>  times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">prefixes</span><span class="op">)</span>,</span>
-<span>  prefixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"rep%s"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">times</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  times <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">affixes</span><span class="op">)</span>,</span>
+<span>  affixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/sprintf.html" class="external-link">sprintf</a></span><span class="op">(</span><span class="st">"rep%s"</span>, <span class="fu"><a href="https://rdrr.io/r/base/seq.html" class="external-link">seq_len</a></span><span class="op">(</span><span class="va">times</span><span class="op">)</span><span class="op">)</span>,</span>
+<span>  postfix <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  tag_sets <span class="op">=</span> <span class="cn">FALSE</span>,</span>
 <span>  tag_params <span class="op">=</span> <span class="cn">FALSE</span></span>
 <span><span class="op">)</span></span></code></pre></div>
@@ -72,19 +73,26 @@ By default, the resulting parameters are prefixed with the string <code>"repX.",
 <dt id="arg-times">times<a class="anchor" aria-label="anchor" href="#arg-times"></a></dt>
 <dd><p>(<code>integer(1)</code>)<br>
 Number of times to repeat <code>set</code>.
-Should not be given if <code>prefixes</code> is provided.</p></dd>
+Should not be given if <code>affixes</code> is provided.</p></dd>
 
 
-<dt id="arg-prefixes">prefixes<a class="anchor" aria-label="anchor" href="#arg-prefixes"></a></dt>
+<dt id="arg-affixes">affixes<a class="anchor" aria-label="anchor" href="#arg-affixes"></a></dt>
 <dd><p>(<code>character</code>)<br>
-A <code>character</code> vector indicating the prefixes to use for each repetition of <code>set</code>.
-If this is given, <code>times</code> is inferred from <code>length(prefixes)</code> and should not be given separately.
+A <code>character</code> vector indicating the prefixes / postfixes to use for each repetition of <code>set</code>.
+Per default, these are prefixes; if <code>postfix</code> is <code>TRUE</code>, these values are postfixed instead.
+If this is given, <code>times</code> is inferred from <code>length(affixes)</code> and should not be given separately.
 If <code>times</code> is given, this defaults to <code>"repX"</code>, with <code>X</code> counting up from 1.</p></dd>
+
+
+<dt id="arg-postfix">postfix<a class="anchor" aria-label="anchor" href="#arg-postfix"></a></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to use <code>affixes</code> as a postfix instead of a prefix.
+Default <code>FALSE</code> (use prefixes).</p></dd>
 
 
 <dt id="arg-tag-sets">tag_sets<a class="anchor" aria-label="anchor" href="#arg-tag-sets"></a></dt>
 <dd><p>(<code>logical(1)</code>)<br>
-Whether to add a tag of the form <code>"set_&lt;prefixes[[i]]&gt;"</code> to each parameter in the result, indicating the repetition each parameter belongs to.</p></dd>
+Whether to add a tag of the form <code>"set_&lt;affixes[[i]]&gt;"</code> to each parameter in the result, indicating the repetition each parameter belongs to.</p></dd>
 
 
 <dt id="arg-tag-params">tag_params<a class="anchor" aria-label="anchor" href="#arg-tag-params"></a></dt>
@@ -111,7 +119,7 @@ Whether to add a tag of the form <code>"param_&lt;id&gt;"</code> to each paramet
 <span class="r-out co"><span class="r-pr">#&gt;</span> 5: rep3.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 6: rep3.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
 <span class="r-in"><span></span></span>
-<span class="r-in"><span><span class="fu">ps_replicate</span><span class="op">(</span><span class="va">pset</span>, prefixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"first"</span>, <span class="st">"last"</span><span class="op">)</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="fu">ps_replicate</span><span class="op">(</span><span class="va">pset</span>, affixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"first"</span>, <span class="st">"last"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(4)&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>         id    class lower upper nlevels        default  value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
@@ -119,6 +127,15 @@ Whether to add a tag of the form <code>"param_&lt;id&gt;"</code> to each paramet
 <span class="r-out co"><span class="r-pr">#&gt;</span> 2: first.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 3:  last.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> 4:  last.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="fu">ps_replicate</span><span class="op">(</span><span class="va">pset</span>, affixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"first"</span>, <span class="st">"last"</span><span class="op">)</span>, postfix <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(4)&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>         id    class lower upper nlevels        default  value</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>     &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1: i.first ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: z.first ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:  i.last ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4:  z.last ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">pset</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>i <span class="op">=</span> <span class="fl">1</span>, z <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>

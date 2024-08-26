@@ -5,13 +5,17 @@ the resulting object will not change the input ParamSet $values by reference.
 This emulates ParamSetCollection$new(sets), which in particular means that the resulting ParamSet has all the Domains
 from the input sets, but some $ids are changed: If the ParamSet is given in sets with a name, then the Domains will
 have their &amp;lt;id&amp;gt; changed to &amp;lt;name in "sets"&amp;gt;.&amp;lt;id&amp;gt;. This is also reflected in deps.
-The c() operator, applied to ParamSets, is a synony for ps_union().'><meta property="og:description" content='This emulates ParamSetCollection$new(sets), except that the result is a flat ParamSet, not a ParamSetCollection.
+The c() operator, applied to ParamSets, is a synony for ps_union().
+The named arguments tag_sets, tag_params, and postfix_names are also available in the c() operator, but need to be
+used with a preceding dot instead: .tag_sets, .tag_params, and .postfix_names.'><meta property="og:description" content='This emulates ParamSetCollection$new(sets), except that the result is a flat ParamSet, not a ParamSetCollection.
 The resulting object is decoupled from the input ParamSet objects: Unlike ParamSetCollection, changing $values of
 the resulting object will not change the input ParamSet $values by reference.
 This emulates ParamSetCollection$new(sets), which in particular means that the resulting ParamSet has all the Domains
 from the input sets, but some $ids are changed: If the ParamSet is given in sets with a name, then the Domains will
 have their &amp;lt;id&amp;gt; changed to &amp;lt;name in "sets"&amp;gt;.&amp;lt;id&amp;gt;. This is also reflected in deps.
-The c() operator, applied to ParamSets, is a synony for ps_union().'><meta name="robots" content="noindex"></head><body>
+The c() operator, applied to ParamSets, is a synony for ps_union().
+The named arguments tag_sets, tag_params, and postfix_names are also available in the c() operator, but need to be
+used with a preceding dot instead: .tag_sets, .tag_params, and .postfix_names.'><meta name="robots" content="noindex"></head><body>
     <a href="#main" class="visually-hidden-focusable">Skip to contents</a>
 
 
@@ -62,12 +66,14 @@ the resulting object will not change the input <code><a href="ParamSet.html">Par
 <p>This emulates <code>ParamSetCollection$new(sets)</code>, which in particular means that the resulting <code><a href="ParamSet.html">ParamSet</a></code> has all the <code><a href="Domain.html">Domain</a></code>s
 from the input <code>sets</code>, but some <code>$id</code>s are changed: If the <code><a href="ParamSet.html">ParamSet</a></code> is given in <code>sets</code> with a name, then the <code><a href="Domain.html">Domain</a></code>s will
 have their <code>&lt;id&gt;</code> changed to <code>&lt;name in "sets"&gt;.&lt;id&gt;</code>. This is also reflected in deps.</p>
-<p>The <code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> operator, applied to <code><a href="ParamSet.html">ParamSet</a></code>s, is a synony for <code>ps_union()</code>.</p>
+<p>The <code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> operator, applied to <code><a href="ParamSet.html">ParamSet</a></code>s, is a synony for <code>ps_union()</code>.
+The named arguments <code>tag_sets</code>, <code>tag_params</code>, and <code>postfix_names</code> are also available in the <code><a href="https://rdrr.io/r/base/c.html" class="external-link">c()</a></code> operator, but need to be
+used with a preceding dot instead: <code>.tag_sets</code>, <code>.tag_params</code>, and <code>.postfix_names</code>.</p>
     </div>
 
     <div class="section level2">
     <h2 id="ref-usage">Usage<a class="anchor" aria-label="anchor" href="#ref-usage"></a></h2>
-    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ps_union</span><span class="op">(</span><span class="va">sets</span>, tag_sets <span class="op">=</span> <span class="cn">FALSE</span>, tag_params <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
+    <div class="sourceCode"><pre class="sourceCode r"><code><span><span class="fu">ps_union</span><span class="op">(</span><span class="va">sets</span>, tag_sets <span class="op">=</span> <span class="cn">FALSE</span>, tag_params <span class="op">=</span> <span class="cn">FALSE</span>, postfix_names <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></code></pre></div>
     </div>
 
     <div class="section level2">
@@ -87,6 +93,12 @@ Whether to add tags of the form <code>"set_&lt;set_id&gt;"</code> to each parame
 <dt id="arg-tag-params">tag_params<a class="anchor" aria-label="anchor" href="#arg-tag-params"></a></dt>
 <dd><p>(<code>logical(1)</code>)<br>
 Whether to add tags of the form <code>"param_&lt;param_id&gt;"</code> to each parameter with original ID <code>&lt;param_id&gt;</code>.</p></dd>
+
+
+<dt id="arg-postfix-names">postfix_names<a class="anchor" aria-label="anchor" href="#arg-postfix-names"></a></dt>
+<dd><p>(<code>logical(1)</code>)<br>
+Whether to use names in <code>sets</code> as postfixes, instead of prefixes.
+Default <code>FALSE</code>.</p></dd>
 
 </dl></div>
 
@@ -143,6 +155,16 @@ Whether to add tags of the form <code>"param_&lt;param_id&gt;"</code> to each pa
 <span class="r-out co"><span class="r-pr">#&gt;</span> $two.x</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> [1] 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> </span>
+<span class="r-in"><span></span></span>
+<span class="r-in"><span><span class="va">pu3</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span>one <span class="op">=</span> <span class="va">ps1</span>, two <span class="op">=</span> <span class="va">ps1</span>, <span class="va">ps2</span>, .postfix_names <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
+<span class="r-in"><span><span class="va">pu3</span></span></span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(3)&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>        id    class lower upper nlevels        default  value</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1:  x.one ParamDbl  -Inf   Inf     Inf &lt;NoDefault[0]&gt;      1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2:  x.two ParamDbl  -Inf   Inf     Inf &lt;NoDefault[0]&gt;      1</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:      y ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-in"><span></span></span>
 <span class="r-in"><span></span></span>
 </code></pre></div>
     </div>

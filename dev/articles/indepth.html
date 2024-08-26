@@ -90,7 +90,7 @@ operations on these parameter spaces. A parameter space is often useful
 when describing:</p>
 <ul>
 <li>A set of sensible input values for an R function</li>
-<li>The set of possible values that slots of a configuration object can
+<li>The set of possible values that fields of a configuration object can
 take</li>
 <li>The search space of an optimization process</li>
 </ul>
@@ -248,15 +248,15 @@ constructed.</p>
 are also the <code>$class</code>, <code>$nlevels</code>,
 <code>$is_bounded</code>, <code>$has_default</code>,
 <code>$storage_type</code>, <code>$is_number</code> and
-<code>$is_categ</code> slots that give information about a
+<code>$is_categ</code> fields that give information about a
 parameter.</p>
-<p>A list of all slots can be found in <code>?Param</code>.</p>
+<p>A list of all fields can be found in <code><a href="../reference/ParamSet.html">?ParamSet</a></code>.</p>
 <div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">param_set</span><span class="op">$</span><span class="va">lower</span></span>
 <span><span class="co">#&gt; parA parB parC parD parE </span></span>
 <span><span class="co">#&gt;   NA    0    0   NA   NA</span></span>
-<span><span class="va">param_set</span><span class="op">$</span><span class="va">parD</span><span class="op">$</span><span class="va">levels</span></span>
-<span><span class="co">#&gt; NULL</span></span>
+<span><span class="va">param_set</span><span class="op">$</span><span class="va">levels</span><span class="op">$</span><span class="va">parD</span></span>
+<span><span class="co">#&gt; [1] "x" "y" "z"</span></span>
 <span><span class="va">param_set</span><span class="op">$</span><span class="va">class</span></span>
 <span><span class="co">#&gt;       parA       parB       parC       parD       parE </span></span>
 <span><span class="co">#&gt; "ParamLgl" "ParamInt" "ParamDbl" "ParamFct" "ParamUty"</span></span></code></pre></div>
@@ -358,13 +358,13 @@ information about them, using the variety of methods provided by
 <h5 id="values-in-a-paramset">Values in a <code>ParamSet</code><a class="anchor" aria-label="anchor" href="#values-in-a-paramset"></a>
 </h5>
 <p>Although a <code>ParamSet</code> fundamentally represents a value
-space, it also has a slot <code>$values</code> that can contain a point
+space, it also has a field <code>$values</code> that can contain a point
 within that space. This is useful because many things that define a
 parameter space need similar operations (like parameter checking) that
-can be simplified. The <code>$values</code> slot contains a named list
+can be simplified. The <code>$values</code> field contains a named list
 that is always checked against parameter constraints. When trying to set
 parameter values, e.g. for <code>mlr3</code> <code>Learner</code>s, it
-is the <code>$values</code> slot of its <code>$param_set</code> that
+is the <code>$values</code> field of its <code>$param_set</code> that
 needs to be used.</p>
 <div class="sourceCode" id="cb10"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">ps1</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>x <span class="op">=</span> <span class="fl">1</span>, y <span class="op">=</span> <span class="fl">1.5</span><span class="op">)</span></span>
@@ -441,9 +441,9 @@ as well, because <code>D</code> does not take any value if
 <span><span class="co">#&gt; [1] "B: can only be set if the following condition is met 'D %in% {x, y}'. Instead the parameter value for 'D' is not set at all. Try setting 'D' to a value that satisfies the condition"</span></span></code></pre></div>
 <p>Internally, the dependencies are represented as a
 <code>data.table</code>, which can be accessed listed in the
-<strong><code>$deps</code></strong> slot. This <code>data.table</code>
+<strong><code>$deps</code></strong> field. This <code>data.table</code>
 can even be mutated, to e.g. remove dependencies. There are no sanity
-checks done when the <code>$deps</code> slot is changed this way.
+checks done when the <code>$deps</code> field is changed this way.
 Therefore it is advised to be cautious.</p>
 <div class="sourceCode" id="cb14"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="va">p</span><span class="op">$</span><span class="va">deps</span></span>
@@ -526,7 +526,7 @@ upper bounds.</p>
 <p>Functions that sample the parameter space fundamentally return an
 object of the <code>Design</code> class. These objects contain the
 sampled data as a <code>data.table</code> under the <code>$data</code>
-slot, and also offer conversion to a list of parameter-values using the
+field, and also offer conversion to a list of parameter-values using the
 <strong><code>$transpose()</code></strong> function.</p>
 </div>
 <div class="section level4">
@@ -852,7 +852,7 @@ automatically. A way to perform the above would therefore be:</p>
 <span><span class="co">#&gt; [[1]]$fun</span></span>
 <span><span class="co">#&gt; function (x, ...) </span></span>
 <span><span class="co">#&gt; UseMethod("mean")</span></span>
-<span><span class="co">#&gt; &lt;bytecode: 0x55e9d4b0fa80&gt;</span></span>
+<span><span class="co">#&gt; &lt;bytecode: 0x55be695c5a20&gt;</span></span>
 <span><span class="co">#&gt; &lt;environment: namespace:base&gt;</span></span></code></pre></div>
 <p>Imagine now that a different kind of parametrization of the function
 is desired: The user wants to give a function that selects a certain
@@ -890,7 +890,7 @@ function.</p>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $fun</span></span>
 <span><span class="co">#&gt; function(input) quantile(input, x$quantile)</span></span>
-<span><span class="co">#&gt; &lt;environment: 0x55e9d83c0670&gt;</span></span>
+<span><span class="co">#&gt; &lt;environment: 0x55be6cc851b0&gt;</span></span>
 <span><span class="va">methodPS</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="fu">fun</span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span></span>
