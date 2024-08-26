@@ -1,7 +1,7 @@
 # paradox 1.0.1-9000
 
 * `ParamSetCollection$flatten()` now detaches `$extra_trafo` completely from original ParamSetCollection.
-* `ps_replicate()` generates postfixes instead of prefixes.
+* Option to postfix, instead of prefix, in `ParamSetCollection`, `c()`/`ps_union()`, and `ps_replicate()`.
 
 # paradox 1.0.1
 
