@@ -376,7 +376,7 @@ test_that("PSC postfix", {
   ps3 = ps(x.y = p_fct(c("a", "b")))
   ps4 = ps(y.x = p_lgl())
 
-  psc = ParamSetCollection$new(list(y = ps1, z = ps2), postfix = TRUE)
+  psc = ParamSetCollection$new(list(y = ps1, z = ps2), postfix_names = TRUE)
 
   expect_equal(psc$ids(), c("x.y", "x.z"))
 
@@ -432,14 +432,14 @@ test_that("PSC postfix", {
   expect_equal(ps4$values, named_list())
 
   # mixed with / without names
-  psc = ParamSetCollection$new(list(y = ps1, ps4), postfix = TRUE)
+  psc = ParamSetCollection$new(list(y = ps1, ps4), postfix_names = TRUE)
   expect_equal(psc$ids(), c("x.y", "y.x"))
   psc$values$x.y = 1
   expect_equal(psc$values, list(x.y = 1))
   psc$values$y.x = TRUE
   expect_equal(psc$values, list(x.y = 1, y.x = TRUE))
   expect_equal(ps1$values$x, 1)
-  expect_equal(ps4$values$y, TRUE)
+  expect_equal(ps4$values$y.x, TRUE)
 
   ps4$extra_trafo = function(x, param_set) {
     x$zzz = 888
@@ -449,10 +449,10 @@ test_that("PSC postfix", {
   expect_equal(psc$trafo(list()), list(x.z.y = 999, zzz = 888))
 
   # x.y generated twice here
-  expect_error(ParamSetCollection$new(list(y = ps1, ps3), postfix = TRUE), "would contain duplicated parameter.* x.y")
+  expect_error(ParamSetCollection$new(list(y = ps1, ps3), postfix_names = TRUE), "would contain duplicated parameter.* x.y")
 
   # don't get confused when no names are given
-  psc = ParamSetCollection$new(list(ps3, ps4), postfix = TRUE)
+  psc = ParamSetCollection$new(list(ps3, ps4), postfix_names = TRUE)
 
   expect_equal(psc$ids(), c("x.y", "y.x"))
   psc$values$x.y = "a"

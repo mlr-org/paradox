@@ -303,12 +303,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
 
           in_tune_fn = cargo$in_tune_fn
 
-          set_ids = info$ids
+          prefixed_set_ids = private$.add_name_prefix(prefix, info$ids)
           cargo$in_tune_fn = crate(function(domain, param_vals) {
-            param_vals = param_vals[names(param_vals) %in% private$.add_name_prefix(prefix, set_ids)]
+            param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
             names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
             in_tune_fn(domain, param_vals)
-          }, in_tune_fn, prefix, set_ids)
+          }, in_tune_fn, prefix, prefixed_set_ids)
 
           if (length(cargo$disable_in_tune)) {
             cargo$disable_in_tune = set_names(
