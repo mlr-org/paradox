@@ -106,7 +106,12 @@ This field provides direct references to the \code{\link{ParamSet}} objects.}
 \subsection{Method \code{new()}}{
 Creates a new instance of this \link[R6:R6Class]{R6} class.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(sets, tag_sets = FALSE, tag_params = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSetCollection$new(
+  sets,
+  tag_sets = FALSE,
+  tag_params = FALSE,
+  postfix_names = FALSE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -121,6 +126,9 @@ Whether to add tags of the form \code{"set_<set_id>"} to each parameter originat
 
 \item{\code{tag_params}}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
+
+\item{\code{postfix_names}}{(\code{logical(1)})\cr
+Whether to use the names inside \code{sets} as postfixes, rather than prefixes.}
 }
 \if{html}{\out{</div>}}
 }

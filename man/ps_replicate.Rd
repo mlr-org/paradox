@@ -6,8 +6,9 @@
 \usage{
 ps_replicate(
   set,
-  times = length(prefixes),
-  prefixes = sprintf("rep\%s", seq_len(times)),
+  times = length(affixes),
+  affixes = sprintf("rep\%s", seq_len(times)),
+  postfix = FALSE,
   tag_sets = FALSE,
   tag_params = FALSE
 )
@@ -18,15 +19,20 @@ ps_replicate(
 
 \item{times}{(\code{integer(1)})\cr
 Number of times to repeat \code{set}.
-Should not be given if \code{prefixes} is provided.}
+Should not be given if \code{affixes} is provided.}
 
-\item{prefixes}{(\code{character})\cr
-A \code{character} vector indicating the prefixes to use for each repetition of \code{set}.
-If this is given, \code{times} is inferred from \code{length(prefixes)} and should not be given separately.
+\item{affixes}{(\code{character})\cr
+A \code{character} vector indicating the prefixes / postfixes to use for each repetition of \code{set}.
+Per default, these are prefixes; if \code{postfix} is \code{TRUE}, these values are postfixed instead.
+If this is given, \code{times} is inferred from \code{length(affixes)} and should not be given separately.
 If \code{times} is given, this defaults to \code{"repX"}, with \code{X} counting up from 1.}
 
+\item{postfix}{(\code{logical(1)})\cr
+Whether to use \code{affixes} as a postfix instead of a prefix.
+Default \code{FALSE} (use prefixes).}
+
 \item{tag_sets}{(\code{logical(1)})\cr
-Whether to add a tag of the form \code{"set_<prefixes[[i]]>"} to each parameter in the result, indicating the repetition each parameter belongs to.}
+Whether to add a tag of the form \code{"set_<affixes[[i]]>"} to each parameter in the result, indicating the repetition each parameter belongs to.}
 
 \item{tag_params}{(\code{logical(1)})\cr
 Whether to add a tag of the form \code{"param_<id>"} to each parameter in the result, indicating the original parameter ID inside \code{set}.}
@@ -43,7 +49,9 @@ pset = ps(
 
 ps_replicate(pset, 3)
 
-ps_replicate(pset, prefixes = c("first", "last"))
+ps_replicate(pset, affixes = c("first", "last"))
+
+ps_replicate(pset, affixes = c("first", "last"), postfix = TRUE)
 
 pset$values = list(i = 1, z = FALSE)
 

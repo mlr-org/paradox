@@ -4,7 +4,7 @@
 \alias{ps_union}
 \title{Create a ParamSet from a list of ParamSets}
 \usage{
-ps_union(sets, tag_sets = FALSE, tag_params = FALSE)
+ps_union(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE)
 }
 \arguments{
 \item{sets}{(\code{list} of \code{\link{ParamSet}})\cr
@@ -15,6 +15,10 @@ Whether to add tags of the form \code{"set_<set_id>"} to each parameter originat
 
 \item{tag_params}{(\code{logical(1)})\cr
 Whether to add tags of the form \code{"param_<param_id>"} to each parameter with original ID \verb{<param_id>}.}
+
+\item{postfix_names}{(\code{logical(1)})\cr
+Whether to use names in \code{sets} as postfixes, instead of prefixes.
+Default \code{FALSE}.}
 }
 \description{
 This emulates \code{ParamSetCollection$new(sets)}, except that the result is a flat \code{\link{ParamSet}}, not a \code{\link{ParamSetCollection}}.
@@ -26,6 +30,8 @@ from the input \code{sets}, but some \verb{$id}s are changed: If the \code{\link
 have their \verb{<id>} changed to \verb{<name in "sets">.<id>}. This is also reflected in deps.
 
 The \code{c()} operator, applied to \code{\link{ParamSet}}s, is a synony for \code{ps_union()}.
+The named arguments \code{tag_sets}, \code{tag_params}, and \code{postfix_names} are also available in the \code{c()} operator, but need to be
+used with a preceding dot instead: \code{.tag_sets}, \code{.tag_params}, and \code{.postfix_names}.
 }
 \examples{
 ps1 = ps(x = p_dbl())
@@ -53,5 +59,9 @@ pu2 = c(one = ps1, two = ps1, ps2)
 pu2
 
 pu2$values
+
+pu3 = c(one = ps1, two = ps1, ps2, .postfix_names = TRUE)
+pu3
+
 
 }
