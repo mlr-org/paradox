@@ -273,8 +273,8 @@ ParamSet = R6Class("ParamSet",
       assert_list(x, names = "unique")
       trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
       value = NULL  # static checks
-      trafos[, value := x[id]]
       if (nrow(trafos)) {
+        trafos[, value := x[id]]
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
         x = insert_named(x, set_names(transformed, trafos$id))
       }

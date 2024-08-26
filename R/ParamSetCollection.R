@@ -373,9 +373,20 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     .postfix = FALSE,
     .add_name_prefix = function(owner, id) {
       if (private$.postfix) sprintf("%s.%s", id, owner) else sprintf("%s.%s", owner, id)
-    }
+    },
     .get_values = function() {
-      vals = unlist(map(private$.sets, "values"), recursive = FALSE)
+      if (private$.postfix && !is.null(names(private$.sets))) {
+        vals = imap(private$.sets, function(x, n) {
+          vals_subset = x$values
+          if (nchar(n)) {
+            names(vals_subset) = sprintf("%s.%s", names(vals_subset), n)
+          }
+          vals_subset
+        })
+        vals = unlist(unname(vals), recursive = FALSE)
+      } else {
+        vals = unlist(map(private$.sets, "values"), recursive = FALSE)
+      }
       if (length(vals)) vals else named_list()
     },
     .store_values = function(xs) {
@@ -476,7 +487,7 @@ psc_extra_trafo = function(x, children_with_trafos, sets_with_trafos, translatio
     changing_values = trafo(changing_values_in)
     prefix = names(sets_with_trafos)[[i]]
     if (prefix != "") {
-      names(changing_values) = if (postfi) sprintf("%s.%s", names(changing_values), prefix) else sprintf("%s.%s", prefix, names(changing_values))
+      names(changing_values) = if (postfix) sprintf("%s.%s", names(changing_values), prefix) else sprintf("%s.%s", prefix, names(changing_values))
     }
     changing_values
   }), recursive = FALSE)
