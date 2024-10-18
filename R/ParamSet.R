@@ -432,7 +432,7 @@ ParamSet = R6Class("ParamSet",
         xs_nontune = discard(xs, inherits, "TuneToken")
 
         # only had TuneTokens, nothing else to check here.
-        if (!length(xs_nontune)) {
+        if (!length(xs_nontune) && !some(xs, is, "InternalTuneToken")) {
           return(trueret)
         }
       } else {
