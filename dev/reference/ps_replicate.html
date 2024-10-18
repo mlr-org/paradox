@@ -112,30 +112,30 @@ Whether to add a tag of the form <code>"param_&lt;id&gt;"</code> to each paramet
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(6)&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>        id    class lower upper nlevels        default  value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1: rep1.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2: rep1.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3: rep2.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4: rep2.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 5: rep3.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 6: rep3.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1: rep1.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: rep1.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3: rep2.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4: rep2.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 5: rep3.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 6: rep3.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu">ps_replicate</span><span class="op">(</span><span class="va">pset</span>, affixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"first"</span>, <span class="st">"last"</span><span class="op">)</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(4)&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>         id    class lower upper nlevels        default  value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1: first.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2: first.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3:  last.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4:  last.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1: first.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: first.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:  last.i ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4:  last.z ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="fu">ps_replicate</span><span class="op">(</span><span class="va">pset</span>, affixes <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"first"</span>, <span class="st">"last"</span><span class="op">)</span>, postfix <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> &lt;ParamSet(4)&gt;</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>         id    class lower upper nlevels        default  value</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>     &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 1: i.first ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 2: z.first ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 3:  i.last ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span>
-<span class="r-out co"><span class="r-pr">#&gt;</span> 4:  z.last ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;       </span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 1: i.first ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 2: z.first ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 3:  i.last ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span> 4:  z.last ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span>
 <span class="r-in"><span></span></span>
 <span class="r-in"><span><span class="va">pset</span><span class="op">$</span><span class="va">values</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>i <span class="op">=</span> <span class="fl">1</span>, z <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span></span>
 <span class="r-in"><span></span></span>
@@ -219,7 +219,7 @@ Whether to add a tag of the form <code>"param_&lt;id&gt;"</code> to each paramet
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
 </div>
 
     </footer></div>

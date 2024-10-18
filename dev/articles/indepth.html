@@ -198,10 +198,10 @@ not be changed after construction.</p>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
 <span><span class="co">#&gt; 1:   parA ParamLgl    NA    NA       2 &lt;NoDefault[0]&gt;  FALSE</span></span>
-<span><span class="co">#&gt; 2:   parB ParamInt     0    10      11 &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 3:   parC ParamDbl     0     4     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 4:   parD ParamFct    NA    NA       3              y       </span></span>
-<span><span class="co">#&gt; 5:   parE ParamUty    NA    NA     Inf &lt;NoDefault[0]&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 2:   parB ParamInt     0    10      11 &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 3:   parC ParamDbl     0     4     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 4:   parD ParamFct    NA    NA       3              y [NULL]</span></span>
+<span><span class="co">#&gt; 5:   parE ParamUty    NA    NA     Inf &lt;NoDefault[0]&gt; [NULL]</span></span></code></pre></div>
 <p>Every parameter can have:</p>
 <ul>
 <li>
@@ -267,10 +267,10 @@ as <code>data.table</code> by calling <code><a href="https://rdatatable.gitlab.i
 <span><span class="co">#&gt;        id    class lower upper      levels nlevels is_bounded special_vals</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;      &lt;list&gt;   &lt;num&gt;     &lt;lgcl&gt;       &lt;list&gt;</span></span>
 <span><span class="co">#&gt; 1:   parA ParamLgl    NA    NA  TRUE,FALSE       2       TRUE    &lt;list[0]&gt;</span></span>
-<span><span class="co">#&gt; 2:   parB ParamInt     0    10                  11       TRUE    &lt;list[0]&gt;</span></span>
-<span><span class="co">#&gt; 3:   parC ParamDbl     0     4                 Inf       TRUE    &lt;list[1]&gt;</span></span>
+<span><span class="co">#&gt; 2:   parB ParamInt     0    10      [NULL]      11       TRUE    &lt;list[0]&gt;</span></span>
+<span><span class="co">#&gt; 3:   parC ParamDbl     0     4      [NULL]     Inf       TRUE    &lt;list[1]&gt;</span></span>
 <span><span class="co">#&gt; 4:   parD ParamFct    NA    NA       x,y,z       3       TRUE    &lt;list[0]&gt;</span></span>
-<span><span class="co">#&gt; 5:   parE ParamUty    NA    NA                 Inf      FALSE    &lt;list[0]&gt;</span></span>
+<span><span class="co">#&gt; 5:   parE ParamUty    NA    NA      [NULL]     Inf      FALSE    &lt;list[0]&gt;</span></span>
 <span><span class="co">#&gt;           default storage_type      tags</span></span>
 <span><span class="co">#&gt;            &lt;list&gt;       &lt;char&gt;    &lt;list&gt;</span></span>
 <span><span class="co">#&gt; 1: &lt;NoDefault[0]&gt;      logical          </span></span>
@@ -326,15 +326,15 @@ modify the original <code>ParamSet</code>.</p>
 <span><span class="co">#&gt; &lt;ParamSet(3)&gt;</span></span>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 2:      y ParamDbl  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 3:      z ParamFct    NA    NA       3 &lt;NoDefault[0]&gt;</span></span>
+<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 2:      y ParamDbl  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 3:      z ParamFct    NA    NA       3 &lt;NoDefault[0]&gt; [NULL]</span></span>
 <span><span class="va">ps_all</span><span class="op">$</span><span class="fu">subset</span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"x"</span>, <span class="st">"z"</span><span class="op">)</span><span class="op">)</span></span>
 <span><span class="co">#&gt; &lt;ParamSet(2)&gt;</span></span>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 2:      z ParamFct    NA    NA       3 &lt;NoDefault[0]&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 2:      z ParamFct    NA    NA       3 &lt;NoDefault[0]&gt; [NULL]</span></span></code></pre></div>
 <p><code>ParamSet</code>s of each individual parameters can be accessed
 through the <code>$subspaces()</code> function.</p>
 <p>It is possible to get the <code>ParamSet</code> as a
@@ -346,8 +346,8 @@ information about them, using the variety of methods provided by
 <code class="sourceCode R"><span><span class="fu"><a href="https://rdatatable.gitlab.io/data.table/reference/as.data.table.html" class="external-link">as.data.table</a></span><span class="op">(</span><span class="va">ps_all</span><span class="op">)</span></span>
 <span><span class="co">#&gt;        id    class lower upper levels nlevels is_bounded special_vals</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt; &lt;list&gt;   &lt;num&gt;     &lt;lgcl&gt;       &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf            Inf      FALSE    &lt;list[0]&gt;</span></span>
-<span><span class="co">#&gt; 2:      y ParamDbl  -Inf   Inf            Inf      FALSE    &lt;list[0]&gt;</span></span>
+<span><span class="co">#&gt; 1:      x ParamInt  -Inf   Inf [NULL]     Inf      FALSE    &lt;list[0]&gt;</span></span>
+<span><span class="co">#&gt; 2:      y ParamDbl  -Inf   Inf [NULL]     Inf      FALSE    &lt;list[0]&gt;</span></span>
 <span><span class="co">#&gt; 3:      z ParamFct    NA    NA  a,b,c       3       TRUE    &lt;list[0]&gt;</span></span>
 <span><span class="co">#&gt;           default storage_type   tags</span></span>
 <span><span class="co">#&gt;            &lt;list&gt;       &lt;char&gt; &lt;list&gt;</span></span>
@@ -469,8 +469,8 @@ consisting of multiple copies of the parameter, which can then
 <span><span class="co">#&gt; &lt;ParamSet(2)&gt;</span></span>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1: rep1.x ParamDbl     0     1     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 2: rep2.x ParamDbl     0     1     Inf &lt;NoDefault[0]&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1: rep1.x ParamDbl     0     1     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 2: rep2.x ParamDbl     0     1     Inf &lt;NoDefault[0]&gt; [NULL]</span></span></code></pre></div>
 <p>It is also possible to use a <code>ParamUty</code> to accept
 vectorial parameters, which also works for parameters of variable
 length. A <code>ParamSet</code> containing a <code>ParamUty</code> can
@@ -803,7 +803,7 @@ use the following <code>ParamSet</code>:</p>
 <span><span class="co">#&gt; &lt;ParamSet(1)&gt;</span></span>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1:    fun ParamUty    NA    NA     Inf &lt;NoDefault[0]&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1:    fun ParamUty    NA    NA     Inf &lt;NoDefault[0]&gt; [NULL]</span></span></code></pre></div>
 <p>If one wanted to sample this method, using one of four functions, a
 way to do this would be:</p>
 <div class="sourceCode" id="cb27"><pre class="downlit sourceCode r">
@@ -852,7 +852,7 @@ automatically. A way to perform the above would therefore be:</p>
 <span><span class="co">#&gt; [[1]]$fun</span></span>
 <span><span class="co">#&gt; function (x, ...) </span></span>
 <span><span class="co">#&gt; UseMethod("mean")</span></span>
-<span><span class="co">#&gt; &lt;bytecode: 0x55be695c5a20&gt;</span></span>
+<span><span class="co">#&gt; &lt;bytecode: 0x563711af49b0&gt;</span></span>
 <span><span class="co">#&gt; &lt;environment: namespace:base&gt;</span></span></code></pre></div>
 <p>Imagine now that a different kind of parametrization of the function
 is desired: The user wants to give a function that selects a certain
@@ -889,8 +889,9 @@ function.</p>
 <code class="sourceCode R"><span><span class="va">xvals</span> <span class="op">=</span> <span class="va">design</span><span class="op">$</span><span class="fu">transpose</span><span class="op">(</span><span class="op">)</span></span>
 <span><span class="fu"><a href="https://rdrr.io/r/base/print.html" class="external-link">print</a></span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; $fun</span></span>
-<span><span class="co">#&gt; function(input) quantile(input, x$quantile)</span></span>
-<span><span class="co">#&gt; &lt;environment: 0x55be6cc851b0&gt;</span></span>
+<span><span class="co">#&gt; function (input) </span></span>
+<span><span class="co">#&gt; quantile(input, x$quantile)</span></span>
+<span><span class="co">#&gt; &lt;environment: 0x563715df99d0&gt;</span></span>
 <span><span class="va">methodPS</span><span class="op">$</span><span class="fu">check</span><span class="op">(</span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="co">#&gt; [1] TRUE</span></span>
 <span><span class="va">xvals</span><span class="op">[[</span><span class="fl">1</span><span class="op">]</span><span class="op">]</span><span class="op">$</span><span class="fu">fun</span><span class="op">(</span><span class="fl">1</span><span class="op">:</span><span class="fl">10</span><span class="op">)</span></span>
@@ -942,8 +943,8 @@ turned into parameters. A possible search space for the
 <span><span class="co">#&gt; &lt;ParamSet(2)&gt;</span></span>
 <span><span class="co">#&gt;        id    class lower upper nlevels        default  value</span></span>
 <span><span class="co">#&gt;    &lt;char&gt;   &lt;char&gt; &lt;num&gt; &lt;num&gt;   &lt;num&gt;         &lt;list&gt; &lt;list&gt;</span></span>
-<span><span class="co">#&gt; 1:   cost ParamDbl   0.1    10     Inf &lt;NoDefault[0]&gt;       </span></span>
-<span><span class="co">#&gt; 2: kernel ParamFct    NA    NA       2 &lt;NoDefault[0]&gt;</span></span></code></pre></div>
+<span><span class="co">#&gt; 1:   cost ParamDbl   0.1    10     Inf &lt;NoDefault[0]&gt; [NULL]</span></span>
+<span><span class="co">#&gt; 2: kernel ParamFct    NA    NA       2 &lt;NoDefault[0]&gt; [NULL]</span></span></code></pre></div>
 <p>There are five domain constructors that produce a parameters when
 given to <code>ps</code>:</p>
 <table class="table">
@@ -1379,7 +1380,7 @@ along two dimensions:</p>
 </div>
 
 <div class="pkgdown-footer-right">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/" class="external-link">pkgdown</a> 2.1.1.</p>
 </div>
 
     </footer>
