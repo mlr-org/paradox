@@ -203,6 +203,18 @@ ParamSet = R6Class("ParamSet",
       values = self$values
       ns = names(values)
 
+      deps = self$deps
+      if (remove_dependencies && nrow(deps)) {
+        for (j in seq_row(deps)) {
+          p1id = deps$id[[j]]
+          p2id = deps$on[[j]]
+          cond = deps$cond[[j]]
+          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
+            values[p1id] = NULL
+          }
+        }
+      }
+
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
@@ -215,18 +227,6 @@ ParamSet = R6Class("ParamSet",
         required = setdiff(self$ids(tags = "required"), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
-        }
-      }
-
-      deps = self$deps
-      if (remove_dependencies && nrow(deps)) {
-        for (j in seq_row(deps)) {
-          p1id = deps$id[[j]]
-          p2id = deps$on[[j]]
-          cond = deps$cond[[j]]
-          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
-            values[p1id] = NULL
-          }
         }
       }
 
