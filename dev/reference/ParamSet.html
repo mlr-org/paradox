@@ -82,7 +82,7 @@ In practice, the majority of cases where a <code>ParamSet</code> is created, the
     <h2 id="s-methods-and-type-converters">S3 methods and type converters<a class="anchor" aria-label="anchor" href="#s-methods-and-type-converters"></a></h2>
 
 
-<ul><li><p><code><a href="https://rdatatable.gitlab.io/data.table/reference/as.data.table.html" class="external-link">as.data.table()</a></code><br><code>ParamSet</code> -&gt; <code><a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table()</a></code><br>
+<ul><li><p><code><a href="https://rdrr.io/pkg/data.table/man/as.data.table.html" class="external-link">as.data.table()</a></code><br><code>ParamSet</code> -&gt; <code><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table()</a></code><br>
 Compact representation as datatable. Col types are:<br></p><ul><li><p>id: character</p></li>
 <li><p>class: character</p></li>
 <li><p>lower, upper: numeric</p></li>
@@ -157,7 +157,7 @@ constraints, returning a scalar <code>logical(1)</code> value.</p></dd>
 
 
 <dt><code>deps</code></dt>
-<dd><p>(<code><a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table()</a></code>)<br>
+<dd><p>(<code><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table()</a></code>)<br>
 Table has cols <code>id</code> (<code>character(1)</code>) and <code>on</code> (<code>character(1)</code>) and <code>cond</code> (<a href="Condition.html">Condition</a>).
 Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to <code>add_dep</code>.
@@ -555,7 +555,7 @@ Should be <code>TRUE</code> unless this was already checked before.</p></dd>
 
 </div><p></p><hr><a id="method-ParamSet-test_constraint_dt"></a><div class="section">
 <h3 id="method-test-constraint-dt-">Method <code>test_constraint_dt()</code><a class="anchor" aria-label="anchor" href="#method-test-constraint-dt-"></a></h3>
-<p><span class="pkg">checkmate</span>-like test-function. Takes a <code><a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table</a></code>.
+<p><span class="pkg">checkmate</span>-like test-function. Takes a <code><a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table</a></code>.
 For each row, return <code>FALSE</code> if the given <code>$constraint</code> is not satisfied, <code>TRUE</code> otherwise.
 Note this is different from satisfying the bounds or types given by the <code>ParamSet</code> itself:
 If <code>x</code> does not satisfy these, an error will be thrown, given that <code>assert_value</code> is <code>TRUE</code>.</p><div class="section">
@@ -721,7 +721,7 @@ is <code>TRUE</code>, the additional effect is that <code>xs</code> is converted
 
 </div><p></p><hr><a id="method-ParamSet-check_dt"></a><div class="section">
 <h3 id="method-check-dt-">Method <code>check_dt()</code><a class="anchor" aria-label="anchor" href="#method-check-dt-"></a></h3>
-<p><span class="pkg">checkmate</span>-like check-function. Takes a <a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>
+<p><span class="pkg">checkmate</span>-like check-function. Takes a <a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table</a>
 where rows are points and columns are parameters.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
@@ -734,7 +734,7 @@ Constraints and dependencies are not checked when <code>check_strict</code> is <
 <div class="section">
 <h4 id="arguments-14">Arguments<a class="anchor" aria-label="anchor" href="#arguments-14"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a> | <code><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame()</a></code>).</p></dd>
+<dd><p>(<a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table</a> | <code><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame()</a></code>).</p></dd>
 
 
 <dt><code>check_strict</code></dt>
@@ -759,7 +759,7 @@ Whether to check that constraints and dependencies are satisfied.</p></dd>
 <div class="section">
 <h4 id="arguments-15">Arguments<a class="anchor" aria-label="anchor" href="#arguments-15"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+<dd><p>(<a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
 
 
 <dt><code>check_strict</code></dt>
@@ -784,7 +784,7 @@ Whether to check that constraints and dependencies are satisfied.</p></dd>
 <div class="section">
 <h4 id="arguments-16">Arguments<a class="anchor" aria-label="anchor" href="#arguments-16"></a></h4>
 <p></p><div class="arguments"><dl><dt><code>xdt</code></dt>
-<dd><p>(<a href="https://rdatatable.gitlab.io/data.table/reference/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
+<dd><p>(<a href="https://rdrr.io/pkg/data.table/man/data.table.html" class="external-link">data.table::data.table</a>).</p></dd>
 
 
 <dt><code>check_strict</code></dt>
