@@ -356,6 +356,8 @@ test_that("ParamSet$check_dt", {
 })
 
 test_that("rd_info.ParamSet", {
+  skip_if_not_installed("knitr")
+
   ps = ParamSet_legacy$new()
   expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))
