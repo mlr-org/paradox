@@ -13,7 +13,7 @@ knitr::opts_chunk$set(echo = TRUE, comment = "#>", collapse = TRUE)
 has_other = requireNamespace("lhs", quietly = TRUE)
 knitr::opts_chunk$set(eval = has_other)
 ```
-`r if (!has_other) " **Note.** This vignette uses the suggested package `lhs`. It is not installed, so code chunks are shown but not executed."`
+`r if (!has_other) " **Note.** This vignette uses the suggested package 'lhs'. It is not installed, so code chunks are shown but not executed."`
 
 ## Parameters (using paradox)
 
