@@ -49,10 +49,8 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
-    rmarkdown,
     mlr3learners,
     e1071,
-    knitr,
     lhs,
     spacefillr,
     testthat
