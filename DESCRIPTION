@@ -49,20 +49,18 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
-    rmarkdown,
     mlr3learners,
     e1071,
-    knitr,
     lhs,
     spacefillr,
-    testthat
+    testthat,
+    knitr
 Encoding: UTF-8
 Config/testthat/edition: 3
 Config/testthat/parallel: false
 NeedsCompilation: no
 Roxygen: list(markdown = TRUE, r6 = TRUE)
 RoxygenNote: 7.3.2
-VignetteBuilder: knitr, rmarkdown
 Collate:
     'Condition.R'
     'Design.R'
