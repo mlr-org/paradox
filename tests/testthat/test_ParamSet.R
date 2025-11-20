@@ -400,6 +400,8 @@ test_that("ParamSet$check with allow_subset = FALSE", {
 })
 
 test_that("rd_info.ParamSet", {
+  skip_if_not_installed("knitr")
+
   ps = ParamSet_legacy$new()
   expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
   ps = ps_union(list(ps, ParamFct$new("a", levels = letters[1:3])))
@@ -558,3 +560,27 @@ test_that("disable internal tuning", {
   expect_error(param_set$disable_internal_tuning("b"))
 })
 
+<<<<<<< HEAD
+=======
+test_that("get_values works with tokens and dependencies", {
+  ps = ps(
+    cost    = p_dbl(0, default = 1, tags = "train", depends = quote(type == "C-classification")),
+    kernel  = p_fct(c("linear", "polynomial", "radial", "sigmoid"), default = "radial", tags = "train"),
+    type    = p_fct(c("C-classification", "nu-classification"), default = "C-classification", tags = "train")
+  )
+
+  ps$set_values(cost = to_tune(1e-5, 1e5, logscale = TRUE), kernel = "radial", type = "C-classification")
+  expect_equal(ps$get_values(type = "only_token"), list(cost = to_tune(1e-5, 1e5, logscale = TRUE)))
+
+  ps = ps(
+    cost    = p_dbl(0, default = 1, tags = "train"),
+    kernel  = p_fct(c("linear", "polynomial", "radial", "sigmoid"), default = "radial", tags = "train"),
+    type    = p_fct(c("C-classification", "nu-classification"), default = "C-classification", tags = "train")
+  )
+
+  ps$set_values(cost = to_tune(1e-5, 1e5, logscale = TRUE), kernel = "radial", type = "C-classification")
+  ps$get_values(type = "only_token")
+
+  expect_equal(ps$get_values(type = "only_token"), list(cost = to_tune(1e-5, 1e5, logscale = TRUE)))
+})
+>>>>>>> main

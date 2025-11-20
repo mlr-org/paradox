@@ -456,3 +456,11 @@ test_that("internal and aggr", {
   )
   expect_equal(param_set$search_space()$aggr_internal_tuned_values(list(a = list(1, 2, 3))), list(a = -60))
 })
+
+test_that("cannot mark non-int-tuneable parameters for int tuning", {
+  p = ps(x = p_int(lower = 0L))
+  expect_error(
+    p$set_values(x = to_tune(upper = 1000, internal = TRUE, aggr = function(x) round(mean(unlist(x))))),
+    "Trying to assign"
+  )
+})

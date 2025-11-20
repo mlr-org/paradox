@@ -9,6 +9,7 @@
 #'   `Condition` to use
 #' @param x (`any`)\cr
 #'   Value to test
+#' @export
 condition_test = function(cond, x) {
   UseMethod("condition_test")
 }

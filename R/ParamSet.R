@@ -203,6 +203,18 @@ ParamSet = R6Class("ParamSet",
       values = self$values
       ns = names(values)
 
+      deps = self$deps
+      if (remove_dependencies && nrow(deps)) {
+        for (j in seq_row(deps)) {
+          p1id = deps$id[[j]]
+          p2id = deps$on[[j]]
+          cond = deps$cond[[j]]
+          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
+            values[p1id] = NULL
+          }
+        }
+      }
+
       if (type == "without_token") {
         values = discard(values, is, "TuneToken")
       } else if (type == "only_token") {
@@ -215,18 +227,6 @@ ParamSet = R6Class("ParamSet",
         required = setdiff(self$ids(tags = "required"), ns)
         if (length(required) > 0L) {
           stop(sprintf("Missing required parameters: %s", str_collapse(required)))
-        }
-      }
-
-      deps = self$deps
-      if (remove_dependencies && nrow(deps)) {
-        for (j in seq_row(deps)) {
-          p1id = deps$id[[j]]
-          p2id = deps$on[[j]]
-          cond = deps$cond[[j]]
-          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
-            values[p1id] = NULL
-          }
         }
       }
 
@@ -273,8 +273,8 @@ ParamSet = R6Class("ParamSet",
       assert_list(x, names = "unique")
       trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
       value = NULL  # static checks
-      trafos[, value := x[id]]
       if (nrow(trafos)) {
+        trafos[, value := x[id]]
         transformed = pmap(trafos, function(id, trafo, value) trafo(value))
         x = insert_named(x, set_names(transformed, trafos$id))
       }
@@ -480,7 +480,7 @@ ParamSet = R6Class("ParamSet",
         xs_nontune = discard(xs, inherits, "TuneToken")
 
         # only had TuneTokens, nothing else to check here.
-        if (!length(xs_nontune)) {
+        if (!length(xs_nontune) && !some(xs, is, "InternalTuneToken")) {
           return(trueret)
         }
       } else {
@@ -770,7 +770,6 @@ ParamSet = R6Class("ParamSet",
       result$assert_values = FALSE
       result$deps = deps[ids, on = "id", nomatch = NULL]
       if (keep_constraint) result$constraint = self$constraint
-      # TODO: ParamSetCollection trafo currently drags along the entire original paramset in its environment
       result$extra_trafo = self$extra_trafo
       # restrict to ids already in pvals
       values = self$values

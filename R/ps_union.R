@@ -10,12 +10,17 @@
 #' have their `<id>` changed to `<name in "sets">.<id>`. This is also reflected in deps.
 #'
 #' The `c()` operator, applied to [`ParamSet`]s, is a synony for `ps_union()`.
+#' The named arguments `tag_sets`, `tag_params`, and `postfix_names` are also available in the `c()` operator, but need to be
+#' used with a preceding dot instead: `.tag_sets`, `.tag_params`, and `.postfix_names`.
 #' @param sets (`list` of [`ParamSet`])\cr
 #'   This may be a named list, in which case non-empty names are prefixed to parameters in the corresponding [`ParamSet`].
 #' @param tag_sets (`logical(1)`)\cr
 #'   Whether to add tags of the form `"set_<set_id>"` to each parameter originating from a given `ParamSet` given with name `<name in "sets">`.
 #' @param tag_params (`logical(1)`)\cr
 #'   Whether to add tags of the form `"param_<param_id>"` to each parameter with original ID `<param_id>`.
+#' @param postfix_names (`logical(1)`)\cr
+#'   Whether to use names in `sets` as postfixes, instead of prefixes.
+#'   Default `FALSE`.
 #' @examples
 #' ps1 = ps(x = p_dbl())
 #' ps1$values = list(x = 1)
@@ -43,14 +48,18 @@
 #'
 #' pu2$values
 #'
+#' pu3 = c(one = ps1, two = ps1, ps2, .postfix_names = TRUE)
+#' pu3
+#'
+#'
 #' @export
-ps_union = function(sets, tag_sets = FALSE, tag_params = FALSE) {
+ps_union = function(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE) {
   assert_list(sets, types = "ParamSet")
   if (!length(sets)) return(ParamSet$new())
-  ParamSetCollection$new(sets, tag_sets = tag_sets, tag_params = tag_params)$flatten()
+  ParamSetCollection$new(sets, tag_sets = tag_sets, tag_params = tag_params, postfix_names = postfix_names)$flatten()
 }
 
 #' @export
-c.ParamSet = function(..., .tag_sets = FALSE, .tag_params = FALSE) {
-  ps_union(list(...), tag_sets = .tag_sets, tag_params = .tag_params)
+c.ParamSet = function(..., .tag_sets = FALSE, .tag_params = FALSE, .postfix_names = FALSE) {
+  ps_union(list(...), tag_sets = .tag_sets, tag_params = .tag_params, postfix_names = .postfix_names)
 }

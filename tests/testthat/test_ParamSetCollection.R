@@ -369,3 +369,112 @@ test_that("disable internal tuning without set names", {
   param_set$disable_internal_tuning("a")
   expect_equal(param_set$values$b, TRUE)
 })
+
+test_that("PSC postfix", {
+  ps1 = ps(x = p_int(1, 10, logscale = TRUE))
+  ps2 = ps(x = p_dbl(-1, 1))
+  ps3 = ps(x.y = p_fct(c("a", "b")))
+  ps4 = ps(y.x = p_lgl())
+
+  psc = ParamSetCollection$new(list(y = ps1, z = ps2), postfix_names = TRUE)
+
+  expect_equal(psc$ids(), c("x.y", "x.z"))
+
+  psc$values$x.y = 1
+  expect_equal(psc$values, list(x.y = 1))
+  psc$values$x.z = -1
+  expect_equal(psc$values, list(x.y = 1, x.z = -1))
+  expect_equal(ps1$values$x, 1)
+  expect_equal(ps2$values$x, -1)
+
+  ps1$extra_trafo = function(x, param_set) {
+    x$x.z = 99
+    x
+  }
+
+  expect_equal(psc$trafo(list()), list(x.z.y = 99))
+
+  expect_equal(psc$trafo(list(x.y = 3)), list(x.y = 10, x.z.y = 99))
+
+  psc$values = list()
+  expect_equal(psc$values, named_list())
+  expect_equal(ps1$values, named_list())
+
+  psc$values$x.y = 1
+  psc$values$x.z = -1
+  psf = psc$flatten()
+  expect_equal(psf$ids(), c("x.y", "x.z"))
+  expect_equal(psf$values, list(x.y = 1, x.z = -1))
+  psf$values = list(x.y = 2, x.z = -0.5)
+  expect_equal(psf$values, list(x.y = 2, x.z = -0.5))
+  expect_equal(psc$values, list(x.y = 1, x.z = -1))
+
+  expect_equal(psf$trafo(list()), list(x.z.y = 99))
+  expect_equal(psf$trafo(list(x.y = 3)), list(x.y = 10, x.z.y = 99))
+
+  ps1$extra_trafo = function(x, param_set) {
+    x$x.z = 999
+    x
+  }
+  expect_equal(psc$trafo(list()), list(x.z.y = 999))
+  expect_equal(psf$trafo(list()), list(x.z.y = 99))
+
+  expect_error(psc$add(ps3), "would lead to nameclashes.* x.y")
+  psc$add(ps4)
+
+  expect_equal(psc$ids(), c("x.y", "x.z", "y.x"))
+  psc$add(ps3, n = "X.Y")
+  expect_equal(psc$ids(), c("x.y", "x.z", "y.x", "x.y.X.Y"))
+
+  ps4$values = list(y.x = TRUE)
+  expect_equal(psc$values, list(x.y = 1, x.z = -1, y.x = TRUE))
+  psc$values = list()
+  expect_equal(ps4$values, named_list())
+
+  # mixed with / without names
+  psc = ParamSetCollection$new(list(y = ps1, ps4), postfix_names = TRUE)
+  expect_equal(psc$ids(), c("x.y", "y.x"))
+  psc$values$x.y = 1
+  expect_equal(psc$values, list(x.y = 1))
+  psc$values$y.x = TRUE
+  expect_equal(psc$values, list(x.y = 1, y.x = TRUE))
+  expect_equal(ps1$values$x, 1)
+  expect_equal(ps4$values$y.x, TRUE)
+
+  ps4$extra_trafo = function(x, param_set) {
+    x$zzz = 888
+    x
+  }
+
+  expect_equal(psc$trafo(list()), list(x.z.y = 999, zzz = 888))
+
+  # x.y generated twice here
+  expect_error(ParamSetCollection$new(list(y = ps1, ps3), postfix_names = TRUE), "would contain duplicated parameter.* x.y")
+
+  # don't get confused when no names are given
+  psc = ParamSetCollection$new(list(ps3, ps4), postfix_names = TRUE)
+
+  expect_equal(psc$ids(), c("x.y", "y.x"))
+  psc$values$x.y = "a"
+
+  # retains 'TRUE' from above
+  expect_equal(psc$values, list(x.y = "a", y.x = TRUE))
+
+  expect_equal(psc$trafo(list()), list(zzz = 888))
+
+
+  expect_equal(c(y = ps1, z = ps2, .postfix_names = TRUE)$ids(), c("x.y", "x.z"))
+  repps = ps_replicate(ps1, affixes = letters[1:3], postfix = TRUE)
+  expect_equal(repps$ids(),
+    c("x.a", "x.b", "x.c"))
+
+  expect_equal(repps$trafo(list(x.a = 1, x.b = 2)),
+    list(
+      x.a = 2,
+      x.z.a = 999,
+      x.b = 7,
+      x.z.b = 999,
+      x.z.c = 999
+    )
+  )
+})
