@@ -646,7 +646,8 @@ ParamSet = R6Class("ParamSet",
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param allow_subset (`logical(1)`)\cr
     #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt`, except for parameters with unsatisfied dependencies, which may be missing (represented as `NA`).
+    #'   If `FALSE`, all parameters must be present in `xdt`.
+    #'   Parameters with unsatisfied dependencies can be set to `NA`.
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
@@ -670,6 +671,7 @@ ParamSet = R6Class("ParamSet",
     #' @param allow_subset (`logical(1)`)\cr
     #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
     #'   If `FALSE`, all parameters must be present in `xdt`.
+    #'   Parameters with unsatisfied dependencies can be set to `NA`.
     #' @return If successful `TRUE`, if not `FALSE`.
     test_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) makeTest(res = self$check_dt(xdt, check_strict = check_strict, allow_subset = allow_subset)),
 
@@ -685,6 +687,7 @@ ParamSet = R6Class("ParamSet",
     #' @param allow_subset (`logical(1)`)\cr
     #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
     #'   If `FALSE`, all parameters must be present in `xdt`.
+    #'   Parameters with unsatisfied dependencies can be set to `NA`.
     #' @return If successful `xs` invisibly, if not, an error is generated.
     assert_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, allow_subset = allow_subset), .var.name, NULL), # nolint
 

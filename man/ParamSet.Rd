@@ -620,7 +620,8 @@ Whether to check that constraints and dependencies are satisfied.}
 
 \item{\code{allow_subset}}{(\code{logical(1)})\cr
 Whether points in \code{xdt} are allowed to be a subset of the parameter set.
-If \code{FALSE}, all parameters must be present in \code{xdt}, except for parameters with unsatisfied dependencies, which may be missing (represented as \code{NA}).}
+If \code{FALSE}, all parameters must be present in \code{xdt}.
+Parameters with unsatisfied dependencies can be set to \code{NA}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -647,7 +648,8 @@ Whether to check that constraints and dependencies are satisfied.}
 
 \item{\code{allow_subset}}{(\code{logical(1)})\cr
 Whether points in \code{xdt} are allowed to be a subset of the parameter set.
-If \code{FALSE}, all parameters must be present in \code{xdt}, except for parameters with unsatisfied dependencies, which are allowed to be missing (represented as \code{NA}).}
+If \code{FALSE}, all parameters must be present in \code{xdt}.
+Parameters with unsatisfied dependencies can be set to \code{NA}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -679,7 +681,8 @@ Whether to check that constraints and dependencies are satisfied.}
 
 \item{\code{allow_subset}}{(\code{logical(1)})\cr
 Whether points in \code{xdt} are allowed to be a subset of the parameter set.
-If \code{FALSE}, all parameters must be present in \code{xdt}, except for parameters with unsatisfied dependencies, which are allowed to be missing (represented as \code{NA}).}
+If \code{FALSE}, all parameters must be present in \code{xdt}.
+Parameters with unsatisfied dependencies can be set to \code{NA}.}
 
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
