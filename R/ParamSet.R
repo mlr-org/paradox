@@ -646,7 +646,7 @@ ParamSet = R6Class("ParamSet",
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param allow_subset (`logical(1)`)\cr
     #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt`.
+    #'   If `FALSE`, all parameters must be present in `xdt`, except for parameters with unsatisfied dependencies, which may be missing (represented as `NA`).
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
