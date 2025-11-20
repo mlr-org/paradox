@@ -620,7 +620,7 @@ Whether to check that constraints and dependencies are satisfied.}
 
 \item{\code{allow_subset}}{(\code{logical(1)})\cr
 Whether points in \code{xdt} are allowed to be a subset of the parameter set.
-If \code{FALSE}, all parameters must be present in \code{xdt}.}
+If \code{FALSE}, all parameters must be present in \code{xdt}, except for parameters with unsatisfied dependencies, which may be missing (represented as \code{NA}).}
 }
 \if{html}{\out{</div>}}
 }
