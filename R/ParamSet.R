@@ -597,11 +597,7 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' \pkg{checkmate}-like test-function. Takes a named list.
-    #' A point x is feasible, if it configures a subset of params,
-    #' all individual param constraints are satisfied and all dependencies are satisfied.
-    #' Params for which dependencies are not satisfied should not be part of `x`.
-    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
+    #' \pkg{checkmate}-like test-function (s. `$check()`).
     #'
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
@@ -614,11 +610,7 @@ ParamSet = R6Class("ParamSet",
     test = function(xs, check_strict = TRUE, allow_subset = TRUE) makeTest(self$check(xs, check_strict = check_strict, allow_subset = allow_subset)),
 
     #' @description
-    #' \pkg{checkmate}-like assert-function. Takes a named list.
-    #' A point x is feasible, if it configures a subset of params,
-    #' all individual param constraints are satisfied and all dependencies are satisfied.
-    #' Params for which dependencies are not satisfied should not be part of `x`.
-    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
+    #' \pkg{checkmate}-like assert-function (s. `$check()`).
     #'
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
@@ -646,7 +638,7 @@ ParamSet = R6Class("ParamSet",
     #' where rows are points and columns are parameters.
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
-    #' Params for which dependencies are not satisfied should not be part of `x`.
+    #' Params for which dependencies are not satisfied should be set to `NA` in `xdt`.
     #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).

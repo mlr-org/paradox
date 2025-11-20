@@ -528,11 +528,7 @@ If successful \code{TRUE}, if not a string with an error message.
 \if{html}{\out{<a id="method-ParamSet-test"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-test}{}}}
 \subsection{Method \code{test()}}{
-\pkg{checkmate}-like test-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+\pkg{checkmate}-like test-function (s. \verb{$check()}).
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE, allow_subset = TRUE)}\if{html}{\out{</div>}}
 }
@@ -560,11 +556,7 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \if{html}{\out{<a id="method-ParamSet-assert"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-assert}{}}}
 \subsection{Method \code{assert()}}{
-\pkg{checkmate}-like assert-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+\pkg{checkmate}-like assert-function (s. \verb{$check()}).
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(
   xs,
@@ -612,7 +604,7 @@ If successful \code{xs} invisibly, if not an error message.
 where rows are points and columns are parameters.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
+Params for which dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = TRUE, allow_subset = TRUE)}\if{html}{\out{</div>}}
