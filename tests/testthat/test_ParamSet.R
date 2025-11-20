@@ -560,8 +560,6 @@ test_that("disable internal tuning", {
   expect_error(param_set$disable_internal_tuning("b"))
 })
 
-<<<<<<< HEAD
-=======
 test_that("get_values works with tokens and dependencies", {
   ps = ps(
     cost    = p_dbl(0, default = 1, tags = "train", depends = quote(type == "C-classification")),
@@ -583,4 +581,3 @@ test_that("get_values works with tokens and dependencies", {
 
   expect_equal(ps$get_values(type = "only_token"), list(cost = to_tune(1e-5, 1e5, logscale = TRUE)))
 })
->>>>>>> main
