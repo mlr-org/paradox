@@ -355,6 +355,50 @@ test_that("ParamSet$check_dt", {
   expect_true(ps$check_dt(xdt, check_strict = TRUE))
 })
 
+test_that("ParamSet$check with allow_subset = FALSE", {
+  # test with one dependent parameter on one parent
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"))
+  )
+
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1), allow_subset = FALSE), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1), allow_subset = FALSE), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1), allow_subset = FALSE), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1), allow_subset = FALSE))
+
+  # full parameter set
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1), allow_subset = FALSE))
+  expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1), allow_subset = FALSE))
+
+  # test with one dependent parameter on two parents
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b") && x4 == 5),
+    x4 = p_int(lower = 0, upper = 10)
+  )
+
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1, x4 = 5), allow_subset = FALSE), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1, x4 = 5), allow_subset = FALSE), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1, x4 = 5), allow_subset = FALSE), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1, x4 = 5), allow_subset = FALSE))
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x4 = 4), allow_subset = FALSE))
+
+  # full parameter set
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1, x4 = 5), allow_subset = FALSE))
+  expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1, x4 = 5), allow_subset = FALSE))
+})
+
 test_that("rd_info.ParamSet", {
   ps = ParamSet_legacy$new()
   expect_character(rd_info(ps), pattern = "empty", ignore.case = TRUE)
@@ -513,3 +557,4 @@ test_that("disable internal tuning", {
   expect_error(param_set$disable_internal_tuning("c"))
   expect_error(param_set$disable_internal_tuning("b"))
 })
+

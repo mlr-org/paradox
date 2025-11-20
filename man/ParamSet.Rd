@@ -472,8 +472,9 @@ A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+Use \code{allow_subset = FALSE} to check that all parameters are present in \code{xs}, except for parameters with unsatisfied dependencies.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE, allow_subset = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -490,6 +491,11 @@ These values are accepted independent of \code{sanitize} (depending on the
 \code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
 is \code{TRUE}, the additional effect is that, should checks pass, the
 sanitized values of \code{xs} are added to the result as attribute \code{"sanitized"}.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether \code{xs} is allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+\code{TuneToken}s are not allowed to be present in \code{xs}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -528,7 +534,7 @@ all individual param constraints are satisfied and all dependencies are satisfie
 Params for which dependencies are not satisfied should not be part of \code{x}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE, allow_subset = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -538,6 +544,11 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether \code{xs} is allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+\code{TuneToken}s are not allowed to be present in \code{xs}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -558,6 +569,7 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(
   xs,
   check_strict = TRUE,
+  allow_subset = TRUE,
   .var.name = vname(xs),
   sanitize = FALSE
 )}\if{html}{\out{</div>}}
@@ -570,6 +582,11 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether \code{xs} is allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+\code{TuneToken}s are not allowed to be present in \code{xs}.}
 
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
@@ -598,7 +615,7 @@ all individual param constraints are satisfied and all dependencies are satisfie
 Params for which dependencies are not satisfied should not be part of \code{x}.
 Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = TRUE, allow_subset = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -608,6 +625,10 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether points in \code{xdt} are allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xdt}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -621,7 +642,7 @@ If successful \code{TRUE}, if not a string with the error message.
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt, check_strict = TRUE, allow_subset = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -631,6 +652,10 @@ If successful \code{TRUE}, if not a string with the error message.
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether points in \code{xdt} are allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xdt}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -644,7 +669,12 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \subsection{Method \code{assert_dt()}}{
 \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, check_strict = TRUE, .var.name = vname(xdt))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(
+  xdt,
+  check_strict = TRUE,
+  allow_subset = TRUE,
+  .var.name = vname(xdt)
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -654,6 +684,10 @@ If successful \code{TRUE}, if not \code{FALSE}.
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{allow_subset}}{(\code{logical(1)})\cr
+Whether points in \code{xdt} are allowed to be a subset of the parameter set.
+If \code{FALSE}, all parameters must be present in \code{xdt}.}
 
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
