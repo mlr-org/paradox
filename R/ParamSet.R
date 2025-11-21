@@ -382,12 +382,16 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' \pkg{checkmate}-like check-function. Takes a named list.
-    #' A point x is feasible, if it configures a subset of params,
-    #' all individual param constraints are satisfied and all dependencies are satisfied.
-    #' Params for which dependencies are not satisfied should not be part of `x`.
-    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
+    #' \pkg{checkmate}-like check-function. Takes a setting of parameters as a named list.
+    #' A point x is feasible, if it configures a subset of params in a valid manner, i.e.,
+    #' the param type is correct, and param bounds, constraints and dependencies are satisfied.
+    #' Params for which dependencies are not satisfied should not be part of `x` (and not set to `NA`).
+    #' Param dependencies and `$constraint` are not checked when `check_strict` is `FALSE` (but data type and bounds are checked).
+    #' This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
     #' Use `allow_subset = FALSE` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
+    #' 'allow_subset = TRUE' is often useful when you want to check the validity of settings you want to assign when defaults
+    #' are already present, 'allow_subset = FALSE' is often useful when configurations are created
+    #' but some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
@@ -636,18 +640,21 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a [data.table::data.table]
     #' where rows are points and columns are parameters.
+    #' Checks in a similar manner as `$check(xs)`.
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
     #' Params for which dependencies are not satisfied should be set to `NA` in `xdt`.
-    #' Constraints and dependencies are not checked when `check_strict` is `FALSE`.
+    #' Dependencies and `$constraint` are not checked when `check_strict` is `FALSE`.
+    #' Note that checking only subsets implies that `xdt` is therefore allowed to
+    #' have fewer columns as there are params in the set.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param allow_subset (`logical(1)`)\cr
     #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt`.
-    #'   Parameters with unsatisfied dependencies can be set to `NA`.
+    #'   If `FALSE`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   Parameters with unsatisfied dependencies must be set to `NA`.
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
