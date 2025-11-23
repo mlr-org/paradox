@@ -475,7 +475,7 @@ Param dependencies and \verb{$constraint} are not checked when \code{check_stric
 This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
 Use \code{presence = "all"} to check that all parameters are present in \code{xs}, except for parameters with unsatisfied dependencies.
 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
-'allow_subset = "all"' is often useful when configurations are created
+'presence = "all"' is often useful when configurations are created
 but some algorithm from a search space param set in optimization.
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE, presence = "none")}\if{html}{\out{</div>}}

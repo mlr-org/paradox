@@ -390,7 +390,7 @@ ParamSet = R6Class("ParamSet",
     #' This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
     #' Use `presence = "all"` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
     #' 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
-    #' 'allow_subset = "all"' is often useful when configurations are created
+    #' 'presence = "all"' is often useful when configurations are created
     #' but some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
