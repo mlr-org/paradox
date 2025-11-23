@@ -388,9 +388,9 @@ ParamSet = R6Class("ParamSet",
     #' Params for which dependencies are not satisfied should not be part of `x` (and not set to `NA`).
     #' Param dependencies and `$constraint` are not checked when `check_strict` is `FALSE` (but data type and bounds are checked).
     #' This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
-    #' Use `allow_subset = FALSE` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
-    #' 'allow_subset = TRUE' is often useful when you want to check the validity of settings you want to assign when defaults
-    #' are already present, 'allow_subset = FALSE' is often useful when configurations are created
+    #' Use `presence = "all"` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
+    #' 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
+    #' 'allow_subset = "all"' is often useful when configurations are created
     #' but some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
@@ -402,12 +402,14 @@ ParamSet = R6Class("ParamSet",
     #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
     #'   is `TRUE`, the additional effect is that, should checks pass, the
     #'   sanitized values of `xs` are added to the result as attribute `"sanitized"`.
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether `xs` is allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
-    #'   `TuneToken`s are not allowed to be present in `xs`.
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
     #' @return If successful `TRUE`, if not a string with an error message.
-    check = function(xs, check_strict = TRUE, sanitize = FALSE, allow_subset = TRUE) {
+    check = function(xs, check_strict = TRUE, sanitize = FALSE, presence = "none") {
+      assert_choice(presence, c("none", "all", "required"))
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -432,14 +434,20 @@ ParamSet = R6Class("ParamSet",
       }
 
 
-      if (!allow_subset) {
+      if (presence != "none") {
+        check_ids = if (presence == "required") {
+          self$ids(tags = "required")
+        } else {
+          ids
+        }
+
         if (some(xs, inherits, "TuneToken")) {
           return("TuneTokens are not allowed to be present.")
         }
 
-        # check if all parameters are present
+        # check if parameters are present
         # only parameters with unsatisfied dependencies can be missing
-        missing = setdiff(ids, ns)
+        missing = setdiff(check_ids, ns)
         if (length(missing)) {
           deps = self$deps
 
@@ -606,12 +614,13 @@ ParamSet = R6Class("ParamSet",
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether `xs` is allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
-    #'   `TuneToken`s are not allowed to be present in `xs`.
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs, check_strict = TRUE, allow_subset = TRUE) makeTest(self$check(xs, check_strict = check_strict, allow_subset = allow_subset)),
+    test = function(xs, check_strict = TRUE, presence = "none") makeTest(self$check(xs, check_strict = check_strict, presence = presence)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check()`).
@@ -627,13 +636,13 @@ ParamSet = R6Class("ParamSet",
     #'   These values are accepted independent of `sanitize` (depending on the
     #'   `tolerance` arguments of `p_dbl()` and `p_int()`) . If `sanitize`
     #'   is `TRUE`, the additional effect is that `xs` is converted to within bounds.
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether `xs` is allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
-    #'   `TuneToken`s are not allowed to be present in `xs`.
-    #' @return If successful `xs` invisibly, if not an error message.
-    assert = function(xs, check_strict = TRUE, allow_subset = TRUE, .var.name = vname(xs), sanitize = FALSE) {
-      checkresult = self$check(xs, check_strict = check_strict, sanitize = sanitize, allow_subset = allow_subset)
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
+    assert = function(xs, check_strict = TRUE, presence = "none", .var.name = vname(xs), sanitize = FALSE) {
+      checkresult = self$check(xs, check_strict = check_strict, sanitize = sanitize, presence = presence)
       makeAssertion(if (sanitize) attr(checkresult, "sanitized") else xs, checkresult, .var.name, NULL)  # nolint
     },
 
@@ -651,17 +660,18 @@ ParamSet = R6Class("ParamSet",
     #' @param xdt ([data.table::data.table] | `data.frame()`).
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
-    #'   Parameters with unsatisfied dependencies must be set to `NA`.
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) {
+    check_dt = function(xdt, check_strict = TRUE, presence = "none") {
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
       for (i in seq_along(xss)) {
         xs = xss[[i]]
-        ok = self$check(xs, check_strict = check_strict, allow_subset = allow_subset)
+        ok = self$check(xs, check_strict = check_strict, presence = presence)
         if (!isTRUE(ok)) {
           return(ok)
         }
@@ -675,12 +685,13 @@ ParamSet = R6Class("ParamSet",
     #' @param xdt ([data.table::data.table]).
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt`.
-    #'   Parameters with unsatisfied dependencies can be set to `NA`.
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE) makeTest(res = self$check_dt(xdt, check_strict = check_strict, allow_subset = allow_subset)),
+    test_dt = function(xdt, check_strict = TRUE, presence = "none") makeTest(res = self$check_dt(xdt, check_strict = check_strict, presence = presence)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
@@ -691,12 +702,13 @@ ParamSet = R6Class("ParamSet",
     #' @param .var.name (`character(1)`)\cr
     #'   Name of the checked object to print in error messages.\cr
     #'   Defaults to the heuristic implemented in [vname][checkmate::vname].
-    #' @param allow_subset (`logical(1)`)\cr
-    #'   Whether points in `xdt` are allowed to be a subset of the parameter set.
-    #'   If `FALSE`, all parameters must be present in `xdt`.
-    #'   Parameters with unsatisfied dependencies can be set to `NA`.
+    #' @param presence (`character(1)`)\cr
+    #'   If `"none"` (default), no check is performed for the presence of parameters.
+    #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
+    #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
     #' @return If successful `xs` invisibly, if not, an error is generated.
-    assert_dt = function(xdt, check_strict = TRUE, allow_subset = TRUE, .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, allow_subset = allow_subset), .var.name, NULL), # nolint
+    assert_dt = function(xdt, check_strict = TRUE, presence = "none", .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, presence = presence), .var.name, NULL), # nolint
 
     #' @description
     #' Map a `matrix` or `data.frame` of values between 0 and 1 to proportional values inside the feasible intervals of individual parameters.
