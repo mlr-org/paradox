@@ -505,7 +505,7 @@ sanitized values of \code{xs} are added to the result as attribute \code{"saniti
 \item{\code{presence}}{(\code{character(1)})\cr
 If \code{"none"} (default), no check is performed for the presence of parameters.
 If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
-If \code{"required"}, required parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+If \code{"required"}, parameters with the \code{"required"} tag must be present in \code{xs}, except for parameters with unsatisfied dependencies.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
 
 \item{\code{allow_token}}{(\code{logical(1)})\cr
