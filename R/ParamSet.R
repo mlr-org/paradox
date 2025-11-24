@@ -405,7 +405,7 @@ ParamSet = R6Class("ParamSet",
     #' @param presence (`character(1)`)\cr
     #'   If `"none"` (default), no check is performed for the presence of parameters.
     #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
-    #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   If `"required"`, parameters with the `"required"` tag must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
     #' @return If successful `TRUE`, if not a string with an error message.
     check = function(xs, check_strict = TRUE, sanitize = FALSE, presence = "none") {
