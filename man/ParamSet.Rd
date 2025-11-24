@@ -478,7 +478,13 @@ Use \code{presence = "all"} to check that all parameters are present in \code{xs
 'presence = "all"' is often useful when configurations are created
 but some algorithm from a search space param set in optimization.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE, presence = "none")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(
+  xs,
+  check_strict = TRUE,
+  sanitize = FALSE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -501,6 +507,10 @@ If \code{"none"} (default), no check is performed for the presence of parameters
 If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
 If \code{"required"}, required parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -535,7 +545,7 @@ If successful \code{TRUE}, if not a string with an error message.
 \subsection{Method \code{test()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE, presence = "none")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE, presence = "none", allow_token = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -551,6 +561,10 @@ If \code{"none"} (default), no check is performed for the presence of parameters
 If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
 If \code{"required"}, required parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -569,7 +583,8 @@ If successful \code{TRUE}, if not \code{FALSE}.
   check_strict = TRUE,
   presence = "none",
   .var.name = vname(xs),
-  sanitize = FALSE
+  sanitize = FALSE,
+  allow_token = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -596,6 +611,10 @@ Whether to move values that are slightly outside bounds to valid values.
 These values are accepted independent of \code{sanitize} (depending on the
 \code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
 is \code{TRUE}, the additional effect is that \code{xs} is converted to within bounds.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -614,7 +633,12 @@ Dependencies and \verb{$constraint} are not checked when \code{check_strict} is 
 Note that checking only subsets implies that \code{xdt} is therefore allowed to
 have fewer columns as there are params in the set.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = TRUE, presence = "none")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(
+  xdt,
+  check_strict = TRUE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -630,6 +654,10 @@ If \code{"none"} (default), no check is performed for the presence of parameters
 If \code{"all"}, all parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
 If \code{"required"}, required parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xdt}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -643,7 +671,12 @@ If successful \code{TRUE}, if not a string with the error message.
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt, check_strict = TRUE, presence = "none")}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(
+  xdt,
+  check_strict = TRUE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -659,6 +692,10 @@ If \code{"none"} (default), no check is performed for the presence of parameters
 If \code{"all"}, all parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
 If \code{"required"}, required parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xdt}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -676,7 +713,8 @@ If successful \code{TRUE}, if not \code{FALSE}.
   xdt,
   check_strict = TRUE,
   presence = "none",
-  .var.name = vname(xdt)
+  .var.name = vname(xdt),
+  allow_token = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -697,6 +735,10 @@ For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be 
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }

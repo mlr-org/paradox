@@ -397,6 +397,19 @@ test_that("ParamSet$check with presence = 'all'", {
   expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1, x4 = 5), presence = "all"))
 })
 
+test_that("ParamSet$check with presence = 'all' and token", {
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"))
+  )
+  expect_true(param_set$check(list(x1 = to_tune(c("a", "b", "c")), x2 = 1, x3 = 1), presence = "all", allow_token = TRUE))
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = to_tune(0, 1)), presence = "all", allow_token = TRUE))
+
+  expect_error(param_set$assert(list(x1 = to_tune(c("a", "b", "c")), x2 = 1, x3 = 1), presence = "all", allow_token = FALSE), "TuneTokens are not allowed to be present.")
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = to_tune(0, 1)), presence = "all", allow_token = TRUE))
+})
+
 test_that("ParamSet$check with presence = 'required'", {
   # all parameters are required
   param_set = ps(

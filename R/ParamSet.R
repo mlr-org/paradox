@@ -407,8 +407,11 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xs`.
+    #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not a string with an error message.
-    check = function(xs, check_strict = TRUE, sanitize = FALSE, presence = "none") {
+    check = function(xs, check_strict = TRUE, sanitize = FALSE, presence = "none",  allow_token = TRUE) {
       assert_choice(presence, c("none", "all", "required"))
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
@@ -419,6 +422,10 @@ ParamSet = R6Class("ParamSet",
       trueret = TRUE
       if (sanitize) {
         attr(trueret, "sanitized") = xs
+      }
+
+      if (!allow_token && some(xs, inherits, "TuneToken")) {
+        return("TuneTokens are not allowed to be present.")
       }
 
       # return early, this makes the following code easier since we don't need to consider edgecases with empty vectors.
@@ -439,10 +446,6 @@ ParamSet = R6Class("ParamSet",
           self$ids(tags = "required")
         } else {
           ids
-        }
-
-        if (some(xs, inherits, "TuneToken")) {
-          return("TuneTokens are not allowed to be present.")
         }
 
         # check if parameters are present
@@ -467,7 +470,7 @@ ParamSet = R6Class("ParamSet",
                 for (i in seq_len(.N)) {
                   on_i = on[[i]]
                   onval = xs[[on_i]]
-                  if (!isTRUE(condition_test(cond[[i]], onval))) {
+                  if (!inherits(onval, "TuneToken") && !isTRUE(condition_test(cond[[i]], onval))) {
                     ok = FALSE
                     break
                   }
@@ -619,8 +622,11 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xs`.
+    #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test = function(xs, check_strict = TRUE, presence = "none") makeTest(self$check(xs, check_strict = check_strict, presence = presence)),
+    test = function(xs, check_strict = TRUE, presence = "none", allow_token = TRUE) makeTest(self$check(xs, check_strict = check_strict, presence = presence, allow_token = allow_token)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check()`).
@@ -641,8 +647,11 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   If `"required"`, required parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
-    assert = function(xs, check_strict = TRUE, presence = "none", .var.name = vname(xs), sanitize = FALSE) {
-      checkresult = self$check(xs, check_strict = check_strict, sanitize = sanitize, presence = presence)
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xs`.
+    #'   Default is `TRUE`.
+    assert = function(xs, check_strict = TRUE, presence = "none", .var.name = vname(xs), sanitize = FALSE, allow_token = TRUE) {
+      checkresult = self$check(xs, check_strict = check_strict, sanitize = sanitize, presence = presence, allow_token = allow_token)
       makeAssertion(if (sanitize) attr(checkresult, "sanitized") else xs, checkresult, .var.name, NULL)  # nolint
     },
 
@@ -665,13 +674,16 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xdt`.
+    #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not a string with the error message.
-    check_dt = function(xdt, check_strict = TRUE, presence = "none") {
+    check_dt = function(xdt, check_strict = TRUE, presence = "none", allow_token = TRUE) {
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
       for (i in seq_along(xss)) {
         xs = xss[[i]]
-        ok = self$check(xs, check_strict = check_strict, presence = presence)
+        ok = self$check(xs, check_strict = check_strict, presence = presence, allow_token = allow_token)
         if (!isTRUE(ok)) {
           return(ok)
         }
@@ -690,8 +702,11 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xdt`.
+    #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not `FALSE`.
-    test_dt = function(xdt, check_strict = TRUE, presence = "none") makeTest(res = self$check_dt(xdt, check_strict = check_strict, presence = presence)),
+    test_dt = function(xdt, check_strict = TRUE, presence = "none", allow_token = TRUE) makeTest(res = self$check_dt(xdt, check_strict = check_strict, presence = presence, allow_token = allow_token)),
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
@@ -707,8 +722,11 @@ ParamSet = R6Class("ParamSet",
     #'   If `"all"`, all parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   If `"required"`, required parameters must be present in `xdt` and not 'NA' if their dependencies are satisfied.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xdt`.
+    #' @param allow_token (`logical(1)`)\cr
+    #'   Whether to allow `TuneToken`s to be present in `xdt`.
+    #'   Default is `TRUE`.
     #' @return If successful `xs` invisibly, if not, an error is generated.
-    assert_dt = function(xdt, check_strict = TRUE, presence = "none", .var.name = vname(xdt)) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, presence = presence), .var.name, NULL), # nolint
+    assert_dt = function(xdt, check_strict = TRUE, presence = "none", .var.name = vname(xdt), allow_token = TRUE) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, presence = presence, allow_token = allow_token), .var.name, NULL), # nolint
 
     #' @description
     #' Map a `matrix` or `data.frame` of values between 0 and 1 to proportional values inside the feasible intervals of individual parameters.
