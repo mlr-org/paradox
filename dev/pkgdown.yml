@@ -3,7 +3,7 @@ pkgdown: 2.2.0
 pkgdown_sha: ~
 articles:
   indepth: indepth.html
-last_built: 2025-11-25T11:42Z
+last_built: 2025-11-25T11:44Z
 urls:
   reference: https://paradox.mlr-org.com/reference
   article: https://paradox.mlr-org.com/articles
