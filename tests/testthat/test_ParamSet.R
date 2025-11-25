@@ -355,6 +355,111 @@ test_that("ParamSet$check_dt", {
   expect_true(ps$check_dt(xdt, check_strict = TRUE))
 })
 
+test_that("ParamSet$check with presence = 'all'", {
+  # test with one dependent parameter on one parent
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"))
+  )
+
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1), presence = "all"), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1), presence = "all"), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1), presence = "all"), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1), presence = "all"))
+  # full parameter set
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1), presence = "all"))
+  expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1), presence = "all"))
+
+  # test with one dependent parameter on two parents
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b") && x4 == 5),
+    x4 = p_int(lower = 0, upper = 10)
+  )
+
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1, x4 = 5), presence = "all"), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1, x4 = 5), presence = "all"), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1, x4 = 5), presence = "all"), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1, x4 = 5), presence = "all"))
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x4 = 4), presence = "all"))
+  # full parameter set
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1, x4 = 5), presence = "all"))
+  expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1, x4 = 5), presence = "all"))
+})
+
+test_that("ParamSet$check with presence = 'all' and token", {
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c")),
+    x2 = p_dbl(lower = 0, upper = 1),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"))
+  )
+  expect_true(param_set$check(list(x1 = to_tune(c("a", "b", "c")), x2 = 1, x3 = 1), presence = "all", allow_token = TRUE))
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = to_tune(0, 1)), presence = "all", allow_token = TRUE))
+
+  expect_error(param_set$assert(list(x1 = to_tune(c("a", "b", "c")), x2 = 1, x3 = 1), presence = "all", allow_token = FALSE), "TuneTokens are not allowed to be present.")
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = to_tune(0, 1)), presence = "all", allow_token = TRUE))
+})
+
+test_that("ParamSet$check with presence = 'required'", {
+  # all parameters are required
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c"), tags = "required"),
+    x2 = p_dbl(lower = 0, upper = 1, tags = "required"),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"), tags = "required")
+  )
+
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1), presence = "required"), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1), presence = "required"), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1), presence = "required"), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1), presence = "required"))
+  # full parameter set
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1), presence = "required"))
+  expect_true(param_set$check(list(x1 = "b", x2 = 1, x3 = 1), presence = "required"))
+
+  # parameter without dependencies is required
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c"), tags = "required"),
+    x2 = p_dbl(lower = 0, upper = 1, tags = "required"),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"), tags = "required"),
+    x4 = p_int(lower = 0, upper = 10)
+  )
+
+  # missing not required parameter
+  expect_true(param_set$check(list(x1 = "a", x2 = 1, x3 = 1), presence = "required"))
+  # missing parameter without dependencies
+  expect_error(param_set$assert(list(x1 = "a", x3 = 1), presence = "required"), "All parameters must be present. Missing parameters: x2.")
+  # missing parent
+  expect_error(param_set$assert(list(x2 = 1, x3 = 1), presence = "required"), "All parameters must be present. Missing parameters: x1.")
+  # missing dependent parameter with satisfied dependencies
+  expect_error(param_set$assert(list(x1 = "a", x2 = 1), presence = "required"), "All parameters must be present. Missing parameters with satisfied dependencies: x3.")
+  # missing dependent parameter with unsatisfied dependencies
+  expect_true(param_set$check(list(x1 = "c", x2 = 1), presence = "required"))
+
+  # dependent parameter is not required
+  param_set = ps(
+    x1 = p_fct(levels = c("a", "b", "c"), tags = "required"),
+    x2 = p_dbl(lower = 0, upper = 1, tags = "required"),
+    x3 = p_int(lower = 0, upper = 1, depends = x1 %in% c("a", "b"))
+  )
+
+  # missing not required parameter
+  expect_true(param_set$check(list(x1 = "a", x2 = 1), presence = "required"))
+})
+
 test_that("rd_info.ParamSet", {
   skip_if_not_installed("knitr")
 

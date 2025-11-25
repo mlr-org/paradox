@@ -2,6 +2,7 @@
 
 * `ParamSetCollection$flatten()` now detaches `$extra_trafo` completely from original ParamSetCollection.
 * Option to postfix, instead of prefix, in `ParamSetCollection`, `c()`/`ps_union()`, and `ps_replicate()`.
+* Add `presence` argument with options `"all"`, `"required"`, and `"none"` (default) to `ParamSet$check()`, `$test()`, `$assert()`, `$check_dt()`, `$test_dt()`, and `$assert_dt()` to optionally check that all or all required parameters are present in the parameter set, except for parameters with unsatisfied dependencies.
 
 # paradox 1.0.1
 

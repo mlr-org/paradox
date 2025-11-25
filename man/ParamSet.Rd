@@ -467,13 +467,24 @@ Should be \code{TRUE} unless this was already checked before.}
 \if{html}{\out{<a id="method-ParamSet-check"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-check}{}}}
 \subsection{Method \code{check()}}{
-\pkg{checkmate}-like check-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+\pkg{checkmate}-like check-function. Takes a setting of parameters as a named list.
+A point x is feasible, if it configures a subset of params in a valid manner, i.e.,
+the param type is correct, and param bounds, constraints and dependencies are satisfied.
+Params for which dependencies are not satisfied should not be part of \code{x} (and not set to \code{NA}).
+Param dependencies and \verb{$constraint} are not checked when \code{check_strict} is \code{FALSE} (but data type and bounds are checked).
+This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
+Use \code{presence = "all"} to check that all parameters are present in \code{xs}, except for parameters with unsatisfied dependencies.
+'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
+'presence = "all"' is often useful when configurations are created
+but some algorithm from a search space param set in optimization.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(xs, check_strict = TRUE, sanitize = FALSE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check(
+  xs,
+  check_strict = TRUE,
+  sanitize = FALSE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -490,6 +501,16 @@ These values are accepted independent of \code{sanitize} (depending on the
 \code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
 is \code{TRUE}, the additional effect is that, should checks pass, the
 sanitized values of \code{xs} are added to the result as attribute \code{"sanitized"}.}
+
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+If \code{"required"}, parameters with the \code{"required"} tag must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -522,13 +543,9 @@ If successful \code{TRUE}, if not a string with an error message.
 \if{html}{\out{<a id="method-ParamSet-test"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-test}{}}}
 \subsection{Method \code{test()}}{
-\pkg{checkmate}-like test-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+\pkg{checkmate}-like test-function (s. \verb{$check()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test(xs, check_strict = TRUE, presence = "none", allow_token = TRUE)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -538,6 +555,16 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+If \code{"required"}, required parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -549,17 +576,15 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \if{html}{\out{<a id="method-ParamSet-assert"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-assert}{}}}
 \subsection{Method \code{assert()}}{
-\pkg{checkmate}-like assert-function. Takes a named list.
-A point x is feasible, if it configures a subset of params,
-all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+\pkg{checkmate}-like assert-function (s. \verb{$check()}).
 \subsection{Usage}{
 \if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert(
   xs,
   check_strict = TRUE,
+  presence = "none",
   .var.name = vname(xs),
-  sanitize = FALSE
+  sanitize = FALSE,
+  allow_token = TRUE
 )}\if{html}{\out{</div>}}
 }
 
@@ -571,6 +596,12 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
 
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+If \code{"required"}, required parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
+
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
@@ -580,11 +611,12 @@ Whether to move values that are slightly outside bounds to valid values.
 These values are accepted independent of \code{sanitize} (depending on the
 \code{tolerance} arguments of \code{p_dbl()} and \code{p_int()}) . If \code{sanitize}
 is \code{TRUE}, the additional effect is that \code{xs} is converted to within bounds.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xs}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
-}
-\subsection{Returns}{
-If successful \code{xs} invisibly, if not an error message.
 }
 }
 \if{html}{\out{<hr>}}
@@ -593,12 +625,20 @@ If successful \code{xs} invisibly, if not an error message.
 \subsection{Method \code{check_dt()}}{
 \pkg{checkmate}-like check-function. Takes a \link[data.table:data.table]{data.table::data.table}
 where rows are points and columns are parameters.
+Checks in a similar manner as \verb{$check(xs)}.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
-Params for which dependencies are not satisfied should not be part of \code{x}.
-Constraints and dependencies are not checked when \code{check_strict} is \code{FALSE}.
+Params for which dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
+Dependencies and \verb{$constraint} are not checked when \code{check_strict} is \code{FALSE}.
+Note that checking only subsets implies that \code{xdt} is therefore allowed to
+have fewer columns as there are params in the set.
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(xdt, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$check_dt(
+  xdt,
+  check_strict = TRUE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -608,6 +648,16 @@ Constraints and dependencies are not checked when \code{check_strict} is \code{F
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+If \code{"required"}, required parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xdt}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -621,7 +671,12 @@ If successful \code{TRUE}, if not a string with the error message.
 \subsection{Method \code{test_dt()}}{
 \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(xdt, check_strict = TRUE)}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$test_dt(
+  xdt,
+  check_strict = TRUE,
+  presence = "none",
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -631,6 +686,16 @@ If successful \code{TRUE}, if not a string with the error message.
 
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
+
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+If \code{"required"}, required parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xdt}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
@@ -644,7 +709,13 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \subsection{Method \code{assert_dt()}}{
 \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
 \subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(xdt, check_strict = TRUE, .var.name = vname(xdt))}\if{html}{\out{</div>}}
+\if{html}{\out{<div class="r">}}\preformatted{ParamSet$assert_dt(
+  xdt,
+  check_strict = TRUE,
+  presence = "none",
+  .var.name = vname(xdt),
+  allow_token = TRUE
+)}\if{html}{\out{</div>}}
 }
 
 \subsection{Arguments}{
@@ -655,9 +726,19 @@ If successful \code{TRUE}, if not \code{FALSE}.
 \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
 
+\item{\code{presence}}{(\code{character(1)})\cr
+If \code{"none"} (default), no check is performed for the presence of parameters.
+If \code{"all"}, all parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+If \code{"required"}, required parameters must be present in \code{xdt} and not 'NA' if their dependencies are satisfied.
+For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xdt}.}
+
 \item{\code{.var.name}}{(\code{character(1)})\cr
 Name of the checked object to print in error messages.\cr
 Defaults to the heuristic implemented in \link[checkmate:vname]{vname}.}
+
+\item{\code{allow_token}}{(\code{logical(1)})\cr
+Whether to allow \code{TuneToken}s to be present in \code{xdt}.
+Default is \code{TRUE}.}
 }
 \if{html}{\out{</div>}}
 }
