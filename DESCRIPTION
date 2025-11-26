@@ -49,6 +49,7 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
+    reticulate,
     rmarkdown,
     mlr3learners,
     e1071,
@@ -82,6 +83,7 @@ Collate:
     'SamplerJointIndep.R'
     'SamplerUnif.R'
     'asserts.R'
+    'config_space.R'
     'default_values.R'
     'generate_design_grid.R'
     'generate_design_lhs.R'
