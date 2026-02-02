@@ -49,6 +49,7 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
+    callr,
     reticulate,
     rmarkdown,
     mlr3learners,

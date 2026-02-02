@@ -1,3 +1,5 @@
+skip_if_not_installed(c("callr", "reticulate"))
+
 test_that("paramset_to_configspace defaults check with old ConfigSpace API", {
   expect_true(callr::r(function() {
     Sys.setenv(RETICULATE_PYTHON = "managed")
