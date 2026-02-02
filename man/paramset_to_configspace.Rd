@@ -4,10 +4,10 @@
 \alias{paramset_to_configspace}
 \title{Convert a paradox ParamSet to a ConfigSpace ConfigurationSpace}
 \usage{
-paramset_to_configspace(ps, name = NULL)
+paramset_to_configspace(param_set, name = NULL)
 }
 \arguments{
-\item{ps}{\link{ParamSet}\cr
+\item{param_set}{\link{ParamSet}\cr
 The parameter set to convert.
 All parameters must have defaults.
 Numeric parameters must define both \code{lower} and \code{upper} bounds.}
@@ -19,31 +19,29 @@ Optional name for the resulting ConfigurationSpace.}
 A Python \code{ConfigSpace.ConfigurationSpace} object representing the given parameter set.
 }
 \description{
-Translates a \code{\link{ParamSet}} into a Python \code{ConfigSpace.ConfigurationSpace} via \CRANpkg{reticulate}.
-
+Translates a \link{ParamSet} into a Python \code{ConfigSpace.ConfigurationSpace} via \CRANpkg{reticulate}.
 This function performs strict validation to ensure the \link{ParamSet} can be represented in ConfigSpace:
 \itemize{
 \item Every parameter must have a default value.
 If any parameter is missing a default, an error is raised.
-\item Utility parameters (\code{ParamUty}) are not representable in ConfigSpace and are skipped with a warning listing their IDs.
 }
 
 Supported parameter mappings:
 \itemize{
-\item \code{ParamDbl} => \code{Float} / \code{UniformFloatHyperparameter}
-\item \code{ParamInt} => \code{Integer} / \code{UniformIntegerHyperparameter}
-\item \code{ParamLgl} => \code{Categorical(TRUE/FALSE)}
-\item \code{ParamFct} => \code{Categorical}
+\item \code{p_dbl()}: \code{Float} / \code{UniformFloatHyperparameter}
+\item \code{p_int()}: \code{Integer} / \code{UniformIntegerHyperparameter}
+\item \code{p_lgl()}: \code{Categorical} (TRUE/FALSE)
+\item \code{p_fct()}: \code{Categorical}
 }
 
-Dependency conditions (\code{CondEqual}, \code{CondIn}) are preserved.
+Dependency conditions (\code{CondEqual}, \code{CondAnyOf}) are preserved.
 Multiple conditions on the same child are combined using \code{ConfigSpace.AndConjunction}.
 
-The function auto-detects old vs. new ConfigSpace APIs
+The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
 }
 \examples{
 \dontrun{
-  ps = paradox::ps(
+  param_set = ps(
     lr        = p_dbl(lower = 1e-5, upper = 1,   default = 0.01, tags = "train"),
     ntree     = p_int(lower = 10,   upper = 500, default = 100,  tags = c("train","tuning")),
     bootstrap = p_lgl(default = TRUE, tags = "train"),
@@ -53,6 +51,6 @@ The function auto-detects old vs. new ConfigSpace APIs
     depending = p_lgl(tags = "train", default = TRUE,
                       depends = quote(criterion == "entropy" && extras \%in\% c("alpha","beta")))
   )
-  cs = paramset_to_configspace(ps, name = "demo")
+  cs = paramset_to_configspace(param_set, name = "demo")
 }
 }

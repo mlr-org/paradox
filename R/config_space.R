@@ -1,27 +1,24 @@
 #' @title Convert a paradox ParamSet to a ConfigSpace ConfigurationSpace
 #'
 #' @description
-#'
-#' Translates a [`paradox::ParamSet`] into a Python `ConfigSpace.ConfigurationSpace` via \CRANpkg{reticulate}.
-#'
+#' Translates a [ParamSet] into a Python `ConfigSpace.ConfigurationSpace` via \CRANpkg{reticulate}.
 #' This function performs strict validation to ensure the [ParamSet] can be represented in ConfigSpace:
 #'
-#' - Every parameter must have a default value.
+#' * Every parameter must have a default value.
 #'   If any parameter is missing a default, an error is raised.
-#' - Utility parameters (`ParamUty`) are not representable in ConfigSpace and are skipped with a warning listing their IDs.
 #'
 #' Supported parameter mappings:
-#' - `ParamDbl` => `Float` / `UniformFloatHyperparameter`
-#' - `ParamInt` => `Integer` / `UniformIntegerHyperparameter`
-#' - `ParamLgl` => `Categorical(TRUE/FALSE)`
-#' - `ParamFct` => `Categorical`
+#' * `p_dbl()`: `Float` / `UniformFloatHyperparameter`
+#' * `p_int()`: `Integer` / `UniformIntegerHyperparameter`
+#' * `p_lgl()`: `Categorical` (TRUE/FALSE)
+#' * `p_fct()`: `Categorical`
 #'
-#' Dependency conditions (`CondEqual`, `CondIn`) are preserved.
+#' Dependency conditions (`CondEqual`, `CondAnyOf`) are preserved.
 #' Multiple conditions on the same child are combined using `ConfigSpace.AndConjunction`.
 #'
-#' The function auto-detects old vs. new ConfigSpace APIs
+#' The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
 #'
-#' @param ps [ParamSet]\cr
+#' @param param_set [ParamSet]\cr
 #'   The parameter set to convert.
 #'   All parameters must have defaults.
 #'   Numeric parameters must define both `lower` and `upper` bounds.
@@ -32,7 +29,7 @@
 #'
 #' @examples
 #' \dontrun{
-#'   ps = paradox::ps(
+#'   param_set = ps(
 #'     lr        = p_dbl(lower = 1e-5, upper = 1,   default = 0.01, tags = "train"),
 #'     ntree     = p_int(lower = 10,   upper = 500, default = 100,  tags = c("train","tuning")),
 #'     bootstrap = p_lgl(default = TRUE, tags = "train"),
@@ -42,158 +39,153 @@
 #'     depending = p_lgl(tags = "train", default = TRUE,
 #'                       depends = quote(criterion == "entropy" && extras %in% c("alpha","beta")))
 #'   )
-#'   cs = paramset_to_configspace(ps, name = "demo")
+#'   cs = paramset_to_configspace(param_set, name = "demo")
 #' }
 #' @export
-
-paramset_to_configspace = function(ps, name = NULL) {
-  stopifnot(inherits(ps, "ParamSet"))
+paramset_to_configspace = function(param_set, name = NULL) {
   assert_python_packages("ConfigSpace")
+  assert_param_set(param_set, no_untyped = TRUE)
 
-  # Skip uty parameters and give warning
-  uty_idx = which(ps$params$cls %in% c("ParamUty", "p_uty"))
-  if (length(uty_idx)) {
-    warning(sprintf(
-      "The following ParamUty parameter(s) cannot be converted and will be skipped: %s",
-      paste(ps$params$id[uty_idx], collapse = ", ")
-    ))
-    ps = ps$subset(ps$params$id[-uty_idx])
+  # assert that every parameter has a default
+  missing_defaults = setdiff(param_set$ids(), names(param_set$default))
+  if (length(missing_defaults)) {
+    stopf("All parameters must have a default. Missing for: %s", str_collapse(missing_defaults))
   }
 
-  #assert that every parameter has a default
-  no_default = vapply(ps$params$default, function(x) {
-    d = unlist(x)
-    is.null(d) || is.na(d)
-  }, logical(1))
-  if (any(no_default)) {
-    stop(sprintf(
-      "All parameters must have a default. Missing for: %s",
-      paste(ps$params$id[no_default], collapse = ", ")
-    ))
+  # assert that numeric params must have lower & upper
+  upper = param_set$upper[param_set$is_number]
+  if (anyInfinite(upper)) {
+    stopf("Numeric parameters must have both lower and upper bounds. Missing upper bounds for: %s", str_collapse(param_set$ids()[is.infinite(upper)]))
   }
 
-  # assert that numeric params must have lower & upper (presence check)
-  is_num = ps$params$cls %in% c("ParamDbl", "ParamInt")
-  missing_bounds = is_num & (is.infinite(ps$params$lower) | is.infinite(ps$params$upper))
-  if (any(missing_bounds, na.rm = TRUE)) {
-    stop(sprintf(
-      "Numeric parameters must have both lower and upper bounds. Missing for: %s",
-      paste(ps$params$id[missing_bounds], collapse = ", ")
-    ))
+  lower = param_set$lower[param_set$is_number]
+  if (anyInfinite(lower)) {
+    stopf("Numeric parameters must have both lower and upper bounds. Missing lower bounds for: %s", str_collapse(param_set$ids()[is.infinite(lower)]))
   }
 
-  # Import ConfigSpace & detect API version:
+  # assert that categorical params must have levels
+  levels = param_set$levels[param_set$is_categ]
+  if (any(is.null(levels))) {
+    stopf("Categorical parameters must have levels. Missing levels for: %s", str_collapse(param_set$ids()[is.null(levels)]))
+  }
+
   ConfigSpace = reticulate::import("ConfigSpace", delay_load = TRUE)
   cs = ConfigSpace$ConfigurationSpace(name = name)
 
+  # detect API version
   old_cs_version =
     !reticulate::py_has_attr(ConfigSpace, "Float") ||
     !reticulate::py_has_attr(ConfigSpace, "Integer") ||
     !reticulate::py_has_attr(ConfigSpace, "Categorical")
 
-  # Helper to add entities across API versions:
-  add_hp = function(hp) {
-    if (!is.null(cs$add)) cs$add(hp)
-    else if (!is.null(cs$add_hyperparameter)) cs$add_hyperparameter(hp)
-    else if (!is.null(cs$add_hyperparameters)) cs$add_hyperparameters(list(hp))
-    else stop("could not add hyperparameter to configurationspace.")
-    invisible(NULL)
-  }
-
-  # Builders for each datatype (can handle old configspace version):
-  build_float = function(id, lower, upper, default, meta) {
-    if (old_cs_version) {
-      hp = ConfigSpace$hyperparameters$UniformFloatHyperparameter
-      hp(id, lower = as.numeric(lower), upper = as.numeric(upper),
-         default_value = default, meta = meta)
-      return(hp)
-    }
-    ConfigSpace$Float(id, bounds = c(as.numeric(lower), as.numeric(upper)),
-                      default = default, meta = meta)
-  }
-
-  build_int = function(id, lower, upper, default, meta) {
-    if (old_cs_version) {
-      hp = ConfigSpace$hyperparameters$UniformIntegerHyperparameter
-      hp(id, lower = as.integer(lower), upper = as.integer(upper),
-         default_value = if (is.null(default)) NULL else as.integer(default),
-         meta = meta)
-      return(hp)
-    }
-    ConfigSpace$Integer(id, bounds = c(as.integer(lower), as.integer(upper)),
-                        default = if (is.null(default)) NULL else as.integer(default),
-                        meta = meta)
-  }
-
-  build_cat = function(id, choices, default, meta) {
-    if (old_cs_version) {
-      hp = ConfigSpace$hyperparameters$CategoricalHyperparameter
-      hp(id, choices = choices, default_value = default, meta = meta)
-      return(hp)
-    }
-    ConfigSpace$Categorical(id, items = choices, default = default, meta = meta)
-  }
-
-  build_bool = function(id, default, meta) {
-    build_cat(id, c(TRUE, FALSE), default, meta)
-  }
-
-  for (i in seq_row(ps$params)) {
-    p = ps$params[i,]
-
+  # add parameters
+  pwalk(param_set$params, function(id, cls, lower, upper, levels, default, .tags, ...) {
     meta = list(
-      tags = p$.tags,
-      custom_check = if (!is.null(p$custom_check)) "present" else NULL
+      tags = .tags
     )
 
-    if (p$cls == "ParamDbl") {
-      add_hp(build_float(p$id, p$lower, p$upper, unlist(p$default), meta))
-
-    } else if (p$cls == "ParamInt") {
-      add_hp(build_int(p$id, p$lower, p$upper, unlist(p$default), meta))
-
-    } else if (p$cls == "ParamLgl") {
-      add_hp(build_bool(p$id, as.logical(p$default), meta))
-
-    } else if (p$cls == "ParamFct") {
-      lvls = unlist(p$levels)
-      if (length(lvls) == 0L) {
-        stop(sprintf("ParamFct '%s' has no levels; skipping.", p$id))
-      }
-      add_hp(build_cat(p$id, lvls, unlist(p$default), meta))
+    if (cls == "ParamDbl") {
+      add_hp(build_float(ConfigSpace, id, lower, upper, default, meta, old_cs_version), cs)
+    } else if (cls == "ParamInt") {
+      add_hp(build_int(ConfigSpace, id, lower, upper, default, meta, old_cs_version), cs)
+    } else if (cls == "ParamLgl") {
+      add_hp(build_bool(ConfigSpace, id, default, meta, old_cs_version), cs)
+    } else if (cls == "ParamFct") {
+      add_hp(build_cat(ConfigSpace, id, levels, default, meta, old_cs_version), cs)
     }
-  }
+  })
 
-  # Build and add dependency conditions:
-  if (!is.null(ps$deps) && nrow(ps$deps)) {
-    deps = ps$deps
-    combine_condition = function(x) {
-      assert_list(x, all.missing = FALSE)
-      if (length(x) < 2) return(x[[1]])
-      do.call(ConfigSpace$AndConjunction, unname(x))
-    }
+  # add dependencies
+  if (nrow(param_set$deps)) {
+    deps_grouped = split(param_set$deps, by = "id")
 
-    conditions = named_list()
-    for (i in seq_row(deps)) {
-      dep = deps[i,]
-      # `dep$cond` is a list with only one element; see `add_dep` in paradox/r/paramset.r
-      # thus, we can safely extract the first element
-      condition = dep$cond[[1]]
+    walk(deps_grouped, function(deps) {
+      conditions = pmap(deps, function(id, on, cond) {
+        if (inherits(cond, "CondEqual")) {
+          ConfigSpace$EqualsCondition(cs[id], cs[on], cond$rhs)
+        } else {
+          ConfigSpace$InCondition(cs[id], cs[on], cond$rhs)
+        }
+      })
 
-      if (inherits(condition, "CondEqual")) {
-        cond = ConfigSpace$EqualsCondition(cs[dep$id], cs[dep$on], condition$rhs)
+      if (length(conditions) > 1) {
+        condition = do.call(ConfigSpace$AndConjunction, unname(conditions))
+        cs$add_condition(condition)
       } else {
-        cond = ConfigSpace$InCondition(cs[dep$id], cs[dep$on], condition$rhs)
+        cs$add_condition(conditions[[1]])
       }
-      conditions = c(conditions, setNames(list(cond), dep$id))
-    }
-
-    if (length(conditions)) {
-      grouped_conditions = split(conditions, names(conditions))
-      combined_conditions = lapply(grouped_conditions, combine_condition)
-      add_hp(unname(combined_conditions))
-    }
+    })
   }
 
   cs
 }
+
+# add entities across API versions to ConfigSpace
+add_hp = function(hp, cs) {
+  if (reticulate::py_has_attr(cs, "add")) {
+    cs$add(hp)
+  } else if (reticulate::py_has_attr(cs, "add_hyperparameter")) {
+    cs$add_hyperparameter(hp)
+  } else if (reticulate::py_has_attr(cs, "add_hyperparameters")) {
+    cs$add_hyperparameters(list(hp))
+  } else {
+    stopf("Could not detect method to add hyperparameters to ConfigSpace. Please open an issue at https://github.com/mlr-org/paradox/issues and include the version of ConfigSpace: %s.", reticulate::py_get_attr(ConfigSpace, "__version__"))
+  }
+}
+
+# builders for each datatype
+build_float = function(ConfigSpace, id, lower, upper, default, meta, old_cs_version) {
+  assert_string(id)
+  lower = assert_number(lower)
+  upper = assert_number(upper)
+  default = assert_number(default)
+  assert_list(meta)
+  assert_flag(old_cs_version)
+
+  if (old_cs_version) {
+    hp = ConfigSpace$hyperparameters$UniformFloatHyperparameter
+    return(hp(id, lower = lower, upper = upper, default_value = default, meta = meta))
+  }
+  ConfigSpace$Float(id, bounds = c(lower, upper), default = default, meta = meta)
+}
+
+build_int = function(ConfigSpace, id, lower, upper, default, meta, old_cs_version) {
+  assert_string(id)
+  lower = assert_int(lower)
+  upper = assert_int(upper)
+  default = assert_int(default)
+  assert_list(meta)
+  assert_flag(old_cs_version)
+
+  if (old_cs_version) {
+    hp = ConfigSpace$hyperparameters$UniformIntegerHyperparameter
+    return(hp(id, lower = lower, upper = upper, default_value = default, meta = meta))
+  }
+
+  ConfigSpace$Integer(id, bounds = c(lower, upper), default = default, meta = meta)
+}
+
+build_cat = function(ConfigSpace, id, choices, default, meta, old_cs_version) {
+  assert_string(id)
+  assert_character(choices)
+  default = assert_choice(default, choices)
+  assert_list(meta)
+  assert_flag(old_cs_version)
+
+  if (old_cs_version) {
+    hp = ConfigSpace$hyperparameters$CategoricalHyperparameter
+    return(hp(id, choices = choices, default_value = default, meta = meta))
+  }
+
+  ConfigSpace$Categorical(id, items = choices, default = default, meta = meta)
+}
+
+build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
+  assert_string(id)
+  default = assert_flag(default)
+  assert_list(meta)
+  assert_flag(old_cs_version)
+
+  build_cat(ConfigSpace, id, c("TRUE", "FALSE"), as.character(default), meta, old_cs_version)
+}
+
