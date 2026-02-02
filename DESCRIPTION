@@ -32,6 +32,11 @@ Authors@R:
              family = "Becker",
              role = "ctb",
              email = "marcbecker@posteo.de",
+             comment = c(ORCID = "0000-0002-8115-0400")),
+      person(given = "Anna",
+             family = "Nazarova",
+             role = "ctb",
+             email = "anna.nazarova@outlook.com",
              comment = c(ORCID = "0000-0002-8115-0400")))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
