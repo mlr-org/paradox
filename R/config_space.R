@@ -55,18 +55,19 @@ paramset_to_configspace = function(param_set, name = NULL) {
   # assert that numeric params must have lower & upper
   upper = param_set$upper[param_set$is_number]
   if (anyInfinite(upper)) {
-    stopf("Numeric parameters must have both lower and upper bounds. Missing upper bounds for: %s", str_collapse(param_set$ids()[is.infinite(upper)]))
+    stopf("Numeric parameters must have both lower and upper bounds. Missing upper bounds for: %s", str_collapse(names(upper)[is.infinite(upper)]))
   }
 
   lower = param_set$lower[param_set$is_number]
   if (anyInfinite(lower)) {
-    stopf("Numeric parameters must have both lower and upper bounds. Missing lower bounds for: %s", str_collapse(param_set$ids()[is.infinite(lower)]))
+    stopf("Numeric parameters must have both lower and upper bounds. Missing lower bounds for: %s", str_collapse(names(lower)[is.infinite(lower)]))
   }
 
   # assert that categorical params must have levels
   levels = param_set$levels[param_set$is_categ]
-  if (any(is.null(levels))) {
-    stopf("Categorical parameters must have levels. Missing levels for: %s", str_collapse(param_set$ids()[is.null(levels)]))
+  missing_levels = vapply(levels, is.null, logical(1))
+  if (any(missing_levels)) {
+    stopf("Categorical parameters must have levels. Missing levels for: %s", str_collapse(names(levels)[missing_levels]))
   }
 
   ConfigSpace = reticulate::import("ConfigSpace", delay_load = TRUE)
