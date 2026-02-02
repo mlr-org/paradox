@@ -129,7 +129,7 @@ add_hp = function(hp, cs) {
   } else if (reticulate::py_has_attr(cs, "add_hyperparameters")) {
     cs$add_hyperparameters(list(hp))
   } else {
-    stopf("Could not detect method to add hyperparameters to ConfigSpace. Please open an issue at https://github.com/mlr-org/paradox/issues and include the version of ConfigSpace: %s.", reticulate::py_get_attr(ConfigSpace, "__version__"))
+    stopf("Could not detect method to add hyperparameters to ConfigSpace.")
   }
 }
 
