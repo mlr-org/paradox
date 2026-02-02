@@ -1,4 +1,6 @@
-skip_if_not_installed(c("callr", "reticulate"))
+skip_if_not_installed("callr")
+skip_if_not_installed("reticulate")
+
 
 test_that("paramset_to_configspace defaults check with old ConfigSpace API", {
   expect_true(callr::r(function() {
