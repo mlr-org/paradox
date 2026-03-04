@@ -42,6 +42,8 @@
   : SamplerUnif Class
 - [`assert_param_set()`](https://paradox.mlr-org.com/dev/reference/assert_param_set.md)
   : Assertions for Params and ParamSets
+- [`assert_python_packages()`](https://paradox.mlr-org.com/dev/reference/assert_python_packages.md)
+  : Assert Python Packages
 - [`default_values()`](https://paradox.mlr-org.com/dev/reference/default_values.md)
   : Extract Parameter Default Values
 - [`generate_design_grid()`](https://paradox.mlr-org.com/dev/reference/generate_design_grid.md)
@@ -56,6 +58,8 @@
   [`paradox-package`](https://paradox.mlr-org.com/dev/reference/paradox-package.md)
   : paradox: Define and Work with Parameter Spaces for Complex
   Algorithms
+- [`paramset_to_configspace()`](https://paradox.mlr-org.com/dev/reference/paramset_to_configspace.md)
+  : Convert a paradox ParamSet to a ConfigSpace ConfigurationSpace
 - [`ps()`](https://paradox.mlr-org.com/dev/reference/ps.md) : Construct
   a ParamSet using Short Forms
 - [`ps_replicate()`](https://paradox.mlr-org.com/dev/reference/ps_replicate.md)

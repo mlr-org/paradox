@@ -47,7 +47,7 @@ objects.
 
 - `deps`:
 
-  ([`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html))  
+  ([`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html))  
   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and
   `cond`
   ([Condition](https://paradox.mlr-org.com/dev/reference/Condition.md)).

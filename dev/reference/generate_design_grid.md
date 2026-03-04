@@ -82,4 +82,5 @@ generate_design_grid(pset, 10)
 #> 29: 1.0000000       b
 #> 30: 1.0000000       c
 #>         ratio letters
+#>         <num>  <char>
 ```

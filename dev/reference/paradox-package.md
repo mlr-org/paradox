@@ -36,3 +36,6 @@ Other contributors:
 
 - Marc Becker <marcbecker@posteo.de>
   ([ORCID](https://orcid.org/0000-0002-8115-0400)) \[contributor\]
+
+- Anna Nazarova <anna.nazarova@outlook.com>
+  ([ORCID](https://orcid.org/0000-0002-8115-0400)) \[contributor\]

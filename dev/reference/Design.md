@@ -2,7 +2,7 @@
 
 A lightweight wrapper around a
 [ParamSet](https://paradox.mlr-org.com/dev/reference/ParamSet.md) and a
-[`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html),
+[`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html),
 where the latter is a design of configurations produced from the
 former - e.g., by calling a
 [`generate_design_grid()`](https://paradox.mlr-org.com/dev/reference/generate_design_grid.md)
@@ -16,7 +16,7 @@ or by sampling.
 
 - `data`:
 
-  ([`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html))  
+  ([`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html))  
   Stored `data`.
 
 ## Methods
@@ -52,7 +52,7 @@ Creates a new instance of this
 
 - `data`:
 
-  ([`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html))  
+  ([`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html))  
   Stored `data`.
 
 - `remove_dupl`:

@@ -21,6 +21,7 @@
 <url><loc>https://paradox.mlr-org.com/dev/reference/SamplerJointIndep.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/SamplerUnif.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/assert_param_set.html</loc></url>
+<url><loc>https://paradox.mlr-org.com/dev/reference/assert_python_packages.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/default_values.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/domain_check.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/domain_is_bounded.html</loc></url>
@@ -35,6 +36,7 @@
 <url><loc>https://paradox.mlr-org.com/dev/reference/generate_design_sobol.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/index.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/paradox-package.html</loc></url>
+<url><loc>https://paradox.mlr-org.com/dev/reference/paramset_to_configspace.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/ps.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/ps_replicate.html</loc></url>
 <url><loc>https://paradox.mlr-org.com/dev/reference/ps_union.html</loc></url>

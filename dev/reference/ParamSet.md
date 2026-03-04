@@ -35,9 +35,9 @@ used.
 
 ## S3 methods and type converters
 
-- [`as.data.table()`](https://rdatatable.gitlab.io/data.table/reference/as.data.table.html)  
+- [`as.data.table()`](https://rdrr.io/pkg/data.table/man/as.data.table.html)  
   `ParamSet` -\>
-  [`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html)  
+  [`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html)  
   Compact representation as datatable. Col types are:  
 
   - id: character
@@ -129,7 +129,7 @@ used.
 
 - `deps`:
 
-  ([`data.table::data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html))  
+  ([`data.table::data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html))  
   Table has cols `id` (`character(1)`) and `on` (`character(1)`) and
   `cond`
   ([Condition](https://paradox.mlr-org.com/dev/reference/Condition.md)).
@@ -611,11 +611,11 @@ that `assert_value` is `TRUE`.
 ### Method `test_constraint_dt()`
 
 checkmate-like test-function. Takes a
-[`data.table`](https://rdatatable.gitlab.io/data.table/reference/data.table.html).
-For each row, return `FALSE` if the given `$constraint` is not
-satisfied, `TRUE` otherwise. Note this is different from satisfying the
-bounds or types given by the `ParamSet` itself: If `x` does not satisfy
-these, an error will be thrown, given that `assert_value` is `TRUE`.
+[`data.table`](https://rdrr.io/pkg/data.table/man/data.table.html). For
+each row, return `FALSE` if the given `$constraint` is not satisfied,
+`TRUE` otherwise. Note this is different from satisfying the bounds or
+types given by the `ParamSet` itself: If `x` does not satisfy these, an
+error will be thrown, given that `assert_value` is `TRUE`.
 
 #### Usage
 
@@ -841,7 +841,7 @@ checkmate-like assert-function (s. `$check()`).
 ### Method `check_dt()`
 
 checkmate-like check-function. Takes a
-[data.table::data.table](https://rdatatable.gitlab.io/data.table/reference/data.table.html)
+[data.table::data.table](https://rdrr.io/pkg/data.table/man/data.table.html)
 where rows are points and columns are parameters. Checks in a similar
 manner as `$check(xs)`. A point x is feasible, if it configures a subset
 of params, all individual param constraints are satisfied and all
@@ -864,7 +864,7 @@ there are params in the set.
 
 - `xdt`:
 
-  ([data.table::data.table](https://rdatatable.gitlab.io/data.table/reference/data.table.html)
+  ([data.table::data.table](https://rdrr.io/pkg/data.table/man/data.table.html)
   \| [`data.frame()`](https://rdrr.io/r/base/data.frame.html)).
 
 - `check_strict`:
@@ -911,7 +911,7 @@ checkmate-like test-function (s. `$check_dt()`).
 
 - `xdt`:
 
-  ([data.table::data.table](https://rdatatable.gitlab.io/data.table/reference/data.table.html)).
+  ([data.table::data.table](https://rdrr.io/pkg/data.table/man/data.table.html)).
 
 - `check_strict`:
 
@@ -958,7 +958,7 @@ checkmate-like assert-function (s. `$check_dt()`).
 
 - `xdt`:
 
-  ([data.table::data.table](https://rdatatable.gitlab.io/data.table/reference/data.table.html)).
+  ([data.table::data.table](https://rdrr.io/pkg/data.table/man/data.table.html)).
 
 - `check_strict`:
 

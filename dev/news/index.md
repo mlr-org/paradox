@@ -145,7 +145,7 @@ CRAN release: 2020-07-21
 - New public methods `is_numeric()` and `is_categorical()` for parameter
   sets.
 - Fixed a test for upcoming release of
-  [`data.table()`](https://rdatatable.gitlab.io/data.table/reference/data.table.html).
+  [`data.table()`](https://rdrr.io/pkg/data.table/man/data.table.html).
 - Added a helper function to format parameter sets in Rd files.
 
 ## paradox 0.3.0
@@ -153,7 +153,7 @@ CRAN release: 2020-07-21
 CRAN release: 2020-07-07
 
 - New function
-  [`transpose()`](https://rdatatable.gitlab.io/data.table/reference/transpose.html)
+  [`transpose()`](https://rdrr.io/pkg/data.table/man/transpose.html)
   converts `data.table` of parameter values to a list of lists.
 - New methods `ParamSet$check_dt()`, `$assert_dt()` and `test_dt()` can
   check a `data.table` for valid parameter values.
@@ -168,7 +168,7 @@ CRAN release: 2020-04-15
 - Enforce integer bounds in ParamInt
   ([\#258](https://github.com/mlr-org/paradox/issues/258)).
 - Reexport
-  [`data.table::as.data.table()`](https://rdatatable.gitlab.io/data.table/reference/as.data.table.html).
+  [`data.table::as.data.table()`](https://rdrr.io/pkg/data.table/man/as.data.table.html).
 - Deep cloning of `ParamSet$values`
   ([\#273](https://github.com/mlr-org/paradox/issues/273)).
 

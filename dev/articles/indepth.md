@@ -176,7 +176,7 @@ param_set$class
 
 It is also possible to get all information of a `ParamSet` as
 `data.table` by calling
-[`as.data.table()`](https://rdatatable.gitlab.io/data.table/reference/as.data.table.html).
+[`as.data.table()`](https://rdrr.io/pkg/data.table/man/as.data.table.html).
 
 ``` r
 as.data.table(param_set)
@@ -258,7 +258,7 @@ ps_all$subset(c("x", "z"))
 `$subspaces()` function.
 
 It is possible to get the `ParamSet` as a `data.table` using
-[`as.data.table()`](https://rdatatable.gitlab.io/data.table/reference/as.data.table.html).
+[`as.data.table()`](https://rdrr.io/pkg/data.table/man/as.data.table.html).
 This makes it easy to subset parameters on certain conditions and
 aggregate information about them, using the variety of methods provided
 by `data.table`.
@@ -303,7 +303,8 @@ The parameter constraints are automatically checked:
 
 ``` r
 ps1$values$x = 1.5
-#> Error in self$assert(xs, sanitize = TRUE): Assertion on 'xs' failed: x: Must be of type 'single integerish value', not 'double'.
+#> Error in `self$assert()`:
+#> ! Assertion on 'xs' failed: x: Must be of type 'single integerish value', not 'double'.
 ```
 
 ##### Dependencies
@@ -811,7 +812,7 @@ generate_design_random(samplingPS, 1)$transpose()
 #> [[1]]$fun
 #> function (x, ...) 
 #> UseMethod("mean")
-#> <bytecode: 0x555d770ecef8>
+#> <bytecode: 0x55c95cc67220>
 #> <environment: namespace:base>
 ```
 
@@ -856,7 +857,7 @@ print(xvals[[1]])
 #> $fun
 #> function (input) 
 #> quantile(input, x$quantile)
-#> <environment: 0x555d78cb2df8>
+#> <environment: 0x55c95fc556b0>
 methodPS$check(xvals[[1]])
 #> [1] TRUE
 xvals[[1]]$fun(1:10)
@@ -959,10 +960,10 @@ search_space = ps(cost = p_dbl(0.1, 10), kernel = p_fct(c("polynomial", "radial"
 
 We can use the `paradox` function `generate_design_grid` to look at the
 values that would be evaluated by grid search. (We are using
-[`rbindlist()`](https://rdatatable.gitlab.io/data.table/reference/rbindlist.html)
-here because the result of `$transpose()` is a list that is harder to
-read. If we didn’t use `$transpose()`, on the other hand, the
-transformations that we investigate here are not applied.) In
+[`rbindlist()`](https://rdrr.io/pkg/data.table/man/rbindlist.html) here
+because the result of `$transpose()` is a list that is harder to read.
+If we didn’t use `$transpose()`, on the other hand, the transformations
+that we investigate here are not applied.) In
 `generate_design_grid(search_space, 3)`, `search_space` is the
 `ParamSet` argument and 3 is the specified resolution in the parameter
 space. The resolution for categorical parameters is ignored; these
@@ -1081,8 +1082,8 @@ generate_design_grid(search_space, 3)$transpose()
 ```
 
 (We are omitting
-[`rbindlist()`](https://rdatatable.gitlab.io/data.table/reference/rbindlist.html)
-in this example because it breaks the vector valued return elements.)
+[`rbindlist()`](https://rdrr.io/pkg/data.table/man/rbindlist.html) in
+this example because it breaks the vector valued return elements.)
 
 ### Automatic Factor Level Transformation
 
