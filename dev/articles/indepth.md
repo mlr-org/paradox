@@ -812,7 +812,7 @@ generate_design_random(samplingPS, 1)$transpose()
 #> [[1]]$fun
 #> function (x, ...) 
 #> UseMethod("mean")
-#> <bytecode: 0x55c95cc67220>
+#> <bytecode: 0x560f91b35220>
 #> <environment: namespace:base>
 ```
 
@@ -857,7 +857,7 @@ print(xvals[[1]])
 #> $fun
 #> function (input) 
 #> quantile(input, x$quantile)
-#> <environment: 0x55c95fc556b0>
+#> <environment: 0x560f94b23828>
 methodPS$check(xvals[[1]])
 #> [1] TRUE
 xvals[[1]]$fun(1:10)
