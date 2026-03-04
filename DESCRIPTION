@@ -32,6 +32,11 @@ Authors@R:
              family = "Becker",
              role = "ctb",
              email = "marcbecker@posteo.de",
+             comment = c(ORCID = "0000-0002-8115-0400")),
+      person(given = "Anna",
+             family = "Nazarova",
+             role = "ctb",
+             email = "anna.nazarova@outlook.com",
              comment = c(ORCID = "0000-0002-8115-0400")))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
@@ -49,6 +54,8 @@ Imports:
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
+    callr,
+    reticulate,
     rmarkdown,
     mlr3learners,
     e1071,
@@ -82,6 +89,7 @@ Collate:
     'SamplerJointIndep.R'
     'SamplerUnif.R'
     'asserts.R'
+    'config_space.R'
     'default_values.R'
     'generate_design_grid.R'
     'generate_design_lhs.R'

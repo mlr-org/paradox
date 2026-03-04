@@ -31,6 +31,7 @@ Authors:
 Other contributors:
 \itemize{
   \item Marc Becker \email{marcbecker@posteo.de} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
+  \item Anna Nazarova \email{anna.nazarova@outlook.com} (\href{https://orcid.org/0000-0002-8115-0400}{ORCID}) [contributor]
 }
 
 }
