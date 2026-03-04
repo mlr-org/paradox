@@ -17,8 +17,8 @@ test_that("paramset_to_configspace works without defaults with old ConfigSpace A
       x3 = p_fct(levels = c("a", "b", "c"))
     )
     cs = paramset_to_configspace(param_set)
-    expect_class(cs, "ConfigSpace.configuration_space.ConfigurationSpace")
-    expect_names(cs$get_hyperparameter_names(), permutation.of = c("x1", "x2", "x3"))
+    checkmate::expect_class(cs, "ConfigSpace.configuration_space.ConfigurationSpace")
+    checkmate::expect_names(cs$get_hyperparameter_names(), permutation.of = c("x1", "x2", "x3"))
 
     TRUE
   }))
