@@ -4,9 +4,6 @@
 #' Translates a [ParamSet] into a Python `ConfigSpace.ConfigurationSpace` via \CRANpkg{reticulate}.
 #' This function performs strict validation to ensure the [ParamSet] can be represented in ConfigSpace:
 #'
-#' * Every parameter must have a default value.
-#'   If any parameter is missing a default, an error is raised.
-#'
 #' Supported parameter mappings:
 #' * `p_dbl()`: `Float` / `UniformFloatHyperparameter`
 #' * `p_int()`: `Integer` / `UniformIntegerHyperparameter`
@@ -16,11 +13,13 @@
 #' Dependency conditions (`CondEqual`, `CondAnyOf`) are preserved.
 #' Multiple conditions on the same child are combined using `ConfigSpace.AndConjunction`.
 #'
+#' Defaults are optional. If a parameter has no default, ConfigSpace will auto-assign one
+#' (e.g. midpoint for numeric parameters, first level for categoricals).
+#'
 #' The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
 #'
 #' @param param_set [ParamSet]\cr
 #'   The parameter set to convert.
-#'   All parameters must have defaults.
 #'   Numeric parameters must define both `lower` and `upper` bounds.
 #' @param name `character(1)`\cr
 #'   Optional name for the resulting ConfigurationSpace.
@@ -45,12 +44,6 @@
 paramset_to_configspace = function(param_set, name = NULL) {
   assert_python_packages("ConfigSpace")
   assert_param_set(param_set, no_untyped = TRUE)
-
-  # assert that every parameter has a default
-  missing_defaults = setdiff(param_set$ids(), names(param_set$default))
-  if (length(missing_defaults)) {
-    stopf("All parameters must have a default. Missing for: %s", str_collapse(missing_defaults))
-  }
 
   # assert that numeric params must have lower & upper
   upper = param_set$upper[param_set$is_number]
@@ -79,13 +72,15 @@ paramset_to_configspace = function(param_set, name = NULL) {
     )
 
     if (cls == "ParamDbl") {
-      add_hp(build_float(ConfigSpace, id, lower, upper, default, meta, old_cs_version), cs)
+      add_hp(cs, build_float(ConfigSpace, id, lower, upper, default, meta, old_cs_version))
     } else if (cls == "ParamInt") {
-      add_hp(build_int(ConfigSpace, id, lower, upper, default, meta, old_cs_version), cs)
+      add_hp(cs, build_int(ConfigSpace, id, lower, upper, default, meta, old_cs_version))
     } else if (cls == "ParamLgl") {
-      add_hp(build_bool(ConfigSpace, id, default, meta, old_cs_version), cs)
+      add_hp(cs, build_bool(ConfigSpace, id, default, meta, old_cs_version))
     } else if (cls == "ParamFct") {
-      add_hp(build_cat(ConfigSpace, id, levels, default, meta, old_cs_version), cs)
+      add_hp(cs, build_cat(ConfigSpace, id, levels, default, meta, old_cs_version))
+    } else {
+      stopf("Unsupported parameter class '%s' for parameter '%s'.", cls, id)
     }
   })
 
@@ -115,7 +110,7 @@ paramset_to_configspace = function(param_set, name = NULL) {
 }
 
 # add entities across API versions to ConfigSpace
-add_hp = function(hp, cs) {
+add_hp = function(cs, hp) {
   if (reticulate::py_has_attr(cs, "add")) {
     cs$add(hp)
   } else if (reticulate::py_has_attr(cs, "add_hyperparameter")) {
@@ -125,6 +120,12 @@ add_hp = function(hp, cs) {
   } else {
     stopf("Could not detect method to add hyperparameters to ConfigSpace.")
   }
+  invisible(cs)
+}
+
+# normalize NoDefault to NULL (reticulate maps NULL -> Python None)
+normalize_default = function(default) {
+  if (is_nodefault(default)) NULL else default
 }
 
 # builders for each datatype
@@ -132,9 +133,9 @@ build_float = function(ConfigSpace, id, lower, upper, default, meta, old_cs_vers
   assert_string(id)
   lower = assert_number(lower)
   upper = assert_number(upper)
-  default = assert_number(default)
   assert_list(meta)
   assert_flag(old_cs_version)
+  default = normalize_default(default)
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$UniformFloatHyperparameter
@@ -147,39 +148,37 @@ build_int = function(ConfigSpace, id, lower, upper, default, meta, old_cs_versio
   assert_string(id)
   lower = assert_int(lower)
   upper = assert_int(upper)
-  default = assert_int(default)
   assert_list(meta)
   assert_flag(old_cs_version)
+  default = normalize_default(default)
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$UniformIntegerHyperparameter
     return(hp(id, lower = lower, upper = upper, default_value = default, meta = meta))
   }
-
   ConfigSpace$Integer(id, bounds = c(lower, upper), default = default, meta = meta)
 }
 
 build_cat = function(ConfigSpace, id, choices, default, meta, old_cs_version) {
   assert_string(id)
   assert_character(choices)
-  default = assert_choice(default, choices)
   assert_list(meta)
   assert_flag(old_cs_version)
+  default = normalize_default(default)
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$CategoricalHyperparameter
     return(hp(id, choices = choices, default_value = default, meta = meta))
   }
-
   ConfigSpace$Categorical(id, items = choices, default = default, meta = meta)
 }
 
 build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
   assert_string(id)
-  default = assert_flag(default)
   assert_list(meta)
   assert_flag(old_cs_version)
+  default = as.character(normalize_default(default))
 
-  build_cat(ConfigSpace, id, c("TRUE", "FALSE"), as.character(default), meta, old_cs_version)
+  build_cat(ConfigSpace, id, c("TRUE", "FALSE"), default, meta, old_cs_version)
 }
 

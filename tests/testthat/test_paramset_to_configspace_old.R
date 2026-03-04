@@ -2,7 +2,7 @@ skip_if_not_installed("callr")
 skip_if_not_installed("reticulate")
 
 
-test_that("paramset_to_configspace defaults check with old ConfigSpace API", {
+test_that("paramset_to_configspace works without defaults with old ConfigSpace API", {
   expect_true(callr::r(function() {
     Sys.setenv(RETICULATE_PYTHON = "managed")
 
@@ -16,7 +16,9 @@ test_that("paramset_to_configspace defaults check with old ConfigSpace API", {
       x2 = p_dbl(lower = 0, upper = 10),
       x3 = p_fct(levels = c("a", "b", "c"))
     )
-    expect_error(paramset_to_configspace(param_set), "All parameters must have a default. Missing for: x2, x3")
+    cs = paramset_to_configspace(param_set)
+    expect_class(cs, "ConfigSpace.configuration_space.ConfigurationSpace")
+    expect_names(cs$get_hyperparameter_names(), permutation.of = c("x1", "x2", "x3"))
 
     TRUE
   }))

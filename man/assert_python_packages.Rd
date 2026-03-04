@@ -15,6 +15,7 @@ Python version to use. If \code{NULL}, the default Python version is used.}
 }
 \value{
 (\code{character()})\cr
+Invisibly returns the input \code{packages} vector if all requested Python packages are available; otherwise throws an error listing the missing packages.
 }
 \description{
 Assert that the given Python packages are available.

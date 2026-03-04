@@ -9,7 +9,6 @@ paramset_to_configspace(param_set, name = NULL)
 \arguments{
 \item{param_set}{\link{ParamSet}\cr
 The parameter set to convert.
-All parameters must have defaults.
 Numeric parameters must define both \code{lower} and \code{upper} bounds.}
 
 \item{name}{\code{character(1)}\cr
@@ -22,8 +21,8 @@ A Python \code{ConfigSpace.ConfigurationSpace} object representing the given par
 Translates a \link{ParamSet} into a Python \code{ConfigSpace.ConfigurationSpace} via \CRANpkg{reticulate}.
 This function performs strict validation to ensure the \link{ParamSet} can be represented in ConfigSpace:
 \itemize{
-\item Every parameter must have a default value.
-If any parameter is missing a default, an error is raised.
+\item Defaults are optional. If a parameter has no default, ConfigSpace will auto-assign one
+(e.g. midpoint for numeric parameters, first level for categoricals).
 }
 
 Supported parameter mappings:
