@@ -139,9 +139,11 @@ build_float = function(ConfigSpace, id, lower, upper, default, meta, old_cs_vers
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$UniformFloatHyperparameter
-    return(hp(id, lower = lower, upper = upper, default_value = default, meta = meta))
+
+    # default must not be passed at all if no default is given
+    return(invoke(hp, .args = discard(list(name = id, lower = lower, upper = upper, default_value = default, meta = meta), is.null)))
   }
-  ConfigSpace$Float(id, bounds = c(lower, upper), default = default, meta = meta)
+  return(invoke(ConfigSpace$Float, .args = discard(list(name = id, bounds = c(lower, upper), default = default, meta = meta), is.null)))
 }
 
 build_int = function(ConfigSpace, id, lower, upper, default, meta, old_cs_version) {
@@ -154,9 +156,9 @@ build_int = function(ConfigSpace, id, lower, upper, default, meta, old_cs_versio
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$UniformIntegerHyperparameter
-    return(hp(id, lower = lower, upper = upper, default_value = default, meta = meta))
+    return(invoke(hp, .args = discard(list(name = id, lower = lower, upper = upper, default_value = default, meta = meta), is.null)))
   }
-  ConfigSpace$Integer(id, bounds = c(lower, upper), default = default, meta = meta)
+  return(invoke(ConfigSpace$Integer, .args = discard(list(name = id, bounds = c(lower, upper), default = default, meta = meta), is.null)))
 }
 
 build_cat = function(ConfigSpace, id, choices, default, meta, old_cs_version) {
@@ -168,16 +170,17 @@ build_cat = function(ConfigSpace, id, choices, default, meta, old_cs_version) {
 
   if (old_cs_version) {
     hp = ConfigSpace$hyperparameters$CategoricalHyperparameter
-    return(hp(id, choices = choices, default_value = default, meta = meta))
+    return(invoke(hp, .args = discard(list(name = id, choices = choices, default_value = default, meta = meta), is.null)))
   }
-  ConfigSpace$Categorical(id, items = choices, default = default, meta = meta)
+  return(invoke(ConfigSpace$Categorical, .args = discard(list(name = id, items = choices, default = default, meta = meta), is.null)))
 }
 
 build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
   assert_string(id)
   assert_list(meta)
   assert_flag(old_cs_version)
-  default = as.character(normalize_default(default))
+  default = normalize_default(default)
+  if (!is.null(default)) default = as.character(default)
 
   build_cat(ConfigSpace, id, c("TRUE", "FALSE"), default, meta, old_cs_version)
 }
