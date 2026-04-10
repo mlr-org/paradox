@@ -185,3 +185,184 @@ build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
   build_cat(ConfigSpace, id, c("TRUE", "FALSE"), default, meta, old_cs_version)
 }
 
+#' @title Convert a ConfigSpace ConfigurationSpace to a paradox ParamSet
+#'
+#' @description
+#' Translates a Python `ConfigSpace.ConfigurationSpace` (via \CRANpkg{reticulate}) into a [ParamSet].
+#' This is the inverse of [paramset_to_configspace()] and uses the same type mapping.
+#'
+#' Supported hyperparameter mappings:
+#' * `UniformFloatHyperparameter` / `Float`: `p_dbl()` (with `logscale = TRUE` if `log = True`)
+#' * `UniformIntegerHyperparameter` / `Integer`: `p_int()` (with `logscale = TRUE` if `log = True`)
+#' * `CategoricalHyperparameter` / `Categorical`: `p_fct()`, or `p_lgl()` if the choices are exactly `c("TRUE", "FALSE")`
+#' * `OrdinalHyperparameter`: `p_fct()` (paradox has no ordinal type; ordering is preserved via the level order)
+#'
+#' Dependencies are translated as follows:
+#' * `EqualsCondition` -> `depends = parent == value`
+#' * `InCondition` -> `depends = parent %in% values`
+#' * `AndConjunction` of the above -> multiple `depends` entries on the same child (paradox combines them with AND)
+#' * `OrConjunction` (and other unsupported conjunctions) -> dropped with a warning, since paradox cannot express disjunctions
+#'
+#' Forbidden clauses are not representable in paradox and are dropped with a warning.
+#'
+#' Hyperparameter `meta` dictionaries written by [paramset_to_configspace()] are inspected for a `tags` entry,
+#' which is restored as the parameter's `tags`.
+#'
+#' The function auto-detects old ConfigSpace API (ConfigSpace < 0.6.0) vs. new ConfigSpace API (ConfigSpace >= 0.6.0).
+#'
+#' @param config_space (`ConfigSpace.ConfigurationSpace`)\cr
+#'   The Python ConfigurationSpace object to convert.
+#'
+#' @return A [ParamSet] representing the given configuration space.
+#'
+#' @examples
+#' \dontrun{
+#'   ConfigSpace = reticulate::import("ConfigSpace")
+#'   cs = ConfigSpace$ConfigurationSpace(name = "demo")
+#'   cs$add(ConfigSpace$Float("lr", bounds = c(1e-5, 1), default = 0.01, log = TRUE))
+#'   cs$add(ConfigSpace$Integer("n", bounds = c(10L, 500L), default = 100L))
+#'   cs$add(ConfigSpace$Categorical("crit", items = c("gini", "entropy"), default = "gini"))
+#'   param_set = configspace_to_paramset(cs)
+#' }
+#' @export
+configspace_to_paramset = function(config_space) {
+  assert_python_packages("ConfigSpace")
+  if (!inherits(config_space, "ConfigSpace.configuration_space.ConfigurationSpace")) {
+    stopf("'config_space' must be a Python ConfigSpace.ConfigurationSpace, not '%s'.", class(config_space)[[1L]])
+  }
+
+  # collect hyperparameters
+  hps = config_space$get_hyperparameters()
+  hp_names = config_space$get_hyperparameter_names()
+  hps = set_names(hps, hp_names)
+
+  args = map(hps, domain_from_hyperparameter)
+
+  # forbidden clauses are not expressible in paradox
+  forbiddens = try(reticulate::py_to_r(config_space$get_forbiddens()), silent = TRUE)
+  if (!inherits(forbiddens, "try-error") && length(forbiddens) > 0L) {
+    warningf("Dropping %i forbidden clause(s); paradox cannot represent forbidden clauses.", length(forbiddens))
+  }
+
+  param_set = invoke(ps, .args = args)
+
+  # add dependencies
+  conditions = config_space$get_conditions()
+  walk(conditions, function(cond) {
+    add_condition_to_paramset(param_set, cond)
+  })
+
+  param_set
+}
+
+# build a paradox Domain object from a single ConfigSpace hyperparameter
+domain_from_hyperparameter = function(hp) {
+  # match by trailing class name (e.g. "UniformFloatHyperparameter") so the same code
+  # handles both the new ConfigSpace API (class strings include the submodule, e.g.
+  # "ConfigSpace.hyperparameters.uniform_float.UniformFloatHyperparameter") and the
+  # old API (class strings like "ConfigSpace.hyperparameters.UniformFloatHyperparameter").
+  short_cls = sub(".*\\.", "", class(hp))
+  meta = try(reticulate::py_to_r(reticulate::py_get_attr(hp, "meta")), silent = TRUE)
+  if (inherits(meta, "try-error") || is.null(meta)) meta = list()
+  tags = if (!is.null(meta$tags)) as.character(meta$tags) else character()
+
+  if (any(c("UniformFloatHyperparameter", "NormalFloatHyperparameter", "BetaFloatHyperparameter") %in% short_cls)) {
+    log = isTRUE(reticulate::py_to_r(reticulate::py_get_attr(hp, "log")))
+    default = reticulate::py_to_r(reticulate::py_get_attr(hp, "default_value"))
+    # paradox stores `default` in transformed space when logscale = TRUE,
+    # while ConfigSpace stores it in linear space.
+    if (log && !is.null(default)) default = log(default)
+    p_dbl(
+      lower = reticulate::py_to_r(reticulate::py_get_attr(hp, "lower")),
+      upper = reticulate::py_to_r(reticulate::py_get_attr(hp, "upper")),
+      default = default,
+      logscale = log,
+      tags = tags
+    )
+  } else if (any(c("UniformIntegerHyperparameter", "NormalIntegerHyperparameter", "BetaIntegerHyperparameter") %in% short_cls)) {
+    log = isTRUE(reticulate::py_to_r(reticulate::py_get_attr(hp, "log")))
+    default = as.integer(reticulate::py_to_r(reticulate::py_get_attr(hp, "default_value")))
+    # see note above; for integers paradox also expects the default in log space.
+    if (log && !is.null(default)) default = log(default)
+    p_int(
+      lower = as.integer(reticulate::py_to_r(reticulate::py_get_attr(hp, "lower"))),
+      upper = as.integer(reticulate::py_to_r(reticulate::py_get_attr(hp, "upper"))),
+      default = default,
+      logscale = log,
+      tags = tags
+    )
+  } else if ("CategoricalHyperparameter" %in% short_cls) {
+    choices = as.character(reticulate::py_to_r(reticulate::py_get_attr(hp, "choices")))
+    default = reticulate::py_to_r(reticulate::py_get_attr(hp, "default_value"))
+    if (setequal(choices, c("TRUE", "FALSE"))) {
+      p_lgl(default = as.logical(default), tags = tags)
+    } else {
+      p_fct(levels = choices, default = as.character(default), tags = tags)
+    }
+  } else if ("OrdinalHyperparameter" %in% short_cls) {
+    sequence = as.character(reticulate::py_to_r(reticulate::py_get_attr(hp, "sequence")))
+    default = as.character(reticulate::py_to_r(reticulate::py_get_attr(hp, "default_value")))
+    p_fct(levels = sequence, default = default, tags = tags)
+  } else if (any(c("Constant", "UnParametrizedHyperparameter") %in% short_cls)) {
+    value = reticulate::py_to_r(reticulate::py_get_attr(hp, "value"))
+    p_fct(levels = as.character(value), default = as.character(value), tags = tags)
+  } else {
+    stopf("Unsupported ConfigSpace hyperparameter class '%s' for parameter '%s'.",
+      class(hp)[[1L]], reticulate::py_to_r(reticulate::py_get_attr(hp, "name")))
+  }
+}
+
+# add a single (possibly conjunctive) ConfigSpace condition to a paradox ParamSet
+add_condition_to_paramset = function(param_set, cond) {
+  short_cls = sub(".*\\.", "", class(cond))
+
+  if ("AndConjunction" %in% short_cls) {
+    components = reticulate::py_to_r(reticulate::py_get_attr(cond, "components"))
+    walk(components, function(component) add_condition_to_paramset(param_set, component))
+    return(invisible(param_set))
+  }
+
+  if ("OrConjunction" %in% short_cls) {
+    warningf("Dropping OrConjunction condition; paradox cannot represent disjunctions.")
+    return(invisible(param_set))
+  }
+
+  if ("EqualsCondition" %in% short_cls) {
+    child = reticulate::py_to_r(reticulate::py_get_attr(cond, "child")$name)
+    parent = reticulate::py_to_r(reticulate::py_get_attr(cond, "parent")$name)
+    value = reticulate::py_to_r(reticulate::py_get_attr(cond, "value"))
+    value = coerce_dependency_value(param_set, parent, value)
+    param_set$add_dep(child, on = parent, cond = CondEqual$new(value))
+    return(invisible(param_set))
+  }
+
+  if ("InCondition" %in% short_cls) {
+    child = reticulate::py_to_r(reticulate::py_get_attr(cond, "child")$name)
+    parent = reticulate::py_to_r(reticulate::py_get_attr(cond, "parent")$name)
+    values = reticulate::py_to_r(reticulate::py_get_attr(cond, "values"))
+    values = map(values, function(v) coerce_dependency_value(param_set, parent, v))
+    if (length(values) > 0L && !is.list(values[[1L]])) values = unlist(values)
+    param_set$add_dep(child, on = parent, cond = CondAnyOf$new(values))
+    return(invisible(param_set))
+  }
+
+  warningf("Dropping unsupported condition class '%s'; only EqualsCondition, InCondition, and AndConjunction are supported.",
+    class(cond)[[1L]])
+  invisible(param_set)
+}
+
+# coerce a categorical-comparison value into the type of the paradox parent parameter
+coerce_dependency_value = function(param_set, parent, value) {
+  parent_class = param_set$class[[parent]]
+  if (identical(parent_class, "ParamLgl")) {
+    return(as.logical(value))
+  }
+  if (identical(parent_class, "ParamInt")) {
+    return(as.integer(value))
+  }
+  if (identical(parent_class, "ParamDbl")) {
+    return(as.numeric(value))
+  }
+  as.character(value)
+}
+
