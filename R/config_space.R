@@ -322,7 +322,7 @@ add_condition_to_paramset = function(param_set, cond) {
 
   if ("AndConjunction" %in% short_cls) {
     components = py_attr(cond, "components")
-    walk(components, function(component) add_condition_to_paramset(param_set, component))
+    walk(components, add_condition_to_paramset, param_set = param_set))
     return(invisible(param_set))
   }
 
