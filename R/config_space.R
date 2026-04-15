@@ -322,7 +322,7 @@ add_condition_to_paramset = function(param_set, cond) {
 
   if ("AndConjunction" %in% short_cls) {
     components = py_attr(cond, "components")
-    walk(components, add_condition_to_paramset, param_set = param_set))
+    walk(components, add_condition_to_paramset, param_set = param_set)
     return(invisible(param_set))
   }
 
@@ -343,7 +343,7 @@ add_condition_to_paramset = function(param_set, cond) {
     child = py_attr(cond, "child")$name
     parent = py_attr(cond, "parent")$name
     values = py_attr(cond, "values")
-    values = map(values, coerce_dependency_value, param_set = param_set, parent = parent))
+    values = map(values, coerce_dependency_value, param_set = param_set, parent = parent)
     if (length(values) > 0L && !is.list(values[[1L]])) values = unlist(values)
     param_set$add_dep(child, on = parent, cond = CondAnyOf$new(values))
     return(invisible(param_set))
