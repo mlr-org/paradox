@@ -250,9 +250,7 @@ configspace_to_paramset = function(config_space) {
 
   # add dependencies
   conditions = config_space$get_conditions()
-  walk(conditions, function(cond) {
-    add_condition_to_paramset(param_set, cond)
-  })
+  walk(conditions, add_condition_to_paramset, param_set = param_set)
 
   param_set
 }
