@@ -28,8 +28,10 @@ test_that("configspace_to_paramset works with old ConfigSpace API", {
     expect_equal(param_set$class[["x2"]], "ParamInt")
     expect_equal(param_set$class[["x3"]], "ParamFct")
     expect_equal(param_set$class[["x4"]], "ParamLgl")
-    expect_equal(param_set$class[["x5"]], "ParamFct")
-    expect_equal(param_set$levels[["x5"]], c("low", "med", "high"))
+    expect_equal(param_set$class[["x5"]], "ParamInt")
+    expect_equal(param_set$lower[["x5"]], 1)
+    expect_equal(param_set$upper[["x5"]], 3)
+    expect_equal(param_set$trafo(list(x5 = 2L))$x5, "med")
 
     TRUE
   }))

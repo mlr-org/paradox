@@ -196,7 +196,10 @@ build_bool = function(ConfigSpace, id, default, meta, old_cs_version) {
 #' * `UniformIntegerHyperparameter` / `Integer`: `p_int()` (with `logscale = TRUE` if `log = True`)
 #' * `CategoricalHyperparameter` / `Categorical`: `p_fct()`,
 #' or `p_lgl()` if the choices are exactly `c("TRUE", "FALSE")`
-#' * `OrdinalHyperparameter`: `p_fct()` (paradox has no ordinal type; ordering is preserved via the level order)
+#' * `OrdinalHyperparameter`: `p_int(lower = 1, upper = length(sequence))` with a `trafo`
+#' mapping the integer index to the corresponding sequence value.
+#' Paradox has no ordinal type,
+#' but this encoding preserves the ordering for numeric optimizers (unlike `p_fct()`, whose levels are unordered).
 #'
 #' Dependencies are translated as follows:
 #' * `EqualsCondition` -> `depends = parent == value`
@@ -246,11 +249,21 @@ configspace_to_paramset = function(config_space) {
       length(forbiddens))
   }
 
+  # remember sequences of ordinal parents so conditions on them (which reference
+  # string values) can be translated to the integer index representation.
+  ordinal_sequences = discard(map(hps, function(hp) {
+    if ("OrdinalHyperparameter" %in% sub(".*\\.", "", class(hp))) {
+      as.character(py_attr(hp, "sequence"))
+    } else {
+      NULL
+    }
+  }), is.null)
+
   param_set = invoke(ps, .args = args)
 
   # add dependencies
   conditions = config_space$get_conditions()
-  walk(conditions, add_condition_to_paramset, param_set = param_set)
+  walk(conditions, add_condition_to_paramset, param_set = param_set, ordinal_sequences = ordinal_sequences)
 
   param_set
 }
@@ -305,8 +318,15 @@ domain_from_hyperparameter = function(hp) {
     }
   } else if ("OrdinalHyperparameter" %in% short_cls) {
     sequence = as.character(py_attr(hp, "sequence"))
-    default = as.character(py_attr(hp, "default_value"))
-    p_fct(levels = sequence, default = default, tags = tags)
+    default = py_attr(hp, "default_value")
+    default_index = if (!is.null(default)) match(as.character(default), sequence) else NULL
+    p_int(
+      lower = 1L,
+      upper = length(sequence),
+      default = default_index,
+      trafo = crate(function(x) sequence[x], sequence),
+      tags = tags
+    )
   } else if (any(c("Constant", "UnParametrizedHyperparameter") %in% short_cls)) {
     value = py_attr(hp, "value")
     p_fct(levels = as.character(value), default = as.character(value), tags = tags)
@@ -317,12 +337,12 @@ domain_from_hyperparameter = function(hp) {
 }
 
 # add a single (possibly conjunctive) ConfigSpace condition to a paradox ParamSet
-add_condition_to_paramset = function(param_set, cond) {
+add_condition_to_paramset = function(param_set, cond, ordinal_sequences = list()) {
   short_cls = sub(".*\\.", "", class(cond))
 
   if ("AndConjunction" %in% short_cls) {
     components = py_attr(cond, "components")
-    walk(components, add_condition_to_paramset, param_set = param_set)
+    walk(components, add_condition_to_paramset, param_set = param_set, ordinal_sequences = ordinal_sequences)
     return(invisible(param_set))
   }
 
@@ -334,7 +354,7 @@ add_condition_to_paramset = function(param_set, cond) {
     child = py_attr(cond, "child")$name
     parent = py_attr(cond, "parent")$name
     value = py_attr(cond, "value")
-    value = coerce_dependency_value(param_set, parent, value)
+    value = coerce_dependency_value(param_set, parent, value, ordinal_sequences)
     param_set$add_dep(child, on = parent, cond = CondEqual$new(value))
     return(invisible(param_set))
   }
@@ -343,7 +363,8 @@ add_condition_to_paramset = function(param_set, cond) {
     child = py_attr(cond, "child")$name
     parent = py_attr(cond, "parent")$name
     values = py_attr(cond, "values")
-    values = map(values, coerce_dependency_value, param_set = param_set, parent = parent)
+    values = map(values, coerce_dependency_value, param_set = param_set, parent = parent,
+      ordinal_sequences = ordinal_sequences)
     if (length(values) > 0L && !is.list(values[[1L]])) values = unlist(values)
     param_set$add_dep(child, on = parent, cond = CondAnyOf$new(values))
     return(invisible(param_set))
@@ -353,8 +374,13 @@ add_condition_to_paramset = function(param_set, cond) {
     class(cond)[[1L]])
 }
 
-# coerce a categorical-comparison value into the type of the paradox parent parameter
-coerce_dependency_value = function(param_set, parent, value) {
+# coerce a categorical-comparison value into the type of the paradox parent parameter.
+# ordinal parents are represented as integers in paradox; translate the string value
+# from the original ConfigSpace condition to the matching sequence index.
+coerce_dependency_value = function(param_set, parent, value, ordinal_sequences = list()) {
+  if (parent %in% names(ordinal_sequences)) {
+    return(match(as.character(value), ordinal_sequences[[parent]]))
+  }
   parent_class = param_set$class[[parent]]
   if (identical(parent_class, "ParamLgl")) {
     return(as.logical(value))

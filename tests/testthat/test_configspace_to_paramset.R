@@ -35,10 +35,14 @@ test_that("configspace_to_paramset converts basic hyperparameter types", {
   expect_equal(param_set$class[["x4"]], "ParamLgl")
   expect_equal(param_set$default[["x4"]], TRUE)
 
-  # ordinals map to ParamFct, level order preserved
-  expect_equal(param_set$class[["x5"]], "ParamFct")
-  expect_equal(param_set$levels[["x5"]], c("low", "med", "high"))
-  expect_equal(param_set$default[["x5"]], "med")
+  # ordinals map to ParamInt with a trafo mapping the index back to the sequence value
+  expect_equal(param_set$class[["x5"]], "ParamInt")
+  expect_equal(param_set$lower[["x5"]], 1)
+  expect_equal(param_set$upper[["x5"]], 3)
+  expect_equal(param_set$default[["x5"]], 2L)
+  expect_equal(param_set$trafo(list(x5 = 1L))$x5, "low")
+  expect_equal(param_set$trafo(list(x5 = 2L))$x5, "med")
+  expect_equal(param_set$trafo(list(x5 = 3L))$x5, "high")
 })
 
 test_that("configspace_to_paramset honors log-scaled numeric hyperparameters", {
@@ -150,6 +154,28 @@ test_that("configspace_to_paramset coerces deps for boolean parents", {
   param_set = configspace_to_paramset(cs)
   expect_equal(param_set$class[["flag"]], "ParamLgl")
   expect_identical(param_set$deps$cond[[1L]]$rhs, TRUE)
+})
+
+test_that("configspace_to_paramset translates conditions on ordinal parents", {
+  cs_mod = reticulate::import("ConfigSpace")
+  cs = cs_mod$ConfigurationSpace()
+  parent = cs_mod$OrdinalHyperparameter("parent", sequence = c("low", "med", "high"), default_value = "med")
+  child1 = cs_mod$Float("child1", bounds = c(0, 1), default = 0.5)
+  child2 = cs_mod$Float("child2", bounds = c(0, 1), default = 0.5)
+  cs$add(list(parent, child1, child2))
+  cs$add(cs_mod$EqualsCondition(child1, parent, "high"))
+  cs$add(cs_mod$InCondition(child2, parent, list("low", "med")))
+
+  param_set = configspace_to_paramset(cs)
+  expect_equal(param_set$class[["parent"]], "ParamInt")
+
+  c1_dep = param_set$deps[id == "child1"]
+  expect_class(c1_dep$cond[[1L]], "CondEqual")
+  expect_identical(c1_dep$cond[[1L]]$rhs, 3L)
+
+  c2_dep = param_set$deps[id == "child2"]
+  expect_class(c2_dep$cond[[1L]], "CondAnyOf")
+  expect_setequal(c2_dep$cond[[1L]]$rhs, c(1L, 2L))
 })
 
 test_that("configspace_to_paramset rejects non-ConfigurationSpace input", {
