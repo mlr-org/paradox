@@ -35,28 +35,29 @@ p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 }
 
 #' @export
-domain_check.ParamInt = function(param, values) {
-  if (!qtestr(values, "N1()")) {
-    return(check_domain_vectorize(param$id, values, check_int,
-      more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
-        tol = .51)  # we don't know the tolerances of individual values, but we do know that some values are not even (non-missing, finite) numerics
-    ))
-  }
+# domain_check.ParamInt = function(param, values) {
+#   print("dc_int")
+#   if (!qtestr(values, "N1()")) {
+#     return(check_domain_vectorize(param$id, values, check_int,
+#       more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
+#         tol = .51)  # we don't know the tolerances of individual values, but we do know that some values are not even (non-missing, finite) numerics
+#     ))
+#   }
+#   print(777)
+#   values_num = as.numeric(values)
 
-  values_num = as.numeric(values)
+#   if (all(abs(trunc(values_num + 0.5) - 0.5) <= param$tolerance)) {
+#     values_num = round(values_num)
+#     if (all(values_num >= param$lower) && all(values_num <= param$upper)) {
+#       return(TRUE)
+#     }
+#   }
 
-  if (all(abs(trunc(values_num + 0.5) - 0.5) <= param$tolerance)) {
-    values_num = round(values_num)
-    if (all(values_num >= param$lower) && all(values_num <= param$upper)) {
-      return(TRUE)
-    }
-  }
-
-  check_domain_vectorize(param$id, values_num, check_int,
-    more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
-      tol = pmax(1e-300, param$tolerance + 2 * abs(values_num) * .Machine$double.eps))  # want to have inclusive tolerance bounds. Not sure if 2* is necessary.
-  )
-}
+#   check_domain_vectorize(param$id, values_num, check_int,
+#     more_args = list(lower = param$lower - 0.5, upper = param$upper + 0.5,  # be lenient with bounds, because they would refer to the rounded values
+#       tol = pmax(1e-300, param$tolerance + 2 * abs(values_num) * .Machine$double.eps))  # want to have inclusive tolerance bounds. Not sure if 2* is necessary.
+#   )
+# }
 
 #' @export
 domain_sanitize.ParamInt = function(param, values) {

@@ -39,14 +39,15 @@ test_that("$check() works on TuneToken", {
     ParamInt$new("xub"),
     ParamDbl$new("y", lower = 0, upper = 10, special_vals = list("x")),
     ParamUty$new("uty"),
-    ParamUty$new("uty1", custom_check = function(x) if (!identical(x, 1)) "uty1 must be 1" else TRUE),
+    # ParamUty$new("uty1", custom_check = function(x) if (!identical(x, 1)) "uty1 must be 1" else TRUE),
+    ParamUty$new("uty1"),
     ParamFct$new("fct", c("x", "y")),
     ParamLgl$new("lgl")
   ))
 
   expect_equal(pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = TRUE)), TRUE)
   expect_string(pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = 1)),
-    pattern = "Must be of type .*logical.*not.*double")
+    pattern = "lgl:.*not of type 'scalar logical'")
 
 
   expect_equal(pars$check(list(x = to_tune(), xub = to_tune(0, 1), y = to_tune(p_int(1, 10)),

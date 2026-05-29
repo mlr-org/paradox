@@ -1,3 +1,7 @@
+
+#FIXME: remove this function or still export it? by calling C
+#FIXME: the functions says TTs are not accepted? maybe change that?
+
 #' @title Check Value Validity
 #'
 #' @description
@@ -18,17 +22,20 @@
 #' @keywords internal
 #' @export
 domain_check = function(param, values) {
+  print("domain_check")
+  print(values)
   if (!test_list(values, len = nrow(param))) return("values must be a list")
   if (length(values) == 0) return(TRUE)  # happens when there are no params + values to check
-  assert_string(unique(param$grouping))
-  special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
-  if (any(special_vals_hit)) {
-    # don't annoy domain_check methods with the burdon of having to filter out
-    # values that match special_values
-    Recall(param[!special_vals_hit], values[!special_vals_hit])
-  } else {
-    UseMethod("domain_check")
-  }
+  .Call("c_paramset_domain_check", param, xs, FALSE)
+  # assert_string(unique(param$grouping))
+#   special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
+#   if (any(special_vals_hit)) {
+#     # don't annoy domain_check methods with the burdon of having to filter out
+#     # values that match special_values
+#     Recall(param[!special_vals_hit], values[!special_vals_hit])
+#   } else {
+#     UseMethod("domain_check")
+#   }
 }
 
 #' @export
@@ -158,20 +165,20 @@ domain_is_number.Domain = function(param) rep(FALSE, nrow(param))
 
 
 # param:
-check_domain_vectorize = function(ids, values, checker, more_args = list()) {
-  if (is.function(checker)) {
-    errors = pmap(c(list(ids, values), more_args), function(id, value, ...) {
-      ch = checker(value, ...)
-      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
-    })
-  } else {
-    # `checker` is a list of functions with the same length as `values`
-    errors = pmap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
-      ch = chck(value, ...)
-      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
-    })
-  }
-  errors = unlist(errors)
-  if (!length(errors)) return(TRUE)
-  str_collapse(errors, sep = "\n")
-}
+# check_domain_vectorize = function(ids, values, checker, more_args = list()) {
+#   if (is.function(checker)) {
+#     errors = pmap(c(list(ids, values), more_args), function(id, value, ...) {
+#       ch = checker(value, ...)
+#       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
+#     })
+#   } else {
+#     # `checker` is a list of functions with the same length as `values`
+#     errors = pmap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
+#       ch = chck(value, ...)
+#       if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
+#     })
+#   }
+#   errors = unlist(errors)
+#   if (!length(errors)) return(TRUE)
+#   str_collapse(errors, sep = "\n")
+# }

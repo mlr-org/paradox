@@ -10,12 +10,12 @@ p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), de
 }
 
 #' @export
-domain_check.ParamLgl = function(param, values) {
-  if (qtestr(values, "B1")) {
-    return(TRUE)
-  }
-  check_domain_vectorize(param$id, values, check_flag)
-}
+# domain_check.ParamLgl = function(param, values) {
+  # if (qtestr(values, "B1")) {
+    # return(TRUE)
+  # }
+  # check_domain_vectorize(param$id, values, check_flag)
+# }
 
 #' @export
 domain_nlevels.ParamLgl = function(param) rep(2, nrow(param))

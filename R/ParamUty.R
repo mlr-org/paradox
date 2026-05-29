@@ -21,13 +21,13 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
 }
 
 #' @export
-domain_check.ParamUty = function(param, values) {
-  cargo = map(param$cargo, "custom_check")
-  subset = !map_lgl(cargo, is.null)
-  if (!any(subset)) return(TRUE)
-  values = values[subset]
-  check_domain_vectorize(param$id[subset], values, cargo[subset])
-}
+# domain_check.ParamUty = function(param, values) {
+#   cargo = map(param$cargo, "custom_check")
+#   subset = !map_lgl(cargo, is.null)
+#   if (!any(subset)) return(TRUE)
+#   values = values[subset]
+#   check_domain_vectorize(param$id[subset], values, cargo[subset])
+# }
 
 #' @export
 domain_nlevels.ParamUty = function(param) rep(Inf, nrow(param))

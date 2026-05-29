@@ -55,6 +55,8 @@ ParamSet = R6Class("ParamSet",
     #' Should values be checked for validity during assigment to active binding `$values`?
     #' Default is `TRUE`, only switch this off if you know what you are doing.
     assert_values = TRUE,
+    #FIXME: have we documented that users might wanna swicth this off?
+    # maybe combine this with martins trick to disable checkmate?
 
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
@@ -212,8 +214,19 @@ ParamSet = R6Class("ParamSet",
         new_values = insert_named(self$values, new_values)
         new_values = new_values[names(new_values) %nin% discarding]
       }
+      # FIXME: i think we rely on the "assert" here below.
       self$values = new_values
       invisible(self)
+    },
+
+    #' @useDynLib paradox c_paramset_set_values
+    # FIXME: why do we discard NULL values in the above code? this isnt even documented?
+    # this means we cannot set values to NULL? this also only happens in insert-mode...?
+    set_values_2 = function(..., .values = list(), .insert = TRUE) {
+      # argchecks are done in C code
+      dots = list(...)
+      .Call("c_paramset_set_values", self, dots, .values, .insert)
+      #FIXME: we need to return inv(self) here...
     },
 
     #' @description
@@ -349,6 +362,7 @@ ParamSet = R6Class("ParamSet",
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @return If successful `TRUE`, if not a string with an error message.
     check = function(xs, check_strict = TRUE) {
+      # print(xs)
       assert_flag(check_strict)
       ok = check_list(xs, names = "unique")
       if (!isTRUE(ok)) {
@@ -363,9 +377,10 @@ ParamSet = R6Class("ParamSet",
       if (length(extra)) {
         return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
       }
-
+      # print(444)
       if (length(xs) && test_list(xs, types = "TuneToken")) {
         tunecheck = tryCatch({
+          # print("tunecheck")
           private$get_tune_ps(xs)
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
@@ -379,22 +394,27 @@ ParamSet = R6Class("ParamSet",
         }
       })
 
+      # FIXME: here we only return the first error. that is a change. at least doc this
+      checkresult = .Call("c_paramset_domain_check", self, xs, FALSE);
+      if (!is.null(checkresult))
+        return(checkresult)
 
-      # check each parameter group's feasibility
-      xs_nontune = discard(xs, inherits, "TuneToken")
+      ## check each parameter group's feasibility
+      #xs_nontune = discard(xs, inherits, "TuneToken")
 
-      # need to make sure we index w/ empty character instead of NULL
-      params = params[names(xs_nontune) %??% character(0), on = "id"]
+      ## need to make sure we index w/ empty character instead of NULL
+      ##FIXME: bad
+      #params = params[names(xs_nontune) %??% character(0), on = "id"]
 
-      set(params, , "values", list(xs_nontune))
-      pgroups = split(params, by = c("cls", "grouping"))
-      checkresults = map(pgroups, function(x) {
-        domain_check(set_class(x, c(x$cls[[1]], "Domain", class(x))), x$values)
-      })
-      checkresults = discard(checkresults, isTRUE)
-      if (length(checkresults)) {
-        return(str_collapse(checkresults, sep = "\n"))
-      }
+      #set(params, , "values", list(xs_nontune))
+      #pgroups = split(params, by = c("cls", "grouping"))
+      #checkresults = map(pgroups, function(x) {
+      #  domain_check(set_class(x, c(x$cls[[1]], "Domain", class(x))), x$values)
+      #})
+      #checkresults = discard(checkresults, isTRUE)
+      #if (length(checkresults)) {
+      #  return(str_collapse(checkresults, sep = "\n"))
+      #}
 
       if (check_strict) {
         ## required = setdiff(self$ids(tags = "required"), ns)
@@ -667,12 +687,13 @@ ParamSet = R6Class("ParamSet",
         stopf("A param cannot depend on itself!")
       }
 
-      if (on %in% ids) {  # not necessarily true when allow_dangling_dependencies
-        feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_domain(on), list(x)))
-        if (any(!feasible_on_values)) {
-          stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
-        }
-      }
+      # FIXME: i deactivated this
+      # if (on %in% ids) {  # not necessarily true when allow_dangling_dependencies
+        # feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_domain(on), list(x)))
+        # if (any(!feasible_on_values)) {
+          # stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
+        # }
+      # }
       private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
       invisible(self)
     },
@@ -736,17 +757,22 @@ ParamSet = R6Class("ParamSet",
       }
       if (length(xs) == 0L) {
         xs = named_list()
+      # } else if (FALSE) {
       } else if (self$assert_values) {  # this only makes sense when we have asserts on
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
+        # FIXME: this is called from set_values!!!!
         nontt = discard(xs, inherits, "TuneToken")
         values = special_vals = NULL  # static checks
+        # FIXME: it is not great that this has no comment.
+        # i also dont understand it :(
         sanitized = set(private$.params[names(nontt), on = "id"], , "values", list(nontt))[
           !pmap_lgl(list(special_vals, values), has_element),
           .(id, values = domain_sanitize(recover_domain(.SD, .BY), values)), by = c("cls", "grouping")]
         xs = insert_named(xs, with(sanitized, set_names(values, id)))
       }
       # store with param ordering, return value with original ordering
+      # FIXME: is this relevant that we return in order?
       private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
       xs
     },
