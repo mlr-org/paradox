@@ -147,7 +147,7 @@ verify_trusted_inputs() {
     environment/runtime-matrix-pre46-exclusions.tsv
     environment/runtime-matrix-whole-file-skips.tsv
     environment/runtime-matrix-result-skips.tsv
-    environment/runtime-r-${version}-linux-64.lock
+    "environment/runtime-r-${version}-linux-64.lock"
   )
   for relative in "${trusted_inputs[@]}"; do
     [[ -f "$inputs/$relative" && ! -L "$inputs/$relative" ]] ||

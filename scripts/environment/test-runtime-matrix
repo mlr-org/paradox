@@ -100,7 +100,7 @@ awk -F '\t' '
   {count[$1]++}
   END {if (NR != 14 || count["4.3.3"] != 6 || count["4.5.2"] != 7) exit 1}
 ' "$result_skips"
-while IFS=$'\t' read -r runtime test_name test_title reason; do
+while IFS=$'\t' read -r runtime test_name _; do
   [[ "$runtime" == runtime ]] && continue
   [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
     echo "Runtime result skip names an absent or symbolic test: $test_name" >&2

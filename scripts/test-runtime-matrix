@@ -223,7 +223,7 @@ for version in "${versions[@]}"; do
 
   (
     cd "$ROOT"
-    # shellcheck disable=SC1090
+    # shellcheck disable=SC1091
     . "$ROOT/scripts/activate-runtime-matrix" "$version"
     export R_LIBS_USER="$library"
     export R_LIBS_SITE=
