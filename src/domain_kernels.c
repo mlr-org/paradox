@@ -268,6 +268,9 @@ typedef struct {
 
 static void snapshot_numeric_column(SEXP column, R_xlen_t size,
     const char *column_name, double *snapshot) {
+  if (snapshot == NULL) {
+    Rf_error("Unable to allocate temporary native workspace");
+  }
   /* Validate the canonical column without retaining its raw view.  Element
    * access through the public API then copies it into callback-independent
    * native storage before any public value is observed. */
@@ -298,6 +301,9 @@ static numeric_domain_snapshot_t snapshot_numeric_domain(
     allocation_size,
     column_count * sizeof(*storage)
   );
+  if (storage == NULL) {
+    Rf_error("Unable to allocate temporary native workspace");
+  }
   double *lower_snapshot = storage;
   double *upper_snapshot = storage + allocation_size;
   double *tolerance_snapshot = tolerance == R_NilValue
