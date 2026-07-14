@@ -31,30 +31,30 @@ check <- function(value, message) {
 # binding inspection and continues through the compatible R implementation.
 left <- ps(
   width = p_dbl(lower = 0, upper = 4, default = 1,
-    tags = c("required", "numeric"), trafo = function(x) x * 2),
+    tags = "numeric", trafo = function(x) x * 2),
   count = p_int(lower = 1, upper = 5, default = 2),
   mode = p_fct(levels = c("a", "b"), default = "a")
 )
-check(identical(left$ids(), c("count", "mode", "width")), "ids facade failed")
+check(identical(left$ids(), c("width", "count", "mode")), "ids facade failed")
 check(inherits(left$params, "data.table") && nrow(left$params) == 3L,
   "params facade failed")
 check(length(left$domains) == 3L && inherits(left$domains$width, "Domain"),
   "domains facade failed")
 left$values <- list(width = 1.5, count = 3L, mode = "b")
-check(identical(left$get_values(), list(count = 3L, mode = "b", width = 1.5)),
+check(identical(left$get_values(), list(width = 1.5, count = 3L, mode = "b")),
   "get_values facade failed")
 check(left$check(left$values), "check facade failed")
 check(identical(left$trafo(left$values)$width, 3), "closure facade failed")
 check(length(left$qunif(c(0, 0.5, 1))) == 3L, "qunif facade failed")
 
 subset <- left$clone(deep = TRUE)$subset(c("width", "mode"))
-check(identical(subset$ids(), c("mode", "width")), "subset facade failed")
+check(identical(subset$ids(), c("width", "mode")), "subset facade failed")
 right <- ps(flag = p_lgl(default = TRUE), depth = p_int(0, 3, default = 1))
 right$values <- list(flag = FALSE, depth = 2L)
 collection <- ParamSetCollection$new(list(left = left, right = right))
 check(identical(
   collection$ids(),
-  c("left.count", "left.mode", "left.width", "right.depth", "right.flag")
+  c("left.width", "left.count", "left.mode", "right.flag", "right.depth")
 ), "collection ids facade failed")
 check(nrow(collection$params) == 5L && inherits(collection$params, "data.table"),
   "collection params facade failed")
