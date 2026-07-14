@@ -35,6 +35,15 @@ if (length(run_id) != 1L ||
     run_id %in% c(".", "..")) {
   stop("--run-id must be a safe name of at most 128 characters", call. = FALSE)
 }
+candidate_run_id <- Sys.getenv("PARADOX_CANDIDATE_RUN_ID", unset = "")
+if (!grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", candidate_run_id) ||
+    candidate_run_id %in% c(".", "..") ||
+    !identical(candidate_run_id, run_id)) {
+  stop(
+    "PARADOX_CANDIDATE_RUN_ID must equal the repository evidence --run-id",
+    call. = FALSE
+  )
+}
 root <- if (length(positionals) >= 1L) {
   normalizePath(positionals[[1L]], winslash = "/", mustWork = TRUE)
 } else {
@@ -126,6 +135,14 @@ run_directory <- normalizePath(run_directory, winslash = "/", mustWork = TRUE)
 if (!identical(dirname(run_directory), runs_root)) {
   stop("run directory escaped .local/compat/runs", call. = FALSE)
 }
+expected_candidate_library <- file.path(run_directory, "library-candidate")
+if (!identical(candidate_library, expected_candidate_library)) {
+  stop(
+    "candidate library does not belong to PARADOX_CANDIDATE_RUN_ID: ",
+    expected_candidate_library,
+    call. = FALSE
+  )
+}
 stage_name <- sprintf("repository-tests-priority-%d", max_priority)
 stage_directory <- file.path(run_directory, stage_name)
 if (file.exists(stage_directory) || dir.exists(stage_directory) ||
@@ -200,7 +217,10 @@ require_regular_provenance_file <- function(path, label) {
 
 validate_candidate_provenance <- function(
   root,
+  candidate_run_id,
   candidate_library,
+  dependency_library,
+  dependency_library_content_sha256,
   candidate_ref,
   candidate_commit,
   candidate_tree,
@@ -220,9 +240,11 @@ validate_candidate_provenance <- function(
 
   provenance_lines <- readLines(provenance_path, warn = FALSE)
   expected_keys <- c(
-    "schema", "candidate_ref", "candidate_commit", "candidate_tree",
-    "candidate_version", "source_archive_sha256",
-    "candidate_content_sha256", "installer_sha256"
+    "schema", "candidate_run_id", "candidate_ref", "candidate_commit",
+    "candidate_tree", "candidate_version", "candidate_library",
+    "dependency_library", "dependency_library_content_sha256",
+    "source_archive_sha256", "candidate_content_sha256", "installer_sha256",
+    "git_authenticator_sha256"
   )
   if (length(provenance_lines) != length(expected_keys) + 1L ||
       !identical(provenance_lines[[1L]], "key\tvalue")) {
@@ -238,7 +260,7 @@ validate_candidate_provenance <- function(
     stop("candidate provenance receipt keys, order, or values are invalid", call. = FALSE)
   }
   names(values) <- keys
-  if (!identical(values[["schema"]], "1")) {
+  if (!identical(values[["schema"]], "2")) {
     stop("candidate provenance receipt schema is unsupported", call. = FALSE)
   }
 
@@ -253,10 +275,14 @@ validate_candidate_provenance <- function(
   }
 
   declared_values <- c(
+    candidate_run_id = candidate_run_id,
     candidate_ref = candidate_ref,
     candidate_commit = candidate_commit,
     candidate_tree = candidate_tree,
     candidate_version = candidate_version,
+    candidate_library = candidate_library,
+    dependency_library = dependency_library,
+    dependency_library_content_sha256 = dependency_library_content_sha256,
     candidate_content_sha256 = candidate_content_sha256
   )
   if (!identical(unname(values[names(declared_values)]), unname(declared_values))) {
@@ -266,7 +292,8 @@ validate_candidate_provenance <- function(
     )
   }
   if (!grepl("^[0-9a-f]{64}$", values[["source_archive_sha256"]]) ||
-      !grepl("^[0-9a-f]{64}$", values[["installer_sha256"]])) {
+      !grepl("^[0-9a-f]{64}$", values[["installer_sha256"]]) ||
+      !grepl("^[0-9a-f]{64}$", values[["git_authenticator_sha256"]])) {
     stop("candidate provenance receipt contains a malformed SHA-256", call. = FALSE)
   }
 
@@ -276,6 +303,19 @@ validate_candidate_provenance <- function(
   if (!identical(values[["installer_sha256"]], installer_sha256)) {
     stop("candidate provenance receipt was written by a different installer", call. = FALSE)
   }
+  git_authenticator_path <- file.path(root, "compat", "authenticate-candidate-git")
+  require_regular_provenance_file(
+    git_authenticator_path, "candidate Git authenticator"
+  )
+  git_authenticator_sha256 <- unname(tools::sha256sum(git_authenticator_path))
+  if (!identical(
+      values[["git_authenticator_sha256"]], git_authenticator_sha256
+    )) {
+    stop(
+      "candidate provenance receipt names a different Git authenticator",
+      call. = FALSE
+    )
+  }
 
   archive_path <- tempfile("paradox-candidate-provenance-", fileext = ".tar")
   error_path <- tempfile("paradox-candidate-provenance-git-")
@@ -283,8 +323,16 @@ validate_candidate_provenance <- function(
   archive_status <- suppressWarnings(system2(
     "git",
     c(
-      "-C", shQuote(root), "archive", "--format=tar", "-o",
+      "--no-replace-objects", "-c", "core.attributesFile=/dev/null",
+      "-c", "tar.umask=0002",
+      "-C", shQuote(root),
+      "archive", "--format=tar", "-o",
       shQuote(archive_path), shQuote(candidate_commit)
+    ),
+    env = c(
+      "GIT_ATTR_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+      "GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+      "GIT_NO_REPLACE_OBJECTS=1"
     ),
     stdout = FALSE,
     stderr = error_path
@@ -308,7 +356,8 @@ validate_candidate_provenance <- function(
     seal_path = seal_path,
     receipt_sha256 = provenance_sha256,
     source_archive_sha256 = archive_sha256,
-    installer_sha256 = installer_sha256
+    installer_sha256 = installer_sha256,
+    git_authenticator_sha256 = git_authenticator_sha256
   )
 }
 
@@ -334,12 +383,42 @@ dependency_harness_path <- file.path(
 )
 evidence_helper_path <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_path <- file.path(root, "compat", "verify-repository-evidence.R")
+git_authenticator_path <- file.path(root, "compat", "authenticate-candidate-git")
 compat_system_evidence_path <- file.path(
   root, "compat", "compat-system-evidence.R"
 )
 sys.source(fingerprint_path, envir = environment())
 sys.source(evidence_helper_path, envir = environment())
 sys.source(compat_system_evidence_path, envir = environment())
+require_regular_provenance_file(
+  git_authenticator_path, "candidate Git authenticator"
+)
+if (file.access(git_authenticator_path, mode = 1L) != 0L) {
+  stop("candidate Git authenticator is not executable", call. = FALSE)
+}
+
+authenticate_candidate_git <- function() {
+  output <- suppressWarnings(system2(
+    git_authenticator_path,
+    vapply(
+      c(root, candidate_ref, candidate_commit, candidate_tree),
+      shQuote,
+      character(1L)
+    ),
+    stdout = TRUE,
+    stderr = TRUE
+  ))
+  status <- as.integer(attr(output, "status") %||% 0L)
+  if (!identical(status, 0L) ||
+      !identical(output, "candidate_git_authentication=passed")) {
+    stop(
+      "candidate Git authentication failed",
+      if (length(output)) paste0(": ", paste(output, collapse = "\n")) else "",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
 extra_library_content_sha256 <- if (length(extra_libraries)) {
   vapply(extra_libraries, compat_tree_content_sha256, character(1L))
 } else {
@@ -368,6 +447,25 @@ declared_candidate_content_sha256 <- Sys.getenv(
   unset = ""
 )
 fingerprint_file <- file.path(candidate_library, ".paradox-candidate-content-sha256")
+require_regular_provenance_file(
+  fingerprint_file, "candidate content fingerprint sentinel"
+)
+expected_candidate_entries <- sort(c(
+  ".paradox-candidate-content-sha256",
+  ".paradox-candidate-provenance.sha256",
+  ".paradox-candidate-provenance.tsv",
+  "paradox"
+))
+observed_candidate_entries <- sort(list.files(
+  candidate_library, all.files = TRUE, no.. = TRUE
+))
+if (!identical(observed_candidate_entries, expected_candidate_entries)) {
+  stop(
+    "candidate library has an unexpected top-level inventory: ",
+    paste(observed_candidate_entries, collapse = ", "),
+    call. = FALSE
+  )
+}
 if (!nzchar(declared_candidate_content_sha256) && file.exists(fingerprint_file)) {
   declared_candidate_content_sha256 <- trimws(readLines(fingerprint_file, n = 1L, warn = FALSE))
 }
@@ -403,6 +501,7 @@ if (!grepl(object_hash_pattern, candidate_tree)) {
 }
 
 candidate_source_state <- function() {
+  authenticate_candidate_git()
   list(
     ref_commit = single_git_value(
       root,
@@ -434,7 +533,12 @@ if (!candidate_source_matches(initial_candidate_source)) {
 }
 candidate_provenance <- validate_candidate_provenance(
   root = root,
+  candidate_run_id = candidate_run_id,
   candidate_library = candidate_library,
+  dependency_library = dependency_library,
+  dependency_library_content_sha256 = compat_tree_content_sha256(
+    dependency_library
+  ),
   candidate_ref = candidate_ref,
   candidate_commit = candidate_commit,
   candidate_tree = candidate_tree,
@@ -889,6 +993,7 @@ if (plan_only) {
     commit = selected_snapshot$commit,
     checkout = vapply(initial_checkout_states, `[[`, character(1L), "checkout"),
     clean = vapply(initial_checkout_states, `[[`, logical(1L), "clean"),
+    candidate_run_id = candidate_run_id,
     candidate_ref = candidate_ref,
     candidate_commit = candidate_commit,
     candidate_tree = candidate_tree,
@@ -896,6 +1001,8 @@ if (plan_only) {
     candidate_provenance_sha256 = candidate_provenance$receipt_sha256,
     candidate_source_archive_sha256 = candidate_provenance$source_archive_sha256,
     candidate_installer_sha256 = candidate_provenance$installer_sha256,
+    candidate_git_authenticator_sha256 =
+      candidate_provenance$git_authenticator_sha256,
     candidate_library_content_sha256 = candidate_library_content_sha256,
     dependency_library_content_sha256 = dependency_library_content_sha256,
     dependency_stage = dependency_stage_directory,
@@ -927,7 +1034,7 @@ metadata_inputs <- c(
   manifest_path, snapshot_path, fingerprint_path, harness_path,
   evidence_helper_path, evidence_verifier_path, compat_system_evidence_path,
   candidate_provenance$path, candidate_provenance$seal_path,
-  file.path(root, "compat", "install-candidate")
+  file.path(root, "compat", "install-candidate"), git_authenticator_path
 )
 copied_metadata <- file.copy(
   metadata_inputs,
@@ -940,7 +1047,8 @@ compat_system_evidence <- compat_system_capture_evidence(root, metadata_director
 run_metadata <- data.frame(
   field = c(
     "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
-    "candidate_ref", "candidate_commit", "candidate_tree", "candidate_version",
+    "candidate_run_id", "candidate_ref", "candidate_commit", "candidate_tree",
+    "candidate_version",
     "candidate_library", "candidate_package", "candidate_content_sha256",
     "candidate_library_content_sha256", "dependency_library",
     "dependency_library_content_sha256", "extra_libraries",
@@ -948,6 +1056,7 @@ run_metadata <- data.frame(
     "github_manifest_sha256", "github_snapshot_sha256", "harness_sha256",
     "fingerprint_sha256", "candidate_provenance_sha256",
     "candidate_source_archive_sha256", "candidate_installer_sha256",
+    "candidate_git_authenticator_sha256",
     "evidence_helper_sha256", "evidence_verifier_sha256",
     "dependency_stage", "dependency_stage_manifest_sha256",
     "dependency_stage_seal_sha256", "dependency_stage_run_sha256",
@@ -955,8 +1064,8 @@ run_metadata <- data.frame(
     "result_ledger"
   ),
   value = c(
-    "2", "repository_tests", run_id, started_utc, root,
-    as.character(max_priority), candidate_ref,
+    "3", "repository_tests", run_id, started_utc, root,
+    as.character(max_priority), candidate_run_id, candidate_ref,
     candidate_commit, candidate_tree, candidate_version, candidate_library,
     candidate_package, candidate_content_sha256, candidate_library_content_sha256,
     dependency_library, dependency_library_content_sha256,
@@ -974,6 +1083,7 @@ run_metadata <- data.frame(
     candidate_provenance$receipt_sha256,
     candidate_provenance$source_archive_sha256,
     candidate_provenance$installer_sha256,
+    candidate_provenance$git_authenticator_sha256,
     unname(tools::sha256sum(evidence_helper_path)),
     unname(tools::sha256sum(evidence_verifier_path)),
     dependency_stage_directory, dependency_evidence$manifest_sha256,

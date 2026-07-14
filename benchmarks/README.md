@@ -97,7 +97,7 @@ per installation:
 benchmarks/release \
   --baseline-evidence .local/compat/differential/runs/DIFFERENTIAL_RUN \
   --candidate-library .local/compat/runs/CANDIDATE_RUN/library-candidate \
-  --dependency-library .local/compat/runs/CONSUMER_RUN/library-dependencies \
+  --dependency-library .local/compat/R/library-dependencies \
   --mies-library .local/compat/R/library-mies-diagnose \
   --output .local/benchmarks/release-YYYYMMDDTHHMMSSZ
 ```
@@ -105,7 +105,9 @@ benchmarks/release \
 The five `PARADOX_CANDIDATE_*` variables written for the immutable candidate
 workflow must still be exported: `RUN_ID`, `REF`, `COMMIT`, `TREE`, and
 `CONTENT_SHA256`. `--dependency-library` is repeatable and the first occurrence
-must provide `mlr3pipelines` for the focused worker. Use repeatable
+must be the canonical dependency library and content recorded when the
+candidate was installed, as well as provide `mlr3pipelines` for the focused
+worker. Use repeatable
 `--protected-library` arguments for any additional read-only libraries reachable
 by package loading. The focused legacy worker also names `.local/R/library`
 directly; the release gate therefore protects and fingerprints that library

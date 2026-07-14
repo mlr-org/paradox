@@ -304,12 +304,13 @@ if (any(release_unsafe_git_environment)) {
   )
 }
 
-release_run_capture <- function(command, arguments, label) {
+release_run_capture <- function(command, arguments, label, environment = character()) {
   stderr_file <- tempfile("paradox-release-stderr-")
   on.exit(unlink(stderr_file), add = TRUE)
   output <- suppressWarnings(system2(
     command,
     args = vapply(arguments, shQuote, character(1L)),
+    env = environment,
     stdout = TRUE,
     stderr = stderr_file
   ))
@@ -346,9 +347,13 @@ release_require_committed_files <- function(paths, label) {
     status <- suppressWarnings(system2(
       release_git,
       args = vapply(c(
-        "-C", release_root, "cat-file", "blob",
+        "--no-replace-objects", "-C", release_root, "cat-file", "blob",
         paste0(release_candidate_commit, ":", relative)
       ), shQuote, character(1L)),
+      env = c(
+        "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
+        "GIT_CONFIG_NOSYSTEM=1", "GIT_NO_REPLACE_OBJECTS=1"
+      ),
       stdout = blob,
       stderr = error
     ))
@@ -548,16 +553,35 @@ release_evidence_verifier <- file.path(
   release_root, "compat", "verify-repository-evidence.R"
 )
 release_installer <- file.path(release_root, "compat", "install-candidate")
+release_git_authenticator <- file.path(
+  release_root, "compat", "authenticate-candidate-git"
+)
 for (path in c(
   release_fingerprint_script, release_evidence_script,
-  release_evidence_verifier, release_installer
+  release_evidence_verifier, release_installer, release_git_authenticator
 )) {
   release_require_regular_file(path, "release helper")
 }
 release_require_committed_files(c(
   release_fingerprint_script, release_evidence_script,
-  release_evidence_verifier, release_installer
+  release_evidence_verifier, release_installer, release_git_authenticator
 ), "release helper")
+
+release_authenticate_candidate_git <- function() {
+  output <- release_run_capture(
+    release_git_authenticator,
+    c(
+      release_root, release_candidate_ref, release_candidate_commit,
+      release_candidate_tree
+    ),
+    "authenticating candidate Git state"
+  )
+  if (!identical(output, "candidate_git_authentication=passed")) {
+    release_fail("candidate Git authenticator returned an unexpected result")
+  }
+  invisible(TRUE)
+}
+release_authenticate_candidate_git()
 
 release_fingerprint_environment <- new.env(parent = baseenv())
 sys.source(release_fingerprint_script, envir = release_fingerprint_environment)
@@ -766,6 +790,7 @@ release_candidate_sentinel <- file.path(
 )
 
 release_authenticate_candidate <- function() {
+  release_authenticate_candidate_git()
   for (path in c(
     release_candidate_provenance, release_candidate_provenance_seal,
     release_candidate_sentinel
@@ -782,9 +807,11 @@ release_authenticate_candidate <- function() {
     stringsAsFactors = FALSE, check.names = FALSE
   )
   expected_keys <- c(
-    "schema", "candidate_ref", "candidate_commit", "candidate_tree",
-    "candidate_version", "source_archive_sha256", "candidate_content_sha256",
-    "installer_sha256"
+    "schema", "candidate_run_id", "candidate_ref", "candidate_commit",
+    "candidate_tree", "candidate_version", "candidate_library",
+    "dependency_library", "dependency_library_content_sha256",
+    "source_archive_sha256", "candidate_content_sha256", "installer_sha256",
+    "git_authenticator_sha256"
   )
   if (!identical(names(provenance), c("key", "value")) ||
       !identical(provenance$key, expected_keys) || anyNA(provenance$value) ||
@@ -798,15 +825,28 @@ release_authenticate_candidate <- function() {
     "  .paradox-candidate-provenance.tsv"
   )
   if (!identical(seal, expected_seal) ||
-      !identical(values[["schema"]], "1") ||
+      !identical(values[["schema"]], "2") ||
+      !identical(values[["candidate_run_id"]], release_candidate_run_id) ||
       !identical(values[["candidate_ref"]], release_candidate_ref) ||
       !identical(values[["candidate_commit"]], release_candidate_commit) ||
       !identical(values[["candidate_tree"]], release_candidate_tree) ||
+      !identical(values[["candidate_library"]], release_candidate_library) ||
+      !identical(
+        values[["dependency_library"]], release_dependency_libraries[[1L]]
+      ) ||
+      !identical(
+        values[["dependency_library_content_sha256"]],
+        release_tree_fingerprint(release_dependency_libraries[[1L]])
+      ) ||
       !identical(
         values[["candidate_content_sha256"]], release_candidate_content
       ) ||
       !identical(
         values[["installer_sha256"]], unname(tools::sha256sum(release_installer))
+      ) ||
+      !identical(
+        values[["git_authenticator_sha256"]],
+        unname(tools::sha256sum(release_git_authenticator))
       ) ||
       !grepl("^[0-9a-f]{64}$", values[["source_archive_sha256"]])) {
     release_fail("candidate provenance is unsealed or differs from current inputs")
@@ -818,6 +858,21 @@ release_authenticate_candidate <- function() {
   )
   if (!identical(dirname(candidate_package), release_candidate_library)) {
     release_fail("paradox did not resolve directly from the candidate library")
+  }
+  expected_entries <- sort(c(
+    ".paradox-candidate-content-sha256",
+    ".paradox-candidate-provenance.sha256",
+    ".paradox-candidate-provenance.tsv",
+    "paradox"
+  ))
+  observed_entries <- sort(list.files(
+    release_candidate_library, all.files = TRUE, no.. = TRUE
+  ))
+  if (!identical(observed_entries, expected_entries)) {
+    release_fail(
+      "candidate library has an unexpected top-level inventory: ",
+      paste(observed_entries, collapse = ", ")
+    )
   }
   package_content <- release_tree_fingerprint(candidate_package)
   package_version <- as.character(utils::packageVersion(
@@ -853,10 +908,17 @@ release_authenticate_candidate <- function() {
   invisible(release_run_capture(
     release_git,
     c(
-      "-C", release_root, "archive", "--format=tar", "-o", archive,
-      release_candidate_commit
+      "--no-replace-objects", "-c", "core.attributesFile=/dev/null",
+      "-c", "tar.umask=0002",
+      "-C", release_root, "archive",
+      "--format=tar", "-o", archive, release_candidate_commit
     ),
-    "reproducing the candidate source archive"
+    "reproducing the candidate source archive",
+    environment = c(
+      "GIT_ATTR_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+      "GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+      "GIT_NO_REPLACE_OBJECTS=1"
+    )
   ))
   if (!file.exists(archive) ||
       !identical(
@@ -912,7 +974,8 @@ release_helper_inputs <- c(
   fingerprint = release_fingerprint_script,
   evidence = release_evidence_script,
   evidence_verifier = release_evidence_verifier,
-  candidate_installer = release_installer
+  candidate_installer = release_installer,
+  candidate_git_authenticator = release_git_authenticator
 )
 invisible(lapply(
   release_helper_inputs, release_require_regular_file,

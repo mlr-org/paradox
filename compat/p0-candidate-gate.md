@@ -271,6 +271,9 @@ candidate_ref=NEW_FULL_REF
 git check-ref-format "$candidate_ref"
 candidate_commit="$(git rev-parse --verify "$candidate_ref^{commit}")"
 candidate_tree="$(git rev-parse --verify "$candidate_ref^{tree}")"
+test "$(git rev-parse --verify 'HEAD^{commit}')" = "$candidate_commit"
+test "$(git rev-parse --verify 'HEAD^{tree}')" = "$candidate_tree"
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
 candidate_short="$(git rev-parse --short=12 "$candidate_commit")"
 candidate_source="$PARADOX_ROOT/.local/compat/candidate-snapshots/$candidate_commit"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$candidate_short"
@@ -321,9 +324,13 @@ Rscript compat/test-repositories.R "$PARADOX_ROOT" 0 \
 sentinel plus the ordered provenance receipt and its seal. The ref, commit, and
 tree are deliberately exported before installation; the portable content hash
 is read from the sentinel only after installation. The hardened harness
-authenticates those values, the current installer, and a reproduced Git archive
+authenticates those values, the candidate installation run and canonical
+candidate/dependency paths, the dependency-library content, the current
+installer and Git-state helper, and a reproduced Git archive
 before testing, and checks candidate and dependency contents around every
-repository. Before making a release-gate claim, also verify that the baseline
+repository. It also requires a clean primary checkout at the candidate HEAD and
+rejects Git replacements, grafts, and inherited object/config overrides. Before
+making a release-gate claim, also verify that the baseline
 and mlr3verse-overlay fingerprints remain unchanged and review every non-pass
 row rather than merely the process exit status.
 The dependency-install and checkout-test ledgers for this rerun are retained at

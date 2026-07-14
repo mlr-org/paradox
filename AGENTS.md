@@ -425,8 +425,17 @@ and tree are exported, and only into the absent run-specific library reserved
 beside the dependency-preparation stage. The authoritative command shape and
 portable content-sentinel handling are in
 `compat/README.md`; `compat/install-candidate` takes candidate library,
-dependency library, and source worktree in that order. That same authenticated
-candidate is then used for:
+dependency library, and source worktree in that order. Installation and every
+consumer release gate require the primary checkout to be clean with HEAD, the
+full ref, commit, and tree all identifying the candidate; replacement refs,
+grafts, alternate object stores, external archive attributes, hidden index
+flags, and inherited repository-altering `GIT_*` inputs are forbidden. The
+sealed schema-2 receipt binds `PARADOX_CANDIDATE_RUN_ID`, both canonical library
+paths, the dependency-library content hash, and the exact installer and Git
+authenticator. Repository checks reuse that candidate run ID because their
+dependency stage is its sibling; reverse-dependency and documentation checks
+use new evidence run IDs while retaining the original candidate run ID in the
+environment. That same authenticated candidate is then used for:
 
 - `compat/install-reverse-dependency-dependencies.R`, with named root,
   priority, dependency-library, and unique run-ID options; its successful

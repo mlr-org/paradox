@@ -147,6 +147,9 @@ candidate_ref=refs/paradox-compat/release-candidate
 git check-ref-format "$candidate_ref"
 candidate_commit="$(git rev-parse --verify "$candidate_ref^{commit}")"
 candidate_tree="$(git rev-parse --verify "$candidate_ref^{tree}")"
+test "$(git rev-parse --verify 'HEAD^{commit}')" = "$candidate_commit"
+test "$(git rev-parse --verify 'HEAD^{tree}')" = "$candidate_tree"
+test -z "$(git status --porcelain=v1 --untracked-files=all)"
 candidate_short="$(git rev-parse --short=12 "$candidate_commit")"
 run_id="$(date -u +%Y%m%dT%H%M%SZ)-$candidate_short"
 candidate_source="$PARADOX_ROOT/.local/compat/candidate-snapshots/$candidate_commit"
@@ -197,7 +200,16 @@ the portable package-content sentinel shown above, an ordered provenance
 receipt, and its SHA-256 seal beside the candidate library. The sentinel is the
 package-tree content hash produced by `compat/fingerprint.R`; it is not a GNU `find`/mtime
 fingerprint. The installer verifies the exact local R home and proves the
-dependency-library content hash unchanged across installation. Every
+dependency-library content hash unchanged across installation. Receipt schema
+2 binds the candidate run ID, canonical candidate and dependency-library
+paths, dependency-library content, installer, and shared Git authenticator in
+addition to the source and installed package identities. The dedicated
+candidate library may contain only the package, sentinel, receipt, and seal.
+Installation and every release gate require the primary checkout to be clean
+at the candidate commit and tree, reject replacement refs, grafts, alternate
+object stores, external archive attributes, and hidden index flags, disable
+filesystem-monitor/untracked-cache shortcuts, and reject inherited
+repository-altering `GIT_*` variables. Every
 compatibility and documentation release gate authenticates
 the receipt against the full ref, commit, tree, installed version, content
 hash, current installer, and a freshly reproduced source archive.
@@ -285,8 +297,10 @@ is installed into a run-specific library, which is first on every isolated
 consumer test process's library path. The installer writes an ordered
 provenance receipt and SHA-256 seal beside that library. Both files must be
 regular, non-symbolic files. The harness requires their exact schema, checks
-the receipt against the full candidate ref, commit, tree, installed version,
-and installed package-content hash, authenticates the current installer, and
+the receipt against the candidate installation run, canonical candidate and
+dependency paths, dependency content, full candidate ref, commit, tree,
+installed version, and installed package-content hash, authenticates the
+current installer and Git-state helper, and
 reproduces the source tar byte-for-byte with `git archive`. It then verifies
 every selected checkout against
 `github-snapshot.tsv`, including its origin, commit, and clean worktree; and
@@ -314,6 +328,7 @@ to
 `.local/compat/runs/<run-id>/repository-tests-priority-<N>/test-results-priority-<N>.tsv`.
 The sibling `metadata/` directory retains the exact manifests, harness,
 fingerprint implementation, candidate provenance receipt and seal, installer,
+Git-state authenticator,
 ordered run metadata, and completion hashes. A deterministic manifest covers
 every regular file in the completed stage, and `metadata/completion.seal`
 authenticates that manifest. Verify either dependency or test evidence with:

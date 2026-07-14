@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  printf '%s\n' "authenticate-candidate-git: $*" >&2
+  exit 2
+}
+
+[[ $# -eq 4 || $# -eq 5 ]] ||
+  fail "usage: authenticate-candidate-git ROOT REF COMMIT TREE [SOURCE]"
+
+ROOT_INPUT=$1
+CANDIDATE_REF=$2
+CANDIDATE_COMMIT=$3
+CANDIDATE_TREE=$4
+CANDIDATE_SOURCE=${5:-}
+
+case "$ROOT_INPUT$CANDIDATE_REF$CANDIDATE_COMMIT$CANDIDATE_TREE$CANDIDATE_SOURCE" in
+  *$'\n'*|*$'\r'*|*$'\t'*) fail "arguments must not contain control characters" ;;
+esac
+
+while IFS= read -r name; do
+  case "$name" in
+    GIT_PAGER) ;;
+    GIT_*)
+      [[ -z ${!name} ]] ||
+        fail "repository-altering Git environment is forbidden: $name"
+      ;;
+  esac
+done < <(compgen -e)
+
+[[ -d "$ROOT_INPUT" && ! -L "$ROOT_INPUT" ]] ||
+  fail "repository root is absent, not a directory, or symbolic"
+ROOT=$(cd "$ROOT_INPUT" && pwd -P)
+[[ "$ROOT_INPUT" == "$ROOT" ]] || fail "repository root must be canonical"
+
+GIT=$(command -v git)
+[[ "$GIT" == "$ROOT/.local/toolchain/bin/git" ]] ||
+  fail "git is not the exact activated repository-local executable"
+git_safe() {
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    "$GIT" --no-replace-objects \
+    -c core.fsmonitor=false -c core.untrackedCache=false "$@"
+}
+[[ -d "$ROOT/.git" && ! -L "$ROOT/.git" ]] ||
+  fail "release evidence requires the plain primary Git directory"
+
+if [[ "$CANDIDATE_REF" != refs/* ]] ||
+    ! git_safe check-ref-format "$CANDIDATE_REF" >/dev/null 2>&1; then
+  fail "candidate ref must be one valid full refs/... name"
+fi
+[[ "$CANDIDATE_COMMIT" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "candidate commit must be one full lowercase SHA-1"
+[[ "$CANDIDATE_TREE" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "candidate tree must be one full lowercase SHA-1"
+
+TOPLEVEL=$(git_safe -C "$ROOT" rev-parse --show-toplevel 2>/dev/null) ||
+  fail "repository root is not a Git worktree"
+GIT_DIRECTORY=$(git_safe -C "$ROOT" rev-parse --absolute-git-dir 2>/dev/null) ||
+  fail "could not resolve the primary Git directory"
+TOPLEVEL=$(cd "$TOPLEVEL" && pwd -P)
+GIT_DIRECTORY=$(cd "$GIT_DIRECTORY" && pwd -P)
+[[ "$TOPLEVEL" == "$ROOT" && "$GIT_DIRECTORY" == "$ROOT/.git" ]] ||
+  fail "release evidence requires the repository's primary worktree"
+
+REPLACEMENTS=$(git_safe -C "$ROOT" for-each-ref \
+  --format='%(refname)' refs/replace) || fail "could not inspect replacement refs"
+[[ -z "$REPLACEMENTS" ]] || fail "Git replacement refs are forbidden"
+[[ ! -e "$ROOT/.git/info/grafts" && ! -L "$ROOT/.git/info/grafts" ]] ||
+  fail "Git grafts are forbidden"
+[[ ! -e "$ROOT/.git/info/attributes" && ! -L "$ROOT/.git/info/attributes" ]] ||
+  fail "Git info attributes are forbidden for reproducible archives"
+[[ ! -e "$ROOT/.git/objects/info/alternates" &&
+   ! -L "$ROOT/.git/objects/info/alternates" ]] ||
+  fail "Git alternate object stores are forbidden"
+
+audit_index_flags() {
+  local worktree=$1
+  local label=$2
+  local entries entry flag
+  entries=$(git_safe -C "$worktree" ls-files -v) ||
+    fail "could not inspect $label index flags"
+  while IFS= read -r entry; do
+    [[ -n "$entry" ]] || continue
+    flag=${entry:0:1}
+    case "$flag" in
+      [a-z]|S) fail "$label index hides tracked state with flag $flag" ;;
+    esac
+  done <<< "$entries"
+}
+audit_index_flags "$ROOT" "primary worktree"
+
+HEAD_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) ||
+  fail "could not resolve repository HEAD"
+HEAD_TREE=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
+  fail "could not resolve repository HEAD tree"
+REF_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
+  "$CANDIDATE_REF^{commit}" 2>/dev/null) || fail "candidate ref does not resolve"
+RESOLVED_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
+  "$CANDIDATE_COMMIT^{commit}" 2>/dev/null) || fail "candidate commit does not resolve"
+RESOLVED_TREE=$(git_safe -C "$ROOT" rev-parse --verify \
+  "$CANDIDATE_COMMIT^{tree}" 2>/dev/null) || fail "candidate tree does not resolve"
+STATUS=$(git_safe -C "$ROOT" status --porcelain=v1 --untracked-files=all) ||
+  fail "could not inspect repository cleanliness"
+[[ "$HEAD_COMMIT" == "$CANDIDATE_COMMIT" &&
+   "$HEAD_TREE" == "$CANDIDATE_TREE" &&
+   "$REF_COMMIT" == "$CANDIDATE_COMMIT" &&
+   "$RESOLVED_COMMIT" == "$CANDIDATE_COMMIT" &&
+   "$RESOLVED_TREE" == "$CANDIDATE_TREE" &&
+   -z "$STATUS" ]] ||
+  fail "root HEAD, ref, commit, tree, or cleanliness differs from the candidate"
+
+if [[ -n "$CANDIDATE_SOURCE" ]]; then
+  [[ -d "$CANDIDATE_SOURCE" && ! -L "$CANDIDATE_SOURCE" ]] ||
+    fail "candidate source is absent, not a directory, or symbolic"
+  SOURCE=$(cd "$CANDIDATE_SOURCE" && pwd -P)
+  [[ "$SOURCE" == "$CANDIDATE_SOURCE" ]] || fail "candidate source must be canonical"
+  SOURCE_TOPLEVEL=$(git_safe -C "$SOURCE" rev-parse --show-toplevel 2>/dev/null) ||
+    fail "candidate source is not a Git worktree"
+  SOURCE_TOPLEVEL=$(cd "$SOURCE_TOPLEVEL" && pwd -P)
+  [[ "$SOURCE_TOPLEVEL" == "$SOURCE" ]] ||
+    fail "candidate source must be its Git worktree root"
+  COMMON_DIRECTORY=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
+    --git-common-dir 2>/dev/null) || fail "could not resolve candidate common Git directory"
+  COMMON_DIRECTORY=$(cd "$COMMON_DIRECTORY" && pwd -P)
+  [[ "$COMMON_DIRECTORY" == "$ROOT/.git" ]] ||
+    fail "candidate source does not share the authenticated object store"
+  SOURCE_ALTERNATES=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
+    --git-path objects/info/alternates 2>/dev/null) ||
+    fail "could not resolve candidate source alternate-object path"
+  SOURCE_GRAFTS=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
+    --git-path info/grafts 2>/dev/null) ||
+    fail "could not resolve candidate source graft path"
+  SOURCE_ATTRIBUTES=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
+    --git-path info/attributes 2>/dev/null) ||
+    fail "could not resolve candidate source attribute path"
+  [[ ! -e "$SOURCE_ALTERNATES" && ! -L "$SOURCE_ALTERNATES" ]] ||
+    fail "candidate source uses an alternate object store"
+  [[ ! -e "$SOURCE_GRAFTS" && ! -L "$SOURCE_GRAFTS" ]] ||
+    fail "candidate source uses Git grafts"
+  [[ ! -e "$SOURCE_ATTRIBUTES" && ! -L "$SOURCE_ATTRIBUTES" ]] ||
+    fail "candidate source uses Git info attributes"
+  audit_index_flags "$SOURCE" "candidate source worktree"
+  SOURCE_HEAD=$(git_safe -C "$SOURCE" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) ||
+    fail "could not resolve candidate source HEAD"
+  SOURCE_TREE=$(git_safe -C "$SOURCE" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
+    fail "could not resolve candidate source tree"
+  SOURCE_STATUS=$(git_safe -C "$SOURCE" status --porcelain=v1 --untracked-files=all) ||
+    fail "could not inspect candidate source cleanliness"
+  [[ "$SOURCE_HEAD" == "$CANDIDATE_COMMIT" &&
+     "$SOURCE_TREE" == "$CANDIDATE_TREE" && -z "$SOURCE_STATUS" ]] ||
+    fail "candidate source HEAD, tree, or cleanliness differs from the candidate"
+fi
+
+printf '%s\n' "candidate_git_authentication=passed"

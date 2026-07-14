@@ -18,6 +18,7 @@ API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
 REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-preparation.R"
 SNAPSHOT_HELPER="$ROOT/scripts/environment/snapshot-worktree.R"
 COPY_SNAPSHOT_HELPER="$ROOT/scripts/environment/copy-check-snapshot.R"
+CANDIDATE_GIT_AUTHENTICATOR="$ROOT/compat/authenticate-candidate-git"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
 PACKAGE_MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
 mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
@@ -45,7 +46,8 @@ expect_failure() {
 [[ -x "$RSCRIPT" ]] || fail "local Rscript is missing"
 [[ -x "$SOURCE_VALIDATOR" && -x "$RECEIPT_HELPER" && \
     -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" && \
-    -x "$REVERSE_DEPENDENCY_PREP_TEST" ]] ||
+    -x "$REVERSE_DEPENDENCY_PREP_TEST" && \
+    -x "$CANDIDATE_GIT_AUTHENTICATOR" ]] ||
   fail "validation helpers are not executable"
 [[ -f "$SNAPSHOT_HELPER" && ! -L "$SNAPSHOT_HELPER" && \
     -f "$COPY_SNAPSHOT_HELPER" && ! -L "$COPY_SNAPSHOT_HELPER" ]] ||
@@ -97,6 +99,220 @@ cmp "$SNAPSHOT_METADATA/source-manifest.tsv" \
     -L "$SNAPSHOT_REPLAY/retained-link" && \
     ! -e "$SNAPSHOT_REPLAY/deleted.txt" ]] ||
   fail "snapshot replay did not preserve the deleted tracked path"
+
+# Frozen-candidate Git authentication rejects every state that can substitute
+# bytes for an exported object identity: a dirty root or source worktree, a
+# moved ref, a replacement ref, a graft, or inherited Git object/config input.
+CANDIDATE_FIXTURE="$TEST_ROOT/candidate git fixture"
+CANDIDATE_SOURCE_FIXTURE="$TEST_ROOT/candidate source fixture"
+mkdir -p "$CANDIDATE_FIXTURE/.local/toolchain/bin"
+ln "$TOOLCHAIN/bin/git" "$CANDIDATE_FIXTURE/.local/toolchain/bin/git"
+ln -s "$TOOLCHAIN/lib" "$CANDIDATE_FIXTURE/.local/toolchain/lib"
+CANDIDATE_GIT="$CANDIDATE_FIXTURE/.local/toolchain/bin/git"
+PATH="$CANDIDATE_FIXTURE/.local/toolchain/bin:$PATH" \
+  "$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" init -q
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config user.name 'Paradox fixture'
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config user.email \
+  'fixture@example.invalid'
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config commit.gpgsign false
+printf '%s\n' '.local/' > "$CANDIDATE_FIXTURE/.gitignore"
+printf '%s\n' canonical > "$CANDIDATE_FIXTURE/candidate.txt"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" add .gitignore candidate.txt
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" commit -q -m canonical
+CANDIDATE_COMMIT=$("$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" rev-parse HEAD)
+CANDIDATE_TREE=$("$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" rev-parse 'HEAD^{tree}')
+CANDIDATE_REF=refs/paradox-test/candidate
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" update-ref \
+  "$CANDIDATE_REF" "$CANDIDATE_COMMIT"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" worktree add -q --detach \
+  "$CANDIDATE_SOURCE_FIXTURE" "$CANDIDATE_COMMIT"
+CANDIDATE_AUTH_ENV=(env "PATH=$CANDIDATE_FIXTURE/.local/toolchain/bin:$PATH")
+"${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+  "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE" >/dev/null
+
+printf '%s\n' dirty > "$CANDIDATE_FIXTURE/untracked.txt"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+rm "$CANDIDATE_FIXTURE/untracked.txt"
+
+printf '%s\n' dirty > "$CANDIDATE_SOURCE_FIXTURE/untracked.txt"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+  "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE"
+rm "$CANDIDATE_SOURCE_FIXTURE/untracked.txt"
+
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" update-index \
+  --assume-unchanged candidate.txt
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" update-index \
+  --no-assume-unchanged candidate.txt
+
+"$CANDIDATE_GIT" -C "$CANDIDATE_SOURCE_FIXTURE" update-index \
+  --skip-worktree candidate.txt
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+  "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE"
+"$CANDIDATE_GIT" -C "$CANDIDATE_SOURCE_FIXTURE" update-index \
+  --no-skip-worktree candidate.txt
+
+printf '%s\n' "$CANDIDATE_FIXTURE/.git/objects" \
+  > "$CANDIDATE_FIXTURE/.git/objects/info/alternates"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+rm "$CANDIDATE_FIXTURE/.git/objects/info/alternates"
+
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config core.fsmonitor \
+  /definitely/absent/paradox-fsmonitor
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config core.untrackedCache true
+"${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+  "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE" >/dev/null
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config --unset core.fsmonitor
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config --unset core.untrackedCache
+grep -Fq 'core.fsmonitor=false' "$CANDIDATE_GIT_AUTHENTICATOR" ||
+  fail "candidate Git authentication does not disable filesystem monitors"
+grep -Fq 'core.untrackedCache=false' "$CANDIDATE_GIT_AUTHENTICATOR" ||
+  fail "candidate Git authentication does not disable the untracked cache"
+
+printf '%s\n' replacement > "$CANDIDATE_FIXTURE/candidate.txt"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" add candidate.txt
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" commit -q -m replacement
+REPLACEMENT_COMMIT=$("$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" rev-parse HEAD)
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" checkout -q --detach \
+  "$CANDIDATE_COMMIT"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" replace \
+  "$CANDIDATE_COMMIT" "$REPLACEMENT_COMMIT"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" archive --format=tar \
+  -o "$TEST_ROOT/unsafe-replacement.tar" "$CANDIDATE_COMMIT"
+GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+  "$CANDIDATE_GIT" --no-replace-objects -c tar.umask=0002 \
+  -C "$CANDIDATE_FIXTURE" archive --format=tar \
+  -o "$TEST_ROOT/safe-replacement.tar" "$CANDIDATE_COMMIT"
+[[ $(tar -xOf "$TEST_ROOT/unsafe-replacement.tar" candidate.txt) == replacement &&
+   $(tar -xOf "$TEST_ROOT/safe-replacement.tar" candidate.txt) == canonical ]] ||
+  fail "replacement-disabled archive did not preserve canonical candidate bytes"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" replace -d "$CANDIDATE_COMMIT" \
+  >/dev/null
+
+printf '%s\n' "$REPLACEMENT_COMMIT" > "$CANDIDATE_FIXTURE/.git/info/grafts"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+rm "$CANDIDATE_FIXTURE/.git/info/grafts"
+
+printf '%s\n' 'candidate.txt export-ignore' \
+  > "$CANDIDATE_FIXTURE/.git/info/attributes"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+rm "$CANDIDATE_FIXTURE/.git/info/attributes"
+
+mkdir -p "$TEST_ROOT/git-home/.config/git"
+printf '%s\n' 'candidate.txt export-ignore' \
+  > "$TEST_ROOT/git-home/.config/git/attributes"
+printf '%s\n' '[tar]' '  umask = 0777' > "$TEST_ROOT/git-home/.gitconfig"
+printf '%s\n' '[tar]' '  umask = 0777' > "$TEST_ROOT/git-system.config"
+GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+  "$CANDIDATE_GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+  -c tar.umask=0002 -C "$CANDIDATE_FIXTURE" archive --format=tar \
+  -o "$TEST_ROOT/baseline-canonical.tar" "$CANDIDATE_COMMIT"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" config tar.umask 0777
+HOME="$TEST_ROOT/git-home" GIT_CONFIG_SYSTEM="$TEST_ROOT/git-system.config" \
+  "$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" \
+  archive --format=tar -o "$TEST_ROOT/unsafe-attributes.tar" \
+  "$CANDIDATE_COMMIT"
+HOME="$TEST_ROOT/git-home" GIT_ATTR_NOSYSTEM=1 \
+  GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+  GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+  "$CANDIDATE_GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+  -c tar.umask=0002 \
+  -C "$CANDIDATE_FIXTURE" \
+  archive --format=tar -o "$TEST_ROOT/safe-attributes.tar" "$CANDIDATE_COMMIT"
+if tar -tf "$TEST_ROOT/unsafe-attributes.tar" | grep -qx candidate.txt; then
+  fail "global attributes fixture did not alter the ordinary Git archive"
+fi
+tar -tf "$TEST_ROOT/safe-attributes.tar" | grep -qx candidate.txt ||
+  fail "canonical Git archive did not disable global/system attributes"
+[[ $(sha256sum "$TEST_ROOT/baseline-canonical.tar" | cut -d ' ' -f 1) == \
+   $(sha256sum "$TEST_ROOT/safe-attributes.tar" | cut -d ' ' -f 1) ]] ||
+  fail "hostile Git configuration changed the canonical archive SHA-256"
+tar -tvf "$TEST_ROOT/baseline-canonical.tar" \
+  > "$TEST_ROOT/baseline-canonical.modes"
+tar -tvf "$TEST_ROOT/safe-attributes.tar" > "$TEST_ROOT/safe-attributes.modes"
+cmp "$TEST_ROOT/baseline-canonical.modes" \
+  "$TEST_ROOT/safe-attributes.modes" >/dev/null ||
+  fail "hostile Git configuration changed canonical archive modes"
+for archive_harness in \
+    "$ROOT/compat/install-candidate" \
+    "$ROOT/compat/test-repositories.R" \
+    "$ROOT/compat/test-reverse-dependencies.R" \
+    "$ROOT/compat/test-documentation" \
+    "$ROOT/benchmarks/release.R"; do
+  grep -Fq 'core.attributesFile=/dev/null' "$archive_harness" ||
+    fail "candidate archive does not disable global attributes: $archive_harness"
+  grep -Fq 'GIT_ATTR_NOSYSTEM' "$archive_harness" ||
+    fail "candidate archive does not disable system attributes: $archive_harness"
+  grep -Fq 'GIT_CONFIG_GLOBAL' "$archive_harness" ||
+    fail "candidate archive does not isolate global Git config: $archive_harness"
+  grep -Fq 'GIT_CONFIG_SYSTEM' "$archive_harness" ||
+    fail "candidate archive does not isolate system Git config: $archive_harness"
+  grep -Fq 'GIT_CONFIG_NOSYSTEM' "$archive_harness" ||
+    fail "candidate archive does not disable system Git config: $archive_harness"
+  grep -Fq 'tar.umask=0002' "$archive_harness" ||
+    fail "candidate archive does not pin its permission mask: $archive_harness"
+  grep -Fq 'GIT_NO_REPLACE_OBJECTS' "$archive_harness" ||
+    fail "candidate archive does not disable object replacement: $archive_harness"
+  grep -Fq -- '--no-replace-objects' "$archive_harness" ||
+    fail "candidate archive lacks Git's replacement-disable option: $archive_harness"
+done
+
+CANDIDATE_INSTALLER="$ROOT/compat/install-candidate"
+cleanup_trap_line=$(grep -nF 'trap cleanup EXIT' "$CANDIDATE_INSTALLER" |
+  cut -d: -f1)
+library_mkdir_line=$(grep -nF 'mkdir "$CANDIDATE_LIBRARY"' \
+  "$CANDIDATE_INSTALLER" | cut -d: -f1)
+library_owned_line=$(grep -nF 'CANDIDATE_LIBRARY_OWNED=true' \
+  "$CANDIDATE_INSTALLER" | cut -d: -f1)
+dependency_final_line=$(grep -nF \
+  'DEPENDENCY_CONTENT_FINAL=$(fingerprint_dependency_library)' \
+  "$CANDIDATE_INSTALLER" | cut -d: -f1)
+install_complete_line=$(grep -nF 'INSTALL_COMPLETE=true' \
+  "$CANDIDATE_INSTALLER" | cut -d: -f1)
+[[ -n "$cleanup_trap_line" && -n "$library_mkdir_line" &&
+   -n "$library_owned_line" && -n "$dependency_final_line" &&
+   -n "$install_complete_line" ]] ||
+  fail "candidate installer transaction ordering could not be inspected"
+((cleanup_trap_line < library_mkdir_line &&
+    library_mkdir_line < library_owned_line &&
+    library_owned_line < dependency_final_line &&
+    dependency_final_line < install_complete_line)) ||
+  fail "candidate installer disarms cleanup before completing its transaction"
+grep -Fq '"$CANDIDATE_LIBRARY" == "$EXPECTED_CANDIDATE_LIBRARY"' \
+  "$CANDIDATE_INSTALLER" ||
+  fail "candidate cleanup lacks its exact-path guard"
+grep -Fq '"${CANDIDATE_LIBRARY%/*}" == "$RUN_DIRECTORY"' \
+  "$CANDIDATE_INSTALLER" ||
+  fail "candidate cleanup lacks its exact-parent guard"
+
+expect_failure env \
+  "PATH=$CANDIDATE_FIXTURE/.local/toolchain/bin:$PATH" \
+  GIT_CONFIG_GLOBAL=/dev/null \
+  "$CANDIDATE_GIT_AUTHENTICATOR" "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" \
+  "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" update-ref \
+  "$CANDIDATE_REF" "$REPLACEMENT_COMMIT"
+expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" "$CANDIDATE_TREE"
+"$CANDIDATE_GIT" -C "$CANDIDATE_FIXTURE" update-ref \
+  "$CANDIDATE_REF" "$CANDIDATE_COMMIT"
+"${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
+  "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+  "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE" >/dev/null
 
 # Raw-token policy sees identifiers in inactive branches but ignores comments,
 # strings, and the documented APIs whose names contain ATTRIB.
