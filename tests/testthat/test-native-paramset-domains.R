@@ -886,6 +886,8 @@ test_that("native domains uses one cumulative interrupt budget", {
 })
 
 test_that("native ParamSet and collection domains survive forced collection", {
+  skip_on_cran()
+
   skip_if_not(native_domains_available())
   param_set = ps(
     x = p_dbl(-1, 1, tags = c("a", "b"), trafo = exp),
@@ -1217,6 +1219,8 @@ test_that("collection domains detects private-owner replacement after callbacks"
 })
 
 test_that("deep collection domains survives focused frame-growth gctorture", {
+  skip_on_cran()
+
   skip_if_not(native_domains_available())
   deep = ps(x = p_int(0L, 2L, init = 1L))
   for (depth in seq_len(18L)) {

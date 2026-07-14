@@ -743,6 +743,8 @@ test_that("aligned final matching preserves duplicate-name match semantics", {
 })
 
 test_that("final matching compacts removed duplicate names", {
+  skip_on_cran()
+
   skip_if_not(native_get_values_available())
   param_set = ps(
     a = p_int(init = 1L),
@@ -1083,6 +1085,8 @@ test_that("serialized and cloned exact objects remain native-admissible", {
 })
 
 test_that("native get_values survives forced collection and callbacks", {
+  skip_on_cran()
+
   skip_if_not(native_get_values_available())
   condition = native_get_values_condition(
     "NativeGetValuesGctortureCondition",

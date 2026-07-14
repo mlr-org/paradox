@@ -731,6 +731,8 @@ test_that("deep clone and serialization retain established value aliasing", {
 })
 
 test_that("values getters and setters survive gctorture", {
+  skip_on_cran()
+
   skip_if(
     identical(Sys.getenv("PARADOX_SKIP_CHARACTERIZATION_GCT"), "true"),
     "explicitly skipping the slow characterization gctorture case"

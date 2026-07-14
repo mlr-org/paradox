@@ -430,6 +430,8 @@ test_that("native collection constructor detaches names from finalizer mutation"
 })
 
 test_that("native collection constructor survives forced collection", {
+  skip_on_cran()
+
   skip_if_not(native_collection_constructor_available())
   left = ps(
     x = p_dbl(0, 1, tags = "numeric", trafo = sqrt),

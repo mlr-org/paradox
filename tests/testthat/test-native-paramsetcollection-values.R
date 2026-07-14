@@ -552,6 +552,8 @@ test_that("serialized and cloned exact values graphs remain admissible", {
 })
 
 test_that("native collection values survives forced collection", {
+  skip_on_cran()
+
   skip_if_not(native_collection_values_available())
   collection = ParamSetCollection$new(list(
     outer = native_collection_values_rich(TRUE),

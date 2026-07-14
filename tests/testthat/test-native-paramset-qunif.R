@@ -366,6 +366,8 @@ test_that("direct native qunif fails closed on corrupt ParamSet storage", {
 })
 
 test_that("bulk qunif remains rooted under adversarial collection", {
+  skip_on_cran()
+
   symbol = native_paramset_qunif_symbol()
   param_set = native_paramset_qunif_space()
   units = matrix(

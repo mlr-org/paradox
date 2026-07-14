@@ -277,6 +277,8 @@ test_that("surface authentication does not observe ALTREP active registries", {
 })
 
 test_that("surface authentication roots canonical closure graphs", {
+  skip_on_cran()
+
   symbol = surface_auth_symbol()
   param_set = ps(x = p_dbl(0, 1, trafo = identity))
   collection = ParamSetCollection$new(list(

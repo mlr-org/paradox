@@ -376,6 +376,8 @@ test_that("collection values admits only inert invalidated params indices", {
 })
 
 test_that("deep collection snapshots survive root and graph growth", {
+  skip_on_cran()
+
   marker = new.env(parent = emptyenv())
   marker$value = 42L
   leaves = lapply(seq_len(12L), function(index) {

@@ -1,4 +1,6 @@
 test_that("native ParamSet trafo planning survives forced collection", {
+  skip_on_cran()
+
   symbol = get(
     "C_param_set_trafo_plan",
     envir = asNamespace("paradox")

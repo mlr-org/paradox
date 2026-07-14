@@ -1,4 +1,5 @@
 skip_if_not_installed("reticulate")
+skip_on_cran()
 
 test_that("paramset_to_configspace works without defaults for new ConfigSpace", {
   param_set = ps(
@@ -102,4 +103,3 @@ test_that("multiple dependent children can coexist", {
   expect_setequal(children, c("c1", "c2"))
   expect_true(all(parents == c("parent", "parent")))
 })
-

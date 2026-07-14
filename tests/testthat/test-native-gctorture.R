@@ -1,4 +1,6 @@
 test_that("every allocating native entry point survives forced collection", {
+  skip_on_cran()
+
   namespace = asNamespace("paradox")
   symbols = mget(
     paste0("C_", c(

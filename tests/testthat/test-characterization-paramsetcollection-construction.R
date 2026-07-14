@@ -411,6 +411,8 @@ test_that("delayed extension storage is forced only by the R constructor", {
 })
 
 test_that("small rich construction survives forced collection", {
+  skip_on_cran()
+
   left = ps(
     x = p_dbl(0, 1, tags = "numeric", trafo = sqrt),
     y = p_int(0L, 3L)

@@ -188,6 +188,8 @@ test_that("storage authentication preserves unsupported extension rows", {
 })
 
 test_that("frame admission survives forced collection", {
+  skip_on_cran()
+
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
 

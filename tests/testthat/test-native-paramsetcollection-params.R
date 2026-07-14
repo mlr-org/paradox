@@ -383,6 +383,8 @@ test_that("invalid post-callback values fail once without R fallback replay", {
 })
 
 test_that("pre-callback snapshots survive private params rebinding during deps", {
+  skip_on_cran()
+
   skip_if_not(native_collection_params_available())
   child = ps(parent = p_int(init = 1L), target = p_lgl(init = TRUE))
   child$add_dep("target", "parent", CondEqual(1L))
@@ -578,6 +580,8 @@ test_that("serialized and cloned exact collections remain admissible", {
 })
 
 test_that("native collection params survives forced collection", {
+  skip_on_cran()
+
   skip_if_not(native_collection_params_available())
   collection = native_collection_rich()
   expected = native_collection_params_reference(collection)

@@ -767,6 +767,8 @@ test_that("random canonical ParamSets match the frozen R implementation", {
 })
 
 test_that("native params survives forced collection", {
+  skip_on_cran()
+
   skip_if_not(native_params_available())
   param_set = native_params_rich_set()
   private = param_set$.__enclos_env__$private

@@ -731,6 +731,8 @@ test_that("cycles error while deep graphs, clones, and serialization are safe", 
 })
 
 test_that("native collection deps survives focused gctorture", {
+  skip_on_cran()
+
   skip_if_not(native_collection_deps_available())
   child = native_collection_deps_child(c("a", "b", "c"), list(
     list("b", "a", 1L),

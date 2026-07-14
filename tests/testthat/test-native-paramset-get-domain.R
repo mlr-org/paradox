@@ -315,6 +315,8 @@ test_that("base get_domain authenticates values and deps without replay", {
 })
 
 test_that("collection extension callbacks cannot invalidate native snapshots", {
+  skip_on_cran()
+
   collection = NULL
   RebindingParamSet = R6::R6Class(
     "ParamSetGetDomainRebindingChild",
@@ -363,6 +365,8 @@ test_that("collection extension callbacks cannot invalidate native snapshots", {
 })
 
 test_that("collection callbacks expose live tag and trafo table rebindings", {
+  skip_on_cran()
+
   collection = NULL
   RebindingTablesParamSet = R6::R6Class(
     "ParamSetGetDomainRebindingTablesChild",
@@ -426,6 +430,8 @@ test_that("collection get_domain never replays admitted callbacks", {
 })
 
 test_that("collection domain batches retain rebound trafo callbacks across rows", {
+  skip_on_cran()
+
   collection = NULL
   state = new.env(parent = emptyenv())
   state$row = 0L

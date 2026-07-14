@@ -1,5 +1,6 @@
 skip_if_not_installed("callr")
 skip_if_not_installed("reticulate")
+skip_on_cran()
 
 
 test_that("paramset_to_configspace works without defaults with old ConfigSpace API", {
