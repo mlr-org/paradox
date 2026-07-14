@@ -401,7 +401,16 @@ benchmarks/release \
 
 The wrapper reauthenticates the frozen Git ref, candidate installation,
 differential evidence, complete dependency-library contents, workload
-inventory, and helper bytes before and after measurement. It retains raw
-samples, allocations, summaries, consumer comparisons, command environments,
-and provenance, then seals and verifies the complete output. Compact ratios
-are not sufficient on their own. Run this gate on an otherwise idle host.
+inventory, reviewed regression-policy inputs, and helper bytes before and after
+measurement. It retains raw samples, allocations, summaries, consumer
+comparisons, command environments, provenance, and one decision row for every
+registered workload and focused consumer operation. Missing policy coverage or
+any material regression leaves the stage failed and unsealed. The completion
+metadata binds the policy hashes and reports pass/marginal/fail counts and the
+worst timing and allocation ratios; inspect
+`metadata/regression-decisions.tsv` for the distribution-aware bootstrap bounds
+and reasons. Marginal rows are deliberately non-fatal timer-noise/review cases,
+not an automatic performance claim. Compact ratios are not sufficient on their
+own. Run this gate on an otherwise idle host and review every marginal row and
+the raw distributions before accepting the candidate. The full threshold and
+zero-allocation policy is documented in `benchmarks/README.md`.

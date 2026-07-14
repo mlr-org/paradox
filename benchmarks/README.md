@@ -114,24 +114,95 @@ ordinary project, and repository-local R base libraries are fingerprinted
 before and after the gate. All user-supplied library roots must be distinct,
 disjoint, plain directories below this repository's `.local/` tree.
 
-`--plan-only` performs the same provenance, Git, evidence, candidate, and
-library authentication and prints the exact three commands without reserving a
-retained output directory. A real run requires an absent output path below
+`--plan-only` performs the same provenance, Git, evidence, candidate, library,
+workload-inventory, and regression-policy authentication and prints the exact
+three commands plus the policy manifest hash without reserving a retained
+output directory. A real run requires an absent output path below
 `.local/benchmarks/`. It records separate stdout/stderr logs, raw paired and
 consumer results, command arguments and environment, before/after content
 fingerprints, the candidate and differential provenance, completion metadata,
-and copies of every helper. Success seals the complete output with the common
-repository-evidence format and verifies it again with the retained verifier:
+the reviewed policy inputs, a per-case decision ledger, and copies of every
+helper. Success seals the complete output with the common repository-evidence
+format and verifies it again with the retained verifier:
 
 ```sh
 Rscript --vanilla compat/verify-repository-evidence.R \
   .local/benchmarks/release-YYYYMMDDTHHMMSSZ
 ```
 
-A failed command or postcondition leaves an explicitly failed, deliberately
-unsealed directory for diagnosis. Because the focused consumer script has a
-fixed 100-iteration contract, `--iterations` controls the all-workload paired
-run only.
+A failed command, material regression, or postcondition leaves an explicitly
+failed, deliberately unsealed directory for diagnosis. Because the focused
+consumer script has a fixed 100-iteration contract, `--iterations` controls the
+all-workload paired run only. The release policy requires at least 50 paired
+samples per workload; the default remains 100.
+
+### Reviewed regression policy
+
+[`regression-policy.tsv`](regression-policy.tsv) assigns every registered
+paired workload and every focused consumer operation to exactly one reviewed
+tier and records why it is protected. The gate rejects missing, extra,
+duplicated, or reordered policy rows before starting a benchmark. Adding or
+renaming a workload therefore requires an explicit policy review. The policy
+algorithm and constants live in
+[`regression-policy.R`](regression-policy.R); both files are copied into the
+evidence and their individual SHA-256 values and combined policy-manifest hash
+are recorded in completion metadata.
+
+The thresholds are relative to the authenticated upstream baseline measured on
+the same host:
+
+| Tier | Median limit | Upper-quartile limit | Required probability candidate is slower | Allocation ratio | Minimum allocation increase |
+|---|---:|---:|---:|---:|---:|
+| `hot` | 1.20 | 1.35 | 0.75 | 1.25 | 16 KiB |
+| `standard` | 1.35 | 1.60 | 0.80 | 1.50 | 64 KiB |
+
+Common constructors, ID/value/domain access, validation, design generation,
+mutation, and maintained consumer paths use the stricter `hot` tier. Structural
+stress, nested, and callback-extension cases use `standard`. These are portable
+relative budgets; the policy assumes no processor model, instruction set, or
+absolute nanosecond target.
+
+Timing decisions use all retained samples, not only the summary median. For
+both the median ratio and the 75th-percentile ratio, the evaluator computes
+2,000 deterministic independent-sample bootstrap replicates. A timing metric
+fails only when its observed ratio and its one-sided 95% lower bootstrap bound
+both reach the tier limit and the empirical all-pairs probability that the
+candidate is slower reaches the tier's probability limit. This conjunction
+protects against material, distribution-wide slowdowns while avoiding failures
+from a single timer outlier or a noisy median. The evaluator restores the
+caller's random-number-generator state.
+
+A case is `marginal` when a timing distribution consumes at least half of its
+relative budget, its upper confidence bound crosses the full limit, or its
+allocation increase consumes at least half of the allocation budget, without
+meeting all failure criteria. Marginal cases do not fail the gate, but they are
+printed and must be reviewed with the raw distributions before making a release
+claim. This prevents normal host noise from creating brittle gates without
+hiding an emerging regression.
+
+Allocation profiles are independent of timed samples. An allocation failure
+requires both the tier's relative increase and minimum byte increase. If the
+baseline allocates zero bytes, the relative ratio is infinite but the minimum
+byte increase still applies; zero-to-zero is recorded as ratio 1, and a tiny
+zero-to-nonzero change is not automatically a failure. This handles native
+zero-allocation paths without dividing by zero or treating a profiling record
+as a material regression.
+
+`metadata/regression-decisions.tsv` retains one explicit decision per policy
+row, including sample counts, medians, upper quartiles, bootstrap bounds,
+empirical slower probability, allocations, applicable thresholds, and reasons.
+`metadata/completion.tsv` records pass/marginal/fail counts and the worst median,
+upper-quartile, and allocation regressions. "Worst" is selected by the fraction
+of the applicable tier budget consumed, so a tiny allocation above a zero-byte
+baseline cannot hide a larger material increase. The raw ratio, byte delta, and
+budget fraction are all retained. Any `fail` row prevents the evidence seal.
+The deterministic policy fixtures cover stable passes, a noisy marginal, a
+clear timing failure, and both harmless and material zero-baseline allocation
+changes:
+
+```sh
+Rscript --vanilla benchmarks/tests/test-regression-policy.R
+```
 
 For the development runner, supply `--baseline-ref` whenever the source
 revision is known. The default is deliberately `unrecorded`, because Git `HEAD`
@@ -154,6 +225,11 @@ An explicit `--output` directory must be empty. Each run contains:
   totals, and GC totals; and
 - `comparison.csv`: median speedup and allocation ratio. Ratios greater than
   one favor the candidate.
+
+The focused consumer directory likewise retains
+`{baseline,candidate}-samples.csv` beside its summaries. In the regression
+decision ledger, ratios use the more natural regression orientation instead:
+values greater than one mean that the candidate is slower or allocates more.
 
 Every workload is evaluated and checked before timing, warmed up outside the
 timed region, then checked again for fixture mutation. The driver also requires
@@ -179,7 +255,9 @@ parameter sets plus a two-node `mlr3pipelines` graph. Each object measures
 `$params`, `$values`, and the common
 `$get_values(check_required = FALSE)` read path. Optional fourth and fifth
 arguments select the miesmuschel and shared dependency libraries when their
-compatibility-run locations differ from the defaults.
+compatibility-run locations differ from the defaults. An optional sixth
+argument selects the raw-sample CSV; otherwise it is written beside the summary
+as `<summary-name>-samples.csv`.
 
 For the collection initializer itself, the focused worker adds plain and
 metadata-rich 8-by-8 and 32-by-8 synthetic collections to those three retained

@@ -1,8 +1,8 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 3L || length(args) > 5L) {
+if (length(args) < 3L || length(args) > 6L) {
   stop(paste(
     "usage: paramsetcollection-consumers.R LABEL PARADOX_LIBRARY OUTPUT_CSV",
-    "[MIES_LIBRARY] [DEPENDENCY_LIBRARY]"
+    "[MIES_LIBRARY] [DEPENDENCY_LIBRARY] [SAMPLES_CSV]"
   ), call. = FALSE)
 }
 
@@ -19,6 +19,16 @@ dependency_library <- normalizePath(
     ".local/compat/R/library-dependencies",
   mustWork = TRUE
 )
+samples_output <- if (length(args) >= 6L) {
+  args[[6L]]
+} else {
+  paste0(tools::file_path_sans_ext(output), "-samples.csv")
+}
+if (identical(normalizePath(dirname(output), mustWork = TRUE),
+    normalizePath(dirname(samples_output), mustWork = TRUE)) &&
+    identical(basename(output), basename(samples_output))) {
+  stop("summary and sample output paths must differ", call. = FALSE)
+}
 ordinary_library <- normalizePath(".local/R/library", mustWork = TRUE)
 .libPaths(unique(c(
   paradox_library,
@@ -57,7 +67,10 @@ stopifnot(all(vapply(
   logical(1L)
 )))
 
-rows <- unlist(lapply(names(objects), function(case) {
+summary_rows <- list()
+sample_rows <- list()
+row_index <- 0L
+for (case in names(objects)) {
   object <- objects[[case]]
   expected_ids <- object$ids()
   expected_values <- object$values
@@ -87,7 +100,7 @@ rows <- unlist(lapply(names(objects), function(case) {
       }
     )
   )
-  lapply(names(operations), function(operation_name) {
+  for (operation_name in names(operations)) {
     operation <- operations[[operation_name]]$run
     validate <- operations[[operation_name]]$validate
     observed <- operation()
@@ -100,20 +113,43 @@ rows <- unlist(lapply(names(objects), function(case) {
       memory = TRUE,
       filter_gc = FALSE
     )
-    data.frame(
+    elapsed_ns <- as.numeric(measurement$time[[1L]]) * 1e9
+    if (length(elapsed_ns) != 100L || any(!is.finite(elapsed_ns)) ||
+        any(elapsed_ns <= 0)) {
+      stop("focused consumer timing produced invalid samples", call. = FALSE)
+    }
+    quantiles <- unname(stats::quantile(
+      elapsed_ns, c(0, 0.25, 0.5, 0.75, 1), type = 8
+    ))
+    row_index <- row_index + 1L
+    summary_rows[[row_index]] <- data.frame(
       label = label,
       consumer_case = case,
       operation = operation_name,
       n_sets = length(object$sets),
       n_params = object$length,
       iterations = 100L,
-      median_ns = as.numeric(measurement$median) * 1e9,
+      min_ns = quantiles[[1L]],
+      q25_ns = quantiles[[2L]],
+      median_ns = quantiles[[3L]],
+      q75_ns = quantiles[[4L]],
+      max_ns = quantiles[[5L]],
       mem_alloc_bytes = as.numeric(measurement$mem_alloc),
       stringsAsFactors = FALSE
     )
-  })
-}), recursive = FALSE)
+    sample_rows[[row_index]] <- data.frame(
+      label = label,
+      consumer_case = case,
+      operation = operation_name,
+      iteration = seq_along(elapsed_ns),
+      elapsed_ns = elapsed_ns,
+      stringsAsFactors = FALSE
+    )
+  }
+}
 
-result <- do.call(rbind, rows)
+result <- do.call(rbind, summary_rows)
+samples <- do.call(rbind, sample_rows)
 write.csv(result, output, row.names = FALSE)
+write.csv(samples, samples_output, row.names = FALSE)
 print(result, row.names = FALSE)

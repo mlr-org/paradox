@@ -21,7 +21,8 @@ release_usage <- function() {
     "                            repeatable and passed to the paired runner\n",
     "  --params N                Mixed parameter count [default: 64]\n",
     "  --rows N                  check_dt/qunif row count [default: 128]\n",
-    "  --iterations N            Timed samples per paired workload [default: 100]\n",
+    "  --iterations N            Timed samples per paired workload [default: 100;\n",
+    "                            reviewed policy minimum: 50]\n",
     "  --warmups N               Paired workload warmups [default: 5]\n",
     "  --seed N                  Deterministic paired seed [default: 20260713]\n",
     "  --plan-only               Authenticate inputs and print commands; reserve no output\n",
@@ -30,7 +31,8 @@ release_usage <- function() {
     "PARADOX_CANDIDATE_COMMIT, PARADOX_CANDIDATE_TREE, and\n",
     "PARADOX_CANDIDATE_CONTENT_SHA256 must describe the installed candidate.\n",
     "The workload inventory is deliberately not selectable: a successful release\n",
-    "run always measures every workload plus both focused consumer processes.\n"
+    "run always measures every workload plus both focused consumer processes,\n",
+    "then applies the authenticated distribution-aware regression policy.\n"
   ))
 }
 
@@ -898,6 +900,12 @@ release_helper_inputs <- c(
   paired_driver = file.path(release_root, "benchmarks", "run.R"),
   paired_worker = file.path(release_root, "benchmarks", "worker.R"),
   workloads = file.path(release_root, "benchmarks", "workloads.R"),
+  regression_policy = file.path(
+    release_root, "benchmarks", "regression-policy.R"
+  ),
+  regression_policy_table = file.path(
+    release_root, "benchmarks", "regression-policy.tsv"
+  ),
   focused_consumer = file.path(
     release_root, "benchmarks", "paramsetcollection-consumers.R"
   ),
@@ -915,6 +923,51 @@ release_require_committed_files(
 )
 release_helper_sha256 <- unname(tools::sha256sum(release_helper_inputs))
 
+release_workload_environment <- new.env(parent = baseenv())
+sys.source(
+  release_helper_inputs[["workloads"]], envir = release_workload_environment
+)
+release_all_workloads <- release_workload_environment$benchmark_workload_names()
+release_policy_environment <- new.env(parent = baseenv())
+sys.source(
+  release_helper_inputs[["regression_policy"]],
+  envir = release_policy_environment
+)
+release_policy_spec <- release_policy_environment$benchmark_regression_policy_spec()
+release_policy_environment$benchmark_regression_validate_spec(release_policy_spec)
+if (release_arguments$iterations < release_policy_spec$minimum_samples) {
+  release_fail(
+    "--iterations must be >= ", release_policy_spec$minimum_samples,
+    " for distribution-aware release decisions"
+  )
+}
+release_regression_policy <-
+  release_policy_environment$benchmark_regression_read_policy(
+    release_helper_inputs[["regression_policy_table"]], release_all_workloads
+  )
+release_policy_inputs <- release_helper_inputs[c(
+  "regression_policy", "regression_policy_table"
+)]
+release_policy_sha256 <- setNames(
+  unname(tools::sha256sum(release_policy_inputs)),
+  names(release_policy_inputs)
+)
+release_policy_manifest_lines <- c(
+  "role\tfile\tsha256",
+  paste(
+    names(release_policy_inputs), basename(release_policy_inputs),
+    release_policy_sha256, sep = "\t"
+  )
+)
+release_policy_manifest_file <- tempfile(
+  "paradox-benchmark-policy-", tmpdir = file.path(release_root, ".local", "tmp")
+)
+writeLines(release_policy_manifest_lines, release_policy_manifest_file, useBytes = TRUE)
+release_policy_manifest_sha256 <- unname(
+  tools::sha256sum(release_policy_manifest_file)
+)
+unlink(release_policy_manifest_file)
+
 release_support_libraries <- c(
   release_dependency_libraries, release_mies_library,
   release_extra_libraries, release_ordinary_library
@@ -923,6 +976,12 @@ release_paired_output <- file.path(release_output, "paired")
 release_consumer_directory <- file.path(release_output, "consumers")
 release_consumer_baseline <- file.path(release_consumer_directory, "baseline.csv")
 release_consumer_candidate <- file.path(release_consumer_directory, "candidate.csv")
+release_consumer_baseline_samples <- file.path(
+  release_consumer_directory, "baseline-samples.csv"
+)
+release_consumer_candidate_samples <- file.path(
+  release_consumer_directory, "candidate-samples.csv"
+)
 release_paired_arguments <- c(
   "--no-save", "--no-restore", "--no-site-file", "--no-init-file",
   release_helper_inputs[["paired_driver"]],
@@ -940,10 +999,11 @@ release_paired_arguments <- c(
   "--warmups", as.character(release_arguments$warmups),
   "--seed", as.character(release_arguments$seed)
 )
-release_focus_arguments <- function(label, library, output) {
+release_focus_arguments <- function(label, library, output, samples_output) {
   c(
     "--vanilla", release_helper_inputs[["focused_consumer"]], label, library,
-    output, release_mies_library, release_dependency_libraries[[1L]]
+    output, release_mies_library, release_dependency_libraries[[1L]],
+    samples_output
   )
 }
 release_child_environment <- c(
@@ -968,14 +1028,16 @@ release_planned_commands <- list(
   consumer_baseline = list(
     command = release_expected_rscript,
     arguments = release_focus_arguments(
-      "baseline", release_baseline_library, release_consumer_baseline
+      "baseline", release_baseline_library, release_consumer_baseline,
+      release_consumer_baseline_samples
     ),
     environment = release_child_environment
   ),
   consumer_candidate = list(
     command = release_expected_rscript,
     arguments = release_focus_arguments(
-      "candidate", release_candidate_library, release_consumer_candidate
+      "candidate", release_candidate_library, release_consumer_candidate,
+      release_consumer_candidate_samples
     ),
     environment = release_child_environment
   )
@@ -987,6 +1049,11 @@ if (release_arguments$plan_only) {
   cat("baseline_evidence_manifest_sha256=",
       release_differential$verified$manifest_sha256, "\n", sep = "")
   cat("candidate_content_sha256=", release_candidate_content, "\n", sep = "")
+  cat(
+    "regression_policy_manifest_sha256=", release_policy_manifest_sha256,
+    "\n", sep = ""
+  )
+  cat("regression_policy_rows=", nrow(release_regression_policy), "\n", sep = "")
   for (name in names(release_planned_commands)) {
     cat(name, "=", release_quote_command(
       release_planned_commands[[name]]$command,
@@ -1045,6 +1112,7 @@ release_helper_targets <- file.path(
   release_output, "helpers",
   c(
     "release", "release.R", "run", "run.R", "worker.R", "workloads.R",
+    "regression-policy.R", "regression-policy.tsv",
     "paramsetcollection-consumers.R", "fingerprint.R", "repository-evidence.R",
     "verify-repository-evidence.R", "install-candidate"
   )
@@ -1069,6 +1137,33 @@ release_write_tsv(data.frame(
   sha256 = release_helper_sha256,
   stringsAsFactors = FALSE
 ), file.path(release_output, "metadata", "helpers.tsv"))
+release_write_tsv(data.frame(
+  role = names(release_policy_inputs),
+  source = unname(release_policy_inputs),
+  retained = substring(
+    release_helper_targets[match(
+      names(release_policy_inputs), names(release_helper_inputs)
+    )],
+    nchar(release_output, type = "chars") + 2L
+  ),
+  sha256 = release_policy_sha256,
+  policy_manifest_sha256 = rep(
+    release_policy_manifest_sha256, length(release_policy_inputs)
+  ),
+  stringsAsFactors = FALSE
+), file.path(release_output, "metadata", "regression-policy-inputs.tsv"))
+release_write_lines(
+  release_policy_manifest_lines,
+  file.path(release_output, "metadata", "regression-policy-manifest.tsv")
+)
+if (!identical(
+    unname(tools::sha256sum(file.path(
+      release_output, "metadata", "regression-policy-manifest.tsv"
+    ))),
+    release_policy_manifest_sha256
+  )) {
+  release_fail("retained regression policy manifest differs from its input hash")
+}
 
 release_provenance_sources <- c(
   differential_completion = release_differential_files$completion,
@@ -1213,11 +1308,20 @@ release_write_tsv(data.frame(
 release_validation_error <- NULL
 release_workload_count <- NA_integer_
 release_consumer_rows <- NA_integer_
+release_regression_summary <- list(
+  row_count = NA_integer_, pass_count = NA_integer_,
+  marginal_count = NA_integer_, fail_count = NA_integer_,
+  worst_median_case = "-", worst_median_ratio = NA_real_,
+  worst_median_budget_fraction = NA_real_,
+  worst_q75_case = "-", worst_q75_ratio = NA_real_,
+  worst_q75_budget_fraction = NA_real_,
+  worst_allocation_case = "-", worst_allocation_ratio = NA_real_,
+  worst_allocation_delta_bytes = NA_real_,
+  worst_allocation_budget_fraction = NA_real_
+)
 if (all(!is.na(release_status) & release_status == 0L)) {
   release_validation_error <- tryCatch({
-    workload_environment <- new.env(parent = baseenv())
-    sys.source(release_helper_inputs[["workloads"]], envir = workload_environment)
-    all_workloads <- workload_environment$benchmark_workload_names()
+    all_workloads <- release_all_workloads
     summary_baseline <- utils::read.csv(
       file.path(release_paired_output, "summary-baseline.csv"),
       stringsAsFactors = FALSE, check.names = FALSE
@@ -1234,6 +1338,62 @@ if (all(!is.na(release_status) & release_status == 0L)) {
         !identical(summary_candidate$workload, all_workloads) ||
         !identical(comparison$workload, all_workloads)) {
       release_fail("paired runner did not retain the complete ordered workload inventory")
+    }
+    paired_samples_baseline <- utils::read.csv(
+      file.path(release_paired_output, "samples-baseline.csv"),
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
+    paired_samples_candidate <- utils::read.csv(
+      file.path(release_paired_output, "samples-candidate.csv"),
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
+    paired_sample_columns <- c(
+      "workload", "iteration", "elapsed_seconds", "elapsed_ns",
+      "gc_level0", "gc_level1", "gc_level2"
+    )
+    paired_counts <- function(value) {
+      unname(table(factor(value$workload, levels = all_workloads)))
+    }
+    summaries_match_samples <- function(
+      summary, summary_keys, samples, sample_keys
+    ) {
+      if (!all(c(
+          "iterations", "min_ns", "q25_ns", "median_ns", "q75_ns", "max_ns"
+        ) %in% names(summary))) {
+        return(FALSE)
+      }
+      for (index in seq_len(nrow(summary))) {
+        elapsed <- samples$elapsed_ns[sample_keys == summary_keys[[index]]]
+        expected <- unname(stats::quantile(
+          elapsed, c(0, 0.25, 0.5, 0.75, 1), type = 8
+        ))
+        observed <- as.numeric(unlist(summary[index, c(
+          "min_ns", "q25_ns", "median_ns", "q75_ns", "max_ns"
+        )], use.names = FALSE))
+        if (length(elapsed) != summary$iterations[[index]] ||
+            !isTRUE(all.equal(
+              observed, expected, tolerance = 1e-10,
+              check.attributes = FALSE
+            ))) {
+          return(FALSE)
+        }
+      }
+      TRUE
+    }
+    if (!identical(names(paired_samples_baseline), paired_sample_columns) ||
+        !identical(names(paired_samples_candidate), paired_sample_columns) ||
+        !identical(unique(paired_samples_baseline$workload), all_workloads) ||
+        !identical(unique(paired_samples_candidate$workload), all_workloads) ||
+        any(paired_counts(paired_samples_baseline) != release_arguments$iterations) ||
+        any(paired_counts(paired_samples_candidate) != release_arguments$iterations) ||
+        !summaries_match_samples(
+          summary_baseline, summary_baseline$workload,
+          paired_samples_baseline, paired_samples_baseline$workload
+        ) || !summaries_match_samples(
+          summary_candidate, summary_candidate$workload,
+          paired_samples_candidate, paired_samples_candidate$workload
+        )) {
+      release_fail("paired samples do not match the complete requested inventory")
     }
     if (!requireNamespace("jsonlite", quietly = TRUE)) {
       release_fail("jsonlite is unavailable for paired metadata validation")
@@ -1288,6 +1448,14 @@ if (all(!is.na(release_status) & release_status == 0L)) {
     consumer_candidate <- utils::read.csv(
       release_consumer_candidate, stringsAsFactors = FALSE, check.names = FALSE
     )
+    consumer_samples_baseline <- utils::read.csv(
+      release_consumer_baseline_samples,
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
+    consumer_samples_candidate <- utils::read.csv(
+      release_consumer_candidate_samples,
+      stringsAsFactors = FALSE, check.names = FALSE
+    )
     key_columns <- c(
       "consumer_case", "operation", "n_sets", "n_params", "iterations"
     )
@@ -1297,7 +1465,18 @@ if (all(!is.na(release_status) & release_status == 0L)) {
     expected_operations <- rep(c(
       "params", "values", "get_values_unchecked"
     ), times = 3L)
+    expected_consumer_summary_columns <- c(
+      "label", "consumer_case", "operation", "n_sets", "n_params",
+      "iterations", "min_ns", "q25_ns", "median_ns", "q75_ns",
+      "max_ns", "mem_alloc_bytes"
+    )
+    expected_consumer_sample_columns <- c(
+      "label", "consumer_case", "operation", "iteration", "elapsed_ns"
+    )
+    expected_sample_cases <- rep(expected_cases, each = 100L)
+    expected_sample_operations <- rep(expected_operations, each = 100L)
     if (!identical(names(consumer_baseline), names(consumer_candidate)) ||
+        !identical(names(consumer_baseline), expected_consumer_summary_columns) ||
         !identical(consumer_baseline$label, rep("baseline", 9L)) ||
         !identical(consumer_candidate$label, rep("candidate", 9L)) ||
         !identical(consumer_baseline$consumer_case, expected_cases) ||
@@ -1313,7 +1492,38 @@ if (all(!is.na(release_status) & release_status == 0L)) {
         any(!is.finite(consumer_candidate$mem_alloc_bytes)) ||
         any(consumer_baseline$mem_alloc_bytes < 0) ||
         any(consumer_candidate$mem_alloc_bytes < 0) ||
-        any(consumer_baseline$iterations != 100L)) {
+        any(consumer_baseline$iterations != 100L) ||
+        !identical(names(consumer_samples_baseline),
+          expected_consumer_sample_columns) ||
+        !identical(names(consumer_samples_candidate),
+          expected_consumer_sample_columns) ||
+        !identical(consumer_samples_baseline$label, rep("baseline", 900L)) ||
+        !identical(consumer_samples_candidate$label, rep("candidate", 900L)) ||
+        !identical(consumer_samples_baseline$consumer_case,
+          expected_sample_cases) ||
+        !identical(consumer_samples_candidate$consumer_case,
+          expected_sample_cases) ||
+        !identical(consumer_samples_baseline$operation,
+          expected_sample_operations) ||
+        !identical(consumer_samples_candidate$operation,
+          expected_sample_operations) ||
+        !summaries_match_samples(
+          consumer_baseline,
+          paste(consumer_baseline$consumer_case, consumer_baseline$operation),
+          consumer_samples_baseline,
+          paste(
+            consumer_samples_baseline$consumer_case,
+            consumer_samples_baseline$operation
+          )
+        ) || !summaries_match_samples(
+          consumer_candidate,
+          paste(consumer_candidate$consumer_case, consumer_candidate$operation),
+          consumer_samples_candidate,
+          paste(
+            consumer_samples_candidate$consumer_case,
+            consumer_samples_candidate$operation
+          )
+        )) {
       release_fail("focused consumer outputs have unexpected shape or inputs")
     }
     safe_ratio <- function(numerator, denominator) {
@@ -1342,6 +1552,90 @@ if (all(!is.na(release_status) & release_status == 0L)) {
       row.names = FALSE, na = ""
     )
     release_consumer_rows <- nrow(consumer_comparison)
+
+    policy_samples <- function(paired, consumer) {
+      rbind(
+        data.frame(
+          scope = rep("paired", nrow(paired)),
+          case = paired$workload,
+          operation = rep("-", nrow(paired)),
+          iteration = as.integer(paired$iteration),
+          elapsed_ns = paired$elapsed_ns,
+          stringsAsFactors = FALSE
+        ),
+        data.frame(
+          scope = rep("consumer", nrow(consumer)),
+          case = consumer$consumer_case,
+          operation = consumer$operation,
+          iteration = as.integer(consumer$iteration),
+          elapsed_ns = consumer$elapsed_ns,
+          stringsAsFactors = FALSE
+        )
+      )
+    }
+    policy_allocations <- function(paired, consumer) {
+      rbind(
+        data.frame(
+          scope = rep("paired", nrow(paired)),
+          case = paired$workload,
+          operation = rep("-", nrow(paired)),
+          mem_alloc_bytes = paired$mem_alloc_bytes,
+          stringsAsFactors = FALSE
+        ),
+        data.frame(
+          scope = rep("consumer", nrow(consumer)),
+          case = consumer$consumer_case,
+          operation = consumer$operation,
+          mem_alloc_bytes = consumer$mem_alloc_bytes,
+          stringsAsFactors = FALSE
+        )
+      )
+    }
+    regression_ledger <- release_policy_environment$benchmark_regression_evaluate(
+      release_regression_policy,
+      policy_samples(paired_samples_baseline, consumer_samples_baseline),
+      policy_samples(paired_samples_candidate, consumer_samples_candidate),
+      policy_allocations(summary_baseline, consumer_baseline),
+      policy_allocations(summary_candidate, consumer_candidate)
+    )
+    release_write_tsv(
+      regression_ledger,
+      file.path(release_output, "metadata", "regression-decisions.tsv")
+    )
+    release_regression_summary <-
+      release_policy_environment$benchmark_regression_summarize(
+        regression_ledger
+      )
+    release_log_line(paste0(
+      "regression decisions: pass=", release_regression_summary$pass_count,
+      ", marginal=", release_regression_summary$marginal_count,
+      ", fail=", release_regression_summary$fail_count
+    ))
+    review_rows <- regression_ledger$decision != "pass"
+    if (any(review_rows)) {
+      diagnostics <- regression_ledger[review_rows, c(
+        "scope", "case", "operation", "tier", "decision", "reasons",
+        "median_ratio", "median_ratio_ci_low", "median_ratio_limit",
+        "median_budget_fraction",
+        "q75_ratio", "q75_ratio_ci_low", "q75_ratio_limit",
+        "q75_budget_fraction", "allocation_ratio", "allocation_delta_bytes",
+        "allocation_budget_fraction"
+      )]
+      cat("\nRegression-policy review rows:\n")
+      print(diagnostics, row.names = FALSE, digits = 4)
+    }
+    if (release_regression_summary$fail_count > 0L) {
+      failed <- regression_ledger[regression_ledger$decision == "fail", ]
+      failed_keys <- ifelse(
+        failed$scope == "paired", failed$case,
+        paste(failed$case, failed$operation, sep = "/")
+      )
+      release_fail(
+        "material benchmark regression in ",
+        paste(failed_keys, collapse = ", "),
+        "; see metadata/regression-decisions.tsv"
+      )
+    }
     NULL
   }, error = function(condition) conditionMessage(condition))
 }
@@ -1366,17 +1660,42 @@ release_post_error <- tryCatch({
       unname(tools::sha256sum(release_provenance_sources)), release_provenance_sha
     ) || !identical(
       unname(tools::sha256sum(release_provenance_targets)), release_provenance_sha
+    ) || !identical(
+      unname(tools::sha256sum(file.path(
+        release_output, "metadata", "regression-policy-manifest.tsv"
+      ))),
+      release_policy_manifest_sha256
     )) {
-    release_fail("a helper or provenance input changed during the release gate")
+    release_fail(
+      "a helper, provenance input, or policy manifest changed during the release gate"
+    )
   }
   NULL
 }, error = function(condition) conditionMessage(condition))
 
 release_pass <- all(!is.na(release_status) & release_status == 0L) &&
-  is.null(release_validation_error) && is.null(release_post_error)
+  is.null(release_validation_error) && is.null(release_post_error) &&
+  identical(
+    release_regression_summary$row_count, nrow(release_regression_policy)
+  ) && identical(release_regression_summary$fail_count, 0L) &&
+  file.exists(file.path(
+    release_output, "metadata", "regression-decisions.tsv"
+  ))
+release_completion_value <- function(value) {
+  if (length(value) != 1L || is.na(value)) "-" else as.character(value)
+}
+release_regression_status <- if (is.na(release_regression_summary$fail_count)) {
+  "not-run"
+} else if (release_regression_summary$fail_count > 0L) {
+  "fail"
+} else if (release_regression_summary$marginal_count > 0L) {
+  "marginal"
+} else {
+  "pass"
+}
 release_completion <- c(
   "harness=benchmark-release",
-  "schema=1",
+  "schema=2",
   paste0("status=", if (release_pass) "pass" else "fail"),
   paste0("candidate_run_id=", release_candidate_run_id),
   paste0("candidate_ref=", release_candidate_ref),
@@ -1391,6 +1710,90 @@ release_completion <- c(
   paste0("baseline_version=", release_baseline_version),
   paste0("baseline_content_sha256=", release_baseline_content),
   paste0("candidate_version=", release_candidate$package_version),
+  paste0("regression_policy_schema=", release_policy_spec$schema),
+  paste0("regression_decision_status=", release_regression_status),
+  paste0("regression_minimum_samples=", release_policy_spec$minimum_samples),
+  paste0(
+    "regression_bootstrap_replicates=",
+    release_policy_spec$bootstrap_replicates
+  ),
+  paste0("regression_confidence=", release_policy_spec$confidence),
+  paste0(
+    "regression_policy_R_sha256=",
+    release_policy_sha256[["regression_policy"]]
+  ),
+  paste0(
+    "regression_policy_table_sha256=",
+    release_policy_sha256[["regression_policy_table"]]
+  ),
+  paste0(
+    "regression_policy_manifest_sha256=", release_policy_manifest_sha256
+  ),
+  paste0("regression_policy_rows=", nrow(release_regression_policy)),
+  paste0(
+    "regression_decision_rows=",
+    release_completion_value(release_regression_summary$row_count)
+  ),
+  paste0(
+    "regression_pass_count=",
+    release_completion_value(release_regression_summary$pass_count)
+  ),
+  paste0(
+    "regression_marginal_count=",
+    release_completion_value(release_regression_summary$marginal_count)
+  ),
+  paste0(
+    "regression_fail_count=",
+    release_completion_value(release_regression_summary$fail_count)
+  ),
+  paste0(
+    "worst_median_case=",
+    release_completion_value(release_regression_summary$worst_median_case)
+  ),
+  paste0(
+    "worst_median_ratio=",
+    release_completion_value(release_regression_summary$worst_median_ratio)
+  ),
+  paste0(
+    "worst_median_budget_fraction=",
+    release_completion_value(
+      release_regression_summary$worst_median_budget_fraction
+    )
+  ),
+  paste0(
+    "worst_q75_case=",
+    release_completion_value(release_regression_summary$worst_q75_case)
+  ),
+  paste0(
+    "worst_q75_ratio=",
+    release_completion_value(release_regression_summary$worst_q75_ratio)
+  ),
+  paste0(
+    "worst_q75_budget_fraction=",
+    release_completion_value(
+      release_regression_summary$worst_q75_budget_fraction
+    )
+  ),
+  paste0(
+    "worst_allocation_case=",
+    release_completion_value(release_regression_summary$worst_allocation_case)
+  ),
+  paste0(
+    "worst_allocation_ratio=",
+    release_completion_value(release_regression_summary$worst_allocation_ratio)
+  ),
+  paste0(
+    "worst_allocation_delta_bytes=",
+    release_completion_value(
+      release_regression_summary$worst_allocation_delta_bytes
+    )
+  ),
+  paste0(
+    "worst_allocation_budget_fraction=",
+    release_completion_value(
+      release_regression_summary$worst_allocation_budget_fraction
+    )
+  ),
   paste0("workload_count=", if (is.na(release_workload_count)) "-" else release_workload_count),
   paste0("consumer_rows=", if (is.na(release_consumer_rows)) "-" else release_consumer_rows),
   paste0("protected_library_count=", nrow(release_library_before)),
@@ -1398,7 +1801,11 @@ release_completion <- c(
   paste0("completed_utc=", format(Sys.time(), tz = "UTC", usetz = TRUE)),
   paste0(
     "validation_error=",
-    if (is.null(release_validation_error)) "-" else gsub("[\\r\\n\\t]", " ", release_validation_error)
+    if (is.null(release_validation_error)) {
+      "-"
+    } else {
+      gsub("[\\r\\n\\t]", " ", release_validation_error)
+    }
   ),
   paste0(
     "postcondition_error=",
@@ -1419,7 +1826,10 @@ if (!release_pass) {
   )
 }
 
-release_log_line("all workloads, focused consumers, and postconditions passed")
+release_log_line(paste0(
+  "all workloads, focused consumers, regression policy, and postconditions ",
+  "passed; marginal decisions=", release_regression_summary$marginal_count
+))
 retained_evidence_environment <- new.env(parent = baseenv())
 sys.source(
   file.path(release_output, "helpers", "repository-evidence.R"),
