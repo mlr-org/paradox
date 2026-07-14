@@ -21,6 +21,8 @@ sys.source(file.path(root, "compat", "source-fetch-common.R"),
   envir = environment(), keep.source = FALSE)
 sys.source(file.path(root, "compat", "reverse-dependency-prep-common.R"),
   envir = environment(), keep.source = FALSE)
+sys.source(file.path(root, "compat", "fingerprint.R"),
+  envir = environment(), keep.source = FALSE)
 sys.source(file.path(root, "compat", "repository-evidence.R"),
   envir = environment(), keep.source = FALSE)
 
@@ -33,12 +35,13 @@ if (!dir.create(test_root, recursive = FALSE, mode = "0700")) {
 fixture_owned_paths <- test_root
 cleanup_fixture_paths <- function() {
   for (path in rev(fixture_owned_paths)) {
-    if (!file.exists(path) && !dir.exists(path) && !nzchar(Sys.readlink(path))) {
+    if (!file.exists(path) && !dir.exists(path) &&
+        !reverse_prep_is_symbolic(path)) {
       next
     }
     status <- unlink(path, recursive = TRUE, force = TRUE)
     if (!identical(as.integer(status), 0L) || file.exists(path) ||
-        dir.exists(path) || nzchar(Sys.readlink(path))) {
+        dir.exists(path) || reverse_prep_is_symbolic(path)) {
       stop("could not remove fixture-owned path: ", path, call. = FALSE)
     }
   }
@@ -462,7 +465,7 @@ fixture_run_directories <- file.path(
 )
 if (any(file.exists(fixture_run_directories) |
     dir.exists(fixture_run_directories) |
-    nzchar(Sys.readlink(fixture_run_directories)))) {
+    vapply(fixture_run_directories, reverse_prep_is_symbolic, logical(1L)))) {
   stop("disposable harness fixture run path already exists", call. = FALSE)
 }
 fixture_owned_paths <- c(fixture_owned_paths, fixture_run_directories)
@@ -499,7 +502,8 @@ assert_lock_absent <- function() {
   lock <- file.path(
     root, ".local", "compat", ".reverse-dependency-preparation.lock"
   )
-  if (file.exists(lock) || dir.exists(lock) || nzchar(Sys.readlink(lock))) {
+  if (file.exists(lock) || dir.exists(lock) ||
+      reverse_prep_is_symbolic(lock)) {
     stop("real preparation harness retained its global mutation lock",
       call. = FALSE)
   }
@@ -540,7 +544,7 @@ missing_result <- run_harness(
   fixture_run_ids[["missing"]], dependency_library = missing_library
 )
 if (identical(missing_result$status, 0L) || file.exists(missing_library) ||
-    dir.exists(missing_library) || nzchar(Sys.readlink(missing_library)) ||
+    dir.exists(missing_library) || reverse_prep_is_symbolic(missing_library) ||
     !any(grepl(
       "--plan-only requires a pre-existing dependency library",
       missing_result$stderr, fixed = TRUE
