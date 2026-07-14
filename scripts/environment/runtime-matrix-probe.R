@@ -45,7 +45,12 @@ check(identical(left$get_values(), list(width = 1.5, count = 3L, mode = "b")),
   "get_values facade failed")
 check(left$check(left$values), "check facade failed")
 check(identical(left$trafo(left$values)$width, 3), "closure facade failed")
-check(length(left$qunif(c(0, 0.5, 1))) == 3L, "qunif facade failed")
+unit = matrix(
+  c(0, 0.5, 1),
+  nrow = 1L,
+  dimnames = list(NULL, left$ids())
+)
+check(length(left$qunif(unit)) == 3L, "qunif facade failed")
 
 subset <- left$clone(deep = TRUE)$subset(c("width", "mode"))
 check(identical(subset$ids(), c("width", "mode")), "subset facade failed")
