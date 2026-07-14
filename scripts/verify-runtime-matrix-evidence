@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/verify-runtime-matrix-evidence --run-id ID
+
+Verify the completion seals and complete retained artifact trees for a local
+R 4.3.3 / R 4.5.2 runtime-matrix run.
+USAGE
+}
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+run_id=
+while (($#)); do
+  case "$1" in
+    --run-id)
+      (($# >= 2)) || fail "--run-id requires a value"
+      run_id=$2
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown evidence-verifier argument: $1" ;;
+  esac
+done
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+  fail "Run ID has an unsafe or empty shape"
+run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
+[[ -d "$run_root" && ! -L "$run_root" ]] || fail "Runtime-matrix run is absent: $run_root"
+
+verify_seal() {
+  local metadata=$1
+  for file in run.tsv completion.inputs.tsv completion.seal; do
+    [[ -f "$metadata/$file" && ! -L "$metadata/$file" ]] ||
+      fail "Runtime evidence metadata is absent or symbolic: $metadata/$file"
+  done
+  [[ $(awk -F '\t' '$1 == "status" {print $2}' "$metadata/run.tsv") == passed ]] ||
+    fail "Runtime evidence status is not passed: $metadata/run.tsv"
+  (
+    cd "$metadata"
+    sha256sum -c completion.inputs.tsv >/dev/null
+    expected="$(sha256sum completion.inputs.tsv | cut -d ' ' -f 1)  completion.inputs.tsv"
+    [[ $(wc -l < completion.seal) -eq 1 && "$(<completion.seal)" == "$expected" ]]
+  ) || fail "Runtime evidence completion seal is stale: $metadata"
+}
+
+verify_seal "$run_root/metadata"
+mapfile -t versions < <(awk -F '\t' 'NR > 1 {print $1}' "$run_root/metadata/stages.tsv")
+[[ ${#versions[@]} -ge 1 ]] || fail "Runtime evidence contains no stages"
+for version in "${versions[@]}"; do
+  case "$version" in 4.3.3|4.5.2) ;; *) fail "Unexpected retained runtime: $version" ;; esac
+  stage="$run_root/R-$version"
+  metadata="$stage/metadata"
+  artifacts="$stage/artifacts"
+  verify_seal "$metadata"
+  [[ -d "$artifacts" && ! -L "$artifacts" ]] || fail "Artifact tree is absent: $artifacts"
+  [[ -f "$metadata/artifacts.manifest.tsv" && ! -L "$metadata/artifacts.manifest.tsv" ]] ||
+    fail "Artifact tree receipt is absent"
+  "$PREFIX_RECEIPT" verify "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
+  recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")
+  recorded_commit=$(awk -F '\t' '$1 == "source_commit" {print $2}' "$metadata/run.tsv")
+  recorded_tree=$(awk -F '\t' '$1 == "source_tree" {print $2}' "$metadata/run.tsv")
+  recorded_branch=$(awk -F '\t' '$1 == "r_api_compat_branch" {print $2}' "$metadata/run.tsv")
+  [[ "$recorded_version" == "$version" && "$recorded_commit" =~ ^[0-9a-f]{40}$ &&
+    "$recorded_tree" =~ ^[0-9a-f]{40}$ ]] || fail "Retained source/runtime identity is malformed"
+  case "$version:$recorded_branch" in
+    4.3.3:pre-4.5-evaluated-public-fallback|\
+      4.5.2:4.5-direct-closure-and-evaluated-binding) ;;
+    *) fail "Retained public-R-API branch marker is inconsistent" ;;
+  esac
+  rg -q '^runtime_matrix_focused_probe=passed$' "$artifacts/logs/focused-probe.log" ||
+    fail "Focused public-R-API probe did not pass"
+  rg -q '^runtime_matrix_source_tests=passed$' "$artifacts/logs/source-tests.log" ||
+    fail "Full practical source suite did not pass"
+  rg -q '^symbol_audit=passed$' "$artifacts/logs/r-api-symbol-audit.log" ||
+    fail "Public-R-API symbol audit did not pass"
+done
+
+printf 'runtime_matrix_evidence=passed\nrun_id=%s\nstages=%s\n' \
+  "$run_id" "${#versions[@]}"

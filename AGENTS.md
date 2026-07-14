@@ -51,6 +51,38 @@ portability work, not by this Linux bootstrap. Activation sources the
 environment's compiler hooks explicitly but does not install a global
 micromamba hook.
 
+Actual execution on older supported public R APIs is an independent, opt-in
+matrix. Its prefix-free conda explicit inputs are
+`environment/runtime-r-4.3.3-linux-64.lock` and
+`environment/runtime-r-4.5.2-linux-64.lock`; every artifact has an exact
+SHA-256. R 4.3.3 exercises all pre-4.5 compatibility branches and R 4.5.2
+exercises the staggered direct closure/environment API without the new R 4.6
+binding and attribute inspection APIs. Provision and verify both isolated
+prefixes after ordinary bootstrap with:
+
+```sh
+scripts/bootstrap-runtime-matrix
+scripts/bootstrap-runtime-matrix --verify
+scripts/environment/test-runtime-matrix-installed all
+```
+
+The prefixes, conda cache, mutable development libraries, temporary files,
+and receipts live below `.local/runtime-matrix` (with download/cache material
+below `.cache`) and are independent of `.local/R/library`, the geospatial/P1
+consumer overlay, and the instrumented Valgrind R. Bootstrap authenticates
+micromamba from the same pinned archive as ordinary bootstrap, compares the
+complete installed URL/SHA-256 inventory with the selected lock, runs an
+actual C17 extension probe, and seals the complete runtime-prefix tree.
+`--verify` is read-only and rehashes that tree. `--offline` can create an
+absent prefix only from the authenticated local conda cache.
+
+For interactive diagnosis, source exactly one verified runtime with
+`. scripts/activate-runtime-matrix 4.3.3` (or `4.5.2`). This clears inherited
+R/compiler/library state and selects a runtime-specific mutable library and
+caches inside the repository. Source ordinary `scripts/activate` again to
+return to development R 4.6.1. Never use a matrix prefix as a dependency
+library for another R version.
+
 The mandatory Linux compatibility corpus has a separate, opt-in native
 dependency overlay. Its prefix-free explicit inputs are
 `environment/compat-system-geo-linux-64.lock` and
@@ -339,6 +371,29 @@ the passed native run that retained the same frozen source; an API-only run is
 not a valid `--source-run`. Any later package-source change requires a new
 commit/ref and new native, API, memory, compatibility, documentation, and
 performance evidence.
+
+Real supported-runtime evidence is retained separately from header-only API
+compilation. Run it against the same frozen full ref as the release gates:
+
+```sh
+scripts/test-runtime-matrix --runtime all \
+  --source-ref refs/paradox-release/candidate-YYYYMMDDTHHMMSSZ \
+  --run-id release-runtime-matrix-YYYYMMDDTHHMMSSZ
+scripts/verify-runtime-matrix-evidence \
+  --run-id release-runtime-matrix-YYYYMMDDTHHMMSSZ
+```
+
+Each real runtime builds a source archive, installs it into an absent
+run-specific library, executes a focused `r_api_compat.c` behavior probe, and
+runs the practical full package source suite with `NOT_CRAN=false` (so the
+deliberately expensive GC-torture and external Python jobs may skip). The DSO
+audit proves the exact version-specific public R symbol set: R 4.3 must not
+link any R 4.5/4.6 accessor, while R 4.5 must link the direct closure and
+evaluated-binding accessors but no R 4.6 binding/attribute accessor. Complete
+source, build, library, logs, dependency inventory, compiler identity,
+bootstrap receipt, and commands are tree-receipted and completion-sealed below
+`.local/checks/<run-id>/runtime-matrix/`. Any later source change requires a
+fresh matrix run along with every other frozen release gate.
 
 Install the consumer-test candidate only after its run ID and full ref, commit,
 and tree are exported, and only into the absent run-specific library reserved

@@ -1,0 +1,334 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MATRIX_ROOT="$ROOT/.local/runtime-matrix"
+PREFIX_ROOT="$MATRIX_ROOT/prefixes"
+RECEIPT_ROOT="$MATRIX_ROOT/receipts"
+MAMBA_ROOT="$MATRIX_ROOT/micromamba"
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+MICROMAMBA_URL="https://micro.mamba.pm/api/micromamba/linux-64/${MICROMAMBA_VERSION}"
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+INVENTORY_HELPER="$ROOT/scripts/environment/runtime-matrix-inventory.R"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/bootstrap-runtime-matrix [OPTIONS]
+
+Provision or verify exact repository-local compatibility runtimes.
+
+Options:
+  --runtime VERSION  Select 4.3.3, 4.5.2, or all (default: all).
+  --verify           Read-only verification; never provisions a prefix.
+  --verify-locks     Validate only the checked-in explicit artifact locks.
+  --offline          Provision absent prefixes from the local conda cache only.
+  -h, --help         Show this help.
+
+Run the ordinary scripts/bootstrap first.  Matrix prefixes, package caches,
+receipts, temporary files, and development libraries all remain under
+.local/runtime-matrix or .cache within this checkout.
+USAGE
+}
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+mode=provision
+selection=all
+offline=false
+while (($#)); do
+  case "$1" in
+    --runtime)
+      (($# >= 2)) || fail "--runtime requires a value"
+      selection=$2
+      shift 2
+      ;;
+    --verify) mode=verify; shift ;;
+    --verify-locks) mode=verify_locks; shift ;;
+    --offline) offline=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown bootstrap-runtime-matrix argument: $1" ;;
+  esac
+done
+case "$selection" in
+  all) versions=(4.3.3 4.5.2) ;;
+  4.3.3|4.5.2) versions=("$selection") ;;
+  *) fail "Runtime must be 4.3.3, 4.5.2, or all" ;;
+esac
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "The local runtime matrix is pinned for Linux x86_64" ;;
+esac
+
+# Bootstrap and read-only verification are also hostile-environment boundaries.
+# In particular, Rscript prints an inherited R_HOME warning to stdout, which
+# would otherwise corrupt the exact installed-package inventory being compared.
+unset \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_MAKEVARS_SITE R_MAKEVARS_USER \
+  CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+  AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
+  CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS FORTRANFLAGS LDFLAGS \
+  CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH \
+  LIBRARY_PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH \
+  PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+  CMAKE_PREFIX_PATH CMAKE_MODULE_PATH CMAKE_TOOLCHAIN_FILE CMAKE_ARGS \
+  CONFIG_SITE MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
+  CONDA_PREFIX CONDA_BUILD CONDA_BUILD_SYSROOT ||
+  fail "Could not clear inherited R/compiler inputs"
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "Managed runtime-matrix path escaped the repository: $path" ;;
+  esac
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current=$current/$component
+    [[ ! -L "$current" ]] || fail "Refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "Managed runtime-matrix path is not a directory: $current"
+  done
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "Refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "Managed runtime-matrix path is not a regular file: $path"
+}
+
+validate_lock() {
+  local version=$1 lock=$2 line package_count=0 r_count=0
+  local expected_header="# platform: linux-64"
+  [[ -f "$lock" && ! -L "$lock" ]] || fail "Runtime lock is absent or symbolic: $lock"
+  mapfile -t lines < "$lock"
+  [[ ${#lines[@]} -gt 3 && "${lines[0]}" == "$expected_header" &&
+    "${lines[1]}" == "# runtime: R $version" && "${lines[2]}" == @EXPLICIT ]] ||
+    fail "Runtime lock has an unexpected header: $lock"
+  declare -A seen=()
+  for line in "${lines[@]:3}"; do
+    [[ "$line" =~ ^https://conda\.anaconda\.org/conda-forge/(linux-64|noarch)/[^[:space:]#]+#([0-9a-f]{64})$ ]] ||
+      fail "Runtime lock contains an invalid explicit artifact: $lock"
+    [[ -z ${seen[$line]+x} ]] || fail "Runtime lock contains a duplicate artifact: $line"
+    seen[$line]=1
+    ((package_count += 1))
+    if [[ "$line" =~ /r-base-${version}- ]]; then
+      ((r_count += 1))
+    fi
+  done
+  ((package_count >= 50 && r_count == 1)) ||
+    fail "Runtime lock does not contain one exact R $version closure"
+  printf 'runtime_lock=%s\nlock_sha256=%s\nlocked_packages=%s\n' \
+    "$version" "$(sha256_file "$lock")" "$package_count"
+}
+
+for version in "${versions[@]}"; do
+  validate_lock "$version" "$ROOT/environment/runtime-r-${version}-linux-64.lock"
+done
+[[ "$mode" != verify_locks ]] || exit 0
+
+for input in "$PREFIX_RECEIPT" "$INVENTORY_HELPER"; do
+  [[ -f "$input" && ! -L "$input" ]] || fail "Runtime helper is absent or symbolic: $input"
+done
+for managed in \
+  "$ROOT/.local" "$ROOT/.local/bin" "$MATRIX_ROOT" "$PREFIX_ROOT" \
+  "$RECEIPT_ROOT" "$MAMBA_ROOT" "$ROOT/.local/tmp" \
+  "$ROOT/.cache" "$ROOT/.cache/downloads"
+do
+  assert_plain_directory_chain "$managed"
+done
+assert_plain_file_or_absent "$MICROMAMBA"
+assert_plain_file_or_absent "$MICROMAMBA_ARCHIVE"
+
+if [[ ! -f "$MICROMAMBA_ARCHIVE" ]]; then
+  [[ "$mode" == provision && "$offline" == false ]] ||
+    fail "Authenticated micromamba archive is absent: $MICROMAMBA_ARCHIVE"
+  mkdir -p -- "${MICROMAMBA_ARCHIVE%/*}"
+  temporary_archive=$(mktemp "$MICROMAMBA_ARCHIVE.new.XXXXXX")
+  trap 'rm -f -- "${temporary_archive:-}"' EXIT
+  curl -fL "$MICROMAMBA_URL" -o "$temporary_archive"
+  [[ "$(sha256_file "$temporary_archive")" == "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+    fail "Downloaded micromamba archive failed SHA-256 authentication"
+  mv -- "$temporary_archive" "$MICROMAMBA_ARCHIVE"
+  trap - EXIT
+fi
+[[ "$(sha256_file "$MICROMAMBA_ARCHIVE")" == "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+  fail "Micromamba archive SHA-256 mismatch"
+member_count=$(tar -tjf "$MICROMAMBA_ARCHIVE" | awk '$0 == "bin/micromamba" {n += 1} END {print n + 0}')
+[[ "$member_count" == 1 ]] || fail "Micromamba archive member identity is ambiguous"
+mkdir -p -- "$ROOT/.local/bin" "$ROOT/.local/tmp"
+member=$(mktemp "$ROOT/.local/tmp/runtime-matrix-micromamba.XXXXXX")
+trap 'rm -f -- "${member:-}"' EXIT
+tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba > "$member"
+chmod 0755 "$member"
+if [[ -f "$MICROMAMBA" ]]; then
+  [[ -x "$MICROMAMBA" && "$(sha256_file "$MICROMAMBA")" == "$(sha256_file "$member")" ]] ||
+    fail "Installed micromamba is not the executable from the authenticated archive"
+  rm -f -- "$member"
+else
+  [[ "$mode" == provision ]] || fail "Authenticated micromamba executable is absent"
+  mv -- "$member" "$MICROMAMBA"
+fi
+trap - EXIT
+[[ "$($MICROMAMBA --version)" == "$MICROMAMBA_VERSION" ]] ||
+  fail "Authenticated micromamba reports an unexpected version"
+
+write_expected_receipt() {
+  local version=$1 prefix=$2 lock=$3 manifest=$4
+  local cc
+  cc=$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    "$prefix/bin/R" CMD config CC)
+  cat <<EOF
+format\t1
+runtime\t$version
+platform\tlinux-64
+prefix_relative\t.local/runtime-matrix/prefixes/R-$version
+lock_relative\tenvironment/runtime-r-$version-linux-64.lock
+lock_sha256\t$(sha256_file "$lock")
+micromamba_version\t$MICROMAMBA_VERSION
+micromamba_archive_sha256\t$MICROMAMBA_ARCHIVE_SHA256
+micromamba_executable_sha256\t$(sha256_file "$MICROMAMBA")
+inventory_helper_sha256\t$(sha256_file "$INVENTORY_HELPER")
+prefix_receipt_helper_sha256\t$(sha256_file "$PREFIX_RECEIPT")
+prefix_manifest_sha256\t$(sha256_file "$manifest")
+r_version\t$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')
+r_home_relative\t.local/runtime-matrix/prefixes/R-$version/lib/R
+cc\t$cc
+EOF
+}
+
+verify_one() {
+  local version=$1
+  local lock="$ROOT/environment/runtime-r-${version}-linux-64.lock"
+  local prefix="$PREFIX_ROOT/R-$version"
+  local receipt_directory="$RECEIPT_ROOT/R-$version"
+  local manifest="$receipt_directory/prefix.manifest.tsv"
+  local inventory="$receipt_directory/installed-explicit.lock"
+  local packages="$receipt_directory/packages.tsv"
+  local receipt="$receipt_directory/receipt.tsv"
+  local seal="$receipt_directory/receipt.sha256"
+  local expected_inventory actual_inventory expected_receipt expected_seal
+
+  [[ -d "$prefix" && ! -L "$prefix" ]] || fail "Runtime prefix is absent: $prefix"
+  for file in "$manifest" "$inventory" "$packages" "$receipt" "$seal"; do
+    [[ -f "$file" && ! -L "$file" ]] || fail "Runtime receipt is absent or symbolic: $file"
+  done
+  "$PREFIX_RECEIPT" verify "$prefix" "$manifest"
+
+  expected_inventory=$(mktemp "$ROOT/.local/tmp/runtime-lock.XXXXXX")
+  actual_inventory=$(mktemp "$ROOT/.local/tmp/runtime-inventory.XXXXXX")
+  expected_receipt=$(mktemp "$ROOT/.local/tmp/runtime-receipt.XXXXXX")
+  trap 'rm -f -- "${expected_inventory:-}" "${actual_inventory:-}" "${expected_receipt:-}"' RETURN
+  tail -n +4 "$lock" | sort > "$expected_inventory"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+    sort > "$actual_inventory"
+  cmp -s -- "$expected_inventory" "$actual_inventory" ||
+    fail "Installed package identities differ from the exact R $version lock"
+  cmp -s -- "$actual_inventory" "$inventory" ||
+    fail "Installed package inventory differs from its retained receipt"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" |
+    cmp -s -- "$packages" - || fail "Installed package ledger differs from conda metadata"
+  write_expected_receipt "$version" "$prefix" "$lock" "$manifest" > "$expected_receipt"
+  cmp -s -- "$receipt" "$expected_receipt" ||
+    fail "Runtime receipt differs from its authenticated inputs"
+  expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+    fail "Runtime receipt seal is malformed or stale"
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
+    fail "Runtime executable does not report R $version"
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/R" RHOME)" == "$prefix/lib/R" ]] ||
+    fail "Runtime RHOME escaped its exact prefix"
+  rm -f -- "$expected_inventory" "$actual_inventory" "$expected_receipt"
+  trap - RETURN
+  printf 'runtime_matrix_prefix=passed\nruntime=%s\nprefix=%s\nreceipt=%s\n' \
+    "$version" "$prefix" "$receipt"
+}
+
+if [[ "$mode" == verify ]]; then
+  for version in "${versions[@]}"; do verify_one "$version"; done
+  exit 0
+fi
+
+mkdir -p -- "$PREFIX_ROOT" "$RECEIPT_ROOT" "$MAMBA_ROOT" "$ROOT/.local/tmp"
+for version in "${versions[@]}"; do
+  lock="$ROOT/environment/runtime-r-${version}-linux-64.lock"
+  prefix="$PREFIX_ROOT/R-$version"
+  receipt_directory="$RECEIPT_ROOT/R-$version"
+  if [[ -e "$prefix" || -L "$prefix" ]]; then
+    verify_one "$version"
+    continue
+  fi
+  [[ ! -e "$receipt_directory" && ! -L "$receipt_directory" ]] ||
+    fail "Receipt exists for an absent R $version prefix: $receipt_directory"
+  mkdir -p -- "$receipt_directory"
+  create_args=(create --yes --no-rc --no-env -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
+  [[ "$offline" == false ]] || create_args+=(--offline)
+  CONDARC=/dev/null MAMBARC=/dev/null MAMBA_ROOT_PREFIX="$MAMBA_ROOT" \
+    "$MICROMAMBA" "${create_args[@]}"
+
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
+    fail "Provisioned runtime does not report exact R $version"
+  test_directory="$MATRIX_ROOT/probes/R-$version"
+  mkdir -p -- "$test_directory"
+  cat > "$test_directory/c17.c" <<'EOF'
+#include <R.h>
+#include <Rinternals.h>
+SEXP runtime_matrix_c17(SEXP value) {
+  for (int i = 0; i < 1; ++i) { if (value != R_NilValue) return value; }
+  return R_NilValue;
+}
+EOF
+  (
+    export PATH="$prefix/bin:/usr/bin:/bin"
+    export CONDA_PREFIX="$prefix"
+    for hook in "$prefix"/etc/conda/activate.d/*.sh; do
+      # shellcheck disable=SC1090
+      [[ ! -f "$hook" ]] || . "$hook"
+    done
+    cd "$test_directory"
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+      "$prefix/bin/R" CMD SHLIB --preclean c17.c
+  ) > "$test_directory/build.log" 2>&1
+  [[ -f "$test_directory/c17.so" ]] || fail "R $version C17 capability probe failed"
+
+  manifest="$receipt_directory/prefix.manifest.tsv"
+  "$PREFIX_RECEIPT" create "$prefix" "$manifest"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+    sort > "$receipt_directory/installed-explicit.lock"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" \
+    > "$receipt_directory/packages.tsv"
+  write_expected_receipt "$version" "$prefix" "$lock" "$manifest" \
+    > "$receipt_directory/receipt.tsv"
+  printf '%s  receipt.tsv\n' "$(sha256_file "$receipt_directory/receipt.tsv")" \
+    > "$receipt_directory/receipt.sha256"
+  chmod 0444 "$receipt_directory"/*
+  verify_one "$version"
+done

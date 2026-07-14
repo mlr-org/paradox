@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/environment/runtime-matrix-prefix-receipt create|verify DIRECTORY MANIFEST
+
+Create or verify a deterministic SHA-256 manifest for an isolated runtime
+prefix.  Paths, kinds, modes, sizes, file bytes, and internal symbolic-link
+targets are authenticated.  Links that resolve outside the prefix are refused.
+USAGE
+}
+
+if [[ $# -ne 3 || ! ${1:-} =~ ^(create|verify)$ ]]; then
+  usage >&2
+  exit 2
+fi
+
+operation=$1
+directory=$2
+manifest=$3
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+[[ -d "$directory" && ! -L "$directory" ]] ||
+  fail "Receipt root must be a real, non-symbolic directory: $directory"
+directory=$(cd "$directory" && pwd -P)
+case "$manifest" in
+  /*) ;;
+  *) manifest=$PWD/$manifest ;;
+esac
+manifest_parent=${manifest%/*}
+[[ -d "$manifest_parent" && ! -L "$manifest_parent" ]] ||
+  fail "Receipt parent must be a real, non-symbolic directory: $manifest_parent"
+manifest_parent=$(cd "$manifest_parent" && pwd -P)
+manifest=$manifest_parent/${manifest##*/}
+case "$manifest/" in
+  "$directory"/*) fail "Receipt must live outside the authenticated tree" ;;
+esac
+
+for tool in find sort sha256sum readlink realpath mktemp cmp xargs; do
+  command -v "$tool" >/dev/null 2>&1 || fail "Required receipt tool is absent: $tool"
+done
+
+describe() {
+  local root=$1 output=$2 relative path kind mode size value target resolved
+  local record hash full_path
+  local unsorted
+  declare -A hashes=()
+  unsorted=$(mktemp "${output}.unsorted.XXXXXX")
+  trap 'rm -f -- "${unsorted:-}" "${output:-}"' RETURN
+  : > "$unsorted"
+
+  # Hash all regular files in batched sha256sum processes.  The earlier
+  # per-member implementation spawned several processes for each conda file
+  # and made read-only activation verification unnecessarily slow.
+  while IFS= read -r -d '' record; do
+    hash=${record:0:64}
+    full_path=${record:66}
+    [[ "$hash" =~ ^[0-9a-f]{64}$ && "$full_path" == "$root/"* ]] ||
+      fail "Could not parse a runtime-prefix SHA-256 record"
+    relative=${full_path#"$root/"}
+    hashes["$relative"]=$hash
+  done < <(find "$root" -type f -print0 | sort -z |
+    xargs -0 -r sha256sum -z --)
+
+  while IFS=$'\t' read -r -d '' relative kind size mode target; do
+    [[ -n "$relative" && "$relative" != *$'\t'* &&
+      "$relative" != *$'\r'* && "$relative" != *$'\n'* ]] ||
+      fail "Runtime prefix contains a path unsupported by the receipt format"
+    path=$root/$relative
+    if [[ "$kind" == l && -L "$path" ]]; then
+      kind=symlink
+      mode=-
+      size=-
+      [[ -n "$target" && "$target" != *$'\t'* &&
+        "$target" != *$'\r'* && "$target" != *$'\n'* ]] ||
+        fail "Runtime prefix contains an unsupported symbolic-link target: $relative"
+      case "$target" in
+        /*) fail "Runtime prefix contains an absolute symbolic link: $relative" ;;
+      esac
+      resolved=$(realpath -m -- "${path%/*}/$target")
+      case "$resolved" in
+        "$root"|"$root"/*) ;;
+        *) fail "Runtime prefix contains a symbolic link escaping its root: $relative" ;;
+      esac
+      value=target:$target
+    elif [[ "$kind" == d && -d "$path" ]]; then
+      kind=directory
+      size=-
+      value=-
+    elif [[ "$kind" == f && -f "$path" ]]; then
+      kind='file'
+      value=${hashes[$relative]:-}
+      [[ "$value" =~ ^[0-9a-f]{64}$ ]] ||
+        fail "A regular runtime-prefix file was not hashed: $relative"
+    else
+      fail "Runtime prefix changed while it was being received: $relative"
+    fi
+    printf '%s\t%s\t%s\t%s\t%s\n' \
+      "$relative" "$kind" "$value" "$size" "$mode" >> "$unsorted"
+  done < <(find "$root" -mindepth 1 -printf '%P\t%y\t%s\t%m\t%l\0' | sort -z)
+
+  {
+    printf 'path\tkind\tsha256_or_target\tsize\tmode\n'
+    sort -t $'\t' -k1,1 "$unsorted"
+  } > "$output"
+  rm -f -- "$unsorted"
+  trap - RETURN
+}
+
+if [[ "$operation" == create ]]; then
+  [[ ! -e "$manifest" && ! -L "$manifest" ]] ||
+    fail "Refusing to replace an existing runtime-prefix receipt: $manifest"
+  temporary=$(mktemp "$manifest.new.XXXXXX")
+  trap 'rm -f -- "${temporary:-}"' EXIT
+  describe "$directory" "$temporary"
+  chmod 0444 "$temporary"
+  mv -- "$temporary" "$manifest"
+  trap - EXIT
+  printf 'runtime_prefix_receipt_created=%s\n' "$manifest"
+  printf 'runtime_prefix_members=%s\n' "$(( $(wc -l < "$manifest") - 1 ))"
+  exit 0
+fi
+
+[[ -f "$manifest" && ! -L "$manifest" ]] ||
+  fail "Runtime-prefix receipt is absent or symbolic: $manifest"
+temporary=$(mktemp "$manifest.verify.XXXXXX")
+trap 'rm -f -- "${temporary:-}"' EXIT
+describe "$directory" "$temporary"
+if ! cmp -s -- "$manifest" "$temporary"; then
+  fail "Runtime prefix does not match its authenticated tree receipt: $directory"
+fi
+printf 'runtime_prefix_receipt_verified=%s\n' "$manifest"
+printf 'runtime_prefix_members=%s\n' "$(( $(wc -l < "$manifest") - 1 ))"

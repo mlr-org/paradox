@@ -1,0 +1,216 @@
+#!/usr/bin/env sh
+# shellcheck disable=SC2317 # return-or-exit idiom supports sourcing and execution.
+
+runtime_matrix_activation_fail() {
+  echo "$*" >&2
+  return 1
+}
+
+if [ ! -f DESCRIPTION ]; then
+  runtime_matrix_activation_fail \
+    "scripts/activate-runtime-matrix must be sourced from the paradox repository root" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+if [ "$#" -ne 1 ]; then
+  runtime_matrix_activation_fail \
+    "usage: . scripts/activate-runtime-matrix 4.3.3|4.5.2" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+case "$1" in
+  4.3.3|4.5.2) PARADOX_RUNTIME_MATRIX_VERSION=$1 ;;
+  *)
+    runtime_matrix_activation_fail "runtime must be 4.3.3 or 4.5.2" ||
+      { return 1 2>/dev/null || exit 1; }
+    ;;
+esac
+
+PARADOX_ROOT=$(pwd -P)
+PARADOX_RUNTIME_MATRIX_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/prefixes/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+if ! "$PARADOX_ROOT/scripts/bootstrap-runtime-matrix" \
+    --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" --verify >/dev/null; then
+  runtime_matrix_activation_fail \
+    "R $PARADOX_RUNTIME_MATRIX_VERSION prefix failed authenticated verification" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+
+runtime_matrix_require_plain_directory_chain() {
+  runtime_matrix_path=$1
+  case "$runtime_matrix_path" in
+    "$PARADOX_ROOT"|"$PARADOX_ROOT"/*) ;;
+    *) runtime_matrix_activation_fail "Managed path escaped the repository: $runtime_matrix_path" || return 1 ;;
+  esac
+  runtime_matrix_current=$PARADOX_ROOT
+  runtime_matrix_remainder=${runtime_matrix_path#"$PARADOX_ROOT"}
+  while [ -n "$runtime_matrix_remainder" ]; do
+    runtime_matrix_remainder=${runtime_matrix_remainder#/}
+    runtime_matrix_component=${runtime_matrix_remainder%%/*}
+    if [ "$runtime_matrix_component" = "$runtime_matrix_remainder" ]; then
+      runtime_matrix_remainder=
+    else
+      runtime_matrix_remainder=${runtime_matrix_remainder#*/}
+    fi
+    [ -n "$runtime_matrix_component" ] || continue
+    runtime_matrix_current="$runtime_matrix_current/$runtime_matrix_component"
+    if [ -L "$runtime_matrix_current" ]; then
+      runtime_matrix_activation_fail "Refusing symbolic managed directory: $runtime_matrix_current" || return 1
+    fi
+    if [ -e "$runtime_matrix_current" ] && [ ! -d "$runtime_matrix_current" ]; then
+      runtime_matrix_activation_fail "Managed path is not a directory: $runtime_matrix_current" || return 1
+    fi
+  done
+}
+
+PARADOX_RUNTIME_MATRIX_LIBRARY="$PARADOX_ROOT/.local/runtime-matrix/libraries/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+PARADOX_RUNTIME_MATRIX_TMP="$PARADOX_ROOT/.local/runtime-matrix/tmp/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+PARADOX_RUNTIME_MATRIX_CACHE="$PARADOX_ROOT/.cache/runtime-matrix/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+PARADOX_RUNTIME_MATRIX_XDG="$PARADOX_ROOT/.local/runtime-matrix/runtime/R-$PARADOX_RUNTIME_MATRIX_VERSION"
+for runtime_matrix_directory in \
+  "$PARADOX_ROOT/.local" "$PARADOX_ROOT/.local/runtime-matrix" \
+  "$PARADOX_RUNTIME_MATRIX_PREFIX" "$PARADOX_RUNTIME_MATRIX_LIBRARY" \
+  "$PARADOX_RUNTIME_MATRIX_TMP" "$PARADOX_RUNTIME_MATRIX_CACHE" \
+  "$PARADOX_RUNTIME_MATRIX_XDG"
+do
+  if ! runtime_matrix_require_plain_directory_chain "$runtime_matrix_directory"; then
+    unset runtime_matrix_directory
+    unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true
+    return 1 2>/dev/null || exit 1
+  fi
+done
+unset runtime_matrix_directory runtime_matrix_path runtime_matrix_current
+unset runtime_matrix_remainder runtime_matrix_component
+
+if ! unset \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_MAKEVARS_SITE R_MAKEVARS_USER R_HISTFILE \
+  CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+  CC_FOR_BUILD CPP_FOR_BUILD CXX_FOR_BUILD FC_FOR_BUILD \
+  AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
+  ADDR2LINE CXXFILT ELFEDIT GPROF \
+  CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS FORTRANFLAGS LDFLAGS \
+  LDFLAGS_LD DEBUG_CFLAGS DEBUG_CPPFLAGS DEBUG_CXXFLAGS DEBUG_FFLAGS \
+  CXX11 CXX14 CXX17 CXX20 CXX23 \
+  CXX11FLAGS CXX14FLAGS CXX17FLAGS CXX20FLAGS CXX23FLAGS \
+  CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH \
+  LIBRARY_PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH \
+  COMPILER_PATH GCC_EXEC_PREFIX \
+  PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+  CMAKE_PREFIX_PATH CMAKE_MODULE_PATH CMAKE_TOOLCHAIN_FILE CMAKE_ARGS MESON_ARGS \
+  CONFIG_SITE MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
+  CONDA_PREFIX MAMBA_ROOT_PREFIX CONDA_BUILD CONDA_BUILD_SYSROOT \
+  CONDA_BUILD_CROSS_COMPILATION CONDA_TOOLCHAIN_HOST CONDA_TOOLCHAIN_BUILD \
+  HOST BUILD QEMU_LD_PREFIX build_alias host_alias \
+  GCC_AR GCC_NM GCC_RANLIB \
+  CONDA_BACKUP_ADDR2LINE CONDA_BACKUP_AR CONDA_BACKUP_AS \
+  CONDA_BACKUP_BUILD CONDA_BACKUP_CC CONDA_BACKUP_CC_FOR_BUILD \
+  CONDA_BACKUP_CFLAGS CONDA_BACKUP_CMAKE_ARGS CONDA_BACKUP_CMAKE_PREFIX_PATH \
+  CONDA_BACKUP_CONDA_BUILD_CROSS_COMPILATION CONDA_BACKUP_CONDA_BUILD_SYSROOT \
+  CONDA_BACKUP_CONDA_TOOLCHAIN_BUILD CONDA_BACKUP_CONDA_TOOLCHAIN_HOST \
+  CONDA_BACKUP_CPP CONDA_BACKUP_CPPFLAGS CONDA_BACKUP_CPP_FOR_BUILD \
+  CONDA_BACKUP_CXXFILT CONDA_BACKUP_DEBUG_CFLAGS CONDA_BACKUP_DEBUG_CPPFLAGS \
+  CONDA_BACKUP_ELFEDIT CONDA_BACKUP_GCC CONDA_BACKUP_GCC_AR \
+  CONDA_BACKUP_GCC_NM CONDA_BACKUP_GCC_RANLIB CONDA_BACKUP_GPROF \
+  CONDA_BACKUP_HOST CONDA_BACKUP_LD CONDA_BACKUP_LDFLAGS \
+  CONDA_BACKUP_LDFLAGS_LD CONDA_BACKUP_MESON_ARGS CONDA_BACKUP_NM \
+  CONDA_BACKUP_OBJCOPY CONDA_BACKUP_OBJDUMP CONDA_BACKUP_QEMU_LD_PREFIX \
+  CONDA_BACKUP_RANLIB CONDA_BACKUP_READELF CONDA_BACKUP_SIZE \
+  CONDA_BACKUP_STRINGS CONDA_BACKUP_STRIP CONDA_BACKUP_build_alias \
+  CONDA_BACKUP_host_alias \
+  GSETTINGS_SCHEMA_DIR GSETTINGS_SCHEMA_DIR_CONDA_BACKUP \
+  RSTUDIO_WHICH_R RSTUDIO_WHICH_R_PREV \
+  XDG_RUNTIME_DIR CCACHE_TEMPDIR \
+  PARADOX_COMPAT_SYSTEM_ACTIVE PARADOX_COMPAT_SYSTEM_ROOT \
+  PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX
+then
+  runtime_matrix_activation_fail "Could not clear an inherited R/compiler input" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+
+export PARADOX_ROOT PARADOX_RUNTIME_MATRIX_VERSION
+export PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY
+export CONDA_PREFIX="$PARADOX_RUNTIME_MATRIX_PREFIX"
+export MAMBA_ROOT_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/micromamba"
+export R_LIBS_USER="$PARADOX_RUNTIME_MATRIX_LIBRARY"
+export R_LIBS_SITE=
+export R_ENVIRON_USER="$PARADOX_ROOT/environment/Renviron"
+export R_PROFILE_USER="$PARADOX_ROOT/environment/Rprofile.R"
+export R_MAKEVARS_USER="$PARADOX_ROOT/environment/Makevars"
+export R_HISTFILE=/dev/null
+export TMPDIR="$PARADOX_RUNTIME_MATRIX_TMP"
+export XDG_RUNTIME_DIR="$PARADOX_RUNTIME_MATRIX_XDG"
+export XDG_CACHE_HOME="$PARADOX_RUNTIME_MATRIX_CACHE/xdg"
+export R_USER_CACHE_DIR="$PARADOX_RUNTIME_MATRIX_CACHE/R"
+export CCACHE_DIR="$PARADOX_RUNTIME_MATRIX_CACHE/ccache"
+export CCACHE_TEMPDIR="$PARADOX_RUNTIME_MATRIX_TMP/ccache"
+export PIP_CACHE_DIR="$PARADOX_RUNTIME_MATRIX_CACHE/pip"
+export UV_CACHE_DIR="$PARADOX_RUNTIME_MATRIX_CACHE/uv"
+export CONFIG_SITE=/dev/null
+
+if ! mkdir -p \
+  "$R_LIBS_USER" "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
+  "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
+  "$PIP_CACHE_DIR" "$UV_CACHE_DIR" || ! chmod 0700 "$XDG_RUNTIME_DIR"; then
+  runtime_matrix_activation_fail "Could not prepare repository-local matrix state" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+
+# Remove every ordinary or matrix R prefix owned by this checkout before
+# prepending the selected one.  Unrelated host utilities remain available.
+runtime_matrix_clean_path=
+runtime_matrix_path_remainder=${PATH:-}
+while :; do
+  case "$runtime_matrix_path_remainder" in
+    *:*)
+      runtime_matrix_path_entry=${runtime_matrix_path_remainder%%:*}
+      runtime_matrix_path_remainder=${runtime_matrix_path_remainder#*:}
+      ;;
+    *)
+      runtime_matrix_path_entry=$runtime_matrix_path_remainder
+      runtime_matrix_path_remainder=
+      ;;
+  esac
+  case "$runtime_matrix_path_entry" in
+    ""|"$PARADOX_ROOT/.local/toolchain/bin"|"$PARADOX_ROOT/.local/bin"|\
+      "$PARADOX_ROOT/.local/runtime-matrix/prefixes/"R-*/bin) ;;
+    *)
+      case ":$runtime_matrix_clean_path:" in
+        *:"$runtime_matrix_path_entry":*) ;;
+        *) runtime_matrix_clean_path=${runtime_matrix_clean_path:+"$runtime_matrix_clean_path:"}$runtime_matrix_path_entry ;;
+      esac
+      ;;
+  esac
+  [ -n "$runtime_matrix_path_remainder" ] || break
+done
+export PATH="$PARADOX_RUNTIME_MATRIX_PREFIX/bin:$PARADOX_ROOT/.local/bin${runtime_matrix_clean_path:+:$runtime_matrix_clean_path}"
+
+for runtime_matrix_hook in "$PARADOX_RUNTIME_MATRIX_PREFIX"/etc/conda/activate.d/*.sh; do
+  if [ -f "$runtime_matrix_hook" ]; then
+    # The r-base hook runs javareconf and is therefore inappropriate for an
+    # immutable, tree-receipted runtime.  Selecting R itself needs no hook.
+    [ "${runtime_matrix_hook##*/}" != activate-r-base.sh ] || continue
+    # shellcheck disable=SC1090
+    if ! . "$runtime_matrix_hook"; then
+      runtime_matrix_activation_fail "Compiler activation hook failed: $runtime_matrix_hook" ||
+        { return 1 2>/dev/null || exit 1; }
+    fi
+  fi
+done
+export PKG_CONFIG="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/pkg-config"
+export PKG_CONFIG_PATH="$PARADOX_RUNTIME_MATRIX_PREFIX/lib/pkgconfig:$PARADOX_RUNTIME_MATRIX_PREFIX/share/pkgconfig"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+unset PKG_CONFIG_SYSROOT_DIR
+
+if [ "$(command -v R)" != "$PARADOX_RUNTIME_MATRIX_PREFIX/bin/R" ] ||
+    [ "$(command -v Rscript)" != "$PARADOX_RUNTIME_MATRIX_PREFIX/bin/Rscript" ] ||
+    [ "$(R RHOME)" != "$PARADOX_RUNTIME_MATRIX_PREFIX/lib/R" ] ||
+    [ "$(Rscript --vanilla -e 'cat(as.character(getRversion()))')" != "$PARADOX_RUNTIME_MATRIX_VERSION" ]; then
+  runtime_matrix_activation_fail "Activation did not select exact R $PARADOX_RUNTIME_MATRIX_VERSION" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+
+export PARADOX_ACTIVE_ROOT="$PARADOX_ROOT"
+export PARADOX_RUNTIME_MATRIX_ACTIVE=1
+hash -r 2>/dev/null || true
+unset runtime_matrix_clean_path runtime_matrix_path_remainder runtime_matrix_path_entry
+unset runtime_matrix_hook
+unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true

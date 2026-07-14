@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+scripts=(
+  scripts/bootstrap-runtime-matrix
+  scripts/activate-runtime-matrix
+  scripts/test-runtime-matrix
+  scripts/verify-runtime-matrix-evidence
+  scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/test-runtime-matrix
+  scripts/environment/test-runtime-matrix-installed
+)
+for script in "${scripts[@]}"; do
+  bash -n "$ROOT/$script"
+done
+
+"$ROOT/scripts/bootstrap-runtime-matrix" --help >/dev/null
+"$ROOT/scripts/test-runtime-matrix" --help >/dev/null
+"$ROOT/scripts/verify-runtime-matrix-evidence" --help >/dev/null
+"$ROOT/scripts/bootstrap-runtime-matrix" --verify-locks >/dev/null
+
+if command -v Rscript >/dev/null 2>&1; then
+  Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
+    "$ROOT/scripts/environment/runtime-matrix-inventory.R" \
+    "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+    "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+fi
+
+mkdir -p "$ROOT/.local/tmp"
+fixture=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-receipt.XXXXXX")
+trap 'chmod -R u+w "$fixture" 2>/dev/null || true; rm -rf -- "$fixture"' EXIT
+mkdir -p "$fixture/tree/sub" "$fixture/receipts"
+printf 'spherical\n' > "$fixture/tree/sub/value"
+ln -s sub/value "$fixture/tree/link"
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  create "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+  verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null
+printf 'tampered\n' >> "$fixture/tree/sub/value"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    verify "$fixture/tree" "$fixture/receipts/tree.tsv" >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted tampered content" >&2
+  exit 1
+fi
+printf 'spherical\n' > "$fixture/tree/sub/value"
+ln -s /tmp "$fixture/tree/escape"
+if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    create "$fixture/tree" "$fixture/receipts/escape.tsv" >/dev/null 2>&1; then
+  echo "Runtime-prefix receipt accepted an outward symbolic link" >&2
+  exit 1
+fi
+
+printf 'runtime_matrix_static_fixture=passed\n'

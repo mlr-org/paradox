@@ -1,0 +1,269 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/test-runtime-matrix [OPTIONS]
+
+Build and test one committed paradox source tree under actual local R 4.3.3
+and R 4.5.2 runtimes.
+
+Options:
+  --runtime VERSION  Select 4.3.3, 4.5.2, or all (default: all).
+  --source-ref REF   Full Git ref or commit to archive (default: HEAD).
+  --run-id ID        New retained run ID (required).
+  -h, --help         Show this help.
+
+Each stage builds a source archive, installs it in a fresh run-specific
+library, executes a focused r_api_compat probe and the practical full source
+suite with NOT_CRAN=false, audits the DSO's version-specific undefined public
+R symbols, and seals all retained artifacts below .local/checks/ID/.
+USAGE
+}
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+selection=all
+source_ref=HEAD
+run_id=
+while (($#)); do
+  case "$1" in
+    --runtime)
+      (($# >= 2)) || fail "--runtime requires a value"
+      selection=$2
+      shift 2
+      ;;
+    --source-ref)
+      (($# >= 2)) || fail "--source-ref requires a value"
+      source_ref=$2
+      shift 2
+      ;;
+    --run-id)
+      (($# >= 2)) || fail "--run-id requires a value"
+      run_id=$2
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "Unknown test-runtime-matrix argument: $1" ;;
+  esac
+done
+case "$selection" in
+  all) versions=(4.3.3 4.5.2) ;;
+  4.3.3|4.5.2) versions=("$selection") ;;
+  *) fail "Runtime must be 4.3.3, 4.5.2, or all" ;;
+esac
+[[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
+  fail "--run-id is required and must have a safe shape"
+source_commit=$(git -C "$ROOT" rev-parse --verify "$source_ref^{commit}") ||
+  fail "Source ref does not resolve to a commit: $source_ref"
+source_tree=$(git -C "$ROOT" rev-parse --verify "$source_commit^{tree}")
+[[ "$source_commit" =~ ^[0-9a-f]{40}$ && "$source_tree" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "Git returned malformed source provenance"
+
+trusted_inputs=(
+  scripts/bootstrap-runtime-matrix
+  scripts/activate-runtime-matrix
+  scripts/test-runtime-matrix
+  scripts/verify-runtime-matrix-evidence
+  scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-inventory.R
+  scripts/environment/runtime-matrix-probe.R
+  scripts/environment/run-runtime-matrix-tests.R
+)
+for relative in "${trusted_inputs[@]}"; do
+  [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
+    fail "Runtime-matrix input is absent or symbolic: $relative"
+  git -C "$ROOT" cat-file -e "$source_commit:$relative" 2>/dev/null ||
+    fail "Source commit does not contain runtime-matrix input: $relative"
+  git -C "$ROOT" show "$source_commit:$relative" | cmp -s -- "$ROOT/$relative" - ||
+    fail "Runtime-matrix input differs from the committed source ref: $relative"
+done
+for version in "${versions[@]}"; do
+  relative="environment/runtime-r-${version}-linux-64.lock"
+  git -C "$ROOT" show "$source_commit:$relative" | cmp -s -- "$ROOT/$relative" - ||
+    fail "Runtime lock differs from the committed source ref: $relative"
+done
+
+"$ROOT/scripts/bootstrap-runtime-matrix" --runtime "$selection" --verify
+run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
+[[ ! -e "$run_root" && ! -L "$run_root" ]] || fail "Run directory already exists: $run_root"
+mkdir -p -- "$run_root/metadata"
+printf 'field\tvalue\nstatus\tfailed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
+  "$run_id" "$source_ref" "$source_commit" "$source_tree" > "$run_root/metadata/run.tsv"
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+seal_metadata() {
+  local metadata=$1
+  shift
+  (
+    cd "$metadata"
+    : > completion.inputs.tsv
+    local input
+    for input in "$@"; do
+      sha256sum "$input" >> completion.inputs.tsv
+    done
+    printf '%s  completion.inputs.tsv\n' "$(sha256_file completion.inputs.tsv)" > completion.seal
+  )
+}
+
+audit_symbols() {
+  local version=$1 dso=$2 log=$3 nm_tool symbols symbol
+  nm_tool=$(R CMD config NM)
+  command -v "$nm_tool" >/dev/null 2>&1 || fail "Runtime compiler NM is absent: $nm_tool"
+  symbols=${log%.log}.symbols.txt
+  "$nm_tool" -D --undefined-only "$dso" > "$symbols"
+  {
+    printf 'runtime=%s\n' "$version"
+    printf 'nm=%s\n' "$(command -v "$nm_tool")"
+    printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
+  } > "$log"
+  symbol=Rf_eval
+  rg -q "[[:space:]]${symbol}$" "$symbols" ||
+    fail "Expected R API symbol is absent on R $version: $symbol"
+  printf 'required_symbol=%s\n' "$symbol" >> "$log"
+  if [[ "$version" == 4.3.3 ]]; then
+    required=()
+    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
+    branch=pre-4.5-evaluated-public-fallback
+  else
+    required=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx)
+    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
+    branch=4.5-direct-closure-and-evaluated-binding
+  fi
+  for symbol in "${required[@]}"; do
+    rg -q "[[:space:]]${symbol}$" "$symbols" || fail "Expected R API symbol is absent on R $version: $symbol"
+    printf 'required_symbol=%s\n' "$symbol" >> "$log"
+  done
+  for symbol in "${forbidden[@]}"; do
+    if rg -q "[[:space:]]${symbol}$" "$symbols"; then
+      fail "Too-new R API symbol leaked into the R $version package DSO: $symbol"
+    fi
+    printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
+  done
+  printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
+}
+
+for version in "${versions[@]}"; do
+  stage="$run_root/R-$version"
+  artifacts="$stage/artifacts"
+  metadata="$stage/metadata"
+  source="$artifacts/source"
+  build="$artifacts/build"
+  library="$artifacts/library"
+  logs="$artifacts/logs"
+  inputs="$artifacts/inputs"
+  mkdir -p -- "$source" "$build" "$library" "$logs" "$inputs" "$metadata"
+  printf 'field\tvalue\nstatus\tfailed\nruntime\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
+    "$version" "$source_ref" "$source_commit" "$source_tree" > "$metadata/run.tsv"
+
+  git -C "$ROOT" archive --format=tar "$source_commit" | tar -xf - -C "$source"
+  for relative in "${trusted_inputs[@]}" "environment/runtime-r-${version}-linux-64.lock"; do
+    mkdir -p -- "$inputs/${relative%/*}"
+    cp -- "$ROOT/$relative" "$inputs/$relative"
+  done
+  cp -R -- "$ROOT/.local/runtime-matrix/receipts/R-$version" "$inputs/bootstrap-receipt"
+  {
+    printf 'step\tcommand\n'
+    printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
+    printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
+    printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
+    printf 'symbols\tNM -D --undefined-only paradox.so\n'
+    printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY\n'
+  } > "$inputs/commands.tsv"
+
+  (
+    cd "$ROOT"
+    # shellcheck disable=SC1090
+    . "$ROOT/scripts/activate-runtime-matrix" "$version"
+    export R_LIBS_USER="$library"
+    export R_LIBS_SITE=
+    export TMPDIR="$artifacts/tmp"
+    export XDG_RUNTIME_DIR="$artifacts/runtime"
+    export XDG_CACHE_HOME="$artifacts/cache/xdg"
+    export R_USER_CACHE_DIR="$artifacts/cache/R"
+    export CCACHE_DIR="$artifacts/cache/ccache"
+    export CCACHE_TEMPDIR="$artifacts/tmp/ccache"
+    export PIP_CACHE_DIR="$artifacts/cache/pip"
+    export UV_CACHE_DIR="$artifacts/cache/uv"
+    mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
+      "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
+      "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
+    chmod 0700 "$XDG_RUNTIME_DIR"
+
+    cd "$build"
+    R CMD build --no-build-vignettes --no-manual "$source" \
+      > "$logs/build.log" 2>&1
+    mapfile -t archives < <(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
+    [[ ${#archives[@]} -eq 1 ]] || fail "R $version build did not produce one source archive"
+    archive=${archives[0]}
+    R CMD INSTALL --preclean --clean --install-tests --library="$library" "$archive" \
+      > "$logs/install.log" 2>&1
+    Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" "$library" \
+      > "$logs/focused-probe.log" 2>&1
+    audit_symbols "$version" "$library/paradox/libs/paradox.so" \
+      "$logs/r-api-symbol-audit.log"
+    NOT_CRAN=false Rscript --vanilla \
+      "$ROOT/scripts/environment/run-runtime-matrix-tests.R" "$source" "$library" \
+      > "$logs/source-tests.log" 2>&1
+    Rscript --vanilla -e 'sessionInfo()' > "$logs/session-info.log" 2>&1
+    Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
+      > "$logs/r-packages.tsv" 2>&1
+    R CMD config CC > "$logs/cc.txt" 2>&1
+    cc=$(R CMD config CC)
+    "$cc" --version > "$logs/compiler-version.log" 2>&1
+  )
+
+  branch=$(awk -F = '$1 == "r_api_compat_branch" {print $2}' "$logs/r-api-symbol-audit.log")
+  archive=$(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
+  [[ -n "$branch" && -f "$archive" ]] || fail "Runtime stage outputs are incomplete"
+  "$PREFIX_RECEIPT" create "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
+  {
+    printf 'field\tvalue\n'
+    printf 'status\tpassed\n'
+    printf 'runtime\t%s\n' "$version"
+    printf 'source_ref\t%s\n' "$source_ref"
+    printf 'source_commit\t%s\n' "$source_commit"
+    printf 'source_tree\t%s\n' "$source_tree"
+    printf 'r_api_compat_branch\t%s\n' "$branch"
+    printf 'lock_sha256\t%s\n' "$(sha256_file "$ROOT/environment/runtime-r-${version}-linux-64.lock")"
+    printf 'bootstrap_receipt_sha256\t%s\n' "$(sha256_file "$inputs/bootstrap-receipt/receipt.tsv")"
+    printf 'archive_sha256\t%s\n' "$(sha256_file "$archive")"
+    printf 'candidate_dso_sha256\t%s\n' "$(sha256_file "$library/paradox/libs/paradox.so")"
+    printf 'artifacts_manifest_sha256\t%s\n' "$(sha256_file "$metadata/artifacts.manifest.tsv")"
+  } > "$metadata/run.tsv"
+  seal_metadata "$metadata" run.tsv artifacts.manifest.tsv
+done
+
+{
+  printf 'runtime\tstage_seal_sha256\n'
+  for version in "${versions[@]}"; do
+    printf '%s\t%s\n' "$version" \
+      "$(sha256_file "$run_root/R-$version/metadata/completion.seal")"
+  done
+} > "$run_root/metadata/stages.tsv"
+{
+  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\n' \
+    "$run_id" "$source_ref" "$source_commit" "$source_tree" "${#versions[@]}"
+} > "$run_root/metadata/run.tsv"
+(
+  cd "$run_root/metadata"
+  : > completion.inputs.tsv
+  sha256sum run.tsv stages.tsv >> completion.inputs.tsv
+  for version in "${versions[@]}"; do
+    sha256sum "../R-$version/metadata/completion.seal" >> completion.inputs.tsv
+  done
+  printf '%s  completion.inputs.tsv\n' "$(sha256_file completion.inputs.tsv)" > completion.seal
+)
+"$ROOT/scripts/verify-runtime-matrix-evidence" --run-id "$run_id"
+printf 'runtime_matrix=passed\nrun_id=%s\nsource_commit=%s\nsource_tree=%s\n' \
+  "$run_id" "$source_commit" "$source_tree"

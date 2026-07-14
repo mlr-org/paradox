@@ -103,3 +103,35 @@ inactive evidence binding without changing the source prefixes.
 hostile inherited XDG/ccache temporary paths and proves ordinary activation
 repairs both to plain repository-local directories, including the required
 mode-0700 XDG runtime root.
+
+## Real supported-R runtime matrix
+
+Header compilation cannot prove that fallback paths behave correctly inside
+the actual R interpreter. The opt-in runtime matrix therefore provisions
+exact conda environments for R 4.3.3 and R 4.5.2 from the SHA-256 explicit
+locks in `environment/runtime-r-*-linux-64.lock`:
+
+```sh
+scripts/bootstrap-runtime-matrix
+scripts/bootstrap-runtime-matrix --verify
+scripts/environment/test-runtime-matrix
+scripts/environment/test-runtime-matrix-installed all
+```
+
+The fast fixture checks shell/R syntax, lock shape, complete-tree tamper
+detection, and outward-link refusal. The installed fixture starts hostile
+clean shells and proves both activations repair injected R libraries, startup
+files, compiler/linker/pkg-config inputs, caches, temporary paths, and XDG
+runtime state. It also re-sources activation to prove idempotence. No matrix
+command reads or mutates `.local/compat/R/library-dependencies` or either
+consumer system prefix.
+
+`scripts/test-runtime-matrix --help` describes the retained execution gate.
+For each selected actual interpreter it archives a committed source ref,
+builds and installs paradox into a fresh stage library, runs the focused
+public-R-API facade probe and full practical source suite, and audits undefined
+DSO symbols against that release's allowed accessor set. All artifacts are
+sealed beneath `.local/checks/<run-id>/runtime-matrix`; verify a completed run
+with `scripts/verify-runtime-matrix-evidence --run-id <run-id>`. The retained
+command and input copies make rerunning a later frozen candidate a change only
+to `--source-ref` and `--run-id`.
