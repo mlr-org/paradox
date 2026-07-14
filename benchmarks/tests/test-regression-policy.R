@@ -1,4 +1,5 @@
 arguments <- commandArgs(FALSE)
+main <- function() {
 script_argument <- grep("^--file=", arguments, value = TRUE)
 if (length(script_argument) != 1L) {
   stop("could not identify regression policy test location", call. = FALSE)
@@ -159,3 +160,6 @@ cat(
   "zero-allocation regression policy fixtures\n",
   sep = ""
 )
+}
+
+main()

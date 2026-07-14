@@ -4,6 +4,7 @@
 # files) into an immutable check input.  Hashing before and after the copy
 # rejects a worktree that changes while the snapshot is being made.
 
+main <- function() {
 args <- commandArgs(trailingOnly = TRUE)
 if (length(args) != 3L) {
   stop(
@@ -97,7 +98,7 @@ if (any(grepl("[\t\r\n]", paths))) {
 
 source_paths <- file.path(root, paths)
 link_targets <- Sys.readlink(source_paths)
-is_link <- nzchar(link_targets)
+is_link <- !is.na(link_targets) & nzchar(link_targets)
 exists <- file.exists(source_paths) | is_link
 is_directory <- exists & !is_link & dir.exists(source_paths)
 if (any(is_directory)) {
@@ -166,9 +167,12 @@ if (any(is_link)) {
     stop("a symbolic link changed while the snapshot was copied", call. = FALSE)
   }
 }
-if (any(is_deleted) && any(file.exists(source_paths[is_deleted]) |
-    nzchar(Sys.readlink(source_paths[is_deleted])))) {
-  stop("a deleted tracked path reappeared during snapshot", call. = FALSE)
+if (any(is_deleted)) {
+  deleted_links <- Sys.readlink(source_paths[is_deleted])
+  deleted_is_link <- !is.na(deleted_links) & nzchar(deleted_links)
+  if (any(file.exists(source_paths[is_deleted]) | deleted_is_link)) {
+    stop("a deleted tracked path reappeared during snapshot", call. = FALSE)
+  }
 }
 
 info <- file.info(source_paths)
@@ -201,3 +205,6 @@ cat("snapshot_manifest_sha256=", unname(tools::sha256sum(manifest_path)),
   "\n", sep = "")
 cat("snapshot_files=", sum(exists), "\n", sep = "")
 cat("snapshot_deleted_tracked=", sum(is_deleted), "\n", sep = "")
+}
+
+main()

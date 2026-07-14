@@ -16,6 +16,8 @@ EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
 API_TOKEN_AUDITOR="$ROOT/scripts/environment/audit-public-api-tokens"
 API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
 REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-preparation.R"
+SNAPSHOT_HELPER="$ROOT/scripts/environment/snapshot-worktree.R"
+COPY_SNAPSHOT_HELPER="$ROOT/scripts/environment/copy-check-snapshot.R"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
 PACKAGE_MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
 mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
@@ -45,6 +47,56 @@ expect_failure() {
     -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" && \
     -x "$REVERSE_DEPENDENCY_PREP_TEST" ]] ||
   fail "validation helpers are not executable"
+[[ -f "$SNAPSHOT_HELPER" && ! -L "$SNAPSHOT_HELPER" && \
+    -f "$COPY_SNAPSHOT_HELPER" && ! -L "$COPY_SNAPSHOT_HELPER" ]] ||
+  fail "snapshot helpers are missing or symbolic"
+
+# A dirty Git snapshot must distinguish a deleted tracked path from a symbolic
+# link. Its retained replay must preserve that deletion instead of treating
+# Sys.readlink()'s NA result for the absent path as a nonempty link target.
+SNAPSHOT_FIXTURE="$TEST_ROOT/snapshot fixture"
+SNAPSHOT_SOURCE="$SNAPSHOT_FIXTURE/source"
+SNAPSHOT_DESTINATION="$SNAPSHOT_FIXTURE/snapshot"
+SNAPSHOT_METADATA="$SNAPSHOT_FIXTURE/metadata"
+SNAPSHOT_REPLAY="$SNAPSHOT_FIXTURE/replay"
+SNAPSHOT_REPLAY_METADATA="$SNAPSHOT_FIXTURE/replay-metadata"
+SNAPSHOT_TMP="$SNAPSHOT_FIXTURE/tmp"
+mkdir -p "$SNAPSHOT_SOURCE" "$SNAPSHOT_TMP"
+git -C "$SNAPSHOT_SOURCE" init -q
+git -C "$SNAPSHOT_SOURCE" config user.name 'Paradox fixture'
+git -C "$SNAPSHOT_SOURCE" config user.email 'fixture@example.invalid'
+git -C "$SNAPSHOT_SOURCE" config commit.gpgsign false
+printf '%s\n' retained > "$SNAPSHOT_SOURCE/retained.txt"
+printf '%s\n' deleted > "$SNAPSHOT_SOURCE/deleted.txt"
+ln -s retained.txt "$SNAPSHOT_SOURCE/retained-link"
+git -C "$SNAPSHOT_SOURCE" add retained.txt deleted.txt retained-link
+git -C "$SNAPSHOT_SOURCE" commit -q -m fixture
+rm "$SNAPSHOT_SOURCE/deleted.txt"
+printf '%s\n' untracked > "$SNAPSHOT_SOURCE/untracked.txt"
+env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$SNAPSHOT_HELPER" \
+  "$SNAPSHOT_SOURCE" "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
+  > "$SNAPSHOT_FIXTURE/snapshot.log"
+grep -qx 'snapshot_files=3' "$SNAPSHOT_FIXTURE/snapshot.log" ||
+  fail "dirty snapshot reported the wrong existing-file count"
+grep -qx 'snapshot_deleted_tracked=1' "$SNAPSHOT_FIXTURE/snapshot.log" ||
+  fail "dirty snapshot did not report its deleted tracked path"
+[[ -f "$SNAPSHOT_DESTINATION/retained.txt" && \
+    -f "$SNAPSHOT_DESTINATION/untracked.txt" && \
+    -L "$SNAPSHOT_DESTINATION/retained-link" && \
+    ! -e "$SNAPSHOT_DESTINATION/deleted.txt" ]] ||
+  fail "dirty snapshot copied the wrong path set"
+env TMPDIR="$SNAPSHOT_TMP" "$RSCRIPT" --vanilla "$COPY_SNAPSHOT_HELPER" \
+  "$SNAPSHOT_DESTINATION" "$SNAPSHOT_METADATA" \
+  "$SNAPSHOT_REPLAY" "$SNAPSHOT_REPLAY_METADATA" \
+  > "$SNAPSHOT_FIXTURE/replay.log"
+cmp "$SNAPSHOT_METADATA/source-manifest.tsv" \
+  "$SNAPSHOT_REPLAY_METADATA/source-manifest.tsv" >/dev/null ||
+  fail "snapshot replay changed the retained source manifest"
+[[ -f "$SNAPSHOT_REPLAY/retained.txt" && \
+    -f "$SNAPSHOT_REPLAY/untracked.txt" && \
+    -L "$SNAPSHOT_REPLAY/retained-link" && \
+    ! -e "$SNAPSHOT_REPLAY/deleted.txt" ]] ||
+  fail "snapshot replay did not preserve the deleted tracked path"
 
 # Raw-token policy sees identifiers in inactive branches but ignores comments,
 # strings, and the documented APIs whose names contain ATTRIB.

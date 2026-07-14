@@ -101,6 +101,7 @@ collect_members <- function(directory, prefix = "") {
 verify_tree <- function(base, phase) {
   full_paths <- file.path(base, paths)
   links <- Sys.readlink(full_paths)
+  symbolic <- !is.na(links) & nzchar(links)
 
   members <- collect_members(base)
   expected_members <- paths[!deleted_rows]
@@ -112,15 +113,16 @@ verify_tree <- function(base, phase) {
   }
 
   bad_files <- file_rows & (
-    !file.exists(full_paths) | dir.exists(full_paths) | nzchar(links)
+    !file.exists(full_paths) | dir.exists(full_paths) | symbolic
   )
   expected_links <- sub(
     "^target:", "", manifest$sha256_or_target[link_rows]
   )
   bad_links <- rep(FALSE, length(paths))
-  bad_links[link_rows] <- links[link_rows] != expected_links
+  bad_links[link_rows] <- !symbolic[link_rows] |
+    links[link_rows] != expected_links
   bad_deleted <- deleted_rows & (
-    file.exists(full_paths) | dir.exists(full_paths) | nzchar(links)
+    file.exists(full_paths) | dir.exists(full_paths) | symbolic
   )
   if (any(bad_files | bad_links | bad_deleted)) {
     stop("source tree does not match its manifest during ", phase,
