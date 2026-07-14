@@ -977,6 +977,19 @@ release_helper_inputs <- c(
   candidate_installer = release_installer,
   candidate_git_authenticator = release_git_authenticator
 )
+release_helper_target_names <- c(
+  "release", "release.R", "run", "run.R", "worker.R", "workloads.R",
+  "regression-policy.R", "regression-policy.tsv",
+  "paramsetcollection-consumers.R", "fingerprint.R", "repository-evidence.R",
+  "verify-repository-evidence.R", "install-candidate",
+  "authenticate-candidate-git"
+)
+if (length(release_helper_target_names) != length(release_helper_inputs) ||
+    anyDuplicated(release_helper_target_names)) {
+  release_fail(
+    "benchmark helper input and retained-target inventories are inconsistent"
+  )
+}
 invisible(lapply(
   release_helper_inputs, release_require_regular_file,
   label = "benchmark release helper"
@@ -1172,13 +1185,7 @@ release_started <- format(Sys.time(), tz = "UTC", usetz = TRUE)
 release_log_line("authenticated frozen release inputs")
 
 release_helper_targets <- file.path(
-  release_output, "helpers",
-  c(
-    "release", "release.R", "run", "run.R", "worker.R", "workloads.R",
-    "regression-policy.R", "regression-policy.tsv",
-    "paramsetcollection-consumers.R", "fingerprint.R", "repository-evidence.R",
-    "verify-repository-evidence.R", "install-candidate"
-  )
+  release_output, "helpers", release_helper_target_names
 )
 if (!all(file.copy(
     release_helper_inputs, release_helper_targets,
