@@ -123,7 +123,7 @@ expect_failure(
   "declares itself"
 )
 description_link <- file.path(test_root, "DESCRIPTION-link")
-file.symlink(description, description_link)
+stopifnot(file.symlink(description, description_link))
 expect_failure(
   reverse_prep_description_dependencies(description_link, "Target"),
   "non-regular.*symbolic"
@@ -339,10 +339,10 @@ stopifnot(
 bioc_dependencies <- reverse_prep_parse_dependency_field(
   "ArchiveTarget", "Imports", "BiocRoot"
 )
-reverse_prep_lock_plan(
+invisible(reverse_prep_lock_plan(
   bioc_output, "biocfixture-deps", "BiocRoot", library,
   bioc_dependencies, character(), bioc_sources
-)
+))
 
 bad_bioc_lock <- bioc_lock
 bad_bioc_lock$packages[[2L]]$sources <- list(
@@ -387,8 +387,8 @@ stage <- file.path(test_root, "evidence")
 dir.create(stage, mode = "0700")
 dir.create(file.path(stage, "metadata"), mode = "0700")
 writeLines("fixture", file.path(stage, "result.txt"), useBytes = TRUE)
-repository_seal_evidence(stage)
-repository_verify_evidence(stage)
+invisible(repository_seal_evidence(stage))
+invisible(repository_verify_evidence(stage))
 writeLines("tampered", file.path(stage, "result.txt"), useBytes = TRUE)
 expect_failure(repository_verify_evidence(stage), "do not match")
 
@@ -396,7 +396,9 @@ stage_link <- file.path(test_root, "evidence-link")
 dir.create(stage_link, mode = "0700")
 dir.create(file.path(stage_link, "metadata"), mode = "0700")
 writeLines("fixture", file.path(stage_link, "result.txt"), useBytes = TRUE)
-file.symlink(file.path(test_root, "outside"), file.path(stage_link, "escape"))
+stopifnot(file.symlink(
+  file.path(test_root, "outside"), file.path(stage_link, "escape")
+))
 expect_failure(repository_seal_evidence(stage_link), "symbolic path")
 
 harness <- readLines(
