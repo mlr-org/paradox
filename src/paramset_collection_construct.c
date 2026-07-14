@@ -265,7 +265,7 @@ SEXP paradox_test_checked_affixed_size(SEXP owner_boundary,
 
   const int owner_selector = INTEGER_ELT(owner_boundary, 0);
   const int id_selector = INTEGER_ELT(id_boundary, 0);
-  size_t sizes[6] = {
+  const size_t sizes[6] = {
     0U,
     1U,
     (size_t) INT_MAX - 1U,
@@ -276,6 +276,7 @@ SEXP paradox_test_checked_affixed_size(SEXP owner_boundary,
   if (owner_selector < 0 || owner_selector >= 6 ||
       id_selector < 0 || id_selector >= 6) {
     Rf_error("Invalid affix boundary selector");
+    return R_NilValue;
   }
 
   size_t output_size = 0;
