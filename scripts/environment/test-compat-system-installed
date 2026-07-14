@@ -115,6 +115,11 @@ env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
   cd "$FIXTURE"
   PATH=/usr/bin:/bin
   . scripts/activate
+  ordinary_before=$(mktemp "$FIXTURE/.local/tmp/ordinary-before-compat.XXXXXX")
+  ordinary_after=$(mktemp "$FIXTURE/.local/tmp/ordinary-after-compat.XXXXXX")
+  trap 'rm -f -- "$ordinary_before" "$ordinary_after"' EXIT HUP INT TERM
+  /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
   . scripts/activate-compat-system
   test "$PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT" = "$FIXTURE"
   test "$PARADOX_COMPAT_SYSTEM_RECEIPT" = "$FIXTURE/.local/receipts/compat-system/receipt.tsv"
@@ -143,6 +148,31 @@ env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
         silent = TRUE
       ), "try-error"))
     ' "$FIXTURE" "$FIXTURE/metadata-active"
+
+  . scripts/activate
+  test "$PARADOX_ACTIVE_ROOT" = "$FIXTURE"
+  test "$R_MAKEVARS_USER" = "$FIXTURE/environment/Makevars"
+  case ":$PATH:" in
+    *:"$FIXTURE/.local/compat/system/p1/bin":*|\
+    *:"$FIXTURE/.local/compat/system/geo/bin":*) exit 1 ;;
+  esac
+  for variable in \
+    PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
+    PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO \
+    PARADOX_COMPAT_SYSTEM_P1 PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH \
+    UDUNITS2_INCLUDE UDUNITS2_LIBS JAVA_HOME JAVA JAVAC JAR \
+    JAVA_CPPFLAGS JAVA_LIBS JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH \
+    MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX \
+    OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent \
+    PRTE_MCA_rmaps_default_mapping_policy CARGO_HOME RUSTUP_HOME \
+    CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER FONTCONFIG_PATH FONTCONFIG_FILE
+  do
+    [[ ! -v $variable ]]
+  done
+  /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_after"
+  cmp -s -- "$ordinary_before" "$ordinary_after"
+  rm -f -- "$ordinary_before" "$ordinary_after"
+  trap - EXIT HUP INT TERM
 )
 
 grep -F 'ordinary_makevars_sha256' "$FIXTURE/.local/receipts/compat-system/receipt.tsv" >/dev/null

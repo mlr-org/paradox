@@ -32,6 +32,41 @@ set -euo pipefail
 root=$1
 version=$2
 cd "$root"
+. scripts/activate
+ordinary_before=$(mktemp "$root/.local/tmp/ordinary-before-runtime.XXXXXX")
+ordinary_after=$(mktemp "$root/.local/tmp/ordinary-after-runtime.XXXXXX")
+trap 'rm -f -- "$ordinary_before" "$ordinary_after"' EXIT HUP INT TERM
+/usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
+
+export PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT="$root"
+export PARADOX_COMPAT_SYSTEM_RECEIPT="$root/.local/receipts/compat-system/receipt.tsv"
+export PARADOX_COMPAT_SYSTEM_ROOT="$root/.local/compat/system"
+export PARADOX_COMPAT_SYSTEM_GEO="$root/.local/compat/system/geo"
+export PARADOX_COMPAT_SYSTEM_P1="$root/.local/compat/system/p1"
+export PARADOX_COMPAT_SYSTEM_ACTIVE=1
+export PARADOX_COMPAT_SYSTEM_GEO_PREFIX="$PARADOX_COMPAT_SYSTEM_GEO"
+export PARADOX_COMPAT_SYSTEM_P1_PREFIX="$PARADOX_COMPAT_SYSTEM_P1"
+export PROJ_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/proj"
+export GDAL_DATA="$PARADOX_COMPAT_SYSTEM_GEO/share/gdal"
+export UDUNITS2_XML_PATH="$PARADOX_COMPAT_SYSTEM_GEO/share/udunits/udunits2.xml"
+export UDUNITS2_INCLUDE="$PARADOX_COMPAT_SYSTEM_GEO/include"
+export UDUNITS2_LIBS="$PARADOX_COMPAT_SYSTEM_GEO/lib"
+export JAVA_HOME="$PARADOX_COMPAT_SYSTEM_P1/lib/jvm"
+export JAVA="$JAVA_HOME/bin/java" JAVAC="$JAVA_HOME/bin/javac" JAR="$JAVA_HOME/bin/jar"
+export JAVA_CPPFLAGS=-I/outside/java JAVA_LIBS=-L/outside/java
+export JAVA_LD_LIBRARY_PATH=/outside/java R_JAVA_LD_LIBRARY_PATH=/outside/java
+export MPI_ROOT="$PARADOX_COMPAT_SYSTEM_P1"
+export MPI_INCLUDE="$MPI_ROOT/include" MPI_LIB_PATH="$MPI_ROOT/lib" MPI_TYPE=OPENMPI
+export OPAL_PREFIX="$MPI_ROOT" OMPI_CC=/outside/cc OMPI_CXX=/outside/cxx
+export OMPI_FC=/outside/fc OMPI_MCA_plm_ssh_agent=false
+export PRTE_MCA_rmaps_default_mapping_policy=:oversubscribe
+export CARGO_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/cargo-home"
+export RUSTUP_HOME="$PARADOX_COMPAT_SYSTEM_ROOT/rustup-home"
+export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER=/outside/cc
+export FONTCONFIG_PATH="$PARADOX_COMPAT_SYSTEM_P1/etc/fonts"
+export FONTCONFIG_FILE="$FONTCONFIG_PATH/fonts.conf"
+PATH="$PARADOX_COMPAT_SYSTEM_P1/bin:$PARADOX_COMPAT_SYSTEM_GEO/bin:$PATH"
+export PATH
 . scripts/activate-runtime-matrix "$version"
 prefix="$root/.local/runtime-matrix/prefixes/R-$version"
 [[ "$PARADOX_ACTIVE_ROOT" == "$root" ]]
@@ -45,6 +80,25 @@ prefix="$root/.local/runtime-matrix/prefixes/R-$version"
 [[ "$TMPDIR" == "$root/.local/runtime-matrix/tmp/R-$version" ]]
 [[ "$XDG_RUNTIME_DIR" == "$root/.local/runtime-matrix/runtime/R-$version" ]]
 [[ "$(stat -c '%a' "$XDG_RUNTIME_DIR")" == 700 ]]
+case ":$PATH:" in
+  *:"$root/.local/compat/system/p1/bin":*|\
+  *:"$root/.local/compat/system/geo/bin":*) exit 1 ;;
+esac
+for variable in \
+  PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
+  PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO \
+  PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_ACTIVE \
+  PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX \
+  PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH UDUNITS2_INCLUDE UDUNITS2_LIBS \
+  JAVA_HOME JAVA JAVAC JAR JAVA_CPPFLAGS JAVA_LIBS \
+  JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH \
+  MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX \
+  OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent \
+  PRTE_MCA_rmaps_default_mapping_policy CARGO_HOME RUSTUP_HOME \
+  CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER FONTCONFIG_PATH FONTCONFIG_FILE
+do
+  [[ ! -v $variable ]]
+done
 Rscript --vanilla -e '
   root <- normalizePath(commandArgs(TRUE)[[1L]], mustWork = TRUE)
   paths <- normalizePath(.libPaths(), mustWork = TRUE)
@@ -73,6 +127,27 @@ configured_nm=$(R CMD config NM)
 [[ -n "$NM" && "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]]
 [[ "${configured_nm##*/}" == "$NM" ]]
 [[ "$(command -v "$NM")" == "$prefix/bin/$NM" ]]
+
+. scripts/activate
+[[ "$(command -v R)" == "$root/.local/toolchain/bin/R" ]]
+[[ "$(R RHOME)" == "$root/.local/toolchain/lib/R" ]]
+case ":$PATH:" in
+  *:"$root/.local/runtime-matrix/prefixes/"R-*/bin:*|\
+  *:"$root/.local/compat/system/p1/bin":*|\
+  *:"$root/.local/compat/system/geo/bin":*) exit 1 ;;
+esac
+for variable in \
+  PARADOX_RUNTIME_MATRIX_ACTIVE PARADOX_RUNTIME_MATRIX_VERSION \
+  PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY \
+  PARADOX_RUNTIME_MATRIX_TMP PARADOX_RUNTIME_MATRIX_CACHE \
+  PARADOX_RUNTIME_MATRIX_XDG
+do
+  [[ ! -v $variable ]]
+done
+/usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_after"
+cmp -s -- "$ordinary_before" "$ordinary_after"
+rm -f -- "$ordinary_before" "$ordinary_after"
+trap - EXIT HUP INT TERM
 SHELL
   printf 'runtime_matrix_activation_fixture=passed runtime=%s\n' "$version"
 done

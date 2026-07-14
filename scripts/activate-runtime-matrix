@@ -119,8 +119,20 @@ if ! unset \
   GSETTINGS_SCHEMA_DIR GSETTINGS_SCHEMA_DIR_CONDA_BACKUP \
   RSTUDIO_WHICH_R RSTUDIO_WHICH_R_PREV \
   XDG_RUNTIME_DIR CCACHE_TEMPDIR \
+  PARADOX_COMPAT_REQUESTED_ROOT PARADOX_COMPAT_CLEAN_PATH \
+  PARADOX_COMPAT_PATH_REMAINDER PARADOX_COMPAT_PATH_ENTRY \
+  PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
+  PARADOX_COMPAT_SYSTEM_GEO PARADOX_COMPAT_SYSTEM_P1 \
   PARADOX_COMPAT_SYSTEM_ACTIVE PARADOX_COMPAT_SYSTEM_ROOT \
-  PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX
+  PARADOX_COMPAT_SYSTEM_GEO_PREFIX PARADOX_COMPAT_SYSTEM_P1_PREFIX \
+  PROJ_DATA GDAL_DATA UDUNITS2_XML_PATH UDUNITS2_INCLUDE UDUNITS2_LIBS \
+  JAVA_HOME JAVA JAVAC JAVAH JAR JAVA_CPPFLAGS JAVA_LIBS \
+  JAVA_LD_LIBRARY_PATH R_JAVA_LD_LIBRARY_PATH \
+  MPI_ROOT MPI_INCLUDE MPI_LIB_PATH MPI_TYPE OPAL_PREFIX \
+  OMPI_CC OMPI_CXX OMPI_FC OMPI_MCA_plm_ssh_agent \
+  PRTE_MCA_rmaps_default_mapping_policy \
+  CARGO_HOME RUSTUP_HOME CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER \
+  FONTCONFIG_PATH FONTCONFIG_FILE
 then
   runtime_matrix_activation_fail "Could not clear an inherited R/compiler input" ||
     { return 1 2>/dev/null || exit 1; }
@@ -171,7 +183,9 @@ while :; do
   esac
   case "$runtime_matrix_path_entry" in
     ""|"$PARADOX_ROOT/.local/toolchain/bin"|"$PARADOX_ROOT/.local/bin"|\
-      "$PARADOX_ROOT/.local/runtime-matrix/prefixes/"R-*/bin) ;;
+      "$PARADOX_ROOT/.local/runtime-matrix/prefixes/"R-*/bin|\
+      "$PARADOX_ROOT/.local/compat/system/p1/bin"|\
+      "$PARADOX_ROOT/.local/compat/system/geo/bin") ;;
     *)
       case ":$runtime_matrix_clean_path:" in
         *:"$runtime_matrix_path_entry":*) ;;

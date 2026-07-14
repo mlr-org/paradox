@@ -15,9 +15,29 @@ fail() {
 # shellcheck disable=SC2016 # assertions intentionally run in the inner shell.
 env -i \
   HOME="${HOME:-/nonexistent}" \
-  PATH=/usr/bin:/bin \
+  PATH="$ROOT/.local/compat/system/p1/bin:$ROOT/.local/compat/system/geo/bin:$ROOT/.local/runtime-matrix/prefixes/R-4.3.3/bin:/usr/bin:/bin" \
   XDG_RUNTIME_DIR=/outside/inherited-runtime \
   CCACHE_TEMPDIR=/outside/inherited-ccache \
+  PARADOX_RUNTIME_MATRIX_ACTIVE=1 \
+  PARADOX_RUNTIME_MATRIX_VERSION=4.3.3 \
+  PARADOX_RUNTIME_MATRIX_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-4.3.3" \
+  PARADOX_RUNTIME_MATRIX_LIBRARY="$ROOT/.local/runtime-matrix/libraries/R-4.3.3" \
+  PARADOX_RUNTIME_MATRIX_TMP="$ROOT/.local/runtime-matrix/tmp/R-4.3.3" \
+  PARADOX_RUNTIME_MATRIX_CACHE="$ROOT/.cache/runtime-matrix/R-4.3.3" \
+  PARADOX_RUNTIME_MATRIX_XDG="$ROOT/.local/runtime-matrix/runtime/R-4.3.3" \
+  PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT="$ROOT" \
+  PARADOX_COMPAT_SYSTEM_RECEIPT="$ROOT/.local/receipts/compat-system/receipt.tsv" \
+  PARADOX_COMPAT_SYSTEM_ROOT="$ROOT/.local/compat/system" \
+  PARADOX_COMPAT_SYSTEM_GEO="$ROOT/.local/compat/system/geo" \
+  PARADOX_COMPAT_SYSTEM_P1="$ROOT/.local/compat/system/p1" \
+  PARADOX_COMPAT_SYSTEM_ACTIVE=1 \
+  PARADOX_COMPAT_SYSTEM_GEO_PREFIX="$ROOT/.local/compat/system/geo" \
+  PARADOX_COMPAT_SYSTEM_P1_PREFIX="$ROOT/.local/compat/system/p1" \
+  PROJ_DATA="$ROOT/.local/compat/system/geo/share/proj" \
+  JAVA_CPPFLAGS=-I/outside/java \
+  MPI_ROOT="$ROOT/.local/compat/system/p1" \
+  CARGO_HOME="$ROOT/.local/compat/system/cargo-home" \
+  FONTCONFIG_PATH="$ROOT/.local/compat/system/p1/etc/fonts" \
   /bin/sh -eu -c '
     root=$1
     cd "$root"
@@ -31,6 +51,22 @@ env -i \
     test -d "$CCACHE_TEMPDIR"
     test ! -L "$CCACHE_TEMPDIR"
     test "$(find "$XDG_RUNTIME_DIR" -maxdepth 0 -printf "%m")" = 700
+    case ":$PATH:" in
+      *:"$root/.local/compat/system/p1/bin":*|\
+      *:"$root/.local/compat/system/geo/bin":*|\
+      *:"$root/.local/runtime-matrix/prefixes/"R-*/bin:*) exit 1 ;;
+    esac
+    if env | grep -E "^(PARADOX_(RUNTIME_MATRIX|COMPAT)_|PROJ_DATA=|JAVA_CPPFLAGS=|MPI_ROOT=|CARGO_HOME=|FONTCONFIG_PATH=)" >/dev/null; then
+      exit 1
+    fi
+
+    ordinary_before=$(mktemp "$root/.local/tmp/ordinary-before.XXXXXX")
+    ordinary_after=$(mktemp "$root/.local/tmp/ordinary-after.XXXXXX")
+    trap '\''rm -f -- "$ordinary_before" "$ordinary_after"'\'' EXIT HUP INT TERM
+    /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
+    . scripts/activate
+    /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_after"
+    cmp -s -- "$ordinary_before" "$ordinary_after"
 
     XDG_RUNTIME_DIR=/outside/resourced-runtime
     CCACHE_TEMPDIR=/outside/resourced-ccache
@@ -38,6 +74,8 @@ env -i \
     test "$XDG_RUNTIME_DIR" = "$root/.local/runtime"
     test "$CCACHE_TEMPDIR" = "$root/.local/tmp/ccache"
     test "$(find "$XDG_RUNTIME_DIR" -maxdepth 0 -printf "%m")" = 700
+    rm -f -- "$ordinary_before" "$ordinary_after"
+    trap - EXIT HUP INT TERM
   ' activation-isolation "$ROOT"
 
 printf '%s\n' 'activation_isolation=passed'
