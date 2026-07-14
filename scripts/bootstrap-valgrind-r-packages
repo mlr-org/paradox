@@ -1,0 +1,395 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+R_VERSION=4.6.1
+R_PREFIX="$ROOT/.local/r-valgrind/${R_VERSION}"
+R_BINARY="$R_PREFIX/bin/R"
+MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
+ARCHIVES="$ROOT/.cache/downloads/valgrind-r-packages"
+LIBRARY="$ROOT/.local/r-valgrind/library"
+LIBRARY_RECEIPT="$ROOT/.local/r-valgrind/receipts/library"
+LOGS="$ROOT/.local/r-valgrind/logs"
+CRAN=https://cloud.r-project.org/src/contrib
+TOOLCHAIN="$ROOT/.local/toolchain"
+RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
+STATE_LOCK="$ROOT/.local/r-valgrind/locks/state.lock"
+STATE_LOCK_HELD=false
+STAGING_LIBRARY=
+OLD_LIBRARY=
+OLD_LIBRARY_RECEIPT=
+LIBRARY_SELECTED=false
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_TARGET=x86_64-conda-linux-gnu
+LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
+LOCAL_LD_LIBRARY_PATH="$TOOLCHAIN/lib"
+LOCAL_PKG_CONFIG_PATH="$TOOLCHAIN/lib/pkgconfig:$TOOLCHAIN/share/pkgconfig"
+LOCAL_PKG_CONFIG_LIBDIR="$LOCAL_PKG_CONFIG_PATH:$LOCAL_SYSROOT/usr/lib/pkgconfig:$LOCAL_SYSROOT/usr/share/pkgconfig"
+LOCAL_CMAKE_PREFIX_PATH="$TOOLCHAIN:$LOCAL_SYSROOT/usr"
+LOCAL_AR="$TOOLCHAIN/bin/$LOCAL_TARGET-ar"
+LOCAL_RANLIB="$TOOLCHAIN/bin/$LOCAL_TARGET-ranlib"
+LOCAL_AS="$TOOLCHAIN/bin/$LOCAL_TARGET-as"
+LOCAL_LD="$TOOLCHAIN/bin/$LOCAL_TARGET-ld"
+LOCAL_NM="$TOOLCHAIN/bin/$LOCAL_TARGET-nm"
+LOCAL_STRIP="$TOOLCHAIN/bin/$LOCAL_TARGET-strip"
+LOCAL_OBJCOPY="$TOOLCHAIN/bin/$LOCAL_TARGET-objcopy"
+LOCAL_OBJDUMP="$TOOLCHAIN/bin/$LOCAL_TARGET-objdump"
+LOCAL_READELF="$TOOLCHAIN/bin/$LOCAL_TARGET-readelf"
+LOCAL_CPP="$TOOLCHAIN/bin/$LOCAL_TARGET-cpp"
+LOCAL_CMAKE_ARGS="-DCMAKE_AR=$LOCAL_AR -DCMAKE_CXX_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_C_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_RANLIB=$LOCAL_RANLIB -DCMAKE_CXX_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_C_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_LINKER=$LOCAL_LD -DCMAKE_STRIP=$LOCAL_STRIP -DCMAKE_BUILD_TYPE=Release"
+BOOTSTRAP_HOME="$ROOT/.local/r-valgrind/bootstrap-home"
+CURL="$TOOLCHAIN/bin/curl"
+LOCAL_USER=$(/usr/bin/id -un)
+
+fail() {
+  printf '%s\n' "bootstrap-valgrind-r-packages: $*" >&2
+  exit 1
+}
+
+is_managed_path() {
+  [[ "$1" == "$ROOT" || "$1" == "$ROOT/"* ]]
+}
+
+validate_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  if [[ "$path" != "$ROOT" ]]; then
+    relative=${path#"$ROOT"/}
+    IFS=/ read -r -a components <<< "$relative"
+    for component in "${components[@]}"; do
+      [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+        fail "$label has an unsafe component: $path"
+      current="$current/$component"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a missing, non-directory, or symbolic component: $current"
+    done
+  fi
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label does not resolve canonically inside the repository: $path"
+}
+
+ensure_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  [[ "$path" == "$ROOT" ]] && return 0
+  relative=${path#"$ROOT"/}
+  current=$ROOT
+  IFS=/ read -r -a components <<< "$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "$label has an unsafe component: $path"
+    current="$current/$component"
+    if [[ -e "$current" || -L "$current" ]]; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a non-directory or symbolic component: $current"
+    else
+      mkdir -- "$current" || fail "could not create $label: $current"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label was substituted while being created: $current"
+    fi
+  done
+  validate_plain_directory_chain "$path" "$label"
+}
+
+validate_optional_plain_parent() {
+  local path=$1 label=${2:-managed path} parent relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  parent=$(dirname "$path")
+  [[ "$parent" == "$ROOT" ]] && return 0
+  relative=${parent#"$ROOT"/}
+  current=$ROOT
+  IFS=/ read -r -a components <<< "$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "$label has an unsafe component: $path"
+    current="$current/$component"
+    if [[ -L "$current" ]]; then
+      fail "$label parent contains a symbolic component: $current"
+    fi
+    [[ -e "$current" ]] || return 1
+    [[ -d "$current" ]] ||
+      fail "$label parent contains a non-directory component: $current"
+  done
+  [[ "$(cd "$parent" && pwd -P)" == "$parent" ]] ||
+    fail "$label parent is not canonical: $parent"
+}
+
+require_managed_file() {
+  local path=$1 label=${2:-managed file}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is missing, non-regular, or symbolic: $path"
+}
+
+require_managed_executable() {
+  local path=$1 label=${2:-managed executable}
+  require_managed_file "$path" "$label"
+  [[ -x "$path" ]] || fail "$label is not executable: $path"
+}
+
+prepare_managed_output() {
+  local path=$1 label=${2:-managed output}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "$label exists but is not a regular file: $path"
+}
+
+prepare_managed_directory_target() {
+  local path=$1 label=${2:-managed directory target}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  if [[ -e "$path" ]]; then
+    validate_plain_directory_chain "$path" "$label"
+  fi
+}
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the local environment first: . scripts/activate"
+[[ "${CONDA_PREFIX:-}" == "$TOOLCHAIN" ]] ||
+  fail "CONDA_PREFIX does not identify the repository-local toolchain"
+validate_plain_directory_chain "$ROOT" "repository root"
+validate_plain_directory_chain "$R_PREFIX" "instrumented-R installation prefix"
+require_managed_executable "$R_BINARY" "instrumented R"
+require_managed_file "$MANIFEST" "instrumented-R package manifest"
+require_managed_executable "$RECEIPT_HELPER" "Valgrind receipt helper"
+require_managed_executable "$CURL" "project-local curl"
+for tool in "$LOCAL_AR" "$LOCAL_RANLIB" "$LOCAL_AS" "$LOCAL_LD" \
+    "$LOCAL_NM" "$LOCAL_STRIP" "$LOCAL_OBJCOPY" "$LOCAL_OBJDUMP" \
+    "$LOCAL_READELF" "$LOCAL_CPP" \
+    "$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar" \
+    "$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib"; do
+  require_managed_executable "$tool" "required local tool"
+done
+validate_plain_directory_chain "$LOCAL_SYSROOT" "project-local compiler sysroot"
+validate_plain_directory_chain "$ROOT/.local/bin" "repository-local binary root"
+ensure_plain_directory_chain "$ARCHIVES" "instrumented-R package archive cache"
+ensure_plain_directory_chain "$LOGS" "instrumented-R package log root"
+ensure_plain_directory_chain "$BOOTSTRAP_HOME" "instrumented-R bootstrap home"
+ensure_plain_directory_chain "$ROOT/.local/tmp" "repository-local temporary root"
+ensure_plain_directory_chain "$(dirname "$STATE_LOCK")" "instrumented-R lock root"
+ensure_plain_directory_chain "$ROOT/.local/r-valgrind/receipts" \
+  "instrumented-R receipt root"
+prepare_managed_directory_target "$LIBRARY" "instrumented-R package library"
+prepare_managed_directory_target "$LIBRARY_RECEIPT" \
+  "instrumented-R package-library receipt"
+prepare_managed_output "$STATE_LOCK" "instrumented-R state lock"
+exec 9>>"$STATE_LOCK"
+[[ -f "$STATE_LOCK" && ! -L "$STATE_LOCK" ]] || {
+  exec 9>&-
+  fail "instrumented-R state lock changed while it was opened"
+}
+[[ "$(/usr/bin/stat -Lc '%d:%i' /proc/$$/fd/9)" == \
+    "$(/usr/bin/stat -Lc '%d:%i' "$STATE_LOCK")" ]] || {
+  exec 9>&-
+  fail "instrumented-R state lock path was substituted while opening"
+}
+if /usr/bin/flock -n -x 9; then
+  STATE_LOCK_HELD=true
+else
+  fail "instrumented-R state is locked by another build, bootstrap, or memory check: $STATE_LOCK"
+fi
+
+cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if [[ -n "$STAGING_LIBRARY" && -d "$STAGING_LIBRARY" ]]; then
+    rm -rf "$STAGING_LIBRARY"
+  fi
+  if [[ "$LIBRARY_SELECTED" == true ]]; then
+    rm -rf "$LIBRARY"
+    if [[ -n "$OLD_LIBRARY" &&
+          ( -e "$OLD_LIBRARY" || -L "$OLD_LIBRARY" ) ]]; then
+      validate_plain_directory_chain "$OLD_LIBRARY" \
+        "old instrumented package library"
+      prepare_managed_directory_target "$LIBRARY" \
+        "instrumented-R package library"
+      mv "$OLD_LIBRARY" "$LIBRARY"
+    fi
+    rm -rf "$LIBRARY_RECEIPT"
+    if [[ -n "$OLD_LIBRARY_RECEIPT" &&
+          ( -e "$OLD_LIBRARY_RECEIPT" || -L "$OLD_LIBRARY_RECEIPT" ) ]]; then
+      validate_plain_directory_chain "$OLD_LIBRARY_RECEIPT" \
+        "old package-library receipt"
+      prepare_managed_directory_target "$LIBRARY_RECEIPT" \
+        "instrumented-R package-library receipt"
+      mv "$OLD_LIBRARY_RECEIPT" "$LIBRARY_RECEIPT"
+    fi
+  fi
+  if [[ "$STATE_LOCK_HELD" == true ]]; then
+    /usr/bin/flock -u 9
+    exec 9>&-
+    STATE_LOCK_HELD=false
+  fi
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+"$RECEIPT_HELPER" verify-r "$ROOT"
+"$RECEIPT_HELPER" validate-package-manifest "$ROOT" "$MANIFEST"
+if "$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST" >/dev/null 2>&1; then
+  "$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST"
+  printf '%s\n' "Instrumented-R package library is current: $LIBRARY"
+  exit 0
+fi
+
+STAGING_LIBRARY="$ROOT/.local/r-valgrind/library.new.$$"
+[[ ! -e "$STAGING_LIBRARY" && ! -L "$STAGING_LIBRARY" ]] ||
+  fail "staging library already exists or is symbolic: $STAGING_LIBRARY"
+prepare_managed_directory_target "$STAGING_LIBRARY" "staged package library"
+mkdir "$STAGING_LIBRARY"
+validate_plain_directory_chain "$STAGING_LIBRARY" "staged package library"
+
+verify_archive() {
+  local archive=$1
+  local expected=$2
+  validate_optional_plain_parent "$archive" "package archive" || return 1
+  [[ ! -L "$archive" ]] || fail "package archive must not be symbolic: $archive"
+  [[ -e "$archive" ]] || return 1
+  require_managed_file "$archive" "package archive"
+  [[ "$(sha256sum "$archive" | cut -d ' ' -f 1)" == "$expected" ]]
+}
+
+install_archive() {
+  local package=$1
+  local version=$2
+  local archive=$3
+  printf '%s\n' "Installing $package $version with instrumented R"
+  prepare_managed_output "$LOGS/$package-install.log" \
+    "instrumented-R package installation log"
+  env -i \
+    "HOME=$BOOTSTRAP_HOME" "PATH=$LOCAL_PATH" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" "RANLIB=$LOCAL_RANLIB" "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" "NM=$LOCAL_NM" "STRIP=$LOCAL_STRIP" \
+    "OBJCOPY=$LOCAL_OBJCOPY" "OBJDUMP=$LOCAL_OBJDUMP" \
+    "READELF=$LOCAL_READELF" "CPP=$LOCAL_CPP" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "CMAKE_ARGS=$LOCAL_CMAKE_ARGS" "MESON_ARGS=-Dbuildtype=release" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_LIBS_USER=$STAGING_LIBRARY" "R_LIBS=$STAGING_LIBRARY" "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" "R_BUILD_ENVIRON=/dev/null" \
+    "R_INSTALL_ENVIRON=/dev/null" "R_CHECK_ENVIRON=/dev/null" \
+    "R_HISTFILE=/dev/null" "R_TESTS=" \
+    "TMPDIR=$ROOT/.local/tmp" "MAKEFLAGS=-j1" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "PYTHONDONTWRITEBYTECODE=1" \
+    "LD_PRELOAD=" "ASAN_OPTIONS=" "UBSAN_OPTIONS=" \
+    "$R_BINARY" CMD INSTALL --preclean --clean --no-multiarch \
+      --library="$STAGING_LIBRARY" "$archive" \
+      > "$LOGS/$package-install.log" 2>&1 || {
+        status=$?
+        sed -n '1,240p' "$LOGS/$package-install.log" >&2
+        fail "$package installation failed with status $status"
+      }
+}
+
+while IFS=$'\t' read -r package version expected ||
+    [[ -n "${package}${version}${expected}" ]]; do
+  [[ "$package" != package ]] || continue
+  [[ "$package" =~ ^[A-Za-z][A-Za-z0-9.]*$ ]] ||
+    fail "unsafe package name in $MANIFEST: $package"
+  [[ "$version" =~ ^[A-Za-z0-9.+-]+$ ]] ||
+    fail "unsafe package version in $MANIFEST for $package"
+  [[ "$expected" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "invalid row in $MANIFEST"
+  file="${package}_${version}.tar.gz"
+  archive="$ARCHIVES/$file"
+  pkgcache="$ROOT/.cache/R/R/pkgcache/pkg/src/contrib/$file"
+
+  if ! verify_archive "$archive" "$expected"; then
+    if verify_archive "$pkgcache" "$expected"; then
+      prepare_managed_output "$archive" "instrumented-R package archive"
+      cp "$pkgcache" "$archive"
+    else
+      partial="$archive.part"
+      prepare_managed_output "$archive" "instrumented-R package archive"
+      prepare_managed_output "$partial" "partial instrumented-R package archive"
+      rm -f "$partial"
+      if ! "$CURL" -fL --retry 3 "$CRAN/$file" -o "$partial"; then
+        rm -f "$partial"
+        prepare_managed_output "$partial" \
+          "partial instrumented-R package archive"
+        "$CURL" -fL --retry 3 "$CRAN/Archive/$package/$file" -o "$partial"
+      fi
+      require_managed_file "$partial" \
+        "downloaded partial instrumented-R package archive"
+      mv "$partial" "$archive"
+    fi
+  fi
+  verify_archive "$archive" "$expected" ||
+    fail "SHA-256 mismatch for $archive"
+  install_archive "$package" "$version" "$archive"
+done < "$MANIFEST"
+
+"$RECEIPT_HELPER" verify-package-archives "$ROOT" "$MANIFEST"
+
+OLD_LIBRARY="$ROOT/.local/r-valgrind/library.old.$$"
+OLD_LIBRARY_RECEIPT="$ROOT/.local/r-valgrind/receipt-library.old.$$"
+prepare_managed_directory_target "$OLD_LIBRARY" "old instrumented package library"
+prepare_managed_directory_target "$OLD_LIBRARY_RECEIPT" \
+  "old package-library receipt"
+rm -rf "$OLD_LIBRARY"
+rm -rf "$OLD_LIBRARY_RECEIPT"
+if [[ -e "$LIBRARY" || -L "$LIBRARY" ]]; then
+  validate_plain_directory_chain "$LIBRARY" "instrumented-R package library"
+  if ! mv "$LIBRARY" "$OLD_LIBRARY"; then
+    fail "could not stage the existing instrumented package library"
+  fi
+fi
+if [[ -e "$LIBRARY_RECEIPT" || -L "$LIBRARY_RECEIPT" ]]; then
+  validate_plain_directory_chain "$LIBRARY_RECEIPT" \
+    "instrumented-R package-library receipt"
+  if ! mv "$LIBRARY_RECEIPT" "$OLD_LIBRARY_RECEIPT"; then
+    [[ ! -e "$OLD_LIBRARY" ]] || mv "$OLD_LIBRARY" "$LIBRARY"
+    fail "could not stage the existing package-library receipt"
+  fi
+fi
+LIBRARY_SELECTED=true
+if mv "$STAGING_LIBRARY" "$LIBRARY"; then
+  STAGING_LIBRARY=
+else
+  fail "could not atomically select the instrumented package library"
+fi
+
+"$RECEIPT_HELPER" create-library "$ROOT" "$MANIFEST"
+"$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST"
+
+# Commit before deleting backups.  From this point cleanup must preserve the
+# verified new pair; an interrupt can at worst leave an obsolete backup for a
+# later bootstrap to remove.
+LIBRARY_SELECTED=false
+obsolete_library=$OLD_LIBRARY
+obsolete_library_receipt=$OLD_LIBRARY_RECEIPT
+OLD_LIBRARY=
+OLD_LIBRARY_RECEIPT=
+STAGING_LIBRARY=
+rm -rf "$obsolete_library"
+rm -rf "$obsolete_library_receipt"
+
+printf '%s\n' "Instrumented-R package library ready: $LIBRARY"

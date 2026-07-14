@@ -24,3 +24,11 @@
 ^revdep$
 
 ^cran-comments\.md$
+^\.cache$
+^\.local$
+^AGENTS\.md$
+^benchmarks$
+^compat$
+^design$
+^environment$
+^scripts$

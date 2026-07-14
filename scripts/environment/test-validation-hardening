@@ -1,0 +1,592 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016 # literal source-code patterns in structural tests
+
+# Lightweight adversarial tests for validation receipts and source-run policy.
+# This deliberately does not build R, install packages, or start containers.
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+TOOLCHAIN="$ROOT/.local/toolchain"
+RSCRIPT="$TOOLCHAIN/bin/Rscript"
+TREE_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+SOURCE_VALIDATOR="$ROOT/scripts/environment/validate-native-source-run"
+RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
+EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
+API_TOKEN_AUDITOR="$ROOT/scripts/environment/audit-public-api-tokens"
+API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
+CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
+PACKAGE_MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
+mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
+TEST_ROOT=$(mktemp -d "$ROOT/.local/tmp/validation-hardening.XXXXXX")
+RUN_ID="validation-helper-test-$$"
+RUN_DIRECTORY="$ROOT/.local/checks/$RUN_ID"
+
+cleanup() {
+  rm -rf "$TEST_ROOT" "$RUN_DIRECTORY"
+}
+trap cleanup EXIT HUP INT TERM
+
+fail() {
+  printf '%s\n' "test-validation-hardening: $*" >&2
+  exit 1
+}
+
+expect_failure() {
+  if "$@" > "$TEST_ROOT/unexpected-success.log" 2>&1; then
+    cat "$TEST_ROOT/unexpected-success.log" >&2
+    fail "command unexpectedly succeeded: $*"
+  fi
+}
+
+[[ -x "$RSCRIPT" ]] || fail "local Rscript is missing"
+[[ -x "$SOURCE_VALIDATOR" && -x "$RECEIPT_HELPER" && \
+    -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" ]] ||
+  fail "validation helpers are not executable"
+
+# Raw-token policy sees identifiers in inactive branches but ignores comments,
+# strings, and the documented APIs whose names contain ATTRIB.
+TOKEN_OK="$TEST_ROOT/public api tokens ok"
+mkdir -p "$TOKEN_OK/src"
+printf '%s\n' \
+  '/* ATTRIB BODY Rf_findVarInFrame3 */' \
+  'const char *tokens = "FORMALS R_NamespaceRegistry";' \
+  'SHALLOW_DUPLICATE_ATTRIB DUPLICATE_ATTRIB ANY_ATTRIB CLEAR_ATTRIB' \
+  'R_ClosureBody R_ClosureFormals R_ClosureEnv R_ParentEnv Rf_getAttrib' \
+  'DATAPTR_RO STRING_PTR_RO R_ExternalPtrTag Rf_isObject' \
+  > "$TOKEN_OK/src/allowed.c"
+"$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_OK" \
+  "$TEST_ROOT/public-api-allowed.txt" >/dev/null
+grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
+  fail "public API token auditor did not pass allowed identifiers"
+
+TOKEN_BAD="$TEST_ROOT/public api tokens bad"
+mkdir -p "$TOKEN_BAD/src"
+policy=$(grep '^forbidden_identifiers=' "$TEST_ROOT/public-api-allowed.txt")
+IFS='|' read -r -a forbidden_tokens <<< "${policy#forbidden_identifiers=}"
+((${#forbidden_tokens[@]} > 30)) ||
+  fail "public API token policy is unexpectedly narrow"
+{
+  printf '#if 0\n'
+  for token in "${forbidden_tokens[@]}"; do
+    printf '%s;\n' "$token"
+  done
+  printf 'AT ## TRIB;\n'
+  printf 'AT %%:%%: TRIB;\n'
+  printf '#endif\n'
+} > "$TOKEN_BAD/src/forbidden.c"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_BAD" \
+  "$TEST_ROOT/public-api-forbidden.txt"
+for token in "${forbidden_tokens[@]}"; do
+  grep -Fq "raw_identifier '$token'" \
+    "$TEST_ROOT/public-api-forbidden.txt" ||
+    fail "public API token auditor missed $token"
+done
+grep -Eq '^API_TOKEN_AUDITOR=.*audit-public-api-tokens"$' \
+  "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not invoke the token auditor"
+grep -Fq "\"\$API_TOKEN_AUDITOR\" \"\$CLANG\" \"\$RUN/source\" \\" \
+  "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate has no active token-auditor command"
+grep -Fq 'done < <(tail -n +2 "$SNAPSHOT_MANIFEST")' \
+  "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not parse its snapshot manifest"
+grep -Fq 'source-tree-final-verify.log' "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not finally reverify source"
+grep -Fq 'artifacts-tree-final-verify.log' "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not finally reverify artifacts"
+grep -Fq 'completion.sha256' "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not seal completion metadata"
+trap_line=$(grep -nF 'trap finish_run 0' "$API_COMPATIBILITY_GATE" |
+  cut -d: -f1)
+first_copy_line=$(grep -nF 'cp "$ROOT/scripts/check-r-api-compatibility"' \
+  "$API_COMPATIBILITY_GATE" | cut -d: -f1)
+source_final_line=$(grep -nF 'source-tree-final-verify.log' \
+  "$API_COMPATIBILITY_GATE" | cut -d: -f1)
+artifacts_final_line=$(grep -nF 'artifacts-tree-final-verify.log' \
+  "$API_COMPATIBILITY_GATE" | cut -d: -f1)
+completion_publish_line=$(grep -nF \
+  'mv "$RUN/metadata/completion.sha256.new"' \
+  "$API_COMPATIBILITY_GATE" | cut -d: -f1)
+[[ -n "$trap_line" && -n "$first_copy_line" &&
+    -n "$source_final_line" && -n "$artifacts_final_line" &&
+    -n "$completion_publish_line" ]] ||
+  fail "R API compatibility gate seal ordering could not be inspected"
+((trap_line < first_copy_line)) ||
+  fail "R API compatibility gate installs its failure trap too late"
+((completion_publish_line > source_final_line &&
+    completion_publish_line > artifacts_final_line)) ||
+  fail "R API compatibility gate publishes its seal before final verification"
+grep -Fq 'rm -f -- "$RUN/metadata/completion.txt"' \
+  "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility gate does not remove invalid completion records"
+grep -Fq "hashhash '##'" "$TEST_ROOT/public-api-forbidden.txt" ||
+  fail "public API token auditor permits token pasting"
+grep -Fq "hashhash '%:%:'" "$TEST_ROOT/public-api-forbidden.txt" ||
+  fail "public API token auditor permits digraph token pasting"
+
+TOKEN_LINK="$TEST_ROOT/public api token symlink"
+mkdir -p "$TOKEN_LINK/src"
+printf '%s\n' 'int ordinary;' > "$TOKEN_LINK/src/ordinary.c"
+printf '%s\n' '#if 0' 'ATTRIB(value);' '#endif' \
+  > "$TEST_ROOT/escaping-forbidden.c"
+ln -s ../../escaping-forbidden.c "$TOKEN_LINK/src/linked.c"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_LINK" \
+  "$TEST_ROOT/public-api-symlink.txt"
+
+# Tree receipts cover content, modes, symlink targets, empty directories, and
+# names containing spaces without following links.
+TREE="$TEST_ROOT/tree with spaces"
+MANIFEST="$TEST_ROOT/tree receipt.tsv"
+mkdir -p "$TREE/empty directory"
+printf '%s\n' alpha > "$TREE/file with spaces"
+printf '%s\n' executable > "$TREE/tool"
+chmod 755 "$TREE/tool"
+ln -s 'file with spaces' "$TREE/link"
+ln -s 'missing target' "$TREE/broken link"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$TREE" "$MANIFEST" >/dev/null
+"$RSCRIPT" --vanilla "$TREE_HELPER" verify "$TREE" "$MANIFEST" >/dev/null
+printf '%s\n' beta > "$TREE/file with spaces"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$TREE" "$MANIFEST"
+printf '%s\n' alpha > "$TREE/file with spaces"
+chmod 644 "$TREE/tool"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$TREE" "$MANIFEST"
+chmod 755 "$TREE/tool"
+mkdir "$TREE/new empty directory"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$TREE" "$MANIFEST"
+rmdir "$TREE/new empty directory"
+rm "$TREE/link"
+ln -s tool "$TREE/link"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$TREE" "$MANIFEST"
+
+ESCAPE_TREE="$TEST_ROOT/escape tree"
+mkdir -p "$ESCAPE_TREE/inside"
+printf '%s\n' outside > "$TEST_ROOT/outside"
+ln -s /etc/passwd "$ESCAPE_TREE/absolute"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+  "$ESCAPE_TREE" "$TEST_ROOT/absolute-link.tsv"
+rm "$ESCAPE_TREE/absolute"
+ln -s ../../outside "$ESCAPE_TREE/inside/relative"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+  "$ESCAPE_TREE" "$TEST_ROOT/relative-link.tsv"
+rm "$ESCAPE_TREE/inside/relative"
+ln -s ../../outside "$ESCAPE_TREE/inside/escape-hop"
+ln -s inside/escape-hop "$ESCAPE_TREE/chained"
+expect_failure "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+  "$ESCAPE_TREE" "$TEST_ROOT/chained-link.tsv"
+
+# A source run must retain all six release-static mode results and a completion
+# seal which joins the actual source/tree/archive to the complete modes tree.
+TINY_TEX_FIXTURE_RECEIPT="$TEST_ROOT/tinytex-tree.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$ROOT/.local/tinytex" \
+  "$TINY_TEX_FIXTURE_RECEIPT" >/dev/null
+tinytex_expected_sha=$(awk -F '\t' 'NR == 2 { print $6 }' \
+  "$ROOT/environment/tinytex-linux-x86_64.tsv")
+[[ "$(sha256sum "$TINY_TEX_FIXTURE_RECEIPT" | cut -d ' ' -f 1)" == \
+  "$tinytex_expected_sha" ]] || fail "local TinyTeX tree differs from its manifest"
+
+FIXTURE_TESTS=focused
+write_source_manifest() {
+  local manifest="$RUN_DIRECTORY/metadata/source-manifest.tsv"
+  printf '"path"\t"kind"\t"sha256_or_target"\t"size"\t"mode"\n' > "$manifest"
+  for relative in environment/tinytex-linux-x86_64.tsv \
+      environment/toolchain-linux-64.lock src/dummy.c; do
+    path="$RUN_DIRECTORY/source/$relative"
+    mode=$(stat -c '%a' "$path")
+    printf '"%s"\t"file"\t"%s"\t%s\t"0%s"\n' "$relative" \
+      "$(sha256sum "$path" | cut -d ' ' -f 1)" "$(stat -c '%s' "$path")" \
+      "$mode" >> "$manifest"
+  done
+}
+
+write_run_metadata() {
+  printf '%s\n' \
+    'harness=native-check' \
+    'schema=2' \
+    'static_policy=release-memory-v1' \
+    "native_check_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/native-check" | cut -d ' ' -f 1)" \
+    "tree_receipt_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/tree-receipt.R" | cut -d ' ' -f 1)" \
+    "toolchain_lock_sha256=$(sha256sum "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock" | cut -d ' ' -f 1)" \
+    "toolchain_explicit_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" | cut -d ' ' -f 1)" \
+    'started_utc=2026-07-14T00:00:00Z' \
+    "root=$ROOT" \
+    "run_id=$RUN_ID" \
+    'source_run=current-worktree' \
+    "tests=$FIXTURE_TESTS" \
+    'strict_gcc=true' \
+    'strict_clang=true' \
+    'analyzer=true' \
+    'analyzer_clang=true' \
+    'cppcheck=true' \
+    'symbols=true' \
+    'asan=false' \
+    'ubsan=false' > "$RUN_DIRECTORY/metadata/run.txt"
+}
+
+write_completion() {
+  completion="$RUN_DIRECTORY/metadata/completion.txt"
+  printf '%s\n' \
+    'harness=native-check' \
+    'schema=1' \
+    "run_id=$RUN_ID" \
+    "source_manifest_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/source-manifest.tsv" | cut -d ' ' -f 1)" \
+    "source_tree_receipt_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/source-tree.tsv" | cut -d ' ' -f 1)" \
+    "modes_tree_receipt_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/modes-tree.tsv" | cut -d ' ' -f 1)" \
+    "source_archive_sha256=$(sha256sum "$RUN_DIRECTORY/source-package/build/paradox_fixture.tar.gz" | cut -d ' ' -f 1)" \
+    "native_check_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/native-check" | cut -d ' ' -f 1)" \
+    "tree_receipt_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/tree-receipt.R" | cut -d ' ' -f 1)" \
+    "toolchain_lock_sha256=$(sha256sum "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock" | cut -d ' ' -f 1)" \
+    "toolchain_explicit_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" | cut -d ' ' -f 1)" \
+    "run_metadata_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/run.txt" | cut -d ' ' -f 1)" \
+    "tool_versions_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/tool-versions.txt" | cut -d ' ' -f 1)" \
+    "commands_sha256=$(sha256sum "$RUN_DIRECTORY/commands.sh" | cut -d ' ' -f 1)" \
+    "tests=$FIXTURE_TESTS" \
+    'static_policy=release-memory-v1' \
+    'strict_gcc=true' \
+    'strict_clang=true' \
+    'analyzer=true' \
+    'analyzer_clang=true' \
+    'cppcheck=true' \
+    'symbols=true' \
+    'asan=false' \
+    'ubsan=false' > "$completion"
+  (cd "$RUN_DIRECTORY/metadata" && sha256sum completion.txt > completion.sha256)
+}
+
+build_valid_native_fixture() {
+  rm -rf "$RUN_DIRECTORY"
+  mkdir -p "$RUN_DIRECTORY/metadata" "$RUN_DIRECTORY/source/environment" \
+    "$RUN_DIRECTORY/source/src" "$RUN_DIRECTORY/source-package/build"
+  cp "$ROOT/scripts/native-check" "$RUN_DIRECTORY/metadata/native-check"
+  cp "$ROOT/scripts/environment/tree-receipt.R" \
+    "$RUN_DIRECTORY/metadata/tree-receipt.R"
+  cp "$ROOT/environment/toolchain-linux-64.lock" \
+    "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock"
+  cp "$ROOT/environment/toolchain-linux-64.lock" \
+    "$RUN_DIRECTORY/metadata/toolchain-explicit.txt"
+  cp "$ROOT/environment/tinytex-linux-x86_64.tsv" \
+    "$RUN_DIRECTORY/source/environment/tinytex-linux-x86_64.tsv"
+  cp "$TINY_TEX_FIXTURE_RECEIPT" \
+    "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  printf '%s\n' 'int fixture;' > "$RUN_DIRECTORY/source/src/dummy.c"
+  printf '%s\n' 'fixture archive' \
+    > "$RUN_DIRECTORY/source-package/build/paradox_fixture.tar.gz"
+  printf '%s\n' tool-versions > "$RUN_DIRECTORY/metadata/tool-versions.txt"
+  printf '%s\n' '$ fixture' > "$RUN_DIRECTORY/commands.sh"
+  for provenance in git-diff.patch git-head.txt git-status.porcelain-v2.z \
+      git-status.txt source-files.zlist; do
+    : > "$RUN_DIRECTORY/metadata/$provenance"
+  done
+  write_source_manifest
+
+  for mode in strict-gcc strict-clang; do
+    mkdir -p "$RUN_DIRECTORY/modes/$mode/logs" \
+      "$RUN_DIRECTORY/modes/$mode/artifacts" \
+      "$RUN_DIRECTORY/modes/$mode/library/paradox/libs"
+    printf '%s\n' install-ok > "$RUN_DIRECTORY/modes/$mode/logs/install.log"
+    printf '%s\n' tests-ok > \
+      "$RUN_DIRECTORY/modes/$mode/logs/tests-$FIXTURE_TESTS.log"
+    printf '%s\n' dso > "$RUN_DIRECTORY/modes/$mode/library/paradox/libs/paradox.so"
+    sha256sum "$RUN_DIRECTORY/modes/$mode/library/paradox/libs/paradox.so" \
+      > "$RUN_DIRECTORY/modes/$mode/artifacts/paradox.so.sha256"
+    : > "$RUN_DIRECTORY/modes/$mode/installed.ok"
+  done
+  if [[ "$FIXTURE_TESTS" == full ]]; then
+    for checked_profile in check-as-cran check-all-tests check-depends-only; do
+      printf '%s\n' "$checked_profile-ok" \
+        > "$RUN_DIRECTORY/modes/strict-gcc/logs/$checked_profile.log"
+      mkdir -p \
+        "$RUN_DIRECTORY/modes/strict-gcc/$checked_profile/paradox.Rcheck"
+      printf '%s\n' 'Status: OK' \
+        > "$RUN_DIRECTORY/modes/strict-gcc/$checked_profile/paradox.Rcheck/00check.log"
+    done
+  fi
+  mkdir -p "$RUN_DIRECTORY/modes/analyzer-gcc/logs" \
+    "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts" \
+    "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports" \
+    "$RUN_DIRECTORY/modes/cppcheck/logs" "$RUN_DIRECTORY/modes/symbols/logs"
+  printf '%s\n' analyzer-ok > "$RUN_DIRECTORY/modes/analyzer-gcc/logs/install.log"
+  printf '%s\n' analyzer-dso > "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts/paradox.so.sha256"
+  : > "$RUN_DIRECTORY/modes/analyzer-gcc/installed.ok"
+  printf '%s\n' plist > "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports/dummy.plist"
+  sha256sum "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports/dummy.plist" \
+    > "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports.sha256"
+  printf '%s\n' cppcheck-ok > "$RUN_DIRECTORY/modes/cppcheck/logs/cppcheck.log"
+  for evidence in registration dynamic-symbols program-headers dynamic-section; do
+    printf '%s\n' "$evidence-ok" > "$RUN_DIRECTORY/modes/symbols/logs/$evidence.log"
+  done
+  {
+    printf 'mode\tstatus\tevidence\tsha256\n'
+    for entry in \
+      "strict-gcc strict-gcc/logs/tests-$FIXTURE_TESTS.log" \
+      "strict-clang strict-clang/logs/tests-$FIXTURE_TESTS.log" \
+      'analyzer-gcc analyzer-gcc/logs/install.log' \
+      'analyzer-clang analyzer-clang/artifacts/reports.sha256' \
+      'cppcheck cppcheck/logs/cppcheck.log' \
+      'symbols symbols/logs/registration.log'; do
+      mode=${entry%% *}
+      evidence=${entry#* }
+      printf '%s\t0\t%s\t%s\n' "$mode" "$evidence" \
+        "$(sha256sum "$RUN_DIRECTORY/modes/$evidence" | cut -d ' ' -f 1)"
+    done
+  } > "$RUN_DIRECTORY/modes/tool-status.tsv"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+    "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+    "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+  write_run_metadata
+  write_completion
+  printf '%s\n' 'status=passed' 'exit_code=0' \
+    'finished_utc=2026-07-14T00:01:00Z' > "$RUN_DIRECTORY/metadata/result.txt"
+}
+
+build_valid_native_fixture
+"$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+printf '%s\n' 'status=failed' 'exit_code=1' \
+  'finished_utc=2026-07-14T00:01:00Z' > "$RUN_DIRECTORY/metadata/result.txt"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' 'status=passed' >> "$RUN_DIRECTORY/metadata/result.txt"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -i 's/cppcheck=true/cppcheck=false/' "$RUN_DIRECTORY/metadata/run.txt"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' tamper >> "$RUN_DIRECTORY/source/src/dummy.c"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' substituted >> "$RUN_DIRECTORY/source/src/dummy.c"
+write_source_manifest
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' tamper >> "$RUN_DIRECTORY/modes/cppcheck/logs/cppcheck.log"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' '# substituted live package set' \
+  >> "$RUN_DIRECTORY/metadata/toolchain-explicit.txt"
+write_run_metadata
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+rm -rf "$RUN_DIRECTORY/modes/symbols"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' 'schema=1' >> "$RUN_DIRECTORY/metadata/completion.txt"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' tamper >> "$RUN_DIRECTORY/metadata/completion.sha256"
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' '# substituted helper' >> "$RUN_DIRECTORY/metadata/tree-receipt.R"
+"$RSCRIPT" --vanilla "$RUN_DIRECTORY/metadata/tree-receipt.R" create \
+  "$RUN_DIRECTORY/source" "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
+"$RSCRIPT" --vanilla "$RUN_DIRECTORY/metadata/tree-receipt.R" create \
+  "$RUN_DIRECTORY/modes" "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_run_metadata
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# A recomputed generic modes receipt and completion seal cannot hide missing or
+# unsuccessful full CRAN-style check evidence from the trusted validator.
+FIXTURE_TESTS=full
+build_valid_native_fixture
+"$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+rm "$RUN_DIRECTORY/modes/strict-gcc/logs/check-as-cran.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' 'Status: 1 WARNING' \
+  > "$RUN_DIRECTORY/modes/strict-gcc/check-depends-only/paradox.Rcheck/00check.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' 'Status: 1 WARNING' \
+  >> "$RUN_DIRECTORY/modes/strict-gcc/check-as-cran/paradox.Rcheck/00check.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Manifest validation rejects appended, duplicate, and incomplete closures
+# without consulting or downloading package archives.
+"$RECEIPT_HELPER" validate-package-manifest "$ROOT" \
+  "$PACKAGE_MANIFEST" >/dev/null
+BAD_MANIFEST="$TEST_ROOT/bad-packages.tsv"
+cp "$PACKAGE_MANIFEST" "$BAD_MANIFEST"
+printf 'Injected\t1.0\t%s' \
+  '0000000000000000000000000000000000000000000000000000000000000000' \
+  >> "$BAD_MANIFEST"
+expect_failure "$RECEIPT_HELPER" validate-package-manifest "$ROOT" \
+  "$BAD_MANIFEST"
+
+# Valgrind log discovery preserves directory spaces and rejects missing,
+# truncated, nonzero-error, and nonzero-leak evidence.
+VALGRIND_LOGS="$TEST_ROOT/Valgrind logs with spaces"
+mkdir "$VALGRIND_LOGS"
+printf '%s\n' \
+  '==123== Memcheck, a memory error detector' \
+  '==123== HEAP SUMMARY:' \
+  '==123==     in use at exit: 0 bytes in 0 blocks' \
+  '==123==   total heap usage: 3 allocs, 3 frees, 4,096 bytes allocated' \
+  '==123== All heap blocks were freed -- no leaks are possible' \
+  '==123== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  > "$VALGRIND_LOGS/focused.123.log"
+"$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" focused \
+  "$TEST_ROOT/valgrind-diagnostics.txt" >/dev/null
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" absent \
+  "$TEST_ROOT/absent-diagnostics.txt"
+printf '%s\n' '==124== Memcheck, a memory error detector' \
+  > "$VALGRIND_LOGS/truncated.124.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" truncated \
+  "$TEST_ROOT/truncated-diagnostics.txt"
+printf '%s\n' \
+  '==125== HEAP SUMMARY:' \
+  '==125==     in use at exit: 8 bytes in 1 blocks' \
+  '==125==   total heap usage: 3 allocs, 2 frees, 4,096 bytes allocated' \
+  '==125== LEAK SUMMARY:' \
+  '==125==    definitely lost: 0 bytes in 0 blocks' \
+  '==125==    indirectly lost: 0 bytes in 0 blocks' \
+  '==125== possibly lost: 8 bytes in 1 blocks' \
+  '==125==    still reachable: 0 bytes in 0 blocks' \
+  '==125==         suppressed: 0 bytes in 0 blocks' \
+  '==125== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  > "$VALGRIND_LOGS/leak.125.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" leak \
+  "$TEST_ROOT/leak-diagnostics.txt"
+
+printf '%s\n' \
+  '==126== HEAP SUMMARY:' \
+  '==126==     in use at exit: 0 bytes in 0 blocks' \
+  '==126==   total heap usage: 1 allocs, 1 frees, 8 bytes allocated' \
+  '==126== All heap blocks were freed -- no leaks are possible' \
+  '==126== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 1 from 1)' \
+  > "$VALGRIND_LOGS/suppressed.126.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" suppressed \
+  "$TEST_ROOT/suppressed-diagnostics.txt"
+printf '%s\n' \
+  '==127== HEAP SUMMARY:' \
+  '==127==     in use at exit: 0 bytes in 0 blocks' \
+  '==127==   total heap usage: 1 allocs, 1 frees, 8 bytes allocated' \
+  '==127== All heap blocks were freed -- no leaks are possible' \
+  '==127== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  'trailing junk' > "$VALGRIND_LOGS/trailing.127.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" trailing \
+  "$TEST_ROOT/trailing-diagnostics.txt"
+printf '%s\n' \
+  '==129== HEAP SUMMARY:' \
+  '==129==     in use at exit: 0 bytes in 0 blocks' \
+  '==129==   total heap usage: 1 allocs, 1 frees, 8 bytes allocated' \
+  '==129== All heap blocks were freed -- no leaks are possible' \
+  '==129== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  '==129== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  > "$VALGRIND_LOGS/duplicate.129.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" duplicate \
+  "$TEST_ROOT/duplicate-diagnostics.txt"
+printf '%s\n' \
+  '==128== HEAP SUMMARY:' \
+  '==128==     in use at exit: 12 bytes in 1 blocks' \
+  '==128==   total heap usage: 2 allocs, 1 frees, 12 bytes allocated' \
+  '==128== LEAK SUMMARY:' \
+  '==128== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)' \
+  > "$VALGRIND_LOGS/header-only.128.log"
+expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" header-only \
+  "$TEST_ROOT/header-only-diagnostics.txt"
+
+# rchk evidence requires actual positive analysis, exact registration, and no
+# ERROR/protection/warning text in either the reports or aggregate log.
+RCHK_REPORTS="$TEST_ROOT/rchk reports"
+RCHK_ARTIFACTS="$TEST_ROOT/rchk artifacts"
+RCHK_LOG="$TEST_ROOT/rchk.log"
+mkdir "$RCHK_REPORTS"
+printf '%s\n' 'Analyzed 7 functions, traversed 42 states.' \
+  > "$RCHK_REPORTS/paradox.so.bcheck"
+: > "$RCHK_REPORTS/paradox.so.maacheck"
+printf '%s\n' \
+  'Initialization function: R_init_paradox' \
+  'Functions: 12' \
+  'Checked call to R_registerRoutines: 1' \
+  > "$RCHK_REPORTS/paradox.so.fficheck"
+write_rchk_status() {
+  printf 'tool\tstatus\treport\tsha256\n'
+  for report_type in bcheck maacheck fficheck; do
+    printf '%s\t0\tparadox.so.%s\t%s\n' "$report_type" "$report_type" \
+      "$(sha256sum "$RCHK_REPORTS/paradox.so.$report_type" | cut -d ' ' -f 1)"
+  done
+}
+write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
+printf '%s\n' 'rchk completed' > "$RCHK_LOG"
+"$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
+  "$RCHK_ARTIFACTS" >/dev/null
+printf '%s\n' 'ERROR: synthetic failure' >> "$RCHK_REPORTS/paradox.so.maacheck"
+write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
+  "$RCHK_ARTIFACTS"
+: > "$RCHK_REPORTS/paradox.so.maacheck"
+sed -i 's/^maacheck.*/maacheck\t1\tparadox.so.maacheck\t0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$RCHK_REPORTS/tool-status.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
+  "$RCHK_ARTIFACTS"
+write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
+sed -i 's/Analyzed 7/Analyzed 0/' "$RCHK_REPORTS/paradox.so.bcheck"
+write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
+  "$RCHK_ARTIFACTS"
+sed -i 's/Analyzed 0/Analyzed 7/' "$RCHK_REPORTS/paradox.so.bcheck"
+sed -i 's/R_registerRoutines: 1/R_registerRoutines: 0/' \
+  "$RCHK_REPORTS/paradox.so.fficheck"
+write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
+  "$RCHK_ARTIFACTS"
+
+# The build, bootstrap, and memory harnesses share this nonblocking exclusive
+# flock protocol. A second process cannot enter while the descriptor is held.
+LOCK_FIXTURE="$TEST_ROOT/valgrind-state.lock"
+exec 8> "$LOCK_FIXTURE"
+/usr/bin/flock -n -x 8
+expect_failure /usr/bin/flock -n -x "$LOCK_FIXTURE" -c true
+/usr/bin/flock -u 8
+exec 8>&-
+/usr/bin/flock -n -x "$LOCK_FIXTURE" -c true
+
+# Transaction ownership is cleared immediately after the new library receipt
+# verifies, before either obsolete backup is deleted. An interruption in the
+# cleanup window therefore preserves the verified new pair.
+PACKAGE_BOOTSTRAP="$ROOT/scripts/bootstrap-valgrind-r-packages"
+verify_line=$(grep -n '^"\$RECEIPT_HELPER" verify-library ' \
+  "$PACKAGE_BOOTSTRAP" | tail -n 1 | cut -d: -f1)
+commit_line=$(awk -v start="$verify_line" \
+  'NR > start && $0 == "LIBRARY_SELECTED=false" { print NR; exit }' \
+  "$PACKAGE_BOOTSTRAP")
+delete_line=$(grep -n '^rm -rf "\$obsolete_library"$' \
+  "$PACKAGE_BOOTSTRAP" | cut -d: -f1)
+[[ "$verify_line" -lt "$commit_line" && "$commit_line" -lt "$delete_line" ]] ||
+  fail "package-library transaction commits after backup deletion"
+DEBUG_BOOTSTRAP="$ROOT/scripts/bootstrap-valgrind-debug-symbols"
+debug_verify_line=$(grep -n '^verify_receipt$' "$DEBUG_BOOTSTRAP" | tail -n 1 | cut -d: -f1)
+debug_commit_line=$(awk -v start="$debug_verify_line" \
+  'NR > start && $0 == "SELECTION_ACTIVE=false" { print NR; exit }' \
+  "$DEBUG_BOOTSTRAP")
+debug_delete_line=$(grep -n '^rm -rf "\$obsolete_prefix" "\$obsolete_receipt"$' \
+  "$DEBUG_BOOTSTRAP" | cut -d: -f1)
+[[ "$debug_verify_line" -lt "$debug_commit_line" && \
+   "$debug_commit_line" -lt "$debug_delete_line" ]] ||
+  fail "debug-symbol transaction commits after backup deletion"
+
+# Production lock descriptors are append-opened and inode-checked; none may
+# truncate the shared coordination path before flock is acquired.
+for lock_harness in scripts/build-valgrind-r \
+    scripts/bootstrap-valgrind-r-packages scripts/memory-check; do
+  grep -Eq 'exec 9>>"\$(STATE_LOCK|VALGRIND_STATE_LOCK)"' \
+    "$ROOT/$lock_harness" || fail "$lock_harness does not append-open its lock"
+  if grep -Eq 'exec 9>"\$(STATE_LOCK|VALGRIND_STATE_LOCK)"' \
+      "$ROOT/$lock_harness"; then
+    fail "$lock_harness still truncates its shared lock"
+  fi
+done
+
+printf '%s\n' "validation hardening helper tests passed"

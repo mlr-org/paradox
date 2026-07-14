@@ -1,0 +1,17 @@
+# Package-DSO-only AddressSanitizer profile.  scripts/native-check supplies the
+# Clang ASan runtime through LD_PRELOAD because the pinned R executable itself
+# was not linked with -fsanitize=address.  Do not combine with UBSan.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=address -fno-omit-frame-pointer
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=address -fno-omit-frame-pointer
+SHLIB_LD = $(CC17)
+CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
+
+PARADOX_ASAN_FLAGS = -O1 -g3 -fno-optimize-sibling-calls \
+  -Wall -Wextra -Wpedantic -Werror \
+  -Wstrict-prototypes -Wmissing-prototypes \
+  -Wmissing-variable-declarations -Wformat=2 -Wundef \
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+
+CFLAGS = $(PARADOX_ASAN_FLAGS)
+C17FLAGS = $(PARADOX_ASAN_FLAGS)

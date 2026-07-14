@@ -1,0 +1,134 @@
+#ifndef PARADOX_PARAMSET_DOMAIN_COMMON_H
+#define PARADOX_PARAMSET_DOMAIN_COMMON_H
+
+#include "paradox.h"
+
+enum paradox_domain_column {
+  PARADOX_DOMAIN_ID = 0,
+  PARADOX_DOMAIN_CLS,
+  PARADOX_DOMAIN_GROUPING,
+  PARADOX_DOMAIN_CARGO,
+  PARADOX_DOMAIN_LOWER,
+  PARADOX_DOMAIN_UPPER,
+  PARADOX_DOMAIN_TOLERANCE,
+  PARADOX_DOMAIN_LEVELS,
+  PARADOX_DOMAIN_SPECIAL_VALS,
+  PARADOX_DOMAIN_DEFAULT,
+  PARADOX_DOMAIN_STORAGE_TYPE,
+  PARADOX_DOMAIN_TAGS,
+  PARADOX_DOMAIN_TRAFO,
+  PARADOX_DOMAIN_REQUIREMENTS,
+  PARADOX_DOMAIN_INIT_GIVEN,
+  PARADOX_DOMAIN_INIT,
+  PARADOX_DOMAIN_COLUMN_COUNT
+};
+
+typedef struct {
+  SEXP table;
+  SEXP ids;
+  SEXP classes;
+  R_xlen_t row_count;
+} paradox_domain_params_t;
+
+typedef struct {
+  SEXP ids;
+  SEXP values;
+  R_xlen_t row_count;
+} paradox_domain_tags_t;
+
+typedef struct {
+  SEXP ids;
+  SEXP values;
+  R_xlen_t row_count;
+} paradox_domain_trafos_t;
+
+typedef struct {
+  SEXP ids;
+  SEXP on;
+  SEXP conditions;
+  R_xlen_t row_count;
+} paradox_domain_dependencies_t;
+
+typedef struct {
+  SEXP values;
+  SEXP names;
+  R_xlen_t size;
+} paradox_domain_values_t;
+
+typedef struct {
+  const paradox_domain_params_t *params;
+  R_xlen_t parameter_row;
+  const paradox_domain_tags_t *tags;
+  const R_xlen_t *tag_rows;
+  R_xlen_t tag_count;
+  SEXP trafo;
+  const paradox_domain_dependencies_t *dependencies;
+  const R_xlen_t *dependency_rows;
+  R_xlen_t dependency_count;
+  int init_given;
+  SEXP init_value;
+} paradox_domain_row_t;
+
+attribute_hidden void paradox_domain_account_work(
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_string_is(
+  SEXP string,
+  const char *expected
+);
+attribute_hidden int paradox_domain_strings_equal(SEXP left, SEXP right);
+attribute_hidden int paradox_domain_exact_string_vector(
+  SEXP value,
+  const char *const *expected,
+  R_xlen_t size,
+  R_xlen_t *work_since_interrupt
+);
+/* Exact private-state validators reject ALTREP table shells, structural
+ * attributes, columns, and inspected nested vectors. Validators root every
+ * borrowed child across their own allocation-capable checks. Returned child
+ * SEXPs are still borrowed: callers must root each retained child immediately
+ * on return, before allocating or invoking R. Every reported size is captured
+ * once during validation. */
+attribute_hidden SEXP paradox_domain_local_value(
+  SEXP environment,
+  const char *name
+);
+attribute_hidden int paradox_domain_owns_private_environment(
+  SEXP self,
+  SEXP private_environment
+);
+attribute_hidden int paradox_domain_validate_params(
+  SEXP params,
+  SEXP selected_id,
+  int validate_all_rows,
+  paradox_domain_params_t *result,
+  R_xlen_t *selected_row,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_validate_tags(
+  SEXP tags,
+  paradox_domain_tags_t *result,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_validate_trafos(
+  SEXP trafos,
+  paradox_domain_trafos_t *result,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_validate_dependencies(
+  SEXP dependencies,
+  paradox_domain_dependencies_t *result,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden int paradox_domain_validate_values(
+  SEXP values,
+  paradox_domain_values_t *result,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden void paradox_domain_fill(
+  SEXP domain,
+  const paradox_domain_row_t *row,
+  R_xlen_t *work_since_interrupt
+);
+
+#endif

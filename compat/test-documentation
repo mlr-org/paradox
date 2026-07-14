@@ -1,0 +1,1138 @@
+#!/usr/bin/env Rscript
+
+# Render the current public documentation consumers against one immutable
+# candidate.  Full projects are attempted first; the paradox-specific book and
+# website documents are separate mandatory gates so unrelated content cannot
+# obscure the compatibility signal.
+
+fail <- function(...) stop(..., call. = FALSE)
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+usage <- function(status = 0L) {
+  writeLines(c(
+    "Usage: compat/test-documentation [OPTIONS]",
+    "",
+    "  --root PATH                 paradox checkout (default: current directory)",
+    "  --candidate-library PATH    immutable candidate library",
+    "  --dependency-library PATH   consumer dependency library",
+    "  --extra-library PATH        additional local library; repeatable",
+    "  --run-id ID                 new retained run identifier",
+    "  --scope all|essential|full  workload scope (default: all)",
+    "  --timeout SECONDS           per-command timeout (default: 7200)",
+    "  --help                      show this help"
+  ))
+  quit(save = "no", status = status)
+}
+
+args <- commandArgs(trailingOnly = TRUE)
+options <- list(
+  root = getwd(), candidate_library = NULL, dependency_library = NULL,
+  extra_library = character(), run_id = NULL, scope = "all", timeout = 7200
+)
+i <- 1L
+while (i <= length(args)) {
+  arg <- args[[i]]
+  if (arg == "--help") usage()
+  key <- sub("^--", "", arg)
+  key <- gsub("-", "_", key, fixed = TRUE)
+  if (!startsWith(arg, "--") || !key %in% names(options)) {
+    fail("unknown argument: ", arg)
+  }
+  if (i == length(args)) fail(arg, " requires a value")
+  value <- args[[i + 1L]]
+  if (key == "extra_library") {
+    options$extra_library <- c(options$extra_library, value)
+  } else {
+    options[[key]] <- value
+  }
+  i <- i + 2L
+}
+
+root <- normalizePath(options$root, mustWork = TRUE)
+require_plain_local_library_argument <- function(path, label) {
+  path <- sub("/+$", "", path)
+  local_root <- file.path(root, ".local")
+  if (!startsWith(path, paste0(local_root, "/"))) {
+    fail(label, " must be an absolute path below ", local_root)
+  }
+  relative <- substring(path, nchar(root) + 2L)
+  components <- strsplit(relative, "/", fixed = TRUE)[[1L]]
+  if (any(!nzchar(components) | components %in% c(".", ".."))) {
+    fail(label, " has a non-canonical path component")
+  }
+  current <- root
+  for (component in components) {
+    current <- file.path(current, component)
+    link <- Sys.readlink(current)
+    if (length(link) != 1L || is.na(link) || nzchar(link) ||
+        !dir.exists(current)) {
+      fail(label, " has a missing, non-directory, or symbolic component: ", current)
+    }
+  }
+  normalized <- normalizePath(path, winslash = "/", mustWork = TRUE)
+  if (!identical(normalized, path)) {
+    fail(label, " must use its canonical absolute path")
+  }
+  normalized
+}
+candidate_library <- options$candidate_library %||% file.path(
+  root, ".local", "compat", "R", "library-candidate"
+)
+dependency_library <- options$dependency_library %||% file.path(
+  root, ".local", "compat", "R", "library-dependencies"
+)
+candidate_library <- require_plain_local_library_argument(
+  candidate_library, "candidate library"
+)
+dependency_library <- require_plain_local_library_argument(
+  dependency_library, "dependency library"
+)
+scope <- as.character(options$scope)
+if (!scope %in% c("all", "essential", "full")) {
+  fail("--scope must be all, essential, or full")
+}
+timeout_seconds <- suppressWarnings(as.numeric(options$timeout))
+if (length(timeout_seconds) != 1L || is.na(timeout_seconds) ||
+    !is.finite(timeout_seconds) || timeout_seconds <= 0) {
+  fail("--timeout must be one positive finite number")
+}
+
+run_id <- options$run_id
+if (is.null(run_id) || length(run_id) != 1L ||
+    !grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", run_id) ||
+    run_id %in% c(".", "..")) {
+  fail("--run-id has an unsafe shape")
+}
+if (!identical(Sys.getenv("PARADOX_ACTIVE_ROOT", unset = ""), root)) {
+  fail("activate the repository-local environment first: . scripts/activate")
+}
+expected_r_home <- normalizePath(
+  file.path(root, ".local", "toolchain", "lib", "R"),
+  winslash = "/", mustWork = TRUE
+)
+if (!identical(
+    normalizePath(R.home(), winslash = "/", mustWork = TRUE),
+    expected_r_home
+  )) {
+  fail("documentation checks are not running under repository-local R")
+}
+
+is_symbolic <- function(path) {
+  link <- Sys.readlink(path)
+  length(link) == 1L && !is.na(link) && nzchar(link)
+}
+require_plain_directory <- function(path, label) {
+  if (!dir.exists(path) || is_symbolic(path)) {
+    fail(label, " is absent, not a directory, or symbolic: ", path)
+  }
+  invisible(path)
+}
+for (path in c(
+  file.path(root, ".local"),
+  file.path(root, ".local", "compat"),
+  file.path(root, ".local", "compat", "runs")
+)) {
+  require_plain_directory(path, "documentation evidence parent")
+}
+runs_root <- normalizePath(
+  file.path(root, ".local", "compat", "runs"),
+  winslash = "/", mustWork = TRUE
+)
+run_parent <- file.path(runs_root, run_id)
+if (file.exists(run_parent) || dir.exists(run_parent) || is_symbolic(run_parent)) {
+  fail("documentation run ID already exists: ", run_parent)
+}
+run_directory <- file.path(run_parent, "documentation")
+
+if (!requireNamespace("processx", quietly = TRUE)) {
+  fail("the repository-local processx package is required")
+}
+fingerprint_script <- file.path(root, "compat", "fingerprint.R")
+harness_script <- file.path(root, "compat", "test-documentation")
+evidence_helper_script <- file.path(root, "compat", "repository-evidence.R")
+evidence_verifier_script <- file.path(root, "compat", "verify-repository-evidence.R")
+for (path in c(
+  fingerprint_script, harness_script, evidence_helper_script,
+  evidence_verifier_script
+)) {
+  if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("documentation harness input is absent, not a regular file, or symbolic: ", path)
+  }
+}
+source(fingerprint_script, local = TRUE)
+source(evidence_helper_script, local = TRUE)
+
+git <- Sys.which("git")
+environment_command <- Sys.which("env")
+local_r <- file.path(R.home("bin"), "R")
+local_rscript <- file.path(R.home("bin"), "Rscript")
+toolchain_root <- file.path(root, ".local", "toolchain")
+toolchain_lock <- file.path(root, "environment", "toolchain-linux-64.lock")
+r_base_library <- file.path(R.home(), "library")
+micromamba <- file.path(root, ".local", "bin", "micromamba")
+micromamba_version <- "2.5.0"
+micromamba_archive_sha256 <- "cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6"
+micromamba_binary_sha256 <- "c04571cfb0750e5432d530a3068b8fcd232ebed3133358e056e59a90b9852b00"
+micromamba_archive <- file.path(
+  root, ".cache", "downloads",
+  paste0("micromamba-", micromamba_version, "-linux-64.tar.bz2")
+)
+quarto <- file.path(root, ".local", "quarto", "1.9.38", "bin", "quarto")
+quarto_bootstrap <- file.path(root, "scripts", "bootstrap-quarto")
+tinytex_root <- file.path(root, ".local", "tinytex")
+tinytex_bin <- file.path(tinytex_root, "bin", "x86_64-linux")
+tinytex_manifest <- file.path(root, "environment", "tinytex-linux-x86_64.tsv")
+tinytex_tree_helper <- file.path(root, "scripts", "environment", "tree-receipt.R")
+texi2dvi <- file.path(root, ".local", "toolchain", "bin", "texi2dvi")
+for (tool in c(
+  git, environment_command, local_r, local_rscript, micromamba, quarto,
+  quarto_bootstrap, texi2dvi
+)) {
+  if (!nzchar(tool) || !file.exists(tool) || nzchar(Sys.readlink(tool))) {
+    fail("required local executable is absent or symbolic: ", tool)
+  }
+}
+for (path in c(
+  toolchain_lock, micromamba_archive, tinytex_manifest, tinytex_tree_helper
+)) {
+  if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("required documentation input is absent, not a regular file, or symbolic: ", path)
+  }
+}
+toolchain_root <- require_plain_local_library_argument(
+  toolchain_root, "ordinary toolchain"
+)
+r_base_library <- require_plain_local_library_argument(
+  r_base_library, "R base library"
+)
+if (!identical(dirname(r_base_library), file.path(toolchain_root, "lib", "R"))) {
+  fail("R base library is not the selected ordinary toolchain library")
+}
+if (!identical(
+    unname(tools::sha256sum(micromamba_archive)),
+    micromamba_archive_sha256
+  ) || !identical(
+    unname(tools::sha256sum(micromamba)),
+    micromamba_binary_sha256
+  )) {
+  fail("repository-local micromamba differs from its authenticated archive")
+}
+local_user <- Sys.info()[["user"]]
+if (is.na(local_user) || !nzchar(local_user)) local_user <- "paradox-docs"
+micromamba_environment <- c(
+  HOME = file.path(root, ".local", "tmp"),
+  USER = local_user,
+  LOGNAME = local_user,
+  PATH = paste(c(
+    file.path(toolchain_root, "bin"), file.path(root, ".local", "bin"),
+    "/usr/bin", "/bin"
+  ), collapse = .Platform$path.sep),
+  MAMBA_ROOT_PREFIX = file.path(root, ".local", "micromamba"),
+  LC_ALL = "C.UTF-8",
+  TZ = "UTC"
+)
+run_micromamba <- function(arguments, error_on_status = FALSE) {
+  processx::run(
+    environment_command,
+    c(
+      "-i",
+      paste0(names(micromamba_environment), "=", unname(micromamba_environment)),
+      micromamba,
+      arguments
+    ),
+    error_on_status = error_on_status,
+    echo = FALSE
+  )
+}
+observed_micromamba_version <- trimws(run_micromamba(
+  "--version", error_on_status = TRUE
+)$stdout)
+if (!identical(observed_micromamba_version, micromamba_version)) {
+  fail("repository-local micromamba reports an unexpected version")
+}
+expected_toolchain_explicit <- readLines(toolchain_lock, warn = FALSE)
+if (length(expected_toolchain_explicit) < 3L ||
+    !identical(expected_toolchain_explicit[[1L]], "# platform: linux-64") ||
+    !identical(expected_toolchain_explicit[[2L]], "@EXPLICIT") ||
+    any(!grepl(
+      "^https://[^[:space:]#]+#[0-9a-f]{64}$",
+      expected_toolchain_explicit[-(1:2)]
+    )) || any(grepl(root, expected_toolchain_explicit, fixed = TRUE))) {
+  fail("ordinary toolchain lock has an invalid explicit shape")
+}
+live_toolchain_explicit <- function() {
+  if (!identical(
+      unname(tools::sha256sum(micromamba_archive)),
+      micromamba_archive_sha256
+    ) || !identical(
+      unname(tools::sha256sum(micromamba)),
+      micromamba_binary_sha256
+    )) {
+    fail("repository-local micromamba changed during documentation validation")
+  }
+  result <- run_micromamba(
+    c("list", "--no-rc", "--prefix", toolchain_root, "--explicit", "--sha256")
+  )
+  lines <- strsplit(result$stdout, "\n", fixed = TRUE)[[1L]]
+  if (result$status != 0L || length(lines) < 3L ||
+      !startsWith(lines[[1L]], "List of packages in environment: ") ||
+      nzchar(lines[[2L]]) ||
+      any(!grepl("^https://[^[:space:]#]+#[0-9a-f]{64}$", lines[-(1:2)]))) {
+    fail("could not obtain a canonical explicit ordinary-toolchain package set")
+  }
+  value <- c("# platform: linux-64", "@EXPLICIT", lines[-(1:2)])
+  if (!identical(value, expected_toolchain_explicit)) {
+    fail("installed ordinary toolchain differs from its pinned explicit lock")
+  }
+  value
+}
+initial_toolchain_explicit <- live_toolchain_explicit()
+for (tool in file.path(tinytex_bin, c("pdflatex", "kpsewhich", "makeindex"))) {
+  if (file.access(tool, mode = 1L) != 0L) {
+    fail("required repository-local TinyTeX tool is not executable: ", tool)
+  }
+}
+tinytex_specification <- utils::read.delim(
+  tinytex_manifest, stringsAsFactors = FALSE, check.names = FALSE,
+  colClasses = "character"
+)
+expected_tinytex_names <- c(
+  "version", "platform", "archive", "archive_size", "archive_sha256",
+  "tree_manifest_sha256", "url"
+)
+if (!identical(names(tinytex_specification), expected_tinytex_names) ||
+    nrow(tinytex_specification) != 1L ||
+    !identical(tinytex_specification$version, "2026.07") ||
+    !identical(tinytex_specification$platform, "linux-x86_64") ||
+    !identical(
+      tinytex_specification$archive,
+      "TinyTeX-linux-x86_64-v2026.07.tar.xz"
+    ) ||
+    !grepl("^[0-9]+$", tinytex_specification$archive_size) ||
+    !grepl("^[0-9a-f]{64}$", tinytex_specification$archive_sha256) ||
+    !grepl("^[0-9a-f]{64}$", tinytex_specification$tree_manifest_sha256) ||
+    !identical(
+      tinytex_specification$url,
+      paste0(
+        "https://github.com/rstudio/tinytex-releases/releases/download/v2026.07/",
+        tinytex_specification$archive
+      )
+    )) {
+  fail("repository-local TinyTeX manifest has an unexpected identity")
+}
+tinytex_archive <- file.path(
+  root, ".cache", "downloads", tinytex_specification$archive
+)
+if (!file.exists(tinytex_archive) || dir.exists(tinytex_archive) ||
+    is_symbolic(tinytex_archive) ||
+    !identical(
+      format(file.info(tinytex_archive)$size, scientific = FALSE, trim = TRUE),
+      tinytex_specification$archive_size
+    ) ||
+    !identical(
+      unname(tools::sha256sum(tinytex_archive)),
+      tinytex_specification$archive_sha256
+    )) {
+  fail("repository-local TinyTeX archive differs from its pinned manifest")
+}
+quarto_version <- trimws(processx::run(quarto, "--version", error_on_status = TRUE)$stdout)
+if (!identical(quarto_version, "1.9.38")) fail("unexpected Quarto version: ", quarto_version)
+quarto_verification <- processx::run(
+  quarto_bootstrap,
+  "--verify",
+  wd = root,
+  error_on_status = FALSE,
+  echo = FALSE
+)
+if (quarto_verification$status != 0L) {
+  fail("repository-local Quarto receipt verification failed: ", quarto_verification$stderr)
+}
+
+candidate_package <- normalizePath(
+  find.package("paradox", lib.loc = candidate_library), mustWork = TRUE
+)
+if (!identical(normalizePath(dirname(candidate_package)), candidate_library)) {
+  fail("paradox did not resolve from the dedicated candidate library")
+}
+candidate_version <- as.character(utils::packageVersion("paradox", lib.loc = candidate_library))
+candidate_ref <- Sys.getenv("PARADOX_CANDIDATE_REF", unset = "")
+candidate_commit <- tolower(Sys.getenv("PARADOX_CANDIDATE_COMMIT", unset = ""))
+candidate_tree <- tolower(Sys.getenv("PARADOX_CANDIDATE_TREE", unset = ""))
+declared_content <- tolower(Sys.getenv("PARADOX_CANDIDATE_CONTENT_SHA256", unset = ""))
+sentinel <- file.path(candidate_library, ".paradox-candidate-content-sha256")
+if (!nzchar(declared_content) && file.exists(sentinel) && !nzchar(Sys.readlink(sentinel))) {
+  declared_content <- tolower(trimws(readLines(sentinel, n = 1L, warn = FALSE)))
+}
+if (!startsWith(candidate_ref, "refs/") ||
+    processx::run(git, c("check-ref-format", candidate_ref),
+      error_on_status = FALSE)$status != 0L ||
+    !grepl("^[0-9a-f]{40}$", candidate_commit) ||
+    !grepl("^[0-9a-f]{40}$", candidate_tree) ||
+    !grepl("^[0-9a-f]{64}$", declared_content)) {
+  fail("candidate commit, tree, and content provenance must be declared and well formed")
+}
+resolved_commit <- trimws(processx::run(
+  git, c("-C", root, "rev-parse", paste0(candidate_commit, "^{commit}")),
+  error_on_status = TRUE
+)$stdout)
+resolved_tree <- trimws(processx::run(
+  git, c("-C", root, "rev-parse", paste0(candidate_commit, "^{tree}")),
+  error_on_status = TRUE
+)$stdout)
+resolved_ref <- trimws(processx::run(
+  git, c("-C", root, "rev-parse", paste0(candidate_ref, "^{commit}")),
+  error_on_status = TRUE
+)$stdout)
+if (!identical(tolower(resolved_commit), candidate_commit) ||
+    !identical(tolower(resolved_ref), candidate_commit) ||
+    !identical(tolower(resolved_tree), candidate_tree)) {
+  fail("declared candidate commit/tree is not a matching local Git object")
+}
+candidate_content <- compat_tree_content_sha256(candidate_package)
+if (!identical(candidate_content, declared_content)) {
+  fail("installed candidate content differs from its declared fingerprint")
+}
+candidate_library_fingerprint <- compat_tree_content_sha256(candidate_library)
+
+provenance_file <- file.path(candidate_library, ".paradox-candidate-provenance.tsv")
+provenance_seal <- file.path(candidate_library, ".paradox-candidate-provenance.sha256")
+for (path in c(provenance_file, provenance_seal)) {
+  if (!file.exists(path) || nzchar(Sys.readlink(path))) {
+    fail("candidate provenance receipt is absent or symbolic: ", path)
+  }
+}
+seal_line <- readLines(provenance_seal, warn = FALSE)
+expected_seal_line <- paste0(
+  unname(tools::sha256sum(provenance_file)),
+  "  .paradox-candidate-provenance.tsv"
+)
+if (length(seal_line) != 1L || !identical(seal_line, expected_seal_line)) {
+  fail("candidate provenance receipt seal is invalid")
+}
+provenance <- utils::read.delim(
+  provenance_file, stringsAsFactors = FALSE, check.names = FALSE,
+  colClasses = "character"
+)
+expected_provenance_keys <- c(
+  "schema", "candidate_ref", "candidate_commit", "candidate_tree",
+  "candidate_version", "source_archive_sha256", "candidate_content_sha256",
+  "installer_sha256"
+)
+if (!identical(names(provenance), c("key", "value")) ||
+    !identical(provenance$key, expected_provenance_keys) ||
+    anyNA(provenance$value)) {
+  fail("candidate provenance receipt has an unexpected shape")
+}
+provenance_value <- setNames(provenance$value, provenance$key)
+if (!identical(unname(provenance_value[c(
+    "schema", "candidate_ref", "candidate_commit", "candidate_tree",
+    "candidate_version", "candidate_content_sha256", "installer_sha256"
+  )]), c(
+    "1", candidate_ref, candidate_commit, candidate_tree, candidate_version,
+    declared_content,
+    unname(tools::sha256sum(file.path(root, "compat", "install-candidate")))
+  )) || !grepl("^[0-9a-f]{64}$", provenance_value[["source_archive_sha256"]])) {
+  fail("candidate provenance receipt differs from the declared candidate")
+}
+archive_probe <- tempfile("paradox-candidate-archive-", tmpdir = file.path(root, ".local", "tmp"))
+archived_candidate <- processx::run(
+  git,
+  c("-C", root, "archive", "--format=tar", "-o", archive_probe, candidate_commit),
+  error_on_status = FALSE
+)
+if (archived_candidate$status != 0L ||
+    !identical(
+      unname(tools::sha256sum(archive_probe)),
+      provenance_value[["source_archive_sha256"]]
+    )) {
+  fail("candidate provenance source archive is not reproducible from its commit")
+}
+unlink(archive_probe)
+
+extra_libraries <- options$extra_library
+environment_extra <- Sys.getenv("PARADOX_CONSUMER_EXTRA_LIBS", unset = "")
+if (nzchar(environment_extra)) {
+  fail("PARADOX_CONSUMER_EXTRA_LIBS is not accepted here; use --extra-library explicitly")
+}
+extra_libraries <- unique(vapply(
+  extra_libraries[nzchar(extra_libraries)],
+  require_plain_local_library_argument,
+  character(1L),
+  label = "extra documentation library"
+))
+for (path in c(candidate_library, dependency_library, extra_libraries)) {
+  require_plain_directory(path, "protected documentation library")
+}
+protected_libraries <- c(candidate_library, dependency_library, extra_libraries)
+if (anyDuplicated(protected_libraries)) {
+  fail("candidate, dependency, and extra libraries must be distinct")
+}
+if (length(protected_libraries) > 1L) {
+  nested <- vapply(seq_along(protected_libraries), function(i) {
+    any(startsWith(
+      protected_libraries[-i],
+      paste0(protected_libraries[[i]], "/")
+    ))
+  }, logical(1L))
+  if (any(nested)) {
+    fail("candidate, dependency, and extra libraries must be disjoint")
+  }
+}
+dependency_library_fingerprint <- compat_tree_content_sha256(dependency_library)
+r_base_library_fingerprint <- compat_tree_content_sha256(r_base_library)
+extra_library_fingerprints <- if (length(extra_libraries)) {
+  setNames(
+    vapply(extra_libraries, compat_tree_content_sha256, character(1L)),
+    extra_libraries
+  )
+} else {
+  character()
+}
+
+if (!dir.create(run_parent, recursive = FALSE, showWarnings = FALSE)) {
+  fail("could not reserve documentation run ID: ", run_parent)
+}
+run_parent <- normalizePath(run_parent, winslash = "/", mustWork = TRUE)
+if (!identical(dirname(run_parent), runs_root)) {
+  fail("documentation run directory escaped its retained parent")
+}
+if (!dir.create(run_directory, recursive = FALSE, showWarnings = FALSE)) {
+  fail("could not reserve documentation evidence directory: ", run_directory)
+}
+run_directory <- normalizePath(run_directory, winslash = "/", mustWork = TRUE)
+if (!identical(dirname(run_directory), run_parent)) {
+  fail("documentation evidence directory escaped its run directory")
+}
+for (child in c(
+  "logs", "sources", "libraries", "homes", "tmp", "cache", "metadata",
+  "texmf-var", "texmf-config", "texmf-home", "texmf-cache", "vartexfonts"
+)) {
+  path <- file.path(run_directory, child)
+  if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
+    fail("could not create documentation evidence child: ", path)
+  }
+}
+
+metadata_inputs <- c(
+  file.path(root, "compat", "github-snapshot.tsv"),
+  file.path(root, "compat", "github-repositories.tsv"),
+  fingerprint_script, harness_script, evidence_helper_script,
+  evidence_verifier_script, provenance_file, provenance_seal,
+  file.path(root, "compat", "install-candidate"),
+  toolchain_lock,
+  tinytex_manifest, tinytex_tree_helper,
+  file.path(root, "environment", "quarto-linux-x86_64.tsv"),
+  quarto_bootstrap,
+  file.path(root, ".local", "receipts", "quarto", "1.9.38", c(
+    "inputs.tsv", "installed-tree.tsv", "seal.sha256"
+  ))
+)
+for (path in metadata_inputs) {
+  if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("documentation metadata input is absent, not a regular file, or symbolic: ", path)
+  }
+}
+if (anyDuplicated(basename(metadata_inputs))) {
+  fail("documentation metadata inputs have colliding retained names")
+}
+metadata_input_sha256 <- setNames(
+  vapply(metadata_inputs, tools::sha256sum, character(1L), USE.NAMES = FALSE),
+  metadata_inputs
+)
+metadata_input_hash <- function(path) unname(metadata_input_sha256[[path]])
+if (!all(file.copy(
+    metadata_inputs,
+    file.path(run_directory, "metadata"),
+    copy.mode = TRUE,
+    copy.date = TRUE
+  ))) {
+  fail("could not retain documentation harness inputs")
+}
+retained_metadata_inputs <- file.path(
+  run_directory, "metadata", basename(metadata_inputs)
+)
+retained_metadata_sha256 <- vapply(
+  retained_metadata_inputs,
+  tools::sha256sum,
+  character(1L),
+  USE.NAMES = FALSE
+)
+if (!identical(unname(metadata_input_sha256), retained_metadata_sha256)) {
+  fail("retained documentation harness inputs differ from their source bytes")
+}
+toolchain_explicit_receipt <- file.path(
+  run_directory, "metadata", "toolchain-explicit.txt"
+)
+writeLines(initial_toolchain_explicit, toolchain_explicit_receipt, useBytes = TRUE)
+toolchain_explicit_receipt_sha256 <- unname(tools::sha256sum(
+  toolchain_explicit_receipt
+))
+if (!identical(
+    toolchain_explicit_receipt_sha256,
+    unname(tools::sha256sum(toolchain_lock))
+  )) {
+  fail("retained ordinary-toolchain package set differs from its explicit lock")
+}
+toolchain_tree_receipt <- file.path(
+  run_directory, "metadata", "toolchain-tree.tsv"
+)
+retained_tree_helper <- file.path(run_directory, "metadata", "tree-receipt.R")
+toolchain_receipt_creation <- processx::run(
+  local_rscript,
+  c("--vanilla", retained_tree_helper, "create", toolchain_root,
+    toolchain_tree_receipt),
+  error_on_status = FALSE,
+  echo = FALSE
+)
+if (toolchain_receipt_creation$status != 0L) {
+  fail(
+    "could not authenticate the repository-local ordinary toolchain: ",
+    toolchain_receipt_creation$stderr
+  )
+}
+toolchain_receipt_initial_verification <- processx::run(
+  local_rscript,
+  c("--vanilla", retained_tree_helper, "verify", toolchain_root,
+    toolchain_tree_receipt),
+  error_on_status = FALSE,
+  echo = FALSE
+)
+if (toolchain_receipt_initial_verification$status != 0L) {
+  fail(
+    "repository-local ordinary toolchain changed while it was receipted: ",
+    toolchain_receipt_initial_verification$stderr
+  )
+}
+toolchain_tree_receipt_sha256 <- unname(tools::sha256sum(
+  toolchain_tree_receipt
+))
+tinytex_tree_receipt <- file.path(
+  run_directory, "metadata", "tinytex-tree.tsv"
+)
+tinytex_receipt_creation <- processx::run(
+  local_rscript,
+  c("--vanilla", tinytex_tree_helper, "create", tinytex_root,
+    tinytex_tree_receipt),
+  error_on_status = FALSE,
+  echo = FALSE
+)
+if (tinytex_receipt_creation$status != 0L ||
+    !identical(
+      unname(tools::sha256sum(tinytex_tree_receipt)),
+      tinytex_specification$tree_manifest_sha256
+    )) {
+  fail(
+    "repository-local TinyTeX tree differs from its manifest: ",
+    tinytex_receipt_creation$stderr
+  )
+}
+tinytex_tree_receipt_sha256 <- tinytex_specification$tree_manifest_sha256
+verify_tinytex_tree <- function(context) {
+  if (!file.exists(tinytex_tree_receipt) || dir.exists(tinytex_tree_receipt) ||
+      is_symbolic(tinytex_tree_receipt) || !identical(
+        unname(tools::sha256sum(tinytex_tree_receipt)),
+        tinytex_tree_receipt_sha256
+      )) {
+    fail("retained TinyTeX tree receipt changed ", context)
+  }
+  result <- processx::run(
+    local_rscript,
+    c("--vanilla", retained_tree_helper, "verify", tinytex_root,
+      tinytex_tree_receipt),
+    error_on_status = FALSE,
+    echo = FALSE
+  )
+  if (result$status != 0L) {
+    fail("repository-local TinyTeX changed ", context, ": ", result$stderr)
+  }
+  invisible(TRUE)
+}
+verify_tinytex_tree("before documentation workloads")
+snapshot <- utils::read.delim(
+  file.path(run_directory, "metadata", "github-snapshot.tsv"),
+  stringsAsFactors = FALSE, check.names = FALSE
+)
+manifest <- utils::read.delim(
+  file.path(run_directory, "metadata", "github-repositories.tsv"),
+  stringsAsFactors = FALSE, check.names = FALSE
+)
+repositories <- c("mlr3book", "mlr3website", "mlr3gallery")
+input_repositories <- c(repositories, "mlr3verse")
+if (!all(input_repositories %in% snapshot$repository) ||
+    !all(input_repositories %in% manifest$repository)) {
+  fail("documentation repositories are missing from a pinned manifest")
+}
+
+capture <- function(command, arguments = character(), wd = root, env = character()) {
+  processx::run(
+    command, arguments, wd = wd, env = env, error_on_status = FALSE,
+    echo = FALSE, windows_verbatim_args = FALSE
+  )
+}
+
+git_output <- function(checkout, arguments) {
+  value <- capture(git, c("-C", checkout, arguments))
+  if (value$status != 0L) fail("Git validation failed for ", checkout, ": ", value$stderr)
+  trimws(value$stdout)
+}
+
+source_metadata <- vector("list", length(input_repositories))
+names(source_metadata) <- input_repositories
+for (repository in input_repositories) {
+  row <- snapshot[snapshot$repository == repository, , drop = FALSE]
+  relation <- manifest[manifest$repository == repository, , drop = FALSE]
+  if (nrow(row) != 1L || nrow(relation) != 1L || relation$action != "clone") {
+    fail("documentation manifest has a non-unique or disabled row for ", repository)
+  }
+  checkout <- file.path(root, ".local", "compat", "github", repository)
+  if (!dir.exists(checkout) || nzchar(Sys.readlink(checkout))) {
+    fail("documentation checkout is absent or symbolic: ", checkout)
+  }
+  observed_commit <- tolower(git_output(checkout, c("rev-parse", "HEAD^{commit}")))
+  observed_tree <- tolower(git_output(checkout, c("rev-parse", "HEAD^{tree}")))
+  dirty <- git_output(checkout, c("status", "--porcelain=v1", "--untracked-files=all"))
+  origin <- git_output(checkout, c("remote", "get-url", "origin"))
+  if (!identical(observed_commit, tolower(row$commit)) || nzchar(dirty) ||
+      !identical(sub("[.]git$", "", origin), sub("[.]git$", "", row$url))) {
+    fail("documentation checkout differs from its pinned clean snapshot: ", repository)
+  }
+  archive <- file.path(run_directory, paste0(repository, "-", observed_commit, ".tar"))
+  archived <- capture(git, c("-C", checkout, "archive", "--format=tar", "-o", archive, observed_commit))
+  if (archived$status != 0L) fail("could not archive ", repository, ": ", archived$stderr)
+  destination <- file.path(run_directory, "sources", repository)
+  dir.create(destination, recursive = TRUE, showWarnings = FALSE)
+  utils::untar(archive, exdir = destination)
+  unlink(archive)
+  source_metadata[[repository]] <- data.frame(
+    repository = repository, url = row$url, commit = observed_commit,
+    tree = observed_tree, source = destination, stringsAsFactors = FALSE
+  )
+}
+source_metadata <- do.call(rbind, source_metadata)
+utils::write.table(
+  source_metadata, file.path(run_directory, "sources.tsv"), sep = "\t",
+  quote = TRUE, row.names = FALSE, na = ""
+)
+
+verify_protected_libraries <- function(context, verify_toolchain_tree = FALSE) {
+  source_ref_commit <- tolower(git_output(
+    root, c("rev-parse", paste0(candidate_ref, "^{commit}"))
+  ))
+  source_ref_tree <- tolower(git_output(
+    root, c("rev-parse", paste0(candidate_ref, "^{tree}"))
+  ))
+  source_commit_tree <- tolower(git_output(
+    root, c("rev-parse", paste0(candidate_commit, "^{tree}"))
+  ))
+  if (!identical(source_ref_commit, candidate_commit) ||
+      !identical(source_ref_tree, candidate_tree) ||
+      !identical(source_commit_tree, candidate_tree)) {
+    fail("candidate ref, commit, or tree changed ", context)
+  }
+  live_metadata_sha256 <- setNames(
+    vapply(metadata_inputs, tools::sha256sum, character(1L), USE.NAMES = FALSE),
+    metadata_inputs
+  )
+  retained_metadata_sha256 <- vapply(
+    retained_metadata_inputs,
+    tools::sha256sum,
+    character(1L),
+    USE.NAMES = FALSE
+  )
+  if (!identical(live_metadata_sha256, metadata_input_sha256) ||
+      !identical(unname(metadata_input_sha256), retained_metadata_sha256)) {
+    fail("documentation harness or retained input changed ", context)
+  }
+  package_now <- normalizePath(find.package("paradox", lib.loc = candidate_library), mustWork = TRUE)
+  if (!identical(package_now, candidate_package) ||
+      !identical(compat_tree_content_sha256(package_now), declared_content) ||
+      !identical(compat_tree_content_sha256(candidate_library), candidate_library_fingerprint)) {
+    fail("candidate library changed ", context)
+  }
+  if (!identical(
+      compat_tree_content_sha256(dependency_library),
+      dependency_library_fingerprint
+    )) {
+    fail("dependency library changed ", context)
+  }
+  if (length(extra_libraries)) {
+    extra_now <- setNames(
+      vapply(extra_libraries, compat_tree_content_sha256, character(1L)),
+      extra_libraries
+    )
+    if (!identical(extra_now, extra_library_fingerprints)) {
+      fail("an extra documentation library changed ", context)
+    }
+  }
+  for (receipt in c(toolchain_explicit_receipt, toolchain_tree_receipt)) {
+    if (!file.exists(receipt) || dir.exists(receipt) || is_symbolic(receipt)) {
+      fail("ordinary-toolchain receipt is absent, non-regular, or symbolic ",
+        context)
+    }
+  }
+  if (!identical(
+      unname(tools::sha256sum(toolchain_explicit_receipt)),
+      toolchain_explicit_receipt_sha256
+    ) || !identical(
+      unname(tools::sha256sum(toolchain_tree_receipt)),
+      toolchain_tree_receipt_sha256
+    )) {
+    fail("ordinary-toolchain receipt changed ", context)
+  }
+  if (!identical(live_toolchain_explicit(), initial_toolchain_explicit)) {
+    fail("ordinary toolchain package set changed ", context)
+  }
+  if (!identical(
+      compat_tree_content_sha256(r_base_library),
+      r_base_library_fingerprint
+    )) {
+    fail("R base library changed ", context)
+  }
+  if (isTRUE(verify_toolchain_tree)) {
+    toolchain_now <- processx::run(
+      local_rscript,
+      c("--vanilla", retained_tree_helper, "verify", toolchain_root,
+        toolchain_tree_receipt),
+      error_on_status = FALSE,
+      echo = FALSE
+    )
+    if (toolchain_now$status != 0L) {
+      fail("repository-local ordinary toolchain changed ", context, ": ",
+        toolchain_now$stderr)
+    }
+  }
+  quarto_now <- processx::run(
+    quarto_bootstrap,
+    "--verify",
+    wd = root,
+    error_on_status = FALSE,
+    echo = FALSE
+  )
+  if (quarto_now$status != 0L) {
+    fail("repository-local Quarto changed ", context, ": ", quarto_now$stderr)
+  }
+  verify_tinytex_tree(context)
+  invisible(TRUE)
+}
+
+library_environment <- function(overlay) {
+  paste(unique(c(candidate_library, overlay, extra_libraries, dependency_library)),
+    collapse = .Platform$path.sep)
+}
+
+base_environment <- function(overlay) {
+  libraries <- library_environment(overlay)
+  repository <- basename(overlay)
+  home <- file.path(run_directory, "homes", repository)
+  temporary <- file.path(run_directory, "tmp", repository)
+  cache <- file.path(run_directory, "cache", repository)
+  path_entries <- c(
+    dirname(quarto),
+    tinytex_bin,
+    dirname(local_r), file.path(root, ".local", "bin"), "/usr/bin", "/bin"
+  )
+  c(
+    HOME = home, USER = local_user, LOGNAME = local_user,
+    NOT_CRAN = "true", TESTTHAT_PARALLEL = "false", R_LIBS = libraries,
+    R_LIBS_USER = libraries, R_LIBS_SITE = "", R_HISTFILE = "/dev/null",
+    R_ENVIRON = "/dev/null", R_ENVIRON_USER = "/dev/null",
+    R_PROFILE = "/dev/null", R_PROFILE_USER = "/dev/null",
+    R_MAKEVARS_SITE = "/dev/null",
+    R_MAKEVARS_USER = file.path(root, "environment", "Makevars"),
+    R_TESTS = "", R_KEEP_PKG_SOURCE = "yes",
+    TMPDIR = temporary, XDG_CACHE_HOME = cache,
+    R_USER_CACHE_DIR = file.path(cache, "R"),
+    TEXMFVAR = file.path(run_directory, "texmf-var", repository),
+    TEXMFCONFIG = file.path(run_directory, "texmf-config", repository),
+    TEXMFHOME = file.path(run_directory, "texmf-home", repository),
+    TEXMFCACHE = file.path(run_directory, "texmf-cache", repository),
+    VARTEXFONTS = file.path(run_directory, "vartexfonts", repository),
+    R_TEXI2DVICMD = texi2dvi, TEXI2DVI = texi2dvi,
+    CCACHE_DIR = file.path(cache, "ccache"),
+    PIP_CACHE_DIR = file.path(cache, "pip"),
+    UV_CACHE_DIR = file.path(cache, "uv"),
+    PYTHONDONTWRITEBYTECODE = "1",
+    RETICULATE_MINICONDA_PATH = file.path(root, ".local", "reticulate"),
+    RETICULATE_USE_MANAGED_VENV = "yes",
+    GIT_CONFIG_GLOBAL = "/dev/null", GIT_CONFIG_NOSYSTEM = "1",
+    CONDA_PREFIX = file.path(root, ".local", "toolchain"),
+    LD_LIBRARY_PATH = Sys.getenv("LD_LIBRARY_PATH", unset = ""),
+    RSTUDIO_PANDOC = file.path(
+      root, ".local", "quarto", "1.9.38", "bin", "tools", "x86_64"
+    ),
+    QUARTO_PRINT_STACK = "true", TZ = "UTC", LC_ALL = "C.UTF-8",
+    MAKEFLAGS = "-j1",
+    PATH = paste(path_entries, collapse = .Platform$path.sep)
+  )
+}
+
+results <- list()
+commands <- list()
+result_index <- 0L
+classify_failure <- function(text) {
+  if (grepl(
+    "there is no package called|package .+ is not installed|dependency .+ is not available|namespace .+ required|package or namespace load failed",
+    text, ignore.case = TRUE, perl = TRUE
+  )) return("missing_r_dependency")
+  if (grepl(
+    "could not resolve host|network is unreachable|HTTP [45][0-9][0-9]|OpenML|LaTeX|pdflatex|xelatex|chromium|system library|timed out|timeout",
+    text, ignore.case = TRUE, perl = TRUE
+  )) return("environmental")
+  "execution_failure"
+}
+
+run_retained <- function(
+  repository, workload, required, command, arguments, wd, overlay,
+  prerequisite = TRUE
+) {
+  result_index <<- result_index + 1L
+  label <- sprintf("%02d-%s-%s", result_index, repository, workload)
+  log <- file.path(run_directory, "logs", paste0(label, ".log"))
+  verify_protected_libraries(paste0("before ", repository, "/", workload))
+  started <- Sys.time()
+  if (!isTRUE(prerequisite)) {
+    status <- 125L
+    output <- "prerequisite failed; command was not run"
+    writeLines(output, log)
+    classification <- "blocked_by_prerequisite"
+  } else {
+    isolated_environment <- base_environment(overlay)
+    environment_arguments <- paste0(
+      names(isolated_environment), "=", unname(isolated_environment)
+    )
+    process <- processx::run(
+      environment_command,
+      c("-i", environment_arguments, command, arguments),
+      wd = wd,
+      timeout = timeout_seconds * 1000, error_on_status = FALSE,
+      stdout = log, stderr = "2>&1", echo = FALSE,
+      windows_verbatim_args = FALSE
+    )
+    status <- process$status
+    output <- paste(readLines(log, warn = FALSE), collapse = "\n")
+    classification <- if (status == 0L) "passed" else classify_failure(output)
+  }
+  elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
+  verify_protected_libraries(paste0("after ", repository, "/", workload))
+  result <- data.frame(
+    repository = repository, workload = workload, required = required,
+    status = status, classification = classification,
+    elapsed_seconds = elapsed, log = normalizePath(log, mustWork = TRUE),
+    stringsAsFactors = FALSE
+  )
+  result_index_local <- length(results) + 1L
+  results[[result_index_local]] <<- result
+  commands[[result_index_local]] <<- data.frame(
+    repository = repository, workload = workload,
+    command = command, arguments = paste(shQuote(arguments), collapse = " "),
+    working_directory = wd, libraries = library_environment(overlay),
+    environment = paste(
+      paste0(
+        names(base_environment(overlay)), "=", unname(base_environment(overlay))
+      ),
+      collapse = " "
+    ),
+    stringsAsFactors = FALSE
+  )
+  status == 0L
+}
+
+scopes <- switch(scope, all = c("full", "essential"), essential = "essential", full = "full")
+
+for (repository in repositories) {
+  source_directory <- source_metadata$source[source_metadata$repository == repository]
+  overlay <- file.path(run_directory, "libraries", repository)
+  if (!dir.create(overlay, recursive = FALSE, showWarnings = FALSE)) {
+    fail("could not create documentation overlay for ", repository)
+  }
+  for (parent in c(
+    "homes", "tmp", "cache", "texmf-var", "texmf-config", "texmf-home",
+    "texmf-cache", "vartexfonts"
+  )) {
+    path <- file.path(run_directory, parent, repository)
+    if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
+      fail("could not create documentation process directory: ", path)
+    }
+  }
+  helper_ok <- TRUE
+  if (repository %in% c("mlr3book", "mlr3website")) {
+    if (repository == "mlr3book") {
+      mlr3verse_source <- source_metadata$source[
+        source_metadata$repository == "mlr3verse"
+      ]
+      helper_ok <- run_retained(
+        repository, "install-mlr3verse", TRUE, local_r,
+        c("CMD", "INSTALL", "--preclean", "--clean", "--no-multiarch",
+          paste0("--library=", overlay), mlr3verse_source),
+        root, overlay
+      )
+    }
+    helper_ok <- run_retained(
+      repository, "install-helper", TRUE, local_r,
+      c("CMD", "INSTALL", "--preclean", "--clean", "--no-multiarch",
+        paste0("--library=", overlay), source_directory),
+      root, overlay, helper_ok
+    ) && helper_ok
+  }
+
+  if (repository == "mlr3book") {
+    if ("full" %in% scopes) run_retained(
+      repository, "full", FALSE, quarto,
+      c("render", "book/", "--cache-refresh", "--execute-debug"),
+      source_directory, overlay, helper_ok
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "paradox-chapter", TRUE, quarto,
+      c(
+        "render",
+        "book/chapters/chapter16/advanced_hyperparameter_specification_using_paradox.qmd",
+        "--execute-debug", "--to", "html"
+      ), source_directory, overlay, helper_ok
+    )
+  } else if (repository == "mlr3website") {
+    if ("full" %in% scopes) run_retained(
+      repository, "full", FALSE, quarto, c("render", "mlr-org/"),
+      source_directory, overlay, helper_ok
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "paradox-benchmark", TRUE, quarto,
+      c("render", "mlr-org/benchmarks/benchmarks_paradox.qmd", "--execute-debug"),
+      source_directory, overlay, helper_ok
+    )
+  } else {
+    if ("full" %in% scopes) run_retained(
+      repository, "legacy-14-post-corpus", FALSE, local_rscript,
+      c("--vanilla", "_inst/eval_all.R"), source_directory, overlay
+    )
+    if ("essential" %in% scopes) {
+      expression <- paste0(
+        "posts <- c(",
+        paste(shQuote(c(
+          "_posts/2020-02-01-tuning-multiplexer/2020-02-01-tuning-multiplexer.Rmd",
+          "_posts/2021-02-03-tuning-a-complex-graph/tuning-a-complex-graph.Rmd",
+          "_posts/2021-07-06-introduction-to-mlr3tuningspaces/introduction-to-mlr3tuningspaces.Rmd"
+        )), collapse = ","),
+        "); for (path in posts) rmarkdown::render(path, encoding='UTF-8', params=list(eval_all=TRUE)"
+      )
+      expression <- paste0(expression, ")")
+      run_retained(
+        repository, "legacy-paradox-subset", FALSE, local_rscript,
+        c("--vanilla", "-e", expression), source_directory, overlay
+      )
+    }
+  }
+}
+
+verify_protected_libraries(
+  "at documentation gate completion",
+  verify_toolchain_tree = TRUE
+)
+results <- do.call(rbind, results)
+commands <- do.call(rbind, commands)
+failed_required <- results$required & results$status != 0L
+overall_status <- if (any(failed_required)) "failed" else "passed"
+required_failures <- if (any(failed_required)) {
+  paste(
+    paste(
+      results$repository[failed_required],
+      results$workload[failed_required],
+      sep = "/"
+    ),
+    collapse = ","
+  )
+} else {
+  "-"
+}
+utils::write.table(
+  results, file.path(run_directory, "results.tsv"), sep = "\t",
+  quote = TRUE, row.names = FALSE, na = ""
+)
+utils::write.table(
+  commands, file.path(run_directory, "commands.tsv"), sep = "\t",
+  quote = TRUE, row.names = FALSE, na = ""
+)
+metadata <- data.frame(
+  key = c(
+    "schema", "run_id", "scope", "status", "required_failures",
+    "candidate_version", "candidate_ref", "candidate_commit",
+    "candidate_tree", "candidate_content_sha256", "candidate_library",
+    "candidate_library_sha256", "dependency_library",
+    "dependency_library_sha256", "extra_libraries", "extra_library_sha256",
+    "candidate_provenance_sha256", "github_manifest_sha256",
+    "github_snapshot_sha256", "harness_sha256", "fingerprint_sha256",
+    "evidence_helper_sha256", "evidence_verifier_sha256",
+    "toolchain", "toolchain_lock_sha256", "toolchain_explicit_sha256",
+    "toolchain_tree_receipt_sha256", "r_base_library",
+    "r_base_library_sha256", "micromamba_version", "micromamba_sha256",
+    "micromamba_archive_sha256",
+    "quarto_manifest_sha256", "quarto_bootstrap_sha256",
+    "quarto_receipt_seal_sha256",
+    "tinytex_manifest_sha256", "tinytex_tree_helper_sha256",
+    "tinytex_tree_receipt_sha256", "tinytex_archive_sha256",
+    "tinytex_makeindex_sha256", "texi2dvi_sha256",
+    "quarto_version", "r", "r_version", "timeout_seconds", "completed_utc"
+  ),
+  value = c(
+    "4", run_id, scope, overall_status, required_failures,
+    candidate_version, candidate_ref, candidate_commit, candidate_tree,
+    declared_content, candidate_library, candidate_library_fingerprint,
+    dependency_library, dependency_library_fingerprint,
+    if (length(extra_libraries)) {
+      paste(extra_libraries, collapse = .Platform$path.sep)
+    } else {
+      "-"
+    },
+    if (length(extra_library_fingerprints)) {
+      paste(
+        paste0(names(extra_library_fingerprints), "=", extra_library_fingerprints),
+        collapse = ";"
+      )
+    } else {
+      "-"
+    },
+    metadata_input_hash(provenance_file),
+    metadata_input_hash(file.path(root, "compat", "github-repositories.tsv")),
+    metadata_input_hash(file.path(root, "compat", "github-snapshot.tsv")),
+    metadata_input_hash(harness_script),
+    metadata_input_hash(fingerprint_script),
+    metadata_input_hash(evidence_helper_script),
+    metadata_input_hash(evidence_verifier_script),
+    toolchain_root,
+    metadata_input_hash(toolchain_lock),
+    toolchain_explicit_receipt_sha256,
+    toolchain_tree_receipt_sha256,
+    r_base_library,
+    r_base_library_fingerprint,
+    observed_micromamba_version,
+    unname(tools::sha256sum(micromamba)),
+    unname(tools::sha256sum(micromamba_archive)),
+    metadata_input_hash(file.path(root, "environment", "quarto-linux-x86_64.tsv")),
+    metadata_input_hash(quarto_bootstrap),
+    metadata_input_hash(file.path(
+      root, ".local", "receipts", "quarto", "1.9.38", "seal.sha256"
+    )),
+    metadata_input_hash(tinytex_manifest),
+    metadata_input_hash(tinytex_tree_helper),
+    tinytex_tree_receipt_sha256,
+    tinytex_specification$archive_sha256,
+    unname(tools::sha256sum(file.path(tinytex_bin, "makeindex"))),
+    unname(tools::sha256sum(texi2dvi)),
+    quarto_version, normalizePath(local_r, winslash = "/", mustWork = TRUE),
+    as.character(getRversion()), format(timeout_seconds, scientific = FALSE),
+    format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
+  ), stringsAsFactors = FALSE
+)
+utils::write.table(
+  metadata, file.path(run_directory, "metadata.tsv"), sep = "\t",
+  quote = TRUE, row.names = FALSE, na = ""
+)
+
+repository_seal_evidence(run_directory)
+
+print(results, row.names = FALSE)
+cat("documentation_evidence=", run_directory, "\n", sep = "")
+if (any(failed_required)) {
+  fail("mandatory documentation workload(s) failed: ",
+    paste(paste(results$repository[failed_required], results$workload[failed_required], sep = "/"),
+      collapse = ", "))
+}

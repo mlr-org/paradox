@@ -28,8 +28,12 @@ p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_
 
 #' @export
 domain_check.ParamDbl = function(param, values, internal = FALSE) {
-  lower = param$lower - param$tolerance * pmax(1, abs(param$lower))
-  upper = param$upper + param$tolerance * pmax(1, abs(param$upper))
+  lower_delta = param$tolerance * pmax(1, abs(param$lower))
+  upper_delta = param$tolerance * pmax(1, abs(param$upper))
+  lower_delta[param$tolerance == 0 | !is.finite(param$lower)] = 0
+  upper_delta[param$tolerance == 0 | !is.finite(param$upper)] = 0
+  lower = param$lower - lower_delta
+  upper = param$upper + upper_delta
   if (qtestr(values, "N1")) {
     values_num = as.numeric(values)
     if (all(values_num >= lower) && all(values_num <= upper)) return(TRUE)
@@ -40,8 +44,8 @@ domain_check.ParamDbl = function(param, values, internal = FALSE) {
 #' @export
 domain_sanitize.ParamDbl = function(param, values) {
   values = as.numeric(values)
-  values[values < param$lower] = param$lower
-  values[values > param$upper] = param$upper
+  values = pmax(values, param$lower)
+  values = pmin(values, param$upper)
   as.list(values)
 }
 
@@ -51,7 +55,21 @@ domain_nlevels.ParamDbl = function(param) ifelse(param$upper == param$lower, 1, 
 domain_is_bounded.ParamDbl = function(param) is.finite(param$lower) & is.finite(param$upper)
 #' @export
 domain_qunif.ParamDbl = function(param, x) {
-  pmax(pmin(x * param$upper - (x-1) * param$lower, param$upper), param$lower)  # extra careful here w/ rounding errors
+  lower = rep(param$lower, length.out = length(x))
+  upper = rep(param$upper, length.out = length(x))
+  mapped = x * upper - (x - 1) * lower
+
+  # The affine expression contains 0 * Inf at closed interval endpoints and
+  # on fixed infinite Domains. Those values are defined even though the
+  # interior of a two-sided unbounded interval is not.
+  fixed = lower == upper
+  mapped[fixed] = lower[fixed]
+  at_lower = x == 0
+  mapped[at_lower] = lower[at_lower]
+  at_upper = x == 1
+  mapped[at_upper] = upper[at_upper]
+
+  pmax(pmin(mapped, upper), lower)  # extra careful here w/ rounding errors
 }
 
 #' @export

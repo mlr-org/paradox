@@ -1,0 +1,43 @@
+# Human-readable solver intent for deliberate toolchain refreshes.  Normal
+# bootstrap runs consume environment/toolchain-linux-64.lock and never solve
+# this specification, so edits here must be accompanied by a reviewed explicit
+# lock update.
+name: paradox-dev
+channels:
+  - conda-forge
+dependencies:
+  - r-base=4.6.1
+  - c-compiler
+  - cxx-compiler
+  - fortran-compiler
+  - clang
+  - clangxx
+  - clang-tools
+  - llvm-tools
+  - make
+  - cmake
+  - ninja
+  - pkg-config
+  # Headers and libraries needed by compiled Suggests in the mlr3 consumer
+  # corpus.  Keeping these here prevents pak from falling back to host paths.
+  - libgit2=1.9.4
+  - libxml2-devel=2.15.3
+  - glpk=5.0
+  - valgrind=3.27.1
+  - gdb
+  - ccache
+  - cppcheck
+  - shellcheck
+  - git
+  - curl
+  - wget
+  - pandoc
+  - qpdf
+  - tidy-html5=5.9.14
+  # TinyTeX is installed as a separately checksummed repository-local overlay
+  # by scripts/bootstrap.  Keep texlive-core for its native support utilities,
+  # but activation deliberately selects the complete TinyTeX binaries first.
+  - texlive-core
+  - texinfo=7.2
+  - ghostscript
+  - hyperfine

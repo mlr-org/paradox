@@ -1,0 +1,27 @@
+# Reproducible GCC 14 / C17 warning gate for scripts/native-check.
+# Keep warning exceptions in the source, next to the documented R API
+# construct that requires them; this profile intentionally has none.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+SHLIB_LD = $(CC17)
+
+# R's conda Makeconf puts a linker-only option in CPPFLAGS.  Supplying the
+# equivalent compile-only set prevents compiler-driver noise without disabling
+# a diagnostic category.
+CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
+
+PARADOX_STRICT_GCC_FLAGS = -O2 -g3 -fno-omit-frame-pointer \
+  -Wall -Wextra -Wpedantic -Werror \
+  -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations \
+  -Wold-style-definition -Wbad-function-cast \
+  -Wformat=2 -Wformat-security -Wundef -Wshadow \
+  -Wconversion -Wsign-conversion -Wdouble-promotion \
+  -Wpointer-arith -Wcast-align=strict -Wcast-qual -Wwrite-strings \
+  -Wvla -Walloca -Walloc-zero -Wnull-dereference \
+  -Wduplicated-cond -Wduplicated-branches -Wlogical-op \
+  -Warray-bounds=2 -Wstringop-overflow=4 \
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+
+CFLAGS = $(PARADOX_STRICT_GCC_FLAGS)
+C17FLAGS = $(PARADOX_STRICT_GCC_FLAGS)

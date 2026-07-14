@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+set -eu
+
+BENCHMARK_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+PARADOX_ROOT=$(CDPATH='' cd -- "$BENCHMARK_DIRECTORY/.." && pwd -P)
+export PARADOX_ROOT
+
+cd "$PARADOX_ROOT"
+# shellcheck disable=SC1091 # Repository-relative path is resolved above.
+. "$PARADOX_ROOT/scripts/activate"
+
+exec Rscript --no-save --no-restore --no-site-file --no-init-file \
+  "$BENCHMARK_DIRECTORY/run.R" "$@"

@@ -1,3 +1,161 @@
+param_set_collection_store_child_values = function(param_set, values) {
+  cls = class(param_set)
+  if (identical(cls, c("ParamSet", "R6")) ||
+      identical(cls, c("ParamSetCollection", "ParamSet", "R6"))) {
+    param_set$.__enclos_env__$private$.store_values(values)
+  } else {
+    # Subclasses can expose delegated state rather than use the inherited
+    # `.values` slot (miesmuschel's ParamSetShadow is the important example).
+    # Its public active binding is the extension point that must observe a
+    # collection assignment.
+    param_set$values = values
+  }
+  invisible(NULL)
+}
+
+# Return the immediate child indices whose exact collection graph contains a
+# live feature in an exact base ParamSet. `NULL` is the fail-closed sentinel:
+# subclasses and malformed/cyclic private graphs retain their public active-
+# binding traversal, including any extension side effects.
+param_set_collection_exact_feature_indices = function(sets, field) {
+  public_field = switch(
+    field,
+    .constraint = "constraint",
+    .extra_trafo = "extra_trafo",
+    return(NULL)
+  )
+  namespace = tryCatch(asNamespace("paradox"), error = function(error) NULL)
+  if (is.null(public_field) || !is.environment(namespace)) return(NULL)
+
+  # `get()` forces a delayed binding. `substitute()` exposes an ordinary local
+  # value but returns a promise's unevaluated expression, allowing this gate to
+  # decline without executing extension code.
+  local_value = function(owner, name) {
+    eval(call("substitute", as.name(name), owner), envir = baseenv())
+  }
+
+  generated_binding = function(param_set, enclosing, private, collection) {
+    if (!is.environment(param_set) || !environmentIsLocked(param_set) ||
+        !exists(public_field, envir = param_set, inherits = FALSE) ||
+        !bindingIsActive(public_field, param_set) ||
+        !exists("self", envir = enclosing, inherits = FALSE) ||
+        bindingIsActive("self", enclosing) ||
+        !exists("private", envir = enclosing, inherits = FALSE) ||
+        bindingIsActive("private", enclosing)) {
+      return(FALSE)
+    }
+    binding = tryCatch(
+      activeBindingFunction(public_field, param_set),
+      error = function(error) NULL
+    )
+    if (!is.function(binding) ||
+        !identical(environment(binding), enclosing) ||
+        !identical(parent.env(enclosing), namespace) ||
+        !identical(formals(binding), as.pairlist(alist(f = ))) ||
+        !identical(local_value(enclosing, "self"), param_set) ||
+        !identical(
+          local_value(enclosing, "private"),
+          private
+        )) {
+      return(FALSE)
+    }
+    method = sprintf(
+      ".__%s__%s",
+      if (collection) "ParamSetCollection" else "ParamSet",
+      public_field
+    )
+    expected = call(
+      method,
+      self = quote(self),
+      private = quote(private),
+      super = quote(super),
+      f = quote(f)
+    )
+    exists(method, envir = namespace, inherits = FALSE) &&
+      !exists(method, envir = enclosing, inherits = FALSE) &&
+      bindingIsLocked(method, namespace) &&
+      identical(body(binding), expected)
+  }
+
+  inspect = function(param_set, path) {
+    cls = class(param_set)
+    exact_param_set = identical(cls, c("ParamSet", "R6"))
+    exact_collection = identical(
+      cls,
+      c("ParamSetCollection", "ParamSet", "R6")
+    )
+    if (!exact_param_set && !exact_collection) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    if (!is.environment(param_set) ||
+        !exists(".__enclos_env__", envir = param_set, inherits = FALSE) ||
+        bindingIsActive(".__enclos_env__", param_set)) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    enclosing = local_value(param_set, ".__enclos_env__")
+    if (!is.environment(enclosing) ||
+        !exists("private", envir = enclosing, inherits = FALSE) ||
+        bindingIsActive("private", enclosing)) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    private = local_value(enclosing, "private")
+    if (!is.environment(private)) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    if (!generated_binding(
+        param_set,
+        enclosing,
+        private,
+        exact_collection
+      )) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+
+    if (exact_param_set) {
+      if (!exists(field, envir = private, inherits = FALSE) ||
+          bindingIsActive(field, private)) {
+        return(list(ok = FALSE, present = FALSE))
+      }
+      value = local_value(private, field)
+      if (!is.null(value) && !is.function(value)) {
+        return(list(ok = FALSE, present = FALSE))
+      }
+      return(list(ok = TRUE, present = !is.null(value)))
+    }
+
+    if (any(vapply(
+        path,
+        identical,
+        logical(1L),
+        y = param_set
+      ))) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    if (!exists(".sets", envir = private, inherits = FALSE) ||
+        bindingIsActive(".sets", private)) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    children = local_value(private, ".sets")
+    if (!is.list(children)) {
+      return(list(ok = FALSE, present = FALSE))
+    }
+    path = c(path, list(param_set))
+    for (child in children) {
+      result = inspect(child, path)
+      if (!result$ok || result$present) return(result)
+    }
+    list(ok = TRUE, present = FALSE)
+  }
+
+  present = logical(length(sets))
+  for (index in seq_along(sets)) {
+    result = inspect(sets[[index]], list())
+    if (!result$ok) return(NULL)
+    present[[index]] = result$present
+  }
+  which(present)
+}
+
 #' @title ParamSetCollection
 #'
 #' @description
@@ -37,6 +195,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #' @param postfix_names (`logical(1)`)\cr
     #'   Whether to use the names inside `sets` as postfixes, rather than prefixes.
     initialize = function(sets, tag_sets = FALSE, tag_params = FALSE, postfix_names = FALSE) {
+      # ParamSetCollection has its own initializer and therefore does not run
+      # ParamSet$initialize(). Keep its inherited by-reference state private to
+      # this instance as well.
+      private$.deps = new_empty_deps()
+
       assert_list(sets, types = "ParamSet")
       assert_flag(tag_sets)
       assert_flag(tag_params)
@@ -45,6 +208,36 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (is.null(names(sets))) names(sets) = rep("", length(sets))
 
       assert_names(names(sets)[names(sets) != ""], type = "strict")
+
+      # Subclasses may specialize the private name-affixing hook. Keep their
+      # construction on the established R path so the override is observed in
+      # every derived table; the exact generated class is the native hot path.
+      native = if (identical(
+          class(self),
+          c("ParamSetCollection", "ParamSet", "R6")
+        )) {
+        .Call(
+          C_param_set_collection_construct,
+          sets,
+          tag_sets,
+          tag_params,
+          postfix_names
+        )
+      }
+      if (!is.null(native)) {
+        private$.params = native$params
+        private$.tags = native$tags
+        private$.trafos = native$trafos
+        private$.translation = native$translation
+
+        # The native tables are already in their final row/key order. Attach
+        # only the optional lookup caches used by established private-state
+        # consumers; no constructor rows are assembled or reordered in R.
+        setindexv(private$.params, c("id", "cls", "grouping"))
+        setindexv(private$.translation, "original_id")
+        private$.sets = sets
+        return(invisible(sets))
+      }
 
       paramtbl = rbindlist_proto(map(seq_along(sets), function(i) {
         s = sets[[i]]
@@ -164,7 +357,12 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       }
 
       new_index = length(private$.sets) + 1
-      paramtbl = p$params[, `:=`(original_id = id, owner_ps_index = new_index, owner_name = n)]
+      # Keep the active-binding result in a local before updating it.  A native
+      # ParamSet returns a fully owned data.table with a valid self-reference;
+      # updating `p$params` directly makes data.table try to assign the result
+      # back through the deliberately read-only active binding.
+      paramtbl = p$params
+      paramtbl[, `:=`(original_id = id, owner_ps_index = new_index, owner_name = n)]
       if (n != "") set(paramtbl, , "id", private$.add_name_prefix(n, paramtbl$id))
 
       if (!nrow(paramtbl)) {
@@ -293,43 +491,87 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         recurse_prefix(id_, get_private(param_set)$.sets[[info$owner_ps_index]], prefix)
       }
 
-      flatps$.__enclos_env__$private$.params[, let(
-        cargo = pmap(list(cargo = cargo, id_ = id), function(cargo, id_) {
-          if (all(map_lgl(cargo[c("disable_in_tune", "in_tune_fn")], is.null))) return(cargo)
+      detach_cargo = function(cargo, id_) {
+        if (all(map_lgl(cargo[c("disable_in_tune", "in_tune_fn")], is.null))) return(cargo)
 
-          info = recurse_prefix(id_, self)
-          prefix = info$prefix
-          if (prefix == "") return(cargo)
+        info = recurse_prefix(id_, self)
+        prefix = info$prefix
+        if (prefix == "") return(cargo)
 
-          in_tune_fn = cargo$in_tune_fn
+        in_tune_fn = cargo$in_tune_fn
 
-          prefixed_set_ids = private$.add_name_prefix(prefix, info$ids)
-          cargo$in_tune_fn = crate(function(domain, param_vals) {
-            param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
-            names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
-            in_tune_fn(domain, param_vals)
-          }, in_tune_fn, prefix, prefixed_set_ids)
+        prefixed_set_ids = private$.add_name_prefix(prefix, info$ids)
+        cargo$in_tune_fn = crate(function(domain, param_vals) {
+          param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
+          names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
+          in_tune_fn(domain, param_vals)
+        }, in_tune_fn, prefix, prefixed_set_ids)
 
-          if (length(cargo$disable_in_tune)) {
-            cargo$disable_in_tune = set_names(
-              cargo$disable_in_tune,
-              private$.add_name_prefix(prefix, names(cargo$disable_in_tune))
-            )
-          }
-          cargo
-        })
-      )]
+        if (length(cargo$disable_in_tune)) {
+          cargo$disable_in_tune = set_names(
+            cargo$disable_in_tune,
+            private$.add_name_prefix(prefix, names(cargo$disable_in_tune))
+          )
+        }
+        cargo
+      }
+
+      flat_params = flatps$.__enclos_env__$private$.params
+      cargos = flat_params$cargo
+      plain_cargos = all(vapply(
+        cargos,
+        function(cargo) is.null(cargo) ||
+          (is.list(cargo) && !is.object(cargo)),
+        logical(1L)
+      ))
+      rows = if (plain_cargos) {
+        which(vapply(
+          cargos,
+          function(cargo) !all(vapply(
+            cargo[c("disable_in_tune", "in_tune_fn")],
+            is.null,
+            logical(1L)
+          )),
+          logical(1L)
+        ))
+      } else {
+        seq_along(cargos)
+      }
+      if (length(rows)) {
+        flat_params[rows, let(
+          cargo = pmap(
+            list(cargo = cargo, id_ = id),
+            detach_cargo
+          )
+        )]
+      }
 
       flatps
     }
   ),
 
   active = list(
+    #' @template field_params
+    params = function(rhs) {
+      if (!missing(rhs)) {
+        if (params_data_table_temporary_reassignment()) {
+          return(rhs)
+        }
+        stop("params is read-only.")
+      }
+
+      native = .Call(C_param_set_collection_params, private, self)
+      if (!is.null(native)) return(native)
+      super$params
+    },
+
     #' @template field_deps
     deps = function(v) {
       if (!missing(v)) {
         stop("deps is read-only in ParamSetCollection.")
       }
+      native = .Call(C_param_set_collection_deps, private, self)
+      if (!is.null(native)) return(native)
       d_all = imap(private$.sets, function(s, id) {
         # copy all deps and rename ids to prefixed versions
         dd = s$deps
@@ -375,6 +617,8 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
       if (private$.postfix) sprintf("%s.%s", id, owner) else sprintf("%s.%s", owner, id)
     },
     .get_values = function() {
+      native = .Call(C_param_set_collection_values, private, self)
+      if (!is.null(native)) return(native)
       if (private$.postfix && !is.null(names(private$.sets))) {
         vals = imap(private$.sets, function(x, n) {
           vals_subset = x$values
@@ -391,24 +635,58 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
     .store_values = function(xs) {
       sets = private$.sets
+      plan = .Call(
+        C_param_set_collection_store_plan,
+        private,
+        self,
+        sets,
+        xs
+      )
+      if (!is.null(plan)) {
+        child_indices = plan[[1L]]
+        child_values = plan[[2L]]
+        for (index in seq_along(child_indices)) {
+          param_set_collection_store_child_values(
+            sets[[child_indices[[index]]]],
+            child_values[[index]]
+          )
+        }
+        return(invisible(NULL))
+      }
       # %??% character(0) in case xs is an empty unnamed list
       idx = match(names(xs) %??% character(0), private$.translation$id)
       translate = private$.translation[idx, c("original_id", "owner_ps_index"), with = FALSE]
       set(translate, , j = "values", list(xs))
       for (xtl in split(translate, f = translate$owner_ps_index)) {
-        sets[[xtl$owner_ps_index[[1]]]]$.__enclos_env__$private$.store_values(set_names(xtl$values, xtl$original_id))
+        param_set_collection_store_child_values(
+          sets[[xtl$owner_ps_index[[1]]]],
+          set_names(xtl$values, xtl$original_id)
+        )
       }
       # clear the values of all sets that are not touched by xs
       for (clearing in setdiff(seq_along(sets), translate$owner_ps_index)) {
-        sets[[clearing]]$.__enclos_env__$private$.store_values(named_list())
+        param_set_collection_store_child_values(
+          sets[[clearing]],
+          named_list()
+        )
       }
     },
     .sets = NULL,
     .translation = data.table(id = character(0), original_id = character(0), owner_ps_index = integer(0), owner_name = character(0), key = "id"),
     .children_with_trafos = function() {
+      exact = param_set_collection_exact_feature_indices(
+        private$.sets,
+        ".extra_trafo"
+      )
+      if (!is.null(exact)) return(exact)
       which(!map_lgl(map(private$.sets, "extra_trafo"), is.null))
     },
     .children_with_constraints = function() {
+      exact = param_set_collection_exact_feature_indices(
+        private$.sets,
+        ".constraint"
+      )
+      if (!is.null(exact)) return(exact)
       which(!map_lgl(map(private$.sets, "constraint"), is.null))
     },
     .extra_trafo_explicit = function(x) {
@@ -421,8 +699,17 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     # This is used for flattening.
     # `ids`: subset of params to consider
     .get_extra_trafo_detached = function(ids = NULL) {
+      exact_children = param_set_collection_exact_feature_indices(
+        private$.sets,
+        ".extra_trafo"
+      )
+      if (!is.null(exact_children) && !length(exact_children)) return(NULL)
       translation = if (is.null(ids)) copy(private$.translation) else private$.translation[id %in% ids]
-      children_with_trafos = private$.children_with_trafos()  # just an integer vector, no need to worry here
+      children_with_trafos = if (is.null(exact_children)) {
+        private$.children_with_trafos()
+      } else {
+        exact_children
+      }
       if (!is.null(ids)) {
         children_with_trafos = intersect(children_with_trafos, translation$owner_ps_index)
       }
@@ -439,8 +726,17 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     },
     # same as with extra_trafo above
     .get_constraint_detached = function(ids = NULL) {
+      exact_children = param_set_collection_exact_feature_indices(
+        private$.sets,
+        ".constraint"
+      )
+      if (!is.null(exact_children) && !length(exact_children)) return(NULL)
       translation = if (is.null(ids)) copy(private$.translation) else private$.translation[id %in% ids]
-      children_with_constraints = private$.children_with_constraints()
+      children_with_constraints = if (is.null(exact_children)) {
+        private$.children_with_constraints()
+      } else {
+        exact_children
+      }
       if (!is.null(ids)) {
         children_with_constraints = intersect(children_with_constraints, translation$owner_ps_index)
       }
@@ -484,7 +780,6 @@ psc_extra_trafo = function(x, children_with_trafos, sets_with_trafos, translatio
     } else {
       changing_values = trafo(changing_values_in)
     }
-    changing_values = trafo(changing_values_in)
     prefix = names(sets_with_trafos)[[i]]
     if (prefix != "") {
       names(changing_values) = if (postfix) sprintf("%s.%s", names(changing_values), prefix) else sprintf("%s.%s", prefix, names(changing_values))
@@ -503,9 +798,7 @@ psc_constraint = function(x, children_with_constraints, sets_with_constraints, t
     constraint = sets_with_constraints[[i]]$constraint
     constraining_values = x[names(x) %in% constraining_ids]
     names(constraining_values) = translation[names(constraining_values), original_id]
-    if (!constraint(x)) return(FALSE)
+    if (!constraint(constraining_values)) return(FALSE)
   }
   TRUE
 }
-
-

@@ -1,0 +1,1025 @@
+# Deterministic workloads used by the paired benchmark worker. Keep this file
+# free of package-loading side effects: run.R sources it to implement
+# --list-workloads before either benchmark package is loaded.
+
+benchmark_workload_names <- function() {
+  c(
+    "domain_p_dbl",
+    "domain_p_int",
+    "domain_p_fct",
+    "domain_p_lgl",
+    "domain_p_uty",
+    "construct_ps_small",
+    "construct_paramset_bulk",
+    "construct_full_mixed",
+    "ids_all",
+    "ids_class",
+    "ids_tags",
+    "ids_any_tags",
+    "static_properties",
+    "check_scalar",
+    "sanitize_scalar",
+    "check_dt",
+    "qunif",
+    "generate_design_random",
+    "design_transpose_plain",
+    "design_transpose_filtered",
+    "design_transpose_trafo",
+    "subset",
+    "get_domain",
+    "get_domain_middle",
+    "get_domain_last",
+    "domains_all",
+    "params",
+    "get_values",
+    "get_values_no_dependencies",
+    "get_values_tags",
+    "set_values_insert",
+    "collection_construct_plain",
+    "collection_construct_rich",
+    "collection_assign_values",
+    "collection_values_plain",
+    "collection_values_rich",
+    "collection_values_nested",
+    "collection_get_values_rich",
+    "collection_get_values_nested",
+    "collection_deps_rich",
+    "collection_deps_nested",
+    "collection_domains_plain",
+    "collection_domains_rich",
+    "collection_domains_nested",
+    "collection_subset_rich",
+    "collection_subset_callbacks",
+    "collection_flatten_rich",
+    "collection_flatten_callbacks",
+    "collection_params_plain",
+    "collection_params_rich",
+    "collection_params_nested",
+    "trafo"
+  )
+}
+
+benchmark_make_inputs <- function(n_params, n_rows) {
+  stopifnot(
+    length(n_params) == 1L,
+    is.integer(n_params),
+    !is.na(n_params),
+    n_params >= 4L,
+    length(n_rows) == 1L,
+    is.integer(n_rows),
+    !is.na(n_rows),
+    n_rows >= 1L
+  )
+
+  parameter_ids <- sprintf("parameter_%05d", seq_len(n_params))
+
+  make_domain <- function(index) {
+    switch(
+      as.character((index - 1L) %% 4L),
+      "0" = p_dbl(
+        lower = -10,
+        upper = 10,
+        tolerance = 1e-6,
+        tags = c("train", "bounded"),
+        trafo = function(x) exp(x / 10)
+      ),
+      "1" = p_int(
+        lower = -20L,
+        upper = 20L,
+        tags = c("train", "bounded")
+      ),
+      "2" = p_fct(
+        levels = letters[1:8],
+        tags = c("train", "categorical")
+      ),
+      "3" = p_lgl(tags = c("flag", "categorical", "required"))
+    )
+  }
+
+  make_domain_list <- function() {
+    domains <- lapply(seq_len(n_params), make_domain)
+    names(domains) <- parameter_ids
+    domains
+  }
+
+  # Reused domains isolate ParamSet$new() from p_*() construction. The
+  # construct_full_mixed workload deliberately creates both from scratch.
+  prebuilt_domains <- make_domain_list()
+  space <- ParamSet$new(prebuilt_domains)
+
+  make_full_mixed <- function() {
+    ParamSet$new(make_domain_list())
+  }
+
+  make_small_ps <- function() {
+    ps(
+      learning_rate = p_dbl(1e-4, 1, tags = c("train", "bounded")),
+      max_depth = p_int(1L, 32L, tags = c("train", "bounded")),
+      booster = p_fct(c("linear", "tree", "dart"), tags = "categorical"),
+      early_stopping = p_lgl(tags = c("flag", "required"))
+    )
+  }
+
+  scalar_values <- vector("list", n_params)
+  for (i in seq_len(n_params)) {
+    scalar_values[[i]] <- switch(
+      as.character((i - 1L) %% 4L),
+      "0" = 0.25,
+      "1" = 10L,
+      "2" = "c",
+      "3" = TRUE
+    )
+  }
+  names(scalar_values) <- parameter_ids
+
+  sanitize_values <- scalar_values
+  first_double <- which((seq_len(n_params) - 1L) %% 4L == 0L)[[1L]]
+  sanitize_values[[first_double]] <- -10 - 5e-6
+  sanitized_expected <- scalar_values
+  sanitized_expected[[first_double]] <- -10
+
+  # `$params` materializes every side table, so retain a separate rich space
+  # with values and dependencies instead of making unrelated design/check
+  # workloads dependency-aware.
+  params_space <- ParamSet$new(prebuilt_domains)
+  params_space$values <- scalar_values
+  for (start in seq.int(1L, n_params, by = 4L)) {
+    if (start + 3L > n_params) next
+    params_space$add_dep(
+      parameter_ids[[start + 2L]],
+      parameter_ids[[start + 3L]],
+      CondEqual(TRUE)
+    )
+  }
+
+  mutation_space <- ParamSet$new(prebuilt_domains)
+  mutation_space$values <- scalar_values
+  mutation_update <- scalar_values[seq_len(min(4L, n_params))]
+  mutation_update[[1L]] <- 0.5
+  mutation_update[[2L]] <- 11L
+  mutation_update[[3L]] <- "d"
+  mutation_update[[4L]] <- FALSE
+  mutation_expected <- scalar_values
+  mutation_expected[names(mutation_update)] <- mutation_update
+
+  collection_groups <- split(
+    seq_len(n_params),
+    ceiling(seq_len(n_params) / 8L)
+  )
+  make_collection_children <- function(rich) {
+    children <- lapply(collection_groups, function(indices) {
+      child <- ParamSet$new(prebuilt_domains[indices])
+      if (rich) {
+        child$values <- scalar_values[indices]
+        if (length(indices) >= 2L) {
+          child$add_dep(
+            parameter_ids[[indices[[2L]]]],
+            parameter_ids[[indices[[1L]]]],
+            CondEqual(scalar_values[[indices[[1L]]]])
+          )
+        }
+      }
+      child
+    })
+    names(children) <- sprintf("set%03d", seq_along(children))
+    children
+  }
+  plain_collection_children <- make_collection_children(FALSE)
+  rich_collection_children <- make_collection_children(TRUE)
+  plain_collection <- ParamSetCollection$new(plain_collection_children)
+  mutation_collection <- ParamSetCollection$new(
+    make_collection_children(FALSE)
+  )
+  mutation_collection_ids <- mutation_collection$ids()
+  mutation_collection_values <- scalar_values[rev(seq_len(n_params))]
+  names(mutation_collection_values) <- rev(mutation_collection_ids)
+  mutation_collection_expected <- mutation_collection_values[match(
+    mutation_collection_ids,
+    names(mutation_collection_values)
+  )]
+  rich_collection <- ParamSetCollection$new(
+    rich_collection_children,
+    tag_sets = TRUE,
+    tag_params = TRUE
+  )
+  if (rich_collection$length >= 2L) {
+    rich_ids <- rich_collection$ids()
+    rich_collection$add_dep(
+      rich_ids[[length(rich_ids)]],
+      rich_ids[[1L]],
+      CondEqual(scalar_values[[1L]])
+    )
+  }
+  callback_collection_children <- make_collection_children(TRUE)
+  for (index in seq_along(callback_collection_children)) {
+    if (index %% 2L == 1L) {
+      callback_collection_children[[index]]$constraint = function(x) TRUE
+      callback_collection_children[[index]]$extra_trafo = function(x) x
+    }
+  }
+  callback_collection <- ParamSetCollection$new(
+    callback_collection_children,
+    tag_sets = TRUE,
+    tag_params = TRUE
+  )
+  nested_children <- make_collection_children(TRUE)
+  nested_groups <- split(
+    seq_along(nested_children),
+    ceiling(seq_along(nested_children) / 4L)
+  )
+  nested_inners <- lapply(nested_groups, function(indices) {
+    ParamSetCollection$new(
+      nested_children[indices],
+      tag_sets = TRUE,
+      tag_params = TRUE
+    )
+  })
+  names(nested_inners) <- sprintf("outer%03d", seq_along(nested_inners))
+  nested_collection <- ParamSetCollection$new(
+    nested_inners,
+    tag_sets = TRUE,
+    tag_params = TRUE
+  )
+
+  batch <- as.data.frame(
+    lapply(scalar_values, rep, times = n_rows),
+    optional = TRUE,
+    stringsAsFactors = FALSE
+  )
+  names(batch) <- parameter_ids
+
+  unit_values <- ((seq_len(n_rows * n_params) - 1L) %% 997L + 0.5) / 997
+  unit_matrix <- matrix(unit_values, nrow = n_rows, ncol = n_params)
+  colnames(unit_matrix) <- parameter_ids
+
+  design_data <- space$qunif(unit_matrix)
+  design <- Design$new(
+    space,
+    data.table::copy(design_data),
+    remove_dupl = FALSE
+  )
+  filtered_data <- data.table::copy(design_data)
+  for (column_index in seq_along(filtered_data)) {
+    if (column_index > n_rows) next
+    rows <- seq.int(column_index, n_rows, by = 8L)
+    missing <- switch(
+      typeof(filtered_data[[column_index]]),
+      double = NA_real_,
+      integer = NA_integer_,
+      character = NA_character_,
+      logical = NA,
+      stop("unexpected design column type", call. = FALSE)
+    )
+    data.table::set(filtered_data, i = rows, j = column_index, value = missing)
+  }
+  filtered_design <- Design$new(
+    space,
+    filtered_data,
+    remove_dupl = FALSE
+  )
+
+  subset_ids <- parameter_ids[seq.int(1L, n_params, by = 2L)]
+  first_id <- parameter_ids[[1L]]
+  middle_id <- parameter_ids[[(n_params + 1L) %/% 2L]]
+  last_id <- parameter_ids[[n_params]]
+
+  list(
+    n_params = n_params,
+    n_rows = n_rows,
+    parameter_ids = parameter_ids,
+    prebuilt_domains = prebuilt_domains,
+    space = space,
+    params_space = params_space,
+    mutation_space = mutation_space,
+    mutation_update = mutation_update,
+    mutation_expected = mutation_expected,
+    plain_collection = plain_collection,
+    mutation_collection = mutation_collection,
+    mutation_collection_values = mutation_collection_values,
+    mutation_collection_expected = mutation_collection_expected,
+    rich_collection = rich_collection,
+    callback_collection = callback_collection,
+    nested_collection = nested_collection,
+    plain_collection_children = plain_collection_children,
+    rich_collection_children = rich_collection_children,
+    plain_collection_ids = plain_collection$ids(),
+    rich_collection_ids = rich_collection$ids(),
+    callback_collection_ids = callback_collection$ids(),
+    nested_collection_ids = nested_collection$ids(),
+    rich_collection_dep_rows = nrow(rich_collection$deps),
+    nested_collection_dep_rows = nrow(nested_collection$deps),
+    rich_collection_subset_ids = rich_collection$ids()[
+      seq.int(1L, rich_collection$length, by = 2L)
+    ],
+    callback_collection_subset_ids = callback_collection$ids()[
+      seq.int(1L, callback_collection$length, by = 2L)
+    ],
+    make_full_mixed = make_full_mixed,
+    make_small_ps = make_small_ps,
+    scalar_values = scalar_values,
+    sanitize_values = sanitize_values,
+    sanitized_expected = sanitized_expected,
+    batch = batch,
+    unit_matrix = unit_matrix,
+    design = design,
+    filtered_design = filtered_design,
+    subset_ids = subset_ids,
+    first_id = first_id,
+    middle_id = middle_id,
+    last_id = last_id
+  )
+}
+
+benchmark_make_workloads <- function(inputs) {
+  stopifnot(is.list(inputs), inherits(inputs$space, "ParamSet"))
+
+  exact_ids <- function(result, expected) {
+    stopifnot(is.character(result), identical(unname(result), unname(expected)))
+    paste(result, collapse = "\037")
+  }
+
+  exact_param_set <- function(result, expected_ids) {
+    stopifnot(inherits(result, "ParamSet"))
+    exact_ids(result$ids(), expected_ids)
+  }
+
+  workloads <- list(
+    domain_p_dbl = list(
+      expression = quote(p_dbl(-10, 10, tolerance = 1e-6, tags = c("train", "bounded"))),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamDbl"),
+          nrow(result) == 1L,
+          identical(result$lower, -10),
+          identical(result$upper, 10)
+        )
+        "ParamDbl[-10,10]"
+      }
+    ),
+    domain_p_int = list(
+      expression = quote(p_int(-20L, 20L, tolerance = 0, tags = c("train", "bounded"))),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamInt"),
+          nrow(result) == 1L,
+          identical(result$lower, -20L),
+          identical(result$upper, 20L)
+        )
+        "ParamInt[-20,20]"
+      }
+    ),
+    domain_p_fct = list(
+      expression = quote(p_fct(letters[1:8], tags = c("train", "categorical"))),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamFct"),
+          nrow(result) == 1L,
+          identical(result$levels[[1L]], letters[1:8])
+        )
+        "ParamFct[8]"
+      }
+    ),
+    domain_p_lgl = list(
+      expression = quote(p_lgl(tags = c("flag", "categorical"))),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamLgl"),
+          nrow(result) == 1L,
+          identical(result$levels[[1L]], c(TRUE, FALSE))
+        )
+        "ParamLgl"
+      }
+    ),
+    domain_p_uty = list(
+      expression = quote(p_uty(custom_check = is.numeric, tags = "payload")),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamUty"),
+          nrow(result) == 1L,
+          identical(result$cargo[[1L]]$custom_check, is.numeric)
+        )
+        "ParamUty"
+      }
+    ),
+    construct_ps_small = list(
+      expression = quote(inputs$make_small_ps()),
+      validate = function(result) {
+        exact_param_set(
+          result,
+          c("learning_rate", "max_depth", "booster", "early_stopping")
+        )
+      }
+    ),
+    construct_paramset_bulk = list(
+      expression = quote(ParamSet$new(inputs$prebuilt_domains)),
+      validate = function(result) exact_param_set(result, inputs$parameter_ids)
+    ),
+    construct_full_mixed = list(
+      expression = quote(inputs$make_full_mixed()),
+      validate = function(result) exact_param_set(result, inputs$parameter_ids)
+    ),
+    ids_all = list(
+      expression = quote(inputs$space$ids()),
+      validate = function(result) exact_ids(result, inputs$parameter_ids)
+    ),
+    ids_class = list(
+      expression = quote(inputs$space$ids(class = c("ParamDbl", "ParamFct"))),
+      validate = function(result) {
+        keep <- (seq_along(inputs$parameter_ids) - 1L) %% 4L %in% c(0L, 2L)
+        exact_ids(result, inputs$parameter_ids[keep])
+      }
+    ),
+    ids_tags = list(
+      expression = quote(inputs$space$ids(tags = c("train", "bounded"))),
+      validate = function(result) {
+        keep <- (seq_along(inputs$parameter_ids) - 1L) %% 4L %in% c(0L, 1L)
+        exact_ids(result, inputs$parameter_ids[keep])
+      }
+    ),
+    ids_any_tags = list(
+      # A single any_tags value avoids the duplicate-ID bug in the pinned
+      # upstream release; semantic bug cases belong in differential tests.
+      expression = quote(inputs$space$ids(any_tags = "categorical")),
+      validate = function(result) {
+        keep <- (seq_along(inputs$parameter_ids) - 1L) %% 4L %in% c(2L, 3L)
+        exact_ids(result, inputs$parameter_ids[keep])
+      }
+    ),
+    static_properties = list(
+      expression = quote(list(
+        nlevels = inputs$space$nlevels,
+        is_number = inputs$space$is_number,
+        is_categ = inputs$space$is_categ,
+        is_bounded = inputs$space$is_bounded
+      )),
+      validate = function(result) {
+        index <- seq_along(inputs$parameter_ids) - 1L
+        stopifnot(
+          is.list(result),
+          identical(names(result), c("nlevels", "is_number", "is_categ", "is_bounded")),
+          identical(names(result$nlevels), inputs$parameter_ids),
+          identical(unname(result$is_number), index %% 4L %in% c(0L, 1L)),
+          identical(unname(result$is_categ), index %% 4L %in% c(2L, 3L)),
+          identical(unname(result$is_bounded), rep(TRUE, inputs$n_params))
+        )
+        paste(
+          paste(result$nlevels, collapse = ","),
+          paste(as.integer(result$is_number), collapse = ""),
+          paste(as.integer(result$is_categ), collapse = ""),
+          paste(as.integer(result$is_bounded), collapse = ""),
+          sep = "|"
+        )
+      }
+    ),
+    check_scalar = list(
+      expression = quote(inputs$space$check(inputs$scalar_values, presence = "all")),
+      validate = function(result) {
+        stopifnot(isTRUE(result), is.null(attributes(result)))
+        "TRUE"
+      }
+    ),
+    sanitize_scalar = list(
+      expression = quote(inputs$space$check(
+        inputs$sanitize_values,
+        sanitize = TRUE,
+        presence = "all"
+      )),
+      validate = function(result) {
+        stopifnot(
+          isTRUE(result),
+          identical(attr(result, "sanitized", exact = TRUE), inputs$sanitized_expected)
+        )
+        "TRUE+sanitized"
+      }
+    ),
+    check_dt = list(
+      expression = quote(inputs$space$check_dt(inputs$batch, presence = "all")),
+      validate = function(result) {
+        stopifnot(isTRUE(result))
+        "TRUE"
+      }
+    ),
+    qunif = list(
+      expression = quote(inputs$space$qunif(inputs$unit_matrix)),
+      validate = function(result) {
+        stopifnot(
+          is.data.frame(result),
+          nrow(result) == inputs$n_rows,
+          ncol(result) == inputs$n_params,
+          identical(names(result), inputs$parameter_ids)
+        )
+        first <- result[[1L]]
+        stopifnot(is.numeric(first), all(is.finite(first)), all(first >= -10), all(first <= 10))
+        paste(
+          nrow(result),
+          ncol(result),
+          format(first[[1L]], digits = 17),
+          format(first[[length(first)]], digits = 17),
+          sep = "|"
+        )
+      }
+    ),
+    generate_design_random = list(
+      expression = quote(generate_design_random(inputs$space, inputs$n_rows)),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Design"),
+          nrow(result$data) == inputs$n_rows,
+          ncol(result$data) == inputs$n_params,
+          identical(names(result$data), inputs$parameter_ids),
+          identical(result$param_set$ids(), inputs$parameter_ids)
+        )
+        paste(
+          nrow(result$data),
+          ncol(result$data),
+          paste(vapply(result$data, typeof, character(1L)), collapse = ","),
+          sep = "|"
+        )
+      }
+    ),
+    design_transpose_plain = list(
+      expression = quote(inputs$design$transpose(filter_na = FALSE, trafo = FALSE)),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_rows,
+          all(lengths(result) == inputs$n_params),
+          identical(names(result[[1L]]), inputs$parameter_ids)
+        )
+        paste(length(result), sum(lengths(result)), result[[1L]][[2L]], sep = "|")
+      }
+    ),
+    design_transpose_filtered = list(
+      expression = quote(inputs$filtered_design$transpose(
+        filter_na = TRUE,
+        trafo = FALSE
+      )),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_rows,
+          all(lengths(result) <= inputs$n_params),
+          any(lengths(result) < inputs$n_params)
+        )
+        paste(length(result), sum(lengths(result)), min(lengths(result)), sep = "|")
+      }
+    ),
+    design_transpose_trafo = list(
+      expression = quote(inputs$design$transpose(filter_na = TRUE, trafo = TRUE)),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_rows,
+          all(lengths(result) == inputs$n_params),
+          identical(names(result[[1L]]), inputs$parameter_ids),
+          is.double(result[[1L]][[1L]])
+        )
+        paste(
+          length(result),
+          sum(lengths(result)),
+          format(result[[1L]][[1L]], digits = 17),
+          sep = "|"
+        )
+      }
+    ),
+    subset = list(
+      expression = quote(inputs$space$subset(inputs$subset_ids)),
+      validate = function(result) exact_param_set(result, inputs$subset_ids)
+    ),
+    get_domain = list(
+      expression = quote(inputs$space$get_domain(inputs$first_id)),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          inherits(result, "ParamDbl"),
+          identical(result$lower, -10),
+          identical(result$upper, 10)
+        )
+        "ParamDbl[-10,10]"
+      }
+    ),
+    get_domain_middle = list(
+      expression = quote(inputs$space$get_domain(inputs$middle_id)),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          identical(result$id, inputs$middle_id)
+        )
+        paste(result$id, result$cls, sep = "|")
+      }
+    ),
+    get_domain_last = list(
+      expression = quote(inputs$space$get_domain(inputs$last_id)),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Domain"),
+          identical(result$id, inputs$last_id)
+        )
+        paste(result$id, result$cls, sep = "|")
+      }
+    ),
+    domains_all = list(
+      expression = quote(inputs$space$domains),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$parameter_ids),
+          all(vapply(result, inherits, logical(1L), "Domain")),
+          identical(
+            unname(vapply(result, function(domain) domain$id, character(1L))),
+            inputs$parameter_ids
+          )
+        )
+        paste(length(result), result[[1L]]$cls, result[[length(result)]]$cls, sep = "|")
+      }
+    ),
+    params = list(
+      expression = quote(inputs$params_space$params),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          nrow(result) == inputs$n_params,
+          ncol(result) == length(paradox:::domain_names),
+          identical(names(result), paradox:::domain_names),
+          identical(result$id, inputs$parameter_ids),
+          all(lengths(result$.tags) >= 2L),
+          sum(!vapply(result$.trafo, is.null, logical(1L))) ==
+            ceiling(inputs$n_params / 4),
+          sum(result$.init_given) == inputs$n_params,
+          sum(!vapply(result$.requirements, is.null, logical(1L))) ==
+            inputs$n_params %/% 4L
+        )
+        paste(
+          nrow(result),
+          sum(lengths(result$.tags)),
+          sum(result$.init_given),
+          sum(!vapply(result$.requirements, is.null, logical(1L))),
+          sep = "|"
+        )
+      }
+    ),
+    get_values = list(
+      expression = quote(inputs$params_space$get_values()),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$parameter_ids),
+          identical(result, inputs$scalar_values)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    get_values_no_dependencies = list(
+      expression = quote(inputs$params_space$get_values(
+        check_required = FALSE,
+        remove_dependencies = FALSE
+      )),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$parameter_ids),
+          identical(result, inputs$scalar_values)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    get_values_tags = list(
+      expression = quote(inputs$params_space$get_values(tags = "train")),
+      validate = function(result) {
+        keep = (seq_along(inputs$parameter_ids) - 1L) %% 4L %in% 0:2
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$parameter_ids[keep]),
+          identical(result, inputs$scalar_values[keep])
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    set_values_insert = list(
+      expression = quote(inputs$mutation_space$set_values(
+        .values = inputs$mutation_update
+      )),
+      validate = function(result) {
+        observed = inputs$mutation_space$values
+        stopifnot(
+          identical(result, inputs$mutation_space),
+          identical(names(observed), inputs$parameter_ids),
+          identical(observed, inputs$mutation_expected)
+        )
+        paste(
+          length(observed),
+          observed[[1L]],
+          observed[[2L]],
+          observed[[3L]],
+          observed[[4L]],
+          sep = "|"
+        )
+      }
+    ),
+    collection_construct_plain = list(
+      expression = quote(ParamSetCollection$new(
+        inputs$plain_collection_children
+      )),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$plain_collection_ids),
+          result$length == inputs$n_params
+        )
+        paste(result$length, length(result$sets), sep = "|")
+      }
+    ),
+    collection_construct_rich = list(
+      expression = quote(ParamSetCollection$new(
+        inputs$rich_collection_children,
+        tag_sets = TRUE,
+        tag_params = TRUE
+      )),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$rich_collection_ids),
+          result$length == inputs$n_params,
+          all(lengths(result$tags) >= 4L)
+        )
+        paste(result$length, sum(lengths(result$tags)), sep = "|")
+      }
+    ),
+    collection_assign_values = list(
+      expression = quote(
+        inputs$mutation_collection$values <-
+          inputs$mutation_collection_values
+      ),
+      validate = function(result) {
+        observed = inputs$mutation_collection$values
+        stopifnot(
+          identical(result, inputs$mutation_collection_values),
+          identical(names(observed), inputs$mutation_collection$ids()),
+          identical(observed, inputs$mutation_collection_expected)
+        )
+        paste(
+          length(observed),
+          observed[[1L]],
+          observed[[2L]],
+          observed[[3L]],
+          observed[[4L]],
+          sep = "|"
+        )
+      }
+    ),
+    collection_values_plain = list(
+      expression = quote(inputs$plain_collection$values),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == 0L,
+          !is.null(names(result))
+        )
+        paste(length(result), length(names(result)), sep = "|")
+      }
+    ),
+    collection_values_rich = list(
+      expression = quote(inputs$rich_collection$values),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$rich_collection_ids)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    collection_values_nested = list(
+      expression = quote(inputs$nested_collection$values),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$nested_collection_ids)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    collection_get_values_rich = list(
+      expression = quote(inputs$rich_collection$get_values()),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$rich_collection_ids)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    collection_get_values_nested = list(
+      expression = quote(inputs$nested_collection$get_values()),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$nested_collection_ids)
+        )
+        paste(length(result), result[[2L]], result[[3L]], sep = "|")
+      }
+    ),
+    collection_deps_rich = list(
+      expression = quote(inputs$rich_collection$deps),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          identical(names(result), c("id", "on", "cond")),
+          nrow(result) == inputs$rich_collection_dep_rows
+        )
+        paste(nrow(result), result$id[[1L]], result$on[[1L]], sep = "|")
+      }
+    ),
+    collection_deps_nested = list(
+      expression = quote(inputs$nested_collection$deps),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          identical(names(result), c("id", "on", "cond")),
+          nrow(result) == inputs$nested_collection_dep_rows
+        )
+        paste(nrow(result), result$id[[1L]], result$on[[1L]], sep = "|")
+      }
+    ),
+    collection_domains_plain = list(
+      expression = quote(inputs$plain_collection$domains),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$plain_collection_ids),
+          all(vapply(result, inherits, logical(1L), "Domain"))
+        )
+        paste(length(result), result[[1L]]$cls, sep = "|")
+      }
+    ),
+    collection_domains_rich = list(
+      expression = quote(inputs$rich_collection$domains),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$rich_collection_ids),
+          all(vapply(result, inherits, logical(1L), "Domain")),
+          all(vapply(result, function(domain) domain$.init_given, logical(1L)))
+        )
+        requirements = lapply(result, function(domain) {
+          domain$.requirements[[1L]]
+        })
+        paste(length(result), sum(lengths(requirements)), sep = "|")
+      }
+    ),
+    collection_domains_nested = list(
+      expression = quote(inputs$nested_collection$domains),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$nested_collection_ids),
+          all(vapply(result, inherits, logical(1L), "Domain")),
+          all(vapply(result, function(domain) domain$.init_given, logical(1L)))
+        )
+        requirements = lapply(result, function(domain) {
+          domain$.requirements[[1L]]
+        })
+        paste(length(result), sum(lengths(requirements)), sep = "|")
+      }
+    ),
+    collection_subset_rich = list(
+      expression = quote(inputs$rich_collection$subset(
+        inputs$rich_collection_subset_ids,
+        allow_dangling_dependencies = TRUE
+      )),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSet"),
+          !inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$rich_collection_subset_ids)
+        )
+        paste(result$length, result$ids()[[1L]], sep = "|")
+      }
+    ),
+    collection_subset_callbacks = list(
+      expression = quote(inputs$callback_collection$subset(
+        inputs$callback_collection_subset_ids,
+        allow_dangling_dependencies = TRUE
+      )),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSet"),
+          !inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$callback_collection_subset_ids),
+          is.function(result$constraint),
+          is.function(result$extra_trafo)
+        )
+        paste(result$length, result$ids()[[1L]], sep = "|")
+      }
+    ),
+    collection_flatten_rich = list(
+      expression = quote(inputs$rich_collection$flatten()),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSet"),
+          !inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$rich_collection_ids)
+        )
+        paste(result$length, result$ids()[[1L]], sep = "|")
+      }
+    ),
+    collection_flatten_callbacks = list(
+      expression = quote(inputs$callback_collection$flatten()),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSet"),
+          !inherits(result, "ParamSetCollection"),
+          identical(result$ids(), inputs$callback_collection_ids),
+          is.function(result$constraint),
+          is.function(result$extra_trafo)
+        )
+        paste(result$length, result$ids()[[1L]], sep = "|")
+      }
+    ),
+    collection_params_plain = list(
+      expression = quote(inputs$plain_collection$params),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          identical(result$id, inputs$plain_collection_ids),
+          nrow(result) == inputs$n_params,
+          identical(names(result), paradox:::domain_names)
+        )
+        paste(nrow(result), sum(result$.init_given), sep = "|")
+      }
+    ),
+    collection_params_rich = list(
+      expression = quote(inputs$rich_collection$params),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          identical(result$id, inputs$rich_collection_ids),
+          nrow(result) == inputs$n_params,
+          all(result$.init_given),
+          any(lengths(result$.tags) >= 4L),
+          any(!vapply(result$.requirements, is.null, logical(1L)))
+        )
+        paste(
+          nrow(result),
+          sum(lengths(result$.tags)),
+          sum(!vapply(result$.requirements, is.null, logical(1L))),
+          sep = "|"
+        )
+      }
+    ),
+    collection_params_nested = list(
+      expression = quote(inputs$nested_collection$params),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "data.table"),
+          identical(result$id, inputs$nested_collection_ids),
+          nrow(result) == inputs$n_params,
+          all(result$.init_given),
+          any(!vapply(result$.requirements, is.null, logical(1L)))
+        )
+        paste(
+          nrow(result),
+          sum(lengths(result$.tags)),
+          sum(!vapply(result$.requirements, is.null, logical(1L))),
+          sep = "|"
+        )
+      }
+    ),
+    trafo = list(
+      expression = quote(inputs$space$trafo(inputs$scalar_values)),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$parameter_ids),
+          isTRUE(all.equal(result[[1L]], exp(0.25 / 10), tolerance = 1e-14)),
+          identical(result[[2L]], 10L),
+          identical(result[[3L]], "c"),
+          identical(result[[4L]], TRUE)
+        )
+        paste(
+          length(result),
+          format(result[[1L]], digits = 17),
+          result[[2L]],
+          result[[3L]],
+          result[[4L]],
+          sep = "|"
+        )
+      }
+    )
+  )
+
+  stopifnot(identical(names(workloads), benchmark_workload_names()))
+  workloads
+}

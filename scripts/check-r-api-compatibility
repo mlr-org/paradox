@@ -1,0 +1,345 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/check-r-api-compatibility [--run-id ID]
+
+Compile every shipped C translation unit, with the package's strict warning
+profiles, against the exact public headers from each R source release pinned in
+environment/r-api-sources.tsv. The command is offline: prepare the verified
+archives first with scripts/fetch-reference-sources.
+
+Every source tree, generated Rconfig.h, compiler log, source snapshot, and
+checksum is retained below .local/checks/RUN_ID. No R version is installed and
+the host R installation is never read or modified.
+EOF
+}
+
+fail() {
+  printf 'check-r-api-compatibility: %s\n' "$*" >&2
+  exit 1
+}
+
+RUN_ID=
+while (($#)); do
+  case "$1" in
+    --run-id)
+      [[ $# -ge 2 ]] || fail "--run-id requires a value"
+      RUN_ID=$2
+      shift 2
+      ;;
+    --run-id=*)
+      RUN_ID=${1#--run-id=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *)
+      fail "unknown argument '$1' (see --help)"
+      ;;
+  esac
+done
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+[[ "$(pwd -P)" == "$ROOT" ]] || fail "run this command from the repository root"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the local environment first: . scripts/activate"
+
+TOOLCHAIN="$ROOT/.local/toolchain"
+MANIFEST="$ROOT/environment/r-api-sources.tsv"
+CACHE="$ROOT/.cache/downloads"
+SNAPSHOT_HELPER="$ROOT/scripts/environment/snapshot-worktree.R"
+TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+GCC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
+CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
+GFORTRAN="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gfortran"
+RSCRIPT="$TOOLCHAIN/bin/Rscript"
+
+[[ -f "$MANIFEST" ]] || fail "missing manifest: $MANIFEST"
+[[ -f "$TREE_RECEIPT_HELPER" && ! -L "$TREE_RECEIPT_HELPER" ]] ||
+  fail "tree receipt helper is missing or symbolic"
+for executable in "$GCC" "$CLANG" "$GFORTRAN" "$RSCRIPT"; do
+  [[ -x "$executable" ]] || fail "missing local executable: $executable"
+done
+[[ "$(command -v Rscript)" == "$RSCRIPT" ]] ||
+  fail "Rscript does not resolve to the activated local toolchain"
+
+if [[ -z "$RUN_ID" ]]; then
+  RUN_ID="r-api-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+fi
+case "$RUN_ID" in
+  ''|.|..|*[!A-Za-z0-9._-]*) fail "unsafe run ID: $RUN_ID" ;;
+esac
+
+RUN="$ROOT/.local/checks/$RUN_ID"
+CHECKS_ROOT="$ROOT/.local/checks"
+require_plain_check_directory() {
+  local path=$1 resolved
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "managed check directory is missing, non-directory, or symbolic: $path"
+  resolved=$(cd "$path" && pwd -P)
+  [[ "$resolved" == "$path" ]] ||
+    fail "managed check directory resolves outside its expected path: $path"
+}
+require_plain_check_directory "$ROOT/.local"
+[[ ! -L "$CHECKS_ROOT" && ( ! -e "$CHECKS_ROOT" || -d "$CHECKS_ROOT" ) ]] ||
+  fail "checks root is symbolic or not a directory: $CHECKS_ROOT"
+[[ -d "$CHECKS_ROOT" ]] || mkdir "$CHECKS_ROOT"
+require_plain_check_directory "$CHECKS_ROOT"
+[[ ! -e "$RUN" && ! -L "$RUN" ]] || fail "run directory already exists: $RUN"
+(umask 077 && mkdir "$RUN" &&
+  mkdir "$RUN/metadata" "$RUN/artifacts" "$RUN/source") ||
+  fail "could not reserve run directory: $RUN"
+require_plain_check_directory "$RUN"
+
+COMPLETION_READY=false
+finish_run() {
+  status=$?
+  trap - 0
+  if [[ "$status" -eq 0 && "$COMPLETION_READY" == true &&
+      -f "$RUN/metadata/completion.txt" &&
+      -f "$RUN/metadata/completion.sha256" ]]; then
+    state=passed
+  else
+    state=failed
+    rm -f -- "$RUN/metadata/completion.txt" \
+      "$RUN/metadata/completion.sha256" \
+      "$RUN/metadata/completion.txt.new" \
+      "$RUN/metadata/completion.sha256.new"
+    if [[ "$status" -eq 0 ]]; then
+      status=1
+    fi
+  fi
+  {
+    printf 'status=%s\n' "$state"
+    printf 'exit_code=%s\n' "$status"
+    printf 'api_token_audit=%s\n' \
+      "$([[ "$state" == passed ]] && printf passed || printf incomplete)"
+    printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$RUN/status.txt"
+  exit "$status"
+}
+trap finish_run 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+cp "$ROOT/scripts/check-r-api-compatibility" \
+  "$RUN/metadata/check-r-api-compatibility"
+cp "$TREE_RECEIPT_HELPER" "$RUN/metadata/tree-receipt.R"
+HARNESS_SHA256=$(sha256sum \
+  "$RUN/metadata/check-r-api-compatibility" | cut -d ' ' -f 1)
+TREE_RECEIPT_HELPER_SHA256=$(sha256sum \
+  "$RUN/metadata/tree-receipt.R" | cut -d ' ' -f 1)
+RETAINED_TREE_RECEIPT_HELPER="$RUN/metadata/tree-receipt.R"
+
+sha256_value() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+verify_sha256() {
+  local expected=$1
+  local path=$2
+  local observed
+  observed=$(sha256_value "$path")
+  [[ "$observed" == "$expected" ]] ||
+    fail "SHA-256 mismatch for $path: expected $expected, observed $observed"
+}
+
+MANIFEST_SHA256=$(sha256_value "$MANIFEST")
+{
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'root=%s\n' "$ROOT"
+  printf 'manifest_sha256=%s\n' "$MANIFEST_SHA256"
+  printf 'gcc=%s\n' "$($GCC --version | head -n 1)"
+  printf 'clang=%s\n' "$($CLANG --version | head -n 1)"
+} > "$RUN/metadata/run.txt"
+
+"$RSCRIPT" --vanilla "$SNAPSHOT_HELPER" \
+  "$ROOT" "$RUN/source" "$RUN/metadata" \
+  > "$RUN/metadata/snapshot-command.log" 2>&1
+
+SNAPSHOT_MANIFEST="$RUN/source/environment/r-api-sources.tsv"
+[[ -f "$SNAPSHOT_MANIFEST" && ! -L "$SNAPSHOT_MANIFEST" ]] ||
+  fail "source snapshot has no regular R API manifest"
+verify_sha256 "$MANIFEST_SHA256" "$SNAPSHOT_MANIFEST"
+cp "$SNAPSHOT_MANIFEST" "$RUN/metadata/r-api-sources.tsv"
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$RUN/source" "$RUN/metadata/source-tree.tsv" \
+  > "$RUN/metadata/source-tree-create.log" 2>&1
+
+shopt -s nullglob
+source_files=("$RUN/source/src"/*.c)
+shopt -u nullglob
+for source_file in "${source_files[@]}"; do
+  [[ -f "$source_file" && ! -L "$source_file" ]] ||
+    fail "source snapshot contains a non-regular C translation unit"
+done
+((${#source_files[@]} > 0)) || fail "source snapshot contains no C files"
+
+API_TOKEN_AUDITOR="$RUN/source/scripts/environment/audit-public-api-tokens"
+[[ -x "$API_TOKEN_AUDITOR" ]] || fail "public API token auditor is missing"
+"$API_TOKEN_AUDITOR" "$CLANG" "$RUN/source" \
+  "$RUN/metadata/public-api-token-audit.txt" \
+  > "$RUN/metadata/public-api-token-audit.log" 2>&1
+grep -qx 'result=passed' "$RUN/metadata/public-api-token-audit.txt" ||
+  fail "public API token audit did not record success"
+: > "$RUN/metadata/validated-headers.tsv"
+
+gcc_flags=(
+  -std=gnu17 -O2 -fsyntax-only
+  -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2
+  -Wall -Wextra -Wpedantic -Werror
+  -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations
+  -Wold-style-definition -Wbad-function-cast
+  -Wformat=2 -Wformat-security -Wundef -Wshadow
+  -Wconversion -Wsign-conversion -Wdouble-promotion
+  -Wpointer-arith -Wcast-align=strict -Wcast-qual -Wwrite-strings
+  -Wvla -Walloca -Walloc-zero -Wnull-dereference
+  -Wduplicated-cond -Wduplicated-branches -Wlogical-op
+  -Warray-bounds=2 -Wstringop-overflow=4
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+)
+clang_flags=(
+  -std=gnu17 -O2 -fsyntax-only
+  -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2
+  -Wall -Wextra -Wpedantic -Werror
+  -Wstrict-prototypes -Wmissing-prototypes -Wmissing-variable-declarations
+  -Wformat=2 -Wformat-security -Wundef -Wshadow
+  -Wconversion -Wsign-conversion -Wdouble-promotion
+  -Wpointer-arith -Wcast-align -Wcast-qual -Wwrite-strings
+  -Wvla -Walloca -Wnull-dereference
+  -Warray-bounds -Wconditional-uninitialized -Wunreachable-code
+  -Wcast-function-type-strict
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+)
+
+versions=0
+while IFS=$'\t' read -r version expected_sha256 purpose; do
+  [[ -n "$version" && -n "$expected_sha256" && -n "$purpose" ]] ||
+    fail "malformed manifest row"
+  archive="$CACHE/R-${version}.tar.gz"
+  [[ -f "$archive" ]] ||
+    fail "missing $archive; run scripts/fetch-reference-sources"
+  verify_sha256 "$expected_sha256" "$archive"
+
+  reference_root="$RUN/artifacts/reference/$version"
+  mkdir -p "$reference_root"
+  tar -xzf "$archive" --no-same-owner -C "$reference_root"
+  source_root="$reference_root/R-${version}"
+  [[ -x "$source_root/configure" ]] || fail "R $version source extraction failed"
+
+  build_root="$RUN/artifacts/build-R-${version}"
+  mkdir -p "$build_root"
+  (
+    cd "$build_root"
+    env \
+      CC="$GCC" CFLAGS='-O2 -g' \
+      F77="$GFORTRAN" FFLAGS='-O2 -g' \
+      FC="$GFORTRAN" FCFLAGS='-O2 -g' \
+      "$source_root/configure" \
+        --prefix="$RUN/artifacts/unused-prefix/R-${version}" \
+        --without-x --without-recommended-packages --disable-java \
+        --with-readline=no --with-blas=no --with-lapack=no
+  ) > "$RUN/artifacts/configure-R-${version}.log" 2>&1
+  make -C "$build_root/src/include" Rconfig.h Rversion.h \
+    > "$RUN/artifacts/make-Rconfig-R-${version}.log" 2>&1
+
+  generated_include="$build_root/src/include"
+  source_include="$source_root/src/include"
+  [[ -f "$generated_include/Rconfig.h" ]] ||
+    fail "R $version did not generate Rconfig.h"
+  [[ -f "$generated_include/Rversion.h" ]] ||
+    fail "R $version did not generate Rversion.h"
+
+  : > "$RUN/artifacts/gcc-R-${version}.log"
+  : > "$RUN/artifacts/clang-R-${version}.log"
+  for source_file in "${source_files[@]}"; do
+    printf '%s\n' "${source_file#"$RUN/source/"}" \
+      >> "$RUN/artifacts/gcc-R-${version}.log"
+    "$GCC" "${gcc_flags[@]}" \
+      -I"$generated_include" -I"$source_include" \
+      -isystem "$TOOLCHAIN/include" "$source_file" \
+      >> "$RUN/artifacts/gcc-R-${version}.log" 2>&1
+
+    printf '%s\n' "${source_file#"$RUN/source/"}" \
+      >> "$RUN/artifacts/clang-R-${version}.log"
+    "$CLANG" "${clang_flags[@]}" \
+      -I"$generated_include" -I"$source_include" \
+      -isystem "$TOOLCHAIN/include" "$source_file" \
+      >> "$RUN/artifacts/clang-R-${version}.log" 2>&1
+  done
+
+  printf '%s\t%s\t%s\t%s\n' \
+    "$version" "$purpose" "$expected_sha256" \
+    "$(sha256_value "$generated_include/Rconfig.h")" \
+    >> "$RUN/metadata/validated-headers.tsv"
+  versions=$((versions + 1))
+done < <(tail -n +2 "$SNAPSHOT_MANIFEST")
+
+((versions > 0)) || fail "manifest contains no R releases"
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+  "$RUN/source" "$RUN/metadata/source-tree.tsv" \
+  > "$RUN/metadata/source-tree-verify.log" 2>&1
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$RUN/artifacts" "$RUN/metadata/artifacts-tree.tsv" \
+  > "$RUN/metadata/artifacts-tree-create.log" 2>&1
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+  "$RUN/artifacts" "$RUN/metadata/artifacts-tree.tsv" \
+  > "$RUN/metadata/artifacts-tree-verify.log" 2>&1
+
+SOURCE_MANIFEST_SHA256=$(sha256_value \
+  "$RUN/metadata/source-manifest.tsv")
+SOURCE_TREE_SHA256=$(sha256_value "$RUN/metadata/source-tree.tsv")
+ARTIFACTS_TREE_SHA256=$(sha256_value "$RUN/metadata/artifacts-tree.tsv")
+API_TOKEN_AUDIT_SHA256=$(sha256_value \
+  "$RUN/metadata/public-api-token-audit.txt")
+VALIDATED_HEADERS_SHA256=$(sha256_value \
+  "$RUN/metadata/validated-headers.tsv")
+COMPLETION_NEW="$RUN/metadata/completion.txt.new"
+{
+  printf 'harness=check-r-api-compatibility\n'
+  printf 'schema=1\n'
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'source_manifest_sha256=%s\n' "$SOURCE_MANIFEST_SHA256"
+  printf 'source_tree_receipt_sha256=%s\n' "$SOURCE_TREE_SHA256"
+  printf 'artifacts_tree_receipt_sha256=%s\n' "$ARTIFACTS_TREE_SHA256"
+  printf 'api_token_audit_sha256=%s\n' "$API_TOKEN_AUDIT_SHA256"
+  printf 'validated_headers_sha256=%s\n' "$VALIDATED_HEADERS_SHA256"
+  printf 'r_api_manifest_sha256=%s\n' "$MANIFEST_SHA256"
+  printf 'harness_sha256=%s\n' "$HARNESS_SHA256"
+  printf 'tree_receipt_helper_sha256=%s\n' \
+    "$TREE_RECEIPT_HELPER_SHA256"
+  printf 'run_metadata_sha256=%s\n' \
+    "$(sha256_value "$RUN/metadata/run.txt")"
+  printf 'versions=%s\n' "$versions"
+  printf 'translation_units=%s\n' "${#source_files[@]}"
+  printf 'compilers=2\n'
+} > "$COMPLETION_NEW"
+chmod 600 "$COMPLETION_NEW"
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+  "$RUN/source" "$RUN/metadata/source-tree.tsv" \
+  > "$RUN/metadata/source-tree-final-verify.log" 2>&1
+"$RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+  "$RUN/artifacts" "$RUN/metadata/artifacts-tree.tsv" \
+  > "$RUN/metadata/artifacts-tree-final-verify.log" 2>&1
+mv "$COMPLETION_NEW" "$RUN/metadata/completion.txt"
+(
+  cd "$RUN/metadata"
+  sha256sum completion.txt
+) > "$RUN/metadata/completion.sha256.new"
+mv "$RUN/metadata/completion.sha256.new" \
+  "$RUN/metadata/completion.sha256"
+COMPLETION_READY=true
+
+printf 'R API compatibility gate passed: %s releases x %s translation units x 2 compilers\n' \
+  "$versions" "${#source_files[@]}"
+printf 'Artifacts: %s\n' "$RUN"

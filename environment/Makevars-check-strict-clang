@@ -1,0 +1,26 @@
+# Reproducible Clang 22 / C17 warning gate for scripts/native-check.
+# R header and registration-ABI exceptions are deliberately local source
+# pragmas, not global warning suppressions.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17
+SHLIB_LD = $(CC17)
+
+# Avoid passing the linker-only flag from the conda R Makeconf to `clang -c`.
+# No compiler diagnostic is disabled here.
+CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
+
+PARADOX_STRICT_CLANG_FLAGS = -O2 -g3 -fno-omit-frame-pointer \
+  -Wall -Wextra -Wpedantic -Werror \
+  -Wstrict-prototypes -Wmissing-prototypes \
+  -Wmissing-variable-declarations \
+  -Wformat=2 -Wformat-security -Wundef -Wshadow \
+  -Wconversion -Wsign-conversion -Wdouble-promotion \
+  -Wpointer-arith -Wcast-align -Wcast-qual -Wwrite-strings \
+  -Wvla -Walloca -Wnull-dereference \
+  -Warray-bounds -Wconditional-uninitialized -Wunreachable-code \
+  -Wcast-function-type-strict \
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+
+CFLAGS = $(PARADOX_STRICT_CLANG_FLAGS)
+C17FLAGS = $(PARADOX_STRICT_CLANG_FLAGS)

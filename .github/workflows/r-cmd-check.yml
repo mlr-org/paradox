@@ -11,25 +11,34 @@ on:
 
 name: r-cmd-check
 
+permissions: read-all
+
 jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
 
     strategy:
       fail-fast: false
       matrix:
         config:
-          - {os: ubuntu-latest,   r: 'devel'}
-          - {os: ubuntu-latest,   r: 'release'}
-          - {os: ubuntu-latest,   r: 'release', depends_only: true}
+          # macos-15 is a standard GitHub-hosted Apple silicon (ARM64) runner.
+          - {os: macos-15,        arch: arm64,  r: 'release'}
+          # setup-r installs the Rtools version appropriate for release R.
+          - {os: windows-latest,  arch: x86_64, r: 'release'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'devel'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
+          - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
+          # Compile against the declared minimum R API as well as current R.
+          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: r-lib/actions/setup-r@v2
         with:
@@ -39,6 +48,45 @@ jobs:
         with:
           extra-packages: any::rcmdcheck
           needs: check
+
+      - name: Verify runner and R architecture
+        shell: Rscript {0}
+        env:
+          EXPECTED_ARCH: ${{ matrix.config.arch }}
+          RUNNER_ARCHITECTURE: ${{ runner.arch }}
+        run: |
+          expected <- Sys.getenv("EXPECTED_ARCH")
+          runner <- tolower(Sys.getenv("RUNNER_ARCHITECTURE"))
+          r_arch <- tolower(R.version$arch)
+          cat("GitHub runner:", runner, "\nR platform:", R.version$platform, "\n")
+
+          expected_runner <- c(arm64 = "arm64", x86_64 = "x64")[[expected]]
+          expected_r <- c(arm64 = "^(aarch64|arm64)$", x86_64 = "^(x86_64|x64)$")[[expected]]
+          stopifnot(
+            identical(runner, expected_runner),
+            grepl(expected_r, r_arch)
+          )
+
+      - name: Verify native source compilation
+        shell: Rscript {0}
+        run: |
+          lib <- tempfile("paradox-native-ci-")
+          dir.create(lib)
+          install.packages(
+            pkgs = ".",
+            lib = lib,
+            repos = NULL,
+            type = "source",
+            INSTALL_opts = c("--preclean", "--clean")
+          )
+
+          loadNamespace("paradox", lib.loc = lib)
+          dll <- getLoadedDLLs()[["paradox"]]
+          stopifnot(
+            !is.null(dll),
+            file.exists(dll[["path"]]),
+            length(getDLLRegisteredRoutines(dll)[[".Call"]]) > 0L
+          )
 
       - uses: r-lib/actions/check-r-package@v2
         env:

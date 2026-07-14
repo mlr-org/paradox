@@ -1,0 +1,216 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+RUN_ID="${PARADOX_CANDIDATE_RUN_ID:-}"
+CANDIDATE_LIBRARY="${1:-$ROOT/.local/compat/runs/$RUN_ID/library-candidate}"
+DEPENDENCY_LIBRARY="${2:-$ROOT/.local/compat/R/library-dependencies}"
+CANDIDATE_SOURCE="${3:-$ROOT}"
+
+fail() {
+  printf '%s\n' "install-candidate: $*" >&2
+  exit 2
+}
+
+sha256_file() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+[[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] &&
+  [[ "$RUN_ID" != . && "$RUN_ID" != .. ]] ||
+  fail "PARADOX_CANDIDATE_RUN_ID must be a safe name of at most 128 characters"
+[[ -n ${PARADOX_CANDIDATE_REF:-} ]] ||
+  fail "PARADOX_CANDIDATE_REF must declare the immutable candidate ref"
+[[ ${PARADOX_CANDIDATE_COMMIT:-} =~ ^[0-9a-f]{40}$ ]] ||
+  fail "PARADOX_CANDIDATE_COMMIT must be a full lowercase commit ID"
+[[ ${PARADOX_CANDIDATE_TREE:-} =~ ^[0-9a-f]{40}$ ]] ||
+  fail "PARADOX_CANDIDATE_TREE must be a full lowercase tree ID"
+
+if [[ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]]; then
+  fail "activate the repository-local toolchain first: . scripts/activate"
+fi
+
+EXPECTED_R="$ROOT/.local/toolchain/bin/R"
+EXPECTED_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+[[ $(command -v R) == "$EXPECTED_R" && $(command -v Rscript) == "$EXPECTED_RSCRIPT" ]] ||
+  fail "the repository-local R and Rscript must be first on PATH"
+[[ $("$EXPECTED_R" RHOME) == "$ROOT/.local/toolchain/lib/R" ]] ||
+  fail "the repository-local RHOME is not the pinned toolchain runtime"
+
+require_plain_directory() {
+  local path=$1
+  local label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, not a directory, or symbolic: $path"
+}
+
+for path in \
+  "$ROOT/.local" \
+  "$ROOT/.local/compat" \
+  "$ROOT/.local/compat/runs" \
+  "$ROOT/.local/compat/runs/$RUN_ID" \
+  "$ROOT/.local/tmp"; do
+  require_plain_directory "$path" "managed candidate path"
+done
+
+RUN_DIRECTORY=$(cd "$ROOT/.local/compat/runs/$RUN_ID" && pwd -P)
+[[ "$RUN_DIRECTORY" == "$ROOT/.local/compat/runs/$RUN_ID" ]] ||
+  fail "candidate run directory escaped the repository"
+EXPECTED_CANDIDATE_LIBRARY="$RUN_DIRECTORY/library-candidate"
+[[ "$CANDIDATE_LIBRARY" == "$EXPECTED_CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library must be the run-specific path $EXPECTED_CANDIDATE_LIBRARY"
+[[ ! -e "$CANDIDATE_LIBRARY" && ! -L "$CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library already exists; choose a new run ID"
+
+require_plain_directory "$DEPENDENCY_LIBRARY" "dependency library"
+DEPENDENCY_LIBRARY=$(cd "$DEPENDENCY_LIBRARY" && pwd -P)
+case "$DEPENDENCY_LIBRARY/" in
+  "$ROOT/.local/"*) ;;
+  *) fail "dependency library must remain below $ROOT/.local" ;;
+esac
+
+CANDIDATE_SOURCE=$(cd "$CANDIDATE_SOURCE" && pwd -P)
+SOURCE_TOPLEVEL=$(git -C "$CANDIDATE_SOURCE" rev-parse --show-toplevel 2>/dev/null) ||
+  fail "candidate source is not a Git worktree"
+SOURCE_TOPLEVEL=$(cd "$SOURCE_TOPLEVEL" && pwd -P)
+[[ "$SOURCE_TOPLEVEL" == "$CANDIDATE_SOURCE" ]] ||
+  fail "candidate source must be the repository root"
+
+CANDIDATE_COMMIT=$PARADOX_CANDIDATE_COMMIT
+RESOLVED_COMMIT=$(git -C "$CANDIDATE_SOURCE" rev-parse \
+  "$CANDIDATE_COMMIT^{commit}" 2>/dev/null) ||
+  fail "candidate commit does not resolve"
+[[ "$RESOLVED_COMMIT" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "resolved candidate commit is malformed"
+if [[ "$RESOLVED_COMMIT" != "$PARADOX_CANDIDATE_COMMIT" ]]; then
+  fail "declared candidate commit is not the resolved full commit ID"
+fi
+
+RESOLVED_TREE=$(git -C "$CANDIDATE_SOURCE" rev-parse \
+  "$RESOLVED_COMMIT^{tree}" 2>/dev/null) || fail "candidate tree does not resolve"
+[[ "$RESOLVED_TREE" =~ ^[0-9a-f]{40}$ ]] ||
+  fail "resolved candidate tree is malformed"
+if [[ "$RESOLVED_TREE" != "$PARADOX_CANDIDATE_TREE" ]]; then
+  fail "declared candidate tree does not match the candidate commit"
+fi
+
+CANDIDATE_REF=$PARADOX_CANDIDATE_REF
+[[ "$CANDIDATE_REF" == refs/* ]] ||
+  fail "declared candidate ref must be one full refs/... name"
+git check-ref-format "$CANDIDATE_REF" >/dev/null 2>&1 ||
+  fail "declared candidate ref is malformed"
+REF_COMMIT=$(git -C "$CANDIDATE_SOURCE" rev-parse \
+  "$CANDIDATE_REF^{commit}" 2>/dev/null) || fail "candidate ref does not resolve"
+[[ "$REF_COMMIT" == "$RESOLVED_COMMIT" ]] ||
+  fail "candidate ref does not resolve to the candidate commit"
+
+DEPENDENCY_CONTENT_BEFORE=$(
+  R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+    "$EXPECTED_RSCRIPT" --vanilla -e '
+      arguments <- commandArgs(TRUE)
+      sys.source(file.path(arguments[[2L]], "compat", "fingerprint.R"),
+        envir = environment())
+      cat(compat_tree_content_sha256(arguments[[1L]]))
+    ' "$DEPENDENCY_LIBRARY" "$ROOT"
+)
+[[ "$DEPENDENCY_CONTENT_BEFORE" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "dependency library content fingerprint is malformed"
+
+mkdir "$CANDIDATE_LIBRARY"
+CANDIDATE_LIBRARY=$(cd "$CANDIDATE_LIBRARY" && pwd -P)
+[[ "$CANDIDATE_LIBRARY" == "$EXPECTED_CANDIDATE_LIBRARY" ]] ||
+  fail "candidate library escaped its reserved run directory"
+
+# Install exactly the committed tree. This deliberately ignores even benign
+# ignored or modified worktree files, making the provenance receipt a factual
+# description of the bytes offered to R CMD INSTALL.
+STAGE=$(mktemp -d "$ROOT/.local/tmp/candidate-source.XXXXXX")
+ARCHIVE=$(mktemp "$ROOT/.local/tmp/candidate-source.tar.XXXXXX")
+cleanup() {
+  rm -rf "$STAGE"
+  rm -f "$ARCHIVE"
+}
+trap cleanup EXIT HUP INT TERM
+git -C "$CANDIDATE_SOURCE" archive --format=tar -o "$ARCHIVE" \
+  "$RESOLVED_COMMIT"
+mkdir "$STAGE/source"
+tar -xf "$ARCHIVE" -C "$STAGE/source"
+ARCHIVE_SHA256=$(sha256_file "$ARCHIVE")
+
+R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_R" CMD INSTALL \
+    --preclean \
+    --clean \
+    --no-multiarch \
+    --with-keep.source \
+    --library="$CANDIDATE_LIBRARY" \
+    "$STAGE/source"
+
+DEPENDENCY_CONTENT_AFTER=$(
+  R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+    "$EXPECTED_RSCRIPT" --vanilla -e '
+      arguments <- commandArgs(TRUE)
+      sys.source(file.path(arguments[[2L]], "compat", "fingerprint.R"),
+        envir = environment())
+      cat(compat_tree_content_sha256(arguments[[1L]]))
+    ' "$DEPENDENCY_LIBRARY" "$ROOT"
+)
+[[ "$DEPENDENCY_CONTENT_AFTER" == "$DEPENDENCY_CONTENT_BEFORE" ]] ||
+  fail "dependency library changed while installing the candidate"
+
+R_LIBS="$DEPENDENCY_LIBRARY" R_LIBS_USER="$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_RSCRIPT" --vanilla -e '
+  args <- commandArgs(TRUE)
+  library <- normalizePath(args[[1L]], mustWork = TRUE)
+  root <- normalizePath(args[[2L]], mustWork = TRUE)
+  sys.source(file.path(root, "compat", "fingerprint.R"), envir = environment())
+  package <- normalizePath(find.package("paradox", lib.loc = library), mustWork = TRUE)
+  stopifnot(identical(normalizePath(dirname(package), mustWork = TRUE), library))
+  fingerprint <- compat_tree_content_sha256(package)
+  writeLines(fingerprint, file.path(library, ".paradox-candidate-content-sha256"))
+  cat("Installed paradox", as.character(packageVersion("paradox", lib.loc = library)), "in", library, "\n")
+  cat("candidate_library=", library, "\n", sep = "")
+  cat("candidate_content_sha256=", fingerprint, "\n", sep = "")
+' "$CANDIDATE_LIBRARY" "$ROOT"
+
+CANDIDATE_CONTENT_SHA256=$(
+  tr -d '\r\n' < "$CANDIDATE_LIBRARY/.paradox-candidate-content-sha256"
+)
+[[ "$CANDIDATE_CONTENT_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "installed candidate content fingerprint is malformed"
+CANDIDATE_VERSION=$(R_LIBS="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" \
+  R_LIBS_USER="$CANDIDATE_LIBRARY:$DEPENDENCY_LIBRARY" R_LIBS_SITE='' \
+  "$EXPECTED_RSCRIPT" --vanilla -e \
+  'cat(as.character(packageVersion("paradox", lib.loc = commandArgs(TRUE)[[1L]])))' \
+  "$CANDIDATE_LIBRARY")
+PROVENANCE="$CANDIDATE_LIBRARY/.paradox-candidate-provenance.tsv"
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'candidate_ref\t%s\n' "$CANDIDATE_REF"
+  printf 'candidate_commit\t%s\n' "$RESOLVED_COMMIT"
+  printf 'candidate_tree\t%s\n' "$RESOLVED_TREE"
+  printf 'candidate_version\t%s\n' "$CANDIDATE_VERSION"
+  printf 'source_archive_sha256\t%s\n' "$ARCHIVE_SHA256"
+  printf 'candidate_content_sha256\t%s\n' "$CANDIDATE_CONTENT_SHA256"
+  printf 'installer_sha256\t%s\n' \
+    "$(sha256_file "${BASH_SOURCE[0]}")"
+} > "$PROVENANCE.new"
+mv "$PROVENANCE.new" "$PROVENANCE"
+(
+  cd "$CANDIDATE_LIBRARY"
+  printf '%s  %s\n' \
+    "$(sha256_file .paradox-candidate-provenance.tsv)" \
+    .paradox-candidate-provenance.tsv \
+    > .paradox-candidate-provenance.sha256
+)
+
+printf '%s\n' \
+  "candidate_ref=$CANDIDATE_REF" \
+  "candidate_commit=$RESOLVED_COMMIT" \
+  "candidate_tree=$RESOLVED_TREE" \
+  "candidate_provenance=$PROVENANCE"

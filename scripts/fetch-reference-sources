@@ -1,0 +1,621 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+R_VERSION=4.6.1
+R_API_MANIFEST="$ROOT/environment/r-api-sources.tsv"
+R_TREE_MANIFEST="$ROOT/environment/r-api-source-trees.tsv"
+DATATABLE_COMMIT=f55ed3558f66a3a165482bb283a6ef375305a408
+RCHK_COMMIT=bd34d5dd1f08ddc93a8b544c22a56609edbce9b0
+RHUB_CONTAINERS_COMMIT=e495b272f20043a0004a010dbaeb66f0aefcccc6
+CACHE="$ROOT/.cache/downloads"
+SOURCES="$ROOT/.local/sources"
+DOCS="$ROOT/.local/reference/R-${R_VERSION}"
+R_RECEIPTS="$ROOT/.local/reference/r-api-sources"
+TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+TINYTEX_MANIFEST="$ROOT/environment/tinytex-linux-x86_64.tsv"
+TEXINFO_MANIFEST="$ROOT/environment/texinfo-source.tsv"
+OFFLINE=false
+
+fail() {
+  printf '%s\n' "fetch-reference-sources: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/fetch-reference-sources [--offline]
+
+Fetch and authenticate the pinned R and auxiliary reference sources. Offline
+mode performs no downloads or Git fetches and requires every archive, checkout,
+and pinned commit to be present already.
+USAGE
+}
+
+case $# in
+  0) ;;
+  1)
+    case $1 in
+      --offline) OFFLINE=true ;;
+      -h|--help) usage; exit 0 ;;
+      *) usage >&2; fail "unknown option: $1" ;;
+    esac
+    ;;
+  *) usage >&2; fail "too many arguments" ;;
+esac
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+LOCAL_CURL="$ROOT/.local/toolchain/bin/curl"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+LOCAL_TEXI2DVI="$ROOT/.local/toolchain/bin/texi2dvi"
+TINYTEX_BIN="$ROOT/.local/tinytex/bin/x86_64-linux"
+[[ "$(command -v curl)" == "$LOCAL_CURL" &&
+   "$(command -v git)" == "$LOCAL_GIT" &&
+   "$(command -v Rscript)" == "$LOCAL_RSCRIPT" &&
+   "$(command -v texi2dvi)" == "$LOCAL_TEXI2DVI" &&
+   "$(command -v pdftex)" == "$TINYTEX_BIN/pdftex" &&
+   "$(command -v makeindex)" == "$TINYTEX_BIN/makeindex" &&
+   "$(command -v tar)" == /usr/bin/tar ]] ||
+  fail "reference-source tools do not resolve to the selected local boundary"
+for required_input in "$R_API_MANIFEST" "$R_TREE_MANIFEST" \
+  "$TREE_RECEIPT_HELPER" "$TINYTEX_MANIFEST" "$TEXINFO_MANIFEST"
+do
+  [[ -f "$required_input" && ! -L "$required_input" ]] ||
+    fail "reference-source input is missing or symbolic: $required_input"
+done
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $path" ;;
+  esac
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed path is not a directory: $current"
+  done
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed path is not a regular file: $path"
+}
+
+for managed_directory in \
+  "$ROOT/.cache" "$CACHE" "$ROOT/.local" "$ROOT/.local/tmp" "$SOURCES" \
+  "$ROOT/.local/reference" "$DOCS" "$R_RECEIPTS"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+mkdir -p "$CACHE" "$ROOT/.local/tmp" "$SOURCES" "$DOCS" "$R_RECEIPTS"
+for managed_directory in "$CACHE" "$ROOT/.local/tmp" "$SOURCES" "$DOCS" \
+  "$R_RECEIPTS"
+do
+  assert_plain_directory_chain "$managed_directory"
+  [[ "$(cd "$managed_directory" && pwd -P)" == "$managed_directory" ]] ||
+    fail "managed directory resolves outside its expected path: $managed_directory"
+done
+
+temporary_paths=()
+cleanup() {
+  local path
+  for path in "${temporary_paths[@]}"; do
+    [[ -e "$path" || -L "$path" ]] || continue
+    if [[ -d "$path" && ! -L "$path" ]]; then
+      find "$path" -depth -type d -exec chmod u+w {} + 2>/dev/null || true
+    fi
+    rm -rf -- "$path"
+  done
+}
+trap cleanup EXIT HUP INT TERM
+
+register_temporary() {
+  temporary_paths+=("$1")
+}
+
+sha256_value() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
+}
+
+verify_sha256() {
+  local expected=$1
+  local file=$2
+  if [[ "$(sha256_value "$file")" != "$expected" ]]; then
+    echo "SHA-256 mismatch for $file" >&2
+    return 1
+  fi
+}
+
+mapfile -t texinfo_rows < "$TEXINFO_MANIFEST"
+[[ ${#texinfo_rows[@]} -eq 2 &&
+   "${texinfo_rows[0]}" == $'version\tarchive\tarchive_size\tarchive_sha256\tmember\tmember_size\tmember_sha256\tlanguage_member\tlanguage_member_size\tlanguage_member_sha256\tindex_member\tindex_member_size\tindex_member_sha256\turl\tawk_version\tawk_archive\tawk_size\tawk_sha256\tawk_url' ]] ||
+  fail "Texinfo source manifest must contain one exact row"
+IFS=$'\t' read -r texinfo_version texinfo_archive_name texinfo_archive_size \
+  texinfo_archive_sha texinfo_member texinfo_member_size texinfo_member_sha \
+  texinfo_language_member texinfo_language_member_size \
+  texinfo_language_member_sha texinfo_index_member texinfo_index_member_size \
+  texinfo_index_member_sha texinfo_url reference_awk_version \
+  reference_awk_archive_name reference_awk_size reference_awk_sha \
+  reference_awk_url texinfo_extra <<< "${texinfo_rows[1]}"
+[[ "$texinfo_version" == 7.2 &&
+   "$texinfo_archive_name" == "texinfo-${texinfo_version}.tar.xz" &&
+   "$texinfo_archive_size" =~ ^[0-9]+$ &&
+   "$texinfo_archive_sha" =~ ^[0-9a-f]{64}$ &&
+   "$texinfo_member" == "texinfo-${texinfo_version}/doc/texinfo.tex" &&
+   "$texinfo_member_size" =~ ^[0-9]+$ &&
+   "$texinfo_member_sha" =~ ^[0-9a-f]{64}$ && -z "$texinfo_extra" &&
+   "$texinfo_language_member" == "texinfo-${texinfo_version}/doc/txi-en.tex" &&
+   "$texinfo_language_member_size" =~ ^[0-9]+$ &&
+   "$texinfo_language_member_sha" =~ ^[0-9a-f]{64}$ &&
+   "$texinfo_index_member" == "texinfo-${texinfo_version}/texindex/texindex.awk" &&
+   "$texinfo_index_member_size" =~ ^[0-9]+$ &&
+   "$texinfo_index_member_sha" =~ ^[0-9a-f]{64}$ &&
+   "$texinfo_url" == "https://ftp.gnu.org/gnu/texinfo/${texinfo_archive_name}" &&
+   "$reference_awk_version" == 1.35.0 &&
+   "$reference_awk_archive_name" == "busybox_AWK-${reference_awk_version}-x86_64-linux-musl" &&
+   "$reference_awk_size" =~ ^[0-9]+$ &&
+   "$reference_awk_sha" =~ ^[0-9a-f]{64}$ &&
+   "$reference_awk_url" == "https://busybox.net/downloads/binaries/${reference_awk_version}-x86_64-linux-musl/busybox_AWK" ]] ||
+  fail "Texinfo source manifest identity is malformed"
+
+texinfo_archive="$CACHE/$texinfo_archive_name"
+reference_awk_archive="$CACHE/$reference_awk_archive_name"
+for artifact in "$texinfo_archive" "$reference_awk_archive"; do
+  assert_plain_file_or_absent "$artifact"
+done
+if [[ ! -f "$texinfo_archive" ]]; then
+  [[ "$OFFLINE" == false ]] ||
+    fail "offline mode requires the pinned Texinfo archive $texinfo_archive"
+  "$LOCAL_CURL" -fL --retry 3 "$texinfo_url" -o "$texinfo_archive"
+fi
+[[ "$(stat -c '%s' "$texinfo_archive")" == "$texinfo_archive_size" &&
+   "$(sha256_value "$texinfo_archive")" == "$texinfo_archive_sha" ]] ||
+  fail "Texinfo source archive differs from its pinned manifest"
+if [[ ! -f "$reference_awk_archive" ]]; then
+  [[ "$OFFLINE" == false ]] ||
+    fail "offline mode requires the pinned awk tool $reference_awk_archive"
+  "$LOCAL_CURL" -fL --retry 3 "$reference_awk_url" \
+    -o "$reference_awk_archive"
+fi
+[[ "$(stat -c '%s' "$reference_awk_archive")" == "$reference_awk_size" &&
+   "$(sha256_value "$reference_awk_archive")" == "$reference_awk_sha" ]] ||
+  fail "reference awk differs from its pinned manifest"
+reference_awk=$(mktemp "$ROOT/.local/tmp/reference-awk.XXXXXX")
+register_temporary "$reference_awk"
+cp -p "$reference_awk_archive" "$reference_awk"
+chmod 0500 "$reference_awk"
+[[ -x "$reference_awk" && "$(sha256_value "$reference_awk")" == \
+   "$reference_awk_sha" ]] ||
+  fail "could not select the authenticated repository-local awk"
+
+archive=
+r_archives=()
+declare -A r_tree_sha256=()
+mapfile -t r_tree_rows < "$R_TREE_MANIFEST"
+[[ ${#r_tree_rows[@]} -ge 2 &&
+   "${r_tree_rows[0]}" == $'version\ttree_manifest_sha256' ]] ||
+  fail "R source-tree manifest has an unexpected header or no rows"
+for row in "${r_tree_rows[@]:1}"; do
+  IFS=$'\t' read -r tree_version tree_sha tree_extra <<< "$row"
+  [[ "$tree_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ &&
+     "$tree_sha" =~ ^[0-9a-f]{64}$ && -z "$tree_extra" &&
+     ! -v "r_tree_sha256[$tree_version]" ]] ||
+    fail "malformed or duplicate row in $R_TREE_MANIFEST"
+  r_tree_sha256["$tree_version"]=$tree_sha
+done
+
+authenticate_r_source_tree() {
+  local version=$1 archive_path=$2 expected_tree_sha=$3
+  local target="$SOURCES/R-$version"
+  local retained_receipt="$R_RECEIPTS/R-$version-tree.tsv"
+  local observed_receipt stage listing stage_source stage_receipt observed_sha
+
+  assert_plain_directory_chain "$target"
+  assert_plain_file_or_absent "$retained_receipt"
+  observed_receipt=$(mktemp "$ROOT/.local/tmp/R-$version-observed.XXXXXX.tsv")
+  register_temporary "$observed_receipt"
+  if [[ -d "$target" ]]; then
+    "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+      "$target" "$observed_receipt" >/dev/null
+    observed_sha=$(sha256_value "$observed_receipt")
+  else
+    observed_sha=absent
+  fi
+
+  if [[ "$observed_sha" != "$expected_tree_sha" ]]; then
+    stage=$(mktemp -d "$ROOT/.local/tmp/R-$version-source.XXXXXX")
+    listing=$(mktemp "$ROOT/.local/tmp/R-$version-listing.XXXXXX")
+    stage_receipt=$(mktemp "$ROOT/.local/tmp/R-$version-stage.XXXXXX.tsv")
+    register_temporary "$stage"
+    register_temporary "$listing"
+    register_temporary "$stage_receipt"
+
+    /usr/bin/tar -tzf "$archive_path" > "$listing"
+    "$reference_awk" -v prefix="R-${version}/" \
+      "index(\$0, prefix) != 1 { bad = 1 }
+       \$0 ~ /(^|\/)\.\.(\$|\/)/ { bad = 1 }
+       END { exit bad }" \
+      "$listing" || fail "R $version archive contains an unsafe member"
+    /usr/bin/tar -xzf "$archive_path" --same-permissions --no-same-owner \
+      -C "$stage"
+    stage_source="$stage/R-$version"
+    [[ -d "$stage_source" && ! -L "$stage_source" ]] ||
+      fail "R $version archive did not extract one plain source root"
+    "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+      "$stage_source" "$stage_receipt" >/dev/null
+    [[ "$(sha256_value "$stage_receipt")" == "$expected_tree_sha" ]] ||
+      fail "R $version archive extraction differs from its pinned tree manifest"
+
+    if [[ -d "$target" ]]; then
+      find "$target" -depth -type d -exec chmod u+w {} +
+      rm -rf -- "$target"
+    fi
+    mv "$stage_source" "$target"
+    "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+      "$target" "$stage_receipt" >/dev/null
+    cp -p "$stage_receipt" "$observed_receipt"
+  fi
+
+  [[ "$(sha256_value "$observed_receipt")" == "$expected_tree_sha" ]] ||
+    fail "selected R $version source tree is not exactly authenticated"
+  "$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" verify \
+    "$target" "$observed_receipt" >/dev/null
+  mv -f "$observed_receipt" "$retained_receipt"
+  r_receipts+=("$retained_receipt")
+}
+
+r_receipts=()
+declare -A r_archive_versions=()
+mapfile -t r_api_rows < "$R_API_MANIFEST"
+[[ ${#r_api_rows[@]} -ge 2 &&
+   "${r_api_rows[0]}" == $'version\tsha256\tpurpose' ]] ||
+  fail "R API source manifest has an unexpected header or no rows"
+for row in "${r_api_rows[@]:1}"; do
+  IFS=$'\t' read -r version sha256 purpose extra <<< "$row"
+  [[ -n "$version" && -n "$sha256" && -n "$purpose" ]] || {
+    printf 'Malformed row in %s\n' "$R_API_MANIFEST" >&2
+    exit 1
+  }
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    printf 'Invalid R version in %s: %s\n' "$R_API_MANIFEST" "$version" >&2
+    exit 1
+  }
+  [[ "$sha256" =~ ^[0-9a-f]{64}$ ]] || {
+    printf 'Invalid R source SHA-256 in %s: %s\n' "$R_API_MANIFEST" "$sha256" >&2
+    exit 1
+  }
+  [[ -z "$extra" && ! -v "r_archive_versions[$version]" &&
+     -v "r_tree_sha256[$version]" ]] ||
+    fail "duplicate, extra, or tree-unreceipted R API source row: $version"
+  r_archive_versions["$version"]=1
+
+  version_archive="$CACHE/R-${version}.tar.gz"
+  assert_plain_file_or_absent "$version_archive"
+  if [[ ! -f "$version_archive" ]]; then
+    [[ "$OFFLINE" == false ]] ||
+      fail "offline mode requires the pinned archive $version_archive"
+    "$LOCAL_CURL" -fL "https://cran.r-project.org/src/base/R-4/R-${version}.tar.gz" \
+      -o "$version_archive"
+  fi
+  verify_sha256 "$sha256" "$version_archive"
+  authenticate_r_source_tree \
+    "$version" "$version_archive" "${r_tree_sha256[$version]}"
+  r_archives+=("$version_archive")
+  if [[ "$version" == "$R_VERSION" ]]; then
+    archive=$version_archive
+  fi
+done
+
+[[ ${#r_archive_versions[@]} -eq ${#r_tree_sha256[@]} ]] ||
+  fail "R archive and source-tree manifests cover different version sets"
+
+[[ -n "$archive" ]] || {
+  printf 'R %s is absent from %s\n' "$R_VERSION" "$R_API_MANIFEST" >&2
+  exit 1
+}
+
+mapfile -t tinytex_rows < "$TINYTEX_MANIFEST"
+[[ ${#tinytex_rows[@]} -eq 2 &&
+   "${tinytex_rows[0]}" == $'version\tplatform\tarchive\tarchive_size\tarchive_sha256\ttree_manifest_sha256\turl' ]] ||
+  fail "TinyTeX manifest must contain one exact row"
+IFS=$'\t' read -r tinytex_version tinytex_platform tinytex_archive_name \
+  tinytex_archive_size tinytex_archive_sha tinytex_tree_sha tinytex_url \
+  tinytex_extra <<< "${tinytex_rows[1]}"
+[[ "$tinytex_version" == 2026.07 && "$tinytex_platform" == linux-x86_64 &&
+   "$tinytex_archive_name" == "TinyTeX-linux-x86_64-v${tinytex_version}.tar.xz" &&
+   "$tinytex_archive_size" =~ ^[0-9]+$ &&
+   "$tinytex_archive_sha" =~ ^[0-9a-f]{64}$ &&
+   "$tinytex_tree_sha" =~ ^[0-9a-f]{64}$ && -z "$tinytex_extra" &&
+   "$tinytex_url" == "https://github.com/rstudio/tinytex-releases/releases/download/v${tinytex_version}/${tinytex_archive_name}" ]] ||
+  fail "TinyTeX manifest identity is malformed"
+tinytex_receipt=$(mktemp "$ROOT/.local/tmp/reference-tinytex.XXXXXX.tsv")
+register_temporary "$tinytex_receipt"
+"$LOCAL_RSCRIPT" --vanilla "$TREE_RECEIPT_HELPER" create \
+  "$ROOT/.local/tinytex" "$tinytex_receipt" >/dev/null
+[[ "$(sha256_value "$tinytex_receipt")" == "$tinytex_tree_sha" ]] ||
+  fail "installed TinyTeX differs from its pinned complete-tree receipt"
+
+for output in "$DOCS/R-exts.texi" "$DOCS/R-ints.texi" \
+  "$DOCS/R-admin.texi" "$DOCS/R-exts.pdf" "$DOCS/R-ints.pdf" \
+  "$DOCS/R-admin.pdf" "$DOCS/SHA256SUMS" \
+  "$DOCS/data.table-commit.txt" "$DOCS/rchk-commit.txt" \
+  "$DOCS/r-hub-containers-commit.txt" "$DOCS/manual-build.tsv" \
+  "$DOCS/git-checkouts.tsv"
+do
+  assert_plain_file_or_absent "$output"
+  assert_plain_file_or_absent "$output.new"
+done
+
+manual_source="$SOURCES/R-${R_VERSION}/doc/manual"
+for input in "$manual_source/R-exts.texi" "$manual_source/R-ints.texi" \
+  "$manual_source/R-admin.texi" "$manual_source/R-defs.texi" \
+  "$SOURCES/R-${R_VERSION}/VERSION" \
+  "$SOURCES/R-${R_VERSION}/SVN-REVISION" \
+  "$SOURCES/R-${R_VERSION}/src/gnuwin32/fixed/rwver.R"
+do
+  [[ -f "$input" && ! -L "$input" ]] ||
+    fail "R manual input is missing or symbolic: $input"
+done
+
+manual_build=$(mktemp -d "$ROOT/.local/tmp/R-${R_VERSION}-manual.XXXXXX")
+register_temporary "$manual_build"
+mkdir "$manual_build/home" "$manual_build/output" "$manual_build/tmp" \
+  "$manual_build/texmf-var" "$manual_build/texmf-config" \
+  "$manual_build/texmf-home" "$manual_build/texmf-cache" \
+  "$manual_build/vartexfonts"
+/usr/bin/tar -xJOf "$texinfo_archive" "$texinfo_member" \
+  > "$manual_build/texinfo.tex"
+[[ "$(stat -c '%s' "$manual_build/texinfo.tex")" == "$texinfo_member_size" &&
+   "$(sha256_value "$manual_build/texinfo.tex")" == "$texinfo_member_sha" ]] ||
+  fail "extracted texinfo.tex differs from its pinned source member"
+/usr/bin/tar -xJOf "$texinfo_archive" "$texinfo_language_member" \
+  > "$manual_build/txi-en.tex"
+[[ "$(stat -c '%s' "$manual_build/txi-en.tex")" == \
+     "$texinfo_language_member_size" &&
+   "$(sha256_value "$manual_build/txi-en.tex")" == \
+     "$texinfo_language_member_sha" ]] ||
+  fail "extracted txi-en.tex differs from its pinned source member"
+/usr/bin/tar -xJOf "$texinfo_archive" "$texinfo_index_member" \
+  > "$manual_build/texindex.awk"
+[[ "$(stat -c '%s' "$manual_build/texindex.awk")" == \
+     "$texinfo_index_member_size" &&
+   "$(sha256_value "$manual_build/texindex.awk")" == \
+     "$texinfo_index_member_sha" ]] ||
+  fail "extracted texindex.awk differs from its pinned source member"
+version_value=$(sed 's/ *(.*//' "$SOURCES/R-${R_VERSION}/VERSION")
+version_no=${version_value%% *}
+last_changed=$(sed -n '2s/^Last Changed Date: //p' \
+  "$SOURCES/R-${R_VERSION}/SVN-REVISION")
+rw_version=$("$LOCAL_RSCRIPT" --vanilla \
+  "$SOURCES/R-${R_VERSION}/src/gnuwin32/fixed/rwver.R")
+rw_tools_version=${rw_version%.*}
+[[ "$version_no" == "$R_VERSION" &&
+   "$last_changed" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ &&
+   "$rw_version" == "R-$R_VERSION" && "$rw_tools_version" == R-4.6 ]] ||
+  fail "pinned R source produced unexpected manual version metadata"
+{
+  printf '@set VERSIONno %s\n' "$version_no"
+  printf '@set VERSION %s (%s)\n' "$version_value" "$last_changed"
+  printf '@set RWVERSION %s\n' "$rw_version"
+  printf '@set RWTVERSION %s\n' "$rw_tools_version"
+} > "$manual_build/version.texi"
+
+source_date_epoch=$(/usr/bin/date -u -d "$last_changed 00:00:00Z" +%s)
+[[ "$source_date_epoch" =~ ^[0-9]+$ ]] ||
+  fail "could not derive a deterministic timestamp from pinned R source metadata"
+for manual in R-exts R-ints R-admin; do
+  /usr/bin/env -i \
+    "HOME=$manual_build/home" "USER=$(id -un)" "LOGNAME=$(id -un)" \
+    "PATH=$TINYTEX_BIN:$ROOT/.local/toolchain/bin:/usr/bin:/bin" \
+    "LD_LIBRARY_PATH=${LD_LIBRARY_PATH:-}" \
+    "TMPDIR=$manual_build/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "SOURCE_DATE_EPOCH=$source_date_epoch" "FORCE_SOURCE_DATE=1" \
+    "TEXMFVAR=$manual_build/texmf-var" \
+    "TEXMFCONFIG=$manual_build/texmf-config" \
+    "TEXMFHOME=$manual_build/texmf-home" \
+    "TEXMFCACHE=$manual_build/texmf-cache" \
+    "VARTEXFONTS=$manual_build/vartexfonts" \
+    "TEXINPUTS=$manual_build:$manual_source:" \
+    "TEXINDEX_AWK=$reference_awk" \
+    "TEXINDEX_SCRIPT=$manual_build/texindex.awk" \
+    "R_TEXI2DVICMD=$LOCAL_TEXI2DVI" "TEXI2DVI=$LOCAL_TEXI2DVI" \
+    "$LOCAL_TEXI2DVI" --quiet --pdf --build=clean \
+      -I "$manual_build" -I "$manual_source" \
+      --output="$manual_build/output/$manual.pdf" \
+      "$manual_source/$manual.texi"
+  generated_pdf="$manual_build/output/$manual.pdf"
+  [[ -s "$generated_pdf" && ! -L "$generated_pdf" &&
+     "$(head -c 5 "$generated_pdf")" == %PDF- ]] ||
+    fail "local Texinfo build did not produce $manual.pdf"
+done
+for manual in R-exts R-ints R-admin; do
+  generated_pdf="$manual_build/output/$manual.pdf"
+  cp -p "$generated_pdf" "$DOCS/$manual.pdf.new"
+  mv -f "$DOCS/$manual.pdf.new" "$DOCS/$manual.pdf"
+  cp -p "$manual_source/$manual.texi" "$DOCS/$manual.texi.new"
+  mv -f "$DOCS/$manual.texi.new" "$DOCS/$manual.texi"
+done
+
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'r_version\t%s\n' "$R_VERSION"
+  printf 'r_archive_sha256\t%s\n' "$(sha256_value "$archive")"
+  printf 'r_tree_manifest_sha256\t%s\n' "${r_tree_sha256[$R_VERSION]}"
+  printf 'tinytex_tree_manifest_sha256\t%s\n' "$tinytex_tree_sha"
+  printf 'texinfo_archive_sha256\t%s\n' "$texinfo_archive_sha"
+  printf 'texinfo_tex_sha256\t%s\n' "$texinfo_member_sha"
+  printf 'txi_en_tex_sha256\t%s\n' "$texinfo_language_member_sha"
+  printf 'texindex_awk_sha256\t%s\n' "$texinfo_index_member_sha"
+  printf 'awk_version\t%s\n' "$reference_awk_version"
+  printf 'awk_sha256\t%s\n' "$reference_awk_sha"
+  printf 'rscript_sha256\t%s\n' "$(sha256_value "$LOCAL_RSCRIPT")"
+  printf 'texi2dvi_sha256\t%s\n' "$(sha256_value "$LOCAL_TEXI2DVI")"
+  printf 'pdftex_sha256\t%s\n' "$(sha256_value "$TINYTEX_BIN/pdftex")"
+  printf 'makeindex_sha256\t%s\n' "$(sha256_value "$TINYTEX_BIN/makeindex")"
+  printf 'source_date_epoch\t%s\n' "$source_date_epoch"
+} > "$DOCS/manual-build.tsv.new"
+mv -f "$DOCS/manual-build.tsv.new" "$DOCS/manual-build.tsv"
+
+reference_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 GIT_NO_LAZY_FETCH=1 \
+    GIT_TERMINAL_PROMPT=0 "$LOCAL_GIT" \
+      -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false "$@"
+}
+
+checkout_rows=()
+authenticate_checkout() {
+  local name=$1 url=$2 commit=$3 path="$SOURCES/$1"
+  local top git_directory head tree pre_status status grafts alternates
+  local local_rewrites local_filters submodule_count fresh=false
+  local -a remotes origin_urls origin_pushurls replacements
+
+  assert_plain_directory_chain "$path"
+  if [[ ! -e "$path" ]]; then
+    [[ "$OFFLINE" == false ]] ||
+      fail "offline mode requires the checkout $path"
+    reference_git init --quiet --template= "$path"
+    reference_git -C "$path" remote add origin "$url"
+    fresh=true
+  fi
+  [[ -d "$path" && ! -L "$path" && -d "$path/.git" &&
+     ! -L "$path/.git" ]] ||
+    fail "$name checkout or its Git directory is missing, invalid, or symbolic"
+  top=$(reference_git -C "$path" rev-parse --show-toplevel)
+  git_directory=$(reference_git -C "$path" rev-parse --absolute-git-dir)
+  [[ "$(cd "$top" && pwd -P)" == "$path" &&
+     "$(cd "$git_directory" && pwd -P)" == "$path/.git" ]] ||
+    fail "$name checkout is not a plain primary Git worktree"
+
+  grafts="$path/.git/info/grafts"
+  alternates="$path/.git/objects/info/alternates"
+  [[ ! -e "$grafts" && ! -L "$grafts" ]] ||
+    fail "$name checkout uses Git grafts; recreate $path before rerunning"
+  [[ ! -e "$alternates" && ! -L "$alternates" ]] ||
+    fail "$name checkout uses alternate objects; recreate $path before rerunning"
+  mapfile -t replacements < <(
+    reference_git -C "$path" for-each-ref --format='%(refname)' refs/replace
+  )
+  [[ ${#replacements[@]} -eq 0 ]] ||
+    fail "$name checkout has replacement refs; recreate $path before rerunning"
+
+  mapfile -t remotes < <(reference_git -C "$path" remote)
+  mapfile -t origin_urls < <(
+    reference_git -C "$path" config --local --get-all remote.origin.url
+  )
+  mapfile -t origin_pushurls < <(
+    reference_git -C "$path" config --local --get-all remote.origin.pushurl
+  )
+  local_rewrites=$(reference_git -C "$path" config --local --get-regexp \
+    '^url\..*\.(insteadof|pushinsteadof)$' || true)
+  local_filters=$(reference_git -C "$path" config --local --get-regexp \
+    '^filter\.' || true)
+  [[ ${#remotes[@]} -eq 1 && "${remotes[0]}" == origin &&
+     ${#origin_urls[@]} -eq 1 && "${origin_urls[0]}" == "$url" &&
+     ${#origin_pushurls[@]} -eq 0 && -z "$local_rewrites" &&
+     -z "$local_filters" ]] ||
+    fail "$name checkout has origin or filter configuration drift; recreate $path before rerunning"
+
+  if [[ "$fresh" == false ]]; then
+    pre_status=$(reference_git -C "$path" status --porcelain=v1 \
+      --untracked-files=all --ignored=matching)
+    [[ -z "$pre_status" ]] ||
+      fail "$name checkout has tracked, untracked, or ignored material; move it aside or recreate $path before rerunning"
+  fi
+
+  if [[ "$OFFLINE" == false ]]; then
+    reference_git -C "$path" fetch --force --no-tags --depth=1 "$url" "$commit"
+  else
+    reference_git -C "$path" cat-file -e "${commit}^{commit}" ||
+      fail "offline mode lacks $name commit $commit"
+  fi
+
+  submodule_count=$(reference_git -C "$path" ls-tree -r "$commit" | \
+    "$reference_awk" \
+      "\$1 == \"160000\" { count += 1 } END { print count + 0 }")
+  [[ "$submodule_count" == 0 ]] ||
+    fail "$name checkout contains Git submodules and cannot be materialized exactly"
+
+  reference_git -C "$path" switch --detach "$commit"
+  head=$(reference_git -C "$path" rev-parse 'HEAD^{commit}')
+  tree=$(reference_git -C "$path" rev-parse 'HEAD^{tree}')
+  status=$(reference_git -C "$path" status --porcelain=v1 \
+    --untracked-files=all --ignored=matching)
+  mapfile -t origin_urls < <(reference_git -C "$path" remote get-url --all origin)
+  [[ "$head" == "$commit" && -z "$status" &&
+     ${#origin_urls[@]} -eq 1 && "${origin_urls[0]}" == "$url" ]] ||
+    fail "$name checkout did not normalize to its exact commit and origin"
+  if reference_git -C "$path" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    fail "$name checkout did not leave HEAD detached"
+  fi
+  reference_git -C "$path" diff --quiet --exit-code "$commit" --
+  reference_git -C "$path" diff --cached --quiet --exit-code "$commit" --
+  checkout_rows+=("$(printf '%s\t%s\t%s\t%s' "$name" "$url" "$commit" "$tree")")
+}
+
+authenticate_checkout \
+  data.table https://github.com/Rdatatable/data.table.git "$DATATABLE_COMMIT"
+authenticate_checkout \
+  rchk https://github.com/kalibera/rchk.git "$RCHK_COMMIT"
+authenticate_checkout \
+  r-hub-containers https://github.com/r-hub/containers.git \
+  "$RHUB_CONTAINERS_COMMIT"
+
+printf '%s\n' "$DATATABLE_COMMIT" > "$DOCS/data.table-commit.txt.new"
+mv -f "$DOCS/data.table-commit.txt.new" "$DOCS/data.table-commit.txt"
+printf '%s\n' "$RCHK_COMMIT" > "$DOCS/rchk-commit.txt.new"
+mv -f "$DOCS/rchk-commit.txt.new" "$DOCS/rchk-commit.txt"
+printf '%s\n' "$RHUB_CONTAINERS_COMMIT" \
+  > "$DOCS/r-hub-containers-commit.txt.new"
+mv -f "$DOCS/r-hub-containers-commit.txt.new" \
+  "$DOCS/r-hub-containers-commit.txt"
+{
+  printf 'name\torigin\tcommit\ttree\n'
+  printf '%s\n' "${checkout_rows[@]}"
+} > "$DOCS/git-checkouts.tsv.new"
+mv -f "$DOCS/git-checkouts.tsv.new" "$DOCS/git-checkouts.tsv"
+
+checksum_inputs=(
+  "${r_archives[@]}" "$texinfo_archive" "$reference_awk_archive"
+  "${r_receipts[@]}"
+  "$DOCS/R-exts.pdf" "$DOCS/R-ints.pdf" "$DOCS/R-admin.pdf"
+  "$DOCS/R-exts.texi" "$DOCS/R-ints.texi" "$DOCS/R-admin.texi"
+  "$DOCS/manual-build.tsv" "$DOCS/git-checkouts.tsv"
+  "$DOCS/data.table-commit.txt" "$DOCS/rchk-commit.txt"
+  "$DOCS/r-hub-containers-commit.txt"
+)
+{
+  for file in "${checksum_inputs[@]}"; do
+    printf '%s  %s\n' "$(sha256_value "$file")" "$(basename "$file")"
+  done
+} > "$DOCS/SHA256SUMS.new"
+mv -f "$DOCS/SHA256SUMS.new" "$DOCS/SHA256SUMS"

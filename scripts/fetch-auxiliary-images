@@ -1,0 +1,139 @@
+#!/usr/bin/env sh
+
+set -eu
+
+SCRIPT_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+ROOT=$(CDPATH='' cd -- "$SCRIPT_DIRECTORY/.." && pwd -P)
+MANIFEST="$ROOT/environment/auxiliary-images.tsv"
+PODMAN_LOCAL="$ROOT/scripts/podman-local"
+
+fail() {
+  printf '%s\n' "fetch-auxiliary-images: $*" >&2
+  exit 1
+}
+
+assert_plain_directory_chain() {
+  _plain_path=$1
+  case "$_plain_path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed path escaped the repository: $_plain_path" ;;
+  esac
+  [ -d "$ROOT" ] && [ ! -L "$ROOT" ] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  _plain_current=$ROOT
+  _plain_remainder=${_plain_path#"$ROOT"}
+  while [ -n "$_plain_remainder" ]; do
+    _plain_remainder=${_plain_remainder#/}
+    _plain_component=${_plain_remainder%%/*}
+    case "$_plain_remainder" in
+      */*) _plain_remainder=${_plain_remainder#*/} ;;
+      *) _plain_remainder= ;;
+    esac
+    [ -n "$_plain_component" ] || continue
+    _plain_current="$_plain_current/$_plain_component"
+    [ ! -L "$_plain_current" ] ||
+      fail "refusing symbolic managed directory: $_plain_current"
+    [ ! -e "$_plain_current" ] || [ -d "$_plain_current" ] ||
+      fail "managed path is not a directory: $_plain_current"
+  done
+}
+
+require_plain_directory() {
+  _required_directory=$1
+  assert_plain_directory_chain "$_required_directory"
+  [ -d "$_required_directory" ] && [ ! -L "$_required_directory" ] ||
+    fail "required directory is missing, non-directory, or symbolic: $_required_directory"
+  [ "$(CDPATH='' cd -- "$_required_directory" && pwd -P)" = \
+      "$_required_directory" ] ||
+    fail "required directory is not canonical: $_required_directory"
+}
+
+require_plain_file() {
+  _required_file=$1
+  require_plain_directory "${_required_file%/*}"
+  [ -f "$_required_file" ] && [ ! -L "$_required_file" ] ||
+    fail "required input is absent, non-regular, or symbolic: $_required_file"
+}
+
+require_plain_executable() {
+  _required_executable=$1
+  require_plain_file "$_required_executable"
+  [ -x "$_required_executable" ] ||
+    fail "required input is not executable: $_required_executable"
+}
+
+if [ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]; then
+  printf '%s\n' \
+    "fetch-auxiliary-images: activate the local environment first: . scripts/activate" \
+    >&2
+  exit 1
+fi
+require_plain_file "$MANIFEST"
+require_plain_executable "$PODMAN_LOCAL"
+
+tab=$(printf '\t')
+exec 7<"$MANIFEST"
+IFS= read -r manifest_header <&7 ||
+  fail "auxiliary image manifest is empty"
+expected_header="purpose${tab}image${tab}digest${tab}source_commit${tab}resolved_utc"
+[ "$manifest_header" = "$expected_header" ] ||
+  fail "auxiliary image manifest header is unexpected"
+awk -F '\t' '
+  NR > 1 {
+    if (NF != 5) exit 1
+    count += 1
+  }
+  END { if (count != 2) exit 1 }
+' "$MANIFEST" ||
+  fail "auxiliary image manifest must contain exactly two five-field rows"
+
+row_count=0
+purpose=''
+image=''
+digest=''
+source_commit=''
+resolved_utc=''
+extra=''
+while IFS="$tab" read -r purpose image digest source_commit resolved_utc extra <&7 ||
+    [ -n "${purpose}${image}${digest}${source_commit}${resolved_utc}${extra}" ]; do
+  row_count=$((row_count + 1))
+  [ -z "$extra" ] || fail "auxiliary image manifest row has extra fields"
+  case "$row_count:$purpose:$image" in
+    '1:rchk:ghcr.io/r-hub/containers/rchk') ;;
+    '2:valgrind-reference:ghcr.io/r-hub/containers/valgrind') ;;
+    *) fail "auxiliary image manifest has an unexpected row identity" ;;
+  esac
+  digest_hex=${digest#sha256:}
+  case "$digest" in
+    sha256:*) ;;
+    *) digest_hex=invalid ;;
+  esac
+  case "$digest_hex" in
+    *[!0-9a-f]*) digest_hex=invalid ;;
+  esac
+  if [ "${#digest_hex}" -ne 64 ]; then
+    fail "invalid digest for $purpose: $digest"
+  fi
+  case "$source_commit" in
+    *[!0-9a-f]*|'') fail "invalid source commit for $purpose" ;;
+  esac
+  [ "${#source_commit}" -eq 40 ] || fail "invalid source commit for $purpose"
+  printf '%s\n' "$resolved_utc" |
+    grep -Eq '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' ||
+    fail "invalid resolved timestamp for $purpose"
+  reference="$image@$digest"
+  printf '%s\n' "Pulling $purpose: $reference"
+  "$PODMAN_LOCAL" pull "$reference"
+  "$PODMAN_LOCAL" image exists "$reference"
+  printf '%s\n' \
+    "Pinned source $source_commit; digest resolved $resolved_utc"
+  purpose=''
+  image=''
+  digest=''
+  source_commit=''
+  resolved_utc=''
+  extra=''
+done
+exec 7<&-
+[ "$row_count" -eq 2 ] ||
+  fail "auxiliary image manifest must contain exactly two pinned rows"

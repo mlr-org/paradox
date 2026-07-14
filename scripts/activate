@@ -1,0 +1,262 @@
+#!/usr/bin/env sh
+# shellcheck disable=SC2317 # return-or-exit idiom supports sourcing and execution.
+# Source this file from the repository root:
+#   . scripts/activate
+
+if [ ! -f DESCRIPTION ]; then
+  echo "scripts/activate must be sourced from the paradox repository root" >&2
+  return 1 2>/dev/null || exit 1
+fi
+
+PARADOX_REQUESTED_ROOT=$(pwd -P)
+PARADOX_ROOT=$PARADOX_REQUESTED_ROOT
+PARADOX_PREFIX="$PARADOX_ROOT/.local/toolchain"
+unset PARADOX_REQUESTED_ROOT
+
+paradox_activation_error() {
+  echo "$*" >&2
+  return 1
+}
+
+# Every directory that activation writes to, or selects as an executable root,
+# must be an ordinary directory reached without following a symbolic link.  In
+# particular, mkdir -p must never turn a repository-local cache name into a
+# write through a pre-existing outward link.
+paradox_require_plain_directory_chain() {
+  paradox_path=$1
+  case "$paradox_path" in
+    "$PARADOX_ROOT"|"$PARADOX_ROOT"/*) ;;
+    *) paradox_activation_error "Managed path escaped the repository: $paradox_path" || return 1 ;;
+  esac
+
+  paradox_current=$PARADOX_ROOT
+  paradox_remainder=${paradox_path#"$PARADOX_ROOT"}
+  while [ -n "$paradox_remainder" ]; do
+    paradox_remainder=${paradox_remainder#/}
+    paradox_component=${paradox_remainder%%/*}
+    if [ "$paradox_component" = "$paradox_remainder" ]; then
+      paradox_remainder=
+    else
+      paradox_remainder=${paradox_remainder#*/}
+    fi
+    [ -n "$paradox_component" ] || continue
+    paradox_current="$paradox_current/$paradox_component"
+    if [ -L "$paradox_current" ]; then
+      paradox_activation_error "Refusing symbolic managed directory: $paradox_current" || return 1
+    fi
+    if [ -e "$paradox_current" ] && [ ! -d "$paradox_current" ]; then
+      paradox_activation_error "Managed directory path is not a directory: $paradox_current" || return 1
+    fi
+  done
+}
+
+for paradox_managed_directory in \
+  "$PARADOX_ROOT/.local" \
+  "$PARADOX_ROOT/.local/bin" \
+  "$PARADOX_ROOT/.local/micromamba" \
+  "$PARADOX_ROOT/.local/toolchain" \
+  "$PARADOX_ROOT/.local/toolchain/bin" \
+  "$PARADOX_ROOT/.local/R" \
+  "$PARADOX_ROOT/.local/R/library" \
+  "$PARADOX_ROOT/.local/tmp" \
+  "$PARADOX_ROOT/.local/reticulate" \
+  "$PARADOX_ROOT/.local/checks" \
+  "$PARADOX_ROOT/.local/texmf" \
+  "$PARADOX_ROOT/.local/texmf/var" \
+  "$PARADOX_ROOT/.local/texmf/config" \
+  "$PARADOX_ROOT/.local/texmf/home" \
+  "$PARADOX_ROOT/.local/texmf/cache" \
+  "$PARADOX_ROOT/.local/texmf/fonts" \
+  "$PARADOX_ROOT/.local/tinytex" \
+  "$PARADOX_ROOT/.local/quarto" \
+  "$PARADOX_ROOT/.local/quarto/1.9.38" \
+  "$PARADOX_ROOT/.cache" \
+  "$PARADOX_ROOT/.cache/R" \
+  "$PARADOX_ROOT/.cache/ccache" \
+  "$PARADOX_ROOT/.cache/pip" \
+  "$PARADOX_ROOT/.cache/uv"
+do
+  if ! paradox_require_plain_directory_chain "$paradox_managed_directory"; then
+    unset paradox_managed_directory paradox_path paradox_current paradox_remainder paradox_component
+    unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+    return 1 2>/dev/null || exit 1
+  fi
+done
+unset paradox_managed_directory paradox_path paradox_current paradox_remainder paradox_component
+
+if [ -L "$PARADOX_PREFIX/bin/R" ] || [ ! -f "$PARADOX_PREFIX/bin/R" ] ||
+    [ ! -x "$PARADOX_PREFIX/bin/R" ] ||
+    [ -L "$PARADOX_PREFIX/bin/Rscript" ] ||
+    [ ! -f "$PARADOX_PREFIX/bin/Rscript" ] ||
+    [ ! -x "$PARADOX_PREFIX/bin/Rscript" ]; then
+  echo "Local toolchain not found; run scripts/bootstrap first" >&2
+  unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+  return 1 2>/dev/null || exit 1
+fi
+
+# Re-sourcing activation must repair the complete selected environment.  Clear
+# inputs through which a parent shell can inject an R library or startup file,
+# a compiler include/library, or pkg-config/CMake configuration.  The compiler
+# hooks below then rebuild their flags solely from the pinned local prefix.
+if ! unset \
+  PARADOX_ACTIVE_ROOT \
+  R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE \
+  R_ENVIRON R_ENVIRON_USER R_PROFILE R_PROFILE_USER \
+  R_MAKEVARS_SITE R_MAKEVARS_USER R_HISTFILE R_TEXI2DVICMD \
+  RSTUDIO_WHICH_R RSTUDIO_WHICH_R_PREV \
+  CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+  CC_FOR_BUILD CPP_FOR_BUILD CXX_FOR_BUILD FC_FOR_BUILD \
+  AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
+  ADDR2LINE CXXFILT ELFEDIT GPROF \
+  CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS FORTRANFLAGS LDFLAGS LDFLAGS_LD \
+  DEBUG_CFLAGS DEBUG_CPPFLAGS DEBUG_CXXFLAGS DEBUG_FFLAGS DEBUG_FORTRANFLAGS \
+  CXX11 CXX14 CXX17 CXX20 CXX23 \
+  CXX11FLAGS CXX14FLAGS CXX17FLAGS CXX20FLAGS CXX23FLAGS \
+  CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH OBJC_INCLUDE_PATH \
+  LIBRARY_PATH LD_LIBRARY_PATH DYLD_LIBRARY_PATH DYLD_FALLBACK_LIBRARY_PATH \
+  COMPILER_PATH GCC_EXEC_PREFIX LIBCLANG_PATH \
+  PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+  CMAKE_PREFIX_PATH CMAKE_MODULE_PATH CMAKE_TOOLCHAIN_FILE CMAKE_ARGS \
+  CMAKE_GENERATOR CMAKE_MAKE_PROGRAM CMAKE_PROJECT_INCLUDE \
+  CMAKE_PROJECT_INCLUDE_BEFORE CMAKE_USER_MAKE_RULES_OVERRIDE \
+  MESON_ARGS CONFIG_SITE MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
+  JAVA_HOME JAVAC JAVAH JAR \
+  TEXMF TEXMFCNF TEXMFVAR TEXMFCONFIG TEXMFHOME TEXMFCACHE TEXI2DVI \
+  TEXMFSYSVAR TEXMFSYSCONFIG TEXMFLOCAL TEXMFDIST TEXMFDBS \
+  TEXINPUTS BIBINPUTS BSTINPUTS TEXFORMATS VARTEXFONTS \
+  TEX LATEX PDFLATEX PDFTEX XELATEX LUALATEX BIBTEX BIBER \
+  MAKEINDEX TEXINDEX TEXINDY DVIPS DVIPDF DVIPDFM DVIPDFMX \
+  CONDA_BUILD \
+  CONDA_BUILD_SYSROOT CONDA_BUILD_CROSS_COMPILATION QEMU_LD_PREFIX \
+  CONDA_PREFIX MAMBA_ROOT_PREFIX \
+  MACOSX_DEPLOYMENT_TARGET SDKROOT XML_CATALOG_FILES
+then
+  echo "Could not clear an inherited R/compiler search or startup variable" >&2
+  unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+  return 1 2>/dev/null || exit 1
+fi
+
+export PARADOX_ROOT
+export MAMBA_ROOT_PREFIX="$PARADOX_ROOT/.local/micromamba"
+export CONDA_PREFIX="$PARADOX_PREFIX"
+export R_LIBS_USER="$PARADOX_ROOT/.local/R/library"
+export R_LIBS_SITE=
+export R_ENVIRON_USER="$PARADOX_ROOT/environment/Renviron"
+export R_PROFILE_USER="$PARADOX_ROOT/environment/Rprofile.R"
+export R_MAKEVARS_USER="$PARADOX_ROOT/environment/Makevars"
+export R_HISTFILE=/dev/null
+export TMPDIR="$PARADOX_ROOT/.local/tmp"
+export XDG_CACHE_HOME="$PARADOX_ROOT/.cache"
+export R_USER_CACHE_DIR="$PARADOX_ROOT/.cache/R"
+export CCACHE_DIR="$PARADOX_ROOT/.cache/ccache"
+export PIP_CACHE_DIR="$PARADOX_ROOT/.cache/pip"
+export UV_CACHE_DIR="$PARADOX_ROOT/.cache/uv"
+export RETICULATE_MINICONDA_PATH="$PARADOX_ROOT/.local/reticulate"
+export RETICULATE_USE_MANAGED_VENV=yes
+export PARADOX_TINYTEX_ROOT="$PARADOX_ROOT/.local/tinytex"
+export TEXMFVAR="$PARADOX_ROOT/.local/texmf/var"
+export TEXMFCONFIG="$PARADOX_ROOT/.local/texmf/config"
+export TEXMFHOME="$PARADOX_ROOT/.local/texmf/home"
+export TEXMFCACHE="$PARADOX_ROOT/.local/texmf/cache"
+export VARTEXFONTS="$PARADOX_ROOT/.local/texmf/fonts"
+export R_TEXI2DVICMD="$PARADOX_PREFIX/bin/texi2dvi"
+export TEXI2DVI="$R_TEXI2DVICMD"
+PARADOX_TINYTEX_BIN="$PARADOX_TINYTEX_ROOT/bin/x86_64-linux"
+PARADOX_QUARTO_BIN="$PARADOX_ROOT/.local/quarto/1.9.38/bin"
+PARADOX_LOCAL_PATH="$PARADOX_PREFIX/bin:$PARADOX_ROOT/.local/bin"
+if [ -x "$PARADOX_QUARTO_BIN/quarto" ]; then
+  PARADOX_LOCAL_PATH="$PARADOX_QUARTO_BIN:$PARADOX_LOCAL_PATH"
+fi
+if [ -d "$PARADOX_TINYTEX_ROOT" ]; then
+  for PARADOX_TINYTEX_TOOL in pdflatex kpsewhich makeindex; do
+    if [ ! -x "$PARADOX_TINYTEX_BIN/$PARADOX_TINYTEX_TOOL" ]; then
+      echo "Incomplete repository-local TinyTeX: missing $PARADOX_TINYTEX_TOOL" >&2
+      unset PARADOX_TINYTEX_TOOL
+      unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+      return 1 2>/dev/null || exit 1
+    fi
+  done
+  unset PARADOX_TINYTEX_TOOL
+  PARADOX_LOCAL_PATH="$PARADOX_TINYTEX_BIN:$PARADOX_LOCAL_PATH"
+fi
+
+# Remove prior copies of the repository-owned entries before prepending them.
+# This makes activation idempotent while retaining ordinary host utilities that
+# are not part of R or compiler configuration.
+PARADOX_CLEAN_PATH=
+PARADOX_PATH_REMAINDER=${PATH:-}
+while :; do
+  case "$PARADOX_PATH_REMAINDER" in
+    *:*)
+      PARADOX_PATH_ENTRY=${PARADOX_PATH_REMAINDER%%:*}
+      PARADOX_PATH_REMAINDER=${PARADOX_PATH_REMAINDER#*:}
+      ;;
+    *)
+      PARADOX_PATH_ENTRY=$PARADOX_PATH_REMAINDER
+      PARADOX_PATH_REMAINDER=
+      ;;
+  esac
+  case "$PARADOX_PATH_ENTRY" in
+    ""|"$PARADOX_PREFIX/bin"|"$PARADOX_ROOT/.local/bin"|\
+      "$PARADOX_TINYTEX_BIN"|"$PARADOX_QUARTO_BIN") ;;
+    *)
+      case ":$PARADOX_CLEAN_PATH:" in
+        *:"$PARADOX_PATH_ENTRY":*) ;;
+        *) PARADOX_CLEAN_PATH=${PARADOX_CLEAN_PATH:+"$PARADOX_CLEAN_PATH:"}$PARADOX_PATH_ENTRY ;;
+      esac
+      ;;
+  esac
+  [ -n "$PARADOX_PATH_REMAINDER" ] || break
+done
+export PATH="$PARADOX_LOCAL_PATH${PARADOX_CLEAN_PATH:+:$PARADOX_CLEAN_PATH}"
+export PKG_CONFIG="$PARADOX_PREFIX/bin/pkg-config"
+export PKG_CONFIG_PATH="$PARADOX_PREFIX/lib/pkgconfig:$PARADOX_PREFIX/share/pkgconfig"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+export CONFIG_SITE=/dev/null
+
+mkdir -p \
+  "$R_LIBS_USER" "$TMPDIR" "$R_USER_CACHE_DIR" \
+  "$CCACHE_DIR" "$PIP_CACHE_DIR" "$UV_CACHE_DIR" \
+  "$RETICULATE_MINICONDA_PATH" "$TEXMFVAR" "$TEXMFCONFIG" \
+  "$TEXMFHOME" "$TEXMFCACHE" "$VARTEXFONTS"
+
+# Conda compiler packages use activation hooks to select their target-prefixed
+# binaries and sysroot. Source those hooks explicitly so this lightweight
+# activation works in both zsh and POSIX-compatible shells without installing a
+# global micromamba shell hook.
+for PARADOX_HOOK in "$PARADOX_PREFIX"/etc/conda/activate.d/*.sh; do
+  if [ -f "$PARADOX_HOOK" ]; then
+    # shellcheck disable=SC1090
+    if ! . "$PARADOX_HOOK"; then
+      echo "Local compiler activation hook failed: $PARADOX_HOOK" >&2
+      unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+      return 1 2>/dev/null || exit 1
+    fi
+  fi
+done
+
+# pkg-config has a compiled-in search path.  PKG_CONFIG_LIBDIR replaces it, so
+# both variables remain deliberately restricted to the authenticated prefix.
+export PKG_CONFIG="$PARADOX_PREFIX/bin/pkg-config"
+export PKG_CONFIG_PATH="$PARADOX_PREFIX/lib/pkgconfig:$PARADOX_PREFIX/share/pkgconfig"
+export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
+unset PKG_CONFIG_SYSROOT_DIR
+
+if [ "$(command -v R)" != "$PARADOX_PREFIX/bin/R" ] ||
+    [ "$(command -v Rscript)" != "$PARADOX_PREFIX/bin/Rscript" ] ||
+    [ "$(R RHOME)" != "$PARADOX_PREFIX/lib/R" ]; then
+  echo "Activation did not select the exact repository-local R runtime" >&2
+  unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true
+  return 1 2>/dev/null || exit 1
+fi
+unset PARADOX_HOOK
+unset PARADOX_TINYTEX_BIN
+unset PARADOX_QUARTO_BIN
+unset PARADOX_LOCAL_PATH
+unset PARADOX_CLEAN_PATH
+unset PARADOX_PATH_REMAINDER
+unset PARADOX_PATH_ENTRY
+export PARADOX_ACTIVE_ROOT="$PARADOX_ROOT"
+
+hash -r 2>/dev/null || true
+unset -f paradox_require_plain_directory_chain paradox_activation_error 2>/dev/null || true

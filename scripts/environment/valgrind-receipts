@@ -1,0 +1,699 @@
+#!/usr/bin/env bash
+# shellcheck disable=SC2016 # retained R validation programs are literal code
+
+# Authenticated receipts for the separately built Valgrind R and its package
+# library.  Callers provide mutual exclusion; this helper makes receipt
+# creation atomic and verification fail closed.
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: valgrind-receipts COMMAND ROOT [PACKAGE_MANIFEST]
+
+Commands:
+  expected-r-configuration  print the one accepted R build configuration
+  verify-r-source           compare the retained source with the pinned archive
+  create-r                  authenticate inputs and create the R tree receipt
+  verify-r                  verify every R input and the complete installed tree
+  validate-package-manifest validate the exact 29-package manifest shape
+  verify-package-archives   verify all archives named by the package manifest
+  create-library            create the package-library receipt
+  verify-library            verify archives, package metadata, and library tree
+EOF
+}
+
+fail() {
+  printf '%s\n' "valgrind-receipts: $*" >&2
+  exit 1
+}
+
+[[ $# -ge 2 ]] || { usage >&2; exit 2; }
+COMMAND=$1
+ROOT=$(cd "$2" && pwd -P)
+shift 2
+
+R_VERSION=4.6.1
+R_ARCHIVE_SHA256=4da6e61d2c0aac5f14a2e7e432cb5fcc269efe83da4293050ba7f03dff4e2cf4
+TOOLCHAIN="$ROOT/.local/toolchain"
+R_SOURCE="$ROOT/.local/sources/R-${R_VERSION}"
+R_ARCHIVE="$ROOT/.cache/downloads/R-${R_VERSION}.tar.gz"
+R_BUILD="$ROOT/.local/build/R-${R_VERSION}-valgrind"
+R_PREFIX="$ROOT/.local/r-valgrind/${R_VERSION}"
+R_BINARY="$R_PREFIX/bin/R"
+R_LIBRARY="$ROOT/.local/r-valgrind/library"
+RECEIPTS="$ROOT/.local/r-valgrind/receipts"
+R_RECEIPT="$RECEIPTS/R-${R_VERSION}"
+LIBRARY_RECEIPT="$RECEIPTS/library"
+SCRIPT_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+TREE_HELPER="$SCRIPT_DIRECTORY/tree-receipt.R"
+SELF="$SCRIPT_DIRECTORY/$(basename "${BASH_SOURCE[0]}")"
+RSCRIPT="$TOOLCHAIN/bin/Rscript"
+CC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
+CXX="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-g++"
+FC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gfortran"
+VALGRIND="$TOOLCHAIN/bin/valgrind"
+VALGRIND_HEADER="$TOOLCHAIN/include/valgrind/valgrind.h"
+AR="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ar"
+RANLIB="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ranlib"
+AS="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-as"
+LD="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ld"
+NM="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-nm"
+STRIP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-strip"
+OBJCOPY="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-objcopy"
+OBJDUMP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-objdump"
+READELF="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-readelf"
+CPP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-cpp"
+MAKE="$TOOLCHAIN/bin/make"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+BUILD_CONFIGURATION="$R_PREFIX/.paradox-build-configuration"
+BUILD_FINGERPRINT="$R_PREFIX/.paradox-build-fingerprint"
+BUILD_CONFIG_H="$R_BUILD/src/include/config.h"
+BUILD_CONFIGURATION_TEXT="$R_BUILD/configuration.txt"
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_LD_LIBRARY_PATH="$TOOLCHAIN/lib"
+LOCAL_TARGET=x86_64-conda-linux-gnu
+LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
+LOCAL_USER=$(/usr/bin/id -un)
+RECEIPT_EMPTY_LIBRARY="$ROOT/.local/r-valgrind/receipt-empty-library"
+
+is_managed_path() {
+  [[ "$1" == "$ROOT" || "$1" == "$ROOT/"* ]]
+}
+
+validate_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  if [[ "$path" != "$ROOT" ]]; then
+    relative=${path#"$ROOT"/}
+    IFS=/ read -r -a components <<< "$relative"
+    for component in "${components[@]}"; do
+      [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+        fail "$label has an unsafe component: $path"
+      current="$current/$component"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a missing, non-directory, or symbolic component: $current"
+    done
+  fi
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label does not resolve canonically inside the repository: $path"
+}
+
+ensure_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  [[ "$path" == "$ROOT" ]] && return 0
+  relative=${path#"$ROOT"/}
+  current=$ROOT
+  IFS=/ read -r -a components <<< "$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "$label has an unsafe component: $path"
+    current="$current/$component"
+    if [[ -e "$current" || -L "$current" ]]; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a non-directory or symbolic component: $current"
+    else
+      mkdir -- "$current" || fail "could not create $label: $current"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label was substituted while being created: $current"
+    fi
+  done
+  validate_plain_directory_chain "$path" "$label"
+}
+
+require_managed_file() {
+  local path=$1 label=${2:-managed file}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is missing, non-regular, or symbolic: $path"
+}
+
+prepare_managed_output() {
+  local path=$1 label=${2:-managed output}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "$label exists but is not a regular file: $path"
+}
+
+prepare_managed_directory_target() {
+  local path=$1 label=${2:-managed directory target}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  if [[ -e "$path" ]]; then
+    validate_plain_directory_chain "$path" "$label"
+  fi
+}
+
+sha256() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+require_file() {
+  if is_managed_path "$1"; then
+    require_managed_file "$1" "required regular file"
+    return
+  fi
+  [[ -f "$1" && ! -L "$1" ]] || fail "required regular file is missing: $1"
+}
+
+require_executable() {
+  if is_managed_path "$1"; then
+    require_managed_file "$1" "required executable"
+  fi
+  [[ -x "$1" && ! -L "$1" ]] || fail "required executable is missing: $1"
+}
+
+require_sha256() {
+  local path=$1
+  local expected=$2
+  require_file "$path"
+  [[ "$(sha256 "$path")" == "$expected" ]] ||
+    fail "SHA-256 mismatch for $path"
+}
+
+validate_plain_directory_chain "$ROOT" "repository root"
+validate_plain_directory_chain "$SCRIPT_DIRECTORY" \
+  "receipt-helper script directory"
+require_managed_file "$SELF" "Valgrind receipt helper"
+
+expected_configuration() {
+  local debug_flags cpp_flags link_flags cc_version
+  debug_flags='-O0 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls'
+  cpp_flags="-I$TOOLCHAIN/include"
+  link_flags="-L$TOOLCHAIN/lib -Wl,-rpath,$TOOLCHAIN/lib -Wl,-rpath-link,$TOOLCHAIN/lib"
+  cc_version=$(env -i "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" \
+    "$CC" -dumpfullversion -dumpversion)
+  printf '%s\n' \
+    "R_VERSION=$R_VERSION" \
+    "CC=$CC" \
+    "CC_VERSION=$cc_version" \
+    "CXX=$CXX" \
+    "FC=$FC" \
+    "AR=$AR" \
+    "RANLIB=$RANLIB" \
+    "AS=$AS" \
+    "LD=$LD" \
+    "NM=$NM" \
+    "STRIP=$STRIP" \
+    "OBJCOPY=$OBJCOPY" \
+    "OBJDUMP=$OBJDUMP" \
+    "READELF=$READELF" \
+    "CPP=$CPP" \
+    "TARGET=$LOCAL_TARGET" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "DEBUG_FLAGS=$debug_flags" \
+    "CPP_FLAGS=$cpp_flags" \
+    "LINK_FLAGS=$link_flags" \
+    "configure=--prefix=$R_PREFIX --with-valgrind-instrumentation=2 --enable-memory-profiling --enable-R-shlib --without-x --without-tcltk --without-readline --without-recommended-packages --disable-nls --with-internal-tzcode"
+}
+
+validate_common_inputs() {
+  validate_plain_directory_chain "$TOOLCHAIN" "repository-local toolchain"
+  require_executable "$RSCRIPT"
+  require_executable "$CC"
+  require_executable "$CXX"
+  require_executable "$FC"
+  require_executable "$AR"
+  require_executable "$RANLIB"
+  require_executable "$AS"
+  require_executable "$LD"
+  require_executable "$NM"
+  require_executable "$STRIP"
+  require_executable "$OBJCOPY"
+  require_executable "$OBJDUMP"
+  require_executable "$READELF"
+  require_executable "$CPP"
+  require_executable "$MAKE"
+  require_executable "$VALGRIND"
+  require_file "$VALGRIND_HEADER"
+  require_file "$TREE_HELPER"
+  require_file "$SELF"
+  require_file "$TOOLCHAIN_LOCK"
+  validate_plain_directory_chain "$LOCAL_SYSROOT" \
+    "project-local compiler sysroot"
+  validate_plain_directory_chain "$ROOT/.local/bin" \
+    "repository-local binary root"
+  require_sha256 "$R_ARCHIVE" "$R_ARCHIVE_SHA256"
+  validate_plain_directory_chain "$R_SOURCE" "verified R source directory"
+  require_file "$R_SOURCE/VERSION"
+  [[ "$(<"$R_SOURCE/VERSION")" == "$R_VERSION" ]] ||
+    fail "R source VERSION does not match $R_VERSION"
+}
+
+validate_r_build_text_evidence() {
+  local expected actual fingerprint
+  validate_common_inputs
+  require_executable "$R_BINARY"
+  require_file "$BUILD_CONFIGURATION"
+  require_file "$BUILD_FINGERPRINT"
+  require_file "$BUILD_CONFIG_H"
+  require_file "$BUILD_CONFIGURATION_TEXT"
+  expected=$(expected_configuration)
+  actual=$(<"$BUILD_CONFIGURATION")
+  [[ "$actual" == "$expected" ]] ||
+    fail "instrumented-R configuration is not the accepted configuration"
+  [[ "$(<"$BUILD_CONFIGURATION_TEXT")" == "$expected" ]] ||
+    fail "retained build-tree configuration differs from the installed configuration"
+  fingerprint=$(printf '%s\n' "$expected" | sha256sum | cut -d ' ' -f 1)
+  [[ "$(<"$BUILD_FINGERPRINT")" == "$fingerprint" ]] ||
+    fail "instrumented-R configuration fingerprint is invalid"
+  grep -Eq '^#define R_MEMORY_PROFILING 1$' "$BUILD_CONFIG_H" ||
+    fail "instrumented R was not built with memory profiling"
+  grep -Eq '^#define VALGRIND_LEVEL 2$' "$BUILD_CONFIG_H" ||
+    fail "instrumented R was not built with Valgrind level 2"
+}
+
+validate_r_runtime_evidence() {
+  ensure_plain_directory_chain "$ROOT/.local/r-valgrind/receipt-home" \
+    "instrumented-R receipt home"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  ensure_plain_directory_chain "$RECEIPT_EMPTY_LIBRARY" \
+    "empty instrumented-R receipt library"
+  env -i \
+    "HOME=$ROOT/.local/r-valgrind/receipt-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_LIBS_USER=$RECEIPT_EMPTY_LIBRARY" \
+    "R_LIBS=$RECEIPT_EMPTY_LIBRARY" "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" "R_HISTFILE=/dev/null" \
+    "TMPDIR=$ROOT/.local/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$R_BINARY" --vanilla --slave -e \
+      'args <- commandArgs(TRUE); prefix <- normalizePath(args[[1L]], mustWork = TRUE); stopifnot(identical(as.character(getRversion()), "4.6.1"), startsWith(normalizePath(R.home()), prefix), isTRUE(capabilities("profmem"))); blas <- normalizePath(unname(extSoftVersion()[["BLAS"]]), mustWork = TRUE); stopifnot(startsWith(blas, prefix), identical(basename(blas), "libRblas.so")); lapack <- normalizePath(file.path(R.home("lib"), "libRlapack.so"), mustWork = TRUE); stopifnot(startsWith(lapack, prefix)); cat("R_HOME=", R.home(), "\nBLAS=", blas, "\nLAPACK=", lapack, "\n", sep = "")' \
+      --args "$R_PREFIX" >/dev/null
+}
+
+validate_r_build_evidence() {
+  validate_r_build_text_evidence
+  validate_r_runtime_evidence
+}
+
+write_r_inputs() {
+  local destination=$1
+  local source_manifest=$2
+  local toolchain_manifest=$3
+  prepare_managed_output "$destination" "instrumented-R input receipt"
+  printf '%s\t%s\n' \
+    schema 1 \
+    kind instrumented-r \
+    r_version "$R_VERSION" \
+    prefix "$R_PREFIX" \
+    r_archive_sha256 "$R_ARCHIVE_SHA256" \
+    r_source_tree_sha256 "$(sha256 "$source_manifest")" \
+    toolchain_tree_sha256 "$(sha256 "$toolchain_manifest")" \
+    toolchain_lock_sha256 "$(sha256 "$TOOLCHAIN_LOCK")" \
+    build_configuration_sha256 "$(sha256 "$BUILD_CONFIGURATION")" \
+    build_config_h_sha256 "$(sha256 "$BUILD_CONFIG_H")" \
+    build_tree_configuration_sha256 "$(sha256 "$BUILD_CONFIGURATION_TEXT")" \
+    cc_sha256 "$(sha256 "$CC")" \
+    cxx_sha256 "$(sha256 "$CXX")" \
+    fc_sha256 "$(sha256 "$FC")" \
+    ar_sha256 "$(sha256 "$AR")" \
+    ranlib_sha256 "$(sha256 "$RANLIB")" \
+    as_sha256 "$(sha256 "$AS")" \
+    ld_sha256 "$(sha256 "$LD")" \
+    nm_sha256 "$(sha256 "$NM")" \
+    strip_sha256 "$(sha256 "$STRIP")" \
+    objcopy_sha256 "$(sha256 "$OBJCOPY")" \
+    objdump_sha256 "$(sha256 "$OBJDUMP")" \
+    readelf_sha256 "$(sha256 "$READELF")" \
+    cpp_sha256 "$(sha256 "$CPP")" \
+    make_sha256 "$(sha256 "$MAKE")" \
+    valgrind_sha256 "$(sha256 "$VALGRIND")" \
+    valgrind_header_sha256 "$(sha256 "$VALGRIND_HEADER")" \
+    receipt_helper_sha256 "$(sha256 "$SELF")" \
+    tree_helper_sha256 "$(sha256 "$TREE_HELPER")" \
+    > "$destination"
+}
+
+write_r_seal() {
+  local directory=$1
+  validate_plain_directory_chain "$directory" "instrumented-R receipt staging directory"
+  prepare_managed_output "$directory/seal.tsv" "instrumented-R receipt seal"
+  printf '%s\t%s\n' \
+    inputs_sha256 "$(sha256 "$directory/inputs.tsv")" \
+    source_tree_sha256 "$(sha256 "$directory/source-tree.tsv")" \
+    toolchain_tree_sha256 "$(sha256 "$directory/toolchain-tree.tsv")" \
+    installed_tree_sha256 "$(sha256 "$directory/installed-tree.tsv")" \
+    > "$directory/seal.tsv"
+}
+
+select_receipt_directory() {
+  local candidate=$1
+  local selected=$2
+  local backup="${selected}.old.$$"
+  validate_plain_directory_chain "$candidate" "staged receipt"
+  prepare_managed_directory_target "$selected" "selected receipt"
+  prepare_managed_directory_target "$backup" "old receipt"
+  rm -rf "$backup"
+  if [[ -e "$selected" || -L "$selected" ]]; then
+    validate_plain_directory_chain "$selected" "selected receipt"
+    mv "$selected" "$backup"
+  fi
+  if mv "$candidate" "$selected"; then
+    validate_plain_directory_chain "$selected" "selected receipt"
+    rm -rf "$backup"
+  else
+    if [[ -e "$backup" || -L "$backup" ]]; then
+      validate_plain_directory_chain "$backup" "old receipt"
+      prepare_managed_directory_target "$selected" "selected receipt"
+      mv "$backup" "$selected"
+    fi
+    fail "could not atomically select receipt $selected"
+  fi
+}
+
+verify_r_source_against_archive() (
+  local destination=${1:-} extraction archive_source source_manifest archive_manifest temporary
+  validate_common_inputs
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  extraction=$(mktemp -d "$ROOT/.local/tmp/r-source-verify.XXXXXX")
+  temporary=$(mktemp -d "$ROOT/.local/tmp/r-source-manifests.XXXXXX")
+  validate_plain_directory_chain "$extraction" "R source verification extraction"
+  validate_plain_directory_chain "$temporary" "R source manifest staging directory"
+  trap 'rm -rf "${extraction:-}" "${temporary:-}"' EXIT
+  /usr/bin/tar -xzf "$R_ARCHIVE" -C "$extraction"
+  archive_source="$extraction/R-${R_VERSION}"
+  validate_plain_directory_chain "$archive_source" \
+    "R archive top-level source directory"
+  source_manifest="$temporary/source-tree.tsv"
+  archive_manifest="$temporary/archive-source-tree.tsv"
+  prepare_managed_output "$source_manifest" "retained R source tree manifest"
+  prepare_managed_output "$archive_manifest" "archive R source tree manifest"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$R_SOURCE" "$source_manifest" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create "$archive_source" "$archive_manifest" >/dev/null
+  if ! cmp -s "$source_manifest" "$archive_manifest"; then
+    diff -u "$archive_manifest" "$source_manifest" | sed -n '1,160p' >&2 || true
+    fail "retained R source tree does not match the verified source archive"
+  fi
+  if [[ -n "$destination" ]]; then
+    prepare_managed_output "$destination" "copied R source tree manifest"
+    cp "$source_manifest" "$destination"
+  fi
+  rm -rf "$extraction" "$temporary"
+  trap - EXIT
+  printf '%s\n' "verified R source matches archive $R_ARCHIVE_SHA256"
+)
+
+create_r_receipt() {
+  local temporary source_manifest final_receipt
+  validate_r_build_evidence
+  ensure_plain_directory_chain "$RECEIPTS" "instrumented-R receipt root"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$RECEIPTS/.R-${R_VERSION}.new.XXXXXX")
+  validate_plain_directory_chain "$temporary" "staged instrumented-R receipt"
+  trap 'rm -rf "${temporary:-}"' EXIT
+  source_manifest="$temporary/source-tree.tsv"
+  verify_r_source_against_archive "$source_manifest" >/dev/null
+  trap 'rm -rf "${temporary:-}"' EXIT
+  prepare_managed_output "$temporary/toolchain-tree.tsv" \
+    "toolchain tree receipt"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+    "$TOOLCHAIN" "$temporary/toolchain-tree.tsv" >/dev/null
+  prepare_managed_output "$temporary/installed-tree.tsv" \
+    "instrumented-R installed tree receipt"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+    "$R_PREFIX" "$temporary/installed-tree.tsv" >/dev/null
+  write_r_inputs "$temporary/inputs.tsv" "$source_manifest" \
+    "$temporary/toolchain-tree.tsv"
+  write_r_seal "$temporary"
+  final_receipt=$R_RECEIPT
+  select_receipt_directory "$temporary" "$final_receipt"
+  trap - EXIT
+  printf '%s\n' "instrumented-R receipt created: $final_receipt"
+}
+
+verify_r_receipt() {
+  local temporary
+  validate_r_build_text_evidence
+  validate_plain_directory_chain "$R_RECEIPT" "instrumented-R receipt"
+  for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv seal.tsv; do
+    require_file "$R_RECEIPT/$name"
+  done
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$ROOT/.local/tmp/r-receipt-verify.XXXXXX")
+  validate_plain_directory_chain "$temporary" \
+    "instrumented-R receipt verification directory"
+  trap 'rm -rf "${temporary:-}"' EXIT
+  write_r_inputs "$temporary/inputs.tsv" "$R_RECEIPT/source-tree.tsv" \
+    "$R_RECEIPT/toolchain-tree.tsv"
+  cmp -s "$temporary/inputs.tsv" "$R_RECEIPT/inputs.tsv" ||
+    fail "instrumented-R input receipt does not match current pinned inputs"
+  for name in source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
+    prepare_managed_output "$temporary/$name" \
+      "instrumented-R receipt verification copy"
+    cp "$R_RECEIPT/$name" "$temporary/$name"
+  done
+  write_r_seal "$temporary"
+  cmp -s "$temporary/seal.tsv" "$R_RECEIPT/seal.tsv" ||
+    fail "instrumented-R receipt seal is invalid"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_SOURCE" "$R_RECEIPT/source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$TOOLCHAIN" "$R_RECEIPT/toolchain-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
+  validate_r_runtime_evidence
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_SOURCE" "$R_RECEIPT/source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$TOOLCHAIN" "$R_RECEIPT/toolchain-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
+  rm -rf "$temporary"
+  trap - EXIT
+  printf '%s\n' "instrumented-R receipt verified: $R_RECEIPT"
+}
+
+validate_package_manifest() {
+  local manifest=$1 package version expected extra count names line_number
+  require_file "$manifest"
+  [[ "$(head -n 1 "$manifest")" == $'package\tversion\tsha256' ]] ||
+    fail "package manifest header is invalid: $manifest"
+  count=0
+  line_number=0
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  names=$(mktemp "$ROOT/.local/tmp/valgrind-package-names.XXXXXX")
+  require_managed_file "$names" "package-name validation scratch file"
+  trap 'rm -f "${names:-}"' RETURN
+  while IFS=$'\t' read -r package version expected extra ||
+      [[ -n "${package}${version}${expected}${extra:-}" ]]; do
+    line_number=$((line_number + 1))
+    if [[ "$line_number" -eq 1 ]]; then
+      continue
+    fi
+    [[ -z "${extra:-}" ]] || fail "package manifest row has extra fields"
+    [[ "$package" =~ ^[A-Za-z][A-Za-z0-9.]*$ ]] ||
+      fail "unsafe package name in manifest: $package"
+    [[ "$version" =~ ^[A-Za-z0-9.+-]+$ ]] ||
+      fail "unsafe package version in manifest for $package"
+    [[ "$expected" =~ ^[0-9a-f]{64}$ ]] ||
+      fail "invalid package SHA-256 for $package"
+    printf '%s\n' "$package" >> "$names"
+    count=$((count + 1))
+  done < "$manifest"
+  [[ "$count" -eq 29 ]] || fail "package manifest must contain exactly 29 packages"
+  [[ -z "$(sort "$names" | uniq -d)" ]] || fail "package manifest contains duplicate names"
+  rm -f "$names"
+  trap - RETURN
+}
+
+verify_package_archives() {
+  local manifest=$1 package version expected extra archive
+  validate_package_manifest "$manifest"
+  while IFS=$'\t' read -r package version expected extra ||
+      [[ -n "${package}${version}${expected}${extra:-}" ]]; do
+    [[ "$package" == package ]] && continue
+    archive="$ROOT/.cache/downloads/valgrind-r-packages/${package}_${version}.tar.gz"
+    require_sha256 "$archive" "$expected"
+  done < "$manifest"
+}
+
+archive_set_sha256() {
+  local manifest=$1 package version expected extra archive temporary
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp "$ROOT/.local/tmp/archive-set.XXXXXX")
+  require_managed_file "$temporary" "package archive-set scratch file"
+  while IFS=$'\t' read -r package version expected extra ||
+      [[ -n "${package}${version}${expected}${extra:-}" ]]; do
+    [[ "$package" == package ]] && continue
+    archive="$ROOT/.cache/downloads/valgrind-r-packages/${package}_${version}.tar.gz"
+    require_file "$archive"
+    printf '%s\t%s\t%s\n' "$package" "$version" "$(sha256 "$archive")" >> "$temporary"
+  done < "$manifest"
+  sha256 "$temporary"
+  rm -f "$temporary"
+}
+
+validate_installed_library() {
+  local manifest=$1 home
+  validate_plain_directory_chain "$R_LIBRARY" "instrumented package library"
+  home="$ROOT/.local/r-valgrind/receipt-home"
+  ensure_plain_directory_chain "$home" "instrumented-R receipt home"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  env -i \
+    "HOME=$home" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_LIBS_USER=$R_LIBRARY" "R_LIBS=$R_LIBRARY" "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" "R_HISTFILE=/dev/null" \
+    "TMPDIR=$ROOT/.local/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$R_BINARY" --vanilla --slave \
+    -e 'args <- commandArgs(TRUE); manifest <- read.delim(args[[1L]], sep = "\t", quote = "", colClasses = "character", check.names = FALSE); lib <- normalizePath(args[[2L]], mustWork = TRUE); stopifnot(identical(names(manifest), c("package", "version", "sha256")), nrow(manifest) == 29L, !anyDuplicated(manifest$package), all(grepl("^[A-Za-z][A-Za-z0-9.]*$", manifest$package)), all(grepl("^[0-9a-f]{64}$", manifest$sha256))); present <- basename(list.dirs(lib, recursive = FALSE, full.names = TRUE)); stopifnot(setequal(present, manifest$package)); for (i in seq_len(nrow(manifest))) { pkg <- manifest$package[[i]]; path <- normalizePath(find.package(pkg, lib.loc = lib), mustWork = TRUE); version <- as.character(packageVersion(pkg, lib.loc = lib)); built <- packageDescription(pkg, lib.loc = lib, fields = "Built"); stopifnot(startsWith(path, paste0(lib, .Platform$file.sep)), identical(version, manifest$version[[i]]), grepl("^R 4\\.6\\.1;", built)); cat(pkg, version, built, sep = "\t"); cat("\n") }' \
+    --args "$manifest" "$R_LIBRARY" >/dev/null
+}
+
+write_library_inputs() {
+  local destination=$1 manifest=$2
+  prepare_managed_output "$destination" "package-library input receipt"
+  printf '%s\t%s\n' \
+    schema 1 \
+    kind instrumented-r-package-library \
+    library "$R_LIBRARY" \
+    package_count 29 \
+    package_manifest_sha256 "$(sha256 "$manifest")" \
+    archive_set_sha256 "$(archive_set_sha256 "$manifest")" \
+    r_receipt_seal_sha256 "$(sha256 "$R_RECEIPT/seal.tsv")" \
+    receipt_helper_sha256 "$(sha256 "$SELF")" \
+    tree_helper_sha256 "$(sha256 "$TREE_HELPER")" \
+    > "$destination"
+}
+
+write_library_seal() {
+  local directory=$1
+  validate_plain_directory_chain "$directory" \
+    "package-library receipt staging directory"
+  prepare_managed_output "$directory/seal.tsv" "package-library receipt seal"
+  printf '%s\t%s\n' \
+    inputs_sha256 "$(sha256 "$directory/inputs.tsv")" \
+    package_manifest_sha256 "$(sha256 "$directory/package-manifest.tsv")" \
+    installed_tree_sha256 "$(sha256 "$directory/installed-tree.tsv")" \
+    > "$directory/seal.tsv"
+}
+
+create_library_receipt() {
+  local manifest=$1 temporary
+  verify_r_receipt >/dev/null
+  verify_package_archives "$manifest"
+  validate_installed_library "$manifest"
+  ensure_plain_directory_chain "$RECEIPTS" "instrumented-R receipt root"
+  temporary=$(mktemp -d "$RECEIPTS/.library.new.XXXXXX")
+  validate_plain_directory_chain "$temporary" "staged package-library receipt"
+  trap 'rm -rf "${temporary:-}"' EXIT
+  prepare_managed_output "$temporary/package-manifest.tsv" \
+    "authenticated package manifest copy"
+  cp "$manifest" "$temporary/package-manifest.tsv"
+  prepare_managed_output "$temporary/installed-tree.tsv" \
+    "package-library installed tree receipt"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" create \
+    "$R_LIBRARY" "$temporary/installed-tree.tsv" >/dev/null
+  write_library_inputs "$temporary/inputs.tsv" "$temporary/package-manifest.tsv"
+  write_library_seal "$temporary"
+  select_receipt_directory "$temporary" "$LIBRARY_RECEIPT"
+  trap - EXIT
+  printf '%s\n' "instrumented package-library receipt created: $LIBRARY_RECEIPT"
+}
+
+verify_library_receipt() {
+  local manifest=$1 temporary
+  verify_r_receipt >/dev/null
+  verify_package_archives "$manifest"
+  validate_plain_directory_chain "$LIBRARY_RECEIPT" \
+    "instrumented package-library receipt"
+  for name in inputs.tsv package-manifest.tsv installed-tree.tsv seal.tsv; do
+    require_file "$LIBRARY_RECEIPT/$name"
+  done
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$ROOT/.local/tmp/library-receipt-verify.XXXXXX")
+  validate_plain_directory_chain "$temporary" \
+    "package-library receipt verification directory"
+  trap 'rm -rf "${temporary:-}"' EXIT
+  cmp -s "$manifest" "$LIBRARY_RECEIPT/package-manifest.tsv" ||
+    fail "package manifest differs from the authenticated library manifest"
+  prepare_managed_output "$temporary/package-manifest.tsv" \
+    "package manifest verification copy"
+  cp "$LIBRARY_RECEIPT/package-manifest.tsv" "$temporary/package-manifest.tsv"
+  write_library_inputs "$temporary/inputs.tsv" "$temporary/package-manifest.tsv"
+  cmp -s "$temporary/inputs.tsv" "$LIBRARY_RECEIPT/inputs.tsv" ||
+    fail "package-library input receipt does not match current pinned inputs"
+  prepare_managed_output "$temporary/installed-tree.tsv" \
+    "installed tree verification copy"
+  cp "$LIBRARY_RECEIPT/installed-tree.tsv" "$temporary/installed-tree.tsv"
+  write_library_seal "$temporary"
+  cmp -s "$temporary/seal.tsv" "$LIBRARY_RECEIPT/seal.tsv" ||
+    fail "package-library receipt seal is invalid"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
+  validate_installed_library "$manifest"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
+  rm -rf "$temporary"
+  trap - EXIT
+  printf '%s\n' "instrumented package-library receipt verified: $LIBRARY_RECEIPT"
+}
+
+case "$COMMAND" in
+  expected-r-configuration)
+    [[ $# -eq 0 ]] || fail "expected-r-configuration takes no package manifest"
+    validate_common_inputs
+    expected_configuration
+    ;;
+  verify-r-source)
+    [[ $# -eq 0 ]] || fail "verify-r-source takes no package manifest"
+    verify_r_source_against_archive
+    ;;
+  create-r)
+    [[ $# -eq 0 ]] || fail "create-r takes no package manifest"
+    create_r_receipt
+    ;;
+  verify-r)
+    [[ $# -eq 0 ]] || fail "verify-r takes no package manifest"
+    verify_r_receipt
+    ;;
+  validate-package-manifest)
+    [[ $# -eq 1 ]] || fail "validate-package-manifest requires PACKAGE_MANIFEST"
+    validate_package_manifest "$1"
+    printf '%s\n' "package manifest verified: $1"
+    ;;
+  verify-package-archives)
+    [[ $# -eq 1 ]] || fail "verify-package-archives requires PACKAGE_MANIFEST"
+    verify_package_archives "$1"
+    printf '%s\n' "package archives verified: $1"
+    ;;
+  create-library)
+    [[ $# -eq 1 ]] || fail "create-library requires PACKAGE_MANIFEST"
+    create_library_receipt "$1"
+    ;;
+  verify-library)
+    [[ $# -eq 1 ]] || fail "verify-library requires PACKAGE_MANIFEST"
+    verify_library_receipt "$1"
+    ;;
+  -h|--help|help)
+    usage
+    ;;
+  *)
+    fail "unknown command: $COMMAND"
+    ;;
+esac

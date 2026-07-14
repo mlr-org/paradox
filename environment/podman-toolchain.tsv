@@ -1,0 +1,2 @@
+version	platform	archive_url	archive_sha256	tree_manifest_sha256
+5.8.2	linux-amd64	https://github.com/mgoltzsche/podman-static/releases/download/v5.8.2/podman-linux-amd64.tar.gz	228b9adf1ba3585d1d72f0a4bb9a669de5ea806d13884b2c43b5e65601a1a580	f4c8c80c18a8c9f21faedbd6ead6e51e350404c2d94695072c8600e4e91370f6

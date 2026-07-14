@@ -171,31 +171,43 @@ Domain = function(cls, grouping,
   storage_type = "list",
   init) {
 
-  if ("internal_tuning" %in% tags) {
-    assert_true(!is.null(cargo$aggr), .var.name = "aggregation function exists")
-  }
-  assert_list(cargo$disable_in_tune, null.ok = TRUE, names = "unique")
-  assert_function(cargo$aggr, null.ok = TRUE)
-  assert_function(cargo$in_tune_fn, null.ok = TRUE)
-  if ((!is.null(cargo$in_tune_fn) || !is.null(cargo$disable_in_tune)) && "internal_tuning" %nin% tags) {
-    # we cannot check the reverse, as parameters in the search space can be tagged with 'internal_tuning'
-    # and not provide in_tune_fn or disable_in_tune
-    stopf("Arguments in_tune_fn and disable_in_tune require the tag 'internal_tuning' to be present.")
-  }
-  if ((is.null(cargo$in_tune_fn) + is.null(cargo$disable_in_tune)) == 1) {
-    stopf("Arguments in_tune_fn and disable_tune_fn must both be present")
-  }
+  # The frame admission gate evaluates only generic metadata promises, in the
+  # historical validation order. Opaque row values remain promises until the
+  # original row-assembly points below. Unsupported or dispatch-capable shapes
+  # return NULL and retain the exact R validation path and diagnostics.
+  native_plan = .Call(C_domain_construct_frame, environment())
+  native = if (is.null(native_plan)) NULL else native_plan[[1L]]
 
-  assert_string(cls)
-  assert_string(grouping)
-  assert_number(lower, na.ok = TRUE)
-  assert_number(upper, na.ok = TRUE)
-  assert_number(tolerance, na.ok = TRUE)
-  if (!is.logical(levels)) assert_character(levels, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
-  assert_list(special_vals)
-  if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
-  assert_character(tags, any.missing = FALSE, unique = TRUE)
-  assert_function(trafo, null.ok = TRUE)
+  if (is.null(native)) {
+    # Keep extensions and every unsupported or invalid shape on the exact
+    # historical validation path. The native routine is a conservative valid
+    # fast gate and never replaces these diagnostics.
+    if ("internal_tuning" %in% tags) {
+      assert_true(!is.null(cargo$aggr), .var.name = "aggregation function exists")
+    }
+    assert_list(cargo$disable_in_tune, null.ok = TRUE, names = "unique")
+    assert_function(cargo$aggr, null.ok = TRUE)
+    assert_function(cargo$in_tune_fn, null.ok = TRUE)
+    if ((!is.null(cargo$in_tune_fn) || !is.null(cargo$disable_in_tune)) && "internal_tuning" %nin% tags) {
+      # we cannot check the reverse, as parameters in the search space can be tagged with 'internal_tuning'
+      # and not provide in_tune_fn or disable_in_tune
+      stopf("Arguments in_tune_fn and disable_in_tune require the tag 'internal_tuning' to be present.")
+    }
+    if ((is.null(cargo$in_tune_fn) + is.null(cargo$disable_in_tune)) == 1) {
+      stopf("Arguments in_tune_fn and disable_tune_fn must both be present")
+    }
+
+    assert_string(cls)
+    assert_string(grouping)
+    assert_number(lower, na.ok = TRUE)
+    assert_number(upper, na.ok = TRUE)
+    assert_number(tolerance, na.ok = TRUE)
+    if (!is.logical(levels)) assert_character(levels, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+    assert_list(special_vals)
+    if (length(special_vals) && !is.null(trafo)) stop("trafo and special_values can not both be given at the same time.")
+    assert_character(tags, any.missing = FALSE, unique = TRUE)
+    assert_function(trafo, null.ok = TRUE)
+  }
 
 
   # depends may be an expression, but may also be quote() or expression()
@@ -213,40 +225,71 @@ Domain = function(cls, grouping,
   trafoexpr = constructorcall$trafo
   constructorcall$trafo = NULL
   constructorcall$depends = NULL
-  reprargs = sapply(names(constructorcall)[-1], get, pos = parent.frame(1), simplify = FALSE)
+  argument_names = names(constructorcall)[-1L]
+  reprargs = if (length(argument_names)) {
+    mget(argument_names, envir = parent.frame(1), inherits = TRUE)
+  } else {
+    list()
+  }
   reprargs$depends = depends_expr
   reprargs$trafo = trafoexpr
   if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
   param_repr = as.call(c(constructorcall[[1]], reprargs))
 
+  param_id = deparse1(param_repr, collapse = "\n", width.cutoff = 80)
+  # Opaque values are not part of native admission. Explicit short-form
+  # arguments may already have been forced by representation capture; hidden
+  # wrapper promises are first observed in this historical row order.
+  default_value = default
+  storage_type_value = storage_type
+  requirements = parse_depends(depends_expr, parent.frame(2))
+  init_given = !missing(init)
+  init_value = if (init_given) init else NULL
+  native_eligible = !is.null(native) &&
+    identical(storage_type_value, native_plan[[2L]])
+
   # domain is a data.table with a few classes.
   # setting `id` to something preliminary so that `domain_assert()` works.
   # we construct this data.table as structure(list(...)), however, since this is *much* faster.
-  param = structure(list(
-      id = deparse1(param_repr, collapse = "\n", width.cutoff = 80),
-      cls = cls, grouping = grouping,
-      cargo = list(cargo),
-      lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
-      special_vals = list(special_vals),
-      default = list(default),
-      storage_type = storage_type,
-      .tags = list(tags),
-      .trafo = list(trafo),
-      .requirements = list(parse_depends(depends_expr, parent.frame(2))),
+  if (!native_eligible) {
+    param = structure(list(
+        id = param_id,
+        cls = cls, grouping = grouping,
+        cargo = list(cargo),
+        lower = lower, upper = upper, tolerance = tolerance, levels = list(levels),
+        special_vals = list(special_vals),
+        default = list(default_value),
+        storage_type = storage_type_value,
+        .tags = list(tags),
+        .trafo = list(trafo),
+        .requirements = list(requirements),
 
-      .init_given = !missing(init),
-      .init = list(if (!missing(init)) init)
-    ),
-    class = c(cls, "Domain", "data.table", "data.frame"),
-    repr = param_repr
-  )
+        .init_given = init_given,
+        .init = list(init_value)
+      ),
+      class = c(cls, "Domain", "data.table", "data.frame"),
+      repr = param_repr
+    )
+  } else {
+    # Authenticate and install every deferred row value before exposing the
+    # native ordinary-list shell as a Domain/data.table object.
+    native[[1L]] = param_id
+    native[[10L]] = list(default_value)
+    native[[11L]] = storage_type_value
+    native[[14L]] = list(requirements)
+    native[[15L]] = init_given
+    native[[16L]] = list(init_value)
+    attr(native, "class") = c(cls, "Domain", "data.table", "data.frame")
+    attr(native, "repr") = param_repr
+    param = native
+  }
 
   if (!is_nodefault(default)) {
     domain_assert(param, list(default))
     if ("required" %in% tags) stop("A 'required' parameter can not have a 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default', but the 'required' indicates that the parameter may not be missing.")
   }
 
-  if (!missing(init)) {
+  if (init_given) {
     if (!is.null(trafo)) stop("Initial value and trafo can not both be given at the same time.")
     domain_assert(param, list(init))
     if (identical(init, default)) warning("Initial value and 'default' value seem to be the same, this is usually a mistake due to a misunderstanding of the meaning of 'default'.\nWhen the method behaves the same as if the parameter value were 'X' whenever the parameter is missing, then 'X' should be a 'default' (but then there is no point in setting it as initial value). 'default' should not be used to indicate the value with which values are initialized.")

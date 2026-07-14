@@ -1,0 +1,210 @@
+#!/usr/bin/env bash
+
+# Fail-closed parsers for retained Valgrind and rchk evidence.  Keeping these
+# parsers independent of the heavyweight harness makes their false-pass cases
+# cheap to exercise in adversarial tests.
+
+set -euo pipefail
+
+fail() {
+  printf '%s\n' "validate-memory-evidence: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  validate-memory-evidence valgrind LOG_DIRECTORY STEM DIAGNOSTIC_REPORT
+  validate-memory-evidence rchk REPORT_DIRECTORY RCHK_LOG ARTIFACT_DIRECTORY
+EOF
+}
+
+[[ $# -ge 1 ]] || { usage >&2; exit 2; }
+COMMAND=$1
+shift
+
+validate_valgrind() {
+  [[ $# -eq 3 ]] || fail "valgrind requires LOG_DIRECTORY STEM DIAGNOSTIC_REPORT"
+  local log_directory=$1 stem=$2 diagnostic_report=$3
+  local log summary_count any_summary_count heap_summary_count leak_shape_count
+  local last_nonempty summary_pid in_use_count total_usage_count
+  local leak_header_count all_freed_count leak_line_count
+  local zero_summary_regex='^==[0-9]+== ERROR SUMMARY: 0 errors from 0 contexts \(suppressed: 0 from 0\)$'
+  local -a logs=()
+  [[ -d "$log_directory" && ! -L "$log_directory" ]] ||
+    fail "Valgrind log directory is missing or symbolic"
+  [[ "$stem" =~ ^[A-Za-z0-9._-]+$ ]] || fail "unsafe Valgrind log stem"
+  mkdir -p "$(dirname "$diagnostic_report")"
+  : > "$diagnostic_report"
+  : > "$diagnostic_report.inventory.tsv"
+  shopt -s nullglob
+  logs=("$log_directory/$stem".*.log)
+  shopt -u nullglob
+  [[ ${#logs[@]} -gt 0 ]] || fail "Valgrind produced no retained logs"
+  for log in "${logs[@]}"; do
+    [[ -f "$log" && ! -L "$log" ]] ||
+      fail "Valgrind log is not a regular file: $log"
+    any_summary_count=$(grep -E -c '^==[0-9]+== ERROR SUMMARY:' "$log" || true)
+    summary_count=$(grep -E -c "$zero_summary_regex" "$log" || true)
+    [[ "$any_summary_count" -eq 1 && "$summary_count" -eq 1 ]] ||
+      fail "Valgrind log lacks exactly one exact suppressed-zero summary: $log"
+    last_nonempty=$(awk 'NF { line = $0 } END { print line }' "$log")
+    [[ "$last_nonempty" =~ $zero_summary_regex ]] ||
+      fail "Valgrind zero-error summary is not the final nonempty line: $log"
+    summary_pid=$(sed -n \
+      's/^==\([0-9][0-9]*\)== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)$/\1/p' \
+      "$log")
+    [[ "$summary_pid" =~ ^[0-9]+$ ]] || fail "could not identify Valgrind log PID"
+    heap_summary_count=$(grep -E -c "^==$summary_pid== HEAP SUMMARY:$" "$log" || true)
+    [[ "$heap_summary_count" -eq 1 ]] ||
+      fail "Valgrind log lacks exactly one heap summary: $log"
+    in_use_count=$(grep -E -c \
+      "^==$summary_pid== +in use at exit: [0-9,]+ bytes in [0-9,]+ blocks$" \
+      "$log" || true)
+    total_usage_count=$(grep -E -c \
+      "^==$summary_pid== +total heap usage: [0-9,]+ allocs, [0-9,]+ frees, [0-9,]+ bytes allocated$" \
+      "$log" || true)
+    [[ "$in_use_count" -eq 1 && "$total_usage_count" -eq 1 ]] ||
+      fail "Valgrind log has an incomplete heap summary: $log"
+    leak_header_count=$(grep -E -c "^==$summary_pid== LEAK SUMMARY:$" "$log" || true)
+    all_freed_count=$(grep -E -c \
+      "^==$summary_pid== All heap blocks were freed -- no leaks are possible$" \
+      "$log" || true)
+    leak_shape_count=$((leak_header_count + all_freed_count))
+    [[ "$leak_shape_count" -eq 1 ]] ||
+      fail "Valgrind log lacks one unambiguous leak result: $log"
+    if [[ "$all_freed_count" -eq 1 ]]; then
+      [[ $(grep -E -c \
+        "^==$summary_pid== +in use at exit: 0 bytes in 0 blocks$" \
+        "$log" || true) -eq 1 ]] ||
+        fail "Valgrind all-freed result contradicts heap usage: $log"
+    else
+      leak_line_count=0
+      for leak_pattern in \
+          'definitely lost: +0 bytes in 0 blocks' \
+          'indirectly lost: +0 bytes in 0 blocks' \
+          'possibly lost: +0 bytes in 0 blocks' \
+          'still reachable: +[0-9,]+ bytes in [0-9,]+ blocks' \
+          'suppressed: +0 bytes in 0 blocks'; do
+        [[ $(grep -E -c "^==$summary_pid== +$leak_pattern$" "$log" || true) -eq 1 ]] ||
+          fail "Valgrind leak summary is incomplete or nonzero: $log"
+        leak_line_count=$((leak_line_count + 1))
+      done
+      [[ "$leak_line_count" -eq 5 ]] || fail "internal leak-summary validation error"
+    fi
+    printf '%s\t%s\n' "$(basename "$log")" \
+      "$(sha256sum "$log" | cut -d ' ' -f 1)" \
+      >> "$diagnostic_report.inventory.tsv"
+    grep -E -H -n \
+      'Invalid (read|write|free)|Conditional jump or move depends on uninitialised|Use of uninitialised|Syscall param .* uninitialised|Mismatched free|Source and destination overlap|ERROR SUMMARY: +[1-9][0-9,]* errors|definitely lost: +[1-9][0-9,]*|indirectly lost: +[1-9][0-9,]*|possibly lost: +[1-9][0-9,]*' \
+      "$log" >> "$diagnostic_report" || true
+  done
+  if [[ -s "$diagnostic_report" ]]; then
+    cat "$diagnostic_report" >&2
+    fail "Valgrind diagnostics were found"
+  fi
+  printf 'valgrind_logs=%s\n' "${#logs[@]}"
+}
+
+validate_rchk() {
+  [[ $# -eq 3 ]] || fail "rchk requires REPORT_DIRECTORY RCHK_LOG ARTIFACT_DIRECTORY"
+  local report_directory=$1 rchk_log=$2 artifacts=$3
+  local report_type report_path report_count analysis_line_count
+  local analyzed_functions registration_count checked_registration_count
+  local registered_functions status_receipt expected_line actual_line
+  local -a receipt_lines=()
+  [[ -d "$report_directory" && ! -L "$report_directory" ]] ||
+    fail "rchk report directory is missing or symbolic"
+  [[ -f "$rchk_log" && ! -L "$rchk_log" ]] ||
+    fail "rchk log is missing or symbolic"
+  mkdir -p "$artifacts"
+  for report_type in bcheck maacheck fficheck; do
+    report_path="$report_directory/paradox.so.$report_type"
+    [[ -f "$report_path" && ! -L "$report_path" ]] ||
+      fail "host-side rchk $report_type report is missing or symbolic"
+  done
+  status_receipt="$report_directory/tool-status.tsv"
+  [[ -f "$status_receipt" && ! -L "$status_receipt" ]] ||
+    fail "host-side rchk tool-status receipt is missing or symbolic"
+  report_count=$(find "$report_directory" -maxdepth 1 -type f \
+    -name 'paradox.so.*check' | wc -l)
+  [[ "$report_count" -eq 3 ]] ||
+    fail "rchk retained an unexpected number of reports"
+  mapfile -t receipt_lines < "$status_receipt"
+  [[ ${#receipt_lines[@]} -eq 4 ]] ||
+    fail "rchk tool-status receipt has an unexpected line count"
+  [[ "${receipt_lines[0]}" == $'tool\tstatus\treport\tsha256' ]] ||
+    fail "rchk tool-status receipt has an unexpected header"
+  local receipt_index=1
+  for report_type in bcheck maacheck fficheck; do
+    report_path="$report_directory/paradox.so.$report_type"
+    expected_line=$(printf '%s\t0\tparadox.so.%s\t%s' \
+      "$report_type" "$report_type" \
+      "$(sha256sum "$report_path" | cut -d ' ' -f 1)")
+    actual_line=${receipt_lines[$receipt_index]}
+    [[ "$actual_line" == "$expected_line" ]] ||
+      fail "rchk tool-status receipt does not bind successful $report_type output"
+    receipt_index=$((receipt_index + 1))
+  done
+
+  sha256sum "$report_directory/paradox.so.bcheck" \
+    "$report_directory/paradox.so.maacheck" \
+    "$report_directory/paradox.so.fficheck" \
+    "$status_receipt" > "$artifacts/reports.sha256"
+
+  analysis_line_count=$(grep -E -c \
+    '^Analyzed [0-9]+ functions, traversed [0-9]+ states\.$' \
+    "$report_directory/paradox.so.bcheck" || true)
+  [[ "$analysis_line_count" -eq 1 ]] ||
+    fail "rchk bcheck lacks exactly one analyzed-function summary"
+  analyzed_functions=$(sed -n \
+    's/^Analyzed \([0-9][0-9]*\) functions, traversed [0-9][0-9]* states\.$/\1/p' \
+    "$report_directory/paradox.so.bcheck")
+  [[ "$analyzed_functions" -gt 0 ]] || fail "rchk bcheck analyzed zero functions"
+  grep -E '^Analyzed [1-9][0-9]* functions, traversed [0-9]+ states\.$' \
+    "$report_directory/paradox.so.bcheck" > "$artifacts/analysis-evidence.txt"
+
+  registration_count=$(grep -Fxc 'Initialization function: R_init_paradox' \
+    "$report_directory/paradox.so.fficheck" || true)
+  [[ "$registration_count" -eq 1 ]] ||
+    fail "rchk fficheck did not recognize exactly one R_init_paradox"
+  checked_registration_count=$(grep -Fxc \
+    'Checked call to R_registerRoutines: 1' \
+    "$report_directory/paradox.so.fficheck" || true)
+  [[ "$checked_registration_count" -eq 1 ]] ||
+    fail "rchk fficheck did not validate exactly one R_registerRoutines call"
+  registered_functions=$(sed -n 's/^Functions: \([0-9][0-9]*\)$/\1/p' \
+    "$report_directory/paradox.so.fficheck")
+  [[ "$registered_functions" =~ ^[0-9]+$ ]] ||
+    fail "rchk fficheck has no unique registered-function count"
+  [[ "$registered_functions" -gt 0 ]] ||
+    fail "rchk fficheck inspected zero registered functions"
+  {
+    grep -Fx 'Initialization function: R_init_paradox' \
+      "$report_directory/paradox.so.fficheck"
+    grep -Fx 'Checked call to R_registerRoutines: 1' \
+      "$report_directory/paradox.so.fficheck"
+    grep -E '^Functions: [1-9][0-9]*$' \
+      "$report_directory/paradox.so.fficheck"
+  } > "$artifacts/registration-evidence.txt"
+
+  if grep -E -i -H -n \
+      'ERROR:|\[(UP|PB)\]|(^|[^[:alpha:]])WARNING([[:space:]]|:)' \
+      "$rchk_log" "$report_directory/paradox.so.bcheck" \
+      "$report_directory/paradox.so.maacheck" \
+      "$report_directory/paradox.so.fficheck" \
+      > "$artifacts/diagnostics.txt"; then
+    cat "$artifacts/diagnostics.txt" >&2
+    fail "rchk reported an error, protection, or warning diagnostic"
+  fi
+  printf 'analyzed_functions=%s\n' "$analyzed_functions"
+  printf 'registered_functions=%s\n' "$registered_functions"
+  printf 'checked_registration_calls=1\n'
+}
+
+case "$COMMAND" in
+  valgrind) validate_valgrind "$@" ;;
+  rchk) validate_rchk "$@" ;;
+  -h|--help|help) usage ;;
+  *) fail "unknown command: $COMMAND" ;;
+esac

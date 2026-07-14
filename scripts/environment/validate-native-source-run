@@ -1,0 +1,361 @@
+#!/usr/bin/env bash
+
+# Validate a completed native-check run before its source may enter a memory
+# gate.  The completion seal binds the verified source tree and manifest to the
+# complete retained modes tree, harness, toolchain, run policy, and command/tool
+# evidence.  result.txt is intentionally checked separately: it is written by
+# native-check's exit trap after the non-circular completion seal exists.
+
+set -euo pipefail
+
+fail() {
+  printf '%s\n' "validate-native-source-run: $*" >&2
+  exit 1
+}
+
+[[ $# -eq 3 ]] ||
+  fail "usage: validate-native-source-run ROOT SOURCE_RUN_ID SOURCE_RUN_DIRECTORY"
+
+ROOT=$(cd "$1" && pwd -P)
+SOURCE_RUN_ID=$2
+SOURCE_RUN_DIRECTORY=$3
+case "$SOURCE_RUN_ID" in
+  ''|.|..|*[!A-Za-z0-9._-]*) fail "unsafe source-run ID" ;;
+esac
+
+EXPECTED_DIRECTORY="$ROOT/.local/checks/$SOURCE_RUN_ID"
+[[ -d "$SOURCE_RUN_DIRECTORY" && ! -L "$SOURCE_RUN_DIRECTORY" ]] ||
+  fail "source-run directory is missing or symbolic"
+ACTUAL_DIRECTORY=$(cd "$SOURCE_RUN_DIRECTORY" && pwd -P)
+[[ "$ACTUAL_DIRECTORY" == "$EXPECTED_DIRECTORY" ]] ||
+  fail "source-run directory does not resolve to the requested local run"
+
+METADATA="$SOURCE_RUN_DIRECTORY/metadata"
+SOURCE="$SOURCE_RUN_DIRECTORY/source"
+MODES="$SOURCE_RUN_DIRECTORY/modes"
+RUN_METADATA="$METADATA/run.txt"
+RESULT_METADATA="$METADATA/result.txt"
+COMPLETION_METADATA="$METADATA/completion.txt"
+COMPLETION_SEAL="$METADATA/completion.sha256"
+RETAINED_HARNESS="$METADATA/native-check"
+TREE_RECEIPT_HELPER="$METADATA/tree-receipt.R"
+SOURCE_MANIFEST="$METADATA/source-manifest.tsv"
+SOURCE_TREE_RECEIPT="$METADATA/source-tree.tsv"
+MODES_TREE_RECEIPT="$METADATA/modes-tree.tsv"
+TOOL_VERSIONS="$METADATA/tool-versions.txt"
+TOOLCHAIN_EXPLICIT="$METADATA/toolchain-explicit.txt"
+TINY_TEX_RECEIPT="$METADATA/tinytex-tree.tsv"
+COMMANDS="$SOURCE_RUN_DIRECTORY/commands.sh"
+SOURCE_TOOLCHAIN_LOCK="$SOURCE/environment/toolchain-linux-64.lock"
+SOURCE_TINY_TEX_MANIFEST="$SOURCE/environment/tinytex-linux-x86_64.tsv"
+LOCAL_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+TRUSTED_HARNESS="$ROOT/scripts/native-check"
+TRUSTED_HELPER_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+TRUSTED_TREE_RECEIPT_HELPER="$TRUSTED_HELPER_DIRECTORY/tree-receipt.R"
+TRUSTED_SNAPSHOT_HELPER="$TRUSTED_HELPER_DIRECTORY/copy-check-snapshot.R"
+
+for path in "$METADATA" "$SOURCE" "$MODES"; do
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "required source-run directory is missing or symbolic: $path"
+done
+for path in "$RUN_METADATA" "$RESULT_METADATA" "$COMPLETION_METADATA" \
+    "$COMPLETION_SEAL" "$RETAINED_HARNESS" "$TREE_RECEIPT_HELPER" \
+    "$SOURCE_MANIFEST" "$SOURCE_TREE_RECEIPT" "$MODES_TREE_RECEIPT" \
+    "$TOOL_VERSIONS" "$TOOLCHAIN_EXPLICIT" "$TINY_TEX_RECEIPT" "$COMMANDS" \
+    "$SOURCE_TOOLCHAIN_LOCK" "$SOURCE_TINY_TEX_MANIFEST"; do
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required source-run evidence is missing or symbolic: $path"
+done
+[[ -x "$LOCAL_RSCRIPT" ]] || fail "repository-local Rscript is missing"
+for path in "$TRUSTED_HARNESS" "$TRUSTED_TREE_RECEIPT_HELPER" \
+    "$TRUSTED_SNAPSHOT_HELPER"; do
+  [[ -f "$path" && ! -L "$path" ]] || fail "trusted validator input is absent or symbolic: $path"
+done
+
+declare -A run_fields=()
+declare -A result_fields=()
+declare -A completion_fields=()
+
+read_fields() {
+  local path=$1 array_name=$2 line key value
+  local -n destination=$array_name
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == *=* ]] || fail "malformed metadata line in $path"
+    key=${line%%=*}
+    value=${line#*=}
+    [[ "$key" =~ ^[a-z][a-z0-9_]*$ ]] ||
+      fail "unsafe metadata key in $path: $key"
+    [[ ! -v "destination[$key]" ]] ||
+      fail "duplicate metadata key in $path: $key"
+    destination["$key"]=$value
+  done < "$path"
+}
+
+require_value() {
+  local array_name=$1 key=$2 expected=$3
+  local -n values=$array_name
+  [[ -v "values[$key]" ]] || fail "required metadata key is absent: $key"
+  [[ "${values[$key]}" == "$expected" ]] ||
+    fail "unexpected value for metadata key $key"
+}
+
+require_exact_keys() {
+  local array_name=$1
+  shift
+  local -n values=$array_name
+  local key
+  [[ ${#values[@]} -eq $# ]] ||
+    fail "$array_name has an unexpected number of metadata keys"
+  for key in "$@"; do
+    [[ -v "values[$key]" ]] ||
+      fail "required metadata key is absent from $array_name: $key"
+  done
+}
+
+require_hash() {
+  [[ "$1" =~ ^[0-9a-f]{64}$ ]] || fail "$2 is not a lowercase SHA-256"
+}
+
+sha256() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+read_fields "$RUN_METADATA" run_fields
+read_fields "$RESULT_METADATA" result_fields
+read_fields "$COMPLETION_METADATA" completion_fields
+
+require_exact_keys run_fields harness schema static_policy \
+  native_check_sha256 tree_receipt_helper_sha256 toolchain_lock_sha256 \
+  toolchain_explicit_sha256 \
+  started_utc root run_id source_run tests strict_gcc strict_clang analyzer \
+  analyzer_clang cppcheck symbols asan ubsan
+require_exact_keys result_fields status exit_code finished_utc
+require_exact_keys completion_fields harness schema run_id \
+  source_manifest_sha256 source_tree_receipt_sha256 modes_tree_receipt_sha256 \
+  source_archive_sha256 native_check_sha256 tree_receipt_helper_sha256 toolchain_lock_sha256 \
+  toolchain_explicit_sha256 \
+  run_metadata_sha256 tool_versions_sha256 commands_sha256 tests \
+  static_policy strict_gcc strict_clang analyzer analyzer_clang cppcheck \
+  symbols asan ubsan
+
+require_value run_fields harness native-check
+require_value run_fields schema 2
+require_value run_fields static_policy release-memory-v1
+require_value run_fields root "$ROOT"
+require_value run_fields run_id "$SOURCE_RUN_ID"
+case "${run_fields[tests]}" in
+  focused|full) ;;
+  *) fail "source native-check did not run focused or full tests" ;;
+esac
+for key in strict_gcc strict_clang analyzer analyzer_clang cppcheck symbols; do
+  require_value run_fields "$key" true
+done
+for key in asan ubsan; do
+  case "${run_fields[$key]}" in true|false) ;; *) fail "invalid mode flag: $key" ;; esac
+done
+require_value result_fields status passed
+require_value result_fields exit_code 0
+[[ "${result_fields[finished_utc]}" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$ ]] ||
+  fail "native result completion time is malformed"
+
+require_value completion_fields harness native-check
+require_value completion_fields schema 1
+require_value completion_fields run_id "$SOURCE_RUN_ID"
+for key in tests static_policy strict_gcc strict_clang analyzer \
+    analyzer_clang cppcheck symbols asan ubsan; do
+  require_value completion_fields "$key" "${run_fields[$key]}"
+done
+
+completion_line_count=$(wc -l < "$COMPLETION_SEAL")
+[[ "$completion_line_count" -eq 1 ]] ||
+  fail "native completion seal must contain exactly one line"
+completion_hash=$(sha256 "$COMPLETION_METADATA")
+[[ "$(<"$COMPLETION_SEAL")" == "$completion_hash  completion.txt" ]] ||
+  fail "native completion seal is invalid"
+
+declare -A bound_files=(
+  [source_manifest_sha256]="$SOURCE_MANIFEST"
+  [source_tree_receipt_sha256]="$SOURCE_TREE_RECEIPT"
+  [modes_tree_receipt_sha256]="$MODES_TREE_RECEIPT"
+  [native_check_sha256]="$RETAINED_HARNESS"
+  [tree_receipt_helper_sha256]="$TREE_RECEIPT_HELPER"
+  [toolchain_lock_sha256]="$SOURCE_TOOLCHAIN_LOCK"
+  [toolchain_explicit_sha256]="$TOOLCHAIN_EXPLICIT"
+  [run_metadata_sha256]="$RUN_METADATA"
+  [tool_versions_sha256]="$TOOL_VERSIONS"
+  [commands_sha256]="$COMMANDS"
+)
+for key in "${!bound_files[@]}"; do
+  require_hash "${completion_fields[$key]}" "$key"
+  [[ "${completion_fields[$key]}" == "$(sha256 "${bound_files[$key]}")" ]] ||
+    fail "native completion binding does not match $key"
+done
+require_hash "${completion_fields[source_archive_sha256]}" source_archive_sha256
+shopt -s nullglob
+source_archives=("$SOURCE_RUN_DIRECTORY/source-package/build/"paradox_*.tar.gz)
+shopt -u nullglob
+[[ ${#source_archives[@]} -eq 1 && -f "${source_archives[0]}" && \
+   ! -L "${source_archives[0]}" ]] ||
+  fail "native run has no unique retained source archive"
+[[ "${completion_fields[source_archive_sha256]}" == \
+   "$(sha256 "${source_archives[0]}")" ]] ||
+  fail "retained source archive does not match native completion metadata"
+for key in native_check_sha256 tree_receipt_helper_sha256 \
+    toolchain_lock_sha256 toolchain_explicit_sha256; do
+  require_value run_fields "$key" "${completion_fields[$key]}"
+done
+cmp -s "$SOURCE_TOOLCHAIN_LOCK" "$TOOLCHAIN_EXPLICIT" ||
+  fail "retained live toolchain package set differs from the source lock"
+cmp -s "$RETAINED_HARNESS" "$TRUSTED_HARNESS" ||
+  fail "retained native-check harness differs from the trusted current harness"
+cmp -s "$TREE_RECEIPT_HELPER" "$TRUSTED_TREE_RECEIPT_HELPER" ||
+  fail "retained tree-receipt helper differs from the trusted current helper"
+
+tinytex_header=$'version\tplatform\tarchive\tarchive_size\tarchive_sha256\ttree_manifest_sha256\turl'
+mapfile -t tinytex_rows < "$SOURCE_TINY_TEX_MANIFEST"
+[[ ${#tinytex_rows[@]} -eq 2 && "${tinytex_rows[0]}" == "$tinytex_header" ]] ||
+  fail "retained TinyTeX manifest must contain one exact row"
+IFS=$'\t' read -r tinytex_version tinytex_platform tinytex_archive \
+  tinytex_archive_size tinytex_archive_sha tinytex_tree_sha tinytex_url \
+  <<< "${tinytex_rows[1]}"
+[[ "$tinytex_version" == 2026.07 && "$tinytex_platform" == linux-x86_64 &&
+   "$tinytex_archive" == "TinyTeX-linux-x86_64-v$tinytex_version.tar.xz" &&
+   "$tinytex_archive_size" =~ ^[0-9]+$ &&
+   "$tinytex_archive_sha" =~ ^[0-9a-f]{64}$ &&
+   "$tinytex_tree_sha" =~ ^[0-9a-f]{64}$ &&
+   "$tinytex_url" == "https://github.com/rstudio/tinytex-releases/releases/download/v$tinytex_version/$tinytex_archive" ]] ||
+  fail "retained TinyTeX manifest identity is unexpected"
+[[ "$(sha256 "$TINY_TEX_RECEIPT")" == "$tinytex_tree_sha" ]] ||
+  fail "retained TinyTeX tree receipt differs from the pinned archive tree"
+
+"$LOCAL_RSCRIPT" --vanilla "$TRUSTED_TREE_RECEIPT_HELPER" verify \
+  "$SOURCE" "$SOURCE_TREE_RECEIPT" >/dev/null
+"$LOCAL_RSCRIPT" --vanilla "$TRUSTED_TREE_RECEIPT_HELPER" verify \
+  "$MODES" "$MODES_TREE_RECEIPT" >/dev/null
+
+MODE_STATUS="$MODES/tool-status.tsv"
+[[ -f "$MODE_STATUS" && ! -L "$MODE_STATUS" ]] ||
+  fail "native mode tool-status receipt is missing or symbolic"
+mapfile -t mode_status_lines < "$MODE_STATUS"
+expected_mode_status=($'mode\tstatus\tevidence\tsha256')
+append_expected_mode_status() {
+  local mode=$1 evidence=$2 evidence_path="$MODES/$2"
+  [[ -f "$evidence_path" && ! -L "$evidence_path" ]] ||
+    fail "mode status evidence is absent or symbolic: $evidence"
+  expected_mode_status+=("$(printf '%s\t0\t%s\t%s' "$mode" "$evidence" \
+    "$(sha256 "$evidence_path")")")
+}
+tests=${run_fields[tests]}
+append_expected_mode_status strict-gcc "strict-gcc/logs/tests-$tests.log"
+append_expected_mode_status strict-clang "strict-clang/logs/tests-$tests.log"
+append_expected_mode_status analyzer-gcc analyzer-gcc/logs/install.log
+append_expected_mode_status analyzer-clang analyzer-clang/artifacts/reports.sha256
+append_expected_mode_status cppcheck cppcheck/logs/cppcheck.log
+append_expected_mode_status symbols symbols/logs/registration.log
+if [[ "${run_fields[asan]}" == true ]]; then
+  append_expected_mode_status asan-clang "asan-clang/logs/tests-$tests.log"
+fi
+if [[ "${run_fields[ubsan]}" == true ]]; then
+  append_expected_mode_status ubsan-clang "ubsan-clang/logs/tests-$tests.log"
+fi
+[[ ${#mode_status_lines[@]} -eq ${#expected_mode_status[@]} ]] ||
+  fail "native mode tool-status receipt has an unexpected line count"
+for index in "${!expected_mode_status[@]}"; do
+  [[ "${mode_status_lines[$index]}" == "${expected_mode_status[$index]}" ]] ||
+    fail "native mode tool-status receipt is out of order or invalid"
+done
+
+# source-tree.tsv and source-manifest.tsv are separate commitments.  Replay the
+# manifest through the trusted snapshot helper so the manifest is proven to
+# describe this exact source tree rather than merely being hash-bound beside it.
+SNAPSHOT_AUDIT=$(mktemp -d "$ROOT/.local/tmp/native-source-audit.XXXXXX")
+cleanup_snapshot_audit() { rm -rf "$SNAPSHOT_AUDIT"; }
+trap cleanup_snapshot_audit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+"$LOCAL_RSCRIPT" --vanilla "$TRUSTED_SNAPSHOT_HELPER" \
+  "$SOURCE" "$METADATA" "$SNAPSHOT_AUDIT/source" \
+  "$SNAPSHOT_AUDIT/metadata" >/dev/null
+rm -rf "$SNAPSHOT_AUDIT"
+trap - EXIT HUP INT TERM
+
+require_mode_file() {
+  local path=$1
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "required native mode evidence is missing or symbolic: $path"
+}
+
+require_nonempty_mode_file() {
+  require_mode_file "$1"
+  [[ -s "$1" ]] || fail "required native mode evidence is empty: $1"
+}
+
+for mode_path in "$MODES"/*; do
+  [[ -e "$mode_path" ]] || continue
+  if [[ "$mode_path" == "$MODE_STATUS" ]]; then
+    continue
+  fi
+  [[ -d "$mode_path" && ! -L "$mode_path" ]] ||
+    fail "native mode member is not a real directory: $mode_path"
+  mode_name=${mode_path##*/}
+  case "$mode_name" in
+    strict-gcc) ;;
+    strict-clang) ;;
+    analyzer-gcc) ;;
+    analyzer-clang) ;;
+    cppcheck) ;;
+    symbols) ;;
+    asan-clang) [[ "${run_fields[asan]}" == true ]] || fail "unselected ASan evidence" ;;
+    ubsan-clang) [[ "${run_fields[ubsan]}" == true ]] || fail "unselected UBSan evidence" ;;
+    *) fail "unexpected native mode directory: $mode_name" ;;
+  esac
+done
+
+for mode_name in strict-gcc strict-clang; do
+  require_nonempty_mode_file "$MODES/$mode_name/logs/install.log"
+  require_nonempty_mode_file "$MODES/$mode_name/logs/tests-$tests.log"
+  require_nonempty_mode_file "$MODES/$mode_name/artifacts/paradox.so.sha256"
+  require_mode_file "$MODES/$mode_name/installed.ok"
+  require_nonempty_mode_file "$MODES/$mode_name/library/paradox/libs/paradox.so"
+done
+if [[ "$tests" == full ]]; then
+  for checked_profile in check-as-cran check-all-tests check-depends-only; do
+    require_nonempty_mode_file \
+      "$MODES/strict-gcc/logs/$checked_profile.log"
+    check_status="$MODES/strict-gcc/$checked_profile/paradox.Rcheck/00check.log"
+    require_nonempty_mode_file "$check_status"
+    check_status_count=$(grep -c '^Status:' "$check_status" || true)
+    check_final_line=$(awk 'NF { line = $0 } END { print line }' "$check_status")
+    [[ "$check_status_count" -eq 1 && "$check_final_line" == 'Status: OK' ]] ||
+      fail "retained $checked_profile did not finish with exact Status: OK"
+  done
+fi
+require_nonempty_mode_file "$MODES/analyzer-gcc/logs/install.log"
+require_nonempty_mode_file "$MODES/analyzer-gcc/artifacts/paradox.so.sha256"
+require_mode_file "$MODES/analyzer-gcc/installed.ok"
+require_nonempty_mode_file "$MODES/analyzer-clang/artifacts/reports.sha256"
+shopt -s nullglob
+analyzer_reports=("$MODES/analyzer-clang/artifacts/reports/"*.plist)
+shopt -u nullglob
+[[ ${#analyzer_reports[@]} -gt 0 ]] || fail "Clang analyzer retained no reports"
+require_nonempty_mode_file "$MODES/cppcheck/logs/cppcheck.log"
+for evidence in registration dynamic-symbols program-headers dynamic-section; do
+  require_nonempty_mode_file "$MODES/symbols/logs/$evidence.log"
+done
+if [[ "${run_fields[asan]}" == true ]]; then
+  require_nonempty_mode_file "$MODES/asan-clang/logs/tests-$tests.log"
+  require_nonempty_mode_file "$MODES/asan-clang/artifacts/scope.txt"
+fi
+if [[ "${run_fields[ubsan]}" == true ]]; then
+  require_nonempty_mode_file "$MODES/ubsan-clang/logs/tests-$tests.log"
+  require_nonempty_mode_file "$MODES/ubsan-clang/artifacts/scope.txt"
+fi
+
+printf 'schema=2\n'
+printf 'source_run=%s\n' "$SOURCE_RUN_ID"
+printf 'source_manifest_sha256=%s\n' "${completion_fields[source_manifest_sha256]}"
+printf 'source_tree_receipt_sha256=%s\n' "${completion_fields[source_tree_receipt_sha256]}"
+printf 'modes_tree_receipt_sha256=%s\n' "${completion_fields[modes_tree_receipt_sha256]}"
+printf 'completion_sha256=%s\n' "$completion_hash"
+printf 'result_metadata_sha256=%s\n' "$(sha256 "$RESULT_METADATA")"

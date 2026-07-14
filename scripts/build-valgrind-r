@@ -1,0 +1,349 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+R_VERSION=4.6.1
+SOURCE="$ROOT/.local/sources/R-${R_VERSION}"
+BUILD="$ROOT/.local/build/R-${R_VERSION}-valgrind"
+PREFIX="$ROOT/.local/r-valgrind/${R_VERSION}"
+JOBS=${PARADOX_BUILD_JOBS:-2}
+TOOLCHAIN="$ROOT/.local/toolchain"
+RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
+STATE_LOCK="$ROOT/.local/r-valgrind/locks/state.lock"
+STATE_LOCK_HELD=false
+BUILD_HOME="$ROOT/.local/r-valgrind/build-home"
+BUILD_TMP="$ROOT/.local/tmp"
+LOCAL_USER=$(/usr/bin/id -un)
+
+fail() {
+  printf '%s\n' "build-valgrind-r: $*" >&2
+  exit 1
+}
+
+is_managed_path() {
+  [[ "$1" == "$ROOT" || "$1" == "$ROOT/"* ]]
+}
+
+validate_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  if [[ "$path" != "$ROOT" ]]; then
+    relative=${path#"$ROOT"/}
+    IFS=/ read -r -a components <<< "$relative"
+    for component in "${components[@]}"; do
+      [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+        fail "$label has an unsafe component: $path"
+      current="$current/$component"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a missing, non-directory, or symbolic component: $current"
+    done
+  fi
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label does not resolve canonically inside the repository: $path"
+}
+
+ensure_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  [[ "$path" == "$ROOT" ]] && return 0
+  relative=${path#"$ROOT"/}
+  current=$ROOT
+  IFS=/ read -r -a components <<< "$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "$label has an unsafe component: $path"
+    current="$current/$component"
+    if [[ -e "$current" || -L "$current" ]]; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a non-directory or symbolic component: $current"
+    else
+      mkdir -- "$current" || fail "could not create $label: $current"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label was substituted while being created: $current"
+    fi
+  done
+  validate_plain_directory_chain "$path" "$label"
+}
+
+require_managed_file() {
+  local path=$1 label=${2:-managed file}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is missing, non-regular, or symbolic: $path"
+}
+
+require_managed_executable() {
+  local path=$1 label=${2:-managed executable}
+  require_managed_file "$path" "$label"
+  [[ -x "$path" ]] || fail "$label is not executable: $path"
+}
+
+prepare_managed_output() {
+  local path=$1 label=${2:-managed output}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "$label exists but is not a regular file: $path"
+}
+
+prepare_managed_directory_target() {
+  local path=$1 label=${2:-managed directory target}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  if [[ -e "$path" ]]; then
+    validate_plain_directory_chain "$path" "$label"
+  fi
+}
+
+case "$JOBS" in
+  ''|*[!0-9]*) fail "PARADOX_BUILD_JOBS must be a positive integer" ;;
+esac
+[[ "$JOBS" -ge 1 ]] || fail "PARADOX_BUILD_JOBS must be positive"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the local environment first: . scripts/activate"
+[[ "${CONDA_PREFIX:-}" == "$TOOLCHAIN" ]] ||
+  fail "CONDA_PREFIX does not identify the repository-local toolchain"
+validate_plain_directory_chain "$ROOT" "repository root"
+validate_plain_directory_chain "$SOURCE" "retained R source"
+require_managed_executable "$SOURCE/configure" "retained R configure script"
+require_managed_file "$SOURCE/VERSION" "retained R VERSION"
+[[ "$(<"$SOURCE/VERSION")" == "$R_VERSION" ]] ||
+  fail "the retained R source has an unexpected version"
+
+CC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
+CXX="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-g++"
+FC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gfortran"
+AR="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ar"
+RANLIB="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ranlib"
+AS="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-as"
+LD="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ld"
+NM="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-nm"
+STRIP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-strip"
+OBJCOPY="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-objcopy"
+OBJDUMP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-objdump"
+READELF="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-readelf"
+CPP="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-cpp"
+MAKE="$TOOLCHAIN/bin/make"
+for tool in "$CC" "$CXX" "$FC" "$AR" "$RANLIB" "$AS" "$LD" \
+    "$NM" "$STRIP" "$OBJCOPY" "$OBJDUMP" "$READELF" "$CPP" \
+    "$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc-ar" \
+    "$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc-ranlib" \
+    "$TOOLCHAIN/bin/valgrind" "$MAKE" "$RECEIPT_HELPER"; do
+  require_managed_executable "$tool" "required local tool"
+done
+require_managed_file "$TOOLCHAIN/include/valgrind/valgrind.h" \
+  "project-local Valgrind header"
+validate_plain_directory_chain \
+  "$TOOLCHAIN/x86_64-conda-linux-gnu/sysroot" \
+  "project-local compiler sysroot"
+validate_plain_directory_chain "$ROOT/.local/bin" "repository-local binary root"
+
+ensure_plain_directory_chain "$ROOT/.local/build" "instrumented-R build root"
+ensure_plain_directory_chain "$ROOT/.local/r-valgrind" "instrumented-R root"
+ensure_plain_directory_chain "$ROOT/.local/r-valgrind/receipts" \
+  "instrumented-R receipt root"
+prepare_managed_directory_target "$BUILD" "instrumented-R build directory"
+prepare_managed_directory_target "$PREFIX" "instrumented-R installation prefix"
+
+ensure_plain_directory_chain "$(dirname "$STATE_LOCK")" "instrumented-R lock root"
+ensure_plain_directory_chain "$BUILD_HOME" "instrumented-R build home"
+ensure_plain_directory_chain "$BUILD_TMP" "repository-local temporary root"
+prepare_managed_output "$STATE_LOCK" "instrumented-R state lock"
+exec 9>>"$STATE_LOCK"
+[[ -f "$STATE_LOCK" && ! -L "$STATE_LOCK" ]] || {
+  exec 9>&-
+  fail "instrumented-R state lock changed while it was opened"
+}
+[[ "$(/usr/bin/stat -Lc '%d:%i' /proc/$$/fd/9)" == \
+    "$(/usr/bin/stat -Lc '%d:%i' "$STATE_LOCK")" ]] || {
+  exec 9>&-
+  fail "instrumented-R state lock path was substituted while opening"
+}
+if /usr/bin/flock -n -x 9; then
+  STATE_LOCK_HELD=true
+else
+  fail "instrumented-R state is locked by another build, bootstrap, or memory check: $STATE_LOCK"
+fi
+
+release_state_lock() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if [[ "$STATE_LOCK_HELD" == true ]]; then
+    /usr/bin/flock -u 9
+    exec 9>&-
+    STATE_LOCK_HELD=false
+  fi
+  exit "$status"
+}
+trap release_state_lock EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+DEBUG_FLAGS="-O0 -g3 -fno-omit-frame-pointer -fno-optimize-sibling-calls"
+CPP_FLAGS="-I$TOOLCHAIN/include"
+# R.bin links against the freshly built libR.so rather than repeating all of
+# libR's private conda dependencies on its own link line.  GNU ld does not use
+# an output RUNPATH to resolve those indirect dependencies while linking, so
+# retain an explicit local rpath-link as well as the runtime path.
+LINK_FLAGS="-L$TOOLCHAIN/lib -Wl,-rpath,$TOOLCHAIN/lib -Wl,-rpath-link,$TOOLCHAIN/lib"
+CONFIGURATION=$("$RECEIPT_HELPER" expected-r-configuration "$ROOT")
+FINGERPRINT=$(printf '%s\n' "$CONFIGURATION" | sha256sum | cut -d ' ' -f 1)
+
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_TARGET=x86_64-conda-linux-gnu
+LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
+PKG_CONFIG_PATH_LOCAL="$TOOLCHAIN/lib/pkgconfig:$TOOLCHAIN/share/pkgconfig"
+PKG_CONFIG_LIBDIR_LOCAL="$PKG_CONFIG_PATH_LOCAL:$LOCAL_SYSROOT/usr/lib/pkgconfig:$LOCAL_SYSROOT/usr/share/pkgconfig"
+CMAKE_ARGS_LOCAL="-DCMAKE_AR=$AR -DCMAKE_CXX_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_C_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_RANLIB=$RANLIB -DCMAKE_CXX_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_C_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_LINKER=$LD -DCMAKE_STRIP=$STRIP -DCMAKE_BUILD_TYPE=Release"
+BUILD_ENV=(
+  env -i
+  "HOME=$BUILD_HOME"
+  "USER=$LOCAL_USER"
+  "LOGNAME=$LOCAL_USER"
+  "PATH=$LOCAL_PATH"
+  "CONDA_PREFIX=$TOOLCHAIN"
+  "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT"
+  "HOST=$LOCAL_TARGET"
+  "BUILD=$LOCAL_TARGET"
+  "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET"
+  "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET"
+  "AS=$AS"
+  "LD=$LD"
+  "NM=$NM"
+  "STRIP=$STRIP"
+  "OBJCOPY=$OBJCOPY"
+  "OBJDUMP=$OBJDUMP"
+  "READELF=$READELF"
+  "CPP=$CPP"
+  "PKG_CONFIG_PATH=$PKG_CONFIG_PATH_LOCAL"
+  "PKG_CONFIG_LIBDIR=$PKG_CONFIG_LIBDIR_LOCAL"
+  "CMAKE_PREFIX_PATH=$TOOLCHAIN:$LOCAL_SYSROOT/usr"
+  "CMAKE_ARGS=$CMAKE_ARGS_LOCAL"
+  "MESON_ARGS=-Dbuildtype=release"
+  "LD_LIBRARY_PATH=$TOOLCHAIN/lib"
+  "TMPDIR=$BUILD_TMP"
+  "LC_ALL=C.UTF-8"
+  "TZ=UTC"
+  "PYTHONDONTWRITEBYTECODE=1"
+  "MAKEFLAGS=-j$JOBS"
+)
+
+CLEAN_REBUILD=true
+if [[ -e "$PREFIX/bin/R" || -L "$PREFIX/bin/R" ||
+      -e "$PREFIX/.paradox-build-fingerprint" ||
+      -L "$PREFIX/.paradox-build-fingerprint" ]]; then
+  require_managed_executable "$PREFIX/bin/R" "existing instrumented R"
+  require_managed_file "$PREFIX/.paradox-build-fingerprint" \
+    "existing instrumented-R build fingerprint"
+  if [[ "$(<"$PREFIX/.paradox-build-fingerprint")" == "$FINGERPRINT" ]]; then
+    if [[ -e "$ROOT/.local/r-valgrind/receipts/R-${R_VERSION}" ||
+          -L "$ROOT/.local/r-valgrind/receipts/R-${R_VERSION}" ]]; then
+      validate_plain_directory_chain \
+        "$ROOT/.local/r-valgrind/receipts/R-${R_VERSION}" \
+        "existing instrumented-R receipt"
+      if "$RECEIPT_HELPER" verify-r "$ROOT"; then
+        printf '%s\n' "Instrumented R and its authenticated receipt are current: $PREFIX"
+        exit 0
+      fi
+      printf '%s\n' \
+        "Existing instrumented-R receipt is stale; performing a clean rebuild"
+    fi
+  else
+    fail "an instrumented R built with a different configuration exists at $PREFIX"
+  fi
+fi
+
+"$RECEIPT_HELPER" verify-r-source "$ROOT"
+
+if [[ -e "$BUILD/.paradox-build-fingerprint" ||
+      -L "$BUILD/.paradox-build-fingerprint" ]]; then
+  require_managed_file "$BUILD/.paradox-build-fingerprint" \
+    "build-tree fingerprint"
+  if [[ "$(<"$BUILD/.paradox-build-fingerprint")" != "$FINGERPRINT" ]]; then
+    fail "the existing build directory has a different configuration: $BUILD"
+  fi
+fi
+if [[ "$CLEAN_REBUILD" == true ]]; then
+  prepare_managed_directory_target "$BUILD" "instrumented-R build directory"
+  prepare_managed_directory_target "$PREFIX" "instrumented-R installation prefix"
+  rm -rf "$BUILD" "$PREFIX"
+fi
+ensure_plain_directory_chain "$BUILD" "instrumented-R build directory"
+ensure_plain_directory_chain "$PREFIX" "instrumented-R installation prefix"
+prepare_managed_output "$BUILD/.paradox-build-fingerprint" \
+  "build-tree fingerprint"
+printf '%s\n' "$FINGERPRINT" > "$BUILD/.paradox-build-fingerprint"
+prepare_managed_output "$BUILD/configuration.txt" "build-tree configuration"
+printf '%s\n' "$CONFIGURATION" > "$BUILD/configuration.txt"
+
+if [[ -e "$BUILD/config.status" || -L "$BUILD/config.status" ]]; then
+  require_managed_file "$BUILD/config.status" "R configure status"
+else
+  prepare_managed_output "$BUILD/configure.log" "R configure log"
+  (
+    cd "$BUILD"
+    "${BUILD_ENV[@]}" \
+      CC="$CC" CXX="$CXX" CXX11="$CXX" CXX14="$CXX" CXX17="$CXX" \
+      CXX20="$CXX" CXX23="$CXX" FC="$FC" F77="$FC" \
+      AR="$AR" RANLIB="$RANLIB" \
+      CFLAGS="$DEBUG_FLAGS" CXXFLAGS="$DEBUG_FLAGS" \
+      FFLAGS="$DEBUG_FLAGS" FCFLAGS="$DEBUG_FLAGS" \
+      CPPFLAGS="$CPP_FLAGS" LDFLAGS="$LINK_FLAGS" \
+      "$SOURCE/configure" \
+        --prefix="$PREFIX" \
+        --with-valgrind-instrumentation=2 \
+        --enable-memory-profiling \
+        --enable-R-shlib \
+        --without-x \
+        --without-tcltk \
+        --without-readline \
+        --without-recommended-packages \
+        --disable-nls \
+        --with-internal-tzcode
+  ) 2>&1 | tee "$BUILD/configure.log"
+fi
+
+# The release tarball already contains NEWS.pdf.  The project-local compact
+# TeX installation is sufficient for package checks but deliberately lacks
+# some of R's manual-only font packages; asking tools::Rd2pdf_NEWS_in_Rd() to
+# regenerate that shipped file can therefore fail after the instrumented
+# interpreter itself has built successfully.  An explicit empty make variable
+# selects R's supported no-pdflatex branch without weakening package checks.
+prepare_managed_output "$BUILD/build.log" "instrumented-R build log"
+"${BUILD_ENV[@]}" "$MAKE" -C "$BUILD" -j "$JOBS" PDFLATEX= \
+  2>&1 | tee "$BUILD/build.log"
+prepare_managed_output "$BUILD/install.log" "instrumented-R install log"
+"${BUILD_ENV[@]}" "$MAKE" -C "$BUILD" install 2>&1 | tee "$BUILD/install.log"
+
+require_managed_executable "$PREFIX/bin/R" "installed instrumented R"
+installed_version=$("${BUILD_ENV[@]}" "$PREFIX/bin/R" --vanilla --slave -e \
+  'cat(as.character(getRversion()))')
+[[ "$installed_version" == "$R_VERSION" ]] ||
+  fail "installed R reports version $installed_version"
+require_managed_file "$BUILD/src/include/config.h" "instrumented-R config header"
+grep -Eq '^#define R_MEMORY_PROFILING 1$' "$BUILD/src/include/config.h" ||
+  fail "installed R does not report memory profiling support"
+grep -Eq '^#define VALGRIND_LEVEL 2$' "$BUILD/src/include/config.h" ||
+  fail "installed R was not built with Valgrind instrumentation"
+
+prepare_managed_output "$PREFIX/.paradox-build-fingerprint" \
+  "installed build fingerprint"
+printf '%s\n' "$FINGERPRINT" > "$PREFIX/.paradox-build-fingerprint"
+prepare_managed_output "$PREFIX/.paradox-build-configuration" \
+  "installed build configuration"
+printf '%s\n' "$CONFIGURATION" > "$PREFIX/.paradox-build-configuration"
+"$RECEIPT_HELPER" create-r "$ROOT"
+"$RECEIPT_HELPER" verify-r "$ROOT"
+printf '%s\n' "Instrumented R ready: $PREFIX"

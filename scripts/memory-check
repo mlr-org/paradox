@@ -1,0 +1,1606 @@
+#!/usr/bin/env sh
+# shellcheck disable=SC2016,SC1003 # literal R/driver code and emitted continuations
+
+set -eu
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/memory-check --source-run ID --mode MODE [--mode MODE ...]
+                            [--run-id ID]
+
+Run release memory checks against a hash-verified copy of the immutable source
+retained by an earlier check run.  There is deliberately no default mode.
+
+Modes:
+  gct       R CMD check --use-gct with _R_CHECK_GCT_N_=10
+  valgrind  focused native tests and R CMD check --use-valgrind with the
+            separately built, instrumented R 4.6.1 and dependency library
+  rchk      bcheck, maacheck, and fficheck in the exact pinned rchk image
+  all       all three modes
+
+Options:
+  --source-run ID  required source snapshot below .local/checks/ID
+  --run-id ID      output ID below .local/checks (default: UTC timestamp/PID)
+  -h, --help       show this help and exit
+
+The repository-local environment must already be active:
+
+  . scripts/activate
+
+The valgrind mode never builds R or installs packages automatically.  Prepare
+it with scripts/build-valgrind-r and scripts/bootstrap-valgrind-r-packages.
+The rchk mode never pulls an image; prepare the exact manifest digest with
+scripts/fetch-auxiliary-images.  Every mode retains commands, source,
+provenance, tool versions, logs, and mode-specific artifacts in its run.
+EOF
+}
+
+fail() {
+  printf '%s\n' "memory-check: $*" >&2
+  exit 1
+}
+
+MODE_GCT=false
+MODE_VALGRIND=false
+MODE_RCHK=false
+MODE_SELECTED=false
+RUN_ID=
+SOURCE_RUN_ID=
+
+select_mode() {
+  case "$1" in
+    gct)
+      MODE_GCT=true
+      ;;
+    valgrind)
+      MODE_VALGRIND=true
+      ;;
+    rchk)
+      MODE_RCHK=true
+      ;;
+    all)
+      MODE_GCT=true
+      MODE_VALGRIND=true
+      MODE_RCHK=true
+      ;;
+    *)
+      fail "unknown mode '$1' (see --help)"
+      ;;
+  esac
+  MODE_SELECTED=true
+}
+
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --mode)
+      [ "$#" -ge 2 ] || fail "--mode requires a value"
+      select_mode "$2"
+      shift 2
+      ;;
+    --mode=*)
+      select_mode "${1#--mode=}"
+      shift
+      ;;
+    --run-id)
+      [ "$#" -ge 2 ] || fail "--run-id requires a value"
+      RUN_ID=$2
+      shift 2
+      ;;
+    --run-id=*)
+      RUN_ID=${1#--run-id=}
+      shift
+      ;;
+    --source-run)
+      [ "$#" -ge 2 ] || fail "--source-run requires a value"
+      SOURCE_RUN_ID=$2
+      shift 2
+      ;;
+    --source-run=*)
+      SOURCE_RUN_ID=${1#--source-run=}
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      [ "$#" -eq 0 ] || fail "positional arguments are not supported"
+      ;;
+    *)
+      fail "unknown argument '$1' (see --help)"
+      ;;
+  esac
+done
+
+[ "$MODE_SELECTED" = true ] || fail "at least one --mode is required"
+[ -n "$SOURCE_RUN_ID" ] || fail "--source-run is required"
+
+safe_id() {
+  case "$1" in
+    *[!A-Za-z0-9._-]*|''|.|..)
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+safe_id "$SOURCE_RUN_ID" ||
+  fail "--source-run must use only letters, digits, dot, underscore, hyphen"
+if [ -n "$RUN_ID" ]; then
+  safe_id "$RUN_ID" ||
+    fail "--run-id must use only letters, digits, dot, underscore, hyphen"
+else
+  RUN_ID="memory-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+fi
+[ "$SOURCE_RUN_ID" != "$RUN_ID" ] ||
+  fail "--source-run and --run-id must identify different runs"
+
+SCRIPT_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
+ROOT=$(CDPATH='' cd -- "$SCRIPT_DIRECTORY/.." && pwd -P)
+[ "$(pwd -P)" = "$ROOT" ] || fail "run this command from the repository root"
+[ "${PARADOX_ACTIVE_ROOT:-}" = "$ROOT" ] ||
+  fail "activate the local environment first: . scripts/activate"
+
+TOOLCHAIN="$ROOT/.local/toolchain"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+ORDINARY_R="$TOOLCHAIN/bin/R"
+ORDINARY_RSCRIPT="$TOOLCHAIN/bin/Rscript"
+ORDINARY_LIBRARY="$ROOT/.local/R/library"
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_TARGET=x86_64-conda-linux-gnu
+LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
+TINY_TEX_BIN="$ROOT/.local/tinytex/bin/x86_64-linux"
+if [ -x "$TINY_TEX_BIN/pdflatex" ]; then
+  LOCAL_PATH="$TINY_TEX_BIN:$LOCAL_PATH"
+fi
+LOCAL_PKG_CONFIG_PATH="$TOOLCHAIN/lib/pkgconfig:$TOOLCHAIN/share/pkgconfig"
+LOCAL_PKG_CONFIG_LIBDIR="$LOCAL_PKG_CONFIG_PATH:$LOCAL_SYSROOT/usr/lib/pkgconfig:$LOCAL_SYSROOT/usr/share/pkgconfig"
+LOCAL_CMAKE_PREFIX_PATH="$TOOLCHAIN:$LOCAL_SYSROOT/usr"
+LOCAL_LD_LIBRARY_PATH="$TOOLCHAIN/lib"
+LOCAL_AR="$TOOLCHAIN/bin/$LOCAL_TARGET-ar"
+LOCAL_RANLIB="$TOOLCHAIN/bin/$LOCAL_TARGET-ranlib"
+LOCAL_AS="$TOOLCHAIN/bin/$LOCAL_TARGET-as"
+LOCAL_LD="$TOOLCHAIN/bin/$LOCAL_TARGET-ld"
+LOCAL_NM="$TOOLCHAIN/bin/$LOCAL_TARGET-nm"
+LOCAL_STRIP="$TOOLCHAIN/bin/$LOCAL_TARGET-strip"
+LOCAL_OBJCOPY="$TOOLCHAIN/bin/$LOCAL_TARGET-objcopy"
+LOCAL_OBJDUMP="$TOOLCHAIN/bin/$LOCAL_TARGET-objdump"
+LOCAL_READELF="$TOOLCHAIN/bin/$LOCAL_TARGET-readelf"
+LOCAL_CPP="$TOOLCHAIN/bin/$LOCAL_TARGET-cpp"
+LOCAL_CMAKE_ARGS="-DCMAKE_AR=$LOCAL_AR -DCMAKE_CXX_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_C_COMPILER_AR=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar -DCMAKE_RANLIB=$LOCAL_RANLIB -DCMAKE_CXX_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_C_COMPILER_RANLIB=$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib -DCMAKE_LINKER=$LOCAL_LD -DCMAKE_STRIP=$LOCAL_STRIP -DCMAKE_BUILD_TYPE=Release"
+COPY_SNAPSHOT="$ROOT/scripts/environment/copy-check-snapshot.R"
+HARNESS_SCRIPT="$ROOT/scripts/memory-check"
+SOURCE_RUN_VALIDATOR="$ROOT/scripts/environment/validate-native-source-run"
+VALGRIND_RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
+TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+MEMORY_EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
+DEBUG_SYMBOL_HELPER="$ROOT/scripts/bootstrap-valgrind-debug-symbols"
+LOCAL_USER=$(/usr/bin/id -un)
+VALGRIND_STATE_LOCK="$ROOT/.local/r-valgrind/locks/state.lock"
+VALGRIND_LOCK_HELD=false
+for required in "$ORDINARY_R" "$ORDINARY_RSCRIPT"; do
+  [ -x "$required" ] || fail "local R is missing; run scripts/bootstrap"
+done
+for required in "$LOCAL_AR" "$LOCAL_RANLIB" "$LOCAL_AS" "$LOCAL_LD" \
+    "$LOCAL_NM" "$LOCAL_STRIP" "$LOCAL_OBJCOPY" "$LOCAL_OBJDUMP" \
+    "$LOCAL_READELF" "$LOCAL_CPP" \
+    "$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ar" \
+    "$TOOLCHAIN/bin/$LOCAL_TARGET-gcc-ranlib"; do
+  [ -x "$required" ] || fail "required local tool is missing: $required"
+done
+[ -d "$ORDINARY_LIBRARY" ] || fail "repository-local R library is missing"
+[ -f "$TOOLCHAIN_LOCK" ] && [ ! -L "$TOOLCHAIN_LOCK" ] ||
+  fail "toolchain lock is missing or symbolic: $TOOLCHAIN_LOCK"
+[ -f "$COPY_SNAPSHOT" ] || fail "snapshot verifier is missing: $COPY_SNAPSHOT"
+[ -f "$HARNESS_SCRIPT" ] || fail "memory-check script is missing: $HARNESS_SCRIPT"
+[ -x "$SOURCE_RUN_VALIDATOR" ] ||
+  fail "source-run validator is missing: $SOURCE_RUN_VALIDATOR"
+[ -x "$VALGRIND_RECEIPT_HELPER" ] ||
+  fail "Valgrind receipt helper is missing: $VALGRIND_RECEIPT_HELPER"
+[ -f "$TREE_RECEIPT_HELPER" ] ||
+  fail "tree-receipt helper is missing: $TREE_RECEIPT_HELPER"
+[ -x "$MEMORY_EVIDENCE_HELPER" ] ||
+  fail "memory-evidence validator is missing: $MEMORY_EVIDENCE_HELPER"
+[ -x "$DEBUG_SYMBOL_HELPER" ] ||
+  fail "Valgrind debug-symbol verifier is missing: $DEBUG_SYMBOL_HELPER"
+[ "${CONDA_PREFIX:-}" = "$TOOLCHAIN" ] ||
+  fail "CONDA_PREFIX does not identify the activated local toolchain"
+[ "$(command -v R)" = "$ORDINARY_R" ] ||
+  fail "R does not resolve to the activated local executable"
+[ "$("$ORDINARY_R" RHOME)" = "$TOOLCHAIN/lib/R" ] ||
+  fail "R_HOME is not project-local"
+ORDINARY_R_VERSION=$("$ORDINARY_R" --vanilla --slave -e \
+  'cat(as.character(getRversion()))')
+[ "$ORDINARY_R_VERSION" = "4.6.1" ] ||
+  fail "expected ordinary local R 4.6.1, found $ORDINARY_R_VERSION"
+
+CHECKS_ROOT="$ROOT/.local/checks"
+require_plain_check_directory() {
+  checked_directory=$1
+  [ -d "$checked_directory" ] && [ ! -L "$checked_directory" ] ||
+    fail "managed check directory is missing, non-directory, or symbolic: $checked_directory"
+  [ "$(CDPATH='' cd -- "$checked_directory" && pwd -P)" = "$checked_directory" ] ||
+    fail "managed check directory resolves outside its expected path: $checked_directory"
+}
+require_plain_check_directory "$ROOT/.local"
+require_plain_check_directory "$CHECKS_ROOT"
+SOURCE_RUN_DIRECTORY="$CHECKS_ROOT/$SOURCE_RUN_ID"
+[ -d "$SOURCE_RUN_DIRECTORY/source" ] ||
+  fail "source run has no retained source: $SOURCE_RUN_DIRECTORY"
+[ -f "$SOURCE_RUN_DIRECTORY/metadata/source-manifest.tsv" ] ||
+  fail "source run has no retained manifest: $SOURCE_RUN_DIRECTORY"
+[ ! -L "$SOURCE_RUN_DIRECTORY" ] && \
+  [ ! -L "$SOURCE_RUN_DIRECTORY/source" ] && \
+  [ ! -L "$SOURCE_RUN_DIRECTORY/metadata" ] && \
+  [ ! -L "$SOURCE_RUN_DIRECTORY/metadata/source-manifest.tsv" ] ||
+  fail "source run directories and manifest must not be symbolic links"
+SOURCE_RUN_REAL=$(CDPATH='' cd -- "$SOURCE_RUN_DIRECTORY" && pwd -P)
+[ "$SOURCE_RUN_REAL" = "$SOURCE_RUN_DIRECTORY" ] ||
+  fail "source run must resolve directly below the repository-local checks tree"
+
+RUN_DIRECTORY="$CHECKS_ROOT/$RUN_ID"
+[ ! -e "$RUN_DIRECTORY" ] && [ ! -L "$RUN_DIRECTORY" ] ||
+  fail "run directory already exists or is symbolic: $RUN_DIRECTORY"
+(umask 077 && mkdir "$RUN_DIRECTORY" &&
+  mkdir "$RUN_DIRECTORY/metadata" "$RUN_DIRECTORY/modes" \
+    "$RUN_DIRECTORY/artifacts") ||
+  fail "run directory already exists or cannot be created: $RUN_DIRECTORY"
+require_plain_check_directory "$RUN_DIRECTORY"
+cp "$HARNESS_SCRIPT" "$RUN_DIRECTORY/metadata/memory-check"
+cp "$COPY_SNAPSHOT" "$RUN_DIRECTORY/metadata/copy-check-snapshot.R"
+cp "$SOURCE_RUN_VALIDATOR" \
+  "$RUN_DIRECTORY/metadata/validate-native-source-run"
+cp "$VALGRIND_RECEIPT_HELPER" \
+  "$RUN_DIRECTORY/metadata/valgrind-receipts"
+cp "$TREE_RECEIPT_HELPER" "$RUN_DIRECTORY/metadata/tree-receipt.R"
+cp "$MEMORY_EVIDENCE_HELPER" \
+  "$RUN_DIRECTORY/metadata/validate-memory-evidence"
+cp "$DEBUG_SYMBOL_HELPER" \
+  "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
+chmod 700 "$RUN_DIRECTORY/metadata/validate-native-source-run" \
+  "$RUN_DIRECTORY/metadata/valgrind-receipts" \
+  "$RUN_DIRECTORY/metadata/validate-memory-evidence" \
+  "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
+sha256sum "$RUN_DIRECTORY/metadata/memory-check" \
+  "$RUN_DIRECTORY/metadata/copy-check-snapshot.R" \
+  "$RUN_DIRECTORY/metadata/validate-native-source-run" \
+  "$RUN_DIRECTORY/metadata/valgrind-receipts" \
+  "$RUN_DIRECTORY/metadata/tree-receipt.R" \
+  "$RUN_DIRECTORY/metadata/validate-memory-evidence" \
+  "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols" \
+  > "$RUN_DIRECTORY/metadata/harness.sha256"
+RETAINED_COPY_SNAPSHOT="$RUN_DIRECTORY/metadata/copy-check-snapshot.R"
+RETAINED_SOURCE_RUN_VALIDATOR="$RUN_DIRECTORY/metadata/validate-native-source-run"
+RETAINED_VALGRIND_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/valgrind-receipts"
+RETAINED_MEMORY_EVIDENCE_HELPER="$RUN_DIRECTORY/metadata/validate-memory-evidence"
+RETAINED_TREE_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/tree-receipt.R"
+RETAINED_DEBUG_SYMBOL_HELPER="$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
+COMMAND_LOG="$RUN_DIRECTORY/commands.sh"
+: > "$COMMAND_LOG"
+chmod 600 "$COMMAND_LOG"
+MEMORY_COMPLETION_READY=false
+
+finish_run() {
+  status=$?
+  trap - 0
+  if [ "$VALGRIND_LOCK_HELD" = true ]; then
+    /usr/bin/flock -u 9 || true
+    exec 9>&-
+    VALGRIND_LOCK_HELD=false
+  fi
+  if [ "$status" -eq 0 ] && [ "$MEMORY_COMPLETION_READY" = true ] && \
+      [ -f "$RUN_DIRECTORY/metadata/completion.txt" ] && \
+      [ -f "$RUN_DIRECTORY/metadata/completion.sha256" ]; then
+    state=passed
+  else
+    state=failed
+    if [ "$status" -eq 0 ]; then
+      status=1
+    fi
+  fi
+  {
+    printf 'status=%s\n' "$state"
+    printf 'exit_code=%s\n' "$status"
+    printf 'finished_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  } > "$RUN_DIRECTORY/metadata/result.txt"
+  exit "$status"
+}
+trap finish_run 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+quote_argument() {
+  case "$1" in
+    '')
+      printf "''"
+      ;;
+    *[!A-Za-z0-9_./:=,+@%-]*)
+      printf "'"
+      printf '%s' "$1" | sed "s/'/'\\\\''/g"
+      printf "'"
+      ;;
+    *)
+      printf '%s' "$1"
+      ;;
+  esac
+}
+
+log_command() {
+  printf '$' >> "$COMMAND_LOG"
+  for argument do
+    printf ' ' >> "$COMMAND_LOG"
+    quote_argument "$argument" >> "$COMMAND_LOG"
+  done
+  printf '\n' >> "$COMMAND_LOG"
+}
+
+log_command_in_directory() {
+  directory=$1
+  shift
+  {
+    printf '$ cd '
+    quote_argument "$directory"
+    printf ' &&'
+    for argument do
+      printf ' '
+      quote_argument "$argument"
+    done
+    printf '\n'
+  } >> "$COMMAND_LOG"
+}
+
+show_failure_log() {
+  failed_log=$1
+  printf '%s\n' "--- tail of $failed_log ---" >&2
+  tail -n 240 "$failed_log" >&2 || true
+}
+
+run_logged() {
+  output_log=$1
+  shift
+  mkdir -p "$(dirname -- "$output_log")"
+  log_command "$@"
+  if "$@" > "$output_log" 2>&1; then
+    :
+  else
+    command_status=$?
+    show_failure_log "$output_log"
+    fail "command failed with status $command_status (log: $output_log)"
+  fi
+}
+
+run_in_directory_logged() {
+  output_log=$1
+  working_directory=$2
+  shift 2
+  mkdir -p "$(dirname -- "$output_log")"
+  log_command_in_directory "$working_directory" "$@"
+  if (cd "$working_directory" && "$@") > "$output_log" 2>&1; then
+    :
+  else
+    command_status=$?
+    show_failure_log "$output_log"
+    fail "command failed with status $command_status (log: $output_log)"
+  fi
+}
+
+ORDINARY_INPUT_RECEIPTS="$RUN_DIRECTORY/metadata/ordinary-inputs"
+mkdir -p "$ORDINARY_INPUT_RECEIPTS" "$RUN_DIRECTORY/metadata/home"
+run_logged "$RUN_DIRECTORY/metadata/ordinary-toolchain-receipt-create.log" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$TOOLCHAIN" "$ORDINARY_INPUT_RECEIPTS/toolchain-tree.tsv"
+run_logged "$RUN_DIRECTORY/metadata/ordinary-library-receipt-create.log" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$ORDINARY_LIBRARY" "$ORDINARY_INPUT_RECEIPTS/library-tree.tsv"
+cp "$TOOLCHAIN_LOCK" "$ORDINARY_INPUT_RECEIPTS/toolchain-linux-64.lock"
+(
+  cd "$ORDINARY_INPUT_RECEIPTS"
+  sha256sum toolchain-tree.tsv library-tree.tsv toolchain-linux-64.lock \
+    > seal.sha256
+)
+
+verify_ordinary_inputs() {
+  verification_stage=$1
+  run_logged "$RUN_DIRECTORY/metadata/ordinary-inputs-$verification_stage.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+    "$TOOLCHAIN" "$ORDINARY_INPUT_RECEIPTS/toolchain-tree.tsv"
+  run_logged "$RUN_DIRECTORY/metadata/ordinary-library-$verification_stage.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" verify \
+    "$ORDINARY_LIBRARY" "$ORDINARY_INPUT_RECEIPTS/library-tree.tsv"
+  (cd "$ORDINARY_INPUT_RECEIPTS" && sha256sum -c seal.sha256) >/dev/null ||
+    fail "ordinary input receipt seal changed during $verification_stage"
+  cmp -s "$TOOLCHAIN_LOCK" \
+    "$ORDINARY_INPUT_RECEIPTS/toolchain-linux-64.lock" ||
+    fail "ordinary toolchain lock changed during $verification_stage"
+}
+
+verify_ordinary_inputs pre-source
+
+{
+  printf 'harness=memory-check\n'
+  printf 'schema=1\n'
+  printf 'started_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  printf 'root=%s\n' "$ROOT"
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'source_run=%s\n' "$SOURCE_RUN_ID"
+  printf 'gct=%s\n' "$MODE_GCT"
+  printf 'valgrind=%s\n' "$MODE_VALGRIND"
+  printf 'rchk=%s\n' "$MODE_RCHK"
+} > "$RUN_DIRECTORY/metadata/run.txt"
+
+mkdir -p "$RUN_DIRECTORY/metadata/home"
+run_logged "$RUN_DIRECTORY/metadata/source-run-proof.pre.txt" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RETAINED_SOURCE_RUN_VALIDATOR" "$ROOT" "$SOURCE_RUN_ID" \
+  "$SOURCE_RUN_DIRECTORY"
+for origin_name in run.txt result.txt native-check tree-receipt.R \
+    source-manifest.tsv source-tree.tsv modes-tree.tsv completion.txt \
+    completion.sha256; do
+  cp "$SOURCE_RUN_DIRECTORY/metadata/$origin_name" \
+    "$RUN_DIRECTORY/metadata/origin-$origin_name"
+done
+(
+  cd "$RUN_DIRECTORY/metadata"
+  sha256sum origin-run.txt origin-result.txt origin-native-check \
+    origin-tree-receipt.R origin-source-manifest.tsv origin-source-tree.tsv \
+    origin-modes-tree.tsv origin-completion.txt origin-completion.sha256
+) > "$RUN_DIRECTORY/metadata/source-run-evidence.sha256"
+
+{
+  uname -a
+  "$ORDINARY_R" --version
+  printf 'R_HOME=%s\n' "$("$ORDINARY_R" RHOME)"
+  printf 'ordinary_library=%s\n' "$ORDINARY_LIBRARY"
+  printf 'memory_check_sha256='
+  sha256sum "$RUN_DIRECTORY/metadata/memory-check" | cut -d ' ' -f 1
+  printf 'snapshot_helper_sha256='
+  sha256sum "$RETAINED_COPY_SNAPSHOT" | cut -d ' ' -f 1
+  for configuration in CC CC17 C17FLAGS CPPFLAGS LDFLAGS BLAS_LIBS; do
+    printf 'R_CMD_config_%s=' "$configuration"
+    "$ORDINARY_R" CMD config "$configuration"
+  done
+} > "$RUN_DIRECTORY/metadata/tool-versions.txt" 2>&1
+
+SOURCE_DIRECTORY="$RUN_DIRECTORY/source"
+run_logged "$RUN_DIRECTORY/metadata/snapshot.log" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_LIBS_USER=$ORDINARY_LIBRARY" "R_LIBS=$ORDINARY_LIBRARY" \
+  "R_LIBS_SITE=" "R_ENVIRON_USER=/dev/null" \
+  "R_PROFILE_USER=/dev/null" "R_MAKEVARS_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_COPY_SNAPSHOT" \
+  "$SOURCE_RUN_DIRECTORY/source" "$SOURCE_RUN_DIRECTORY/metadata" \
+  "$SOURCE_DIRECTORY" "$RUN_DIRECTORY/metadata"
+
+run_logged "$RUN_DIRECTORY/metadata/source-run-proof.post.txt" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$RETAINED_SOURCE_RUN_VALIDATOR" "$ROOT" "$SOURCE_RUN_ID" \
+  "$SOURCE_RUN_DIRECTORY"
+cmp -s "$RUN_DIRECTORY/metadata/source-run-proof.pre.txt" \
+  "$RUN_DIRECTORY/metadata/source-run-proof.post.txt" ||
+  fail "source-run metadata changed while its snapshot was copied"
+for origin_name in run.txt result.txt native-check tree-receipt.R \
+    source-manifest.tsv source-tree.tsv modes-tree.tsv completion.txt \
+    completion.sha256; do
+  cmp -s "$SOURCE_RUN_DIRECTORY/metadata/$origin_name" \
+    "$RUN_DIRECTORY/metadata/origin-$origin_name" ||
+    fail "source-run $origin_name changed while its snapshot was copied"
+done
+if [ ! -f "$SOURCE_DIRECTORY/environment/toolchain-linux-64.lock" ] ||
+    ! cmp -s "$TOOLCHAIN_LOCK" \
+      "$SOURCE_DIRECTORY/environment/toolchain-linux-64.lock"; then
+  fail "source-run toolchain lock differs from the activated toolchain lock"
+fi
+
+run_logged "$RUN_DIRECTORY/metadata/ordinary-library.tsv" env -i \
+  "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" \
+  "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_LIBS_USER=$ORDINARY_LIBRARY" \
+  "R_LIBS=$ORDINARY_LIBRARY" \
+  "R_LIBS_SITE=" \
+  "R_ENVIRON_USER=/dev/null" \
+  "R_PROFILE_USER=/dev/null" \
+  "R_MAKEVARS_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_R" --vanilla --slave \
+  -e 'ip <- installed.packages(lib.loc = commandArgs(TRUE)[[1L]], fields = "Built"); keep <- c("Package", "Version", "Built", "NeedsCompilation"); write.table(ip[, keep, drop = FALSE], stdout(), sep = "\t", quote = FALSE, row.names = FALSE, na = "")' \
+  --args "$ORDINARY_LIBRARY"
+sha256sum "$RUN_DIRECTORY/metadata/ordinary-library.tsv" \
+  > "$RUN_DIRECTORY/metadata/ordinary-library.tsv.sha256"
+
+GIT_HEAD=$(sed -n '1p' "$RUN_DIRECTORY/metadata/git-head.txt")
+case "$GIT_HEAD" in
+  *[!0-9a-f]*|'') fail "retained Git head is malformed" ;;
+esac
+case "${#GIT_HEAD}" in 40|64) ;; *) fail "retained Git head has invalid length" ;; esac
+SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GIT_HEAD") ||
+  fail "retained Git commit is unavailable: $GIT_HEAD"
+case "$SOURCE_DATE_EPOCH" in
+  ''|*[!0-9]*) fail "could not derive SOURCE_DATE_EPOCH" ;;
+esac
+export SOURCE_DATE_EPOCH
+
+if find "$SOURCE_DIRECTORY" -name .valgrindrc -print | grep -q .; then
+  fail "source snapshot contains .valgrindrc and could alter the memory gate"
+fi
+
+SOURCE_PACKAGE_DIRECTORY="$RUN_DIRECTORY/artifacts/source-package"
+TARBALL=
+
+ordinary_environment_in_directory() {
+  ordinary_log=$1
+  ordinary_working_directory=$2
+  ordinary_home=$3
+  ordinary_library=$4
+  shift 4
+  mkdir -p "$ordinary_home" "$ordinary_working_directory/tmp" \
+    "$ordinary_working_directory/cache/R"
+  run_in_directory_logged "$ordinary_log" "$ordinary_working_directory" \
+    env -i \
+    "HOME=$ordinary_home" \
+    "USER=$LOCAL_USER" \
+    "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" "RANLIB=$LOCAL_RANLIB" "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" "NM=$LOCAL_NM" "STRIP=$LOCAL_STRIP" \
+    "OBJCOPY=$LOCAL_OBJCOPY" "OBJDUMP=$LOCAL_OBJDUMP" \
+    "READELF=$LOCAL_READELF" "CPP=$LOCAL_CPP" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "CMAKE_ARGS=$LOCAL_CMAKE_ARGS" "MESON_ARGS=-Dbuildtype=release" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LIBRARY_PATH=" \
+    "CPATH=" \
+    "C_INCLUDE_PATH=" \
+    "CPLUS_INCLUDE_PATH=" \
+    "DEBUGINFOD_URLS=" \
+    "R_LIBS_USER=$ordinary_library" \
+    "R_LIBS=$ordinary_library:$ORDINARY_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=$SOURCE_DIRECTORY/environment/Makevars" \
+    "R_BUILD_ENVIRON=/dev/null" \
+    "R_INSTALL_ENVIRON=/dev/null" \
+    "R_CHECK_ENVIRON=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "R_KEEP_PKG_SOURCE=yes" \
+    "NOT_CRAN=true" \
+    "_R_CHECK_FORCE_SUGGESTS_=true" \
+    "TMPDIR=$ordinary_working_directory/tmp" \
+    "XDG_CACHE_HOME=$ordinary_working_directory/cache" \
+    "R_USER_CACHE_DIR=$ordinary_working_directory/cache/R" \
+    "CCACHE_DIR=$ordinary_working_directory/cache/ccache" \
+    "PIP_CACHE_DIR=$ordinary_working_directory/cache/pip" \
+    "UV_CACHE_DIR=$ordinary_working_directory/cache/uv" \
+    "RETICULATE_MINICONDA_PATH=$ROOT/.local/reticulate" \
+    "RETICULATE_USE_MANAGED_VENV=yes" \
+    "MAKEFLAGS=-j1" \
+    "LC_ALL=C.UTF-8" \
+    "TZ=UTC" \
+    "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+    "LD_PRELOAD=" \
+    "ASAN_OPTIONS=" \
+    "UBSAN_OPTIONS=" \
+    "$@"
+}
+
+ensure_source_tarball() {
+  if [ -n "$TARBALL" ]; then
+    return
+  fi
+  mkdir -p "$SOURCE_PACKAGE_DIRECTORY/build" \
+    "$SOURCE_PACKAGE_DIRECTORY/library" "$SOURCE_PACKAGE_DIRECTORY/home"
+  ordinary_environment_in_directory \
+    "$SOURCE_PACKAGE_DIRECTORY/build.log" \
+    "$SOURCE_PACKAGE_DIRECTORY/build" \
+    "$SOURCE_PACKAGE_DIRECTORY/home" \
+    "$SOURCE_PACKAGE_DIRECTORY/library" \
+    "$ORDINARY_R" CMD build --no-manual "$SOURCE_DIRECTORY"
+
+  set -- "$SOURCE_PACKAGE_DIRECTORY"/build/paradox_*.tar.gz
+  [ "$#" -eq 1 ] && [ -f "$1" ] ||
+    fail "R CMD build did not produce exactly one paradox source archive"
+  TARBALL=$1
+  sha256sum "$TARBALL" > "$SOURCE_PACKAGE_DIRECTORY/source-archive.sha256"
+}
+
+check_r_cmd_check_result() {
+  check_root=$1
+  mode_artifacts=$2
+  set -- "$check_root"/paradox.Rcheck/00check.log
+  [ "$#" -eq 1 ] && [ -f "$1" ] ||
+    fail "R CMD check did not retain paradox.Rcheck/00check.log"
+  check_log=$1
+  grep -E '^Status:' "$check_log" > "$mode_artifacts/check-status.txt" ||
+    fail "R CMD check log has no final status"
+  if grep -E '^Status:.*(ERROR|WARNING)' "$check_log" \
+      > "$mode_artifacts/check-failures.txt"; then
+    cat "$mode_artifacts/check-failures.txt" >&2
+    show_failure_log "$check_log"
+    fail "R CMD check reported an ERROR or WARNING (log: $check_log)"
+  fi
+  rm -f "$mode_artifacts/check-failures.txt"
+  sha256sum "$check_log" > "$mode_artifacts/00check.log.sha256"
+}
+
+if [ "$MODE_GCT" = true ]; then
+  verify_ordinary_inputs pre-gct
+  ensure_source_tarball
+  MODE_DIRECTORY="$RUN_DIRECTORY/modes/gct"
+  MODE_LIBRARY="$MODE_DIRECTORY/library"
+  MODE_WORK="$MODE_DIRECTORY/work"
+  MODE_ARTIFACTS="$MODE_DIRECTORY/artifacts"
+  mkdir -p "$MODE_LIBRARY" "$MODE_WORK" "$MODE_ARTIFACTS" \
+    "$MODE_DIRECTORY/home"
+  {
+    printf '%s\n' \
+      'mode=gct' \
+      'r_executable=ordinary repository-local R 4.6.1' \
+      'command=R CMD check --use-gct --no-manual --no-multiarch' \
+      '_R_CHECK_GCT_N_=10' \
+      'tests=complete package check, examples and vignettes enabled' \
+      'manual=false (not a memory-exercising surface)'
+  } > "$MODE_ARTIFACTS/scope.txt"
+
+  ordinary_environment_in_directory \
+    "$MODE_DIRECTORY/logs/check.log" "$MODE_WORK" \
+    "$MODE_DIRECTORY/home" "$MODE_LIBRARY" \
+    "_R_CHECK_GCT_N_=10" \
+    "$ORDINARY_R" CMD check --use-gct --no-manual --no-multiarch \
+    "--library=$MODE_LIBRARY" "$TARBALL"
+  check_r_cmd_check_result "$MODE_WORK" "$MODE_ARTIFACTS"
+  if ! grep -F -n 'gctorture2(10)' \
+      "$MODE_WORK/paradox.Rcheck/paradox-Ex.R" \
+      > "$MODE_ARTIFACTS/gctorture2-injection.txt"; then
+    fail "R CMD check did not retain evidence of _R_CHECK_GCT_N_=10"
+  fi
+  grep -F -n 'gctorture(TRUE)' \
+    "$MODE_WORK/paradox.Rcheck/tests/startup.Rs" \
+    > "$MODE_ARTIFACTS/test-gctorture-injection.txt" ||
+    fail "R CMD check did not enable GC torture for package tests"
+
+  VIGNETTE_SOURCE_ROOT="$MODE_WORK/vignette-source"
+  mkdir -p "$VIGNETTE_SOURCE_ROOT"
+  run_logged "$MODE_DIRECTORY/logs/extract-vignette-source.log" \
+    /usr/bin/tar -xzf "$TARBALL" -C "$VIGNETTE_SOURCE_ROOT"
+  VIGNETTE_SOURCE="$VIGNETTE_SOURCE_ROOT/paradox"
+  [ -d "$VIGNETTE_SOURCE" ] && [ ! -L "$VIGNETTE_SOURCE" ] ||
+    fail "source archive has no unique paradox directory for vignette torture"
+  ordinary_environment_in_directory \
+    "$MODE_DIRECTORY/logs/vignettes-gctorture.log" \
+    "$VIGNETTE_SOURCE" "$MODE_DIRECTORY/home" "$MODE_LIBRARY" \
+    "R_GCTORTURE=10" \
+    "$ORDINARY_R" --vanilla --slave \
+    -e 'args <- commandArgs(TRUE); stopifnot(identical(Sys.getenv("R_GCTORTURE"), "10")); gctorture2(10L); cat("R_GCTORTURE=10\ngctorture2_step=10\n"); tools::buildVignettes(dir = args[[1L]], tangle = TRUE, clean = TRUE, quiet = FALSE)' \
+    --args "$VIGNETTE_SOURCE"
+  grep -Fx 'R_GCTORTURE=10' \
+    "$MODE_DIRECTORY/logs/vignettes-gctorture.log" \
+    > "$MODE_ARTIFACTS/vignette-gctorture-evidence.txt" ||
+    fail "explicit vignette build did not retain GC-torture evidence"
+  grep -Fx 'gctorture2_step=10' \
+    "$MODE_DIRECTORY/logs/vignettes-gctorture.log" \
+    >> "$MODE_ARTIFACTS/vignette-gctorture-evidence.txt" ||
+    fail "explicit vignette build did not confirm gctorture2 step 10"
+  verify_ordinary_inputs post-gct
+fi
+
+validate_instrumented_library() {
+  validation_log=$1
+  build_configuration=$2
+  valgrind_r=$3
+  valgrind_library=$4
+  package_manifest=$5
+
+  [ -f "$build_configuration" ] ||
+    fail "instrumented R has no retained build configuration"
+  grep -q -- '--with-valgrind-instrumentation=2' "$build_configuration" ||
+    fail "instrumented R was not configured at Valgrind level 2"
+  if grep -q -- '--with-blas' "$build_configuration"; then
+    fail "instrumented R configuration selected an external BLAS"
+  fi
+
+  mkdir -p "$(dirname -- "$validation_log")/home"
+
+  run_logged "$validation_log" env -i \
+    "HOME=$(dirname -- "$validation_log")/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LIBRARY_PATH=" \
+    "CPATH=" \
+    "C_INCLUDE_PATH=" \
+    "CPLUS_INCLUDE_PATH=" \
+    "DEBUGINFOD_URLS=" \
+    "R_LIBS_USER=$valgrind_library" \
+    "R_LIBS=$valgrind_library" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "LC_ALL=C.UTF-8" \
+    "TZ=UTC" \
+    "$valgrind_r" --vanilla --slave \
+    -e 'args <- commandArgs(TRUE); manifest <- read.delim(args[[1L]], sep = "\t", quote = "", colClasses = "character", check.names = FALSE); lib <- normalizePath(args[[2L]], mustWork = TRUE); prefix <- normalizePath(args[[3L]], mustWork = TRUE); stopifnot(identical(as.character(getRversion()), "4.6.1"), startsWith(normalizePath(R.home()), prefix), isTRUE(capabilities("profmem")), identical(names(manifest), c("package", "version", "sha256")), !anyDuplicated(manifest$package), !anyNA(manifest), all(nzchar(manifest$package)), all(nzchar(manifest$version)), all(grepl("^[0-9a-f]{64}$", manifest$sha256))); present <- basename(list.dirs(lib, recursive = FALSE, full.names = TRUE)); stopifnot(setequal(present, manifest$package)); for (i in seq_len(nrow(manifest))) { pkg <- manifest$package[[i]]; path <- normalizePath(find.package(pkg, lib.loc = lib), mustWork = TRUE); version <- as.character(packageVersion(pkg, lib.loc = lib)); built <- packageDescription(pkg, lib.loc = lib, fields = "Built"); stopifnot(startsWith(path, paste0(lib, .Platform$file.sep)), identical(version, manifest$version[[i]]), grepl("^R 4\\.6\\.1;", built)); cat(pkg, version, built, sep = "\t"); cat("\n") }; blas <- normalizePath(unname(extSoftVersion()[["BLAS"]]), mustWork = TRUE); stopifnot(startsWith(blas, prefix), grepl("^libRblas", basename(blas))); cat("R_HOME=", R.home(), "\nBLAS=", blas, "\n", sep = "")' \
+    --args "$package_manifest" "$valgrind_library" "$(dirname -- "$valgrind_r")/.."
+}
+
+acquire_valgrind_state_lock() {
+  mkdir -p "$(dirname -- "$VALGRIND_STATE_LOCK")"
+  [ ! -L "$VALGRIND_STATE_LOCK" ] ||
+    fail "instrumented-R state lock must not be symbolic"
+  exec 9>>"$VALGRIND_STATE_LOCK"
+  [ -f "$VALGRIND_STATE_LOCK" ] && [ ! -L "$VALGRIND_STATE_LOCK" ] || {
+    exec 9>&-
+    fail "instrumented-R state lock changed while it was opened"
+  }
+  [ "$(/usr/bin/stat -Lc '%d:%i' /proc/$$/fd/9)" = \
+      "$(/usr/bin/stat -Lc '%d:%i' "$VALGRIND_STATE_LOCK")" ] || {
+    exec 9>&-
+    fail "instrumented-R state lock path was substituted while opening"
+  }
+  if ! /usr/bin/flock -n -x 9; then
+    exec 9>&-
+    fail "instrumented-R state is locked by another build, bootstrap, or memory check"
+  fi
+  VALGRIND_LOCK_HELD=true
+}
+
+release_valgrind_state_lock() {
+  if [ "$VALGRIND_LOCK_HELD" = true ]; then
+    /usr/bin/flock -u 9
+    exec 9>&-
+    VALGRIND_LOCK_HELD=false
+  fi
+}
+
+run_valgrind_receipt_verification() {
+  receipt_log=$1
+  receipt_manifest=$2
+  receipt_home=$(dirname -- "$receipt_log")/receipt-home
+  mkdir -p "$receipt_home" "$ROOT/.local/tmp"
+  run_logged "$receipt_log" env -i \
+    "HOME=$receipt_home" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "CONDA_PREFIX=$TOOLCHAIN" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "TMPDIR=$ROOT/.local/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_VALGRIND_RECEIPT_HELPER" verify-library \
+    "$ROOT" "$receipt_manifest"
+}
+
+retain_valgrind_receipts() {
+  receipt_destination=$1
+  receipt_root="$ROOT/.local/r-valgrind/receipts"
+  mkdir -p "$receipt_destination/R-4.6.1" "$receipt_destination/library"
+  for relative in \
+      R-4.6.1/inputs.tsv \
+      R-4.6.1/source-tree.tsv \
+      R-4.6.1/toolchain-tree.tsv \
+      R-4.6.1/installed-tree.tsv \
+      R-4.6.1/seal.tsv \
+      library/inputs.tsv \
+      library/package-manifest.tsv \
+      library/installed-tree.tsv \
+      library/seal.tsv; do
+    [ -f "$receipt_root/$relative" ] && [ ! -L "$receipt_root/$relative" ] ||
+      fail "authenticated Valgrind receipt is absent or symbolic: $relative"
+    cp "$receipt_root/$relative" "$receipt_destination/$relative"
+  done
+  (
+    cd "$receipt_destination"
+    sha256sum \
+      R-4.6.1/inputs.tsv \
+      R-4.6.1/source-tree.tsv \
+      R-4.6.1/toolchain-tree.tsv \
+      R-4.6.1/installed-tree.tsv \
+      R-4.6.1/seal.tsv \
+      library/inputs.tsv \
+      library/package-manifest.tsv \
+      library/installed-tree.tsv \
+      library/seal.tsv
+  ) > "$receipt_destination/receipt-files.sha256"
+}
+
+compare_retained_valgrind_receipts() {
+  receipt_copy=$1
+  receipt_root="$ROOT/.local/r-valgrind/receipts"
+  for relative in \
+      R-4.6.1/inputs.tsv \
+      R-4.6.1/source-tree.tsv \
+      R-4.6.1/toolchain-tree.tsv \
+      R-4.6.1/installed-tree.tsv \
+      R-4.6.1/seal.tsv \
+      library/inputs.tsv \
+      library/package-manifest.tsv \
+      library/installed-tree.tsv \
+      library/seal.tsv; do
+    cmp -s "$receipt_root/$relative" "$receipt_copy/$relative" ||
+      fail "Valgrind prerequisite receipt changed during the memory gate: $relative"
+  done
+  (cd "$receipt_copy" && sha256sum -c receipt-files.sha256) >/dev/null ||
+    fail "retained Valgrind prerequisite receipts failed their hash list"
+}
+
+run_valgrind_in_directory_logged() {
+  output_log=$1
+  working_directory=$2
+  valgrind_log_directory=$3
+  valgrind_log_stem=$4
+  shift 4
+  mkdir -p "$(dirname -- "$output_log")"
+  log_command_in_directory "$working_directory" "$@"
+  if (cd "$working_directory" && "$@") > "$output_log" 2>&1; then
+    :
+  else
+    command_status=$?
+    show_failure_log "$output_log"
+    for valgrind_failure_log in \
+        "$valgrind_log_directory/$valgrind_log_stem".*.log; do
+      if [ -f "$valgrind_failure_log" ]; then
+        show_failure_log "$valgrind_failure_log"
+      fi
+    done
+    fail "Valgrind command failed with status $command_status (log: $output_log)"
+  fi
+}
+
+scan_valgrind_logs() {
+  valgrind_log_directory=$1
+  valgrind_log_stem=$2
+  diagnostic_report=$3
+  run_logged "$diagnostic_report.validation.log" env -i \
+    "HOME=$(dirname -- "$diagnostic_report")" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_MEMORY_EVIDENCE_HELPER" valgrind \
+    "$valgrind_log_directory" "$valgrind_log_stem" "$diagnostic_report"
+}
+
+write_valgrind_wrapper() {
+  wrapper=$1
+  expected_executable=$2
+  log_pattern=$3
+  debug_root=$4
+  (umask 077
+    {
+      printf '%s\n' '#!/usr/bin/env sh' 'set -eu'
+      printf 'VALGRIND_BINARY='
+      quote_argument "$VALGRIND_BINARY"
+      printf '\nEXPECTED_EXECUTABLE='
+      quote_argument "$expected_executable"
+      printf '\nLOG_PATTERN='
+      quote_argument "$log_pattern"
+      printf '\nDEBUG_ROOT='
+      quote_argument "$debug_root"
+      printf '\n'
+      printf '%s\n' \
+        'if [ "$#" -eq 1 ] && [ "$1" = "--version" ]; then' \
+        '  exec "$VALGRIND_BINARY" --version' \
+        'fi' \
+        '[ "$#" -ge 1 ] && [ "$1" = "$EXPECTED_EXECUTABLE" ] || {' \
+        '  printf "%s\n" "unexpected Valgrind target: ${1:-<missing>}" >&2' \
+        '  exit 2' \
+        '}' \
+        'exec "$VALGRIND_BINARY" \' \
+        '  --command-line-only=yes \' \
+        '  --tool=memcheck \' \
+        '  --default-suppressions=no \' \
+        '  --leak-check=full \' \
+        '  --show-leak-kinds=definite,indirect,possible \' \
+        '  --errors-for-leak-kinds=definite,indirect,possible \' \
+        '  --track-origins=yes \' \
+        '  --error-exitcode=97 \' \
+        '  --num-callers=50 \' \
+        '  --read-var-info=no \' \
+        '  --keep-debuginfo=yes \' \
+        '  --trace-children=no \' \
+        '  --child-silent-after-fork=yes \' \
+        '  "--extra-debuginfo-path=$DEBUG_ROOT" \' \
+        '  "--log-file=$LOG_PATTERN" \' \
+        '  "$@"'
+    } > "$wrapper")
+  chmod 700 "$wrapper"
+}
+
+scan_valgrind_rc_files() {
+  rc_stage=$1
+  rc_report="$MODE_ARTIFACTS/valgrind-rc-$rc_stage.txt"
+  find "$SOURCE_DIRECTORY" "$MODE_DIRECTORY" -name .valgrindrc -print \
+    > "$rc_report"
+  [ ! -s "$rc_report" ] || {
+    cat "$rc_report" >&2
+    fail "Valgrind rc files were present during $rc_stage"
+  }
+}
+
+if [ "$MODE_VALGRIND" = true ]; then
+  verify_ordinary_inputs pre-valgrind
+  acquire_valgrind_state_lock
+  VALGRIND_PREFIX="$ROOT/.local/r-valgrind/4.6.1"
+  VALGRIND_R="$VALGRIND_PREFIX/bin/R"
+  VALGRIND_LIBRARY="$ROOT/.local/r-valgrind/library"
+  VALGRIND_MANIFEST="$SOURCE_DIRECTORY/environment/valgrind-r-packages.tsv"
+  VALGRIND_BUILD_CONFIGURATION="$VALGRIND_PREFIX/.paradox-build-configuration"
+  VALGRIND_BUILD_FINGERPRINT="$VALGRIND_PREFIX/.paradox-build-fingerprint"
+  VALGRIND_BINARY="$TOOLCHAIN/bin/valgrind"
+  VALGRIND_DEBUG_PREFIX="$ROOT/.local/debug/libc6-dbg-2.31-0ubuntu9.18"
+  VALGRIND_DEBUG_RECEIPT="$ROOT/.local/receipts/valgrind-debug-symbols"
+  for required in "$VALGRIND_R" "$VALGRIND_BINARY"; do
+    [ -x "$required" ] || fail "Valgrind prerequisite is missing: $required"
+  done
+  VALGRIND_RESOLVED=$(PATH="$LOCAL_PATH"; export PATH; command -v valgrind) ||
+    fail "Valgrind does not resolve in the isolated tool path"
+  [ "$VALGRIND_RESOLVED" = "$VALGRIND_BINARY" ] ||
+    fail "Valgrind resolves outside the project toolchain: $VALGRIND_RESOLVED"
+  [ "$($VALGRIND_BINARY --version)" = "valgrind-3.27.1" ] ||
+    fail "expected pinned Valgrind 3.27.1"
+  [ -d "$VALGRIND_LIBRARY" ] ||
+    fail "instrumented-R library is missing; run scripts/bootstrap-valgrind-r-packages"
+  [ -f "$VALGRIND_MANIFEST" ] || fail "missing $VALGRIND_MANIFEST"
+  [ -f "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" ] ||
+    fail "source snapshot has no focused native-test runner"
+  [ -f "$VALGRIND_BUILD_CONFIGURATION" ] ||
+    fail "instrumented R has no retained build configuration"
+  [ -f "$VALGRIND_BUILD_FINGERPRINT" ] ||
+    fail "instrumented R has no build fingerprint"
+  build_fingerprint=$(sed -n '1p' "$VALGRIND_BUILD_FINGERPRINT")
+  case "$build_fingerprint" in
+    *[!0-9a-f]*|'') fail "instrumented-R build fingerprint is malformed" ;;
+  esac
+  [ "${#build_fingerprint}" -eq 64 ] ||
+    fail "instrumented-R build fingerprint has invalid length"
+  [ "$(sha256sum "$VALGRIND_BUILD_CONFIGURATION" | cut -d ' ' -f 1)" = \
+      "$build_fingerprint" ] ||
+    fail "instrumented-R build configuration does not match its fingerprint"
+
+  MODE_DIRECTORY="$RUN_DIRECTORY/modes/valgrind"
+  MODE_LIBRARY="$MODE_DIRECTORY/library"
+  MODE_CHECK_LIBRARY="$MODE_DIRECTORY/check-library"
+  MODE_WORK="$MODE_DIRECTORY/work"
+  MODE_LOGS="$MODE_DIRECTORY/logs"
+  MODE_ARTIFACTS="$MODE_DIRECTORY/artifacts"
+  MODE_HOME="$MODE_DIRECTORY/home"
+  mkdir -p "$MODE_LIBRARY" "$MODE_CHECK_LIBRARY" "$MODE_WORK" "$MODE_LOGS" \
+    "$MODE_ARTIFACTS" "$MODE_HOME" "$MODE_WORK/tmp" \
+    "$MODE_WORK/cache/R"
+  run_logged "$MODE_LOGS/debug-symbol-receipt-pre.log" env -i \
+    "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_DEBUG_SYMBOL_HELPER" --verify --root "$ROOT"
+  VALGRIND_DEBUG_RECEIPT_COPY="$MODE_ARTIFACTS/debug-symbol-receipt"
+  mkdir -p "$VALGRIND_DEBUG_RECEIPT_COPY"
+  for debug_receipt_file in inputs.tsv installed-tree.tsv seal.sha256; do
+    [ -f "$VALGRIND_DEBUG_RECEIPT/$debug_receipt_file" ] && \
+      [ ! -L "$VALGRIND_DEBUG_RECEIPT/$debug_receipt_file" ] ||
+      fail "Valgrind debug-symbol receipt is absent or symbolic: $debug_receipt_file"
+    cp "$VALGRIND_DEBUG_RECEIPT/$debug_receipt_file" \
+      "$VALGRIND_DEBUG_RECEIPT_COPY/$debug_receipt_file"
+  done
+  run_valgrind_receipt_verification \
+    "$MODE_LOGS/prerequisite-receipts-pre.log" "$VALGRIND_MANIFEST"
+  VALGRIND_RECEIPT_COPY="$MODE_ARTIFACTS/prerequisite-receipts"
+  retain_valgrind_receipts "$VALGRIND_RECEIPT_COPY"
+  cp "$VALGRIND_MANIFEST" "$MODE_ARTIFACTS/valgrind-r-packages.tsv"
+  cp "$VALGRIND_BUILD_CONFIGURATION" \
+    "$MODE_ARTIFACTS/instrumented-R-configuration.txt"
+  cp "$VALGRIND_BUILD_FINGERPRINT" \
+    "$MODE_ARTIFACTS/instrumented-R-fingerprint.txt"
+  sha256sum "$VALGRIND_MANIFEST" "$VALGRIND_BUILD_CONFIGURATION" \
+    "$VALGRIND_BUILD_FINGERPRINT" \
+    > "$MODE_ARTIFACTS/prerequisites.sha256"
+
+  run_logged "$MODE_LOGS/instrumented-R-version.log" env -i \
+    "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "$VALGRIND_R" --version
+  run_logged "$MODE_LOGS/valgrind-version.log" \
+    "$VALGRIND_BINARY" --version
+
+  validate_instrumented_library \
+    "$MODE_DIRECTORY/instrumented-library.log" \
+    "$VALGRIND_BUILD_CONFIGURATION" "$VALGRIND_R" \
+    "$VALGRIND_LIBRARY" "$VALGRIND_MANIFEST"
+  ensure_source_tarball
+
+  VALGRIND_WRAPPER_ROOT="$MODE_ARTIFACTS/valgrind-wrappers"
+  VALGRIND_R_EXECUTABLE="$VALGRIND_PREFIX/lib/R/bin/exec/R"
+  [ -x "$VALGRIND_R_EXECUTABLE" ] ||
+    fail "instrumented R executable is missing: $VALGRIND_R_EXECUTABLE"
+  for wrapper_stage in smoke baseline focused check; do
+    mkdir -p "$VALGRIND_WRAPPER_ROOT/$wrapper_stage"
+  done
+  write_valgrind_wrapper "$VALGRIND_WRAPPER_ROOT/smoke/valgrind" \
+    /bin/true "$MODE_LOGS/valgrind-smoke.%p.log" "$VALGRIND_DEBUG_PREFIX"
+  write_valgrind_wrapper "$VALGRIND_WRAPPER_ROOT/baseline/valgrind" \
+    "$VALGRIND_R_EXECUTABLE" "$MODE_LOGS/valgrind-baseline.%p.log" \
+    "$VALGRIND_DEBUG_PREFIX"
+  write_valgrind_wrapper "$VALGRIND_WRAPPER_ROOT/focused/valgrind" \
+    "$VALGRIND_R_EXECUTABLE" "$MODE_LOGS/valgrind-focused.%p.log" \
+    "$VALGRIND_DEBUG_PREFIX"
+  write_valgrind_wrapper "$VALGRIND_WRAPPER_ROOT/check/valgrind" \
+    "$VALGRIND_R_EXECUTABLE" "$MODE_LOGS/valgrind-check.%p.log" \
+    "$VALGRIND_DEBUG_PREFIX"
+  (
+    cd "$VALGRIND_WRAPPER_ROOT"
+    sha256sum smoke/valgrind baseline/valgrind focused/valgrind check/valgrind \
+      > wrappers.sha256
+  )
+  scan_valgrind_rc_files pre
+  {
+    printf '%s\n' \
+      'mode=valgrind' \
+      'r_executable=separate unoptimized repository-local R 4.6.1' \
+      'instrumentation=--with-valgrind-instrumentation=2' \
+      'blas=R reference BLAS (validated as project-local libRblas)' \
+      'focused_tests=true' \
+      'check=R CMD check --use-valgrind --ignore-vignettes --no-manual' \
+      'suggests=_R_CHECK_FORCE_SUGGESTS_=false' \
+      'vignettes=false (ordinary gct mode retains the vignette surface)' \
+      'configuration=stage wrapper passes exact CLI options with --command-line-only=yes' \
+      'VALGRIND_OPTS=empty' \
+      'leak_detail=definite,indirect,possible; full summary retained' \
+      'read_var_info=false (avoids non-actionable DWARF parser warnings)' \
+      'child_silent_after_fork=true (rejects header-only fork-child logs)' \
+      "extra_debuginfo_path=$VALGRIND_DEBUG_PREFIX"
+  } > "$MODE_ARTIFACTS/scope.txt"
+
+  VALGRIND_COMMON_ENV="R_LIBS_USER=$MODE_LIBRARY"
+  run_valgrind_in_directory_logged "$MODE_LOGS/smoke.log" \
+    "$MODE_WORK" "$MODE_LOGS" valgrind-smoke \
+    env -i "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$VALGRIND_WRAPPER_ROOT/smoke:$LOCAL_PATH" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "VALGRIND_OPTS=" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$VALGRIND_WRAPPER_ROOT/smoke/valgrind" /bin/true
+  scan_valgrind_logs "$MODE_LOGS" valgrind-smoke \
+    "$MODE_ARTIFACTS/smoke-valgrind-diagnostics.txt"
+
+  run_valgrind_in_directory_logged "$MODE_LOGS/baseline.log" \
+    "$MODE_WORK" "$MODE_LOGS" valgrind-baseline \
+    env -i \
+    "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$VALGRIND_WRAPPER_ROOT/baseline:$LOCAL_PATH" "CONDA_PREFIX=$TOOLCHAIN" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_LIBS_USER=$VALGRIND_LIBRARY" "R_LIBS=$VALGRIND_LIBRARY" \
+    "R_LIBS_SITE=" "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "R_TESTS=" \
+    "TMPDIR=$MODE_WORK/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "VALGRIND_OPTS=" \
+    "$VALGRIND_R" -d valgrind --vanilla --slave \
+    -e 'stopifnot(identical(as.character(getRversion()), "4.6.1")); invisible(gc()); cat("valgrind baseline complete\n")'
+  scan_valgrind_logs "$MODE_LOGS" valgrind-baseline \
+    "$MODE_ARTIFACTS/baseline-valgrind-diagnostics.txt"
+
+  run_in_directory_logged "$MODE_LOGS/install.log" "$MODE_WORK" \
+    env -i \
+    "HOME=$MODE_HOME" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" "RANLIB=$LOCAL_RANLIB" "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" "NM=$LOCAL_NM" "STRIP=$LOCAL_STRIP" \
+    "OBJCOPY=$LOCAL_OBJCOPY" "OBJDUMP=$LOCAL_OBJDUMP" \
+    "READELF=$LOCAL_READELF" "CPP=$LOCAL_CPP" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "CMAKE_ARGS=$LOCAL_CMAKE_ARGS" "MESON_ARGS=-Dbuildtype=release" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LIBRARY_PATH=" \
+    "CPATH=" \
+    "C_INCLUDE_PATH=" \
+    "CPLUS_INCLUDE_PATH=" \
+    "DEBUGINFOD_URLS=" \
+    "$VALGRIND_COMMON_ENV" \
+    "R_LIBS=$MODE_LIBRARY:$VALGRIND_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_BUILD_ENVIRON=/dev/null" \
+    "R_INSTALL_ENVIRON=/dev/null" \
+    "R_CHECK_ENVIRON=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "R_KEEP_PKG_SOURCE=yes" \
+    "TMPDIR=$MODE_WORK/tmp" \
+    "XDG_CACHE_HOME=$MODE_WORK/cache" \
+    "R_USER_CACHE_DIR=$MODE_WORK/cache/R" \
+    "MAKEFLAGS=-j1" \
+    "LC_ALL=C.UTF-8" \
+    "TZ=UTC" \
+    "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+    "LD_PRELOAD=" \
+    "ASAN_OPTIONS=" \
+    "UBSAN_OPTIONS=" \
+    "$VALGRIND_R" CMD INSTALL --preclean --clean --no-multiarch \
+    "--library=$MODE_LIBRARY" "$TARBALL"
+
+  [ -f "$MODE_LIBRARY/paradox/libs/paradox.so" ] ||
+    fail "instrumented R did not install the paradox shared library"
+  sha256sum "$MODE_LIBRARY/paradox/libs/paradox.so" \
+    > "$MODE_ARTIFACTS/paradox.so.sha256"
+
+  run_valgrind_in_directory_logged "$MODE_LOGS/focused-tests.log" \
+    "$MODE_WORK" "$MODE_LOGS" valgrind-focused \
+    env -i \
+    "HOME=$MODE_HOME" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$VALGRIND_WRAPPER_ROOT/focused:$LOCAL_PATH" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" "RANLIB=$LOCAL_RANLIB" "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" "NM=$LOCAL_NM" "STRIP=$LOCAL_STRIP" \
+    "OBJCOPY=$LOCAL_OBJCOPY" "OBJDUMP=$LOCAL_OBJDUMP" \
+    "READELF=$LOCAL_READELF" "CPP=$LOCAL_CPP" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "CMAKE_ARGS=$LOCAL_CMAKE_ARGS" "MESON_ARGS=-Dbuildtype=release" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LIBRARY_PATH=" \
+    "CPATH=" \
+    "C_INCLUDE_PATH=" \
+    "CPLUS_INCLUDE_PATH=" \
+    "DEBUGINFOD_URLS=" \
+    "$VALGRIND_COMMON_ENV" \
+    "R_LIBS=$MODE_LIBRARY:$VALGRIND_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "NOT_CRAN=true" \
+    "TMPDIR=$MODE_WORK/tmp" \
+    "XDG_CACHE_HOME=$MODE_WORK/cache" \
+    "R_USER_CACHE_DIR=$MODE_WORK/cache/R" \
+    "MAKEFLAGS=-j1" \
+    "LC_ALL=C.UTF-8" \
+    "TZ=UTC" \
+    "VALGRIND_OPTS=" \
+    "$VALGRIND_R" -d valgrind --vanilla --slave \
+    -f "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" \
+    --args "$SOURCE_DIRECTORY" "$MODE_LIBRARY" focused
+  scan_valgrind_logs "$MODE_LOGS" valgrind-focused \
+    "$MODE_ARTIFACTS/focused-valgrind-diagnostics.txt"
+
+  run_valgrind_in_directory_logged "$MODE_LOGS/check.log" \
+    "$MODE_WORK" "$MODE_LOGS" valgrind-check \
+    env -i \
+    "HOME=$MODE_HOME" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$VALGRIND_WRAPPER_ROOT/check:$LOCAL_PATH" \
+    "CONDA_PREFIX=$TOOLCHAIN" \
+    "CONDA_BUILD_SYSROOT=$LOCAL_SYSROOT" \
+    "HOST=$LOCAL_TARGET" "BUILD=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_HOST=$LOCAL_TARGET" \
+    "CONDA_TOOLCHAIN_BUILD=$LOCAL_TARGET" \
+    "AR=$LOCAL_AR" "RANLIB=$LOCAL_RANLIB" "AS=$LOCAL_AS" \
+    "LD=$LOCAL_LD" "NM=$LOCAL_NM" "STRIP=$LOCAL_STRIP" \
+    "OBJCOPY=$LOCAL_OBJCOPY" "OBJDUMP=$LOCAL_OBJDUMP" \
+    "READELF=$LOCAL_READELF" "CPP=$LOCAL_CPP" \
+    "PKG_CONFIG_PATH=$LOCAL_PKG_CONFIG_PATH" \
+    "PKG_CONFIG_LIBDIR=$LOCAL_PKG_CONFIG_LIBDIR" \
+    "CMAKE_PREFIX_PATH=$LOCAL_CMAKE_PREFIX_PATH" \
+    "CMAKE_ARGS=$LOCAL_CMAKE_ARGS" "MESON_ARGS=-Dbuildtype=release" \
+    "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LIBRARY_PATH=" \
+    "CPATH=" \
+    "C_INCLUDE_PATH=" \
+    "CPLUS_INCLUDE_PATH=" \
+    "DEBUGINFOD_URLS=" \
+    "R_LIBS_USER=$MODE_CHECK_LIBRARY" \
+    "R_LIBS=$MODE_CHECK_LIBRARY:$VALGRIND_LIBRARY" \
+    "R_LIBS_SITE=" \
+    "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" \
+    "R_MAKEVARS_USER=/dev/null" \
+    "R_BUILD_ENVIRON=/dev/null" \
+    "R_INSTALL_ENVIRON=/dev/null" \
+    "R_CHECK_ENVIRON=/dev/null" \
+    "R_HISTFILE=/dev/null" \
+    "R_TESTS=" \
+    "R_KEEP_PKG_SOURCE=yes" \
+    "NOT_CRAN=true" \
+    "_R_CHECK_FORCE_SUGGESTS_=false" \
+    "TMPDIR=$MODE_WORK/tmp" \
+    "XDG_CACHE_HOME=$MODE_WORK/cache" \
+    "R_USER_CACHE_DIR=$MODE_WORK/cache/R" \
+    "MAKEFLAGS=-j1" \
+    "LC_ALL=C.UTF-8" \
+    "TZ=UTC" \
+    "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+    "VALGRIND_OPTS=" \
+    "$VALGRIND_R" CMD check --use-valgrind --ignore-vignettes \
+    --no-manual --no-multiarch "--library=$MODE_CHECK_LIBRARY" "$TARBALL"
+  scan_valgrind_logs "$MODE_LOGS" valgrind-check \
+    "$MODE_ARTIFACTS/check-valgrind-diagnostics.txt"
+  check_r_cmd_check_result "$MODE_WORK" "$MODE_ARTIFACTS"
+  run_valgrind_receipt_verification \
+    "$MODE_LOGS/prerequisite-receipts-post.log" "$VALGRIND_MANIFEST"
+  compare_retained_valgrind_receipts "$VALGRIND_RECEIPT_COPY"
+  run_logged "$MODE_LOGS/debug-symbol-receipt-post.log" env -i \
+    "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_DEBUG_SYMBOL_HELPER" --verify --root "$ROOT"
+  for debug_receipt_file in inputs.tsv installed-tree.tsv seal.sha256; do
+    cmp -s "$VALGRIND_DEBUG_RECEIPT/$debug_receipt_file" \
+      "$VALGRIND_DEBUG_RECEIPT_COPY/$debug_receipt_file" ||
+      fail "Valgrind debug-symbol receipt changed during the memory gate: $debug_receipt_file"
+  done
+  (cd "$VALGRIND_WRAPPER_ROOT" && sha256sum -c wrappers.sha256) >/dev/null ||
+    fail "Valgrind stage wrapper changed during the memory gate"
+  scan_valgrind_rc_files post
+  release_valgrind_state_lock
+  verify_ordinary_inputs post-valgrind
+fi
+
+write_rchk_driver() {
+  driver=$1
+  (umask 077
+    {
+      printf '%s\n' '#!/usr/bin/env bash'
+      printf '%s\n' 'set -euo pipefail'
+      printf '%s\n' 'export WLLVM=/opt/R/devel-rchk/python/bin'
+      printf '%s\n' 'export RCHK=/opt/R/devel-rchk/rchk'
+      printf '%s\n' 'export LLVM=/usr/lib/llvm-14'
+      printf '%s\n' 'export WLLVM_BC_STORE=/opt/R/devel-rchk/bcstore'
+      printf '%s\n' 'export LLVM_COMPILER=clang'
+      printf '%s\n' 'export PATH="$WLLVM:/opt/R/devel-rchk/bin:$LLVM/bin:/usr/local/bin:/usr/bin:/bin"'
+      printf '%s\n' 'OUTPUT=/paradox-output'
+      printf '%s\n' '[[ -d "$OUTPUT" && -w "$OUTPUT" ]] || { echo "rchk output mount is not writable" >&2; exit 2; }'
+      printf '%s\n' '[[ -z "$(find "$OUTPUT" -mindepth 1 -maxdepth 1 -print -quit)" ]] || { echo "rchk output mount is not empty" >&2; exit 2; }'
+      printf '%s\n' 'cd /check/source'
+      printf '%s\n' 'package=$(awk -F: '\''$1 == "Package" { gsub(/[[:space:]]/, "", $2); print $2 }'\'' DESCRIPTION)'
+      printf '%s\n' '[[ "$package" == paradox ]] || { echo "unexpected package: $package" >&2; exit 2; }'
+      printf '%s\n' 'R --version'
+      printf '%s\n' 'llvm-config --version'
+      printf '%s\n' 'sha256sum "$RCHK/src/bcheck" "$RCHK/src/maacheck" "$RCHK/src/fficheck"'
+      printf '%s\n' 'rm -rf "/opt/R/devel-rchk/packages/lib/$package" "/opt/R/devel-rchk/packages/libsonly/$package"'
+      printf '%s\n' 'sha256sum DESCRIPTION > "$OUTPUT/mounted-description.sha256"'
+      printf '%s\n' '/opt/R/devel-rchk/bin/rchk.sh'
+      printf '%s\n' 'cd /opt/R/devel-rchk'
+      printf '%s\n' 'dso="packages/lib/$package/libs/$package.so"'
+      printf '%s\n' '[[ -f "$dso" ]] || { echo "analyzed package DSO is missing: $dso" >&2; exit 2; }'
+      printf '%s\n' 'sha256sum "$dso" > "$OUTPUT/analyzed-dso.sha256"'
+      printf '%s\n' 'cp "$dso" "$OUTPUT/analyzed-paradox.so"'
+      printf '%s\n' 'find "packages/lib/$package" "packages/libsonly/$package" -type f \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -delete 2>/dev/null || true'
+      printf '%s\n' '[[ -z "$(find "packages/lib/$package" "packages/libsonly/$package" -type f \( -name "*.bcheck" -o -name "*.maacheck" -o -name "*.fficheck" \) -print -quit 2>/dev/null)" ]] || { echo "could not clear cached rchk reports" >&2; exit 2; }'
+      printf '%s\n' 'printf "tool\tstatus\treport\tsha256\n" > "$OUTPUT/tool-status.tsv"'
+      printf '%s\n' 'for report_type in bcheck maacheck fficheck; do'
+      printf '%s\n' '  /bin/bash -e -o pipefail "$RCHK/scripts/check_package.sh" "$package" "$report_type"'
+      printf '%s\n' '  report="$dso.$report_type"'
+      printf '%s\n' '  [[ -f "$report" && ! -L "$report" ]] || { echo "missing fresh $report_type report: $report" >&2; exit 2; }'
+      printf '%s\n' '  output_report="$OUTPUT/paradox.so.$report_type"'
+      printf '%s\n' '  cp "$report" "$output_report"'
+      printf '%s\n' '  source_sha=$(sha256sum "$report" | awk '\''{ print $1 }'\'')'
+      printf '%s\n' '  output_sha=$(sha256sum "$output_report" | awk '\''{ print $1 }'\'')'
+      printf '%s\n' '  [[ "$source_sha" == "$output_sha" ]] || { echo "copied $report_type report changed" >&2; exit 2; }'
+      printf '%s\n' '  printf "%s\t0\tparadox.so.%s\t%s\n" "$report_type" "$report_type" "$output_sha" >> "$OUTPUT/tool-status.tsv"'
+      printf '%s\n' '  printf "===== retained rchk report: %s =====\n" "$report"'
+      printf '%s\n' '  sha256sum "$report"'
+      printf '%s\n' '  cat "$report"'
+      printf '%s\n' 'done'
+    } > "$driver")
+}
+
+if [ "$MODE_RCHK" = true ]; then
+  verify_ordinary_inputs pre-rchk
+  AUXILIARY_IMAGES="$SOURCE_DIRECTORY/environment/auxiliary-images.tsv"
+  PODMAN_WRAPPER="$ROOT/scripts/podman-local"
+  PODMAN_MANIFEST="$ROOT/environment/podman-toolchain.tsv"
+  PODMAN_RECEIPT_TEXT="$ROOT/.local/receipts/podman/5.8.2.txt"
+  PODMAN_RECEIPT_TREE="$ROOT/.local/receipts/podman/5.8.2-tree-manifest.tsv"
+  PODMAN_RECEIPT_SHA="$ROOT/.local/receipts/podman/5.8.2.sha256"
+  [ -f "$AUXILIARY_IMAGES" ] || fail "missing $AUXILIARY_IMAGES"
+  [ -x "$PODMAN_WRAPPER" ] || fail "missing executable $PODMAN_WRAPPER"
+  for podman_input in \
+      scripts/podman-local \
+      scripts/environment/podman-tree-manifest \
+      environment/podman-toolchain.tsv \
+      environment/podman-containers.conf.in \
+      environment/podman-storage.conf.in \
+      environment/podman-registries.conf; do
+    [ -f "$ROOT/$podman_input" ] && [ ! -L "$ROOT/$podman_input" ] ||
+      fail "Podman input is absent or symbolic: $podman_input"
+    cmp -s "$ROOT/$podman_input" "$SOURCE_DIRECTORY/$podman_input" ||
+      fail "Podman input differs from the static source run: $podman_input"
+  done
+  for podman_receipt in "$PODMAN_RECEIPT_TEXT" "$PODMAN_RECEIPT_TREE" \
+      "$PODMAN_RECEIPT_SHA"; do
+    [ -f "$podman_receipt" ] && [ ! -L "$podman_receipt" ] ||
+      fail "Podman toolchain receipt is absent or symbolic: $podman_receipt"
+  done
+  run_logged "$RUN_DIRECTORY/metadata/podman-receipt-pre.log" \
+    sha256sum -c "$PODMAN_RECEIPT_SHA"
+  rchk_rows=$(awk -F '\t' '$1 == "rchk" { count += 1 } END { print count + 0 }' \
+    "$AUXILIARY_IMAGES")
+  [ "$rchk_rows" -eq 1 ] || fail "auxiliary image manifest must contain one rchk row"
+  tab=$(printf '\t')
+  old_ifs=$IFS
+  IFS="$tab" read -r rchk_purpose rchk_image rchk_digest \
+    rchk_source_commit rchk_resolved_utc <<EOF
+$(awk -F '\t' '$1 == "rchk" { print }' "$AUXILIARY_IMAGES")
+EOF
+  IFS=$old_ifs
+  [ "$rchk_purpose" = "rchk" ] || fail "could not parse the rchk manifest row"
+  [ "$rchk_image" = "ghcr.io/r-hub/containers/rchk" ] ||
+    fail "unexpected rchk image repository: $rchk_image"
+  digest_hex=${rchk_digest#sha256:}
+  case "$rchk_digest" in sha256:*) ;; *) digest_hex=invalid ;; esac
+  case "$digest_hex" in *[!0-9a-f]*|'') digest_hex=invalid ;; esac
+  [ "${#digest_hex}" -eq 64 ] || fail "rchk image digest is malformed"
+  case "$rchk_source_commit" in *[!0-9a-f]*|'') fail "rchk source commit is malformed" ;; esac
+  [ "${#rchk_source_commit}" -eq 40 ] || fail "rchk source commit has invalid length"
+  [ -n "$rchk_resolved_utc" ] || fail "rchk digest resolution time is missing"
+  RCHK_REFERENCE="$rchk_image@$rchk_digest"
+
+  MODE_DIRECTORY="$RUN_DIRECTORY/modes/rchk"
+  MODE_WORK="$MODE_DIRECTORY/work"
+  MODE_LOGS="$MODE_DIRECTORY/logs"
+  MODE_ARTIFACTS="$MODE_DIRECTORY/artifacts"
+  MODE_REPORTS="$MODE_ARTIFACTS/reports"
+  mkdir -p "$MODE_WORK" "$MODE_LOGS" "$MODE_ARTIFACTS" "$MODE_REPORTS" \
+    "$MODE_DIRECTORY/home" "$MODE_DIRECTORY/podman-launch-home"
+  cp "$AUXILIARY_IMAGES" "$MODE_ARTIFACTS/auxiliary-images.tsv"
+  cp "$PODMAN_WRAPPER" "$MODE_ARTIFACTS/podman-local"
+  cp "$PODMAN_MANIFEST" "$MODE_ARTIFACTS/podman-toolchain.tsv"
+  cp "$PODMAN_RECEIPT_TEXT" "$MODE_ARTIFACTS/podman-5.8.2.txt"
+  cp "$PODMAN_RECEIPT_TREE" \
+    "$MODE_ARTIFACTS/podman-5.8.2-tree-manifest.tsv"
+  cp "$PODMAN_RECEIPT_SHA" "$MODE_ARTIFACTS/podman-5.8.2.sha256"
+  sha256sum "$MODE_ARTIFACTS/auxiliary-images.tsv" \
+    "$MODE_ARTIFACTS/podman-local" \
+    "$MODE_ARTIFACTS/podman-toolchain.tsv" \
+    "$MODE_ARTIFACTS/podman-5.8.2.txt" \
+    "$MODE_ARTIFACTS/podman-5.8.2-tree-manifest.tsv" \
+    "$MODE_ARTIFACTS/podman-5.8.2.sha256" \
+    > "$MODE_ARTIFACTS/container-inputs.sha256"
+  {
+    printf 'purpose=%s\n' "$rchk_purpose"
+    printf 'reference=%s\n' "$RCHK_REFERENCE"
+    printf 'source_commit=%s\n' "$rchk_source_commit"
+    printf 'resolved_utc=%s\n' "$rchk_resolved_utc"
+  } > "$MODE_ARTIFACTS/image.txt"
+
+  run_logged "$MODE_LOGS/podman-version.log" env -i \
+    "HOME=$MODE_DIRECTORY/podman-launch-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$PODMAN_WRAPPER" version
+  log_command env -i "HOME=$MODE_DIRECTORY/podman-launch-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$PODMAN_WRAPPER" image exists "$RCHK_REFERENCE"
+  if ! env -i \
+      "HOME=$MODE_DIRECTORY/podman-launch-home" \
+      "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+      "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+      "LC_ALL=C.UTF-8" "TZ=UTC" \
+      "$PODMAN_WRAPPER" image exists "$RCHK_REFERENCE" \
+      > "$MODE_LOGS/image-exists.log" 2>&1; then
+    fail "pinned rchk image is absent; run scripts/fetch-auxiliary-images"
+  fi
+  run_logged "$MODE_LOGS/image-inspect.log" \
+    env -i "HOME=$MODE_DIRECTORY/podman-launch-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$PODMAN_WRAPPER" image inspect "$RCHK_REFERENCE"
+  grep -F "$rchk_digest" "$MODE_LOGS/image-inspect.log" \
+    > "$MODE_ARTIFACTS/image-digest-evidence.txt" ||
+    fail "local image inspection does not contain the manifest digest"
+
+  run_logged "$MODE_LOGS/copy-source.log" \
+    env -i "HOME=$MODE_DIRECTORY/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_LIBS_USER=$ORDINARY_LIBRARY" "R_LIBS=$ORDINARY_LIBRARY" \
+    "R_LIBS_SITE=" "R_ENVIRON_USER=/dev/null" \
+    "R_PROFILE_USER=/dev/null" "R_MAKEVARS_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$MODE_WORK" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_COPY_SNAPSHOT" \
+    "$SOURCE_DIRECTORY" "$RUN_DIRECTORY/metadata" \
+    "$MODE_WORK/source" "$MODE_ARTIFACTS/source-copy-metadata"
+  run_logged "$MODE_LOGS/make-source-writable.log" chmod -R u+w \
+    "$MODE_WORK/source"
+  RCHK_DRIVER="$MODE_ARTIFACTS/run-rchk"
+  write_rchk_driver "$RCHK_DRIVER"
+  sha256sum "$RCHK_DRIVER" > "$MODE_ARTIFACTS/run-rchk.sha256"
+  {
+    printf '%s\n' \
+      'mode=rchk' \
+      "image=$RCHK_REFERENCE" \
+      'network=none' \
+      'container_pull=never' \
+      'source=verified snapshot copied to a writable run-local tree' \
+      'tools=bcheck,maacheck,fficheck' \
+      'fatal_diagnostics=ERROR:,[UP],[PB],WARNING' \
+      'required_registration_calls=1' \
+      'required_analyzed_functions=positive' \
+      'host_container_state=scripts/podman-local repository-local vfs store'
+  } > "$MODE_ARTIFACTS/scope.txt"
+
+  run_logged "$MODE_LOGS/rchk.log" \
+    env -i "HOME=$MODE_DIRECTORY/podman-launch-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$PODMAN_WRAPPER" run --rm --pull=never --network=none \
+    --workdir /check/source \
+    --env "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH" \
+    --env LC_ALL=C.UTF-8 --env TZ=UTC \
+    --volume "$MODE_WORK/source:/check/source:rw" \
+    --volume "$RCHK_DRIVER:/paradox-tools/run-rchk:ro" \
+    --volume "$MODE_REPORTS:/paradox-output:rw" \
+    "$RCHK_REFERENCE" /bin/bash /paradox-tools/run-rchk
+
+  for report_type in bcheck maacheck fficheck; do
+    report_path="$MODE_REPORTS/paradox.so.$report_type"
+    [ -f "$report_path" ] && [ ! -L "$report_path" ] ||
+      fail "rchk did not retain a host-side $report_type report"
+    grep -F "libs/paradox.so.$report_type" "$MODE_LOGS/rchk.log" \
+      > "$MODE_ARTIFACTS/$report_type-evidence.txt" ||
+      fail "rchk did not retain a $report_type report"
+  done
+  run_logged "$MODE_LOGS/rchk-evidence-validation.log" env -i \
+    "HOME=$MODE_DIRECTORY/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_MEMORY_EVIDENCE_HELPER" rchk \
+    "$MODE_REPORTS" "$MODE_LOGS/rchk.log" "$MODE_ARTIFACTS"
+  for rchk_evidence in mounted-description.sha256 analyzed-dso.sha256 \
+      analyzed-paradox.so tool-status.tsv; do
+    [ -f "$MODE_REPORTS/$rchk_evidence" ] && \
+      [ ! -L "$MODE_REPORTS/$rchk_evidence" ] ||
+      fail "rchk did not retain source/DSO evidence: $rchk_evidence"
+  done
+  mounted_description_sha=$(sed -n 's/[[:space:]].*$//p' \
+    "$MODE_REPORTS/mounted-description.sha256")
+  [ "$mounted_description_sha" = \
+      "$(sha256sum "$MODE_WORK/source/DESCRIPTION" | cut -d ' ' -f 1)" ] ||
+    fail "rchk container did not compile the mounted source snapshot"
+  analyzed_dso_sha=$(sed -n 's/[[:space:]].*$//p' \
+    "$MODE_REPORTS/analyzed-dso.sha256")
+  [ "$analyzed_dso_sha" = \
+      "$(sha256sum "$MODE_REPORTS/analyzed-paradox.so" | cut -d ' ' -f 1)" ] ||
+    fail "host-retained rchk DSO differs from the analyzed package DSO"
+  run_logged "$MODE_LOGS/podman-version-post.log" env -i \
+    "HOME=$MODE_DIRECTORY/podman-launch-home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "PARADOX_ACTIVE_ROOT=$ROOT" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$PODMAN_WRAPPER" version
+  run_logged "$MODE_LOGS/podman-receipt-post.log" \
+    sha256sum -c "$PODMAN_RECEIPT_SHA"
+  cmp -s "$PODMAN_RECEIPT_TEXT" "$MODE_ARTIFACTS/podman-5.8.2.txt" ||
+    fail "Podman receipt changed during rchk"
+  cmp -s "$PODMAN_RECEIPT_TREE" \
+    "$MODE_ARTIFACTS/podman-5.8.2-tree-manifest.tsv" ||
+    fail "Podman tree receipt changed during rchk"
+  cmp -s "$PODMAN_RECEIPT_SHA" "$MODE_ARTIFACTS/podman-5.8.2.sha256" ||
+    fail "Podman receipt hash list changed during rchk"
+  verify_ordinary_inputs post-rchk
+fi
+
+verify_ordinary_inputs final
+run_logged "$RUN_DIRECTORY/metadata/memory-source-tree-receipt.log" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$SOURCE_DIRECTORY" "$RUN_DIRECTORY/metadata/memory-source-tree.tsv"
+run_logged "$RUN_DIRECTORY/metadata/memory-modes-tree-receipt.log" \
+  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+  "LC_ALL=C.UTF-8" "TZ=UTC" \
+  "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_TREE_RECEIPT_HELPER" create \
+  "$RUN_DIRECTORY/modes" "$RUN_DIRECTORY/metadata/memory-modes-tree.tsv"
+MEMORY_COMPLETION_NEW="$RUN_DIRECTORY/metadata/completion.txt.new"
+{
+  printf 'harness=memory-check\n'
+  printf 'schema=1\n'
+  printf 'run_id=%s\n' "$RUN_ID"
+  printf 'source_run=%s\n' "$SOURCE_RUN_ID"
+  printf 'run_metadata_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/run.txt" | cut -d ' ' -f 1)"
+  printf 'memory_check_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/memory-check" | cut -d ' ' -f 1)"
+  printf 'tree_receipt_helper_sha256=%s\n' \
+    "$(sha256sum "$RETAINED_TREE_RECEIPT_HELPER" | cut -d ' ' -f 1)"
+  printf 'source_manifest_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/source-manifest.tsv" | cut -d ' ' -f 1)"
+  printf 'source_tree_receipt_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/memory-source-tree.tsv" | cut -d ' ' -f 1)"
+  printf 'modes_tree_receipt_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/memory-modes-tree.tsv" | cut -d ' ' -f 1)"
+  printf 'source_proof_pre_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/source-run-proof.pre.txt" | cut -d ' ' -f 1)"
+  printf 'source_proof_post_sha256=%s\n' \
+    "$(sha256sum "$RUN_DIRECTORY/metadata/source-run-proof.post.txt" | cut -d ' ' -f 1)"
+  printf 'ordinary_inputs_seal_sha256=%s\n' \
+    "$(sha256sum "$ORDINARY_INPUT_RECEIPTS/seal.sha256" | cut -d ' ' -f 1)"
+  printf 'commands_sha256=%s\n' \
+    "$(sha256sum "$COMMAND_LOG" | cut -d ' ' -f 1)"
+  printf 'gct=%s\n' "$MODE_GCT"
+  printf 'valgrind=%s\n' "$MODE_VALGRIND"
+  printf 'rchk=%s\n' "$MODE_RCHK"
+} > "$MEMORY_COMPLETION_NEW"
+chmod 600 "$MEMORY_COMPLETION_NEW"
+mv "$MEMORY_COMPLETION_NEW" "$RUN_DIRECTORY/metadata/completion.txt"
+(
+  cd "$RUN_DIRECTORY/metadata"
+  sha256sum completion.txt > completion.sha256.new
+  mv completion.sha256.new completion.sha256
+)
+MEMORY_COMPLETION_READY=true
+printf '%s\n' "memory checks passed: $RUN_DIRECTORY"

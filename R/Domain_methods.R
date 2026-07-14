@@ -22,6 +22,13 @@
 #' @export
 domain_check = function(param, values, internal = FALSE) {
   if (length(values) == 0) return(TRUE)  # happens when there are no params + values to check
+  # The historical `if (!internal)` below rejects NA/NULL/vector conditions but
+  # accepts truthy numeric values. Only bypass it for the two canonical flags;
+  # otherwise a successful native value check would accidentally hide those
+  # established base-R diagnostics. Keep this after the empty-values return so
+  # that path still does not force a lazy `internal` argument.
+  canonical_internal = identical(internal, FALSE) || identical(internal, TRUE)
+  if (canonical_internal && .Call(C_domain_check_builtin, param, values)) return(TRUE)
   if (!internal) {
     if (!test_list(values, len = nrow(param))) return("values must be a list")
     assert_string(unique(param$grouping))
@@ -120,7 +127,9 @@ domain_qunif = function(param, x) {
   if (!nrow(param)) return(logical(0))
   assert_string(unique(param$grouping))
   assert_numeric(x, lower = 0, upper = 1, any.missing = FALSE)
-  assert_true(length(x) %% length(nrow(param)) == 0)
+  assert_true(length(x) %% nrow(param) == 0)
+  native = .Call(C_domain_qunif_builtin, param, x)
+  if (!is.null(native)) return(native)
   UseMethod("domain_qunif")
 }
 
@@ -139,6 +148,8 @@ domain_qunif = function(param, x) {
 #' @export
 domain_sanitize = function(param, values) {
   if (!length(values)) return(values)
+  native = .Call(C_domain_sanitize_builtin, param, values)
+  if (!is.null(native)) return(native)
   UseMethod("domain_sanitize")
 }
 

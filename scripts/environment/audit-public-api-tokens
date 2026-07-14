@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+
+# Reject legacy R internals even when they occur in inactive preprocessor
+# branches. Clang's raw lexer distinguishes identifiers from comments and
+# string literals without preprocessing the source.
+
+set -euo pipefail
+
+fail() {
+  printf 'audit-public-api-tokens: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 3 ]] || fail "usage: audit-public-api-tokens CLANG SOURCE REPORT"
+
+CLANG=$1
+SOURCE=$2
+REPORT=$3
+[[ -x "$CLANG" ]] || fail "Clang is not executable: $CLANG"
+[[ -d "$SOURCE/src" && ! -L "$SOURCE" && ! -L "$SOURCE/src" ]] ||
+  fail "source and src must be plain directories: $SOURCE"
+[[ ! -e "$REPORT" && ! -L "$REPORT" ]] || fail "report already exists: $REPORT"
+[[ -d "$(dirname "$REPORT")" ]] || fail "report parent does not exist"
+
+SOURCE=$(cd "$SOURCE" && pwd -P)
+REPORT_PARENT=$(cd "$(dirname "$REPORT")" && pwd -P)
+REPORT="$REPORT_PARENT/$(basename "$REPORT")"
+
+shopt -s nullglob
+SOURCE_FILES=("$SOURCE"/src/*.c "$SOURCE"/src/*.h)
+shopt -u nullglob
+((${#SOURCE_FILES[@]} > 0)) || fail "source tree has no C source or headers"
+for source_file in "${SOURCE_FILES[@]}"; do
+  [[ -f "$source_file" && ! -L "$source_file" ]] ||
+    fail "C sources and headers must be regular, non-symbolic files: $source_file"
+done
+
+WORK=$(mktemp -d "$REPORT_PARENT/.public-api-token-audit.XXXXXX")
+cleanup() {
+  rm -rf "$WORK"
+}
+trap cleanup EXIT HUP INT TERM
+
+TOKENS_PATTERN='ATTRIB|BODY|CLOENV|ENCLOS|FORMALS|NO_ATTRIB'
+TOKENS_PATTERN+='|R_NamespaceRegistry|Rf_findVar|Rf_findVarInFrame'
+TOKENS_PATTERN+='|Rf_findVarInFrame3|SET_ATTRIB|SET_BODY|SET_CLOENV'
+TOKENS_PATTERN+='|SET_ENCLOS|SET_FORMALS|findVar|findVarInFrame'
+TOKENS_PATTERN+='|findVarInFrame3'
+TOKENS_PATTERN+='|ENVFLAGS|SET_ENVFLAGS|FRAME|SET_FRAME|HASHTAB|SET_HASHTAB'
+TOKENS_PATTERN+='|PRVALUE|SET_PRVALUE|PRCODE|SET_PRCODE|PRENV|SET_PRENV'
+TOKENS_PATTERN+='|R_PromiseExpr|OBJECT|SET_OBJECT|IS_S4_OBJECT'
+TOKENS_PATTERN+='|SET_S4_OBJECT|UNSET_S4_OBJECT|Rf_allocSExp|R_GetCurrentEnv'
+TOKENS_PATTERN+='|R_data_class|isFrame|IS_ASCII|IS_UTF8|SETLENGTH'
+TOKENS_PATTERN+='|EXTPTR_PROT|EXTPTR_TAG|EXTPTR_PTR|GetOption|R_lsInternal'
+TOKENS_PATTERN+='|REAL0|COMPLEX0|STRING_PTR|DATAPTR|STDVEC_DATAPTR'
+LINE_PATTERN="^(raw_identifier '($TOKENS_PATTERN)'([[:space:]]|$)|hashhash )"
+REPORT_TEMP="$WORK/report"
+{
+  printf 'policy=forbidden-r-object-layout-and-binding-identifiers\n'
+  printf 'forbidden_identifiers=%s\n' "$TOKENS_PATTERN"
+  printf 'token_pasting=forbidden\n'
+  printf 'source=%s\n' "$SOURCE"
+  printf 'files=%s\n' "${#SOURCE_FILES[@]}"
+} > "$REPORT_TEMP"
+
+failed=false
+for source_file in "${SOURCE_FILES[@]}"; do
+  token_file="$WORK/tokens"
+  if ! "$CLANG" -Xclang -dump-raw-tokens -fsyntax-only "$source_file" \
+      > /dev/null 2> "$token_file"; then
+    printf 'lexer_error=%s\n' "${source_file#"$SOURCE/"}" >> "$REPORT_TEMP"
+    cat "$token_file" >> "$REPORT_TEMP"
+    failed=true
+    continue
+  fi
+  if LC_ALL=C grep -E "$LINE_PATTERN" "$token_file" > "$WORK/hits"; then
+    printf 'forbidden_file=%s\n' "${source_file#"$SOURCE/"}" \
+      >> "$REPORT_TEMP"
+    cat "$WORK/hits" >> "$REPORT_TEMP"
+    failed=true
+  else
+    matcher_status=$?
+    if ((matcher_status != 1)); then
+      printf 'matcher_error=%s:%s\n' \
+        "${source_file#"$SOURCE/"}" "$matcher_status" >> "$REPORT_TEMP"
+      failed=true
+    fi
+  fi
+done
+
+if "$failed"; then
+  printf 'result=failed\n' >> "$REPORT_TEMP"
+  mv "$REPORT_TEMP" "$REPORT"
+  printf 'forbidden R C internals found; see %s\n' "$REPORT" >&2
+  exit 1
+fi
+
+printf 'result=passed\n' >> "$REPORT_TEMP"
+mv "$REPORT_TEMP" "$REPORT"
+printf 'public R C API token audit passed: %s files\n' "${#SOURCE_FILES[@]}"

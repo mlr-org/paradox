@@ -1,0 +1,385 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+PREFIX="$ROOT/.local/toolchain"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+TINYTEX_MANIFEST="$ROOT/environment/tinytex-linux-x86_64.tsv"
+TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+TINYTEX="$ROOT/.local/tinytex"
+R_LIBRARY="$ROOT/.local/R/library"
+CACHE="$ROOT/.cache/downloads"
+
+TINYTEX_HEADER=$'version\tplatform\tarchive\tarchive_size\tarchive_sha256\ttree_manifest_sha256\turl'
+for tinytex_input in "$TINYTEX_MANIFEST" "$TREE_RECEIPT_HELPER"; do
+  [[ -f "$tinytex_input" && ! -L "$tinytex_input" ]] || {
+    echo "Pinned TinyTeX input is absent or symbolic: $tinytex_input" >&2
+    exit 1
+  }
+done
+mapfile -t tinytex_rows < "$TINYTEX_MANIFEST"
+[[ ${#tinytex_rows[@]} -eq 2 && "${tinytex_rows[0]}" == "$TINYTEX_HEADER" ]] || {
+  echo "TinyTeX manifest must contain one exact row" >&2
+  exit 1
+}
+IFS=$'\t' read -r TINYTEX_VERSION TINYTEX_PLATFORM TINYTEX_ARCHIVE \
+  TINYTEX_ARCHIVE_SIZE TINYTEX_SHA256 TINYTEX_TREE_SHA256 TINYTEX_URL \
+  <<< "${tinytex_rows[1]}"
+[[ "$TINYTEX_VERSION" == 2026.07 && "$TINYTEX_PLATFORM" == linux-x86_64 &&
+   "$TINYTEX_ARCHIVE" == "TinyTeX-linux-x86_64-v${TINYTEX_VERSION}.tar.xz" &&
+   "$TINYTEX_ARCHIVE_SIZE" =~ ^[0-9]+$ &&
+   "$TINYTEX_SHA256" =~ ^[0-9a-f]{64}$ &&
+   "$TINYTEX_TREE_SHA256" =~ ^[0-9a-f]{64}$ &&
+   "$TINYTEX_URL" == "https://github.com/rstudio/tinytex-releases/releases/download/v${TINYTEX_VERSION}/${TINYTEX_ARCHIVE}" ]] || {
+  echo "TinyTeX manifest identity is unexpected" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  "") ;;
+  -h|--help)
+    cat <<'USAGE'
+Usage: scripts/bootstrap
+
+Create or verify the repository-local R, compiler, TeX, Quarto, container,
+and R package toolchain. No host installation or shell startup file is modified.
+USAGE
+    exit 0
+    ;;
+  *)
+    printf 'Unknown bootstrap argument: %s\n' "$1" >&2
+    printf 'Usage: scripts/bootstrap\n' >&2
+    exit 2
+    ;;
+esac
+if (($# > 1)); then
+  printf 'Usage: scripts/bootstrap\n' >&2
+  exit 2
+fi
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *)
+    echo "The checked-in bootstrap is pinned for Linux x86_64; use the native macOS CI specification on Apple hosts." >&2
+    exit 1
+    ;;
+esac
+
+assert_plain_directory_chain() {
+  local path=$1
+  local current remainder component
+  case "$path" in
+    "$ROOT"|"$ROOT"/*) ;;
+    *)
+      echo "Managed directory escaped the repository: $path" >&2
+      return 1
+      ;;
+  esac
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    if [[ -L "$current" ]]; then
+      echo "Refusing symbolic managed directory: $current" >&2
+      return 1
+    fi
+    if [[ -e "$current" && ! -d "$current" ]]; then
+      echo "Managed directory path is not a directory: $current" >&2
+      return 1
+    fi
+  done
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  local parent=${path%/*}
+  assert_plain_directory_chain "$parent"
+  if [[ -L "$path" ]]; then
+    echo "Refusing symbolic managed file: $path" >&2
+    return 1
+  fi
+  if [[ -e "$path" && ! -f "$path" ]]; then
+    echo "Managed file path is not a regular file: $path" >&2
+    return 1
+  fi
+}
+
+# Validate every initially managed root before mkdir, download, extraction, or
+# execution can follow it.  The subordinate bootstraps perform their own
+# content checks; their top-level write roots are included here as a second
+# boundary at the orchestrator.
+for managed_directory in \
+  "$ROOT/.local" \
+  "$ROOT/.local/bin" \
+  "$ROOT/.local/micromamba" \
+  "$ROOT/.local/tmp" \
+  "$ROOT/.local/toolchain" \
+  "$ROOT/.local/R" \
+  "$R_LIBRARY" \
+  "$ROOT/.local/checks" \
+  "$ROOT/.local/texmf" \
+  "$ROOT/.local/texmf/var" \
+  "$ROOT/.local/texmf/config" \
+  "$ROOT/.local/texmf/home" \
+  "$ROOT/.local/texmf/cache" \
+  "$ROOT/.local/texmf/fonts" \
+  "$ROOT/.local/tinytex" \
+  "$ROOT/.local/tinytex.new" \
+  "$ROOT/.local/.TinyTeX" \
+  "$ROOT/.local/quarto" \
+  "$ROOT/.local/receipts" \
+  "$ROOT/.local/receipts/quarto" \
+  "$ROOT/.local/receipts/podman" \
+  "$ROOT/.local/locks" \
+  "$ROOT/.local/debug" \
+  "$ROOT/.local/podman" \
+  "$ROOT/.local/containers" \
+  "$ROOT/.cache" \
+  "$CACHE" \
+  "$ROOT/.cache/downloads/quarto" \
+  "$ROOT/.cache/downloads/podman" \
+  "$ROOT/.cache/downloads/r-packages" \
+  "$ROOT/.cache/R" \
+  "$ROOT/.cache/ccache"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+assert_plain_file_or_absent "$MICROMAMBA"
+
+mkdir -p \
+  "$ROOT/.local/bin" "$ROOT/.local/micromamba" "$ROOT/.local/tmp" \
+  "$R_LIBRARY" "$CACHE" "$ROOT/.cache/R" "$ROOT/.cache/ccache"
+
+sha256_of_file() {
+  local file=$1
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$file" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$file" | cut -d ' ' -f 1
+  fi
+}
+
+verify_sha256() {
+  local expected=$1
+  local file=$2
+  local actual
+  actual=$(sha256_of_file "$file")
+  if [[ "$actual" != "$expected" ]]; then
+    echo "SHA-256 mismatch for $file" >&2
+    return 1
+  fi
+}
+
+archive="$CACHE/micromamba-${MICROMAMBA_VERSION}-linux-64.tar.bz2"
+assert_plain_file_or_absent "$archive"
+if [[ ! -f "$archive" ]]; then
+  curl -fL "https://micro.mamba.pm/api/micromamba/linux-64/${MICROMAMBA_VERSION}" -o "$archive"
+fi
+verify_sha256 "$MICROMAMBA_SHA256" "$archive"
+
+# The archive digest authenticates the input; comparing the selected executable
+# with its sole exact archive member authenticates an already installed binary
+# before it is allowed to answer even a list/create command.
+micromamba_member_count=$(tar -tjf "$archive" | awk '$0 == "bin/micromamba" { count += 1 } END { print count + 0 }')
+if [[ "$micromamba_member_count" != 1 ]]; then
+  echo "Pinned micromamba archive does not contain exactly one bin/micromamba member" >&2
+  exit 1
+fi
+micromamba_member=$(mktemp "$ROOT/.local/tmp/micromamba-member.XXXXXX")
+trap 'rm -f "$micromamba_member"' EXIT
+tar -xOjf "$archive" bin/micromamba > "$micromamba_member"
+chmod 0755 "$micromamba_member"
+micromamba_member_sha=$(sha256_of_file "$micromamba_member")
+if [[ -f "$MICROMAMBA" ]]; then
+  if [[ ! -x "$MICROMAMBA" ]] ||
+      [[ "$(sha256_of_file "$MICROMAMBA")" != "$micromamba_member_sha" ]]; then
+    echo "Installed micromamba is not the executable from the pinned archive" >&2
+    echo "Remove only $MICROMAMBA and rerun scripts/bootstrap" >&2
+    exit 1
+  fi
+  rm -f "$micromamba_member"
+else
+  mv "$micromamba_member" "$MICROMAMBA"
+fi
+trap - EXIT
+
+micromamba_actual_version=$("$MICROMAMBA" --version)
+if [[ "$micromamba_actual_version" != "$MICROMAMBA_VERSION" ]]; then
+  echo "Authenticated micromamba reports version $micromamba_actual_version, expected $MICROMAMBA_VERSION" >&2
+  exit 1
+fi
+
+export MAMBA_ROOT_PREFIX="$ROOT/.local/micromamba"
+if [[ ! -f "$TOOLCHAIN_LOCK" ]] || [[ -L "$TOOLCHAIN_LOCK" ]]; then
+  echo "Pinned toolchain lock is missing or symbolic: $TOOLCHAIN_LOCK" >&2
+  exit 1
+fi
+lock_artifacts=0
+lock_artifacts_valid=true
+while IFS= read -r artifact; do
+  ((lock_artifacts += 1))
+  if [[ ! "$artifact" =~ ^https://[^[:space:]#]+#[0-9a-f]{64}$ ]]; then
+    lock_artifacts_valid=false
+  fi
+done < <(sed -n '3,$p' "$TOOLCHAIN_LOCK")
+if [[ "$(sed -n '1p' "$TOOLCHAIN_LOCK")" != '# platform: linux-64' ]] ||
+    [[ "$(sed -n '2p' "$TOOLCHAIN_LOCK")" != '@EXPLICIT' ]] ||
+    ((lock_artifacts == 0)) || [[ "$lock_artifacts_valid" != true ]] ||
+    grep -Fq "$ROOT" "$TOOLCHAIN_LOCK"; then
+  echo "Pinned toolchain lock has an invalid or checkout-specific header" >&2
+  exit 1
+fi
+toolchain_actual=$(mktemp "$ROOT/.local/tmp/toolchain-explicit.XXXXXX")
+trap 'rm -f "$toolchain_actual"' EXIT
+write_installed_toolchain_lock() {
+  {
+    printf '%s\n' '# platform: linux-64' '@EXPLICIT'
+    "$MICROMAMBA" list --no-rc --prefix "$PREFIX" --explicit --sha256 | sed -n '3,$p'
+  } > "$toolchain_actual"
+}
+if [[ ! -x "$PREFIX/bin/R" ]]; then
+  "$MICROMAMBA" create --yes --prefix "$PREFIX" --file "$TOOLCHAIN_LOCK"
+else
+  write_installed_toolchain_lock
+  if ! cmp -s "$TOOLCHAIN_LOCK" "$toolchain_actual"; then
+    echo "Installed toolchain differs from the pinned explicit lock" >&2
+    echo "Remove only $PREFIX and rerun scripts/bootstrap to rebuild it exactly" >&2
+    exit 1
+  fi
+fi
+write_installed_toolchain_lock
+if ! cmp -s "$TOOLCHAIN_LOCK" "$toolchain_actual"; then
+  echo "Installed toolchain differs from the pinned explicit lock" >&2
+  exit 1
+fi
+rm -f "$toolchain_actual"
+trap - EXIT
+
+# conda-forge's compact texlive-core omits Perl modules needed to generate
+# formats and therefore cannot complete R's PDF manual check by itself. Use the
+# pinned full TinyTeX release as a fully local, checksummed TeX overlay. The
+# full release includes makeindex and the documentation packages needed by R;
+# no check may install packages into this authenticated tree. Extract into a
+# temporary sibling so an interrupted refresh never leaves the selected
+# toolchain half-written.
+tinytex_archive="$CACHE/$TINYTEX_ARCHIVE"
+tinytex_marker="$TINYTEX/.paradox-version"
+tinytex_marker_value="${TINYTEX_ARCHIVE}:${TINYTEX_SHA256}:readonly-v1"
+assert_plain_file_or_absent "$tinytex_archive"
+assert_plain_file_or_absent "$tinytex_marker"
+if [[ ! -f "$tinytex_archive" ]]; then
+  "$PREFIX/bin/curl" -fL --retry 3 \
+    "$TINYTEX_URL" \
+    -o "$tinytex_archive"
+fi
+if [[ "$(stat -c '%s' "$tinytex_archive")" != "$TINYTEX_ARCHIVE_SIZE" ]]; then
+  echo "TinyTeX archive size differs from the pinned manifest" >&2
+  exit 1
+fi
+verify_sha256 "$TINYTEX_SHA256" "$tinytex_archive"
+if [[ ! -f "$tinytex_marker" ]] || [[ "$(<"$tinytex_marker")" != "$tinytex_marker_value" ]]; then
+  tinytex_listing=$(mktemp "$ROOT/.local/tmp/tinytex-listing.XXXXXX")
+  trap 'rm -f "$tinytex_listing"' EXIT
+  tar -tJf "$tinytex_archive" > "$tinytex_listing"
+  awk '
+    $0 != ".TinyTeX" && $0 != ".TinyTeX/" &&
+      index($0, ".TinyTeX/") != 1 { bad = 1 }
+    $0 ~ /(^|\/)\.\.($|\/)/ { bad = 1 }
+    END { exit bad }
+  ' "$tinytex_listing" || {
+    echo "TinyTeX archive contains an unsafe or unexpected member" >&2
+    exit 1
+  }
+  for stale_tinytex in \
+    "$ROOT/.local/.TinyTeX" "$ROOT/.local/tinytex.new" "$TINYTEX"
+  do
+    if [[ -d "$stale_tinytex" && ! -L "$stale_tinytex" ]]; then
+      find "$stale_tinytex" -depth -type d -exec chmod u+w {} +
+    fi
+    rm -rf -- "$stale_tinytex"
+  done
+  tar -xJf "$tinytex_archive" -C "$ROOT/.local"
+  mv "$ROOT/.local/.TinyTeX" "$ROOT/.local/tinytex.new"
+  mv "$ROOT/.local/tinytex.new" "$TINYTEX"
+  printf '%s\n' "$tinytex_marker_value" > "$tinytex_marker"
+  # Runtime writes would invalidate the input receipt and make later checks
+  # depend on whichever package installation happened first. TeX user state is
+  # redirected separately; make the authenticated distribution immutable.
+  find "$TINYTEX" -type d -exec chmod 0555 {} +
+  find "$TINYTEX" -type f -perm /111 -exec chmod 0555 {} +
+  find "$TINYTEX" -type f ! -perm /111 -exec chmod 0444 {} +
+  rm -f "$tinytex_listing"
+  trap - EXIT
+fi
+[[ "$(stat -c '%a' "$tinytex_marker")" == 444 ]] || {
+  echo "Pinned TinyTeX marker is not read-only" >&2
+  exit 1
+}
+
+TINYTEX_BIN="$TINYTEX/bin/x86_64-linux"
+for tinytex_tool in pdflatex kpsewhich makeindex; do
+  [[ -x "$TINYTEX_BIN/$tinytex_tool" ]] || {
+    echo "Pinned TinyTeX installation has no $tinytex_tool executable" >&2
+    exit 1
+  }
+done
+# TEXFORMATS is engine-specific.  A bare `kpsewhich` process identifies its
+# engine as `unsetengine` and therefore cannot locate an otherwise valid
+# pdftex format in a freshly extracted TeX Live tree.
+PATH="$TINYTEX_BIN:$PATH" "$TINYTEX_BIN/kpsewhich" \
+  -engine=pdftex pdflatex.fmt >/dev/null
+
+# Hash the complete selected tree on every bootstrap. The digest was generated
+# from a fresh extraction of the authenticated archive plus the version marker,
+# so a marker-only or partially modified installation cannot be reused.
+tinytex_tree_receipt=$(mktemp "$ROOT/.local/tmp/tinytex-tree.XXXXXX")
+trap 'rm -f "$tinytex_tree_receipt"' EXIT
+"$PREFIX/bin/Rscript" --vanilla "$TREE_RECEIPT_HELPER" create \
+  "$TINYTEX" "$tinytex_tree_receipt" >/dev/null
+if [[ "$(sha256_of_file "$tinytex_tree_receipt")" != "$TINYTEX_TREE_SHA256" ]]; then
+  echo "Installed TinyTeX tree differs from the pinned archive manifest" >&2
+  echo "Remove only $TINYTEX and rerun scripts/bootstrap" >&2
+  exit 1
+fi
+rm -f "$tinytex_tree_receipt"
+trap - EXIT
+
+# Documentation consumers are executable compatibility tests too.  Install the
+# separately receipted Quarto release after R and TeX are available; its
+# bootstrap authenticates both the archive and the entire extracted tree.
+"$ROOT/scripts/bootstrap-quarto"
+
+# Valgrind 3.27 needs the exact glibc loader debug object to install mandatory
+# redirections on this host.  Keep the checksummed package and its debuglink
+# mirror repository-local; this never invokes apt/dpkg or changes /usr.
+"$ROOT/scripts/bootstrap-valgrind-debug-symbols"
+
+# The rchk gate also needs a complete local container runtime, not merely a
+# local image store.  This verifies and selects the pinned static Podman/helper
+# bundle without installing anything into HOME or the host system.
+"$ROOT/scripts/bootstrap-podman"
+
+# Keep all R packages project-local, including packages installed by tools that
+# do not inherit the activated shell.
+cd "$ROOT"
+# shellcheck disable=SC1091
+. "$ROOT/scripts/activate"
+export R_LIBS_USER="$R_LIBRARY"
+export R_ENVIRON_USER="$ROOT/environment/Renviron"
+export R_PROFILE_USER="$ROOT/environment/Rprofile.R"
+"$PREFIX/bin/Rscript" "$ROOT/scripts/bootstrap-r-packages.R"
+
+echo
+echo "Toolchain ready. Activate it with:"
+echo "  . scripts/activate"

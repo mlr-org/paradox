@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+if [[ $# -ne 1 || ! -d $1 || -L $1 ]]; then
+  printf '%s\n' "usage: podman-tree-manifest DIRECTORY" >&2
+  exit 2
+fi
+
+ROOT=$(cd "$1" && pwd -P)
+export LC_ALL=C
+
+emit_path() {
+  local relative=$1 target resolved
+  local full="$ROOT/$relative"
+  case "$relative" in
+    *$'\t'*|*$'\r'*|*$'\n'*)
+      printf '%s\n' "unsupported control character in Podman path" >&2
+      exit 2
+      ;;
+  esac
+
+  if [[ -L $full ]]; then
+    target=$(readlink "$full")
+    case "$target" in
+      *$'\t'*|*$'\r'*|*$'\n'*)
+        printf '%s\n' "unsupported control character in Podman link target" >&2
+        exit 2
+        ;;
+      /*)
+        printf '%s\n' "Podman tree contains an absolute symbolic link: $relative" >&2
+        exit 2
+        ;;
+    esac
+    resolved=$(/usr/bin/realpath -m -- "${full%/*}/$target") || {
+      printf '%s\n' "could not resolve Podman symbolic link: $relative" >&2
+      exit 2
+    }
+    case "$resolved" in
+      "$ROOT"|"$ROOT"/*) ;;
+      *)
+        printf '%s\n' "Podman tree contains an escaping symbolic link: $relative" >&2
+        exit 2
+        ;;
+    esac
+    printf '%s\tsymlink\t-\t-\t%s\n' "$relative" "$target"
+  elif [[ -d $full ]]; then
+    printf '%s\tdirectory\t%s\t-\t-\n' \
+      "$relative" "$(stat -c '%a' "$full")"
+  elif [[ -f $full ]]; then
+    printf '%s\tfile\t%s\t%s\t%s\n' \
+      "$relative" \
+      "$(stat -c '%a' "$full")" \
+      "$(stat -c '%s' "$full")" \
+      "$(sha256sum "$full" | cut -d ' ' -f 1)"
+  else
+    printf '%s\n' "unsupported Podman tree member: $relative" >&2
+    exit 2
+  fi
+}
+
+export -f emit_path
+export ROOT
+
+{
+  printf '.\0'
+  find "$ROOT" -mindepth 1 -printf '%P\0'
+} | sort -z | while IFS= read -r -d '' relative; do
+  emit_path "$relative"
+done

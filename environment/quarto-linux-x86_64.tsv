@@ -1,0 +1,2 @@
+version	platform	archive	archive_size	archive_sha256	tree_manifest_sha256	url
+1.9.38	linux-amd64	quarto-1.9.38-linux-amd64.tar.gz	136466558	ea8c897368791ad9f200010c087ea3111b2e556b12a960487dd4e216902aa102	e53edf706dc6b136b621f80ff2e63c11c63c6e7767bef696b3a2a9f363eca036	https://github.com/quarto-dev/quarto-cli/releases/download/v1.9.38/quarto-1.9.38-linux-amd64.tar.gz

@@ -1,0 +1,5 @@
+version	sha256	purpose
+4.3.0	45dcc48b6cf27d361020f77fde1a39209e997b81402b3663ca1c010056a6a609	declared-minimum
+4.4.0	ace4125f9b976d2c53bcc5fca30c75e30d4edc401584859cbadb080e72b5f030	last-pre-attribute-api-transition
+4.5.2	0d71ff7106ec69cd7c67e1e95ed1a3cee355880931f2eb78c530014a9e379f20	staggered-public-api-transition
+4.6.1	4da6e61d2c0aac5f14a2e7e432cb5fcc269efe83da4293050ba7f03dff4e2cf4	current-development

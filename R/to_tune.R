@@ -324,6 +324,26 @@ pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
   # temporarily hide dangling deps
   on = NULL  # pacify static code check
   pslike$deps = pslike$deps[on %in% pslike$ids()]
+
+  # This is a plausibility check, so its result must not depend on or advance the
+  # caller's random-number stream. Fix both the RNG algorithm and seed because
+  # the sampler may use runif() as well as sample(). Restore the exact incoming
+  # state even when validation fails or the caller had not initialized the RNG.
+  rng_env = globalenv()
+  had_rng_state = exists(".Random.seed", envir = rng_env, inherits = FALSE)
+  rng_state = if (had_rng_state) get(".Random.seed", envir = rng_env, inherits = FALSE)
+  rng_kind = RNGkind()
+  on.exit({
+    do.call(RNGkind, as.list(rng_kind))
+    if (had_rng_state) {
+      assign(".Random.seed", rng_state, envir = rng_env)
+    } else if (exists(".Random.seed", envir = rng_env, inherits = FALSE)) {
+      rm(".Random.seed", envir = rng_env)
+    }
+  }, add = TRUE)
+  RNGkind("Mersenne-Twister", "Inversion", "Rejection")
+  set.seed(1L)
+
   testpoints = generate_design_random(pslike, 10)$transpose()
   pslike$deps = alldeps
   invalidpoints = discard(testpoints, function(x) length(x) == 1)

@@ -1,0 +1,375 @@
+#!/usr/bin/env bash
+
+# Install, without touching dpkg or the host filesystem, the exact loader debug
+# object required by Valgrind on this Ubuntu 20.04 host.  Valgrind's
+# --extra-debuginfo-path lookup prepends a root to the loader's absolute path,
+# so the extracted build-id object is mirrored at its .gnu_debuglink basename.
+
+set -euo pipefail
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/bootstrap-valgrind-debug-symbols [--verify] [--root ROOT]
+
+Without --verify, download, hash, extract, mirror, and receipt the pinned local
+debug-symbol tree.  --verify is offline and changes no state.
+EOF
+}
+
+fail() {
+  printf '%s\n' "bootstrap-valgrind-debug-symbols: $*" >&2
+  exit 1
+}
+
+is_managed_path() {
+  [[ "$1" == "$ROOT" || "$1" == "$ROOT/"* ]]
+}
+
+validate_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  current=$ROOT
+  if [[ "$path" != "$ROOT" ]]; then
+    relative=${path#"$ROOT"/}
+    IFS=/ read -r -a components <<< "$relative"
+    for component in "${components[@]}"; do
+      [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+        fail "$label has an unsafe component: $path"
+      current="$current/$component"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a missing, non-directory, or symbolic component: $current"
+    done
+  fi
+  [[ "$(cd "$path" && pwd -P)" == "$path" ]] ||
+    fail "$label does not resolve canonically inside the repository: $path"
+}
+
+ensure_plain_directory_chain() {
+  local path=$1 label=${2:-managed directory} relative current component
+  local -a components
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  [[ -d "$ROOT" && ! -L "$ROOT" ]] ||
+    fail "repository root is missing, non-directory, or symbolic: $ROOT"
+  [[ "$path" == "$ROOT" ]] && return 0
+  relative=${path#"$ROOT"/}
+  current=$ROOT
+  IFS=/ read -r -a components <<< "$relative"
+  for component in "${components[@]}"; do
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "$label has an unsafe component: $path"
+    current="$current/$component"
+    if [[ -e "$current" || -L "$current" ]]; then
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label contains a non-directory or symbolic component: $current"
+    else
+      mkdir -- "$current" || fail "could not create $label: $current"
+      [[ -d "$current" && ! -L "$current" ]] ||
+        fail "$label was substituted while being created: $current"
+    fi
+  done
+  validate_plain_directory_chain "$path" "$label"
+}
+
+require_managed_file() {
+  local path=$1 label=${2:-managed file}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is missing, non-regular, or symbolic: $path"
+}
+
+require_managed_executable() {
+  local path=$1 label=${2:-managed executable}
+  require_managed_file "$path" "$label"
+  [[ -x "$path" ]] || fail "$label is not executable: $path"
+}
+
+prepare_managed_output() {
+  local path=$1 label=${2:-managed output}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "$label exists but is not a regular file: $path"
+}
+
+prepare_managed_directory_target() {
+  local path=$1 label=${2:-managed directory target}
+  is_managed_path "$path" || fail "$label escapes the repository: $path"
+  validate_plain_directory_chain "$(dirname "$path")" "$label parent"
+  [[ ! -L "$path" ]] || fail "$label must not be symbolic: $path"
+  if [[ -e "$path" ]]; then
+    validate_plain_directory_chain "$path" "$label"
+  fi
+}
+
+VERIFY_ONLY=false
+ROOT=
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --verify) VERIFY_ONLY=true; shift ;;
+    --root)
+      [[ $# -ge 2 ]] || fail "--root requires a value"
+      ROOT=$2
+      shift 2
+      ;;
+    --root=*) ROOT=${1#--root=}; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+
+if [[ -z "$ROOT" ]]; then
+  ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+else
+  ROOT=$(cd "$ROOT" && pwd -P)
+fi
+
+MANIFEST="$ROOT/environment/valgrind-debug-symbols.tsv"
+PREFIX="$ROOT/.local/debug/libc6-dbg-2.31-0ubuntu9.18"
+RECEIPT="$ROOT/.local/receipts/valgrind-debug-symbols"
+CACHE="$ROOT/.cache/downloads/system-debug"
+ARCHIVE="$CACHE/libc6-dbg_2.31-0ubuntu9.18_amd64.deb"
+TOOLCHAIN="$ROOT/.local/toolchain"
+CURL="$TOOLCHAIN/bin/curl"
+AR="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-ar"
+RSCRIPT="$TOOLCHAIN/bin/Rscript"
+READELF="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-readelf"
+PYTHON="$TOOLCHAIN/bin/python3.14"
+TREE_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+EXPECTED_HEADER=$'package\tversion\tarchitecture\tarchive_size\tarchive_sha256\turl\tloader_path\tloader_size\tloader_sha256\tloader_build_id\tdebuglink\tdebug_size\tdebug_sha256'
+
+validate_plain_directory_chain "$ROOT" "repository root"
+for tool in "$CURL" "$AR" "$RSCRIPT" "$READELF" "$PYTHON"; do
+  require_managed_executable "$tool" "required repository-local tool"
+done
+[[ "$("$PYTHON" --version 2>&1)" == "Python 3.14.6" ]] ||
+  fail "repository-local Python version differs from the pinned toolchain"
+require_managed_file "$TREE_HELPER" "tree-receipt helper"
+require_managed_file "$MANIFEST" "debug-symbol manifest"
+
+mapfile -t manifest_lines < "$MANIFEST"
+[[ ${#manifest_lines[@]} -eq 2 ]] || fail "manifest must contain one exact row"
+[[ "${manifest_lines[0]}" == "$EXPECTED_HEADER" ]] ||
+  fail "manifest header is unexpected"
+IFS=$'\t' read -r package version architecture archive_size archive_sha url \
+  loader_path loader_size loader_sha loader_build_id debuglink debug_size \
+  debug_sha \
+  <<< "${manifest_lines[1]}"
+[[ "$package" == libc6-dbg && "$version" == 2.31-0ubuntu9.18 && \
+   "$architecture" == amd64 ]] || fail "manifest identity is unexpected"
+[[ "$archive_size" =~ ^[0-9]+$ && "$loader_size" =~ ^[0-9]+$ && \
+   "$debug_size" =~ ^[0-9]+$ ]] ||
+  fail "manifest sizes are malformed"
+for digest in "$archive_sha" "$loader_sha" "$debug_sha"; do
+  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || fail "manifest SHA-256 is malformed"
+done
+[[ "$loader_build_id" =~ ^[0-9a-f]{40}$ ]] || fail "loader build ID is malformed"
+[[ "$debuglink" == "${loader_build_id:2}.debug" ]] ||
+  fail "debuglink does not match the loader build ID"
+[[ "$loader_path" == /usr/lib/x86_64-linux-gnu/ld-2.31.so ]] ||
+  fail "loader path is unexpected"
+
+sha256() { sha256sum "$1" | cut -d ' ' -f 1; }
+verify_regular_hash() {
+  local path=$1 size=$2 digest=$3 label=$4
+  if is_managed_path "$path"; then
+    require_managed_file "$path" "$label"
+  fi
+  [[ -f "$path" && ! -L "$path" ]] || fail "$label is absent or symbolic: $path"
+  [[ $(stat -c '%s' "$path") == "$size" ]] || fail "$label size differs from manifest"
+  [[ $(sha256 "$path") == "$digest" ]] || fail "$label SHA-256 differs from manifest"
+}
+
+verify_loader() {
+  verify_regular_hash "$loader_path" "$loader_size" "$loader_sha" "host loader"
+  local actual_build_id actual_debuglink
+  actual_build_id=$("$READELF" -n "$loader_path" |
+    sed -n 's/^[[:space:]]*Build ID: //p')
+  [[ "$actual_build_id" == "$loader_build_id" ]] ||
+    fail "host loader build ID differs from manifest"
+  actual_debuglink=$("$READELF" --string-dump=.gnu_debuglink "$loader_path" |
+    sed -n 's/^  \[[[:space:]0-9a-f]*\][[:space:]]*//p' | sed -n '1p')
+  [[ "$actual_debuglink" == "$debuglink" ]] ||
+    fail "host loader debuglink differs from manifest"
+}
+
+verify_receipt() {
+  local input_receipt="$RECEIPT/inputs.tsv"
+  local tree_receipt="$RECEIPT/installed-tree.tsv"
+  local seal="$RECEIPT/seal.sha256"
+  validate_plain_directory_chain "$PREFIX" "debug-symbol prefix"
+  for path in "$RECEIPT" "$input_receipt" "$tree_receipt" "$seal"; do
+    if [[ "$path" == "$RECEIPT" ]]; then
+      validate_plain_directory_chain "$path" "debug-symbol receipt"
+    else
+      require_managed_file "$path" "debug-symbol receipt file"
+    fi
+  done
+  [[ $(wc -l < "$seal") -eq 2 ]] || fail "debug-symbol receipt seal has unexpected shape"
+  (cd "$RECEIPT" && sha256sum -c seal.sha256) >/dev/null ||
+    fail "debug-symbol receipt seal is invalid"
+  local expected_inputs
+  expected_inputs=$(printf '%s\n' \
+    "schema=1" \
+    "manifest_sha256=$(sha256 "$MANIFEST")" \
+    "archive_sha256=$archive_sha" \
+    "archive_size=$archive_size" \
+    "loader_path=$loader_path" \
+    "loader_sha256=$loader_sha" \
+    "loader_build_id=$loader_build_id" \
+    "debuglink=$debuglink" \
+    "debug_size=$debug_size" \
+    "debug_sha256=$debug_sha" \
+    "tree_receipt_helper_sha256=$(sha256 "$TREE_HELPER")" \
+    "bootstrap_sha256=$(sha256 "${BASH_SOURCE[0]}")")
+  [[ "$(<"$input_receipt")" == "$expected_inputs" ]] ||
+    fail "debug-symbol input receipt differs from pinned inputs"
+  verify_regular_hash "$ARCHIVE" "$archive_size" "$archive_sha" "debug archive"
+  verify_loader
+  local extracted="$PREFIX/usr/lib/debug/.build-id/${loader_build_id:0:2}/${loader_build_id:2}.debug"
+  local mirrored="$PREFIX${loader_path%/*}/$debuglink"
+  verify_regular_hash "$extracted" "$debug_size" \
+    "$debug_sha" "extracted loader debug object"
+  [[ -f "$mirrored" && ! -L "$mirrored" && $(sha256 "$mirrored") == "$debug_sha" ]] ||
+    fail "Valgrind debuglink mirror is absent or invalid"
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify "$PREFIX" "$tree_receipt" >/dev/null
+}
+
+if [[ "$VERIFY_ONLY" == true ]]; then
+  verify_receipt
+  printf '%s\n' "Valgrind debug-symbol receipt verified: $PREFIX"
+  exit 0
+fi
+
+ensure_plain_directory_chain "$CACHE" "debug-symbol download cache"
+ensure_plain_directory_chain "$ROOT/.local/debug" "debug-symbol root"
+ensure_plain_directory_chain "$ROOT/.local/receipts" "receipt root"
+ensure_plain_directory_chain "$ROOT/.local/tmp" "temporary root"
+if [[ ! -f "$ARCHIVE" ]]; then
+  partial="$ARCHIVE.part"
+  prepare_managed_output "$ARCHIVE" "debug archive"
+  prepare_managed_output "$partial" "partial debug archive"
+  rm -f "$partial"
+  "$CURL" -fL --retry 3 "$url" -o "$partial"
+  require_managed_file "$partial" "downloaded partial debug archive"
+  mv "$partial" "$ARCHIVE"
+fi
+verify_regular_hash "$ARCHIVE" "$archive_size" "$archive_sha" "debug archive"
+verify_loader
+
+STAGE_PREFIX=$(mktemp -d "$ROOT/.local/debug/libc6-dbg.new.XXXXXX")
+STAGE_RECEIPT=$(mktemp -d "$ROOT/.local/receipts/valgrind-debug-symbols.new.XXXXXX")
+EXTRACT_WORK=$(mktemp -d "$ROOT/.local/tmp/libc6-dbg-extract.XXXXXX")
+validate_plain_directory_chain "$STAGE_PREFIX" "staged debug-symbol tree"
+validate_plain_directory_chain "$STAGE_RECEIPT" "staged debug-symbol receipt"
+validate_plain_directory_chain "$EXTRACT_WORK" "debug-symbol extraction worktree"
+OLD_PREFIX="$ROOT/.local/debug/libc6-dbg.old.$$"
+OLD_RECEIPT="$ROOT/.local/receipts/valgrind-debug-symbols.old.$$"
+prepare_managed_directory_target "$PREFIX" "selected debug-symbol tree"
+prepare_managed_directory_target "$RECEIPT" "selected debug-symbol receipt"
+prepare_managed_directory_target "$OLD_PREFIX" "old debug-symbol tree"
+prepare_managed_directory_target "$OLD_RECEIPT" "old debug-symbol receipt"
+SELECTION_ACTIVE=false
+cleanup() {
+  status=$?
+  trap - EXIT HUP INT TERM
+  if [[ "$SELECTION_ACTIVE" == true ]]; then
+    rm -rf "$PREFIX" "$RECEIPT"
+    if [[ -e "$OLD_PREFIX" || -L "$OLD_PREFIX" ]]; then
+      validate_plain_directory_chain "$OLD_PREFIX" "old debug-symbol tree"
+      prepare_managed_directory_target "$PREFIX" "selected debug-symbol tree"
+      mv "$OLD_PREFIX" "$PREFIX"
+    fi
+    if [[ -e "$OLD_RECEIPT" || -L "$OLD_RECEIPT" ]]; then
+      validate_plain_directory_chain "$OLD_RECEIPT" "old debug-symbol receipt"
+      prepare_managed_directory_target "$RECEIPT" "selected debug-symbol receipt"
+      mv "$OLD_RECEIPT" "$RECEIPT"
+    fi
+  fi
+  [[ -z "$STAGE_PREFIX" ]] || rm -rf "$STAGE_PREFIX"
+  [[ -z "$STAGE_RECEIPT" ]] || rm -rf "$STAGE_RECEIPT"
+  rm -rf "$EXTRACT_WORK"
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+data_member=$("$AR" t "$ARCHIVE" | awk '/^data\.tar\.xz$/ { print }')
+[[ "$data_member" == data.tar.xz ]] || fail "debug archive has no unique data.tar.xz"
+(cd "$EXTRACT_WORK" && "$AR" x "$ARCHIVE" "$data_member")
+require_managed_file "$EXTRACT_WORK/$data_member" "debug-symbol data archive"
+"$PYTHON" - "$EXTRACT_WORK/$data_member" "$STAGE_PREFIX" <<'PY'
+import pathlib
+import sys
+import tarfile
+
+archive = pathlib.Path(sys.argv[1])
+destination = pathlib.Path(sys.argv[2])
+with tarfile.open(archive, mode="r:xz") as stream:
+    stream.extractall(destination, filter="data")
+PY
+
+extracted="$STAGE_PREFIX/usr/lib/debug/.build-id/${loader_build_id:0:2}/${loader_build_id:2}.debug"
+verify_regular_hash "$extracted" "$debug_size" "$debug_sha" \
+  "archive loader debug object"
+mirror_directory="$STAGE_PREFIX${loader_path%/*}"
+ensure_plain_directory_chain "$mirror_directory" "Valgrind debuglink mirror directory"
+prepare_managed_output "$mirror_directory/$debuglink" "Valgrind debuglink mirror"
+cp "$extracted" "$mirror_directory/$debuglink"
+[[ $(sha256 "$mirror_directory/$debuglink") == "$debug_sha" ]] ||
+  fail "could not create the Valgrind debuglink mirror"
+
+prepare_managed_output "$STAGE_RECEIPT/installed-tree.tsv" \
+  "debug-symbol installed tree receipt"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create \
+  "$STAGE_PREFIX" "$STAGE_RECEIPT/installed-tree.tsv" >/dev/null
+prepare_managed_output "$STAGE_RECEIPT/inputs.tsv" "debug-symbol input receipt"
+printf '%s\n' \
+  "schema=1" \
+  "manifest_sha256=$(sha256 "$MANIFEST")" \
+  "archive_sha256=$archive_sha" \
+  "archive_size=$archive_size" \
+  "loader_path=$loader_path" \
+  "loader_sha256=$loader_sha" \
+  "loader_build_id=$loader_build_id" \
+  "debuglink=$debuglink" \
+  "debug_size=$debug_size" \
+  "debug_sha256=$debug_sha" \
+  "tree_receipt_helper_sha256=$(sha256 "$TREE_HELPER")" \
+  "bootstrap_sha256=$(sha256 "${BASH_SOURCE[0]}")" \
+  > "$STAGE_RECEIPT/inputs.tsv"
+(
+  cd "$STAGE_RECEIPT"
+  prepare_managed_output "$STAGE_RECEIPT/seal.sha256" "debug-symbol receipt seal"
+  sha256sum inputs.tsv installed-tree.tsv > seal.sha256
+)
+
+rm -rf "$OLD_PREFIX" "$OLD_RECEIPT"
+if [[ -e "$PREFIX" ]]; then
+  mv "$PREFIX" "$OLD_PREFIX" || fail "could not stage existing debug-symbol tree"
+fi
+if [[ -e "$RECEIPT" ]]; then
+  if ! mv "$RECEIPT" "$OLD_RECEIPT"; then
+    [[ ! -e "$OLD_PREFIX" ]] || mv "$OLD_PREFIX" "$PREFIX"
+    fail "could not stage existing debug-symbol receipt"
+  fi
+fi
+SELECTION_ACTIVE=true
+mv "$STAGE_PREFIX" "$PREFIX"
+STAGE_PREFIX=
+mv "$STAGE_RECEIPT" "$RECEIPT"
+STAGE_RECEIPT=
+verify_receipt
+SELECTION_ACTIVE=false
+obsolete_prefix=$OLD_PREFIX
+obsolete_receipt=$OLD_RECEIPT
+OLD_PREFIX=
+OLD_RECEIPT=
+rm -rf "$obsolete_prefix" "$obsolete_receipt"
+printf '%s\n' "Valgrind debug symbols ready: $PREFIX"

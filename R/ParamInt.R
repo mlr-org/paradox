@@ -71,7 +71,18 @@ domain_is_bounded.ParamInt = function(param) is.finite(param$lower) & is.finite(
 domain_qunif.ParamInt = function(param, x) {
   # extra careful here w/ rounding errors and the x == 1 case
   # note that as.integer alone rounds towards 0 and can not be used without 'floor' here
-  as.integer(floor(pmax(pmin(x * (param$upper + 1) - (x - 1) * param$lower, param$upper), param$lower)))
+  lower = rep(param$lower, length.out = length(x))
+  upper = rep(param$upper, length.out = length(x))
+  mapped = x * (upper + 1) - (x - 1) * lower
+
+  fixed = lower == upper & is.finite(lower)
+  mapped[fixed] = lower[fixed]
+  at_lower = x == 0 & is.finite(lower)
+  mapped[at_lower] = lower[at_lower]
+  at_upper = x == 1 & is.finite(upper)
+  mapped[at_upper] = upper[at_upper]
+
+  as.integer(floor(pmax(pmin(mapped, upper), lower)))
 }
 
 #' @export

@@ -2,7 +2,7 @@ Type: Package
 Package: paradox
 Title: Define and Work with Parameter Spaces for Complex
     Algorithms
-Version: 1.0.1-9000
+Version: 2.0.0
 Authors@R:
     c(person(given = "Michel",
              family = "Lang",
@@ -36,12 +36,13 @@ Authors@R:
       person(given = "Anna",
              family = "Nazarova",
              role = "ctb",
-             email = "anna.nazarova@outlook.com",
-             comment = c(ORCID = "0000-0002-8115-0400")))
+             email = "anna.nazarova@outlook.com"))
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
     includes statistical designs and random samplers. Objects are
     implemented as 'R6' classes.
+Depends:
+    R (>= 4.3.0)
 License: LGPL-3
 URL: https://paradox.mlr-org.com,
     https://github.com/mlr-org/paradox
@@ -50,7 +51,6 @@ Imports:
     backports,
     checkmate,
     data.table,
-    methods,
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
@@ -66,7 +66,8 @@ Suggests:
 Encoding: UTF-8
 Config/testthat/edition: 3
 Config/testthat/parallel: false
-NeedsCompilation: no
+NeedsCompilation: yes
+SystemRequirements: USE_C17
 Roxygen: list(markdown = TRUE, r6 = TRUE)
 RoxygenNote: 7.3.3
 VignetteBuilder: knitr, rmarkdown

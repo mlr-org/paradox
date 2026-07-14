@@ -1,0 +1,21 @@
+# Package-DSO-only UndefinedBehaviorSanitizer profile following the R 4.6.1
+# recommendation for Clang 17 and newer.  It is never combined with ASan.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=undefined -fno-sanitize=float-divide-by-zero -fno-sanitize-recover=undefined -fno-omit-frame-pointer
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=undefined -fno-sanitize=float-divide-by-zero -fno-sanitize-recover=undefined -fno-omit-frame-pointer
+SHLIB_LD = $(CC17)
+CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
+
+# R 4.6.1 recommends explicitly linking the standalone runtime into the
+# package DSO for package-only Clang UBSan checks.  The rpath keeps this inside
+# the activated project toolchain at runtime.
+SAN_LIBS = -L$(CONDA_PREFIX)/lib -Wl,-rpath,$(CONDA_PREFIX)/lib -lclang_rt.ubsan_standalone-x86_64
+
+PARADOX_UBSAN_FLAGS = -O1 -g3 -fno-optimize-sibling-calls \
+  -Wall -Wextra -Wpedantic -Werror \
+  -Wstrict-prototypes -Wmissing-prototypes \
+  -Wmissing-variable-declarations -Wformat=2 -Wundef \
+  -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
+
+CFLAGS = $(PARADOX_UBSAN_FLAGS)
+C17FLAGS = $(PARADOX_UBSAN_FLAGS)

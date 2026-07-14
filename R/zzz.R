@@ -3,7 +3,7 @@
 #' @import mlr3misc
 #' @importFrom R6 R6Class is.R6Class
 #' @importFrom stats runif rnorm
-#' @importFrom methods is
+#' @useDynLib paradox, .registration = TRUE, .fixes = "C_"
 "_PACKAGE"
 
 

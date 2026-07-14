@@ -1,0 +1,12 @@
+# Portable package-check profile for the full CRAN-style native gate.
+# Strict warning coverage is provided independently by the GCC and Clang
+# profiles; this profile deliberately avoids architecture and diagnostic flags
+# that R's incoming checks classify as nonportable package compilation flags.
+
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+SHLIB_LD = $(CC17)
+
+CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
+CFLAGS = -O2 -g
+C17FLAGS = -O2 -g

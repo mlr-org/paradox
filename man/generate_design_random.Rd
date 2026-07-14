@@ -17,8 +17,12 @@ Number of points to draw randomly.}
 }
 \description{
 Generates a design with randomly drawn points.
-Internally uses \code{\link{SamplerUnif}}, hence, also works for \link{ParamSet}s with dependencies.
-If dependencies do not hold, values are set to \code{NA} in the resulting data.table.
+Canonical base \link{ParamSet} and \link{ParamSetCollection} objects use one bulk
+uniform draw followed by quantile mapping. The values and random-number
+stream match \code{\link{SamplerUnif}}, including dependency handling. Extended or
+zero-dimensional parameter spaces retain the complete \code{\link{SamplerUnif}} path.
+If dependencies do not hold, values are set to \code{NA} in the resulting
+data.table.
 }
 \examples{
 pset = ps(

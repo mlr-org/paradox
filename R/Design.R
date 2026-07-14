@@ -1,3 +1,106 @@
+design_transpose_param_trafos = function(xs, param_set) {
+  # Retain the historical call expression for overridden methods and their
+  # errors.  In particular, conditionCall() remains `ps$trafo(x)`.
+  ps = param_set
+  fallback = function() map(xs, function(x) ps$trafo(x))
+
+  if (!isTRUE(.Call(C_param_set_surface_auth, param_set, 1L)) ||
+      !identical(class(param_set), c("ParamSet", "R6")) ||
+      !is.null(param_set$extra_trafo)) {
+    return(fallback())
+  }
+
+  enclosure = param_set$.__enclos_env__
+  if (!is.environment(enclosure) || !is.environment(enclosure$private)) {
+    return(fallback())
+  }
+  trafos = enclosure$private$.trafos
+  if (typeof(trafos) != "list" ||
+      !identical(class(trafos), c("data.table", "data.frame")) ||
+      !identical(names(trafos), c("id", "trafo")) ||
+      !identical(attr(trafos, "sorted", exact = TRUE), "id") ||
+      typeof(trafos$id) != "character" ||
+      typeof(trafos$trafo) != "list" ||
+      length(trafos$id) != length(trafos$trafo)) {
+    return(fallback())
+  }
+
+  # Keep independent vector shells: data.table permits callbacks to replace
+  # list elements by reference, while ParamSet$trafo() snapshots the joined
+  # table before invoking the first callback in a row.
+  trafo_ids = trafos$id[]
+  trafo_functions = trafos$trafo[]
+  if (anyNA(trafo_ids) || any(!nzchar(trafo_ids)) ||
+      anyDuplicated(trafo_ids) ||
+      !all(vapply(trafo_functions, is.function, logical(1L)))) {
+    return(fallback())
+  }
+
+  # Validate and match every row before running user code. If a public field was
+  # altered after construction, the fallback must not repeat callbacks that
+  # have already run.
+  matches = vector("list", length(xs))
+  for (row in seq_along(xs)) {
+    x = xs[[row]]
+    row_ids = names(x)
+    if (typeof(x) != "list" ||
+        !identical(names(attributes(x)), "names") ||
+        is.null(row_ids) || anyNA(row_ids) || any(!nzchar(row_ids)) ||
+        anyDuplicated(row_ids)) {
+      return(fallback())
+    }
+    matches[[row]] = match(row_ids, trafo_ids, nomatch = 0L)
+  }
+
+  # Snapshot the canonical function list once, but retain the historical
+  # row/parameter callback order and call expression. Single-bracket
+  # assignment keeps NULL and vector-valued results as one list element.
+  for (row in seq_along(xs)) {
+    x = xs[[row]]
+    matched = matches[[row]]
+    for (column in which(matched != 0L)) {
+      id = trafo_ids[[matched[[column]]]]
+      trafo = trafo_functions[[matched[[column]]]]
+      value = x[[column]]
+      x[column] = list(param_set_call_trafo(id, trafo, value))
+    }
+
+    # An individual callback may install an extra transformation. Historically
+    # ParamSet$trafo() reads it after all individual callbacks, so it still
+    # applies to the current row.
+    extra_trafo = param_set$extra_trafo
+    added_extra_trafo = !is.null(extra_trafo)
+    if (added_extra_trafo) {
+      xin = x
+      if (test_function(extra_trafo, args = c("x", "param_set"))) {
+        x = extra_trafo(x = xin, param_set = param_set)
+      } else {
+        x = extra_trafo(xin)
+      }
+    }
+    xs[row] = list(x)
+
+    # A callback can also replace or mutate the canonical table by reference.
+    # The current row correctly uses its pre-callback snapshot; hand only the
+    # untouched tail to the public method so later rows see the new state.
+    current_trafos = enclosure$private$.trafos
+    same_trafos = typeof(current_trafos) == "list" &&
+      identical(class(current_trafos), c("data.table", "data.frame")) &&
+      identical(names(current_trafos), c("id", "trafo")) &&
+      identical(attr(current_trafos, "sorted", exact = TRUE), "id") &&
+      identical(current_trafos$id, trafo_ids) &&
+      identical(current_trafos$trafo, trafo_functions)
+    same_surface = isTRUE(.Call(C_param_set_surface_auth, param_set, 1L))
+    if ((!same_surface || !same_trafos || added_extra_trafo) &&
+        row < length(xs)) {
+      remaining = seq.int(row + 1L, length(xs))
+      xs[remaining] = map(xs[remaining], function(x) ps$trafo(x))
+      return(xs)
+    }
+  }
+  xs
+}
+
 #' @title Design of Configurations
 #'
 #' @description
@@ -77,12 +180,15 @@ Design = R6Class("Design",
       assert_flag(filter_na)
       assert_flag(trafo)
       ps = self$param_set
-      xs = transpose_list(self$data)
-      if (filter_na) {
-        xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
+      xs = .Call(C_design_transpose, self$data, filter_na)
+      if (is.null(xs)) {
+        xs = transpose_list(self$data)
+        if (filter_na) {
+          xs = map(xs, function(x) Filter(Negate(is_scalar_na), x))
+        }
       }
       if (ps$has_trafo && trafo) {
-        xs = map(xs, function(x) ps$trafo(x))
+        xs = design_transpose_param_trafos(xs, ps)
       }
       return(xs)
     }

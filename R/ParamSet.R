@@ -1,3 +1,64 @@
+# Return a fresh, zero-row dependency table without invoking data.table's
+# comparatively expensive constructor. In particular, the outer list must
+# never be shared between R6 instances: data.table may attach optional lookup
+# metadata to it by reference. Initializers that override both ParamSet and
+# ParamSetCollection without calling super must install their own dependency
+# store in the same way. The self-reference is optional and is installed lazily
+# by data.table operations that need it.
+new_empty_deps = function() {
+  structure(
+    list(id = character(0L), on = character(0L), cond = list()),
+    row.names = integer(0L),
+    class = c("data.table", "data.frame")
+  )
+}
+
+# A native `$params` result has a valid data.table self-reference but no spare
+# column-pointer capacity. Adding a column therefore makes data.table take a
+# shallow copy and assign that temporary back to the extraction expression.
+# Preserve the historical `ps$params[, new := value]` and
+# `data.table::set(ps$params, ...)` behavior without making the active binding
+# generally writable. Function identity keeps this exception narrower and
+# more robust than inspecting deparsed calls or error text.
+params_data_table_temporary_reassignment = function() {
+  depth = sys.nframe()
+  data_table_namespace = asNamespace("data.table")
+
+  reassign = get0(
+    ".reassign_extracted_table",
+    envir = data_table_namespace,
+    inherits = FALSE
+  )
+  if (depth > 4L && !is.null(reassign) &&
+      identical(sys.function(depth - 4L), reassign)) {
+    return(TRUE)
+  }
+
+  set = get0("set", envir = data_table_namespace, inherits = FALSE)
+  depth > 5L && !is.null(set) && identical(sys.function(depth - 5L), set)
+}
+
+# Keep individual transformations in R even when their matching and snapshots
+# come from C. Besides avoiding user-code evaluation during a native unwind,
+# this preserves the historical promise expression and immediate callback
+# frame: `id`, `trafo`, and `value` are the three pmap formals, and conditions
+# record the call as `trafo(value)`.
+param_set_call_trafo = function(id, trafo, value) {
+  trafo(value)
+}
+
+# Freeze loop-dependent lookups in a per-invocation frame without forcing the
+# callback's `value` argument. A callback may return a closure that forces its
+# argument only after the outer loop has advanced; the intermediate bindings
+# must therefore outlive that iteration, just as pmap's row frame does.
+param_set_call_trafo_at = function(ids, callbacks, values, index) {
+  index = force(index)
+  id = ids[[index]]
+  trafo = callbacks[[index]]
+  value = values[[index]]
+  param_set_call_trafo(id, trafo, value)
+}
+
 #' @title ParamSet
 #'
 #' @description
@@ -67,6 +128,60 @@ ParamSet = R6Class("ParamSet",
     #'   dependencies are allowed, the dependency is added regardless. This is mainly for internal
     #'   use.
     initialize = function(params = named_list(), allow_dangling_dependencies = FALSE) {
+      # Native subset state is a private, authenticated, single-use hand-off.
+      # Keeping it in the existing `params` formal preserves the public R6
+      # constructor signature and makes ordinary external pointers continue
+      # through the established validation path.
+      if (typeof(params) == "externalptr" && isTRUE(.Call(
+          C_param_set_adopt_subset_state,
+          private,
+          params
+        ))) {
+        # The historical subset path installs this secondary index on every
+        # result. Deep-cloned data.tables can lose secondary indices, so the
+        # adopted native state must restore it as well; otherwise equivalent
+        # clone/union sequences expose different `$params` attributes.
+        setindexv(private$.params, c("id", "cls", "grouping"))
+        return(invisible(NULL))
+      }
+
+      private$.deps = new_empty_deps()
+
+      # Subclasses may observe the transient Domain-shaped table while
+      # initialize() delegates dependency installation through self$add_dep().
+      # Keep that extension contract on the R path; the exact base class is the
+      # common construction hot path and can use the compact native result.
+      native = if (identical(class(self), c("ParamSet", "R6"))) {
+        .Call(C_param_set_construct, params)
+      }
+      if (!is.null(native)) {
+        paramtbl = native$params
+        private$.tags = native$tags
+        private$.trafos = native$trafos
+        initvalues = native$init_values
+
+        # The tables are already in key order. Let data.table attach its
+        # optional lookup metadata without asking it to assemble or reorder
+        # any constructor state.
+        setindexv(paramtbl, c("id", "cls", "grouping"))
+        setindexv(private$.tags, "tag")
+        private$.params = paramtbl
+
+        for (row in seq_along(native$requirements)) {
+          for (req in native$requirements[[row]]) {
+            invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
+              .args = req)
+          }
+        }
+
+        private$.params = paramtbl
+        if (!is.null(initvalues)) self$values = initvalues
+        return(invisible(initvalues))
+      }
+
+      # The native gate fully validates canonical built-in rows. Extensions,
+      # malformed inputs, and unsupported shapes retain the established
+      # checkmate diagnostics and data.table assembly path.
       assert_list(params, types = "Domain")
 
       if (length(params)) assert_names(names(params), type = "strict")
@@ -154,27 +269,7 @@ ParamSet = R6Class("ParamSet",
     #'   Return only IDs of dimensions that have at least one of the tags given in this argument.
     #' @return `character()`.
     ids = function(class = NULL, tags = NULL, any_tags = NULL) {
-      assert_character(class, any.missing = FALSE, null.ok = TRUE)
-      assert_character(tags, any.missing = FALSE, null.ok = TRUE)
-      assert_character(any_tags, any.missing = FALSE, null.ok = TRUE)
-
-      if (is.null(class) && is.null(tags) && is.null(any_tags)) {
-        return(private$.params$id)
-      }
-      if (length(tags) == 1 && is.null(any_tags) && is.null(class)) {
-        # very typical case: only 'tags' is given.
-        rv = private$.tags$id[private$.tags$tag == tags]
-        # keep original order
-        return(rv[match(private$.params$id, rv, nomatch = 0)])
-      }
-      ptbl = if (is.null(class)) private$.params else private$.params[cls %in% class, .(id)]
-      if (is.null(tags) && is.null(any_tags)) {
-        return(ptbl$id)
-      }
-      tagtbl = private$.tags[ptbl, nomatch = 0]
-      idpool = if (is.null(any_tags)) list() else list(tagtbl[tag %in% any_tags, id])
-      idpool = c(idpool, lapply(tags, function(t) tagtbl[t, id, on = "tag", nomatch = 0]))
-      Reduce(intersect, idpool)
+      .Call(C_param_set_ids_lazy, private, environment())
     },
 
     #' @description
@@ -196,6 +291,9 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
+      native = .Call(C_param_set_get_values, private, self, environment())
+      if (!is.null(native)) return(native)
+
       assert_choice(type, c("with_token", "without_token", "only_token", "with_internal"))
 
       assert_flag(check_required)
@@ -216,11 +314,11 @@ ParamSet = R6Class("ParamSet",
       }
 
       if (type == "without_token") {
-        values = discard(values, is, "TuneToken")
+        values = discard(values, inherits, "TuneToken")
       } else if (type == "only_token") {
-        values = keep(values, is, "TuneToken")
+        values = keep(values, inherits, "TuneToken")
       } else if (type == "with_internal") {
-        values = keep(values, is, "InternalTuneToken")
+        values = keep(values, inherits, "InternalTuneToken")
       }
 
       if (check_required) {
@@ -250,11 +348,26 @@ ParamSet = R6Class("ParamSet",
       assert_list(dots, names = "unique")
       assert_list(.values, names = "unique")
       assert_disjunct(names(dots), names(.values))
-      new_values = insert_named(dots, .values)
+      insert = FALSE
+      current_values = NULL
       if (.insert) {
-        discarding = names(keep(new_values, is.null))
-        new_values = insert_named(self$values, new_values)
-        new_values = new_values[names(new_values) %nin% discarding]
+        insert = TRUE
+        current_values = self$values
+      }
+      new_values = .Call(
+        C_param_set_values_merge,
+        dots,
+        .values,
+        current_values,
+        insert
+      )
+      if (is.null(new_values)) {
+        new_values = insert_named(dots, .values)
+        if (insert) {
+          discarding = names(keep(new_values, is.null))
+          new_values = insert_named(current_values, new_values)
+          new_values = new_values[names(new_values) %nin% discarding]
+        }
       }
       self$values = new_values
       invisible(self)
@@ -271,12 +384,32 @@ ParamSet = R6Class("ParamSet",
     trafo = function(x, param_set = self) {
       if (is.data.frame(x)) x = as.list(x)
       assert_list(x, names = "unique")
-      trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
-      value = NULL  # static checks
-      if (nrow(trafos)) {
-        trafos[, value := x[id]]
-        transformed = pmap(trafos, function(id, trafo, value) trafo(value))
-        x = insert_named(x, set_names(transformed, trafos$id))
+      input_attributes = attributes(x)
+      ordinary_input = (length(x) == 0L && is.null(input_attributes)) ||
+        identical(names(input_attributes), "names")
+      plan = if (ordinary_input &&
+          identical(class(self), c("ParamSet", "R6"))) {
+        .Call(C_param_set_trafo_plan, x, private$.trafos)
+      }
+      if (is.null(plan)) {
+        trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
+        value = NULL  # static checks
+        if (nrow(trafos)) {
+          trafos[, value := x[id]]
+          transformed = pmap(trafos, function(id, trafo, value) trafo(value))
+          x = insert_named(x, set_names(transformed, trafos$id))
+        }
+      } else if (length(plan[[1L]])) {
+        ids = plan[[1L]]
+        callbacks = plan[[2L]]
+        values = plan[[3L]]
+        transformed = vector("list", length(ids))
+        for (index in seq_along(ids)) {
+          transformed[index] = list(param_set_call_trafo_at(
+            ids, callbacks, values, index
+          ))
+        }
+        x = insert_named(x, set_names(transformed, ids))
       }
       extra_trafo = self$extra_trafo
       if (!is.null(extra_trafo)) {
@@ -361,7 +494,12 @@ ParamSet = R6Class("ParamSet",
     #' @return `logical(1)`: Whether `x` satisfies the `$constraint`.
     test_constraint = function(x, assert_value = TRUE) {
       if (assert_value) self$assert(x, check_strict = FALSE)
-      assert_flag(is.null(private$.constraint) || private$.constraint(x))
+      if (inherits(self, "ParamSetCollection")) {
+        constraint = self$constraint
+        assert_flag(is.null(constraint) || constraint(x))
+      } else {
+        assert_flag(is.null(private$.constraint) || private$.constraint(x))
+      }
     },
 
     #' @description
@@ -428,8 +566,11 @@ ParamSet = R6Class("ParamSet",
         return("TuneTokens are not allowed to be present.")
       }
 
-      # return early, this makes the following code easier since we don't need to consider edgecases with empty vectors.
-      if (!length(xs)) return(trueret)
+      # Preserve the established empty, presence-free fast return before any
+      # private parameter storage is observed. Unlike the old unconditional
+      # return, non-default presence modes continue below so they can report
+      # missing required parameters.
+      if (!length(xs) && presence == "none") return(trueret)
 
       params = private$.params
       ns = names(xs)
@@ -486,23 +627,41 @@ ParamSet = R6Class("ParamSet",
         }
       }
 
-      if (some(xs, inherits, "TuneToken")) {
+      # return early, this makes the following code easier since we don't need to consider edgecases with empty vectors.
+      if (!length(xs)) return(trueret)
+
+      # The native gate only returns a result after proving that all supplied
+      # values are canonical built-ins. Invalid, special, token, utility, and
+      # custom-Domain values return NULL and retain the exact R diagnostics.
+      # Restricting this to the base class also preserves subclass overrides of
+      # test_constraint() and check_dependencies().
+      native_safe = identical(class(self), c("ParamSet", "R6")) &&
+        isTRUE(.Call(C_param_set_surface_auth, self, 2L)) &&
+        (!check_strict || (is.null(private$.constraint) && !nrow(private$.deps)))
+      if (native_safe) {
+        native = .Call(C_param_set_check_builtin, params, xs, sanitize)
+        if (!is.null(native)) return(native)
+      }
+
+      has_tune_tokens = some(xs, inherits, "TuneToken")
+      if (has_tune_tokens) {
         tunecheck = tryCatch({
           private$get_tune_ps(xs)
           TRUE
         }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
         if (!isTRUE(tunecheck)) return(tunecheck)
         xs_nontune = discard(xs, inherits, "TuneToken")
+        xs_internaltune = keep(xs, inherits, "InternalTuneToken")
 
         # only had TuneTokens, nothing else to check here.
-        if (!length(xs_nontune) && !some(xs, is, "InternalTuneToken")) {
+        if (!length(xs_nontune) && !length(xs_internaltune)) {
           return(trueret)
         }
       } else {
         xs_nontune = xs
+        xs_internaltune = named_list()
       }
 
-      xs_internaltune = keep(xs, is, "InternalTuneToken")
       walk(names(xs_internaltune), function(pid) {
         if ("internal_tuning" %nin% self$tags[[pid]]) {
           stopf("Trying to assign InternalTuneToken to parameter '%s' which is not tagged with 'internal_tuning'.", pid)
@@ -512,7 +671,15 @@ ParamSet = R6Class("ParamSet",
 
       # check each parameter group's feasibility
       pidx = match(names(xs_nontune), params$id)
-      nonspecial = !pmap_lgl(list(params$special_vals[pidx], xs_nontune), has_element)
+      special_vals = params$special_vals[pidx]
+      has_special_vals = lengths(special_vals) != 0L
+      nonspecial = rep(TRUE, length(pidx))
+      if (any(has_special_vals)) {
+        nonspecial[has_special_vals] = !pmap_lgl(
+          list(special_vals[has_special_vals], xs_nontune[has_special_vals]),
+          has_element
+        )
+      }
       pidx = pidx[nonspecial]
 
       if (sanitize) {
@@ -679,6 +846,41 @@ ParamSet = R6Class("ParamSet",
     #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE, presence = "none", allow_token = TRUE) {
+      # Probe the table before touching the optional arguments. Historically,
+      # check_dt() does not force any of them when there are no points, while a
+      # non-empty point validates/forces presence, check_strict, and allow_token
+      # in that order through self$check(). Native admission must retain both
+      # that laziness and that error priority.
+      native = if (isTRUE(.Call(C_param_set_surface_auth, self, 3L))) {
+        .Call(C_param_set_check_dt_builtin, private$.params, xdt)
+      }
+      if (isTRUE(native)) {
+        if (!length(xdt) || !length(xdt[[1L]])) return(TRUE)
+
+        # Forward these promises through the same validators used by check().
+        # Besides retaining error priority, this preserves the condition call
+        # when evaluating an argument itself raises an error.
+        assert_choice(presence, c("none", "all", "required"))
+        canonical_presence = identical(presence, "none")
+        assert_flag(check_strict)
+
+        # check() has no eager validator for allow_token. A nonliteral promise
+        # must therefore be forced by the unchanged row path below, where its
+        # side effects, errors, and callback frame remain compatible. Default
+        # and explicit literal flags are the common native-safe cases.
+        allow_token_expression = substitute(allow_token)
+        canonical_allow_token = identical(allow_token_expression, FALSE) ||
+          identical(allow_token_expression, TRUE)
+
+        # Presence modes other than "none" require row-specific dependency
+        # reasoning and deliberately stay on the compatibility path for now.
+        native_safe = canonical_presence && canonical_allow_token &&
+          (identical(check_strict, FALSE) ||
+            (identical(check_strict, TRUE) &&
+              is.null(private$.constraint) && !nrow(private$.deps)))
+        if (native_safe) return(native)
+      }
+
       xss = map(transpose_list(xdt), discard, is.na)
       msgs = list()
       for (i in seq_along(xss)) {
@@ -744,6 +946,12 @@ ParamSet = R6Class("ParamSet",
       }
       assert_names(colnames(x), type = "unique", subset.of = private$.params$id)
 
+      # Canonical built-in slices are mapped column-wise in native code and
+      # returned in the established data.table facade. Custom Domains and
+      # unsupported storage shapes retain grouped S3 dispatch below.
+      native = .Call(C_param_set_qunif_builtin, private$.params, x)
+      if (!is.null(native)) return(native)
+
       x = t(x)
       params = private$.params[rownames(x), on = "id"]
       params$result = list()
@@ -760,6 +968,9 @@ ParamSet = R6Class("ParamSet",
     #' @param id (`character(1)`).
     #' @return [`Domain`].
     get_domain = function(id) {
+      native = .Call(C_param_set_get_domain, private, self, id)
+      if (!is.null(native)) return(native)
+
       assert_string(id)
       paramrow = private$.params[id, on = "id", nomatch = NULL]
 
@@ -792,7 +1003,36 @@ ParamSet = R6Class("ParamSet",
 
       assert_subset(ids, param_ids)
       deps = self$deps
-      if (!allow_dangling_dependencies && nrow(deps)) { # check that all required / leftover parents are still in new ids
+      check_dependencies = FALSE
+      if (!allow_dangling_dependencies && nrow(deps)) {
+        check_dependencies = TRUE
+      }
+
+      # Exact base ParamSets with canonical built-in storage can transfer a
+      # complete, freshly sliced state directly into the ordinary constructor.
+      # Subclasses, extension Domains, and malformed stores fall back as one
+      # unit so their R dispatch and historical diagnostics remain visible.
+      native = .Call(
+        C_param_set_subset_state,
+        private,
+        self,
+        ids,
+        check_dependencies
+      )
+      if (!is.null(native)) {
+        pids_not_there = native$missing_parents
+        if (length(pids_not_there) > 0L) {
+          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
+              "\nIf you still want to subset, set allow_dangling_dependencies to TRUE."), str_collapse(pids_not_there))
+        }
+
+        result = ParamSet$new(native$state)
+        if (keep_constraint) result$constraint = self$constraint
+        result$extra_trafo = self$extra_trafo
+        return(result)
+      }
+
+      if (check_dependencies) { # check that all required / leftover parents are still in new ids
         on = NULL
         parents = unique(deps[ids, on, on = "id", nomatch = NULL])
         pids_not_there = setdiff(parents, ids)
@@ -945,6 +1185,8 @@ ParamSet = R6Class("ParamSet",
       if (length(xs) == 0L) {
         xs = named_list()
       } else if (self$assert_values) {
+        native = .Call(C_param_set_assign_values_checked, private, self, xs)
+        if (!is.null(native)) return(native)
         # this only makes sense when we have asserts on
         # convert all integer params really to storage type int, move doubles to within bounds etc.
         # solves issue #293, #317
@@ -971,8 +1213,14 @@ ParamSet = R6Class("ParamSet",
     #' @template field_params
     params = function(rhs) {
       if (!missing(rhs)) {
+        if (params_data_table_temporary_reassignment()) {
+          return(rhs)
+        }
         stop("params is read-only.")
       }
+
+      native = .Call(C_param_set_params, private, self)
+      if (!is.null(native)) return(native)
 
       result = copy(private$.params)
       result[, .tags := list(self$tags)]
@@ -994,6 +1242,9 @@ ParamSet = R6Class("ParamSet",
       if (!missing(rhs)) {
         stop("domains is read-only.")
       }
+      native = .Call(C_param_set_domains, private, self)
+      if (!is.null(native)) return(native)
+
       nm = self$ids()
       set_names(map(nm, self$get_domain), nm)
     },
@@ -1054,7 +1305,13 @@ ParamSet = R6Class("ParamSet",
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
     has_deps = function() nrow(self$deps) > 0L,
     #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
-    has_constraint = function() !is.null(private$.constraint),
+    has_constraint = function() {
+      if (inherits(self, "ParamSetCollection")) {
+        !is.null(self$constraint)
+      } else {
+        !is.null(private$.constraint)
+      }
+    },
     #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_dbl()`] or [`p_int()`].
     all_numeric = function() all(self$is_number),
     #' @field all_categorical (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_fct()`] and [`p_lgl()`].
@@ -1095,6 +1352,9 @@ ParamSet = R6Class("ParamSet",
     #' @field nlevels (named `integer()`)\cr Number of distinct levels of parameters. `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
+      value = param_set_static_property(private$.params, 0L)
+      if (!is.null(value)) return(value)
+
       tmp = private$.params[,
         list(id, nlevels = domain_nlevels(recover_domain(.SD))),
         by = c("cls", "grouping"),
@@ -1105,6 +1365,9 @@ ParamSet = R6Class("ParamSet",
 
     #' @field is_number (named `logical()`)\cr Whether parameter is [`p_dbl()`] or [`p_int()`]. Named with parameter IDs.
     is_number = function() {
+      value = param_set_static_property(private$.params, 1L)
+      if (!is.null(value)) return(value)
+
       tmp = private$.params[,
         list(id, is_number = rep(domain_is_number(recover_domain(.SD)), .N)),
         by = c("cls", "grouping"),
@@ -1115,6 +1378,9 @@ ParamSet = R6Class("ParamSet",
 
     #' @field is_categ (named `logical()`)\cr Whether parameter is [`p_fct()`] or [`p_lgl()`]. Named with parameter IDs.
     is_categ = function() {
+      value = param_set_static_property(private$.params, 2L)
+      if (!is.null(value)) return(value)
+
       tmp = private$.params[,
         list(id, is_categ = rep(domain_is_categ(recover_domain(.SD)), .N)),
         by = c("cls", "grouping"),
@@ -1125,6 +1391,9 @@ ParamSet = R6Class("ParamSet",
 
     #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
     is_bounded = function() {
+      value = param_set_static_property(private$.params, 3L)
+      if (!is.null(value)) return(value)
+
       tmp = private$.params[,
         list(id, is_bounded = domain_is_bounded(recover_domain(.SD))),
         by = c("cls", "grouping"),
@@ -1136,6 +1405,8 @@ ParamSet = R6Class("ParamSet",
 
   private = list(
     .store_values = function(xs) {
+      native = .Call(C_param_set_store_values, private, self, xs)
+      if (!is.null(native)) return(invisible(native))
       # store with param ordering
       private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
     },
@@ -1211,6 +1482,15 @@ recover_domain = function(sd) {
   sd
 }
 
+# Built-in static properties are derived directly from the canonical columns in
+# native code. Unknown Domain classes retain the grouped S3 dispatch used by the
+# R implementation, so downstream packages can continue to define new types.
+param_set_static_property = function(params, property) {
+  native = .Call(C_param_set_property, params, property)
+  if (is.null(native)) return(NULL)
+  if (all(native[[2L]])) native[[1L]] else NULL
+}
+
 #' @export
 as.data.table.ParamSet = function(x, ...) { # nolint
   x$data
@@ -1252,4 +1532,3 @@ rd_info.ParamSet = function(obj, descriptions = character(), ...) { # nolint
   x = c("", knitr::kable(params, col.names = capitalize(names(params))))
   paste(x, collapse = "\n")
 }
-
