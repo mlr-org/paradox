@@ -506,8 +506,7 @@ test_that("extensions and invalid requests retain the R fallback", {
   expect_null(native_get_domain_call(subclass, "x"))
   native_get_domain_expect_equivalent(
     subclass$get_domain("x"),
-    native_get_domain_reference(subclass, "x"),
-    selfref = 0L
+    native_get_domain_reference(subclass, "x")
   )
 
   expect_error(custom_set$get_domain("absent"), "No param with id 'absent'", fixed = TRUE)
