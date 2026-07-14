@@ -268,9 +268,6 @@ typedef struct {
 
 static void snapshot_numeric_column(SEXP column, R_xlen_t size,
     const char *column_name, double *snapshot) {
-  if (snapshot == NULL) {
-    Rf_error("Unable to allocate temporary native workspace");
-  }
   /* Validate the canonical column without retaining its raw view.  Element
    * access through the public API then copies it into callback-independent
    * native storage before any public value is observed. */
@@ -296,23 +293,21 @@ static void snapshot_numeric_column(SEXP column, R_xlen_t size,
 static numeric_domain_snapshot_t snapshot_numeric_domain(
     SEXP lower, SEXP upper, SEXP tolerance, R_xlen_t size) {
   const R_xlen_t allocation_size = size == 0 ? 1 : size;
-  const size_t column_count = tolerance == R_NilValue ? 2U : 3U;
+  const int has_tolerance = tolerance != R_NilValue;
+  const size_t column_count = has_tolerance ? 3U : 2U;
   double *storage = paradox_temporary_alloc(
     allocation_size,
     column_count * sizeof(*storage)
   );
-  if (storage == NULL) {
-    Rf_error("Unable to allocate temporary native workspace");
-  }
   double *lower_snapshot = storage;
   double *upper_snapshot = storage + allocation_size;
-  double *tolerance_snapshot = tolerance == R_NilValue
-    ? NULL
-    : storage + 2 * allocation_size;
+  double *tolerance_snapshot = has_tolerance
+    ? storage + 2 * allocation_size
+    : NULL;
 
   snapshot_numeric_column(lower, size, "lower", lower_snapshot);
   snapshot_numeric_column(upper, size, "upper", upper_snapshot);
-  if (tolerance != R_NilValue) {
+  if (has_tolerance) {
     snapshot_numeric_column(
       tolerance,
       size,
