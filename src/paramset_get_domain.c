@@ -495,7 +495,11 @@ SEXP paradox_param_set_get_domain(
     VECSXP,
     PARADOX_DOMAIN_COLUMN_COUNT
   ));
-  paradox_domain_fill(result, &domain_row, &work_since_interrupt);
-  UNPROTECT(2);
-  return result;
+  SEXP prepared = PROTECT(paradox_domain_fill(
+    result,
+    &domain_row,
+    &work_since_interrupt
+  ));
+  UNPROTECT(3);
+  return prepared;
 }

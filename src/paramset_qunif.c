@@ -518,7 +518,7 @@ static SEXP copy_column_names(SEXP names,
   return result;
 }
 
-static void set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
+static SEXP set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
   SEXP classes = PROTECT(Rf_allocVector(STRSXP, 2));
   SET_STRING_ELT(classes, 0, Rf_mkChar("data.table"));
   SET_STRING_ELT(classes, 1, Rf_mkChar("data.frame"));
@@ -538,8 +538,9 @@ static void set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
   Rf_setAttrib(table, R_RowNamesSymbol, row_names);
   Rf_setAttrib(table, R_ClassSymbol, classes);
   Rf_setAttrib(table, R_NamesSymbol, names);
-  paradox_set_data_table_selfref(table);
-  UNPROTECT(2);
+  SEXP result = PROTECT(paradox_prepare_data_table(table));
+  UNPROTECT(3);
+  return result;
 }
 
 static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
@@ -677,7 +678,11 @@ SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
     }
     UNPROTECT(1);
   }
-  set_table_attributes(result, result_names, matrix.rows);
-  UNPROTECT(5);
-  return result;
+  SEXP prepared = PROTECT(set_table_attributes(
+    result,
+    result_names,
+    matrix.rows
+  ));
+  UNPROTECT(6);
+  return prepared;
 }

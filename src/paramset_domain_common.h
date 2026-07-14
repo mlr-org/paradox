@@ -125,7 +125,7 @@ attribute_hidden int paradox_domain_validate_values(
   paradox_domain_values_t *result,
   R_xlen_t *work_since_interrupt
 );
-attribute_hidden void paradox_domain_fill(
+attribute_hidden SEXP paradox_domain_fill(
   SEXP domain,
   const paradox_domain_row_t *row,
   R_xlen_t *work_since_interrupt

@@ -504,7 +504,7 @@ static SEXP copy_vector(SEXP source,
   return result;
 }
 
-static void set_params_attributes(SEXP result, SEXP source_index,
+static SEXP set_params_attributes(SEXP result, SEXP source_index,
     R_xlen_t row_count, R_xlen_t *work_since_interrupt) {
   PROTECT(source_index);
   SEXP names = PROTECT(Rf_allocVector(
@@ -538,13 +538,17 @@ static void set_params_attributes(SEXP result, SEXP source_index,
     Rf_setAttrib(result, Rf_install("index"), index);
   }
 
-  paradox_set_data_table_selfref(result);
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  ++protected_count;
   /* `data.table` also ties the self-reference tag to this exact names vector.
    * Reattaching it last matches ordinary update-join output and keeps future
    * by-reference operations detached from the private table. */
-  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(result, R_NamesSymbol, names);
+  SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
+  ++protected_count;
+  Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);
   UNPROTECT(protected_count);
+  return prepared;
 }
 
 static int validate_dynamic_state(
@@ -907,14 +911,14 @@ SEXP paradox_params_build_static(const paradox_params_state_t *state,
   SET_VECTOR_ELT(result, PARADOX_DOMAIN_TRAFO, trafo_column);
   UNPROTECT(1);
 
-  set_params_attributes(
+  SEXP prepared = PROTECT(set_params_attributes(
     result,
     state->source_index,
     params->row_count,
     work_since_interrupt
-  );
-  UNPROTECT(1);
-  return result;
+  ));
+  UNPROTECT(2);
+  return prepared;
 }
 
 int paradox_params_finish_dynamic(SEXP result,

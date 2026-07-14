@@ -753,7 +753,7 @@ static SEXP translate_dependency(const deps_plan_t *plan,
   return current;
 }
 
-static void set_output_attributes(SEXP result, R_xlen_t row_count) {
+static SEXP set_output_attributes(SEXP result, R_xlen_t row_count) {
   SEXP names = PROTECT(Rf_allocVector(STRSXP, 3));
   SET_STRING_ELT(names, 0, Rf_mkChar("id"));
   SET_STRING_ELT(names, 1, Rf_mkChar("on"));
@@ -771,10 +771,12 @@ static void set_output_attributes(SEXP result, R_xlen_t row_count) {
     SET_INTEGER_ELT(row_names, 1, -(int) row_count);
   }
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
-  paradox_set_data_table_selfref(result);
-  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(3);
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
+  Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);
+  UNPROTECT(5);
+  return prepared;
 }
 
 static SEXP emit_plan(const deps_plan_t *plan, R_xlen_t row_count,
@@ -836,9 +838,9 @@ static SEXP emit_plan(const deps_plan_t *plan, R_xlen_t row_count,
     UNPROTECT(4);
     Rf_error("ParamSetCollection dependency state changed during emission");
   }
-  set_output_attributes(result, row_count);
-  UNPROTECT(4);
-  return result;
+  SEXP prepared = PROTECT(set_output_attributes(result, row_count));
+  UNPROTECT(5);
+  return prepared;
 }
 
 SEXP paradox_param_set_collection_deps(

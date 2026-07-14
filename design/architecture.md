@@ -121,14 +121,26 @@ as one type-table entry rather than by redesigning `ParamSet`.
 
 Native table-shaped results are ordinary `VECSXP` objects whose columns are
 allocated with the correct storage types and whose names, compact row names,
-and class are set to `c("data.table", "data.frame")`. Shipped C never calls
-data.table internals. It does install data.table's public object-level
+and class are set to `c("data.table", "data.frame")`. Shipped C does not link
+to a data.table C symbol or include a private header. It normally installs
+data.table's public object-level
 `.internal.selfref` representation through the public R API: the outer pointer
 tags the exact names vector and protects an owner pointer for the table. This
 is necessary because consumers routinely pass returned tables straight to
 `data.table::set()` or `:=`; without a valid self-reference, those operations
 warn, copy unexpectedly, or try to assign a modified value back through an R6
-active binding. No data.table C symbol or private header is linked.
+active binding.
+
+data.table before 1.18 assumes that every table carrying a valid self-reference
+also has at least `ncol()` allocated column-pointer slots. A native `VECSXP`
+has zero `TRUELENGTH`, so those releases otherwise try to copy nonempty tables
+into a zero-slot shallow shell. Only for such older releases, the common table
+finalizer evaluates the exported `data.table::alloc.col(table, 0L)` closure and
+adopts its returned shell. This allocates exactly `ncol()` pointer slots, keeps
+every column shared, and avoids the usual 1024 spare slots. The bridge validates
+the returned columns, owner/self-reference, and capacity and fails closed on a
+changed contract. data.table 1.18 and newer retain the allocation-free public-R
+API path and its native construction performance.
 
 Result metadata is owned by the result. In particular, native table names are
 copied into a fresh plain character vector instead of attaching an input

@@ -333,7 +333,7 @@ static SEXP character_vector(const char *const *values, R_xlen_t size) {
   return result;
 }
 
-static void set_data_table_attributes(SEXP table,
+static SEXP set_data_table_attributes(SEXP table,
     const char *const *column_names, R_xlen_t column_count,
     R_xlen_t row_count, int include_row_names, int sorted_by_id) {
   SEXP names = PROTECT(character_vector(column_names, column_count));
@@ -361,8 +361,9 @@ static void set_data_table_attributes(SEXP table,
     ++n_protected;
     Rf_setAttrib(table, Rf_install("sorted"), sorted);
   }
-  paradox_set_data_table_selfref(table);
-  UNPROTECT(n_protected);
+  SEXP result = PROTECT(paradox_prepare_data_table(table));
+  UNPROTECT(n_protected + 1);
+  return result;
 }
 
 static SEXP new_table(const char *const *column_names,
@@ -374,16 +375,16 @@ static SEXP new_table(const char *const *column_names,
     SET_VECTOR_ELT(table, column, value);
     UNPROTECT(1);
   }
-  set_data_table_attributes(
+  SEXP result = PROTECT(set_data_table_attributes(
     table,
     column_names,
     column_count,
     row_count,
     include_row_names,
     sorted_by_id
-  );
-  UNPROTECT(1);
-  return table;
+  ));
+  UNPROTECT(2);
+  return result;
 }
 
 static void copy_permanent_value(SEXP destination, R_xlen_t row,

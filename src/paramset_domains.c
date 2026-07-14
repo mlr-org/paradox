@@ -1302,9 +1302,13 @@ static SEXP assemble_domains(const paradox_domain_params_t *params,
       VECSXP,
       PARADOX_DOMAIN_COLUMN_COUNT
     ));
-    paradox_domain_fill(domain, &domain_row, work_since_interrupt);
-    SET_VECTOR_ELT(result, row, domain);
-    UNPROTECT(1);
+    SEXP prepared = PROTECT(paradox_domain_fill(
+      domain,
+      &domain_row,
+      work_since_interrupt
+    ));
+    SET_VECTOR_ELT(result, row, prepared);
+    UNPROTECT(2);
   }
 
   UNPROTECT(5);

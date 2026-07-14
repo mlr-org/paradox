@@ -80,6 +80,6 @@ attribute_hidden void *paradox_temporary_alloc(
   R_xlen_t count,
   size_t element_size
 );
-attribute_hidden void paradox_set_data_table_selfref(SEXP table);
+attribute_hidden SEXP paradox_prepare_data_table(SEXP table);
 
 #endif

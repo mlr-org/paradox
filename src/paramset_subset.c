@@ -377,10 +377,11 @@ static SEXP subset_table(SEXP source, const R_xlen_t *positions,
     ++protected_count;
     Rf_setAttrib(result, Rf_install("sorted"), sorted);
   }
-  paradox_set_data_table_selfref(result);
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  ++protected_count;
 
   UNPROTECT(protected_count);
-  return result;
+  return prepared;
 }
 
 static SEXP selected_key_table(SEXP source,

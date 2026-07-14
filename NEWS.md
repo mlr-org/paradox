@@ -2,6 +2,11 @@
 
 ## Native core
 
+* Native data.table facades now allocate a minimal column-pointer shell through
+  the exported `alloc.col()` interface when used with data.table versions older
+  than 1.18. This fixes shallow subsetting and update joins on supported R 4.3
+  installations without copying columns or changing the fast path for current
+  data.table releases.
 * `Design$transpose()` now builds ordinary row configurations in registered C
   code. Classed or otherwise dispatch-sensitive columns retain the historical R
   path, while common numeric, integer, logical, character, and list-column

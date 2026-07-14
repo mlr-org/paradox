@@ -582,7 +582,7 @@ static void set_scalar_column(SEXP result,
   UNPROTECT(2);
 }
 
-static void set_domain_attributes(SEXP result, SEXP cls,
+static SEXP set_domain_attributes(SEXP result, SEXP cls,
     R_xlen_t *work_since_interrupt) {
   PROTECT(cls);
   SEXP names = PROTECT(Rf_allocVector(STRSXP, PARADOX_DOMAIN_COLUMN_COUNT));
@@ -606,13 +606,15 @@ static void set_domain_attributes(SEXP result, SEXP cls,
   SET_INTEGER_ELT(row_names, 1, -1);
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
 
-  paradox_set_data_table_selfref(result);
-  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(4);
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
+  Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);
+  UNPROTECT(6);
+  return prepared;
 }
 
-void paradox_domain_fill(SEXP domain, const paradox_domain_row_t *row,
+SEXP paradox_domain_fill(SEXP domain, const paradox_domain_row_t *row,
     R_xlen_t *work_since_interrupt) {
   paradox_domain_account_work(work_since_interrupt);
   for (enum paradox_domain_column column = PARADOX_DOMAIN_ID;
@@ -691,7 +693,7 @@ void paradox_domain_fill(SEXP domain, const paradox_domain_row_t *row,
   SET_VECTOR_ELT(domain, PARADOX_DOMAIN_INIT, init_column);
   UNPROTECT(2);
 
-  set_domain_attributes(
+  return set_domain_attributes(
     domain,
     STRING_ELT(row->params->classes, row->parameter_row),
     work_since_interrupt
