@@ -538,7 +538,7 @@ static SEXP set_params_attributes(SEXP result, SEXP source_index,
     Rf_setAttrib(result, Rf_install("index"), index);
   }
 
-  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result, TRUE));
   ++protected_count;
   /* `data.table` also ties the self-reference tag to this exact names vector.
    * Reattaching it last matches ordinary update-join output and keeps future

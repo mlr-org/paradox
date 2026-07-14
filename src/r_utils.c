@@ -375,7 +375,7 @@ static void validate_capacity_bridge(SEXP source, SEXP result,
   UNPROTECT(3);
 }
 
-SEXP paradox_prepare_data_table(SEXP table) {
+SEXP paradox_prepare_data_table(SEXP table, int growable) {
   if (data_table_requires_capacity_bridge()) {
     SEXP namespace_environment = PROTECT(
       paradox_api_registered_namespace("data.table")
@@ -388,12 +388,22 @@ SEXP paradox_prepare_data_table(SEXP table) {
       Rf_install("alloc.col"),
       namespace_environment
     ));
-    SEXP zero = PROTECT(Rf_ScalarInteger(0));
-    SEXP call = PROTECT(Rf_lang3(allocate, table, zero));
-    SET_TAG(CDDR(call), Rf_install("n"));
+    int protected_count = 2;
+    SEXP call;
+    if (growable) {
+      call = PROTECT(Rf_lang2(allocate, table));
+      ++protected_count;
+    } else {
+      SEXP zero = PROTECT(Rf_ScalarInteger(0));
+      ++protected_count;
+      call = PROTECT(Rf_lang3(allocate, table, zero));
+      ++protected_count;
+      SET_TAG(CDDR(call), Rf_install("n"));
+    }
     SEXP result = PROTECT(Rf_eval(call, namespace_environment));
+    ++protected_count;
     validate_capacity_bridge(table, result, namespace_environment);
-    UNPROTECT(5);
+    UNPROTECT(protected_count);
     return result;
   }
 
@@ -416,4 +426,28 @@ SEXP paradox_prepare_data_table(SEXP table) {
   Rf_setAttrib(table, Rf_install(".internal.selfref"), selfref);
   UNPROTECT(3);
   return table;
+}
+
+SEXP paradox_finalize_data_table(SEXP table) {
+  if (TYPEOF(table) != VECSXP || ALTREP(table) ||
+      !Rf_inherits(table, "data.table")) {
+    Rf_error("Internal error: expected an ordinary data.table shell");
+  }
+  SEXP names = Rf_getAttrib(table, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP || ALTREP(names) ||
+      XLENGTH(names) != XLENGTH(table)) {
+    Rf_error("Internal error: expected ordinary data.table names");
+  }
+
+  PROTECT(table);
+  /* A fallback data.table may carry a copied or names-stale self-reference.
+   * Remove it before the legacy capacity bridge so alloc.col() cannot mistake
+   * spare pointer capacity for a fully valid shell. */
+  Rf_setAttrib(table, Rf_install(".internal.selfref"), R_NilValue);
+  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
+  SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
+  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(result, R_NamesSymbol, result_names);
+  UNPROTECT(3);
+  return result;
 }

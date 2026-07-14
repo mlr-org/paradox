@@ -13,6 +13,17 @@ new_empty_deps = function() {
   )
 }
 
+# R < 4.6 deliberately retains the data.table implementation of Domain
+# reconstruction because its public binding API cannot authenticate inert R6
+# locals. Normalize that compatible path to the same owned, by-reference-safe
+# facade as the native result. The small registered finalizer uses the common
+# table-capacity bridge and reattaches its exact names vector last, preserving
+# the self-reference while restoring the characterized attribute order. The
+# R path still performs all Domain assembly and callback-sensitive work.
+finalize_domain_data_table = function(table) {
+  .Call(C_finalize_data_table, table)
+}
+
 # A native `$params` result has a valid data.table self-reference but no spare
 # column-pointer capacity. Adding a column therefore makes data.table take a
 # shallow copy and assign that temporary back to the extraction expression.
@@ -986,7 +997,8 @@ ParamSet = R6Class("ParamSet",
         .init = unname(vals[id]))
       ]
 
-      set_class(paramrow, c(paramrow$cls, "Domain", class(paramrow)))
+      paramrow = set_class(paramrow, c(paramrow$cls, "Domain", class(paramrow)))
+      finalize_domain_data_table(paramrow)
     },
 
     #' @description
@@ -1246,7 +1258,7 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(native)) return(native)
 
       nm = self$ids()
-      set_names(map(nm, self$get_domain), nm)
+      set_names(map(nm, self$get_domain), paste0(nm))
     },
 
     #' @template field_extra_trafo

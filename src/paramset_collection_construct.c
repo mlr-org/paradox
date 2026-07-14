@@ -496,7 +496,7 @@ static SEXP set_table_attributes(SEXP table,
   }
   SEXP result = table;
   if (include_selfref) {
-    result = PROTECT(paradox_prepare_data_table(table));
+    result = PROTECT(paradox_prepare_data_table(table, FALSE));
     ++protected_count;
     SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
     ++protected_count;

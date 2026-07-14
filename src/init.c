@@ -21,6 +21,7 @@ void attribute_visible R_init_paradox(DllInfo *dll);
 #endif
 static const R_CallMethodDef call_methods[] = {
   {"design_transpose", (DL_FUNC) &paradox_design_transpose, 2},
+  {"finalize_data_table", (DL_FUNC) &paradox_finalize_data_table, 1},
   {"domain_check_builtin", (DL_FUNC) &paradox_domain_check_builtin, 2},
   {"domain_construct", (DL_FUNC) &paradox_domain_construct, 14},
   {"domain_construct_frame", (DL_FUNC) &paradox_domain_construct_frame, 1},

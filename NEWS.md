@@ -7,6 +7,9 @@
   than 1.18. This fixes shallow subsetting and update joins on supported R 4.3
   installations without copying columns or changing the fast path for current
   data.table releases.
+* The retained pre-R-4.6 Domain reconstruction path now returns independently
+  owned names and a valid data.table self-reference with the same observable
+  attribute order as the native facade.
 * `Design$transpose()` now builds ordinary row configurations in registered C
   code. Classed or otherwise dispatch-sensitive columns retain the historical R
   path, while common numeric, integer, logical, character, and list-column

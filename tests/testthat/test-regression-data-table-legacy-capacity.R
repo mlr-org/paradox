@@ -9,6 +9,18 @@ expect_legacy_data_table_ready = function(table) {
   invisible(table)
 }
 
+expect_legacy_data_table_growable = function(table) {
+  expect_legacy_data_table_ready(table)
+  expect_true(data.table::truelength(table) > length(table))
+  expect_no_warning(data.table::set(
+    table,
+    j = ".capacity_probe",
+    value = seq_len(nrow(table))
+  ))
+  expect_true(".capacity_probe" %in% names(table))
+  invisible(table)
+}
+
 test_that("native table shells remain usable with data.table before 1.18", {
   skip_if(
     utils::packageVersion("data.table") >= package_version("1.18.0"),
@@ -55,11 +67,34 @@ test_that("native table shells remain usable with data.table before 1.18", {
     collection_deps = collection_deps
   )
   lapply(tables, expect_legacy_data_table_ready)
+  lapply(
+    list(params, quantiles, collection_params, collection_deps),
+    expect_legacy_data_table_growable
+  )
 
   domain = expect_no_warning(param_set$get_domain("width"))
-  expect_no_warning(domain[, names(domain), with = FALSE])
+  expect_legacy_data_table_ready(domain)
+  expect_identical(
+    names(attributes(domain)),
+    c("class", "row.names", ".internal.selfref", "names")
+  )
+  expect_legacy_data_table_growable(domain)
   domains = expect_no_warning(param_set$domains)
-  lapply(domains, function(item) {
-    expect_no_warning(item[, names(item), with = FALSE])
-  })
+  second_domains = expect_no_warning(param_set$domains)
+  lapply(domains, expect_legacy_data_table_ready)
+  expect_false(identical(
+    data.table::address(names(domains)),
+    data.table::address(private$.params$id)
+  ))
+  expect_false(identical(
+    data.table::address(names(domains)),
+    data.table::address(names(second_domains))
+  ))
+
+  old_capacity = getOption("datatable.alloccol")
+  on.exit(options(datatable.alloccol = old_capacity), add = TRUE)
+  options(datatable.alloccol = 0L)
+  zero_capacity = expect_no_warning(ps(x = p_dbl())$params)
+  expect_legacy_data_table_ready(zero_capacity)
+  expect_identical(data.table::truelength(zero_capacity), length(zero_capacity))
 })

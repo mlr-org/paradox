@@ -135,12 +135,16 @@ data.table before 1.18 assumes that every table carrying a valid self-reference
 also has at least `ncol()` allocated column-pointer slots. A native `VECSXP`
 has zero `TRUELENGTH`, so those releases otherwise try to copy nonempty tables
 into a zero-slot shallow shell. Only for such older releases, the common table
-finalizer evaluates the exported `data.table::alloc.col(table, 0L)` closure and
-adopts its returned shell. This allocates exactly `ncol()` pointer slots, keeps
-every column shared, and avoids the usual 1024 spare slots. The bridge validates
-the returned columns, owner/self-reference, and capacity and fails closed on a
-changed contract. data.table 1.18 and newer retain the allocation-free public-R
-API path and its native construction performance.
+finalizer evaluates the exported `data.table::alloc.col()` closure and adopts
+its returned shell. Private construction state passes `0L`, allocating exactly
+`ncol()` pointer slots and avoiding the usual 1024 spare slots. Publicly
+returned facades use data.table's configured spare capacity so direct `set()`
+calls can add columns by reference. Setting `datatable.alloccol` to zero
+deliberately disables that spare capacity, just as it does for data.table's own
+constructor. Both forms keep every column shared. The bridge validates the
+returned columns, owner/self-reference, and capacity and fails
+closed on a changed contract. data.table 1.18 and newer retain the
+allocation-free public-R API path and its native construction performance.
 
 Result metadata is owned by the result. In particular, native table names are
 copied into a fresh plain character vector instead of attaching an input

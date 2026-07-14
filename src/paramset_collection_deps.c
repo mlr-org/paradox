@@ -771,7 +771,7 @@ static SEXP set_output_attributes(SEXP result, R_xlen_t row_count) {
     SET_INTEGER_ELT(row_names, 1, -(int) row_count);
   }
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
-  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result, TRUE));
   SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
   Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);

@@ -538,7 +538,7 @@ static SEXP set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
   Rf_setAttrib(table, R_RowNamesSymbol, row_names);
   Rf_setAttrib(table, R_ClassSymbol, classes);
   Rf_setAttrib(table, R_NamesSymbol, names);
-  SEXP result = PROTECT(paradox_prepare_data_table(table));
+  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
   UNPROTECT(3);
   return result;
 }

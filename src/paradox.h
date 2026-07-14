@@ -164,6 +164,7 @@ attribute_hidden SEXP paradox_param_set_adopt_subset_state(
   SEXP token
 );
 attribute_hidden SEXP paradox_design_transpose(SEXP data, SEXP filter_na);
+attribute_hidden SEXP paradox_finalize_data_table(SEXP table);
 attribute_hidden SEXP paradox_test_checked_affixed_size(
   SEXP owner_boundary,
   SEXP id_boundary

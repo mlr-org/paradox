@@ -377,7 +377,7 @@ static SEXP subset_table(SEXP source, const R_xlen_t *positions,
     ++protected_count;
     Rf_setAttrib(result, Rf_install("sorted"), sorted);
   }
-  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result, FALSE));
   ++protected_count;
 
   UNPROTECT(protected_count);

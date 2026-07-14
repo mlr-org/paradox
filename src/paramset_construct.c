@@ -361,7 +361,7 @@ static SEXP set_data_table_attributes(SEXP table,
     ++n_protected;
     Rf_setAttrib(table, Rf_install("sorted"), sorted);
   }
-  SEXP result = PROTECT(paradox_prepare_data_table(table));
+  SEXP result = PROTECT(paradox_prepare_data_table(table, FALSE));
   UNPROTECT(n_protected + 1);
   return result;
 }

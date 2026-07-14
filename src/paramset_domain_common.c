@@ -606,7 +606,7 @@ static SEXP set_domain_attributes(SEXP result, SEXP cls,
   SET_INTEGER_ELT(row_names, 1, -1);
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
 
-  SEXP prepared = PROTECT(paradox_prepare_data_table(result));
+  SEXP prepared = PROTECT(paradox_prepare_data_table(result, TRUE));
   SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
   Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);
