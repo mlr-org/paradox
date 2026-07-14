@@ -179,6 +179,18 @@ substitution from truncating or splitting coordination.
   sizes then emits, retains a vector pointer, or extracts children across an
   allocating or reentrant boundary; ordinary compact ALTREP inputs separately
   verify compatible fallback or one-pass materialization.
+- The adversarial ALTREP constructors, GC-finalizer mutator, and unreachable
+  string-size boundary probe intentionally live in the shipped DSO. R package
+  tests execute the installed release library, and compiling a different
+  test-only library would leave the actual CRAN artifact untested at precisely
+  these lifetime boundaries. They are registered, hidden C symbols with
+  forced-symbol lookup and have no exported R wrapper; this is an access
+  boundary, not a secrecy claim, because a caller can still obtain registered
+  routines deliberately. Their `test_*` registration names and namespace-only
+  `C_test_*` bindings are a private validation ABI: external use is unsupported
+  and may change without deprecation. Production paths never call them, they
+  retain no process-global R objects, and the finalizer fixture clears its
+  external pointer after one mutation.
 - Any consumer failure that expresses a reusable contract first becomes a
   package regression test before the implementation is changed.
 
