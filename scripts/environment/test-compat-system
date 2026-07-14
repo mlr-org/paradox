@@ -1,0 +1,128 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+BOOTSTRAP="$ROOT/scripts/bootstrap-compat-system"
+TEST_PARENT="$ROOT/.local/tmp"
+mkdir -p "$TEST_PARENT"
+TEST_ROOT=$(mktemp -d "$TEST_PARENT/compat-system-test.XXXXXX")
+trap 'rm -rf -- "$TEST_ROOT"' EXIT HUP INT TERM
+
+fail() {
+  printf '%s\n' "test-compat-system: $*" >&2
+  exit 1
+}
+
+expect_failure() {
+  if "$@" >"$TEST_ROOT/expected-failure.stdout" 2>"$TEST_ROOT/expected-failure.stderr"; then
+    fail "command unexpectedly succeeded: $*"
+  fi
+}
+
+copy_fixture() {
+  FIXTURE="$TEST_ROOT/fixture"
+  rm -rf -- "$FIXTURE"
+  mkdir -p "$FIXTURE/environment" "$FIXTURE/scripts"
+  mkdir -p "$FIXTURE/.local/compat/system"
+  mkdir -p "$FIXTURE/.local/receipts/compat-system"
+  cp "$ROOT/DESCRIPTION" "$FIXTURE/DESCRIPTION"
+  cp "$ROOT/environment/toolchain-linux-64.lock" "$FIXTURE/environment/"
+  cp "$ROOT/environment/Makevars" "$FIXTURE/environment/"
+  cp "$ROOT/environment/compat-system-geo-linux-64.lock" "$FIXTURE/environment/"
+  cp "$ROOT/environment/compat-system-p1-linux-64.lock" "$FIXTURE/environment/"
+  cp "$ROOT/scripts/bootstrap-compat-system" "$FIXTURE/scripts/"
+  cp "$ROOT/scripts/activate-compat-system" "$FIXTURE/scripts/"
+  chmod 0755 "$FIXTURE/scripts/bootstrap-compat-system"
+  chmod 0755 "$FIXTURE/scripts/activate-compat-system"
+}
+
+write_fixture_receipt() {
+  "$FIXTURE/scripts/bootstrap-compat-system" --print-expected-makevars > \
+    "$FIXTURE/.local/compat/system/Makevars"
+  "$FIXTURE/scripts/bootstrap-compat-system" --print-expected-receipt > \
+    "$FIXTURE/.local/receipts/compat-system/receipt.tsv"
+  (
+    cd "$FIXTURE/.local/receipts/compat-system"
+    sha256sum receipt.tsv > receipt.sha256
+  )
+}
+
+"$BOOTSTRAP" --verify-locks >"$TEST_ROOT/locks.stdout"
+for lock in "$ROOT/environment/compat-system-geo-linux-64.lock" \
+  "$ROOT/environment/compat-system-p1-linux-64.lock"
+do
+  if grep -F "$ROOT" "$lock" >/dev/null; then
+    fail "tracked lock contains the checkout root: $lock"
+  fi
+done
+
+copy_fixture
+write_fixture_receipt
+"$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt > \
+  "$TEST_ROOT/receipt.stdout"
+
+expected_makevars=$(
+  "$FIXTURE/scripts/bootstrap-compat-system" --print-expected-makevars
+)
+case $expected_makevars in
+  *"$FIXTURE/.local/compat/system/geo"*) ;;
+  *) fail "generated Makevars did not relocate its geo prefix" ;;
+esac
+case $expected_makevars in
+  *"$FIXTURE/.local/compat/system/p1"*) ;;
+  *) fail "generated Makevars did not relocate its priority-one prefix" ;;
+esac
+case $expected_makevars in
+  *"$ROOT/.local/compat/system/geo"*)
+    fail "relocated Makevars retained the source checkout prefix"
+    ;;
+esac
+
+printf 'tampered\n' >>"$FIXTURE/.local/receipts/compat-system/receipt.tsv"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt
+write_fixture_receipt
+
+printf '# tampered\n' >>"$FIXTURE/.local/compat/system/Makevars"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt
+write_fixture_receipt
+
+printf 'extra seal line\n' >>"$FIXTURE/.local/receipts/compat-system/receipt.sha256"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt
+write_fixture_receipt
+
+rm -f -- "$FIXTURE/.local/compat/system/Makevars"
+ln -s /dev/null "$FIXTURE/.local/compat/system/Makevars"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt
+
+copy_fixture
+write_fixture_receipt
+mv "$FIXTURE/.local/compat" "$FIXTURE/.local/compat-real"
+ln -s compat-real "$FIXTURE/.local/compat"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-receipt
+
+copy_fixture
+rm -f -- "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+ln -s "$ROOT/environment/compat-system-geo-linux-64.lock" \
+  "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-locks
+
+copy_fixture
+sed -i '$d' "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-locks
+
+copy_fixture
+sed -i '$s/[0-9a-f]$/z/' "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-locks
+
+copy_fixture
+hash=$(sed -n '3s/^.*#//p' "$FIXTURE/environment/compat-system-geo-linux-64.lock")
+sed -i "3c\\https://example.invalid$FIXTURE/package.conda#$hash" \
+  "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-locks
+
+copy_fixture
+first=$(sed -n '3p' "$FIXTURE/environment/compat-system-geo-linux-64.lock")
+sed -i "\$c\\$first" "$FIXTURE/environment/compat-system-geo-linux-64.lock"
+expect_failure "$FIXTURE/scripts/bootstrap-compat-system" --verify-locks
+
+printf '%s\n' 'compat_system_tests=passed'

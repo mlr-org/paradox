@@ -1,0 +1,434 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The ordinary paradox bootstrap is deliberately small enough for package
+# development.  This opt-in layer supplies only the much larger native stacks
+# needed to build the mandatory Linux compatibility corpus.
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+GEO_LOCK="$ROOT/environment/compat-system-geo-linux-64.lock"
+P1_LOCK="$ROOT/environment/compat-system-p1-linux-64.lock"
+TOOLCHAIN_LOCK="$ROOT/environment/toolchain-linux-64.lock"
+ORDINARY_MAKEVARS="$ROOT/environment/Makevars"
+MICROMAMBA="$ROOT/.local/bin/micromamba"
+MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-2.5.0-linux-64.tar.bz2"
+MAMBA_ROOT="$ROOT/.local/micromamba"
+SYSTEM_ROOT="$ROOT/.local/compat/system"
+GEO_PREFIX="$SYSTEM_ROOT/geo"
+P1_PREFIX="$SYSTEM_ROOT/p1"
+MAKEVARS="$SYSTEM_ROOT/Makevars"
+RECEIPT_ROOT="$ROOT/.local/receipts/compat-system"
+RECEIPT="$RECEIPT_ROOT/receipt.tsv"
+RECEIPT_SEAL="$RECEIPT_ROOT/receipt.sha256"
+ACTIVATION_HELPER="$ROOT/scripts/activate-compat-system"
+STATE_LOCK="$ROOT/.local/locks/compat-system.lock"
+MICROMAMBA_VERSION=2.5.0
+MICROMAMBA_ARCHIVE_SHA256=cec496f2299f9ceb5f5e23fc2ccf081fffda0c4bc87a6fdab575bf1e04f103b6
+MICROMAMBA_BINARY_SHA256=c04571cfb0750e5432d530a3068b8fcd232ebed3133358e056e59a90b9852b00
+GEO_ARTIFACTS=65
+P1_ARTIFACTS=95
+
+fail() {
+  printf '%s\n' "bootstrap-compat-system: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: scripts/bootstrap-compat-system [--offline|--verify]
+       scripts/bootstrap-compat-system --verify-locks
+       scripts/bootstrap-compat-system --verify-receipt
+
+Create or verify the opt-in, repository-local Linux system dependencies used by
+the P0/P1 compatibility corpus. The ordinary scripts/bootstrap does not invoke
+this command.
+
+  --offline         Create missing prefixes only from the existing local conda
+                    package cache; never contact a repository.
+  --verify          Read-only verification of both prefixes and their receipt.
+  --verify-locks    Read-only structural verification of the two tracked locks;
+                    does not require an activated toolchain or Linux host.
+  --verify-receipt  Read-only verification of the generated Makevars and receipt;
+                    does not inspect the conda prefixes.
+
+The two --print-expected-* modes are read-only test and audit interfaces.
+USAGE
+}
+
+mode=provision
+case $# in
+  0) ;;
+  1)
+    case $1 in
+      --offline) mode=offline ;;
+      --verify) mode=verify ;;
+      --verify-locks) mode=verify_locks ;;
+      --verify-receipt) mode=verify_receipt ;;
+      --print-expected-makevars) mode=print_makevars ;;
+      --print-expected-receipt) mode=print_receipt ;;
+      -h|--help) usage; exit 0 ;;
+      *) usage >&2; fail "unknown option: $1" ;;
+    esac
+    ;;
+  *) usage >&2; fail "too many arguments" ;;
+esac
+
+sha256_file() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+sha256_stream() {
+  sha256sum | cut -d ' ' -f 1
+}
+
+require_plain_file() {
+  local path=$1 label=$2
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, not a regular file, or symbolic: $path"
+}
+
+require_plain_directory() {
+  local path=$1 label=$2
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "$label is absent, not a directory, or symbolic: $path"
+}
+
+assert_plain_directory_chain() {
+  local path=$1 current remainder component
+  case $path in
+    "$ROOT"|"$ROOT"/*) ;;
+    *) fail "managed directory escaped the repository: $path" ;;
+  esac
+  current=$ROOT
+  remainder=${path#"$ROOT"}
+  while [[ -n "$remainder" ]]; do
+    remainder=${remainder#/}
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" ]] || continue
+    current="$current/$component"
+    [[ ! -L "$current" ]] || fail "refusing symbolic managed directory: $current"
+    [[ ! -e "$current" || -d "$current" ]] ||
+      fail "managed directory path is not a directory: $current"
+  done
+}
+
+assert_plain_file_or_absent() {
+  local path=$1
+  assert_plain_directory_chain "${path%/*}"
+  [[ ! -L "$path" ]] || fail "refusing symbolic managed file: $path"
+  [[ ! -e "$path" || -f "$path" ]] ||
+    fail "managed file path is not a regular file: $path"
+}
+
+validate_lock() {
+  local label=$1 path=$2 expected=$3 line artifact_count=0
+  local -A seen=()
+  require_plain_file "$path" "$label explicit lock"
+  mapfile -t lines < "$path"
+  [[ ${#lines[@]} -eq $((expected + 2)) ]] ||
+    fail "$label lock must contain exactly $expected artifacts"
+  [[ "${lines[0]}" == '# platform: linux-64' && "${lines[1]}" == '@EXPLICIT' ]] ||
+    fail "$label lock has an invalid explicit header"
+  for line in "${lines[@]:2}"; do
+    [[ "$line" =~ ^https://[^[:space:]#]+#[0-9a-f]{64}$ ]] ||
+      fail "$label lock contains a non-HTTPS or non-SHA-256 artifact"
+    [[ "$line" != *"$ROOT"* ]] || fail "$label lock contains a checkout path"
+    [[ ! -v "seen[$line]" ]] || fail "$label lock contains a duplicate artifact"
+    seen["$line"]=1
+    ((artifact_count += 1))
+  done
+  [[ $artifact_count -eq expected ]] || fail "$label lock artifact count changed"
+}
+
+validate_locks() {
+  assert_plain_directory_chain "$ROOT/environment"
+  validate_lock geo "$GEO_LOCK" "$GEO_ARTIFACTS"
+  validate_lock p1 "$P1_LOCK" "$P1_ARTIFACTS"
+}
+
+write_expected_makevars() {
+  require_plain_file "$ORDINARY_MAKEVARS" "ordinary project Makevars"
+  cat <<EOF
+# Generated by scripts/bootstrap-compat-system. Do not edit.
+# This file is checkout-relocatable because it is regenerated from PARADOX_ROOT.
+#
+# Ordinary project Makevars follow.
+EOF
+  cat "$ORDINARY_MAKEVARS"
+  cat <<EOF
+
+# Compatibility-system linker paths follow.
+LDFLAGS += -Wl,-rpath,$P1_PREFIX/lib -Wl,-rpath-link,$P1_PREFIX/lib
+LDFLAGS += -Wl,-rpath,$P1_PREFIX/lib/jvm/lib/server -Wl,-rpath-link,$P1_PREFIX/lib/jvm/lib/server
+LDFLAGS += -Wl,-rpath,$GEO_PREFIX/lib -Wl,-rpath-link,$GEO_PREFIX/lib -L$GEO_PREFIX/lib
+EOF
+}
+
+write_expected_receipt() {
+  local makevars_sha
+  makevars_sha=$(write_expected_makevars | sha256_stream)
+  cat <<EOF
+key	value
+schema	1
+status	passed
+platform	linux-64
+geo_prefix	.local/compat/system/geo
+p1_prefix	.local/compat/system/p1
+geo_artifacts	$GEO_ARTIFACTS
+p1_artifacts	$P1_ARTIFACTS
+geo_lock_sha256	$(sha256_file "$GEO_LOCK")
+p1_lock_sha256	$(sha256_file "$P1_LOCK")
+toolchain_lock_sha256	$(sha256_file "$TOOLCHAIN_LOCK")
+ordinary_makevars_sha256	$(sha256_file "$ORDINARY_MAKEVARS")
+bootstrap_sha256	$(sha256_file "$ROOT/scripts/bootstrap-compat-system")
+activation_sha256	$(sha256_file "$ACTIVATION_HELPER")
+makevars_sha256	$makevars_sha
+micromamba_version	$MICROMAMBA_VERSION
+micromamba_archive_sha256	$MICROMAMBA_ARCHIVE_SHA256
+micromamba_binary_sha256	$MICROMAMBA_BINARY_SHA256
+gdal_version	3.12.4
+geos_version	3.14.1
+proj_version	9.8.1
+udunits_version	2.2.28
+java_version	21.0.10
+rust_version	1.97.0
+protobuf_version	6.33.5
+openmpi_version	5.0.10
+fontconfig_version	2.18.1
+freetype_version	2.14.3
+expat_version	2.8.1
+EOF
+}
+
+verify_receipt_files() {
+  for receipt_directory in \
+    "$ROOT/.local" "$ROOT/.local/compat" "$SYSTEM_ROOT" \
+    "$ROOT/.local/receipts" "$RECEIPT_ROOT"
+  do
+    assert_plain_directory_chain "$receipt_directory"
+  done
+  validate_locks
+  require_plain_file "$TOOLCHAIN_LOCK" "ordinary toolchain lock"
+  require_plain_file "$ORDINARY_MAKEVARS" "ordinary project Makevars"
+  require_plain_file "$ROOT/scripts/bootstrap-compat-system" "compatibility bootstrap"
+  require_plain_file "$ACTIVATION_HELPER" "compatibility activation helper"
+  require_plain_directory "$SYSTEM_ROOT" "compatibility system root"
+  require_plain_file "$MAKEVARS" "generated compatibility Makevars"
+  require_plain_directory "$RECEIPT_ROOT" "compatibility receipt root"
+  require_plain_file "$RECEIPT" "compatibility receipt"
+  require_plain_file "$RECEIPT_SEAL" "compatibility receipt seal"
+  cmp -s "$MAKEVARS" <(write_expected_makevars) ||
+    fail "generated compatibility Makevars differs from the selected checkout"
+  cmp -s "$RECEIPT" <(write_expected_receipt) ||
+    fail "compatibility receipt differs from its authenticated inputs"
+  local expected_seal actual_seal
+  expected_seal="$(sha256_file "$RECEIPT")  receipt.tsv"
+  IFS= read -r actual_seal < "$RECEIPT_SEAL" ||
+    fail "compatibility receipt seal is unreadable"
+  [[ "$actual_seal" == "$expected_seal" ]] ||
+    fail "compatibility receipt seal is malformed or stale"
+  [[ $(wc -l < "$RECEIPT_SEAL") -eq 1 ]] ||
+    fail "compatibility receipt seal must contain exactly one line"
+}
+
+case $mode in
+  verify_locks)
+    validate_locks
+    printf 'compat_system_locks=passed\ngeo_artifacts=%d\np1_artifacts=%d\n' \
+      "$GEO_ARTIFACTS" "$P1_ARTIFACTS"
+    exit 0
+    ;;
+  print_makevars)
+    validate_locks
+    write_expected_makevars
+    exit 0
+    ;;
+  print_receipt)
+    validate_locks
+    require_plain_file "$TOOLCHAIN_LOCK" "ordinary toolchain lock"
+    require_plain_file "$ORDINARY_MAKEVARS" "ordinary project Makevars"
+    require_plain_file "$ROOT/scripts/bootstrap-compat-system" "compatibility bootstrap"
+    require_plain_file "$ACTIVATION_HELPER" "compatibility activation helper"
+    write_expected_receipt
+    exit 0
+    ;;
+  verify_receipt)
+    verify_receipt_files
+    printf 'compat_system_receipt=passed\n'
+    exit 0
+    ;;
+esac
+
+for managed_directory in \
+  "$ROOT/.local" "$ROOT/.local/bin" "$ROOT/.local/toolchain" \
+  "$ROOT/.cache" "$ROOT/.cache/downloads" "$ROOT/.local/compat" \
+  "$SYSTEM_ROOT" "$GEO_PREFIX" "$P1_PREFIX" "$ROOT/.local/receipts" \
+  "$RECEIPT_ROOT" "$ROOT/.local/locks" "$SYSTEM_ROOT/cargo-home" \
+  "$SYSTEM_ROOT/rustup-home"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+
+[[ $(uname -s)-$(uname -m) == Linux-x86_64 ]] ||
+  fail "the compatibility system overlay is pinned only for Linux x86_64"
+[[ ${PARADOX_ACTIVE_ROOT:-} == "$ROOT" ]] ||
+  fail "activate this checkout first: . scripts/activate"
+[[ $(command -v R) == "$ROOT/.local/toolchain/bin/R" &&
+   $(command -v Rscript) == "$ROOT/.local/toolchain/bin/Rscript" &&
+   $(R RHOME) == "$ROOT/.local/toolchain/lib/R" ]] ||
+  fail "activation did not select this checkout's exact local R"
+require_plain_file "$MICROMAMBA" "authenticated core micromamba"
+[[ -x "$MICROMAMBA" ]] || fail "core micromamba is not executable"
+require_plain_file "$MICROMAMBA_ARCHIVE" "authenticated core micromamba archive"
+[[ $(sha256_file "$MICROMAMBA_ARCHIVE") == "$MICROMAMBA_ARCHIVE_SHA256" ]] ||
+  fail "core micromamba archive differs from its SHA-256 pin"
+micromamba_member_count=$(tar -tjf "$MICROMAMBA_ARCHIVE" |
+  awk '$0 == "bin/micromamba" { count += 1 } END { print count + 0 }')
+[[ $micromamba_member_count == 1 ]] ||
+  fail "core micromamba archive does not have one exact executable member"
+micromamba_member_sha256=$(tar -xOjf "$MICROMAMBA_ARCHIVE" bin/micromamba |
+  sha256_stream)
+[[ $micromamba_member_sha256 == "$MICROMAMBA_BINARY_SHA256" ]] ||
+  fail "micromamba archive member differs from its binary SHA-256 pin"
+[[ $(sha256_file "$MICROMAMBA") == "$MICROMAMBA_BINARY_SHA256" ]] ||
+  fail "installed core micromamba differs from its authenticated archive"
+[[ $("$MICROMAMBA" --version) == "$MICROMAMBA_VERSION" ]] ||
+  fail "core micromamba version differs from $MICROMAMBA_VERSION"
+validate_locks
+
+export MAMBA_ROOT_PREFIX="$MAMBA_ROOT"
+
+write_installed_lock() {
+  local prefix=$1
+  {
+    printf '%s\n' '# platform: linux-64' '@EXPLICIT'
+    "$MICROMAMBA" --no-rc list --prefix "$prefix" --explicit --sha256 |
+      sed -n '3,$p'
+  }
+}
+
+verify_prefix() {
+  local label=$1 prefix=$2 lock=$3
+  require_plain_directory "$prefix" "$label compatibility prefix"
+  require_plain_directory "$prefix/conda-meta" "$label conda metadata"
+  cmp -s "$lock" <(write_installed_lock "$prefix") ||
+    fail "$label compatibility prefix differs from its exact explicit lock"
+}
+
+verify_capabilities() {
+  local executable regular
+  for executable in \
+    "$GEO_PREFIX/bin/gdal-config" "$GEO_PREFIX/bin/geos-config" \
+    "$GEO_PREFIX/bin/proj" "$GEO_PREFIX/bin/udunits2" \
+    "$P1_PREFIX/bin/java" "$P1_PREFIX/bin/javac" \
+    "$P1_PREFIX/bin/rustc" "$P1_PREFIX/bin/cargo" \
+    "$P1_PREFIX/bin/protoc" "$P1_PREFIX/bin/mpicc"
+  do
+    [[ -x "$executable" ]] || fail "compatibility capability is not executable: $executable"
+  done
+  for regular in \
+    "$P1_PREFIX/lib/pkgconfig/fontconfig.pc" \
+    "$P1_PREFIX/lib/pkgconfig/freetype2.pc" \
+    "$P1_PREFIX/lib/pkgconfig/protobuf.pc" \
+    "$P1_PREFIX/lib/jvm/include/jni.h" \
+    "$P1_PREFIX/lib/jvm/include/linux/jni_md.h"
+  do
+    [[ -f "$regular" && ! -L "$regular" ]] ||
+      fail "compatibility capability file is absent or symbolic: $regular"
+  done
+  [[ $("$GEO_PREFIX/bin/gdal-config" --version) == 3.12.4 ]] ||
+    fail "gdal-config version differs from the lock"
+  [[ $("$GEO_PREFIX/bin/geos-config" --version) == 3.14.1 ]] ||
+    fail "geos-config version differs from the lock"
+  [[ $("$P1_PREFIX/bin/rustc" --version) == 'rustc 1.97.0 '* ]] ||
+    fail "rustc version differs from the lock"
+  [[ $("$P1_PREFIX/bin/protoc" --version) == 'libprotoc 33.5' ]] ||
+    fail "protoc version differs from the lock"
+  [[ $("$P1_PREFIX/bin/mpicc" --showme:version) == 'mpicc: Open MPI 5.0.10 (Language: C)' ]] ||
+    fail "Open MPI version differs from the lock"
+  local java_version
+  java_version=$("$P1_PREFIX/bin/java" -version 2>&1)
+  [[ ${java_version%%$'\n'*} == 'openjdk version "21.0.10-internal" 2026-01-20' ]] ||
+    fail "OpenJDK version differs from the lock"
+}
+
+verify_complete_state() {
+  verify_prefix toolchain "$ROOT/.local/toolchain" "$TOOLCHAIN_LOCK"
+  verify_prefix geo "$GEO_PREFIX" "$GEO_LOCK"
+  verify_prefix p1 "$P1_PREFIX" "$P1_LOCK"
+  verify_capabilities
+  verify_receipt_files
+  # Re-read package identities after receipt and capability inspection so an
+  # overlapping mutation cannot be hidden between the first observations.
+  verify_prefix toolchain "$ROOT/.local/toolchain" "$TOOLCHAIN_LOCK"
+  verify_prefix geo "$GEO_PREFIX" "$GEO_LOCK"
+  verify_prefix p1 "$P1_PREFIX" "$P1_LOCK"
+}
+
+if [[ $mode == verify ]]; then
+  verify_complete_state
+  printf 'compat_system=passed\nmode=verify\n'
+  exit 0
+fi
+
+for managed_directory in \
+  "$ROOT/.local" "$ROOT/.local/compat" "$SYSTEM_ROOT" \
+  "$GEO_PREFIX" "$P1_PREFIX" "$ROOT/.local/receipts" "$RECEIPT_ROOT" \
+  "$ROOT/.local/locks" "$SYSTEM_ROOT/cargo-home" "$SYSTEM_ROOT/rustup-home"
+do
+  assert_plain_directory_chain "$managed_directory"
+done
+for managed_file in "$MAKEVARS" "$RECEIPT" "$RECEIPT_SEAL" "$STATE_LOCK"; do
+  assert_plain_file_or_absent "$managed_file"
+done
+mkdir -p "$ROOT/.local/compat" "$SYSTEM_ROOT" "$ROOT/.local/receipts" \
+  "$RECEIPT_ROOT" "$ROOT/.local/locks" "$SYSTEM_ROOT/cargo-home" \
+  "$SYSTEM_ROOT/rustup-home"
+
+exec 9>"$STATE_LOCK"
+flock -n -x 9 || fail "another compatibility bootstrap owns $STATE_LOCK"
+
+create_or_verify_prefix() {
+  local label=$1 prefix=$2 lock=$3
+  if [[ ! -e "$prefix" ]]; then
+    local -a arguments=(--no-rc)
+    if [[ $mode == offline ]]; then
+      arguments+=(--offline)
+    fi
+    arguments+=(create --yes --prefix "$prefix" --file "$lock")
+    "$MICROMAMBA" "${arguments[@]}"
+  elif [[ ! -d "$prefix/conda-meta" ]]; then
+    fail "$label prefix exists but is not a complete conda environment: $prefix"
+  fi
+  verify_prefix "$label" "$prefix" "$lock"
+}
+
+create_or_verify_prefix geo "$GEO_PREFIX" "$GEO_LOCK"
+create_or_verify_prefix p1 "$P1_PREFIX" "$P1_LOCK"
+verify_capabilities
+
+makevars_new=$(mktemp "$SYSTEM_ROOT/Makevars.new.XXXXXX")
+receipt_new=$(mktemp "$RECEIPT_ROOT/receipt.new.XXXXXX")
+seal_new=$(mktemp "$RECEIPT_ROOT/receipt-sha256.new.XXXXXX")
+cleanup_new() {
+  rm -f -- "$makevars_new" "$receipt_new" "$seal_new"
+}
+trap cleanup_new EXIT HUP INT TERM
+write_expected_makevars > "$makevars_new"
+chmod 0644 "$makevars_new"
+mv -f -- "$makevars_new" "$MAKEVARS"
+write_expected_receipt > "$receipt_new"
+chmod 0644 "$receipt_new"
+mv -f -- "$receipt_new" "$RECEIPT"
+printf '%s  receipt.tsv\n' "$(sha256_file "$RECEIPT")" > "$seal_new"
+chmod 0644 "$seal_new"
+mv -f -- "$seal_new" "$RECEIPT_SEAL"
+trap - EXIT HUP INT TERM
+
+verify_complete_state
+printf 'compat_system=passed\nmode=%s\nreceipt=%s\n' "$mode" "$RECEIPT"

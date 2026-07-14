@@ -6,6 +6,41 @@ Priority 0 and 1 packages form the release gate; priority 2 packages are broad
 compatibility probes; priority 3 packages are optional consumers whose relevant
 tests are retained when their full stacks are impractical.
 
+## Reproducible Linux system overlay
+
+The priority-zero and priority-one Linux corpus needs geospatial libraries,
+Rust, protobuf, OpenMPI, a JVM/JNI toolchain, and font libraries beyond the
+ordinary package-development toolchain. These are a separate opt-in layer; the
+ordinary `scripts/bootstrap` remains unchanged:
+
+```sh
+. scripts/activate
+scripts/bootstrap-compat-system          # provision, then verify
+# or, once the conda artifacts are cached:
+scripts/bootstrap-compat-system --offline
+. scripts/activate-compat-system
+scripts/bootstrap-compat-system --verify
+```
+
+The authoritative inputs are
+`environment/compat-system-geo-linux-64.lock` (65 artifacts) and
+`environment/compat-system-p1-linux-64.lock` (95 artifacts). Both are
+prefix-free explicit conda locks with an artifact SHA-256 on every row.
+Provisioning writes only below `.local/compat/system/`, generates a
+checkout-local `Makevars`, and seals a deterministic receipt below
+`.local/receipts/compat-system/`. `--verify` is entirely read-only and
+fails if either complete installed package set, a required capability, the
+generated Makevars, any tracked input hash, or the receipt seal differs.
+
+Source the overlay only for dependency preparation and consumer/documentation
+workloads that require it. Native checks and differential upstream baselines
+must continue from ordinary activation without the overlay. Every retained
+compatibility stage records an inactive cross-platform status when the overlay
+is absent. When it is active, the stage verifies it before and after the
+workload and retains the receipt, seal, locks, bootstrap, activation helper,
+generated Makevars, and evidence helper under the stage's authenticated
+`metadata/` tree.
+
 After activating the local environment, fetch or verify the exact checked-in
 CRAN source snapshot with:
 

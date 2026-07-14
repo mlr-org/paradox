@@ -459,6 +459,9 @@ fingerprint_script <- file.path(root, "compat", "fingerprint.R")
 harness_script <- file.path(root, "compat", "test-reverse-dependencies.R")
 evidence_helper_script <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_script <- file.path(root, "compat", "verify-repository-evidence.R")
+compat_system_evidence_script <- file.path(
+  root, "compat", "compat-system-evidence.R"
+)
 tinytex_manifest_path <- file.path(
   root, "environment", "tinytex-linux-x86_64.tsv"
 )
@@ -467,12 +470,14 @@ tree_receipt_script <- file.path(
 )
 for (path in c(
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script, tinytex_manifest_path, tree_receipt_script
+  evidence_verifier_script, compat_system_evidence_script,
+  tinytex_manifest_path, tree_receipt_script
 )) {
   reverse_require_regular_provenance_file(path, "reverse-dependency harness input")
 }
 sys.source(fingerprint_script, envir = environment())
 sys.source(evidence_helper_script, envir = environment())
+sys.source(compat_system_evidence_script, envir = environment())
 
 tinytex_manifest <- reverse_read_tsv(
   tinytex_manifest_path,
@@ -640,6 +645,7 @@ bioc_snapshot_path <- file.path(root, "compat", "bioconductor-snapshot.tsv")
 reverse_metadata_inputs <- c(
   inventory_path, cran_snapshot_path, bioc_snapshot_path, fingerprint_script,
   harness_script, evidence_helper_script, evidence_verifier_script,
+  compat_system_evidence_script,
   tinytex_manifest_path, tree_receipt_script,
   candidate_provenance$path, candidate_provenance$seal_path,
   file.path(root, "compat", "install-candidate")
@@ -884,6 +890,7 @@ retained_reverse_sha256 <- vapply(
 if (!identical(unname(reverse_metadata_sha256), retained_reverse_sha256)) {
   stop("retained reverse-dependency inputs differ from plan inputs", call. = FALSE)
 }
+compat_system_evidence <- compat_system_capture_evidence(root, metadata_directory)
 
 retained_tree_receipt_script <- file.path(
   metadata_directory, basename(tree_receipt_script)
@@ -1013,6 +1020,10 @@ if (arguments$plan_only) {
     character(1L),
     USE.NAMES = FALSE
   )
+  compat_system_verify_evidence(
+    compat_system_evidence,
+    "during final reverse-dependency plan validation"
+  )
   if (!reverse_candidate_source_matches(plan_source_final) ||
       !identical(compat_tree_content_sha256(candidate_package), candidate_content) ||
       !identical(
@@ -1106,9 +1117,11 @@ reverse_environment <- function(package_directory) {
     TESTTHAT_PARALLEL = "false",
     `_R_CHECK_FORCE_SUGGESTS_` = "false",
     TMPDIR = file.path(package_directory, "tmp"),
+    XDG_RUNTIME_DIR = file.path(package_directory, "runtime"),
     XDG_CACHE_HOME = file.path(package_directory, "cache"),
     R_USER_CACHE_DIR = file.path(package_directory, "cache", "R"),
     CCACHE_DIR = file.path(package_directory, "cache", "ccache"),
+    CCACHE_TEMPDIR = file.path(package_directory, "tmp", "ccache"),
     PIP_CACHE_DIR = file.path(package_directory, "cache", "pip"),
     UV_CACHE_DIR = file.path(package_directory, "cache", "uv"),
     TEXMFVAR = file.path(texmf_root, "var"),
@@ -1133,6 +1146,8 @@ reverse_environment <- function(package_directory) {
   )
   compiler_values <- Sys.getenv(compiler_variables, unset = "")
   names(compiler_values) <- compiler_variables
+  overlay_environment <- compat_system_child_environment()
+  environment[names(overlay_environment)] <- overlay_environment
   c(environment, compiler_values[nzchar(compiler_values)])
 }
 
@@ -1213,6 +1228,19 @@ for (index in seq_len(nrow(plan))) {
   dir.create(work_directory, recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(package_directory, "home"), recursive = TRUE, showWarnings = FALSE)
   dir.create(file.path(package_directory, "tmp"), recursive = TRUE, showWarnings = FALSE)
+  ccache_temporary <- file.path(package_directory, "tmp", "ccache")
+  runtime_directory <- file.path(package_directory, "runtime")
+  if (!dir.create(ccache_temporary, recursive = TRUE, showWarnings = FALSE) ||
+      !dir.create(
+        runtime_directory,
+        recursive = TRUE,
+        showWarnings = FALSE,
+        mode = "0700"
+      ) ||
+      !isTRUE(Sys.chmod(runtime_directory, mode = "0700"))) {
+    stop("could not create package-local ccache/runtime state for ", package,
+      call. = FALSE)
+  }
   dir.create(file.path(package_directory, "cache", "R"), recursive = TRUE, showWarnings = FALSE)
   for (texmf_child in c("var", "config", "home", "cache", "fonts")) {
     if (!dir.create(
@@ -1437,6 +1465,10 @@ if (!protected_inputs_unchanged) {
   stop("a protected source, library, or retained input changed during the gate",
     call. = FALSE)
 }
+compat_system_verify_evidence(
+  compat_system_evidence,
+  "during reverse-dependency gate completion"
+)
 
 passed <- nrow(combined_results) == nrow(plan) &&
   all(combined_results$status == "passed")

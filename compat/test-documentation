@@ -151,9 +151,12 @@ fingerprint_script <- file.path(root, "compat", "fingerprint.R")
 harness_script <- file.path(root, "compat", "test-documentation")
 evidence_helper_script <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_script <- file.path(root, "compat", "verify-repository-evidence.R")
+compat_system_evidence_script <- file.path(
+  root, "compat", "compat-system-evidence.R"
+)
 for (path in c(
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script
+  evidence_verifier_script, compat_system_evidence_script
 )) {
   if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
     fail("documentation harness input is absent, not a regular file, or symbolic: ", path)
@@ -161,6 +164,7 @@ for (path in c(
 }
 source(fingerprint_script, local = TRUE)
 source(evidence_helper_script, local = TRUE)
+source(compat_system_evidence_script, local = TRUE)
 
 git <- Sys.which("git")
 environment_command <- Sys.which("env")
@@ -505,7 +509,8 @@ if (!identical(dirname(run_directory), run_parent)) {
 }
 for (child in c(
   "logs", "sources", "libraries", "homes", "tmp", "cache", "metadata",
-  "texmf-var", "texmf-config", "texmf-home", "texmf-cache", "vartexfonts"
+  "runtime", "texmf-var", "texmf-config", "texmf-home", "texmf-cache",
+  "vartexfonts"
 )) {
   path <- file.path(run_directory, child)
   if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
@@ -517,7 +522,8 @@ metadata_inputs <- c(
   file.path(root, "compat", "github-snapshot.tsv"),
   file.path(root, "compat", "github-repositories.tsv"),
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script, provenance_file, provenance_seal,
+  evidence_verifier_script, compat_system_evidence_script,
+  provenance_file, provenance_seal,
   file.path(root, "compat", "install-candidate"),
   toolchain_lock,
   tinytex_manifest, tinytex_tree_helper,
@@ -560,6 +566,9 @@ retained_metadata_sha256 <- vapply(
 if (!identical(unname(metadata_input_sha256), retained_metadata_sha256)) {
   fail("retained documentation harness inputs differ from their source bytes")
 }
+compat_system_evidence <- compat_system_capture_evidence(
+  root, file.path(run_directory, "metadata")
+)
 toolchain_explicit_receipt <- file.path(
   run_directory, "metadata", "toolchain-explicit.txt"
 )
@@ -715,6 +724,7 @@ utils::write.table(
 )
 
 verify_protected_libraries <- function(context, verify_toolchain_tree = FALSE) {
+  compat_system_verify_evidence(compat_system_evidence, context)
   source_ref_commit <- tolower(git_output(
     root, c("rev-parse", paste0(candidate_ref, "^{commit}"))
   ))
@@ -827,11 +837,17 @@ base_environment <- function(overlay) {
   temporary <- file.path(run_directory, "tmp", repository)
   cache <- file.path(run_directory, "cache", repository)
   path_entries <- c(
+    if (compat_system_evidence$active) {
+      c(
+        file.path(Sys.getenv("PARADOX_COMPAT_SYSTEM_P1"), "bin"),
+        file.path(Sys.getenv("PARADOX_COMPAT_SYSTEM_GEO"), "bin")
+      )
+    },
     dirname(quarto),
     tinytex_bin,
     dirname(local_r), file.path(root, ".local", "bin"), "/usr/bin", "/bin"
   )
-  c(
+  environment <- c(
     HOME = home, USER = local_user, LOGNAME = local_user,
     NOT_CRAN = "true", TESTTHAT_PARALLEL = "false", R_LIBS = libraries,
     R_LIBS_USER = libraries, R_LIBS_SITE = "", R_HISTFILE = "/dev/null",
@@ -841,6 +857,7 @@ base_environment <- function(overlay) {
     R_MAKEVARS_USER = file.path(root, "environment", "Makevars"),
     R_TESTS = "", R_KEEP_PKG_SOURCE = "yes",
     TMPDIR = temporary, XDG_CACHE_HOME = cache,
+    XDG_RUNTIME_DIR = file.path(run_directory, "runtime", repository),
     R_USER_CACHE_DIR = file.path(cache, "R"),
     TEXMFVAR = file.path(run_directory, "texmf-var", repository),
     TEXMFCONFIG = file.path(run_directory, "texmf-config", repository),
@@ -849,6 +866,7 @@ base_environment <- function(overlay) {
     VARTEXFONTS = file.path(run_directory, "vartexfonts", repository),
     R_TEXI2DVICMD = texi2dvi, TEXI2DVI = texi2dvi,
     CCACHE_DIR = file.path(cache, "ccache"),
+    CCACHE_TEMPDIR = file.path(temporary, "ccache"),
     PIP_CACHE_DIR = file.path(cache, "pip"),
     UV_CACHE_DIR = file.path(cache, "uv"),
     PYTHONDONTWRITEBYTECODE = "1",
@@ -864,6 +882,10 @@ base_environment <- function(overlay) {
     MAKEFLAGS = "-j1",
     PATH = paste(path_entries, collapse = .Platform$path.sep)
   )
+  overlay_environment <- compat_system_child_environment()
+  environment[names(overlay_environment)] <- overlay_environment
+  environment[["PATH"]] <- paste(path_entries, collapse = .Platform$path.sep)
+  environment
 }
 
 results <- list()
@@ -946,13 +968,26 @@ for (repository in repositories) {
     fail("could not create documentation overlay for ", repository)
   }
   for (parent in c(
-    "homes", "tmp", "cache", "texmf-var", "texmf-config", "texmf-home",
+    "homes", "tmp", "cache", "runtime", "texmf-var", "texmf-config", "texmf-home",
     "texmf-cache", "vartexfonts"
   )) {
     path <- file.path(run_directory, parent, repository)
     if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
       fail("could not create documentation process directory: ", path)
     }
+  }
+  if (!dir.create(
+      file.path(run_directory, "tmp", repository, "ccache"),
+      recursive = FALSE,
+      showWarnings = FALSE
+    )) {
+    fail("could not create documentation ccache temporary directory")
+  }
+  if (!isTRUE(Sys.chmod(
+      file.path(run_directory, "runtime", repository),
+      mode = "0700"
+    ))) {
+    fail("could not secure documentation XDG runtime directory")
   }
   helper_ok <- TRUE
   if (repository %in% c("mlr3book", "mlr3website")) {

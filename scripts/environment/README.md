@@ -88,3 +88,18 @@ symbols, a one-to-one mapping between `.Call` registrations and `C_*`
 namespace bindings, no literal-string `.Call` in shipped R, and no dynamically
 exported package symbols except `R_init_paradox`. On Linux it also rejects an
 executable stack and text relocations and requires GNU RELRO metadata.
+
+The opt-in Linux consumer dependency overlay is independent of this native
+harness. `scripts/environment/test-compat-system` performs its fast structural
+gate: exact lock shape, prefix-free relocation, generated Makevars and receipt
+verification, seals, and fail-closed tamper/symlink cases. Full installed-state
+verification is `scripts/bootstrap-compat-system --verify`; run it only after
+ordinary activation and before sourcing `scripts/activate-compat-system`.
+`scripts/environment/test-compat-system-installed` hard-links the three
+installed package inventories into a disposable checkout and exercises
+provision, offline, verification, receipt repair, activation, and active and
+inactive evidence binding without changing the source prefixes.
+`scripts/environment/test-activation-isolation` starts a clean shell with
+hostile inherited XDG/ccache temporary paths and proves ordinary activation
+repairs both to plain repository-local directories, including the required
+mode-0700 XDG runtime root.

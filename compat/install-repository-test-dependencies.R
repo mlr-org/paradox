@@ -157,8 +157,12 @@ harness_path <- file.path(root, "compat", "install-repository-test-dependencies.
 fingerprint_path <- file.path(root, "compat", "fingerprint.R")
 evidence_helper_path <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_path <- file.path(root, "compat", "verify-repository-evidence.R")
+compat_system_evidence_path <- file.path(
+  root, "compat", "compat-system-evidence.R"
+)
 sys.source(fingerprint_path, envir = environment())
 sys.source(evidence_helper_path, envir = environment())
+sys.source(compat_system_evidence_path, envir = environment())
 
 read_manifest <- function(path, expected_columns) {
   value <- utils::read.delim(
@@ -412,13 +416,14 @@ write_tsv(fallback_checkout_preflight, fallback_checkout_preflight_path)
 copied <- file.copy(
   c(
     manifest_path, snapshot_path, harness_path, fingerprint_path,
-    evidence_helper_path, evidence_verifier_path
+    evidence_helper_path, evidence_verifier_path, compat_system_evidence_path
   ),
   metadata_directory,
   copy.mode = TRUE,
   copy.date = TRUE
 )
 if (!all(copied)) stop("could not retain dependency evidence inputs", call. = FALSE)
+compat_system_evidence <- compat_system_capture_evidence(root, metadata_directory)
 run_metadata <- data.frame(
   field = c(
     "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
@@ -627,6 +632,10 @@ fallback_checkout_postflight_path <- file.path(
 )
 write_tsv(fallback_checkout_postflight, fallback_checkout_postflight_path)
 fallback_checkout_postflight_failed <- any(!fallback_checkout_postflight$valid)
+compat_system_verify_evidence(
+  compat_system_evidence,
+  "during repository dependency completion"
+)
 completion <- data.frame(
   field = c(
     "schema", "stage_kind", "run_id", "max_priority", "finished_utc", "status",

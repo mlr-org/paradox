@@ -334,8 +334,12 @@ dependency_harness_path <- file.path(
 )
 evidence_helper_path <- file.path(root, "compat", "repository-evidence.R")
 evidence_verifier_path <- file.path(root, "compat", "verify-repository-evidence.R")
+compat_system_evidence_path <- file.path(
+  root, "compat", "compat-system-evidence.R"
+)
 sys.source(fingerprint_path, envir = environment())
 sys.source(evidence_helper_path, envir = environment())
+sys.source(compat_system_evidence_path, envir = environment())
 extra_library_content_sha256 <- if (length(extra_libraries)) {
   vapply(extra_libraries, compat_tree_content_sha256, character(1L))
 } else {
@@ -921,7 +925,7 @@ metadata_directory <- reserve_plain_child_directory(
 Sys.setenv(NOT_CRAN = "true")
 metadata_inputs <- c(
   manifest_path, snapshot_path, fingerprint_path, harness_path,
-  evidence_helper_path, evidence_verifier_path,
+  evidence_helper_path, evidence_verifier_path, compat_system_evidence_path,
   candidate_provenance$path, candidate_provenance$seal_path,
   file.path(root, "compat", "install-candidate")
 )
@@ -932,6 +936,7 @@ copied_metadata <- file.copy(
   copy.date = TRUE
 )
 if (!all(copied_metadata)) stop("could not retain repository test inputs", call. = FALSE)
+compat_system_evidence <- compat_system_capture_evidence(root, metadata_directory)
 run_metadata <- data.frame(
   field = c(
     "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
@@ -991,6 +996,17 @@ run_repository_tests <- function(
   candidate_content_sha256,
   fingerprint_tree
 ) {
+  child_environment <- compat_system_child_environment()
+  child_environment[c(
+    "NOT_CRAN", "TESTTHAT_PARALLEL", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE",
+    "TMPDIR", "XDG_RUNTIME_DIR", "XDG_CACHE_HOME", "CCACHE_DIR",
+    "CCACHE_TEMPDIR"
+  )] <- c(
+    "true", "false", library_environment, library_environment, "",
+    Sys.getenv("TMPDIR"), Sys.getenv("XDG_RUNTIME_DIR"),
+    Sys.getenv("XDG_CACHE_HOME"), Sys.getenv("CCACHE_DIR"),
+    Sys.getenv("CCACHE_TEMPDIR")
+  )
   callr::r(
     function(
       checkout,
@@ -1058,13 +1074,7 @@ run_repository_tests <- function(
       fingerprint_tree = fingerprint_tree
     ),
     libpath = libpaths,
-    env = c(
-      NOT_CRAN = "true",
-      TESTTHAT_PARALLEL = "false",
-      R_LIBS = library_environment,
-      R_LIBS_USER = library_environment,
-      R_LIBS_SITE = ""
-    ),
+    env = child_environment,
     stdout = "|",
     stderr = "2>&1",
     spinner = FALSE,
@@ -1337,6 +1347,10 @@ results <- write_results(results)
 
 final_candidate_source <- candidate_source_state()
 final_dependency_evidence <- repository_verify_evidence(dependency_stage_directory)
+compat_system_verify_evidence(
+  compat_system_evidence,
+  "during repository test completion"
+)
 if (!candidate_source_matches(final_candidate_source) ||
     !identical(final_dependency_evidence$manifest_sha256,
       dependency_evidence$manifest_sha256) ||

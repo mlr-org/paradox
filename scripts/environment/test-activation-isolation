@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+
+fail() {
+  printf '%s\n' "test-activation-isolation: $*" >&2
+  exit 1
+}
+
+[[ -f "$ROOT/DESCRIPTION" ]] || fail "repository root is invalid"
+[[ -x "$ROOT/.local/toolchain/bin/R" ]] ||
+  fail "run scripts/bootstrap before the activation isolation test"
+
+# shellcheck disable=SC2016 # assertions intentionally run in the inner shell.
+env -i \
+  HOME="${HOME:-/nonexistent}" \
+  PATH=/usr/bin:/bin \
+  XDG_RUNTIME_DIR=/outside/inherited-runtime \
+  CCACHE_TEMPDIR=/outside/inherited-ccache \
+  /bin/sh -eu -c '
+    root=$1
+    cd "$root"
+    . scripts/activate
+    test "$PARADOX_ACTIVE_ROOT" = "$root"
+    test "$XDG_RUNTIME_DIR" = "$root/.local/runtime"
+    test "$CCACHE_TEMPDIR" = "$root/.local/tmp/ccache"
+    test "$TMPDIR" = "$root/.local/tmp"
+    test -d "$XDG_RUNTIME_DIR"
+    test ! -L "$XDG_RUNTIME_DIR"
+    test -d "$CCACHE_TEMPDIR"
+    test ! -L "$CCACHE_TEMPDIR"
+    test "$(find "$XDG_RUNTIME_DIR" -maxdepth 0 -printf "%m")" = 700
+
+    XDG_RUNTIME_DIR=/outside/resourced-runtime
+    CCACHE_TEMPDIR=/outside/resourced-ccache
+    . scripts/activate
+    test "$XDG_RUNTIME_DIR" = "$root/.local/runtime"
+    test "$CCACHE_TEMPDIR" = "$root/.local/tmp/ccache"
+    test "$(find "$XDG_RUNTIME_DIR" -maxdepth 0 -printf "%m")" = 700
+  ' activation-isolation "$ROOT"
+
+printf '%s\n' 'activation_isolation=passed'

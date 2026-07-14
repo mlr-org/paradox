@@ -51,6 +51,33 @@ portability work, not by this Linux bootstrap. Activation sources the
 environment's compiler hooks explicitly but does not install a global
 micromamba hook.
 
+The mandatory Linux compatibility corpus has a separate, opt-in native
+dependency overlay. Its prefix-free explicit inputs are
+`environment/compat-system-geo-linux-64.lock` and
+`environment/compat-system-p1-linux-64.lock`; every artifact URL carries a
+SHA-256. The ordinary bootstrap deliberately does not install these large
+stacks. After ordinary activation, provision or verify them with:
+
+```sh
+scripts/bootstrap-compat-system
+scripts/bootstrap-compat-system --verify
+. scripts/activate-compat-system
+```
+
+`--offline` creates an absent prefix only from the authenticated local conda
+cache. `--verify` is read-only and compares the complete installed explicit
+package sets with both locks, checks their direct compiler/geospatial/JVM
+capabilities, and authenticates the generated checkout-local Makevars and
+sealed receipt. `--verify-locks` and `--verify-receipt` are narrower
+read-only audits. Activation refuses an unverified overlay and exports only
+repository-local search paths. Do not use this overlay for native package
+validation or upstream differential baselines: it exists to reproduce the
+system dependencies of the P0/P1 Linux consumer corpus. Compatibility,
+reverse-dependency, and documentation evidence records whether it was active;
+active runs retain and protect the exact locks, receipt, helpers, and generated
+Makevars. Apple silicon and other platforms leave the overlay inactive and
+continue through their native compatibility gates.
+
 `environment/r-packages-linux-64.lock` is likewise an input, not a snapshot of
 the mutable installed library. It records the complete non-base source closure
 as exact package/version/SHA-256 rows. Bootstrap downloads only those named
@@ -85,6 +112,10 @@ a Quarto binary from HOME, `/usr`, an editor, or a mutable container tag.
 Temporary files and caches for R, pak, pip/uv, ccache, and reticulate are also
 redirected below the repository. `HOME` is intentionally left unchanged so Git
 credentials continue to work; do not allow a tool to install into HOME.
+Ordinary activation also clears inherited `XDG_RUNTIME_DIR` and
+`CCACHE_TEMPDIR`, selects `.local/runtime` and `.local/tmp/ccache`, and
+repairs the runtime directory to mode 0700. This prevents ccache's runtime
+temporary files from escaping into a user-wide XDG directory.
 Containerized CRAN auxiliary checks must be invoked through
 `scripts/podman-local`. Bootstrap installs the SHA-256-pinned Podman 5.8.2
 static bundle, including crun, runc, conmon, pasta, netavark, aardvark-dns,
@@ -166,6 +197,8 @@ precedence over remembered behavior.
 - `.local/sources/`: ignored R, data.table, rchk, and check-container reference
   source trees.
 - `.local/compat/`: ignored CRAN and GitHub consumer checkouts.
+- `.local/compat/system/`: ignored, lock-reproducible Linux-only native
+  dependency overlay for the mandatory compatibility corpus.
 
 ## Native validation commands
 
