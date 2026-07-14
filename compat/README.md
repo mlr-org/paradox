@@ -246,7 +246,8 @@ result classifications; other check failures remain candidate-or-consumer
 failures rather than being silently waived.
 
 `github-repositories.tsv` records the executable subset selected from the
-organization-wide scan. `mlr-org-review.tsv` and its companion review explain
+organization-wide scan plus any explicitly reviewed external dependency
+providers. `mlr-org-review.tsv` and its companion review explain
 the decision for all 91 repositories, including the separately authenticated
 source-only corpus and the verified empty `mlr-org/docker` repository. Recheck
 that census against the local archives with `compat/verify-mlr-org-review`.
@@ -348,7 +349,11 @@ reviewed checkout in `github-repositories.tsv` provides it, the dependency
 installer records the checkout commit in `local_sources`, installs that
 package with hard dependencies only, and retries the consumer dependency
 solve. The package's own optional development dependencies remain the
-responsibility of its priority-level run.
+responsibility of its priority-level run. Rows whose relation is `Dependency`
+are eligible only for this pinned fallback map: they are not paradox consumer
+test or documentation targets. This currently retains `fastshap` for
+`mlr3summary`, because CRAN archived `fastshap` after the consumer snapshot was
+reviewed.
 The dependency installer also requires `--run-id ID`; its ledger and retained
 inputs are written to
 `.local/compat/runs/<run-id>/repository-dependencies-priority-<N>/` before the
