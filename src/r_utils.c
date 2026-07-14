@@ -375,7 +375,33 @@ static void validate_capacity_bridge(SEXP source, SEXP result,
   UNPROTECT(3);
 }
 
+static void own_named_data_table_columns(SEXP table) {
+  PROTECT(table);
+  for (R_xlen_t column = 0; column < XLENGTH(table); ++column) {
+    SEXP value = VECTOR_ELT(table, column);
+    if (Rf_getAttrib(value, R_NamesSymbol) != R_NilValue) {
+      SEXP owned = PROTECT(Rf_shallow_duplicate(value));
+      if (owned == value) {
+        Rf_error(
+          "Internal error: cannot own named data.table column %lld",
+          (long long) (column + 1)
+        );
+      }
+      Rf_setAttrib(owned, R_NamesSymbol, R_NilValue);
+      SET_VECTOR_ELT(table, column, owned);
+      UNPROTECT(1);
+    }
+  }
+  UNPROTECT(1);
+}
+
 SEXP paradox_prepare_data_table(SEXP table, int growable) {
+  /* data.table::alloc.col() before 1.18 removes names from each column by
+   * reference, including a column shared with package state or a caller.
+   * Own only those unusual columns before normalization. Canonical unnamed
+   * columns remain shared, while current and legacy releases expose the same
+   * data.table column contract without mutating an input vector. */
+  own_named_data_table_columns(table);
   if (data_table_requires_capacity_bridge()) {
     SEXP namespace_environment = PROTECT(
       paradox_api_registered_namespace("data.table")
@@ -439,15 +465,30 @@ SEXP paradox_finalize_data_table(SEXP table) {
     Rf_error("Internal error: expected ordinary data.table names");
   }
 
-  PROTECT(table);
+  /* This is a registered entry point, so the input can have arbitrary aliases.
+   * Own the outer vector and attribute pairlist before normalizing either one.
+   * A shallow duplicate deliberately preserves the column vectors; duplicating
+   * names separately prevents later by-reference renaming of the result from
+   * reaching the input table through a shared STRSXP. */
+  SEXP shell = PROTECT(Rf_shallow_duplicate(table));
+  SEXP shell_names = PROTECT(Rf_shallow_duplicate(names));
+  SEXP shell_index = PROTECT(Rf_shallow_duplicate(
+    Rf_getAttrib(table, Rf_install("index"))
+  ));
+  SEXP shell_sorted = PROTECT(Rf_duplicate(
+    Rf_getAttrib(table, Rf_install("sorted"))
+  ));
+  Rf_setAttrib(shell, R_NamesSymbol, shell_names);
+  Rf_setAttrib(shell, Rf_install("index"), shell_index);
+  Rf_setAttrib(shell, Rf_install("sorted"), shell_sorted);
   /* A fallback data.table may carry a copied or names-stale self-reference.
    * Remove it before the legacy capacity bridge so alloc.col() cannot mistake
    * spare pointer capacity for a fully valid shell. */
-  Rf_setAttrib(table, Rf_install(".internal.selfref"), R_NilValue);
-  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
+  Rf_setAttrib(shell, Rf_install(".internal.selfref"), R_NilValue);
+  SEXP result = PROTECT(paradox_prepare_data_table(shell, TRUE));
   SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(result, R_NamesSymbol, result_names);
-  UNPROTECT(3);
+  UNPROTECT(6);
   return result;
 }

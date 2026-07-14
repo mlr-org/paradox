@@ -9,7 +9,9 @@
   data.table releases.
 * The retained pre-R-4.6 Domain reconstruction path now returns independently
   owned names and a valid data.table self-reference with the same observable
-  attribute order as the native facade.
+  attribute order as the native facade. Its registered finalizer owns the
+  outer table shell and names before normalization, so aliases are not changed,
+  and the fallback preserves Latin-1 and other marked ID encodings.
 * `Design$transpose()` now builds ordinary row configurations in registered C
   code. Classed or otherwise dispatch-sensitive columns retain the historical R
   path, while common numeric, integer, logical, character, and list-column

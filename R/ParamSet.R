@@ -1258,7 +1258,10 @@ ParamSet = R6Class("ParamSet",
       if (!is.null(native)) return(native)
 
       nm = self$ids()
-      set_names(map(nm, self$get_domain), paste0(nm))
+      # Subsetting owns a new outer STRSXP without re-encoding its CHARSXPs.
+      # `paste0(nm)` also owns storage, but transcodes Latin-1 IDs on old R.
+      owned_nm = nm[seq_along(nm)]
+      set_names(map(nm, self$get_domain), owned_nm)
     },
 
     #' @template field_extra_trafo

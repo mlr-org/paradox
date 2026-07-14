@@ -521,6 +521,33 @@ test_that("empty, custom, and encoded collection Domains retain fallback shape",
   expect_identical(observed[[1L]]$.init[[1L]], 0.5)
 })
 
+test_that("Domain list names own storage without changing ID encodings", {
+  utf8 = enc2utf8("caf\u00e9")
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  skip_if(is.na(latin1), "this platform cannot represent the Latin-1 fixture")
+  Encoding(latin1) = "latin1"
+
+  param_set = ps(x = p_dbl())
+  private = param_set$.__enclos_env__$private
+  data.table::set(private$.params, 1L, "id", latin1)
+  data.table::setindexv(private$.params, c("id", "cls", "grouping"))
+
+  ids = param_set$ids()
+  first = param_set$domains
+  second = param_set$domains
+  expect_identical(Encoding(ids), "latin1")
+  expect_identical(Encoding(names(first)), Encoding(ids))
+  expect_identical(charToRaw(names(first)), charToRaw(ids))
+  expect_false(identical(
+    data.table::address(names(first)),
+    data.table::address(ids)
+  ))
+  expect_false(identical(
+    data.table::address(names(first)),
+    data.table::address(names(second))
+  ))
+})
+
 test_that("collection batching rejects noncanonical storage without forcing it", {
   make_fixture = function() {
     child = ps(x = p_dbl(0, 1), y = p_int(0L, 2L))

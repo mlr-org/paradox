@@ -141,8 +141,11 @@ its returned shell. Private construction state passes `0L`, allocating exactly
 returned facades use data.table's configured spare capacity so direct `set()`
 calls can add columns by reference. Setting `datatable.alloccol` to zero
 deliberately disables that spare capacity, just as it does for data.table's own
-constructor. Both forms keep every column shared. The bridge validates the
-returned columns, owner/self-reference, and capacity and fails
+constructor. Both forms keep every canonical unnamed column shared. Named
+column vectors receive an owned shallow copy before their names are removed,
+because the legacy `alloc.col()` wrapper would otherwise remove those names
+through a shared reference. The bridge validates the returned columns,
+owner/self-reference, and capacity and fails
 closed on a changed contract. data.table 1.18 and newer retain the
 allocation-free public-R API path and its native construction performance.
 
@@ -150,7 +153,12 @@ Result metadata is owned by the result. In particular, native table names are
 copied into a fresh plain character vector instead of attaching an input
 matrix's `dimnames` vector. A later by-reference `setnames()` call therefore
 cannot mutate the input matrix or the character vector from which its column
-names were created.
+names were created. The pre-R-4.6 Domain fallback applies the same rule by
+shallowly owning its outer table shell and copying its names before replacing
+the self-reference. Existing key and secondary-index metadata receive the same
+owned copies as data.table's shallow allocator. Its Domain-list names are
+copied by subsetting the ID vector, which owns the outer `STRSXP` while
+preserving the encoding of each `CHARSXP`.
 
 The same rule applies to Domain rows, conditions, and other small S3 objects.
 R remains responsible for language capture such as `substitute(depends)`,
