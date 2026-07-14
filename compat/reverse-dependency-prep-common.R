@@ -28,7 +28,7 @@ reverse_prep_parse_dependency_field <- function(value, field, target) {
   }
   pattern <- paste0(
     "^([A-Za-z][A-Za-z0-9.]*)[[:space:]]*",
-    "(?:\\([[:space:]]*(>=|<=|==|>|<)[[:space:]]*",
+    "(?:\\([[:space:]]*(>=|<=|==|!=|>|<)[[:space:]]*",
     "([A-Za-z0-9][A-Za-z0-9.+-]*)[[:space:]]*\\))?$"
   )
   matches <- regexec(pattern, tokens, perl = TRUE)
@@ -187,12 +187,14 @@ reverse_prep_enrich_lockfile <- function(
         is.character(sha256) && grepl("^[0-9a-f]{64}$", sha256)) {
       next
     }
-    if (!identical(row$repotype, "bioc") ||
+    repository_type <- row$repotype
+    if (length(repository_type) != 1L || !is.character(repository_type) ||
+        is.na(repository_type) || !nzchar(repository_type) ||
         length(row$package) != 1L || length(row$version) != 1L ||
         !grepl("^[A-Za-z][A-Za-z0-9.]*$", row$package) ||
         !grepl("^[A-Za-z0-9][A-Za-z0-9.+-]*$", row$version)) {
       reverse_prep_stop(
-        "pak lockfile has an unauthenticated non-Bioconductor source row"
+        "pak lockfile has an invalid checksum-less standard source row"
       )
     }
     sources <- unlist(row$sources, use.names = FALSE)
@@ -203,7 +205,7 @@ reverse_prep_enrich_lockfile <- function(
     ]
     if (!length(eligible)) {
       reverse_prep_stop(
-        "Bioconductor lock row lacks an exact HTTPS source for ", row$package
+        "checksum-less lock row lacks an exact HTTPS source for ", row$package
       )
     }
     destination <- file.path(source_directory, archive_name)
@@ -237,7 +239,7 @@ reverse_prep_enrich_lockfile <- function(
     }
     if (!downloaded) {
       reverse_prep_stop(
-        "could not download exact Bioconductor source for ", row$package,
+        "could not download exact dependency source for ", row$package,
         if (length(errors)) paste0(": ", paste(errors, collapse = " | ")) else ""
       )
     }
@@ -250,7 +252,7 @@ reverse_prep_enrich_lockfile <- function(
         !identical(unname(tools::md5sum(destination)), initial_md5) ||
         !identical(file.info(destination, extra_cols = FALSE)$size, initial_size)) {
       reverse_prep_stop(
-        "Bioconductor dependency source changed while authenticating ",
+        "dependency source changed while authenticating ",
         row$package
       )
     }
@@ -264,6 +266,7 @@ reverse_prep_enrich_lockfile <- function(
     retained[[length(retained) + 1L]] <- data.frame(
       package = row$package,
       version = row$version,
+      repository_type = repository_type,
       source_url = selected_url,
       retained_archive = destination,
       size = format(initial_size, scientific = FALSE, trim = TRUE),
@@ -289,9 +292,10 @@ reverse_prep_enrich_lockfile <- function(
   reverse_prep_read_lockfile(output)
   if (!length(retained)) {
     return(data.frame(
-      package = character(), version = character(), source_url = character(),
-      retained_archive = character(), size = character(), md5 = character(),
-      sha256 = character(), stringsAsFactors = FALSE
+      package = character(), version = character(), repository_type = character(),
+      source_url = character(), retained_archive = character(),
+      size = character(), md5 = character(), sha256 = character(),
+      stringsAsFactors = FALSE
     ))
   }
   do.call(rbind, retained)
@@ -300,7 +304,8 @@ reverse_prep_enrich_lockfile <- function(
 reverse_prep_version_satisfies <- function(observed, constraint) {
   if (!nzchar(constraint)) return(TRUE)
   parts <- strsplit(constraint, " ", fixed = TRUE)[[1L]]
-  if (length(parts) != 2L || !parts[[1L]] %in% c(">=", "<=", "==", ">", "<")) {
+  if (length(parts) != 2L ||
+      !parts[[1L]] %in% c(">=", "<=", "==", "!=", ">", "<")) {
     reverse_prep_stop("invalid retained dependency constraint: ", constraint)
   }
   comparison <- utils::compareVersion(observed, parts[[2L]])
@@ -308,6 +313,7 @@ reverse_prep_version_satisfies <- function(observed, constraint) {
     ">=" = comparison >= 0L,
     "<=" = comparison <= 0L,
     "==" = comparison == 0L,
+    "!=" = comparison != 0L,
     ">" = comparison > 0L,
     "<" = comparison < 0L
   )

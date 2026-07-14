@@ -425,6 +425,10 @@ if (dir.exists(library)) {
   if (file.exists(library) || is_symbolic(library)) {
     stop("dependency library exists but is not a plain directory", call. = FALSE)
   }
+  if (values$plan_only) {
+    stop("--plan-only requires a pre-existing dependency library",
+      call. = FALSE)
+  }
   parent <- require_plain_local_directory(dirname(library),
     "dependency library parent")
   if (!identical(file.path(parent, basename(library)), library) ||
@@ -434,20 +438,60 @@ if (dir.exists(library)) {
   library <- require_plain_local_directory(library, "dependency library")
 }
 
+run_dependency_preparation <- function() {
 mutation_lock <- file.path(compat_root, ".reverse-dependency-preparation.lock")
-if (file.exists(mutation_lock) || dir.exists(mutation_lock) ||
-    is_symbolic(mutation_lock) ||
+lock_absent <- function(path) {
+  !file.exists(path) && !dir.exists(path) && !is_symbolic(path)
+}
+plain_empty_lock <- function(path) {
+  info <- file.info(path, extra_cols = FALSE)
+  dir.exists(path) && !is_symbolic(path) && isTRUE(info$isdir) &&
+    !length(list.files(path, all.files = TRUE, no.. = TRUE))
+}
+remove_owned_empty_lock <- function(path) {
+  if (!plain_empty_lock(path)) return(FALSE)
+  status <- unlink(path, recursive = TRUE, force = FALSE)
+  identical(as.integer(status), 0L) && lock_absent(path)
+}
+
+if (!lock_absent(mutation_lock) ||
     !dir.create(mutation_lock, recursive = FALSE, mode = "0700")) {
   stop("reverse-dependency dependency preparation is already running or stale",
     call. = FALSE)
 }
 lock_active <- TRUE
-on.exit({
-  if (lock_active && dir.exists(mutation_lock) && !is_symbolic(mutation_lock) &&
-      !length(list.files(mutation_lock, all.files = TRUE, no.. = TRUE))) {
-    unlink(mutation_lock, recursive = FALSE, force = FALSE)
+release_mutation_lock <- function(strict) {
+  if (!lock_active) return(invisible(TRUE))
+  released <- remove_owned_empty_lock(mutation_lock)
+  if (released) {
+    lock_active <<- FALSE
+    return(invisible(TRUE))
   }
-}, add = TRUE)
+  if (strict) {
+    stop("could not release reverse-dependency preparation lock", call. = FALSE)
+  }
+  invisible(FALSE)
+}
+on.exit(release_mutation_lock(TRUE), add = TRUE)
+
+failure_hook <- Sys.getenv("PARADOX_REVERSE_PREP_TEST_FAILURE", unset = "")
+if (!failure_hook %in% c("", "after-lock")) {
+  stop("invalid reverse-dependency preparation test failure hook", call. = FALSE)
+}
+if (nzchar(failure_hook)) {
+  fixture_library_prefix <- file.path(
+    local_root, "tmp", "reverse-dependency-preparation-"
+  )
+  if (!values$plan_only || !identical(max_priority, 3L) ||
+      !identical(source_plan$package, "drape") ||
+      !startsWith(run_id, "reverse-dependency-preparation-fixture-") ||
+      !startsWith(library, fixture_library_prefix)) {
+    stop("reverse-dependency preparation test hook is outside fixture scope",
+      call. = FALSE)
+  }
+  stop("injected failure after reverse-dependency lock acquisition",
+    call. = FALSE)
+}
 
 package_state <- function(package) {
   path <- file.path(library, package)
@@ -667,12 +711,7 @@ completion <- data.frame(
   stringsAsFactors = FALSE
 )
 write_tsv(completion, file.path(metadata_directory, "completion.tsv"))
-if (!unlink(mutation_lock, recursive = FALSE, force = FALSE) ||
-    file.exists(mutation_lock) || dir.exists(mutation_lock) ||
-    is_symbolic(mutation_lock)) {
-  stop("could not release reverse-dependency preparation lock", call. = FALSE)
-}
-lock_active <- FALSE
+release_mutation_lock(TRUE)
 repository_seal_evidence(stage_directory)
 cat(
   if (values$plan_only) "Resolved" else "Installed",
@@ -680,3 +719,6 @@ cat(
   if (nrow(source_plan) == 1L) "" else "s", ": ", stage_directory, "\n",
   sep = ""
 )
+}
+
+run_dependency_preparation()

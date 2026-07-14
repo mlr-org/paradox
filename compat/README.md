@@ -103,12 +103,16 @@ may reference it only as `installed`; a source/update plan fails, and its
 complete package content must remain byte-identical.
 
 Resolution produces a retained pak lock with exact versions, source URLs, and
-SHA-256 values. Pak does not serialize the published Bioconductor MD5 into its
-lock format, so every unresolved Bioconductor source is downloaded first,
-checked as a safe package/version archive, retained under `resolved-sources/`,
-hashed with MD5 and SHA-256, and inserted as the first authenticated lock
-source. Installed-package references must resolve directly below the
-specified repository-local dependency library; source rows without a SHA-256
+SHA-256 values. Some CRAN-like repositories, including Bioconductor, do not
+give pak a SHA-256 that it can serialize into the lock. Every checksum-less
+standard source row is therefore required to expose an exact HTTPS
+`PACKAGE_VERSION.tar.gz` URL. The stage downloads that archive, checks its
+safe package tree and DESCRIPTION identity, retains it under
+`resolved-sources/`, hashes it with MD5 and SHA-256, and inserts the retained
+file as the first authenticated lock source. This policy is based on the
+verifiable archive contract, not pak's repository-type label.
+Installed-package references must resolve directly below the specified
+repository-local dependency library; source rows without a SHA-256
 or HTTPS source fail. Installation replays that lock with `update = FALSE`,
 then verifies every locked version, the protected paradox tree, all target
 archives, all live and retained input hashes, and the optional system overlay.
@@ -119,12 +123,14 @@ metadata are sealed below
 Verify the stage with `compat/verify-repository-evidence.R`.
 
 Repeated `--package NAME` selects a bounded subset. `--plan-only` resolves and
-seals the exact lock while requiring the dependency library to remain
-byte-identical; it does not install anything. Run
+seals the exact lock while requiring a pre-existing dependency library to
+remain byte-identical; it does not create the library or install anything. Run
 `scripts/environment/test-reverse-dependency-preparation.R` after ordinary
 activation for deterministic parser, archive, lock-policy, path-escape, and
-evidence-tamper fixtures. Those fixtures use a disposable library below
-`.local/tmp` and never inspect or mutate the shared compatibility library.
+evidence-tamper fixtures, plus real plan-only success and injected post-lock
+failure/retry runs. Those fixtures use a disposable library below `.local/tmp`,
+verify function-scoped lock cleanup, and never inspect or mutate the shared
+compatibility library.
 
 ## Freeze and install one candidate
 

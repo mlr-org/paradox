@@ -414,9 +414,11 @@ SHA-256-bearing pak lock, and seals its endpoints and inputs under
 `.local/compat/runs/<ID>/reverse-dependency-dependencies-priority-<N>/`.
 An existing paradox used to build a transitive dependency is allowed only as a
 protected `installed` lock row and must remain byte-identical. `--plan-only`
-must leave the selected dependency library unchanged. The disposable fixture
-gate is `scripts/environment/test-reverse-dependency-preparation.R`; it never
-uses the live shared dependency library.
+requires a pre-existing selected dependency library and must leave it
+unchanged. The disposable fixture gate is
+`scripts/environment/test-reverse-dependency-preparation.R`; its real harness
+success and injected post-lock failure/retry runs verify cleanup without ever
+using the live shared dependency library.
 
 Install the consumer-test candidate only after its run ID and full ref, commit,
 and tree are exported, and only into the absent run-specific library reserved
