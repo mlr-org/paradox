@@ -154,6 +154,8 @@ test_that("native Domains are detached tables with valid ownership", {
 })
 
 test_that("native get_domain retains admitted columns across GC finalizers", {
+  skip_on_cran()
+
   collection = NULL
   finalizer = new.env(parent = emptyenv())
   finalizer$pointer = NULL

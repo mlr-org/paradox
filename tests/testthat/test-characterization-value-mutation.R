@@ -273,6 +273,8 @@ test_that("extension setter errors retain historical delegation order", {
 })
 
 test_that("mutation survives clone, serialization, and forced collection", {
+  skip_on_cran()
+
   reference = new.env(parent = emptyenv())
   reference$value = 1L
   child = ps(value = p_uty(), count = p_int())

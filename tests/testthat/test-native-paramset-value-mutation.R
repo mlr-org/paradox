@@ -529,6 +529,8 @@ test_that("miesmuschel ParamSetShadow remains a public setter extension", {
 })
 
 test_that("reentrant custom checks may replace parameter storage and collect", {
+  skip_on_cran()
+
   events = new.env(parent = emptyenv())
   events$count = 0L
   holder = new.env(parent = emptyenv())
@@ -559,6 +561,8 @@ test_that("reentrant custom checks may replace parameter storage and collect", {
 })
 
 test_that("native mutation entries and public setters survive gctorture", {
+  skip_on_cran()
+
   param_set = ps(a = p_int(), b = p_dbl())
   param_set$values = list(a = 1L, b = 0.25)
   other = ps(flag = p_lgl(init = TRUE))
