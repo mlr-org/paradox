@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 
 usage() {
   cat <<'USAGE'
@@ -32,6 +34,9 @@ while (($#)); do
 done
 [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
   fail "Run ID has an unsafe or empty shape"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" &&
+  "$(command -v git)" == "$LOCAL_GIT" ]] ||
+  fail "activate the exact repository-local toolchain first: . scripts/activate"
 run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
 [[ -d "$run_root" && ! -L "$run_root" ]] || fail "Runtime-matrix run is absent: $run_root"
 
@@ -51,25 +56,389 @@ verify_seal() {
   ) || fail "Runtime evidence completion seal is stale: $metadata"
 }
 
-verify_seal "$run_root/metadata"
-mapfile -t versions < <(awk -F '\t' 'NR > 1 {print $1}' "$run_root/metadata/stages.tsv")
-[[ ${#versions[@]} -ge 1 ]] || fail "Runtime evidence contains no stages"
+metadata_value() {
+  local metadata=$1 key=$2
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' "$metadata/run.tsv"
+}
+
+log_value() {
+  local log=$1 key=$2
+  awk -F = -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$log"
+}
+
+verify_source_archive() {
+  local artifacts=$1 metadata=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local source_tar="$inputs/source.git.tar"
+  local source_manifest="$inputs/source.manifest.tsv"
+  local git_identity="$inputs/git-identity.tsv"
+  local recorded_commit verify_tmp
+  for file in "$source_tar" "$source_manifest" "$git_identity"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Retained source archive input is absent or symbolic: $file"
+  done
+  [[ -d "$source" && ! -L "$source" ]] ||
+    fail "Retained source tree is absent or symbolic"
+  recorded_commit=$(metadata_value "$metadata" source_commit)
+  [[ "$recorded_commit" =~ ^[0-9a-f]{40}$ ]] ||
+    fail "Retained Git archive commit is malformed"
+  "$GIT_HELPER" verify-archive "$ROOT" "$recorded_commit" \
+    "$source_tar" >/dev/null ||
+    fail "Retained Git archive is not the canonical recorded commit archive"
+  [[ $(metadata_value "$metadata" source_git_tar_sha256) == \
+      "$(sha256sum "$source_tar" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" source_manifest_sha256) == \
+      "$(sha256sum "$source_manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" git_identity_sha256) == \
+      "$(sha256sum "$git_identity" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained source archive identity hashes are inconsistent"
+  "$GIT_HELPER" identity "$ROOT" | cmp -s -- "$git_identity" - ||
+    fail "Retained Git tool identity differs from the active reviewed toolchain"
+  "$PREFIX_RECEIPT" verify "$source" "$source_manifest" >/dev/null ||
+    fail "Retained source differs from its pre-execution receipt"
+  mkdir -p -- "$ROOT/.local/tmp"
+  verify_tmp=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-source-verify.XXXXXX")
+  if ! /usr/bin/tar -xf "$source_tar" -C "$verify_tmp" ||
+      ! "$PREFIX_RECEIPT" verify "$verify_tmp" "$source_manifest" >/dev/null; then
+    rm -rf -- "$verify_tmp"
+    fail "Retained Git archive differs from the receipted source tree"
+  fi
+  rm -rf -- "$verify_tmp"
+}
+
+verify_recorded_digests() {
+  local version=$1 artifacts=$2 metadata=$3
+  local inputs="$artifacts/inputs"
+  local archive
+  local -a archives
+  mapfile -t archives < <(find "$artifacts/build" -maxdepth 1 -type f \
+    -name 'paradox_*.tar.gz' -print)
+  [[ ${#archives[@]} -eq 1 ]] || fail "Retained build has no unique package archive"
+  archive=${archives[0]}
+  [[ $(metadata_value "$metadata" lock_sha256) == \
+      "$(sha256sum "$inputs/environment/runtime-r-${version}-linux-64.lock" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" bootstrap_receipt_sha256) == \
+      "$(sha256sum "$inputs/bootstrap-receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" archive_sha256) == \
+      "$(sha256sum "$archive" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" candidate_dso_sha256) == \
+      "$(sha256sum "$artifacts/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" artifacts_manifest_sha256) == \
+      "$(sha256sum "$metadata/artifacts.manifest.tsv" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained stage digest claims are inconsistent"
+}
+
+verify_trusted_inputs() {
+  local version=$1 artifacts=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local relative
+  local trusted_inputs=(
+    scripts/bootstrap-runtime-matrix
+    scripts/activate-runtime-matrix
+    scripts/test-runtime-matrix
+    scripts/verify-runtime-matrix-evidence
+    scripts/environment/runtime-matrix-prefix-receipt
+    scripts/environment/runtime-matrix-git
+    scripts/environment/runtime-matrix-inventory.R
+    scripts/environment/runtime-matrix-probe.R
+    scripts/environment/run-runtime-matrix-tests.R
+    environment/runtime-matrix-pre46-exclusions.tsv
+    environment/runtime-matrix-whole-file-skips.tsv
+    environment/runtime-matrix-result-skips.tsv
+    environment/runtime-r-${version}-linux-64.lock
+  )
+  for relative in "${trusted_inputs[@]}"; do
+    [[ -f "$inputs/$relative" && ! -L "$inputs/$relative" ]] ||
+      fail "Retained trusted input is absent or symbolic: $relative"
+    cmp -s -- "$inputs/$relative" "$source/$relative" ||
+      fail "Retained trusted input differs from the source archive: $relative"
+  done
+}
+
+verify_source_scope() {
+  local artifacts=$1 metadata=$2
+  local source="$artifacts/source"
+  local inputs="$artifacts/inputs"
+  local scope="$inputs/source-test-scope"
+  local log="$artifacts/logs/source-tests.log"
+  local exclusions="$inputs/environment/runtime-matrix-pre46-exclusions.tsv"
+  local whole_skips="$inputs/environment/runtime-matrix-whole-file-skips.tsv"
+  local result_skip_policy="$inputs/environment/runtime-matrix-result-skips.tsv"
+  local file value expectations result_skips total_skips runtime
+  local expected_result_skip_count
+
+  for file in "$exclusions" "$whole_skips" "$result_skip_policy" "$scope/scope.tsv" \
+      "$scope/testthat-reported-files.tsv" \
+      "$scope/observed-whole-file-skips.tsv" \
+      "$scope/observed-result-skips.tsv" "$log"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Runtime source-scope input is absent or symbolic: $file"
+  done
+  [[ -d "$scope/testthat" && ! -L "$scope/testthat" ]] ||
+    fail "Staged runtime tests are absent or symbolic"
+  cmp -s -- "$exclusions" \
+    "$source/environment/runtime-matrix-pre46-exclusions.tsv" ||
+    fail "Retained exclusion policy differs from the source snapshot"
+  cmp -s -- "$whole_skips" \
+    "$source/environment/runtime-matrix-whole-file-skips.tsv" ||
+    fail "Retained whole-file skip policy differs from the source snapshot"
+  cmp -s -- "$result_skip_policy" \
+    "$source/environment/runtime-matrix-result-skips.tsv" ||
+    fail "Retained result-skip policy differs from the source snapshot"
+
+  awk -F '\t' '
+    NR == 1 {if ($0 != "context\treason") exit 1; next}
+    NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
+    END {if (NR != 15) exit 1}
+  ' "$exclusions" || fail "Retained pre-R-4.6 exclusion policy is malformed"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "file\tcontext\tmissing_package\tleading_guards\treason") exit 1
+      next
+    }
+    NF != 5 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ ||
+      $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
+      $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
+    END {if (NR != 3) exit 1}
+  ' "$whole_skips" || fail "Retained whole-file skip policy is malformed"
+  awk -F '\t' '
+    NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
+    NF != 4 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
+      $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" || $4 == "" ||
+      seen[$1 FS $2 FS $3]++ {exit 1}
+    {count[$1]++}
+    END {if (NR != 14 || count["4.3.3"] != 6 || count["4.5.2"] != 7) exit 1}
+  ' "$result_skip_policy" || fail "Retained result-skip policy is malformed"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "state\tfile\tcontext\treason") exit 1
+      next
+    }
+    NF != 4 || $1 !~ /^(executed|excluded)$/ ||
+      $2 !~ /^tests\/testthat\/test[-_A-Za-z0-9.]+[.]R$/ || $3 == "" ||
+      seen_file[$2]++ || seen_context[$3]++ {exit 1}
+    {
+      expected = $2
+      sub(/^tests\/testthat\/test[-_]/, "", expected)
+      sub(/[.]R$/, "", expected)
+      if ($3 != expected) exit 1
+      if (($1 == "executed" && $4 != "") ||
+          ($1 == "excluded" && $4 == "")) exit 1
+      count[$1]++
+    }
+    END {if (NR != 72 || count["executed"] != 57 || count["excluded"] != 14) exit 1}
+  ' "$scope/scope.tsv" || fail "Retained source-test scope is malformed"
+
+  diff -u \
+    <(tail -n +2 "$exclusions" | LC_ALL=C sort) \
+    <(awk -F '\t' '$1 == "excluded" {print $3 "\t" $4}' "$scope/scope.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Excluded scope rows differ from the reviewed policy"
+  diff -u \
+    <(find "$source/tests/testthat" -maxdepth 1 -type f \
+      \( -name 'test*.R' -o -name 'test*.r' \) \
+      -printf 'tests/testthat/%f\n' | LC_ALL=C sort) \
+    <(tail -n +2 "$scope/scope.tsv" | cut -f 2 | LC_ALL=C sort) \
+    >/dev/null || fail "Source-test scope does not cover the exact source inventory"
+  [[ -z $(find "$source/tests/testthat" -maxdepth 1 -type l \
+      \( -name 'test*.R' -o -name 'test*.r' \) -print -quit) ]] ||
+    fail "Source-test inventory contains a symbolic test"
+
+  [[ -z $(find "$scope/testthat" -mindepth 1 ! -type f -print -quit) ]] ||
+    fail "Staged source-test directory contains a non-regular member"
+  [[ $(find "$scope/testthat" -maxdepth 1 -type f | wc -l) -eq 64 ]] ||
+    fail "Staged source-test directory has the wrong complete file count"
+  while IFS= read -r file; do
+    cmp -s -- "$file" "$source/tests/testthat/${file##*/}" ||
+      fail "Staged source-test input differs from its source: ${file##*/}"
+  done < <(find "$scope/testthat" -maxdepth 1 -type f -print | LC_ALL=C sort)
+  diff -u \
+    <(find "$scope/testthat" -maxdepth 1 -type f \
+      \( -name 'test*.R' -o -name 'test*.r' \) -printf '%f\n' | LC_ALL=C sort) \
+    <(awk -F '\t' '$1 == "executed" {sub(/^tests\/testthat\//, "", $2); print $2}' \
+      "$scope/scope.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Staged tests differ from the executed scope"
+
+  cmp -s -- "$whole_skips" "$scope/observed-whole-file-skips.tsv" ||
+    fail "Observed whole-file skips differ from the reviewed policy"
+  diff -u \
+    <(awk -F '\t' 'NR > 1 {print $1 "\t" $4}' "$whole_skips") \
+    <(awk -F '\t' '/^observed_whole_file_skip_guard_sequence=/ {
+       sub(/^observed_whole_file_skip_guard_sequence=/, "", $1)
+       sub(/^leading_guards=/, "", $2)
+       print $1 "\t" $2
+     }' "$log") >/dev/null ||
+    fail "Logged whole-file leading guards differ from the reviewed policy"
+  awk -F '\t' '
+    NR == 1 {if ($0 != "file") exit 1; next}
+    NF != 1 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || seen[$1]++ {exit 1}
+    END {if (NR != 56) exit 1}
+  ' "$scope/testthat-reported-files.tsv" ||
+    fail "Retained testthat-reported file inventory is malformed"
+  diff -u \
+    <(comm -23 \
+      <(awk -F '\t' '$1 == "executed" {sub(/^tests\/testthat\//, "", $2); print $2}' \
+        "$scope/scope.tsv" | LC_ALL=C sort) \
+      <(tail -n +2 "$whole_skips" | cut -f 1 | LC_ALL=C sort)) \
+    <(tail -n +2 "$scope/testthat-reported-files.tsv" | LC_ALL=C sort) \
+    >/dev/null || fail "Testthat result files do not equal executed files minus whole-file skips"
+
+  for field in discovered_test_file_count executed_test_file_count \
+      excluded_test_file_count testthat_reported_file_count; do
+    value=$(metadata_value "$metadata" "$field")
+    [[ "$value" =~ ^[0-9]+$ && "$value" == "$(log_value "$log" "$field")" ]] ||
+      fail "Retained source-test count is malformed or inconsistent: $field"
+  done
+  [[ $(metadata_value "$metadata" discovered_test_file_count) == 71 &&
+    $(metadata_value "$metadata" executed_test_file_count) == 57 &&
+    $(metadata_value "$metadata" excluded_test_file_count) == 14 &&
+    $(metadata_value "$metadata" testthat_reported_file_count) == 55 ]] ||
+    fail "Retained source-test counts differ from the reviewed scope"
+  [[ $(metadata_value "$metadata" whole_file_skip_count) == 2 &&
+    $(log_value "$log" expected_whole_file_skip_count) == 2 &&
+    $(log_value "$log" observed_whole_file_skip_count) == 2 ]] ||
+    fail "Retained whole-file skip accounting is inconsistent"
+  runtime=$(metadata_value "$metadata" runtime)
+  expected_result_skip_count=6
+  [[ "$runtime" == 4.5.2 ]] && expected_result_skip_count=7
+  diff -u \
+    <(awk -F '\t' -v runtime="$runtime" 'NR == 1 || $1 == runtime' "$result_skip_policy") \
+    "$scope/observed-result-skips.tsv" >/dev/null ||
+    fail "Observed result skips differ from the reviewed runtime policy"
+  diff -u \
+    <(awk -F '\t' -v runtime="$runtime" \
+      'NR > 1 && $1 == runtime {print $2 "\t" $3 "\t" $4}' "$result_skip_policy") \
+    <(awk -F '\t' '/^observed_result_skip=/ {
+       sub(/^observed_result_skip=/, "", $1)
+       sub(/^test=/, "", $2)
+       sub(/^reason=/, "", $3)
+       print $1 "\t" $2 "\t" $3
+     }' "$log") >/dev/null ||
+    fail "Logged result skips differ from the reviewed runtime policy"
+  [[ $(log_value "$log" expected_result_test_block_skip_count) == \
+      "$expected_result_skip_count" ]] ||
+    fail "Expected result-skip count differs from the reviewed runtime policy"
+  [[ $(log_value "$log" discovered_test_context_count) == 71 &&
+    $(log_value "$log" executed_test_context_count) == 57 &&
+    $(log_value "$log" excluded_test_context_count) == 14 &&
+    $(log_value "$log" staged_test_support_file_count) == 7 ]] ||
+    fail "Retained source-test context/support counts are inconsistent"
+
+  expectations=$(metadata_value "$metadata" expectations_passed)
+  result_skips=$(metadata_value "$metadata" result_test_blocks_skipped)
+  total_skips=$(metadata_value "$metadata" total_test_skips)
+  [[ "$expectations" =~ ^[0-9]+$ && "$result_skips" =~ ^[0-9]+$ &&
+    "$total_skips" =~ ^[0-9]+$ && "$expectations" -ge 4900 &&
+    "$result_skips" -eq "$expected_result_skip_count" &&
+    "$total_skips" -eq $((result_skips + 2)) ]] ||
+    fail "Retained expectation or skip totals are inconsistent"
+  [[ "$expectations" == "$(log_value "$log" expectations_passed)" &&
+    "$result_skips" == "$(log_value "$log" result_test_blocks_skipped)" &&
+    "$total_skips" == "$(log_value "$log" total_test_skips)" &&
+    $(metadata_value "$metadata" minimum_expectations_required) == 4900 &&
+    $(log_value "$log" minimum_expectations_required) == 4900 ]] ||
+    fail "Retained expectation floor differs from the source-test log"
+  [[ $(log_value "$log" not_cran) == false &&
+    $(log_value "$log" test_scope) == \
+      public-characterization-regression-and-supported-native-source-suite &&
+    $(log_value "$log" test_scope_manifest) == source-test-scope/scope.tsv &&
+    $(log_value "$log" whole_file_skip_manifest) == \
+      environment/runtime-matrix-whole-file-skips.tsv &&
+    $(log_value "$log" result_skip_manifest) == \
+      environment/runtime-matrix-result-skips.tsv &&
+    $(log_value "$log" pre46_exclusion_manifest) == \
+      environment/runtime-matrix-pre46-exclusions.tsv &&
+    $(log_value "$log" testthat_reported_file_form) == basename &&
+    $(log_value "$log" expectations_failed) == 0 &&
+    $(log_value "$log" warnings) == 0 && $(log_value "$log" errors) == 0 ]] ||
+    fail "Retained source-test policy or clean status is inconsistent"
+
+  [[ $(metadata_value "$metadata" pre46_exclusion_manifest_sha256) == \
+      "$(sha256sum "$exclusions" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" whole_file_skip_manifest_sha256) == \
+      "$(sha256sum "$whole_skips" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" result_skip_manifest_sha256) == \
+      "$(sha256sum "$result_skip_policy" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" test_scope_manifest_sha256) == \
+      "$(sha256sum "$scope/scope.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" testthat_reported_files_sha256) == \
+      "$(sha256sum "$scope/testthat-reported-files.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" observed_whole_file_skips_sha256) == \
+      "$(sha256sum "$scope/observed-whole-file-skips.tsv" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" observed_result_skips_sha256) == \
+      "$(sha256sum "$scope/observed-result-skips.tsv" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained source-test scope hashes are inconsistent"
+
+  diff -u \
+    <(tail -n +2 "$exclusions" | LC_ALL=C sort) \
+    <(awk -F '\t' '/^pre46_excluded_context=/ {
+       sub(/^pre46_excluded_context=/, "", $1)
+       sub(/^reason=/, "", $2)
+       print $1 "\t" $2
+     }' "$log" | LC_ALL=C sort) \
+    >/dev/null || fail "Logged pre-R-4.6 exclusions differ from policy"
+}
+
+top_metadata="$run_root/metadata"
+stages_file="$top_metadata/stages.tsv"
+[[ -f "$stages_file" && ! -L "$stages_file" ]] ||
+  fail "Runtime stage ledger is absent or symbolic"
+verify_seal "$top_metadata"
+awk -F '\t' '
+  NR == 1 {if ($0 != "runtime\tstage_seal_sha256") exit 1; next}
+  NF != 2 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
+    $2 !~ /^[0-9a-f]+$/ || length($2) != 64 || seen[$1]++ {exit 1}
+  $1 == "4.3.3" {if (seen45) exit 1}
+  $1 == "4.5.2" {seen45 = 1}
+  END {if (NR < 2 || NR > 3) exit 1}
+' "$stages_file" || fail "Runtime stage ledger is malformed"
+mapfile -t versions < <(awk -F '\t' 'NR > 1 {print $1}' "$stages_file")
+top_run_id=$(metadata_value "$top_metadata" run_id)
+top_source_ref=$(metadata_value "$top_metadata" source_ref)
+top_commit=$(metadata_value "$top_metadata" source_commit)
+top_tree=$(metadata_value "$top_metadata" source_tree)
+top_stage_count=$(metadata_value "$top_metadata" stage_count)
+[[ "$top_run_id" == "$run_id" &&
+  "$top_source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+  "$top_source_ref" != *..* && "$top_source_ref" != */ &&
+  "$top_source_ref" != *//* && "$top_commit" =~ ^[0-9a-f]{40}$ &&
+  "$top_tree" =~ ^[0-9a-f]{40}$ &&
+  "$top_stage_count" =~ ^[12]$ &&
+  "$top_stage_count" -eq "${#versions[@]}" ]] ||
+  fail "Top-level runtime provenance is malformed or inconsistent"
+"$GIT_HELPER" verify-ref "$ROOT" "$top_source_ref" "$top_commit" \
+  "$top_tree" >/dev/null ||
+  fail "Top-level source ref no longer resolves to its recorded commit and tree"
 for version in "${versions[@]}"; do
   case "$version" in 4.3.3|4.5.2) ;; *) fail "Unexpected retained runtime: $version" ;; esac
   stage="$run_root/R-$version"
   metadata="$stage/metadata"
   artifacts="$stage/artifacts"
   verify_seal "$metadata"
+  expected_stage_seal=$(awk -F '\t' -v version="$version" \
+    '$1 == version {print $2}' "$stages_file")
+  [[ "$expected_stage_seal" == \
+    "$(sha256sum "$metadata/completion.seal" | cut -d ' ' -f 1)" ]] ||
+    fail "Stage ledger digest differs from the retained completion seal"
   [[ -d "$artifacts" && ! -L "$artifacts" ]] || fail "Artifact tree is absent: $artifacts"
   [[ -f "$metadata/artifacts.manifest.tsv" && ! -L "$metadata/artifacts.manifest.tsv" ]] ||
     fail "Artifact tree receipt is absent"
   "$PREFIX_RECEIPT" verify "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
+  verify_source_archive "$artifacts" "$metadata"
+  verify_trusted_inputs "$version" "$artifacts"
+  verify_recorded_digests "$version" "$artifacts" "$metadata"
+  verify_source_scope "$artifacts" "$metadata"
+  recorded_run_id=$(awk -F '\t' '$1 == "run_id" {print $2}' "$metadata/run.tsv")
   recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")
+  recorded_ref=$(awk -F '\t' '$1 == "source_ref" {print $2}' "$metadata/run.tsv")
   recorded_commit=$(awk -F '\t' '$1 == "source_commit" {print $2}' "$metadata/run.tsv")
   recorded_tree=$(awk -F '\t' '$1 == "source_tree" {print $2}' "$metadata/run.tsv")
   recorded_branch=$(awk -F '\t' '$1 == "r_api_compat_branch" {print $2}' "$metadata/run.tsv")
-  [[ "$recorded_version" == "$version" && "$recorded_commit" =~ ^[0-9a-f]{40}$ &&
-    "$recorded_tree" =~ ^[0-9a-f]{40}$ ]] || fail "Retained source/runtime identity is malformed"
+  [[ "$recorded_run_id" == "$run_id" && "$recorded_version" == "$version" &&
+    "$recorded_ref" == "$top_source_ref" && "$recorded_commit" == "$top_commit" &&
+    "$recorded_tree" == "$top_tree" ]] ||
+    fail "Stage source/runtime provenance differs from the top-level ledger"
   case "$version:$recorded_branch" in
     4.3.3:pre-4.5-evaluated-public-fallback|\
       4.5.2:4.5-direct-closure-and-evaluated-binding) ;;

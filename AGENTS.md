@@ -83,6 +83,22 @@ caches inside the repository. Source ordinary `scripts/activate` again to
 return to development R 4.6.1. Never use a matrix prefix as a dependency
 library for another R version.
 
+The old-runtime source-test scope is explicit rather than inferred from a
+testthat filter. Both interpreters lack the R 4.6 binding inspection APIs, so
+the 14 direct native-admission implementation contexts listed in
+`environment/runtime-matrix-pre46-exclusions.tsv` are not meaningful there;
+their public behavior remains covered by characterization/regression tests and
+the focused public-API probe. The runner stages the other 57 of the current 71
+test files, all seven helper/setup inputs, and retains the complete
+executed/excluded ledger. `environment/runtime-matrix-whole-file-skips.tsv`
+separately authenticates the exact parsed leading-guard sequences of the two
+staged ConfigSpace files (including the old file's preceding available `callr`
+guard) before accepting their absent-reticulate whole-file skips.
+`environment/runtime-matrix-result-skips.tsv` authenticates every reported
+skip title and reason: six `NOT_CRAN=false` blocks on R 4.3.3 and those same
+six plus the inactive legacy-data.table bridge on R 4.5.2. Unknown, duplicate,
+symbolic, stale, reordered, or changed scope/skip rows fail closed.
+
 The mandatory Linux compatibility corpus has a separate, opt-in native
 dependency overlay. Its prefix-free explicit inputs are
 `environment/compat-system-geo-linux-64.lock` and
@@ -385,13 +401,24 @@ scripts/verify-runtime-matrix-evidence \
 
 Each real runtime builds a source archive, installs it into an absent
 run-specific library, executes a focused `r_api_compat.c` behavior probe, and
-runs the practical full package source suite with `NOT_CRAN=false` (so the
-deliberately expensive GC-torture and external Python jobs may skip). The DSO
-audit proves the exact version-specific public R symbol set: R 4.3 must not
-link any R 4.5/4.6 accessor, while R 4.5 must link the direct closure and
+runs the authenticated public/characterization/regression and supported-native
+source scope described above with `NOT_CRAN=false` (so the deliberately
+expensive GC-torture jobs may skip). At least 4,900 clean expectations must run;
+the exact staged files, testthat-reported files, exclusions, parsed whole-file
+guards, reported skip blocks/reasons, and all counts and hashes are retained
+and verified. Source provenance operations use the authenticated
+repository-local Git 2.55.0 with replacements, grafts, alternate object stores,
+info attributes, global/system attributes, and mutable tar umasks disabled or
+rejected. The canonical byte-reproducible Git tar, Git executable identity,
+and an exact pre-execution source-tree receipt are retained and reverified after testing and
+again from a fresh archive extraction by the evidence verifier. The full source
+ref must still resolve to the recorded commit and tree. The DSO audit proves
+the exact version-specific public R symbol set: R 4.3 must not link any R
+4.5/4.6 accessor, while R 4.5 must link the direct closure and
 evaluated-binding accessors but no R 4.6 binding/attribute accessor. Complete
-source, build, library, logs, dependency inventory, compiler identity,
-bootstrap receipt, and commands are tree-receipted and completion-sealed below
+source, build,
+library, logs, dependency inventory, compiler identity, bootstrap receipt,
+commands, and source-test scope are tree-receipted and completion-sealed below
 `.local/checks/<run-id>/runtime-matrix/`. Any later source change requires a
 fresh matrix run along with every other frozen release gate.
 

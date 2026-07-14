@@ -1,0 +1,252 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HELPER_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+OWNER_ROOT=$(cd "$HELPER_DIRECTORY/../.." && pwd -P)
+LOCAL_GIT="$OWNER_ROOT/.local/toolchain/bin/git"
+LOCAL_GIT_EXEC_PATH="$OWNER_ROOT/.local/toolchain/libexec/git-core"
+LOCAL_GIT_LIBRARY_PATH="$OWNER_ROOT/.local/toolchain/lib"
+LOCAL_GIT_STATE_ROOT="$OWNER_ROOT/.local"
+EXPECTED_GIT_VERSION='git version 2.55.0'
+EXPECTED_GIT_SHA256=603d9397af7e092d7733e916d0dfea85c34eb4738537d11c44d0d9179774faa6
+
+fail() {
+  printf '%s\n' "$*" >&2
+  exit 1
+}
+
+[[ -x "$LOCAL_GIT" && -f "$LOCAL_GIT" && ! -L "$LOCAL_GIT" ]] ||
+  fail "The authenticated repository-local Git is absent or symbolic"
+[[ -d "$LOCAL_GIT_EXEC_PATH" && ! -L "$LOCAL_GIT_EXEC_PATH" ]] ||
+  fail "The authenticated repository-local Git exec path is absent or symbolic"
+[[ -d "$LOCAL_GIT_LIBRARY_PATH" && ! -L "$LOCAL_GIT_LIBRARY_PATH" &&
+  -d "$LOCAL_GIT_STATE_ROOT" && ! -L "$LOCAL_GIT_STATE_ROOT" ]] ||
+  fail "The repository-local Git library or state root is absent or symbolic"
+[[ $(/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TZ=UTC \
+    HOME="$LOCAL_GIT_STATE_ROOT" LD_LIBRARY_PATH="$LOCAL_GIT_LIBRARY_PATH" \
+    "$LOCAL_GIT" --version) == "$EXPECTED_GIT_VERSION" ]] ||
+  fail "The repository-local Git version differs from the reviewed toolchain"
+[[ $(/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C \
+    /usr/bin/sha256sum -- "$LOCAL_GIT" | /usr/bin/cut -d ' ' -f 1) == \
+    "$EXPECTED_GIT_SHA256" ]] ||
+  fail "The repository-local Git executable differs from the reviewed toolchain"
+[[ $(/usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TZ=UTC \
+    HOME="$LOCAL_GIT_STATE_ROOT" LD_LIBRARY_PATH="$LOCAL_GIT_LIBRARY_PATH" \
+    GIT_EXEC_PATH="$LOCAL_GIT_EXEC_PATH" "$LOCAL_GIT" --exec-path) == \
+    "$LOCAL_GIT_EXEC_PATH" ]] ||
+  fail "The repository-local Git exec path differs from the reviewed toolchain"
+
+safe_git() {
+  /usr/bin/env -i PATH=/usr/bin:/bin LC_ALL=C TZ=UTC \
+    HOME="$LOCAL_GIT_STATE_ROOT" XDG_CONFIG_HOME="$LOCAL_GIT_STATE_ROOT" \
+    LD_LIBRARY_PATH="$LOCAL_GIT_LIBRARY_PATH" \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 \
+    GIT_EXEC_PATH="$LOCAL_GIT_EXEC_PATH" \
+    "$LOCAL_GIT" --no-replace-objects \
+      -c core.attributesFile=/dev/null -c core.hooksPath=/dev/null \
+      -c core.fsmonitor=false -c core.untrackedCache=false \
+      -c tar.umask=0002 "$@"
+}
+
+canonical_directory() {
+  local path=$1
+  [[ -d "$path" && ! -L "$path" ]] ||
+    fail "Git repository directory is absent or symbolic: $path"
+  (cd "$path" && pwd -P)
+}
+
+validate_ref() {
+  (($# == 1)) || fail "internal ref validator misuse"
+  [[ "$1" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+    "$1" != *..* && "$1" != */ && "$1" != *//* ]] ||
+    fail "Git ref has an unsafe shape"
+}
+
+validate_oid() {
+  (($# == 1)) && [[ $1 =~ ^[0-9a-f]{40}$ ]] ||
+    fail "Git object ID is not one exact SHA-1"
+}
+
+audit_repository() {
+  local root=$1 canonical_root top git_dir common_dir path
+  canonical_root=$(canonical_directory "$root")
+  [[ (-f "$canonical_root/.git" && ! -L "$canonical_root/.git") ||
+     (-d "$canonical_root/.git" && ! -L "$canonical_root/.git") ]] ||
+    fail "Git repository control path is absent or symbolic"
+  top=$(safe_git -C "$canonical_root" rev-parse \
+    --path-format=absolute --show-toplevel)
+  git_dir=$(safe_git -C "$canonical_root" rev-parse \
+    --path-format=absolute --absolute-git-dir)
+  common_dir=$(safe_git -C "$canonical_root" rev-parse \
+    --path-format=absolute --git-common-dir)
+  [[ "$top" == "$canonical_root" ]] ||
+    fail "Git resolved a different repository top level"
+  git_dir=$(canonical_directory "$git_dir")
+  common_dir=$(canonical_directory "$common_dir")
+  for path in \
+      "$git_dir/info/grafts" "$common_dir/info/grafts" \
+      "$git_dir/info/attributes" "$common_dir/info/attributes" \
+      "$git_dir/objects/info/alternates" \
+      "$common_dir/objects/info/alternates"; do
+    [[ ! -e "$path" && ! -L "$path" ]] ||
+      fail "Git repository uses forbidden provenance input: $path"
+  done
+  [[ -z $(safe_git -C "$canonical_root" for-each-ref \
+      --format='%(refname)' refs/replace) ]] ||
+    fail "Git repository contains replacement refs"
+  printf '%s\n' "$canonical_root"
+}
+
+usage() {
+  cat <<'USAGE'
+Usage: runtime-matrix-git COMMAND ROOT [ARGUMENTS]
+
+Commands:
+  audit ROOT
+  identity ROOT
+  resolve-commit ROOT REF
+  resolve-tree ROOT COMMIT
+  verify-ref ROOT REF COMMIT TREE
+  cat-file-exists ROOT OBJECT
+  show-file ROOT OBJECT
+  archive ROOT COMMIT ABSENT_OUTPUT
+  verify-archive ROOT COMMIT ARCHIVE
+USAGE
+}
+
+(($# >= 2)) || { usage >&2; exit 2; }
+command=$1
+root=$2
+shift 2
+canonical_root=$(audit_repository "$root")
+
+case "$command" in
+  audit)
+    (($# == 0)) || fail "audit accepts no further arguments"
+    printf 'runtime_matrix_git_audit=passed\nroot=%s\n' "$canonical_root"
+    ;;
+  identity)
+    (($# == 0)) || fail "identity accepts no further arguments"
+    printf 'field\tvalue\n'
+    printf 'git_path\t%s\n' "$LOCAL_GIT"
+    printf 'git_sha256\t%s\n' "$EXPECTED_GIT_SHA256"
+    printf 'git_version\t%s\n' "$EXPECTED_GIT_VERSION"
+    printf 'git_exec_path\t%s\n' "$LOCAL_GIT_EXEC_PATH"
+    ;;
+  resolve-commit)
+    (($# == 1)) || fail "resolve-commit requires one ref"
+    validate_ref "$1"
+    safe_git -C "$canonical_root" rev-parse --verify --end-of-options \
+      "$1^{commit}"
+    ;;
+  resolve-tree)
+    (($# == 1)) || fail "resolve-tree requires one exact SHA-1 commit"
+    validate_oid "$1"
+    safe_git -C "$canonical_root" rev-parse --verify "$1^{tree}"
+    ;;
+  verify-ref)
+    (($# == 3)) || fail "verify-ref requires a ref, commit, and tree"
+    ref=$1
+    commit=$2
+    tree=$3
+    validate_ref "$ref"
+    validate_oid "$commit"
+    validate_oid "$tree"
+    actual_commit=$(safe_git -C "$canonical_root" rev-parse --verify \
+      --end-of-options "$ref^{commit}")
+    actual_tree=$(safe_git -C "$canonical_root" rev-parse --verify \
+      "$actual_commit^{tree}")
+    post_root=$(audit_repository "$canonical_root")
+    post_commit=$(safe_git -C "$canonical_root" rev-parse --verify \
+      --end-of-options "$ref^{commit}")
+    post_tree=$(safe_git -C "$canonical_root" rev-parse --verify \
+      "$post_commit^{tree}")
+    [[ "$post_root" == "$canonical_root" &&
+      "$actual_commit" == "$commit" && "$post_commit" == "$commit" &&
+      "$actual_tree" == "$tree" && "$post_tree" == "$tree" ]] ||
+      fail "Git ref no longer resolves to the recorded commit and tree"
+    printf 'runtime_matrix_git_ref=verified\n'
+    ;;
+  cat-file-exists)
+    (($# == 1)) || fail "cat-file-exists requires one object expression"
+    [[ "$1" =~ ^[0-9a-f]{40}:[A-Za-z0-9._/-]+$ &&
+      "$1" != *..* && "$1" != *//* ]] ||
+      fail "cat-file object expression has an unsafe shape"
+    safe_git -C "$canonical_root" cat-file -e "$1"
+    ;;
+  show-file)
+    (($# == 1)) || fail "show-file requires one object expression"
+    [[ "$1" =~ ^[0-9a-f]{40}:[A-Za-z0-9._/-]+$ &&
+      "$1" != *..* && "$1" != *//* ]] ||
+      fail "show-file object expression has an unsafe shape"
+    safe_git -C "$canonical_root" show "$1"
+    ;;
+  archive)
+    (($# == 2)) || fail "archive requires an exact commit and absent output"
+    commit=$1
+    validate_oid "$commit"
+    output=$2
+    parent=$(canonical_directory "$(dirname "$output")")
+    output_name=$(basename "$output")
+    [[ "$output_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] ||
+      fail "Git archive output name has an unsafe shape"
+    output="$parent/$output_name"
+    [[ ! -e "$output" && ! -L "$output" ]] ||
+      fail "Git archive output already exists or is symbolic"
+    candidate_dir=$(/usr/bin/mktemp -d \
+      "$parent/.runtime-matrix-archive.XXXXXX")
+    [[ -d "$candidate_dir" && ! -L "$candidate_dir" ]] ||
+      fail "Unable to create an owned Git archive directory"
+    candidate="$candidate_dir/archive.tar"
+    trap '/bin/rm -rf -- "$candidate_dir"' EXIT
+    safe_git -C "$canonical_root" archive --format=tar \
+      --output="$candidate" "$commit"
+    [[ -f "$candidate" && ! -L "$candidate" ]] ||
+      fail "Git did not create a regular archive"
+    post_root=$(audit_repository "$canonical_root")
+    [[ "$post_root" == "$canonical_root" ]] ||
+      fail "Git repository identity changed while archiving"
+    [[ ! -e "$output" && ! -L "$output" ]] ||
+      fail "Git archive output appeared during creation"
+    /bin/mv -n -- "$candidate" "$output"
+    [[ ! -e "$candidate" && ! -L "$candidate" &&
+      -f "$output" && ! -L "$output" ]] ||
+      fail "Unable to publish the Git archive without replacement"
+    /bin/rm -rf -- "$candidate_dir"
+    trap - EXIT
+    ;;
+  verify-archive)
+    (($# == 2)) || fail "verify-archive requires an exact commit and archive"
+    commit=$1
+    archive=$2
+    validate_oid "$commit"
+    [[ "$archive" == /* && -f "$archive" && ! -L "$archive" ]] ||
+      fail "Git archive is absent, symbolic, or not absolute"
+    parent=$(canonical_directory "$(dirname "$archive")")
+    archive_name=$(basename "$archive")
+    [[ "$archive_name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ &&
+      "$archive" == "$parent/$archive_name" ]] ||
+      fail "Git archive path is noncanonical or has an unsafe name"
+    candidate_dir=$(/usr/bin/mktemp -d \
+      "$parent/.runtime-matrix-canonical-archive.XXXXXX")
+    [[ -d "$candidate_dir" && ! -L "$candidate_dir" ]] ||
+      fail "Unable to create an owned canonical archive directory"
+    candidate="$candidate_dir/archive.tar"
+    trap '/bin/rm -rf -- "$candidate_dir"' EXIT
+    safe_git -C "$canonical_root" archive --format=tar \
+      --output="$candidate" "$commit"
+    [[ -f "$candidate" && ! -L "$candidate" ]] ||
+      fail "Git did not reproduce a regular archive"
+    post_root=$(audit_repository "$canonical_root")
+    [[ "$post_root" == "$canonical_root" ]] ||
+      fail "Git repository identity changed while reproducing the archive"
+    /usr/bin/cmp -s -- "$archive" "$candidate" ||
+      fail "Retained archive differs from canonical Git archive bytes"
+    /bin/rm -rf -- "$candidate_dir"
+    trap - EXIT
+    printf 'runtime_matrix_git_archive=verified\n'
+    ;;
+  *) usage >&2; exit 2 ;;
+esac

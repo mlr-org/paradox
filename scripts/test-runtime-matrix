@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 
 usage() {
   cat <<'USAGE'
@@ -13,14 +15,15 @@ and R 4.5.2 runtimes.
 
 Options:
   --runtime VERSION  Select 4.3.3, 4.5.2, or all (default: all).
-  --source-ref REF   Full Git ref or commit to archive (default: HEAD).
+  --source-ref REF   Immutable full refs/... Git ref to archive (required).
   --run-id ID        New retained run ID (required).
   -h, --help         Show this help.
 
 Each stage builds a source archive, installs it in a fresh run-specific
-library, executes a focused r_api_compat probe and the practical full source
-suite with NOT_CRAN=false, audits the DSO's version-specific undefined public
-R symbols, and seals all retained artifacts below .local/checks/ID/.
+library, executes a focused r_api_compat probe and the authenticated supported
+source-test scope with NOT_CRAN=false, audits the DSO's version-specific
+undefined public R symbols, and seals all retained artifacts below
+.local/checks/ID/.
 USAGE
 }
 
@@ -30,7 +33,7 @@ fail() {
 }
 
 selection=all
-source_ref=HEAD
+source_ref=
 run_id=
 while (($#)); do
   case "$1" in
@@ -60,11 +63,23 @@ case "$selection" in
 esac
 [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
   fail "--run-id is required and must have a safe shape"
-source_commit=$(git -C "$ROOT" rev-parse --verify "$source_ref^{commit}") ||
+[[ "$source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+  "$source_ref" != *..* && "$source_ref" != */ &&
+  "$source_ref" != *//* ]] ||
+  fail "--source-ref is required and must be one safe full refs/... ref"
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" &&
+  "$(command -v git)" == "$LOCAL_GIT" ]] ||
+  fail "activate the exact repository-local toolchain first: . scripts/activate"
+[[ -x "$GIT_HELPER" && -f "$GIT_HELPER" && ! -L "$GIT_HELPER" ]] ||
+  fail "Authenticated runtime-matrix Git helper is absent"
+"$GIT_HELPER" audit "$ROOT" >/dev/null
+source_commit=$("$GIT_HELPER" resolve-commit "$ROOT" "$source_ref") ||
   fail "Source ref does not resolve to a commit: $source_ref"
-source_tree=$(git -C "$ROOT" rev-parse --verify "$source_commit^{tree}")
+source_tree=$("$GIT_HELPER" resolve-tree "$ROOT" "$source_commit")
 [[ "$source_commit" =~ ^[0-9a-f]{40}$ && "$source_tree" =~ ^[0-9a-f]{40}$ ]] ||
   fail "Git returned malformed source provenance"
+"$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
+  "$source_tree" >/dev/null
 
 trusted_inputs=(
   scripts/bootstrap-runtime-matrix
@@ -72,21 +87,27 @@ trusted_inputs=(
   scripts/test-runtime-matrix
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-git
   scripts/environment/runtime-matrix-inventory.R
   scripts/environment/runtime-matrix-probe.R
   scripts/environment/run-runtime-matrix-tests.R
+  environment/runtime-matrix-pre46-exclusions.tsv
+  environment/runtime-matrix-whole-file-skips.tsv
+  environment/runtime-matrix-result-skips.tsv
 )
 for relative in "${trusted_inputs[@]}"; do
   [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
     fail "Runtime-matrix input is absent or symbolic: $relative"
-  git -C "$ROOT" cat-file -e "$source_commit:$relative" 2>/dev/null ||
+  "$GIT_HELPER" cat-file-exists "$ROOT" "$source_commit:$relative" 2>/dev/null ||
     fail "Source commit does not contain runtime-matrix input: $relative"
-  git -C "$ROOT" show "$source_commit:$relative" | cmp -s -- "$ROOT/$relative" - ||
+  "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
+    cmp -s -- "$ROOT/$relative" - ||
     fail "Runtime-matrix input differs from the committed source ref: $relative"
 done
 for version in "${versions[@]}"; do
   relative="environment/runtime-r-${version}-linux-64.lock"
-  git -C "$ROOT" show "$source_commit:$relative" | cmp -s -- "$ROOT/$relative" - ||
+  "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
+    cmp -s -- "$ROOT/$relative" - ||
     fail "Runtime lock differs from the committed source ref: $relative"
 done
 
@@ -171,10 +192,18 @@ for version in "${versions[@]}"; do
   logs="$artifacts/logs"
   inputs="$artifacts/inputs"
   mkdir -p -- "$source" "$build" "$library" "$logs" "$inputs" "$metadata"
-  printf 'field\tvalue\nstatus\tfailed\nruntime\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
-    "$version" "$source_ref" "$source_commit" "$source_tree" > "$metadata/run.tsv"
+  printf 'field\tvalue\nstatus\tfailed\nrun_id\t%s\nruntime\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
+    "$run_id" "$version" "$source_ref" "$source_commit" "$source_tree" > "$metadata/run.tsv"
 
-  git -C "$ROOT" archive --format=tar "$source_commit" | tar -xf - -C "$source"
+  "$GIT_HELPER" archive "$ROOT" "$source_commit" "$inputs/source.git.tar"
+  "$GIT_HELPER" verify-archive "$ROOT" "$source_commit" \
+    "$inputs/source.git.tar" >/dev/null
+  source_git_tar_sha256=$(sha256_file "$inputs/source.git.tar")
+  /usr/bin/tar -xf "$inputs/source.git.tar" -C "$source"
+  "$PREFIX_RECEIPT" create "$source" "$inputs/source.manifest.tsv" >/dev/null
+  source_manifest_sha256=$(sha256_file "$inputs/source.manifest.tsv")
+  "$GIT_HELPER" identity "$ROOT" > "$inputs/git-identity.tsv"
+  git_identity_sha256=$(sha256_file "$inputs/git-identity.tsv")
   for relative in "${trusted_inputs[@]}" "environment/runtime-r-${version}-linux-64.lock"; do
     mkdir -p -- "$inputs/${relative%/*}"
     cp -- "$ROOT/$relative" "$inputs/$relative"
@@ -182,11 +211,14 @@ for version in "${versions[@]}"; do
   cp -R -- "$ROOT/.local/runtime-matrix/receipts/R-$version" "$inputs/bootstrap-receipt"
   {
     printf 'step\tcommand\n'
+    printf 'snapshot\treplacement-disabled Git archive with isolated attributes and pre/post repository audits\n'
+    printf 'source-integrity\tpre-execution source receipt; post-execution source and archive verification\n'
+    printf 'git-identity\tauthenticated repository-local Git executable hash, version, path, and exec path\n'
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
     printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
-    printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY\n'
+    printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
   } > "$inputs/commands.tsv"
 
   (
@@ -221,7 +253,8 @@ for version in "${versions[@]}"; do
     audit_symbols "$version" "$library/paradox/libs/paradox.so" \
       "$logs/r-api-symbol-audit.log"
     NOT_CRAN=false Rscript --vanilla \
-      "$ROOT/scripts/environment/run-runtime-matrix-tests.R" "$source" "$library" \
+      "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
+      "$source" "$library" "$inputs/source-test-scope" \
       > "$logs/source-tests.log" 2>&1
     Rscript --vanilla -e 'sessionInfo()' > "$logs/session-info.log" 2>&1
     Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
@@ -233,11 +266,58 @@ for version in "${versions[@]}"; do
 
   branch=$(awk -F = '$1 == "r_api_compat_branch" {print $2}' "$logs/r-api-symbol-audit.log")
   archive=$(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
-  [[ -n "$branch" && -f "$archive" ]] || fail "Runtime stage outputs are incomplete"
+  scope="$inputs/source-test-scope"
+  [[ -n "$branch" && -f "$archive" && -d "$scope" && ! -L "$scope" &&
+    -f "$scope/scope.tsv" && -f "$scope/testthat-reported-files.tsv" &&
+    -f "$scope/observed-whole-file-skips.tsv" &&
+    -f "$scope/observed-result-skips.tsv" ]] ||
+    fail "Runtime stage outputs are incomplete"
+  [[ $(sha256_file "$inputs/source.git.tar") == "$source_git_tar_sha256" &&
+    $(sha256_file "$inputs/source.manifest.tsv") == "$source_manifest_sha256" &&
+    $(sha256_file "$inputs/git-identity.tsv") == "$git_identity_sha256" ]] ||
+    fail "Runtime source or Git identity input changed during execution"
+  "$GIT_HELPER" verify-archive "$ROOT" "$source_commit" \
+    "$inputs/source.git.tar" >/dev/null ||
+    fail "Runtime Git archive is not the canonical selected commit archive"
+  "$PREFIX_RECEIPT" verify "$source" "$inputs/source.manifest.tsv" >/dev/null ||
+    fail "Runtime source changed during execution"
+  log_value() {
+    local key=$1
+    awk -F = -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' \
+      "$logs/source-tests.log"
+  }
+  discovered_test_files=$(log_value discovered_test_file_count)
+  executed_test_files=$(log_value executed_test_file_count)
+  excluded_test_files=$(log_value excluded_test_file_count)
+  reported_test_files=$(log_value testthat_reported_file_count)
+  whole_file_skips=$(log_value observed_whole_file_skip_count)
+  expectations_passed=$(log_value expectations_passed)
+  result_skips=$(log_value result_test_blocks_skipped)
+  total_skips=$(log_value total_test_skips)
+  minimum_expectations=$(log_value minimum_expectations_required)
+  expected_result_skips=$(log_value expected_result_test_block_skip_count)
+  for value in "$discovered_test_files" "$executed_test_files" \
+      "$excluded_test_files" "$reported_test_files" "$whole_file_skips" \
+      "$expectations_passed" "$result_skips" "$total_skips" \
+      "$minimum_expectations" "$expected_result_skips"; do
+    [[ "$value" =~ ^[0-9]+$ ]] || fail "Runtime source-test counts are malformed"
+  done
+  [[ "$discovered_test_files" == 71 && "$executed_test_files" == 57 &&
+    "$excluded_test_files" == 14 && "$reported_test_files" == 55 &&
+    "$whole_file_skips" == 2 && "$minimum_expectations" == 4900 ]] ||
+    fail "Runtime source-test scope differs from the reviewed policy"
+  case "$version:$result_skips:$expected_result_skips" in
+    4.3.3:6:6|4.5.2:7:7) ;;
+    *) fail "Runtime result skips differ from the reviewed policy" ;;
+  esac
+  ((expectations_passed >= minimum_expectations &&
+    total_skips == result_skips + whole_file_skips)) ||
+    fail "Runtime source-test expectation or skip accounting is inconsistent"
   "$PREFIX_RECEIPT" create "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
   {
     printf 'field\tvalue\n'
     printf 'status\tpassed\n'
+    printf 'run_id\t%s\n' "$run_id"
     printf 'runtime\t%s\n' "$version"
     printf 'source_ref\t%s\n' "$source_ref"
     printf 'source_commit\t%s\n' "$source_commit"
@@ -245,12 +325,41 @@ for version in "${versions[@]}"; do
     printf 'r_api_compat_branch\t%s\n' "$branch"
     printf 'lock_sha256\t%s\n' "$(sha256_file "$ROOT/environment/runtime-r-${version}-linux-64.lock")"
     printf 'bootstrap_receipt_sha256\t%s\n' "$(sha256_file "$inputs/bootstrap-receipt/receipt.tsv")"
+    printf 'pre46_exclusion_manifest_sha256\t%s\n' \
+      "$(sha256_file "$inputs/environment/runtime-matrix-pre46-exclusions.tsv")"
+    printf 'whole_file_skip_manifest_sha256\t%s\n' \
+      "$(sha256_file "$inputs/environment/runtime-matrix-whole-file-skips.tsv")"
+    printf 'result_skip_manifest_sha256\t%s\n' \
+      "$(sha256_file "$inputs/environment/runtime-matrix-result-skips.tsv")"
+    printf 'test_scope_manifest_sha256\t%s\n' "$(sha256_file "$scope/scope.tsv")"
+    printf 'testthat_reported_files_sha256\t%s\n' \
+      "$(sha256_file "$scope/testthat-reported-files.tsv")"
+    printf 'observed_whole_file_skips_sha256\t%s\n' \
+      "$(sha256_file "$scope/observed-whole-file-skips.tsv")"
+    printf 'observed_result_skips_sha256\t%s\n' \
+      "$(sha256_file "$scope/observed-result-skips.tsv")"
+    printf 'source_git_tar_sha256\t%s\n' "$source_git_tar_sha256"
+    printf 'source_manifest_sha256\t%s\n' "$source_manifest_sha256"
+    printf 'git_identity_sha256\t%s\n' "$git_identity_sha256"
+    printf 'discovered_test_file_count\t%s\n' "$discovered_test_files"
+    printf 'executed_test_file_count\t%s\n' "$executed_test_files"
+    printf 'excluded_test_file_count\t%s\n' "$excluded_test_files"
+    printf 'testthat_reported_file_count\t%s\n' "$reported_test_files"
+    printf 'whole_file_skip_count\t%s\n' "$whole_file_skips"
+    printf 'expectations_passed\t%s\n' "$expectations_passed"
+    printf 'result_test_blocks_skipped\t%s\n' "$result_skips"
+    printf 'total_test_skips\t%s\n' "$total_skips"
+    printf 'minimum_expectations_required\t%s\n' "$minimum_expectations"
     printf 'archive_sha256\t%s\n' "$(sha256_file "$archive")"
     printf 'candidate_dso_sha256\t%s\n' "$(sha256_file "$library/paradox/libs/paradox.so")"
     printf 'artifacts_manifest_sha256\t%s\n' "$(sha256_file "$metadata/artifacts.manifest.tsv")"
   } > "$metadata/run.tsv"
   seal_metadata "$metadata" run.tsv artifacts.manifest.tsv
 done
+
+"$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
+  "$source_tree" >/dev/null ||
+  fail "Source ref or tree moved during the runtime-matrix run"
 
 {
   printf 'runtime\tstage_seal_sha256\n'

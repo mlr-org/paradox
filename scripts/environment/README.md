@@ -129,8 +129,27 @@ consumer system prefix.
 `scripts/test-runtime-matrix --help` describes the retained execution gate.
 For each selected actual interpreter it archives a committed source ref,
 builds and installs paradox into a fresh stage library, runs the focused
-public-R-API facade probe and full practical source suite, and audits undefined
-DSO symbols against that release's allowed accessor set. Conda R may retain a
+public-R-API facade probe and an authenticated supported source-test scope, and
+audits undefined DSO symbols against that release's allowed accessor set. Both
+old interpreters stage all public, characterization, regression, and compatible
+native tests, while the 14 R-4.6-binding-admission implementation contexts in
+`environment/runtime-matrix-pre46-exclusions.tsv` are explicitly retained as
+excluded. The current inventory is 71 discovered files, 57 executed files,
+and 14 exclusions, with a 4,900-expectation clean floor. The two ConfigSpace
+files that stop at their absent-reticulate guard remain staged and are audited
+separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
+the old file's preceding available `callr` guard; they are not silently treated
+as executed result files. Every result-block skip title and reason is likewise
+matched against `environment/runtime-matrix-result-skips.tsv` (six on R 4.3.3,
+seven on R 4.5.2). The stage retains the exact scope ledger, staged source
+copies, testthat-reported inventory, skip ledgers, counts, and hashes.
+Committed-source reads and archives use the authenticated project-local Git
+with replacements and unreviewed object/attribute inputs rejected, global and
+system attributes disabled, and the tar umask pinned. Its identity and
+canonical byte-reproducible archive are retained, and the full source ref must
+continue to resolve to its recorded commit and tree. A pre-execution source
+receipt is reverified after the run and against a fresh archive extraction
+during evidence verification. Conda R may retain a
 nonexistent build-farm directory in `R CMD config NM`; the audit checks that
 its tool basename agrees with the activated compiler hook, then invokes and
 records the authenticated runtime-prefix binary instead of following that

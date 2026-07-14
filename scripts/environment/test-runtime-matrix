@@ -8,6 +8,7 @@ scripts=(
   scripts/test-runtime-matrix
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-git
   scripts/environment/test-runtime-matrix
   scripts/environment/test-runtime-matrix-installed
 )
@@ -20,11 +21,142 @@ done
 "$ROOT/scripts/verify-runtime-matrix-evidence" --help >/dev/null
 "$ROOT/scripts/bootstrap-runtime-matrix" --verify-locks >/dev/null
 
+exclusions="$ROOT/environment/runtime-matrix-pre46-exclusions.tsv"
+whole_skips="$ROOT/environment/runtime-matrix-whole-file-skips.tsv"
+result_skips="$ROOT/environment/runtime-matrix-result-skips.tsv"
+for manifest in "$exclusions" "$whole_skips" "$result_skips"; do
+  [[ -f "$manifest" && ! -L "$manifest" ]] || {
+    echo "Runtime source-scope manifest is absent or symbolic: $manifest" >&2
+    exit 1
+  }
+done
+awk -F '\t' '
+  NR == 1 {if ($0 != "context\treason") exit 1; next}
+  NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
+  END {if (NR != 15) exit 1}
+' "$exclusions"
+expected_exclusions=(
+  native-altrep-lifetimes
+  native-paramset-domains
+  native-paramset-get-domain
+  native-paramset-get-values
+  native-paramset-params
+  native-paramset-qunif
+  native-paramset-subset
+  native-paramset-value-mutation
+  native-paramsetcollection-construction
+  native-paramsetcollection-deps
+  native-paramsetcollection-exact-state
+  native-paramsetcollection-params
+  native-paramsetcollection-values
+  native-r6-surface-auth
+)
+mapfile -t actual_exclusions < <(tail -n +2 "$exclusions" | cut -f 1)
+[[ "${actual_exclusions[*]}" == "${expected_exclusions[*]}" ]] || {
+  echo "Runtime pre-R-4.6 exclusion policy differs from the reviewed contexts" >&2
+  exit 1
+}
+for context in "${actual_exclusions[@]}"; do
+  test_file="$ROOT/tests/testthat/test-$context.R"
+  [[ -f "$test_file" && ! -L "$test_file" ]] || {
+    echo "Runtime exclusion names an absent or symbolic test: $context" >&2
+    exit 1
+  }
+done
+awk -F '\t' '
+  NR == 1 {
+    if ($0 != "file\tcontext\tmissing_package\tleading_guards\treason") exit 1
+    next
+  }
+  NF != 5 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ ||
+    $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
+    $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
+  END {if (NR != 3) exit 1}
+' "$whole_skips"
+mapfile -t actual_whole_skips < <(tail -n +2 "$whole_skips" | cut -f 1)
+expected_whole_skips=(test_paramset_to_configspace.R test_paramset_to_configspace_old.R)
+[[ "${actual_whole_skips[*]}" == "${expected_whole_skips[*]}" ]] || {
+  echo "Runtime whole-file skip policy differs from the reviewed files" >&2
+  exit 1
+}
+for test_name in "${actual_whole_skips[@]}"; do
+  [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
+    echo "Runtime whole-file skip names an absent or symbolic test: $test_name" >&2
+    exit 1
+  }
+done
+[[ $(awk -F '\t' 'NR == 2 {print $4}' "$whole_skips") == \
+    skip_if_not_installed:reticulate,skip_on_cran &&
+  $(awk -F '\t' 'NR == 3 {print $4}' "$whole_skips") == \
+    skip_if_not_installed:callr,skip_if_not_installed:reticulate,skip_on_cran ]] || {
+  echo "Runtime whole-file leading-guard policy differs from review" >&2
+  exit 1
+}
+awk -F '\t' '
+  NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
+  NF != 4 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
+    $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" || $4 == "" ||
+    seen[$1 FS $2 FS $3]++ {exit 1}
+  {count[$1]++}
+  END {if (NR != 14 || count["4.3.3"] != 6 || count["4.5.2"] != 7) exit 1}
+' "$result_skips"
+while IFS=$'\t' read -r runtime test_name test_title reason; do
+  [[ "$runtime" == runtime ]] && continue
+  [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
+    echo "Runtime result skip names an absent or symbolic test: $test_name" >&2
+    exit 1
+  }
+done < "$result_skips"
+[[ $(find "$ROOT/tests/testthat" -maxdepth 1 -type f -name 'test*.R' | wc -l) -eq 71 &&
+  $(find "$ROOT/tests/testthat" -maxdepth 1 -type f ! -name 'test*.R' | wc -l) -eq 7 ]] || {
+  echo "Runtime source-test inventory changed without a reviewed scope update" >&2
+  exit 1
+}
+rg -q 'Sys.setenv\(NOT_CRAN = "false"\)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q '4900L else 6000L' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+
 if command -v Rscript >/dev/null 2>&1; then
   Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
     "$ROOT/scripts/environment/runtime-matrix-inventory.R" \
     "$ROOT/scripts/environment/runtime-matrix-probe.R" \
     "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+  Rscript --vanilla - "$ROOT" <<'RSCRIPT'
+root <- commandArgs(trailingOnly = TRUE)[[1L]]
+policy <- read.delim(
+  file.path(root, "environment", "runtime-matrix-whole-file-skips.tsv"),
+  quote = "", comment.char = "", colClasses = "character",
+  check.names = FALSE
+)
+guard_label <- function(expression) {
+  if (!is.call(expression) || !is.name(expression[[1L]])) return(NA_character_)
+  name <- as.character(expression[[1L]])
+  if (identical(name, "skip_on_cran") && length(expression) == 1L) {
+    return("skip_on_cran")
+  }
+  if (identical(name, "skip_if_not_installed") &&
+      length(expression) == 2L && is.character(expression[[2L]]) &&
+      length(expression[[2L]]) == 1L) {
+    return(paste0("skip_if_not_installed:", expression[[2L]]))
+  }
+  NA_character_
+}
+for (i in seq_len(nrow(policy))) {
+  expressions <- parse(file.path(root, "tests", "testthat", policy$file[[i]]))
+  first_test <- which(vapply(expressions, function(expression) {
+    is.call(expression) && is.name(expression[[1L]]) &&
+      identical(as.character(expression[[1L]]), "test_that")
+  }, logical(1L)))[[1L]]
+  observed <- vapply(
+    expressions[seq_len(first_test - 1L)], guard_label, character(1L)
+  )
+  stopifnot(
+    !anyNA(observed),
+    identical(paste(observed, collapse = ","), policy$leading_guards[[i]])
+  )
+}
+RSCRIPT
 fi
 
 mkdir -p "$ROOT/.local/tmp"
@@ -50,5 +182,123 @@ if "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
   echo "Runtime-prefix receipt accepted an outward symbolic link" >&2
   exit 1
 fi
+
+git_helper="$ROOT/scripts/environment/runtime-matrix-git"
+local_git="$ROOT/.local/toolchain/bin/git"
+[[ -x "$git_helper" && -f "$git_helper" && ! -L "$git_helper" &&
+  -x "$local_git" && -f "$local_git" && ! -L "$local_git" ]] || {
+  echo "Authenticated runtime Git fixture inputs are absent" >&2
+  exit 1
+}
+fixture_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_CONFIG \
+    -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 "$local_git" "$@"
+}
+git_fixture="$fixture/git-repository"
+fixture_git init --quiet "$git_fixture"
+printf 'retained\n' > "$git_fixture/retained"
+printf 'attribute sentinel\n' > "$git_fixture/secret"
+fixture_git -C "$git_fixture" add retained secret
+fixture_git -C "$git_fixture" -c user.name=runtime-matrix \
+  -c user.email=runtime-matrix.invalid commit --quiet -m first
+printf 'second\n' >> "$git_fixture/retained"
+fixture_git -C "$git_fixture" add retained
+fixture_git -C "$git_fixture" -c user.name=runtime-matrix \
+  -c user.email=runtime-matrix.invalid commit --quiet -m second
+fixture_head=$(fixture_git -C "$git_fixture" rev-parse HEAD)
+fixture_parent=$(fixture_git -C "$git_fixture" rev-parse HEAD^)
+
+(cd "$fixture/tree" && "$git_helper" audit "$git_fixture" >/dev/null)
+[[ $(cd / && "$git_helper" resolve-commit "$git_fixture" HEAD) == \
+    "$fixture_head" ]] || {
+  echo "Runtime Git helper is dependent on its caller's working directory" >&2
+  exit 1
+}
+"$git_helper" identity "$git_fixture" > "$fixture/git-identity.tsv"
+rg -q $'^git_version\tgit version 2[.]55[.]0$' "$fixture/git-identity.tsv"
+baseline_archive="$fixture/baseline.tar"
+"$git_helper" archive "$git_fixture" "$fixture_head" "$baseline_archive"
+"$git_helper" verify-archive "$git_fixture" "$fixture_head" \
+  "$baseline_archive" >/dev/null || {
+  echo "Runtime Git archive was not canonically reproducible" >&2
+  exit 1
+}
+fixture_tree=$("$git_helper" resolve-tree "$git_fixture" "$fixture_head")
+fixture_git -C "$git_fixture" update-ref refs/heads/moving "$fixture_head"
+"$git_helper" verify-ref "$git_fixture" refs/heads/moving "$fixture_head" \
+  "$fixture_tree" >/dev/null
+fixture_git -C "$git_fixture" update-ref refs/heads/moving "$fixture_parent"
+if "$git_helper" verify-ref "$git_fixture" refs/heads/moving "$fixture_head" \
+    "$fixture_tree" >/dev/null 2>&1; then
+  echo "Runtime Git ref verification accepted a moved ref" >&2
+  exit 1
+fi
+fixture_git -C "$git_fixture" update-ref -d refs/heads/moving
+mkdir "$fixture/pax-source"
+/usr/bin/tar -xf "$baseline_archive" -C "$fixture/pax-source"
+/usr/bin/tar --format=pax -cf "$fixture/crafted-pax.tar" \
+  -C "$fixture/pax-source" .
+if "$git_helper" verify-archive "$git_fixture" "$fixture_head" \
+    "$fixture/crafted-pax.tar" >/dev/null 2>&1; then
+  echo "Runtime Git archive verification accepted crafted PAX bytes" >&2
+  exit 1
+fi
+
+global_attributes="$fixture/global-attributes"
+global_config="$fixture/global-gitconfig"
+hostile_home="$fixture/hostile-home"
+mkdir -p "$hostile_home/.config/git"
+printf 'secret export-ignore\n' > "$global_attributes"
+printf '[core]\n\tattributesFile = %s\n[tar]\n\tumask = 0777\n' \
+  "$global_attributes" > "$global_config"
+printf 'secret export-ignore\n' > "$hostile_home/.config/git/attributes"
+printf '[core]\n\tattributesFile = %s\n[tar]\n\tumask = 0777\n' \
+  "$global_attributes" > "$hostile_home/.gitconfig"
+fixture_git -C "$git_fixture" config core.attributesFile "$global_attributes"
+fixture_git -C "$git_fixture" config tar.umask 0777
+hostile_archive="$fixture/hostile-config.tar"
+HOME="$hostile_home" GIT_CONFIG_GLOBAL="$global_config" \
+  GIT_ATTR_NOSYSTEM=0 GIT_ATTR_SOURCE="$global_attributes" \
+  LC_ALL=C.UTF-8 TZ=Pacific/Honolulu \
+  "$git_helper" archive "$git_fixture" "$fixture_head" "$hostile_archive"
+cmp -s -- "$baseline_archive" "$hostile_archive" || {
+  echo "Runtime Git archive trusted hostile attribute or tar.umask configuration" >&2
+  exit 1
+}
+/usr/bin/tar -tf "$hostile_archive" | rg -q '^secret$' || {
+  echo "Runtime Git archive applied an unreviewed export-ignore attribute" >&2
+  exit 1
+}
+
+printf 'secret export-ignore\n' > "$git_fixture/.git/info/attributes"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted info attributes" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/info/attributes"
+printf '%s %s\n' "$fixture_parent" "$fixture_head" > "$git_fixture/.git/info/grafts"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted grafts" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/info/grafts"
+fixture_git -C "$git_fixture" replace "$fixture_head" "$fixture_parent"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted replacement refs" >&2
+  exit 1
+fi
+fixture_git -C "$git_fixture" replace -d "$fixture_head" >/dev/null
+printf '/tmp\n' > "$git_fixture/.git/objects/info/alternates"
+if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
+  echo "Runtime Git audit accepted object alternates" >&2
+  exit 1
+fi
+rm -- "$git_fixture/.git/objects/info/alternates"
+"$git_helper" audit "$git_fixture" >/dev/null
 
 printf 'runtime_matrix_static_fixture=passed\n'
