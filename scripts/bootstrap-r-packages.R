@@ -1,7 +1,12 @@
 root <- Sys.getenv("PARADOX_ROOT", unset = "")
 library <- Sys.getenv("R_LIBS_USER", unset = "")
 
-if (!nzchar(root) || !dir.exists(root) || nzchar(Sys.readlink(root))) {
+is_symbolic <- function(path) {
+  target <- Sys.readlink(path)
+  length(target) == 1L && !is.na(target) && nzchar(target)
+}
+
+if (!nzchar(root) || !dir.exists(root) || is_symbolic(root)) {
   stop("PARADOX_ROOT must identify the repository root")
 }
 root <- normalizePath(root, winslash = "/", mustWork = TRUE)
@@ -22,7 +27,7 @@ assert_plain_directory_chain <- function(path, label) {
       stop("Invalid managed path component in ", label, ": ", path)
     }
     current <- file.path(current, component)
-    if (nzchar(Sys.readlink(current))) {
+    if (is_symbolic(current)) {
       stop("Refusing symbolic ", label, " component: ", current)
     }
     info <- file.info(current)
@@ -43,7 +48,7 @@ dir.create(library, recursive = TRUE, showWarnings = FALSE)
 library <- normalizePath(library, winslash = "/", mustWork = TRUE)
 
 lock_path <- file.path(root, "environment", "r-packages-linux-64.lock")
-if (!file.exists(lock_path) || nzchar(Sys.readlink(lock_path))) {
+if (!file.exists(lock_path) || is_symbolic(lock_path)) {
   stop("Pinned R package lock is missing or symbolic: ", lock_path)
 }
 lock <- utils::read.delim(
@@ -121,7 +126,7 @@ download_locked_archive <- function(package, version, destination) {
 archives <- character(nrow(lock))
 for (i in seq_len(nrow(lock))) {
   archive <- archive_path(lock$Package[[i]], lock$Version[[i]])
-  if (nzchar(Sys.readlink(archive))) {
+  if (is_symbolic(archive)) {
     stop("Refusing symbolic R package archive: ", archive)
   }
   if (!file.exists(archive)) {
