@@ -1,7 +1,11 @@
 # Compatibility laboratory
 
-`reverse-dependencies.tsv` is the reviewed inventory taken from the CRAN
-package page, not a claim that every listed package can run fully on this host.
+`reverse-dependencies.tsv` is the reviewed inventory from the CRAN package
+page plus current CRAN source metadata. The latter deliberately retains direct
+relationships from newly published `FoRecoML`, `interflex`, and `ggmlR` source
+packages that were not yet displayed on paradox's generated CRAN page when it
+was rechecked on 2026-07-14. It is not a claim that every listed package can
+run fully on this host.
 Priority 0 and 1 packages form the release gate; priority 2 packages are broad
 compatibility probes; priority 3 packages are optional consumers whose relevant
 tests are retained when their full stacks are impractical.
