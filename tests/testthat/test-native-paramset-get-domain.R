@@ -155,11 +155,17 @@ test_that("native Domains are detached tables with valid ownership", {
 
 test_that("native get_domain retains admitted columns across GC finalizers", {
   collection = NULL
+  finalizer = new.env(parent = emptyenv())
+  finalizer$pointer = NULL
   FinalizingChild = R6::R6Class(
     "ParamSetGetDomainFinalizingChild",
     inherit = ParamSet,
     private = list(
       .get_values = function() {
+        # Make the mutator unreachable only after native admission and the
+        # permanent parameter-row snapshot. Finalizer timing before this
+        # callback would test a different, legitimately declined state.
+        finalizer$pointer = NULL
         gc(FALSE)
         list(x = 0.5)
       }
@@ -169,12 +175,13 @@ test_that("native get_domain retains admitted columns across GC finalizers", {
   collection = ParamSetCollection$new(list(child))
   private = collection$.__enclos_env__$private
 
-  invisible(.Call(
+  finalizer$pointer = .Call(
     get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
     private$.params,
     0L,
     "mutated-after-admission"
-  ))
+  )
+  expect_identical(private$.params$id, "x")
   previous = gctorture2(1L, wait = 0L)
   on.exit(gctorture2(previous), add = TRUE)
   observed = native_get_domain_call(collection, "x")

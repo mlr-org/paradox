@@ -405,5 +405,9 @@ SEXP paradox_test_gc_column_mutator(SEXP table, SEXP column,
   ));
   R_RegisterCFinalizerEx(pointer, mutate_column_at_gc, FALSE);
   UNPROTECT(2);
-  return R_NilValue;
+  /* Returning the pointer lets adversarial tests retain it until the exact
+   * callback boundary they intend to probe.  Discarding it here makes the
+   * finalizer eligible before native admission, so an unrelated earlier GC
+   * can turn a post-admission lifetime test into a precondition failure. */
+  return pointer;
 }
