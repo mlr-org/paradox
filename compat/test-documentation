@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 
-# Render the current public documentation consumers against one immutable
-# candidate.  Full projects are attempted first; the paradox-specific book and
-# website documents are separate mandatory gates so unrelated content cannot
-# obscure the compatibility signal.
+# Render current public documentation consumers and execute pinned corpus
+# workloads against one immutable candidate. Full projects are attempted
+# first; focused paradox surfaces remain separate gates so unrelated content
+# cannot obscure the compatibility signal.
 
 fail <- function(...) stop(..., call. = FALSE)
 `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -154,9 +154,16 @@ evidence_verifier_script <- file.path(root, "compat", "verify-repository-evidenc
 compat_system_evidence_script <- file.path(
   root, "compat", "compat-system-evidence.R"
 )
+workload_scripts <- c(
+  mbo_config = file.path(root, "compat", "workloads", "mbo-config.R"),
+  mlr3benchmark = file.path(
+    root, "compat", "workloads", "mlr3benchmark-paramset.R"
+  ),
+  mlr3_targets = file.path(root, "compat", "workloads", "mlr3-targets.R")
+)
 for (path in c(
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script, compat_system_evidence_script
+  evidence_verifier_script, compat_system_evidence_script, workload_scripts
 )) {
   if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
     fail("documentation harness input is absent, not a regular file, or symbolic: ", path)
@@ -522,7 +529,7 @@ metadata_inputs <- c(
   file.path(root, "compat", "github-snapshot.tsv"),
   file.path(root, "compat", "github-repositories.tsv"),
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script, compat_system_evidence_script,
+  evidence_verifier_script, compat_system_evidence_script, workload_scripts,
   provenance_file, provenance_seal,
   file.path(root, "compat", "install-candidate"),
   toolchain_lock,
@@ -665,7 +672,10 @@ manifest <- utils::read.delim(
   file.path(run_directory, "metadata", "github-repositories.tsv"),
   stringsAsFactors = FALSE, check.names = FALSE
 )
-repositories <- c("mlr3book", "mlr3website", "mlr3gallery")
+repositories <- c(
+  "mlr3book", "mlr3website", "mlr3gallery", "mlr3cheatsheets",
+  "mlr3benchmark", "mbo_config", "mlr3-targets"
+)
 input_repositories <- c(repositories, "mlr3verse")
 if (!all(input_repositories %in% snapshot$repository) ||
     !all(input_repositories %in% manifest$repository)) {
@@ -687,10 +697,18 @@ git_output <- function(checkout, arguments) {
 
 source_metadata <- vector("list", length(input_repositories))
 names(source_metadata) <- input_repositories
+expected_relations <- c(
+  mlr3book = "Documentation", mlr3website = "Documentation",
+  mlr3gallery = "Documentation", mlr3cheatsheets = "Documentation",
+  mlr3benchmark = "Documentation", mbo_config = "Workload",
+  `mlr3-targets` = "Workload", mlr3verse = "Imports"
+)
 for (repository in input_repositories) {
   row <- snapshot[snapshot$repository == repository, , drop = FALSE]
   relation <- manifest[manifest$repository == repository, , drop = FALSE]
-  if (nrow(row) != 1L || nrow(relation) != 1L || relation$action != "clone") {
+  if (nrow(row) != 1L || nrow(relation) != 1L ||
+      relation$action != "clone" ||
+      !identical(relation$relation, expected_relations[[repository]])) {
     fail("documentation manifest has a non-unique or disabled row for ", repository)
   }
   checkout <- file.path(root, ".local", "compat", "github", repository)
@@ -960,6 +978,10 @@ run_retained <- function(
 }
 
 scopes <- switch(scope, all = c("full", "essential"), essential = "essential", full = "full")
+retained_workload_scripts <- file.path(
+  run_directory, "metadata", basename(workload_scripts)
+)
+names(retained_workload_scripts) <- names(workload_scripts)
 
 for (repository in repositories) {
   source_directory <- source_metadata$source[source_metadata$repository == repository]
@@ -1034,7 +1056,7 @@ for (repository in repositories) {
       c("render", "mlr-org/benchmarks/benchmarks_paradox.qmd", "--execute-debug"),
       source_directory, overlay, helper_ok
     )
-  } else {
+  } else if (repository == "mlr3gallery") {
     if ("full" %in% scopes) run_retained(
       repository, "legacy-14-post-corpus", FALSE, local_rscript,
       c("--vanilla", "_inst/eval_all.R"), source_directory, overlay
@@ -1055,6 +1077,76 @@ for (repository in repositories) {
         c("--vanilla", "-e", expression), source_directory, overlay
       )
     }
+  } else if (repository == "mlr3cheatsheets") {
+    all_cheatsheets <- c(
+      "mlr3/mlr3.Rmd", "mlr3tuning/mlr3tuning.Rmd",
+      "mlr3fselect/mlr3fselect.Rmd",
+      "mlr3pipelines/mlr3pipelines.Rmd"
+    )
+    focused_cheatsheets <- c(
+      "mlr3tuning/mlr3tuning.Rmd", "mlr3pipelines/mlr3pipelines.Rmd"
+    )
+    render_expression <- function(paths) paste0(
+      "paths <- c(", paste(shQuote(paths), collapse = ","),
+      "); for (path in paths) rmarkdown::render(path, encoding='UTF-8', quiet=FALSE)"
+    )
+    if ("full" %in% scopes) run_retained(
+      repository, "all-cheatsheets", FALSE, local_rscript,
+      c("--vanilla", "-e", render_expression(all_cheatsheets)),
+      source_directory, overlay
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "paradox-cheatsheets", TRUE, local_rscript,
+      c("--vanilla", "-e", render_expression(focused_cheatsheets)),
+      source_directory, overlay
+    )
+  } else if (repository == "mlr3benchmark") {
+    if ("full" %in% scopes) run_retained(
+      repository, "nested-values-documentation", FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3benchmark"]],
+        source_directory
+      ), source_directory, overlay
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "nested-values-contract", FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3benchmark"]],
+        source_directory
+      ), source_directory, overlay
+    )
+  } else if (repository == "mbo_config") {
+    if ("full" %in% scopes) run_retained(
+      repository, "serialized-spaces-large", FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mbo_config"]],
+        source_directory, "2048"
+      ), source_directory, overlay
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "serialized-spaces", TRUE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mbo_config"]],
+        source_directory, "128"
+      ), source_directory, overlay
+    )
+  } else if (repository == "mlr3-targets") {
+    if ("full" %in% scopes) run_retained(
+      repository, "legacy-migration-source", FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3_targets"]],
+        source_directory
+      ), source_directory, overlay
+    )
+    if ("essential" %in% scopes) run_retained(
+      repository, "legacy-migration-contract", FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3_targets"]],
+        source_directory
+      ), source_directory, overlay
+    )
+  } else {
+    fail("documentation harness has no workload for ", repository)
   }
 }
 
@@ -1096,6 +1188,8 @@ metadata <- data.frame(
     "candidate_provenance_sha256", "github_manifest_sha256",
     "github_snapshot_sha256", "harness_sha256", "fingerprint_sha256",
     "evidence_helper_sha256", "evidence_verifier_sha256",
+    "mbo_config_workload_sha256", "mlr3benchmark_workload_sha256",
+    "mlr3_targets_workload_sha256",
     "toolchain", "toolchain_lock_sha256", "toolchain_explicit_sha256",
     "toolchain_tree_receipt_sha256", "r_base_library",
     "r_base_library_sha256", "micromamba_version", "micromamba_sha256",
@@ -1108,7 +1202,7 @@ metadata <- data.frame(
     "quarto_version", "r", "r_version", "timeout_seconds", "completed_utc"
   ),
   value = c(
-    "4", run_id, scope, overall_status, required_failures,
+    "5", run_id, scope, overall_status, required_failures,
     candidate_version, candidate_ref, candidate_commit, candidate_tree,
     declared_content, candidate_library, candidate_library_fingerprint,
     dependency_library, dependency_library_fingerprint,
@@ -1132,6 +1226,9 @@ metadata <- data.frame(
     metadata_input_hash(fingerprint_script),
     metadata_input_hash(evidence_helper_script),
     metadata_input_hash(evidence_verifier_script),
+    metadata_input_hash(workload_scripts[["mbo_config"]]),
+    metadata_input_hash(workload_scripts[["mlr3benchmark"]]),
+    metadata_input_hash(workload_scripts[["mlr3_targets"]]),
     toolchain_root,
     metadata_input_hash(toolchain_lock),
     toolchain_explicit_receipt_sha256,

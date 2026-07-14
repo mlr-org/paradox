@@ -285,6 +285,6 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
   fi
 done <"$LEDGER"
 
-[[ $rows -eq 91 && $consumer_rows -eq 40 && $scan_rows -eq 51 ]] ||
-  fail "verified source partition differs from 91 = 40 consumer + 51 scan"
-printf '%s\n' "verified 91 mlr-org repositories (40 pinned consumer sources, 51 census sources)"
+[[ $rows -eq 91 && $consumer_rows -eq 43 && $scan_rows -eq 48 ]] ||
+  fail "verified source partition differs from 91 = 43 consumer + 48 scan"
+printf '%s\n' "verified 91 mlr-org repositories (43 pinned consumer sources, 48 census sources)"

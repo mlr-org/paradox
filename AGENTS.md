@@ -360,7 +360,9 @@ candidate is then used for:
   `--run-id` and optional `--plan-only`; priority zero also receives the reviewed
   `library-mlr3verse-core` through `PARADOX_CONSUMER_EXTRA_LIBS`;
 - `compat/test-documentation`, with the same candidate/dependency libraries,
-  the mlr3verse core as `--extra-library`, a new run ID, and `--scope all`; and
+  the mlr3verse core as `--extra-library`, a new run ID, and `--scope all`;
+  this also runs the pinned mbo_config and reviewed documentation migration
+  workloads; and
 - `benchmarks/release`, with the sealed full-inventory differential run,
   authenticated candidate library, repeated dependency-library options,
   miesmuschel library, and a new output directory. This release wrapper always
@@ -373,12 +375,17 @@ reverse-dependency, and documentation stages use deterministic whole-stage
 manifests authenticated by `metadata/completion.seal`; verify them with
 `compat/verify-repository-evidence.R` before citing the evidence.
 
-The documentation gate's essential book chapter and website paradox benchmark
-are mandatory. Full book/website renders and both the 14-post and focused
-three-post gallery probes remain recorded advisory workloads. The gate verifies
-pinned clean source checkouts, all explicitly selected protected libraries,
-the candidate provenance, and the pinned Quarto receipt. It seals commands,
-results, logs, archived sources, overlays, and metadata below
+The documentation gate's essential book chapter, website paradox benchmark,
+tuning/pipeline cheatsheets, and both serialized mbo_config ParamSet workloads
+are mandatory. Full book/website/cheatsheet renders, both gallery probes, the
+mlr3benchmark nested-values contract, and mlr3-targets legacy migration remain
+recorded advisory workloads. `compat/verify-mlr-org-review` separately
+reauthenticates the complete 91-repository organization census; keep its
+consumer/source partition synchronized whenever a census repository is
+promoted into `github-snapshot.tsv`. The gate verifies pinned clean source
+checkouts, all explicitly selected protected libraries, the candidate
+provenance, and the pinned Quarto receipt. It seals commands, results, logs,
+archived sources, overlays, and metadata below
 `.local/compat/runs/<run-id>/documentation/`. Review advisory results and raw
 benchmark distributions; a zero exit status or a ratio table alone is not a
 release claim.

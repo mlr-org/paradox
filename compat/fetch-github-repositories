@@ -350,7 +350,11 @@ for repository in "${clone_repositories[@]}"; do
   corpus_git init --quiet "$STAGING_CHECKOUT"
   corpus_git -C "$STAGING_CHECKOUT" remote add origin \
     "${snapshot_url[$repository]}"
-  corpus_git -C "$STAGING_CHECKOUT" fetch --depth=1 --filter=blob:none \
+  # Fetch a complete shallow commit. A promisor checkout created with
+  # --filter=blob:none cannot be materialized while GIT_NO_LAZY_FETCH=1 is in
+  # force, and allowing checkout-time network requests would make provenance
+  # depend on an implicit second fetch.
+  corpus_git -C "$STAGING_CHECKOUT" fetch --depth=1 \
     origin "${snapshot_commit[$repository]}"
   if [[ -n "${snapshot_branch[$repository]}" ]]; then
     corpus_git -C "$STAGING_CHECKOUT" switch --create \

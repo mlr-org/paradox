@@ -179,9 +179,14 @@ preflight. Missing R dependencies and missing system dependencies have explicit
 result classifications; other check failures remain candidate-or-consumer
 failures rather than being silently waived.
 
-`github-repositories.tsv` records the reviewed organization-wide scan. Fetch
-all non-obsolete checkouts with `compat/fetch-github-repositories`. Rows marked
-`skip` remain in the inventory to document why they are not release gates.
+`github-repositories.tsv` records the executable subset selected from the
+organization-wide scan. `mlr-org-review.tsv` and its companion review explain
+the decision for all 91 repositories, including the separately authenticated
+source-only corpus and the verified empty `mlr-org/docker` repository. Recheck
+that census against the local archives with `compat/verify-mlr-org-review`.
+Fetch all non-obsolete executable or focused-workload checkouts with
+`compat/fetch-github-repositories`. Rows marked `skip` remain in the inventory
+to document why they are not release gates.
 
 `differential/` contains the isolated upstream-versus-worktree behavioral
 harness. It builds and installs both packages into separate run-local libraries,
@@ -302,9 +307,12 @@ is release evidence for a new candidate.
 
 ## Documentation compatibility gate
 
-The documentation harness uses the same sealed candidate and the pinned,
-clean `mlr3book`, `mlr3website`, `mlr3gallery`, and `mlr3verse` checkouts. Give
-it a new evidence ID and supply the reviewed `mlr3verse` hard-import overlay:
+The documentation and corpus-workload harness uses the same sealed candidate
+and the pinned, clean `mlr3book`, `mlr3website`, `mlr3gallery`,
+`mlr3cheatsheets`, `mlr3benchmark`, `mbo_config`, `mlr3-targets`, and
+`mlr3verse` checkouts.
+Give it a new evidence ID and supply the reviewed `mlr3verse` hard-import
+overlay:
 
 ```sh
 documentation_run_id="$run_id-documentation"
@@ -322,18 +330,25 @@ Rscript compat/test-documentation \
 ```
 
 `--scope all` runs `full` followed by `essential`. The full mlr3book render,
-full mlr3website render, and mlr3gallery's legacy 14-post corpus are advisory:
-their failures remain visible but do not hide a focused compatibility result.
-The essential scope makes the book's advanced paradox chapter and the
-website's paradox benchmark document mandatory. It also renders the three
-reviewed paradox-related gallery posts as an advisory legacy probe. A
+full mlr3website render, all four current cheatsheets, mlr3gallery's legacy
+14-post corpus, the maintained mlr3benchmark nested-values example, and a
+2,048-row real-space workload are retained advisory probes. The essential
+scope makes the book's advanced paradox chapter, the website's paradox
+benchmark, the current tuning and pipelines cheatsheets, and 128-row design,
+quantile, subset, transpose, and serialization operations on both pinned
+`mbo_config` ParamSets mandatory. It also runs the three reviewed gallery posts,
+the mlr3benchmark nested active-binding contract, and the modern equivalent of
+mlr3-targets' pre-`ps()` legacy constructor surface as advisory evidence. A
 standalone `--scope full` or `--scope essential` runs only that half. Installing
 the pinned mlr3verse and the book/website helper packages into fresh run-local
-overlays is itself mandatory.
+overlays is itself mandatory. The removed legacy names in `mlr3-targets` and
+the GPU-heavy `mlr3torch-course` remain authenticated source characterization,
+not mandatory executable release gates.
 
 The harness authenticates the candidate receipt and seal, reproduces its Git
-archive, verifies each documentation checkout's pinned origin, commit, and
-clean tree, and renders only archived run-local source copies with the exact
+archive, verifies each documentation/workload checkout's pinned origin,
+commit, relation, and clean tree, and executes only archived run-local source
+copies with the exact
 repository-local R, Quarto 1.9.38, and TinyTeX. It authenticates the ordinary
 toolchain's installed package set byte for byte against the explicit lock,
 retains a complete toolchain-tree receipt, and fingerprints R's base library.

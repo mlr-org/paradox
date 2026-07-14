@@ -7,8 +7,8 @@ repositories returned by the cached GitHub organization inventory collected on
 That JSON is retained below `.cache/` as collection evidence, while the tracked
 ledger freezes the source identities and decisions needed by later work.
 
-Forty repositories reuse the exact clean mlr-org checkouts already pinned by
-`github-snapshot.tsv`. The other 51 were downloaded separately below
+Forty-three repositories reuse the exact clean mlr-org checkouts now pinned by
+`github-snapshot.tsv`. The other 48 were downloaded separately below
 `.local/compat/github-org-scan/checkouts/`; the existing consumer checkouts
 were not fetched, reset, cleaned, or otherwise changed. Ninety repositories
 have an exact commit, tree, committer date, and deterministic `git archive`
@@ -37,8 +37,8 @@ such as `ps`, `qunif`, `Domain`, `map_dbl`, `param_set`, and legacy
 direct consumers, implicit object-shape consumers, transitive templates,
 predecessor systems, stale material, infrastructure, and genuine non-use.
 
-The census found three omissions that should be integrated into the separate
-consumer manifest after review:
+The census found three omissions that are integrated into the separate
+consumer manifest:
 
 - `mlr3batchmark`: priority 1 package gate. Its production worker calls
   `learner$param_set$set_values()` and its tests read `$values`, despite no
@@ -76,7 +76,7 @@ compat/verify-mlr-org-review
 
 The verifier checks the 91-row schema and uniqueness, exact origin, clean
 status, commit, tree, commit date, full source-archive SHA-256, scan-scope
-SHA-256, and all four match counts. It also checks the fixed partition of 40
-reused consumer sources and 51 separately downloaded census sources. The
+SHA-256, and all four match counts. It also checks the fixed partition of 43
+reused consumer sources and 48 separately downloaded census sources. The
 ignored raw match files are convenient review artifacts, not an input to the
 verification.
