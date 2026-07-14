@@ -116,14 +116,22 @@ seal_metadata() {
 }
 
 audit_symbols() {
-  local version=$1 dso=$2 log=$3 nm_tool symbols symbol
-  nm_tool=$(R CMD config NM)
-  command -v "$nm_tool" >/dev/null 2>&1 || fail "Runtime compiler NM is absent: $nm_tool"
+  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol
+  configured_nm=$(R CMD config NM)
+  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" &&
+      "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]] ||
+    fail "Runtime compiler activation did not select the expected NM"
+  [[ "${configured_nm##*/}" == "$NM" ]] ||
+    fail "Runtime R and compiler activation disagree about NM: $configured_nm / $NM"
+  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$NM"
+  [[ -x "$nm_tool" && "$(command -v -- "$NM")" == "$nm_tool" ]] ||
+    fail "Authenticated runtime compiler NM is absent: $nm_tool"
   symbols=${log%.log}.symbols.txt
   "$nm_tool" -D --undefined-only "$dso" > "$symbols"
   {
     printf 'runtime=%s\n' "$version"
-    printf 'nm=%s\n' "$(command -v "$nm_tool")"
+    printf 'r_config_nm=%s\n' "$configured_nm"
+    printf 'nm=%s\n' "$nm_tool"
     printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
   } > "$log"
   symbol=Rf_eval
@@ -177,7 +185,7 @@ for version in "${versions[@]}"; do
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
-    printf 'symbols\tNM -D --undefined-only paradox.so\n'
+    printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
     printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY\n'
   } > "$inputs/commands.tsv"
 

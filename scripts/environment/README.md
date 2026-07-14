@@ -130,7 +130,11 @@ consumer system prefix.
 For each selected actual interpreter it archives a committed source ref,
 builds and installs paradox into a fresh stage library, runs the focused
 public-R-API facade probe and full practical source suite, and audits undefined
-DSO symbols against that release's allowed accessor set. All artifacts are
+DSO symbols against that release's allowed accessor set. Conda R may retain a
+nonexistent build-farm directory in `R CMD config NM`; the audit checks that
+its tool basename agrees with the activated compiler hook, then invokes and
+records the authenticated runtime-prefix binary instead of following that
+escaped path. All artifacts are
 sealed beneath `.local/checks/<run-id>/runtime-matrix`; verify a completed run
 with `scripts/verify-runtime-matrix-evidence --run-id <run-id>`. The retained
 command and input copies make rerunning a later frozen candidate a change only

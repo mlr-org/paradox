@@ -69,6 +69,10 @@ first_cmake_args=$CMAKE_ARGS
 configured_cc=$(R CMD config CC)
 case "$(command -v "${configured_cc%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
 case "$(command -v "${CC%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
+configured_nm=$(R CMD config NM)
+[[ -n "$NM" && "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]]
+[[ "${configured_nm##*/}" == "$NM" ]]
+[[ "$(command -v "$NM")" == "$prefix/bin/$NM" ]]
 SHELL
   printf 'runtime_matrix_activation_fixture=passed runtime=%s\n' "$version"
 done
