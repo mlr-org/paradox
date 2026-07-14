@@ -1,0 +1,290 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+export LC_ALL=C
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
+LEDGER="$ROOT/compat/mlr-org-review.tsv"
+CONSUMER_ROOT="$ROOT/.local/compat/github"
+SCAN_ROOT="$ROOT/.local/compat/github-org-scan/checkouts"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+FETCH=false
+TEMP_DIRECTORY=
+STAGING_CHECKOUT=
+
+fail() {
+  printf '%s\n' "verify-mlr-org-review: $*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: compat/verify-mlr-org-review [--fetch]
+
+Verify all 91 exact sources, source-archive receipts, scan-scope receipts, and
+match counts in compat/mlr-org-review.tsv. The default is offline and changes
+nothing. --fetch creates only absent org-scan checkouts; it never fetches,
+resets, cleans, or otherwise changes an existing checkout. Populate the
+consumer corpus first with compat/fetch-github-repositories.
+EOF
+}
+
+cleanup() {
+  local status=$?
+  trap - EXIT HUP INT TERM
+  if [[ -n "$TEMP_DIRECTORY" && -d "$TEMP_DIRECTORY" ]]; then
+    rm -rf -- "$TEMP_DIRECTORY"
+  fi
+  if [[ -n "$STAGING_CHECKOUT" && -d "$STAGING_CHECKOUT" ]]; then
+    rm -rf -- "$STAGING_CHECKOUT"
+  fi
+  exit "$status"
+}
+trap cleanup EXIT HUP INT TERM
+
+case "${1:-}" in
+  '') ;;
+  --fetch) FETCH=true ;;
+  -h|--help)
+    [[ $# -eq 1 ]] || fail "--help may not be combined with arguments"
+    usage
+    exit 0
+    ;;
+  *) fail "unknown argument: $1" ;;
+esac
+[[ $# -le 1 ]] || fail "too many arguments"
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+[[ -f "$LEDGER" && ! -L "$LEDGER" ]] || fail "ledger is missing or symbolic"
+[[ -x "$LOCAL_GIT" && ! -L "$LOCAL_GIT" ]] ||
+  fail "repository-local Git is missing or symbolic"
+[[ $(command -v git) == "$LOCAL_GIT" ]] ||
+  fail "git does not resolve to the repository-local executable"
+
+corpus_git() {
+  /usr/bin/env \
+    -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_SHALLOW_FILE -u GIT_EXEC_PATH -u GIT_TEMPLATE_DIR \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL -u GIT_CONFIG_SYSTEM \
+    -u GIT_CONFIG_NOSYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 GIT_TERMINAL_PROMPT=0 \
+    "$LOCAL_GIT" -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false "$@"
+}
+
+validate_ledger() {
+  /usr/bin/awk -F '\t' '
+    BEGIN {
+      expected = "repository\torigin\tcommit\ttree\tcommit_date\tarchived\tclean_status\tsource_archive_sha256\tsource_type\tscoped_files\tscope_receipt_sha256\tparadox_lines\tapi_lines\tall_text_paradox_lines\tall_text_api_lines\tuse_class\treview_decision\tevidence\trationale"
+    }
+    NR == 1 {
+      if ($0 != expected) exit 1
+      next
+    }
+    {
+      if (NF != 19 || $1 !~ /^[A-Za-z0-9.][A-Za-z0-9._-]*$/ ||
+          $2 != "https://github.com/mlr-org/" $1 ".git" || seen[$1]++ ||
+          $6 !~ /^(true|false)$/ ||
+          $7 !~ /^(clean|empty-no-head)$/ ||
+          $8 !~ /^[0-9a-f]+$/ || length($8) != 64 ||
+          $9 !~ /^(consumer-corpus|org-scan)$/ ||
+          $10 !~ /^[0-9]+$/ || $11 !~ /^[0-9a-f]+$/ ||
+          length($11) != 64 || $12 !~ /^[0-9]+$/ ||
+          $13 !~ /^[0-9]+$/ || $14 !~ /^[0-9]+$/ || $15 !~ /^[0-9]+$/ ||
+          $16 !~ /^(alternative-design|de-facto-documentation|de-facto-package|direct-documentation|direct-package|direct-workload|empty|historical-predecessor|infrastructure|mention-only|no-use|self|transitive-template)$/ ||
+          $17 !~ /^(add-advisory-p2|add-gate-p1|characterization-only|covered-by-maintained-upstream-p1|exclude-alternative|exclude-empty|exclude-infrastructure|exclude-mention-only|exclude-no-use|exclude-obsolete|exclude-predecessor|exclude-self|exclude-transitive|retain-advisory-p2|retain-gate-p0|retain-gate-p1|retain-reviewed-exclusion-p3)$/ ||
+          $18 == "" || $19 == "") exit 1
+      if ($3 == "-" || $4 == "-" || $5 == "-") {
+        if ($1 != "docker" || $3 != "-" || $4 != "-" || $5 != "-" ||
+            $7 != "empty-no-head") exit 1
+        empty += 1
+      } else if ($3 !~ /^[0-9a-f]+$/ || length($3) != 40 ||
+                 $4 !~ /^[0-9a-f]+$/ || length($4) != 40 ||
+                 $5 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ ||
+                 $7 != "clean") exit 1
+      key = tolower($1)
+      if (rows && key < previous) exit 1
+      previous = key
+      rows += 1
+    }
+    END { if (rows != 91 || empty != 1) exit 1 }
+  ' "$LEDGER" || fail "ledger schema, ordering, uniqueness, or row count is invalid"
+}
+
+source_path() {
+  local repository=$1 source_type=$2
+  case "$source_type" in
+    consumer-corpus) printf '%s\n' "$CONSUMER_ROOT/$repository" ;;
+    org-scan) printf '%s\n' "$SCAN_ROOT/$repository" ;;
+    *) fail "unexpected source type for $repository: $source_type" ;;
+  esac
+}
+
+fetch_absent_source() {
+  local repository=$1 origin=$2 commit=$3 source_type=$4 destination=$5
+  local staging refs
+  [[ "$FETCH" == true ]] ||
+    fail "$repository is absent; rerun with --fetch after populating the consumer corpus"
+  [[ "$source_type" == org-scan ]] ||
+    fail "$repository belongs to the consumer corpus; run compat/fetch-github-repositories"
+  [[ ! -e "$destination" && ! -L "$destination" ]] ||
+    fail "$repository destination appeared while it was checked"
+  staging="$SCAN_ROOT/.${repository}.fetch.$$"
+  [[ ! -e "$staging" && ! -L "$staging" ]] || fail "staging collision for $repository"
+  corpus_git init --quiet "$staging"
+  STAGING_CHECKOUT=$staging
+  corpus_git -C "$staging" remote add origin "$origin"
+  if [[ "$commit" == - ]]; then
+    refs=$(corpus_git ls-remote --refs "$origin")
+    [[ -z "$refs" ]] || fail "$repository was recorded empty but now advertises refs"
+  else
+    corpus_git -C "$staging" fetch --quiet --depth=1 --no-tags origin "$commit"
+    corpus_git -C "$staging" checkout --quiet --detach FETCH_HEAD
+  fi
+  mv -- "$staging" "$destination"
+  STAGING_CHECKOUT=
+}
+
+grep_to_file() {
+  local checkout=$1 output=$2 pattern=$3 scope=$4 status
+  local -a paths
+  if [[ "$scope" == scoped ]]; then
+    paths=(
+      DESCRIPTION NAMESPACE ':(icase,glob)**/*.r'
+      ':(icase,glob)**/*.rmd' ':(icase,glob)**/*.qmd'
+      ':(glob)**/scripts/**'
+    )
+    if corpus_git -C "$checkout" grep -n -I -E "$pattern" HEAD -- \
+      "${paths[@]}" >"$output"; then
+      return 0
+    else
+      status=$?
+    fi
+  else
+    if corpus_git -C "$checkout" grep -n -I -E "$pattern" HEAD >"$output"; then
+      return 0
+    else
+      status=$?
+    fi
+  fi
+  [[ $status -eq 1 ]] || fail "git grep failed in $checkout"
+  : >"$output"
+}
+
+validate_ledger
+[[ -d "$CONSUMER_ROOT" && ! -L "$CONSUMER_ROOT" ]] ||
+  fail "populate the ordinary consumer corpus first"
+if [[ "$FETCH" == true ]]; then
+  mkdir -p -- "$ROOT/.local/compat/github-org-scan" "$SCAN_ROOT"
+else
+  [[ -d "$ROOT/.local/compat/github-org-scan" && -d "$SCAN_ROOT" ]] ||
+    fail "organization scan sources are absent; rerun with --fetch"
+fi
+[[ ! -L "$ROOT/.local/compat/github-org-scan" ]] || fail "scan root is symbolic"
+[[ ! -L "$CONSUMER_ROOT" && ! -L "$SCAN_ROOT" ]] ||
+  fail "a managed checkout root is symbolic"
+TEMP_DIRECTORY=$(mktemp -d "$ROOT/.local/compat/github-org-scan/.verify.XXXXXXXX")
+
+scope_api_pattern='(ParamSet(Collection)?|Param(Dbl|Int|Fct|Lgl|Uty|Cnst|Special)|TuneToken|Domain|p_(dbl|int|fct|lgl|uty|vct|maybe|cnst)|(^|[^[:alnum:]_])ps[[:space:]]*\(|to_tune|param_set|search_space|generate_design|qunif)'
+broad_api_pattern='(ParamSet(Collection)?|Param(Dbl|Int|Fct|Lgl|Uty|Cnst|Special)|TuneToken|p_(dbl|int|fct|lgl|uty|vct|maybe|cnst)|to_tune|param_set|search_space|generate_design|qunif)'
+rows=0
+consumer_rows=0
+scan_rows=0
+
+while IFS=$'\t' read -r repository origin commit tree commit_date archived \
+  clean_status archive_sha source_type scoped_files scope_sha paradox_lines \
+  api_lines all_paradox_lines all_api_lines use_class review_decision evidence \
+  rationale; do
+  [[ "$repository" != repository ]] || continue
+  : "$archived" "$clean_status" "$use_class" "$review_decision" "$evidence" \
+    "$rationale"
+  checkout=$(source_path "$repository" "$source_type")
+  if [[ ! -d "$checkout/.git" ]]; then
+    [[ ! -e "$checkout" && ! -L "$checkout" ]] ||
+      fail "$repository checkout path is not an ordinary Git checkout"
+    fetch_absent_source "$repository" "$origin" "$commit" "$source_type" "$checkout"
+  fi
+  [[ -d "$checkout" && ! -L "$checkout" && -d "$checkout/.git" &&
+     ! -L "$checkout/.git" ]] || fail "$repository checkout is unsafe"
+  [[ $(corpus_git -C "$checkout" rev-parse --show-toplevel) == "$checkout" ]] ||
+    fail "$repository has an unexpected worktree root"
+  mapfile -t remotes < <(corpus_git -C "$checkout" remote)
+  [[ ${#remotes[@]} -eq 1 && "${remotes[0]}" == origin ]] ||
+    fail "$repository does not have exactly one origin remote"
+  [[ $(corpus_git -C "$checkout" remote get-url origin) == "$origin" ]] ||
+    fail "$repository origin differs from the ledger"
+  [[ -z $(corpus_git -C "$checkout" config --get-all remote.origin.pushurl) ]] ||
+    fail "$repository has an explicit push URL"
+  [[ ! -e "$checkout/.git/objects/info/alternates" &&
+     ! -L "$checkout/.git/objects/info/alternates" &&
+     ! -e "$checkout/.git/info/grafts" && ! -L "$checkout/.git/info/grafts" ]] ||
+    fail "$repository uses alternate objects or grafts"
+  [[ -z $(corpus_git -C "$checkout" for-each-ref --format='%(refname)' refs/replace) ]] ||
+    fail "$repository contains replacement objects"
+  [[ -z $(corpus_git -C "$checkout" status --porcelain=v1 --untracked-files=all) ]] ||
+    fail "$repository checkout is dirty"
+
+  scope_file="$TEMP_DIRECTORY/$repository.scope"
+  scoped_paradox_file="$TEMP_DIRECTORY/$repository.scoped-paradox"
+  scoped_api_file="$TEMP_DIRECTORY/$repository.scoped-api"
+  broad_paradox_file="$TEMP_DIRECTORY/$repository.broad-paradox"
+  broad_api_file="$TEMP_DIRECTORY/$repository.broad-api"
+  if [[ "$commit" == - ]]; then
+    corpus_git -C "$checkout" rev-parse --verify 'HEAD^{commit}' >/dev/null 2>&1 &&
+      fail "$repository unexpectedly acquired a HEAD"
+    : >"$scope_file"
+    : >"$scoped_paradox_file"
+    : >"$scoped_api_file"
+    : >"$broad_paradox_file"
+    : >"$broad_api_file"
+    observed_archive_sha=$(printf '' | sha256sum | /usr/bin/awk '{print $1}')
+  else
+    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{commit}') == "$commit" ]] ||
+      fail "$repository commit differs from the ledger"
+    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{tree}') == "$tree" ]] ||
+      fail "$repository tree differs from the ledger"
+    [[ $(corpus_git -C "$checkout" show -s --format=%cI HEAD) == "$commit_date" ]] ||
+      fail "$repository commit date differs from the ledger"
+    observed_archive_sha=$(corpus_git -C "$checkout" archive --format=tar HEAD | \
+      sha256sum | /usr/bin/awk '{print $1}')
+    corpus_git -C "$checkout" ls-tree -r HEAD | /usr/bin/awk -F '\t' '
+      { path=$2; lower=tolower(path) }
+      path == "DESCRIPTION" || path == "NAMESPACE" ||
+        lower ~ /\.(r|rmd|qmd)$/ || path ~ /(^|\/)scripts\// { print }
+    ' >"$scope_file"
+    grep_to_file "$checkout" "$scoped_paradox_file" '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' scoped
+    grep_to_file "$checkout" "$scoped_api_file" "$scope_api_pattern" scoped
+    grep_to_file "$checkout" "$broad_paradox_file" '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' broad
+    grep_to_file "$checkout" "$broad_api_file" "$broad_api_pattern" broad
+  fi
+  [[ "$observed_archive_sha" == "$archive_sha" ]] ||
+    fail "$repository source archive receipt differs from the ledger"
+  observed_scope_sha=$(sha256sum "$scope_file" | /usr/bin/awk '{print $1}')
+  [[ "$observed_scope_sha" == "$scope_sha" ]] ||
+    fail "$repository scan-scope receipt differs from the ledger"
+  [[ $(wc -l <"$scope_file") -eq $scoped_files ]] ||
+    fail "$repository scoped file count differs from the ledger"
+  [[ $(wc -l <"$scoped_paradox_file") -eq $paradox_lines ]] ||
+    fail "$repository scoped paradox count differs from the ledger"
+  [[ $(wc -l <"$scoped_api_file") -eq $api_lines ]] ||
+    fail "$repository scoped API count differs from the ledger"
+  [[ $(wc -l <"$broad_paradox_file") -eq $all_paradox_lines ]] ||
+    fail "$repository broad paradox count differs from the ledger"
+  [[ $(wc -l <"$broad_api_file") -eq $all_api_lines ]] ||
+    fail "$repository broad API count differs from the ledger"
+  rows=$((rows + 1))
+  if [[ "$source_type" == consumer-corpus ]]; then
+    consumer_rows=$((consumer_rows + 1))
+  else
+    scan_rows=$((scan_rows + 1))
+  fi
+done <"$LEDGER"
+
+[[ $rows -eq 91 && $consumer_rows -eq 40 && $scan_rows -eq 51 ]] ||
+  fail "verified source partition differs from 91 = 40 consumer + 51 scan"
+printf '%s\n' "verified 91 mlr-org repositories (40 pinned consumer sources, 51 census sources)"
