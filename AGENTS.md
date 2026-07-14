@@ -395,6 +395,29 @@ bootstrap receipt, and commands are tree-receipted and completion-sealed below
 `.local/checks/<run-id>/runtime-matrix/`. Any later source change requires a
 fresh matrix run along with every other frozen release gate.
 
+Before installing the frozen candidate, prepare the pinned source-package
+hard dependency closure with a separate unique evidence ID:
+
+```sh
+reverse_dependency_run=release-reverse-dependencies-YYYYMMDDTHHMMSSZ
+dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
+Rscript --vanilla compat/install-reverse-dependency-dependencies.R \
+  --root "$PARADOX_ROOT" --max-priority 2 \
+  --dependency-library "$dependency_library" \
+  --run-id "$reverse_dependency_run"
+```
+
+This stage authenticates the pinned CRAN/Bioconductor target sources, resolves
+only `Depends`, `Imports`, and `LinkingTo` through retained synthetic
+dependencies-only roots, rejects installing or updating paradox, replays the
+SHA-256-bearing pak lock, and seals its endpoints and inputs under
+`.local/compat/runs/<ID>/reverse-dependency-dependencies-priority-<N>/`.
+An existing paradox used to build a transitive dependency is allowed only as a
+protected `installed` lock row and must remain byte-identical. `--plan-only`
+must leave the selected dependency library unchanged. The disposable fixture
+gate is `scripts/environment/test-reverse-dependency-preparation.R`; it never
+uses the live shared dependency library.
+
 Install the consumer-test candidate only after its run ID and full ref, commit,
 and tree are exported, and only into the absent run-specific library reserved
 beside the dependency-preparation stage. The authoritative command shape and
@@ -403,6 +426,10 @@ portable content-sentinel handling are in
 dependency library, and source worktree in that order. That same authenticated
 candidate is then used for:
 
+- `compat/install-reverse-dependency-dependencies.R`, with named root,
+  priority, dependency-library, and unique run-ID options; its successful
+  sealed stage supplies the hard source-package closure before candidate
+  installation and reverse checks;
 - `compat/install-repository-test-dependencies.R`, with positional root,
   maximum priority, and dependency library plus the mandatory named
   `--run-id`; its retained ledger is written below the matching

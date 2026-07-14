@@ -70,6 +70,62 @@ This command has the same fail-closed and `--offline` semantics and verifies
 the pinned SHA-256 value before selecting an archive. Its repository URL names
 the exact Bioconductor 3.23 release rather than the mutable `release` alias.
 
+## Prepare reverse-package hard dependencies
+
+Prepare the hard `Depends`, `Imports`, and `LinkingTo` closure before freezing
+the candidate. This is a separate stage from the GitHub checkout dependency
+installer because it is derived only from the authenticated CRAN and
+Bioconductor source archives:
+
+```sh
+reverse_dependency_run_id="$(date -u +%Y%m%dT%H%M%SZ)-reverse-deps-p2"
+dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
+test ! -e "$PARADOX_ROOT/.local/compat/runs/$reverse_dependency_run_id"
+
+Rscript --vanilla compat/install-reverse-dependency-dependencies.R \
+  --root "$PARADOX_ROOT" \
+  --max-priority 2 \
+  --dependency-library "$dependency_library" \
+  --run-id "$reverse_dependency_run_id"
+```
+
+The harness first authenticates both manifests and every selected target
+archive, including CRAN MD5 values, SHA-256 values, package names, versions,
+and safe archive structure. It extracts only each target's `DESCRIPTION` and
+constructs a retained synthetic `deps::` resolver root containing its hard
+fields. The target archive is never supplied as an installation root,
+`Suggests` and `Enhances` never enter the resolver, and direct `paradox`
+requirements are removed. A transitive dependency may itself be another
+selected reverse package; that package is still a genuine hard dependency,
+not the target being checked. An already installed bootstrap `paradox` may
+satisfy those transitive package installations, but the authenticated pak lock
+may reference it only as `installed`; a source/update plan fails, and its
+complete package content must remain byte-identical.
+
+Resolution produces a retained pak lock with exact versions, source URLs, and
+SHA-256 values. Pak does not serialize the published Bioconductor MD5 into its
+lock format, so every unresolved Bioconductor source is downloaded first,
+checked as a safe package/version archive, retained under `resolved-sources/`,
+hashed with MD5 and SHA-256, and inserted as the first authenticated lock
+source. Installed-package references must resolve directly below the
+specified repository-local dependency library; source rows without a SHA-256
+or HTTPS source fail. Installation replays that lock with `update = FALSE`,
+then verifies every locked version, the protected paradox tree, all target
+archives, all live and retained input hashes, and the optional system overlay.
+The source plan, original and synthetic descriptions, direct-dependency
+ledger, lock, resolved plan, package-library endpoints, logs, and completion
+metadata are sealed below
+`.local/compat/runs/<ID>/reverse-dependency-dependencies-priority-<N>/`.
+Verify the stage with `compat/verify-repository-evidence.R`.
+
+Repeated `--package NAME` selects a bounded subset. `--plan-only` resolves and
+seals the exact lock while requiring the dependency library to remain
+byte-identical; it does not install anything. Run
+`scripts/environment/test-reverse-dependency-preparation.R` after ordinary
+activation for deterministic parser, archive, lock-policy, path-escape, and
+evidence-tamper fixtures. Those fixtures use a disposable library below
+`.local/tmp` and never inspect or mutate the shared compatibility library.
+
 ## Freeze and install one candidate
 
 All release compatibility commands must use one newly installed, immutable

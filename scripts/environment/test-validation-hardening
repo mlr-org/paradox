@@ -15,6 +15,7 @@ RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
 EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
 API_TOKEN_AUDITOR="$ROOT/scripts/environment/audit-public-api-tokens"
 API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
+REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-preparation.R"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
 PACKAGE_MANIFEST="$ROOT/environment/valgrind-r-packages.tsv"
 mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
@@ -41,7 +42,8 @@ expect_failure() {
 
 [[ -x "$RSCRIPT" ]] || fail "local Rscript is missing"
 [[ -x "$SOURCE_VALIDATOR" && -x "$RECEIPT_HELPER" && \
-    -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" ]] ||
+    -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" && \
+    -x "$REVERSE_DEPENDENCY_PREP_TEST" ]] ||
   fail "validation helpers are not executable"
 
 # Raw-token policy sees identifiers in inactive branches but ignores comments,
@@ -588,5 +590,14 @@ for lock_harness in scripts/build-valgrind-r \
     fail "$lock_harness still truncates its shared lock"
   fi
 done
+
+"$RSCRIPT" --vanilla "$REVERSE_DEPENDENCY_PREP_TEST" \
+  > "$TEST_ROOT/reverse-dependency-preparation.log" 2>&1 || {
+  cat "$TEST_ROOT/reverse-dependency-preparation.log" >&2
+  fail "reverse-dependency preparation fixtures failed"
+}
+grep -qx 'reverse-dependency preparation fixtures: PASS' \
+  "$TEST_ROOT/reverse-dependency-preparation.log" ||
+  fail "reverse-dependency preparation fixture result is malformed"
 
 printf '%s\n' "validation hardening helper tests passed"
