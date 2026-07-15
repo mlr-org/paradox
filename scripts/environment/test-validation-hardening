@@ -270,6 +270,43 @@ for archive_harness in \
     fail "candidate archive lacks Git's replacement-disable option: $archive_harness"
 done
 
+# processx::run() accepts timeout values in seconds. Keep the documentation
+# harness's public seconds contract connected to the actual retained command.
+"$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
+path <- commandArgs(TRUE)[[1L]]
+timeout_calls <- list()
+missing_argument <- unname(as.list(alist(value = )))
+walk <- function(x) {
+  if (is.call(x) && identical(x[[1L]], quote(processx::run)) &&
+      "timeout" %in% names(as.list(x))) {
+    timeout_calls[[length(timeout_calls) + 1L]] <<- x
+  }
+  if (is.expression(x) || is.call(x) || is.pairlist(x)) {
+    elements <- as.list(x)
+    for (i in seq_along(elements)) {
+      if (!identical(unname(elements[i]), missing_argument)) walk(elements[[i]])
+    }
+  }
+  invisible(NULL)
+}
+walk(parse(path, keep.source = FALSE))
+if (length(timeout_calls) != 1L ||
+    !identical(timeout_calls[[1L]][["timeout"]], quote(timeout_seconds))) {
+  stop("documentation process timeout is not the exact seconds value",
+    call. = FALSE)
+}
+options(warn = 2)
+probe <- processx::run(
+  file.path(R.home("bin"), "Rscript"),
+  c("--vanilla", "-e", "quit(save = 'no', status = 0L)"),
+  timeout = 7200, error_on_status = FALSE,
+  stdout = "|", stderr = "2>&1"
+)
+if (!identical(probe$status, 0L) || !identical(probe$timeout, FALSE)) {
+  stop("processx did not honor its seconds timeout contract", call. = FALSE)
+}
+RSCRIPT
+
 CANDIDATE_INSTALLER="$ROOT/compat/install-candidate"
 cleanup_trap_line=$(grep -nF 'trap cleanup EXIT' "$CANDIDATE_INSTALLER" |
   cut -d: -f1)

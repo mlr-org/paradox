@@ -415,6 +415,11 @@ Rscript compat/test-documentation \
   --timeout 7200
 ```
 
+`--timeout` is expressed in seconds. The harness passes that value unchanged
+to `processx` for every retained command and records the same value as
+`timeout_seconds` in the sealed metadata; it is never converted to
+milliseconds by the harness.
+
 `--scope all` runs `full` followed by `essential`. The full mlr3book render,
 full mlr3website render, all four current cheatsheets, mlr3gallery's legacy
 14-post corpus, the maintained mlr3benchmark nested-values example, and a

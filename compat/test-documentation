@@ -1030,7 +1030,7 @@ run_retained <- function(
       environment_command,
       c("-i", environment_arguments, command, arguments),
       wd = wd,
-      timeout = timeout_seconds * 1000, error_on_status = FALSE,
+      timeout = timeout_seconds, error_on_status = FALSE,
       stdout = log, stderr = "2>&1", echo = FALSE,
       windows_verbatim_args = FALSE
     )
