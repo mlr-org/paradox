@@ -433,6 +433,11 @@ audit_timeout_ast <- function(tree) {
   if (length(process_assignments) != 1L) {
     reject("the authenticated process call must produce the retained result")
   }
+  process_bindings <- binding_records(retained_body, quote(process))
+  if (length(process_bindings) != 1L ||
+      !identical(process_bindings[[1L]], process_assignments[[1L]])) {
+    reject("the retained process result may not be rebound or mutated")
+  }
   allowed_retained_heads <- list(
     quote(`::`), quote(`!`), quote(`[[`), quote(`{`), quote(`+`),
     quote(`<-`), quote(`<<-`), quote(`==`), quote(`$`), quote(as.numeric),
@@ -449,9 +454,51 @@ audit_timeout_ast <- function(tree) {
   if (length(unexpected_retained_calls)) {
     reject("run_retained contains an unaudited call path")
   }
+  retained_helper_symbols <- list(
+    quote(as.numeric), quote(base_environment), quote(c),
+    quote(classify_failure), quote(data.frame), quote(difftime),
+    quote(file.path), quote(isTRUE), quote(length),
+    quote(library_environment), quote(names), quote(normalizePath),
+    quote(paste), quote(paste0), quote(readLines), quote(shQuote),
+    quote(sprintf), quote(Sys.time), quote(unname),
+    quote(verify_protected_libraries), quote(writeLines)
+  )
+  for (helper in retained_helper_symbols) {
+    helper_bindings <- Filter(function(binding) {
+      head_matches(binding[[1L]], list(
+        quote(assign), quote(delayedAssign), quote(makeActiveBinding)
+      )) || identical(binding[[2L]], helper)
+    }, binding_records(tree, helper))
+    if (length(helper_bindings) > 1L) {
+      reject("allowlisted run_retained helper is rebound: ", helper)
+    }
+    if (length(helper_bindings) == 1L) {
+      binding <- helper_bindings[[1L]]
+      if (!identical(binding[[1L]], quote(`<-`)) ||
+          !identical(binding[[2L]], helper) || !is.call(binding[[3L]]) ||
+          !identical(binding[[3L]][[1L]], quote(`function`))) {
+        reject("allowlisted run_retained helper has an unaudited binding: ",
+          helper)
+      }
+    }
+  }
+  constant_truth <- function(value) {
+    if (identical(value, TRUE)) return(TRUE)
+    if (identical(value, FALSE)) return(FALSE)
+    if ((is.integer(value) || is.double(value)) && length(value) == 1L &&
+        !is.na(value) && is.finite(value)) {
+      return(value != 0)
+    }
+    if (is.call(value) && length(value) == 2L &&
+        identical(value[[1L]], quote(`!`))) {
+      inner <- constant_truth(value[[2L]])
+      if (!is.na(inner)) return(!inner)
+    }
+    NA
+  }
   dead_direct_calls <- Filter(function(call) {
     identical(call[[1L]], quote(`if`)) && length(call) >= 3L &&
-      identical(call[[2L]], FALSE) &&
+      identical(constant_truth(call[[2L]]), FALSE) &&
       any(vapply(
         call_records(call, list(quote(processx::run))),
         identical, logical(1L), direct$node
@@ -662,6 +709,40 @@ invalid_fixtures <- list(
     "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
     "function(command) { if (FALSE) process <- processx::run(",
     "timeout = timeout_seconds); process } }"
+  ),
+  zero_guarded_direct = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (0L) process <- processx::run(",
+    "timeout = timeout_seconds); process } }"
+  ),
+  negated_true_guarded_direct = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (!TRUE) process <- processx::run(",
+    "timeout = timeout_seconds); process } }"
+  ),
+  process_rebound = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { process <- processx::run(command, ",
+    "timeout = timeout_seconds); process <- NULL; process } }"
+  ),
+  allowlisted_global_alias = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); classify_failure <- ",
+    "processx::run; run_retained <- function(command) { process <- ",
+    "processx::run(command, timeout = timeout_seconds); ",
+    "classify_failure(command, c(), FALSE, NULL, FALSE, FALSE, FALSE, ",
+    "7200000); process } }"
+  ),
+  allowlisted_local_alias = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); classify_failure <- ",
+    "function(text) text; run_retained <- function(command) { ",
+    "classify_failure <- processx::run; process <- processx::run(",
+    "command, timeout = timeout_seconds); classify_failure(command, ",
+    "c(), FALSE, NULL, FALSE, FALSE, FALSE, 7200000); process } }"
   )
 )
 for (label in names(invalid_fixtures)) {
