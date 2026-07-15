@@ -274,7 +274,21 @@ done
 # harness's public seconds contract connected to the actual retained command.
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
+expected_documentation_sha256 <-
+  "c5e33dc96761fba52d8256621d34fcd07a69a0eed319e941dd63551b89ca2cbe"
+if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
+  stop("documentation timeout source snapshot changed", call. = FALSE)
+}
 missing_argument <- unname(as.list(alist(value = )))
+ast_sha256 <- function(tree) {
+  payload <- serialize(tree, NULL, version = 3L, xdr = TRUE)
+  temporary <- tempfile("paradox-timeout-ast-")
+  on.exit(unlink(temporary), add = TRUE)
+  connection <- file(temporary, open = "wb")
+  writeBin(payload, connection)
+  close(connection)
+  unname(tools::sha256sum(temporary))
+}
 timeout_records <- function(tree) {
   records <- list()
   walk <- function(x) {
@@ -355,7 +369,7 @@ call_records <- function(tree, heads) {
   walk(tree)
   records
 }
-audit_timeout_ast <- function(tree) {
+audit_timeout_ast <- function(tree, production = FALSE) {
   reject <- function(...) {
     stop("timeout AST audit: ", ..., call. = FALSE)
   }
@@ -396,12 +410,19 @@ audit_timeout_ast <- function(tree) {
       !identical(timeout_bindings[[1L]][[3L]], expected_timeout_rhs)) {
     reject("timeout_seconds must have one exact seconds-valued binding")
   }
+  is_timeout_index <- function(index) {
+    identical(index, quote(timeout)) || identical(index, "timeout") ||
+      identical(index, 1L) || identical(index, 1) ||
+      (is.call(index) && identical(index[[1L]], quote(c)) &&
+        length(index) == 2L && identical(index[[2L]], "timeout"))
+  }
   targets_timeout_option <- function(lhs) {
-    is.call(lhs) && length(lhs) >= 3L &&
-      head_matches(lhs[[1L]], list(quote(`$`), quote(`[[`), quote(`[`))) &&
-      identical(lhs[[2L]], quote(options)) &&
-      (identical(lhs[[3L]], quote(timeout)) ||
-        identical(lhs[[3L]], "timeout"))
+    if (!is.call(lhs) || length(lhs) < 3L ||
+        !head_matches(lhs[[1L]], list(quote(`$`), quote(`[[`), quote(`[`)))) {
+      return(FALSE)
+    }
+    (identical(lhs[[2L]], quote(options)) &&
+      is_timeout_index(lhs[[3L]])) || targets_timeout_option(lhs[[2L]])
   }
   option_timeout_mutations <- Filter(function(assignment) {
     length(assignment) >= 3L && targets_timeout_option(assignment[[2L]])
@@ -420,6 +441,12 @@ audit_timeout_ast <- function(tree) {
     reject("run_retained must have one direct function binding")
   }
   retained_function <- retained_bindings[[1L]][[3L]]
+  if (isTRUE(production) && !identical(
+      ast_sha256(retained_function),
+      "6175651f35ab55d685bc25230acb1441ffc561ea26fe2809f7aa96bc0ce25994"
+    )) {
+    reject("the retained process function source snapshot changed")
+  }
   retained_body <- retained_function[[3L]]
   retained_timeout_records <- timeout_records(retained_body)
   if (length(retained_timeout_records) != 1L ||
@@ -490,6 +517,16 @@ audit_timeout_ast <- function(tree) {
     library_environment = 0L,
     verify_protected_libraries = 2L
   )
+  expected_helper_ast <- c(
+    base_environment =
+      "23fd145aa535556563ef90dd92e6350492032428c0d58b32397e2bd6536c0bd6",
+    classify_failure =
+      "8048077f5e0673044bfb46f573b423d0ab5f55ff1d140c4701ae5a4f11dcad78",
+    library_environment =
+      "4d365e166297f6bc2e7c379f361a9a7517b7cf3361668d4516c99a2f1d5a556b",
+    verify_protected_libraries =
+      "082bfb9256ee6c5993488df24d4bca15715919eb78cefe609f807f4c85d19806"
+  )
   for (helper in retained_helper_symbols) {
     helper_name <- as.character(helper)
     helper_bindings <- Filter(function(binding) {
@@ -511,7 +548,10 @@ audit_timeout_ast <- function(tree) {
             expected_helper_formals[[helper_name]]
           ) || length(call_records(
             binding[[3L]], list(quote(processx::run))
-          )) != expected_helper_process_calls[[helper_name]]) {
+          )) != expected_helper_process_calls[[helper_name]] ||
+          !identical(
+            ast_sha256(binding[[3L]]), expected_helper_ast[[helper_name]]
+          )) {
         reject("allowlisted run_retained helper has an unaudited binding: ",
           helper)
       }
@@ -595,6 +635,12 @@ expect_valid("inside formals with missing default", parse_fixture(
     "function(missing) { process <- processx::run(",
     "timeout = timeout_seconds); process } }")
 ))
+timeout_mutation_fixture <- function(mutation) paste0(
+  "{ options <- list(timeout = 7200); ", mutation,
+  "; timeout_seconds <- suppressWarnings(as.numeric(options$timeout)); ",
+  "run_retained <- function(command) { process <- processx::run(",
+  "command, timeout = timeout_seconds); process } }"
+)
 invalid_fixtures <- list(
   none = "identity(timeout_seconds)",
   only_default = "list(timeout = 7200)",
@@ -797,6 +843,21 @@ invalid_fixtures <- list(
     "run_retained <- function(command) { process <- processx::run(",
     "command, timeout = timeout_seconds); process } }"
   ),
+  timeout_numeric_double_index = timeout_mutation_fixture(
+    "options[[1L]] <- 7200000"
+  ),
+  timeout_numeric_single_index = timeout_mutation_fixture(
+    "options[1L] <- list(7200000)"
+  ),
+  timeout_nested_dollar_index = timeout_mutation_fixture(
+    "options$timeout[[1L]] <- 7200000"
+  ),
+  timeout_nested_name_index = timeout_mutation_fixture(
+    "options[['timeout']][[1L]] <- 7200000"
+  ),
+  timeout_computed_name_index = timeout_mutation_fixture(
+    "options[[c('timeout')]] <- 7200000"
+  ),
   allowlisted_wrapper_alias = paste0(
     "{ options <- list(timeout = 7200); timeout_seconds <- ",
     "suppressWarnings(as.numeric(options$timeout)); paste <- ",
@@ -821,7 +882,7 @@ invalid_fixtures <- list(
 for (label in names(invalid_fixtures)) {
   expect_invalid(label, parse_fixture(invalid_fixtures[[label]]))
 }
-audit_timeout_ast(parse(path, keep.source = FALSE))
+audit_timeout_ast(parse(path, keep.source = FALSE), production = TRUE)
 options(warn = 2)
 probe <- processx::run(
   file.path(R.home("bin"), "Rscript"),
