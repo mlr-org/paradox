@@ -43,6 +43,19 @@ env -i \
     cd "$root"
     . scripts/activate
     test "$PARADOX_ACTIVE_ROOT" = "$root"
+    test "$(command -v R)" = "$root/.local/toolchain/bin/R"
+    test "$(command -v Rscript)" = "$root/.local/toolchain/bin/Rscript"
+    test "$(R RHOME)" = "$root/.local/toolchain/lib/R"
+    test "$(command -v pdflatex)" = \
+      "$root/.local/tinytex/bin/x86_64-linux/pdflatex"
+    test "$(command -v kpsewhich)" = \
+      "$root/.local/tinytex/bin/x86_64-linux/kpsewhich"
+    test "$(command -v makeindex)" = \
+      "$root/.local/tinytex/bin/x86_64-linux/makeindex"
+    test "$(command -v quarto)" = \
+      "$root/.local/quarto/1.9.38/bin/quarto"
+    test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+      "$root/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
     test "$XDG_RUNTIME_DIR" = "$root/.local/runtime"
     test "$CCACHE_TEMPDIR" = "$root/.local/tmp/ccache"
     test "$TMPDIR" = "$root/.local/tmp"

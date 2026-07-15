@@ -118,7 +118,20 @@ package sets with both locks, checks their direct compiler/geospatial/JVM
 capabilities, and authenticates the generated checkout-local Makevars and
 sealed receipt. `--verify-locks` and `--verify-receipt` are narrower
 read-only audits. Activation refuses an unverified overlay and exports only
-repository-local search paths. Do not use this overlay for native package
+repository-local search paths. On Linux it reconstructs the managed executable
+prefix in this exact order: TinyTeX, Quarto, the ordinary toolchain,
+`.local/bin`, P1, and GEO. Thus `R` and `Rscript` continue to resolve to the
+top-level `.local/toolchain/bin` launchers while the repository TinyTeX tools
+remain ahead of conda-provided TeX programs. The reverse-dependency gate rejects
+any other resolution. Exercise hostile ordering, repeated activation, and the
+R-level command predicates with:
+
+```sh
+PARADOX_COMPAT_TEST_INSTALLED_ROOT="$PARADOX_ROOT" \
+  scripts/environment/test-reverse-activation-contract
+```
+
+Do not use this overlay for native package
 validation or upstream differential baselines: it exists to reproduce the
 system dependencies of the P0/P1 Linux consumer corpus. Compatibility,
 reverse-dependency, and documentation evidence records whether it was active;

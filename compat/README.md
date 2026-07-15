@@ -43,7 +43,17 @@ compatibility stage records an inactive cross-platform status when the overlay
 is absent. When it is active, the stage verifies it before and after the
 workload and retains the receipt, seal, locks, bootstrap, activation helper,
 generated Makevars, and evidence helper under the stage's authenticated
-`metadata/` tree.
+`metadata/` tree. Overlay activation preserves the ordinary documentation and
+runtime contract: its exact managed `PATH` prefix is TinyTeX, Quarto, the
+top-level toolchain, `.local/bin`, P1, then GEO. It therefore must not replace
+the activated `.local/toolchain/bin/R` or `Rscript`, nor let conda TeX programs
+shadow the authenticated TinyTeX tools. On an installed Linux checkout, audit
+that contract with:
+
+```sh
+PARADOX_COMPAT_TEST_INSTALLED_ROOT="$PARADOX_ROOT" \
+  scripts/environment/test-reverse-activation-contract
+```
 
 After activating the local environment, fetch or verify the exact checked-in
 CRAN source snapshot with:
@@ -224,7 +234,11 @@ Run the pinned CRAN and Bioconductor source-package gate against that immutable
 candidate. A new reverse-run ID is required because retained evidence is never
 overwritten. The protected dependency library must already contain the hard
 dependency closure for the selected source packages; this harness deliberately
-does not mutate that library, and classifies missing dependencies explicitly:
+does not mutate that library, and classifies missing dependencies explicitly.
+Start from ordinary activation and source the verified system overlay when the
+selected Linux packages require it; do not edit `PATH` manually. The harness
+requires the exact top-level `.local/toolchain/bin/R` and `Rscript`, the
+authenticated TinyTeX tools, and the local `texi2dvi`:
 
 ```sh
 reverse_run_id="$run_id-reverse-p1"
@@ -256,6 +270,12 @@ and can be checked with `compat/verify-repository-evidence.R`. Use repeated
 preflight. Missing R dependencies and missing system dependencies have explicit
 result classifications; other check failures remain candidate-or-consumer
 failures rather than being silently waived.
+
+Before the full run, repeat the command above with a fresh preflight run ID and
+append `--package miesmuschel --plan-only`. This is the required practical
+one-package smoke after a candidate is refrozen: it exercises the real reverse
+harness and command-resolution preflight without creating a check stage or
+mutating either protected library.
 
 `github-repositories.tsv` records the executable subset selected from the
 organization-wide scan plus any explicitly reviewed external dependency

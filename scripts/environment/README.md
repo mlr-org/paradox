@@ -98,7 +98,15 @@ ordinary activation and before sourcing `scripts/activate-compat-system`.
 `scripts/environment/test-compat-system-installed` hard-links the three
 installed package inventories into a disposable checkout and exercises
 provision, offline, verification, receipt repair, activation, and active and
-inactive evidence binding without changing the source prefixes.
+inactive evidence binding without changing the source prefixes. It also runs
+`scripts/environment/test-reverse-activation-contract`, whose tracked
+`reverse-activation-probe.R` checks the same R-level command predicates used by
+the reverse-dependency gate. The contract fixture starts with hostile command
+shims, requires the exact managed prefix TinyTeX, Quarto, toolchain,
+`.local/bin`, P1, GEO, and proves repeated overlay activation is byte-for-byte
+stable before ordinary activation removes the overlay again. A source-only
+audit worktree can exercise an already installed checkout with
+`PARADOX_COMPAT_TEST_INSTALLED_ROOT=/absolute/checkout`.
 `scripts/environment/test-activation-isolation` starts a clean shell with
 hostile inherited XDG/ccache temporary paths and proves ordinary activation
 repairs both to plain repository-local directories, including the required

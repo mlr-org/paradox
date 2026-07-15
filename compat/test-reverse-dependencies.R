@@ -177,11 +177,22 @@ expected_r_home <- normalizePath(
   mustWork = TRUE
 )
 actual_r_home <- normalizePath(R.home(), winslash = "/", mustWork = TRUE)
-actual_r <- normalizePath(file.path(actual_r_home, "bin", "R"),
-  winslash = "/", mustWork = TRUE)
-if (!identical(actual_r_home, expected_r_home)) {
-  stop("the reverse-dependency gate is not running under repository-local R", call. = FALSE)
+actual_r <- file.path(root, ".local", "toolchain", "bin", "R")
+actual_rscript <- file.path(root, ".local", "toolchain", "bin", "Rscript")
+reverse_runtime_tools <- c(R = actual_r, Rscript = actual_rscript)
+reverse_runtime_links <- Sys.readlink(reverse_runtime_tools)
+if (!identical(actual_r_home, expected_r_home) ||
+    any(!file.exists(reverse_runtime_tools)) ||
+    any(dir.exists(reverse_runtime_tools)) ||
+    any(is.na(reverse_runtime_links) | nzchar(reverse_runtime_links)) ||
+    !identical(unname(Sys.which(names(reverse_runtime_tools))),
+      unname(reverse_runtime_tools))) {
+  stop(
+    "the reverse-dependency gate requires the exact activated top-level R and Rscript",
+    call. = FALSE
+  )
 }
+rm(reverse_runtime_tools, reverse_runtime_links)
 
 run_id <- arguments$run_id
 if (length(run_id) != 1L ||
@@ -616,12 +627,14 @@ if (!identical(
   stop("TinyTeX archive directory escaped the repository cache", call. = FALSE)
 }
 
-actual_rscript <- file.path(actual_r_home, "bin", "Rscript")
 texi2dvi_path <- file.path(root, ".local", "toolchain", "bin", "texi2dvi")
+reverse_require_regular_provenance_file(actual_r, "local R")
+reverse_require_regular_provenance_file(actual_rscript, "local Rscript")
 reverse_require_regular_provenance_file(texi2dvi_path, "local texi2dvi")
-if (!identical(unname(Sys.which("Rscript")), actual_rscript) ||
+if (!identical(unname(Sys.which("R")), actual_r) ||
+    !identical(unname(Sys.which("Rscript")), actual_rscript) ||
     !identical(unname(Sys.which("texi2dvi")), texi2dvi_path)) {
-  stop("Rscript or texi2dvi does not resolve to the exact local toolchain",
+  stop("R, Rscript, or texi2dvi does not resolve to the exact local toolchain",
     call. = FALSE)
 }
 tinytex_tool_sha256 <- unname(tools::sha256sum(tinytex_tool_paths))
@@ -1395,7 +1408,7 @@ for (index in seq_len(nrow(plan))) {
   reverse_write_command(
     preflight_command,
     child_environment,
-    file.path(R.home("bin"), "Rscript"),
+    actual_rscript,
     c(
       "--vanilla", preflight_script, candidate_package,
       unname(tinytex_tool_paths), texi2dvi_path
@@ -1414,7 +1427,7 @@ for (index in seq_len(nrow(plan))) {
   reverse_write_command(
     check_command,
     child_environment,
-    file.path(R.home("bin"), "R"),
+    actual_r,
     c(
       "CMD", "check", "--no-manual", "--no-multiarch",
       paste0("--library=", check_library), plan$archive[[index]]

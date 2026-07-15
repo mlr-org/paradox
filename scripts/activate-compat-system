@@ -55,9 +55,15 @@ fi
 export PARADOX_COMPAT_SYSTEM_ROOT PARADOX_COMPAT_SYSTEM_GEO
 export PARADOX_COMPAT_SYSTEM_P1 PARADOX_COMPAT_SYSTEM_RECEIPT
 
-# Remove prior overlay entries so re-sourcing remains idempotent. The ordinary
-# toolchain stays first, ensuring R's configured unqualified compiler names keep
-# selecting the reviewed GCC 14 toolchain rather than P1's Rust/MPI compiler.
+# Rebuild the complete repository-managed executable prefix. Documentation
+# tools retain the order established by ordinary activation, while the reviewed
+# R/compiler toolchain remains ahead of the P1 and GEO overlays. Remove every
+# managed entry first so hostile inherited ordering and repeated activation are
+# both repaired deterministically.
+PARADOX_COMPAT_TINYTEX_BIN="$PARADOX_ROOT/.local/tinytex/bin/x86_64-linux"
+PARADOX_COMPAT_QUARTO_BIN="$PARADOX_ROOT/.local/quarto/1.9.38/bin"
+PARADOX_COMPAT_TOOLCHAIN_BIN="$PARADOX_ROOT/.local/toolchain/bin"
+PARADOX_COMPAT_LOCAL_BIN="$PARADOX_ROOT/.local/bin"
 PARADOX_COMPAT_CLEAN_PATH=
 PARADOX_COMPAT_PATH_REMAINDER=${PATH:-}
 while :; do
@@ -72,8 +78,10 @@ while :; do
       ;;
   esac
   case $PARADOX_COMPAT_PATH_ENTRY in
-    ""|"$PARADOX_ROOT/.local/toolchain/bin"|\
-      "$PARADOX_COMPAT_SYSTEM_P1/bin"|"$PARADOX_COMPAT_SYSTEM_GEO/bin") ;;
+    ""|"$PARADOX_COMPAT_TINYTEX_BIN"|"$PARADOX_COMPAT_QUARTO_BIN"|\
+      "$PARADOX_COMPAT_TOOLCHAIN_BIN"|"$PARADOX_COMPAT_LOCAL_BIN"|\
+      "$PARADOX_COMPAT_SYSTEM_P1/bin"|"$PARADOX_COMPAT_SYSTEM_GEO/bin"|\
+      "$PARADOX_ROOT/.local/runtime-matrix/prefixes/"R-*/bin) ;;
     *)
       case :$PARADOX_COMPAT_CLEAN_PATH: in
         *:"$PARADOX_COMPAT_PATH_ENTRY":*) ;;
@@ -85,12 +93,23 @@ while :; do
   esac
   [ -n "$PARADOX_COMPAT_PATH_REMAINDER" ] || break
 done
-PATH="$PARADOX_ROOT/.local/toolchain/bin:$PARADOX_COMPAT_SYSTEM_P1/bin"
+PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_TOOLCHAIN_BIN:$PARADOX_COMPAT_LOCAL_BIN"
+if [ -x "$PARADOX_COMPAT_QUARTO_BIN/quarto" ]; then
+  PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_QUARTO_BIN:$PARADOX_COMPAT_MANAGED_PATH"
+fi
+if [ -x "$PARADOX_COMPAT_TINYTEX_BIN/pdflatex" ] &&
+    [ -x "$PARADOX_COMPAT_TINYTEX_BIN/kpsewhich" ] &&
+    [ -x "$PARADOX_COMPAT_TINYTEX_BIN/makeindex" ]; then
+  PARADOX_COMPAT_MANAGED_PATH="$PARADOX_COMPAT_TINYTEX_BIN:$PARADOX_COMPAT_MANAGED_PATH"
+fi
+PATH="$PARADOX_COMPAT_MANAGED_PATH:$PARADOX_COMPAT_SYSTEM_P1/bin"
 PATH="$PATH:$PARADOX_COMPAT_SYSTEM_GEO/bin"
 PATH="$PATH${PARADOX_COMPAT_CLEAN_PATH:+:$PARADOX_COMPAT_CLEAN_PATH}"
 export PATH
 unset PARADOX_COMPAT_CLEAN_PATH PARADOX_COMPAT_PATH_REMAINDER
-unset PARADOX_COMPAT_PATH_ENTRY
+unset PARADOX_COMPAT_PATH_ENTRY PARADOX_COMPAT_MANAGED_PATH
+unset PARADOX_COMPAT_TINYTEX_BIN PARADOX_COMPAT_QUARTO_BIN
+unset PARADOX_COMPAT_TOOLCHAIN_BIN PARADOX_COMPAT_LOCAL_BIN
 
 PKG_CONFIG="$PARADOX_ROOT/.local/toolchain/bin/pkg-config"
 PKG_CONFIG_LIBDIR="$PARADOX_COMPAT_SYSTEM_P1/lib/pkgconfig"

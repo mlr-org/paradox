@@ -49,6 +49,8 @@ done
 mkdir -p "$FIXTURE/compat" "$FIXTURE/environment" "$FIXTURE/scripts"
 mkdir -p "$FIXTURE/.local/bin" "$FIXTURE/.cache/downloads"
 mkdir -p "$FIXTURE/.local/compat/system"
+mkdir -p "$FIXTURE/.local/tinytex/bin/x86_64-linux"
+mkdir -p "$FIXTURE/.local/quarto/1.9.38/bin" "$FIXTURE/hostile-bin"
 cp "$ROOT/DESCRIPTION" "$FIXTURE/"
 cp "$ROOT/compat/compat-system-evidence.R" "$FIXTURE/compat/"
 cp "$ROOT/environment/Makevars" "$FIXTURE/environment/"
@@ -80,6 +82,20 @@ printf '%s\n' '#!/usr/bin/env sh' '[ "${1:-}" = RHOME ] || exit 1' \
 printf '%s\n' '#!/usr/bin/env sh' 'exit 1' >"$FIXTURE/.local/toolchain/bin/Rscript"
 chmod 0755 "$FIXTURE/.local/toolchain/bin/R"
 chmod 0755 "$FIXTURE/.local/toolchain/bin/Rscript"
+for tool in pdflatex kpsewhich makeindex; do
+  printf '%s\n' '#!/usr/bin/env sh' 'exit 0' \
+    >"$FIXTURE/.local/tinytex/bin/x86_64-linux/$tool"
+  chmod 0755 "$FIXTURE/.local/tinytex/bin/x86_64-linux/$tool"
+done
+printf '%s\n' '#!/usr/bin/env sh' 'exit 0' \
+  >"$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+chmod 0755 "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+for tool in R Rscript pdflatex kpsewhich makeindex quarto texi2dvi \
+  x86_64-conda-linux-gnu-cc
+do
+  printf '%s\n' '#!/usr/bin/env sh' 'exit 97' >"$FIXTURE/hostile-bin/$tool"
+  chmod 0755 "$FIXTURE/hostile-bin/$tool"
+done
 
 run_bootstrap() {
   PATH="$FIXTURE/.local/toolchain/bin:/usr/bin:/bin" \
@@ -113,20 +129,76 @@ env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
 
 (
   cd "$FIXTURE"
-  PATH=/usr/bin:/bin
+  PATH="$FIXTURE/hostile-bin:/usr/bin:/bin"
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
   . scripts/activate
+  ordinary_prefix="$FIXTURE/.local/tinytex/bin/x86_64-linux"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/quarto/1.9.38/bin"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/toolchain/bin"
+  ordinary_prefix="$ordinary_prefix:$FIXTURE/.local/bin"
+  case $PATH in
+    "$ordinary_prefix"|"$ordinary_prefix":*) ;;
+    *) fail "ordinary activation did not preserve managed executable order" ;;
+  esac
+  test "$(command -v R)" = "$FIXTURE/.local/toolchain/bin/R"
+  test "$(command -v Rscript)" = "$FIXTURE/.local/toolchain/bin/Rscript"
+  test "$(R RHOME)" = "$FIXTURE/.local/toolchain/lib/R"
+  test "$(command -v pdflatex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/pdflatex"
+  test "$(command -v kpsewhich)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/kpsewhich"
+  test "$(command -v makeindex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/makeindex"
+  test "$(command -v quarto)" = "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+  test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+    "$FIXTURE/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
   ordinary_before=$(mktemp "$FIXTURE/.local/tmp/ordinary-before-compat.XXXXXX")
   ordinary_after=$(mktemp "$FIXTURE/.local/tmp/ordinary-after-compat.XXXXXX")
   trap 'rm -f -- "$ordinary_before" "$ordinary_after"' EXIT HUP INT TERM
   /usr/bin/env -0 | LC_ALL=C /usr/bin/sort -z >"$ordinary_before"
   # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
   . scripts/activate-compat-system
+  overlay_prefix="$ordinary_prefix:$FIXTURE/.local/compat/system/p1/bin"
+  overlay_prefix="$overlay_prefix:$FIXTURE/.local/compat/system/geo/bin"
+  case $PATH in
+    "$overlay_prefix"|"$overlay_prefix":*) ;;
+    *) fail "compatibility activation did not preserve managed executable order" ;;
+  esac
+  test "$(command -v R)" = "$FIXTURE/.local/toolchain/bin/R"
+  test "$(command -v Rscript)" = "$FIXTURE/.local/toolchain/bin/Rscript"
+  test "$(R RHOME)" = "$FIXTURE/.local/toolchain/lib/R"
+  test "$(command -v pdflatex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/pdflatex"
+  test "$(command -v kpsewhich)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/kpsewhich"
+  test "$(command -v makeindex)" = \
+    "$FIXTURE/.local/tinytex/bin/x86_64-linux/makeindex"
+  test "$(command -v quarto)" = "$FIXTURE/.local/quarto/1.9.38/bin/quarto"
+  test "$(command -v x86_64-conda-linux-gnu-cc)" = \
+    "$FIXTURE/.local/toolchain/bin/x86_64-conda-linux-gnu-cc"
   test "$PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT" = "$FIXTURE"
   test "$PARADOX_COMPAT_SYSTEM_RECEIPT" = "$FIXTURE/.local/receipts/compat-system/receipt.tsv"
   test "$R_MAKEVARS_USER" = "$FIXTURE/.local/compat/system/Makevars"
   test "$XDG_RUNTIME_DIR" = "$FIXTURE/.local/runtime"
   test "$CCACHE_TEMPDIR" = "$FIXTURE/.local/tmp/ccache"
   scripts/bootstrap-compat-system --verify >/dev/null
+  overlay_path=$PATH
+  overlay_makevars=$R_MAKEVARS_USER
+  overlay_pkg_config=$PKG_CONFIG_LIBDIR
+  . scripts/activate-compat-system
+  test "$PATH" = "$overlay_path"
+  test "$R_MAKEVARS_USER" = "$overlay_makevars"
+  test "$PKG_CONFIG_LIBDIR" = "$overlay_pkg_config"
+  injected_path="$FIXTURE/hostile-bin:$FIXTURE/.local/compat/system/p1/bin"
+  injected_path="$injected_path:$FIXTURE/.local/tinytex/bin/x86_64-linux"
+  injected_path="$injected_path:$FIXTURE/.local/toolchain/bin"
+  injected_path="$injected_path:$FIXTURE/.local/quarto/1.9.38/bin"
+  injected_path="$injected_path:$FIXTURE/.local/compat/system/geo/bin"
+  PATH="$injected_path:$PATH"
+  export PATH
+  hash -r 2>/dev/null || true
+  . scripts/activate-compat-system
+  test "$PATH" = "$overlay_path"
   # shellcheck disable=SC2016 # R expression is deliberately single-quoted.
   "$INSTALLED_ROOT/.local/toolchain/bin/Rscript" --vanilla -e '
       args <- commandArgs(TRUE)
@@ -149,6 +221,7 @@ env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
       ), "try-error"))
     ' "$FIXTURE" "$FIXTURE/metadata-active"
 
+  # shellcheck disable=SC1091 # copied fixture helper resolved at runtime.
   . scripts/activate
   test "$PARADOX_ACTIVE_ROOT" = "$FIXTURE"
   test "$R_MAKEVARS_USER" = "$FIXTURE/environment/Makevars"
@@ -177,4 +250,6 @@ env -u PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT \
 
 grep -F 'ordinary_makevars_sha256' "$FIXTURE/.local/receipts/compat-system/receipt.tsv" >/dev/null
 grep -F '# Project-owned placeholder.' "$FIXTURE/.local/compat/system/Makevars" >/dev/null
+PARADOX_COMPAT_TEST_INSTALLED_ROOT="$INSTALLED_ROOT" \
+  "$ROOT/scripts/environment/test-reverse-activation-contract" >/dev/null
 printf '%s\n' 'compat_system_installed_fixture=passed'
