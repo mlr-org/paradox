@@ -34,6 +34,296 @@ if (length(args) == 2L) {
   )
 }
 
+local({
+  valid_case <- normalizer$differential_normalize(list(
+    description = "valid policy fixture",
+    outcome = list(status = "value", value = 1L),
+    warnings = list(),
+    messages = list(),
+    stdout = character(),
+    rng_state_after = 1L
+  ))
+  normalizer$.differential_assert_value_case_outcomes(
+    list(sentinel = valid_case),
+    "Valid fixture"
+  )
+  expect_error(
+    function() normalizer$.differential_assert_value_case_outcomes(
+      list(sentinel = list()),
+      "Malformed fixture"
+    ),
+    c("Malformed fixture", "sentinel", "<malformed>"),
+    "malformed normalized outcome policy"
+  )
+  partial_case <- valid_case
+  names(partial_case$values)[names(partial_case$values) == "outcome"] <-
+    "outcomes"
+  expect_error(
+    function() normalizer$.differential_assert_value_case_outcomes(
+      list(sentinel = partial_case),
+      "Partial-match fixture"
+    ),
+    c("Partial-match fixture", "sentinel", "<malformed>"),
+    "partially matched normalized outcome policy"
+  )
+})
+
+if (length(args) == 2L &&
+    identical(harness$origins[["cases"]], "candidate-snapshot")) local({
+  # Keep the few deliberate NSE/delayed bindings explicit; every other global
+  # must resolve from the minimal case environment or baseenv().
+  if (!requireNamespace("codetools", quietly = TRUE)) {
+    stop("The authenticated minimal-parent audit requires codetools", call. = FALSE)
+  }
+  case_environment <- new.env(parent = baseenv())
+  sys.source(harness$paths[["cases"]], envir = case_environment)
+  cases <- case_environment$paradox_differential_cases
+  functions <- list(
+    `.helper:diff_case` = case_environment$diff_case,
+    `.helper:observe_call` = case_environment$observe_call,
+    `.helper:project_domain` = case_environment$project_domain
+  )
+  functions <- c(functions, lapply(cases, function(case) case$run))
+
+  unresolved <- character()
+  for (context in names(functions)) {
+    globals <- codetools::findGlobals(functions[[context]], merge = FALSE)
+    for (kind in c("functions", "variables")) {
+      symbols <- globals[[kind]]
+      missing <- symbols[
+        !vapply(symbols, exists, logical(1L), envir = baseenv(), inherits = FALSE) &
+          !vapply(
+            symbols,
+            exists,
+            logical(1L),
+            envir = case_environment,
+            inherits = FALSE
+          )
+      ]
+      unresolved <- c(
+        unresolved,
+        sprintf("%s\t%s\t%s", context, sub("s$", "", kind), missing)
+      )
+    }
+  }
+  expected_unresolved <- c(
+    "diagnostics\tvariable\tabsent",
+    "domain_lazy_arguments\tvariable\tinvalid_dependency",
+    "validation\tfunction\t:=",
+    "validation\tvariable\tcount"
+  )
+  if (!identical(sort(unresolved), sort(expected_unresolved))) {
+    stop(
+      paste0(
+        "Default differential cases have an unexpected minimal-parent global ledger: ",
+        paste(sort(unresolved), collapse = "; ")
+      ),
+      call. = FALSE
+    )
+  }
+})
+
+if (length(args) == 2L) local({
+  # Exercise the authenticated scripts themselves.  Calling only the shared
+  # helpers would not prove that capture and comparison actually fail closed.
+  directory <- tempfile("paradox-differential-outcome-policy-")
+  dir.create(directory)
+  on.exit(unlink(directory, recursive = TRUE, force = TRUE))
+
+  roles <- normalizer$.differential_harness_roles
+  fixture_paths <- file.path(directory, basename(harness$paths[roles]))
+  names(fixture_paths) <- roles
+  copied <- file.copy(
+    harness$paths[roles],
+    fixture_paths,
+    overwrite = FALSE,
+    copy.mode = TRUE,
+    copy.date = TRUE
+  )
+  if (any(!copied)) {
+    stop("Could not create the differential outcome-policy harness", call. = FALSE)
+  }
+  Sys.chmod(fixture_paths, mode = "0644")
+
+  writeLines(c(
+    "diff_case <- function(description, run, seed = 1L) {",
+    "  list(description = description, run = run, seed = as.integer(seed))",
+    "}",
+    "paradox_differential_cases <- list(",
+    "  sentinel = diff_case(",
+    "    \"sentinel outcome-policy fixture\",",
+    "    function() stop(\"sentinel top-level abort\", call. = FALSE)",
+    "  )",
+    ")"
+  ), fixture_paths[["cases"]], useBytes = TRUE)
+  writeLines(
+    "case\tbaseline_fingerprint\tcandidate_fingerprint\treason",
+    fixture_paths[["expected-differences"]],
+    useBytes = TRUE
+  )
+
+  origins <- rep("candidate-snapshot", length(roles))
+  names(origins) <- roles
+  origins[["cases"]] <- "external-override"
+  origins[["expected-differences"]] <- "strict-empty"
+  manifest <- data.frame(
+    role = roles,
+    file = basename(fixture_paths),
+    sha256 = vapply(
+      fixture_paths,
+      normalizer$.differential_sha256_file,
+      character(1L)
+    ),
+    origin = unname(origins),
+    stringsAsFactors = FALSE
+  )
+  manifest_path <- file.path(directory, "harness-sha256.tsv")
+  utils::write.table(
+    manifest,
+    file = manifest_path,
+    quote = FALSE,
+    sep = "\t",
+    row.names = FALSE,
+    col.names = TRUE
+  )
+
+  fixture_normalizer <- new.env(parent = baseenv())
+  sys.source(fixture_paths[["normalizer"]], envir = fixture_normalizer)
+  fixture_harness <- fixture_normalizer$.differential_validate_harness_manifest(
+    manifest_path
+  )
+
+  run_directory <- dirname(dirname(harness$manifest_path))
+  candidate_library <- normalizePath(
+    file.path(run_directory, "library-candidate"),
+    mustWork = TRUE
+  )
+  if (!dir.exists(file.path(candidate_library, "paradox"))) {
+    stop("Differential outcome-policy fixture has no candidate paradox", call. = FALSE)
+  }
+  shared_libraries <- .libPaths()
+  shared_libraries <- shared_libraries[
+    normalizePath(shared_libraries, mustWork = TRUE) != candidate_library
+  ]
+  shared_library <- paste(shared_libraries, collapse = .Platform$path.sep)
+  if (!nzchar(shared_library)) {
+    stop("Differential outcome-policy fixture has no shared R library", call. = FALSE)
+  }
+
+  rscript <- file.path(R.home("bin"), "Rscript")
+  run_rscript <- function(script, arguments) {
+    output <- suppressWarnings(system2(
+      rscript,
+      c("--vanilla", shQuote(script), vapply(arguments, shQuote, character(1L))),
+      stdout = TRUE,
+      stderr = TRUE
+    ))
+    status <- attr(output, "status")
+    if (is.null(status)) status <- 0L
+    list(status = status, output = output)
+  }
+  assert_failed <- function(process, patterns, label) {
+    if (identical(process$status, 0L) ||
+        any(!vapply(
+          patterns,
+          grepl,
+          logical(1L),
+          x = paste(process$output, collapse = "\n"),
+          fixed = TRUE
+        ))) {
+      stop(
+        paste0(
+          "Expected actionable subprocess failure for ", label, ":\n",
+          paste(process$output, collapse = "\n")
+        ),
+        call. = FALSE
+      )
+    }
+  }
+
+  capture_output <- file.path(directory, "sentinel-capture.rds")
+  capture_process <- run_rscript(
+    fixture_paths[["capture"]],
+    c(
+      "--library", candidate_library,
+      "--shared-library", shared_library,
+      "--cases", fixture_paths[["cases"]],
+      "--normalizer", fixture_paths[["normalizer"]],
+      "--harness-manifest", manifest_path,
+      "--output", capture_output,
+      "--label", "sentinel",
+      "--revision", "sentinel"
+    )
+  )
+  assert_failed(
+    capture_process,
+    c("sentinel", "sentinel top-level abort", "aborted before returning observations"),
+    "real capture top-level error policy"
+  )
+  if (file.exists(capture_output)) {
+    stop("Failed capture wrote an observation artifact", call. = FALSE)
+  }
+
+  normalized_error <- fixture_normalizer$differential_normalize(list(
+    description = "sentinel outcome-policy fixture",
+    outcome = list(
+      status = "error",
+      condition = list(
+        class = c("simpleError", "error", "condition"),
+        message = "sentinel normalized abort",
+        call = NULL
+      )
+    ),
+    warnings = list(),
+    messages = list(),
+    stdout = character(),
+    rng_state_after = 1L
+  ))
+  capture_metadata <- list(
+    label = "sentinel",
+    revision = "sentinel",
+    package_version = "0.0.0",
+    package_path = file.path(candidate_library, "paradox"),
+    R_version = R.version.string,
+    case_file = normalizePath(fixture_paths[["cases"]], mustWork = TRUE),
+    case_file_sha256 = fixture_harness$file_sha256[["cases"]],
+    harness = fixture_normalizer$.differential_harness_record(fixture_harness),
+    available_cases = "sentinel",
+    selected_cases = "sentinel"
+  )
+  identical_error_capture <- list(
+    format_version = 2L,
+    normalization_version = fixture_normalizer$.differential_normalization_version,
+    metadata = capture_metadata,
+    cases = list(sentinel = normalized_error)
+  )
+  baseline_path <- file.path(directory, "identical-error-baseline.rds")
+  candidate_path <- file.path(directory, "identical-error-candidate.rds")
+  saveRDS(identical_error_capture, baseline_path, version = 3L)
+  saveRDS(identical_error_capture, candidate_path, version = 3L)
+  report_path <- file.path(directory, "identical-error-report.rds")
+  report_text_path <- file.path(directory, "identical-error-report.txt")
+  compare_process <- run_rscript(
+    fixture_paths[["compare"]],
+    c(
+      baseline_path,
+      candidate_path,
+      report_path,
+      report_text_path,
+      manifest_path,
+      fixture_paths[["expected-differences"]]
+    )
+  )
+  assert_failed(
+    compare_process,
+    c("Baseline", "sentinel", "error", "non-value top-level"),
+    "real comparison identical-error policy"
+  )
+  if (file.exists(report_path) || file.exists(report_text_path)) {
+    stop("Rejected identical-error comparison wrote a report", call. = FALSE)
+  }
+})
+
 valid <- data.table::data.table(value = 1:2)
 second_valid <- data.table::data.table(value = 1:2)
 valid_marker <- normalizer$.diff_data_table_selfref(

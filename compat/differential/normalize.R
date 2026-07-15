@@ -7,6 +7,83 @@
 
 .differential_normalization_version <- 3L
 
+.differential_abort_case <- function(case_name, condition) {
+  if (length(case_name) != 1L || !is.character(case_name) ||
+      is.na(case_name) || !nzchar(case_name)) {
+    stop("Differential case failure has no valid case name", call. = FALSE)
+  }
+  if (!inherits(condition, "condition")) {
+    stop(
+      sprintf("Differential case `%s` failed with a malformed condition", case_name),
+      call. = FALSE
+    )
+  }
+  stop(
+    sprintf(
+      "Differential case `%s` aborted before returning observations: %s",
+      case_name,
+      conditionMessage(condition)
+    ),
+    call. = FALSE
+  )
+}
+
+.differential_normalized_outcome_status <- function(case) {
+  if (!is.list(case) ||
+      !identical(case[["kind", exact = TRUE]], "list") ||
+      !is.list(case[["values", exact = TRUE]])) {
+    return(NA_character_)
+  }
+  outcome <- case[["values", exact = TRUE]][["outcome", exact = TRUE]]
+  if (!is.list(outcome) ||
+      !identical(outcome[["kind", exact = TRUE]], "list") ||
+      !is.list(outcome[["values", exact = TRUE]])) {
+    return(NA_character_)
+  }
+  status <- outcome[["values", exact = TRUE]][["status", exact = TRUE]]
+  if (!is.list(status) ||
+      !identical(status[["kind", exact = TRUE]], "atomic") ||
+      !identical(status[["type", exact = TRUE]], "character")) {
+    return(NA_character_)
+  }
+  value <- status[["value", exact = TRUE]]
+  if (length(value) != 1L || !is.character(value) || is.na(value) ||
+      !nzchar(value)) {
+    return(NA_character_)
+  }
+  value
+}
+
+.differential_assert_value_case_outcomes <- function(cases, label) {
+  if (length(label) != 1L || !is.character(label) || is.na(label) ||
+      !nzchar(label)) {
+    stop("Differential capture outcome validation has no valid label", call. = FALSE)
+  }
+  if (!is.list(cases) || is.null(names(cases)) || anyNA(names(cases)) ||
+      any(!nzchar(names(cases))) || anyDuplicated(names(cases))) {
+    stop(sprintf("%s differential capture has a malformed case inventory", label),
+      call. = FALSE)
+  }
+  statuses <- vapply(
+    cases,
+    .differential_normalized_outcome_status,
+    character(1L)
+  )
+  invalid <- is.na(statuses) | statuses != "value"
+  if (any(invalid)) {
+    observed <- ifelse(is.na(statuses[invalid]), "<malformed>", statuses[invalid])
+    stop(
+      sprintf(
+        "%s differential capture has non-value top-level case outcomes: %s",
+        label,
+        paste(sprintf("`%s`=%s", names(observed), observed), collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
 .differential_harness_roles <- c(
   "runner",
   "cases",

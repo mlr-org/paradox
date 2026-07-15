@@ -107,7 +107,7 @@ run_case <- function(case, name) {
   RNGkind(kind = "Mersenne-Twister", normal.kind = "Inversion", sample.kind = "Rejection")
   set.seed(as.integer(case$seed))
 
-  stdout <- capture.output({
+  stdout <- utils::capture.output({
     outcome <- tryCatch(
       withCallingHandlers(
         list(status = "value", value = case$run()),
@@ -120,7 +120,7 @@ run_case <- function(case, name) {
           invokeRestart("muffleMessage")
         }
       ),
-      error = function(e) list(status = "error", condition = condition_projection(e))
+      error = function(e) normalizer_env$.differential_abort_case(name, e)
     )
   }, type = "output")
 

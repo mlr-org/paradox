@@ -146,7 +146,7 @@ paradox_differential_cases <- list(
           dimensions = dim(domain),
           attribute_names = names(attributes(domain)),
           cargo_names = names(domain$cargo[[1L]]),
-          printed = paste(capture.output(print(domain)), collapse = "\n")
+          printed = paste(utils::capture.output(print(domain)), collapse = "\n")
         ))
       }
 

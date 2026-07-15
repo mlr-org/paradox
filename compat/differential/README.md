@@ -152,6 +152,10 @@ different dynamic environments as equal.
 observables: public property vectors, ordinary tables/lists, formatted
 conditions, callback outputs, or a closure whose lexical capture matters. Do
 not return a ParamSet/Design/R6 instance directly; project the relevant fields.
+An uncaught error from the case-level `run` function is a harness failure on
+either side, and the comparator also rejects retained captures with a non-value
+top-level outcome. Record errors that are themselves intentional observations
+with `observe_call()` inside the case result instead.
 
 The runner also accepts `--cases path/to/file.R`. A custom file must define the
 same named-list contract; it can source or reproduce the tiny `diff_case()`

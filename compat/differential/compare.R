@@ -61,6 +61,14 @@ if (!identical(baseline$metadata$available_cases, candidate$metadata$available_c
     !identical(baseline$metadata$selected_cases, candidate$metadata$selected_cases)) {
   stop("Baseline and candidate case inventories/selections differ", call. = FALSE)
 }
+normalizer$.differential_assert_value_case_outcomes(
+  baseline$cases,
+  "Baseline"
+)
+normalizer$.differential_assert_value_case_outcomes(
+  candidate$cases,
+  "Candidate"
+)
 
 case_names <- names(baseline$cases)
 equal <- vapply(case_names, function(name) {
