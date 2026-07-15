@@ -275,15 +275,15 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 missing_argument <- unname(as.list(alist(value = )))
-audit_timeout_ast <- function(tree) {
+timeout_records <- function(tree) {
   records <- list()
   walk <- function(x) {
-    if (is.call(x)) {
+    if (is.call(x) || is.pairlist(x)) {
       elements <- as.list(x)
       positions <- as.integer(which(names(elements) == "timeout"))
       if (length(positions)) {
         records[[length(records) + 1L]] <<- list(
-          call = x, positions = positions
+          node = x, positions = positions
         )
       }
     }
@@ -295,23 +295,39 @@ audit_timeout_ast <- function(tree) {
     }
     invisible(NULL)
   }
+  walk(tree)
+  records
+}
+audit_timeout_ast <- function(tree) {
   reject <- function(...) {
     stop("timeout AST audit: ", ..., call. = FALSE)
   }
-  walk(tree)
-  if (length(records) != 1L) {
-    reject("expected one named timeout record, found ", length(records))
+  records <- timeout_records(tree)
+  if (length(records) != 2L) {
+    reject("expected two named timeout records, found ", length(records))
   }
-  record <- records[[1L]]
-  if (length(record$positions) != 1L) {
+  if (any(lengths(lapply(records, `[[`, "positions")) != 1L)) {
     reject("the named timeout must occupy exactly one numeric call position")
   }
-  if (!identical(record$call[[1L]], quote(processx::run))) {
-    reject("the named timeout does not belong to a direct processx::run call")
+  is_direct <- vapply(records, function(record) {
+    is.call(record$node) &&
+      identical(record$node[[1L]], quote(processx::run))
+  }, logical(1L))
+  is_default <- vapply(records, function(record) {
+    is.call(record$node) && identical(record$node[[1L]], quote(list))
+  }, logical(1L))
+  if (sum(is_direct) != 1L || sum(is_default) != 1L) {
+    reject("expected one direct processx::run timeout and one list default")
   }
-  timeout_argument <- unname(as.list(record$call)[record$positions])
-  if (!identical(timeout_argument, list(quote(timeout_seconds)))) {
+  direct <- records[[which(is_direct)]]
+  direct_argument <- unname(as.list(direct$node)[direct$positions])
+  if (!identical(direct_argument, list(quote(timeout_seconds)))) {
     reject("the direct timeout argument is not the exact seconds symbol")
+  }
+  default <- records[[which(is_default)]]
+  default_argument <- unname(as.list(default$node)[default$positions])
+  if (!identical(default_argument, list(7200))) {
+    reject("the command-line timeout default is not exactly 7200 seconds")
   }
   invisible(TRUE)
 }
@@ -334,50 +350,103 @@ expect_invalid <- function(label, tree) {
   }
 }
 
-expect_valid("direct", parse_fixture(
-  "processx::run(command, timeout = timeout_seconds)"
-))
+valid_fixture <- paste0(
+  "{ list(timeout = 7200); ",
+  "processx::run(command, timeout = timeout_seconds) }"
+)
+expect_valid("command line and direct", parse_fixture(valid_fixture))
 expect_valid("inside formals with missing default", parse_fixture(
-  "function(missing, run = processx::run(timeout = timeout_seconds)) NULL"
+  paste0("{ list(timeout = 7200); function(missing, run = ",
+    "processx::run(timeout = timeout_seconds)) NULL }")
 ))
 invalid_fixtures <- list(
   none = "identity(timeout_seconds)",
+  only_default = "list(timeout = 7200)",
+  only_direct = "processx::run(timeout = timeout_seconds)",
   duplicate_same_call = paste0(
-    "processx::run(timeout = timeout_seconds, ",
-    "timeout = timeout_seconds)"
+    "{ list(timeout = 7200); processx::run(",
+    "timeout = timeout_seconds, timeout = timeout_seconds) }"
   ),
   two_direct = paste0(
-    "{ processx::run(timeout = timeout_seconds); ",
+    "{ list(timeout = 7200); ",
+    "processx::run(timeout = timeout_seconds); ",
     "processx::run(timeout = timeout_seconds) }"
   ),
   nested_direct = paste0(
+    "{ list(timeout = 7200); ",
     "processx::run(timeout = processx::run(",
-    "timeout = timeout_seconds))"
+    "timeout = timeout_seconds)) }"
   ),
-  alias_runner_named = "runner(timeout = timeout_seconds)",
+  alias_runner_named = paste0(
+    "{ list(timeout = 7200); runner(timeout = timeout_seconds) }"
+  ),
+  alias_runner_appended = paste0(
+    valid_fixture, "; runner(timeout = timeout_seconds)"
+  ),
   do_call_list_named = paste0(
-    "do.call(processx::run, list(timeout = timeout_seconds))"
+    "{ list(timeout = 7200); do.call(processx::run, ",
+    "list(timeout = timeout_seconds)) }"
   ),
-  arbitrary_other_named = "arbitrary(timeout = timeout_seconds)",
-  multiplied_direct = "processx::run(timeout = timeout_seconds * 1000)",
+  do_call_appended = paste0(
+    valid_fixture,
+    "; do.call(processx::run, list(timeout = timeout_seconds))"
+  ),
+  arbitrary_other_named = paste0(
+    "{ list(timeout = 7200); arbitrary(timeout = timeout_seconds) }"
+  ),
+  multiplied_direct = paste0(
+    "{ list(timeout = 7200); processx::run(",
+    "timeout = timeout_seconds * 1000) }"
+  ),
+  converted_direct = paste0(
+    "{ list(timeout = 7200); processx::run(",
+    "timeout = as.numeric(timeout_seconds)) }"
+  ),
   converted_call_in_pairlist = paste0(
-    "function(missing, run = processx::run(",
-    "timeout = as.numeric(timeout_seconds))) NULL"
+    "{ list(timeout = 7200); function(missing, run = processx::run(",
+    "timeout = as.numeric(timeout_seconds))) NULL }"
+  ),
+  converted_default = paste0(
+    "{ list(timeout = as.numeric(7200)); ",
+    "processx::run(timeout = timeout_seconds) }"
+  ),
+  multiplied_default = paste0(
+    "{ list(timeout = 7200 * 1000); ",
+    "processx::run(timeout = timeout_seconds) }"
+  ),
+  duplicate_default = paste0(
+    "{ list(timeout = 7200, timeout = 7200); ",
+    "processx::run(timeout = timeout_seconds) }"
+  ),
+  nested_effective_redefinition = paste0(
+    "list(timeout = 7200); run_retained <- function(...) ",
+    "processx::run(timeout = timeout_seconds); ",
+    "{ run_retained <- function(...) processx::run(",
+    "timeout = timeout_seconds * 1000) }"
+  ),
+  superassign_redefinition = paste0(
+    "list(timeout = 7200); run_retained <- function(...) ",
+    "processx::run(timeout = timeout_seconds); ",
+    "run_retained <<- function(...) processx::run(",
+    "timeout = timeout_seconds * 1000)"
+  ),
+  equals_redefinition = paste0(
+    "list(timeout = 7200); run_retained <- function(...) ",
+    "processx::run(timeout = timeout_seconds); ",
+    "run_retained = function(...) processx::run(",
+    "timeout = timeout_seconds * 1000)"
+  ),
+  assign_redefinition = paste0(
+    "list(timeout = 7200); run_retained <- function(...) ",
+    "processx::run(timeout = timeout_seconds); ",
+    "assign('run_retained', function(...) processx::run(",
+    "timeout = timeout_seconds * 1000))"
   )
 )
 for (label in names(invalid_fixtures)) {
   expect_invalid(label, parse_fixture(invalid_fixtures[[label]]))
 }
-expressions <- as.list(parse(path, keep.source = FALSE))
-run_retained_definitions <- Filter(function(x) {
-  is.call(x) && length(x) == 3L && identical(x[[1L]], quote(`<-`)) &&
-    identical(x[[2L]], quote(run_retained)) && is.call(x[[3L]]) &&
-    identical(x[[3L]][[1L]], quote(`function`))
-}, expressions)
-if (length(run_retained_definitions) != 1L) {
-  stop("documentation run_retained definition is not unique", call. = FALSE)
-}
-audit_timeout_ast(run_retained_definitions[[1L]][[3L]])
+audit_timeout_ast(parse(path, keep.source = FALSE))
 options(warn = 2)
 probe <- processx::run(
   file.path(R.home("bin"), "Rscript"),
