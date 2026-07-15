@@ -396,6 +396,21 @@ audit_timeout_ast <- function(tree) {
       !identical(timeout_bindings[[1L]][[3L]], expected_timeout_rhs)) {
     reject("timeout_seconds must have one exact seconds-valued binding")
   }
+  targets_timeout_option <- function(lhs) {
+    is.call(lhs) && length(lhs) >= 3L &&
+      head_matches(lhs[[1L]], list(quote(`$`), quote(`[[`), quote(`[`))) &&
+      identical(lhs[[2L]], quote(options)) &&
+      (identical(lhs[[3L]], quote(timeout)) ||
+        identical(lhs[[3L]], "timeout"))
+  }
+  option_timeout_mutations <- Filter(function(assignment) {
+    length(assignment) >= 3L && targets_timeout_option(assignment[[2L]])
+  }, call_records(
+    tree, list(quote(`<-`), quote(`<<-`), quote(`=`))
+  ))
+  if (length(option_timeout_mutations)) {
+    reject("the parsed command-line timeout may not be mutated")
+  }
   retained_bindings <- binding_records(tree, quote(run_retained))
   if (length(retained_bindings) != 1L ||
       !identical(retained_bindings[[1L]][[1L]], quote(`<-`)) ||
@@ -463,7 +478,20 @@ audit_timeout_ast <- function(tree) {
     quote(sprintf), quote(Sys.time), quote(unname),
     quote(verify_protected_libraries), quote(writeLines)
   )
+  expected_helper_formals <- list(
+    base_environment = "overlay",
+    classify_failure = "text",
+    library_environment = "overlay",
+    verify_protected_libraries = c("context", "verify_toolchain_tree")
+  )
+  expected_helper_process_calls <- c(
+    base_environment = 0L,
+    classify_failure = 0L,
+    library_environment = 0L,
+    verify_protected_libraries = 2L
+  )
   for (helper in retained_helper_symbols) {
+    helper_name <- as.character(helper)
     helper_bindings <- Filter(function(binding) {
       head_matches(binding[[1L]], list(
         quote(assign), quote(delayedAssign), quote(makeActiveBinding)
@@ -474,9 +502,16 @@ audit_timeout_ast <- function(tree) {
     }
     if (length(helper_bindings) == 1L) {
       binding <- helper_bindings[[1L]]
-      if (!identical(binding[[1L]], quote(`<-`)) ||
+      if (!helper_name %in% names(expected_helper_formals) ||
+          !identical(binding[[1L]], quote(`<-`)) ||
           !identical(binding[[2L]], helper) || !is.call(binding[[3L]]) ||
-          !identical(binding[[3L]][[1L]], quote(`function`))) {
+          !identical(binding[[3L]][[1L]], quote(`function`)) ||
+          !identical(
+            names(binding[[3L]][[2L]]),
+            expected_helper_formals[[helper_name]]
+          ) || length(call_records(
+            binding[[3L]], list(quote(processx::run))
+          )) != expected_helper_process_calls[[helper_name]]) {
         reject("allowlisted run_retained helper has an unaudited binding: ",
           helper)
       }
@@ -496,9 +531,14 @@ audit_timeout_ast <- function(tree) {
     }
     NA
   }
+  is_inert_condition <- function(value) {
+    is.null(value) ||
+      (is.atomic(value) && length(value) == 1L && is.na(value))
+  }
   dead_direct_calls <- Filter(function(call) {
     identical(call[[1L]], quote(`if`)) && length(call) >= 3L &&
-      identical(constant_truth(call[[2L]]), FALSE) &&
+      (identical(constant_truth(call[[2L]]), FALSE) ||
+        is_inert_condition(call[[2L]])) &&
       any(vapply(
         call_records(call, list(quote(processx::run))),
         identical, logical(1L), direct$node
@@ -743,6 +783,39 @@ invalid_fixtures <- list(
     "classify_failure <- processx::run; process <- processx::run(",
     "command, timeout = timeout_seconds); classify_failure(command, ",
     "c(), FALSE, NULL, FALSE, FALSE, FALSE, 7200000); process } }"
+  ),
+  timeout_dollar_mutation = paste0(
+    "{ options <- list(timeout = 7200); options$timeout <- ",
+    "options$timeout * 1000; timeout_seconds <- suppressWarnings(",
+    "as.numeric(options$timeout)); run_retained <- function(command) { ",
+    "process <- processx::run(command, timeout = timeout_seconds); ",
+    "process } }"
+  ),
+  timeout_index_mutation = paste0(
+    "{ options <- list(timeout = 7200); options[['timeout']] <- 7200000; ",
+    "timeout_seconds <- suppressWarnings(as.numeric(options$timeout)); ",
+    "run_retained <- function(command) { process <- processx::run(",
+    "command, timeout = timeout_seconds); process } }"
+  ),
+  allowlisted_wrapper_alias = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); paste <- ",
+    "function(command) processx::run(command, c(), FALSE, NULL, FALSE, ",
+    "FALSE, FALSE, timeout_seconds * 1000); run_retained <- ",
+    "function(command) { process <- processx::run(command, ",
+    "timeout = timeout_seconds); paste(command); process } }"
+  ),
+  na_guarded_direct = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (NA) process <- processx::run(",
+    "timeout = timeout_seconds); process } }"
+  ),
+  null_guarded_direct = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (NULL) process <- processx::run(",
+    "timeout = timeout_seconds); process } }"
   )
 )
 for (label in names(invalid_fixtures)) {
