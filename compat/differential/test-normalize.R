@@ -47,25 +47,53 @@ local({
     list(sentinel = valid_case),
     "Valid fixture"
   )
-  expect_error(
-    function() normalizer$.differential_assert_value_case_outcomes(
-      list(sentinel = list()),
-      "Malformed fixture"
-    ),
-    c("Malformed fixture", "sentinel", "<malformed>"),
-    "malformed normalized outcome policy"
-  )
+  expect_malformed <- function(case, label) {
+    expect_error(
+      function() normalizer$.differential_assert_value_case_outcomes(
+        list(sentinel = case),
+        label
+      ),
+      c(label, "sentinel", "<malformed>"),
+      paste(label, "normalized outcome policy")
+    )
+  }
+  expect_malformed(list(), "Malformed fixture")
+
   partial_case <- valid_case
   names(partial_case$values)[names(partial_case$values) == "outcome"] <-
     "outcomes"
-  expect_error(
-    function() normalizer$.differential_assert_value_case_outcomes(
-      list(sentinel = partial_case),
-      "Partial-match fixture"
-    ),
-    c("Partial-match fixture", "sentinel", "<malformed>"),
-    "partially matched normalized outcome policy"
+  expect_malformed(partial_case, "Partial-match fixture")
+
+  duplicate_wrapper <- append(
+    valid_case,
+    list(kind = valid_case$kind),
+    after = 1L
   )
+  expect_malformed(duplicate_wrapper, "Duplicate wrapper fixture")
+
+  duplicate_outcome <- valid_case
+  duplicate_outcome$values <- append(
+    duplicate_outcome$values,
+    list(outcome = duplicate_outcome$values$outcome),
+    after = 2L
+  )
+  expect_malformed(duplicate_outcome, "Duplicate outcome fixture")
+
+  duplicate_status <- valid_case
+  duplicate_status$values$outcome$values <- append(
+    duplicate_status$values$outcome$values,
+    list(status = duplicate_status$values$outcome$values$status),
+    after = 1L
+  )
+  expect_malformed(duplicate_status, "Duplicate status fixture")
+
+  duplicate_value <- valid_case
+  duplicate_value$values$outcome$values <- append(
+    duplicate_value$values$outcome$values,
+    list(value = duplicate_value$values$outcome$values$value),
+    after = 2L
+  )
+  expect_malformed(duplicate_value, "Duplicate value fixture")
 })
 
 if (length(args) == 2L &&

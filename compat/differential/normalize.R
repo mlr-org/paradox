@@ -28,27 +28,56 @@
   )
 }
 
+.differential_has_exact_names <- function(value, expected_names) {
+  is.list(value) && identical(names(value), expected_names)
+}
+
 .differential_normalized_outcome_status <- function(case) {
-  if (!is.list(case) ||
-      !identical(case[["kind", exact = TRUE]], "list") ||
-      !is.list(case[["values", exact = TRUE]])) {
+  if (!.differential_has_exact_names(
+        case,
+        c("kind", "values", "attributes")
+      ) || !identical(case[["kind", exact = TRUE]], "list")) {
     return(NA_character_)
   }
-  outcome <- case[["values", exact = TRUE]][["outcome", exact = TRUE]]
-  if (!is.list(outcome) ||
-      !identical(outcome[["kind", exact = TRUE]], "list") ||
-      !is.list(outcome[["values", exact = TRUE]])) {
+  case_values <- case[["values", exact = TRUE]]
+  if (!.differential_has_exact_names(
+        case_values,
+        c(
+          "description", "outcome", "warnings", "messages", "stdout",
+          "rng_state_after"
+        )
+      )) {
     return(NA_character_)
   }
-  status <- outcome[["values", exact = TRUE]][["status", exact = TRUE]]
-  if (!is.list(status) ||
-      !identical(status[["kind", exact = TRUE]], "atomic") ||
+  outcome <- case_values[["outcome", exact = TRUE]]
+  if (!.differential_has_exact_names(
+        outcome,
+        c("kind", "values", "attributes")
+      ) || !identical(outcome[["kind", exact = TRUE]], "list")) {
+    return(NA_character_)
+  }
+  outcome_values <- outcome[["values", exact = TRUE]]
+  value_schema <- c("status", "value")
+  error_schema <- c("status", "condition")
+  if (!.differential_has_exact_names(outcome_values, value_schema) &&
+      !.differential_has_exact_names(outcome_values, error_schema)) {
+    return(NA_character_)
+  }
+  status <- outcome_values[["status", exact = TRUE]]
+  if (!.differential_has_exact_names(
+        status,
+        c("kind", "type", "value", "attributes")
+      ) || !identical(status[["kind", exact = TRUE]], "atomic") ||
       !identical(status[["type", exact = TRUE]], "character")) {
     return(NA_character_)
   }
   value <- status[["value", exact = TRUE]]
   if (length(value) != 1L || !is.character(value) || is.na(value) ||
       !nzchar(value)) {
+    return(NA_character_)
+  }
+  if ((identical(value, "value") && !identical(names(outcome_values), value_schema)) ||
+      (identical(value, "error") && !identical(names(outcome_values), error_schema))) {
     return(NA_character_)
   }
   value
