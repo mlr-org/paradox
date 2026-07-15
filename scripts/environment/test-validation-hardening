@@ -298,6 +298,63 @@ timeout_records <- function(tree) {
   walk(tree)
   records
 }
+contains_symbol <- function(tree, symbol) {
+  if (is.symbol(tree)) return(identical(tree, symbol))
+  if (!is.expression(tree) && !is.call(tree) && !is.pairlist(tree)) {
+    return(FALSE)
+  }
+  elements <- as.list(tree)
+  any(vapply(seq_along(elements), function(i) {
+    !identical(unname(elements[i]), missing_argument) &&
+      contains_symbol(elements[[i]], symbol)
+  }, logical(1L)))
+}
+head_matches <- function(head, choices) {
+  any(vapply(choices, function(choice) identical(head, choice), logical(1L)))
+}
+binding_records <- function(tree, symbol) {
+  records <- list()
+  walk <- function(x) {
+    if (is.call(x)) {
+      head <- x[[1L]]
+      if (head_matches(head, list(quote(`<-`), quote(`<<-`), quote(`=`))) &&
+          length(x) >= 3L && contains_symbol(x[[2L]], symbol)) {
+        records[[length(records) + 1L]] <<- x
+      } else if (head_matches(head, list(
+        quote(assign), quote(delayedAssign), quote(makeActiveBinding)
+      )) && length(x) >= 2L &&
+          identical(x[[2L]], as.character(symbol))) {
+        records[[length(records) + 1L]] <<- x
+      }
+    }
+    if (is.expression(x) || is.call(x) || is.pairlist(x)) {
+      elements <- as.list(x)
+      for (i in seq_along(elements)) {
+        if (!identical(unname(elements[i]), missing_argument)) walk(elements[[i]])
+      }
+    }
+    invisible(NULL)
+  }
+  walk(tree)
+  records
+}
+call_records <- function(tree, heads) {
+  records <- list()
+  walk <- function(x) {
+    if (is.call(x) && head_matches(x[[1L]], heads)) {
+      records[[length(records) + 1L]] <<- x
+    }
+    if (is.expression(x) || is.call(x) || is.pairlist(x)) {
+      elements <- as.list(x)
+      for (i in seq_along(elements)) {
+        if (!identical(unname(elements[i]), missing_argument)) walk(elements[[i]])
+      }
+    }
+    invisible(NULL)
+  }
+  walk(tree)
+  records
+}
 audit_timeout_ast <- function(tree) {
   reject <- function(...) {
     stop("timeout AST audit: ", ..., call. = FALSE)
@@ -329,6 +386,38 @@ audit_timeout_ast <- function(tree) {
   if (!identical(default_argument, list(7200))) {
     reject("the command-line timeout default is not exactly 7200 seconds")
   }
+  timeout_bindings <- binding_records(tree, quote(timeout_seconds))
+  expected_timeout_rhs <- quote(
+    suppressWarnings(as.numeric(options$timeout))
+  )
+  if (length(timeout_bindings) != 1L ||
+      !identical(timeout_bindings[[1L]][[1L]], quote(`<-`)) ||
+      !identical(timeout_bindings[[1L]][[2L]], quote(timeout_seconds)) ||
+      !identical(timeout_bindings[[1L]][[3L]], expected_timeout_rhs)) {
+    reject("timeout_seconds must have one exact seconds-valued binding")
+  }
+  retained_bindings <- binding_records(tree, quote(run_retained))
+  if (length(retained_bindings) != 1L ||
+      !identical(retained_bindings[[1L]][[1L]], quote(`<-`)) ||
+      !identical(retained_bindings[[1L]][[2L]], quote(run_retained)) ||
+      !is.call(retained_bindings[[1L]][[3L]]) ||
+      !identical(retained_bindings[[1L]][[3L]][[1L]], quote(`function`))) {
+    reject("run_retained must have one direct function binding")
+  }
+  dynamic_heads <- list(
+    quote(assign), quote(delayedAssign), quote(makeActiveBinding),
+    quote(eval), quote(evalq), quote(parse), quote(as.call), quote(call),
+    quote(get), quote(get0), quote(getExportedValue)
+  )
+  if (length(call_records(retained_bindings[[1L]][[3L]], dynamic_heads))) {
+    reject("run_retained may not construct or resolve its process call dynamically")
+  }
+  retained_do_calls <- call_records(
+    retained_bindings[[1L]][[3L]], list(quote(do.call))
+  )
+  if (length(retained_do_calls)) {
+    reject("run_retained may not dispatch its process call through do.call")
+  }
   invisible(TRUE)
 }
 parse_fixture <- function(text) parse(text = text, keep.source = FALSE)
@@ -351,13 +440,17 @@ expect_invalid <- function(label, tree) {
 }
 
 valid_fixture <- paste0(
-  "{ list(timeout = 7200); ",
+  "{ options <- list(timeout = 7200); ",
+  "timeout_seconds <- suppressWarnings(as.numeric(options$timeout)); ",
+  "run_retained <- function(command) ",
   "processx::run(command, timeout = timeout_seconds) }"
 )
 expect_valid("command line and direct", parse_fixture(valid_fixture))
 expect_valid("inside formals with missing default", parse_fixture(
-  paste0("{ list(timeout = 7200); function(missing, run = ",
-    "processx::run(timeout = timeout_seconds)) NULL }")
+  paste0("{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(missing, run = processx::run(",
+    "timeout = timeout_seconds)) NULL }")
 ))
 invalid_fixtures <- list(
   none = "identity(timeout_seconds)",
@@ -437,10 +530,32 @@ invalid_fixtures <- list(
     "timeout = timeout_seconds * 1000)"
   ),
   assign_redefinition = paste0(
-    "list(timeout = 7200); run_retained <- function(...) ",
+    "options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); ",
+    "run_retained <- function(...) ",
     "processx::run(timeout = timeout_seconds); ",
     "assign('run_retained', function(...) processx::run(",
     "timeout = timeout_seconds * 1000))"
+  ),
+  timeout_rebound = paste0(
+    valid_fixture, "; timeout_seconds <- timeout_seconds * 1000"
+  ),
+  timeout_literal_rebound = paste0(
+    valid_fixture, "; timeout_seconds <- 7200000"
+  ),
+  timeout_preconverted = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)) * 1000; ",
+    "run_retained <- function(command) processx::run(command, ",
+    "timeout = timeout_seconds) }"
+  ),
+  dynamic_in_retained = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { processx::run(command, ",
+    "timeout = timeout_seconds); do.call(processx::run, c(",
+    "list(command), setNames(list(timeout_seconds * 1000), ",
+    "'timeout'))) } }"
   )
 )
 for (label in names(invalid_fixtures)) {
