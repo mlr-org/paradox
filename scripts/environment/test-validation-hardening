@@ -341,7 +341,7 @@ binding_records <- function(tree, symbol) {
 call_records <- function(tree, heads) {
   records <- list()
   walk <- function(x) {
-    if (is.call(x) && head_matches(x[[1L]], heads)) {
+    if (is.call(x) && (is.null(heads) || head_matches(x[[1L]], heads))) {
       records[[length(records) + 1L]] <<- x
     }
     if (is.expression(x) || is.call(x) || is.pairlist(x)) {
@@ -404,16 +404,72 @@ audit_timeout_ast <- function(tree) {
       !identical(retained_bindings[[1L]][[3L]][[1L]], quote(`function`))) {
     reject("run_retained must have one direct function binding")
   }
+  retained_function <- retained_bindings[[1L]][[3L]]
+  retained_body <- retained_function[[3L]]
+  retained_timeout_records <- timeout_records(retained_body)
+  if (length(retained_timeout_records) != 1L ||
+      !identical(retained_timeout_records[[1L]]$node, direct$node) ||
+      !identical(
+        retained_timeout_records[[1L]]$positions, direct$positions
+      )) {
+    reject("the direct timeout must belong to the retained process function")
+  }
+  if ("timeout_seconds" %in% names(retained_function[[2L]])) {
+    reject("run_retained may not shadow the validated timeout binding")
+  }
+  retained_process_calls <- call_records(
+    retained_function, list(quote(processx::run))
+  )
+  if (length(retained_process_calls) != 1L ||
+      !identical(retained_process_calls[[1L]], direct$node)) {
+    reject("run_retained must contain only the authenticated process call")
+  }
+  body_assignments <- call_records(retained_body, list(quote(`<-`)))
+  process_assignments <- Filter(function(assignment) {
+    length(assignment) == 3L &&
+      identical(assignment[[2L]], quote(process)) &&
+      identical(assignment[[3L]], direct$node)
+  }, body_assignments)
+  if (length(process_assignments) != 1L) {
+    reject("the authenticated process call must produce the retained result")
+  }
+  allowed_retained_heads <- list(
+    quote(`::`), quote(`!`), quote(`[[`), quote(`{`), quote(`+`),
+    quote(`<-`), quote(`<<-`), quote(`==`), quote(`$`), quote(as.numeric),
+    quote(base_environment), quote(c), quote(classify_failure),
+    quote(data.frame), quote(difftime), quote(file.path), quote(`if`),
+    quote(isTRUE), quote(length), quote(library_environment), quote(names),
+    quote(normalizePath), quote(paste), quote(paste0), quote(processx::run),
+    quote(readLines), quote(shQuote), quote(sprintf), quote(Sys.time),
+    quote(unname), quote(verify_protected_libraries), quote(writeLines)
+  )
+  unexpected_retained_calls <- Filter(function(call) {
+    !head_matches(call[[1L]], allowed_retained_heads)
+  }, call_records(retained_body, NULL))
+  if (length(unexpected_retained_calls)) {
+    reject("run_retained contains an unaudited call path")
+  }
+  dead_direct_calls <- Filter(function(call) {
+    identical(call[[1L]], quote(`if`)) && length(call) >= 3L &&
+      identical(call[[2L]], FALSE) &&
+      any(vapply(
+        call_records(call, list(quote(processx::run))),
+        identical, logical(1L), direct$node
+      ))
+  }, call_records(retained_body, list(quote(`if`))))
+  if (length(dead_direct_calls)) {
+    reject("the authenticated process call may not be guarded by constant false")
+  }
   dynamic_heads <- list(
     quote(assign), quote(delayedAssign), quote(makeActiveBinding),
     quote(eval), quote(evalq), quote(parse), quote(as.call), quote(call),
     quote(get), quote(get0), quote(getExportedValue)
   )
-  if (length(call_records(retained_bindings[[1L]][[3L]], dynamic_heads))) {
+  if (length(call_records(retained_function, dynamic_heads))) {
     reject("run_retained may not construct or resolve its process call dynamically")
   }
   retained_do_calls <- call_records(
-    retained_bindings[[1L]][[3L]], list(quote(do.call))
+    retained_function, list(quote(do.call))
   )
   if (length(retained_do_calls)) {
     reject("run_retained may not dispatch its process call through do.call")
@@ -442,15 +498,15 @@ expect_invalid <- function(label, tree) {
 valid_fixture <- paste0(
   "{ options <- list(timeout = 7200); ",
   "timeout_seconds <- suppressWarnings(as.numeric(options$timeout)); ",
-  "run_retained <- function(command) ",
-  "processx::run(command, timeout = timeout_seconds) }"
+  "run_retained <- function(command) { process <- ",
+  "processx::run(command, timeout = timeout_seconds); process } }"
 )
 expect_valid("command line and direct", parse_fixture(valid_fixture))
 expect_valid("inside formals with missing default", parse_fixture(
   paste0("{ options <- list(timeout = 7200); timeout_seconds <- ",
     "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
-    "function(missing, run = processx::run(",
-    "timeout = timeout_seconds)) NULL }")
+    "function(missing) { process <- processx::run(",
+    "timeout = timeout_seconds); process } }")
 ))
 invalid_fixtures <- list(
   none = "identity(timeout_seconds)",
@@ -556,6 +612,56 @@ invalid_fixtures <- list(
     "timeout = timeout_seconds); do.call(processx::run, c(",
     "list(command), setNames(list(timeout_seconds * 1000), ",
     "'timeout'))) } }"
+  ),
+  direct_decoy_outside_retained = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); if (FALSE) ",
+    "processx::run(timeout = timeout_seconds); run_retained <- ",
+    "function(command) identity(command) }"
+  ),
+  alias_inside_retained = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); if (FALSE) ",
+    "processx::run(timeout = timeout_seconds); run_retained <- ",
+    "function(command) runner(command) }"
+  ),
+  shadowed_timeout_formal = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command, timeout_seconds = 7200000) ",
+    "processx::run(command, timeout = timeout_seconds) }"
+  ),
+  pairlist_decoy_positional_body = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command, decoy = processx::run(",
+    "timeout = timeout_seconds)) processx::run(command, character(), ",
+    "FALSE, NULL, FALSE, FALSE, FALSE, timeout_seconds * 1000) }"
+  ),
+  dead_direct_then_alias = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (FALSE) processx::run(",
+    "timeout = timeout_seconds); runner(command) } }"
+  ),
+  valid_direct_then_alias = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { process <- processx::run(",
+    "command, timeout = timeout_seconds); runner(command); process } }"
+  ),
+  valid_direct_then_internal_namespace = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { process <- processx::run(",
+    "command, timeout = timeout_seconds); processx:::run(command, ",
+    "timeout_seconds * 1000); process } }"
+  ),
+  dead_assigned_direct = paste0(
+    "{ options <- list(timeout = 7200); timeout_seconds <- ",
+    "suppressWarnings(as.numeric(options$timeout)); run_retained <- ",
+    "function(command) { if (FALSE) process <- processx::run(",
+    "timeout = timeout_seconds); process } }"
   )
 )
 for (label in names(invalid_fixtures)) {
