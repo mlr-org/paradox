@@ -516,6 +516,11 @@ test_that("numeric constructor admission is narrow and preserves forcing order",
   expect_false(native_domain_numeric_bounds(
     lower = structure(0, class = "domain_bound_probe")
   ))
+  expect_false(native_domain_numeric_bounds(lower = NULL))
+  expect_false(native_domain_numeric_bounds(upper = NULL))
+  expect_error(p_dbl(lower = NULL), "not 'NULL'", fixed = TRUE)
+  expect_error(p_int(lower = NULL), "not 'NULL'", fixed = TRUE)
+  expect_error(p_int(upper = NULL), "not 'NULL'", fixed = TRUE)
 
   events = character()
   observe = function(name, value) {

@@ -378,7 +378,7 @@ mlr3verse_library="$PARADOX_ROOT/.local/compat/R/library-mlr3verse-core"
 test -d "$mlr3verse_library"
 export NOT_CRAN=true
 export PARADOX_CONSUMER_EXTRA_LIBS="$mlr3verse_library"
-export PARADOX_CANDIDATE_SOURCE="$candidate_source_worktree"
+export PARADOX_CANDIDATE_SOURCE="$candidate_source"
 
 Rscript compat/test-repositories.R "$PARADOX_ROOT" 0 \
   "$candidate_library" "$dependency_library" --run-id "$run_id"

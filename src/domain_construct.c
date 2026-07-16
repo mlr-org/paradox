@@ -561,11 +561,13 @@ static int force_frame_value(
 }
 
 static int plain_scalar_number_value(SEXP value, double *result) {
-  if (ALTREP(value) || Rf_isObject(value) ||
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  if ((type != INTSXP && type != REALSXP) || ALTREP(value) ||
+      Rf_isObject(value) ||
       !paradox_api_has_no_attributes(value) || XLENGTH(value) != 1) {
     return FALSE;
   }
-  if (TYPEOF(value) == INTSXP) {
+  if (type == INTSXP) {
     const int input = INTEGER_ELT(value, 0);
     if (input == NA_INTEGER) {
       return FALSE;
@@ -573,7 +575,7 @@ static int plain_scalar_number_value(SEXP value, double *result) {
     *result = (double) input;
     return TRUE;
   }
-  if (TYPEOF(value) == REALSXP) {
+  if (type == REALSXP) {
     const double input = REAL_ELT(value, 0);
     if (ISNAN(input)) {
       return FALSE;

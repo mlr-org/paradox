@@ -335,6 +335,9 @@
 * Preserve the established R6 classes, public bindings, serializable ordinary-R
   state, data.table-shaped views, clone/reference behavior, and the private
   layouts used by important mlr3 ecosystem consumers.
+* Invalid `NULL` numeric Domain bounds now decline native admission before any
+  attribute or length query, preserving the established checkmate diagnostic
+  instead of exposing an internal R C-API error.
 * Package unload now releases every process-global native root used by the
   built-in Domain, literal `ps()`, bulk ParamSet-shell, and combined sampler
   factories. Both `R_init_paradox` and `R_unload_paradox` are exported on
