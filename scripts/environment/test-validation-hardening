@@ -297,7 +297,7 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 expected_documentation_sha256 <-
-  "5660eaac656189bb5e02ed343b546c8a4be55aaa9a8bc9630ab1bd877e1e1eb1"
+  "5004e7ac4d81f55d187cd92eab979dee30ce1c8138fb1211e79d4354c52e0786"
 if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
   stop("documentation timeout source snapshot changed", call. = FALSE)
 }
@@ -561,7 +561,7 @@ audit_timeout_ast <- function(tree, production = FALSE) {
     sample_classification_log =
       "678da7857705addf16412cbbbd046e6441345431aae340a00ee5199132fad246",
     verify_row_boundary =
-      "36cbdccb17bf75898f64fea6001355e4e3b48438c713e886e9e0025f0e9a3639"
+      "9ba11e5105fcfe787ecee7496811bd307c026474085aba00c6f797aca3445a5b"
   )
   for (helper in retained_helper_symbols) {
     helper_name <- as.character(helper)
@@ -609,6 +609,22 @@ audit_timeout_ast <- function(tree, production = FALSE) {
           "bd20551825e489e8952a75ae3af00819c377c1a94b7334398177ccd8cbdb08d8"
         )) {
       reject("documentation locale helper has an unaudited binding")
+    }
+    candidate_authentication_bindings <- binding_records(
+      tree, quote(authenticate_candidate_git)
+    )
+    if (length(candidate_authentication_bindings) != 1L ||
+        !identical(candidate_authentication_bindings[[1L]][[1L]], quote(`<-`)) ||
+        !identical(candidate_authentication_bindings[[1L]][[2L]],
+          quote(authenticate_candidate_git)) ||
+        !is.call(candidate_authentication_bindings[[1L]][[3L]]) ||
+        !identical(candidate_authentication_bindings[[1L]][[3L]][[1L]],
+          quote(`function`)) ||
+        !identical(
+          ast_sha256(candidate_authentication_bindings[[1L]][[3L]]),
+          "fe6f00f1cf57f168c8bca56ca3313698c4e912b471dc2208a355e1ace6587851"
+        )) {
+      reject("documentation candidate authenticator has an unaudited binding")
     }
   }
   constant_truth <- function(value) {

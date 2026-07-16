@@ -340,6 +340,47 @@ rr_reverse_nested_controls <- function() c(
   RCPP_PARALLEL_NUM_THREADS = "1"
 )
 
+# The source-package mlr3 checks exercise a public two-worker contract and
+# assert that data.table can retain two OpenMP threads in the main session.
+# A consumer row already owns two logical CPUs under the `consumer` scheduler
+# profile, so expose exactly that allocation to this check child. Installation,
+# the outer worker, build/test pools, BLAS, Rcpp, and every other package retain
+# the uniform one-thread controls above.
+rr_reverse_check_nested_controls <- function(package) {
+  if (!is.character(package) || length(package) != 1L || is.na(package) ||
+      !grepl("^[A-Za-z][A-Za-z0-9.]*$", package)) {
+    rr_fail("reverse check package identity is malformed")
+  }
+  controls <- rr_reverse_nested_controls()
+  if (identical(package, "mlr3")) {
+    two_cpu <- c(
+      MC_CORES = "2",
+      R_FUTURE_AVAILABLECORES_FALLBACK = "2",
+      R_PARALLELLY_AVAILABLECORES_FALLBACK = "2",
+      OMP_NUM_THREADS = "2",
+      OMP_THREAD_LIMIT = "2"
+    )
+    controls[names(two_cpu)] <- unname(two_cpu)
+  }
+  controls
+}
+
+rr_reverse_check_environment <- function(environment, package) {
+  if (!is.character(environment) || is.null(names(environment)) ||
+      anyNA(environment) || anyNA(names(environment)) ||
+      any(!nzchar(names(environment))) || anyDuplicated(names(environment))) {
+    rr_fail("reverse check base environment is malformed")
+  }
+  ordinary <- rr_reverse_nested_controls()
+  if (any(!names(ordinary) %in% names(environment)) ||
+      !identical(unname(environment[names(ordinary)]), unname(ordinary))) {
+    rr_fail("reverse check base environment is not uniformly bounded")
+  }
+  controls <- rr_reverse_check_nested_controls(package)
+  environment[names(controls)] <- unname(controls)
+  environment
+}
+
 rr_validate_resource_report <- function(report, profile = "consumer",
                                         require_no_operator = TRUE) {
   fields <- c(

@@ -21,6 +21,7 @@ usage <- function(status = 0L) {
     "",
     "  --root PATH                 paradox checkout (default: current directory)",
     "  --candidate-library PATH    immutable candidate library",
+    "  --candidate-source PATH     clean detached candidate worktree",
     "  --dependency-library PATH   consumer dependency library",
     "  --extra-library PATH        additional local library; repeatable",
     "  --run-id ID                 new retained run identifier",
@@ -33,8 +34,9 @@ usage <- function(status = 0L) {
 
 args <- commandArgs(trailingOnly = TRUE)
 options <- list(
-  root = getwd(), candidate_library = NULL, dependency_library = NULL,
-  extra_library = character(), run_id = NULL, scope = "all", timeout = 7200
+  root = getwd(), candidate_library = NULL, candidate_source = NULL,
+  dependency_library = NULL, extra_library = character(), run_id = NULL,
+  scope = "all", timeout = 7200
 )
 i <- 1L
 while (i <= length(args)) {
@@ -93,6 +95,15 @@ candidate_library <- require_plain_local_library_argument(
 )
 dependency_library <- require_plain_local_library_argument(
   dependency_library, "dependency library"
+)
+candidate_source_argument <- options$candidate_source
+if (is.null(candidate_source_argument) ||
+    length(candidate_source_argument) != 1L ||
+    !nzchar(candidate_source_argument)) {
+  fail("--candidate-source must name the clean detached candidate worktree")
+}
+candidate_source <- require_plain_local_library_argument(
+  candidate_source_argument, "detached candidate source"
 )
 scope <- as.character(options$scope)
 if (!scope %in% c("all", "essential", "full")) {
@@ -520,10 +531,19 @@ if (!startsWith(candidate_ref, "refs/") ||
     !grepl("^[0-9a-f]{64}$", declared_content)) {
   fail("candidate commit, tree, and content provenance must be declared and well formed")
 }
+expected_candidate_source <- file.path(
+  root, ".local", "compat", "candidate-snapshots", candidate_commit
+)
+if (!identical(candidate_source, expected_candidate_source)) {
+  fail(
+    "--candidate-source must be the managed worktree for the declared commit: ",
+    expected_candidate_source
+  )
+}
 authenticate_candidate_git <- function(context) {
   result <- processx::run(
     git_authenticator_script,
-    c(root, candidate_ref, candidate_commit, candidate_tree),
+    c(root, candidate_ref, candidate_commit, candidate_tree, candidate_source),
     error_on_status = FALSE,
     echo = FALSE
   )
@@ -800,6 +820,24 @@ retained_metadata_sha256 <- vapply(
 if (!identical(unname(metadata_input_sha256), retained_metadata_sha256)) {
   fail("retained documentation harness inputs differ from their source bytes")
 }
+candidate_source_receipt <- data.frame(
+  key = c(
+    "schema", "candidate_source", "candidate_ref", "candidate_commit",
+    "candidate_tree", "source_archive_sha256"
+  ),
+  value = c(
+    "1", candidate_source, candidate_ref, candidate_commit, candidate_tree,
+    provenance_value[["source_archive_sha256"]]
+  ),
+  stringsAsFactors = FALSE
+)
+candidate_source_receipt_path <- file.path(
+  run_directory, "metadata", "candidate-source.tsv"
+)
+documentation_write_tsv(candidate_source_receipt, candidate_source_receipt_path)
+candidate_source_receipt_sha256 <- unname(tools::sha256sum(
+  candidate_source_receipt_path
+))
 compat_system_evidence <- compat_system_capture_evidence(
   root, file.path(run_directory, "metadata")
 )
@@ -1053,6 +1091,7 @@ small_input_manifest <- data.frame(
     "toolchain_explicit_receipt", "toolchain_tree_receipt",
     "tinytex_tree_receipt", "protected_metadata_pre",
     "content_hash_metadata_anchor", "tool_auth_metadata_anchor",
+    "candidate_source_receipt",
     rep("compat_system_live_input", length(compat_system_evidence$source_paths)),
     rep("compat_system_retained_input", length(compat_system_evidence$retained_paths))
   ),
@@ -1060,7 +1099,7 @@ small_input_manifest <- data.frame(
     metadata_inputs, retained_metadata_inputs,
     toolchain_explicit_receipt, toolchain_tree_receipt, tinytex_tree_receipt,
     protected_metadata_pre_path, content_hash_metadata_path,
-    tool_auth_metadata_path,
+    tool_auth_metadata_path, candidate_source_receipt_path,
     compat_system_evidence$source_paths, compat_system_evidence$retained_paths
   ),
   stringsAsFactors = FALSE
@@ -1420,14 +1459,15 @@ verify_row_boundary <- function(
       "protected_root_count", "protected_inventory_rows",
       "small_input_manifest_sha256", "environment_sha256",
       "candidate_ref", "candidate_commit", "candidate_tree",
+      "candidate_source", "candidate_source_receipt_sha256",
       "compat_system_active"
     ),
     value = c(
-      "1", label, phase, context, "passed", full_boundary_pre_sha256,
+      "2", label, phase, context, "passed", full_boundary_pre_sha256,
       protected_metadata_pre_sha256, as.character(length(protected_roots)),
       as.character(nrow(protected_metadata_pre)), small_input_manifest_sha256,
       environment_evidence$sha256, candidate_ref, candidate_commit,
-      candidate_tree,
+      candidate_tree, candidate_source, candidate_source_receipt_sha256,
       if (compat_system_evidence$active) "true" else "false"
     ),
     stringsAsFactors = FALSE
@@ -1942,7 +1982,8 @@ metadata <- data.frame(
     "log_classification_pathological_rows", "retained_log_bytes",
     "log_classification_sha256",
     "candidate_run_id", "candidate_version", "candidate_ref", "candidate_commit",
-    "candidate_tree", "candidate_content_sha256", "candidate_library",
+    "candidate_tree", "candidate_source", "candidate_source_receipt_sha256",
+    "candidate_content_sha256", "candidate_library",
     "candidate_library_sha256", "dependency_library",
     "dependency_library_sha256", "extra_libraries", "extra_library_sha256",
     "candidate_provenance_sha256", "github_manifest_sha256",
@@ -1963,7 +2004,7 @@ metadata <- data.frame(
     "quarto_version", "r", "r_version", "timeout_seconds", "completed_utc"
   ),
   value = c(
-    "7", run_id, scope, overall_status, required_failures,
+    "8", run_id, scope, overall_status, required_failures,
     "2", full_boundary_pre_sha256, full_boundary_post$sha256,
     protected_metadata_pre_sha256,
     full_boundary_post$protected_metadata_sha256,
@@ -1985,7 +2026,7 @@ metadata <- data.frame(
     ),
     log_classification_sha256,
     candidate_run_id, candidate_version, candidate_ref, candidate_commit,
-    candidate_tree,
+    candidate_tree, candidate_source, candidate_source_receipt_sha256,
     declared_content, candidate_library, candidate_library_fingerprint,
     dependency_library, dependency_library_fingerprint,
     if (length(extra_libraries)) {

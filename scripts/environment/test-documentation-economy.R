@@ -64,6 +64,12 @@ ast_sha256 <- function(value) {
 run_retained <- function_binding("run_retained")
 row_boundary <- function_binding("verify_row_boundary")
 full_boundary <- function_binding("verify_full_boundary")
+candidate_authenticator <- function_binding("authenticate_candidate_git")
+if (!"candidate_source" %in% all.names(
+    candidate_authenticator, functions = TRUE, unique = TRUE
+  )) {
+  fail("documentation candidate authentication omits the detached source")
+}
 locale_environment <- eval(
   function_binding("documentation_locale_environment")
 )()
@@ -128,7 +134,8 @@ expected_hardening_snapshots <- c(
   ast_sha256(function_binding("classify_failure")),
   ast_sha256(function_binding("retain_environment_evidence")),
   ast_sha256(row_boundary),
-  ast_sha256(function_binding("sample_classification_log"))
+  ast_sha256(function_binding("sample_classification_log")),
+  ast_sha256(candidate_authenticator)
 )
 for (snapshot in expected_hardening_snapshots) {
   if (sum(grepl(snapshot, hardening_text, fixed = TRUE)) != 1L) {

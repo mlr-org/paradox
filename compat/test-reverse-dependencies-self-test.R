@@ -88,6 +88,38 @@ if (anyDuplicated(names(controls)) ||
     !identical(controls[["R_PARALLELLY_AVAILABLECORES_FALLBACK"]], "1")) {
   rr_fail("uniform nested-parallel controls are incomplete")
 }
+mlr3_controls <- rr_reverse_check_nested_controls("mlr3")
+ordinary_check_controls <- rr_reverse_check_nested_controls("bbotk")
+expected_mlr3_changes <- c(
+  "MC_CORES", "R_FUTURE_AVAILABLECORES_FALLBACK",
+  "R_PARALLELLY_AVAILABLECORES_FALLBACK", "OMP_NUM_THREADS",
+  "OMP_THREAD_LIMIT"
+)
+observed_mlr3_changes <- names(controls)[controls != mlr3_controls]
+if (!identical(ordinary_check_controls, controls) ||
+    !identical(observed_mlr3_changes, expected_mlr3_changes) ||
+    !identical(unname(controls[expected_mlr3_changes]), rep("1", 5L)) ||
+    !identical(unname(mlr3_controls[expected_mlr3_changes]), rep("2", 5L)) ||
+    !identical(
+      mlr3_controls[setdiff(names(controls), expected_mlr3_changes)],
+      controls[setdiff(names(controls), expected_mlr3_changes)]
+    )) {
+  rr_fail("mlr3's check-only two-CPU projection is not exact")
+}
+synthetic_environment <- c(SYNTHETIC_SENTINEL = "retained", controls)
+ordinary_check_environment <- rr_reverse_check_environment(
+  synthetic_environment, "miesmuschel"
+)
+mlr3_check_environment <- rr_reverse_check_environment(
+  synthetic_environment, "mlr3"
+)
+if (!identical(ordinary_check_environment, synthetic_environment) ||
+    !identical(mlr3_check_environment[["SYNTHETIC_SENTINEL"]], "retained") ||
+    !identical(
+      mlr3_check_environment[names(mlr3_controls)], mlr3_controls
+    ) || !identical(synthetic_environment[names(controls)], controls)) {
+  rr_fail("reverse check environment projection escaped its exact scope")
+}
 locale_environment <- rr_consumer_locale_environment()
 expected_locale_environment <- c(
   LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C", TZ = "UTC"
@@ -125,6 +157,12 @@ if (!identical(
     unname(locale_environment)
   )) {
   rr_fail("external reverse worker inherited a hostile locale")
+}
+if (!identical(
+    unname(as.character(worker_environment[names(controls)])),
+    unname(controls)
+  )) {
+  rr_fail("external reverse worker inherited a check-only CPU exception")
 }
 
 # Run mutation is exclusive.  A live owner is observed but never signalled;

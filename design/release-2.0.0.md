@@ -42,7 +42,7 @@ native, runtime, differential, or memory analyzers.
 | GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed and independently replayed |
 | CRAN/Bioconductor P0/P1 hard dependency preparation | `release-reverse-dependencies-p1-afa5668-20260716` | Passed and sealed |
 | GitHub P0/P1 hard dependency preparation | `release-consumers-p1-afa5668-20260716` | Passed and sealed |
-| GitHub P0/P1 source tests | `release-consumers-p1-afa5668-20260716` | Pending final execution |
+| GitHub P0/P1 source tests | `release-consumers-p1-afa5668-20260716` | Sealed: 20 passed, 7 classified non-candidate failures, 1 bounded timeout; both verifiers passed |
 | CRAN/Bioconductor P0/P1 source checks | `release-reverse-p1-afa5668-20260716` | Pending final execution |
 | Documentation, books, galleries, and serialized migration workloads | `release-documentation-afa5668-20260716` | Pending final execution |
 | Full release benchmark inventory | `release-afa5668-20260716` | Pending final execution |
@@ -52,6 +52,39 @@ fingerprints and their reasons are fixed in
 `compat/differential/expected-differences.tsv`. They cover corrected empty
 presence handling, repeated-ID subsetting, grouped sanitization, infinite
 bounds, collection callbacks, and ID-filter order/type behavior.
+
+### Classified GitHub consumer limitations
+
+The source-checkout gate retains ordinary upstream failures as factual rows;
+they are not relabeled as passes. The following observed non-green results have
+independent evidence that they are outside Paradox 2.0.0:
+
+- `mlr3tuningspaces`: 430 passes and one `expect_learner()` helper-scope error.
+  The exact test and helper bytes fail identically with paradox 1.0.1.
+- `mlr3cluster`: 3,669 passes; the one failure and two errors all require the
+  Weka Package Manager `XMeans` plug-in absent from isolated `WEKA_HOME`. The
+  exact error reproduces with paradox 1.0.1; its ClusterR warning does too.
+- `mlr3filters`: 502 passes and three errors caused by installed CRAN
+  mlr3pipelines 0.11.0 registering `FilterEnsemble` without prototype
+  arguments. Candidate/baseline probes are identical; the pinned GitHub
+  mlr3pipelines source contains the upstream fix and passed 76,848 expectations.
+- `mlr3torch`: all 85 Paradox-facing expectations passed. The wider row is
+  non-green because Lantern/libtorch is not provisioned and two external CIFAR
+  mirrors timed out; its independent clone-hash failure reproduces byte-for-byte
+  with paradox 1.0.1.
+- `xplainfi`: 1,838 passes and 15 errors caused by unqualified `tgen()` in
+  helpers whose source-load lexical environment does not import it. A focused
+  paradox 1.0.1 probe reproduces the same error; all 15 sites share that helper.
+- `mlr3forecast`: 981 passes. Its 41 help-index errors require an installed
+  package although the checkout is source-loaded; its one source-loaded R6
+  callback failure reproduces with paradox 1.0.1.
+- `mlr3extralearners`: the huge optional-backend inventory reached the RWeka
+  section before the fixed 60-minute deadline. Its factual timeout is retained;
+  the runner was not restarted or granted an unbounded exception.
+
+These are bounded consumer/environment characterizations, not expected Paradox
+differences and not permissions to ignore a future failure with another
+signature.
 
 ## Engineering decisions and compatibility boundary
 
@@ -87,9 +120,14 @@ candidate installation and content-addressed dependency/install caches. Their
 outer scheduler admits at most four 8-GiB consumer rows on this host and
 rechecks live CPU/memory headroom before every wave. Nested work is normally
 single-threaded. The GitHub `mlr3` row alone receives a receipt-bound two-CPU
-exception for upstream tests that explicitly assert its worker contract;
-make, CMake, testthat, BLAS, and Rcpp stay at one. All consumer and documentation
-children force `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `LANGUAGE=C`, and `TZ=UTC`.
+exception for upstream tests that explicitly assert its worker contract. The
+reverse runner applies the same five-field projection only to the CRAN `mlr3`
+R CMD check child; its installation and outer worker remain at one. In both
+cases make, CMake, testthat, BLAS, and Rcpp stay at one. All consumer and
+documentation children force `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `LANGUAGE=C`,
+and `TZ=UTC`. Documentation gates authenticate the same managed detached
+candidate source at every workload boundary, so excluded primary-checkout work
+cannot replace the package being documented.
 
 Discretionary performance work is frozen. Reopen native code only if the final
 full benchmark exposes a clear release-relevant regression with a low-risk,

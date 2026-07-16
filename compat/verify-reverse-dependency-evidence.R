@@ -357,15 +357,22 @@ for (index in seq_len(nrow(results))) {
   }
   command_environment <- command[command$kind == "environment", , drop = FALSE]
   command_values <- setNames(command_environment$value, command_environment$name)
-  if (any(!names(locale_environment) %in% names(command_values)) ||
+  if (anyDuplicated(command_environment$name) ||
+      any(!names(locale_environment) %in% names(command_values)) ||
       !identical(unname(command_values[names(locale_environment)]),
         unname(locale_environment))) {
     rr_fail("row did not use the deterministic consumer locale: ", package)
   }
-  if (any(!names(nested_controls) %in% names(command_values)) ||
-      !identical(unname(command_values[names(nested_controls)]),
-        unname(nested_controls))) {
-    rr_fail("row did not disable nested parallelism: ", package)
+  command_controls <- if (identical(
+      result$installed_content_sha256[[1L]], "-")) {
+    nested_controls
+  } else {
+    rr_reverse_check_nested_controls(package)
+  }
+  if (any(!names(command_controls) %in% names(command_values)) ||
+      !identical(unname(command_values[names(command_controls)]),
+        unname(command_controls))) {
+    rr_fail("row did not use its exact bounded parallel controls: ", package)
   }
   total <- result$count_files_total[[1L]]
   parsed <- result$count_files_parsed[[1L]]

@@ -296,8 +296,13 @@ consumers and fails closed if even one would invade the memory reserve.
 `PARADOX_REVERSE_JOBS=N` may only lower the current automatic and retained
 limits. Every child has a separate process, install library, home, work tree,
 and caches. Nested make/CMake, testthat, `parallel`/`future`, OpenMP, BLAS, and
-related thread pools are fixed at one and recorded in command evidence and the
-install-cache key.
+related thread pools are normally fixed at one and recorded in command
+evidence and the install-cache key. The `mlr3` R CMD check child alone exposes
+its allotted two logical CPUs for the upstream worker-contract assertions:
+`MC_CORES`, the future and parallelly available-core fallbacks, and the two
+OpenMP limits are 2. Installation, the outer worker, make/CMake, testthat,
+BLAS, Rcpp, and every non-`mlr3` check remain at one; the sequential future
+plan and disabled-fork policy are unchanged.
 
 The parent waits for every process in a wave before checking protected inputs.
 It alone writes the deterministic wave and acceptance ledgers, seals successful
@@ -568,6 +573,7 @@ unset PARADOX_CONSUMER_EXTRA_LIBS
 Rscript compat/test-documentation \
   --root "$PARADOX_ROOT" \
   --candidate-library "$candidate_library" \
+  --candidate-source "$candidate_source" \
   --dependency-library "$dependency_library" \
   --extra-library "$mlr3verse_library" \
   --run-id "$documentation_run_id" \
@@ -596,8 +602,9 @@ overlays is itself mandatory. The removed legacy names in `mlr3-targets` and
 the GPU-heavy `mlr3torch-course` remain authenticated source characterization,
 not mandatory executable release gates.
 
-The harness authenticates the candidate receipt and seal, reproduces its Git
-archive, verifies each documentation/workload checkout's pinned origin,
+The harness authenticates the candidate receipt and seal through the required
+clean detached `--candidate-source`, reproduces its Git archive, verifies each
+documentation/workload checkout's pinned origin,
 commit, relation, and clean tree, and executes only archived run-local source
 copies with the exact
 repository-local R, Quarto 1.9.38, and TinyTeX. It authenticates the ordinary

@@ -395,11 +395,12 @@ observed peak usage.
 Heavyweight consumer checks may use only the repository and reverse runners'
 bounded external-`Rscript` waves. They recompute the live ceiling before every
 wave and normally force nested make, CMake, testthat, `parallel`, `future`,
-BLAS, and OpenMP work to one thread. The repository runner's `mlr3` row alone
-receives its receipted two-CPU worker-contract exception; build, test, BLAS, and
-Rcpp controls stay at one. The runners collect every sibling, seal the complete
-wave before deterministic promotion, and terminate worker descendants on
-interruption.
+BLAS, and OpenMP work to one thread. The repository runner's `mlr3` row and the
+reverse runner's `mlr3` R CMD check child alone receive their receipted two-CPU
+worker-contract exceptions; reverse installation and outer workers remain at
+one, and build, test, BLAS, and Rcpp controls stay at one. The runners collect
+every sibling, seal the complete wave before deterministic promotion, and
+terminate worker descendants on interruption.
 Ordinary focused/full native tests use the same nested-thread caps inside
 file-isolated workers, enforce a 30-minute per-task deadline, and keep the two
 ConfigSpace files in one exclusive worker after the ordinary wave.
@@ -772,9 +773,11 @@ environment. That same authenticated candidate is then used for:
   metadata wave boundaries, and sealed append-only acceptance with `--resume`.
   Immediately before every wave it retains a fresh
   `scripts/environment/resource-jobs consumer --report` decision, runs at most
-  that lowering-only limit, disables nested make/CMake, testthat,
+  that lowering-only limit, normally disables nested make/CMake, testthat,
   `parallel`/`future`, BLAS, and OpenMP parallelism, waits for every sibling,
-  and lets only the parent seal and accept rows;
+  and lets only the parent seal and accept rows. Its `mlr3` R CMD check child
+  alone exposes the row's two-CPU allocation for five worker-contract controls;
+  installation, outer workers, build/test pools, BLAS, and Rcpp stay at one;
   plan-only and its synthetic self-test perform no protected-library content
   pass;
 - `compat/test-repositories.R`, whose positional interface is root, maximum
@@ -792,7 +795,8 @@ environment. That same authenticated candidate is then used for:
   `mlr3` worker-contract exception that exposes exactly two CPUs while make,
   CMake, testthat, BLAS, and Rcpp remain at one;
 - `compat/test-documentation`, with the same candidate/dependency libraries,
-  the mlr3verse core as `--extra-library`, a new run ID, and `--scope all`;
+  the clean detached `--candidate-source`, the mlr3verse core as
+  `--extra-library`, a new run ID, and `--scope all`;
   this also runs the pinned mbo_config and reviewed documentation migration
   workloads; and
 - `benchmarks/release`, with the sealed full-inventory differential run,

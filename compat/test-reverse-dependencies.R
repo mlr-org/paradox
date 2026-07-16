@@ -2271,7 +2271,12 @@ reverse_row <- function(plan_row, package_directory, protected_before) {
       stop("could not retain authenticated install log for ", package,
         call. = FALSE)
     }
-    child_environment <- reverse_environment(package_directory, cache$library)
+    # Keep installation and the serialized outer worker uniformly bounded.
+    # Only the authenticated mlr3 check child receives its scheduler-backed
+    # two-CPU worker-contract projection.
+    child_environment <- rr_reverse_check_environment(
+      reverse_environment(package_directory, cache$library), package
+    )
     preflight_script <- file.path(package_directory, "preflight.R")
     writeLines(c(
       "args <- commandArgs(TRUE)",
