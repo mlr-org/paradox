@@ -69,6 +69,7 @@ metadata. On the development host on 2026-07-15, the valid replay took about
 1.89 seconds; the complete interruption/four-negative self-test took 15.01
 seconds with a maximum resident set size of about 79 MiB. Valgrind and rchk's underlying
 semantic parsers have separate adversarial fixtures in
-`test-validation-hardening`; the first real completed schema-2 all-mode run
-must still be replayed before this verifier can be cited as real release
-evidence.
+`test-validation-hardening`. A release claim requires the verifier to replay a
+real completed schema-2 all-mode run independently; the 2.0.0 release ledger
+records that retained replay rather than treating the synthetic fixture as
+memory-safety evidence.

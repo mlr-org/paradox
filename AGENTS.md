@@ -304,11 +304,12 @@ Release validation must maximize information gained per unit of wall time and
 I/O without weakening provenance. Use this order and stop at the first failing
 gate: parse/static harness checks, directly affected tests, one strict compiler
 build, the complete paradox unit suite, the remaining compiler/runtime/API
-gates, focused consumer rows, memory analyzers, and finally benchmarks on an
-otherwise idle host. Do not use a full `R CMD check` as an inner development
-loop. Examples, vignettes, manuals, CRAN policy, native diagnostics, and
-consumer tests are separate gates and must not be repeated merely to exercise
-one another.
+gates, the full differential gate, focused then full priority-zero/one consumer
+rows, memory analyzers, documentation, and finally benchmarks on an otherwise
+idle host. Do not use a full `R CMD check` as an inner development loop.
+Examples, vignettes, manuals, CRAN policy, native diagnostics, and consumer
+tests are separate gates and must not be repeated merely to exercise one
+another.
 
 Freeze package source at a full Git ref and validate it from a clean detached
 worktree. Continuing development in the primary checkout must not invalidate an
@@ -393,9 +394,12 @@ a 16384 MiB minimum reserve. These are scheduling budgets, not claims of
 observed peak usage.
 Heavyweight consumer checks may use only the repository and reverse runners'
 bounded external-`Rscript` waves. They recompute the live ceiling before every
-wave, force nested make, CMake, testthat, `parallel`, `future`, BLAS, and OpenMP
-work to one thread, collect every sibling, seal the complete wave before
-deterministic promotion, and terminate worker descendants on interruption.
+wave and normally force nested make, CMake, testthat, `parallel`, `future`,
+BLAS, and OpenMP work to one thread. The repository runner's `mlr3` row alone
+receives its receipted two-CPU worker-contract exception; build, test, BLAS, and
+Rcpp controls stay at one. The runners collect every sibling, seal the complete
+wave before deterministic promotion, and terminate worker descendants on
+interruption.
 Ordinary focused/full native tests use the same nested-thread caps inside
 file-isolated workers, enforce a 30-minute per-task deadline, and keep the two
 ConfigSpace files in one exclusive worker after the ordinary wave.
@@ -617,10 +621,13 @@ remain below `.local/checks/<run-id>`.
 
 ## Frozen release workflow
 
-Release evidence starts only after all intended files are committed and a full
-Git ref is fixed on that commit. Keep the repository on that exact clean commit
-while commands that snapshot the current worktree run. A final native, public-R
-API, and memory sequence uses new run IDs:
+Release evidence starts only after all intended package files are committed and
+a full Git ref is fixed on that commit. Keep the primary checkout on that exact
+clean commit only while commands such as the differential and benchmark drivers
+snapshot its current worktree. Compatibility and documentation gates instead
+authenticate the frozen detached source, so excluded harness/report work may
+continue in the primary checkout. A final native, public-R API, and memory
+sequence uses new run IDs:
 
 ```sh
 . scripts/activate
@@ -634,6 +641,10 @@ scripts/check-r-api-compatibility --run-id "$r_api_run"
 scripts/memory-check --source-run "$native_run" --mode all \
   --run-id "$memory_run"
 ```
+
+The memory command is shown beside the source run that it consumes, but in a
+new release execute it only after the focused/full consumer gates are green;
+do not spend Valgrind/rchk time on a candidate already rejected by consumers.
 
 `--mode all` on `native-check` means all strict compiler, static-analysis,
 symbol, ASan, and UBSan modes. With `--tests full`, its strict-GCC mode also
@@ -686,6 +697,20 @@ commands, and source-test scope are tree-receipted and completion-sealed below
 `.local/checks/<run-id>/runtime-matrix/`. Any later source change requires a
 fresh matrix run along with every other frozen release gate.
 
+While the primary checkout is still exactly the clean candidate, run the full
+pinned differential inventory and verify its sealed directory before consumer
+work begins:
+
+```sh
+compat/differential/run --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9
+Rscript --vanilla compat/verify-repository-evidence.R \
+  "$(cat .local/tmp/current-release-differential-run.txt)"
+```
+
+Every difference must either be absent or match both fingerprints and the
+reason in `compat/differential/expected-differences.tsv`; a dirty differential
+run is diagnostic only and cannot become release or benchmark evidence.
+
 Before installing the frozen candidate, prepare the pinned source-package
 hard dependency closure with a separate unique evidence ID:
 
@@ -693,7 +718,7 @@ hard dependency closure with a separate unique evidence ID:
 reverse_dependency_run=release-reverse-dependencies-YYYYMMDDTHHMMSSZ
 dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
 Rscript --vanilla compat/install-reverse-dependency-dependencies.R \
-  --root "$PARADOX_ROOT" --max-priority 2 \
+  --root "$PARADOX_ROOT" --max-priority 1 \
   --dependency-library "$dependency_library" \
   --run-id "$reverse_dependency_run"
 ```
@@ -716,11 +741,14 @@ and tree are exported, and only into the absent run-specific library reserved
 beside the dependency-preparation stage. The authoritative command shape and
 portable content-sentinel handling are in
 `compat/README.md`; `compat/install-candidate` takes candidate library,
-dependency library, and source worktree in that order. Installation and every
-consumer release gate require the primary checkout to be clean with HEAD, the
-full ref, commit, and tree all identifying the candidate; replacement refs,
-grafts, alternate object stores, external archive attributes, hidden index
-flags, and inherited repository-altering `GIT_*` inputs are forbidden. The
+dependency library, and source worktree in that order. Installation and the
+consumer/documentation gates require the clean detached candidate source,
+full ref, commit, and tree all to identify the candidate; the primary checkout
+may contain unrelated later work. Differential and benchmark drivers are the
+exceptions and require exact candidate `HEAD` because they snapshot the primary
+checkout. Replacement refs, grafts, alternate object stores, external archive
+attributes, hidden index flags, and inherited repository-altering `GIT_*`
+inputs are forbidden. The
 sealed schema-2 receipt binds `PARADOX_CANDIDATE_RUN_ID`, both canonical library
 paths, the dependency-library content hash, and the exact installer and Git
 authenticator. Repository checks reuse that candidate run ID because their
@@ -760,7 +788,9 @@ environment. That same authenticated candidate is then used for:
   isolated homes, temporary trees, and caches, takes exactly one protected
   pre/post boundary per wave, seals the complete wave before parent-only
   promotion, and resumes a partially promoted sealed wave without rerunning
-  successful rows;
+  successful rows. Nested work is capped at one except for a receipt-bound
+  `mlr3` worker-contract exception that exposes exactly two CPUs while make,
+  CMake, testthat, BLAS, and Rcpp remain at one;
 - `compat/test-documentation`, with the same candidate/dependency libraries,
   the mlr3verse core as `--extra-library`, a new run ID, and `--scope all`;
   this also runs the pinned mbo_config and reviewed documentation migration

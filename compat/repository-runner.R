@@ -1473,13 +1473,35 @@ repository_runner_nested_parallel_environment <- function() c(
   R_FUTURE_AVAILABLECORES_FALLBACK = "1"
 )
 
+repository_runner_child_parallel_environment <- function(repository = NULL) {
+  if (!is.null(repository)) {
+    repository <- repository_runner_safe_name(repository, "consumer repository")
+  }
+  environment <- c(
+    repository_runner_nested_parallel_environment(),
+    OMP_NUM_THREADS = "1", OMP_THREAD_LIMIT = "1",
+    OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1",
+    MKL_NUM_THREADS = "1", BLIS_NUM_THREADS = "1",
+    VECLIB_MAXIMUM_THREADS = "1", NUMEXPR_NUM_THREADS = "1",
+    RCPP_PARALLEL_NUM_THREADS = "1"
+  )
+  if (identical(repository, "mlr3")) {
+    # mlr3's worker-contract tests intentionally exercise two logical CPUs.
+    # Keep BLAS, build, Rcpp, and testthat parallelism at one so the exception
+    # cannot multiply the scheduler's bounded two-CPU row allocation.
+    environment[c(
+      "MC_CORES", "R_PARALLELLY_AVAILABLECORES_FALLBACK",
+      "R_FUTURE_AVAILABLECORES_FALLBACK", "OMP_NUM_THREADS",
+      "OMP_THREAD_LIMIT"
+    )] <- "2"
+  }
+  environment
+}
+
 repository_runner_environment_receipt_names <- function() c(
-  "NOT_CRAN", "TESTTHAT_PARALLEL", "TESTTHAT_CPUS", "MAKEFLAGS",
-  names(repository_runner_nested_parallel_environment()),
-  "OMP_NUM_THREADS", "OMP_THREAD_LIMIT", "OPENBLAS_NUM_THREADS",
-  "GOTO_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS",
-  "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
-  "RCPP_PARALLEL_NUM_THREADS", "R_LIBS", "R_LIBS_USER",
+  "LC_ALL", "LANG", "LANGUAGE", "TZ", "NOT_CRAN", "TESTTHAT_PARALLEL",
+  "TESTTHAT_CPUS", "MAKEFLAGS", names(repository_runner_child_parallel_environment()),
+  "R_LIBS", "R_LIBS_USER",
   "PARADOX_ROW_STATE_ROOT", "HOME", "TMPDIR", "XDG_CACHE_HOME",
   "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
   "R_USER_CACHE_DIR", "R_USER_CONFIG_DIR", "R_USER_DATA_DIR",
@@ -1494,7 +1516,8 @@ repository_runner_environment_receipt_names <- function() c(
   "CCACHE_TEMPDIR"
 )
 
-repository_runner_process_environment <- function(context, row_state) {
+repository_runner_process_environment <- function(context, row_state,
+                                                  repository) {
   row_state <- repository_runner_require_directory(row_state, "row-local state")
   state_names <- c(
     home = "home", tmp = "tmp", xdg_cache = "xdg-cache",
@@ -1525,14 +1548,11 @@ repository_runner_process_environment <- function(context, row_state) {
     context$config$extra_libraries, context$config$dependency_library)
   library_environment <- paste(libraries, collapse = .Platform$path.sep)
   environment <- context$config$base_environment
-  nested_parallel <- repository_runner_nested_parallel_environment()
+  child_parallel <- repository_runner_child_parallel_environment(repository)
   override_names <- c(
-    "NOT_CRAN", "TESTTHAT_PARALLEL", "TESTTHAT_CPUS", "MAKEFLAGS",
-    names(nested_parallel),
-    "OMP_NUM_THREADS", "OMP_THREAD_LIMIT", "OPENBLAS_NUM_THREADS",
-    "GOTO_NUM_THREADS", "MKL_NUM_THREADS", "BLIS_NUM_THREADS",
-    "VECLIB_MAXIMUM_THREADS", "NUMEXPR_NUM_THREADS",
-    "RCPP_PARALLEL_NUM_THREADS", "R_LIBS", "R_LIBS_USER", "R_LIBS_SITE",
+    "LC_ALL", "LANG", "LANGUAGE", "TZ", "NOT_CRAN", "TESTTHAT_PARALLEL",
+    "TESTTHAT_CPUS", "MAKEFLAGS", names(child_parallel), "R_LIBS",
+    "R_LIBS_USER", "R_LIBS_SITE",
     "R_PROFILE_USER", "R_ENVIRON_USER", "R_DEFAULT_PACKAGES", "R_TESTS",
     "PARADOX_ROW_STATE_ROOT", "HOME", "TMPDIR", "XDG_CACHE_HOME",
     "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
@@ -1549,12 +1569,10 @@ repository_runner_process_environment <- function(context, row_state) {
     "WEKA_HOME", "CCACHE_DIR", "CCACHE_TEMPDIR"
   )
   overrides <- c(
+    LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C", TZ = "UTC",
     NOT_CRAN = "true", TESTTHAT_PARALLEL = "false", TESTTHAT_CPUS = "1",
-    MAKEFLAGS = "-j1", nested_parallel,
-    OMP_NUM_THREADS = "1", OMP_THREAD_LIMIT = "1",
-    OPENBLAS_NUM_THREADS = "1", GOTO_NUM_THREADS = "1", MKL_NUM_THREADS = "1",
-    BLIS_NUM_THREADS = "1", VECLIB_MAXIMUM_THREADS = "1",
-    NUMEXPR_NUM_THREADS = "1", RCPP_PARALLEL_NUM_THREADS = "1",
+    MAKEFLAGS = "-j1",
+    child_parallel,
     R_LIBS = library_environment,
     R_LIBS_USER = library_environment, R_LIBS_SITE = "", R_PROFILE_USER = "",
     R_ENVIRON_USER = "",
@@ -1602,7 +1620,8 @@ repository_runner_environment_receipt <- function(environment) {
 }
 
 repository_runner_validate_environment_receipt <- function(receipt, attempt,
-                                                           context) {
+                                                           context,
+                                                           repository) {
   names <- repository_runner_environment_receipt_names()
   if (!identical(receipt$name, names) || anyDuplicated(receipt$name)) {
     repository_runner_fail("child environment receipt has unexpected scope")
@@ -1639,13 +1658,10 @@ repository_runner_validate_environment_receipt <- function(receipt, attempt,
   libraries <- paste(c(context$config$candidate_library,
     context$config$extra_libraries, context$config$dependency_library),
     collapse = .Platform$path.sep)
-  constants <- c(NOT_CRAN = "true", TESTTHAT_PARALLEL = "false",
+  constants <- c(LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C",
+    TZ = "UTC", NOT_CRAN = "true", TESTTHAT_PARALLEL = "false",
     TESTTHAT_CPUS = "1", MAKEFLAGS = "-j1",
-    repository_runner_nested_parallel_environment(), OMP_NUM_THREADS = "1",
-    OMP_THREAD_LIMIT = "1", OPENBLAS_NUM_THREADS = "1",
-    GOTO_NUM_THREADS = "1", MKL_NUM_THREADS = "1", BLIS_NUM_THREADS = "1",
-    VECLIB_MAXIMUM_THREADS = "1", NUMEXPR_NUM_THREADS = "1",
-    RCPP_PARALLEL_NUM_THREADS = "1", R_LIBS = libraries,
+    repository_runner_child_parallel_environment(repository), R_LIBS = libraries,
     R_LIBS_USER = libraries, PYTHONDONTWRITEBYTECODE = "1", PYTHONNOUSERSITE = "1",
     PIP_CONFIG_FILE = "/dev/null", PIP_DISABLE_PIP_VERSION_CHECK = "1",
     RETICULATE_AUTOCONFIGURE = "FALSE",
@@ -2106,7 +2122,8 @@ repository_runner_verify_attempt <- function(context, row, attempt_override = NU
     test_warnings = counts[["warnings"]])
   receipt <- repository_runner_read_tsv(file.path(attempt, "child-environment.tsv"),
     c("name", "value"), label = "child environment receipt")
-  repository_runner_validate_environment_receipt(receipt, attempt, context)
+  repository_runner_validate_environment_receipt(receipt, attempt, context,
+    row$repository[[1L]])
   mutation <- c(added = sum(delta$change == "added"),
     modified = sum(delta$change == "modified"), deleted = sum(delta$change == "deleted"))
   provenance <- c("validation_tool_provenance_violation",
@@ -2282,7 +2299,8 @@ repository_runner_execute_attempt <- function(context, row, row_directory, attem
   framework <- repository_runner_framework(work$source)
   row_state <- repository_runner_reserve_directory(work$root, "row-state",
     "row-local state")
-  environment <- repository_runner_process_environment(context, row_state)
+  environment <- repository_runner_process_environment(context, row_state,
+    row$repository[[1L]])
   receipt <- repository_runner_environment_receipt(environment)
   repository_runner_write_tsv(receipt, file.path(attempt, "child-environment.tsv"))
   log <- file.path(attempt, "test.log")
@@ -2674,7 +2692,8 @@ repository_runner_worker_environment <- function(state) {
   }
   Sys.chmod(paths[[7L]], "0700")
   environment <- Sys.getenv()
-  overrides <- c(HOME = paths[[1L]], TMPDIR = paths[[2L]],
+  overrides <- c(LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C",
+    TZ = "UTC", HOME = paths[[1L]], TMPDIR = paths[[2L]],
     XDG_CACHE_HOME = paths[[3L]], XDG_CONFIG_HOME = paths[[4L]],
     XDG_DATA_HOME = paths[[5L]], XDG_STATE_HOME = paths[[6L]],
     XDG_RUNTIME_DIR = paths[[7L]], R_PROFILE_USER = "", R_ENVIRON_USER = "",

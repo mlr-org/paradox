@@ -66,6 +66,49 @@ log_value() {
   awk -F = -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print}' "$log"
 }
 
+# Evidence replay must not inherit an unreceipted search executable from the
+# operator's PATH.  Keep the small marker and nm-output readers inside Bash and
+# bound both the record count and bytes observed before accepting a result.
+bounded_regular_text_file() {
+  local file=$1 size
+  [[ -f "$file" && ! -L "$file" ]] || return 1
+  size=$(/usr/bin/stat -c '%s' -- "$file") || return 1
+  [[ "$size" =~ ^[0-9]+$ && "$size" -le 1048576 ]]
+}
+
+text_has_exact_line_once() {
+  local file=$1 expected=$2 line
+  local records=0 bytes=0 matches=0
+  bounded_regular_text_file "$file" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    records=$((records + 1))
+    bytes=$((bytes + ${#line} + 1))
+    ((records <= 4096 && bytes <= 1048576)) || return 1
+    [[ "$line" == "$expected" ]] && matches=$((matches + 1))
+  done < "$file"
+  [[ "$matches" -eq 1 ]]
+}
+
+runtime_symbol_count() {
+  local file=$1 expected=$2 line kind symbol extra
+  local records=0 bytes=0 matches=0
+  bounded_regular_text_file "$file" || return 1
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    records=$((records + 1))
+    bytes=$((bytes + ${#line} + 1))
+    ((records <= 4096 && bytes <= 1048576)) || return 1
+    kind=
+    symbol=
+    extra=
+    read -r kind symbol extra <<< "$line"
+    [[ "$kind" == U || "$kind" == w ]] || return 1
+    [[ -n "$symbol" && -z "$extra" ]] || return 1
+    [[ "$symbol" == "$expected" ]] && matches=$((matches + 1))
+  done < "$file"
+  ((records > 0)) || return 1
+  printf '%s\n' "$matches"
+}
+
 verify_source_archive() {
   local artifacts=$1 metadata=$2
   local source="$artifacts/source"
@@ -127,6 +170,59 @@ verify_recorded_digests() {
     $(metadata_value "$metadata" artifacts_manifest_sha256) == \
       "$(sha256sum "$metadata/artifacts.manifest.tsv" | cut -d ' ' -f 1)" ]] ||
     fail "Retained stage digest claims are inconsistent"
+}
+
+verify_runtime_symbol_scope() {
+  local version=$1 artifacts=$2 metadata=$3
+  local log="$artifacts/logs/r-api-symbol-audit.log"
+  local symbols="$artifacts/logs/r-api-symbol-audit.symbols.txt"
+  local dso="$artifacts/library/paradox/libs/paradox.so"
+  local branch symbol count
+  local -a required forbidden
+  for file in "$log" "$symbols" "$dso"; do
+    [[ -f "$file" && ! -L "$file" ]] ||
+      fail "Runtime symbol evidence is absent or symbolic: $file"
+  done
+
+  if [[ "$version" == 4.3.3 ]]; then
+    required=(Rf_eval)
+    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_getVarEx R_GetBindingType R_getRegisteredNamespace R_getAttribCount
+      R_hasAttrib)
+    branch=pre-4.5-evaluated-public-fallback
+  else
+    required=(Rf_eval R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_getVarEx)
+    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount
+      R_hasAttrib)
+    branch=4.5-direct-closure-and-evaluated-binding
+  fi
+
+  for symbol in "${required[@]}"; do
+    count=$(runtime_symbol_count "$symbols" "$symbol") ||
+      fail "Retained runtime symbol inventory is malformed or unbounded"
+    [[ "$count" == 1 ]] ||
+      fail "Required R API symbol is not unique on R $version: $symbol"
+    text_has_exact_line_once "$log" "required_symbol=$symbol" ||
+      fail "Required R API symbol receipt is absent or duplicated: $symbol"
+  done
+  for symbol in "${forbidden[@]}"; do
+    count=$(runtime_symbol_count "$symbols" "$symbol") ||
+      fail "Retained runtime symbol inventory is malformed or unbounded"
+    [[ "$count" == 0 ]] ||
+      fail "Forbidden R API symbol is present on R $version: $symbol"
+    text_has_exact_line_once "$log" "forbidden_symbol_absent=$symbol" ||
+      fail "Forbidden R API symbol receipt is absent or duplicated: $symbol"
+  done
+  if ! text_has_exact_line_once "$log" "runtime=$version" ||
+      ! text_has_exact_line_once "$log" \
+        "dso_sha256=$(sha256sum "$dso" | cut -d ' ' -f 1)" ||
+      ! text_has_exact_line_once "$log" "r_api_compat_branch=$branch" ||
+      ! text_has_exact_line_once "$log" "symbol_audit=passed"; then
+    fail "Runtime symbol audit identity or completion marker is inconsistent"
+  fi
+  [[ $(metadata_value "$metadata" r_api_compat_branch) == "$branch" ]] ||
+    fail "Runtime symbol policy branch differs from stage metadata"
 }
 
 verify_trusted_inputs() {
@@ -548,6 +644,7 @@ for version in "${versions[@]}"; do
   verify_source_archive "$artifacts" "$metadata"
   verify_trusted_inputs "$version" "$artifacts"
   verify_recorded_digests "$version" "$artifacts" "$metadata"
+  verify_runtime_symbol_scope "$version" "$artifacts" "$metadata"
   [[ $(metadata_value "$metadata" scheduler_resource_report_sha256) == \
       "$(metadata_value "$top_metadata" resource_report_sha256)" &&
     $(metadata_value "$metadata" scheduler_stage_tasks_sha256) == \
@@ -577,12 +674,12 @@ for version in "${versions[@]}"; do
       4.5.2:4.5-direct-closure-and-evaluated-binding) ;;
     *) fail "Retained public-R-API branch marker is inconsistent" ;;
   esac
-  rg -q '^runtime_matrix_focused_probe=passed$' "$artifacts/logs/focused-probe.log" ||
+  text_has_exact_line_once "$artifacts/logs/focused-probe.log" \
+    'runtime_matrix_focused_probe=passed' ||
     fail "Focused public-R-API probe did not pass"
-  rg -q '^runtime_matrix_source_tests=passed$' "$artifacts/logs/source-tests.log" ||
+  text_has_exact_line_once "$artifacts/logs/source-tests.log" \
+    'runtime_matrix_source_tests=passed' ||
     fail "Full practical source suite did not pass"
-  rg -q '^symbol_audit=passed$' "$artifacts/logs/r-api-symbol-audit.log" ||
-    fail "Public-R-API symbol audit did not pass"
 done
 
 printf 'runtime_matrix_evidence=passed\nrun_id=%s\nstages=%s\n' \

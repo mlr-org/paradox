@@ -297,7 +297,7 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 expected_documentation_sha256 <-
-  "9a1cf41b592f879d091c1c80c20700ee42173d9464f88e93cd87cb791cc933c4"
+  "5660eaac656189bb5e02ed343b546c8a4be55aaa9a8bc9630ab1bd877e1e1eb1"
 if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
   stop("documentation timeout source snapshot changed", call. = FALSE)
 }
@@ -551,13 +551,13 @@ audit_timeout_ast <- function(tree, production = FALSE) {
   )
   expected_helper_ast <- c(
     base_environment =
-      "23fd145aa535556563ef90dd92e6350492032428c0d58b32397e2bd6536c0bd6",
+      "45437b5669fc8e874ceee1efb4fff46713ca629f92812cd24defe7ae9cc20146",
     classify_failure =
       "4a1ea539659707118b7cb463f317edd547c20045db9e6418b84406e4132c79b7",
     library_environment =
       "4d365e166297f6bc2e7c379f361a9a7517b7cf3361668d4516c99a2f1d5a556b",
     retain_environment_evidence =
-      "ffdffa18b8f3ba5c19cb36a97d9b644e36c80379e6e97042df1f00f6015d9f06",
+      "6a7ea7e08b6ef50a2710e3ccb9b695ae0887d3e05e74bfb15525fc9799f53cec",
     sample_classification_log =
       "678da7857705addf16412cbbbd046e6441345431aae340a00ee5199132fad246",
     verify_row_boundary =
@@ -591,6 +591,24 @@ audit_timeout_ast <- function(tree, production = FALSE) {
         reject("allowlisted run_retained helper has an unaudited binding: ",
           helper)
       }
+    }
+  }
+  if (production) {
+    locale_bindings <- binding_records(
+      tree, quote(documentation_locale_environment)
+    )
+    if (length(locale_bindings) != 1L ||
+        !identical(locale_bindings[[1L]][[1L]], quote(`<-`)) ||
+        !identical(locale_bindings[[1L]][[2L]],
+          quote(documentation_locale_environment)) ||
+        !is.call(locale_bindings[[1L]][[3L]]) ||
+        !identical(locale_bindings[[1L]][[3L]][[1L]], quote(`function`)) ||
+        length(locale_bindings[[1L]][[3L]][[2L]]) != 0L ||
+        !identical(
+          ast_sha256(locale_bindings[[1L]][[3L]]),
+          "bd20551825e489e8952a75ae3af00819c377c1a94b7334398177ccd8cbdb08d8"
+        )) {
+      reject("documentation locale helper has an unaudited binding")
     }
   }
   constant_truth <- function(value) {

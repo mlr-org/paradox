@@ -309,6 +309,13 @@ rr_object_sha256 <- function(value) {
   rr_sha256(temporary)
 }
 
+rr_consumer_locale_environment <- function() c(
+  LC_ALL = "C.UTF-8",
+  LANG = "C.UTF-8",
+  LANGUAGE = "C",
+  TZ = "UTC"
+)
+
 rr_reverse_nested_controls <- function() c(
   TESTTHAT_PARALLEL = "false",
   TESTTHAT_IS_PARALLEL = "false",
@@ -1743,6 +1750,7 @@ rr_worker_environment <- function(state, inherited = Sys.getenv()) {
   Sys.chmod(paths[[7L]], mode = "0700")
   environment <- inherited
   overrides <- c(
+    rr_consumer_locale_environment(),
     HOME = paths[[1L]], TMPDIR = paths[[2L]],
     XDG_CACHE_HOME = paths[[3L]], XDG_CONFIG_HOME = paths[[4L]],
     XDG_DATA_HOME = paths[[5L]], XDG_STATE_HOME = paths[[6L]],

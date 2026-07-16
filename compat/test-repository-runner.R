@@ -405,6 +405,11 @@ write_file(file.path(child_checkout, "tests", "testthat", "test-counts.R"), c(
   "  testthat::expect_identical(Sys.getenv(\"R_PARALLELLY_FORK_ENABLE\"), \"false\")",
   "  testthat::expect_identical(Sys.getenv(\"R_PARALLELLY_AVAILABLECORES_FALLBACK\"), \"1\")",
   "  testthat::expect_identical(Sys.getenv(\"R_FUTURE_AVAILABLECORES_FALLBACK\"), \"1\")",
+  "  testthat::expect_identical(Sys.getenv(\"LC_ALL\"), \"C.UTF-8\")",
+  "  testthat::expect_identical(Sys.getenv(\"LANG\"), \"C.UTF-8\")",
+  "  testthat::expect_identical(Sys.getenv(\"LANGUAGE\"), \"C\")",
+  "  testthat::expect_identical(Sys.getenv(\"TZ\"), \"UTC\")",
+  "  testthat::expect_identical(nchar(capture.output(cat(\"\\U2208\")), type = \"chars\"), 1L)",
   "})"
 ))
 development_library <- normalizePath(file.path(root, ".local", "R", "library"),
@@ -414,7 +419,7 @@ child_context$config$extra_libraries <- c(extra_library, development_library)
 child_state <- file.path(scratch, "child-state")
 dir.create(child_state)
 child_environment <- repository_runner_process_environment(child_context,
-  child_state)
+  child_state, "syntheticconsumer")
 nested_parallel <- repository_runner_nested_parallel_environment()
 if (!identical(unname(child_environment[names(nested_parallel)]),
     unname(nested_parallel))) {
@@ -429,11 +434,39 @@ child_counts <- repository_runner_validate_counts(child_counts_path, "testthat",
   child_process$status, child_process$timed_out)
 if (!identical(child_process$status, 1L) ||
     !identical(child_counts[["availability"]], "complete_testthat") ||
-    !identical(child_counts[["expectations"]], "11") ||
+    !identical(child_counts[["expectations"]], "16") ||
     !identical(child_counts[["failed"]], "2") ||
-    !identical(child_counts[["passed"]], "9")) {
+    !identical(child_counts[["passed"]], "14")) {
   stop("external child did not retain complete multi-failure counts",
     call. = FALSE)
+}
+
+mlr3_receipt_attempt <- file.path(scratch, "mlr3-environment-receipt-attempt")
+dir.create(mlr3_receipt_attempt)
+dir.create(file.path(mlr3_receipt_attempt, "work"))
+mlr3_state <- file.path(mlr3_receipt_attempt, "work", "row-state")
+dir.create(mlr3_state)
+mlr3_environment <- repository_runner_process_environment(context, mlr3_state,
+  "mlr3")
+ordinary_parallel <- repository_runner_child_parallel_environment(
+  "syntheticconsumer")
+mlr3_parallel <- repository_runner_child_parallel_environment("mlr3")
+changed_parallel_names <- names(ordinary_parallel)[ordinary_parallel != mlr3_parallel]
+expected_changed_parallel_names <- c(
+  "MC_CORES", "R_PARALLELLY_AVAILABLECORES_FALLBACK",
+  "R_FUTURE_AVAILABLECORES_FALLBACK", "OMP_NUM_THREADS", "OMP_THREAD_LIMIT"
+)
+fixed_controls <- c(
+  TESTTHAT_PARALLEL = "false", TESTTHAT_CPUS = "1", MAKEFLAGS = "-j1"
+)
+if (!identical(changed_parallel_names, expected_changed_parallel_names) ||
+    !identical(unname(mlr3_parallel[expected_changed_parallel_names]),
+      rep("2", length(expected_changed_parallel_names))) ||
+    !identical(mlr3_parallel[setdiff(names(mlr3_parallel),
+      expected_changed_parallel_names)], ordinary_parallel[setdiff(
+      names(ordinary_parallel), expected_changed_parallel_names)]) ||
+    !identical(mlr3_environment[names(fixed_controls)], fixed_controls)) {
+  stop("mlr3's bounded two-CPU child exception is not isolated", call. = FALSE)
 }
 
 receipt_attempt <- file.path(scratch, "environment-receipt-attempt")
@@ -442,14 +475,20 @@ dir.create(file.path(receipt_attempt, "work"))
 receipt_state <- file.path(receipt_attempt, "work", "row-state")
 dir.create(receipt_state)
 receipt_environment <- repository_runner_process_environment(context,
-  receipt_state)
+  receipt_state, "syntheticconsumer")
 receipt <- repository_runner_environment_receipt(receipt_environment)
 invisible(repository_runner_validate_environment_receipt(receipt,
-  receipt_attempt, context))
+  receipt_attempt, context, "syntheticconsumer"))
+mlr3_receipt <- repository_runner_environment_receipt(mlr3_environment)
+invisible(repository_runner_validate_environment_receipt(mlr3_receipt,
+  mlr3_receipt_attempt, context, "mlr3"))
+expect_error(repository_runner_validate_environment_receipt(mlr3_receipt,
+  mlr3_receipt_attempt, context, "syntheticconsumer"),
+  "does not prove row isolation")
 tampered_receipt <- receipt
 tampered_receipt$value[tampered_receipt$name == "R_FUTURE_PLAN"] <- "multisession"
 expect_error(repository_runner_validate_environment_receipt(tampered_receipt,
-  receipt_attempt, context), "does not prove row isolation")
+  receipt_attempt, context, "syntheticconsumer"), "does not prove row isolation")
 
 external_worker_state <- file.path(scratch, "external-worker-environment")
 dir.create(external_worker_state)
@@ -460,11 +499,17 @@ if (!identical(as.character(external_worker_environment[names(nested_parallel)])
   stop("external worker environment omitted a nested-parallelism control",
     call. = FALSE)
 }
+worker_locale <- c(LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C",
+  TZ = "UTC")
+if (!identical(unname(as.character(external_worker_environment[
+      names(worker_locale)])), unname(worker_locale))) {
+  stop("external worker environment is not locale-stable", call. = FALSE)
+}
 
 isolation_root <- file.path(scratch, "isolation")
 dir.create(isolation_root)
 isolation_environment <- repository_runner_process_environment(context,
-  isolation_root)
+  isolation_root, "syntheticconsumer")
 python <- file.path(root, ".local", "toolchain", "bin", "python")
 if (file.exists(python)) {
   module_root <- file.path(scratch, "python-module")

@@ -240,6 +240,7 @@ invisible(rr_validate_reverse_acceptance_waves(accepted, waves))
 
 canonical_count <- function(value) grepl("^(0|[1-9][0-9]*)$", value)
 nested_controls <- rr_reverse_nested_controls()
+locale_environment <- rr_consumer_locale_environment()
 for (index in seq_len(nrow(results))) {
   result <- results[index, , drop = FALSE]
   package <- result$package[[1L]]
@@ -356,6 +357,11 @@ for (index in seq_len(nrow(results))) {
   }
   command_environment <- command[command$kind == "environment", , drop = FALSE]
   command_values <- setNames(command_environment$value, command_environment$name)
+  if (any(!names(locale_environment) %in% names(command_values)) ||
+      !identical(unname(command_values[names(locale_environment)]),
+        unname(locale_environment))) {
+    rr_fail("row did not use the deterministic consumer locale: ", package)
+  }
   if (any(!names(nested_controls) %in% names(command_values)) ||
       !identical(unname(command_values[names(nested_controls)]),
         unname(nested_controls))) {
@@ -395,6 +401,15 @@ for (index in seq_len(nrow(results))) {
     }
     inputs <- rr_read_tsv(receipt_paths[[3L]], c("field", "value"))
     input_values <- setNames(inputs$value, inputs$field)
+    input_locale_names <- paste0(
+      "environment.", names(locale_environment)
+    )
+    if (any(!input_locale_names %in% names(input_values)) ||
+        !identical(unname(input_values[input_locale_names]),
+          unname(locale_environment))) {
+      rr_fail("install-cache key omitted the deterministic consumer locale: ",
+        package)
+    }
     input_control_names <- paste0("environment.", names(nested_controls))
     if (any(!input_control_names %in% names(input_values)) ||
         !identical(unname(input_values[input_control_names]),

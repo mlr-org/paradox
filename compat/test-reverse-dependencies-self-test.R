@@ -88,6 +88,13 @@ if (anyDuplicated(names(controls)) ||
     !identical(controls[["R_PARALLELLY_AVAILABLECORES_FALLBACK"]], "1")) {
   rr_fail("uniform nested-parallel controls are incomplete")
 }
+locale_environment <- rr_consumer_locale_environment()
+expected_locale_environment <- c(
+  LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C", TZ = "UTC"
+)
+if (!identical(locale_environment, expected_locale_environment)) {
+  rr_fail("deterministic consumer locale controls are incomplete")
+}
 
 expect_error <- function(expression, pattern = NULL) {
   message <- tryCatch({ force(expression); NULL }, error = conditionMessage)
@@ -101,6 +108,24 @@ expect_error <- function(expression, pattern = NULL) {
 temporary <- tempfile("paradox-reverse-economy-self-test-")
 if (!dir.create(temporary)) rr_fail("could not create self-test root")
 on.exit(unlink(temporary, recursive = TRUE, force = TRUE), add = TRUE)
+
+# A worker must replace hostile inherited locale and timezone values before it
+# deserializes or executes any consumer-row closure.
+worker_locale_state <- file.path(temporary, "worker-locale-state")
+dir.create(worker_locale_state)
+hostile_worker_environment <- Sys.getenv()
+hostile_worker_environment[names(locale_environment)] <- c(
+  "C", "POSIX", "de_DE", "Pacific/Honolulu"
+)
+worker_environment <- rr_worker_environment(
+  worker_locale_state, hostile_worker_environment
+)
+if (!identical(
+    unname(as.character(worker_environment[names(locale_environment)])),
+    unname(locale_environment)
+  )) {
+  rr_fail("external reverse worker inherited a hostile locale")
+}
 
 # Run mutation is exclusive.  A live owner is observed but never signalled;
 # an authenticated dead owner is archived before a new lock is published.
@@ -1114,10 +1139,14 @@ result_fixture[1L, c(
 result_fixture[] <- lapply(result_fixture, as.character)
 rr_write_tsv(result_fixture, file.path(verification_row, "result.tsv"))
 nested_fixture <- rr_reverse_nested_controls()
+locale_fixture <- rr_consumer_locale_environment()
 rr_write_tsv(data.frame(
-  kind = c(rep("environment", length(nested_fixture)), "timeout_seconds"),
-  name = c(names(nested_fixture), "timeout"),
-  value = c(unname(nested_fixture), "60"),
+  kind = c(
+    rep("environment", length(locale_fixture) + length(nested_fixture)),
+    "timeout_seconds"
+  ),
+  name = c(names(locale_fixture), names(nested_fixture), "timeout"),
+  value = c(unname(locale_fixture), unname(nested_fixture), "60"),
   stringsAsFactors = FALSE
 ), file.path(verification_row, "install-command.tsv"))
 worker_task_hash <- strrep("8", 64L)

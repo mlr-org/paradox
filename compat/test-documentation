@@ -8,6 +8,13 @@
 fail <- function(...) stop(..., call. = FALSE)
 `%||%` <- function(x, y) if (is.null(x)) y else x
 
+documentation_locale_environment <- function() c(
+  LC_ALL = "C.UTF-8",
+  LANG = "C.UTF-8",
+  LANGUAGE = "C",
+  TZ = "UTC"
+)
+
 usage <- function(status = 0L) {
   writeLines(c(
     "Usage: compat/test-documentation [OPTIONS]",
@@ -381,8 +388,7 @@ micromamba_environment <- c(
     "/usr/bin", "/bin"
   ), collapse = .Platform$path.sep),
   MAMBA_ROOT_PREFIX = file.path(root, ".local", "micromamba"),
-  LC_ALL = "C.UTF-8",
-  TZ = "UTC"
+  documentation_locale_environment()
 )
 run_micromamba <- function(arguments, error_on_status = FALSE) {
   processx::run(
@@ -1342,7 +1348,8 @@ base_environment <- function(overlay) {
     RSTUDIO_PANDOC = file.path(
       root, ".local", "quarto", "1.9.38", "bin", "tools", "x86_64"
     ),
-    QUARTO_PRINT_STACK = "true", TZ = "UTC", LC_ALL = "C.UTF-8",
+    QUARTO_PRINT_STACK = "true",
+    documentation_locale_environment(),
     MAKEFLAGS = "-j1",
     PATH = paste(path_entries, collapse = .Platform$path.sep)
   )
@@ -1357,6 +1364,12 @@ retain_environment_evidence <- function(label, environment) {
       anyNA(environment) || anyNA(names(environment)) ||
       any(!nzchar(names(environment))) || anyDuplicated(names(environment))) {
     fail("documentation workload environment is malformed: ", label)
+  }
+  locale_environment <- documentation_locale_environment()
+  if (any(!names(locale_environment) %in% names(environment)) ||
+      !identical(unname(environment[names(locale_environment)]),
+        unname(locale_environment))) {
+    fail("documentation workload locale is not deterministic: ", label)
   }
   value <- data.frame(
     position = seq_along(environment),

@@ -1789,8 +1789,7 @@ reverse_environment <- function(package_directory, consumer_library = NULL) {
     VARTEXFONTS = file.path(texmf_root, "fonts"),
     R_TEXI2DVICMD = texi2dvi_path,
     TEXI2DVI = texi2dvi_path,
-    LC_ALL = "C.UTF-8",
-    TZ = "UTC",
+    rr_consumer_locale_environment(),
     SOURCE_DATE_EPOCH = source_date_epoch,
     LD_PRELOAD = "",
     ASAN_OPTIONS = "",
@@ -2281,6 +2280,8 @@ reverse_row <- function(plan_row, package_directory, protected_before) {
       "resolved <- normalizePath(find.package('paradox'), winslash = '/', mustWork = TRUE)",
       "if (!identical(resolved, candidate)) stop('wrong paradox package', call. = FALSE)",
       "if (!identical(Sys.getenv('NOT_CRAN'), 'true')) stop('NOT_CRAN is not true', call. = FALSE)",
+      "expected_locale <- c(LC_ALL = 'C.UTF-8', LANG = 'C.UTF-8', LANGUAGE = 'C', TZ = 'UTC')",
+      "if (!identical(Sys.getenv(names(expected_locale)), expected_locale)) stop('consumer locale is not deterministic', call. = FALSE)",
       "if (!identical(Sys.getenv('PYTHONDONTWRITEBYTECODE'), '1')) stop('Python bytecode is enabled', call. = FALSE)",
       "if (!identical(Sys.getenv('PYTHONPYCACHEPREFIX'), expected_python_cache)) stop('Python cache escaped row', call. = FALSE)"
     ), preflight_script, useBytes = TRUE)

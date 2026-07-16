@@ -1,5 +1,9 @@
 # Priority-zero candidate compatibility gate
 
+> Historical and superseded: this interrupted 2026-07-13 investigation is not
+> release evidence. Do not execute its old forward-looking recipe; use
+> `compat/README.md` and the current internal release ledger instead.
+
 Gate date: 2026-07-13 (Europe/Berlin)
 
 This pass was intended to test one immutable, Git-visible package source
@@ -250,19 +254,13 @@ sole error at `test_tuning_spaces.R:3`.
 The provenance-annotated result ledger SHA-256 is
 `4a745b57bb537e0793ffe57fd328e72d6cdb5f19896da1437e2a03df200644c3`.
 
-The complete priority-zero suite must be rerun after the now-current candidate
-is frozen, using a run-specific candidate library that no development command
-shares. The hardened harness fingerprints package contents before every child
-and after every repository, and aborts on any replacement. This mandatory
-rerun is deferred until the pending native slices are incorporated; rerunning
-the obsolete frozen snapshot would spend an hour without advancing the
-release candidate.
+The complete priority-zero suite described below was still pending when this
+historical note was written. Its recipe is retained only to explain the old
+investigation and has been superseded by the resumable priority-zero/one
+workflow in `compat/README.md`.
 
-Use the following inputs and command shape for that mandatory rerun, replacing
-`NEW_FULL_REF` only after all intended native slices are frozen into a
-Git-visible commit. The ref must remain fixed for the whole run. The recipe
-prepares dependencies first, creates or verifies the detached source worktree,
-and refuses to share or replace a candidate library:
+The obsolete command shape follows for historical interpretation only. Do not
+execute it for a current release:
 
 ```sh
 . scripts/activate

@@ -88,13 +88,13 @@ installer because it is derived only from the authenticated CRAN and
 Bioconductor source archives:
 
 ```sh
-reverse_dependency_run_id="$(date -u +%Y%m%dT%H%M%SZ)-reverse-deps-p2"
+reverse_dependency_run_id="$(date -u +%Y%m%dT%H%M%SZ)-reverse-deps-p1"
 dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
 test ! -e "$PARADOX_ROOT/.local/compat/runs/$reverse_dependency_run_id"
 
 Rscript --vanilla compat/install-reverse-dependency-dependencies.R \
   --root "$PARADOX_ROOT" \
-  --max-priority 2 \
+  --max-priority 1 \
   --dependency-library "$dependency_library" \
   --run-id "$reverse_dependency_run_id"
 ```
@@ -215,11 +215,14 @@ dependency-library content hash unchanged across installation. Receipt schema
 paths, dependency-library content, installer, and shared Git authenticator in
 addition to the source and installed package identities. The dedicated
 candidate library may contain only the package, sentinel, receipt, and seal.
-Installation and every release gate require the primary checkout to be clean
-at the candidate commit and tree, reject replacement refs, grafts, alternate
-object stores, external archive attributes, and hidden index flags, disable
-filesystem-monitor/untracked-cache shortcuts, and reject inherited
-repository-altering `GIT_*` variables. Every
+Installation and the compatibility/documentation gates authenticate the clean
+detached candidate source at the declared commit and tree. They reject
+replacement refs, grafts, alternate object stores, external archive
+attributes, hidden index flags, filesystem-monitor/untracked-cache shortcuts,
+and inherited repository-altering `GIT_*` variables. Unrelated work in the
+primary checkout is allowed after the candidate is frozen. The differential
+and benchmark drivers are the exceptions: they snapshot the primary checkout
+and therefore require its exact clean `HEAD` to identify the candidate. Every
 compatibility and documentation release gate authenticates
 the receipt against the full ref, commit, tree, installed version, content
 hash, current installer, and a freshly reproduced source archive.
@@ -370,7 +373,7 @@ commits used by the compatibility baseline.
 
 Consumer dependencies and the candidate package use separate local libraries,
 so pak cannot replace the package under test with CRAN paradox. Run the
-priority-zero checkout gate with the reviewed hard-import-only `mlr3verse`
+mandatory priority-zero/one checkout gate with the reviewed hard-import-only `mlr3verse`
 overlay explicitly present in the child library path:
 
 ```sh
@@ -380,7 +383,7 @@ export NOT_CRAN=true
 export PARADOX_CONSUMER_EXTRA_LIBS="$mlr3verse_library"
 export PARADOX_CANDIDATE_SOURCE="$candidate_source"
 
-Rscript compat/test-repositories.R "$PARADOX_ROOT" 0 \
+Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
   "$candidate_library" "$dependency_library" --run-id "$run_id"
 ```
 
@@ -438,9 +441,12 @@ reports all reachable failures rather than only the first one.
 Independent rows run in bounded external-`Rscript` waves. Immediately before
 each wave the runner retains a fresh `resource-jobs consumer` decision;
 `--jobs N` may only lower that live and initially retained ceiling. Every
-worker has isolated mutable state and forces nested make, CMake, testthat,
-`parallel`/`future`, BLAS, and OpenMP work to one thread. The parent waits for
-every sibling, seals the complete wave, and promotes accepted rows in
+worker has isolated mutable state and normally forces nested make, CMake,
+testthat, `parallel`/`future`, BLAS, and OpenMP work to one thread. The `mlr3`
+row alone receives a receipt-bound two-CPU exception for its explicit worker
+contract tests; make, CMake, testthat, BLAS, Rcpp, and every other repository
+remain capped at one within the scheduler's two-CPU row allocation. The parent
+waits for every sibling, seals the complete wave, and promotes accepted rows in
 deterministic plan order. Restarting the same unfinished run reuses every
 semantically verified accepted row, including successful siblings retained
 before a later row failed, instead of executing it again.
@@ -466,7 +472,7 @@ stage, and `metadata/completion.seal` authenticates that manifest. Perform the
 full repository-specific verifier with:
 
 ```sh
-Rscript --vanilla compat/test-repositories.R "$PARADOX_ROOT" 0 \
+Rscript --vanilla compat/test-repositories.R "$PARADOX_ROOT" 1 \
   "$candidate_library" "$dependency_library" --run-id "$run_id" \
   --candidate-source "$PARADOX_CANDIDATE_SOURCE" --verify
 ```
@@ -501,9 +507,11 @@ The same ordered library list is exported through `R_LIBS` and
 required for consumer-created subprocesses such as mlr3's mirai learner
 encapsulation daemons. Source-checkout testthat files run serially so every
 file retains pkgload's development-help shim. Default nested `parallel` and
-`future` plans are also forced sequential inside each bounded outer worker; a
-consumer test may still explicitly install its own reviewed plan when parallel
-behavior is itself the subject of the test.
+`future` plans are also forced sequential inside each bounded outer worker.
+The receipt-bound `mlr3` row advertises its allotted two logical CPUs because
+its tests assert that worker contract; it still starts from a sequential
+future plan. Other consumer tests may explicitly install their own reviewed
+plan when parallel behavior is itself the subject of the test.
 
 The harness runs testthat and tinytest packages with their native frameworks.
 For meta-packages whose tests are ordinary `tests/*.R` scripts, it loads the

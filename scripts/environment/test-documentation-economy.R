@@ -64,6 +64,21 @@ ast_sha256 <- function(value) {
 run_retained <- function_binding("run_retained")
 row_boundary <- function_binding("verify_row_boundary")
 full_boundary <- function_binding("verify_full_boundary")
+locale_environment <- eval(
+  function_binding("documentation_locale_environment")
+)()
+expected_locale_environment <- c(
+  LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C", TZ = "UTC"
+)
+if (!identical(locale_environment, expected_locale_environment) ||
+    !"documentation_locale_environment" %in% all.names(
+      function_binding("base_environment"), functions = TRUE, unique = TRUE
+    ) || !"documentation_locale_environment" %in% all.names(
+      function_binding("retain_environment_evidence"),
+      functions = TRUE, unique = TRUE
+    )) {
+  fail("documentation workload locale is not fixed and receipt-bound")
+}
 heavy_names <- c(
   "compat_tree_content_sha256", "compat_system_verify_evidence",
   "live_toolchain_explicit", "quarto_bootstrap", "verify_tinytex_tree",
@@ -109,6 +124,7 @@ hardening_text <- readLines(hardening, warn = FALSE)
 expected_hardening_snapshots <- c(
   unname(tools::sha256sum(harness)),
   ast_sha256(run_retained),
+  ast_sha256(function_binding("documentation_locale_environment")),
   ast_sha256(function_binding("classify_failure")),
   ast_sha256(function_binding("retain_environment_evidence")),
   ast_sha256(row_boundary),

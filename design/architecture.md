@@ -182,8 +182,12 @@ surface retain the callback-preserving batch above.
 
 Unknown Domain subclasses take a slow R/S3 fallback. Third-party extension is
 not a primary design constraint, but retaining this fallback costs little and
-prevents unnecessary breakage. A future package-owned parameter type is added
-as one type-table entry rather than by redesigning `ParamSet`.
+prevents unnecessary breakage. A future package-owned built-in type does not
+require redesigning `ParamSet`, but it is a deliberate cross-cutting change:
+maintainers must extend classification and construction, the relevant domain
+and ParamSet kernels, properties/checks/quantiles/subsetting, design generators
+and samplers where applicable, R fallbacks, differential cases, and native and
+R regression tests. There is intentionally no third-party native plug-in ABI.
 
 The scalar Domain checker also treats its table columns as an authenticated
 boundary. IDs, classes, grouping, numeric bounds, tolerances, and outer and
