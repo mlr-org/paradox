@@ -24,14 +24,15 @@ case "$VERSION" in 4.3.3|4.5.2) ;; *) fail "unsupported runtime version" ;; esac
   "$(cd "$RUN_ROOT" && pwd -P)" == "$RUN_ROOT" ]] ||
   fail "RUN_ROOT is not one canonical retained runtime-matrix directory"
 
-STAGE="$RUN_ROOT/R-$VERSION"
-ARTIFACTS="$STAGE/artifacts"
-SOURCE="$ARTIFACTS/source"
-BUILD="$ARTIFACTS/build"
-LIBRARY="$ARTIFACTS/library"
-LOGS="$ARTIFACTS/logs"
-INPUTS="$ARTIFACTS/inputs"
-for directory in "$SOURCE" "$BUILD" "$LIBRARY" "$LOGS" "$INPUTS"; do
+STAGE_DIRECTORY="$RUN_ROOT/R-$VERSION"
+STAGE_ARTIFACTS="$STAGE_DIRECTORY/artifacts"
+STAGE_SOURCE="$STAGE_ARTIFACTS/source"
+STAGE_BUILD="$STAGE_ARTIFACTS/build"
+STAGE_LIBRARY="$STAGE_ARTIFACTS/library"
+STAGE_LOGS="$STAGE_ARTIFACTS/logs"
+STAGE_INPUTS="$STAGE_ARTIFACTS/inputs"
+for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_LIBRARY" \
+    "$STAGE_LOGS" "$STAGE_INPUTS"; do
   [[ -d "$directory" && ! -L "$directory" ]] ||
     fail "prepared stage directory is absent or symbolic: $directory"
 done
@@ -96,18 +97,18 @@ cd "$ROOT"
 # safe outer overlap.  Do not let a package, BLAS, OpenMP runtime,
 # future/parallel, or a nested build multiply the admitted process and memory
 # budget inside either stage.
-export R_LIBS_USER="$LIBRARY"
+export R_LIBS_USER="$STAGE_LIBRARY"
 export R_LIBS_SITE=
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
-export TMPDIR="$ARTIFACTS/tmp"
-export XDG_RUNTIME_DIR="$ARTIFACTS/runtime"
-export XDG_CACHE_HOME="$ARTIFACTS/cache/xdg"
-export R_USER_CACHE_DIR="$ARTIFACTS/cache/R"
-export CCACHE_DIR="$ARTIFACTS/cache/ccache"
-export CCACHE_TEMPDIR="$ARTIFACTS/tmp/ccache"
-export PIP_CACHE_DIR="$ARTIFACTS/cache/pip"
-export UV_CACHE_DIR="$ARTIFACTS/cache/uv"
+export TMPDIR="$STAGE_ARTIFACTS/tmp"
+export XDG_RUNTIME_DIR="$STAGE_ARTIFACTS/runtime"
+export XDG_CACHE_HOME="$STAGE_ARTIFACTS/cache/xdg"
+export R_USER_CACHE_DIR="$STAGE_ARTIFACTS/cache/R"
+export CCACHE_DIR="$STAGE_ARTIFACTS/cache/ccache"
+export CCACHE_TEMPDIR="$STAGE_ARTIFACTS/tmp/ccache"
+export PIP_CACHE_DIR="$STAGE_ARTIFACTS/cache/pip"
+export UV_CACHE_DIR="$STAGE_ARTIFACTS/cache/uv"
 export MAKEFLAGS=-j1
 export CMAKE_BUILD_PARALLEL_LEVEL=1
 export CARGO_BUILD_JOBS=1
@@ -127,28 +128,28 @@ mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
   "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 
-cd "$BUILD"
-R CMD build --no-build-vignettes --no-manual "$SOURCE" \
-  > "$LOGS/build.log" 2>&1
-mapfile -t archives < <(find "$BUILD" -maxdepth 1 -type f \
+cd "$STAGE_BUILD"
+R CMD build --no-build-vignettes --no-manual "$STAGE_SOURCE" \
+  > "$STAGE_LOGS/build.log" 2>&1
+mapfile -t archives < <(find "$STAGE_BUILD" -maxdepth 1 -type f \
   -name 'paradox_*.tar.gz' -print)
 [[ ${#archives[@]} -eq 1 ]] ||
   fail "R $VERSION build did not produce one source archive"
 archive=${archives[0]}
-R CMD INSTALL --preclean --clean --install-tests --library="$LIBRARY" "$archive" \
-  > "$LOGS/install.log" 2>&1
-Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" "$LIBRARY" \
-  > "$LOGS/focused-probe.log" 2>&1
-audit_symbols "$VERSION" "$LIBRARY/paradox/libs/paradox.so" \
-  "$LOGS/r-api-symbol-audit.log"
+R CMD INSTALL --preclean --clean --install-tests \
+  --library="$STAGE_LIBRARY" "$archive" > "$STAGE_LOGS/install.log" 2>&1
+Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+  "$STAGE_LIBRARY" > "$STAGE_LOGS/focused-probe.log" 2>&1
+audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
+  "$STAGE_LOGS/r-api-symbol-audit.log"
 NOT_CRAN=false Rscript --vanilla \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
-  "$SOURCE" "$LIBRARY" "$INPUTS/source-test-scope" \
-  > "$LOGS/source-tests.log" 2>&1
-Rscript --vanilla -e 'sessionInfo()' > "$LOGS/session-info.log" 2>&1
+  "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
+  > "$STAGE_LOGS/source-tests.log" 2>&1
+Rscript --vanilla -e 'sessionInfo()' > "$STAGE_LOGS/session-info.log" 2>&1
 Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
-  > "$LOGS/r-packages.tsv" 2>&1
-R CMD config CC > "$LOGS/cc.txt" 2>&1
+  > "$STAGE_LOGS/r-packages.tsv" 2>&1
+R CMD config CC > "$STAGE_LOGS/cc.txt" 2>&1
 cc=$(R CMD config CC)
-"$cc" --version > "$LOGS/compiler-version.log" 2>&1
+"$cc" --version > "$STAGE_LOGS/compiler-version.log" 2>&1
 printf 'runtime_stage_worker=passed\nruntime=%s\n' "$VERSION"

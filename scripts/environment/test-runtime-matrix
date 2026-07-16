@@ -17,6 +17,10 @@ scripts=(
 for script in "${scripts[@]}"; do
   bash -n "$ROOT/$script"
 done
+if rg -q '^BUILD=' "$ROOT/scripts/environment/run-runtime-matrix-stage"; then
+  echo "Runtime stage reuses activation's BUILD compiler-triplet variable" >&2
+  exit 1
+fi
 
 "$ROOT/scripts/bootstrap-runtime-matrix" --help >/dev/null
 "$ROOT/scripts/test-runtime-matrix" --help >/dev/null
