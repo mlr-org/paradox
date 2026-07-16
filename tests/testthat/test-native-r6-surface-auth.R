@@ -276,6 +276,25 @@ test_that("surface authentication does not observe ALTREP active registries", {
   expect_true(.Call(symbol, param_set, 1L))
 })
 
+test_that("surface authentication validates duplicated registry closures", {
+  symbol = surface_auth_symbol()
+  param_set = ps(x = p_dbl(0, 1, trafo = identity))
+  enclosure = param_set$.__enclos_env__
+  active = as.list(get(".__active__", envir = enclosure, inherits = FALSE))
+  original_body = body(active$has_trafo)
+
+  replacement = active$has_trafo
+  body(replacement) = quote(FALSE)
+  active$has_trafo = replacement
+  assign(".__active__", active, envir = enclosure)
+
+  expect_identical(
+    body(activeBindingFunction(as.symbol("has_trafo"), param_set)),
+    original_body
+  )
+  expect_false(.Call(symbol, param_set, 1L))
+})
+
 test_that("surface authentication roots canonical closure graphs", {
   skip_on_cran()
 

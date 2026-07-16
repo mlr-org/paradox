@@ -7,6 +7,8 @@ R_API_MANIFEST="$ROOT/environment/r-api-sources.tsv"
 R_TREE_MANIFEST="$ROOT/environment/r-api-source-trees.tsv"
 DATATABLE_COMMIT=f55ed3558f66a3a165482bb283a6ef375305a408
 RCHK_COMMIT=bd34d5dd1f08ddc93a8b544c22a56609edbce9b0
+RCHK_BOUNDED_COMMIT=56b621a4e7112246d7b640bee6219ee9c6eb4bf8
+RCHK_BOUNDED_TREE=d08d5b88ab6c469ac1b6d9c4beeece322e223ac5
 RHUB_CONTAINERS_COMMIT=e495b272f20043a0004a010dbaeb66f0aefcccc6
 CACHE="$ROOT/.cache/downloads"
 SOURCES="$ROOT/.local/sources"
@@ -360,6 +362,7 @@ for output in "$DOCS/R-exts.texi" "$DOCS/R-ints.texi" \
   "$DOCS/R-admin.texi" "$DOCS/R-exts.pdf" "$DOCS/R-ints.pdf" \
   "$DOCS/R-admin.pdf" "$DOCS/SHA256SUMS" \
   "$DOCS/data.table-commit.txt" "$DOCS/rchk-commit.txt" \
+  "$DOCS/rchk-bounded-commit.txt" \
   "$DOCS/r-hub-containers-commit.txt" "$DOCS/manual-build.tsv" \
   "$DOCS/git-checkouts.tsv"
 do
@@ -494,7 +497,7 @@ reference_git() {
 
 checkout_rows=()
 authenticate_checkout() {
-  local name=$1 url=$2 commit=$3 path="$SOURCES/$1"
+  local name=$1 url=$2 commit=$3 expected_tree=${4:-} path="$SOURCES/$1"
   local top git_directory head tree pre_status status grafts alternates
   local local_rewrites local_filters submodule_count fresh=false
   local -a remotes origin_urls origin_pushurls replacements
@@ -574,6 +577,8 @@ authenticate_checkout() {
   [[ "$head" == "$commit" && -z "$status" &&
      ${#origin_urls[@]} -eq 1 && "${origin_urls[0]}" == "$url" ]] ||
     fail "$name checkout did not normalize to its exact commit and origin"
+  [[ -z "$expected_tree" || "$tree" == "$expected_tree" ]] ||
+    fail "$name checkout tree differs from its pinned Git tree"
   if reference_git -C "$path" symbolic-ref -q HEAD >/dev/null 2>&1; then
     fail "$name checkout did not leave HEAD detached"
   fi
@@ -587,6 +592,9 @@ authenticate_checkout \
 authenticate_checkout \
   rchk https://github.com/kalibera/rchk.git "$RCHK_COMMIT"
 authenticate_checkout \
+  rchk-bounded https://github.com/gaborcsardi/rchk.git \
+  "$RCHK_BOUNDED_COMMIT" "$RCHK_BOUNDED_TREE"
+authenticate_checkout \
   r-hub-containers https://github.com/r-hub/containers.git \
   "$RHUB_CONTAINERS_COMMIT"
 
@@ -594,6 +602,8 @@ printf '%s\n' "$DATATABLE_COMMIT" > "$DOCS/data.table-commit.txt.new"
 mv -f "$DOCS/data.table-commit.txt.new" "$DOCS/data.table-commit.txt"
 printf '%s\n' "$RCHK_COMMIT" > "$DOCS/rchk-commit.txt.new"
 mv -f "$DOCS/rchk-commit.txt.new" "$DOCS/rchk-commit.txt"
+printf '%s\n' "$RCHK_BOUNDED_COMMIT" > "$DOCS/rchk-bounded-commit.txt.new"
+mv -f "$DOCS/rchk-bounded-commit.txt.new" "$DOCS/rchk-bounded-commit.txt"
 printf '%s\n' "$RHUB_CONTAINERS_COMMIT" \
   > "$DOCS/r-hub-containers-commit.txt.new"
 mv -f "$DOCS/r-hub-containers-commit.txt.new" \
@@ -611,6 +621,7 @@ checksum_inputs=(
   "$DOCS/R-exts.texi" "$DOCS/R-ints.texi" "$DOCS/R-admin.texi"
   "$DOCS/manual-build.tsv" "$DOCS/git-checkouts.tsv"
   "$DOCS/data.table-commit.txt" "$DOCS/rchk-commit.txt"
+  "$DOCS/rchk-bounded-commit.txt"
   "$DOCS/r-hub-containers-commit.txt"
 )
 {

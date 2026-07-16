@@ -652,13 +652,20 @@ static int atomic_missing(SEXP column, R_xlen_t row) {
 }
 
 static int valid_double_column(SEXP column, R_xlen_t size,
-    const param_spec_t *spec, R_xlen_t *work_since_interrupt) {
+    const param_spec_t *spec, int require_complete, int *all_complete,
+    R_xlen_t *work_since_interrupt) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
   if (type != REALSXP && type != INTSXP) {
     for (R_xlen_t row = 0; row < size; ++row) {
       account_work(work_since_interrupt);
       if (!atomic_missing(column, row)) {
         return FALSE;
+      }
+      if (require_complete) {
+        return FALSE;
+      }
+      if (all_complete != NULL) {
+        *all_complete = FALSE;
       }
     }
     return TRUE;
@@ -670,11 +677,23 @@ static int valid_double_column(SEXP column, R_xlen_t size,
     if (type == REALSXP) {
       value = REAL_ELT(column, row);
       if (ISNAN(value)) {
+        if (require_complete) {
+          return FALSE;
+        }
+        if (all_complete != NULL) {
+          *all_complete = FALSE;
+        }
         continue;
       }
     } else {
       const int integer = INTEGER_ELT(column, row);
       if (integer == NA_INTEGER) {
+        if (require_complete) {
+          return FALSE;
+        }
+        if (all_complete != NULL) {
+          *all_complete = FALSE;
+        }
         continue;
       }
       value = (double) integer;
@@ -687,13 +706,20 @@ static int valid_double_column(SEXP column, R_xlen_t size,
 }
 
 static int valid_integer_column(SEXP column, R_xlen_t size,
-    const param_spec_t *spec, R_xlen_t *work_since_interrupt) {
+    const param_spec_t *spec, int require_complete, int *all_complete,
+    R_xlen_t *work_since_interrupt) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
   if (type != REALSXP && type != INTSXP) {
     for (R_xlen_t row = 0; row < size; ++row) {
       account_work(work_since_interrupt);
       if (!atomic_missing(column, row)) {
         return FALSE;
+      }
+      if (require_complete) {
+        return FALSE;
+      }
+      if (all_complete != NULL) {
+        *all_complete = FALSE;
       }
     }
     return TRUE;
@@ -705,11 +731,23 @@ static int valid_integer_column(SEXP column, R_xlen_t size,
     if (type == REALSXP) {
       value = REAL_ELT(column, row);
       if (ISNAN(value)) {
+        if (require_complete) {
+          return FALSE;
+        }
+        if (all_complete != NULL) {
+          *all_complete = FALSE;
+        }
         continue;
       }
     } else {
       const int integer = INTEGER_ELT(column, row);
       if (integer == NA_INTEGER) {
+        if (require_complete) {
+          return FALSE;
+        }
+        if (all_complete != NULL) {
+          *all_complete = FALSE;
+        }
         continue;
       }
       value = (double) integer;
@@ -723,12 +761,19 @@ static int valid_integer_column(SEXP column, R_xlen_t size,
 }
 
 static int valid_factor_column(SEXP column, R_xlen_t size, SEXP levels,
+    int require_complete, int *all_complete,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(column) != STRSXP) {
     for (R_xlen_t row = 0; row < size; ++row) {
       account_work(work_since_interrupt);
       if (!atomic_missing(column, row)) {
         return FALSE;
+      }
+      if (require_complete) {
+        return FALSE;
+      }
+      if (all_complete != NULL) {
+        *all_complete = FALSE;
       }
     }
     return TRUE;
@@ -738,6 +783,12 @@ static int valid_factor_column(SEXP column, R_xlen_t size, SEXP levels,
     account_work(work_since_interrupt);
     SEXP selected = STRING_ELT(column, row);
     if (selected == NA_STRING) {
+      if (require_complete) {
+        return FALSE;
+      }
+      if (all_complete != NULL) {
+        *all_complete = FALSE;
+      }
       continue;
     }
     PROTECT(selected);
@@ -759,6 +810,7 @@ static int valid_factor_column(SEXP column, R_xlen_t size, SEXP levels,
 }
 
 static int valid_logical_column(SEXP column, R_xlen_t size,
+    int require_complete, int *all_complete,
     R_xlen_t *work_since_interrupt) {
   if (TYPEOF(column) != LGLSXP) {
     for (R_xlen_t row = 0; row < size; ++row) {
@@ -766,14 +818,32 @@ static int valid_logical_column(SEXP column, R_xlen_t size,
       if (!atomic_missing(column, row)) {
         return FALSE;
       }
+      if (require_complete) {
+        return FALSE;
+      }
+      if (all_complete != NULL) {
+        *all_complete = FALSE;
+      }
     }
     return TRUE;
+  }
+  if (require_complete || all_complete != NULL) {
+    for (R_xlen_t row = 0; row < size; ++row) {
+      account_work(work_since_interrupt);
+      if (LOGICAL_ELT(column, row) == NA_LOGICAL) {
+        if (require_complete) {
+          return FALSE;
+        }
+        *all_complete = FALSE;
+      }
+    }
   }
   return TRUE;
 }
 
 static int valid_builtin_column(SEXP column, R_xlen_t size,
-    const param_spec_t *spec, R_xlen_t *work_since_interrupt) {
+    const param_spec_t *spec, int require_complete, int *all_complete,
+    R_xlen_t *work_since_interrupt) {
   if (ALTREP(column) || Rf_isObject(column)) {
     return FALSE;
   }
@@ -785,25 +855,64 @@ static int valid_builtin_column(SEXP column, R_xlen_t size,
 
   switch (spec->kind) {
   case PARAM_KIND_DBL:
-    return valid_double_column(column, size, spec, work_since_interrupt);
+    return valid_double_column(
+      column,
+      size,
+      spec,
+      require_complete,
+      all_complete,
+      work_since_interrupt
+    );
   case PARAM_KIND_INT:
-    return valid_integer_column(column, size, spec, work_since_interrupt);
+    return valid_integer_column(
+      column,
+      size,
+      spec,
+      require_complete,
+      all_complete,
+      work_since_interrupt
+    );
   case PARAM_KIND_FCT:
     return valid_factor_column(
       column,
       size,
       spec->levels,
+      require_complete,
+      all_complete,
       work_since_interrupt
     );
   case PARAM_KIND_LGL:
-    return valid_logical_column(column, size, work_since_interrupt);
+    return valid_logical_column(
+      column,
+      size,
+      require_complete,
+      all_complete,
+      work_since_interrupt
+    );
   case PARAM_KIND_UNKNOWN:
     return FALSE;
   }
   return FALSE;
 }
 
-SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
+enum check_dt_plan_flag {
+  CHECK_DT_PLAN_COMPLETE = 1,
+  CHECK_DT_PLAN_ALL_PARAMS = 2
+};
+
+static SEXP valid_check_dt_result(int report_plan, int all_complete,
+    int all_params) {
+  if (!report_plan) {
+    return Rf_ScalarLogical(TRUE);
+  }
+  return Rf_ScalarInteger(
+    (all_complete ? CHECK_DT_PLAN_COMPLETE : 0) |
+      (all_params ? CHECK_DT_PLAN_ALL_PARAMS : 0)
+  );
+}
+
+static SEXP check_dt_builtin(SEXP params, SEXP xdt,
+    int require_nonmissing, int require_all_params, int report_plan) {
   if (TYPEOF(xdt) != VECSXP || ALTREP(xdt)) {
     return R_NilValue;
   }
@@ -817,7 +926,9 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
   }
   const R_xlen_t n_columns = XLENGTH(xdt);
   if (n_columns == 0) {
-    SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
+    SEXP result = PROTECT(require_all_params
+      ? R_NilValue
+      : valid_check_dt_result(report_plan, TRUE, FALSE));
     UNPROTECT(2);
     return result;
   }
@@ -847,7 +958,11 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
     }
   }
   if (n_rows == 0) {
-    SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
+    SEXP result = PROTECT(valid_check_dt_result(
+      report_plan,
+      TRUE,
+      FALSE
+    ));
     UNPROTECT(2);
     return result;
   }
@@ -861,6 +976,10 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
   }
   param_columns_t columns;
   if (!load_param_columns(params, &columns, roots)) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+  if (require_all_params && n_columns != columns.size) {
     UNPROTECT(1);
     return R_NilValue;
   }
@@ -879,6 +998,7 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
     account_work(&work_since_interrupt);
     seen[row] = 0;
   }
+  int all_complete = TRUE;
 
   for (R_xlen_t column = 0; column < n_columns; ++column) {
     account_work(&work_since_interrupt);
@@ -908,6 +1028,8 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
           values,
           n_rows,
           &spec,
+          require_nonmissing,
+          report_plan ? &all_complete : NULL,
           &work_since_interrupt
         )) {
       UNPROTECT(1);
@@ -921,7 +1043,62 @@ SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
       R_NilValue
     );
   }
-  SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
+  SEXP result = PROTECT(valid_check_dt_result(
+    report_plan,
+    all_complete,
+    n_columns == columns.size
+  ));
   UNPROTECT(2);
   return result;
+}
+
+SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt) {
+  return check_dt_builtin(params, xdt, FALSE, FALSE, FALSE);
+}
+
+static SEXP materialize_altrep_list(SEXP value) {
+  const R_xlen_t size = XLENGTH(value);
+  SEXP materialized = PROTECT(Rf_allocVector(VECSXP, size));
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t index = 0; index < size; ++index) {
+    account_work(&work_since_interrupt);
+    SEXP element = PROTECT(VECTOR_ELT(value, index));
+    SET_VECTOR_ELT(materialized, index, element);
+    UNPROTECT(1);
+  }
+  /* Retain the post-materialization attribute surface.  An ALTREP element
+   * callback may legally allocate or mutate reachable R state; the returned
+   * ordinary shell is therefore also the sole input to any later R fallback,
+   * so no callback is replayed after native admission has inspected it. */
+  SHALLOW_DUPLICATE_ATTRIB(materialized, value);
+  UNPROTECT(1);
+  return materialized;
+}
+
+SEXP paradox_param_set_check_dt_plan_builtin(SEXP params, SEXP xdt) {
+  if (TYPEOF(xdt) != VECSXP || !ALTREP(xdt)) {
+    return check_dt_builtin(params, xdt, FALSE, FALSE, TRUE);
+  }
+
+  SEXP input = PROTECT(materialize_altrep_list(xdt));
+  SEXP plan = PROTECT(check_dt_builtin(
+    params,
+    input,
+    FALSE,
+    FALSE,
+    TRUE
+  ));
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
+  SET_VECTOR_ELT(result, 0, plan);
+  SET_VECTOR_ELT(result, 1, input);
+  UNPROTECT(3);
+  return result;
+}
+
+SEXP paradox_param_set_check_dt_complete_builtin(SEXP params, SEXP xdt) {
+  return check_dt_builtin(params, xdt, TRUE, FALSE, FALSE);
+}
+
+SEXP paradox_param_set_check_dt_all_builtin(SEXP params, SEXP xdt) {
+  return check_dt_builtin(params, xdt, TRUE, TRUE, FALSE);
 }

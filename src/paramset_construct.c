@@ -5,7 +5,23 @@
 #include "paradox.h"
 #include <R_ext/Utils.h>
 
+#include "r_api_compat.h"
 #include "r_utils.h"
+
+/* data.table's secondary-index representation is intentionally internal.
+ * Enable native construction only after .onLoad has compared this exact
+ * process' data.table output with the schema understood below.  The first
+ * attempt seals the DSO state even when the probe is unsupported: registered
+ * native symbols are externally reachable, so a later call must not be able
+ * to change the process-wide decision made during package loading. */
+enum data_table_index_layout_state {
+  DATA_TABLE_INDEX_LAYOUT_UNCONFIGURED = 0,
+  DATA_TABLE_INDEX_LAYOUT_DISABLED,
+  DATA_TABLE_INDEX_LAYOUT_ENABLED
+};
+
+static enum data_table_index_layout_state data_table_index_layout_state =
+  DATA_TABLE_INDEX_LAYOUT_UNCONFIGURED;
 
 enum domain_column {
   DOMAIN_ID = 0,
@@ -268,14 +284,15 @@ static inline void account_work(R_xlen_t *work_since_interrupt) {
   }
 }
 
-static int id_precedes(SEXP ids, R_xlen_t left, R_xlen_t right) {
+static int character_precedes(SEXP values, R_xlen_t left, R_xlen_t right) {
   return strcmp(
-    CHAR(STRING_ELT(ids, left)),
-    CHAR(STRING_ELT(ids, right))
+    CHAR(STRING_ELT(values, left)),
+    CHAR(STRING_ELT(values, right))
   ) <= 0;
 }
 
-static void stable_id_order(SEXP ids, R_xlen_t *order, R_xlen_t *workspace,
+static void stable_character_order(SEXP values, R_xlen_t *order,
+    R_xlen_t *workspace,
     R_xlen_t size, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t index = 0; index < size; ++index) {
     account_work(work_since_interrupt);
@@ -293,7 +310,11 @@ static void stable_id_order(SEXP ids, R_xlen_t *order, R_xlen_t *workspace,
 
       while (left < middle && right < end) {
         account_work(work_since_interrupt);
-        workspace[output++] = id_precedes(ids, order[left], order[right])
+        workspace[output++] = character_precedes(
+          values,
+          order[left],
+          order[right]
+        )
           ? order[left++]
           : order[right++];
       }
@@ -322,6 +343,299 @@ static void stable_id_order(SEXP ids, R_xlen_t *order, R_xlen_t *workspace,
     }
     width *= 2;
   }
+}
+
+static int exact_plain_integer_vector(SEXP value,
+    const int *expected, R_xlen_t size) {
+  if (TYPEOF(value) != INTSXP || ALTREP(value) || XLENGTH(value) != size ||
+      !paradox_api_has_no_attributes(value)) {
+    return FALSE;
+  }
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (INTEGER_ELT(value, index) != expected[index]) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int exact_integer_attribute(SEXP value, const char *name,
+    int expected) {
+  SEXP attribute = Rf_getAttrib(value, Rf_install(name));
+  return TYPEOF(attribute) == INTSXP && !ALTREP(attribute) &&
+    XLENGTH(attribute) == 1 &&
+    paradox_api_has_no_attributes(attribute) &&
+    INTEGER_ELT(attribute, 0) == expected;
+}
+
+static int exact_index_probe(SEXP index, const char *marker,
+    const int *expected_order, R_xlen_t order_size,
+    const int *expected_starts, R_xlen_t start_count,
+    int expected_max_group) {
+  if (TYPEOF(index) != INTSXP || ALTREP(index) || XLENGTH(index) != 0 ||
+      !paradox_api_has_single_attribute(index, marker)) {
+    return FALSE;
+  }
+  SEXP cache = Rf_getAttrib(index, Rf_install(marker));
+  static const char *const cache_attributes[] = {
+    "starts", "maxgrpn", "anyna", "anyinfnan", "anynotascii",
+    "anynotutf8"
+  };
+  if (TYPEOF(cache) != INTSXP || ALTREP(cache) ||
+      XLENGTH(cache) != order_size || !paradox_api_has_only_attributes(
+        cache,
+        cache_attributes,
+        sizeof(cache_attributes) / sizeof(cache_attributes[0])
+      )) {
+    return FALSE;
+  }
+  for (R_xlen_t index_position = 0;
+      index_position < order_size;
+      ++index_position) {
+    if (INTEGER_ELT(cache, index_position) !=
+        expected_order[index_position]) {
+      return FALSE;
+    }
+  }
+  SEXP starts = Rf_getAttrib(cache, Rf_install("starts"));
+  return exact_plain_integer_vector(
+      starts,
+      expected_starts,
+      start_count
+    ) && exact_integer_attribute(cache, "maxgrpn", expected_max_group) &&
+    exact_integer_attribute(cache, "anyna", 0) &&
+    exact_integer_attribute(cache, "anyinfnan", 0) &&
+    exact_integer_attribute(cache, "anynotascii", 0) &&
+    exact_integer_attribute(cache, "anynotutf8", 0);
+}
+
+SEXP paradox_param_set_index_layout(SEXP version, SEXP params_index,
+    SEXP tags_index, SEXP identity_index, SEXP empty_index) {
+  if (data_table_index_layout_state !=
+      DATA_TABLE_INDEX_LAYOUT_UNCONFIGURED) {
+    return Rf_ScalarLogical(
+      data_table_index_layout_state == DATA_TABLE_INDEX_LAYOUT_ENABLED
+    );
+  }
+
+  static const int params_order[] = {2, 3, 1};
+  static const int params_starts[] = {1, 2, 3};
+  static const int tags_order[] = {3, 6, 2, 4, 1, 7, 5};
+  static const int tags_starts[] = {1, 2, 3, 4, 5, 7};
+  static const int identity_starts[] = {1, 2, 3};
+  const int reviewed_version = TYPEOF(version) == STRSXP &&
+    !ALTREP(version) && XLENGTH(version) == 1 &&
+    paradox_api_has_no_attributes(version) &&
+    (string_is(STRING_ELT(version, 0), "1.17.8") ||
+      string_is(STRING_ELT(version, 0), "1.18.4"));
+  const int enabled = reviewed_version && exact_index_probe(
+      params_index,
+      "__id__cls__grouping",
+      params_order,
+      3,
+      params_starts,
+      3,
+      1
+    ) && exact_index_probe(
+      tags_index,
+      "__tag",
+      tags_order,
+      7,
+      tags_starts,
+      6,
+      2
+    ) && exact_index_probe(
+      identity_index,
+      "__id__cls__grouping",
+      NULL,
+      0,
+      identity_starts,
+      3,
+      1
+    ) && exact_index_probe(
+      empty_index,
+      "__tag",
+      NULL,
+      0,
+      NULL,
+      0,
+      0
+    );
+  data_table_index_layout_state = enabled
+    ? DATA_TABLE_INDEX_LAYOUT_ENABLED
+    : DATA_TABLE_INDEX_LAYOUT_DISABLED;
+  return Rf_ScalarLogical(enabled);
+}
+
+static int ascii_string(SEXP value) {
+  if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES) {
+    return FALSE;
+  }
+  const int size = LENGTH(value);
+  const unsigned char *bytes = (const unsigned char *) CHAR(value);
+  for (int index = 0; index < size; ++index) {
+    if (bytes[index] == '\0' || bytes[index] >= 0x80) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static int character_vector_is_ascii(SEXP values) {
+  if (TYPEOF(values) != STRSXP || ALTREP(values)) {
+    return FALSE;
+  }
+  const R_xlen_t size = XLENGTH(values);
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (!ascii_string(STRING_ELT(values, index))) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static void attach_secondary_index(SEXP table, const char *marker,
+    const R_xlen_t *order, R_xlen_t size,
+    const R_xlen_t *group_starts, R_xlen_t group_count,
+    R_xlen_t max_group) {
+  if (size > INT_MAX || group_count > INT_MAX || max_group > INT_MAX) {
+    return;
+  }
+  int identity = TRUE;
+  for (R_xlen_t position = 0; position < size; ++position) {
+    if (order[position] != position) {
+      identity = FALSE;
+      break;
+    }
+  }
+
+  SEXP index = PROTECT(Rf_allocVector(INTSXP, 0));
+  SEXP cache = PROTECT(Rf_allocVector(INTSXP, identity ? 0 : size));
+  if (!identity) {
+    for (R_xlen_t position = 0; position < size; ++position) {
+      INTEGER(cache)[position] = (int) order[position] + 1;
+    }
+  }
+  SEXP starts = PROTECT(Rf_allocVector(INTSXP, group_count));
+  for (R_xlen_t group = 0; group < group_count; ++group) {
+    INTEGER(starts)[group] = (int) group_starts[group] + 1;
+  }
+  SEXP maxgrpn = PROTECT(Rf_ScalarInteger((int) max_group));
+  SEXP zero = PROTECT(Rf_ScalarInteger(0));
+  Rf_setAttrib(cache, Rf_install("starts"), starts);
+  Rf_setAttrib(cache, Rf_install("maxgrpn"), maxgrpn);
+  Rf_setAttrib(cache, Rf_install("anyna"), zero);
+  Rf_setAttrib(cache, Rf_install("anyinfnan"), zero);
+  Rf_setAttrib(cache, Rf_install("anynotascii"), zero);
+  Rf_setAttrib(cache, Rf_install("anynotutf8"), zero);
+  Rf_setAttrib(index, Rf_install(marker), cache);
+  Rf_setAttrib(table, Rf_install("index"), index);
+  UNPROTECT(5);
+}
+
+static int attach_params_index(SEXP params, const R_xlen_t *order,
+    R_xlen_t size) {
+  if (data_table_index_layout_state != DATA_TABLE_INDEX_LAYOUT_ENABLED ||
+      size > INT_MAX ||
+      !character_vector_is_ascii(VECTOR_ELT(params, DOMAIN_ID)) ||
+      !character_vector_is_ascii(VECTOR_ELT(params, DOMAIN_CLS)) ||
+      !character_vector_is_ascii(VECTOR_ELT(params, DOMAIN_GROUPING))) {
+    return FALSE;
+  }
+  R_xlen_t *starts = size == 0
+    ? NULL
+    : paradox_temporary_alloc(size, sizeof(*starts));
+  for (R_xlen_t group = 0; group < size; ++group) {
+    starts[group] = group;
+  }
+  attach_secondary_index(
+    params,
+    "__id__cls__grouping",
+    order,
+    size,
+    starts,
+    size,
+    size == 0 ? 0 : 1
+  );
+  return TRUE;
+}
+
+int paradox_param_set_attach_singleton_index(SEXP params) {
+  if (TYPEOF(params) != VECSXP || ALTREP(params) ||
+      XLENGTH(params) != DOMAIN_TAGS) {
+    return FALSE;
+  }
+  for (enum domain_column column = DOMAIN_ID;
+      column <= DOMAIN_GROUPING;
+      column = (enum domain_column) (column + 1)) {
+    SEXP values = VECTOR_ELT(params, column);
+    if (TYPEOF(values) != STRSXP || ALTREP(values) ||
+        XLENGTH(values) != 1) {
+      return FALSE;
+    }
+  }
+
+  static const R_xlen_t singleton_order[] = {0};
+  return attach_params_index(params, singleton_order, 1);
+}
+
+static void attach_tags_index(SEXP tags,
+    R_xlen_t *work_since_interrupt) {
+  SEXP values = VECTOR_ELT(tags, 1);
+  const R_xlen_t size = XLENGTH(values);
+  if (data_table_index_layout_state != DATA_TABLE_INDEX_LAYOUT_ENABLED ||
+      size > INT_MAX ||
+      !character_vector_is_ascii(values)) {
+    return;
+  }
+  R_xlen_t *order = size == 0
+    ? NULL
+    : paradox_temporary_alloc(size, sizeof(*order));
+  R_xlen_t *workspace = size == 0
+    ? NULL
+    : paradox_temporary_alloc(size, sizeof(*workspace));
+  if (size != 0) {
+    stable_character_order(
+      values,
+      order,
+      workspace,
+      size,
+      work_since_interrupt
+    );
+  }
+
+  R_xlen_t *starts = size == 0
+    ? NULL
+    : paradox_temporary_alloc(size, sizeof(*starts));
+  R_xlen_t group_count = 0;
+  R_xlen_t max_group = 0;
+  for (R_xlen_t position = 0; position < size; ++position) {
+    account_work(work_since_interrupt);
+    if (position == 0 || strcmp(
+        CHAR(STRING_ELT(values, order[position - 1])),
+        CHAR(STRING_ELT(values, order[position]))
+      ) != 0) {
+      starts[group_count++] = position;
+    }
+  }
+  for (R_xlen_t group = 0; group < group_count; ++group) {
+    const R_xlen_t end = group + 1 == group_count
+      ? size
+      : starts[group + 1];
+    const R_xlen_t group_size = end - starts[group];
+    if (group_size > max_group) {
+      max_group = group_size;
+    }
+  }
+  attach_secondary_index(
+    tags,
+    "__tag",
+    order,
+    size,
+    starts,
+    group_count,
+    max_group
+  );
 }
 
 static SEXP character_vector(const char *const *values, R_xlen_t size) {
@@ -497,11 +811,17 @@ SEXP paradox_param_set_construct(SEXP domains) {
 
   R_xlen_t *order = NULL;
   R_xlen_t *workspace = NULL;
+  R_xlen_t work_since_interrupt = 0;
   if (size > 0) {
-    R_xlen_t work_since_interrupt = 0;
     order = paradox_temporary_alloc(size, sizeof(*order));
     workspace = paradox_temporary_alloc(size, sizeof(*workspace));
-    stable_id_order(ids, order, workspace, size, &work_since_interrupt);
+    stable_character_order(
+      ids,
+      order,
+      workspace,
+      size,
+      &work_since_interrupt
+    );
     for (R_xlen_t index = 1; index < size; ++index) {
       account_work(&work_since_interrupt);
       if (strcmp(
@@ -538,6 +858,7 @@ SEXP paradox_param_set_construct(SEXP domains) {
       );
     }
   }
+  attach_params_index(params, order, size);
 
   const char *const tag_column_names[] = {"id", "tag"};
   const SEXPTYPE tag_column_types[] = {STRSXP, STRSXP};
@@ -576,6 +897,7 @@ SEXP paradox_param_set_construct(SEXP domains) {
   if (tag_row != tag_count) {
     Rf_error("Internal error: incomplete ParamSet tag output");
   }
+  attach_tags_index(tags, &work_since_interrupt);
 
   const char *const trafo_column_names[] = {"id", "trafo"};
   const SEXPTYPE trafo_column_types[] = {STRSXP, VECSXP};

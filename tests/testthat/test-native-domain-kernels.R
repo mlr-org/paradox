@@ -70,6 +70,9 @@ test_that("native validity gates recognize common built-in scalar values", {
     domain_check(p_dbl(0, 1, special_vals = list(NULL)), list(NULL)),
     TRUE
   )
+  special = p_dbl(0, 1, special_vals = list("automatic"))
+  expect_false(.Call(symbol, special, list(0.5)))
+  expect_true(domain_check(special, list(0.5)))
 })
 
 test_that("invalid built-in values retain exact R fallback diagnostics", {
@@ -114,6 +117,36 @@ test_that("invalid built-in values retain exact R fallback diagnostics", {
   expect_identical(domain_check(lgl, list(NA)), "p_lgl(): May not be NA")
   expect_identical(domain_check(dbl, 0.5), "values must be a list")
   expect_identical(domain_check(dbl, NULL), TRUE)
+})
+
+test_that("native checks decline dispatch-sensitive Domain metadata", {
+  symbol = native_domain_symbol("domain_check_builtin")
+  domain = p_dbl(0, 2)
+  data.table::setattr(domain$lower, "class", "NativeDomainCheckAudit")
+  method = "Ops.NativeDomainCheckAudit"
+  assign(
+    method,
+    function(...) stop("NATIVE DOMAIN CHECK OPS DISPATCH", call. = FALSE),
+    envir = .GlobalEnv
+  )
+  on.exit(rm(list = method, envir = .GlobalEnv), add = TRUE)
+
+  expect_false(.Call(symbol, domain, list(1)))
+  expect_error(
+    domain_check(domain, list(1)),
+    "NATIVE DOMAIN CHECK OPS DISPATCH",
+    fixed = TRUE
+  )
+
+  factor = p_fct(c("a", "b"))
+  data.table::setattr(factor$levels[[1L]], "note", "dispatch-sensitive")
+  expect_false(.Call(symbol, factor, list("a")))
+  expect_true(domain_check(factor, list("a")))
+
+  coerced_factor = p_fct(c("1", "2"))
+  coerced_factor$levels[[1L]] = 1:2
+  expect_false(.Call(symbol, coerced_factor, list("1")))
+  expect_true(domain_check(coerced_factor, list("1")))
 })
 
 test_that("validity kernels preserve tolerance, alignment, and special values", {

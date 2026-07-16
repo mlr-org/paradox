@@ -85,10 +85,10 @@ library for another R version.
 
 The old-runtime source-test scope is explicit rather than inferred from a
 testthat filter. Both interpreters lack the R 4.6 binding inspection APIs, so
-the 14 direct native-admission implementation contexts listed in
+the 22 direct native-admission implementation contexts listed in
 `environment/runtime-matrix-pre46-exclusions.tsv` are not meaningful there;
 their public behavior remains covered by characterization/regression tests and
-the focused public-API probe. The runner stages the other 57 of the current 71
+the focused public-API probe. The runner stages the other 57 of the current 79
 test files, all seven helper/setup inputs, and retains the complete
 executed/excluded ledger. `environment/runtime-matrix-whole-file-skips.tsv`
 separately authenticates the exact parsed leading-guard sequences of the two
@@ -201,9 +201,10 @@ to interpret consumer warnings.
 Run `scripts/fetch-reference-sources` to download the checksum-pinned R source
 releases in `environment/r-api-sources.tsv`, the Writing R Extensions, R
 Internals, and R Installation and Administration manuals, a reference checkout
-of data.table, and pinned rchk/R-hub container sources used by the auxiliary
+of data.table, the upstream rchk source, the bounded-state rchk source used for
+the release analyzer, and pinned R-hub container sources used by the auxiliary
 memory gates. Each R extraction is checked against the complete tree digest in
-`environment/r-api-source-trees.tsv`. The three Git worktrees must have their
+`environment/r-api-source-trees.tsv`. The four Git worktrees must have their
 reviewed origins and be exactly clean, including untracked and ignored files,
 before the command may move them to their exact detached commits. The command
 never discards checkout contents; move local material aside or recreate a
@@ -223,6 +224,53 @@ release where `NO_ATTRIB` exists but `R_hasAttrib()` and `R_getAttribCount()` do
 not (4.5.2), and the development runtime (4.6.1). The C interface rules in
 those local sources and manuals take
 precedence over remembered behavior.
+
+Prepare the bounded bcheck executable once, without running an analysis, with:
+
+```sh
+scripts/prepare-bounded-rchk-bcheck
+scripts/prepare-bounded-rchk-bcheck --verify
+```
+
+This uses `gaborcsardi/rchk` commit
+`56b621a4e7112246d7b640bee6219ee9c6eb4bf8` and tree
+`d08d5b88ab6c469ac1b6d9c4beeece322e223ac5`, builds inside the exact local
+rchk image with networking and image pulls disabled, selects
+`/usr/bin/clang++`, `LLVM=/usr/lib/llvm-14`, `BCHECK_MAX_STATES=800000`, and
+`CALLOCATORS_MAX_STATES=1000000`, and atomically publishes a sealed cache below
+`.local/rchk-bounded-bcheck/<input-key>`. The key excludes the preparation
+verifier but includes every byte-producing input: the complete immutable source
+receipt, image identity, compiler/LLVM/make identity, exact build command and
+environment, macros, and container build driver. A cache hit and `--verify`
+never compile or execute bcheck, never replace an invalid entry, and require a
+mode-0555 final key directory with immutable, completely receipted descendants.
+Run `scripts/environment/test-bounded-rchk-bcheck-cache` after changing this
+layer; it proves publication and rejects stale and independently re-receipted
+command, source, and inventory tampering without compiling rchk.
+
+The release rchk gate does not invoke the image's `rchk.sh`, its unsafe
+high-state `bcheck`, or upstream `check_package.sh`. Inside the pinned image it
+performs a direct WLLVM libraries-only install of the frozen candidate,
+extracts the package bitcode, and runs the cached bounded bcheck plus the image-pinned
+maacheck and fficheck against the same R/package bitcode. Each analyzer receives
+the exact soft and hard address-space limit `RLIMIT_AS=21474836480` bytes
+(20 GiB). The
+serial `resource-jobs rchk` admission additionally budgets 20480 MiB and keeps
+at least 16384 MiB available for the host. Rootless Podman on this cgroup-v1
+host does not enforce `--memory`, so container memory flags are deliberately
+not part of the safety contract.
+
+The source snapshot carries `environment/rchk-bcheck-policy/`. Its policy binds
+the analyzer identity and complete bcheck, empty maacheck, and fficheck report
+hashes, plus every ordered bcheck Function block, exact UP/PB counts, and a
+reviewed rationale for each block. It accepts only those source-bound analyzer
+model limitations; it is not a general UP/PB suppression. Every package-local
+`ERROR:` remains fatal, maacheck must be byte-empty, and fficheck must report
+exactly 61 functions and one `R_registerRoutines` call. The prefreeze review
+after splitting the literal `ps()` constructor analyzed 854 functions and
+41,293 states without package-local state exhaustion. That measurement explains
+the policy and refactor; only a run consuming the frozen release candidate is
+release evidence.
 
 ## Development invariants
 
@@ -246,6 +294,116 @@ precedence over remembered behavior.
   sanitizer runs, and Valgrind runs must be clean before release claims.
 - Never optimize from synthetic timings alone: retain representative benchmarks
   derived from real reverse dependencies and record their inputs and results.
+- Discretionary performance work is frozen for 2.0.0. Reopen it before release
+  only for a clear release-relevant bottleneck whose measured gain justifies
+  invalidating the frozen candidate and its source-dependent evidence.
+
+## Verification economy and evidence
+
+Release validation must maximize information gained per unit of wall time and
+I/O without weakening provenance. Use this order and stop at the first failing
+gate: parse/static harness checks, directly affected tests, one strict compiler
+build, the complete paradox unit suite, the remaining compiler/runtime/API
+gates, focused consumer rows, memory analyzers, and finally benchmarks on an
+otherwise idle host. Do not use a full `R CMD check` as an inner development
+loop. Examples, vignettes, manuals, CRAN policy, native diagnostics, and
+consumer tests are separate gates and must not be repeated merely to exercise
+one another.
+
+Freeze package source at a full Git ref and validate it from a clean detached
+worktree. Continuing development in the primary checkout must not invalidate an
+already fixed candidate. A source change invalidates evidence that actually
+depends on those package bytes; a harness or report-only change invalidates the
+affected harness evidence, not an authenticated compiled cache whose key omits
+that input. Never cite evidence from an older package-content hash as evidence
+for a newer candidate.
+
+Install each ordinary candidate once per frozen stage. Cache expensive
+compiler-instrumented variants and consumer installations by content-addressed
+keys containing only inputs that can affect their bytes: source, install worker
+and command, relevant environment, R/configuration, compilers/build tools,
+platform, and dependency state. Authenticate the complete cache receipt
+immediately before starting a test child. Reporting, verifier, plan, or
+row-order changes must not cause a package rebuild. An incompatible or
+incompletely authenticated cache is quarantined and rebuilt once; it is never
+silently trusted. A fresh ordinary Paradox DSO currently compiles in roughly
+15--25 seconds; it may be rebuilt when doing so is cheaper and easier to audit
+than authenticating a cross-run binary cache. Never spend minutes to avoid
+seconds of deterministic compilation.
+
+For a protected multi-gigabyte library, compute a complete content hash once at
+stage start and once at final postflight. At each row boundary compare a cheap,
+non-following metadata fingerprint containing path, type, mode, size, mtime,
+ctime, device, inode, link count, and hard-link identity. Redirect Python
+bytecode, reticulate, XDG, R, compiler, and package caches into the disposable
+row directory so consumers cannot dirty shared libraries. Plan-only and
+self-test modes perform no full protected-library hashes.
+
+The memory gate follows the same two-boundary rule. Its initial ordinary
+toolchain receipt must be byte-identical to the toolchain receipt that built
+the instrumented R, so Valgrind receipt validation must not traverse that tree
+again. While holding the shared instrumented-R state lock, verify the complete
+R source, installed R prefix, and dedicated dependency library once before and
+once after execution; bind the interval with metadata fingerprints and sealed
+receipt/runtime checks. Package and R archives are authenticated when a build
+or install consumes them, but are not reread on a no-op cache verification or
+inside memory-check. The receipts retain their pinned digests; `verify-r` and
+`verify-library` traverse every runtime tree exactly once. A verifier-only
+change migrates an authenticated schema-1 receipt with `refresh-r` and
+`refresh-library`; it must never rebuild R or reinstall packages.
+
+Consumer validation is append-only and resumable per package. A row is accepted
+only after its tests, exact counts where available, provenance checks, protected
+input checks, and row seal all succeed; an interrupted or partially promoted row
+is never accepted. A verified sealed row is not rerun because a later package
+failed. For external datasets, services, credentials, or optional runtimes,
+retain one exact failure, classify it, and stop that external work at the row
+boundary. Collect all failures from a bounded targeted run and fix a coherent
+batch before rerunning only the affected target.
+Synthetic tamper suites should build one authenticated valid fixture per schema
+or scope and restore independent copies for mutations. Do not regenerate and
+rehash an identical valid fixture before every negative assertion.
+
+Reuse a build only across ABI-compatible gates: GCT copies and verifies the
+sealed strict-GCC installation, Valgrind compiles one instrumented-R-specific
+DSO, ASan and UBSan keep separate DSOs, and rchk uses its pinned analyzer
+environment. Prefer direct coverage of every registered native routine and
+known allocation/callback hazard over another complete functional package
+check. Static-analyzer reports are retained verbatim and audited by source line
+and root reachability; a green runtime torture probe is not presented as a
+deterministic regression for a static lifetime defect unless the probe
+guarantees an allocation in the unsafe window. Benchmarks run only after
+correctness evidence is complete and alone on an idle host.
+
+Use `scripts/environment/resource-jobs` instead of a raw CPU count for new
+parallel gates. It intersects online CPUs, process affinity, cgroup v1/v2 CPU
+quotas, Linux `MemAvailable` (or Darwin `vm_stat`), and the tightest cgroup
+memory headroom. Every profile keeps at least 12 GiB and normally 25% of
+currently available RAM free; heavyweight consumers are additionally capped at
+four processes with 8 GiB budgeted per process. `--max-jobs` and gate-level
+environment variables may only lower the detected ceiling. Retain the
+`--report` TSV with release evidence. If one job would consume the safety
+reserve, scheduling fails closed instead of forcing an unsafe serial process.
+The current conservative admission budgets are: `compile`, one CPU and 1024
+MiB per job with a maximum of 16; `api-compile`, one CPU and 768 MiB per job;
+`light-test`, one CPU and 2048 MiB per job with a maximum of 16; and `consumer`,
+two CPUs and 8192 MiB per job with a maximum of four and a 16384 MiB minimum
+reserve. The serial `rchk` profile budgets 20480 MiB for one process and keeps
+a 16384 MiB minimum reserve. These are scheduling budgets, not claims of
+observed peak usage.
+Heavyweight consumer checks may use only the repository and reverse runners'
+bounded external-`Rscript` waves. They recompute the live ceiling before every
+wave, force nested make, CMake, testthat, `parallel`, `future`, BLAS, and OpenMP
+work to one thread, collect every sibling, seal the complete wave before
+deterministic promotion, and terminate worker descendants on interruption.
+Ordinary focused/full native tests use the same nested-thread caps inside
+file-isolated workers, enforce a 30-minute per-task deadline, and keep the two
+ConfigSpace files in one exclusive worker after the ordinary wave.
+Do not overlap heavyweight top-level gates: point-in-time admission reports are
+not a cross-gate resource lease, and this host has no swap. Do not parallelize
+Valgrind, GCT, rchk, ASan/UBSan execution, an unisolated functional-test
+process, or other jobs whose isolation has not been proved merely because CPUs
+are idle.
 
 ## Repository layout used by the migration
 
@@ -288,32 +446,95 @@ Generated per-mode test caches and temporary directories are logged and pruned
 before the modes-tree receipt is created, because reticulate/uv places absolute
 interpreter symlinks there. They are not evidence; installed libraries,
 artifacts, tool profiles, commands, and full logs are retained.
+Functional tests run once, preferring strict GCC. Strict Clang, ASan, and UBSan
+use the tracked native probe inventory, which dynamically calls every
+registered routine and the reviewed allocation/callback hazards, followed by
+the exact six-file analyzer-sensitive subset with `NOT_CRAN=false`. `--tests
+probes` selects that bounded pair explicitly for fast development validation.
+The ordinary 2.0.0 DSO currently contains 61 registered `.Call` routines; the
+coverage manifest must match their names and arities exactly. The conditional
+row-name-rooting fixture is confined to its dedicated instrumented build and
+is not part of that ordinary inventory.
+Run `scripts/environment/test-native-test-batch` after changing the functional
+runner: it proves that one bounded invocation retains a complete two-failure
+batch before returning nonzero, instead of exposing one expectation per rerun,
+then passes a synthetic corpus at all reviewed focused-ledger minima through the
+real writer and trusted verifier.
 
 `scripts/check-r-api-compatibility` is the offline source-compatibility gate.
-It snapshots the Git-visible worktree, extracts every exact R source archive
-from `environment/r-api-sources.tsv` into a retained run, generates that
-release's `Rconfig.h` without installing R, and compiles every shipped C file
-with both strict GCC and strict Clang warnings. This catches accidental use of
-new public C APIs despite successful builds on the development R. Its artifacts
-remain below `.local/checks/` and it never reads or changes the host R. Before
-compilation, Clang's raw lexer audits every shipped C source and header,
+It snapshots the Git-visible worktree and compiles every shipped C file with
+both strict GCC and strict Clang warnings against the releases in
+`environment/r-api-sources.tsv`. This catches accidental use of new public C
+APIs despite successful builds on the development R. Full archive extraction,
+configuration, and generation of `Rconfig.h`/`Rversion.h` happen only on a
+content-addressed cache miss below `.cache/r-api-headers`; those private trees
+are deleted before cache publication. Header-cache schema 3 binds its release
+and archive SHA-256, exact configure inputs and fixed shell, platform, pinned
+toolchain lock, the executing cache and tree-receipt helpers, and the complete
+reviewed configure/make command inventory. That inventory records present and
+absent commands, selected paths, bounded link chains, executable bytes, and
+identity probes. Per-key locking, unique staging, atomic promotion, complete
+tree receipts, and a sealed input receipt make simultaneous same-key runs safe.
+A hit verifies all of that state without rereading the source archive. Every
+run receives its own small copied or reflinked source-include tree plus
+generated headers, creates and verifies a fresh receipt for the published
+copy, and requires that receipt to equal the authenticated cache receipt. It
+compiles only against that run-local copy and never references mutable cache
+files.
+Thus retained evidence contains no full extracted R source or configure tree.
+Its artifacts remain below `.local/checks/`, and it never reads or changes the
+host R. On Linux, before header preparation, the gate receipts the exact
+compiler closure that can affect syntax admission: invoked and canonical GCC
+and Clang drivers, versions, targets and search paths, GCC specs and `cc1`,
+their effective preprocessing plans, Clang's target configuration, resolved
+dynamic libraries, and every default or explicit header tree used by the gate:
+GCC builtin/fixed headers, the local sysroot, the explicit toolchain include
+tree, and the Clang resource tree. It verifies that receipt again before final
+sealing instead of traversing the complete multi-gigabyte toolchain. Before
+compilation, Clang's raw lexer
+audits every shipped C source and header,
 including inactive preprocessor branches, and rejects the legacy object-layout
 and binding identifiers forbidden by Writing R Extensions, as well as either
 spelling of the C token-pasting operator. The audit is
 implemented by `scripts/environment/audit-public-api-tokens` and its report is
 part of the retained run. The gate authenticates its snapshot manifest before
-using it, receipts the complete source and generated-artifact trees, reverifies
-both trees at completion, and writes a checksum-protected completion record
-binding those receipts, the retained harness and helper, the audit, generated
-headers, compilers, and release count. A failed or interrupted run has no valid
-completion record and records `status=failed`.
+using it, receipts the complete package source and run-artifact trees,
+reverifies both at completion, and writes a checksum-protected completion
+record binding those receipts, the retained harness and helpers, the audit,
+header-cache ledger and receipts, compilers, and release count. A failed or
+interrupted run has no valid completion record and records `status=failed`.
+Strict syntax admissions are
+independent per translation unit and therefore use the resource-aware compiler
+batch runner. GCC and Clang share one live ceiling and, when that ceiling is
+greater than one, execute as balanced concurrent lanes rather than each
+claiming the full limit. Schema-4 lane plans bind the exact admission report,
+retained runner, timeout tool, compiler and wrapper identities, authenticated
+util-linux `setsid`, and the count plus NUL-framed SHA-256 of the complete
+compiler argument vector. The latter proves the strict warning profile and
+exact run-local include paths rather than merely the compiler executable. Its
+source-order task ledger binds every translation-unit hash, the invoked,
+link-target, and canonical compiler identities, exit and timeout state, and
+the hashes of both the compiler log and its separate supervisor-only log. The
+wave inventory hashes both exact lane ledgers and their inventories. It also
+retains deterministic input-order aggregates and reports failure only after
+every task in both compiler batches has completed.
+`PARADOX_API_JOBS` may conservatively lower, but never raise, the derived job
+ceiling. Header preparation uses its own retained light-test ceiling and
+supervised process groups; compilation recomputes a lowering-only live ceiling
+for every R release. The parent retains an exact row for every header task plus
+an authenticated cleanup-retry ledger, and a bounded four-release compiler
+matrix records all task failures before one aggregate failure is reported.
 
 `scripts/build-valgrind-r` builds a second, unoptimized R 4.6.1 below
 `.local/r-valgrind/4.6.1` from the pinned source, with reference BLAS,
 Valgrind instrumentation level 2, memory profiling, and only local compilers
 and libraries. It is deliberately not selected by normal activation. Set
-`PARADOX_BUILD_JOBS` to control its build parallelism; a configuration mismatch
-fails instead of silently reusing a stale build tree.
+`PARADOX_BUILD_JOBS` to lower its automatically derived build parallelism; a
+value above the current safe CPU/RAM ceiling is rejected. The build retains the
+decision in `resource-jobs.tsv`. A verified cache hit performs no scheduling
+probe or rebuild; a real rebuild computes and stages its exact report
+immediately before removing the old build. A configuration mismatch fails
+instead of silently reusing a stale build tree.
 `scripts/bootstrap-valgrind-r-packages` then installs the exact, checksummed
 dependency closure in `environment/valgrind-r-packages.tsv` from source into
 `.local/r-valgrind/library`; it must not reuse the ordinary compiled library.
@@ -356,18 +577,43 @@ against its source tree, built archive, completion seal, ordered mode statuses,
 and complete modes-tree receipt before copying it into a new retained run. The
 retained native harness and receipt helper must equal trusted current copies,
 so changing worktrees or transplanted evidence cannot alter the input. `gct`
-runs `R CMD check --use-gct` with
-`_R_CHECK_GCT_N_=10`. `valgrind` refuses to build prerequisites implicitly;
+copies and tree-verifies the already sealed strict-GCC candidate installation,
+then runs the complete registered-routine and reviewed-hazard inventory once
+under `gctorture2(10)`. `valgrind` refuses to build prerequisites implicitly;
 it validates the dedicated R, exact package closure, level-2 instrumentation,
-and project-local reference BLAS before running focused tests and
-`R CMD check --use-valgrind` with full actionable-leak and origin diagnostics.
-Retained stage wrappers force exact command-line-only options, empty
-`VALGRIND_OPTS`, the receipted loader debug object, and complete
-suppressed-zero logs. `rchk`
-refuses implicit image pulls and runs bcheck, maacheck, and fficheck offline in
-the exact manifest digest, through `scripts/podman-local`, against only a
-writable run-local source copy. All commands, source, metadata, tool versions,
-logs, and diagnostic reports remain below `.local/checks/<run-id>`.
+and project-local reference BLAS, installs the candidate once for that R, and
+reuses the source archive already sealed by the frozen native run instead of
+rebuilding package or vignette inputs, then runs the same complete inventory
+under Valgrind. Valgrind then executes the exact six-file analyzer-sensitive
+subset (at least 70 blocks and 650 passing expectations) with four reviewed
+expensive scopes skipped; GCT relies on its complete probes and deterministic
+rooting regressions. Both modes bind the semantic result to the exact current
+DSO before execution and reverify it immediately before sealing. They do not
+repeat the full functional corpus, examples, vignettes, manuals, or `R CMD
+check` surfaces already owned by the frozen native and documentation gates.
+Under the Valgrind state lock, the complete R source,
+installed R, and dependency-library trees are authenticated at exactly the
+pre/post execution boundaries; cheap non-following metadata ledgers cover the
+interval, and the ordinary toolchain's already complete receipt is matched
+byte-for-byte instead of being traversed again. Retained Valgrind stage
+wrappers force exact
+command-line-only options, empty `VALGRIND_OPTS`, the receipted loader debug
+object, and complete suppressed-zero logs. Python bytecode and caches are
+disabled or redirected into the disposable mode work tree. The ordinary
+toolchain and dependency library receive full content receipts at stage start
+and final postflight; non-following type/mode/size/time/device/inode/link
+metadata protects every intermediate mode boundary without rereading all file
+contents. `rchk` refuses implicit image pulls and verifies the authenticated
+800,000-state bcheck cache before entering the exact image digest through
+`scripts/podman-local`. The container directly installs and extracts bitcode
+from the writable run-local copy of the frozen source; it never invokes the
+image bcheck wrapper. All three analyzers run serially with an exact 20-GiB
+`RLIMIT_AS`, and the host admits the mode only after the separate 20-GiB-budget,
+16-GiB-reserve resource check. The complete bcheck report and ordered
+block/rationale policy must match the source snapshot, maacheck must be empty,
+and fficheck must inspect exactly 61 registered functions. All commands,
+source, cache identity, metadata, limits, tool versions, logs, and reports
+remain below `.local/checks/<run-id>`.
 
 ## Frozen release workflow
 
@@ -391,15 +637,20 @@ scripts/memory-check --source-run "$native_run" --mode all \
 
 `--mode all` on `native-check` means all strict compiler, static-analysis,
 symbol, ASan, and UBSan modes. With `--tests full`, its strict-GCC mode also
-runs a clean `R CMD check --as-cran`, a second check with all skip-on-CRAN
-tests enabled, and a depends-only check with forced Suggests disabled. All
-three must end at exact `Status: OK` and are included in the sealed mode tree.
+runs the complete skip-on-CRAN test corpus once, one clean `R CMD check
+--as-cran`, and a test/example/vignette/manual-free depends-only check with
+forced Suggests disabled. Both checks must end at exact `Status: OK`; the
+strict-Clang and sanitizer DSOs run the complete native probe inventory instead
+of repeating the R corpus.
 `--mode all` on `memory-check` means gctorture,
 the dedicated instrumented-R Valgrind gate, and rchk. The memory gate must use
 the passed native run that retained the same frozen source; an API-only run is
 not a valid `--source-run`. Any later package-source change requires a new
 commit/ref and new native, API, memory, compatibility, documentation, and
-performance evidence.
+performance evidence. Final checks consume that frozen candidate and
+content-addressed caches whose byte-affecting keys still verify; they do not
+rebuild or resnapshot the moving primary checkout merely because a report or
+verifier changed.
 
 Real supported-runtime evidence is retained separately from header-only API
 compilation. Run it against the same frozen full ref as the release gates:
@@ -487,11 +738,29 @@ environment. That same authenticated candidate is then used for:
   `.local/compat/runs/<run-id>/repository-dependencies-priority-<N>/` stage;
 - `compat/test-reverse-dependencies.R`, with named options for the root,
   priority, candidate/dependency libraries, full ref/commit/tree, portable
-  candidate content hash, and a new reverse-run ID;
+  candidate content hash, clean detached `--candidate-source`, and a new
+  reverse-run ID. Its default tracked runner uses content-addressed consumer
+  installs, two protected-library content passes per actual stage, cheap
+  metadata wave boundaries, and sealed append-only acceptance with `--resume`.
+  Immediately before every wave it retains a fresh
+  `scripts/environment/resource-jobs consumer --report` decision, runs at most
+  that lowering-only limit, disables nested make/CMake, testthat,
+  `parallel`/`future`, BLAS, and OpenMP parallelism, waits for every sibling,
+  and lets only the parent seal and accept rows;
+  plan-only and its synthetic self-test perform no protected-library content
+  pass;
 - `compat/test-repositories.R`, whose positional interface is root, maximum
   priority, candidate library, and dependency library, plus mandatory named
-  `--run-id` and optional `--plan-only`; priority zero also receives the reviewed
-  `library-mlr3verse-core` through `PARADOX_CONSUMER_EXTRA_LIBS`;
+  `--run-id`, optional `--plan-only` or `--verify`, candidate source/origin and
+  repository-selection controls, a task deadline, and a lowering-only `--jobs`
+  limit; priority zero also receives the reviewed `library-mlr3verse-core`
+  through `PARADOX_CONSUMER_EXTRA_LIBS`. Its default
+  resumable runner recomputes the same lowering-only consumer ceiling before
+  each wave, executes rows in independent supervised `Rscript` processes with
+  isolated homes, temporary trees, and caches, takes exactly one protected
+  pre/post boundary per wave, seals the complete wave before parent-only
+  promotion, and resumes a partially promoted sealed wave without rerunning
+  successful rows;
 - `compat/test-documentation`, with the same candidate/dependency libraries,
   the mlr3verse core as `--extra-library`, a new run ID, and `--scope all`;
   this also runs the pinned mbo_config and reviewed documentation migration
@@ -504,9 +773,12 @@ environment. That same authenticated candidate is then used for:
 Repository dependency and test ledgers are retained only below their unique
 run directories. The checked-in priority-zero ledgers are historical fixtures;
 release harnesses must never update files under `compat/`. Repository,
-reverse-dependency, and documentation stages use deterministic whole-stage
-manifests authenticated by `metadata/completion.seal`; verify them with
-`compat/verify-repository-evidence.R` before citing the evidence.
+reverse-dependency, and documentation stages use deterministic manifests
+authenticated by `metadata/completion.seal`. Verify repository and
+documentation stages with `compat/verify-repository-evidence.R`; verify the
+reverse stage's row-bound composite seal, structured counts, two-pass ledger,
+and retained install-cache receipts with
+`compat/verify-reverse-dependency-evidence.R` before citing it.
 
 The documentation gate's essential book chapter, website paradox benchmark,
 tuning/pipeline cheatsheets, and both serialized mbo_config ParamSet workloads

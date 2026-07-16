@@ -14,6 +14,29 @@ collection_exact_values_symbol = function() {
   )
 }
 
+collection_exact_check_symbol = function() {
+  get(
+    "C_param_set_collection_check_builtin",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+}
+
+collection_exact_check = function(
+    collection,
+    values,
+    sanitize = FALSE,
+    check_strict = TRUE) {
+  .Call(
+    collection_exact_check_symbol(),
+    collection_exact_private(collection),
+    collection,
+    values,
+    sanitize,
+    check_strict
+  )
+}
+
 collection_exact_fixture = function() {
   child = ps(
     first = p_int(init = 1L),
@@ -434,4 +457,345 @@ test_that("deep collection snapshots survive root and graph growth", {
     logical(1L),
     marker
   )))
+})
+
+test_that("collection scalar check is registered and reached publicly", {
+  symbol = collection_exact_check_symbol()
+  expect_s3_class(symbol, "NativeSymbolInfo")
+  expect_identical(symbol$numParameters, 5L)
+
+  collection = psc(component = ps(x = p_int(0, 2)))
+  values = list(component.x = 1L)
+  expect_error(
+    .Call(
+      "param_set_collection_check_builtin",
+      collection_exact_private(collection),
+      collection,
+      values,
+      FALSE,
+      TRUE,
+      PACKAGE = "paradox"
+    ),
+    "not available",
+    fixed = TRUE
+  )
+  expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
+
+  namespace = asNamespace("paradox")
+  binding = "C_param_set_collection_check_builtin"
+  registered = get(binding, envir = namespace, inherits = FALSE)
+  unlockBinding(binding, namespace)
+  on.exit({
+    assign(binding, registered, envir = namespace)
+    lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(binding, NULL, envir = namespace)
+  expect_error(
+    collection$check(values),
+    "first argument must be a string",
+    fixed = TRUE
+  )
+})
+
+test_that("exact collection scalar checks preserve values and sanitization", {
+  child = ps(
+    number = p_dbl(-1, 1, tolerance = 1e-6),
+    integer = p_int(-2, 2, tolerance = 1e-6),
+    flag = p_lgl(),
+    factor = p_fct(c("slow", "fast"))
+  )
+  collection = psc(left = child, right = ps(other = p_int(0, 9)))
+  values = list(
+    left.factor = "fast",
+    right.other = 2L,
+    left.number = -1 - 5e-7,
+    left.flag = FALSE,
+    left.integer = 1.0000005
+  )
+  observed = collection_exact_check(
+    collection,
+    values,
+    sanitize = TRUE
+  )
+  expect_identical(observed, collection$check(values, sanitize = TRUE))
+  expect_identical(attr(observed, "sanitized"), list(
+    left.factor = "fast",
+    right.other = 2L,
+    left.number = -1,
+    left.flag = FALSE,
+    left.integer = 1L
+  ))
+
+  inner = psc(component = ps(x = p_int(0, 2)))
+  nested = psc(left = inner, right = inner)
+  nested_values = list(
+    left.component.x = 1L,
+    right.component.x = 2L
+  )
+  expect_identical(
+    collection_exact_check(nested, nested_values),
+    TRUE
+  )
+  expect_identical(nested$check(nested_values), TRUE)
+
+  evaluation_state = new.env(parent = emptyenv())
+  evaluation_state$count = 0L
+  expect_identical(collection$check({
+    evaluation_state$count = evaluation_state$count + 1L
+    list(left.integer = 1L)
+  }), TRUE)
+  expect_identical(evaluation_state$count, 1L)
+})
+
+test_that("strict collection features retain the established fallback", {
+  constraint_calls = 0L
+  constrained_child = ps(x = p_dbl(0, 1))
+  constrained_child$constraint = function(x) {
+    constraint_calls <<- constraint_calls + 1L
+    x$x <= 0.5
+  }
+  constrained = psc(component = constrained_child)
+  constrained_values = list(component.x = 0.75)
+  expect_null(collection_exact_check(constrained, constrained_values))
+  expect_identical(constraint_calls, 0L)
+  expect_identical(
+    constrained$check(constrained_values),
+    "Constraint not fulfilled."
+  )
+  expect_identical(constraint_calls, 1L)
+  expect_identical(
+    collection_exact_check(
+      constrained,
+      constrained_values,
+      check_strict = FALSE
+    ),
+    TRUE
+  )
+  expect_identical(
+    constrained$check(constrained_values, check_strict = FALSE),
+    TRUE
+  )
+  expect_identical(constraint_calls, 1L)
+
+  dependent_child = ps(
+    parent = p_lgl(),
+    child = p_int(0, 2)
+  )
+  dependent_child$add_dep("child", "parent", CondEqual(TRUE))
+  dependent = psc(component = dependent_child)
+  dependent_values = list(
+    component.parent = FALSE,
+    component.child = 1L
+  )
+  expect_null(collection_exact_check(dependent, dependent_values))
+  expect_match(
+    dependent$check(dependent_values),
+    "component.parent == TRUE",
+    fixed = TRUE
+  )
+  expect_identical(collection_exact_check(
+    dependent,
+    dependent_values,
+    check_strict = FALSE
+  ), TRUE)
+
+  cross = psc(
+    left = ps(parent = p_lgl()),
+    right = ps(child = p_int(0, 2))
+  )
+  cross$add_dep("right.child", "left.parent", CondEqual(TRUE))
+  cross_values = list(left.parent = FALSE, right.child = 1L)
+  expect_null(collection_exact_check(cross, cross_values))
+  expect_match(
+    cross$check(cross_values),
+    "left.parent == TRUE",
+    fixed = TRUE
+  )
+})
+
+test_that("unsupported collection checks decline without extension effects", {
+  special = psc(component = ps(
+    x = p_dbl(0, 1, special_vals = list("AUTO"))
+  ))
+  expect_null(collection_exact_check(special, list(component.x = 0.5)))
+  expect_identical(special$check(list(component.x = 0.5)), TRUE)
+  expect_identical(special$check(list(component.x = "AUTO")), TRUE)
+
+  ordinary = psc(component = ps(x = p_int(0, 2)))
+  expect_null(collection_exact_check(
+    ordinary,
+    list(component.x = factor("1"))
+  ))
+  expect_match(
+    ordinary$check(list(component.x = factor("1"))),
+    "single integerish value",
+    fixed = TRUE
+  )
+  expect_null(collection_exact_check(ordinary, list(unknown = 1L)))
+  expect_match(
+    ordinary$check(list(unknown = 1L)),
+    "not available",
+    fixed = TRUE
+  )
+
+  ChildSubclass = R6::R6Class(
+    "NativeCollectionCheckChildSubclass",
+    inherit = ParamSet
+  )
+  subclassed = psc(component = ChildSubclass$new(list(x = p_int())))
+  subclass_values = list(component.x = 1L)
+  expect_null(collection_exact_check(subclassed, subclass_values))
+  expect_identical(collection_exact_check(
+    subclassed,
+    subclass_values,
+    check_strict = FALSE
+  ), TRUE)
+  expect_identical(subclassed$check(subclass_values), TRUE)
+
+  utility = psc(component = ps(payload = p_uty()))
+  utility_values = list(
+    function() 1,
+    new.env(parent = emptyenv()),
+    quote(left + right),
+    as.name("payload"),
+    pairlist(value = 1L),
+    new("externalptr")
+  )
+  for (value in utility_values) {
+    input = list(component.payload = value)
+    expect_null(collection_exact_check(utility, input))
+    expect_identical(utility$check(input), TRUE)
+  }
+})
+
+test_that("strict collection graph admission is inert and fail closed", {
+  collection = psc(component = ps(x = p_int()))
+  private = collection_exact_private(collection)
+  original = private$.children_with_constraints
+  forced = 0L
+  unlockBinding(".children_with_constraints", private)
+  delayedAssign(
+    ".children_with_constraints",
+    {
+      forced <<- forced + 1L
+      original
+    },
+    assign.env = private
+  )
+  lockBinding(".children_with_constraints", private)
+  on.exit({
+    unlockBinding(".children_with_constraints", private)
+    assign(".children_with_constraints", original, envir = private)
+    lockBinding(".children_with_constraints", private)
+  }, add = TRUE)
+  expect_null(collection_exact_check(
+    collection,
+    list(component.x = 1L)
+  ))
+  expect_identical(forced, 0L)
+
+  cyclic = ParamSetCollection$new(list())
+  cyclic_private = collection_exact_private(cyclic)
+  cyclic_private$.sets = list(self = cyclic)
+  empty_values = structure(list(), names = character())
+  expect_null(collection_exact_check(cyclic, empty_values))
+  expect_identical(collection_exact_check(
+    cyclic,
+    empty_values,
+    check_strict = FALSE
+  ), TRUE)
+})
+
+test_that("collection scalar check rejects ALTREP before duplication", {
+  callbacks = 0L
+  collection = psc(component = ps(x = p_int()))
+  private = collection_exact_private(collection)
+  changed = native_stateful_altrep(
+    private$.params$id,
+    private$.params$id,
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      stop("collection check invoked ALTREP", call. = FALSE)
+    },
+    callback_after = NA_integer_
+  )
+  private$.params = collection_exact_replace_column(
+    private$.params,
+    "id",
+    changed
+  )
+  native_stateful_altrep_rearm(changed, c(NA_integer_, 0L))
+
+  expect_null(collection_exact_check(
+    collection,
+    list(component.x = 1L)
+  ))
+  expect_identical(callbacks, 0L)
+})
+
+test_that("collection check snapshots reject non-vector parameter columns", {
+  malformed = list(
+    lower = new.env(parent = emptyenv()),
+    upper = function() NULL,
+    tolerance = quote(left + right),
+    levels = list(new.env(parent = emptyenv()))
+  )
+  for (column in names(malformed)) {
+    collection = psc(component = ps(x = p_dbl()))
+    private = collection_exact_private(collection)
+    private$.params = collection_exact_replace_column(
+      private$.params,
+      column,
+      malformed[[column]]
+    )
+    expect_null(
+      collection_exact_check(collection, list(component.x = 0)),
+      info = column
+    )
+  }
+})
+
+test_that("collection check snapshots decline dispatch-sensitive metadata", {
+  collection = psc(component = ps(x = p_dbl(0, 2)))
+  private = collection_exact_private(collection)
+  private$.params = collection_exact_replace_column(
+    private$.params,
+    "lower",
+    structure(private$.params$lower, class = "CollectionCheckAudit")
+  )
+  method_name = "Ops.CollectionCheckAudit"
+  assign(
+    method_name,
+    function(...) stop("COLLECTION CHECK OPS DISPATCH", call. = FALSE),
+    envir = .GlobalEnv
+  )
+  on.exit(rm(list = method_name, envir = .GlobalEnv), add = TRUE)
+
+  values = list(component.x = 1)
+  expect_null(collection_exact_check(collection, values))
+  expect_error(
+    collection$check(values),
+    "COLLECTION CHECK OPS DISPATCH",
+    fixed = TRUE
+  )
+
+  attributed = list(
+    levels = structure(c(TRUE, FALSE), note = "dispatch-sensitive"),
+    special_vals = structure(list(), note = "dispatch-sensitive")
+  )
+  for (column in names(attributed)) {
+    candidate = if (column == "levels") {
+      psc(component = ps(x = p_lgl()))
+    } else {
+      psc(component = ps(x = p_dbl()))
+    }
+    candidate_private = collection_exact_private(candidate)
+    candidate_private$.params = collection_exact_replace_column(
+      candidate_private$.params,
+      column,
+      list(attributed[[column]])
+    )
+    input = list(component.x = if (column == "levels") TRUE else 1)
+    expect_null(collection_exact_check(candidate, input), info = column)
+  }
 })

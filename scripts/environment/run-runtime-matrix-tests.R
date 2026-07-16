@@ -246,7 +246,7 @@ if (getRversion() < "4.6.0") {
     check.names = FALSE
   )
   if (!identical(names(exclusions), c("context", "reason")) ||
-      nrow(exclusions) != 14L || anyNA(exclusions) ||
+      nrow(exclusions) != 22L || anyNA(exclusions) ||
       any(!nzchar(exclusions$reason)) ||
       any(grepl("\t", exclusions$reason, fixed = TRUE)) ||
       any(grepl("\r", exclusions$reason, fixed = TRUE)) ||
@@ -378,8 +378,11 @@ results <- testthat::test_dir(
   staged_directory,
   reporter = "summary",
   load_helpers = TRUE,
-  stop_on_failure = TRUE,
-  stop_on_warning = TRUE,
+  # Complete the exact retained inventory before enforcing the clean-suite
+  # policy below.  A costly old-R run should report every ordinary failure and
+  # warning in one batch instead of revealing them one invocation at a time.
+  stop_on_failure = FALSE,
+  stop_on_warning = FALSE,
   package = "paradox",
   load_package = "none"
 )

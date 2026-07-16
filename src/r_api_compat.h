@@ -34,6 +34,13 @@ attribute_hidden SEXP paradox_api_local_value(
   SEXP symbol
 );
 
+/* Return an ordinary direct binding or an already-forced delayed binding.
+ * Never force a new promise or invoke an active binding. */
+attribute_hidden SEXP paradox_api_stable_local_value(
+  SEXP environment,
+  SEXP symbol
+);
+
 /* Retrieve a local binding with ordinary R evaluation semantics. */
 attribute_hidden SEXP paradox_api_evaluated_local_value(
   SEXP environment,

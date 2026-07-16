@@ -1,11 +1,19 @@
 #' @rdname Domain
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
-  assert_number(tolerance, lower = 0)
-  assert_number(lower)
-  assert_number(upper)
-  assert_true(lower <= upper)
-  if (assert_flag(logscale)) {
+  native = .Call(
+    C_domain_construct_builtin,
+    environment(), p_dbl, sys.call(), parent.frame(), 0L
+  )
+  if (!is.null(native)) return(native)
+  if (!.Call(C_domain_numeric_bounds_admit, environment(), FALSE)) {
+    assert_number(tolerance, lower = 0)
+    assert_number(lower)
+    assert_number(upper)
+    assert_true(lower <= upper)
+    assert_flag(logscale)
+  }
+  if (logscale) {
     if (!is.null(trafo)) stop("When a trafo is given then logscale must be FALSE")
     if (assert_number(lower) <= 0) stop("When logscale is TRUE then lower bound must be strictly greater than 0")
     trafo = exp

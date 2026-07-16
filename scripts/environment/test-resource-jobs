@@ -1,0 +1,208 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+HELPER="$ROOT/scripts/environment/resource-jobs"
+[[ -x "$HELPER" && ! -L "$HELPER" ]] || {
+  printf '%s\n' 'test-resource-jobs: helper is absent or symbolic' >&2
+  exit 1
+}
+mkdir -p "$ROOT/.local/tmp"
+SCRATCH=$(mktemp -d "$ROOT/.local/tmp/resource-jobs-test.XXXXXX")
+trap 'rm -rf "$SCRATCH"' EXIT HUP INT TERM
+
+write_file() {
+  local path=$1
+  shift
+  mkdir -p "$(dirname "$path")"
+  printf '%s\n' "$@" > "$path"
+}
+
+field() {
+  local name=$1 report=$2
+  awk -F '\t' -v name="$name" '$1 == name { print $2 }' "$report"
+}
+
+run_fixture() {
+  local proc=$1 cgroup=$2
+  shift 2
+  env \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" "$@"
+}
+
+# Unified hierarchy: the parent, not the leaf, supplies the tight CPU and RAM
+# limits.  The scheduler must walk all ancestors and combine those constraints
+# with process affinity and MemAvailable.
+V2="$SCRATCH/v2"
+write_file "$V2/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   67108864 kB'
+write_file "$V2/proc/self/status" $'Name:\tfixture' \
+  $'Cpus_allowed_list:\t0-7,16-23'
+write_file "$V2/proc/self/cgroup" '0::/team/job'
+write_file "$V2/cgroup/team/job/memory.max" '51539607552'
+write_file "$V2/cgroup/team/job/memory.current" '8589934592'
+write_file "$V2/cgroup/team/job/cpu.max" '800000 100000'
+write_file "$V2/cgroup/team/memory.max" '25769803776'
+write_file "$V2/cgroup/team/memory.current" '8589934592'
+write_file "$V2/cgroup/team/cpu.max" '600000 100000'
+V2_REPORT="$SCRATCH/v2-report.tsv"
+run_fixture "$V2/proc" "$V2/cgroup" api-compile --report > "$V2_REPORT"
+[[ "$(field jobs "$V2_REPORT")" == 5 ]]
+[[ "$(field cpu_limit "$V2_REPORT")" == 6 ]]
+[[ "$(field memory_available_mib "$V2_REPORT")" == 16384 ]]
+[[ "$(field memory_reserve_mib "$V2_REPORT")" == 12288 ]]
+[[ "$(field memory_source "$V2_REPORT")" == proc_memavailable+cgroup ]]
+[[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile --max-jobs 3)" == 3 ]]
+if run_fixture "$V2/proc" "$V2/cgroup" rchk \
+    > "$SCRATCH/unsafe-rchk.out" 2> "$SCRATCH/unsafe-rchk.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory rchk received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one rchk job' "$SCRATCH/unsafe-rchk.err"
+for noncanonical in 00 08 9999999999; do
+  if run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+      --max-jobs "$noncanonical" > "$SCRATCH/noncanonical-$noncanonical.out" \
+      2> "$SCRATCH/noncanonical-$noncanonical.err"; then
+    printf 'test-resource-jobs: noncanonical job count was accepted: %s\n' \
+      "$noncanonical" >&2
+    exit 1
+  fi
+  grep -q 'positive integer' "$SCRATCH/noncanonical-$noncanonical.err"
+done
+if run_fixture "$V2/proc" "$V2/cgroup" consumer \
+    > "$SCRATCH/unsafe-consumer.out" 2> "$SCRATCH/unsafe-consumer.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory consumer received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one consumer job' \
+  "$SCRATCH/unsafe-consumer.err"
+
+# The bounded rchk profile is deliberately serial and admits one analyzer only
+# when its 20 GiB address-space budget and 16 GiB host reserve both fit.
+RCHK="$SCRATCH/rchk"
+write_file "$RCHK/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   50331648 kB'
+write_file "$RCHK/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$RCHK/proc/self/cgroup" '0::/'
+mkdir -p "$RCHK/cgroup"
+RCHK_REPORT="$SCRATCH/rchk-report.tsv"
+run_fixture "$RCHK/proc" "$RCHK/cgroup" rchk --report > "$RCHK_REPORT"
+[[ "$(field jobs "$RCHK_REPORT")" == 1 ]]
+[[ "$(field memory_mib_per_job "$RCHK_REPORT")" == 20480 ]]
+[[ "$(field memory_reserve_mib "$RCHK_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$RCHK_REPORT")" == 1 ]]
+
+# Split v1 controllers use different cgroup paths.  Infinity at the leaf must
+# not hide a finite ancestor quota, and the memory controller must use
+# limit-minus-usage rather than its nominal limit.
+V1="$SCRATCH/v1"
+write_file "$V1/proc/meminfo" 'MemTotal:       33554432 kB' \
+  'MemAvailable:   33554432 kB'
+write_file "$V1/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$V1/proc/self/cgroup" \
+  '9:memory:/user/session' '6:cpu,cpuacct:/user'
+write_file "$V1/cgroup/memory/user/session/memory.limit_in_bytes" \
+  '21474836480'
+write_file "$V1/cgroup/memory/user/session/memory.usage_in_bytes" \
+  '4294967296'
+write_file "$V1/cgroup/memory/user/memory.limit_in_bytes" '34359738368'
+write_file "$V1/cgroup/memory/user/memory.usage_in_bytes" '10737418240'
+write_file "$V1/cgroup/cpu,cpuacct/user/cpu.cfs_quota_us" '400000'
+write_file "$V1/cgroup/cpu,cpuacct/user/cpu.cfs_period_us" '100000'
+V1_REPORT="$SCRATCH/v1-report.tsv"
+run_fixture "$V1/proc" "$V1/cgroup" api-compile --report > "$V1_REPORT"
+[[ "$(field jobs "$V1_REPORT")" == 3 ]]
+[[ "$(field cgroup_cpu_limit "$V1_REPORT")" == 4 ]]
+[[ "$(field cgroup_memory_available_mib "$V1_REPORT")" == 16384 ]]
+
+# A malformed present controller file is not silently treated as unlimited.
+write_file "$V2/cgroup/team/job/cpu.max" 'not-a-quota'
+if run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+    > "$SCRATCH/malformed.out" 2> "$SCRATCH/malformed.err"; then
+  printf '%s\n' 'test-resource-jobs: malformed cgroup quota was accepted' >&2
+  exit 1
+fi
+grep -q 'malformed cgroup CPU constraint' "$SCRATCH/malformed.err"
+
+# Darwin must use a live vm_stat reading.  Falling back to a fraction of total
+# physical RAM can over-admit badly on a pressured host, so absent or malformed
+# availability data fails closed.
+DARWIN="$SCRATCH/darwin"
+mkdir -p "$DARWIN/proc" "$DARWIN/cgroup" "$DARWIN/bin"
+# The single quotes deliberately preserve positional parameters in the
+# generated fixture rather than expanding this test runner's arguments.
+# shellcheck disable=SC2016
+write_file "$DARWIN/bin/sysctl" \
+  '#!/bin/sh' \
+  '[ "$1" = -n ] && [ "$2" = hw.memsize ] || exit 64' \
+  'printf "%s\\n" 68719476736'
+write_file "$DARWIN/bin/vm_stat" \
+  '#!/bin/sh' \
+  'cat <<EOF' \
+  'Mach Virtual Memory Statistics: (page size of 4096 bytes)' \
+  'Pages free:                               4000000.' \
+  'Pages inactive:                           3000000.' \
+  'Pages speculative:                        1000000.' \
+  'Pages purgeable:                          9000000.' \
+  'EOF'
+chmod 0700 "$DARWIN/bin/sysctl" "$DARWIN/bin/vm_stat"
+DARWIN_REPORT="$SCRATCH/darwin-report.tsv"
+env \
+  "PATH=$DARWIN/bin:/usr/bin:/bin" \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Darwin \
+  PARADOX_RESOURCE_PROC_ROOT="$DARWIN/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$DARWIN/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$DARWIN_REPORT"
+[[ "$(field memory_source "$DARWIN_REPORT")" == darwin_vm_stat ]]
+[[ "$(field memory_available_mib "$DARWIN_REPORT")" == 31250 ]]
+[[ "$(field jobs "$DARWIN_REPORT")" == 24 ]]
+write_file "$DARWIN/bin/vm_stat" \
+  '#!/bin/sh' \
+  'printf "%s\\n" "unrecognized vm_stat output"'
+chmod 0700 "$DARWIN/bin/vm_stat"
+if env \
+    "PATH=$DARWIN/bin:/usr/bin:/bin" \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Darwin \
+    PARADOX_RESOURCE_PROC_ROOT="$DARWIN/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$DARWIN/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/darwin-malformed.out" \
+      2> "$SCRATCH/darwin-malformed.err"; then
+  printf '%s\n' 'test-resource-jobs: malformed Darwin availability was accepted' >&2
+  exit 1
+fi
+grep -q 'could not parse positive Darwin vm_stat availability' \
+  "$SCRATCH/darwin-malformed.err"
+
+# Test-only roots cannot leak into production mode, and operator limits may
+# lower but never increase the automatically derived ceiling.
+if env PARADOX_RESOURCE_PROC_ROOT="$V1/proc" "$HELPER" api-compile \
+    > "$SCRATCH/leak.out" 2> "$SCRATCH/leak.err"; then
+  printf '%s\n' 'test-resource-jobs: unguarded fixture override was accepted' >&2
+  exit 1
+fi
+grep -q 'test overrides require' "$SCRATCH/leak.err"
+ACTUAL=$($HELPER api-compile)
+LIMITED=$($HELPER api-compile --max-jobs 1)
+ACTUAL_COMPILE=$($HELPER compile)
+ACTUAL_CONSUMER=$($HELPER consumer)
+ACTUAL_REPORT="$SCRATCH/actual-report.tsv"
+$HELPER api-compile --report > "$ACTUAL_REPORT"
+[[ "$ACTUAL" =~ ^[1-9][0-9]*$ && "$LIMITED" == 1 ]]
+[[ "$ACTUAL_COMPILE" =~ ^[1-9][0-9]*$ && "$ACTUAL_COMPILE" -le 16 ]]
+[[ "$ACTUAL_CONSUMER" =~ ^[1-9][0-9]*$ && "$ACTUAL_CONSUMER" -le 4 ]]
+[[ "$(field memory_reserve_mib "$ACTUAL_REPORT")" -ge 12288 ]]
+
+printf 'resource_jobs_self_test=passed\nactual_api_compile_jobs=%s\nactual_compile_jobs=%s\nactual_consumer_jobs=%s\n' \
+  "$ACTUAL" "$ACTUAL_COMPILE" "$ACTUAL_CONSUMER"

@@ -24,11 +24,13 @@ Modes:
   all            every mode above, including the two separate sanitizers
 
 Options:
-  --tests LEVEL  none, focused, or full (default: focused).  This applies to
-                 explicitly selected strict and sanitizer modes.  Focused runs
-                 characterization, native, and regression test files.  A full
-                 strict-GCC run additionally performs clean --as-cran,
-                 all-tests, and depends-only R CMD checks on the source archive.
+  --tests LEVEL  none, probes, focused, or full (default: focused).  Probes
+                 dynamically exercise every registered routine and reviewed
+                 allocation/callback hazard plus a bounded six-file analyzer
+                 corpus.  Focused/full functional tests run once, preferring
+                 strict GCC; other compiler and sanitizer builds run probes.
+                 A full strict-GCC run additionally performs one clean --as-cran
+                 check and a test-free depends-only check.
   --run-id ID    use ID below .local/checks instead of a UTC timestamp/PID
   --source-run ID
                  verify and replay the immutable source retained by run ID
@@ -42,6 +44,8 @@ Every command, log, compiler version, installed library, source archive, Git
 state, and content-hashed snapshot is retained below .local/checks/ID.  ASan
 and UBSan are never combined.  These sanitizer modes instrument only the
 package DSO; they are not substitutes for a future sanitizer-built R gate.
+PARADOX_NATIVE_COMPILE_JOBS and PARADOX_NATIVE_TEST_JOBS may lower, but never
+raise, the retained resource-aware install and focused/full test ceilings.
 EOF
 }
 
@@ -168,9 +172,58 @@ done
 
 [ "$MODE_SELECTED" = true ] || fail "at least one --mode is required"
 case "$TEST_SELECTION" in
-  none|focused|full) ;;
-  *) fail "--tests must be none, focused, or full" ;;
+  none|probes|focused|full) ;;
+  *) fail "--tests must be none, probes, focused, or full" ;;
 esac
+
+NATIVE_TEST_JOB_OVERRIDE=${PARADOX_NATIVE_TEST_JOBS:-}
+NATIVE_COMPILE_JOB_OVERRIDE=${PARADOX_NATIVE_COMPILE_JOBS:-}
+for job_override in "$NATIVE_TEST_JOB_OVERRIDE" "$NATIVE_COMPILE_JOB_OVERRIDE"; do
+  case "$job_override" in
+    '') ;;
+    *[!0-9]*|0*)
+      fail "native job overrides must be canonical positive integers"
+      ;;
+  esac
+done
+
+# Functional R tests describe package behavior, not compiler identity. Run
+# them once under the first selected executable mode and use the complete
+# native probe inventory for every other DSO. This preserves compiler and
+# sanitizer coverage without repeating a half-hour R corpus per build.
+STRICT_GCC_TEST_SCOPE=none
+STRICT_CLANG_TEST_SCOPE=none
+ASAN_TEST_SCOPE=none
+UBSAN_TEST_SCOPE=none
+if [ "$TEST_SELECTION" = probes ]; then
+  [ "$MODE_STRICT_GCC" = false ] || STRICT_GCC_TEST_SCOPE=probes
+  [ "$MODE_STRICT_CLANG" = false ] || STRICT_CLANG_TEST_SCOPE=probes
+  [ "$MODE_ASAN" = false ] || ASAN_TEST_SCOPE=probes
+  [ "$MODE_UBSAN" = false ] || UBSAN_TEST_SCOPE=probes
+elif [ "$TEST_SELECTION" != none ]; then
+  [ "$MODE_STRICT_GCC" = false ] || STRICT_GCC_TEST_SCOPE=probes
+  [ "$MODE_STRICT_CLANG" = false ] || STRICT_CLANG_TEST_SCOPE=probes
+  [ "$MODE_ASAN" = false ] || ASAN_TEST_SCOPE=probes
+  [ "$MODE_UBSAN" = false ] || UBSAN_TEST_SCOPE=probes
+  if [ "$MODE_STRICT_GCC" = true ]; then
+    STRICT_GCC_TEST_SCOPE=$TEST_SELECTION
+  elif [ "$MODE_STRICT_CLANG" = true ]; then
+    STRICT_CLANG_TEST_SCOPE=$TEST_SELECTION
+  elif [ "$MODE_ASAN" = true ]; then
+    ASAN_TEST_SCOPE=$TEST_SELECTION
+  elif [ "$MODE_UBSAN" = true ]; then
+    UBSAN_TEST_SCOPE=$TEST_SELECTION
+  fi
+fi
+if [ "$TEST_SELECTION" != none ] &&
+    [ "$MODE_STRICT_GCC" = false ] &&
+    [ "$MODE_STRICT_CLANG" = false ] &&
+    [ "$MODE_ASAN" = false ] &&
+    [ "$MODE_UBSAN" = false ]; then
+  fail "--tests $TEST_SELECTION requires at least one executable compiler mode"
+fi
+NEED_TINY_TEX=false
+[ "$TEST_SELECTION" != full ] || NEED_TINY_TEX=true
 
 SCRIPT_DIRECTORY=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 ROOT=$(CDPATH='' cd -- "$SCRIPT_DIRECTORY/.." && pwd -P)
@@ -188,7 +241,8 @@ MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linu
 TINY_TEX_MANIFEST="$ROOT/environment/tinytex-linux-x86_64.tsv"
 TINY_TEX_ROOT="$ROOT/.local/tinytex"
 TINY_TEX_BIN="$TINY_TEX_ROOT/bin/x86_64-linux"
-LOCAL_PATH="$TINY_TEX_BIN:$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+LOCAL_PATH="$TOOLCHAIN/bin:$ROOT/.local/bin:/usr/bin:/bin"
+[ "$NEED_TINY_TEX" = false ] || LOCAL_PATH="$TINY_TEX_BIN:$LOCAL_PATH"
 LOCAL_TARGET=x86_64-conda-linux-gnu
 LOCAL_SYSROOT="$TOOLCHAIN/$LOCAL_TARGET/sysroot"
 LOCAL_PKG_CONFIG_PATH="$TOOLCHAIN/lib/pkgconfig:$TOOLCHAIN/share/pkgconfig"
@@ -266,26 +320,31 @@ done
   [ "$TINY_TEX_ARCHIVE_NAME" = "TinyTeX-linux-x86_64-v$TINY_TEX_VERSION.tar.xz" ] &&
   [ "$TINY_TEX_URL" = "https://github.com/rstudio/tinytex-releases/releases/download/v$TINY_TEX_VERSION/$TINY_TEX_ARCHIVE_NAME" ] ||
   fail "TinyTeX manifest identity is unexpected"
-TINY_TEX_ARCHIVE="$ROOT/.cache/downloads/$TINY_TEX_ARCHIVE_NAME"
-[ -f "$TINY_TEX_ARCHIVE" ] && [ ! -L "$TINY_TEX_ARCHIVE" ] ||
-  fail "pinned TinyTeX archive is missing or symbolic"
-[ "$(stat -c '%s' "$TINY_TEX_ARCHIVE")" = "$TINY_TEX_ARCHIVE_SIZE" ] ||
-  fail "TinyTeX archive size differs from the manifest"
-[ "$(sha256sum "$TINY_TEX_ARCHIVE" | cut -d ' ' -f 1)" = "$TINY_TEX_ARCHIVE_SHA256" ] ||
-  fail "TinyTeX archive SHA-256 differs from the manifest"
 [ "${CONDA_PREFIX:-}" = "$TOOLCHAIN" ] ||
   fail "CONDA_PREFIX does not identify the activated local toolchain"
 [ "$(command -v R)" = "$TOOLCHAIN/bin/R" ] ||
   fail "R does not resolve to the activated local executable"
 [ "$(R RHOME)" = "$TOOLCHAIN/lib/R" ] || fail "R_HOME is not project-local"
-for tinytex_tool in pdflatex kpsewhich makeindex; do
-  [ -x "$TINY_TEX_BIN/$tinytex_tool" ] ||
-    fail "pinned TinyTeX tool is missing: $TINY_TEX_BIN/$tinytex_tool"
-  [ "$(PATH=$LOCAL_PATH command -v "$tinytex_tool")" = "$TINY_TEX_BIN/$tinytex_tool" ] ||
-    fail "$tinytex_tool does not resolve to the pinned TinyTeX overlay"
-done
-PATH=$LOCAL_PATH "$TINY_TEX_BIN/kpsewhich" -engine=pdftex pdflatex.fmt >/dev/null ||
-  fail "pinned TinyTeX cannot locate the pdflatex format"
+if [ "$NEED_TINY_TEX" = true ]; then
+  TINY_TEX_ARCHIVE="$ROOT/.cache/downloads/$TINY_TEX_ARCHIVE_NAME"
+  [ -f "$TINY_TEX_ARCHIVE" ] && [ ! -L "$TINY_TEX_ARCHIVE" ] ||
+    fail "pinned TinyTeX archive is missing or symbolic"
+  [ "$(stat -c '%s' "$TINY_TEX_ARCHIVE")" = "$TINY_TEX_ARCHIVE_SIZE" ] ||
+    fail "TinyTeX archive size differs from the manifest"
+  [ "$(sha256sum "$TINY_TEX_ARCHIVE" | cut -d ' ' -f 1)" = \
+    "$TINY_TEX_ARCHIVE_SHA256" ] ||
+    fail "TinyTeX archive SHA-256 differs from the manifest"
+  for tinytex_tool in pdflatex kpsewhich makeindex; do
+    [ -x "$TINY_TEX_BIN/$tinytex_tool" ] ||
+      fail "pinned TinyTeX tool is missing: $TINY_TEX_BIN/$tinytex_tool"
+    [ "$(PATH=$LOCAL_PATH command -v "$tinytex_tool")" = \
+      "$TINY_TEX_BIN/$tinytex_tool" ] ||
+      fail "$tinytex_tool does not resolve to the pinned TinyTeX overlay"
+  done
+  PATH=$LOCAL_PATH "$TINY_TEX_BIN/kpsewhich" -engine=pdftex \
+    pdflatex.fmt >/dev/null ||
+    fail "pinned TinyTeX cannot locate the pdflatex format"
+fi
 
 GCC="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-gcc"
 CLANG="$TOOLCHAIN/bin/x86_64-conda-linux-gnu-clang"
@@ -367,20 +426,29 @@ RUN_DIRECTORY="$CHECKS_ROOT/$RUN_ID"
 require_plain_check_directory "$RUN_DIRECTORY"
 HARNESS_SCRIPT="$ROOT/scripts/native-check"
 TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+RESOURCE_JOBS_HELPER="$ROOT/scripts/environment/resource-jobs"
 [ -f "$HARNESS_SCRIPT" ] && [ ! -L "$HARNESS_SCRIPT" ] ||
   fail "native-check harness is missing or symbolic: $HARNESS_SCRIPT"
 [ -f "$TREE_RECEIPT_HELPER" ] && [ ! -L "$TREE_RECEIPT_HELPER" ] ||
   fail "tree-receipt helper is missing or symbolic: $TREE_RECEIPT_HELPER"
+[ -f "$RESOURCE_JOBS_HELPER" ] && [ ! -L "$RESOURCE_JOBS_HELPER" ] &&
+  [ -x "$RESOURCE_JOBS_HELPER" ] ||
+  fail "resource scheduler is missing, symbolic, or non-executable: $RESOURCE_JOBS_HELPER"
 cp "$HARNESS_SCRIPT" "$RUN_DIRECTORY/metadata/native-check"
 cp "$TREE_RECEIPT_HELPER" "$RUN_DIRECTORY/metadata/tree-receipt.R"
+cp "$RESOURCE_JOBS_HELPER" "$RUN_DIRECTORY/metadata/resource-jobs"
 NATIVE_CHECK_SHA256=$(sha256sum "$RUN_DIRECTORY/metadata/native-check" |
   cut -d ' ' -f 1)
 TREE_RECEIPT_HELPER_SHA256=$(sha256sum \
   "$RUN_DIRECTORY/metadata/tree-receipt.R" | cut -d ' ' -f 1)
+RESOURCE_JOBS_HELPER_SHA256=$(sha256sum \
+  "$RUN_DIRECTORY/metadata/resource-jobs" | cut -d ' ' -f 1)
 (
   cd "$RUN_DIRECTORY/metadata"
-  sha256sum native-check tree-receipt.R
+  sha256sum native-check tree-receipt.R resource-jobs
 ) > "$RUN_DIRECTORY/metadata/harness.sha256"
+printf 'scope\tmode\tprofile\tjobs\treport_sha256\treport\n' \
+  > "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
 COMMAND_LOG="$RUN_DIRECTORY/commands.sh"
 : > "$COMMAND_LOG"
 chmod 600 "$COMMAND_LOG"
@@ -493,6 +561,184 @@ run_in_directory_logged() {
   reject_warnings "$output_log"
 }
 
+resource_report_value() {
+  awk -F '\t' -v target="$2" '
+    $1 == target {
+      if (NF != 2 || ++count != 1) exit 2
+      value = $2
+    }
+    END {
+      if (count != 1) exit 3
+      print value
+    }
+  ' "$1"
+}
+
+validate_resource_report() {
+  validated_report=$1
+  validated_profile=$2
+  validated_jobs=$3
+  validated_force_one=$4
+  awk -F '\t' -v expected_profile="$validated_profile" \
+      -v expected_jobs="$validated_jobs" \
+      -v force_one="$validated_force_one" '
+    function positive(value) {
+      return value ~ /^[1-9][0-9]*$/
+    }
+    function nonnegative(value) {
+      return value ~ /^(0|[1-9][0-9]*)$/
+    }
+    function minimum(left, right) {
+      return left < right ? left : right
+    }
+    BEGIN {
+      count = split("field schema profile platform online_cpus affinity_cpus cgroup_cpu_limit cpu_limit cpu_reserve cpu_per_job cpu_jobs memory_source memory_available_mib cgroup_memory_available_mib memory_reserve_mib memory_mib_per_job memory_jobs profile_max_jobs operator_max_jobs jobs", keys, " ")
+    }
+    {
+      if (NF != 2 || NR > count || $1 != keys[NR]) bad = 1
+      values[$1] = $2
+    }
+    END {
+      if (bad || NR != count || values["field"] != "value" ||
+          values["schema"] != "1" ||
+          values["profile"] != expected_profile ||
+          values["platform"] == "" || values["memory_source"] == "") exit 1
+
+      if (expected_profile == "compile") {
+        expected_cpu_per_job = 1
+        expected_memory_per_job = 1024
+        expected_profile_max = 16
+      } else if (expected_profile == "light-test") {
+        expected_cpu_per_job = 1
+        expected_memory_per_job = 2048
+        expected_profile_max = 16
+      } else {
+        exit 1
+      }
+
+      if (!positive(values["online_cpus"]) ||
+          !positive(values["affinity_cpus"]) ||
+          !positive(values["cpu_limit"]) ||
+          !nonnegative(values["cpu_reserve"]) ||
+          !positive(values["cpu_per_job"]) ||
+          !positive(values["cpu_jobs"]) ||
+          !positive(values["memory_available_mib"]) ||
+          !positive(values["memory_reserve_mib"]) ||
+          !positive(values["memory_mib_per_job"]) ||
+          !positive(values["memory_jobs"]) ||
+          !positive(values["profile_max_jobs"]) ||
+          !positive(values["jobs"]) ||
+          !positive(expected_jobs)) exit 1
+      if (values["cgroup_cpu_limit"] != "unlimited" &&
+          !positive(values["cgroup_cpu_limit"])) exit 1
+      if (values["cgroup_memory_available_mib"] != "unlimited" &&
+          !positive(values["cgroup_memory_available_mib"])) exit 1
+      if (values["cgroup_memory_available_mib"] != "unlimited" &&
+          (values["memory_available_mib"] + 0) > (values["cgroup_memory_available_mib"] + 0)) exit 1
+      if (values["operator_max_jobs"] != "none" &&
+          !positive(values["operator_max_jobs"])) exit 1
+
+      cpu_limit = minimum(values["online_cpus"] + 0,
+        values["affinity_cpus"] + 0)
+      if (values["cgroup_cpu_limit"] != "unlimited")
+        cpu_limit = minimum(cpu_limit, values["cgroup_cpu_limit"] + 0)
+      if (values["cpu_limit"] + 0 != cpu_limit) exit 1
+      cpu_reserve = cpu_limit >= 16 ? 2 : (cpu_limit >= 4 ? 1 : 0)
+      cpu_budget = cpu_limit - cpu_reserve
+      if (cpu_budget < 1) cpu_budget = 1
+      cpu_jobs = int(cpu_budget / expected_cpu_per_job)
+      if (cpu_jobs < 1) cpu_jobs = 1
+      if (values["cpu_reserve"] + 0 != cpu_reserve ||
+          values["cpu_per_job"] + 0 != expected_cpu_per_job ||
+          values["cpu_jobs"] + 0 != cpu_jobs) exit 1
+
+      memory_available = values["memory_available_mib"] + 0
+      memory_reserve = int(memory_available / 4)
+      if (memory_reserve < 12288) memory_reserve = 12288
+      memory_budget = memory_available > memory_reserve ?
+        memory_available - memory_reserve : 0
+      memory_jobs = int(memory_budget / expected_memory_per_job)
+      if (values["memory_reserve_mib"] + 0 != memory_reserve ||
+          values["memory_mib_per_job"] + 0 != expected_memory_per_job ||
+          memory_jobs < 1 || values["memory_jobs"] + 0 != memory_jobs ||
+          values["profile_max_jobs"] + 0 != expected_profile_max) exit 1
+
+      jobs = minimum(cpu_jobs, memory_jobs)
+      jobs = minimum(jobs, expected_profile_max)
+      if (values["operator_max_jobs"] != "none") {
+        operator_max = values["operator_max_jobs"] + 0
+        if (operator_max > jobs) exit 1
+        jobs = minimum(jobs, operator_max)
+      }
+      if (values["jobs"] + 0 != jobs || expected_jobs + 0 != jobs) exit 1
+      if (force_one == "true" &&
+          (values["operator_max_jobs"] != "1" || jobs != 1)) exit 1
+    }
+  ' "$validated_report" ||
+    fail "native resource report is malformed or semantically inconsistent: $validated_report"
+}
+
+resource_jobs_decision() {
+  resource_report=$1
+  resource_scope=$2
+  resource_mode=$3
+  resource_profile=$4
+  resource_override=$5
+  set -- env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "PATH=$LOCAL_PATH" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RUN_DIRECTORY/metadata/resource-jobs" "$resource_profile"
+  if [ -n "$resource_override" ]; then
+    set -- "$@" --max-jobs "$resource_override"
+  fi
+  set -- "$@" --report
+  run_logged "$resource_report" "$@"
+
+  resource_cpu_jobs=$(resource_report_value "$resource_report" cpu_jobs) ||
+    fail "resource report has no unique cpu_jobs field: $resource_report"
+  resource_memory_jobs=$(resource_report_value "$resource_report" memory_jobs) ||
+    fail "resource report has no unique memory_jobs field: $resource_report"
+  resource_profile_max=$(resource_report_value \
+    "$resource_report" profile_max_jobs) ||
+    fail "resource report has no unique profile_max_jobs field: $resource_report"
+  RESOURCE_JOBS=$(resource_report_value "$resource_report" jobs) ||
+    fail "resource report has no unique jobs field: $resource_report"
+  case "$resource_cpu_jobs:$resource_memory_jobs:$RESOURCE_JOBS" in
+    *[!0-9:]*|0:*|*:0:*|*:0) fail "resource report contains a malformed job count" ;;
+  esac
+  resource_safe_ceiling=$resource_cpu_jobs
+  if [ "$resource_memory_jobs" -lt "$resource_safe_ceiling" ]; then
+    resource_safe_ceiling=$resource_memory_jobs
+  fi
+  case "$resource_profile_max" in
+    unlimited) ;;
+    *[!0-9]*|0) fail "resource report contains a malformed profile ceiling" ;;
+    *)
+      if [ "$resource_profile_max" -lt "$resource_safe_ceiling" ]; then
+        resource_safe_ceiling=$resource_profile_max
+      fi
+      ;;
+  esac
+  if [ -n "$resource_override" ] &&
+      [ "$resource_override" -gt "$resource_safe_ceiling" ]; then
+    fail "native job override may lower but not exceed safe ceiling $resource_safe_ceiling"
+  fi
+  resource_expected_jobs=$resource_safe_ceiling
+  if [ -n "$resource_override" ] &&
+      [ "$resource_override" -lt "$resource_expected_jobs" ]; then
+    resource_expected_jobs=$resource_override
+  fi
+  [ "$RESOURCE_JOBS" -eq "$resource_expected_jobs" ] ||
+    fail "resource report selected an unexpected job count"
+  resource_relative=${resource_report#"$RUN_DIRECTORY/"}
+  [ "$resource_relative" != "$resource_report" ] ||
+    fail "resource report escaped the retained native run"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$resource_scope" "$resource_mode" "$resource_profile" \
+    "$RESOURCE_JOBS" \
+    "$(sha256sum "$resource_report" | cut -d ' ' -f 1)" \
+    "$resource_relative" >> "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+}
+
 run_logged "$RUN_DIRECTORY/metadata/micromamba-list.log" \
   env -i "HOME=$RUN_DIRECTORY/metadata/home" \
   "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
@@ -508,19 +754,26 @@ cmp -s "$TOOLCHAIN_LOCK" "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" ||
 TOOLCHAIN_EXPLICIT_SHA256=$(sha256sum \
   "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" | cut -d ' ' -f 1)
 
-run_logged "$RUN_DIRECTORY/metadata/tinytex-tree.log" \
-  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
-  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
-  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
-  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
-  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
-  "LC_ALL=C.UTF-8" "TZ=UTC" \
-  "$TOOLCHAIN/bin/Rscript" --vanilla \
-  "$RUN_DIRECTORY/metadata/tree-receipt.R" create "$TINY_TEX_ROOT" \
-  "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
-[ "$(sha256sum "$RUN_DIRECTORY/metadata/tinytex-tree.tsv" | cut -d ' ' -f 1)" = \
-  "$TINY_TEX_TREE_SHA256" ] ||
-  fail "installed TinyTeX tree differs from the pinned archive manifest"
+if [ "$NEED_TINY_TEX" = true ]; then
+  run_logged "$RUN_DIRECTORY/metadata/tinytex-tree.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$TOOLCHAIN/bin/Rscript" --vanilla \
+    "$RUN_DIRECTORY/metadata/tree-receipt.R" create "$TINY_TEX_ROOT" \
+    "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  [ "$(sha256sum "$RUN_DIRECTORY/metadata/tinytex-tree.tsv" | \
+    cut -d ' ' -f 1)" = "$TINY_TEX_TREE_SHA256" ] ||
+    fail "installed TinyTeX tree differs from the pinned archive manifest"
+else
+  printf '%s\n' 'scope=not-used' \
+    > "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  printf '%s\n' 'TinyTeX authentication skipped: no documentation gate selected' \
+    > "$RUN_DIRECTORY/metadata/tinytex-tree.log"
+fi
 
 {
   printf 'harness=native-check\n'
@@ -529,6 +782,8 @@ run_logged "$RUN_DIRECTORY/metadata/tinytex-tree.log" \
   printf 'native_check_sha256=%s\n' "$NATIVE_CHECK_SHA256"
   printf 'tree_receipt_helper_sha256=%s\n' \
     "$TREE_RECEIPT_HELPER_SHA256"
+  printf 'resource_jobs_helper_sha256=%s\n' \
+    "$RESOURCE_JOBS_HELPER_SHA256"
   printf 'toolchain_lock_sha256=%s\n' \
     "$(sha256sum "$TOOLCHAIN_LOCK" | cut -d ' ' -f 1)"
   printf 'toolchain_explicit_sha256=%s\n' "$TOOLCHAIN_EXPLICIT_SHA256"
@@ -555,20 +810,29 @@ run_logged "$RUN_DIRECTORY/metadata/tinytex-tree.log" \
   "$CPPCHECK" --version
   "$NM" --version
   "$READELF" --version
-  "$TINY_TEX_BIN/pdflatex" --version
-  "$TINY_TEX_BIN/kpsewhich" --version
+  if [ "$NEED_TINY_TEX" = true ]; then
+    "$TINY_TEX_BIN/pdflatex" --version
+    "$TINY_TEX_BIN/kpsewhich" --version
+  else
+    printf 'tinytex_scope=not-used\n'
+  fi
   printf 'micromamba_version=%s\n' "$("$MICROMAMBA" --version)"
   printf 'micromamba_sha256=%s\n' \
     "$(sha256sum "$MICROMAMBA" | cut -d ' ' -f 1)"
   printf 'micromamba_archive_sha256=%s\n' \
     "$(sha256sum "$MICROMAMBA_ARCHIVE" | cut -d ' ' -f 1)"
   printf 'toolchain_explicit_sha256=%s\n' "$TOOLCHAIN_EXPLICIT_SHA256"
-  printf 'makeindex_sha256=%s\n' \
-    "$(sha256sum "$TINY_TEX_BIN/makeindex" | cut -d ' ' -f 1)"
   printf 'tinytex_manifest_sha256=%s\n' \
     "$(sha256sum "$TINY_TEX_MANIFEST" | cut -d ' ' -f 1)"
-  printf 'tinytex_tree_receipt_sha256=%s\n' \
-    "$(sha256sum "$RUN_DIRECTORY/metadata/tinytex-tree.tsv" | cut -d ' ' -f 1)"
+  if [ "$NEED_TINY_TEX" = true ]; then
+    printf 'makeindex_sha256=%s\n' \
+      "$(sha256sum "$TINY_TEX_BIN/makeindex" | cut -d ' ' -f 1)"
+    printf 'tinytex_tree_receipt_sha256=%s\n' \
+      "$(sha256sum "$RUN_DIRECTORY/metadata/tinytex-tree.tsv" | cut -d ' ' -f 1)"
+  else
+    printf 'makeindex_sha256=not-used\n'
+    printf 'tinytex_tree_receipt_sha256=not-used\n'
+  fi
   printf 'R_HOME=%s\n' "$(R RHOME)"
   for configuration in CC CC17 C17FLAGS CPPFLAGS LDFLAGS SHLIB_LD; do
     printf 'R_CMD_config_%s=' "$configuration"
@@ -617,6 +881,12 @@ if [ ! -f "$SOURCE_DIRECTORY/environment/tinytex-linux-x86_64.tsv" ] ||
       "$SOURCE_DIRECTORY/environment/tinytex-linux-x86_64.tsv"; then
   fail "snapshot TinyTeX manifest differs from the validated tool manifest"
 fi
+if [ ! -f "$SOURCE_DIRECTORY/scripts/environment/resource-jobs" ] ||
+    [ -L "$SOURCE_DIRECTORY/scripts/environment/resource-jobs" ] ||
+    ! cmp -s "$RUN_DIRECTORY/metadata/resource-jobs" \
+      "$SOURCE_DIRECTORY/scripts/environment/resource-jobs"; then
+  fail "snapshot resource scheduler differs from the retained trusted helper"
+fi
 
 GIT_HEAD=$(sed -n '1p' "$RUN_DIRECTORY/metadata/git-head.txt")
 SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GIT_HEAD")
@@ -661,6 +931,8 @@ source_build_environment() {
     "TMPDIR=$SOURCE_PACKAGE_DIRECTORY/tmp" \
     "XDG_CACHE_HOME=$SOURCE_PACKAGE_DIRECTORY/cache" \
     "R_USER_CACHE_DIR=$SOURCE_PACKAGE_DIRECTORY/cache/R" \
+    "PYTHONDONTWRITEBYTECODE=1" \
+    "PYTHONPYCACHEPREFIX=$SOURCE_PACKAGE_DIRECTORY/cache/python-bytecode" \
     "TEXMFVAR=$SOURCE_PACKAGE_DIRECTORY/texmf-var" \
     "TEXMFCONFIG=$SOURCE_PACKAGE_DIRECTORY/texmf-config" \
     "TEXMFHOME=$SOURCE_PACKAGE_DIRECTORY/texmf-home" \
@@ -780,6 +1052,8 @@ run_mode_r_logged() {
     "TMPDIR=$MODE_DIRECTORY/tmp" \
     "XDG_CACHE_HOME=$MODE_DIRECTORY/cache" \
     "R_USER_CACHE_DIR=$MODE_DIRECTORY/cache/R" \
+    "PYTHONDONTWRITEBYTECODE=1" \
+    "PYTHONPYCACHEPREFIX=$MODE_DIRECTORY/cache/python-bytecode" \
     "TEXMFVAR=$MODE_DIRECTORY/texmf-var" \
     "TEXMFCONFIG=$MODE_DIRECTORY/texmf-config" \
     "TEXMFHOME=$MODE_DIRECTORY/texmf-home" \
@@ -807,7 +1081,17 @@ install_mode() {
     return
   fi
   ensure_source_tarball
+  install_job_override=$NATIVE_COMPILE_JOB_OVERRIDE
+  # GCC -fanalyzer can consume substantially more memory per translation unit
+  # than an ordinary compile.  Until retained peak-RSS measurements justify a
+  # separate scheduler profile, keep this build serial instead of pretending
+  # the ordinary 1-GiB compile budget applies.
+  [ "$mode_name" != analyzer-gcc ] || install_job_override=1
+  resource_jobs_decision \
+    "$MODE_DIRECTORY/artifacts/install-resource-jobs.tsv" \
+    install "$mode_name" compile "$install_job_override"
   run_mode_r_logged "$MODE_DIRECTORY/logs/install.log" \
+    "MAKEFLAGS=-j$RESOURCE_JOBS" \
     "$TOOLCHAIN/bin/R" CMD INSTALL --preclean --clean --no-multiarch \
     --library="$MODE_LIBRARY" "$TARBALL"
   DLL_PATH="$MODE_LIBRARY/paradox/libs/paradox.so"
@@ -820,24 +1104,102 @@ test_mode() {
   mode_name=$1
   profile=$2
   sanitizer=$3
+  test_scope=$4
   prepare_mode "$mode_name" "$profile" "$sanitizer"
-  run_mode_r_logged "$MODE_DIRECTORY/logs/tests-$TEST_SELECTION.log" \
-    "$TOOLCHAIN/bin/Rscript" --vanilla \
-    "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" \
-    "$SOURCE_DIRECTORY" "$MODE_LIBRARY" "$TEST_SELECTION"
+  test_dso_sha256=$(sha256sum \
+    "$MODE_LIBRARY/paradox/libs/paradox.so" | cut -d ' ' -f 1)
+  if [ "$test_scope" = probes ]; then
+    probe_result="$MODE_DIRECTORY/artifacts/native-probes.tsv"
+    expected_dso_sha256=$(sha256sum \
+      "$MODE_LIBRARY/paradox/libs/paradox.so" | cut -d ' ' -f 1)
+    run_mode_r_logged "$MODE_DIRECTORY/logs/probes-run.log" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/run-native-probes.R" \
+      --mode=plain \
+      "--manifest=$SOURCE_DIRECTORY/environment/native-routine-coverage.tsv" \
+      "--candidate-library=$MODE_LIBRARY" \
+      "--dependency-library=$DEPENDENCY_LIBRARY" \
+      "--output=$probe_result" \
+      "--expected-dso-sha256=$expected_dso_sha256" \
+      --expected-version=2.0.0 --rounds=1
+    run_mode_r_logged "$MODE_DIRECTORY/logs/tests-probes.log" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/verify-native-probes.R" \
+      "--manifest=$SOURCE_DIRECTORY/environment/native-routine-coverage.tsv" \
+      "--result=$probe_result" --mode=plain \
+      "--expected-dso-sha256=$expected_dso_sha256"
+    analyzer_ledger="$MODE_DIRECTORY/artifacts/native-tests-analyzer.tsv"
+    run_mode_r_logged "$MODE_DIRECTORY/logs/tests-analyzer.log" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" \
+      "$SOURCE_DIRECTORY" "$MODE_LIBRARY" analyzer "$analyzer_ledger"
+    run_mode_r_logged "$MODE_DIRECTORY/logs/tests-analyzer-ledger.log" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
+      "--source=$SOURCE_DIRECTORY" "--ledger=$analyzer_ledger" \
+      --selection=analyzer \
+      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
+      "--expected-dso-sha256=$test_dso_sha256"
+    set -- \
+      "$MODE_DIRECTORY/logs/probes-run.log" \
+      "$MODE_DIRECTORY/logs/tests-probes.log" \
+      "$MODE_DIRECTORY/logs/tests-analyzer.log" \
+      "$MODE_DIRECTORY/logs/tests-analyzer-ledger.log"
+  else
+    functional_ledger="$MODE_DIRECTORY/artifacts/native-tests-$test_scope.tsv"
+    functional_jobs=
+    if [ "$test_scope" = focused ] || [ "$test_scope" = full ]; then
+      functional_job_override=$NATIVE_TEST_JOB_OVERRIDE
+      # Sanitizer DSOs intentionally remain single-process.  Retain the same
+      # light-test decision schema, but force its lowering-only ceiling to one.
+      [ "$sanitizer" = none ] || functional_job_override=1
+      resource_jobs_decision \
+        "$MODE_DIRECTORY/artifacts/native-tests-$test_scope-resource-jobs.tsv" \
+        functional-test "$mode_name" light-test "$functional_job_override"
+      functional_jobs=$RESOURCE_JOBS
+      run_mode_r_logged "$MODE_DIRECTORY/logs/tests-$test_scope.log" \
+        "PARADOX_NATIVE_TEST_JOBS=$functional_jobs" \
+        "$TOOLCHAIN/bin/Rscript" --vanilla \
+        "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" \
+        "$SOURCE_DIRECTORY" "$MODE_LIBRARY" "$test_scope" \
+        "$functional_ledger"
+    else
+      run_mode_r_logged "$MODE_DIRECTORY/logs/tests-$test_scope.log" \
+        "$TOOLCHAIN/bin/Rscript" --vanilla \
+        "$SOURCE_DIRECTORY/scripts/environment/run-native-tests.R" \
+        "$SOURCE_DIRECTORY" "$MODE_LIBRARY" "$test_scope" \
+        "$functional_ledger"
+    fi
+    if [ "$test_scope" = focused ] || [ "$test_scope" = full ]; then
+      run_mode_r_logged \
+        "$MODE_DIRECTORY/logs/tests-$test_scope-ledger.log" \
+        "$TOOLCHAIN/bin/Rscript" --vanilla \
+        "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
+        "--source=$SOURCE_DIRECTORY" "--ledger=$functional_ledger" \
+        "--selection=$test_scope" \
+        "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
+        "--expected-dso-sha256=$test_dso_sha256" \
+        "--expected-requested-jobs=$functional_jobs"
+    fi
+    set -- "$MODE_DIRECTORY/logs/tests-$test_scope.log"
+  fi
 
   case "$sanitizer" in
     asan)
-      if grep -E -n 'AddressSanitizer|ERROR: AddressSanitizer' \
-          "$MODE_DIRECTORY/logs/tests-$TEST_SELECTION.log"; then
-        fail "AddressSanitizer report found"
-      fi
+      for sanitizer_log do
+        if grep -E -n 'AddressSanitizer|ERROR: AddressSanitizer' \
+            "$sanitizer_log"; then
+          fail "AddressSanitizer report found"
+        fi
+      done
       ;;
     ubsan)
-      if grep -E -n 'UndefinedBehaviorSanitizer|runtime error:' \
-          "$MODE_DIRECTORY/logs/tests-$TEST_SELECTION.log"; then
-        fail "UndefinedBehaviorSanitizer report found"
-      fi
+      for sanitizer_log do
+        if grep -E -n 'UndefinedBehaviorSanitizer|runtime error:' \
+            "$sanitizer_log"; then
+          fail "UndefinedBehaviorSanitizer report found"
+        fi
+      done
       ;;
   esac
 }
@@ -862,9 +1224,8 @@ check_strict_gcc_full() {
   ensure_source_tarball
 
   cran_output="$MODE_DIRECTORY/check-as-cran"
-  all_tests_output="$MODE_DIRECTORY/check-all-tests"
   depends_only_output="$MODE_DIRECTORY/check-depends-only"
-  mkdir -p "$cran_output" "$all_tests_output" "$depends_only_output"
+  mkdir -p "$cran_output" "$depends_only_output"
 
   run_mode_r_logged "$MODE_DIRECTORY/logs/check-as-cran.log" \
     NOT_CRAN=false \
@@ -874,23 +1235,14 @@ check_strict_gcc_full() {
     "--output=$cran_output" "$TARBALL"
   require_clean_check_status check-as-cran "$cran_output"
 
-  run_mode_r_logged "$MODE_DIRECTORY/logs/check-all-tests.log" \
-    NOT_CRAN=true \
-    _R_CHECK_CRAN_INCOMING_REMOTE_=false \
-    "R_MAKEVARS_USER=$CRAN_PROFILE" \
-    "$TOOLCHAIN/bin/R" CMD check --timings --no-multiarch \
-    --no-manual --no-vignettes \
-    "--output=$all_tests_output" "$TARBALL"
-  require_clean_check_status check-all-tests "$all_tests_output"
-
   run_mode_r_logged "$MODE_DIRECTORY/logs/check-depends-only.log" \
-    NOT_CRAN=true \
+    NOT_CRAN=false \
     _R_CHECK_CRAN_INCOMING_REMOTE_=false \
     _R_CHECK_FORCE_SUGGESTS_=false \
     _R_CHECK_DEPENDS_ONLY_=true \
     "R_MAKEVARS_USER=$CRAN_PROFILE" \
     "$TOOLCHAIN/bin/R" CMD check --timings --no-multiarch \
-    --no-manual --no-vignettes \
+    --no-tests --no-examples --no-manual --no-vignettes \
     "--output=$depends_only_output" "$TARBALL"
   require_clean_check_status check-depends-only "$depends_only_output"
 }
@@ -904,15 +1256,15 @@ UBSAN_PROFILE="$SOURCE_DIRECTORY/environment/Makevars-check-ubsan-clang"
 
 if [ "$MODE_STRICT_GCC" = true ]; then
   install_mode strict-gcc "$STRICT_GCC_PROFILE" none
-  test_mode strict-gcc "$STRICT_GCC_PROFILE" none
-  if [ "$TEST_SELECTION" = full ]; then
+  test_mode strict-gcc "$STRICT_GCC_PROFILE" none "$STRICT_GCC_TEST_SCOPE"
+  if [ "$STRICT_GCC_TEST_SCOPE" = full ]; then
     check_strict_gcc_full
   fi
 fi
 
 if [ "$MODE_STRICT_CLANG" = true ]; then
   install_mode strict-clang "$STRICT_CLANG_PROFILE" none
-  test_mode strict-clang "$STRICT_CLANG_PROFILE" none
+  test_mode strict-clang "$STRICT_CLANG_PROFILE" none "$STRICT_CLANG_TEST_SCOPE"
 fi
 
 if [ "$MODE_ANALYZER" = true ]; then
@@ -924,6 +1276,9 @@ if [ "$MODE_ANALYZER_CLANG" = true ]; then
   analyzer_reports="$MODE_DIRECTORY/artifacts/reports"
   mkdir -p "$analyzer_reports"
   analyzer_source_found=false
+  analyzer_diagnostics_found=false
+  analyzer_diagnostic_sources="$MODE_DIRECTORY/artifacts/diagnostic-sources.txt"
+  : > "$analyzer_diagnostic_sources"
   : > "$MODE_DIRECTORY/artifacts/reports.sha256"
   for c_source in "$SOURCE_DIRECTORY"/src/*.c; do
     if [ -f "$c_source" ]; then
@@ -959,7 +1314,8 @@ if [ "$MODE_ANALYZER_CLANG" = true ]; then
       if sed -n \
           '\|<key>diagnostics</key>|,\|</array>|p' "$analyzer_report" |
           grep -q '<dict>'; then
-        fail "Clang analyzer report contains diagnostics: $analyzer_report"
+        printf '%s\n' "$source_name" >> "$analyzer_diagnostic_sources"
+        analyzer_diagnostics_found=true
       fi
       sha256sum "$analyzer_report" >> \
         "$MODE_DIRECTORY/artifacts/reports.sha256"
@@ -967,6 +1323,10 @@ if [ "$MODE_ANALYZER_CLANG" = true ]; then
   done
   [ "$analyzer_source_found" = true ] ||
     fail "snapshot contains no C sources for Clang analysis"
+  if [ "$analyzer_diagnostics_found" = true ]; then
+    cat "$analyzer_diagnostic_sources" >&2
+    fail "Clang analyzer reports contain diagnostics"
+  fi
 fi
 
 if [ "$MODE_CPPCHECK" = true ]; then
@@ -1011,9 +1371,11 @@ if [ "$MODE_SYMBOLS" = true ]; then
   windows_exported_symbols=$(awk '
     NF && $1 != "EXPORTS" && substr($1, 1, 1) != ";" { print $1 }
   ' "$WINDOWS_EXPORTS")
-  [ "$windows_exported_symbols" = "R_init_paradox" ] || {
+  expected_exported_symbols='R_init_paradox
+R_unload_paradox'
+  [ "$windows_exported_symbols" = "$expected_exported_symbols" ] || {
     printf '%s\n' "$windows_exported_symbols" >&2
-    fail "the Windows DLL allow-list exports symbols other than R_init_paradox"
+    fail "the Windows DLL allow-list differs from the init/unload lifecycle ABI"
   }
   install_mode strict-gcc "$STRICT_GCC_PROFILE" none
   STRICT_GCC_LIBRARY=$MODE_LIBRARY
@@ -1029,9 +1391,9 @@ if [ "$MODE_SYMBOLS" = true ]; then
     "$NM" -D --defined-only "$STRICT_GCC_DLL"
   exported_symbols=$(awk 'NF >= 3 { print $NF }' \
     "$MODE_DIRECTORY/logs/dynamic-symbols.log")
-  [ "$exported_symbols" = "R_init_paradox" ] || {
+  [ "$exported_symbols" = "$expected_exported_symbols" ] || {
     printf '%s\n' "$exported_symbols" >&2
-    fail "the DLL exports symbols other than R_init_paradox"
+    fail "the DLL exports symbols outside the init/unload lifecycle ABI"
   }
   run_logged "$MODE_DIRECTORY/logs/program-headers.log" \
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
@@ -1078,7 +1440,7 @@ if [ "$MODE_ASAN" = true ]; then
   if grep -q '__ubsan_' "$MODE_DIRECTORY/logs/sanitizer-symbols.log"; then
     fail "ASan package was accidentally combined with UBSan"
   fi
-  test_mode asan-clang "$ASAN_PROFILE" asan
+  test_mode asan-clang "$ASAN_PROFILE" asan "$ASAN_TEST_SCOPE"
 fi
 
 if [ "$MODE_UBSAN" = true ]; then
@@ -1112,7 +1474,7 @@ if [ "$MODE_UBSAN" = true ]; then
     fail "UBSan standalone runtime is not a DLL dependency"
   grep -F -q "$TOOLCHAIN/lib" "$MODE_DIRECTORY/logs/runtime-linkage.log" ||
     fail "UBSan DLL does not retain the project-local runtime rpath"
-  test_mode ubsan-clang "$UBSAN_PROFILE" ubsan
+  test_mode ubsan-clang "$UBSAN_PROFILE" ubsan "$UBSAN_TEST_SCOPE"
 fi
 
 require_retained_file() {
@@ -1124,6 +1486,90 @@ require_retained_file() {
 require_nonempty_retained_file() {
   require_retained_file "$1"
   [ -s "$1" ] || fail "required native mode evidence is empty: $1"
+}
+
+verify_retained_dso() {
+  evidence_mode=$1
+  dso="$RUN_DIRECTORY/modes/$evidence_mode/library/paradox/libs/paradox.so"
+  receipt="$RUN_DIRECTORY/modes/$evidence_mode/artifacts/paradox.so.sha256"
+  require_nonempty_retained_file "$dso"
+  require_nonempty_retained_file "$receipt"
+  expected_line="$(sha256sum "$dso")"
+  [ "$(wc -l < "$receipt")" -eq 1 ] &&
+    [ "$(cat "$receipt")" = "$expected_line" ] ||
+    fail "retained DSO receipt differs from $evidence_mode native library"
+}
+
+require_test_scope_evidence() {
+  evidence_mode=$1
+  evidence_scope=$2
+  evidence_root="$RUN_DIRECTORY/modes/$evidence_mode"
+  require_nonempty_retained_file \
+    "$evidence_root/logs/tests-$evidence_scope.log"
+  if [ "$evidence_scope" = probes ]; then
+    require_retained_file "$evidence_root/logs/probes-run.log"
+    require_nonempty_retained_file \
+      "$evidence_root/artifacts/native-probes.tsv"
+    analyzer_ledger="$evidence_root/artifacts/native-tests-analyzer.tsv"
+    require_nonempty_retained_file "$evidence_root/logs/tests-analyzer.log"
+    require_nonempty_retained_file \
+      "$evidence_root/logs/tests-analyzer-ledger.log"
+    require_nonempty_retained_file "$analyzer_ledger"
+    retained_dso_sha256=$(sha256sum \
+      "$evidence_root/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)
+    run_logged "$evidence_root/logs/probes-final-verify.log" \
+      env -i "HOME=$evidence_root/home" \
+      "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+      "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+      "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+      "R_HISTFILE=/dev/null" "TMPDIR=$evidence_root/tmp" \
+      "LC_ALL=C.UTF-8" "TZ=UTC" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/verify-native-probes.R" \
+      "--manifest=$SOURCE_DIRECTORY/environment/native-routine-coverage.tsv" \
+      "--result=$evidence_root/artifacts/native-probes.tsv" --mode=plain \
+      "--expected-dso-sha256=$retained_dso_sha256"
+    run_logged "$evidence_root/logs/tests-analyzer-final-ledger.log" \
+      env -i "HOME=$evidence_root/home" \
+      "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+      "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+      "R_LIBS_USER=$DEPENDENCY_LIBRARY" "R_LIBS=$DEPENDENCY_LIBRARY" \
+      "R_LIBS_SITE=" "R_ENVIRON_USER=/dev/null" \
+      "R_PROFILE_USER=/dev/null" "R_HISTFILE=/dev/null" \
+      "TMPDIR=$evidence_root/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
+      "--source=$SOURCE_DIRECTORY" "--ledger=$analyzer_ledger" \
+      --selection=analyzer \
+      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
+      "--expected-dso-sha256=$retained_dso_sha256"
+  elif [ "$evidence_scope" = focused ] || [ "$evidence_scope" = full ]; then
+    functional_ledger="$evidence_root/artifacts/native-tests-$evidence_scope.tsv"
+    functional_resource_report="$evidence_root/artifacts/native-tests-$evidence_scope-resource-jobs.tsv"
+    require_nonempty_retained_file "$functional_ledger"
+    require_nonempty_retained_file "$functional_resource_report"
+    require_nonempty_retained_file \
+      "$evidence_root/logs/tests-$evidence_scope-ledger.log"
+    retained_functional_jobs=$(resource_report_value \
+      "$functional_resource_report" jobs) ||
+      fail "functional resource report has no unique jobs field"
+    run_logged "$evidence_root/logs/tests-$evidence_scope-final-ledger.log" \
+      env -i "HOME=$evidence_root/home" \
+      "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+      "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+      "R_LIBS_USER=$DEPENDENCY_LIBRARY" "R_LIBS=$DEPENDENCY_LIBRARY" \
+      "R_LIBS_SITE=" "R_ENVIRON_USER=/dev/null" \
+      "R_PROFILE_USER=/dev/null" "R_HISTFILE=/dev/null" \
+      "TMPDIR=$evidence_root/tmp" "LC_ALL=C.UTF-8" "TZ=UTC" \
+      "$TOOLCHAIN/bin/Rscript" --vanilla \
+      "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
+      "--source=$SOURCE_DIRECTORY" "--ledger=$functional_ledger" \
+      "--selection=$evidence_scope" \
+      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
+      "--expected-dso-sha256=$(sha256sum \
+        "$evidence_root/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" \
+      "--expected-requested-jobs=$retained_functional_jobs"
+  fi
 }
 
 validate_completed_mode_evidence() {
@@ -1150,14 +1596,13 @@ validate_completed_mode_evidence() {
 
   if [ "$MODE_STRICT_GCC" = true ] || [ "$MODE_SYMBOLS" = true ]; then
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-gcc/logs/install.log"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-gcc/artifacts/paradox.so.sha256"
     require_retained_file "$RUN_DIRECTORY/modes/strict-gcc/installed.ok"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-gcc/library/paradox/libs/paradox.so"
+    verify_retained_dso strict-gcc
   fi
   if [ "$MODE_STRICT_GCC" = true ]; then
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-gcc/logs/tests-$TEST_SELECTION.log"
-    if [ "$TEST_SELECTION" = full ]; then
-      for checked_profile in check-as-cran check-all-tests check-depends-only; do
+    require_test_scope_evidence strict-gcc "$STRICT_GCC_TEST_SCOPE"
+    if [ "$STRICT_GCC_TEST_SCOPE" = full ]; then
+      for checked_profile in check-as-cran check-depends-only; do
         require_nonempty_retained_file \
           "$RUN_DIRECTORY/modes/strict-gcc/logs/$checked_profile.log"
         require_nonempty_retained_file \
@@ -1174,15 +1619,14 @@ validate_completed_mode_evidence() {
   fi
   if [ "$MODE_STRICT_CLANG" = true ]; then
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-clang/logs/install.log"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-clang/logs/tests-$TEST_SELECTION.log"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-clang/artifacts/paradox.so.sha256"
+    require_test_scope_evidence strict-clang "$STRICT_CLANG_TEST_SCOPE"
     require_retained_file "$RUN_DIRECTORY/modes/strict-clang/installed.ok"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/strict-clang/library/paradox/libs/paradox.so"
+    verify_retained_dso strict-clang
   fi
   if [ "$MODE_ANALYZER" = true ]; then
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/analyzer-gcc/logs/install.log"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts/paradox.so.sha256"
     require_retained_file "$RUN_DIRECTORY/modes/analyzer-gcc/installed.ok"
+    verify_retained_dso analyzer-gcc
   fi
   if [ "$MODE_ANALYZER_CLANG" = true ]; then
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports.sha256"
@@ -1199,29 +1643,36 @@ validate_completed_mode_evidence() {
     done
   fi
   if [ "$MODE_ASAN" = true ]; then
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/asan-clang/logs/tests-$TEST_SELECTION.log"
+    require_test_scope_evidence asan-clang "$ASAN_TEST_SCOPE"
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/asan-clang/artifacts/scope.txt"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/asan-clang/artifacts/paradox.so.sha256"
+    verify_retained_dso asan-clang
   fi
   if [ "$MODE_UBSAN" = true ]; then
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/ubsan-clang/logs/tests-$TEST_SELECTION.log"
+    require_test_scope_evidence ubsan-clang "$UBSAN_TEST_SCOPE"
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/ubsan-clang/artifacts/scope.txt"
-    require_nonempty_retained_file "$RUN_DIRECTORY/modes/ubsan-clang/artifacts/paradox.so.sha256"
+    verify_retained_dso ubsan-clang
   fi
 }
 
 validate_completed_mode_evidence
 
-run_logged "$RUN_DIRECTORY/metadata/tinytex-verify-after.log" \
-  env -i "HOME=$RUN_DIRECTORY/metadata/home" \
-  "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
-  "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
-  "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
-  "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
-  "LC_ALL=C.UTF-8" "TZ=UTC" \
-  "$TOOLCHAIN/bin/Rscript" --vanilla \
-  "$RUN_DIRECTORY/metadata/tree-receipt.R" verify "$TINY_TEX_ROOT" \
-  "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+if [ "$NEED_TINY_TEX" = true ]; then
+  run_logged "$RUN_DIRECTORY/metadata/tinytex-verify-after.log" \
+    env -i "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "R_ENVIRON_USER=/dev/null" "R_PROFILE_USER=/dev/null" \
+    "R_HISTFILE=/dev/null" "TMPDIR=$ROOT/.local/tmp" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$TOOLCHAIN/bin/Rscript" --vanilla \
+    "$RUN_DIRECTORY/metadata/tree-receipt.R" verify "$TINY_TEX_ROOT" \
+    "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+else
+  [ "$(cat "$RUN_DIRECTORY/metadata/tinytex-tree.tsv")" = \
+    'scope=not-used' ] || fail "unused TinyTeX marker changed during native run"
+  printf '%s\n' 'TinyTeX not used; marker unchanged' \
+    > "$RUN_DIRECTORY/metadata/tinytex-verify-after.log"
+fi
 
 # Full tests may ask reticulate/uv to provision an isolated Python. Its cache
 # contains absolute convenience symlinks and architecture-specific build
@@ -1248,6 +1699,127 @@ for completed_mode_directory in "$RUN_DIRECTORY"/modes/*; do
     "$completed_mode_directory/vartexfonts"
 done
 
+resource_decision_header=$(sed -n '1p' \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv")
+expected_resource_header=$(printf \
+  'scope\tmode\tprofile\tjobs\treport_sha256\treport')
+[ "$resource_decision_header" = "$expected_resource_header" ] ||
+  fail "native resource-decision ledger has an unexpected header"
+
+expected_resource_descriptors="$RUN_DIRECTORY/metadata/resource-jobs.expected"
+actual_resource_descriptors="$RUN_DIRECTORY/metadata/resource-jobs.actual"
+: > "$expected_resource_descriptors"
+append_expected_resource() {
+  expected_scope=$1
+  expected_mode=$2
+  expected_profile=$3
+  expected_report=$4
+  printf '%s\t%s\t%s\t%s\n' "$expected_scope" "$expected_mode" \
+    "$expected_profile" "$expected_report" >> "$expected_resource_descriptors"
+}
+if [ "$MODE_STRICT_GCC" = true ]; then
+  append_expected_resource install strict-gcc compile \
+    modes/strict-gcc/artifacts/install-resource-jobs.tsv
+  case "$STRICT_GCC_TEST_SCOPE" in
+    focused|full)
+      append_expected_resource functional-test strict-gcc light-test \
+        "modes/strict-gcc/artifacts/native-tests-$STRICT_GCC_TEST_SCOPE-resource-jobs.tsv"
+      ;;
+  esac
+fi
+if [ "$MODE_STRICT_CLANG" = true ]; then
+  append_expected_resource install strict-clang compile \
+    modes/strict-clang/artifacts/install-resource-jobs.tsv
+  case "$STRICT_CLANG_TEST_SCOPE" in
+    focused|full)
+      append_expected_resource functional-test strict-clang light-test \
+        "modes/strict-clang/artifacts/native-tests-$STRICT_CLANG_TEST_SCOPE-resource-jobs.tsv"
+      ;;
+  esac
+fi
+if [ "$MODE_ANALYZER" = true ]; then
+  append_expected_resource install analyzer-gcc compile \
+    modes/analyzer-gcc/artifacts/install-resource-jobs.tsv
+fi
+if [ "$MODE_SYMBOLS" = true ] && [ "$MODE_STRICT_GCC" = false ]; then
+  append_expected_resource install strict-gcc compile \
+    modes/strict-gcc/artifacts/install-resource-jobs.tsv
+fi
+if [ "$MODE_ASAN" = true ]; then
+  append_expected_resource install asan-clang compile \
+    modes/asan-clang/artifacts/install-resource-jobs.tsv
+  case "$ASAN_TEST_SCOPE" in
+    focused|full)
+      append_expected_resource functional-test asan-clang light-test \
+        "modes/asan-clang/artifacts/native-tests-$ASAN_TEST_SCOPE-resource-jobs.tsv"
+      ;;
+  esac
+fi
+if [ "$MODE_UBSAN" = true ]; then
+  append_expected_resource install ubsan-clang compile \
+    modes/ubsan-clang/artifacts/install-resource-jobs.tsv
+  case "$UBSAN_TEST_SCOPE" in
+    focused|full)
+      append_expected_resource functional-test ubsan-clang light-test \
+        "modes/ubsan-clang/artifacts/native-tests-$UBSAN_TEST_SCOPE-resource-jobs.tsv"
+      ;;
+  esac
+fi
+if ! awk -F '\t' 'NR > 1 {
+    if (NF != 6) exit 1
+    print $1 "\t" $2 "\t" $3 "\t" $6
+  }' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" \
+    > "$actual_resource_descriptors"; then
+  fail "native resource-decision ledger contains a malformed row"
+fi
+cmp -s "$expected_resource_descriptors" "$actual_resource_descriptors" ||
+  fail "native resource-decision inventory is missing, duplicate, or out of order"
+rm -f "$expected_resource_descriptors" "$actual_resource_descriptors"
+
+resource_tab=$(printf '\t')
+sed -n '2,$p' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" |
+  while IFS="$resource_tab" read -r resource_scope resource_mode \
+      resource_profile resource_jobs resource_report_sha \
+      resource_report_relative resource_extra; do
+    [ -z "$resource_extra" ] && [ -n "$resource_scope" ] &&
+      [ -n "$resource_mode" ] && [ -n "$resource_profile" ] ||
+      fail "native resource-decision ledger contains a malformed row"
+    case "$resource_jobs" in
+      *[!0-9]*|0) fail "native resource decision has invalid jobs" ;;
+    esac
+    if [ "${#resource_report_sha}" -ne 64 ] ||
+        ! printf '%s\n' "$resource_report_sha" |
+          grep -Eq '^[0-9a-f]{64}$'; then
+      fail "native resource decision report hash is not SHA-256"
+    fi
+    case "$resource_report_relative" in
+      modes/*/artifacts/*-resource-jobs.tsv) ;;
+      *) fail "native resource report has an unsafe retained path" ;;
+    esac
+    resource_report_path="$RUN_DIRECTORY/$resource_report_relative"
+    [ -f "$resource_report_path" ] && [ ! -L "$resource_report_path" ] &&
+      [ "$(sha256sum "$resource_report_path" | cut -d ' ' -f 1)" = \
+        "$resource_report_sha" ] ||
+      fail "native resource report differs from its decision ledger"
+    [ "$(resource_report_value "$resource_report_path" profile)" = \
+        "$resource_profile" ] &&
+      [ "$(resource_report_value "$resource_report_path" jobs)" -eq \
+        "$resource_jobs" ] ||
+      fail "native resource report profile/jobs differ from the decision ledger"
+    resource_force_one=false
+    if [ "$resource_scope" = install ] &&
+        [ "$resource_mode" = analyzer-gcc ]; then
+      resource_force_one=true
+    fi
+    case "$resource_scope:$resource_mode" in
+      functional-test:asan-clang|functional-test:ubsan-clang)
+        resource_force_one=true
+        ;;
+    esac
+    validate_resource_report "$resource_report_path" "$resource_profile" \
+      "$resource_jobs" "$resource_force_one"
+  done
+
 MODE_STATUS_NEW="$RUN_DIRECTORY/modes/tool-status.tsv.new"
 printf 'mode\tstatus\tevidence\tsha256\n' > "$MODE_STATUS_NEW"
 append_mode_status() {
@@ -1258,12 +1830,13 @@ append_mode_status() {
     >> "$MODE_STATUS_NEW"
 }
 if [ "$MODE_STRICT_GCC" = true ]; then
-  append_mode_status strict-gcc "strict-gcc/logs/tests-$TEST_SELECTION.log"
+  append_mode_status strict-gcc \
+    "strict-gcc/logs/tests-$STRICT_GCC_TEST_SCOPE.log"
 elif [ "$MODE_SYMBOLS" = true ]; then
   append_mode_status strict-gcc "strict-gcc/logs/install.log"
 fi
 [ "$MODE_STRICT_CLANG" = false ] || append_mode_status strict-clang \
-  "strict-clang/logs/tests-$TEST_SELECTION.log"
+  "strict-clang/logs/tests-$STRICT_CLANG_TEST_SCOPE.log"
 [ "$MODE_ANALYZER" = false ] || append_mode_status analyzer-gcc \
   analyzer-gcc/logs/install.log
 [ "$MODE_ANALYZER_CLANG" = false ] || append_mode_status analyzer-clang \
@@ -1273,9 +1846,9 @@ fi
 [ "$MODE_SYMBOLS" = false ] || append_mode_status symbols \
   symbols/logs/registration.log
 [ "$MODE_ASAN" = false ] || append_mode_status asan-clang \
-  "asan-clang/logs/tests-$TEST_SELECTION.log"
+  "asan-clang/logs/tests-$ASAN_TEST_SCOPE.log"
 [ "$MODE_UBSAN" = false ] || append_mode_status ubsan-clang \
-  "ubsan-clang/logs/tests-$TEST_SELECTION.log"
+  "ubsan-clang/logs/tests-$UBSAN_TEST_SCOPE.log"
 mv "$MODE_STATUS_NEW" "$RUN_DIRECTORY/modes/tool-status.tsv"
 RETAINED_TREE_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/tree-receipt.R"
 run_logged "$RUN_DIRECTORY/metadata/source-tree-receipt.log" \
@@ -1303,6 +1876,8 @@ SOURCE_TREE_RECEIPT_SHA256=$(sha256sum \
   "$RUN_DIRECTORY/metadata/source-tree.tsv" | cut -d ' ' -f 1)
 MODES_TREE_RECEIPT_SHA256=$(sha256sum \
   "$RUN_DIRECTORY/metadata/modes-tree.tsv" | cut -d ' ' -f 1)
+RESOURCE_JOBS_DECISIONS_SHA256=$(sha256sum \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv" | cut -d ' ' -f 1)
 if [ -n "$TARBALL" ]; then
   [ -f "$TARBALL" ] && [ ! -L "$TARBALL" ] ||
     fail "native completion source archive is missing or symbolic"
@@ -1321,6 +1896,10 @@ COMPLETION_NEW="$RUN_DIRECTORY/metadata/completion.txt.new"
   printf 'source_archive_sha256=%s\n' "$SOURCE_ARCHIVE_SHA256"
   printf 'native_check_sha256=%s\n' "$NATIVE_CHECK_SHA256"
   printf 'tree_receipt_helper_sha256=%s\n' "$TREE_RECEIPT_HELPER_SHA256"
+  printf 'resource_jobs_helper_sha256=%s\n' \
+    "$RESOURCE_JOBS_HELPER_SHA256"
+  printf 'resource_jobs_decisions_sha256=%s\n' \
+    "$RESOURCE_JOBS_DECISIONS_SHA256"
   printf 'toolchain_lock_sha256=%s\n' \
     "$(sha256sum "$SOURCE_DIRECTORY/environment/toolchain-linux-64.lock" | cut -d ' ' -f 1)"
   printf 'toolchain_explicit_sha256=%s\n' "$TOOLCHAIN_EXPLICIT_SHA256"

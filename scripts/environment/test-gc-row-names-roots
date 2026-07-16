@@ -1,0 +1,628 @@
+#!/usr/bin/env Rscript
+
+# Build the deterministic compact-row-name GC oracle once per exact native
+# input set.  The instrumented package is a development artifact, not release
+# evidence: every reuse verifies its sealed input metadata and complete
+# installed-library tree, then reruns the inexpensive behavioral driver.
+
+usage <- function() {
+  cat(paste0(
+    "Usage: scripts/environment/test-gc-row-names-roots\n\n",
+    "Run from the repository root after `. scripts/activate`.  With no\n",
+    "arguments, this computes the exact instrumented-build key, verifies or\n",
+    "creates the repository-local cached installation, and always reruns the\n",
+    "focused behavioral driver.\n"
+  ))
+}
+
+arguments <- commandArgs(trailingOnly = TRUE)
+if (length(arguments) == 1L && arguments[[1L]] %in% c("-h", "--help")) {
+  usage()
+  quit(save = "no", status = 0L)
+}
+if (length(arguments)) {
+  stop("no arguments are supported; see --help", call. = FALSE)
+}
+
+sha256_file <- function(path) {
+  unname(tools::sha256sum(path))
+}
+
+sha256_bytes <- function(value) {
+  unname(tools::sha256sum(bytes = charToRaw(enc2utf8(value))))
+}
+
+read_raw_file <- function(path) {
+  size <- file.info(path)$size
+  if (is.na(size)) {
+    stop("could not stat command output: ", path, call. = FALSE)
+  }
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  readBin(connection, what = "raw", n = size)
+}
+
+run_capture_raw <- function(command, arguments, temporary_root,
+    environment = character()) {
+  output <- tempfile("command-output-", tmpdir = temporary_root)
+  error_output <- tempfile("command-error-", tmpdir = temporary_root)
+  on.exit(unlink(c(output, error_output)), add = TRUE)
+  status <- system2(
+    command,
+    arguments,
+    stdout = output,
+    stderr = error_output,
+    env = environment
+  )
+  if (!identical(status, 0L)) {
+    detail <- rawToChar(read_raw_file(error_output))
+    stop(
+      "command failed (", status, "): ", command,
+      if (nzchar(detail)) paste0("\n", detail) else "",
+      call. = FALSE
+    )
+  }
+  read_raw_file(output)
+}
+
+split_nul <- function(value) {
+  if (!length(value)) {
+    return(character())
+  }
+  boundaries <- which(value == as.raw(0L))
+  if (!length(boundaries) || tail(boundaries, 1L) != length(value)) {
+    stop("Git returned a non-NUL-terminated path inventory", call. = FALSE)
+  }
+  starts <- c(1L, head(boundaries, -1L) + 1L)
+  ends <- boundaries - 1L
+  nonempty <- ends >= starts
+  vapply(which(nonempty), function(index) {
+    rawToChar(value[starts[[index]]:ends[[index]]])
+  }, character(1L), USE.NAMES = FALSE)
+}
+
+escape_field <- function(value) {
+  value <- gsub("\\", "\\\\", value, fixed = TRUE)
+  value <- gsub("\t", "\\t", value, fixed = TRUE)
+  value <- gsub("\r", "\\r", value, fixed = TRUE)
+  gsub("\n", "\\n", value, fixed = TRUE)
+}
+
+format_mode <- function(path) {
+  mode <- file.info(path)$mode
+  if (is.na(mode)) {
+    stop("could not stat input: ", path, call. = FALSE)
+  }
+  sprintf("%04o", as.integer(mode))
+}
+
+tree_identity <- function(directory, label, temporary_root) {
+  if (!dir.exists(directory) || nzchar(Sys.readlink(directory))) {
+    stop(label, " must be a real directory: ", directory, call. = FALSE)
+  }
+  root <- normalizePath(directory, mustWork = TRUE)
+  paths <- list.files(
+    root,
+    all.files = TRUE,
+    full.names = FALSE,
+    recursive = TRUE,
+    include.dirs = TRUE,
+    no.. = TRUE
+  )
+  paths <- sort(paths, method = "radix")
+  if (any(grepl("[\t\r\n]", paths))) {
+    stop(label, " contains a path unsupported by the cache manifest", call. = FALSE)
+  }
+  full_paths <- file.path(root, paths)
+  targets <- Sys.readlink(full_paths)
+  information <- file.info(full_paths)
+  kinds <- ifelse(nzchar(targets), "link", ifelse(information$isdir, "directory", "file"))
+  files <- kinds == "file"
+  hashes <- rep("", length(paths))
+  if (any(files)) {
+    hashes[files] <- unname(tools::sha256sum(full_paths[files]))
+  }
+  rows <- character(length(paths))
+  for (index in seq_along(paths)) {
+    relative <- paths[[index]]
+    full_path <- full_paths[[index]]
+    if (identical(kinds[[index]], "link")) {
+      if (grepl("[\t\r\n]", targets[[index]])) {
+        stop(label, " contains an unsupported symbolic-link target", call. = FALSE)
+      }
+      rows[[index]] <- paste(
+        "link", relative, escape_field(targets[[index]]), sep = "\t"
+      )
+    } else if (identical(kinds[[index]], "directory")) {
+      rows[[index]] <- paste(
+        "directory", relative, format_mode(full_path), sep = "\t"
+      )
+    } else if (identical(kinds[[index]], "file") && file.exists(full_path)) {
+      rows[[index]] <- paste(
+        "file", relative, hashes[[index]],
+        format(information$size[[index]], scientific = FALSE, trim = TRUE),
+        format_mode(full_path), sep = "\t"
+      )
+    } else {
+      stop(label, " changed while it was being inventoried", call. = FALSE)
+    }
+  }
+  sha256_bytes(paste0(paste(rows, collapse = "\n"), "\n"))
+}
+
+require_real_directory <- function(path, label, create = FALSE) {
+  if (create && !dir.exists(path) && !dir.create(path, recursive = FALSE)) {
+    stop("could not create ", label, ": ", path, call. = FALSE)
+  }
+  if (!dir.exists(path) || nzchar(Sys.readlink(path))) {
+    stop(label, " must be a real, non-symbolic directory: ", path, call. = FALSE)
+  }
+  normalized <- normalizePath(path, mustWork = TRUE)
+  expected <- paste0(normalizePath(dirname(path), mustWork = TRUE), "/", basename(path))
+  if (!identical(normalized, expected)) {
+    stop(label, " resolves outside its expected path: ", path, call. = FALSE)
+  }
+  invisible(normalized)
+}
+
+require_regular_file <- function(path, label) {
+  if (!file.exists(path) || dir.exists(path) || nzchar(Sys.readlink(path))) {
+    stop(label, " must be a regular, non-symbolic file: ", path, call. = FALSE)
+  }
+  invisible(path)
+}
+
+main <- function() {
+  root_value <- Sys.getenv("PARADOX_ROOT", unset = "")
+  active_value <- Sys.getenv("PARADOX_ACTIVE_ROOT", unset = "")
+  if (!nzchar(root_value) || !nzchar(active_value)) {
+    stop("source scripts/activate before running this probe", call. = FALSE)
+  }
+  root <- normalizePath(root_value, mustWork = TRUE)
+  if (!identical(active_value, root) ||
+      !identical(normalizePath(getwd(), mustWork = TRUE), root)) {
+    stop("run from the exact activated repository root", call. = FALSE)
+  }
+  expected_r_home <- file.path(root, ".local", "toolchain", "lib", "R")
+  expected_rscript <- file.path(root, ".local", "toolchain", "bin", "Rscript")
+  expected_r <- file.path(root, ".local", "toolchain", "bin", "R")
+  if (!identical(R.home(), expected_r_home) ||
+      !identical(unname(Sys.which("Rscript")), expected_rscript) ||
+      !identical(unname(Sys.which("R")), expected_r)) {
+    stop("activation did not select the exact repository-local R", call. = FALSE)
+  }
+
+  local_root <- file.path(root, ".local")
+  temporary_root <- file.path(local_root, "tmp")
+  cache_parent <- file.path(local_root, "cache")
+  cache_root <- file.path(cache_parent, "gc-row-names-roots")
+  lock_root <- file.path(cache_root, ".locks")
+  require_real_directory(local_root, ".local")
+  require_real_directory(temporary_root, "local temporary root")
+  require_real_directory(cache_parent, "local cache root", create = TRUE)
+  require_real_directory(cache_root, "GC-row-name cache root", create = TRUE)
+  require_real_directory(lock_root, "GC-row-name cache lock root", create = TRUE)
+
+  driver <- file.path(root, "tests", "instrumented", "gc-row-names-roots.R")
+  wrapper <- file.path(root, "scripts", "environment", "test-gc-row-names-roots")
+  profile <- file.path(root, "environment", "Makevars-test-gc-row-names")
+  strict_profile <- file.path(root, "environment", "Makevars-check-strict-gcc")
+  receipt_helper <- file.path(root, "scripts", "environment", "tree-receipt.R")
+  required_inputs <- c(driver, wrapper, profile, strict_profile, receipt_helper)
+  labels <- c("driver", "wrapper", "instrument profile", "strict profile", "tree receipt helper")
+  invisible(Map(require_regular_file, required_inputs, labels))
+
+  git <- unname(Sys.which("git"))
+  if (!nzchar(git)) {
+    stop("Git is required to select visible package inputs", call. = FALSE)
+  }
+  package_scope <- c(
+    "DESCRIPTION", "NAMESPACE", "LICENSE", ".Rbuildignore", ".Rinstignore",
+    "R", "src", "man", "inst", "data", "demo", "exec", "po",
+    "vignettes", "configure", "configure.win", "cleanup", "cleanup.win"
+  )
+  git_output <- run_capture_raw(
+    git,
+    c(
+      "-C", shQuote(root), "ls-files", "--cached", "--others",
+      "--exclude-standard", "-z", "--", package_scope
+    ),
+    temporary_root
+  )
+  source_paths <- sort(unique(split_nul(git_output)), method = "radix")
+  if (!all(c("DESCRIPTION", "NAMESPACE") %in% source_paths)) {
+    stop("Git-visible package inputs lack DESCRIPTION or NAMESPACE", call. = FALSE)
+  }
+  if (any(!nzchar(source_paths)) || any(grepl("[\t\r\n]", source_paths)) ||
+      any(startsWith(source_paths, "/")) ||
+      any(grepl("(^|/)\\.\\.(/|$)", source_paths))) {
+    stop("package input inventory contains an unsupported path", call. = FALSE)
+  }
+  full_source_paths <- file.path(root, source_paths)
+  if (any(nzchar(Sys.readlink(full_source_paths))) ||
+      any(!file.exists(full_source_paths)) || any(dir.exists(full_source_paths))) {
+    stop("package inputs must be regular, non-symbolic files", call. = FALSE)
+  }
+
+  records <- list()
+  add_record <- function(kind, name, hash, detail) {
+    if (!grepl("^[0-9a-f]{64}$", hash)) {
+      stop("invalid SHA-256 while recording ", name, call. = FALSE)
+    }
+    records[[length(records) + 1L]] <<- c(
+      kind = kind,
+      name = escape_field(name),
+      sha256 = hash,
+      detail = escape_field(detail)
+    )
+  }
+  add_string <- function(kind, name, value) {
+    add_record(kind, name, sha256_bytes(value), value)
+  }
+  add_file <- function(kind, name, path) {
+    require_regular_file(path, name)
+    size <- file.info(path)$size
+    add_record(
+      kind,
+      name,
+      sha256_file(path),
+      paste0(
+        "size=", format(size, scientific = FALSE, trim = TRUE),
+        ";mode=", format_mode(path)
+      )
+    )
+  }
+  add_resolved_file <- function(kind, name, path) {
+    resolved <- normalizePath(path, mustWork = TRUE)
+    if (!file.exists(resolved) || dir.exists(resolved)) {
+      stop(name, " does not resolve to a regular file", call. = FALSE)
+    }
+    size <- file.info(resolved)$size
+    add_record(
+      kind,
+      name,
+      sha256_file(resolved),
+      paste0(
+        "resolved=", resolved,
+        ";size=", format(size, scientific = FALSE, trim = TRUE),
+        ";mode=", format_mode(resolved)
+      )
+    )
+  }
+
+  add_string("schema", "cache-format", "gc-row-names-roots-v1")
+  source_hashes <- unname(tools::sha256sum(full_source_paths))
+  for (index in seq_along(source_paths)) {
+    source_path <- full_source_paths[[index]]
+    add_record(
+      "source",
+      source_paths[[index]],
+      source_hashes[[index]],
+      paste0(
+        "size=", format(file.info(source_path)$size, scientific = FALSE, trim = TRUE),
+        ";mode=", format_mode(source_path)
+      )
+    )
+  }
+  add_file("harness", "driver", driver)
+  add_file("harness", "wrapper", wrapper)
+  add_file("build", "instrument-profile", profile)
+  add_file("build", "strict-profile", strict_profile)
+  add_file("verification", "tree-receipt-helper", receipt_helper)
+
+  r_runtime_files <- c(
+    file.path(R.home("bin"), "R"),
+    file.path(R.home("bin"), "Rscript"),
+    file.path(R.home("bin"), "exec", "R"),
+    file.path(R.home("lib"), paste0("libR", .Platform$dynlib.ext)),
+    file.path(R.home("etc"), "Makeconf"),
+    file.path(R.home("etc"), "Renviron"),
+    file.path(R.home("etc"), "ldpaths")
+  )
+  for (path in r_runtime_files) {
+    add_resolved_file("R-runtime", sub(paste0("^", R.home(), "/"), "", path), path)
+  }
+  add_string("R-runtime", "public-headers", tree_identity(
+    file.path(R.home(), "include"), "R public headers", temporary_root
+  ))
+  r_abi <- c(
+    version = as.character(getRversion()),
+    version_string = R.version.string,
+    platform = R.version$platform,
+    arch = R.version$arch,
+    os = R.version$os,
+    dynamic_library_extension = .Platform$dynlib.ext,
+    sizeof_pointer = as.character(.Machine$sizeof.pointer)
+  )
+  for (name in names(r_abi)) {
+    add_string("R-ABI", name, unname(r_abi[[name]]))
+  }
+
+  conda_prefix <- Sys.getenv("CONDA_PREFIX", unset = "")
+  compiler <- file.path(conda_prefix, "bin", "x86_64-conda-linux-gnu-gcc")
+  if (!nzchar(conda_prefix) || !file.exists(compiler)) {
+    stop("the pinned GCC compiler is unavailable after activation", call. = FALSE)
+  }
+  add_resolved_file("compiler", "gcc-driver", compiler)
+  compiler_probes <- list(
+    version = "--version",
+    machine = "-dumpmachine",
+    full_version = c("-dumpfullversion", "-dumpversion")
+  )
+  for (name in names(compiler_probes)) {
+    output <- run_capture_raw(compiler, compiler_probes[[name]], temporary_root)
+    add_string("compiler", name, rawToChar(output))
+  }
+  add_resolved_file("tool", "git", git)
+  add_string(
+    "tool", "git-version",
+    rawToChar(run_capture_raw(git, "--version", temporary_root))
+  )
+  for (tool in c("make", "sh")) {
+    path <- unname(Sys.which(tool))
+    if (!nzchar(path)) {
+      stop("required build tool is unavailable: ", tool, call. = FALSE)
+    }
+    add_resolved_file("tool", tool, path)
+  }
+
+  build_environment <- paste0("R_MAKEVARS_USER=", profile)
+  config_names <- c(
+    "CC", "CPPFLAGS", "CFLAGS", "CC17", "C17FLAGS", "SHLIB_LD",
+    "SHLIB_LDFLAGS", "LDFLAGS"
+  )
+  for (name in config_names) {
+    output <- run_capture_raw(
+      expected_r,
+      c("CMD", "config", name),
+      temporary_root,
+      environment = build_environment
+    )
+    add_string("expanded-build-config", name, rawToChar(output))
+  }
+  environment_names <- c(
+    "PATH", "CONDA_PREFIX", "CPATH", "C_INCLUDE_PATH", "CPLUS_INCLUDE_PATH",
+    "LIBRARY_PATH", "LD_LIBRARY_PATH", "PKG_CONFIG_PATH", "MAKE", "MAKEFLAGS",
+    "R_MAKEVARS_SITE", "R_MAKEVARS_USER"
+  )
+  for (name in environment_names) {
+    add_string("build-environment", name, Sys.getenv(name, unset = ""))
+  }
+  add_string(
+    "build", "install-command",
+    "R CMD INSTALL --clean --library=<content-addressed-library> <exact-source-copy>"
+  )
+
+  description <- read.dcf(file.path(root, "DESCRIPTION"))
+  dependency_fields <- intersect(c("Depends", "Imports", "LinkingTo"), colnames(description))
+  dependency_text <- paste(description[1L, dependency_fields], collapse = ",")
+  dependency_items <- trimws(strsplit(dependency_text, ",", fixed = TRUE)[[1L]])
+  dependencies <- sub("[[:space:]]*\\(.*$", "", dependency_items)
+  dependencies <- sort(unique(setdiff(dependencies[nzchar(dependencies)], "R")), method = "radix")
+  for (package in dependencies) {
+    location <- find.package(package, quiet = TRUE)
+    if (!nzchar(location)) {
+      stop("hard dependency is not installed: ", package, call. = FALSE)
+    }
+    add_string(
+      "dependency", paste0(package, "/version"),
+      as.character(utils::packageVersion(package, lib.loc = dirname(location)))
+    )
+    add_string(
+      "dependency", paste0(package, "/tree"),
+      tree_identity(location, paste0("dependency ", package), temporary_root)
+    )
+  }
+
+  rows <- do.call(rbind, records)
+  ordering <- order(rows[, "kind"], rows[, "name"], method = "radix")
+  rows <- rows[ordering, , drop = FALSE]
+  input_manifest <- tempfile("gc-row-name-inputs-", tmpdir = temporary_root)
+  on.exit(unlink(input_manifest), add = TRUE)
+  writeLines(
+    c(
+      "kind\tname\tsha256\tdetail",
+      apply(rows, 1L, paste, collapse = "\t")
+    ),
+    con = input_manifest,
+    useBytes = TRUE
+  )
+  key <- sha256_file(input_manifest)
+  cache <- file.path(cache_root, key)
+
+  verify_cache <- function(directory) {
+    if (!dir.exists(directory) || nzchar(Sys.readlink(directory))) {
+      stop("cache entry is missing or symbolic: ", directory, call. = FALSE)
+    }
+    metadata <- file.path(directory, "metadata")
+    library <- file.path(directory, "library")
+    require_real_directory(metadata, "cache metadata")
+    require_real_directory(library, "cached library")
+    files <- c(
+      inputs = file.path(metadata, "inputs.tsv"),
+      tree = file.path(metadata, "library-tree.tsv"),
+      log = file.path(metadata, "build.log"),
+      completion = file.path(metadata, "completion.inputs.tsv"),
+      seal = file.path(metadata, "completion.seal")
+    )
+    invisible(Map(require_regular_file, files, paste("cache", names(files))))
+    current <- readBin(input_manifest, "raw", n = file.info(input_manifest)$size)
+    retained <- readBin(files[["inputs"]], "raw", n = file.info(files[["inputs"]])$size)
+    if (!identical(current, retained)) {
+      stop("cache input manifest does not match its content key", call. = FALSE)
+    }
+    completion_rows <- read.delim(
+      files[["completion"]], header = TRUE, sep = "\t", quote = "",
+      colClasses = "character", stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    if (!identical(names(completion_rows), c("file", "sha256")) ||
+        !identical(completion_rows$file, c("inputs.tsv", "library-tree.tsv", "build.log")) ||
+        any(!grepl("^[0-9a-f]{64}$", completion_rows$sha256))) {
+      stop("cache completion input inventory is invalid", call. = FALSE)
+    }
+    actual_hashes <- vapply(
+      file.path(metadata, completion_rows$file), sha256_file, character(1L)
+    )
+    if (!identical(unname(actual_hashes), completion_rows$sha256)) {
+      stop("cache completion input hashes do not match", call. = FALSE)
+    }
+    seal_lines <- readLines(files[["seal"]], warn = FALSE)
+    expected_seal <- paste0(sha256_file(files[["completion"]]), "  completion.inputs.tsv")
+    if (!identical(seal_lines, expected_seal)) {
+      stop("cache completion seal does not match", call. = FALSE)
+    }
+    receipt_output <- tempfile("receipt-verify-", tmpdir = temporary_root)
+    on.exit(unlink(receipt_output), add = TRUE)
+    status <- system2(
+      expected_rscript,
+      c(
+        "--vanilla", shQuote(receipt_helper), "verify",
+        shQuote(library), shQuote(files[["tree"]])
+      ),
+      stdout = receipt_output,
+      stderr = receipt_output
+    )
+    if (!identical(status, 0L)) {
+      detail <- paste(readLines(receipt_output, warn = FALSE), collapse = "\n")
+      stop("cached library failed tree-receipt verification\n", detail, call. = FALSE)
+    }
+    invisible(library)
+  }
+
+  cache_status <- "hit"
+  if (!dir.exists(cache)) {
+    lock <- file.path(lock_root, key)
+    acquired <- dir.create(lock, recursive = FALSE, mode = "0700")
+    if (!acquired) {
+      for (attempt in seq_len(240L)) {
+        if (dir.exists(cache)) {
+          break
+        }
+        Sys.sleep(0.25)
+      }
+      if (!dir.exists(cache)) {
+        stop(
+          "another process owns the build key but produced no cache entry within 60 seconds: ",
+          lock,
+          call. = FALSE
+        )
+      }
+      cache_status <- "wait-hit"
+    } else {
+      on.exit(unlink(lock, recursive = TRUE, force = TRUE), add = TRUE)
+      if (!dir.exists(cache)) {
+        build <- tempfile(paste0(".building-", key, "-"), tmpdir = cache_root)
+        if (!dir.create(build, mode = "0700")) {
+          stop("could not create temporary cache build", call. = FALSE)
+        }
+        on.exit(unlink(build, recursive = TRUE, force = TRUE), add = TRUE)
+        source <- file.path(build, "source")
+        library <- file.path(build, "library")
+        metadata <- file.path(build, "metadata")
+        dir.create(source, mode = "0700")
+        dir.create(library, mode = "0700")
+        dir.create(metadata, mode = "0700")
+        for (index in seq_along(source_paths)) {
+          destination <- file.path(source, source_paths[[index]])
+          dir.create(dirname(destination), recursive = TRUE, showWarnings = FALSE)
+          if (!file.copy(
+              full_source_paths[[index]], destination,
+              overwrite = FALSE, copy.mode = TRUE, copy.date = TRUE)) {
+            stop("could not copy package input: ", source_paths[[index]], call. = FALSE)
+          }
+        }
+        build_log <- file.path(metadata, "build.log")
+        status <- system2(
+          expected_r,
+          c(
+            "CMD", "INSTALL", "--clean",
+            paste0("--library=", shQuote(library)), shQuote(source)
+          ),
+          stdout = build_log,
+          stderr = build_log,
+          env = build_environment
+        )
+        if (!identical(status, 0L)) {
+          detail <- paste(tail(readLines(build_log, warn = FALSE), 80L), collapse = "\n")
+          stop("instrumented package installation failed\n", detail, call. = FALSE)
+        }
+        installed <- file.path(library, "paradox")
+        if (!dir.exists(installed)) {
+          stop("instrumented installation did not create paradox", call. = FALSE)
+        }
+        unlink(source, recursive = TRUE, force = TRUE)
+        if (!file.copy(input_manifest, file.path(metadata, "inputs.tsv"))) {
+          stop("could not retain cache input manifest", call. = FALSE)
+        }
+        tree_manifest <- file.path(metadata, "library-tree.tsv")
+        receipt_log <- tempfile("receipt-create-", tmpdir = temporary_root)
+        on.exit(unlink(receipt_log), add = TRUE)
+        receipt_status <- system2(
+          expected_rscript,
+          c(
+            "--vanilla", shQuote(receipt_helper), "create",
+            shQuote(library), shQuote(tree_manifest)
+          ),
+          stdout = receipt_log,
+          stderr = receipt_log
+        )
+        if (!identical(receipt_status, 0L)) {
+          detail <- paste(readLines(receipt_log, warn = FALSE), collapse = "\n")
+          stop("could not receipt cached library\n", detail, call. = FALSE)
+        }
+        completion <- file.path(metadata, "completion.inputs.tsv")
+        completion_names <- c("inputs.tsv", "library-tree.tsv", "build.log")
+        writeLines(
+          c(
+            "file\tsha256",
+            paste(
+              completion_names,
+              vapply(file.path(metadata, completion_names), sha256_file, character(1L)),
+              sep = "\t"
+            )
+          ),
+          completion,
+          useBytes = TRUE
+        )
+        writeLines(
+          paste0(sha256_file(completion), "  completion.inputs.tsv"),
+          file.path(metadata, "completion.seal"),
+          useBytes = TRUE
+        )
+        verify_cache(build)
+        if (!file.rename(build, cache)) {
+          stop("could not atomically select completed cache entry", call. = FALSE)
+        }
+        unlink(lock, recursive = TRUE, force = TRUE)
+        cache_status <- "miss"
+      }
+    }
+  }
+
+  library <- verify_cache(cache)
+  cat("gc_row_names_cache_key=", key, "\n", sep = "")
+  cat("gc_row_names_cache_status=", cache_status, "\n", sep = "")
+  cat("gc_row_names_cache_library=", library, "\n", sep = "")
+  driver_log <- tempfile("gc-row-name-driver-", tmpdir = temporary_root)
+  on.exit(unlink(driver_log), add = TRUE)
+  status <- system2(
+    expected_rscript,
+    c("--vanilla", shQuote(driver), shQuote(library)),
+    stdout = driver_log,
+    stderr = driver_log
+  )
+  cat(paste0(readLines(driver_log, warn = FALSE), "\n"), sep = "")
+  if (!identical(status, 0L)) {
+    stop("instrumented compact-row-name driver failed", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+
+tryCatch(
+  main(),
+  error = function(condition) {
+    message("test-gc-row-names-roots: ", conditionMessage(condition))
+    quit(save = "no", status = 1L)
+  }
+)

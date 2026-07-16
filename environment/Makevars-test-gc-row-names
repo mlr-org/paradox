@@ -1,0 +1,6 @@
+# Deterministic compact-row-name reachability probe. This profile is selected
+# only by the standalone instrumented regression; ordinary package builds do
+# not compile its barriers or register its status routine.
+
+include $(PARADOX_ROOT)/environment/Makevars-check-strict-gcc
+PKG_CPPFLAGS += -DPARADOX_TEST_GC_ROW_NAMES_ROOTS

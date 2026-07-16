@@ -628,11 +628,19 @@ static int load_values_private_state(SEXP private_environment,
   const R_xlen_t column_count = XLENGTH(params);
   SEXP params_names = Rf_getAttrib(params, R_NamesSymbol);
   SEXP params_classes = Rf_getAttrib(params, R_ClassSymbol);
-  SEXP row_names = Rf_getAttrib(params, R_RowNamesSymbol);
+  /* R's public getter expands compact data-frame row names to a fresh ALTREP
+   * object.  Unlike an ordinary attribute value, that expansion is not kept
+   * alive through `params`, so protect it across the allocating attribute
+   * lookups below until the root carrier owns it. */
+  SEXP row_names = PROTECT(Rf_getAttrib(params, R_RowNamesSymbol));
   SEXP params_index = Rf_getAttrib(params, Rf_install("index"));
   SEXP params_selfref = Rf_getAttrib(
     params,
     Rf_install(".internal.selfref")
+  );
+  PARADOX_TEST_GC_ROW_NAMES_BARRIER(
+    row_names,
+    PARADOX_TEST_GC_ROW_NAMES_COLLECTION_LOCAL
   );
   SET_VECTOR_ELT(
     roots,
@@ -648,6 +656,11 @@ static int load_values_private_state(SEXP private_environment,
     roots,
     roots_offset + VALUES_ROOT_PARAM_ROW_NAMES,
     row_names
+  );
+  UNPROTECT(1);
+  PARADOX_TEST_GC_ROW_NAMES_BARRIER(
+    row_names,
+    PARADOX_TEST_GC_ROW_NAMES_COLLECTION_CARRIER
   );
   SET_VECTOR_ELT(
     roots,
@@ -815,15 +828,25 @@ static int load_values_private_state(SEXP private_environment,
   return TRUE;
 }
 
-static R_xlen_t append_frame_roots(values_root_plan_t *root_plan,
-    PROTECT_INDEX root_plan_index, SEXP self, SEXP private_environment,
+static void reserve_frame_roots(values_root_plan_t *root_plan,
+    PROTECT_INDEX root_plan_index, R_xlen_t frame_count,
     R_xlen_t *work_since_interrupt) {
-  if (root_plan->used > root_plan->capacity ||
-      root_plan->capacity - root_plan->used < VALUES_ROOT_COUNT) {
-    if (root_plan->capacity > R_XLEN_T_MAX / 2) {
-      Rf_error("Unable to grow collection values root plan");
+  const R_xlen_t slots_per_frame = (R_xlen_t) VALUES_ROOT_COUNT;
+  if (root_plan->used > root_plan->capacity || frame_count < 0 ||
+      frame_count > (R_XLEN_T_MAX - root_plan->used) / slots_per_frame) {
+    Rf_error("Unable to grow collection values root plan");
+  }
+  const R_xlen_t required = root_plan->used +
+    frame_count * slots_per_frame;
+  if (required > root_plan->capacity) {
+    R_xlen_t expanded_capacity = root_plan->capacity;
+    while (expanded_capacity < required) {
+      if (expanded_capacity > R_XLEN_T_MAX / 2) {
+        expanded_capacity = required;
+        break;
+      }
+      expanded_capacity *= 2;
     }
-    const R_xlen_t expanded_capacity = root_plan->capacity * 2;
     SEXP expanded = PROTECT(Rf_allocVector(VECSXP, expanded_capacity));
     for (R_xlen_t index = 0; index < root_plan->used; ++index) {
       paradox_domain_account_work(work_since_interrupt);
@@ -838,6 +861,17 @@ static R_xlen_t append_frame_roots(values_root_plan_t *root_plan,
     root_plan->capacity = expanded_capacity;
     UNPROTECT(1);
   }
+}
+
+static R_xlen_t append_frame_roots(values_root_plan_t *root_plan,
+    PROTECT_INDEX root_plan_index, SEXP self, SEXP private_environment,
+    R_xlen_t *work_since_interrupt) {
+  reserve_frame_roots(
+    root_plan,
+    root_plan_index,
+    1,
+    work_since_interrupt
+  );
   const R_xlen_t offset = root_plan->used;
   root_plan->used += VALUES_ROOT_COUNT;
   SET_VECTOR_ELT(root_plan->roots, offset + VALUES_ROOT_SELF, self);
@@ -960,31 +994,79 @@ static int initialize_frame(SEXP self, SEXP private_environment,
     }
   }
 
-  SEXP matches = PROTECT(Rf_match(
-    frame->translation.ids,
-    frame->params_state.params.ids,
-    0
-  ));
-  if ((TYPEOF(matches) != INTSXP && TYPEOF(matches) != REALSXP) ||
-      ALTREP(matches) ||
-      XLENGTH(matches) != frame->params_state.params.row_count) {
-    UNPROTECT(1);
-    Rf_error("Internal error: unexpected collection values translation match");
-  }
+  const R_xlen_t parameter_count = frame->params_state.params.row_count;
   frame->translation_by_param = paradox_temporary_alloc(
-    frame->params_state.params.row_count,
+    parameter_count,
     sizeof(*frame->translation_by_param)
   );
-  for (R_xlen_t row = 0; row < frame->params_state.params.row_count; ++row) {
+
+  /* Construction normally keeps `.params` and the keyed translation in the
+   * same order and reuses their CHARSXP ids. Prove that common case in one
+   * linear pass before using either the small unordered scan or R's allocating
+   * general match. Cloned, re-encoded, or otherwise non-canonical strings
+   * retain the exact historical matching semantics through those fallbacks. */
+  int pointer_match = frame->translation.row_count == parameter_count;
+  for (R_xlen_t row = 0; pointer_match && row < parameter_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t position = match_position(matches, row);
-    if (position == 0 || position > frame->translation.row_count) {
-      UNPROTECT(1);
-      return FALSE;
+    SEXP id = STRING_ELT(frame->params_state.params.ids, row);
+    if (STRING_ELT(frame->translation.ids, row) != id) {
+      pointer_match = FALSE;
+    } else {
+      frame->translation_by_param[row] = row;
     }
-    frame->translation_by_param[row] = position - 1;
   }
-  UNPROTECT(1);
+  if (!pointer_match && parameter_count <= 16) {
+    pointer_match = TRUE;
+    for (R_xlen_t row = 0; pointer_match && row < parameter_count; ++row) {
+      paradox_domain_account_work(work_since_interrupt);
+      SEXP id = STRING_ELT(frame->params_state.params.ids, row);
+      R_xlen_t translation_row = 0;
+      while (translation_row < frame->translation.row_count &&
+          STRING_ELT(frame->translation.ids, translation_row) != id) {
+        paradox_domain_account_work(work_since_interrupt);
+        ++translation_row;
+      }
+      if (translation_row == frame->translation.row_count) {
+        pointer_match = FALSE;
+      } else {
+        frame->translation_by_param[row] = translation_row;
+      }
+    }
+  }
+  if (!pointer_match) {
+    SEXP matches = PROTECT(Rf_match(
+      frame->translation.ids,
+      frame->params_state.params.ids,
+      0
+    ));
+    if ((TYPEOF(matches) != INTSXP && TYPEOF(matches) != REALSXP) ||
+        ALTREP(matches) || XLENGTH(matches) != parameter_count) {
+      UNPROTECT(1);
+      Rf_error(
+        "Internal error: unexpected collection values translation match"
+      );
+    }
+    for (R_xlen_t row = 0; row < parameter_count; ++row) {
+      paradox_domain_account_work(work_since_interrupt);
+      const R_xlen_t position = match_position(matches, row);
+      if (position == 0 || position > frame->translation.row_count) {
+        UNPROTECT(1);
+        return FALSE;
+      }
+      frame->translation_by_param[row] = position - 1;
+    }
+    UNPROTECT(1);
+  }
+  /* Every immediate child will eventually receive one authentication frame.
+   * Reserve those root slots together while retaining the depth-first walk:
+   * child environments and their live values are still observed only when
+   * traversal reaches them. */
+  reserve_frame_roots(
+    root_plan,
+    root_plan_index,
+    child_count,
+    work_since_interrupt
+  );
   return TRUE;
 }
 
@@ -1297,7 +1379,11 @@ SEXP paradox_param_set_collection_values(SEXP private_environment, SEXP self) {
   values_root_plan_t root_plan = {
     R_NilValue,
     0,
-    16 * VALUES_ROOT_COUNT
+    /* Root plus three leaves covers the common small collection without a
+     * resize.  Larger and nested graphs already grow geometrically, so
+     * reserving sixteen complete authentication frames on every read only
+     * inflated the fixed cost of the hottest small-collection path. */
+    4 * VALUES_ROOT_COUNT
   };
   PROTECT_WITH_INDEX(
     root_plan.roots = Rf_allocVector(VECSXP, root_plan.capacity),

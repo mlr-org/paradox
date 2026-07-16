@@ -21,7 +21,14 @@ benchmark_workload_names <- function() {
     "sanitize_scalar",
     "check_dt",
     "qunif",
+    "paramset_subspaces",
+    "paramset_subspaces_deps",
+    "sampler_unif_construct",
+    "sampler_unif_construct_deps",
+    "sampler_unif_sample",
     "generate_design_random",
+    "generate_design_grid_mixed4",
+    "generate_design_grid_mixed8",
     "design_transpose_plain",
     "design_transpose_filtered",
     "design_transpose_trafo",
@@ -106,6 +113,7 @@ benchmark_make_inputs <- function(n_params, n_rows) {
   # construct_full_mixed workload deliberately creates both from scratch.
   prebuilt_domains <- make_domain_list()
   space <- ParamSet$new(prebuilt_domains)
+  sampler_unif <- SamplerUnif$new(space)
 
   make_full_mixed <- function() {
     ParamSet$new(make_domain_list())
@@ -119,6 +127,22 @@ benchmark_make_inputs <- function(n_params, n_rows) {
       early_stopping = p_lgl(tags = c("flag", "required"))
     )
   }
+
+  make_grid_space <- function(cycles) {
+    domains <- lapply(seq_len(4L * cycles), function(index) {
+      switch(
+        as.character((index - 1L) %% 4L),
+        "0" = p_dbl(-10, 10),
+        "1" = p_int(-20L, 20L),
+        "2" = p_fct(letters[1:3]),
+        "3" = p_lgl()
+      )
+    })
+    names(domains) <- sprintf("grid_parameter_%02d", seq_along(domains))
+    ParamSet$new(domains)
+  }
+  grid_mixed4 <- make_grid_space(1L)
+  grid_mixed8 <- make_grid_space(2L)
 
   scalar_values <- vector("list", n_params)
   for (i in seq_len(n_params)) {
@@ -289,6 +313,7 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     parameter_ids = parameter_ids,
     prebuilt_domains = prebuilt_domains,
     space = space,
+    sampler_unif = sampler_unif,
     params_space = params_space,
     mutation_space = mutation_space,
     mutation_update = mutation_update,
@@ -316,6 +341,9 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     ],
     make_full_mixed = make_full_mixed,
     make_small_ps = make_small_ps,
+    grid_mixed4 = grid_mixed4,
+    grid_mixed8 = grid_mixed8,
+    grid_resolution = 3L,
     scalar_values = scalar_values,
     sanitize_values = sanitize_values,
     sanitized_expected = sanitized_expected,
@@ -341,6 +369,28 @@ benchmark_make_workloads <- function(inputs) {
   exact_param_set <- function(result, expected_ids) {
     stopifnot(inherits(result, "ParamSet"))
     exact_ids(result$ids(), expected_ids)
+  }
+
+  exact_grid <- function(result, space) {
+    data <- result$data
+    resolutions <- space$nlevels
+    resolutions[space$is_number] <- inputs$grid_resolution
+    expected_rows <- as.integer(prod(resolutions))
+    stopifnot(
+      inherits(result, "Design"),
+      inherits(data, "data.table"),
+      nrow(data) == expected_rows,
+      ncol(data) == space$length,
+      identical(names(data), space$ids()),
+      identical(result$param_set$ids(), space$ids()),
+      identical(
+        unname(vapply(data, typeof, character(1L))),
+        rep(c("double", "integer", "character", "logical"),
+          length.out = space$length)
+      )
+    )
+    paste(expected_rows, space$length, data[[1L]][[1L]],
+      data[[1L]][[expected_rows]], sep = "|")
   }
 
   workloads <- list(
@@ -524,6 +574,103 @@ benchmark_make_workloads <- function(inputs) {
         )
       }
     ),
+    paramset_subspaces = list(
+      expression = quote(inputs$space$subspaces()),
+      validate = function(result) {
+        child_ids = vapply(
+          result,
+          function(subspace) subspace$ids(),
+          character(1L)
+        )
+        stopifnot(
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$parameter_ids),
+          identical(unname(child_ids), inputs$parameter_ids),
+          all(vapply(result, inherits, logical(1L), "ParamSet")),
+          all(vapply(result, function(subspace) subspace$length == 1L,
+            logical(1L)))
+        )
+        paste(length(result), paste(child_ids, collapse = ","), sep = "|")
+      }
+    ),
+    paramset_subspaces_deps = list(
+      expression = quote(inputs$params_space$subspaces()),
+      validate = function(result) {
+        child_ids = vapply(
+          result,
+          function(subspace) subspace$ids(),
+          character(1L)
+        )
+        stopifnot(
+          length(result) == inputs$n_params,
+          identical(names(result), inputs$parameter_ids),
+          identical(unname(child_ids), inputs$parameter_ids),
+          nrow(inputs$params_space$deps) > 0L,
+          all(vapply(result, function(subspace) nrow(subspace$deps) == 0L,
+            logical(1L)))
+        )
+        paste(length(result), nrow(inputs$params_space$deps), sep = "|")
+      }
+    ),
+    sampler_unif_construct = list(
+      expression = quote(SamplerUnif$new(inputs$space)),
+      validate = function(result) {
+        child_ids = vapply(
+          result$samplers,
+          function(sampler) sampler$param$ids(),
+          character(1L)
+        )
+        stopifnot(
+          inherits(result, "SamplerUnif"),
+          identical(result$param_set$ids(), inputs$parameter_ids),
+          identical(names(result$samplers), inputs$parameter_ids),
+          identical(unname(child_ids), inputs$parameter_ids)
+        )
+        paste(length(result$samplers), paste(child_ids, collapse = ","),
+          sep = "|")
+      }
+    ),
+    sampler_unif_construct_deps = list(
+      expression = quote(SamplerUnif$new(inputs$params_space)),
+      validate = function(result) {
+        child_ids = vapply(
+          result$samplers,
+          function(sampler) sampler$param$ids(),
+          character(1L)
+        )
+        stopifnot(
+          inherits(result, "SamplerUnif"),
+          identical(result$param_set$ids(), inputs$parameter_ids),
+          identical(names(result$samplers), inputs$parameter_ids),
+          identical(unname(child_ids), inputs$parameter_ids),
+          nrow(result$param_set$deps) == nrow(inputs$params_space$deps),
+          all(vapply(result$samplers,
+            function(sampler) nrow(sampler$param$deps) == 0L,
+            logical(1L)))
+        )
+        paste(length(result$samplers), nrow(result$param_set$deps), sep = "|")
+      }
+    ),
+    sampler_unif_sample = list(
+      # Consumers retain the sampler and invoke it inside optimizer loops;
+      # construction is intentionally outside the timed expression.
+      expression = quote(inputs$sampler_unif$sample(inputs$n_rows)),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "Design"),
+          nrow(result$data) == inputs$n_rows,
+          ncol(result$data) == inputs$n_params,
+          identical(names(result$data), inputs$parameter_ids),
+          identical(result$param_set, inputs$sampler_unif$param_set)
+        )
+        paste(
+          nrow(result$data),
+          ncol(result$data),
+          paste(vapply(result$data, typeof, character(1L)), collapse = ","),
+          sep = "|"
+        )
+      }
+    ),
     generate_design_random = list(
       expression = quote(generate_design_random(inputs$space, inputs$n_rows)),
       validate = function(result) {
@@ -541,6 +688,20 @@ benchmark_make_workloads <- function(inputs) {
           sep = "|"
         )
       }
+    ),
+    generate_design_grid_mixed4 = list(
+      expression = quote(generate_design_grid(
+        inputs$grid_mixed4,
+        inputs$grid_resolution
+      )),
+      validate = function(result) exact_grid(result, inputs$grid_mixed4)
+    ),
+    generate_design_grid_mixed8 = list(
+      expression = quote(generate_design_grid(
+        inputs$grid_mixed8,
+        inputs$grid_resolution
+      )),
+      validate = function(result) exact_grid(result, inputs$grid_mixed8)
     ),
     design_transpose_plain = list(
       expression = quote(inputs$design$transpose(filter_na = FALSE, trafo = FALSE)),

@@ -4,6 +4,7 @@
 
 #include "paradox.h"
 
+#include "builtin_condition.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
@@ -34,6 +35,21 @@ typedef struct {
   int values_detached;
 } get_values_state_t;
 
+typedef struct {
+  paradox_builtin_condition_kind_t kind;
+  SEXP rhs;
+  SEXP parent_value;
+  R_xlen_t dependent;
+  R_xlen_t parent;
+  int original_member;
+} get_values_dependency_plan_t;
+
+static int canonical_seq_row_producer(
+  SEXP function,
+  SEXP frame,
+  SEXP namespace_environment
+);
+
 enum get_values_root_slot {
   GET_VALUES_ROOT_SELF = 0,
   GET_VALUES_ROOT_PRIVATE,
@@ -51,6 +67,9 @@ enum get_values_root_slot {
   GET_VALUES_ROOT_DEPENDENCY_IDS,
   GET_VALUES_ROOT_DEPENDENCY_ON,
   GET_VALUES_ROOT_DEPENDENCY_CONDITIONS,
+  GET_VALUES_ROOT_DEPENDENCY_RHS,
+  GET_VALUES_ROOT_DEPENDENCY_PARENTS,
+  GET_VALUES_ROOT_DEPENDENCY_VALUE_NAMES,
   GET_VALUES_ROOT_LIVE_PARAMS,
   GET_VALUES_ROOT_LIVE_TAGS,
   GET_VALUES_ROOT_COUNT
@@ -660,7 +679,9 @@ static int parse_type(SEXP value, get_values_type_t *type) {
   return FALSE;
 }
 
-static SEXP dependency_removal_rows(SEXP frame, SEXP dependencies) {
+static SEXP dependency_removal_rows(SEXP frame, SEXP dependencies,
+    SEXP namespace_environment, int *canonical_producer) {
+  *canonical_producer = FALSE;
   SEXP nrow_call = PROTECT(Rf_lang2(
     Rf_install("nrow"),
     dependencies
@@ -682,16 +703,25 @@ static SEXP dependency_removal_rows(SEXP frame, SEXP dependencies) {
 
   /* `seq_row(deps)` is a second live nrow observation in the historical
    * body. Preserve it rather than reusing the value from the `if` test. */
-  SEXP sequence_call = PROTECT(Rf_lang2(
+  SEXP sequence_function = PROTECT(Rf_findFun(
     Rf_install("seq_row"),
+    frame
+  ));
+  SEXP sequence_call = PROTECT(Rf_lang2(
+    sequence_function,
     dependencies
   ));
+  *canonical_producer = canonical_seq_row_producer(
+    sequence_function,
+    frame,
+    namespace_environment
+  );
   SEXP rows = PROTECT(Rf_eval(sequence_call, frame));
   if (TYPEOF(rows) != INTSXP && TYPEOF(rows) != REALSXP) {
-    UNPROTECT(8);
+    UNPROTECT(9);
     Rf_error("ParamSet dependency row sequence changed during native get_values()");
   }
-  UNPROTECT(8);
+  UNPROTECT(9);
   return rows;
 }
 
@@ -764,6 +794,101 @@ static int result_is_true(SEXP value) {
     LOGICAL_ELT(value, 0) == TRUE;
 }
 
+static SEXP single_body_expression(SEXP body) {
+  if (TYPEOF(body) != LANGSXP || CAR(body) != Rf_install("{") ||
+      CDR(body) == R_NilValue || CDDR(body) != R_NilValue) {
+    return R_UnboundValue;
+  }
+  return CADR(body);
+}
+
+static int exact_unary_call(SEXP call, const char *function, SEXP argument) {
+  return TYPEOF(call) == LANGSXP && CAR(call) == Rf_install(function) &&
+    CDR(call) != R_NilValue && CDDR(call) == R_NilValue &&
+    CADR(call) == argument;
+}
+
+static int exact_seq_row_body(SEXP function) {
+  SEXP expression = single_body_expression(
+    paradox_api_closure_expression(function)
+  );
+  if (TYPEOF(expression) != LANGSXP ||
+      CAR(expression) != Rf_install("seq_len") ||
+      CDR(expression) == R_NilValue || CDDR(expression) != R_NilValue) {
+    return FALSE;
+  }
+  return exact_unary_call(CADR(expression), "nrow", Rf_install("x"));
+}
+
+static int exact_single_x_formal(SEXP function) {
+  SEXP formal = paradox_api_closure_formals(function);
+  return exact_missing_formal(formal, "x") && CDR(formal) == R_NilValue;
+}
+
+/* Resolve the function that actually produced `rows` before invoking it.
+ * Authenticating a binding after the call is insufficient: a replacement can
+ * restore the import and return a callback-capable ALTREP row vector. */
+static int canonical_seq_row_producer(SEXP function, SEXP frame,
+    SEXP namespace_environment) {
+  SEXP symbol = Rf_install("seq_row");
+  if (R_existsVarInFrame(frame, symbol)) {
+    return FALSE;
+  }
+  SEXP imports = PROTECT(paradox_api_parent_environment(
+    namespace_environment
+  ));
+  if (TYPEOF(imports) != ENVSXP ||
+      !R_existsVarInFrame(imports, symbol) ||
+      R_BindingIsActive(symbol, imports) ||
+      !R_BindingIsLocked(symbol, imports)) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+  SEXP imported = PROTECT(paradox_api_stable_local_value(imports, symbol));
+  if (function != imported || TYPEOF(function) != CLOSXP) {
+    UNPROTECT(2);
+    return FALSE;
+  }
+  SEXP mlr3misc_namespace = PROTECT(
+    paradox_api_registered_namespace("mlr3misc")
+  );
+  const int exact = TYPEOF(mlr3misc_namespace) == ENVSXP &&
+    paradox_api_closure_environment(function) == mlr3misc_namespace &&
+    exact_single_x_formal(function) && exact_seq_row_body(function);
+  UNPROTECT(3);
+  return exact;
+}
+
+static int callback_free_parent(SEXP value, SEXP rhs) {
+  return paradox_builtin_condition_scalar_supported(value, rhs);
+}
+
+static int callback_free_value_names(SEXP values, SEXP *names,
+    R_xlen_t *work_since_interrupt) {
+  SEXP candidate = PROTECT(Rf_getAttrib(values, R_NamesSymbol));
+  if (TYPEOF(candidate) != STRSXP || ALTREP(candidate) ||
+      XLENGTH(candidate) != XLENGTH(values) ||
+      !paradox_api_has_no_attributes(candidate)) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+  const R_xlen_t size = XLENGTH(candidate);
+  for (R_xlen_t index = 0; index < size; ++index) {
+    paradox_domain_account_work(work_since_interrupt);
+    if (!supported_string(STRING_ELT(candidate, index))) {
+      UNPROTECT(1);
+      return FALSE;
+    }
+  }
+  if (Rf_any_duplicated(candidate, FALSE) != 0) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+  *names = candidate;
+  UNPROTECT(1);
+  return TRUE;
+}
+
 static SEXP current_value_names(const get_values_state_t *state) {
   SEXP names = PROTECT(Rf_getAttrib(
     state->values_data.values,
@@ -813,6 +938,236 @@ static void detach_values_shell(get_values_state_t *state, SEXP roots,
   state->values_data.names = names;
   state->values_detached = TRUE;
   UNPROTECT(2);
+}
+
+/* Built-in conditions are overwhelmingly the common dependency form. Once
+ * the complete row set, dispatch surface, condition objects, names, and
+ * operands have been authenticated, no user code can run inside the loop.
+ * That permits one planning scan followed by direct indexed evaluation. Any
+ * extensible or mutated representation declines before changing `kept` and
+ * retains the fully live R/S3 path below. */
+static int try_apply_builtin_dependencies(get_values_state_t *state,
+    int *kept, SEXP rows, int canonical_row_producer,
+    SEXP namespace_environment, SEXP roots,
+    R_xlen_t *work_since_interrupt) {
+  if (!canonical_row_producer) {
+    return FALSE;
+  }
+
+  paradox_domain_dependencies_t dependencies;
+  if (!paradox_domain_validate_dependencies(
+      state->dependencies,
+      &dependencies,
+      work_since_interrupt
+    ) || XLENGTH(rows) != dependencies.row_count) {
+    return FALSE;
+  }
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_IDS,
+    dependencies.ids
+  );
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_ON,
+    dependencies.on
+  );
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_CONDITIONS,
+    dependencies.conditions
+  );
+
+  SEXP current_names;
+  if (!callback_free_value_names(
+      state->values_data.values,
+      &current_names,
+      work_since_interrupt
+    )) {
+    return FALSE;
+  }
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_VALUE_NAMES,
+    current_names
+  );
+  get_values_dependency_plan_t *plan = paradox_temporary_alloc(
+    dependencies.row_count,
+    sizeof(*plan)
+  );
+  SEXP rhs_roots = PROTECT(Rf_allocVector(
+    VECSXP,
+    dependencies.row_count
+  ));
+  SEXP parent_roots = PROTECT(Rf_allocVector(
+    VECSXP,
+    dependencies.row_count
+  ));
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_RHS,
+    rhs_roots
+  );
+  SET_VECTOR_ELT(
+    roots,
+    GET_VALUES_ROOT_DEPENDENCY_PARENTS,
+    parent_roots
+  );
+  UNPROTECT(2);
+  SEXP dependent_matches = PROTECT(Rf_match(
+    current_names,
+    dependencies.ids,
+    0
+  ));
+  SEXP parent_matches = PROTECT(Rf_match(
+    current_names,
+    dependencies.on,
+    0
+  ));
+  int match_protects = 2;
+  SEXP original_matches = dependent_matches;
+  if (state->original_names != current_names) {
+    original_matches = PROTECT(Rf_match(
+      state->original_names,
+      dependencies.ids,
+      0
+    ));
+    ++match_protects;
+  }
+  const SEXPTYPE dependent_match_type = (SEXPTYPE) TYPEOF(
+    dependent_matches
+  );
+  const SEXPTYPE parent_match_type = (SEXPTYPE) TYPEOF(parent_matches);
+  const SEXPTYPE original_match_type = (SEXPTYPE) TYPEOF(original_matches);
+  if ((dependent_match_type != INTSXP &&
+       dependent_match_type != REALSXP) ||
+      (parent_match_type != INTSXP && parent_match_type != REALSXP) ||
+      (original_match_type != INTSXP &&
+       original_match_type != REALSXP) ||
+      XLENGTH(dependent_matches) != dependencies.row_count ||
+      XLENGTH(parent_matches) != dependencies.row_count ||
+      XLENGTH(original_matches) != dependencies.row_count) {
+    UNPROTECT(match_protects);
+    return FALSE;
+  }
+  for (R_xlen_t row = 0; row < dependencies.row_count; ++row) {
+    paradox_domain_account_work(work_since_interrupt);
+    SEXP condition = PROTECT(VECTOR_ELT(dependencies.conditions, row));
+    if (!paradox_builtin_condition_exact(
+        condition,
+        &plan[row].kind,
+        &plan[row].rhs,
+        work_since_interrupt
+      )) {
+      UNPROTECT(1 + match_protects);
+      return FALSE;
+    }
+    /* Keep every cached operand independently reachable.  In particular,
+     * an allocating GC finalizer may mutate the live dependency table after
+     * this row was planned; the scratch pointer must never depend on the old
+     * condition object continuing to own its rhs. */
+    SET_VECTOR_ELT(rhs_roots, row, plan[row].rhs);
+
+    plan[row].original_member = match_position_at(
+      original_matches,
+      original_match_type,
+      row,
+      state->values_data.size
+    ) != R_XLEN_T_MAX;
+    plan[row].dependent = match_position_at(
+      dependent_matches,
+      dependent_match_type,
+      row,
+      state->values_data.size
+    );
+    plan[row].parent = match_position_at(
+      parent_matches,
+      parent_match_type,
+      row,
+      state->values_data.size
+    );
+    SEXP parent = PROTECT(plan[row].parent == R_XLEN_T_MAX
+      ? R_NilValue
+      : VECTOR_ELT(state->values_data.values, plan[row].parent));
+    const int supported = callback_free_parent(parent, plan[row].rhs);
+    UNPROTECT(2);
+    if (!supported) {
+      UNPROTECT(match_protects);
+      return FALSE;
+    }
+  }
+  UNPROTECT(match_protects);
+
+  /* Authentication is deliberately last. Planning allocates but executes no
+   * user code; checking the effective dispatch surface here minimizes the
+   * interval in which a registered S3 method could change before execution. */
+  if (!paradox_builtin_condition_dispatch_is_canonical(
+      namespace_environment
+    )) {
+    return FALSE;
+  }
+
+  /* Matching and dispatch authentication allocate and can therefore run a GC
+   * finalizer that replaces an element of the user-visible values list after
+   * its initial planning check. Revalidate once at the final fallback boundary
+   * and root the exact scalar observed there. No later direct comparison may
+   * re-read a different, unvalidated list element. */
+  if (XLENGTH(state->values_data.values) != state->values_data.size) {
+    return FALSE;
+  }
+  for (R_xlen_t row = 0; row < dependencies.row_count; ++row) {
+    paradox_domain_account_work(work_since_interrupt);
+    SEXP parent = PROTECT(plan[row].parent == R_XLEN_T_MAX
+      ? R_NilValue
+      : VECTOR_ELT(state->values_data.values, plan[row].parent));
+    if (!callback_free_parent(parent, plan[row].rhs)) {
+      UNPROTECT(1);
+      return FALSE;
+    }
+    plan[row].parent_value = parent;
+    SET_VECTOR_ELT(parent_roots, row, parent);
+    UNPROTECT(1);
+  }
+
+  const R_xlen_t row_sequence_size = XLENGTH(rows);
+  for (R_xlen_t position = 0; position < row_sequence_size; ++position) {
+    paradox_domain_account_work(work_since_interrupt);
+    const R_xlen_t row = dependency_row_at(rows, position);
+    if (row >= dependencies.row_count) {
+      Rf_error(
+        "ParamSet dependencies changed to a malformed shape during "
+        "native get_values()"
+      );
+    }
+    if (!plan[row].original_member) {
+      continue;
+    }
+    SEXP parent = PROTECT(
+      plan[row].parent == R_XLEN_T_MAX || !kept[plan[row].parent]
+        ? R_NilValue
+        : plan[row].parent_value
+    );
+    if (Rf_inherits(parent, "TuneToken")) {
+      UNPROTECT(1);
+      continue;
+    }
+    const int satisfied = parent != R_NilValue &&
+      paradox_builtin_condition_element_matches(
+        parent,
+        0,
+        plan[row].rhs,
+        work_since_interrupt
+      );
+    UNPROTECT(1);
+    if (satisfied) {
+      continue;
+    }
+    detach_values_shell(state, roots, work_since_interrupt);
+    if (plan[row].dependent != R_XLEN_T_MAX) {
+      kept[plan[row].dependent] = FALSE;
+    }
+  }
+  return TRUE;
 }
 
 static void apply_dependencies(get_values_state_t *state, int *kept,
@@ -1309,19 +1664,32 @@ SEXP paradox_param_set_get_values(SEXP private_environment, SEXP self,
     kept[value] = TRUE;
   }
 
+  int canonical_row_producer;
   SEXP dependency_rows = PROTECT(dependency_removal_rows(
     frame,
-    state.dependencies
+    state.dependencies,
+    namespace_environment,
+    &canonical_row_producer
   ));
   if (dependency_rows != R_NilValue) {
-    apply_dependencies(
-      &state,
-      kept,
-      dependency_rows,
-      namespace_environment,
-      roots,
-      &work_since_interrupt
-    );
+    if (!try_apply_builtin_dependencies(
+        &state,
+        kept,
+        dependency_rows,
+        canonical_row_producer,
+        namespace_environment,
+        roots,
+        &work_since_interrupt
+      )) {
+      apply_dependencies(
+        &state,
+        kept,
+        dependency_rows,
+        namespace_environment,
+        roots,
+        &work_since_interrupt
+      );
+    }
   }
   apply_type_filter(&state, type, kept, &work_since_interrupt);
   if (type != GET_VALUES_WITH_TOKEN) {

@@ -1,0 +1,227 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+PREPARE="$ROOT/scripts/prepare-bounded-rchk-bcheck"
+TREE_HELPER="$ROOT/scripts/environment/tree-receipt.R"
+CONFIG="$ROOT/environment/rchk-bounded-bcheck.tsv"
+COMMAND_INPUT="$ROOT/environment/rchk-bounded-bcheck-command.tsv"
+ENVIRONMENT_INPUT="$ROOT/environment/rchk-bounded-bcheck-environment.tsv"
+TOOL_INPUT="$ROOT/environment/rchk-bounded-bcheck-tool-identity.tsv"
+AUXILIARY_IMAGES="$ROOT/environment/auxiliary-images.tsv"
+LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+LOCAL_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
+
+fail() {
+  printf '%s\n' "test-bounded-rchk-bcheck-cache: $*" >&2
+  exit 1
+}
+
+[[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+for input in "$PREPARE" "$TREE_HELPER" "$CONFIG" "$COMMAND_INPUT" \
+    "$ENVIRONMENT_INPUT" "$TOOL_INPUT" "$AUXILIARY_IMAGES"; do
+  [[ -f "$input" && ! -L "$input" ]] || fail "missing test input: $input"
+done
+
+value() {
+  awk -F '\t' -v key="$2" '$1 == key { print $2 }' "$1"
+}
+sha256_value() {
+  sha256sum "$1" | cut -d ' ' -f 1
+}
+
+source_name=$(value "$CONFIG" source_name)
+source_commit=$(value "$CONFIG" source_commit)
+source_receipt_sha=$(value "$CONFIG" source_receipt_sha256)
+reference_source="$ROOT/.local/sources/$source_name"
+[[ -d "$reference_source/.git" && ! -L "$reference_source/.git" ]] ||
+  fail "run scripts/fetch-reference-sources before this test"
+[[ "$("$LOCAL_GIT" -C "$reference_source" rev-parse 'HEAD^{commit}')" == \
+   "$source_commit" ]] || fail "bounded-rchk reference checkout differs"
+
+TEST_PARENT=$(mktemp -d "$ROOT/.local/tmp/test-rchk-bcheck-cache.XXXXXX")
+cleanup() {
+  find "$TEST_PARENT" -type d -exec chmod u+rwx {} + 2>/dev/null || true
+  find "$TEST_PARENT" -type f -exec chmod u+rw {} + 2>/dev/null || true
+  rm -rf -- "$TEST_PARENT"
+}
+trap cleanup EXIT HUP INT TERM
+
+input_receipt="$TEST_PARENT/input.tsv"
+"$PREPARE" --print-input-receipt > "$input_receipt"
+cache_key=$(sha256_value "$input_receipt")
+[[ "$cache_key" =~ ^[0-9a-f]{64}$ ]] || fail "fixture cache key is invalid"
+
+BASELINE_PARENT="$TEST_PARENT/baseline"
+ENTRY="$BASELINE_PARENT/$cache_key"
+PAYLOAD="$ENTRY/payload"
+RECEIPTS="$ENTRY/receipts"
+mkdir -p "$PAYLOAD/bin" "$PAYLOAD/identity" "$PAYLOAD/logs" \
+  "$PAYLOAD/source" "$RECEIPTS"
+
+"$LOCAL_GIT" -C "$reference_source" archive --format=tar "$source_commit" |
+  /usr/bin/tar --no-same-owner --no-same-permissions -xf - \
+    -C "$PAYLOAD/source"
+find "$PAYLOAD/source" -type d -exec chmod 0755 {} +
+find "$PAYLOAD/source" -type f -perm /111 -exec chmod 0555 {} +
+find "$PAYLOAD/source" -type f ! -perm /111 -exec chmod 0444 {} +
+find "$PAYLOAD/source" -type d -exec chmod 0555 {} +
+"$LOCAL_RSCRIPT" --vanilla "$TREE_HELPER" create "$PAYLOAD/source" \
+  "$RECEIPTS/source-tree.tsv" >/dev/null
+[[ "$(sha256_value "$RECEIPTS/source-tree.tsv")" == \
+   "$source_receipt_sha" ]] || fail "synthetic source receipt differs"
+cp -p "$input_receipt" "$RECEIPTS/input.tsv"
+cp -p "$COMMAND_INPUT" "$PAYLOAD/build-command.tsv"
+cp -p "$ENVIRONMENT_INPUT" "$PAYLOAD/build-environment.tsv"
+cp -p "$TOOL_INPUT" "$PAYLOAD/identity/tools.tsv"
+printf 'key\tvalue\nschema\t1\nexit_status\t0\n' > "$PAYLOAD/build-status.tsv"
+
+cat > "$PAYLOAD/identity/compiler-version.txt" <<'EOF'
+Ubuntu clang version 14.0.0-1ubuntu1.1
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+EOF
+{
+  printf '%s\n' \
+    $'version\t14.0.0' \
+    $'host_target\tx86_64-pc-linux-gnu' \
+    $'build_mode\tRelease' \
+    $'shared_mode\tshared' \
+    $'cppflags\t-I/usr/lib/llvm-14/include -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS' \
+    $'cxxflags\t-I/usr/lib/llvm-14/include -std=c++14   -fno-exceptions -D_GNU_SOURCE -D__STDC_CONSTANT_MACROS -D__STDC_FORMAT_MACROS -D__STDC_LIMIT_MACROS'
+  printf 'ldflags\t-L/usr/lib/llvm-14/lib \n'
+  printf '%s\n\n' $'libs\t-lLLVM-14'
+} > "$PAYLOAD/identity/llvm-config-identity.tsv"
+cat > "$PAYLOAD/identity/make-version.txt" <<'EOF'
+GNU Make 4.3
+Built for x86_64-pc-linux-gnu
+Copyright (C) 1988-2020 Free Software Foundation, Inc.
+License GPLv3+: GNU GPL version 3 or later <http://gnu.org/licenses/gpl.html>
+This is free software: you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law.
+EOF
+[[ "$(sha256_value "$PAYLOAD/identity/compiler-version.txt")" == \
+     "$(value "$CONFIG" compiler_version_sha256)" &&
+   "$(sha256_value "$PAYLOAD/identity/llvm-config-identity.tsv")" == \
+     "$(value "$CONFIG" llvm_config_identity_sha256)" &&
+   "$(sha256_value "$PAYLOAD/identity/make-version.txt")" == \
+     "$(value "$CONFIG" make_version_sha256)" ]] ||
+  fail "synthetic raw tool identities differ from their pins"
+
+image_repository=$(value "$CONFIG" image_repository)
+image_digest=$(value "$CONFIG" image_digest)
+{
+  printf 'key\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'reference\t%s@%s\n' "$image_repository" "$image_digest"
+  printf 'image_id\t%s\n' "$(value "$CONFIG" image_id)"
+  printf 'os\t%s\n' "$(value "$CONFIG" image_os)"
+  printf 'architecture\t%s\n' "$(value "$CONFIG" image_architecture)"
+} > "$PAYLOAD/identity/image.tsv"
+{
+  sed -n '1p' "$AUXILIARY_IMAGES"
+  awk -F '\t' '$1 == "rchk" { print }' "$AUXILIARY_IMAGES"
+} > "$PAYLOAD/identity/auxiliary-image.tsv"
+
+printf '%s\n' \
+  '/usr/bin/clang++ -DBCHECK_MAX_STATES=800000 -DCALLOCATORS_MAX_STATES=1000000 synthetic.cpp' \
+  'synthetic fixture: compile and link completed' > "$PAYLOAD/logs/build.log"
+: > "$PAYLOAD/logs/container.log"
+cp -p /bin/true "$PAYLOAD/bin/bcheck"
+
+write_seal() {
+  local entry=$1 receipts="$1/receipts" payload="$1/payload"
+  local input_sha source_sha payload_sha binary_sha
+  chmod u+w "$receipts" 2>/dev/null || true
+  chmod u+w "$receipts/payload-tree.tsv" 2>/dev/null || true
+  "$LOCAL_RSCRIPT" --vanilla "$TREE_HELPER" create "$payload" \
+    "$receipts/payload-tree.tsv" >/dev/null
+  input_sha=$(sha256_value "$receipts/input.tsv")
+  source_sha=$(sha256_value "$receipts/source-tree.tsv")
+  payload_sha=$(sha256_value "$receipts/payload-tree.tsv")
+  binary_sha=$(sha256_value "$payload/bin/bcheck")
+  chmod u+w "$receipts/seal.tsv" 2>/dev/null || true
+  {
+    printf 'key\tvalue\n'
+    printf 'schema\t1\n'
+    printf 'cache_key\t%s\n' "$cache_key"
+    printf 'input_receipt_sha256\t%s\n' "$input_sha"
+    printf 'source_receipt_sha256\t%s\n' "$source_sha"
+    printf 'payload_receipt_sha256\t%s\n' "$payload_sha"
+    printf 'binary_sha256\t%s\n' "$binary_sha"
+    printf 'binary_mode\t0555\n'
+  } > "$receipts/seal.tsv"
+  find "$receipts" -type f -exec chmod 0444 {} +
+  find "$receipts" -type d -exec chmod 0555 {} +
+}
+
+find "$PAYLOAD" -type f -perm /111 -exec chmod 0555 {} +
+find "$PAYLOAD" -type f ! -perm /111 -exec chmod 0444 {} +
+find "$PAYLOAD" -type d -exec chmod 0555 {} +
+write_seal "$ENTRY"
+chmod 0755 "$ENTRY"
+"$PREPARE" --verify-entry "$ENTRY" >/dev/null
+
+# Exercise the real publication shape: copy/reflink away from a tree which may
+# previously have been a bind mount, verify the copy, and atomically rename it.
+PROMOTION_PARENT="$TEST_PARENT/promotion"
+PUBLISHED_PARENT="$TEST_PARENT/published"
+mkdir "$PROMOTION_PARENT" "$PUBLISHED_PARENT"
+cp -a --reflink=auto "$ENTRY" "$PROMOTION_PARENT/$cache_key"
+"$PREPARE" --verify-entry "$PROMOTION_PARENT/$cache_key" >/dev/null
+mv -T "$PROMOTION_PARENT/$cache_key" "$PUBLISHED_PARENT/$cache_key"
+chmod 0555 "$PUBLISHED_PARENT/$cache_key"
+ENTRY="$PUBLISHED_PARENT/$cache_key"
+"$PREPARE" --verify-entry "$ENTRY" >/dev/null
+
+copy_case() {
+  local parent="$TEST_PARENT/$1"
+  mkdir "$parent"
+  cp -a --reflink=auto "$ENTRY" "$parent/$cache_key"
+  printf '%s\n' "$parent/$cache_key"
+}
+
+expect_failure() {
+  local label=$1 pattern=$2 entry=$3 log
+  log="$TEST_PARENT/$label.log"
+  if "$PREPARE" --verify-entry "$entry" > "$log" 2>&1; then
+    fail "$label tamper unexpectedly verified"
+  fi
+  grep -F "$pattern" "$log" >/dev/null ||
+    fail "$label tamper failed for an unexpected reason"
+}
+
+binary_case=$(copy_case binary)
+chmod u+w "$binary_case/payload/bin/bcheck"
+printf 'tamper\n' >> "$binary_case/payload/bin/bcheck"
+chmod 0555 "$binary_case/payload/bin/bcheck"
+expect_failure binary 'payload differs from its complete receipt' "$binary_case"
+
+command_case=$(copy_case command)
+chmod u+w "$command_case/payload/build-command.tsv"
+printf '12\tUNREVIEWED=1\n' >> "$command_case/payload/build-command.tsv"
+chmod 0444 "$command_case/payload/build-command.tsv"
+write_seal "$command_case"
+chmod 0755 "$command_case"
+expect_failure command 'command differs from its exact input' "$command_case"
+
+source_case=$(copy_case source)
+chmod u+w "$source_case/payload/source/README.md"
+printf 'tamper\n' >> "$source_case/payload/source/README.md"
+chmod 0444 "$source_case/payload/source/README.md"
+write_seal "$source_case"
+chmod 0755 "$source_case"
+expect_failure source 'source differs from its complete receipt' "$source_case"
+
+extra_case=$(copy_case extra)
+chmod u+w "$extra_case/payload"
+printf 'unexpected\n' > "$extra_case/payload/unexpected.txt"
+chmod 0444 "$extra_case/payload/unexpected.txt"
+chmod 0555 "$extra_case/payload"
+write_seal "$extra_case"
+chmod 0755 "$extra_case"
+expect_failure extra 'payload inventory is incomplete or has additions' "$extra_case"
+
+printf '%s\n' "bounded-rchk bcheck cache self-test passed"

@@ -6,6 +6,35 @@ native_domain_construct_frame_symbol = function() {
   get("C_domain_construct_frame", envir = asNamespace("paradox"))
 }
 
+native_domain_fct_grouping_symbol = function() {
+  get("C_domain_fct_grouping", envir = asNamespace("paradox"))
+}
+
+native_domain_numeric_bounds_symbol = function() {
+  get("C_domain_numeric_bounds_admit", envir = asNamespace("paradox"))
+}
+
+native_domain_uty_check_result_symbol = function() {
+  get("C_domain_uty_check_result", envir = asNamespace("paradox"))
+}
+
+native_domain_simple_repr_id_symbol = function() {
+  get("C_domain_simple_repr_id", envir = asNamespace("paradox"))
+}
+
+native_domain_numeric_bounds = function(
+    integer_kind = FALSE,
+    lower = -Inf,
+    upper = Inf,
+    tolerance = sqrt(.Machine$double.eps),
+    logscale = FALSE) {
+  .Call(
+    native_domain_numeric_bounds_symbol(),
+    environment(),
+    integer_kind
+  )
+}
+
 native_domain_frame_plan = function(
     cls = "ParamLgl",
     grouping = "ParamLgl",
@@ -61,11 +90,498 @@ test_that("native Domain construction is registered with a forced symbol", {
   frame_symbol = native_domain_construct_frame_symbol()
   expect_s3_class(frame_symbol, "NativeSymbolInfo")
   expect_identical(frame_symbol$numParameters, 1L)
+  grouping_symbol = native_domain_fct_grouping_symbol()
+  expect_s3_class(grouping_symbol, "NativeSymbolInfo")
+  expect_identical(grouping_symbol$numParameters, 1L)
+  bounds_symbol = native_domain_numeric_bounds_symbol()
+  expect_s3_class(bounds_symbol, "NativeSymbolInfo")
+  expect_identical(bounds_symbol$numParameters, 2L)
+  uty_symbol = native_domain_uty_check_result_symbol()
+  expect_s3_class(uty_symbol, "NativeSymbolInfo")
+  expect_identical(uty_symbol$numParameters, 1L)
+  repr_symbol = native_domain_simple_repr_id_symbol()
+  expect_s3_class(repr_symbol, "NativeSymbolInfo")
+  expect_identical(repr_symbol$numParameters, 1L)
   expect_error(
     .Call("domain_construct", PACKAGE = "paradox"),
     "not available"
   )
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
+})
+
+test_that("exact zero-argument built-in calls bypass deparse1", {
+  symbol = native_domain_simple_repr_id_symbol()
+  native_enabled = getRversion() >= "4.5.0"
+  expected = c(
+    p_dbl = "p_dbl()",
+    p_int = "p_int()",
+    p_lgl = "p_lgl()",
+    p_uty = "p_uty()"
+  )
+  domains = list(
+    p_dbl = p_dbl(),
+    p_int = p_int(),
+    p_lgl = p_lgl(),
+    p_uty = p_uty()
+  )
+  for (constructor in names(expected)) {
+    representation = as.call(list(as.name(constructor)))
+    encoded = .Call(symbol, representation)
+    if (native_enabled) {
+      expect_identical(encoded, expected[[constructor]])
+    } else {
+      expect_null(encoded)
+    }
+    domain = domains[[constructor]]
+    expect_identical(domain$id, expected[[constructor]])
+    expect_identical(attr(domain, "repr"), representation)
+  }
+
+  attributed = quote(p_dbl())
+  attr(attributed, "probe") = TRUE
+  classed = quote(p_dbl())
+  class(classed) = "constructor_probe"
+  for (representation in list(
+    quote(p_dbl(,)),
+    quote(paradox::p_dbl()),
+    quote(paradox:::p_dbl()),
+    quote(p_fct()),
+    attributed,
+    classed,
+    as.name("p_dbl"),
+    NULL
+  )) {
+    expect_null(.Call(symbol, representation))
+  }
+})
+
+test_that("native short Domain representations are byte-identical to deparse1", {
+  symbol = native_domain_simple_repr_id_symbol()
+  native_enabled = getRversion() >= "4.5.0"
+  previous_scipen = getOption("scipen")
+  on.exit(options(scipen = previous_scipen), add = TRUE)
+  options(scipen = 0L)
+
+  admitted = list(
+    as.call(c(list(as.name("p_dbl")), list(
+      lower = -9999,
+      upper = Inf,
+      tags = c("train", "bounded")
+    ))),
+    as.call(c(list(as.name("p_dbl")), list(
+      lower = -Inf,
+      upper = -0
+    ))),
+    as.call(c(list(as.name("p_int")), list(
+      lower = -20L,
+      upper = 20L,
+      tolerance = 0,
+      tags = c("train", "bounded")
+    ))),
+    as.call(c(list(as.name("p_fct")), list(
+      levels = character(),
+      tags = c("choice", "safe")
+    ))),
+    as.call(c(list(as.name("p_fct")), list(
+      levels = c("linear", "tree", "dart"),
+      tags = "categorical"
+    ))),
+    as.call(c(list(as.name("p_lgl")), list(
+      default = TRUE,
+      init = FALSE,
+      tags = c("flag", "required")
+    ))),
+    as.call(c(list(as.name("p_uty")), list(
+      custom_check = NULL,
+      repr = "plain value",
+      tags = "payload"
+    )))
+  )
+  for (representation in admitted) {
+    encoded = .Call(symbol, representation)
+    if (native_enabled) {
+      expect_type(encoded, "character")
+      expect_length(encoded, 1L)
+      expect_lte(nchar(encoded, type = "bytes"), 80L)
+      expect_identical(
+        encoded,
+        deparse1(representation, collapse = "\n", width.cutoff = 80)
+      )
+    } else {
+      expect_null(encoded)
+    }
+  }
+
+  domains = list(
+    p_dbl(-10, 10, tags = c("train", "bounded")),
+    p_int(-20L, 20L, tolerance = 0, tags = c("train", "bounded")),
+    p_fct(c("linear", "tree", "dart"), tags = "categorical"),
+    p_lgl(tags = c("flag", "required"), init = FALSE),
+    p_uty(tags = "payload")
+  )
+  for (domain in domains) {
+    representation = attr(domain, "repr")
+    expected = deparse1(
+      representation,
+      collapse = "\n",
+      width.cutoff = 80
+    )
+    encoded = .Call(symbol, representation)
+    if (native_enabled) {
+      expect_identical(encoded, expected)
+    } else {
+      expect_null(encoded)
+    }
+    expect_identical(domain$id, expected)
+  }
+
+  set.seed(20260716L)
+  strings = c("a", "Z9", "two words", "dash-value", "x/y", "a'b")
+  for (iteration in seq_len(250L)) {
+    constructor = c("p_dbl", "p_int", "p_fct", "p_lgl", "p_uty")[[
+      1L + (iteration - 1L) %% 5L
+    ]]
+    arguments = switch(
+      constructor,
+      p_dbl = list(
+        lower = as.double(sample.int(19999L, 1L) - 10000L),
+        upper = sample(c(-Inf, Inf), 1L),
+        tags = sample(strings, sample.int(2L, 1L))
+      ),
+      p_int = list(
+        lower = as.integer(sample.int(19999L, 1L) - 10000L),
+        upper = as.integer(sample.int(19999L, 1L) - 10000L),
+        tolerance = 0,
+        tags = sample(strings, 1L)
+      ),
+      p_fct = list(
+        levels = sample(strings, sample.int(2L, 1L)),
+        tags = sample(strings, 1L)
+      ),
+      p_lgl = list(
+        tags = sample(strings, sample.int(2L, 1L)),
+        init = sample(c(TRUE, FALSE), 1L)
+      ),
+      p_uty = list(
+        custom_check = NULL,
+        repr = sample(strings, 1L),
+        tags = sample(strings, 1L)
+      )
+    )
+    arguments = arguments[sample.int(length(arguments))]
+    representation = as.call(c(list(as.name(constructor)), arguments))
+    encoded = .Call(symbol, representation)
+    if (native_enabled) {
+      expect_type(encoded, "character")
+      expect_identical(
+        encoded,
+        deparse1(representation, collapse = "\n", width.cutoff = 80),
+        info = sprintf("iteration %d", iteration)
+      )
+    } else {
+      expect_null(encoded)
+    }
+  }
+})
+
+test_that("native short Domain representation grammar fails closed", {
+  symbol = native_domain_simple_repr_id_symbol()
+  native_enabled = getRversion() >= "4.5.0"
+  previous_scipen = getOption("scipen")
+  on.exit(options(scipen = previous_scipen), add = TRUE)
+  options(scipen = 0L)
+
+  attributed_call = quote(p_dbl(lower = 1))
+  attr(attributed_call, "probe") = TRUE
+  classed_call = quote(p_dbl(lower = 1))
+  class(classed_call) = "constructor_probe"
+  attributed_value = structure(1L, names = "value")
+  classed_value = structure(1L, class = "value_probe")
+  s4_call = asS4(quote(p_dbl()), TRUE, FALSE)
+  s4_value = asS4(1L, TRUE, FALSE)
+  bytes_value = rawToChar(as.raw(c(0x63, 0x61, 0x66, 0xc3, 0xa9)))
+  Encoding(bytes_value) = "bytes"
+  duplicate_arguments = as.call(c(
+    list(as.name("p_dbl")),
+    setNames(list(1, 2), c("lower", "lower"))
+  ))
+
+  declined = list(
+    quote(other(lower = 1)),
+    quote(paradox::p_dbl(lower = 1)),
+    quote(p_fct()),
+    call("p_dbl", 1),
+    quote(p_dbl(,)),
+    as.call(c(list(as.name("p_dbl")), list(unknown = 1))),
+    duplicate_arguments,
+    attributed_call,
+    classed_call,
+    s4_call,
+    as.call(c(list(as.name("p_dbl")), list(lower = attributed_value))),
+    as.call(c(list(as.name("p_dbl")), list(lower = classed_value))),
+    as.call(c(list(as.name("p_dbl")), list(lower = s4_value))),
+    as.call(c(list(as.name("p_dbl")), list(lower = 0.5))),
+    as.call(c(list(as.name("p_dbl")), list(lower = 10000))),
+    as.call(c(list(as.name("p_dbl")), list(lower = NA_real_))),
+    as.call(c(list(as.name("p_dbl")), list(lower = NaN))),
+    as.call(c(list(as.name("p_int")), list(lower = NA_integer_))),
+    as.call(c(list(as.name("p_int")), list(lower = c(1L, 3L)))),
+    as.call(c(list(as.name("p_lgl")), list(init = NA))),
+    as.call(c(list(as.name("p_lgl")), list(init = c(TRUE, FALSE)))),
+    as.call(c(list(as.name("p_fct")), list(levels = 'a"b'))),
+    as.call(c(list(as.name("p_fct")), list(levels = "a\\b"))),
+    as.call(c(list(as.name("p_fct")), list(levels = "line\nbreak"))),
+    as.call(c(list(as.name("p_fct")), list(levels = "café"))),
+    as.call(c(list(as.name("p_fct")), list(levels = bytes_value))),
+    as.call(c(list(as.name("p_fct")), list(levels = rep("abcdefghij", 8L)))),
+    as.call(c(list(as.name("p_fct")), list(levels = rep("x", 17L)))),
+    as.call(c(list(as.name("p_uty")), list(default = list()))),
+    as.call(c(list(as.name("p_uty")), list(default = quote(x + 1))))
+  )
+  for (representation in declined) {
+    expect_null(.Call(symbol, representation))
+  }
+
+  exactly_80 = as.call(c(
+    list(as.name("p_uty")),
+    list(repr = paste(rep("a", 64L), collapse = ""))
+  ))
+  encoded = .Call(symbol, exactly_80)
+  if (native_enabled) {
+    expect_identical(nchar(encoded, type = "bytes"), 80L)
+    expect_identical(
+      encoded,
+      deparse1(exactly_80, collapse = "\n", width.cutoff = 80)
+    )
+  } else {
+    expect_null(encoded)
+  }
+  over_80 = as.call(c(
+    list(as.name("p_uty")),
+    list(repr = paste(rep("a", 65L), collapse = ""))
+  ))
+  expect_null(.Call(symbol, over_80))
+
+  finite_real = as.call(c(
+    list(as.name("p_dbl")),
+    list(lower = -10, upper = 10)
+  ))
+  encoded = .Call(symbol, finite_real)
+  if (native_enabled) {
+    expect_identical(
+      encoded,
+      deparse1(finite_real, collapse = "\n", width.cutoff = 80)
+    )
+  } else {
+    expect_null(encoded)
+  }
+  options(scipen = -9L)
+  expect_null(.Call(symbol, finite_real))
+  domain = p_dbl(-10, 10)
+  expect_identical(
+    domain$id,
+    deparse1(attr(domain, "repr"), collapse = "\n", width.cutoff = 80)
+  )
+})
+
+test_that("utility callback results bypass general assertions only when valid", {
+  symbol = native_domain_uty_check_result_symbol()
+  for (value in list(
+    TRUE,
+    structure(TRUE, names = "valid"),
+    structure(TRUE, class = "valid"),
+    "diagnostic",
+    structure("diagnostic", class = "valid")
+  )) {
+    expect_identical(.Call(symbol, value), TRUE)
+  }
+  for (value in list(FALSE, NA, NA_character_, character(), 1L, NULL)) {
+    expect_identical(.Call(symbol, value), FALSE)
+  }
+
+  expect_s3_class(p_uty(custom_check = function(value) TRUE), "ParamUty")
+  expect_s3_class(
+    p_uty(custom_check = function(value) "invalid later"),
+    "ParamUty"
+  )
+  expect_error(
+    p_uty(custom_check = function(value) FALSE),
+    "result of 'custom_check\\(\\)'",
+    ignore.case = TRUE
+  )
+})
+
+test_that("factor grouping uses a narrow exact native escape pass", {
+  symbol = native_domain_fct_grouping_symbol()
+  levels = c('a"b', "c\\d", "plain")
+  expected = mlr3misc::str_collapse(
+    gsub("([\\\\\"])", "\\\\\\1", levels),
+    quote = '"',
+    sep = ","
+  )
+  expect_identical(.Call(symbol, levels), expected)
+  expect_identical(.Call(symbol, character()), "\"\"")
+
+  expect_null(.Call(symbol, NA_character_))
+  expect_null(.Call(symbol, "café"))
+  expect_null(.Call(symbol, structure("plain", names = "named")))
+  expect_null(.Call(symbol, structure("plain", class = "grouping_probe")))
+
+  factor = p_fct(c("z\\last", 'a"first', "middle"))
+  expect_identical(
+    factor$grouping,
+    mlr3misc::str_collapse(
+      gsub(
+        "([\\\\\"])",
+        "\\\\\\1",
+        sort(factor$levels[[1L]])
+      ),
+      quote = '"',
+      sep = ","
+    )
+  )
+})
+
+test_that("factor aggregation skips its general assertion only for NULL", {
+  without_aggregation = p_fct(c("a", "b"), aggr = NULL)
+  expect_null(without_aggregation$cargo[[1L]])
+
+  aggregation = function(value) value[[1L]]
+  with_aggregation = p_fct(c("a", "b"), aggr = aggregation)
+  expect_identical(with_aggregation$cargo[[1L]]$aggr, aggregation)
+
+  expect_error(
+    p_fct(c("a", "b"), aggr = function(x, y) x),
+    "Assertion on 'aggr' failed: Must have exactly 1 formal arguments, but has 2.",
+    fixed = TRUE
+  )
+  expect_error(
+    p_fct(c("a", "b"), aggr = 1L),
+    "Assertion on 'aggr' failed: Must be a function (or 'NULL'), not 'integer'.",
+    fixed = TRUE
+  )
+
+  events = character()
+  observe = function(name, value) {
+    events <<- c(events, name)
+    value
+  }
+  construct = function(
+      levels = observe("levels", c("a", "b")),
+      aggr = observe("aggr", NULL)) {
+    p_fct(levels, aggr = aggr)
+  }
+  construct()
+  expect_identical(events, c("aggr", "levels"))
+
+  events = character()
+  expect_error(
+    construct(
+      levels = observe("levels", stop("levels forced", call. = FALSE)),
+      aggr = observe("aggr", 1L)
+    ),
+    "Assertion on 'aggr' failed: Must be a function (or 'NULL'), not 'integer'.",
+    fixed = TRUE
+  )
+  expect_identical(events, "aggr")
+})
+
+test_that("numeric constructor admission is narrow and preserves forcing order", {
+  expect_true(native_domain_numeric_bounds(
+    lower = -2,
+    upper = 3,
+    tolerance = Inf
+  ))
+  expect_true(native_domain_numeric_bounds(
+    integer_kind = TRUE,
+    lower = -2L,
+    upper = Inf,
+    tolerance = 0.5
+  ))
+  expect_false(native_domain_numeric_bounds(logscale = TRUE))
+  expect_false(native_domain_numeric_bounds(tolerance = -1))
+  expect_false(native_domain_numeric_bounds(lower = 2, upper = 1))
+  expect_false(native_domain_numeric_bounds(
+    integer_kind = TRUE,
+    lower = 0.5
+  ))
+  expect_false(native_domain_numeric_bounds(
+    integer_kind = TRUE,
+    lower = 1e-310
+  ))
+  expect_false(native_domain_numeric_bounds(
+    integer_kind = TRUE,
+    upper = .Machine$integer.max + 1
+  ))
+  expect_false(native_domain_numeric_bounds(
+    lower = structure(0, class = "domain_bound_probe")
+  ))
+
+  events = character()
+  observe = function(name, value) {
+    events <<- c(events, name)
+    value
+  }
+  constructor = function(
+      tolerance = observe("tolerance", 0),
+      lower = observe("lower", -1),
+      upper = observe("upper", 1),
+      logscale = observe("logscale", FALSE)) {
+    .Call(native_domain_numeric_bounds_symbol(), environment(), FALSE)
+  }
+  expect_true(constructor())
+  expect_identical(events, c("tolerance", "lower", "upper", "logscale"))
+
+  expected = c("tolerance", "lower", "upper", "logscale")
+  for (stop_at in expected) {
+    events = character()
+    observe_until = function(name, value) {
+      events <<- c(events, name)
+      if (identical(name, stop_at)) {
+        stop(sprintf("forced:%s", name), call. = FALSE)
+      }
+      value
+    }
+    stopped = function(
+        tolerance = observe_until("tolerance", 0),
+        lower = observe_until("lower", -1),
+        upper = observe_until("upper", 1),
+        logscale = observe_until("logscale", FALSE)) {
+      .Call(native_domain_numeric_bounds_symbol(), environment(), FALSE)
+    }
+    expect_error(stopped(), sprintf("forced:%s", stop_at), fixed = TRUE)
+    expect_identical(events, expected[seq_len(match(stop_at, expected))])
+  }
+
+  decline = function(
+      integer_kind = FALSE,
+      tolerance = observe("tolerance", 0),
+      lower = observe("lower", -1),
+      upper = observe("upper", 1),
+      logscale = observe("logscale", FALSE)) {
+    .Call(
+      native_domain_numeric_bounds_symbol(),
+      environment(),
+      integer_kind
+    )
+  }
+  events = character()
+  expect_false(decline(tolerance = observe("tolerance", -1)))
+  expect_identical(events, "tolerance")
+
+  events = character()
+  expect_false(decline(
+    integer_kind = TRUE,
+    lower = observe("lower", 0.5)
+  ))
+  expect_identical(events, c("tolerance", "lower"))
+
+  events = character()
+  expect_false(decline(
+    lower = observe("lower", 2),
+    upper = observe("upper", 1)
+  ))
+  expect_identical(events, c("tolerance", "lower", "upper"))
 })
 
 test_that("frame admission builds a private plan without forcing opaque rows", {

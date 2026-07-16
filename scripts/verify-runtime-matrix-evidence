@@ -144,6 +144,9 @@ verify_trusted_inputs() {
     scripts/environment/runtime-matrix-inventory.R
     scripts/environment/runtime-matrix-probe.R
     scripts/environment/run-runtime-matrix-tests.R
+    scripts/environment/resource-jobs
+    scripts/environment/run-runtime-matrix-stage
+    scripts/environment/run-runtime-matrix-wave
     environment/runtime-matrix-pre46-exclusions.tsv
     environment/runtime-matrix-whole-file-skips.tsv
     environment/runtime-matrix-result-skips.tsv
@@ -155,6 +158,122 @@ verify_trusted_inputs() {
     cmp -s -- "$inputs/$relative" "$source/$relative" ||
       fail "Retained trusted input differs from the source archive: $relative"
   done
+}
+
+verify_scheduler_evidence() {
+  local top_metadata=$1
+  shift
+  local -a expected_versions=("$@")
+  local report="$top_metadata/resource-jobs.tsv"
+  local tasks="$top_metadata/stage-tasks.tsv"
+  local wave="$top_metadata/stage-wave"
+  local plan="$wave/wave-plan.tsv"
+  local ledger="$wave/task-ledger.tsv"
+  local manifest="$top_metadata/stage-wave.manifest.tsv"
+  local jobs timeout_seconds value path ordinal version exit_status timed_out
+  local task_log_relative task_log_sha supervisor_relative supervisor_sha
+  local expected expected_plan_worker
+
+  for path in "$report" "$tasks" "$plan" "$ledger" "$manifest"; do
+    [[ -f "$path" && ! -L "$path" ]] ||
+      fail "Runtime scheduler evidence is absent or symbolic: $path"
+  done
+  [[ -d "$wave" && ! -L "$wave" ]] ||
+    fail "Runtime scheduler wave directory is absent or symbolic"
+  "$PREFIX_RECEIPT" verify "$wave" "$manifest" >/dev/null ||
+    fail "Runtime scheduler wave differs from its complete receipt"
+
+  [[ $(head -n 1 "$report") == $'field\tvalue' ]] ||
+    fail "Runtime resource report has the wrong header"
+  awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}' \
+    "$report" || fail "Runtime resource report is malformed"
+  [[ $(awk -F '\t' '$1 == "schema" {print $2}' "$report") == 1 &&
+    $(awk -F '\t' '$1 == "profile" {print $2}' "$report") == light-test ]] ||
+    fail "Runtime resource report is not the reviewed light-test schema"
+  jobs=$(awk -F '\t' '$1 == "jobs" {print $2}' "$report")
+  [[ "$jobs" =~ ^[12]$ && "$jobs" -le "${#expected_versions[@]}" ]] ||
+    fail "Runtime resource report jobs are unsafe or inconsistent"
+
+  {
+    printf 'ordinal\tversion\n'
+    for ((ordinal = 1; ordinal <= ${#expected_versions[@]}; ordinal++)); do
+      printf '%s\t%s\n' "$ordinal" "${expected_versions[ordinal - 1]}"
+    done
+  } | cmp -s -- "$tasks" - ||
+    fail "Runtime scheduler task order differs from the stage ledger"
+
+  [[ $(head -n 1 "$plan") == $'field\tvalue' ]] ||
+    fail "Runtime scheduler plan has the wrong header"
+  awk -F '\t' 'NR == 1 {next} NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}' \
+    "$plan" || fail "Runtime scheduler plan is malformed"
+  plan_value() { awk -F '\t' -v key="$1" '$1 == key {print $2}' "$plan"; }
+  timeout_seconds=$(plan_value task_timeout_seconds)
+  [[ $(plan_value schema) == 1 && $(plan_value jobs) == "$jobs" &&
+    $(plan_value tasks) == "${#expected_versions[@]}" &&
+    $(plan_value admission_report_path) == "$report" &&
+    $(plan_value admission_report_sha256) == "$(sha256sum "$report" | cut -d ' ' -f 1)" &&
+    $(plan_value task_list_path) == "$tasks" &&
+    $(plan_value task_list_sha256) == "$(sha256sum "$tasks" | cut -d ' ' -f 1)" &&
+    $(plan_value nested_parallelism) == 1 &&
+    $(plan_value kill_after_seconds) == 10 &&
+    $(plan_value termination_grace_tenths) == 50 &&
+    "$timeout_seconds" =~ ^[1-9][0-9]{0,4}$ && "$timeout_seconds" -le 86400 ]] ||
+    fail "Runtime scheduler plan admission or timeout policy is inconsistent"
+
+  expected_plan_worker="$ROOT/scripts/environment/run-runtime-matrix-stage"
+  [[ $(plan_value worker_path) == "$expected_plan_worker" &&
+    $(plan_value worker_sha256) == "$(sha256sum "$expected_plan_worker" | cut -d ' ' -f 1)" ]] ||
+    fail "Runtime stage worker identity differs from trusted current code"
+  for value in bash setsid timeout_tool; do
+    path=$(plan_value "${value}_path")
+    [[ "$path" == /* && -x "$path" && -f "$path" && ! -L "$path" &&
+      "$(readlink -f -- "$path")" == "$path" &&
+      $(plan_value "${value}_sha256") == "$(sha256sum "$path" | cut -d ' ' -f 1)" ]] ||
+      fail "Runtime scheduler tool identity is stale: $value"
+  done
+  [[ $(LC_ALL=C "$(plan_value bash_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value bash_identity_sha256)" &&
+    $(LC_ALL=C "$(plan_value setsid_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value setsid_identity_sha256)" &&
+    $(LC_ALL=C "$(plan_value timeout_tool_path)" --version 2>&1 | head -n 1 | sha256sum | cut -d ' ' -f 1) == \
+      "$(plan_value timeout_tool_identity_sha256)" ]] ||
+    fail "Runtime scheduler tool version identity is stale"
+
+  [[ $(head -n 1 "$ledger") == $'schema\tordinal\tversion\texit_status\ttimed_out\tstarted\ttask_log_relative\ttask_log_sha256\tsupervisor_log_relative\tsupervisor_log_sha256' ]] ||
+    fail "Runtime scheduler task ledger has the wrong header"
+  expected=0
+  while IFS=$'\t' read -r _ ordinal version exit_status timed_out started \
+      task_log_relative task_log_sha supervisor_relative supervisor_sha extra; do
+    [[ -z "${extra:-}" ]] || fail "Runtime scheduler ledger row has extra fields"
+    expected=$((expected + 1))
+    [[ "$ordinal" == "$expected" &&
+      "$version" == "${expected_versions[expected - 1]}" &&
+      "$exit_status" == 0 && "$timed_out" == false && "$started" == true &&
+      "$task_log_relative" == "tasks/$(printf '%04d.log' "$expected")" &&
+      "$supervisor_relative" == "tasks/$(printf '%04d.supervisor.log' "$expected")" ]] ||
+      fail "Runtime scheduler sibling result is incomplete or out of order"
+    [[ -f "$wave/$task_log_relative" && ! -L "$wave/$task_log_relative" &&
+      -f "$wave/$supervisor_relative" && ! -L "$wave/$supervisor_relative" &&
+      "$task_log_sha" == "$(sha256sum "$wave/$task_log_relative" | cut -d ' ' -f 1)" &&
+      "$supervisor_sha" == "$(sha256sum "$wave/$supervisor_relative" | cut -d ' ' -f 1)" &&
+      ! -s "$wave/$supervisor_relative" ]] ||
+      fail "Runtime scheduler task logs are stale or a successful supervisor emitted diagnostics"
+    if ! grep -Fqx 'runtime_stage_worker=passed' "$wave/$task_log_relative" ||
+        ! grep -Fqx "runtime=$version" "$wave/$task_log_relative"; then
+      fail "Runtime stage worker success marker is absent"
+    fi
+  done < <(tail -n +2 "$ledger")
+  [[ "$expected" -eq "${#expected_versions[@]}" ]] ||
+    fail "Runtime scheduler did not retain every expected sibling"
+
+  [[ $(metadata_value "$top_metadata" runtime_jobs) == "$jobs" &&
+    $(metadata_value "$top_metadata" stage_timeout_seconds) == "$timeout_seconds" &&
+    $(metadata_value "$top_metadata" resource_report_sha256) == "$(sha256sum "$report" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" stage_tasks_sha256) == "$(sha256sum "$tasks" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_plan_sha256) == "$(sha256sum "$plan" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_task_ledger_sha256) == "$(sha256sum "$ledger" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" wave_manifest_sha256) == "$(sha256sum "$manifest" | cut -d ' ' -f 1)" ]] ||
+    fail "Top-level runtime scheduler bindings are inconsistent"
 }
 
 verify_source_scope() {
@@ -191,7 +310,7 @@ verify_source_scope() {
   awk -F '\t' '
     NR == 1 {if ($0 != "context\treason") exit 1; next}
     NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
-    END {if (NR != 15) exit 1}
+    END {if (NR != 23) exit 1}
   ' "$exclusions" || fail "Retained pre-R-4.6 exclusion policy is malformed"
   awk -F '\t' '
     NR == 1 {
@@ -228,7 +347,7 @@ verify_source_scope() {
           ($1 == "excluded" && $4 == "")) exit 1
       count[$1]++
     }
-    END {if (NR != 72 || count["executed"] != 57 || count["excluded"] != 14) exit 1}
+    END {if (NR != 80 || count["executed"] != 57 || count["excluded"] != 22) exit 1}
   ' "$scope/scope.tsv" || fail "Retained source-test scope is malformed"
 
   diff -u \
@@ -290,9 +409,9 @@ verify_source_scope() {
     [[ "$value" =~ ^[0-9]+$ && "$value" == "$(log_value "$log" "$field")" ]] ||
       fail "Retained source-test count is malformed or inconsistent: $field"
   done
-  [[ $(metadata_value "$metadata" discovered_test_file_count) == 71 &&
+  [[ $(metadata_value "$metadata" discovered_test_file_count) == 79 &&
     $(metadata_value "$metadata" executed_test_file_count) == 57 &&
-    $(metadata_value "$metadata" excluded_test_file_count) == 14 &&
+    $(metadata_value "$metadata" excluded_test_file_count) == 22 &&
     $(metadata_value "$metadata" testthat_reported_file_count) == 55 ]] ||
     fail "Retained source-test counts differ from the reviewed scope"
   [[ $(metadata_value "$metadata" whole_file_skip_count) == 2 &&
@@ -319,9 +438,9 @@ verify_source_scope() {
   [[ $(log_value "$log" expected_result_test_block_skip_count) == \
       "$expected_result_skip_count" ]] ||
     fail "Expected result-skip count differs from the reviewed runtime policy"
-  [[ $(log_value "$log" discovered_test_context_count) == 71 &&
+  [[ $(log_value "$log" discovered_test_context_count) == 79 &&
     $(log_value "$log" executed_test_context_count) == 57 &&
-    $(log_value "$log" excluded_test_context_count) == 14 &&
+    $(log_value "$log" excluded_test_context_count) == 22 &&
     $(log_value "$log" staged_test_support_file_count) == 7 ]] ||
     fail "Retained source-test context/support counts are inconsistent"
 
@@ -407,6 +526,7 @@ top_stage_count=$(metadata_value "$top_metadata" stage_count)
   "$top_stage_count" =~ ^[12]$ &&
   "$top_stage_count" -eq "${#versions[@]}" ]] ||
   fail "Top-level runtime provenance is malformed or inconsistent"
+verify_scheduler_evidence "$top_metadata" "${versions[@]}"
 "$GIT_HELPER" verify-ref "$ROOT" "$top_source_ref" "$top_commit" \
   "$top_tree" >/dev/null ||
   fail "Top-level source ref no longer resolves to its recorded commit and tree"
@@ -428,6 +548,19 @@ for version in "${versions[@]}"; do
   verify_source_archive "$artifacts" "$metadata"
   verify_trusted_inputs "$version" "$artifacts"
   verify_recorded_digests "$version" "$artifacts" "$metadata"
+  [[ $(metadata_value "$metadata" scheduler_resource_report_sha256) == \
+      "$(metadata_value "$top_metadata" resource_report_sha256)" &&
+    $(metadata_value "$metadata" scheduler_stage_tasks_sha256) == \
+      "$(metadata_value "$top_metadata" stage_tasks_sha256)" &&
+    $(metadata_value "$metadata" scheduler_wave_plan_sha256) == \
+      "$(metadata_value "$top_metadata" wave_plan_sha256)" &&
+    $(metadata_value "$metadata" scheduler_task_ledger_sha256) == \
+      "$(metadata_value "$top_metadata" wave_task_ledger_sha256)" &&
+    $(metadata_value "$metadata" scheduler_wave_manifest_sha256) == \
+      "$(metadata_value "$top_metadata" wave_manifest_sha256)" &&
+    $(metadata_value "$metadata" stage_worker_sha256) == \
+      "$(sha256sum "$artifacts/inputs/scripts/environment/run-runtime-matrix-stage" | cut -d ' ' -f 1)" ]] ||
+    fail "Stage scheduler evidence differs from the top-level admission"
   verify_source_scope "$artifacts" "$metadata"
   recorded_run_id=$(awk -F '\t' '$1 == "run_id" {print $2}' "$metadata/run.tsv")
   recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")

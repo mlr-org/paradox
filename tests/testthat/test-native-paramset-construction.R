@@ -2,6 +2,54 @@ native_paramset_construct_symbol = function() {
   get("C_param_set_construct", envir = asNamespace("paradox"))
 }
 
+native_paramset_index_layout_replay = function(first_valid) {
+  dso = getLoadedDLLs()[["paradox"]][["path"]]
+  callr::r(function(dso, first_valid) {
+    dll = dyn.load(dso)
+    symbol = getDLLRegisteredRoutines(dll)[[".Call"]][[
+      "param_set_index_layout"
+    ]]
+
+    params = data.table::data.table(
+      id = c("z", "a", "m"),
+      cls = rep("ParamDbl", 3L),
+      grouping = rep("ParamDbl", 3L)
+    )
+    data.table::setindexv(params, c("id", "cls", "grouping"))
+    tags = data.table::data.table(
+      tag = c("a", "B", "", "_", "b", "A", "a")
+    )
+    data.table::setindexv(tags, "tag")
+    identity = data.table::data.table(
+      id = c("a", "m", "z"),
+      cls = rep("ParamDbl", 3L),
+      grouping = rep("ParamDbl", 3L)
+    )
+    data.table::setindexv(identity, c("id", "cls", "grouping"))
+    empty = data.table::data.table(tag = character())
+    data.table::setindexv(empty, "tag")
+
+    arguments = list(
+      base::getNamespaceVersion("data.table")[[1L]],
+      attr(params, "index", exact = TRUE),
+      attr(tags, "index", exact = TRUE),
+      attr(identity, "index", exact = TRUE),
+      attr(empty, "index", exact = TRUE)
+    )
+    invoke = function(valid) {
+      .Call(
+        symbol,
+        if (valid) arguments[[1L]] else "unsupported",
+        arguments[[2L]],
+        arguments[[3L]],
+        arguments[[4L]],
+        arguments[[5L]]
+      )
+    }
+    c(first = invoke(first_valid), replay = invoke(!first_valid))
+  }, args = list(dso = dso, first_valid = first_valid))
+}
+
 native_paramset_force_constructor_fallback = function(domains) {
   lapply(domains, function(domain) {
     domain = data.table::copy(domain)
@@ -44,11 +92,87 @@ test_that("native ParamSet construction is registered with a forced symbol", {
   symbol = native_paramset_construct_symbol()
   expect_s3_class(symbol, "NativeSymbolInfo")
   expect_identical(symbol$numParameters, 1L)
+  layout_symbol = get(
+    "C_param_set_index_layout",
+    envir = asNamespace("paradox")
+  )
+  expect_s3_class(layout_symbol, "NativeSymbolInfo")
+  expect_identical(layout_symbol$numParameters, 5L)
   expect_error(
     .Call("param_set_construct", list(), PACKAGE = "paradox"),
     "not available"
   )
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
+})
+
+test_that("data.table index-layout configuration is one-shot and fail-closed", {
+  enabled_first = native_paramset_index_layout_replay(TRUE)
+  expect_identical(enabled_first[["replay"]], enabled_first[["first"]])
+  if (base::getNamespaceVersion("data.table")[[1L]] %in%
+      c("1.17.8", "1.18.4")) {
+    expect_true(enabled_first[["first"]])
+  }
+
+  unsupported_first = native_paramset_index_layout_replay(FALSE)
+  expect_false(unsupported_first[["first"]])
+  expect_false(unsupported_first[["replay"]])
+})
+
+test_that("native construction reuses the probed data.table index layout", {
+  domains = list(
+    z = p_int(tags = c("a", "B")),
+    a = p_dbl(tags = c("", "_")),
+    m = p_lgl(tags = c("b", "A"))
+  )
+  bundle = .Call(native_paramset_construct_symbol(), domains)
+  params_index = attr(bundle$params, "index", exact = TRUE)
+  tags_index = attr(bundle$tags, "index", exact = TRUE)
+  if (is.null(attr(
+      params_index,
+      "__id__cls__grouping",
+      exact = TRUE
+    ))) {
+    skip("loaded data.table uses a different secondary-index layout")
+  }
+
+  expected_params = data.table::copy(bundle$params)
+  attr(expected_params, "index") = NULL
+  data.table::setindexv(expected_params, c("id", "cls", "grouping"))
+  expected_tags = data.table::copy(bundle$tags)
+  attr(expected_tags, "index") = NULL
+  data.table::setindexv(expected_tags, "tag")
+  expect_identical(
+    params_index,
+    attr(expected_params, "index", exact = TRUE)
+  )
+  expect_identical(
+    tags_index,
+    attr(expected_tags, "index", exact = TRUE)
+  )
+
+  non_ascii = list(
+    x = p_fct(c("gr\u00f6\u00dfe", "small"), tags = "gr\u00f6\u00dfe")
+  )
+  direct = .Call(native_paramset_construct_symbol(), non_ascii)
+  expect_null(attr(
+    attr(direct$params, "index", exact = TRUE),
+    "__id__cls__grouping",
+    exact = TRUE
+  ))
+  expect_null(attr(
+    attr(direct$tags, "index", exact = TRUE),
+    "__tag",
+    exact = TRUE
+  ))
+  public = ParamSet$new(non_ascii)
+  expect_identical(
+    data.table::indices(public$.__enclos_env__$private$.params),
+    "id__cls__grouping"
+  )
+  expect_identical(
+    data.table::indices(public$.__enclos_env__$private$.tags),
+    "tag"
+  )
 })
 
 test_that("native construction creates canonical empty and mixed bundles", {

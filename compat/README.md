@@ -252,24 +252,95 @@ Rscript --vanilla compat/test-reverse-dependencies.R \
   --candidate-ref "$candidate_ref" \
   --candidate-commit "$candidate_commit" \
   --candidate-tree "$candidate_tree" \
+  --candidate-source "$candidate_source" \
   --candidate-content "$candidate_content" \
   --run-id "$reverse_run_id"
 ```
 
 The gate verifies the manifest, every pinned CRAN MD5 and SHA-256, and every
 pinned Bioconductor SHA-256 before running isolated `R CMD check` processes.
-Each process gets a
-writable run-local check library, `NOT_CRAN=true`, and the candidate before the
-shared dependency library. Candidate package, complete candidate-library, and
-complete dependency-library content hashes are checked before and after every
-package. Plans, copied manifests, commands, full logs, results, and completion
-metadata are retained below `.local/compat/reverse-runs/`. A deterministic
-whole-stage manifest and `metadata/completion.seal` cover those retained files
-and can be checked with `compat/verify-repository-evidence.R`. Use repeated
-`--package NAME` selections and `--plan-only` for a bounded checksum/provenance
-preflight. Missing R dependencies and missing system dependencies have explicit
-result classifications; other check failures remain candidate-or-consumer
-failures rather than being silently waived.
+The fixed candidate is authenticated through its clean detached source
+worktree, so unrelated development in the primary checkout does not invalidate
+an in-flight run. Each process gets a writable row-local home, temporary tree,
+Python/reticulate/R/compiler caches, `NOT_CRAN=true`, and the candidate before
+the shared dependency library.
+
+The complete candidate and dependency libraries are content-hashed exactly
+twice in an actual stage: once at stage start and once at final postflight.
+Every execution-wave boundary instead compares a non-following, path-bound metadata
+fingerprint containing type, mode, size, mtime, ctime, device, inode, link
+count, hard-link identity, and symbolic-link text. `--plan-only` and the
+synthetic self-test perform zero protected-library content hashes. TinyTeX's
+complete archive/tree authentication remains owned by its bootstrap receipt;
+this consumer gate rechecks only the exact tools it executes.
+
+Consumer installation is separate from checking and content-addressed below
+`.local/compat/reverse-cache/install/`. Its key contains only inputs that can
+affect installed bytes: authenticated archive and candidate/dependency
+content, the exact install worker/command/environment, R configuration,
+compiler/build-tool bytes, platform, Makevars, locks, and active overlay
+receipts. Runner, verifier, report, plan, and row-order changes are excluded.
+Every cache is fully sealed and semantically reauthenticated immediately before
+the check child starts; an invalid cache is quarantined and rebuilt once.
+Concurrent same-key builders stage privately; exactly one atomically promotes
+the cache and every loser authenticates and reuses that completed target.
+
+Independent rows run in conservative bounded waves. Immediately before every
+wave, `scripts/environment/resource-jobs consumer --report` recomputes the
+live CPU-affinity, cgroup, and available-memory ceiling; its exact report is
+retained with that wave. The automatic ceiling is at most four heavyweight
+consumers and fails closed if even one would invade the memory reserve.
+`PARADOX_REVERSE_JOBS=N` may only lower the current automatic and retained
+limits. Every child has a separate process, install library, home, work tree,
+and caches. Nested make/CMake, testthat, `parallel`/`future`, OpenMP, BLAS, and
+related thread pools are fixed at one and recorded in command evidence and the
+install-cache key.
+
+The parent waits for every process in a wave before checking protected inputs.
+It alone writes the deterministic wave and acceptance ledgers, seals successful
+worker outputs, and promotes rows in plan order. Ordinary consumer failures are
+complete accepted rows; an unexpected worker failure remains unsealed with its
+diagnostics while successful siblings from that completed wave are retained.
+Every external task atomically publishes a launch receipt before invoking R and
+a completion receipt only after its identity-bound result exists; resume uses
+those receipts to distinguish completed siblings, failed workers, and tasks
+that were never started. Process-group and token cleanup bound interruption
+even when nested tools create new sessions.
+`--no-stop-on-test-error` collects each package's complete bounded test-script
+batch, and later packages continue. Counts are `exact`, `partial`, or
+`unavailable` rather than manufactured zeros. If interrupted, resume the same
+selection and identity with:
+
+```sh
+Rscript --vanilla compat/test-reverse-dependencies.R \
+  --root "$PARADOX_ROOT" --max-priority 1 \
+  --candidate-library "$candidate_library" \
+  --dependency-library "$dependency_library" \
+  --candidate-ref "$candidate_ref" --candidate-commit "$candidate_commit" \
+  --candidate-tree "$candidate_tree" --candidate-source "$candidate_source" \
+  --candidate-content "$candidate_content" --run-id "$reverse_run_id" \
+  --resume
+```
+
+Every semantically verified accepted row is skipped, whether it records a pass
+or a complete bounded failure; only incomplete attempts are moved to sealed
+interrupted diagnostics and rerun. The run-level composite seal binds
+row manifests and seals instead of rehashing every retained `Rcheck` artifact.
+Verify a completed run with:
+
+```sh
+Rscript --vanilla compat/verify-reverse-dependency-evidence.R \
+  "$PARADOX_ROOT/.local/compat/reverse-runs/$reverse_run_id"
+```
+
+Use repeated `--package NAME` selections and `--plan-only` for a bounded
+checksum/provenance preflight. Missing R dependencies and missing system
+dependencies have explicit result classifications; other failures remain
+candidate-or-consumer failures rather than being silently waived. Exercise the
+economy, bounded-concurrency, cache-promotion race, complete-wave failure,
+parent-only acceptance, tamper, count, and resume contracts without real
+consumers or large hashes with `Rscript --vanilla
+compat/test-reverse-dependencies-self-test.R`.
 
 Before the full run, repeat the command above with a fresh preflight run ID and
 append `--package miesmuschel --plan-only`. This is the required practical
@@ -307,6 +378,7 @@ mlr3verse_library="$PARADOX_ROOT/.local/compat/R/library-mlr3verse-core"
 test -d "$mlr3verse_library"
 export NOT_CRAN=true
 export PARADOX_CONSUMER_EXTRA_LIBS="$mlr3verse_library"
+export PARADOX_CANDIDATE_SOURCE="$candidate_source_worktree"
 
 Rscript compat/test-repositories.R "$PARADOX_ROOT" 0 \
   "$candidate_library" "$dependency_library" --run-id "$run_id"
@@ -320,10 +392,15 @@ regular, non-symbolic files. The harness requires their exact schema, checks
 the receipt against the candidate installation run, canonical candidate and
 dependency paths, dependency content, full candidate ref, commit, tree,
 installed version, and installed package-content hash, authenticates the
-current installer and Git-state helper, and
-reproduces the source tar byte-for-byte with `git archive`. It then verifies
-every selected checkout against
-`github-snapshot.tsv`, including its origin, commit, and clean worktree; and
+current installer and Git-state helper, and reproduces the source tar
+byte-for-byte with `git archive`. `PARADOX_CANDIDATE_SOURCE` (or
+`--candidate-source`) must name a clean, detached linked worktree at that exact
+ref, commit, and tree. The primary checkout may contain unrelated development
+work; it is never substituted for the frozen source. Replacement refs, grafts,
+alternate object stores, redirected attributes, hidden index state, partial
+clone inputs, symbolic tree members, and source dirt including ignored files
+fail closed. It then verifies every selected checkout against
+`github-snapshot.tsv`, including its origin, commit, and tree; and
 requires the successful, sealed sibling dependency-preparation stage for the
 same run ID and priority. The dependency stage's reviewed manifests, selected
 repositories, local R, harnesses, result ledger, and final dependency-library
@@ -332,31 +409,84 @@ that exposes a package `DESCRIPTION` and is therefore eligible for the local
 resolver fallback has a separate pinned preflight and postflight receipt. Both
 receipts bind its package, repository, origin, commit, and clean worktree. The
 test harness authenticates those provider receipts while retaining the selected
-consumer rows as a separate exact binding, then
-rechecks all protected content around every repository. It checkpoints the
-result ledger after each row and aborts on a provenance violation. Optional
+consumer rows as a separate exact binding. Tests execute from two freshly
+extracted copies of a deterministic archive of the pinned commit, so local
+consumer dirt is neither executed nor silently incorporated. Optional
 third and fourth script arguments select the candidate and dependency
-locations; `--run-id ID` is mandatory, and `--plan-only` validates the
-complete preflight without creating the run directory, test stage, or result
-ledger. Plan-only behavior is controlled only by that command-line flag;
+locations; `--run-id ID` is mandatory. The resumable interface also accepts
+`--candidate-source`, `--candidate-origin`, `--repositories`,
+`--timeout-seconds`, and lowering-only `--jobs` controls. `--plan-only`
+validates source,
+candidate, dependency-evidence, and dynamic row selection without creating the
+test stage and without computing any protected candidate/dependency/overlay
+tree fingerprint. `--verify` reopens a completed stage and performs its
+semantic and sealed-artifact verification without rerunning tests. Plan-only
+behavior is controlled only by that command-line flag;
 inherited environment variables cannot silently turn the release command into
 a successful plan.
-Results, elapsed times, pinned
-commits, frameworks, candidate versions, candidate source and library
-fingerprints, `NOT_CRAN`, classifications, and unrelated blockers are written
-to
-`.local/compat/runs/<run-id>/repository-tests-priority-<N>/test-results-priority-<N>.tsv`.
-The sibling `metadata/` directory retains the exact manifests, harness,
-fingerprint implementation, candidate provenance receipt and seal, installer,
-Git-state authenticator,
-ordered run metadata, and completion hashes. A deterministic manifest covers
-every regular file in the completed stage, and `metadata/completion.seal`
-authenticates that manifest. Verify either dependency or test evidence with:
+
+The general runner has no fixed priority split or row count. Each row has
+append-only `attempt-NNNNNN/` evidence and is promoted only after archive,
+environment, structured-count, mutation-delta, provenance, and status
+semantics pass. Its small `accepted.tsv` pointer makes a later invocation skip
+that row; an interrupted or invalid attempt is retained or quarantined and a
+new attempt is used. Ordinary consumer failures are accepted as factual row
+results and the remaining consumers still run. Only a provenance/infrastructure
+failure stops promotion. Testthat runs with `stop_on_failure = FALSE`, so a row
+reports all reachable failures rather than only the first one.
+
+Independent rows run in bounded external-`Rscript` waves. Immediately before
+each wave the runner retains a fresh `resource-jobs consumer` decision;
+`--jobs N` may only lower that live and initially retained ceiling. Every
+worker has isolated mutable state and forces nested make, CMake, testthat,
+`parallel`/`future`, BLAS, and OpenMP work to one thread. The parent waits for
+every sibling, seals the complete wave, and promotes accepted rows in
+deterministic plan order. Restarting the same unfinished run reuses every
+semantically verified accepted row, including successful siblings retained
+before a later row failed, instead of executing it again.
+
+Candidate package, complete candidate library, dependency library, and every
+ordered extra library receive a full content fingerprint exactly at the stage
+start and final boundary. Between boundaries the runner uses exhaustive
+non-following metadata checks and small authenticated sentinels; it does not
+rehash every package tree around every row. Every row receives disposable
+HOME, temporary, XDG, R cache, Python bytecode/user, pip/uv, reticulate,
+matplotlib, ML-framework, CUDA, WEKA, and ccache roots. Those roots and both
+writable source extractions are deleted before the attempt is sealed, so a
+later row cannot reuse consumer compilation or cache state accidentally.
+
+Results, elapsed times, pinned commits/trees, frameworks, candidate versions,
+the two boundary fingerprints, semantic test counts, `NOT_CRAN`,
+classifications, mutation deltas, logs, and exact archived source proofs live
+below `.local/compat/runs/<run-id>/repository-tests-priority-<N>/rows/` and
+`completions/`. `inputs/` retains the dynamic selection, exact harnesses,
+fingerprint implementation, detached candidate proof, environment, and start
+boundary. A deterministic manifest covers every regular file in the completed
+stage, and `metadata/completion.seal` authenticates that manifest. Perform the
+full repository-specific verifier with:
 
 ```sh
-Rscript --vanilla compat/verify-repository-evidence.R \
-  ".local/compat/runs/$run_id/repository-tests-priority-0"
+Rscript --vanilla compat/test-repositories.R "$PARADOX_ROOT" 0 \
+  "$candidate_library" "$dependency_library" --run-id "$run_id" \
+  --candidate-source "$PARADOX_CANDIDATE_SOURCE" --verify
 ```
+
+`compat/verify-repository-evidence.R` remains the generic outer manifest/seal
+check. The repository-specific verifier additionally reconstructs every
+accepted row's semantics and proves its archive against the pinned Git tree.
+Before a release run, exercise the reusable row scheduler, detached-candidate
+authentication, bounded parallelism, complete-batch failure collection, and
+resume semantics without touching real consumers:
+
+```sh
+Rscript --vanilla compat/test-repository-runner.R
+```
+
+This is a synthetic harness regression only; it is not consumer evidence.
+The prior monolithic schema-3 body remains in `test-repositories.R` only to
+interpret historical local evidence when
+`PARADOX_REPOSITORY_LEGACY_SCHEMA3=true`; never set that switch for a new
+candidate or relabel its evidence as the resumable schema.
 
 The priority-specific evidence
 directory is reserved before testing and any collision, symlink, or path
@@ -370,8 +500,10 @@ The same ordered library list is exported through `R_LIBS` and
 `R_LIBS_USER`, not merely assigned to the immediate callr process. This is
 required for consumer-created subprocesses such as mlr3's mirai learner
 encapsulation daemons. Source-checkout testthat files run serially so every
-file retains pkgload's development-help shim; this only disables testthat's
-file scheduler, not parallel behavior explicitly exercised by consumer tests.
+file retains pkgload's development-help shim. Default nested `parallel` and
+`future` plans are also forced sequential inside each bounded outer worker; a
+consumer test may still explicitly install its own reviewed plan when parallel
+behavior is itself the subject of the test.
 
 The harness runs testthat and tinytest packages with their native frameworks.
 For meta-packages whose tests are ordinary `tests/*.R` scripts, it loads the
@@ -479,6 +611,16 @@ source metadata, and their deterministic evidence manifest are retained below
 `metadata/completion.seal` authenticates that complete stage. Verify it with
 `compat/verify-repository-evidence.R` and review advisory rows as well as the
 process status before making a documentation-compatibility claim.
+
+The cheap static economy regression verifies that per-workload boundaries do
+not reacquire heavyweight whole-tree evidence and that failure classification
+reads only bounded log samples:
+
+```sh
+Rscript --vanilla scripts/environment/test-documentation-economy.R
+```
+
+It is a harness self-test, not a substitute for `compat/test-documentation`.
 
 ## Final sealed benchmark
 

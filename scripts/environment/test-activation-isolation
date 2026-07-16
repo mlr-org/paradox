@@ -38,6 +38,9 @@ env -i \
   MPI_ROOT="$ROOT/.local/compat/system/p1" \
   CARGO_HOME="$ROOT/.local/compat/system/cargo-home" \
   FONTCONFIG_PATH="$ROOT/.local/compat/system/p1/etc/fonts" \
+  CCC_OVERRIDE_OPTIONS=x-Werror \
+  LD_AUDIT=/outside/loader-audit.so \
+  CC_PRINT_OPTIONS=1 \
   /bin/sh -eu -c '
     root=$1
     cd "$root"
@@ -69,7 +72,7 @@ env -i \
       *:"$root/.local/compat/system/geo/bin":*|\
       *:"$root/.local/runtime-matrix/prefixes/"R-*/bin:*) exit 1 ;;
     esac
-    if env | grep -E "^(PARADOX_(RUNTIME_MATRIX|COMPAT)_|PROJ_DATA=|JAVA_CPPFLAGS=|MPI_ROOT=|CARGO_HOME=|FONTCONFIG_PATH=)" >/dev/null; then
+    if env | grep -E "^(PARADOX_(RUNTIME_MATRIX|COMPAT)_|PROJ_DATA=|JAVA_CPPFLAGS=|MPI_ROOT=|CARGO_HOME=|FONTCONFIG_PATH=|CCC_OVERRIDE_OPTIONS=|LD_AUDIT=|CC_PRINT_OPTIONS=)" >/dev/null; then
       exit 1
     fi
 

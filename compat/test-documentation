@@ -158,8 +158,9 @@ if (file.exists(run_parent) || dir.exists(run_parent) || is_symbolic(run_parent)
 }
 run_directory <- file.path(run_parent, "documentation")
 
-if (!requireNamespace("processx", quietly = TRUE)) {
-  fail("the repository-local processx package is required")
+if (!requireNamespace("processx", quietly = TRUE) ||
+    !requireNamespace("fs", quietly = TRUE)) {
+  fail("the repository-local processx and fs packages are required")
 }
 fingerprint_script <- file.path(root, "compat", "fingerprint.R")
 harness_script <- file.path(root, "compat", "test-documentation")
@@ -192,6 +193,126 @@ source(evidence_helper_script, local = TRUE)
 source(compat_system_evidence_script, local = TRUE)
 if (file.access(git_authenticator_script, mode = 1L) != 0L) {
   fail("candidate Git authenticator is not executable")
+}
+
+documentation_write_tsv <- function(value, path) {
+  if (file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("documentation evidence path already exists: ", path)
+  }
+  temporary <- paste0(path, ".new")
+  if (file.exists(temporary) || dir.exists(temporary) || is_symbolic(temporary)) {
+    fail("documentation evidence temporary path already exists: ", temporary)
+  }
+  on.exit(unlink(temporary), add = TRUE)
+  utils::write.table(
+    value, temporary, sep = "\t", quote = TRUE, row.names = FALSE, na = "",
+    fileEncoding = "UTF-8"
+  )
+  if (!file.rename(temporary, path)) {
+    fail("could not atomically retain documentation evidence: ", path)
+  }
+  invisible(path)
+}
+
+documentation_format_metadata_number <- function(value) {
+  value <- as.numeric(value)
+  if (anyNA(value) || any(!is.finite(value))) {
+    fail("protected metadata contains a missing or non-finite number")
+  }
+  format(value, scientific = FALSE, trim = TRUE, digits = 22L)
+}
+
+# fs performs the recursive scan in native code without following directory
+# symlinks.  file_info(follow = FALSE) then supplies lstat data for the root and
+# every descendant, including directories and symbolic links themselves.
+documentation_metadata_ledger <- function(roots) {
+  if (!is.character(roots) || !length(roots) || is.null(names(roots)) ||
+      anyNA(roots) || any(!nzchar(roots)) || anyNA(names(roots)) ||
+      any(!nzchar(names(roots))) || anyDuplicated(names(roots))) {
+    fail("protected metadata roots require unique nonempty names and paths")
+  }
+  normalized_roots <- vapply(seq_along(roots), function(index) {
+    path <- roots[[index]]
+    if (!dir.exists(path) || is_symbolic(path)) {
+      fail("protected metadata root is absent, non-directory, or symbolic: ", path)
+    }
+    normalizePath(path, winslash = "/", mustWork = TRUE)
+  }, character(1L))
+  names(normalized_roots) <- names(roots)
+  if (anyDuplicated(normalized_roots)) {
+    fail("protected metadata roots must be distinct")
+  }
+  if (length(normalized_roots) > 1L) {
+    nested <- vapply(seq_along(normalized_roots), function(index) {
+      any(startsWith(
+        normalized_roots[-index], paste0(normalized_roots[[index]], "/")
+      ))
+    }, logical(1L))
+    if (any(nested)) fail("protected metadata roots must be disjoint")
+  }
+
+  rows <- vector("list", length(normalized_roots))
+  for (root_index in seq_along(normalized_roots)) {
+    protected_root <- normalized_roots[[root_index]]
+    paths <- c(
+      protected_root,
+      as.character(fs::dir_ls(
+        protected_root, all = TRUE, recurse = TRUE, type = "any", fail = TRUE
+      ))
+    )
+    if (anyDuplicated(paths)) {
+      fail("protected metadata traversal returned duplicate paths below ",
+        protected_root)
+    }
+    info <- fs::file_info(paths, follow = FALSE)
+    types <- as.character(info$type)
+    modes <- as.integer(info$permissions)
+    if (anyNA(types) || anyNA(modes)) {
+      fail("could not lstat every protected metadata entry below ", protected_root)
+    }
+    relative <- ifelse(
+      paths == protected_root, ".",
+      substring(paths, nchar(protected_root, type = "chars") + 2L)
+    )
+    ordering <- order(relative, method = "radix")
+    rows[[root_index]] <- data.frame(
+      root = names(normalized_roots)[[root_index]],
+      root_path = protected_root,
+      path = relative[ordering],
+      type = types[ordering],
+      mode = sprintf("%06o", modes[ordering]),
+      size = documentation_format_metadata_number(info$size[ordering]),
+      mtime = documentation_format_metadata_number(
+        as.numeric(info$modification_time[ordering])
+      ),
+      ctime = documentation_format_metadata_number(
+        as.numeric(info$change_time[ordering])
+      ),
+      device = documentation_format_metadata_number(info$device_id[ordering]),
+      inode = documentation_format_metadata_number(info$inode[ordering]),
+      nlink = documentation_format_metadata_number(info$hard_links[ordering]),
+      link_target = Sys.readlink(paths[ordering]),
+      stringsAsFactors = FALSE
+    )
+  }
+  value <- do.call(rbind, rows)
+  rownames(value) <- NULL
+  value
+}
+
+documentation_assert_metadata <- function(
+  observed, expected, context, diagnostic = NULL
+) {
+  if (identical(observed, expected)) return(invisible(TRUE))
+  detail <- ""
+  if (!is.null(diagnostic)) {
+    documentation_write_tsv(observed, diagnostic)
+    detail <- paste0(
+      "; diagnostic ledger ", diagnostic, " has SHA-256 ",
+      unname(tools::sha256sum(diagnostic))
+    )
+  }
+  fail("protected metadata changed ", context, detail)
 }
 
 git <- Sys.which("git")
@@ -369,16 +490,6 @@ if (!file.exists(tinytex_archive) || dir.exists(tinytex_archive) ||
 }
 quarto_version <- trimws(processx::run(quarto, "--version", error_on_status = TRUE)$stdout)
 if (!identical(quarto_version, "1.9.38")) fail("unexpected Quarto version: ", quarto_version)
-quarto_verification <- processx::run(
-  quarto_bootstrap,
-  "--verify",
-  wd = root,
-  error_on_status = FALSE,
-  echo = FALSE
-)
-if (quarto_verification$status != 0L) {
-  fail("repository-local Quarto receipt verification failed: ", quarto_verification$stderr)
-}
 
 candidate_package <- normalizePath(
   find.package("paradox", lib.loc = candidate_library), mustWork = TRUE
@@ -443,6 +554,13 @@ if (!identical(candidate_content, declared_content)) {
 }
 candidate_library_fingerprint <- compat_tree_content_sha256(candidate_library)
 dependency_library_fingerprint <- compat_tree_content_sha256(dependency_library)
+candidate_dependency_roots <- c(
+  candidate_library = candidate_library,
+  dependency_library = dependency_library
+)
+candidate_dependency_hash_metadata <- documentation_metadata_ledger(
+  candidate_dependency_roots
+)
 expected_candidate_entries <- sort(c(
   ".paradox-candidate-content-sha256",
   ".paradox-candidate-provenance.sha256",
@@ -573,6 +691,28 @@ extra_library_fingerprints <- if (length(extra_libraries)) {
 } else {
   character()
 }
+candidate_dependency_metadata_now <- documentation_metadata_ledger(
+  candidate_dependency_roots
+)
+documentation_assert_metadata(
+  candidate_dependency_metadata_now,
+  candidate_dependency_hash_metadata,
+  "between candidate/dependency hashing and the remaining content hashes"
+)
+additional_content_roots <- c(
+  r_base_library = r_base_library,
+  if (length(extra_libraries)) {
+    setNames(
+      extra_libraries,
+      sprintf("extra_library_%03d", seq_along(extra_libraries))
+    )
+  }
+)
+content_hash_metadata <- rbind(
+  candidate_dependency_metadata_now,
+  documentation_metadata_ledger(additional_content_roots)
+)
+rownames(content_hash_metadata) <- NULL
 
 if (!dir.create(run_parent, recursive = FALSE, showWarnings = FALSE)) {
   fail("could not reserve documentation run ID: ", run_parent)
@@ -597,6 +737,13 @@ for (child in c(
   if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
     fail("could not create documentation evidence child: ", path)
   }
+}
+if (!dir.create(
+    file.path(run_directory, "metadata", "boundaries"),
+    recursive = FALSE,
+    showWarnings = FALSE
+  )) {
+  fail("could not create documentation boundary evidence directory")
 }
 
 metadata_inputs <- c(
@@ -680,19 +827,6 @@ if (toolchain_receipt_creation$status != 0L) {
     toolchain_receipt_creation$stderr
   )
 }
-toolchain_receipt_initial_verification <- processx::run(
-  local_rscript,
-  c("--vanilla", retained_tree_helper, "verify", toolchain_root,
-    toolchain_tree_receipt),
-  error_on_status = FALSE,
-  echo = FALSE
-)
-if (toolchain_receipt_initial_verification$status != 0L) {
-  fail(
-    "repository-local ordinary toolchain changed while it was receipted: ",
-    toolchain_receipt_initial_verification$stderr
-  )
-}
 toolchain_tree_receipt_sha256 <- unname(tools::sha256sum(
   toolchain_tree_receipt
 ))
@@ -737,7 +871,30 @@ verify_tinytex_tree <- function(context) {
   }
   invisible(TRUE)
 }
-verify_tinytex_tree("before documentation workloads")
+quarto_verification <- processx::run(
+  quarto_bootstrap,
+  "--verify",
+  wd = root,
+  error_on_status = FALSE,
+  echo = FALSE
+)
+if (quarto_verification$status != 0L) {
+  fail("repository-local Quarto receipt verification failed: ",
+    quarto_verification$stderr)
+}
+tool_boundary_roots <- c(
+  ordinary_toolchain = toolchain_root,
+  quarto = file.path(root, ".local", "quarto", "1.9.38"),
+  tinytex = tinytex_root
+)
+if (compat_system_evidence$active) {
+  tool_boundary_roots <- c(
+    tool_boundary_roots,
+    compat_geo = Sys.getenv("PARADOX_COMPAT_SYSTEM_GEO", unset = ""),
+    compat_p1 = Sys.getenv("PARADOX_COMPAT_SYSTEM_P1", unset = "")
+  )
+}
+tool_auth_metadata <- documentation_metadata_ledger(tool_boundary_roots)
 snapshot <- utils::read.delim(
   file.path(run_directory, "metadata", "github-snapshot.tsv"),
   stringsAsFactors = FALSE, check.names = FALSE
@@ -826,9 +983,133 @@ utils::write.table(
   quote = TRUE, row.names = FALSE, na = ""
 )
 
-verify_protected_libraries <- function(context, verify_toolchain_tree = FALSE) {
+protected_roots <- c(
+  candidate_dependency_roots,
+  if (length(extra_libraries)) {
+    setNames(
+      extra_libraries,
+      sprintf("extra_library_%03d", seq_along(extra_libraries))
+    )
+  },
+  tool_boundary_roots
+)
+observed_content_hash_metadata <- rbind(
+  documentation_metadata_ledger(candidate_dependency_roots),
+  documentation_metadata_ledger(additional_content_roots)
+)
+rownames(observed_content_hash_metadata) <- NULL
+documentation_assert_metadata(
+  observed_content_hash_metadata,
+  content_hash_metadata,
+  "between full content hashing and the pre-workload boundary",
+  file.path(run_directory, "metadata", "content-hash-metadata-mismatch.tsv")
+)
+observed_tool_auth_metadata <- documentation_metadata_ledger(tool_boundary_roots)
+documentation_assert_metadata(
+  observed_tool_auth_metadata,
+  tool_auth_metadata,
+  "between full tool authentication and the pre-workload boundary",
+  file.path(run_directory, "metadata", "tool-auth-metadata-mismatch.tsv")
+)
+content_hash_metadata_path <- file.path(
+  run_directory, "metadata", "content-hash-metadata-anchor.tsv"
+)
+tool_auth_metadata_path <- file.path(
+  run_directory, "metadata", "tool-auth-metadata-anchor.tsv"
+)
+documentation_write_tsv(content_hash_metadata, content_hash_metadata_path)
+documentation_write_tsv(tool_auth_metadata, tool_auth_metadata_path)
+content_hash_metadata_sha256 <- unname(tools::sha256sum(
+  content_hash_metadata_path
+))
+tool_auth_metadata_sha256 <- unname(tools::sha256sum(
+  tool_auth_metadata_path
+))
+protected_metadata_pre <- rbind(
+  observed_content_hash_metadata[
+    observed_content_hash_metadata$root != "r_base_library", , drop = FALSE
+  ],
+  observed_tool_auth_metadata
+)
+rownames(protected_metadata_pre) <- NULL
+protected_metadata_pre_path <- file.path(
+  run_directory, "metadata", "protected-metadata-pre.tsv"
+)
+documentation_write_tsv(protected_metadata_pre, protected_metadata_pre_path)
+protected_metadata_pre_sha256 <- unname(tools::sha256sum(
+  protected_metadata_pre_path
+))
+
+small_input_manifest <- data.frame(
+  category = c(
+    rep("live_harness_input", length(metadata_inputs)),
+    rep("retained_harness_input", length(retained_metadata_inputs)),
+    "toolchain_explicit_receipt", "toolchain_tree_receipt",
+    "tinytex_tree_receipt", "protected_metadata_pre",
+    "content_hash_metadata_anchor", "tool_auth_metadata_anchor",
+    rep("compat_system_live_input", length(compat_system_evidence$source_paths)),
+    rep("compat_system_retained_input", length(compat_system_evidence$retained_paths))
+  ),
+  path = c(
+    metadata_inputs, retained_metadata_inputs,
+    toolchain_explicit_receipt, toolchain_tree_receipt, tinytex_tree_receipt,
+    protected_metadata_pre_path, content_hash_metadata_path,
+    tool_auth_metadata_path,
+    compat_system_evidence$source_paths, compat_system_evidence$retained_paths
+  ),
+  stringsAsFactors = FALSE
+)
+small_input_manifest$sha256 <- unname(vapply(
+  small_input_manifest$path, tools::sha256sum, character(1L)
+))
+small_input_manifest_path <- file.path(
+  run_directory, "metadata", "protected-small-inputs-pre.tsv"
+)
+documentation_write_tsv(small_input_manifest, small_input_manifest_path)
+small_input_manifest_sha256 <- unname(tools::sha256sum(
+  small_input_manifest_path
+))
+
+verify_compat_system_small <- function(context) {
+  state <- compat_system_evidence
+  active_root <- Sys.getenv("PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT", unset = "")
+  receipt_environment <- Sys.getenv("PARADOX_COMPAT_SYSTEM_RECEIPT", unset = "")
+  if (!identical(active_root, state$active_root) ||
+      !identical(receipt_environment, state$receipt_environment) ||
+      !identical(compat_system_child_environment(), state$child_environment)) {
+    fail("compatibility-system environment changed ", context)
+  }
+  invisible(TRUE)
+}
+
+verify_small_inputs <- function(context) {
+  if (!file.exists(small_input_manifest_path) ||
+      dir.exists(small_input_manifest_path) ||
+      is_symbolic(small_input_manifest_path) ||
+      !identical(
+        unname(tools::sha256sum(small_input_manifest_path)),
+        small_input_manifest_sha256
+      )) {
+    fail("protected small-input manifest changed ", context)
+  }
+  for (path in unique(small_input_manifest$path)) {
+    if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+      fail("protected small input is absent, non-regular, or symbolic ",
+        context, ": ", path)
+    }
+  }
+  observed <- unname(vapply(
+    small_input_manifest$path, tools::sha256sum, character(1L)
+  ))
+  if (!identical(observed, small_input_manifest$sha256)) {
+    fail("protected harness or receipt input changed ", context)
+  }
+  invisible(TRUE)
+}
+
+verify_small_protected_state <- function(context) {
   authenticate_candidate_git(context)
-  compat_system_verify_evidence(compat_system_evidence, context)
+  verify_compat_system_small(context)
   source_ref_commit <- tolower(git_output(
     root, c("rev-parse", paste0(candidate_ref, "^{commit}"))
   ))
@@ -843,77 +1124,124 @@ verify_protected_libraries <- function(context, verify_toolchain_tree = FALSE) {
       !identical(source_commit_tree, candidate_tree)) {
     fail("candidate ref, commit, or tree changed ", context)
   }
-  live_metadata_sha256 <- setNames(
-    vapply(metadata_inputs, tools::sha256sum, character(1L), USE.NAMES = FALSE),
-    metadata_inputs
+  package_now <- normalizePath(
+    find.package("paradox", lib.loc = candidate_library), mustWork = TRUE
   )
-  retained_metadata_sha256 <- vapply(
-    retained_metadata_inputs,
-    tools::sha256sum,
-    character(1L),
-    USE.NAMES = FALSE
-  )
-  if (!identical(live_metadata_sha256, metadata_input_sha256) ||
-      !identical(unname(metadata_input_sha256), retained_metadata_sha256)) {
-    fail("documentation harness or retained input changed ", context)
+  if (!identical(package_now, candidate_package)) {
+    fail("candidate package resolution changed ", context)
   }
+  verify_small_inputs(context)
+  invisible(TRUE)
+}
+
+full_boundary_pre <- data.frame(
+  boundary = "pre",
+  component = c(
+    "candidate_package", "candidate_library", "dependency_library",
+    "r_base_library",
+    if (length(extra_library_fingerprints)) {
+      paste0("extra_library_", sprintf("%03d", seq_along(extra_library_fingerprints)))
+    },
+    "ordinary_toolchain", "tinytex", "quarto", "compat_system",
+    "protected_metadata", "content_hash_metadata_anchor",
+    "tool_auth_metadata_anchor"
+  ),
+  path = c(
+    candidate_package, candidate_library, dependency_library, r_base_library,
+    unname(names(extra_library_fingerprints)),
+    toolchain_root, tinytex_root,
+    file.path(root, ".local", "quarto", "1.9.38"),
+    if (compat_system_evidence$active) {
+      compat_system_evidence$receipt_environment
+    } else {
+      file.path(run_directory, "metadata", "compat-system.tsv")
+    },
+    protected_metadata_pre_path, content_hash_metadata_path,
+    tool_auth_metadata_path
+  ),
+  mechanism = c(
+    rep("content_sha256", 4L + length(extra_library_fingerprints)),
+    "created_tree_receipt", "created_tree_receipt",
+    "full_receipt_verification", "full_receipt_verification",
+    "nonfollowing_lstat_inventory", "nonfollowing_lstat_anchor",
+    "nonfollowing_lstat_anchor"
+  ),
+  sha256 = c(
+    candidate_content, candidate_library_fingerprint,
+    dependency_library_fingerprint, r_base_library_fingerprint,
+    unname(extra_library_fingerprints),
+    toolchain_tree_receipt_sha256, tinytex_tree_receipt_sha256,
+    metadata_input_hash(file.path(
+      root, ".local", "receipts", "quarto", "1.9.38", "seal.sha256"
+    )),
+    unname(tools::sha256sum(file.path(
+      run_directory, "metadata", "compat-system.tsv"
+    ))),
+    protected_metadata_pre_sha256, content_hash_metadata_sha256,
+    tool_auth_metadata_sha256
+  ),
+  status = "passed",
+  stringsAsFactors = FALSE
+)
+full_boundary_pre_path <- file.path(
+  run_directory, "metadata", "full-boundary-pre.tsv"
+)
+verify_small_protected_state("at the pre-workload full boundary")
+documentation_write_tsv(full_boundary_pre, full_boundary_pre_path)
+full_boundary_pre_sha256 <- unname(tools::sha256sum(full_boundary_pre_path))
+
+verify_full_boundary <- function(context) {
+  if (!file.exists(full_boundary_pre_path) ||
+      dir.exists(full_boundary_pre_path) || is_symbolic(full_boundary_pre_path) ||
+      !identical(
+        unname(tools::sha256sum(full_boundary_pre_path)),
+        full_boundary_pre_sha256
+      )) {
+    fail("pre-workload full-boundary evidence changed ", context)
+  }
+  observed_metadata <- documentation_metadata_ledger(protected_roots)
+  documentation_assert_metadata(
+    observed_metadata,
+    protected_metadata_pre,
+    context,
+    file.path(run_directory, "metadata", "protected-metadata-post-mismatch.tsv")
+  )
+  verify_small_protected_state(context)
+  compat_system_verify_evidence(compat_system_evidence, context)
   package_now <- normalizePath(find.package("paradox", lib.loc = candidate_library), mustWork = TRUE)
-  if (!identical(package_now, candidate_package) ||
-      !identical(compat_tree_content_sha256(package_now), declared_content) ||
-      !identical(compat_tree_content_sha256(candidate_library), candidate_library_fingerprint)) {
-    fail("candidate library changed ", context)
-  }
-  if (!identical(
-      compat_tree_content_sha256(dependency_library),
-      dependency_library_fingerprint
-    )) {
-    fail("dependency library changed ", context)
-  }
-  if (length(extra_libraries)) {
-    extra_now <- setNames(
+  observed_candidate_content <- compat_tree_content_sha256(package_now)
+  observed_candidate_library <- compat_tree_content_sha256(candidate_library)
+  observed_dependency_library <- compat_tree_content_sha256(dependency_library)
+  observed_r_base_library <- compat_tree_content_sha256(r_base_library)
+  observed_extra_libraries <- if (length(extra_libraries)) {
+    setNames(
       vapply(extra_libraries, compat_tree_content_sha256, character(1L)),
       extra_libraries
     )
-    if (!identical(extra_now, extra_library_fingerprints)) {
-      fail("an extra documentation library changed ", context)
-    }
+  } else {
+    character()
   }
-  for (receipt in c(toolchain_explicit_receipt, toolchain_tree_receipt)) {
-    if (!file.exists(receipt) || dir.exists(receipt) || is_symbolic(receipt)) {
-      fail("ordinary-toolchain receipt is absent, non-regular, or symbolic ",
-        context)
-    }
-  }
-  if (!identical(
-      unname(tools::sha256sum(toolchain_explicit_receipt)),
-      toolchain_explicit_receipt_sha256
-    ) || !identical(
-      unname(tools::sha256sum(toolchain_tree_receipt)),
-      toolchain_tree_receipt_sha256
-    )) {
-    fail("ordinary-toolchain receipt changed ", context)
+  if (!identical(package_now, candidate_package) ||
+      !identical(observed_candidate_content, declared_content) ||
+      !identical(observed_candidate_library, candidate_library_fingerprint) ||
+      !identical(observed_dependency_library, dependency_library_fingerprint) ||
+      !identical(observed_r_base_library, r_base_library_fingerprint) ||
+      !identical(observed_extra_libraries, extra_library_fingerprints)) {
+    fail("protected package or library content changed ", context)
   }
   if (!identical(live_toolchain_explicit(), initial_toolchain_explicit)) {
     fail("ordinary toolchain package set changed ", context)
   }
-  if (!identical(
-      compat_tree_content_sha256(r_base_library),
-      r_base_library_fingerprint
-    )) {
-    fail("R base library changed ", context)
-  }
-  if (isTRUE(verify_toolchain_tree)) {
-    toolchain_now <- processx::run(
-      local_rscript,
-      c("--vanilla", retained_tree_helper, "verify", toolchain_root,
-        toolchain_tree_receipt),
-      error_on_status = FALSE,
-      echo = FALSE
-    )
-    if (toolchain_now$status != 0L) {
-      fail("repository-local ordinary toolchain changed ", context, ": ",
-        toolchain_now$stderr)
-    }
+  toolchain_now <- processx::run(
+    local_rscript,
+    c("--vanilla", retained_tree_helper, "verify", toolchain_root,
+      toolchain_tree_receipt),
+    error_on_status = FALSE,
+    echo = FALSE
+  )
+  if (toolchain_now$status != 0L) {
+    fail("repository-local ordinary toolchain changed ", context, ": ",
+      toolchain_now$stderr)
   }
   quarto_now <- processx::run(
     quarto_bootstrap,
@@ -926,7 +1254,39 @@ verify_protected_libraries <- function(context, verify_toolchain_tree = FALSE) {
     fail("repository-local Quarto changed ", context, ": ", quarto_now$stderr)
   }
   verify_tinytex_tree(context)
-  invisible(TRUE)
+
+  full_boundary_post <- full_boundary_pre
+  full_boundary_post$boundary <- "post"
+  full_boundary_post$mechanism <- c(
+    rep("content_sha256", 4L + length(observed_extra_libraries)),
+    "verified_tree_receipt", "verified_tree_receipt",
+    "full_receipt_verification", "full_receipt_verification",
+    "nonfollowing_lstat_inventory", "nonfollowing_lstat_anchor",
+    "nonfollowing_lstat_anchor"
+  )
+  full_boundary_post$sha256 <- c(
+    observed_candidate_content, observed_candidate_library,
+    observed_dependency_library, observed_r_base_library,
+    unname(observed_extra_libraries),
+    toolchain_tree_receipt_sha256, tinytex_tree_receipt_sha256,
+    metadata_input_hash(file.path(
+      root, ".local", "receipts", "quarto", "1.9.38", "seal.sha256"
+    )),
+    unname(tools::sha256sum(file.path(
+      run_directory, "metadata", "compat-system.tsv"
+    ))),
+    protected_metadata_pre_sha256, content_hash_metadata_sha256,
+    tool_auth_metadata_sha256
+  )
+  full_boundary_post_path <- file.path(
+    run_directory, "metadata", "full-boundary-post.tsv"
+  )
+  documentation_write_tsv(full_boundary_post, full_boundary_post_path)
+  list(
+    path = full_boundary_post_path,
+    sha256 = unname(tools::sha256sum(full_boundary_post_path)),
+    protected_metadata_sha256 = protected_metadata_pre_sha256
+  )
 }
 
 library_environment <- function(overlay) {
@@ -992,17 +1352,177 @@ base_environment <- function(overlay) {
   environment
 }
 
+retain_environment_evidence <- function(label, environment) {
+  if (!is.character(environment) || is.null(names(environment)) ||
+      anyNA(environment) || anyNA(names(environment)) ||
+      any(!nzchar(names(environment))) || anyDuplicated(names(environment))) {
+    fail("documentation workload environment is malformed: ", label)
+  }
+  value <- data.frame(
+    position = seq_along(environment),
+    variable = names(environment),
+    value = unname(environment),
+    stringsAsFactors = FALSE
+  )
+  path <- file.path(
+    run_directory, "metadata", "boundaries", paste0(label, "-environment.tsv")
+  )
+  documentation_write_tsv(value, path)
+  list(
+    path = substring(path, nchar(run_directory, type = "chars") + 2L),
+    sha256 = unname(tools::sha256sum(path))
+  )
+}
+
+verify_row_boundary <- function(
+  context, label, phase, overlay, environment, environment_evidence
+) {
+  if (!phase %in% c("pre", "post")) {
+    fail("documentation row boundary has an invalid phase")
+  }
+  if (!file.exists(full_boundary_pre_path) ||
+      dir.exists(full_boundary_pre_path) || is_symbolic(full_boundary_pre_path) ||
+      !identical(
+        unname(tools::sha256sum(full_boundary_pre_path)),
+        full_boundary_pre_sha256
+      )) {
+    fail("pre-workload full-boundary evidence changed ", context)
+  }
+  observed_metadata <- documentation_metadata_ledger(protected_roots)
+  diagnostic <- file.path(
+    run_directory, "metadata", "boundaries",
+    paste0(label, "-", phase, "-metadata-mismatch.tsv")
+  )
+  documentation_assert_metadata(
+    observed_metadata, protected_metadata_pre, context, diagnostic
+  )
+  if (!identical(base_environment(overlay), environment)) {
+    fail("documentation workload environment changed ", context)
+  }
+  verify_small_protected_state(context)
+  attestation <- data.frame(
+    field = c(
+      "schema", "label", "phase", "context", "status",
+      "full_boundary_pre_sha256", "protected_metadata_sha256",
+      "protected_root_count", "protected_inventory_rows",
+      "small_input_manifest_sha256", "environment_sha256",
+      "candidate_ref", "candidate_commit", "candidate_tree",
+      "compat_system_active"
+    ),
+    value = c(
+      "1", label, phase, context, "passed", full_boundary_pre_sha256,
+      protected_metadata_pre_sha256, as.character(length(protected_roots)),
+      as.character(nrow(protected_metadata_pre)), small_input_manifest_sha256,
+      environment_evidence$sha256, candidate_ref, candidate_commit,
+      candidate_tree,
+      if (compat_system_evidence$active) "true" else "false"
+    ),
+    stringsAsFactors = FALSE
+  )
+  path <- file.path(
+    run_directory, "metadata", "boundaries",
+    paste0(label, "-", phase, ".tsv")
+  )
+  documentation_write_tsv(attestation, path)
+  list(
+    path = substring(path, nchar(run_directory, type = "chars") + 2L),
+    sha256 = unname(tools::sha256sum(path)),
+    protected_metadata_sha256 = protected_metadata_pre_sha256,
+    environment_sha256 = environment_evidence$sha256
+  )
+}
+
+classification_log_head_bytes <- 256L * 1024L
+classification_log_tail_bytes <- 768L * 1024L
+classification_log_max_bytes <-
+  classification_log_head_bytes + classification_log_tail_bytes
+sample_classification_log <- function(path) {
+  if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("documentation workload log is absent, non-regular, or symbolic: ", path)
+  }
+  info <- fs::file_info(path, follow = FALSE)
+  if (nrow(info) != 1L || !identical(as.character(info$type), "file")) {
+    fail("documentation workload log has an unexpected lstat type: ", path)
+  }
+  log_bytes <- as.numeric(info$size)
+  if (length(log_bytes) != 1L || is.na(log_bytes) ||
+      !is.finite(log_bytes) || log_bytes < 0 || log_bytes != floor(log_bytes)) {
+    fail("documentation workload log has an invalid size: ", path)
+  }
+  connection <- file(path, open = "rb")
+  on.exit(close(connection), add = TRUE)
+  if (log_bytes <= classification_log_max_bytes) {
+    head_raw <- readBin(connection, what = "raw", n = as.integer(log_bytes))
+    tail_raw <- raw()
+    truncated <- FALSE
+  } else {
+    head_raw <- readBin(
+      connection, what = "raw", n = classification_log_head_bytes
+    )
+    seek(
+      connection,
+      where = log_bytes - classification_log_tail_bytes,
+      origin = "start",
+      rw = "read"
+    )
+    position <- seek(connection, where = NA, rw = "read")
+    if (!identical(as.numeric(position), log_bytes - classification_log_tail_bytes)) {
+      fail("could not seek within oversized documentation log: ", path)
+    }
+    tail_raw <- readBin(
+      connection, what = "raw", n = classification_log_tail_bytes
+    )
+    truncated <- TRUE
+  }
+  expected_sample_bytes <- if (truncated) {
+    classification_log_max_bytes
+  } else {
+    as.integer(log_bytes)
+  }
+  if (length(head_raw) + length(tail_raw) != expected_sample_bytes) {
+    fail("documentation workload log changed while it was sampled: ", path)
+  }
+  nul_bytes <- sum(head_raw == as.raw(0L)) + sum(tail_raw == as.raw(0L))
+  if (nul_bytes) {
+    head_raw[head_raw == as.raw(0L)] <- as.raw(32L)
+    tail_raw[tail_raw == as.raw(0L)] <- as.raw(32L)
+  }
+  text <- if (truncated) {
+    paste0(
+      rawToChar(head_raw),
+      "\n...[classification sample omitted middle of retained log]...\n",
+      rawToChar(tail_raw)
+    )
+  } else {
+    rawToChar(head_raw)
+  }
+  list(
+    text = text,
+    log_bytes = log_bytes,
+    sample_bytes = length(head_raw) + length(tail_raw),
+    head_bytes = length(head_raw),
+    tail_bytes = length(tail_raw),
+    truncated = truncated,
+    nul_bytes = nul_bytes,
+    pathological = if (nul_bytes) {
+      "nul_bytes_sanitized"
+    } else {
+      "none_observed"
+    }
+  )
+}
+
 results <- list()
 commands <- list()
 result_index <- 0L
 classify_failure <- function(text) {
   if (grepl(
     "there is no package called|package .+ is not installed|dependency .+ is not available|namespace .+ required|package or namespace load failed",
-    text, ignore.case = TRUE, perl = TRUE
+    text, ignore.case = TRUE, perl = TRUE, useBytes = TRUE
   )) return("missing_r_dependency")
   if (grepl(
     "could not resolve host|network is unreachable|HTTP [45][0-9][0-9]|OpenML|LaTeX|pdflatex|xelatex|chromium|system library|timed out|timeout",
-    text, ignore.case = TRUE, perl = TRUE
+    text, ignore.case = TRUE, perl = TRUE, useBytes = TRUE
   )) return("environmental")
   "execution_failure"
 }
@@ -1014,15 +1534,19 @@ run_retained <- function(
   result_index <<- result_index + 1L
   label <- sprintf("%02d-%s-%s", result_index, repository, workload)
   log <- file.path(run_directory, "logs", paste0(label, ".log"))
-  verify_protected_libraries(paste0("before ", repository, "/", workload))
+  isolated_environment <- base_environment(overlay)
+  environment_evidence <- retain_environment_evidence(
+    label, isolated_environment
+  )
+  pre_boundary <- verify_row_boundary(
+    paste0("before ", repository, "/", workload),
+    label, "pre", overlay, isolated_environment, environment_evidence
+  )
   started <- Sys.time()
   if (!isTRUE(prerequisite)) {
     status <- 125L
-    output <- "prerequisite failed; command was not run"
-    writeLines(output, log)
-    classification <- "blocked_by_prerequisite"
+    writeLines("prerequisite failed; command was not run", log)
   } else {
-    isolated_environment <- base_environment(overlay)
     environment_arguments <- paste0(
       names(isolated_environment), "=", unname(isolated_environment)
     )
@@ -1035,15 +1559,41 @@ run_retained <- function(
       windows_verbatim_args = FALSE
     )
     status <- process$status
-    output <- paste(readLines(log, warn = FALSE), collapse = "\n")
-    classification <- if (status == 0L) "passed" else classify_failure(output)
+  }
+  log_sample <- sample_classification_log(log)
+  classification <- if (!isTRUE(prerequisite)) {
+    "blocked_by_prerequisite"
+  } else if (status == 0L) {
+    "passed"
+  } else {
+    classify_failure(log_sample$text)
   }
   elapsed <- as.numeric(difftime(Sys.time(), started, units = "secs"))
-  verify_protected_libraries(paste0("after ", repository, "/", workload))
+  post_boundary <- verify_row_boundary(
+    paste0("after ", repository, "/", workload),
+    label, "post", overlay, isolated_environment, environment_evidence
+  )
   result <- data.frame(
     repository = repository, workload = workload, required = required,
     status = status, classification = classification,
     elapsed_seconds = elapsed, log = normalizePath(log, mustWork = TRUE),
+    pre_boundary = pre_boundary$path,
+    pre_boundary_sha256 = pre_boundary$sha256,
+    post_boundary = post_boundary$path,
+    post_boundary_sha256 = post_boundary$sha256,
+    protected_metadata_pre_sha256 = pre_boundary$protected_metadata_sha256,
+    protected_metadata_post_sha256 = post_boundary$protected_metadata_sha256,
+    environment_evidence = environment_evidence$path,
+    environment_sha256 = environment_evidence$sha256,
+    log_bytes = format(
+      log_sample$log_bytes, scientific = FALSE, trim = TRUE, digits = 22L
+    ),
+    classification_sample_bytes = log_sample$sample_bytes,
+    classification_sample_head_bytes = log_sample$head_bytes,
+    classification_sample_tail_bytes = log_sample$tail_bytes,
+    classification_sample_truncated = log_sample$truncated,
+    classification_sample_nul_bytes = log_sample$nul_bytes,
+    classification_sample_pathological = log_sample$pathological,
     stringsAsFactors = FALSE
   )
   result_index_local <- length(results) + 1L
@@ -1053,9 +1603,7 @@ run_retained <- function(
     command = command, arguments = paste(shQuote(arguments), collapse = " "),
     working_directory = wd, libraries = library_environment(overlay),
     environment = paste(
-      paste0(
-        names(base_environment(overlay)), "=", unname(base_environment(overlay))
-      ),
+      paste0(names(isolated_environment), "=", unname(isolated_environment)),
       collapse = " "
     ),
     stringsAsFactors = FALSE
@@ -1236,9 +1784,8 @@ for (repository in repositories) {
   }
 }
 
-verify_protected_libraries(
-  "at documentation gate completion",
-  verify_toolchain_tree = TRUE
+full_boundary_post <- verify_full_boundary(
+  "at the post-workload full boundary"
 )
 results <- do.call(rbind, results)
 commands <- do.call(rbind, commands)
@@ -1264,9 +1811,123 @@ utils::write.table(
   commands, file.path(run_directory, "commands.tsv"), sep = "\t",
   quote = TRUE, row.names = FALSE, na = ""
 )
+log_classification <- results[, c(
+  "repository", "workload", "log", "log_bytes",
+  "classification_sample_bytes", "classification_sample_head_bytes",
+  "classification_sample_tail_bytes", "classification_sample_truncated",
+  "classification_sample_nul_bytes", "classification_sample_pathological",
+  "classification"
+)]
+observed_log_bytes <- vapply(log_classification$log, function(path) {
+  if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
+    fail("retained documentation log is absent, non-regular, or symbolic: ", path)
+  }
+  as.numeric(fs::file_info(path, follow = FALSE)$size)
+}, numeric(1L))
+declared_log_bytes <- as.numeric(log_classification$log_bytes)
+truncated_log_rows <- log_classification$classification_sample_truncated
+if (anyNA(declared_log_bytes) || anyNA(truncated_log_rows) ||
+    !identical(unname(observed_log_bytes), unname(declared_log_bytes)) ||
+    any(truncated_log_rows & (
+      declared_log_bytes <= classification_log_max_bytes |
+        log_classification$classification_sample_bytes !=
+          classification_log_max_bytes |
+        log_classification$classification_sample_head_bytes !=
+          classification_log_head_bytes |
+        log_classification$classification_sample_tail_bytes !=
+          classification_log_tail_bytes
+    )) || any(!truncated_log_rows & (
+      declared_log_bytes > classification_log_max_bytes |
+        log_classification$classification_sample_bytes != declared_log_bytes |
+        log_classification$classification_sample_head_bytes !=
+          declared_log_bytes |
+        log_classification$classification_sample_tail_bytes != 0L
+    )) || any(!log_classification$classification_sample_pathological %in%
+      c("none_observed", "nul_bytes_sanitized")) || any(
+        (log_classification$classification_sample_nul_bytes > 0L) !=
+          (log_classification$classification_sample_pathological ==
+            "nul_bytes_sanitized")
+      )) {
+  fail("retained documentation log-classification evidence is inconsistent")
+}
+log_classification_path <- file.path(
+  run_directory, "metadata", "log-classification.tsv"
+)
+documentation_write_tsv(log_classification, log_classification_path)
+log_classification_sha256 <- unname(tools::sha256sum(log_classification_path))
+workload_boundaries <- do.call(rbind, lapply(seq_len(nrow(results)), function(index) {
+  rbind(
+    data.frame(
+      position = 2L * index - 1L,
+      repository = results$repository[[index]],
+      workload = results$workload[[index]],
+      phase = "pre",
+      boundary = results$pre_boundary[[index]],
+      boundary_sha256 = results$pre_boundary_sha256[[index]],
+      protected_metadata_sha256 = results$protected_metadata_pre_sha256[[index]],
+      environment_evidence = results$environment_evidence[[index]],
+      environment_sha256 = results$environment_sha256[[index]],
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      position = 2L * index,
+      repository = results$repository[[index]],
+      workload = results$workload[[index]],
+      phase = "post",
+      boundary = results$post_boundary[[index]],
+      boundary_sha256 = results$post_boundary_sha256[[index]],
+      protected_metadata_sha256 = results$protected_metadata_post_sha256[[index]],
+      environment_evidence = results$environment_evidence[[index]],
+      environment_sha256 = results$environment_sha256[[index]],
+      stringsAsFactors = FALSE
+    )
+  )
+}))
+workload_boundaries_path <- file.path(
+  run_directory, "metadata", "workload-boundaries.tsv"
+)
+documentation_write_tsv(workload_boundaries, workload_boundaries_path)
+workload_boundaries_sha256 <- unname(tools::sha256sum(
+  workload_boundaries_path
+))
+retained_boundary_paths <- file.path(run_directory, workload_boundaries$boundary)
+retained_environment_paths <- file.path(
+  run_directory, workload_boundaries$environment_evidence
+)
+if (any(!startsWith(retained_boundary_paths, paste0(run_directory, "/"))) ||
+    any(!startsWith(retained_environment_paths, paste0(run_directory, "/"))) ||
+    !identical(
+      unname(vapply(retained_boundary_paths, tools::sha256sum, character(1L))),
+      workload_boundaries$boundary_sha256
+    ) || !identical(
+      unname(vapply(retained_environment_paths, tools::sha256sum, character(1L))),
+      workload_boundaries$environment_sha256
+    ) || !all(
+      workload_boundaries$protected_metadata_sha256 ==
+        protected_metadata_pre_sha256
+    ) || !identical(
+      unname(tools::sha256sum(full_boundary_pre_path)),
+      full_boundary_pre_sha256
+    ) || !identical(
+      unname(tools::sha256sum(full_boundary_post$path)),
+      full_boundary_post$sha256
+    )) {
+  fail("retained documentation boundary evidence failed postflight binding")
+}
 metadata <- data.frame(
   key = c(
     "schema", "run_id", "scope", "status", "required_failures",
+    "full_content_boundaries", "full_boundary_pre_sha256",
+    "full_boundary_post_sha256", "protected_metadata_pre_sha256",
+    "protected_metadata_post_sha256", "protected_root_count",
+    "protected_inventory_rows", "small_input_manifest_sha256",
+    "content_hash_metadata_anchor_sha256", "tool_auth_metadata_anchor_sha256",
+    "workload_boundary_count", "workload_boundaries_sha256",
+    "log_classification_policy", "log_classification_max_bytes",
+    "log_classification_head_bytes", "log_classification_tail_bytes",
+    "log_classification_rows", "log_classification_truncated_rows",
+    "log_classification_pathological_rows", "retained_log_bytes",
+    "log_classification_sha256",
     "candidate_run_id", "candidate_version", "candidate_ref", "candidate_commit",
     "candidate_tree", "candidate_content_sha256", "candidate_library",
     "candidate_library_sha256", "dependency_library",
@@ -1289,7 +1950,27 @@ metadata <- data.frame(
     "quarto_version", "r", "r_version", "timeout_seconds", "completed_utc"
   ),
   value = c(
-    "6", run_id, scope, overall_status, required_failures,
+    "7", run_id, scope, overall_status, required_failures,
+    "2", full_boundary_pre_sha256, full_boundary_post$sha256,
+    protected_metadata_pre_sha256,
+    full_boundary_post$protected_metadata_sha256,
+    as.character(length(protected_roots)),
+    as.character(nrow(protected_metadata_pre)), small_input_manifest_sha256,
+    content_hash_metadata_sha256, tool_auth_metadata_sha256,
+    as.character(nrow(workload_boundaries)), workload_boundaries_sha256,
+    "bounded-head-tail-v1",
+    as.character(classification_log_max_bytes),
+    as.character(classification_log_head_bytes),
+    as.character(classification_log_tail_bytes),
+    as.character(nrow(log_classification)),
+    as.character(sum(truncated_log_rows)),
+    as.character(sum(
+      log_classification$classification_sample_pathological != "none_observed"
+    )),
+    format(
+      sum(declared_log_bytes), scientific = FALSE, trim = TRUE, digits = 22L
+    ),
+    log_classification_sha256,
     candidate_run_id, candidate_version, candidate_ref, candidate_commit,
     candidate_tree,
     declared_content, candidate_library, candidate_library_fingerprint,

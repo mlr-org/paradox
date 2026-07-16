@@ -1,0 +1,4 @@
+selection	minimum_files	minimum_test_blocks	minimum_passed_expectations	minimum_not_cran_scopes
+focused	58	550	1000	27
+full	79	700	9000	29
+analyzer	6	70	650	4

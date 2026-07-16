@@ -1,3 +1,17 @@
+if (!identical(Sys.getenv("PARADOX_REPOSITORY_LEGACY_SCHEMA3", unset = ""),
+    "true")) {
+  file_argument <- grep("^--file=", commandArgs(trailingOnly = FALSE),
+    value = TRUE)
+  if (length(file_argument) != 1L) {
+    stop("could not resolve the repository test harness path", call. = FALSE)
+  }
+  harness <- normalizePath(sub("^--file=", "", file_argument), winslash = "/",
+    mustWork = TRUE)
+  sys.source(file.path(dirname(harness), "test-repositories-resumable.R"),
+    envir = globalenv(), keep.source = TRUE)
+  stop("resumable repository harness returned unexpectedly", call. = FALSE)
+}
+
 args <- commandArgs(trailingOnly = TRUE)
 usage <- paste(
   "usage: test-repositories.R",
@@ -1143,7 +1157,20 @@ run_repository_tests <- function(
         stop("child process resolved modified candidate contents", call. = FALSE)
       }
       if (framework == "testthat") {
-        testthat::test_local(checkout, reporter = "summary", stop_on_failure = TRUE)
+        test_results <- testthat::test_local(
+          checkout,
+          reporter = "summary",
+          stop_on_failure = FALSE,
+          stop_on_warning = FALSE
+        )
+        # Preserve strict row failure while collecting the whole consumer suite
+        # first, so an expensive isolated checkout exposes all ordinary test
+        # failures and warnings in one invocation.
+        testthat:::test_files_check(
+          test_results,
+          stop_on_failure = TRUE,
+          stop_on_warning = TRUE
+        )
       } else if (framework == "tinytest") {
         pkgload::load_all(checkout, helpers = FALSE, export_all = FALSE, quiet = TRUE)
         tinytest_result <- tinytest::run_test_dir(

@@ -62,7 +62,19 @@
 #' @family ParamSet construction helpers
 #' @export
 ps = function(..., .extra_trafo = NULL, .constraint = NULL, .allow_dangling_dependencies = FALSE) {
-  param_set = ParamSet$new(list(...), allow_dangling_dependencies = .allow_dangling_dependencies)
+  # Literal, callback-free built-in Domains are only an intermediate format
+  # here: ParamSet immediately removes their representation and private
+  # columns. The native lane constructs those anonymous rows in one pass, but
+  # deliberately leaves R6 instance creation and every unsupported call on
+  # the historical path. Admission inspects the complete call surface before
+  # evaluating an argument expression, so fallback never repeats side effects.
+  native = .Call(
+    C_ps_builtin_domains,
+    substitute(list(...)),
+    parent.frame()
+  )
+  params = if (is.null(native)) list(...) else native
+  param_set = ParamSet$new(params, allow_dangling_dependencies = .allow_dangling_dependencies)
   param_set$extra_trafo = .extra_trafo
   param_set$constraint = .constraint
   param_set

@@ -5,6 +5,21 @@ native_paramset_check_symbol = function(table = FALSE) {
   )
 }
 
+native_paramset_check_complete_symbol = function(all_params = FALSE) {
+  get(
+    if (all_params) {
+      "C_param_set_check_dt_all_builtin"
+    } else {
+      "C_param_set_check_dt_complete_builtin"
+    },
+    envir = asNamespace("paradox")
+  )
+}
+
+native_paramset_check_plan_symbol = function() {
+  get("C_param_set_check_dt_plan_builtin", envir = asNamespace("paradox"))
+}
+
 native_paramset_check_params = function(param_set) {
   param_set$.__enclos_env__$private$.params
 }
@@ -24,8 +39,14 @@ native_paramset_check_space = function(special = FALSE) {
 }
 
 test_that("native ParamSet validity gates are registered with forced symbols", {
-  routines = c("param_set_check_builtin", "param_set_check_dt_builtin")
-  arities = c(3L, 2L)
+  routines = c(
+    "param_set_check_builtin",
+    "param_set_check_dt_builtin",
+    "param_set_check_dt_plan_builtin",
+    "param_set_check_dt_complete_builtin",
+    "param_set_check_dt_all_builtin"
+  )
+  arities = c(3L, 2L, 2L, 2L, 2L)
 
   for (index in seq_along(routines)) {
     symbol = get(paste0("C_", routines[[index]]), envir = asNamespace("paradox"))
@@ -516,6 +537,63 @@ test_that("native table gate validates column-wise and skips missing cells", {
   expect_identical(param_set$check_dt(zero_rows), TRUE)
 })
 
+test_that("native table completeness gates distinguish cells and parameters", {
+  param_set = native_paramset_check_space()
+  params = native_paramset_check_params(param_set)
+  complete_symbol = native_paramset_check_complete_symbol()
+  all_symbol = native_paramset_check_complete_symbol(all_params = TRUE)
+  values = data.frame(
+    logical = c(TRUE, FALSE),
+    factor = c("slow", "fast"),
+    integer = c(-20L, 20L),
+    double = c(-10, 10),
+    check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+
+  expect_identical(.Call(complete_symbol, params, values), TRUE)
+  expect_identical(.Call(all_symbol, params, values), TRUE)
+  expect_identical(param_set$check_dt(values), TRUE)
+  expect_identical(param_set$check_dt(values, presence = "all"), TRUE)
+  expect_identical(
+    param_set$check_dt(values[c("double", "logical")]),
+    TRUE
+  )
+
+  subset = values[c("double", "logical")]
+  expect_identical(.Call(complete_symbol, params, subset), TRUE)
+  expect_null(.Call(all_symbol, params, subset))
+
+  missing = values
+  missing$integer[[2L]] = NA_integer_
+  expect_null(.Call(complete_symbol, params, missing))
+  expect_null(.Call(all_symbol, params, missing))
+  expect_identical(param_set$check_dt(missing), TRUE)
+  expect_match(
+    param_set$check_dt(missing, presence = "all"),
+    "All parameters must be present",
+    fixed = TRUE
+  )
+})
+
+test_that("native table plan records completeness in its first value pass", {
+  param_set = native_paramset_check_space()
+  params = native_paramset_check_params(param_set)
+  symbol = native_paramset_check_plan_symbol()
+  values = data.frame(
+    double = c(0, NA_real_),
+    integer = c(0L, 1L),
+    factor = c("slow", "fast"),
+    logical = c(TRUE, FALSE),
+    stringsAsFactors = FALSE
+  )
+
+  expect_identical(.Call(symbol, params, values), 2L)
+  expect_identical(.Call(symbol, params, values[-1L]), 1L)
+  values$double[[2L]] = 1
+  expect_identical(.Call(symbol, params, values), 3L)
+})
+
 test_that("invalid and exotic tables fall back with first-row diagnostics", {
   param_set = native_paramset_check_space()
   params = native_paramset_check_params(param_set)
@@ -707,6 +785,21 @@ test_that("native check_dt preserves optional-argument laziness and order", {
     "^\\.__ParamSet__check\\(",
     perl = TRUE
   )
+})
+
+test_that("check_dt observes allow_token side effects before later rows", {
+  param_set = ps(x = p_dbl(0, 10))
+  private = param_set$.__enclos_env__$private
+
+  result = param_set$check_dt(
+    data.frame(x = c(1, 9)),
+    allow_token = {
+      data.table::set(private$.params, j = "upper", value = 5)
+      TRUE
+    }
+  )
+
+  expect_identical(result, "x: Element 1 is not <= 5")
 })
 
 test_that("native identifier matching follows R string encoding semantics", {

@@ -17,9 +17,40 @@ Sampler1D = R6Class("Sampler1D", inherit = Sampler, # abstract base class
     #' Note that this object is typically constructed via derived classes,
     #' e.g., [`Sampler1DUnif`].
     initialize = function(param) {
+      # SamplerUnif may pass an authenticated one-row state that already owns
+      # fresh ParamSet storage. Consume it here and transfer that new object
+      # directly; ordinary public ParamSets retain Sampler's deep-clone
+      # contract, and foreign external pointers retain assert_r6() errors.
+      owned = typeof(param) == "externalptr" && isTRUE(.Call(
+        C_param_set_adopt_subset_state,
+        NULL,
+        param
+      ))
+      if (owned) {
+        param = ParamSet$new(param)
+        # Historical subspaces pass this value through the public setter
+        # before Sampler deep-clones the child. Keep its callback-formals
+        # validation even though the native state already carries the value.
+        extra_trafo = param$extra_trafo
+        param$extra_trafo = extra_trafo
+
+        # R6 deep cloning recursively clones R6 objects stored directly as
+        # fixed/special values. Preserve that rare ownership boundary by using
+        # the ordinary Sampler initializer whenever such a value is present.
+        # Atomic built-in values retain the zero-copy owned hand-off.
+        owned = !any(vapply(
+          param$values,
+          is.environment,
+          logical(1L)
+        ))
+      }
       assert_r6(param, "ParamSet")
       if (param$length != 1) stopf("param must contain exactly 1 Param, but contains %s", param$length)
-      super$initialize(param)
+      if (owned) {
+        self$param_set = param
+      } else {
+        super$initialize(param)
+      }
     }
   ),
 
@@ -61,6 +92,15 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
     .sample = function(n) self$param_set$qunif(setnames(data.table(runif(n)), self$param$ids())) # sample by doing qunif(u)
   )
 )
+
+sampler_1d_unif_generators = function() {
+  list(
+    ParamSet = ParamSet,
+    Sampler1DUnif = Sampler1DUnif,
+    Sampler1D = Sampler1D,
+    Sampler = Sampler
+  )
+}
 
 
 #' @title Sampler1DRfun Class

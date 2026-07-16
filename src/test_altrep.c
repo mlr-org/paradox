@@ -11,6 +11,9 @@
 #include "paradox.h"
 #include <R_ext/Altrep.h>
 #include <R_ext/Rdynload.h>
+#if defined(PARADOX_TEST_GC_ROW_NAMES_ROOTS)
+# include <R_ext/Memory.h>
+#endif
 
 enum test_state_slot {
   TEST_STATE_FIRST = 0,
@@ -34,6 +37,115 @@ static R_altrep_class_t test_list_class;
 static R_altrep_class_t test_integer_class;
 static R_altrep_class_t test_real_class;
 static R_altrep_class_t test_logical_class;
+
+#if defined(PARADOX_TEST_GC_ROW_NAMES_ROOTS)
+static int test_gc_row_names_counts[
+  PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT
+];
+static int test_gc_row_names_collected = FALSE;
+static unsigned char test_gc_row_names_identity = 0;
+
+static const char *test_gc_row_names_point_name(
+    enum paradox_test_gc_row_names_point point) {
+  static const char *const names[] = {
+    "store-local",
+    "collection-local",
+    "collection-carrier"
+  };
+  return names[(int) point];
+}
+
+static void test_gc_row_names_finalizer(SEXP pointer) {
+  if (R_ExternalPtrAddr(pointer) ==
+      (void *) &test_gc_row_names_identity) {
+    test_gc_row_names_collected = TRUE;
+  }
+  R_ClearExternalPtr(pointer);
+}
+
+void paradox_test_gc_row_names_barrier(SEXP value,
+    enum paradox_test_gc_row_names_point point) {
+  if ((int) point < 0 || point >= PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT) {
+    Rf_error("Invalid instrumented row-name GC barrier point");
+  }
+  if (test_gc_row_names_counts[(int) point] == INT_MAX) {
+    Rf_error("Instrumented row-name GC barrier counter overflow");
+  }
+  ++test_gc_row_names_counts[(int) point];
+
+  PROTECT(value);
+  SEXP marker = Rf_install(".paradox.test.gc.row.names.root");
+  if (Rf_getAttrib(value, marker) != R_NilValue) {
+    UNPROTECT(1);
+    Rf_error("Instrumented row-name GC marker already exists");
+  }
+  SEXP sentinel = PROTECT(R_MakeExternalPtr(
+    (void *) &test_gc_row_names_identity,
+    R_NilValue,
+    R_NilValue
+  ));
+  R_RegisterCFinalizerEx(sentinel, test_gc_row_names_finalizer, FALSE);
+  Rf_setAttrib(value, marker, sentinel);
+  test_gc_row_names_collected = FALSE;
+  UNPROTECT(2);
+
+  /* The helper's roots are now gone.  The sentinel survives this full
+   * collection only if the production caller still owns `value`: either its
+   * local PROTECT or the protected collection root carrier must reach it. */
+  R_gc();
+  if (test_gc_row_names_collected) {
+    Rf_error(
+      "Instrumented GC barrier lost compact row names at `%s`",
+      test_gc_row_names_point_name(point)
+    );
+  }
+
+  /* A false collected flag proves that both pointers remain live. Reacquire
+   * explicit local roots before removing the temporary observation edge.
+   * Clearing the pointer makes its eventually pending finalizer inert. */
+  PROTECT(value);
+  PROTECT(sentinel);
+  if (Rf_getAttrib(value, marker) != sentinel) {
+    UNPROTECT(2);
+    Rf_error("Instrumented row-name GC marker changed during collection");
+  }
+  R_ClearExternalPtr(sentinel);
+  Rf_setAttrib(value, marker, R_NilValue);
+  UNPROTECT(2);
+}
+
+SEXP paradox_test_gc_row_names_barrier_counts(SEXP reset) {
+  if (TYPEOF(reset) != LGLSXP || ALTREP(reset) || XLENGTH(reset) != 1 ||
+      LOGICAL_ELT(reset, 0) == NA_LOGICAL) {
+    Rf_error("`reset` must be TRUE or FALSE");
+  }
+  static const char *const point_names[] = {
+    "store_local",
+    "collection_local",
+    "collection_carrier"
+  };
+  SEXP result = PROTECT(Rf_allocVector(
+    INTSXP,
+    PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT
+  ));
+  SEXP names = PROTECT(Rf_allocVector(
+    STRSXP,
+    PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT
+  ));
+  for (int point = 0;
+      point < PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT;
+      ++point) {
+    SET_INTEGER_ELT(result, point, test_gc_row_names_counts[point]);
+    SET_STRING_ELT(names, point, Rf_mkChar(point_names[point]));
+    if (LOGICAL_ELT(reset, 0)) {
+      test_gc_row_names_counts[point] = 0;
+    }
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return result;
+}
+#endif
 
 static int scalar_control(SEXP value, const char *name) {
   if (TYPEOF(value) != INTSXP || ALTREP(value) || XLENGTH(value) != 1) {

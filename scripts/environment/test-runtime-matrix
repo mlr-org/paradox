@@ -9,6 +9,8 @@ scripts=(
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
   scripts/environment/runtime-matrix-git
+  scripts/environment/run-runtime-matrix-stage
+  scripts/environment/run-runtime-matrix-wave
   scripts/environment/test-runtime-matrix
   scripts/environment/test-runtime-matrix-installed
 )
@@ -33,10 +35,14 @@ done
 awk -F '\t' '
   NR == 1 {if ($0 != "context\treason") exit 1; next}
   NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
-  END {if (NR != 15) exit 1}
+  END {if (NR != 23) exit 1}
 ' "$exclusions"
 expected_exclusions=(
   native-altrep-lifetimes
+  native-design-dependencies
+  native-design-transpose-trafo
+  native-domain-builtin-direct
+  native-generate-design-grid
   native-paramset-domains
   native-paramset-get-domain
   native-paramset-get-values
@@ -44,12 +50,16 @@ expected_exclusions=(
   native-paramset-qunif
   native-paramset-subset
   native-paramset-value-mutation
+  native-paramsetcollection-callback-detach
   native-paramsetcollection-construction
   native-paramsetcollection-deps
   native-paramsetcollection-exact-state
   native-paramsetcollection-params
   native-paramsetcollection-values
+  native-ps-construction
   native-r6-surface-auth
+  native-sampler-1d-unif-shell
+  native-sampler-unif-bulk
 )
 mapfile -t actual_exclusions < <(tail -n +2 "$exclusions" | cut -f 1)
 [[ "${actual_exclusions[*]}" == "${expected_exclusions[*]}" ]] || {
@@ -107,7 +117,7 @@ while IFS=$'\t' read -r runtime test_name _; do
     exit 1
   }
 done < "$result_skips"
-[[ $(find "$ROOT/tests/testthat" -maxdepth 1 -type f -name 'test*.R' | wc -l) -eq 71 &&
+[[ $(find "$ROOT/tests/testthat" -maxdepth 1 -type f -name 'test*.R' | wc -l) -eq 79 &&
   $(find "$ROOT/tests/testthat" -maxdepth 1 -type f ! -name 'test*.R' | wc -l) -eq 7 ]] || {
   echo "Runtime source-test inventory changed without a reviewed scope update" >&2
   exit 1
@@ -300,5 +310,244 @@ if "$git_helper" audit "$git_fixture" >/dev/null 2>&1; then
 fi
 rm -- "$git_fixture/.git/objects/info/alternates"
 "$git_helper" audit "$git_fixture" >/dev/null
+
+# The real R stages are deliberately not run by this fixture.  Exercise their
+# generic two-stage supervisor with tiny resistant and failing workers so its
+# scheduling, collection, deadlines, and cleanup can be checked in seconds.
+wave_runner="$ROOT/scripts/environment/run-runtime-matrix-wave"
+wave_fixture="$fixture/runtime-wave"
+wave_root="$wave_fixture/root"
+wave_run="$wave_fixture/run"
+fake_worker="$wave_fixture/fake-worker"
+mkdir -p "$wave_root" "$wave_run"
+cat > "$fake_worker" <<'WORKER'
+#!/usr/bin/env bash
+set -euo pipefail
+root=$1
+version=$3
+mode=$(<"$root/mode")
+case "$mode" in
+  concurrent)
+    mkdir -p "$root/started"
+    : > "$root/started/$version"
+    for _ in $(seq 1 100); do
+      count=$(find "$root/started" -maxdepth 1 -type f | wc -l)
+      ((count == 2)) && break
+      sleep 0.02
+    done
+    ((count == 2)) || exit 31
+    printf 'worker=concurrent\nruntime=%s\n' "$version"
+    ;;
+  quick)
+    printf 'worker=quick\nruntime=%s\n' "$version"
+    ;;
+  fail)
+    printf 'worker=failed\nruntime=%s\n' "$version"
+    [[ "$version" == 4.3.3 ]] && exit 7
+    exit 9
+    ;;
+  resistant)
+    mkdir -p "$root/children"
+    trap '' HUP INT TERM
+    (
+      trap '' HUP INT TERM
+      while :; do sleep 1; done
+    ) &
+    child=$!
+    printf '%s\n' "$child" > "$root/children/$version"
+    while :; do sleep 1; done
+    ;;
+  *) exit 32 ;;
+esac
+WORKER
+chmod 0755 "$fake_worker"
+printf 'ordinal\tversion\n1\t4.3.3\n2\t4.5.2\n' > "$wave_fixture/tasks-two.tsv"
+printf 'ordinal\tversion\n1\t4.3.3\n' > "$wave_fixture/tasks-one.tsv"
+make_report() {
+  printf 'field\tvalue\nschema\t1\nprofile\tlight-test\noperator_max_jobs\t%s\njobs\t%s\n' \
+    "$1" "$1" > "$2"
+}
+make_report 2 "$wave_fixture/report-two.tsv"
+make_report 1 "$wave_fixture/report-one.tsv"
+bash_path=$(command -v bash)
+setsid_path=$(command -v setsid)
+timeout_path=$(command -v timeout)
+run_wave() {
+  local jobs=$1 report=$2 tasks=$3 output=$4 timeout_seconds=$5
+  "$wave_runner" --jobs "$jobs" --admission-report "$report" \
+    --task-list "$tasks" --output-directory "$output" \
+    --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+    --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+    --task-timeout-seconds "$timeout_seconds" --kill-after-seconds 1 \
+    --termination-grace-tenths 3
+}
+
+printf 'concurrent\n' > "$wave_root/mode"
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/concurrent" 5
+[[ $(awk -F '\t' 'NR > 1 && $4 == 0 && $5 == "false" {n++} END {print n + 0}' \
+  "$wave_fixture/concurrent/task-ledger.tsv") -eq 2 ]] || {
+  echo "Runtime wave did not execute both admitted siblings concurrently" >&2
+  exit 1
+}
+if run_wave 3 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/unsafe-three" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted more than two stage workers" >&2
+  exit 1
+fi
+
+# A one-job admission must be honored rather than silently raised.  Both rows
+# are still collected in their deterministic task order.
+printf 'quick\n' > "$wave_root/mode"
+if run_wave 2 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/raised-admission" 5 >/dev/null 2>&1; then
+  echo "Runtime wave raised a lowering-only admission" >&2
+  exit 1
+fi
+run_wave 1 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/lowered" 5
+[[ $(awk -F '\t' '$1 == "jobs" {print $2}' \
+  "$wave_fixture/lowered/wave-plan.tsv") == 1 &&
+  $(tail -n +2 "$wave_fixture/lowered/task-ledger.tsv" | wc -l) -eq 2 ]] || {
+  echo "Runtime wave did not retain its one-job admission and both results" >&2
+  exit 1
+}
+
+# Failures are a batch result: neither sibling is hidden by the other's exit.
+printf 'fail\n' > "$wave_root/mode"
+if run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+    "$wave_fixture/failures" 5 >/dev/null 2>&1; then
+  echo "Runtime wave accepted failing siblings" >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $4}' "$wave_fixture/failures/task-ledger.tsv") == 7 &&
+  $(awk -F '\t' 'NR == 3 {print $4}' "$wave_fixture/failures/task-ledger.tsv") == 9 ]] || {
+  echo "Runtime wave stopped before collecting every sibling failure" >&2
+  exit 1
+}
+
+wait_for_children() {
+  local count=$1 attempt
+  for ((attempt = 0; attempt < 100; attempt++)); do
+    [[ $(find "$wave_root/children" -maxdepth 1 -type f 2>/dev/null | wc -l) -eq "$count" ]] && return 0
+    sleep 0.02
+  done
+  return 1
+}
+assert_children_gone() {
+  local pid_file pid attempt alive
+  for pid_file in "$wave_root"/children/*; do
+    pid=$(<"$pid_file")
+    alive=true
+    for ((attempt = 0; attempt < 100; attempt++)); do
+      if ! kill -0 "$pid" 2>/dev/null; then alive=false; break; fi
+      sleep 0.02
+    done
+    [[ "$alive" == false ]] || {
+      echo "Runtime wave left a resistant worker descendant alive: $pid" >&2
+      exit 1
+    }
+  done
+}
+
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+if run_wave 1 "$wave_fixture/report-one.tsv" "$wave_fixture/tasks-one.tsv" \
+    "$wave_fixture/timeout" 1 >/dev/null 2>&1; then
+  echo "Runtime wave accepted a timed-out stage" >&2
+  exit 1
+fi
+[[ $(awk -F '\t' 'NR == 2 {print $4 ":" $5}' \
+  "$wave_fixture/timeout/task-ledger.tsv") == 124:true ]] || {
+  printf 'Runtime wave did not authenticate its exact timeout: %s\n' \
+    "$(awk -F '\t' 'NR == 2 {print $4 ":" $5}' "$wave_fixture/timeout/task-ledger.tsv")" >&2
+  exit 1
+}
+assert_children_gone
+
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+"$wave_runner" --jobs 2 --admission-report "$wave_fixture/report-two.tsv" \
+  --task-list "$wave_fixture/tasks-two.tsv" \
+  --output-directory "$wave_fixture/interrupted" \
+  --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+  --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+  --task-timeout-seconds 30 --kill-after-seconds 1 \
+  --termination-grace-tenths 3 >/dev/null 2>&1 &
+wave_pid=$!
+wait_for_children 2 || {
+  kill -KILL "$wave_pid" 2>/dev/null || true
+  echo "Runtime interruption fixture did not launch both workers" >&2
+  exit 1
+}
+kill -TERM "$wave_pid"
+wave_status=0
+wait "$wave_pid" || wave_status=$?
+[[ "$wave_status" -eq 143 &&
+  $(awk -F '\t' 'NR > 1 && $6 == "true" {n++} END {print n + 0}' \
+    "$wave_fixture/interrupted/task-ledger.tsv") -eq 2 ]] || {
+  echo "Runtime wave interruption did not retain every sibling result" >&2
+  exit 1
+}
+assert_children_gone
+
+# With one admitted slot, interruption must not launch the queued second
+# version.  Its deterministic ledger row explicitly records "unstarted".
+rm -rf "$wave_root/children"
+printf 'resistant\n' > "$wave_root/mode"
+"$wave_runner" --jobs 1 --admission-report "$wave_fixture/report-one.tsv" \
+  --task-list "$wave_fixture/tasks-two.tsv" \
+  --output-directory "$wave_fixture/interrupted-one" \
+  --worker "$fake_worker" --root "$wave_root" --run-root "$wave_run" \
+  --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+  --task-timeout-seconds 30 --kill-after-seconds 1 \
+  --termination-grace-tenths 3 >/dev/null 2>&1 &
+wave_pid=$!
+wait_for_children 1 || {
+  kill -KILL "$wave_pid" 2>/dev/null || true
+  echo "Runtime serial interruption fixture did not launch its first worker" >&2
+  exit 1
+}
+kill -TERM "$wave_pid"
+wave_status=0
+wait "$wave_pid" || wave_status=$?
+[[ "$wave_status" -eq 143 &&
+  $(awk -F '\t' 'NR == 2 {print $6}' \
+    "$wave_fixture/interrupted-one/task-ledger.tsv") == true &&
+  $(awk -F '\t' 'NR == 3 {print $4 ":" $5 ":" $6}' \
+    "$wave_fixture/interrupted-one/task-ledger.tsv") == 125:false:false &&
+  ! -e "$wave_root/children/4.5.2" ]] || {
+  echo "Runtime serial interruption launched or omitted its queued-stage result" >&2
+  exit 1
+}
+assert_children_gone
+
+# Stable task order and content hashes make promotion independent of completion
+# order.  Identical workers therefore produce byte-identical task ledgers.
+printf 'quick\n' > "$wave_root/mode"
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/deterministic-a" 5
+run_wave 2 "$wave_fixture/report-two.tsv" "$wave_fixture/tasks-two.tsv" \
+  "$wave_fixture/deterministic-b" 5
+cmp -s "$wave_fixture/deterministic-a/task-ledger.tsv" \
+  "$wave_fixture/deterministic-b/task-ledger.tsv" || {
+  echo "Runtime wave evidence depends on sibling completion order" >&2
+  exit 1
+}
+
+for variable in MAKEFLAGS CMAKE_BUILD_PARALLEL_LEVEL TESTTHAT_CPUS MC_CORES \
+    OMP_NUM_THREADS OMP_THREAD_LIMIT OPENBLAS_NUM_THREADS MKL_NUM_THREADS \
+    BLIS_NUM_THREADS VECLIB_MAXIMUM_THREADS; do
+  rg -q "export ${variable}=(-j)?1" \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" || {
+    echo "Runtime stage does not cap nested parallelism: $variable" >&2
+    exit 1
+  }
+done
+rg -Fq '"$RESOURCE_JOBS" light-test --max-jobs "$runtime_jobs_limit" --report' \
+  "$ROOT/scripts/test-runtime-matrix" || {
+  echo "Runtime matrix does not derive its retained light-test admission" >&2
+  exit 1
+}
 
 printf 'runtime_matrix_static_fixture=passed\n'

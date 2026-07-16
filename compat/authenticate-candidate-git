@@ -74,6 +74,19 @@ REPLACEMENTS=$(git_safe -C "$ROOT" for-each-ref \
 [[ ! -e "$ROOT/.git/objects/info/alternates" &&
    ! -L "$ROOT/.git/objects/info/alternates" ]] ||
   fail "Git alternate object stores are forbidden"
+[[ ! -e "$ROOT/.git/objects/info/http-alternates" &&
+   ! -L "$ROOT/.git/objects/info/http-alternates" ]] ||
+  fail "Git HTTP alternate object stores are forbidden"
+
+if DANGEROUS_CONFIG=$(git_safe -C "$ROOT" config --local --get-regexp \
+    '^(include\.|includeif\.|core\.attributesfile$|core\.hookspath$|core\.worktree$|extensions\.worktreeconfig$|extensions\.partialclone$|remote\..*\.promisor$)' \
+    2>/dev/null); then
+  [[ -z "$DANGEROUS_CONFIG" ]] ||
+    fail "repository configuration redirects authenticated Git inputs"
+else
+  CONFIG_STATUS=$?
+  [[ $CONFIG_STATUS -eq 1 ]] || fail "could not audit repository configuration"
+fi
 
 audit_index_flags() {
   local worktree=$1
@@ -89,28 +102,6 @@ audit_index_flags() {
     esac
   done <<< "$entries"
 }
-audit_index_flags "$ROOT" "primary worktree"
-
-HEAD_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) ||
-  fail "could not resolve repository HEAD"
-HEAD_TREE=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
-  fail "could not resolve repository HEAD tree"
-REF_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
-  "$CANDIDATE_REF^{commit}" 2>/dev/null) || fail "candidate ref does not resolve"
-RESOLVED_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
-  "$CANDIDATE_COMMIT^{commit}" 2>/dev/null) || fail "candidate commit does not resolve"
-RESOLVED_TREE=$(git_safe -C "$ROOT" rev-parse --verify \
-  "$CANDIDATE_COMMIT^{tree}" 2>/dev/null) || fail "candidate tree does not resolve"
-STATUS=$(git_safe -C "$ROOT" status --porcelain=v1 --untracked-files=all) ||
-  fail "could not inspect repository cleanliness"
-[[ "$HEAD_COMMIT" == "$CANDIDATE_COMMIT" &&
-   "$HEAD_TREE" == "$CANDIDATE_TREE" &&
-   "$REF_COMMIT" == "$CANDIDATE_COMMIT" &&
-   "$RESOLVED_COMMIT" == "$CANDIDATE_COMMIT" &&
-   "$RESOLVED_TREE" == "$CANDIDATE_TREE" &&
-   -z "$STATUS" ]] ||
-  fail "root HEAD, ref, commit, tree, or cleanliness differs from the candidate"
-
 if [[ -n "$CANDIDATE_SOURCE" ]]; then
   [[ -d "$CANDIDATE_SOURCE" && ! -L "$CANDIDATE_SOURCE" ]] ||
     fail "candidate source is absent, not a directory, or symbolic"
@@ -126,6 +117,13 @@ if [[ -n "$CANDIDATE_SOURCE" ]]; then
   COMMON_DIRECTORY=$(cd "$COMMON_DIRECTORY" && pwd -P)
   [[ "$COMMON_DIRECTORY" == "$ROOT/.git" ]] ||
     fail "candidate source does not share the authenticated object store"
+  SOURCE_GIT_DIRECTORY=$(git_safe -C "$SOURCE" rev-parse --absolute-git-dir \
+    2>/dev/null) || fail "could not resolve candidate source Git directory"
+  SOURCE_GIT_DIRECTORY=$(cd "$SOURCE_GIT_DIRECTORY" && pwd -P)
+  case "$SOURCE_GIT_DIRECTORY/" in
+    "$ROOT/.git/worktrees/"*/) ;;
+    *) fail "candidate source is not a linked worktree of the repository" ;;
+  esac
   SOURCE_ALTERNATES=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
     --git-path objects/info/alternates 2>/dev/null) ||
     fail "could not resolve candidate source alternate-object path"
@@ -137,20 +135,69 @@ if [[ -n "$CANDIDATE_SOURCE" ]]; then
     fail "could not resolve candidate source attribute path"
   [[ ! -e "$SOURCE_ALTERNATES" && ! -L "$SOURCE_ALTERNATES" ]] ||
     fail "candidate source uses an alternate object store"
+  SOURCE_HTTP_ALTERNATES=$(git_safe -C "$SOURCE" rev-parse --path-format=absolute \
+    --git-path objects/info/http-alternates 2>/dev/null) ||
+    fail "could not resolve candidate source HTTP alternate-object path"
+  [[ ! -e "$SOURCE_HTTP_ALTERNATES" && ! -L "$SOURCE_HTTP_ALTERNATES" ]] ||
+    fail "candidate source uses an HTTP alternate object store"
   [[ ! -e "$SOURCE_GRAFTS" && ! -L "$SOURCE_GRAFTS" ]] ||
     fail "candidate source uses Git grafts"
   [[ ! -e "$SOURCE_ATTRIBUTES" && ! -L "$SOURCE_ATTRIBUTES" ]] ||
     fail "candidate source uses Git info attributes"
   audit_index_flags "$SOURCE" "candidate source worktree"
+  if git_safe -C "$SOURCE" symbolic-ref -q HEAD >/dev/null 2>&1; then
+    fail "candidate source HEAD must be detached"
+  fi
+  REF_COMMIT=$(git_safe -C "$SOURCE" rev-parse --verify \
+    "$CANDIDATE_REF^{commit}" 2>/dev/null) || fail "candidate ref does not resolve"
+  REF_TREE=$(git_safe -C "$SOURCE" rev-parse --verify \
+    "$CANDIDATE_REF^{tree}" 2>/dev/null) || fail "candidate ref tree does not resolve"
+  RESOLVED_COMMIT=$(git_safe -C "$SOURCE" rev-parse --verify \
+    "$CANDIDATE_COMMIT^{commit}" 2>/dev/null) || fail "candidate commit does not resolve"
+  RESOLVED_TREE=$(git_safe -C "$SOURCE" rev-parse --verify \
+    "$CANDIDATE_COMMIT^{tree}" 2>/dev/null) || fail "candidate tree does not resolve"
   SOURCE_HEAD=$(git_safe -C "$SOURCE" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) ||
     fail "could not resolve candidate source HEAD"
   SOURCE_TREE=$(git_safe -C "$SOURCE" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
     fail "could not resolve candidate source tree"
-  SOURCE_STATUS=$(git_safe -C "$SOURCE" status --porcelain=v1 --untracked-files=all) ||
+  SOURCE_STATUS=$(git_safe -C "$SOURCE" status --porcelain=v1 \
+    --untracked-files=all --ignored=matching) ||
     fail "could not inspect candidate source cleanliness"
+  TREE_MODES=$(git_safe -C "$SOURCE" ls-tree -r --full-tree \
+    "$CANDIDATE_COMMIT") || fail "could not inspect candidate source tree modes"
   [[ "$SOURCE_HEAD" == "$CANDIDATE_COMMIT" &&
-     "$SOURCE_TREE" == "$CANDIDATE_TREE" && -z "$SOURCE_STATUS" ]] ||
-    fail "candidate source HEAD, tree, or cleanliness differs from the candidate"
+     "$SOURCE_TREE" == "$CANDIDATE_TREE" &&
+     "$REF_COMMIT" == "$CANDIDATE_COMMIT" &&
+     "$REF_TREE" == "$CANDIDATE_TREE" &&
+     "$RESOLVED_COMMIT" == "$CANDIDATE_COMMIT" &&
+     "$RESOLVED_TREE" == "$CANDIDATE_TREE" && -z "$SOURCE_STATUS" ]] ||
+    fail "candidate source ref, HEAD, tree, or cleanliness differs from the candidate"
+  if grep -Eq '^(120000|160000) ' <<< "$TREE_MODES"; then
+    fail "candidate source tree contains a symbolic link or submodule"
+  fi
+else
+  audit_index_flags "$ROOT" "primary worktree"
+  HEAD_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) ||
+    fail "could not resolve repository HEAD"
+  HEAD_TREE=$(git_safe -C "$ROOT" rev-parse --verify 'HEAD^{tree}' 2>/dev/null) ||
+    fail "could not resolve repository HEAD tree"
+  REF_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
+    "$CANDIDATE_REF^{commit}" 2>/dev/null) || fail "candidate ref does not resolve"
+  REF_TREE=$(git_safe -C "$ROOT" rev-parse --verify \
+    "$CANDIDATE_REF^{tree}" 2>/dev/null) || fail "candidate ref tree does not resolve"
+  RESOLVED_COMMIT=$(git_safe -C "$ROOT" rev-parse --verify \
+    "$CANDIDATE_COMMIT^{commit}" 2>/dev/null) || fail "candidate commit does not resolve"
+  RESOLVED_TREE=$(git_safe -C "$ROOT" rev-parse --verify \
+    "$CANDIDATE_COMMIT^{tree}" 2>/dev/null) || fail "candidate tree does not resolve"
+  STATUS=$(git_safe -C "$ROOT" status --porcelain=v1 --untracked-files=all) ||
+    fail "could not inspect repository cleanliness"
+  [[ "$HEAD_COMMIT" == "$CANDIDATE_COMMIT" &&
+     "$HEAD_TREE" == "$CANDIDATE_TREE" &&
+     "$REF_COMMIT" == "$CANDIDATE_COMMIT" &&
+     "$REF_TREE" == "$CANDIDATE_TREE" &&
+     "$RESOLVED_COMMIT" == "$CANDIDATE_COMMIT" &&
+     "$RESOLVED_TREE" == "$CANDIDATE_TREE" && -z "$STATUS" ]] ||
+    fail "root HEAD, ref, commit, tree, or cleanliness differs from the candidate"
 fi
 
 printf '%s\n' "candidate_git_authentication=passed"

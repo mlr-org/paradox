@@ -1,2 +1,3 @@
 EXPORTS
   R_init_paradox
+  R_unload_paradox

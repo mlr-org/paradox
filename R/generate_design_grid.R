@@ -51,10 +51,28 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   # overwrite the resolution for categorical stuff with the number of levels they have
   isc = param_set$is_categ
   par_res = insert_named(par_res, param_set$nlevels[isc])
+
+  # The exact generated base ParamSet surface can assemble the complete grid
+  # in one native allocation-and-fill pass. Collections, extensions, replaced
+  # methods, malformed private storage, and unsupported numeric ranges decline
+  # cleanly and retain the established column-wise R implementation below.
+  res = NULL
+  if (length(par_res) > 0L &&
+      identical(class(param_set), c("ParamSet", "R6")) &&
+      is_exact_random_design_space(param_set)) {
+    res = .Call(
+      C_generate_design_grid_builtin,
+      param_set$.__enclos_env__$private$.params,
+      par_res
+    )
+  }
+
   # generate regular grid from 0,1 then map it to the values of the param,
   # then do a crossproduct
-  grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
-  res = imap(grid_vec, function(value, id) param_set$qunif(setnames(data.table(value), id))[[1]])
-  res = cross_join(res, sorted = FALSE)
+  if (is.null(res)) {
+    grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
+    res = imap(grid_vec, function(value, id) param_set$qunif(setnames(data.table(value), id))[[1]])
+    res = cross_join(res, sorted = FALSE)
+  }
   Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
 }

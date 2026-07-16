@@ -47,12 +47,55 @@ attribute_hidden SEXP paradox_domain_construct(
   SEXP init_value
 );
 attribute_hidden SEXP paradox_domain_construct_frame(SEXP frame);
+attribute_hidden SEXP paradox_domain_builtin_runtime(
+  SEXP constructors,
+  SEXP no_default,
+  SEXP sort_function
+);
+attribute_hidden void paradox_domain_builtin_release(void);
+attribute_hidden SEXP paradox_domain_construct_builtin(
+  SEXP frame,
+  SEXP wrapper,
+  SEXP call,
+  SEXP caller_environment,
+  SEXP kind_value
+);
+attribute_hidden SEXP paradox_domain_fct_grouping(SEXP levels);
+attribute_hidden SEXP paradox_domain_numeric_bounds_admit(
+  SEXP frame,
+  SEXP integer_kind
+);
+attribute_hidden SEXP paradox_domain_uty_check_result(SEXP result);
+attribute_hidden SEXP paradox_domain_simple_repr_id(SEXP representation);
+attribute_hidden SEXP paradox_domain_relaxed_repr_id(SEXP representation);
+attribute_hidden SEXP paradox_ps_builtin_runtime(
+  SEXP constructors,
+  SEXP no_default
+);
+attribute_hidden void paradox_ps_builtin_release(void);
+attribute_hidden SEXP paradox_ps_builtin_domains(
+  SEXP expressions,
+  SEXP eval_environment
+);
+attribute_hidden SEXP paradox_param_set_index_layout(
+  SEXP version,
+  SEXP params_index,
+  SEXP tags_index,
+  SEXP identity_index,
+  SEXP empty_index
+);
+attribute_hidden int paradox_param_set_attach_singleton_index(SEXP params);
 attribute_hidden SEXP paradox_param_set_construct(SEXP domains);
 attribute_hidden SEXP paradox_param_set_collection_construct(
   SEXP sets,
   SEXP tag_sets,
   SEXP tag_params,
   SEXP postfix_names
+);
+attribute_hidden SEXP paradox_param_set_collection_detach_plan(
+  SEXP private_environment,
+  SEXP self,
+  SEXP requested
 );
 attribute_hidden SEXP paradox_param_set_ids(
   SEXP params,
@@ -124,9 +167,49 @@ attribute_hidden SEXP paradox_param_set_check_builtin(
   SEXP xs,
   SEXP sanitize
 );
+attribute_hidden SEXP paradox_param_set_collection_check_builtin(
+  SEXP private_environment,
+  SEXP self,
+  SEXP values,
+  SEXP sanitize,
+  SEXP check_strict
+);
 attribute_hidden SEXP paradox_param_set_check_dt_builtin(SEXP params, SEXP xdt);
+attribute_hidden SEXP paradox_param_set_check_dt_plan_builtin(
+  SEXP params,
+  SEXP xdt
+);
+attribute_hidden SEXP paradox_param_set_check_dt_complete_builtin(
+  SEXP params,
+  SEXP xdt
+);
+attribute_hidden SEXP paradox_param_set_check_dt_all_builtin(
+  SEXP params,
+  SEXP xdt
+);
 attribute_hidden SEXP paradox_param_set_surface_auth(SEXP self, SEXP mode);
+attribute_hidden int paradox_param_set_design_trafo_auth(SEXP self);
+attribute_hidden int paradox_param_set_design_dependencies_auth(SEXP self);
+attribute_hidden int paradox_param_set_collection_check_auth(SEXP self);
+attribute_hidden int paradox_param_set_random_design_auth(SEXP self);
 attribute_hidden SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x);
+attribute_hidden SEXP paradox_sampler_unif_sample_builtin(
+  SEXP self,
+  SEXP param_set,
+  SEXP samplers,
+  SEXP n
+);
+attribute_hidden SEXP paradox_design_dependency_runtime(
+  SEXP mlr3misc_version
+);
+attribute_hidden SEXP paradox_design_dependency_plan_builtin(
+  SEXP data,
+  SEXP param_set
+);
+attribute_hidden SEXP paradox_generate_design_grid_builtin(
+  SEXP params,
+  SEXP resolutions
+);
 attribute_hidden SEXP paradox_param_set_trafo_plan(SEXP x, SEXP trafos);
 attribute_hidden SEXP paradox_param_set_get_domain(
   SEXP private_environment,
@@ -159,11 +242,63 @@ attribute_hidden SEXP paradox_param_set_subset_state(
   SEXP requested_ids,
   SEXP check_dependencies
 );
+attribute_hidden SEXP paradox_param_set_subspace_state(
+  SEXP private_environment,
+  SEXP self,
+  SEXP requested_ids,
+  SEXP check_dependencies,
+  SEXP expected_values
+);
+attribute_hidden SEXP paradox_param_set_subspace_states(
+  SEXP private_environment,
+  SEXP self,
+  SEXP requested_ids,
+  SEXP expected_values
+);
 attribute_hidden SEXP paradox_param_set_adopt_subset_state(
   SEXP private_environment,
   SEXP token
 );
+attribute_hidden int paradox_param_set_subset_state_is_singleton(SEXP token);
+attribute_hidden int paradox_param_set_subset_state_is_sampler_safe(
+  SEXP token
+);
+attribute_hidden int paradox_param_set_adopt_subset_state_internal(
+  SEXP private_environment,
+  SEXP token
+);
+attribute_hidden int paradox_param_set_subset_destination_ready(
+  SEXP private_environment
+);
+attribute_hidden SEXP paradox_param_set_bulk_shell_register(
+  SEXP prototype,
+  SEXP generator_surface
+);
+attribute_hidden SEXP paradox_param_set_bulk_generator_auth(
+  SEXP generator_surface
+);
+attribute_hidden SEXP paradox_param_set_bulk_shells(
+  SEXP prototype,
+  SEXP plans
+);
+attribute_hidden void paradox_param_set_bulk_shell_release(void);
+attribute_hidden SEXP paradox_sampler_1d_unif_bulk_register(
+  SEXP prototype,
+  SEXP generators
+);
+attribute_hidden SEXP paradox_sampler_1d_unif_bulk_shells(
+  SEXP param_generator,
+  SEXP generators,
+  SEXP plans,
+  SEXP values
+);
+attribute_hidden SEXP paradox_sampler_1d_unif_bulk_auth(SEXP generators);
+attribute_hidden void paradox_sampler_1d_unif_bulk_release(void);
 attribute_hidden SEXP paradox_design_transpose(SEXP data, SEXP filter_na);
+attribute_hidden SEXP paradox_design_transpose_logscale_builtin(
+  SEXP xs,
+  SEXP param_set
+);
 attribute_hidden SEXP paradox_finalize_data_table(SEXP table);
 attribute_hidden SEXP paradox_test_checked_affixed_size(
   SEXP owner_boundary,
@@ -186,6 +321,23 @@ attribute_hidden SEXP paradox_test_gc_column_mutator(
   SEXP column,
   SEXP replacement
 );
+#if defined(PARADOX_TEST_GC_ROW_NAMES_ROOTS)
+enum paradox_test_gc_row_names_point {
+  PARADOX_TEST_GC_ROW_NAMES_STORE = 0,
+  PARADOX_TEST_GC_ROW_NAMES_COLLECTION_LOCAL,
+  PARADOX_TEST_GC_ROW_NAMES_COLLECTION_CARRIER,
+  PARADOX_TEST_GC_ROW_NAMES_POINT_COUNT
+};
+attribute_hidden void paradox_test_gc_row_names_barrier(
+  SEXP value,
+  enum paradox_test_gc_row_names_point point
+);
+attribute_hidden SEXP paradox_test_gc_row_names_barrier_counts(SEXP reset);
+# define PARADOX_TEST_GC_ROW_NAMES_BARRIER(value, point) \
+  paradox_test_gc_row_names_barrier((value), (point))
+#else
+# define PARADOX_TEST_GC_ROW_NAMES_BARRIER(value, point) ((void) 0)
+#endif
 attribute_hidden void paradox_test_altrep_initialize(DllInfo *dll);
 
 #endif

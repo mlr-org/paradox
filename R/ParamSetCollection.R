@@ -156,6 +156,55 @@ param_set_collection_exact_feature_indices = function(sets, field) {
   which(present)
 }
 
+# The native detachment planner has already proved that every retained
+# callback takes one argument.  Tiny named lists therefore preserve every
+# access made by psc_constraint()/psc_extra_trafo() without retaining or
+# cloning the source ParamSets.  Keeping these as ordinary package functions
+# lets the package byte compiler compile both the factory and returned wrapper
+# once at installation time; no per-subset crate() or cmpfun() call remains.
+param_set_collection_constraint_factory = function(
+    translation,
+    constraint_indices,
+    constraint_sets) {
+  if (!length(constraint_indices)) return(NULL)
+  runner = psc_constraint
+  force(translation)
+  force(constraint_indices)
+  force(constraint_sets)
+  force(runner)
+  function(x) {
+    runner(
+      x,
+      constraint_indices,
+      constraint_sets,
+      translation
+    )
+  }
+}
+
+param_set_collection_extra_trafo_factory = function(
+    translation,
+    trafo_indices,
+    trafo_sets,
+    postfix) {
+  if (!length(trafo_indices)) return(NULL)
+  runner = psc_extra_trafo
+  force(translation)
+  force(trafo_indices)
+  force(trafo_sets)
+  force(postfix)
+  force(runner)
+  function(x) {
+    runner(
+      x,
+      trafo_indices,
+      trafo_sets,
+      translation,
+      postfix
+    )
+  }
+}
+
 #' @title ParamSetCollection
 #'
 #' @description
@@ -407,8 +456,46 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
       # need to take care of extra_trafo and constraint.
       result = super$subset(ids, allow_dangling_dependencies = allow_dangling_dependencies, keep_constraint = keep_constraint)
-      if (keep_constraint) result$constraint = private$.get_constraint_detached(ids)
-      result$extra_trafo = private$.get_extra_trafo_detached(ids)
+
+      # super$subset() has already observed the collection's public callback
+      # bindings and copied their results into this fresh ParamSet.  When both
+      # retained fields are NULL there is no callback object to detach, so the
+      # graph-wide native admission and snapshot work cannot change `result`.
+      # Inspect the result, rather than the mutable children again: any
+      # callback observed by the public bindings still takes the fully audited
+      # native/fallback path below.  A constraint deliberately omitted through
+      # keep_constraint = FALSE is likewise not cargo that needs detachment.
+      if ((!keep_constraint || is.null(result$constraint)) &&
+          is.null(result$extra_trafo)) {
+        return(result)
+      }
+
+      detached = .Call(
+        C_param_set_collection_detach_plan,
+        private,
+        self,
+        ids
+      )
+      if (is.null(detached)) {
+        if (keep_constraint) {
+          result$constraint = private$.get_constraint_detached(ids)
+        }
+        result$extra_trafo = private$.get_extra_trafo_detached(ids)
+      } else {
+        if (keep_constraint) {
+          result$constraint = param_set_collection_constraint_factory(
+            detached$translation,
+            detached$constraint_indices,
+            detached$constraint_sets
+          )
+        }
+        result$extra_trafo = param_set_collection_extra_trafo_factory(
+          detached$translation,
+          detached$trafo_indices,
+          detached$trafo_sets,
+          detached$postfix
+        )
+      }
       result
     },
 

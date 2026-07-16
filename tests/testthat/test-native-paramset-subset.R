@@ -25,6 +25,14 @@ native_subset_adopt_symbol = function() {
   )
 }
 
+native_subset_adopt_without_initializer = function(plan) {
+  target = ParamSet$new()
+  private = target$.__enclos_env__$private
+  private$.params = NULL
+  expect_true(.Call(native_subset_adopt_symbol(), private, plan$state))
+  private
+}
+
 native_subset_call = function(param_set, ids, check_dependencies = FALSE) {
   .Call(
     native_subset_symbol(),
@@ -1259,4 +1267,785 @@ test_that("native subset uses one cumulative interrupt budget", {
     function(table) data.table:::selfrefok(table, FALSE) == 1L,
     logical(1L)
   )))
+})
+
+# Independent copy of the historical one-dimensional construction path.  It
+# intentionally keeps the data.table joins and public assignments so the
+# native-token lane is compared with behavior it does not implement itself.
+native_subspaces_reference = function(param_set,
+    ids = param_set$.__enclos_env__$private$.params$id) {
+  private = param_set$.__enclos_env__$private
+  values = param_set$values
+  sapply(ids, simplify = FALSE, function(get_id) {
+    result = ParamSet$new()
+    result$extra_trafo = param_set$extra_trafo
+    result_private = result$.__enclos_env__$private
+    result_private$.params = data.table::setindexv(
+      private$.params[get_id, on = "id"],
+      c("id", "cls", "grouping")
+    )
+    result_private$.trafos = data.table::setkeyv(
+      private$.trafos[get_id, on = "id", nomatch = NULL],
+      "id"
+    )
+    result_private$.tags = data.table::setkeyv(
+      private$.tags[get_id, on = "id", nomatch = NULL],
+      "id"
+    )
+    result$assert_values = FALSE
+    result$values = values[match(get_id, names(values), nomatch = 0L)]
+    result$assert_values = TRUE
+    result
+  })
+}
+
+native_subspaces_expect_fallback_equivalent = function(observed, expected) {
+  expect_identical(class(observed), class(expected))
+  observed_private = observed$.__enclos_env__$private
+  expected_private = expected$.__enclos_env__$private
+  for (field in c(".params", ".tags", ".trafos", ".deps")) {
+    expect_identical(names(observed_private[[field]]), names(expected_private[[field]]))
+    expect_identical(class(observed_private[[field]]), class(expected_private[[field]]))
+    expect_identical(
+      lapply(observed_private[[field]], identity),
+      lapply(expected_private[[field]], identity)
+    )
+    expect_identical(
+      data.table::key(observed_private[[field]]),
+      data.table::key(expected_private[[field]])
+    )
+    expect_identical(
+      data.table::indices(observed_private[[field]]),
+      data.table::indices(expected_private[[field]])
+    )
+  }
+  expect_identical(observed_private$.values, expected_private$.values)
+  expect_identical(observed$constraint, expected$constraint)
+  expect_identical(observed$extra_trafo, expected$extra_trafo)
+}
+
+test_that("subspace mode adopts exact dependency-free one-row states", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    double = p_dbl(-2, 3, tags = c("numeric", "shared"), trafo = exp),
+    integer = p_int(-3, 4, tags = "numeric"),
+    factor = p_fct(c("slow", "fast"), tags = "categorical"),
+    logical = p_lgl(tags = c("categorical", "shared"))
+  )
+  param_set$values = list(
+    double = 0.5,
+    integer = 2L,
+    factor = "fast",
+    logical = TRUE
+  )
+  param_set$constraint = function(x) FALSE
+  param_set$extra_trafo = function(x) x
+
+  plan = native_subset_call(param_set, "double", NA)
+  expect_type(plan, "list")
+  expect_identical(plan$missing_parents, character())
+  expect_type(plan$state, "externalptr")
+  direct = ParamSet$new(plan$state)
+  expect_identical(direct$ids(), "double")
+  expect_identical(direct$values, list(double = 0.5))
+  expect_identical(nrow(direct$deps), 0L)
+
+  requested = c("factor", "double", "double", "logical")
+  observed = param_set$subspaces(requested)
+  expected = native_subspaces_reference(param_set, requested)
+  expect_identical(names(observed), requested)
+  expect_length(observed, length(requested))
+  for (index in seq_along(requested)) {
+    native_subset_expect_equivalent(observed[[index]], expected[[index]])
+    expect_identical(observed[[index]]$ids(), requested[[index]])
+    expect_null(observed[[index]]$constraint)
+    expect_identical(observed[[index]]$extra_trafo, param_set$extra_trafo)
+    expect_identical(nrow(observed[[index]]$deps), 0L)
+  }
+
+  first_double = observed[[2L]]$.__enclos_env__$private
+  second_double = observed[[3L]]$.__enclos_env__$private
+  source = param_set$.__enclos_env__$private
+  data.table::set(first_double$.params, 1L, "lower", -100)
+  expect_identical(second_double$.params$lower, -2)
+  expect_identical(source$.params[id == "double", lower], -2)
+  observed[[2L]]$values = list(double = 1)
+  expect_identical(observed[[3L]]$values, list(double = 0.5))
+  expect_identical(param_set$values$double, 0.5)
+
+  named_ids = c(second = "integer", first = "double")
+  named_observed = param_set$subspaces(named_ids)
+  named_expected = native_subspaces_reference(param_set, named_ids)
+  expect_identical(names(named_observed), names(named_ids))
+  for (index in seq_along(named_ids)) {
+    native_subspaces_expect_fallback_equivalent(
+      named_observed[[index]],
+      named_expected[[index]]
+    )
+  }
+  expect_identical(param_set$subspaces(character()), named_list())
+})
+
+test_that("subspace tokens carry canonical owned singleton indices", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    x = p_dbl(-2, 3, tags = c("numeric", "shared"), trafo = exp),
+    y = p_int(-3, 4, tags = "numeric")
+  )
+
+  raw = native_subset_adopt_without_initializer(
+    native_subset_call(param_set, "x", NA)
+  )
+  raw_index = attr(raw$.params, "index", exact = TRUE)
+  raw_marker = attr(raw_index, "__id__cls__grouping", exact = TRUE)
+  # Native synthesis is deliberately disabled for an unreviewed data.table
+  # layout. When enabled, compare every private byte with data.table itself;
+  # otherwise the public adopter below must install the index via setindexv().
+  if (!is.null(raw_marker)) {
+    reference = data.table::data.table(
+      id = "x",
+      cls = "ParamDbl",
+      grouping = "ParamDbl"
+    )
+    data.table::setindexv(reference, c("id", "cls", "grouping"))
+    expect_identical(
+      raw_index,
+      attr(reference, "index", exact = TRUE)
+    )
+  }
+
+  observed = param_set$subspaces(c("x", "x", "y"))
+  expected = native_subspaces_reference(param_set, c("x", "x", "y"))
+  for (index in seq_along(observed)) {
+    observed_params = observed[[index]]$.__enclos_env__$private$.params
+    expected_params = expected[[index]]$.__enclos_env__$private$.params
+    expect_identical(
+      attr(observed_params, "index", exact = TRUE),
+      attr(expected_params, "index", exact = TRUE)
+    )
+  }
+
+  marker = function(table) {
+    attr(
+      attr(table, "index", exact = TRUE),
+      "__id__cls__grouping",
+      exact = TRUE
+    )
+  }
+  first = observed[[1L]]$.__enclos_env__$private$.params
+  second = observed[[2L]]$.__enclos_env__$private$.params
+  source = param_set$.__enclos_env__$private$.params
+  first_cache = marker(first)
+  data.table::setattr(first_cache, "ownership_probe", 1L)
+  expect_identical(attr(first_cache, "ownership_probe", exact = TRUE), 1L)
+  expect_null(attr(marker(second), "ownership_probe", exact = TRUE))
+  expect_null(attr(marker(source), "ownership_probe", exact = TRUE))
+  data.table::setattr(first_cache, "ownership_probe", NULL)
+
+  data.table::setindexv(first, NULL)
+  expect_null(marker(first))
+  expect_false(is.null(marker(second)))
+  expect_false(is.null(marker(source)))
+})
+
+test_that("unsupported singleton index shapes retain the R setter", {
+  skip_if_not(native_subset_available())
+  param_set = ps(x = p_int(0, 2))
+  private = param_set$.__enclos_env__$private
+  encoded_id = enc2utf8("caf\u00e9")
+  Encoding(encoded_id) = "UTF-8"
+  data.table::set(private$.params, i = 1L, j = "id", value = encoded_id)
+
+  plan = native_subset_call(param_set, private$.params$id, NA)
+  expect_type(plan$state, "externalptr")
+  raw = native_subset_adopt_without_initializer(plan)
+  expect_null(attr(
+    attr(raw$.params, "index", exact = TRUE),
+    "__id__cls__grouping",
+    exact = TRUE
+  ))
+
+  plan = native_subset_call(param_set, private$.params$id, NA)
+  public = ParamSet$new(plan$state)
+  expect_identical(
+    data.table::indices(public$.__enclos_env__$private$.params),
+    "id__cls__grouping"
+  )
+  expect_identical(public$ids(), encoded_id)
+})
+
+test_that("dependency-bearing subspaces emit empty child dependencies", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    parent = p_lgl(init = TRUE),
+    child = p_int(0, 4, init = 2L)
+  )
+  param_set$add_dep("child", "parent", CondEqual(TRUE))
+  param_set$constraint = function(x) TRUE
+  param_set$extra_trafo = function(x, param_set) x
+
+  plan = native_subset_call(param_set, "child", NA)
+  expect_type(plan$state, "externalptr")
+  direct = ParamSet$new(plan$state)
+  expect_identical(direct$ids(), "child")
+  expect_identical(nrow(direct$deps), 0L)
+  observed = param_set$subspaces(c("child", "parent"))
+  expected = native_subspaces_reference(
+    param_set,
+    c("child", "parent")
+  )
+  for (index in seq_along(observed)) {
+    native_subspaces_expect_fallback_equivalent(
+      observed[[index]],
+      expected[[index]]
+    )
+    expect_identical(nrow(observed[[index]]$deps), 0L)
+    expect_null(observed[[index]]$constraint)
+  }
+})
+
+test_that("subspaces preserve values-first forcing and altered fallback", {
+  skip_if_not(native_subset_available())
+  param_set = ps(x = p_int(0, 2, init = 1L))
+  stored = param_set$values
+  original = activeBindingFunction("values", param_set)
+  state = new.env(parent = emptyenv())
+  state$events = character()
+  makeActiveBinding("values", function(value) {
+    if (!missing(value)) stop("test values binding is read-only")
+    state$events = c(state$events, "values")
+    stored
+  }, param_set)
+  on.exit(makeActiveBinding("values", original, param_set), add = TRUE)
+
+  observed = param_set$subspaces({
+    state$events = c(state$events, "ids")
+    "x"
+  })
+  expect_identical(state$events, c("values", "ids"))
+  expect_identical(observed$x$values, list(x = 1L))
+
+  makeActiveBinding("values", original, param_set)
+  private = param_set$.__enclos_env__$private
+  original_extra = private$.extra_trafo
+  delayed_state = new.env(parent = emptyenv())
+  delayed_state$forced = 0L
+  unlockBinding(".extra_trafo", private)
+  delayedAssign(
+    ".extra_trafo",
+    {
+      delayed_state$forced = delayed_state$forced + 1L
+      original_extra
+    },
+    assign.env = private
+  )
+  lockBinding(".extra_trafo", private)
+  on.exit({
+    unlockBinding(".extra_trafo", private)
+    assign(".extra_trafo", original_extra, envir = private)
+    lockBinding(".extra_trafo", private)
+  }, add = TRUE)
+  expect_null(native_subset_call(param_set, "x", NA))
+  expect_identical(delayed_state$forced, 0L)
+
+  callbacks = 0L
+  hostile_ids = native_stateful_altrep(
+    c("x", "x"),
+    c("x", "x"),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      stop("subspace planning invoked ALTREP", call. = FALSE)
+    },
+    callback_after = c(NA_integer_, 0L)
+  )
+  planner = get(
+    "param_set_subspace_plans",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  expect_null(planner(param_set, private, hostile_ids))
+  expect_identical(callbacks, 0L)
+})
+
+test_that("subspace planning safely resolves a pending values finalizer", {
+  skip_if_not(native_subset_available())
+  namespace = asNamespace("paradox")
+  planner = get("param_set_subspace_plans", namespace)
+  param_set = ps(
+    x = p_dbl(0, 1, init = 0.25),
+    y = p_int(0, 3, init = 2L)
+  )
+  private = param_set$.__enclos_env__$private
+  captured = param_set$values
+  replacement = list(x = 0.75, y = 3L)
+  state = new.env(parent = emptyenv())
+  state$ran = FALSE
+  trigger = new.env(parent = emptyenv())
+  reg.finalizer(trigger, function(ignored) {
+    state$ran = TRUE
+    private$.values = replacement
+  }, onexit = FALSE)
+  rm(trigger)
+
+  previous = gctorture2(1L, wait = 0L)
+  on.exit(gctorture2(previous), add = TRUE)
+  plans = planner(param_set, private, param_set$ids(), captured)
+  gctorture2(previous)
+  on.exit({
+    private$.values = captured
+  }, add = TRUE)
+  if (is.null(plans)) {
+    # A mutation observed before the final native audit declines atomically.
+    expect_true(state$ran)
+  } else {
+    # The validate-once planner has no intermediate R return boundary. Pending
+    # finalizers may therefore run only after the complete batch is returned;
+    # its detached payload must retain the captured public values snapshot.
+    expect_type(plans, "list")
+    expect_length(plans, 2L)
+    invisible(gc(FALSE))
+    expect_true(state$ran)
+    children = lapply(plans, function(plan) ParamSet$new(plan$state))
+    expect_identical(children$x$values, list(x = 0.25))
+    expect_identical(children$y$values, list(y = 2L))
+  }
+})
+
+test_that("public subspaces and SamplerUnif reuse a declined plan snapshot", {
+  skip_if_not(native_subset_available())
+  namespace = asNamespace("paradox")
+  binding = "param_set_subspace_plans"
+  original = get(binding, namespace, inherits = FALSE)
+  param_set = ps(
+    x = p_dbl(0, 1, init = 0.25),
+    y = p_int(0, 3, init = 2L)
+  )
+  private = param_set$.__enclos_env__$private
+  captured = param_set$values
+  replacement = list(x = 0.75, y = 3L)
+  unlockBinding(binding, namespace)
+  assign(binding, function(param_set, private, ids, values) {
+    private$.values = replacement
+    NULL
+  }, namespace)
+  lockBinding(binding, namespace)
+  on.exit({
+    unlockBinding(binding, namespace)
+    assign(binding, original, namespace)
+    lockBinding(binding, namespace)
+    private$.values = captured
+  }, add = TRUE)
+
+  subspaces = param_set$subspaces()
+  expect_identical(subspaces$x$values, list(x = 0.25))
+  expect_identical(subspaces$y$values, list(y = 2L))
+
+  private$.values = captured
+  sampler = SamplerUnif$new(param_set)
+  expect_identical(sampler$samplers$x$param$values, list(x = 0.25))
+  expect_identical(sampler$samplers$y$param$values, list(y = 2L))
+})
+
+test_that("fresh subspaces retain downstream one-dimensional samplers", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    left = p_dbl(0, 1, init = 0.25),
+    right = p_dbl(0, 1, init = 0.75)
+  )
+  subspaces = param_set$subspaces(c("right", "left"))
+  samplers = lapply(subspaces, function(subspace) {
+    Sampler1DRfun$new(
+      subspace,
+      rfun = function(n) rep(0.5, n),
+      trunc = FALSE
+    )
+  })
+  expect_identical(
+    vapply(samplers, function(sampler) sampler$param$ids(), character(1L)),
+    c(right = "right", left = "left")
+  )
+  expect_identical(
+    lapply(samplers, function(sampler) as.list(sampler$sample(3L)$data)),
+    list(
+      right = list(right = rep(0.75, 3L)),
+      left = list(left = rep(0.25, 3L))
+    )
+  )
+
+  subspaces$right$values = list(right = 0.1)
+  expect_identical(samplers$right$param$values, list(right = 0.75))
+})
+
+test_that("owned subspace tokens transfer once without a child clone", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    x = p_dbl(-2, 3, tags = "numeric", trafo = exp)
+  )
+  param_set$values = list(x = 0.5)
+  param_set$extra_trafo = function(x) x
+  plan = native_subset_call(param_set, "x", NA)
+  expect_true(.Call(native_subset_adopt_symbol(), NULL, plan$state))
+  expect_true(.Call(native_subset_adopt_symbol(), NULL, plan$state))
+
+  sampler = Sampler1DUnif$new(plan$state)
+  expect_false(.Call(native_subset_adopt_symbol(), NULL, plan$state))
+  expect_identical(sampler$param$ids(), "x")
+  expect_identical(sampler$param$values, list(x = 0.5))
+  expect_identical(sampler$param$tags$x, "numeric")
+  expect_identical(sampler$param$extra_trafo, param_set$extra_trafo)
+  expect_identical(nrow(sampler$param$deps), 0L)
+
+  param_set$values = list(x = 1)
+  data.table::set(
+    param_set$.__enclos_env__$private$.params,
+    1L,
+    "lower",
+    -100
+  )
+  expect_identical(sampler$param$values, list(x = 0.5))
+  expect_identical(unname(sampler$param$lower), -2)
+
+  Box = R6::R6Class(
+    "NativeOwnedSubspaceValueBox",
+    public = list(
+      value = NULL,
+      initialize = function(value) self$value = value
+    )
+  )
+  box = Box$new(42L)
+  special = ps(x = p_dbl(0, 1, special_vals = list(box)))
+  special$values = list(x = box)
+  special_sampler = SamplerUnif$new(special)
+  cloned_box = special_sampler$samplers$x$param$values$x
+  expect_s3_class(cloned_box, "NativeOwnedSubspaceValueBox")
+  expect_false(identical(cloned_box, box))
+  expect_identical(cloned_box$value, 42L)
+
+  foreign = new("externalptr")
+  expect_false(.Call(native_subset_adopt_symbol(), NULL, foreign))
+  expect_error(
+    Sampler1DUnif$new(foreign),
+    "R6"
+  )
+})
+
+test_that("SamplerUnif owned construction matches the complete fallback", {
+  skip_if_not(native_subset_available())
+  param_set = ps(
+    double = p_dbl(-2, 3, tags = "numeric", trafo = exp),
+    integer = p_int(-3, 4, init = 2L, tags = "numeric"),
+    factor = p_fct(c("slow", "fast"), init = "fast"),
+    logical = p_lgl(init = TRUE)
+  )
+  param_set$values$double = 0.5
+  param_set$extra_trafo = function(x, param_set) x
+
+  fast = SamplerUnif$new(param_set)
+  namespace = asNamespace("paradox")
+  binding = "param_set_subspace_plans"
+  original = get(binding, envir = namespace, inherits = FALSE)
+  unlockBinding(binding, namespace)
+  on.exit({
+    assign(binding, original, envir = namespace)
+    lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(binding, function(param_set, private, ids) NULL, envir = namespace)
+  fallback = SamplerUnif$new(param_set)
+
+  expect_identical(class(fast), class(fallback))
+  expect_identical(names(fast$samplers), names(fallback$samplers))
+  expect_identical(fast$param_set$ids(), fallback$param_set$ids())
+  expect_identical(fast$param_set$values, fallback$param_set$values)
+  for (index in seq_along(fast$samplers)) {
+    observed = fast$samplers[[index]]$param
+    expected = fallback$samplers[[index]]$param
+    native_subset_expect_equivalent(observed, expected)
+    expect_identical(observed$extra_trafo, param_set$extra_trafo)
+  }
+
+  param_set$values = list(double = 1)
+  expect_identical(fast$param_set$values$double, 0.5)
+  expect_identical(fast$samplers$double$param$values$double, 0.5)
+})
+
+native_bulk_subspace_symbols = function() {
+  namespace = asNamespace("paradox")
+  list(
+    factory = get("C_param_set_bulk_shells", namespace),
+    generator_auth = get("C_param_set_bulk_generator_auth", namespace),
+    token_probe = get("C_param_set_adopt_subset_state", namespace)
+  )
+}
+
+native_bulk_subspace_available = function() {
+  if (!native_subset_available()) return(FALSE)
+  namespace = asNamespace("paradox")
+  isTRUE(.Call(
+    native_bulk_subspace_symbols()$generator_auth,
+    get("ParamSet", namespace)
+  ))
+}
+
+test_that("reviewed R and R6 combination admits bulk ParamSet shells", {
+  if (getRversion() >= "4.6.0" &&
+      packageVersion("R6") == package_version("2.6.1")) {
+    expect_true(native_bulk_subspace_available())
+  }
+})
+
+native_bulk_subspace_call = function(param_set, ids = param_set$ids()) {
+  namespace = asNamespace("paradox")
+  plans = get("param_set_subspace_plans", namespace)(
+    param_set,
+    param_set$.__enclos_env__$private,
+    ids
+  )
+  list(
+    plans = plans,
+    result = .Call(
+      native_bulk_subspace_symbols()$factory,
+      ParamSet,
+      plans
+    )
+  )
+}
+
+expect_param_set_shell_graph = function(observed, expected) {
+  expect_identical(attributes(observed), attributes(expected))
+  expect_identical(parent.env(observed), parent.env(expected))
+  expect_identical(environmentIsLocked(observed), environmentIsLocked(expected))
+
+  observed_enclosure = observed$.__enclos_env__
+  expected_enclosure = expected$.__enclos_env__
+  observed_private = observed_enclosure$private
+  expected_private = expected_enclosure$private
+  environments = list(
+    list(observed, expected),
+    list(observed_enclosure, expected_enclosure),
+    list(observed_private, expected_private)
+  )
+  for (pair in environments) {
+    observed_environment = pair[[1L]]
+    expected_environment = pair[[2L]]
+    observed_names = ls(observed_environment, all.names = TRUE)
+    expected_names = ls(expected_environment, all.names = TRUE)
+    expect_identical(observed_names, expected_names)
+    expect_identical(
+      ls(observed_environment, all.names = TRUE, sorted = FALSE),
+      ls(expected_environment, all.names = TRUE, sorted = FALSE)
+    )
+    expect_identical(
+      environmentIsLocked(observed_environment),
+      environmentIsLocked(expected_environment)
+    )
+    expect_identical(
+      env.profile(observed_environment),
+      env.profile(expected_environment)
+    )
+    for (name in observed_names) {
+      expect_identical(
+        bindingIsActive(name, observed_environment),
+        bindingIsActive(name, expected_environment)
+      )
+      expect_identical(
+        bindingIsLocked(name, observed_environment),
+        bindingIsLocked(name, expected_environment)
+      )
+      if (name %in% c("self", "private", ".__enclos_env__", ".__active__")) {
+        next
+      }
+      observed_value = if (bindingIsActive(name, observed_environment)) {
+        activeBindingFunction(name, observed_environment)
+      } else {
+        get(name, observed_environment, inherits = FALSE)
+      }
+      expected_value = if (bindingIsActive(name, expected_environment)) {
+        activeBindingFunction(name, expected_environment)
+      } else {
+        get(name, expected_environment, inherits = FALSE)
+      }
+      generated_closure = bindingIsActive(name, expected_environment) ||
+        bindingIsLocked(name, expected_environment)
+      if (is.function(expected_value) && generated_closure) {
+        expect_identical(formals(observed_value), formals(expected_value))
+        expect_identical(body(observed_value), body(expected_value))
+        expect_identical(attributes(observed_value), attributes(expected_value))
+        expect_identical(environment(observed_value), observed_enclosure)
+        expect_identical(environment(expected_value), expected_enclosure)
+      } else {
+        expect_identical(observed_value, expected_value)
+      }
+    }
+  }
+  expect_identical(parent.env(observed_enclosure), parent.env(expected_enclosure))
+  expect_identical(parent.env(observed_private), parent.env(expected_private))
+  expect_identical(observed_enclosure$self, observed)
+  expect_identical(observed_enclosure$private, observed_private)
+
+  observed_active = observed_enclosure$.__active__
+  expected_active = expected_enclosure$.__active__
+  expect_identical(names(observed_active), names(expected_active))
+  for (name in names(observed_active)) {
+    expect_identical(
+      data.table::address(observed_active[[name]]),
+      data.table::address(activeBindingFunction(name, observed))
+    )
+    expect_identical(
+      data.table::address(expected_active[[name]]),
+      data.table::address(activeBindingFunction(name, expected))
+    )
+  }
+}
+
+test_that("bulk singleton shells reproduce the complete ParamSet graph", {
+  skip_if_not(native_bulk_subspace_available())
+  param_set = ps(
+    x = p_dbl(-2, 3, tags = c("numeric", "shared"), trafo = exp),
+    y = p_int(-3, 4, init = 2L, tags = "numeric"),
+    z = p_lgl(init = TRUE)
+  )
+  param_set$values$x = 0.5
+  param_set$extra_trafo = function(x, param_set) x
+
+  observed_batch = native_bulk_subspace_call(param_set, c("z", "x", "x"))
+  expect_type(observed_batch$result, "list")
+  expect_named(observed_batch$result, c("z", "x", "x"))
+
+  requested = c("z", "x", "x")
+  captured_values = param_set$values
+  scalar_subspace = get(
+    "C_param_set_subspace_state",
+    asNamespace("paradox")
+  )
+  expected_plans = lapply(requested, function(id) {
+    .Call(
+      scalar_subspace,
+      param_set$.__enclos_env__$private,
+      param_set,
+      id,
+      NA,
+      captured_values
+    )
+  })
+  expected = lapply(expected_plans, function(plan) ParamSet$new(plan$state))
+  for (index in seq_along(expected)) {
+    expect_param_set_shell_graph(observed_batch$result[[index]], expected[[index]])
+  }
+})
+
+test_that("bulk shells clone, serialize, and mutate independently", {
+  skip_if_not(native_bulk_subspace_available())
+  param_set = ps(
+    x = p_dbl(-2, 3, init = 0.5),
+    y = p_int(-3, 4, init = 2L)
+  )
+  batch = native_bulk_subspace_call(param_set, c("x", "x", "y"))$result
+  expect_length(batch, 3L)
+
+  shallow = batch[[1L]]$clone()
+  deep = batch[[1L]]$clone(deep = TRUE)
+  restored = unserialize(serialize(batch[[1L]], NULL))
+  for (object in list(shallow, deep, restored)) {
+    expect_s3_class(object, "ParamSet")
+    expect_identical(object$ids(), "x")
+    expect_identical(object$values, list(x = 0.5))
+  }
+
+  first_private = batch[[1L]]$.__enclos_env__$private
+  second_private = batch[[2L]]$.__enclos_env__$private
+  data.table::set(first_private$.params, 1L, "lower", -100)
+  batch[[1L]]$values = list(x = 1)
+  batch[[1L]]$assert_values = FALSE
+  expect_identical(second_private$.params$lower, -2)
+  expect_identical(batch[[2L]]$values, list(x = 0.5))
+  expect_true(batch[[2L]]$assert_values)
+  expect_identical(param_set$lower[["x"]], -2)
+})
+
+test_that("bulk admission fails atomically for altered surfaces and tokens", {
+  skip_if_not(native_bulk_subspace_available())
+  namespace = asNamespace("paradox")
+  symbols = native_bulk_subspace_symbols()
+  param_set = ps(x = p_dbl(0, 1), y = p_int(0, 2))
+  planner = get("param_set_subspace_plans", namespace)
+  plans = planner(
+    param_set,
+    param_set$.__enclos_env__$private,
+    param_set$ids()
+  )
+  duplicate = structure(
+    list(plans[[1L]], plans[[1L]]),
+    names = c("x", "x")
+  )
+  expect_null(.Call(symbols$factory, ParamSet, duplicate))
+  expect_true(.Call(symbols$token_probe, NULL, plans[[1L]]$state))
+
+  invalid = plans
+  invalid[[2L]]$state = new("externalptr")
+  expect_null(.Call(symbols$factory, ParamSet, invalid))
+  expect_true(.Call(symbols$token_probe, NULL, plans[[1L]]$state))
+  expect_true(.Call(symbols$token_probe, NULL, plans[[2L]]$state))
+
+  empty = structure(list(), names = character())
+  expect_identical(.Call(symbols$factory, ParamSet, empty), empty)
+})
+
+test_that("complete generator tampering never invokes live R6 machinery", {
+  skip_if_not(native_bulk_subspace_available())
+  namespace = asNamespace("paradox")
+  planner = get("param_set_subspace_plans", namespace)
+  helper = get("param_set_bulk_subspace_shells", namespace)
+  param_set = ps(x = p_dbl(0, 1))
+  plans = planner(
+    param_set,
+    param_set$.__enclos_env__$private,
+    "x"
+  )
+  calls = 0L
+  replacements = list(
+    new = function(...) {
+      calls <<- calls + 1L
+      stop("altered new ran", call. = FALSE)
+    },
+    class = FALSE,
+    debug_names = "initialize",
+    get_inherit = function() {
+      calls <<- calls + 1L
+      stop("altered get_inherit ran", call. = FALSE)
+    },
+    has_private = function() {
+      calls <<- calls + 1L
+      stop("altered has_private ran", call. = FALSE)
+    }
+  )
+  for (name in names(replacements)) {
+    original = get(name, ParamSet, inherits = FALSE)
+    assign(name, replacements[[name]], ParamSet)
+    expect_null(helper(plans), info = name)
+    expect_identical(calls, 0L, info = name)
+    expect_true(.Call(
+      native_bulk_subspace_symbols()$token_probe,
+      NULL,
+      plans[[1L]]$state
+    ), info = name)
+    assign(name, original, ParamSet)
+    expect_true(native_bulk_subspace_available(), info = name)
+  }
+})
+
+test_that("bulk singleton shell assembly survives allocation torture", {
+  skip_if_not(native_bulk_subspace_available())
+  param_set = ps(
+    x = p_dbl(0, 1, init = 0.25),
+    y = p_int(0, 3, init = 2L)
+  )
+  previous = gctorture2(25L, wait = 0L)
+  on.exit(gctorture2(previous), add = TRUE)
+  observed = param_set$subspaces(c("y", "x"))
+  gctorture2(previous)
+  expect_identical(
+    unname(vapply(observed, function(child) child$ids(), character(1L))),
+    c("y", "x")
+  )
+  expect_identical(observed[[2L]]$values, list(x = 0.25))
 })

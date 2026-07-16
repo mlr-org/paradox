@@ -6,6 +6,12 @@ a global R library. The default inputs exercise calls repeatedly observed in
 the mlr-org compatibility corpus: `p_*()` and `ps()` construction,
 `ParamSet$new()`, filtered `ids()`, static properties, scalar and tabular
 checking, sanitization, `qunif()`, `subset()`, `get_domain()`, and `trafo()`.
+The retained `SamplerUnif$sample()` workload constructs its sampler once and
+times repeated sampling, matching the optimizer-loop use in bbotk and
+mlr3hyperband instead of conflating sampling with constructor cost.
+Separate plain and dependency-bearing workloads time `ParamSet$subspaces()`
+and `SamplerUnif$new()` themselves, preserving visibility into their one-time
+construction and ownership costs.
 The value group separates the default dependency-aware `$get_values()` call,
 the callback-free `remove_dependencies = FALSE` case, and the ubiquitous
 `tags = "train"` filter. It also measures default filtered getters on rich and

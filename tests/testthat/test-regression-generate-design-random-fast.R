@@ -1,5 +1,11 @@
 random_design_reference = function(param_set, n) {
-  SamplerUnif$new(param_set)$sample(n)
+  sampler = SamplerUnif$new(param_set)
+  # Keep this oracle independent of both bulk implementations.  The extra
+  # class leaves the generated R6 methods and the historical hierarchical
+  # sampler unchanged, but deliberately makes every exact-object native gate
+  # fail closed.
+  class(sampler) = c("SamplerUnifReference", class(sampler))
+  sampler$sample(n)
 }
 
 random_design_dependent_space = function() {

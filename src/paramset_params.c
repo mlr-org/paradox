@@ -192,23 +192,35 @@ static int exact_active_member_on(SEXP binding_environment,
       found = index;
     }
   }
-  /* R6 cloning can duplicate an inherited wrapper separately from the
-   * `.__active__` entry.  They remain identical closures over the cloned
-   * enclosure; an actual replacement fails this identity/body check. */
+  /* R6 cloning and serialization can duplicate an inherited wrapper
+   * separately from the `.__active__` entry.  Keep pointer identity as the
+   * common fast path; otherwise authenticate the registry copy directly.
+   * R_compute_identical() duplicates closures while stripping source
+   * references, opening a finalizer window after the live wrapper was already
+   * checked above. */
   if (found == R_XLEN_T_MAX) {
     UNPROTECT(protected_count);
     return FALSE;
   }
   SEXP registered_function = PROTECT(VECTOR_ELT(active, found));
   ++protected_count;
-  const Rboolean identical = R_compute_identical(
-    registered_function,
-    function,
-    IDENT_USE_CLOENV
-  );
-  if (!identical) {
-    UNPROTECT(protected_count);
-    return FALSE;
+  if (registered_function != function) {
+    if (TYPEOF(registered_function) != CLOSXP || !exact_wrapper_call(
+        registered_function,
+        method_name,
+        argument_name
+      )) {
+      UNPROTECT(protected_count);
+      return FALSE;
+    }
+    SEXP registered_environment = PROTECT(
+      paradox_api_closure_environment(registered_function)
+    );
+    ++protected_count;
+    if (registered_environment != environment) {
+      UNPROTECT(protected_count);
+      return FALSE;
+    }
   }
 
   if (captured_super_out != NULL) {
@@ -327,7 +339,7 @@ int paradox_params_supported_table_attributes(SEXP table, int allow_sorted) {
 
 static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
     R_xlen_t *work_since_interrupt) {
-  SEXP row_names = Rf_getAttrib(table, R_RowNamesSymbol);
+  SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
   /* The public getter intentionally expands data-frame compact row names
    * (`c(NA, -n)`) to an ALTREP `1:n` vector. Row names do not participate in
    * this kernel: the authenticated ordinary columns provide the row count and
@@ -335,20 +347,25 @@ static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
    * row-name facade for Length/Elt merely to validate unused metadata. */
   if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
       !paradox_api_has_no_attributes(row_names)) {
+    UNPROTECT(1);
     return FALSE;
   }
   if (ALTREP(row_names)) {
+    UNPROTECT(1);
     return TRUE;
   }
   if (XLENGTH(row_names) != row_count) {
+    UNPROTECT(1);
     return FALSE;
   }
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
     if (INTEGER_ELT(row_names, row) != (int) row + 1) {
+      UNPROTECT(1);
       return FALSE;
     }
   }
+  UNPROTECT(1);
   return TRUE;
 }
 

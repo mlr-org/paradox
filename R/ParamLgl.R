@@ -1,6 +1,11 @@
 #' @rdname Domain
 #' @export
 p_lgl = function(special_vals = list(), default = NO_DEF, tags = character(), depends = NULL, trafo = NULL, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
+  native = .Call(
+    C_domain_construct_builtin,
+    environment(), p_lgl, sys.call(), parent.frame(), 3L
+  )
+  if (!is.null(native)) return(native)
   cargo = list()
   cargo$aggr = aggr
   cargo$in_tune_fn = in_tune_fn

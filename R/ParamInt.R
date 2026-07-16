@@ -2,12 +2,20 @@
 #' @rdname Domain
 #' @export
 p_int = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
-  assert_number(tolerance, lower = 0, upper = 0.5)
-  # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
-  if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
-  if (!isTRUE(is.infinite(upper))) assert_int(upper, tol = 1e-300) else assert_number(upper)
-  assert_true(lower <= upper)
-  if (assert_flag(logscale)) {
+  native = .Call(
+    C_domain_construct_builtin,
+    environment(), p_int, sys.call(), parent.frame(), 1L
+  )
+  if (!is.null(native)) return(native)
+  if (!.Call(C_domain_numeric_bounds_admit, environment(), TRUE)) {
+    assert_number(tolerance, lower = 0, upper = 0.5)
+    # assert_int will stop for `Inf` values, which we explicitly allow as lower / upper bound
+    if (!isTRUE(is.infinite(lower))) assert_int(lower, tol = 1e-300) else assert_number(lower)
+    if (!isTRUE(is.infinite(upper))) assert_int(upper, tol = 1e-300) else assert_number(upper)
+    assert_true(lower <= upper)
+    assert_flag(logscale)
+  }
+  if (logscale) {
     if (!is.null(trafo)) stop("When a trafo is given then logscale must be FALSE")
     if (lower < 0) stop("When logscale is TRUE then lower bound must be greater or equal 0")
     trafo = crate(function(x) as.integer(max(min(exp(x), upper), lower)), lower, upper)

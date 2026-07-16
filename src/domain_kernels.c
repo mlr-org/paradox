@@ -6,6 +6,7 @@
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 typedef enum {
@@ -115,6 +116,57 @@ static const char *kind_name(domain_kind_t kind) {
   return "";
 }
 
+static int empty_special_values(SEXP param, R_xlen_t size) {
+  SEXP names = PROTECT(Rf_getAttrib(param, R_NamesSymbol));
+  if (TYPEOF(param) != VECSXP || ALTREP(param) ||
+      TYPEOF(names) != STRSXP || ALTREP(names) ||
+      !paradox_api_has_no_attributes(names) ||
+      XLENGTH(names) != XLENGTH(param)) {
+    UNPROTECT(1);
+    return FALSE;
+  }
+
+  R_xlen_t selected = R_XLEN_T_MAX;
+  for (R_xlen_t column = 0; column < XLENGTH(param); ++column) {
+    periodic_interrupt(column);
+    SEXP name = STRING_ELT(names, column);
+    if (name != NA_STRING && strcmp(CHAR(name), "special_vals") == 0) {
+      if (selected != R_XLEN_T_MAX) {
+        UNPROTECT(1);
+        return FALSE;
+      }
+      selected = column;
+    }
+  }
+  /* Retain the historical synthetic minimal-Domain contract used by direct
+   * native callers.  Package-constructed Domains always carry this column. */
+  if (selected == R_XLEN_T_MAX) {
+    UNPROTECT(1);
+    return TRUE;
+  }
+
+  SEXP special_values = PROTECT(VECTOR_ELT(param, selected));
+  if (TYPEOF(special_values) != VECSXP || ALTREP(special_values) ||
+      !paradox_api_has_no_attributes(special_values) ||
+      XLENGTH(special_values) != size) {
+    UNPROTECT(2);
+    return FALSE;
+  }
+  for (R_xlen_t row = 0; row < size; ++row) {
+    periodic_interrupt(row);
+    SEXP current = PROTECT(VECTOR_ELT(special_values, row));
+    const int empty = TYPEOF(current) == VECSXP && !ALTREP(current) &&
+      paradox_api_has_no_attributes(current) && XLENGTH(current) == 0;
+    UNPROTECT(1);
+    if (!empty) {
+      UNPROTECT(2);
+      return FALSE;
+    }
+  }
+  UNPROTECT(2);
+  return TRUE;
+}
+
 static domain_info_t domain_info(SEXP param) {
   const domain_kind_t kind = class_kind(param);
   if (kind == DOMAIN_KIND_UNKNOWN) {
@@ -170,6 +222,17 @@ static domain_info_t domain_info(SEXP param) {
     "Domain storage",
     "grouping"
   );
+  /* The R methods operate on these columns as ordinary R vectors and can
+   * dispatch through classed or otherwise attributed metadata.  Native
+   * kernels are valid only for canonical attribute-free storage; unusual
+   * columns retain that R/S3 path. */
+  if (!paradox_api_has_no_attributes(ids) ||
+      !paradox_api_has_no_attributes(classes) ||
+      !paradox_api_has_no_attributes(grouping)) {
+    const domain_info_t unknown = {DOMAIN_KIND_UNKNOWN, 0, FALSE};
+    UNPROTECT(3);
+    return unknown;
+  }
 
   int grouped = TRUE;
   const char *expected_class = kind_name(kind);
@@ -350,6 +413,12 @@ static SEXP check_numeric_domain(SEXP param, SEXP values,
   SEXP tolerance_sexp = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "tolerance"
   ));
+  if (!paradox_api_has_no_attributes(lower_sexp) ||
+      !paradox_api_has_no_attributes(upper_sexp) ||
+      !paradox_api_has_no_attributes(tolerance_sexp)) {
+    UNPROTECT(3);
+    return Rf_ScalarLogical(FALSE);
+  }
   const numeric_domain_snapshot_t bounds = snapshot_numeric_domain(
     lower_sexp,
     upper_sexp,
@@ -409,6 +478,10 @@ static SEXP check_factor_domain(SEXP param, SEXP values,
   SEXP levels = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "levels"
   ));
+  if (!paradox_api_has_no_attributes(levels)) {
+    UNPROTECT(1);
+    return Rf_ScalarLogical(FALSE);
+  }
   paradox_require_column_checked(
     levels, VECSXP, info->size, "Domain storage", "levels"
   );
@@ -418,6 +491,24 @@ static SEXP check_factor_domain(SEXP param, SEXP values,
     account_work(&work_since_interrupt);
     SEXP value = PROTECT(VECTOR_ELT(values, row));
     SEXP choices = PROTECT(VECTOR_ELT(levels, row));
+    if (TYPEOF(choices) != STRSXP) {
+      /* R's factor method intentionally permits coercion-sensitive atomic
+       * corruption (for example integer choices) and may still accept it via
+       * `%in%`.  Decline those values to that compatibility path.  Recursive
+       * or environment-backed storage cannot be a Domain level vector and is
+       * a hard recognized-storage error. */
+      if (Rf_isVectorAtomic(choices)) {
+        SEXP result = Rf_ScalarLogical(FALSE);
+        UNPROTECT(3);
+        return result;
+      }
+      Rf_error("Corrupt Domain storage: each `levels` element must be character");
+    }
+    if (ALTREP(choices) || !paradox_api_has_no_attributes(choices)) {
+      SEXP result = Rf_ScalarLogical(FALSE);
+      UNPROTECT(3);
+      return result;
+    }
     if (Rf_isObject(value) || TYPEOF(value) != STRSXP ||
         XLENGTH(value) != 1) {
       SEXP result = Rf_ScalarLogical(FALSE);
@@ -430,10 +521,6 @@ static SEXP check_factor_domain(SEXP param, SEXP values,
       UNPROTECT(3);
       return result;
     }
-    if (TYPEOF(choices) != STRSXP) {
-      Rf_error("Corrupt Domain storage: each `levels` element must be character");
-    }
-
     int found = FALSE;
     const R_xlen_t n_choices = XLENGTH(choices);
     for (R_xlen_t choice = 0; choice < n_choices; ++choice) {
@@ -479,7 +566,8 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values) {
   }
 
   const domain_info_t info = domain_info(param);
-  if (!info.grouped || XLENGTH(values) != info.size) {
+  if (!info.grouped || XLENGTH(values) != info.size ||
+      !empty_special_values(param, info.size)) {
     return Rf_ScalarLogical(FALSE);
   }
 

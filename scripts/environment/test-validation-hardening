@@ -15,6 +15,8 @@ RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
 EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
 API_TOKEN_AUDITOR="$ROOT/scripts/environment/audit-public-api-tokens"
 API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
+COMPILER_BATCH_RUNNER="$ROOT/scripts/environment/run-compiler-batch"
+COMPILER_WAVE_RUNNER="$ROOT/scripts/environment/run-compiler-wave"
 REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-preparation.R"
 SNAPSHOT_HELPER="$ROOT/scripts/environment/snapshot-worktree.R"
 COPY_SNAPSHOT_HELPER="$ROOT/scripts/environment/copy-check-snapshot.R"
@@ -25,11 +27,22 @@ mkdir -p "$ROOT/.local/tmp" "$ROOT/.local/checks"
 TEST_ROOT=$(mktemp -d "$ROOT/.local/tmp/validation-hardening.XXXXXX")
 RUN_ID="validation-helper-test-$$"
 RUN_DIRECTORY="$ROOT/.local/checks/$RUN_ID"
+NATIVE_FIXTURE_CACHE="$TEST_ROOT/native-fixture-cache"
 
 cleanup() {
+  local status=$?
+  if [[ "$status" -ne 0 &&
+      "${PARADOX_KEEP_HARDENING_FAILURES:-false}" == true ]]; then
+    printf '%s\n' \
+      "retained failed hardening fixtures: $TEST_ROOT $RUN_DIRECTORY" >&2
+    return
+  fi
   rm -rf "$TEST_ROOT" "$RUN_DIRECTORY"
 }
-trap cleanup EXIT HUP INT TERM
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 fail() {
   printf '%s\n' "test-validation-hardening: $*" >&2
@@ -46,12 +59,21 @@ expect_failure() {
 [[ -x "$RSCRIPT" ]] || fail "local Rscript is missing"
 [[ -x "$SOURCE_VALIDATOR" && -x "$RECEIPT_HELPER" && \
     -x "$EVIDENCE_HELPER" && -x "$API_TOKEN_AUDITOR" && -x "$CLANG" && \
+    -x "$COMPILER_BATCH_RUNNER" && -x "$COMPILER_WAVE_RUNNER" && \
     -x "$REVERSE_DEPENDENCY_PREP_TEST" && \
     -x "$CANDIDATE_GIT_AUTHENTICATOR" ]] ||
   fail "validation helpers are not executable"
 [[ -f "$SNAPSHOT_HELPER" && ! -L "$SNAPSHOT_HELPER" && \
     -f "$COPY_SNAPSHOT_HELPER" && ! -L "$COPY_SNAPSHOT_HELPER" ]] ||
   fail "snapshot helpers are missing or symbolic"
+for fast_preflight in test-resource-jobs test-compiler-batch \
+    test-verification-economy test-memory-run-validator \
+    test-bounded-rchk-bcheck-cache; do
+  [[ -x "$ROOT/scripts/environment/$fast_preflight" &&
+      ! -L "$ROOT/scripts/environment/$fast_preflight" ]] ||
+    fail "fast verification preflight is missing: $fast_preflight"
+  "$ROOT/scripts/environment/$fast_preflight" >/dev/null
+done
 
 # A dirty Git snapshot must distinguish a deleted tracked path from a symbolic
 # link. Its retained replay must preserve that deletion instead of treating
@@ -275,7 +297,7 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 expected_documentation_sha256 <-
-  "c5e33dc96761fba52d8256621d34fcd07a69a0eed319e941dd63551b89ca2cbe"
+  "9a1cf41b592f879d091c1c80c20700ee42173d9464f88e93cd87cb791cc933c4"
 if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
   stop("documentation timeout source snapshot changed", call. = FALSE)
 }
@@ -443,7 +465,7 @@ audit_timeout_ast <- function(tree, production = FALSE) {
   retained_function <- retained_bindings[[1L]][[3L]]
   if (isTRUE(production) && !identical(
       ast_sha256(retained_function),
-      "6175651f35ab55d685bc25230acb1441ffc561ea26fe2809f7aa96bc0ce25994"
+      "d7b31543107664fcb28be7749fa9ce2a50b9263736fcd31ae67dd2948f5443ba"
     )) {
     reject("the retained process function source snapshot changed")
   }
@@ -484,11 +506,13 @@ audit_timeout_ast <- function(tree, production = FALSE) {
     quote(`::`), quote(`!`), quote(`[[`), quote(`{`), quote(`+`),
     quote(`<-`), quote(`<<-`), quote(`==`), quote(`$`), quote(as.numeric),
     quote(base_environment), quote(c), quote(classify_failure),
-    quote(data.frame), quote(difftime), quote(file.path), quote(`if`),
+    quote(data.frame), quote(difftime), quote(file.path), quote(format),
+    quote(`if`),
     quote(isTRUE), quote(length), quote(library_environment), quote(names),
     quote(normalizePath), quote(paste), quote(paste0), quote(processx::run),
-    quote(readLines), quote(shQuote), quote(sprintf), quote(Sys.time),
-    quote(unname), quote(verify_protected_libraries), quote(writeLines)
+    quote(sample_classification_log), quote(shQuote), quote(sprintf),
+    quote(Sys.time), quote(retain_environment_evidence), quote(unname),
+    quote(verify_row_boundary), quote(writeLines)
   )
   unexpected_retained_calls <- Filter(function(call) {
     !head_matches(call[[1L]], allowed_retained_heads)
@@ -499,33 +523,45 @@ audit_timeout_ast <- function(tree, production = FALSE) {
   retained_helper_symbols <- list(
     quote(as.numeric), quote(base_environment), quote(c),
     quote(classify_failure), quote(data.frame), quote(difftime),
-    quote(file.path), quote(isTRUE), quote(length),
+    quote(file.path), quote(format), quote(isTRUE), quote(length),
     quote(library_environment), quote(names), quote(normalizePath),
-    quote(paste), quote(paste0), quote(readLines), quote(shQuote),
-    quote(sprintf), quote(Sys.time), quote(unname),
-    quote(verify_protected_libraries), quote(writeLines)
+    quote(paste), quote(paste0), quote(sample_classification_log),
+    quote(shQuote), quote(retain_environment_evidence), quote(sprintf),
+    quote(Sys.time), quote(unname), quote(verify_row_boundary),
+    quote(writeLines)
   )
   expected_helper_formals <- list(
     base_environment = "overlay",
     classify_failure = "text",
     library_environment = "overlay",
-    verify_protected_libraries = c("context", "verify_toolchain_tree")
+    retain_environment_evidence = c("label", "environment"),
+    sample_classification_log = "path",
+    verify_row_boundary = c(
+      "context", "label", "phase", "overlay", "environment",
+      "environment_evidence"
+    )
   )
   expected_helper_process_calls <- c(
     base_environment = 0L,
     classify_failure = 0L,
     library_environment = 0L,
-    verify_protected_libraries = 2L
+    retain_environment_evidence = 0L,
+    sample_classification_log = 0L,
+    verify_row_boundary = 0L
   )
   expected_helper_ast <- c(
     base_environment =
       "23fd145aa535556563ef90dd92e6350492032428c0d58b32397e2bd6536c0bd6",
     classify_failure =
-      "8048077f5e0673044bfb46f573b423d0ab5f55ff1d140c4701ae5a4f11dcad78",
+      "4a1ea539659707118b7cb463f317edd547c20045db9e6418b84406e4132c79b7",
     library_environment =
       "4d365e166297f6bc2e7c379f361a9a7517b7cf3361668d4516c99a2f1d5a556b",
-    verify_protected_libraries =
-      "082bfb9256ee6c5993488df24d4bca15715919eb78cefe609f807f4c85d19806"
+    retain_environment_evidence =
+      "ffdffa18b8f3ba5c19cb36a97d9b644e36c80379e6e97042df1f00f6015d9f06",
+    sample_classification_log =
+      "678da7857705addf16412cbbbd046e6441345431aae340a00ee5199132fad246",
+    verify_row_boundary =
+      "36cbdccb17bf75898f64fea6001355e4e3b48438c713e886e9e0025f0e9a3639"
   )
   for (helper in retained_helper_symbols) {
     helper_name <- as.character(helper)
@@ -992,8 +1028,54 @@ grep -Fq 'artifacts-tree-final-verify.log' "$API_COMPATIBILITY_GATE" ||
   fail "R API compatibility gate does not finally reverify artifacts"
 grep -Fq 'completion.sha256' "$API_COMPATIBILITY_GATE" ||
   fail "R API compatibility gate does not seal completion metadata"
+for noncanonical in 00 08 9999999999; do
+  invalid_run="invalid-api-jobs-${noncanonical}-$$"
+  if env PARADOX_API_JOBS="$noncanonical" \
+      "$API_COMPATIBILITY_GATE" --run-id "$invalid_run" \
+      > "$TEST_ROOT/invalid-api-jobs-${noncanonical}.out" \
+      2> "$TEST_ROOT/invalid-api-jobs-${noncanonical}.err"; then
+    fail "R API compatibility gate accepted noncanonical jobs: $noncanonical"
+  fi
+  grep -Fq 'canonical bounded positive integer' \
+    "$TEST_ROOT/invalid-api-jobs-${noncanonical}.err" ||
+    fail "R API compatibility gate rejected $noncanonical for the wrong reason"
+  [[ ! -e "$ROOT/.local/checks/$invalid_run" ]] ||
+    fail "invalid R API jobs reserved a retained run"
+done
+for api_parallel_pattern in \
+    'RESOURCE_JOBS_HELPER=' \
+    'COMPILER_BATCH_HELPER=' \
+    'COMPILER_WAVE_HELPER=' \
+    'resource_jobs_helper_sha256=' \
+    'compiler_batch_helper_sha256=' \
+    'compiler_wave_helper_sha256=' \
+    'resource_decision_sha256=' \
+    'resource_prepare_decision_sha256=' \
+    'compiler_waves_sha256=' \
+    'parallel_jobs=' \
+    'prepare_jobs=' \
+    '--max-jobs "$PARALLEL_JOBS" --report' \
+    '"$RETAINED_COMPILER_WAVE_HELPER" "${wave_arguments[@]}"'; do
+  grep -Fq -- "$api_parallel_pattern" "$API_COMPATIBILITY_GATE" ||
+    fail "R API gate lacks bounded parallel evidence: $api_parallel_pattern"
+done
+[[ $(grep -Fc '"$RETAINED_COMPILER_WAVE_HELPER" "${wave_arguments[@]}"' \
+  "$API_COMPATIBILITY_GATE") -eq 1 ]] ||
+  fail "R API gate does not run exactly one combined GCC/Clang wave per release"
+[[ $(grep -Fc '"$RETAINED_COMPILER_BATCH_HELPER" --jobs "$PARALLEL_JOBS"' \
+  "$API_COMPATIBILITY_GATE" || true) -eq 0 ]] ||
+  fail "R API gate still grants the complete ceiling to each compiler family"
+grep -Fq 'clang_jobs=$((live_jobs - gcc_jobs))' \
+  "$API_COMPATIBILITY_GATE" ||
+  fail "R API gate does not split one live ceiling between compiler families"
+grep -Fq 'exec "$BATCH_RUNNER"' "$COMPILER_WAVE_RUNNER" ||
+  fail "compiler wave does not track authoritative batch PIDs"
+grep -Fq 'kill -KILL -- "-$pid"' "$COMPILER_BATCH_RUNNER" ||
+  fail "compiler batch cannot remove TERM-resistant descendants"
 trap_line=$(grep -nF 'trap finish_run 0' "$API_COMPATIBILITY_GATE" |
   cut -d: -f1)
+grep -Fq '  local status=$? pid' "$API_COMPATIBILITY_GATE" ||
+  fail "R API compatibility cleanup executes a stray pid command"
 first_copy_line=$(grep -nF 'cp "$ROOT/scripts/check-r-api-compatibility"' \
   "$API_COMPATIBILITY_GATE" | cut -d: -f1)
 source_final_line=$(grep -nF 'source-tree-final-verify.log' \
@@ -1081,17 +1163,48 @@ tinytex_expected_sha=$(awk -F '\t' 'NR == 2 { print $6 }' \
   "$tinytex_expected_sha" ]] || fail "local TinyTeX tree differs from its manifest"
 
 FIXTURE_TESTS=focused
+fixture_test_file() {
+  case "$1" in
+    1) printf '%s\n' test-native-adversarial-storage.R ;;
+    2) printf '%s\n' test-native-altrep-lifetimes.R ;;
+    3) printf '%s\n' test-native-domain-kernels.R ;;
+    4) printf '%s\n' test-native-paramset-value-mutation.R ;;
+    5) printf '%s\n' test-native-paramsetcollection-exact-state.R ;;
+    6) printf '%s\n' test-native-r6-surface-auth.R ;;
+    [7-9]|[1-4][0-9]|5[0-8])
+      printf 'test-native-fixture-%03d.R\n' "$1"
+      ;;
+    *) printf 'test-fixture-%03d.R\n' "$1" ;;
+  esac
+}
+
 write_source_manifest() {
   local manifest="$RUN_DIRECTORY/metadata/source-manifest.tsv"
   printf '"path"\t"kind"\t"sha256_or_target"\t"size"\t"mode"\n' > "$manifest"
-  for relative in environment/tinytex-linux-x86_64.tsv \
-      environment/toolchain-linux-64.lock src/dummy.c; do
+  for relative in environment/native-routine-coverage.tsv \
+      environment/native-functional-baseline.tsv \
+      environment/tinytex-linux-x86_64.tsv \
+      environment/toolchain-linux-64.lock \
+      scripts/environment/resource-jobs \
+      scripts/environment/run-native-test-worker-group \
+      scripts/environment/run-native-test-worker.R \
+      scripts/environment/run-native-tests.R \
+      scripts/environment/run-native-probes.R \
+      scripts/environment/verify-native-probes.R \
+      scripts/environment/verify-native-test-ledger.R src/dummy.c; do
     path="$RUN_DIRECTORY/source/$relative"
     mode=$(stat -c '%a' "$path")
     printf '"%s"\t"file"\t"%s"\t%s\t"0%s"\n' "$relative" \
       "$(sha256sum "$path" | cut -d ' ' -f 1)" "$(stat -c '%s' "$path")" \
       "$mode" >> "$manifest"
   done
+  while IFS= read -r path; do
+    relative=${path#"$RUN_DIRECTORY/source/"}
+    mode=$(stat -c '%a' "$path")
+    printf '"%s"\t"file"\t"%s"\t%s\t"0%s"\n' "$relative" \
+      "$(sha256sum "$path" | cut -d ' ' -f 1)" "$(stat -c '%s' "$path")" \
+      "$mode" >> "$manifest"
+  done < <(find "$RUN_DIRECTORY/source/tests/testthat" -type f -print | sort)
 }
 
 write_run_metadata() {
@@ -1101,6 +1214,7 @@ write_run_metadata() {
     'static_policy=release-memory-v1' \
     "native_check_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/native-check" | cut -d ' ' -f 1)" \
     "tree_receipt_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/tree-receipt.R" | cut -d ' ' -f 1)" \
+    "resource_jobs_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/resource-jobs" | cut -d ' ' -f 1)" \
     "toolchain_lock_sha256=$(sha256sum "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock" | cut -d ' ' -f 1)" \
     "toolchain_explicit_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" | cut -d ' ' -f 1)" \
     'started_utc=2026-07-14T00:00:00Z' \
@@ -1130,6 +1244,8 @@ write_completion() {
     "source_archive_sha256=$(sha256sum "$RUN_DIRECTORY/source-package/build/paradox_fixture.tar.gz" | cut -d ' ' -f 1)" \
     "native_check_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/native-check" | cut -d ' ' -f 1)" \
     "tree_receipt_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/tree-receipt.R" | cut -d ' ' -f 1)" \
+    "resource_jobs_helper_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/resource-jobs" | cut -d ' ' -f 1)" \
+    "resource_jobs_decisions_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/resource-jobs.tsv" | cut -d ' ' -f 1)" \
     "toolchain_lock_sha256=$(sha256sum "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock" | cut -d ' ' -f 1)" \
     "toolchain_explicit_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/toolchain-explicit.txt" | cut -d ' ' -f 1)" \
     "run_metadata_sha256=$(sha256sum "$RUN_DIRECTORY/metadata/run.txt" | cut -d ' ' -f 1)" \
@@ -1148,21 +1264,282 @@ write_completion() {
   (cd "$RUN_DIRECTORY/metadata" && sha256sum completion.txt > completion.sha256)
 }
 
+write_fixture_resource_report() {
+  local report=$1 profile=$2 jobs=$3 operator_max=$4
+  local memory_per_job memory_jobs
+  case "$profile" in
+    compile)
+      memory_per_job=1024
+      memory_jobs=20
+      ;;
+    light-test)
+      memory_per_job=2048
+      memory_jobs=10
+      ;;
+    *) fail "unknown fixture resource profile: $profile" ;;
+  esac
+  mkdir -p "$(dirname "$report")"
+  printf '%s\n' \
+    $'field\tvalue' \
+    $'schema\t1' \
+    "profile"$'\t'"$profile" \
+    $'platform\tLinux' \
+    $'online_cpus\t8' \
+    $'affinity_cpus\t8' \
+    $'cgroup_cpu_limit\tunlimited' \
+    $'cpu_limit\t8' \
+    $'cpu_reserve\t1' \
+    $'cpu_per_job\t1' \
+    $'cpu_jobs\t7' \
+    $'memory_source\tproc_memavailable' \
+    $'memory_available_mib\t32768' \
+    $'cgroup_memory_available_mib\tunlimited' \
+    $'memory_reserve_mib\t12288' \
+    "memory_mib_per_job"$'\t'"$memory_per_job" \
+    "memory_jobs"$'\t'"$memory_jobs" \
+    $'profile_max_jobs\t16' \
+    "operator_max_jobs"$'\t'"$operator_max" \
+    "jobs"$'\t'"$jobs" > "$report"
+}
+
+append_fixture_resource_row() {
+  local scope=$1 mode=$2 profile=$3 jobs=$4 relative=$5
+  local report="$RUN_DIRECTORY/$relative"
+  write_fixture_resource_report "$report" "$profile" "$jobs" "$jobs"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$scope" "$mode" "$profile" "$jobs" \
+    "$(sha256sum "$report" | cut -d ' ' -f 1)" "$relative" \
+    >> "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+}
+
+write_fixture_resource_evidence() {
+  printf 'scope\tmode\tprofile\tjobs\treport_sha256\treport\n' \
+    > "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+  append_fixture_resource_row install strict-gcc compile 4 \
+    modes/strict-gcc/artifacts/install-resource-jobs.tsv
+  append_fixture_resource_row functional-test strict-gcc light-test 4 \
+    "modes/strict-gcc/artifacts/native-tests-$FIXTURE_TESTS-resource-jobs.tsv"
+  append_fixture_resource_row install strict-clang compile 4 \
+    modes/strict-clang/artifacts/install-resource-jobs.tsv
+  append_fixture_resource_row install analyzer-gcc compile 1 \
+    modes/analyzer-gcc/artifacts/install-resource-jobs.tsv
+}
+
+write_functional_ledger_fixture() {
+  local file_count block_count selected_count index file description ledger
+  local scoped_index analyzer_ledger analyzer_file analyzer_index
+  local analyzer_expectations analyzer_passed fixture_dso_sha workers
+  local worker_file worker_counts worker_task worker_sha
+  fixture_dso_sha=$(printf '%s\n' dso | sha256sum | cut -d ' ' -f 1)
+  if [[ "$FIXTURE_TESTS" == full ]]; then
+    selected_count=79
+    block_count=700
+  else
+    selected_count=58
+    block_count=550
+  fi
+  mkdir -p "$RUN_DIRECTORY/source/tests/testthat"
+  for index in $(seq 1 79); do
+    file=$(fixture_test_file "$index")
+    description=$(printf 'fixture test %03d' "$index")
+    if [[ $index -ge 7 && $index -le 29 ]]; then
+      printf 'test_that("%s", {\n  skip_on_cran()\n  expect_true(TRUE)\n})\n' \
+        "$description" > "$RUN_DIRECTORY/source/tests/testthat/$file"
+    elif [[ "$FIXTURE_TESTS" == full && ( $index -eq 59 || $index -eq 60 ) ]]; then
+      printf 'skip_on_cran()\ntest_that("%s", expect_true(TRUE))\n' \
+        "$description" > "$RUN_DIRECTORY/source/tests/testthat/$file"
+    else
+      printf 'test_that("%s", expect_true(TRUE))\n' "$description" \
+        > "$RUN_DIRECTORY/source/tests/testthat/$file"
+    fi
+  done
+
+  analyzer_files=(
+    test-native-adversarial-storage.R
+    test-native-altrep-lifetimes.R
+    test-native-domain-kernels.R
+    test-native-paramset-value-mutation.R
+    test-native-paramsetcollection-exact-state.R
+    test-native-r6-surface-auth.R
+  )
+  for analyzer_file in "${analyzer_files[@]}"; do
+    : > "$RUN_DIRECTORY/source/tests/testthat/$analyzer_file"
+  done
+  printf '%s\n' \
+    'test_that("reentrant custom checks may replace parameter storage and collect", { skip_on_cran(); expect_true(TRUE) })' \
+    'test_that("native mutation entries and public setters survive gctorture", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-value-mutation.R"
+  printf '%s\n' \
+    'test_that("deep collection snapshots survive root and graph growth", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramsetcollection-exact-state.R"
+  printf '%s\n' \
+    'test_that("surface authentication roots canonical closure graphs", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-r6-surface-auth.R"
+  for analyzer_index in $(seq 1 66); do
+    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 6 ))]}
+    printf 'test_that("analyzer passing block %03d", expect_true(TRUE))\n' \
+      "$analyzer_index" \
+      >> "$RUN_DIRECTORY/source/tests/testthat/$analyzer_file"
+  done
+
+  ledger="$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-$FIXTURE_TESTS.tsv"
+  printf '%s\n' \
+    $'kind\tschema\tselection\tnot_cran\tdso_sha256\tfile\tcontext\ttest\texpectations\tpassed\tfailed\tskipped\terrors\twarnings\tskip_reason\tdetail' \
+    > "$ledger"
+  for index in $(seq 1 "$block_count"); do
+    if [[ $index -eq 1 ]]; then
+      file=test-native-paramset-value-mutation.R
+      description='reentrant custom checks may replace parameter storage and collect'
+    elif [[ $index -eq 2 ]]; then
+      file=test-native-paramset-value-mutation.R
+      description='native mutation entries and public setters survive gctorture'
+    elif [[ $index -eq 3 ]]; then
+      file=test-native-paramsetcollection-exact-state.R
+      description='deep collection snapshots survive root and graph growth'
+    elif [[ $index -eq 4 ]]; then
+      file=test-native-r6-surface-auth.R
+      description='surface authentication roots canonical closure graphs'
+    elif [[ $index -le 27 ]]; then
+      scoped_index=$((index + 2))
+      file=$(fixture_test_file "$scoped_index")
+      description=$(printf 'fixture test %03d' "$scoped_index")
+    else
+      file_count=$(( (index - 26) % selected_count + 1 ))
+      file=$(fixture_test_file "$file_count")
+      description=$(printf 'synthetic ledger block %03d' "$index")
+    fi
+    printf 'test\t1\t%s\tTRUE\t%s\t%s\tfixture\t%s\t20\t20\t0\t0\t0\t0\t-\t-\n' \
+      "$FIXTURE_TESTS" "$fixture_dso_sha" "$file" "$description" >> "$ledger"
+  done
+  workers=${ledger%.tsv}-workers.tsv
+  printf '%s\n' \
+    $'schema\tselection\tjobs\ttask\tlane\tfiles\tdso_sha256_before\tdso_sha256_after\ttest_blocks\texpectations\tpassed\tfailed\tskipped\terrors\twarnings\tstatus' \
+    > "$workers"
+  worker_task=0
+  while IFS= read -r worker_file; do
+    if [[ "$FIXTURE_TESTS" == focused ]]; then
+      case "$worker_file" in
+        *characterization*|*native*|*regression*) ;;
+        *) continue ;;
+      esac
+    fi
+    worker_counts=$(awk -F '\t' -v file="$worker_file" '
+      $1 == "test" && $6 == file {
+        blocks += 1; expectations += $9; passed += $10; failed += $11
+        skipped += $12; errors += $13; warnings += $14
+      }
+      END {
+        printf "%d\t%d\t%d\t%d\t%d\t%d\t%d", blocks, expectations,
+          passed, failed, skipped, errors, warnings
+      }
+    ' "$ledger")
+    worker_task=$((worker_task + 1))
+    printf '1\t%s\t4\t%03d\tparallel\t%s\t%s\t%s\t%s\tcomplete\n' \
+      "$FIXTURE_TESTS" "$worker_task" "$worker_file" \
+      "$fixture_dso_sha" "$fixture_dso_sha" "$worker_counts" >> "$workers"
+  done < <(find "$RUN_DIRECTORY/source/tests/testthat" -type f \
+    -printf '%f\n' | sort)
+  [[ "$worker_task" -eq "$selected_count" ]] ||
+    fail "fixture worker inventory does not match selected files"
+  worker_sha=$(sha256sum "$workers" | cut -d ' ' -f 1)
+  printf 'summary\t1\t%s\tTRUE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t0\t0\t0\t-\tfiles=%d;test_blocks=%d;requested_jobs=4;effective_jobs=4;scheduler_backend=linux-isolated;worker_evidence_sha256=%s\n' \
+    "$FIXTURE_TESTS" "$fixture_dso_sha" \
+    "$((block_count * 20))" "$((block_count * 20))" \
+    "$selected_count" "$block_count" "$worker_sha" >> "$ledger"
+  printf '%s\n' ledger-ok \
+    > "$RUN_DIRECTORY/modes/strict-gcc/logs/tests-$FIXTURE_TESTS-ledger.log"
+
+  mkdir -p "$RUN_DIRECTORY/modes/strict-clang/logs" \
+    "$RUN_DIRECTORY/modes/strict-clang/artifacts"
+  analyzer_ledger="$RUN_DIRECTORY/modes/strict-clang/artifacts/native-tests-analyzer.tsv"
+  printf '%s\n' \
+    $'kind\tschema\tselection\tnot_cran\tdso_sha256\tfile\tcontext\ttest\texpectations\tpassed\tfailed\tskipped\terrors\twarnings\tskip_reason\tdetail' \
+    > "$analyzer_ledger"
+  printf 'test\t1\tanalyzer\tFALSE\t%s\t%s\tfixture\t%s\t1\t0\t0\t1\t0\t0\tReason: On CRAN\t-\n' \
+    "$fixture_dso_sha" test-native-paramset-value-mutation.R \
+    'reentrant custom checks may replace parameter storage and collect' \
+    "$fixture_dso_sha" test-native-paramset-value-mutation.R \
+    'native mutation entries and public setters survive gctorture' \
+    "$fixture_dso_sha" test-native-paramsetcollection-exact-state.R \
+    'deep collection snapshots survive root and graph growth' \
+    "$fixture_dso_sha" test-native-r6-surface-auth.R \
+    'surface authentication roots canonical closure graphs' \
+    >> "$analyzer_ledger"
+  for analyzer_index in $(seq 1 66); do
+    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 6 ))]}
+    description=$(printf 'analyzer passing block %03d' "$analyzer_index")
+    printf 'test\t1\tanalyzer\tFALSE\t%s\t%s\tfixture\t%s\t10\t10\t0\t0\t0\t0\t-\t-\n' \
+      "$fixture_dso_sha" "$analyzer_file" "$description" >> "$analyzer_ledger"
+  done
+  analyzer_expectations=$((4 + 66 * 10))
+  analyzer_passed=$((66 * 10))
+  printf 'summary\t1\tanalyzer\tFALSE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t4\t0\t0\t-\tfiles=6;test_blocks=70;requested_jobs=1;effective_jobs=1;scheduler_backend=serial\n' \
+    "$fixture_dso_sha" "$analyzer_expectations" "$analyzer_passed" \
+    >> "$analyzer_ledger"
+  printf '%s\n' analyzer-tests-ok \
+    > "$RUN_DIRECTORY/modes/strict-clang/logs/tests-analyzer.log"
+  printf '%s\n' analyzer-ledger-ok \
+    > "$RUN_DIRECTORY/modes/strict-clang/logs/tests-analyzer-ledger.log"
+  printf '%s\n' analyzer-final-ledger-ok \
+    > "$RUN_DIRECTORY/modes/strict-clang/logs/tests-analyzer-final-ledger.log"
+}
+
 build_valid_native_fixture() {
+  local cached_fixture="$NATIVE_FIXTURE_CACHE/$FIXTURE_TESTS"
+  case "$FIXTURE_TESTS" in
+    focused|full) ;;
+    *) fail "unsupported native fixture scope: $FIXTURE_TESTS" ;;
+  esac
   rm -rf "$RUN_DIRECTORY"
+  if [[ -d "$cached_fixture" && ! -L "$cached_fixture" ]]; then
+    cp -a -- "$cached_fixture" "$RUN_DIRECTORY"
+    return
+  fi
+  [[ ! -e "$cached_fixture" && ! -L "$cached_fixture" ]] ||
+    fail "cached native fixture is non-directory or symbolic: $cached_fixture"
   mkdir -p "$RUN_DIRECTORY/metadata" "$RUN_DIRECTORY/source/environment" \
-    "$RUN_DIRECTORY/source/src" "$RUN_DIRECTORY/source-package/build"
+    "$RUN_DIRECTORY/source/scripts/environment" "$RUN_DIRECTORY/source/src" \
+    "$RUN_DIRECTORY/source-package/build" \
+    "$RUN_DIRECTORY/modes/strict-gcc/logs" \
+    "$RUN_DIRECTORY/modes/strict-gcc/artifacts"
   cp "$ROOT/scripts/native-check" "$RUN_DIRECTORY/metadata/native-check"
   cp "$ROOT/scripts/environment/tree-receipt.R" \
     "$RUN_DIRECTORY/metadata/tree-receipt.R"
+  cp "$ROOT/scripts/environment/resource-jobs" \
+    "$RUN_DIRECTORY/metadata/resource-jobs"
+  printf 'scope\tmode\tprofile\tjobs\treport_sha256\treport\n' \
+    > "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
   cp "$ROOT/environment/toolchain-linux-64.lock" \
     "$RUN_DIRECTORY/source/environment/toolchain-linux-64.lock"
   cp "$ROOT/environment/toolchain-linux-64.lock" \
     "$RUN_DIRECTORY/metadata/toolchain-explicit.txt"
   cp "$ROOT/environment/tinytex-linux-x86_64.tsv" \
     "$RUN_DIRECTORY/source/environment/tinytex-linux-x86_64.tsv"
-  cp "$TINY_TEX_FIXTURE_RECEIPT" \
-    "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  cp "$ROOT/environment/native-routine-coverage.tsv" \
+    "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
+  cp "$ROOT/environment/native-functional-baseline.tsv" \
+    "$RUN_DIRECTORY/source/environment/native-functional-baseline.tsv"
+  cp "$ROOT/scripts/environment/run-native-probes.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-probes.R"
+  cp "$ROOT/scripts/environment/run-native-tests.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-tests.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker.R"
+  cp "$ROOT/scripts/environment/run-native-test-worker-group" \
+    "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker-group"
+  cp "$ROOT/scripts/environment/resource-jobs" \
+    "$RUN_DIRECTORY/source/scripts/environment/resource-jobs"
+  cp "$ROOT/scripts/environment/verify-native-probes.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/verify-native-probes.R"
+  cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
+    "$RUN_DIRECTORY/source/scripts/environment/verify-native-test-ledger.R"
+  if [[ "$FIXTURE_TESTS" == full ]]; then
+    cp "$TINY_TEX_FIXTURE_RECEIPT" \
+      "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  else
+    printf '%s\n' 'scope=not-used' \
+      > "$RUN_DIRECTORY/metadata/tinytex-tree.tsv"
+  fi
   printf '%s\n' 'int fixture;' > "$RUN_DIRECTORY/source/src/dummy.c"
   printf '%s\n' 'fixture archive' \
     > "$RUN_DIRECTORY/source-package/build/paradox_fixture.tar.gz"
@@ -1172,6 +1549,7 @@ build_valid_native_fixture() {
       git-status.txt source-files.zlist; do
     : > "$RUN_DIRECTORY/metadata/$provenance"
   done
+  write_functional_ledger_fixture
   write_source_manifest
 
   for mode in strict-gcc strict-clang; do
@@ -1179,15 +1557,45 @@ build_valid_native_fixture() {
       "$RUN_DIRECTORY/modes/$mode/artifacts" \
       "$RUN_DIRECTORY/modes/$mode/library/paradox/libs"
     printf '%s\n' install-ok > "$RUN_DIRECTORY/modes/$mode/logs/install.log"
-    printf '%s\n' tests-ok > \
-      "$RUN_DIRECTORY/modes/$mode/logs/tests-$FIXTURE_TESTS.log"
     printf '%s\n' dso > "$RUN_DIRECTORY/modes/$mode/library/paradox/libs/paradox.so"
     sha256sum "$RUN_DIRECTORY/modes/$mode/library/paradox/libs/paradox.so" \
       > "$RUN_DIRECTORY/modes/$mode/artifacts/paradox.so.sha256"
     : > "$RUN_DIRECTORY/modes/$mode/installed.ok"
   done
+  printf '%s\n' tests-ok > \
+    "$RUN_DIRECTORY/modes/strict-gcc/logs/tests-$FIXTURE_TESTS.log"
+  : > "$RUN_DIRECTORY/modes/strict-clang/logs/probes-run.log"
+  printf '%s\n' probes-verified > \
+    "$RUN_DIRECTORY/modes/strict-clang/logs/tests-probes.log"
+  probe_result="$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+  probe_dso_sha=$(sha256sum \
+    "$RUN_DIRECTORY/modes/strict-clang/library/paradox/libs/paradox.so" | \
+    cut -d ' ' -f 1)
+  {
+    printf 'kind\tid\tstatus\tdetail\n'
+    printf 'meta\tschema\tpass\t1\n'
+    printf 'meta\tmode\tpass\tplain\n'
+    printf 'meta\trounds\tpass\t1\n'
+    printf 'meta\tgct_step\tpass\tdisabled\n'
+    printf 'meta\tcandidate_version\tpass\t2.0.0\n'
+    printf 'meta\tdso_sha256\tpass\t%s\n' "$probe_dso_sha"
+    printf 'meta\tdynamic_lookup\tpass\tfalse\n'
+    printf 'meta\tforce_symbols\tpass\ttrue\n'
+    awk -F '\t' 'NR > 1 {
+      printf "registration\t%s\tpass\tarity=%s\n", $1, $2
+    }' "$ROOT/environment/native-routine-coverage.tsv"
+    awk -F '\t' 'NR > 1 {
+      printf "probe\tdirect_%s\tpass\trounds=1\n", $1
+    }' "$ROOT/environment/native-routine-coverage.tsv"
+    for hazard in hazard_altrep_snapshot_reentry \
+        hazard_callback_reentry_rooting hazard_finalizer_column_mutation \
+        hazard_finalize_names_alias; do
+      printf 'hazard\t%s\tpass\trounds=1\n' "$hazard"
+    done
+    printf 'summary\tcomplete\tpass\trecords_before_summary=134;failures=0\n'
+  } > "$probe_result"
   if [[ "$FIXTURE_TESTS" == full ]]; then
-    for checked_profile in check-as-cran check-all-tests check-depends-only; do
+    for checked_profile in check-as-cran check-depends-only; do
       printf '%s\n' "$checked_profile-ok" \
         > "$RUN_DIRECTORY/modes/strict-gcc/logs/$checked_profile.log"
       mkdir -p \
@@ -1198,10 +1606,14 @@ build_valid_native_fixture() {
   fi
   mkdir -p "$RUN_DIRECTORY/modes/analyzer-gcc/logs" \
     "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts" \
+    "$RUN_DIRECTORY/modes/analyzer-gcc/library/paradox/libs" \
     "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports" \
     "$RUN_DIRECTORY/modes/cppcheck/logs" "$RUN_DIRECTORY/modes/symbols/logs"
   printf '%s\n' analyzer-ok > "$RUN_DIRECTORY/modes/analyzer-gcc/logs/install.log"
-  printf '%s\n' analyzer-dso > "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts/paradox.so.sha256"
+  printf '%s\n' analyzer-dso \
+    > "$RUN_DIRECTORY/modes/analyzer-gcc/library/paradox/libs/paradox.so"
+  sha256sum "$RUN_DIRECTORY/modes/analyzer-gcc/library/paradox/libs/paradox.so" \
+    > "$RUN_DIRECTORY/modes/analyzer-gcc/artifacts/paradox.so.sha256"
   : > "$RUN_DIRECTORY/modes/analyzer-gcc/installed.ok"
   printf '%s\n' plist > "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports/dummy.plist"
   sha256sum "$RUN_DIRECTORY/modes/analyzer-clang/artifacts/reports/dummy.plist" \
@@ -1210,11 +1622,12 @@ build_valid_native_fixture() {
   for evidence in registration dynamic-symbols program-headers dynamic-section; do
     printf '%s\n' "$evidence-ok" > "$RUN_DIRECTORY/modes/symbols/logs/$evidence.log"
   done
+  write_fixture_resource_evidence
   {
     printf 'mode\tstatus\tevidence\tsha256\n'
     for entry in \
       "strict-gcc strict-gcc/logs/tests-$FIXTURE_TESTS.log" \
-      "strict-clang strict-clang/logs/tests-$FIXTURE_TESTS.log" \
+      'strict-clang strict-clang/logs/tests-probes.log' \
       'analyzer-gcc analyzer-gcc/logs/install.log' \
       'analyzer-clang analyzer-clang/artifacts/reports.sha256' \
       'cppcheck cppcheck/logs/cppcheck.log' \
@@ -1233,10 +1646,96 @@ build_valid_native_fixture() {
   write_completion
   printf '%s\n' 'status=passed' 'exit_code=0' \
     'finished_utc=2026-07-14T00:01:00Z' > "$RUN_DIRECTORY/metadata/result.txt"
+  mkdir -p "$NATIVE_FIXTURE_CACHE"
+  cp -a -- "$RUN_DIRECTORY" "$cached_fixture"
 }
 
 build_valid_native_fixture
 "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+# A valid hash cannot bless an incomplete or duplicated scheduler inventory.
+build_valid_native_fixture
+sed -i $'/^install\tstrict-clang\t/d' \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+duplicate_resource_row=$(sed -n $'/^install\tstrict-clang\t/p' \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv")
+printf '%s\n' "$duplicate_resource_row" \
+  >> "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Rehashed reports still fail when an override raises the safe ceiling or the
+# memory-heavy GCC analyzer no longer retains its mandatory serial decision.
+build_valid_native_fixture
+resource_report="$RUN_DIRECTORY/modes/strict-gcc/artifacts/install-resource-jobs.tsv"
+sed -i $'s/^operator_max_jobs\t4$/operator_max_jobs\t8/; s/^jobs\t4$/jobs\t8/' \
+  "$resource_report"
+resource_sha=$(sha256sum "$resource_report" | cut -d ' ' -f 1)
+awk -F '\t' -v OFS='\t' -v sha="$resource_sha" '
+  $1 == "install" && $2 == "strict-gcc" { $4 = 8; $5 = sha }
+  { print }
+' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" \
+  > "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new"
+mv "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new" \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+resource_report="$RUN_DIRECTORY/modes/strict-gcc/artifacts/install-resource-jobs.tsv"
+sed -i $'s/^cgroup_memory_available_mib\tunlimited$/cgroup_memory_available_mib\t1024/' \
+  "$resource_report"
+resource_sha=$(sha256sum "$resource_report" | cut -d ' ' -f 1)
+awk -F '\t' -v OFS='\t' -v sha="$resource_sha" '
+  $1 == "install" && $2 == "strict-gcc" { $5 = sha }
+  { print }
+' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" \
+  > "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new"
+mv "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new" \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+resource_report="$RUN_DIRECTORY/modes/analyzer-gcc/artifacts/install-resource-jobs.tsv"
+sed -i $'s/^operator_max_jobs\t1$/operator_max_jobs\t2/; s/^jobs\t1$/jobs\t2/' \
+  "$resource_report"
+resource_sha=$(sha256sum "$resource_report" | cut -d ' ' -f 1)
+awk -F '\t' -v OFS='\t' -v sha="$resource_sha" '
+  $1 == "install" && $2 == "analyzer-gcc" { $4 = 2; $5 = sha }
+  { print }
+' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" \
+  > "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new"
+mv "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new" \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# The light-test report owns the requested limit; a semantically valid change
+# is rejected if the functional ledger and worker evidence still claim four.
+build_valid_native_fixture
+resource_report="$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-focused-resource-jobs.tsv"
+sed -i $'s/^operator_max_jobs\t4$/operator_max_jobs\t3/; s/^jobs\t4$/jobs\t3/' \
+  "$resource_report"
+resource_sha=$(sha256sum "$resource_report" | cut -d ' ' -f 1)
+awk -F '\t' -v OFS='\t' -v sha="$resource_sha" '
+  $1 == "functional-test" { $4 = 3; $5 = sha }
+  { print }
+' "$RUN_DIRECTORY/metadata/resource-jobs.tsv" \
+  > "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new"
+mv "$RUN_DIRECTORY/metadata/resource-jobs.tsv.new" \
+  "$RUN_DIRECTORY/metadata/resource-jobs.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 
 printf '%s\n' 'status=failed' 'exit_code=1' \
   'finished_utc=2026-07-14T00:01:00Z' > "$RUN_DIRECTORY/metadata/result.txt"
@@ -1279,6 +1778,116 @@ printf '%s\n' '# substituted helper' >> "$RUN_DIRECTORY/metadata/tree-receipt.R"
 "$RSCRIPT" --vanilla "$RUN_DIRECTORY/metadata/tree-receipt.R" create \
   "$RUN_DIRECTORY/modes" "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
 write_run_metadata
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Recomputing the generic tree receipt cannot turn a fabricated or incomplete
+# native-probe result into compiler/sanitizer evidence.
+build_valid_native_fixture
+sed -i '/^meta\tdso_sha256\t/s/[0-9a-f]\{64\}$/0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -i '/^hazard\thazard_callback_reentry_rooting\t/d' \
+  "$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+sed -i 's/records_before_summary=134/records_before_summary=133/' \
+  "$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# The generic source receipt cannot bless a substituted probe implementation
+# or a semantically reassigned routine-to-hazard mapping.
+build_valid_native_fixture
+printf '%s\n' '# substituted probe runner' \
+  >> "$RUN_DIRECTORY/source/scripts/environment/run-native-probes.R"
+write_source_manifest
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+  "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' '# substituted functional runner' \
+  >> "$RUN_DIRECTORY/source/scripts/environment/run-native-tests.R"
+write_source_manifest
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+  "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -i \
+  's/direct_finalize_data_table,hazard_finalize_names_alias/direct_finalize_data_table/' \
+  "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
+write_source_manifest
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
+  "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+printf '%s\n' substituted \
+  > "$RUN_DIRECTORY/modes/strict-gcc/library/paradox/libs/paradox.so"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# A recomputed generic modes receipt cannot bless a truncated functional-test
+# batch, false NOT_CRAN policy, substituted DSO identity, or a coherently
+# aggregated failing expectation.
+build_valid_native_fixture
+sed -i '$d' \
+  "$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-focused.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -i '2s/\tTRUE\t/\tFALSE\t/' \
+  "$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-focused.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+sed -i '2s/\t[0-9a-f]\{64\}\t/\t0000000000000000000000000000000000000000000000000000000000000000\t/' \
+  "$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-focused.tsv"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
+functional_ledger="$RUN_DIRECTORY/modes/strict-gcc/artifacts/native-tests-focused.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  NR == 2 { $10 = 19; $11 = 1 }
+  $1 == "summary" { $10 = $10 - 1; $11 = 1 }
+  { print }
+' "$functional_ledger" > "$functional_ledger.new"
+mv "$functional_ledger.new" "$functional_ledger"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
+# Even with a recomputed generic modes receipt and internally consistent
+# totals, the bounded analyzer ledger must retain every exact reviewed CRAN
+# skip and every source-declared analyzer scope.
+build_valid_native_fixture
+analyzer_ledger="$RUN_DIRECTORY/modes/strict-clang/artifacts/native-tests-analyzer.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "test" &&
+    $8 == "reentrant custom checks may replace parameter storage and collect" {
+      next
+    }
+  $1 == "summary" { $9 = $9 - 1; $12 = $12 - 1 }
+  { print }
+' "$analyzer_ledger" > "$analyzer_ledger.new"
+mv "$analyzer_ledger.new" "$analyzer_ledger"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
 write_completion
 expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 
@@ -1392,51 +2001,537 @@ printf '%s\n' \
 expect_failure "$EVIDENCE_HELPER" valgrind "$VALGRIND_LOGS" header-only \
   "$TEST_ROOT/header-only-diagnostics.txt"
 
-# rchk evidence requires actual positive analysis, exact registration, and no
-# ERROR/protection/warning text in either the reports or aggregate log.
-RCHK_REPORTS="$TEST_ROOT/rchk reports"
-RCHK_ARTIFACTS="$TEST_ROOT/rchk artifacts"
-RCHK_LOG="$TEST_ROOT/rchk.log"
-mkdir "$RCHK_REPORTS"
-printf '%s\n' 'Analyzed 7 functions, traversed 42 states.' \
+# The rchk policy is deliberately generated once from one structurally valid
+# analyzer fixture.  Independent copies are then mutated, so this adversarial
+# matrix tests the fail-closed parser without regenerating identical evidence.
+RCHK_BASE="$TEST_ROOT/rchk-policy-baseline"
+RCHK_REPORTS="$RCHK_BASE/reports"
+RCHK_ARTIFACTS="$RCHK_BASE/artifacts"
+RCHK_POLICY="$RCHK_BASE/policy"
+RCHK_LOG="$RCHK_BASE/rchk.log"
+mkdir -p "$RCHK_REPORTS" "$RCHK_ARTIFACTS"
+RCHK_ABSTRACTION_STRPTIME='ERROR: too many states (abstraction error?) in function strptime_internal'
+RCHK_ABSTRACTION_EVAL='ERROR: too many states (abstraction error?) in function bcEval_loop'
+RCHK_ABSTRACTION_GC='ERROR: too many states (abstraction error?) in function RunGenCollect'
+printf '%s\n' \
+  "$RCHK_ABSTRACTION_STRPTIME" \
+  "$RCHK_ABSTRACTION_EVAL" \
+  "$RCHK_ABSTRACTION_GC" \
+  '' \
+  'Function synthetic_alpha' \
+  '  [UP] reviewed alpha allocation diagnostic fixture.c:10' \
+  '  [PB] reviewed alpha balance diagnostic fixture.c:11' \
+  '' \
+  'Function synthetic_beta.2' \
+  '  [UP] reviewed beta allocation diagnostic fixture.c:20' \
+  '  [UP] reviewed beta lifetime diagnostic fixture.c:21' \
+  'Analyzed 7 functions, traversed 42 states.' \
   > "$RCHK_REPORTS/paradox.so.bcheck"
 : > "$RCHK_REPORTS/paradox.so.maacheck"
 printf '%s\n' \
+  'Library name (usually package name): paradox' \
   'Initialization function: R_init_paradox' \
   'Functions: 12' \
   'Checked call to R_registerRoutines: 1' \
   > "$RCHK_REPORTS/paradox.so.fficheck"
+printf '%s\n' \
+  'objdump: Warning: Unrecognized form: 0x22' \
+  'objdump: Warning: Unrecognized form: 0x23' \
+  'rchk completed' > "$RCHK_LOG"
+printf '%s\n' \
+  $'key\tvalue' \
+  $'schema\t1' \
+  $'bounded_bcheck_sha256\taaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' \
+  $'bcheck_max_states\t800000' \
+  $'image_bcheck_sha256\tbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' \
+  $'maacheck_sha256\tcccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc' \
+  $'fficheck_sha256\tdddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd' \
+  $'address_space_limit_bytes\t21474836480' \
+  > "$RCHK_REPORTS/analyzer-identity.tsv"
 write_rchk_status() {
+  local reports=$1 report_type
   printf 'tool\tstatus\treport\tsha256\n'
   for report_type in bcheck maacheck fficheck; do
     printf '%s\t0\tparadox.so.%s\t%s\n' "$report_type" "$report_type" \
-      "$(sha256sum "$RCHK_REPORTS/paradox.so.$report_type" | cut -d ' ' -f 1)"
+      "$(sha256sum "$reports/paradox.so.$report_type" | cut -d ' ' -f 1)"
   done
 }
-write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
-printf '%s\n' 'rchk completed' > "$RCHK_LOG"
+write_rchk_status "$RCHK_REPORTS" > "$RCHK_REPORTS/tool-status.tsv"
+printf '%s\n' \
+  $'ordinal\tfunction\trationale_id' \
+  $'1\tsynthetic_alpha\tALPHA_DIAGNOSTICS' \
+  $'2\tsynthetic_beta.2\tBETA_DIAGNOSTICS' \
+  > "$RCHK_BASE/assignments.tsv"
+printf '%s\n' \
+  $'rationale_id\trationale' \
+  $'ALPHA_DIAGNOSTICS\tSynthetic alpha diagnostics exercise allocation and balance review' \
+  $'BETA_DIAGNOSTICS\tSynthetic beta diagnostics exercise ordered allocation review' \
+  > "$RCHK_BASE/catalog.tsv"
+"$EVIDENCE_HELPER" rchk-policy-generate "$RCHK_REPORTS" \
+  "$RCHK_REPORTS/analyzer-identity.tsv" "$RCHK_BASE/assignments.tsv" \
+  "$RCHK_BASE/catalog.tsv" "$RCHK_POLICY" >/dev/null
 "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
-  "$RCHK_ARTIFACTS" >/dev/null
-printf '%s\n' 'ERROR: synthetic failure' >> "$RCHK_REPORTS/paradox.so.maacheck"
-write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
-expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
-  "$RCHK_ARTIFACTS"
-: > "$RCHK_REPORTS/paradox.so.maacheck"
-sed -i 's/^maacheck.*/maacheck\t1\tparadox.so.maacheck\t0000000000000000000000000000000000000000000000000000000000000000/' \
-  "$RCHK_REPORTS/tool-status.tsv"
-expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
-  "$RCHK_ARTIFACTS"
-write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
-sed -i 's/Analyzed 7/Analyzed 0/' "$RCHK_REPORTS/paradox.so.bcheck"
-write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
-expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
-  "$RCHK_ARTIFACTS"
-sed -i 's/Analyzed 0/Analyzed 7/' "$RCHK_REPORTS/paradox.so.bcheck"
+  "$RCHK_ARTIFACTS" "$RCHK_POLICY" >/dev/null
+grep -qx $'function_blocks\t2' "$RCHK_POLICY/policy.tsv" ||
+  fail "rchk policy generator retained the wrong Function-block count"
+grep -qx $'up_diagnostics\t3' "$RCHK_POLICY/policy.tsv" ||
+  fail "rchk policy generator retained the wrong UP count"
+grep -qx $'pb_diagnostics\t1' "$RCHK_POLICY/policy.tsv" ||
+  fail "rchk policy generator retained the wrong PB count"
+
+prepare_rchk_case() {
+  local label=$1
+  RCHK_CASE="$TEST_ROOT/rchk-case-$label"
+  cp -a "$RCHK_BASE" "$RCHK_CASE"
+  rm -rf "$RCHK_CASE/artifacts"
+  mkdir "$RCHK_CASE/artifacts"
+}
+
+expect_rchk_case_failure() {
+  expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_CASE/reports" \
+    "$RCHK_CASE/rchk.log" "$RCHK_CASE/artifacts" "$RCHK_CASE/policy"
+}
+
+set_rchk_policy_value() {
+  local policy=$1 key=$2 value=$3 temporary
+  temporary="$policy.new"
+  chmod u+w "$policy"
+  awk -F '\t' -v OFS='\t' -v target="$key" -v replacement="$value" '
+    $1 == target { $2 = replacement; changed++ }
+    { print }
+    END { if (changed != 1) exit 1 }
+  ' "$policy" > "$temporary"
+  mv "$temporary" "$policy"
+}
+
+refresh_rchk_policy_hash() {
+  local case_directory=$1 input=$2 key=$3 hash
+  hash=$(sha256sum "$case_directory/policy/$input" | cut -d ' ' -f 1)
+  set_rchk_policy_value "$case_directory/policy/policy.tsv" "$key" "$hash"
+}
+
+prepare_rchk_case midline-package-error
+printf '%s\n' 'driver prefix ERROR: synthetic package failure' \
+  >> "$RCHK_CASE/rchk.log"
+expect_rchk_case_failure
+
+prepare_rchk_case changed-report
+printf '\n' >> "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case status-hash
+sed -i 's/^bcheck.*/bcheck\t0\tparadox.so.bcheck\t0000000000000000000000000000000000000000000000000000000000000000/' \
+  "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case reordered-blocks
+chmod u+w "$RCHK_CASE/policy/blocks.tsv"
+awk 'NR <= 3 { line[NR] = $0 }
+  END { print line[1]; print line[3]; print line[2] }
+' "$RCHK_CASE/policy/blocks.tsv" \
+  > "$RCHK_CASE/policy/blocks.tsv.new"
+mv "$RCHK_CASE/policy/blocks.tsv.new" "$RCHK_CASE/policy/blocks.tsv"
+refresh_rchk_policy_hash "$RCHK_CASE" blocks.tsv blocks_sha256
+expect_rchk_case_failure
+
+prepare_rchk_case missing-block
+chmod u+w "$RCHK_CASE/policy/blocks.tsv"
+sed -i '3d' "$RCHK_CASE/policy/blocks.tsv"
+refresh_rchk_policy_hash "$RCHK_CASE" blocks.tsv blocks_sha256
+expect_rchk_case_failure
+
+prepare_rchk_case block-count
+chmod u+w "$RCHK_CASE/policy/blocks.tsv"
+sed -i 's/^1\tsynthetic_alpha\t1\t1\t/1\tsynthetic_alpha\t2\t1\t/' \
+  "$RCHK_CASE/policy/blocks.tsv"
+refresh_rchk_policy_hash "$RCHK_CASE" blocks.tsv blocks_sha256
+expect_rchk_case_failure
+
+prepare_rchk_case summary-count
+set_rchk_policy_value "$RCHK_CASE/policy/policy.tsv" up_diagnostics 4
+expect_rchk_case_failure
+
+prepare_rchk_case unknown-rationale
+chmod u+w "$RCHK_CASE/policy/blocks.tsv"
+sed -i 's/ALPHA_DIAGNOSTICS/ABSENT_DIAGNOSTICS/' \
+  "$RCHK_CASE/policy/blocks.tsv"
+refresh_rchk_policy_hash "$RCHK_CASE" blocks.tsv blocks_sha256
+expect_rchk_case_failure
+
+prepare_rchk_case catalog-content
+chmod u+w "$RCHK_CASE/policy/rationales.tsv"
+sed -i 's/allocation and balance review/allocation and lifetime review/' \
+  "$RCHK_CASE/policy/rationales.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case unused-rationale
+chmod u+w "$RCHK_CASE/policy/rationales.tsv"
+printf '%s\n' \
+  $'GAMMA_DIAGNOSTICS\tSynthetic gamma diagnostics have a closed review rationale' \
+  >> "$RCHK_CASE/policy/rationales.tsv"
+refresh_rchk_policy_hash "$RCHK_CASE" rationales.tsv rationales_sha256
+expect_rchk_case_failure
+
+prepare_rchk_case nonempty-maacheck
+printf '%s\n' 'maacheck diagnostic' \
+  > "$RCHK_CASE/reports/paradox.so.maacheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case fficheck-drift
+sed -i 's/package name): paradox/package name): substituted/' \
+  "$RCHK_CASE/reports/paradox.so.fficheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case identity-sha
+sed -i 's/^image_bcheck_sha256.*/image_bcheck_sha256\teeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee/' \
+  "$RCHK_CASE/reports/analyzer-identity.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case identity-state-cap
+sed -i 's/bcheck_max_states\t800000/bcheck_max_states\t799999/' \
+  "$RCHK_CASE/reports/analyzer-identity.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case missing-core-error
+sed -i '/function bcEval_loop$/d' "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case duplicate-core-error
+printf '%s\n' "$RCHK_ABSTRACTION_EVAL" \
+  >> "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case zero-analysis
+sed -i 's/Analyzed 7/Analyzed 0/' "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case zero-states
+sed -i 's/traversed 42/traversed 0/' "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case zero-functions
+sed -i 's/Functions: 12/Functions: 0/' \
+  "$RCHK_CASE/reports/paradox.so.fficheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+prepare_rchk_case zero-registration
 sed -i 's/R_registerRoutines: 1/R_registerRoutines: 0/' \
-  "$RCHK_REPORTS/paradox.so.fficheck"
-write_rchk_status > "$RCHK_REPORTS/tool-status.tsv"
-expect_failure "$EVIDENCE_HELPER" rchk "$RCHK_REPORTS" "$RCHK_LOG" \
-  "$RCHK_ARTIFACTS"
+  "$RCHK_CASE/reports/paradox.so.fficheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+RCHK_BAD_CATALOG="$TEST_ROOT/rchk-placeholder-catalog.tsv"
+printf '%s\n' \
+  $'rationale_id\trationale' \
+  $'ALPHA_DIAGNOSTICS\tTODO placeholder rationale text' \
+  $'BETA_DIAGNOSTICS\tSynthetic beta diagnostics exercise ordered allocation review' \
+  > "$RCHK_BAD_CATALOG"
+expect_failure "$EVIDENCE_HELPER" rchk-policy-generate "$RCHK_REPORTS" \
+  "$RCHK_REPORTS/analyzer-identity.tsv" "$RCHK_BASE/assignments.tsv" \
+  "$RCHK_BAD_CATALOG" "$TEST_ROOT/rejected-rchk-policy"
+
+# Memory probe evidence is mode-specific and bound to the exact analyzed DSO.
+# Exercise both dynamic memory modes without compiling a package or starting an
+# analyzer, then prove that a substituted DSO and a structurally complete GCT
+# result with no activation transition are rejected.
+PROBE_VERIFIER="$ROOT/scripts/environment/verify-native-probes.R"
+PROBE_MANIFEST="$ROOT/environment/native-routine-coverage.tsv"
+PROBE_FIXTURE="$TEST_ROOT/memory-probes"
+mkdir -p "$PROBE_FIXTURE"
+printf '%s\n' 'fixture dso' > "$PROBE_FIXTURE/paradox.so"
+probe_dso_sha=$(sha256sum "$PROBE_FIXTURE/paradox.so" | cut -d ' ' -f 1)
+write_memory_probe_fixture() {
+  local mode=$1 result=$2 records=134
+  {
+    printf 'kind\tid\tstatus\tdetail\n'
+    printf 'meta\tschema\tpass\t1\n'
+    printf 'meta\tmode\tpass\t%s\n' "$mode"
+    printf 'meta\trounds\tpass\t1\n'
+    if [[ "$mode" == gct ]]; then
+      printf 'meta\tgct_step\tpass\t10\n'
+    else
+      printf 'meta\tgct_step\tpass\tdisabled\n'
+    fi
+    printf 'meta\tcandidate_version\tpass\t2.0.0\n'
+    printf 'meta\tdso_sha256\tpass\t%s\n' "$probe_dso_sha"
+    printf 'meta\tdynamic_lookup\tpass\tfalse\n'
+    printf 'meta\tforce_symbols\tpass\ttrue\n'
+    awk -F '\t' 'NR > 1 {
+      printf "registration\t%s\tpass\tarity=%s\n", $1, $2
+    }' "$PROBE_MANIFEST"
+    awk -F '\t' 'NR > 1 {
+      printf "probe\tdirect_%s\tpass\trounds=1\n", $1
+    }' "$PROBE_MANIFEST"
+    for hazard in hazard_altrep_snapshot_reentry \
+        hazard_callback_reentry_rooting hazard_finalizer_column_mutation \
+        hazard_finalize_names_alias; do
+      printf 'hazard\t%s\tpass\trounds=1\n' "$hazard"
+    done
+    if [[ "$mode" == gct ]]; then
+      printf 'gct\ttransition\tpass\tprevious=0;active=10;restored=0\n'
+      records=135
+    fi
+    printf 'summary\tcomplete\tpass\trecords_before_summary=%s;failures=0\n' \
+      "$records"
+  } > "$result"
+}
+write_memory_probe_fixture gct "$PROBE_FIXTURE/gct.tsv"
+write_memory_probe_fixture valgrind "$PROBE_FIXTURE/valgrind.tsv"
+"$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
+  "$PROBE_MANIFEST" "$PROBE_FIXTURE/gct.tsv" gct \
+  "$PROBE_FIXTURE/paradox.so" >/dev/null
+"$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
+  "$PROBE_MANIFEST" "$PROBE_FIXTURE/valgrind.tsv" valgrind \
+  "$PROBE_FIXTURE/paradox.so" >/dev/null
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "gct" && $2 == "transition" { next }
+  $1 == "summary" { sub("records_before_summary=135", "records_before_summary=134", $4) }
+  { print }
+' "$PROBE_FIXTURE/gct.tsv" > "$PROBE_FIXTURE/gct-no-transition.tsv"
+expect_failure "$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
+  "$PROBE_MANIFEST" "$PROBE_FIXTURE/gct-no-transition.tsv" gct \
+  "$PROBE_FIXTURE/paradox.so"
+printf '%s\n' 'substituted dso' > "$PROBE_FIXTURE/paradox.so"
+expect_failure "$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
+  "$PROBE_MANIFEST" "$PROBE_FIXTURE/valgrind.tsv" valgrind \
+  "$PROBE_FIXTURE/paradox.so"
+
+# Metadata fingerprints keep every path associated with its complete metadata
+# tuple, including names and link targets containing ordinary text delimiters.
+METADATA_FIXTURE="$TEST_ROOT/metadata-fingerprint"
+METADATA_ROOT="$METADATA_FIXTURE/root"
+mkdir -p "$METADATA_ROOT/directory" "$METADATA_FIXTURE/output"
+printf '%s\n' content > "$METADATA_ROOT/directory/plain"
+printf '%s\n' tabbed > "$METADATA_ROOT/$(printf 'tab\tname')"
+ln -s "$(printf 'missing\nline')" "$METADATA_ROOT/newline-link"
+"$EVIDENCE_HELPER" metadata-fingerprint "$METADATA_ROOT" \
+  "$METADATA_FIXTURE/output/first.sha256" >/dev/null
+"$EVIDENCE_HELPER" metadata-fingerprint "$METADATA_ROOT" \
+  "$METADATA_FIXTURE/output/repeat.sha256" >/dev/null
+cmp -s "$METADATA_FIXTURE/output/first.sha256" \
+  "$METADATA_FIXTURE/output/repeat.sha256" ||
+  fail "unchanged metadata tree did not retain a stable fingerprint"
+chmod 0600 "$METADATA_ROOT/directory/plain"
+"$EVIDENCE_HELPER" metadata-fingerprint "$METADATA_ROOT" \
+  "$METADATA_FIXTURE/output/changed.sha256" >/dev/null
+if cmp -s "$METADATA_FIXTURE/output/first.sha256" \
+    "$METADATA_FIXTURE/output/changed.sha256"; then
+  fail "path-bound metadata mutation did not change the fingerprint"
+fi
+expect_failure "$EVIDENCE_HELPER" metadata-fingerprint "$METADATA_ROOT" \
+  "$METADATA_ROOT/inside.sha256"
+
+# Keep the expensive memory harness on the comprehensive target inventory. It
+# must neither reintroduce whole-package analyzer checks nor leave Python cache
+# writes pointed at a shared dependency library.
+MEMORY_HARNESS="$ROOT/scripts/memory-check"
+for required_pattern in \
+    'RETAINED_NATIVE_PROBE_RUNNER' \
+    'RETAINED_NATIVE_TEST_RUNNER' \
+    'RETAINED_NATIVE_TEST_VERIFIER' \
+    'RETAINED_NATIVE_TEST_BASELINE' \
+    '--mode=gct' \
+    '--mode=valgrind' \
+    'valgrind-analyzer' \
+    '--selection=analyzer' \
+    'source-run-proof-at-use.txt' \
+    'probes-verification-final.log' \
+    'PYTHONDONTWRITEBYTECODE=1' \
+    'PYTHONPYCACHEPREFIX=' \
+    'metadata-fingerprint' \
+    'metadata-start.tsv' \
+    'verify_ordinary_metadata_ledger' \
+    'ordinary-input metadata stage inventory differs from selected modes' \
+    'verify-memory-structure' \
+    'verify-memory-content' \
+    'verify-memory-semantics' \
+    'verify_valgrind_prerequisite_metadata_ledger' \
+    'valgrind_prerequisite_metadata_ledger_sha256=' \
+    "printf 'schema=2\\n'" \
+    'native_probe_runner_sha256=' \
+    'native_probe_verifier_sha256=' \
+    'native_test_runner_sha256=' \
+    'native_test_verifier_sha256=' \
+    'native_test_baseline_sha256=' \
+    'ordinary_input_metadata_ledger_sha256=' \
+    'source_archive_sha256=' \
+    'sealed source run has no unique paradox source archive' \
+    'verify_ordinary_inputs final'; do
+  grep -Fq -- "$required_pattern" "$MEMORY_HARNESS" ||
+    fail "memory harness lacks targeted evidence policy: $required_pattern"
+done
+for obsolete_pattern in \
+    'CMD check --use-gct' \
+    'CMD check --use-valgrind' \
+    'CMD build' \
+    '"$RETAINED_VALGRIND_RECEIPT_HELPER" verify-library' \
+    'valgrind-focused'; do
+  if grep -Fq -- "$obsolete_pattern" "$MEMORY_HARNESS"; then
+    fail "memory harness still contains duplicated analyzer work: $obsolete_pattern"
+  fi
+done
+[[ $(grep -Ec '^verify_ordinary_inputs final$' "$MEMORY_HARNESS") -eq 1 ]] ||
+  fail "memory harness does not limit complete ordinary-input postflight to once"
+[[ $(grep -Ec '^  run_valgrind_receipt_structure_verification \\$' \
+  "$MEMORY_HARNESS") -eq 2 ]] ||
+  fail "memory harness does not use exactly two Valgrind structure boundaries"
+[[ $(grep -Ec '^  run_valgrind_receipt_content_verification \\$' \
+  "$MEMORY_HARNESS") -eq 2 ]] ||
+  fail "memory harness does not use exactly two Valgrind content boundaries"
+[[ $(grep -Ec '^  run_valgrind_receipt_semantic_verification \\$' \
+  "$MEMORY_HARNESS") -eq 2 ]] ||
+  fail "memory harness does not use exactly two authenticated semantic boundaries"
+RECEIPT_CONTENT_BODY=$(awk '
+  /^verify_memory_content\(\) \{/ { inside = 1 }
+  inside { print }
+  inside && /^}/ { exit }
+' "$RECEIPT_HELPER")
+[[ $(printf '%s\n' "$RECEIPT_CONTENT_BODY" | \
+  grep -Fc '"$TREE_HELPER" verify') -eq 3 ]] ||
+  fail "Valgrind memory content boundary does not verify exactly three trees"
+if printf '%s\n' "$RECEIPT_CONTENT_BODY" | grep -Fq '"$TOOLCHAIN"'; then
+  fail "Valgrind memory content boundary redundantly rereads the toolchain"
+fi
+grep -Fq 'cmp -s "$ordinary_toolchain_receipt" "$R_RECEIPT/toolchain-tree.tsv"' \
+  "$RECEIPT_HELPER" ||
+  fail "Valgrind memory structure does not bind the shared toolchain receipt"
+R_INPUT_WRITER_BODY=$(awk '
+  /^write_r_inputs\(\) \{/ { inside = 1 }
+  inside { print }
+  inside && /^}/ { exit }
+' "$RECEIPT_HELPER")
+LIBRARY_INPUT_WRITER_BODY=$(awk '
+  /^write_library_inputs\(\) \{/ { inside = 1 }
+  inside { print }
+  inside && /^}/ { exit }
+' "$RECEIPT_HELPER")
+if printf '%s\n%s\n' "$R_INPUT_WRITER_BODY" "$LIBRARY_INPUT_WRITER_BODY" | \
+    grep -Eq 'receipt_helper_sha256|tree_helper_sha256'; then
+  fail "verifier implementation identity still invalidates runtime receipts"
+fi
+printf '%s\n' "$LIBRARY_INPUT_WRITER_BODY" | \
+  grep -Fq 'declared_archive_set_sha256' ||
+  fail "package receipt cache hits still reread all source archives"
+R_VERIFY_BODY=$(awk '
+  /^verify_r_receipt\(\) \{/ { inside = 1 }
+  inside { print }
+  inside && /^}/ { exit }
+' "$RECEIPT_HELPER")
+LIBRARY_VERIFY_BODY=$(awk '
+  /^verify_library_receipt\(\) \{/ { inside = 1 }
+  inside { print }
+  inside && /^}/ { exit }
+' "$RECEIPT_HELPER")
+[[ $(printf '%s\n' "$R_VERIFY_BODY" | \
+  grep -Fc '"$RSCRIPT" --vanilla "$TREE_HELPER" verify') -eq 3 ]] ||
+  fail "standalone R cache verification repeats complete tree traversals"
+[[ $(printf '%s\n' "$LIBRARY_VERIFY_BODY" | \
+  grep -Fc '"$RSCRIPT" --vanilla "$TREE_HELPER" verify') -eq 1 ]] ||
+  fail "standalone library cache verification repeats its content traversal"
+memory_final_content_line=$(grep -n '^verify_ordinary_inputs final$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+memory_modes_tree_line=$(grep -nF \
+  '"$RUN_DIRECTORY/metadata/memory-modes-tree.tsv"' "$MEMORY_HARNESS" | \
+  head -n 1 | cut -d: -f1)
+memory_ledger_line=$(grep -n '^verify_ordinary_metadata_ledger$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+memory_completion_line=$(grep -nF \
+  'mv "$MEMORY_COMPLETION_NEW" "$RUN_DIRECTORY/metadata/completion.txt"' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+[[ -n "$memory_modes_tree_line" && -n "$memory_final_content_line" &&
+    -n "$memory_ledger_line" &&
+    -n "$memory_completion_line" &&
+    "$memory_modes_tree_line" -lt "$memory_final_content_line" &&
+    "$memory_ledger_line" -lt "$memory_final_content_line" &&
+    "$memory_final_content_line" -lt "$memory_completion_line" ]] ||
+  fail "memory completion can publish before metadata/content postflight"
+valgrind_content_pre_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-content-pre.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_structure_pre_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-structure-pre.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_semantics_pre_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-semantics-pre.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_metadata_start_line=$(grep -n '^  initialize_valgrind_prerequisite_metadata$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+ordinary_metadata_post_line=$(grep -n \
+  '^  verify_ordinary_input_metadata post-valgrind$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+valgrind_metadata_before_line=$(grep -n \
+  '^  verify_valgrind_prerequisite_metadata post-before$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+mapfile -t valgrind_receipt_compare_lines < <(grep -n \
+  '^  compare_retained_valgrind_receipts "\$VALGRIND_RECEIPT_COPY"$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+[[ ${#valgrind_receipt_compare_lines[@]} -eq 4 ]] ||
+  fail "Valgrind live receipts are not compared at all four use boundaries"
+valgrind_receipt_compare_pre_before=${valgrind_receipt_compare_lines[0]}
+valgrind_receipt_compare_pre_after=${valgrind_receipt_compare_lines[1]}
+valgrind_receipt_compare_post_before=${valgrind_receipt_compare_lines[2]}
+valgrind_receipt_compare_post_after=${valgrind_receipt_compare_lines[3]}
+valgrind_receipt_retain_line=$(grep -n \
+  '^  retain_valgrind_receipts "\$VALGRIND_RECEIPT_COPY"$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+valgrind_structure_post_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-structure-post.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_content_post_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-content-post.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_semantics_post_line=$(grep -nF \
+  '"$MODE_LOGS/prerequisite-semantics-post.log"' "$MEMORY_HARNESS" | \
+  tail -n 1 | cut -d: -f1)
+valgrind_metadata_after_line=$(grep -n \
+  '^  verify_valgrind_prerequisite_metadata post-after$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+valgrind_metadata_ledger_line=$(grep -n \
+  '^  verify_valgrind_prerequisite_metadata_ledger$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+valgrind_release_line=$(grep -n '^  release_valgrind_state_lock$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+[[ -n "$valgrind_structure_pre_line" && -n "$valgrind_content_pre_line" &&
+    -n "$valgrind_semantics_pre_line" && -n "$valgrind_metadata_start_line" &&
+    -n "$ordinary_metadata_post_line" && -n "$valgrind_metadata_before_line" &&
+    -n "$valgrind_receipt_retain_line" &&
+    -n "$valgrind_structure_post_line" && -n "$valgrind_content_post_line" &&
+    -n "$valgrind_semantics_post_line" && -n "$valgrind_metadata_after_line" &&
+    -n "$valgrind_metadata_ledger_line" && -n "$valgrind_release_line" &&
+    "$valgrind_receipt_retain_line" -lt "$valgrind_receipt_compare_pre_before" &&
+    "$valgrind_receipt_compare_pre_before" -lt "$valgrind_structure_pre_line" &&
+    "$valgrind_structure_pre_line" -lt "$valgrind_content_pre_line" &&
+    "$valgrind_content_pre_line" -lt "$valgrind_semantics_pre_line" &&
+    "$valgrind_semantics_pre_line" -lt "$valgrind_receipt_compare_pre_after" &&
+    "$valgrind_receipt_compare_pre_after" -lt "$valgrind_metadata_start_line" &&
+    "$valgrind_metadata_start_line" -lt "$ordinary_metadata_post_line" &&
+    "$ordinary_metadata_post_line" -lt "$valgrind_metadata_before_line" &&
+    "$valgrind_metadata_before_line" -lt "$valgrind_receipt_compare_post_before" &&
+    "$valgrind_receipt_compare_post_before" -lt "$valgrind_structure_post_line" &&
+    "$valgrind_structure_post_line" -lt "$valgrind_content_post_line" &&
+    "$valgrind_content_post_line" -lt "$valgrind_semantics_post_line" &&
+    "$valgrind_semantics_post_line" -lt "$valgrind_metadata_after_line" &&
+    "$valgrind_metadata_after_line" -lt "$valgrind_receipt_compare_post_after" &&
+    "$valgrind_receipt_compare_post_after" -lt "$valgrind_metadata_ledger_line" &&
+    "$valgrind_metadata_ledger_line" -lt "$valgrind_release_line" ]] ||
+  fail "Valgrind content/metadata boundaries are ordered outside the state lock"
 
 # The build, bootstrap, and memory harnesses share this nonblocking exclusive
 # flock protocol. A second process cannot enter while the descriptor is held.
@@ -1452,6 +2547,23 @@ exec 8>&-
 # verifies, before either obsolete backup is deleted. An interruption in the
 # cleanup window therefore preserves the verified new pair.
 PACKAGE_BOOTSTRAP="$ROOT/scripts/bootstrap-valgrind-r-packages"
+[[ $(grep -Ec '^if "\$RECEIPT_HELPER" verify-library ' \
+  "$PACKAGE_BOOTSTRAP") -eq 1 ]] ||
+  fail "package bootstrap repeats exhaustive cache verification on a no-op hit"
+bootstrap_refresh_line=$(grep -n '^if "\$RECEIPT_HELPER" refresh-library ' \
+  "$PACKAGE_BOOTSTRAP" | cut -d: -f1)
+bootstrap_stage_line=$(grep -n \
+  '^STAGING_LIBRARY="\$ROOT/.local/r-valgrind/library.new.\$\$"$' \
+  "$PACKAGE_BOOTSTRAP" | cut -d: -f1)
+[[ "$bootstrap_refresh_line" -lt "$bootstrap_stage_line" ]] ||
+  fail "package bootstrap stages a reinstall before authenticated receipt migration"
+R_BUILD_HARNESS="$ROOT/scripts/build-valgrind-r"
+r_refresh_line=$(grep -n '^      if "\$RECEIPT_HELPER" refresh-r ' \
+  "$R_BUILD_HARNESS" | cut -d: -f1)
+r_clean_line=$(grep -n '^  rm -rf "\$BUILD" "\$PREFIX"$' \
+  "$R_BUILD_HARNESS" | cut -d: -f1)
+[[ "$r_refresh_line" -lt "$r_clean_line" ]] ||
+  fail "instrumented R is deleted before authenticated receipt migration"
 verify_line=$(grep -n '^"\$RECEIPT_HELPER" verify-library ' \
   "$PACKAGE_BOOTSTRAP" | tail -n 1 | cut -d: -f1)
 commit_line=$(awk -v start="$verify_line" \

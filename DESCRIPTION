@@ -40,7 +40,8 @@ Authors@R:
 Description: Define parameter spaces, constraints and
     dependencies for arbitrary algorithms, to program on such spaces. Also
     includes statistical designs and random samplers. Objects are
-    implemented as 'R6' classes.
+    implemented as serializable 'R6' classes, with performance-sensitive
+    built-in operations implemented in portable C.
 Depends:
     R (>= 4.3.0)
 License: LGPL-3

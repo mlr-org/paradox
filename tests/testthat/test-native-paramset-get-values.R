@@ -300,6 +300,202 @@ test_that("dependency rows use one local values snapshot in row order", {
   expect_identical(events$seen, "second:1L")
 })
 
+test_that("built-in dependencies preserve scalar comparison semantics", {
+  skip_if_not(native_get_values_available())
+  cases = list(
+    list("logical equal", TRUE, CondEqual(TRUE), TRUE),
+    list("logical unequal", FALSE, CondEqual(TRUE), FALSE),
+    list("logical missing", NA, CondEqual(TRUE), FALSE),
+    list("integer double coercion", 2L, CondEqual(2), TRUE),
+    list("double integer coercion", 2, CondEqual(2L), TRUE),
+    list("positive infinity", Inf, CondEqual(Inf), TRUE),
+    list("opposite infinity", -Inf, CondEqual(Inf), FALSE),
+    list("signed zero", -0, CondEqual(0), TRUE),
+    list("double missing", NA_real_, CondEqual(0), FALSE),
+    list("double NaN", NaN, CondEqual(0), FALSE),
+    list("logical membership", FALSE, CondAnyOf(c(TRUE, FALSE)), TRUE),
+    list("numeric membership coercion", 2L, CondAnyOf(c(0, 2)), TRUE),
+    list("numeric membership miss", 3L, CondAnyOf(c(0, 2)), FALSE),
+    list("character equal", "tree", CondEqual("tree"), TRUE),
+    list(
+      "character membership",
+      "tree",
+      CondAnyOf(c("linear", "tree", "dart")),
+      TRUE
+    ),
+    list("null parent", NULL, CondEqual("tree"), FALSE)
+  )
+
+  for (case in cases) {
+    param_set = ps(parent = p_uty(), child = p_int(init = 1L))
+    param_set$assert_values = FALSE
+    param_set$values = list(parent = case[[2L]], child = 1L)
+    param_set$add_dep("child", "parent", case[[3L]])
+    expected = list(parent = case[[2L]])
+    if (case[[4L]]) expected$child = 1L
+    expect_identical(
+      param_set$get_values(check_required = FALSE),
+      expected,
+      info = case[[1L]]
+    )
+  }
+})
+
+test_that("built-in character dependencies compare supported encodings", {
+  skip_if_not(native_get_values_available())
+  utf8 = enc2utf8("caf\u00e9")
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  skip_if(is.na(latin1))
+  Encoding(latin1) = "latin1"
+
+  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
+  param_set$assert_values = FALSE
+  param_set$values = list(parent = latin1, child = 1L)
+  param_set$add_dep("child", "parent", CondEqual(utf8))
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = latin1, child = 1L)
+  )
+
+  byte_value = "caf\u00e9"
+  Encoding(byte_value) = "bytes"
+  param_set$values = list(parent = byte_value, child = 1L)
+  private = param_set$.__enclos_env__$private
+  data.table::set(
+    private$.deps,
+    j = "cond",
+    value = list(CondEqual(byte_value))
+  )
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = byte_value, child = 1L)
+  )
+})
+
+test_that("mutated built-in condition methods retain namespace dispatch", {
+  skip_if_not(native_get_values_available())
+  namespace = asNamespace("paradox")
+  names = c("condition_test.CondEqual", "condition_test.CondAnyOf")
+  originals = lapply(names, get, envir = namespace, inherits = FALSE)
+  restore = function() {
+    for (index in seq_along(names)) {
+      if (bindingIsLocked(names[[index]], namespace)) {
+        unlockBinding(names[[index]], namespace)
+      }
+      assign(names[[index]], originals[[index]], envir = namespace)
+      lockBinding(names[[index]], namespace)
+    }
+  }
+  on.exit(restore(), add = TRUE)
+
+  calls = integer(2L)
+  for (name in names) unlockBinding(name, namespace)
+  assign(names[[1L]], function(cond, x) {
+    calls[[1L]] <<- calls[[1L]] + 1L
+    FALSE
+  }, envir = namespace)
+  assign(names[[2L]], function(cond, x) {
+    calls[[2L]] <<- calls[[2L]] + 1L
+    TRUE
+  }, envir = namespace)
+  for (name in names) lockBinding(name, namespace)
+
+  param_set = ps(
+    root = p_int(init = 1L),
+    equal = p_int(init = 2L),
+    any = p_int(init = 3L)
+  )
+  param_set$add_dep("equal", "root", CondEqual(1L))
+  param_set$add_dep("any", "root", CondAnyOf(c(0L, 1L)))
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(root = 1L, any = 3L)
+  )
+  expect_identical(calls, c(1L, 1L))
+})
+
+test_that("registered Condition dollar methods retain operand dispatch", {
+  skip_if_not(native_get_values_available())
+  base_namespace = asNamespace("base")
+  methods = get(
+    ".__S3MethodsTable__.",
+    envir = base_namespace,
+    inherits = FALSE
+  )
+  method_name = "$.CondEqual"
+  had_method = exists(method_name, envir = methods, inherits = FALSE)
+  original = if (had_method) {
+    get(method_name, envir = methods, inherits = FALSE)
+  }
+  was_locked = had_method && bindingIsLocked(method_name, methods)
+  restore = function() {
+    if (exists(method_name, envir = methods, inherits = FALSE) &&
+        bindingIsLocked(method_name, methods)) {
+      unlockBinding(method_name, methods)
+    }
+    if (had_method) {
+      assign(method_name, original, envir = methods)
+      if (was_locked) lockBinding(method_name, methods)
+    } else if (exists(method_name, envir = methods, inherits = FALSE)) {
+      rm(list = method_name, envir = methods)
+    }
+  }
+  on.exit(restore(), add = TRUE)
+
+  calls = 0L
+  registerS3method(
+    "$",
+    "CondEqual",
+    function(x, name) {
+      if (identical(name, "rhs")) {
+        calls <<- calls + 1L
+        return(0L)
+      }
+      .subset2(unclass(x), name)
+    },
+    envir = base_namespace
+  )
+  param_set = ps(
+    parent = p_int(init = 0L),
+    child = p_int(init = 1L)
+  )
+  param_set$add_dep("child", "parent", CondEqual(1L))
+  calls = 0L
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = 0L, child = 1L)
+  )
+  expect_identical(calls, 1L)
+})
+
+test_that("altered built-in operands retain vector and attribute semantics", {
+  skip_if_not(native_get_values_available())
+  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
+  param_set$assert_values = FALSE
+
+  named_condition = CondEqual(1L)
+  named_condition$rhs = structure(1L, names = "value")
+  param_set$add_dep("child", "parent", named_condition)
+  param_set$values = list(parent = 1L, child = 1L)
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = 1L, child = 1L)
+  )
+
+  vector_condition = CondEqual(1L)
+  vector_condition$rhs = c(1L, 2L)
+  private = param_set$.__enclos_env__$private
+  data.table::set(
+    private$.deps,
+    j = "cond",
+    value = list(vector_condition)
+  )
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = 1L)
+  )
+})
+
 test_that("dependency answers retain exact isTRUE semantics", {
   skip_if_not(native_get_values_available())
   answers = list(
@@ -371,6 +567,159 @@ test_that("remove_dependencies observes both live dependency row counts", {
   )
   expect_identical(events$dim, 2L)
   expect_identical(events$condition, 0L)
+})
+
+test_that("built-in dependency plans consume the evaluated row sequence", {
+  skip_if_not(native_get_values_available())
+  namespace = asNamespace("paradox")
+  imports = parent.env(namespace)
+  original = get("seq_row", envir = imports, inherits = FALSE)
+  restore = function() {
+    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
+    assign("seq_row", original, envir = imports)
+    lockBinding("seq_row", imports)
+  }
+  on.exit(restore(), add = TRUE)
+
+  replacement = function(x) {
+    restore()
+    rev(seq_len(nrow(x)))
+  }
+  unlockBinding("seq_row", imports)
+  assign("seq_row", replacement, envir = imports)
+  lockBinding("seq_row", imports)
+
+  param_set = ps(
+    root = p_int(init = 0L),
+    middle = p_int(init = 1L),
+    leaf = p_int(init = 2L)
+  )
+  param_set$add_dep("middle", "root", CondEqual(1L))
+  param_set$add_dep("leaf", "middle", CondEqual(1L))
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(root = 0L, leaf = 2L)
+  )
+  expect_identical(
+    get("seq_row", envir = imports, inherits = FALSE),
+    original
+  )
+})
+
+test_that("built-in dependency plans require an authenticated row producer", {
+  skip_if_not(native_get_values_available())
+  namespace = asNamespace("paradox")
+  imports = parent.env(namespace)
+  original = get("seq_row", envir = imports, inherits = FALSE)
+  restore = function() {
+    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
+    assign("seq_row", original, envir = imports)
+    lockBinding("seq_row", imports)
+  }
+  on.exit(restore(), add = TRUE)
+
+  param_set = ps(
+    root = p_int(init = 0L),
+    middle = p_int(init = 1L),
+    leaf = p_int(init = 2L)
+  )
+  param_set$add_dep("middle", "root", CondEqual(1L))
+  param_set$add_dep("leaf", "middle", CondEqual(1L))
+  private = param_set$.__enclos_env__$private
+  callback = function() {
+    data.table::set(
+      private$.deps,
+      j = "cond",
+      value = list(CondEqual(0L), CondEqual(1L))
+    )
+    invisible(NULL)
+  }
+  replacement = function(x) {
+    restore()
+    native_stateful_altrep(
+      c(1L, 2L),
+      c(1L, 2L),
+      callback = callback,
+      callback_after = c(0L, NA_integer_)
+    )
+  }
+  unlockBinding("seq_row", imports)
+  assign("seq_row", replacement, envir = imports)
+  lockBinding("seq_row", imports)
+
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(root = 0L, middle = 1L, leaf = 2L)
+  )
+  expect_identical(
+    get("seq_row", envir = imports, inherits = FALSE),
+    original
+  )
+})
+
+test_that("built-in dependency plans retain admitted parents across row callbacks", {
+  skip_on_cran()
+  skip_if_not(native_get_values_available())
+
+  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
+  param_set$assert_values = FALSE
+  param_set$values = list(parent = 1L, child = 1L)
+  param_set$add_dep("child", "parent", CondEqual(1L))
+  private = param_set$.__enclos_env__$private
+  namespace = asNamespace("paradox")
+  mutator = get("C_test_gc_column_mutator", envir = namespace)
+  callbacks = 0L
+  rows = native_stateful_altrep(
+    1L,
+    1L,
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      pointer = .Call(mutator, private$.values, 0L, 0L)
+      pointer = NULL
+      gc(FALSE)
+      invisible(NULL)
+    },
+    callback_after = c(0L, NA_integer_)
+  )
+
+  # Keep the authenticated seq_row() expression and closure environment, but
+  # make its one invocation return the stateful row vector above. The temporary
+  # bindings restore themselves before the row callback executes.
+  imports = parent.env(namespace)
+  mlr3misc_namespace = asNamespace("mlr3misc")
+  base_namespace = asNamespace("base")
+  original_seq_row = get("seq_row", envir = imports, inherits = FALSE)
+  original_seq_len = get("seq_len", envir = base_namespace, inherits = FALSE)
+  restore = function() {
+    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
+    assign("seq_row", original_seq_row, envir = imports)
+    lockBinding("seq_row", imports)
+    if (bindingIsLocked("seq_len", base_namespace)) {
+      unlockBinding("seq_len", base_namespace)
+    }
+    assign("seq_len", original_seq_len, envir = base_namespace)
+    lockBinding("seq_len", base_namespace)
+  }
+  on.exit(restore(), add = TRUE)
+  admitted_seq_row = eval(quote(function(x) {
+    seq_len(nrow(x))
+  }), envir = mlr3misc_namespace)
+  replacement_seq_len = function(length.out) {
+    restore()
+    rows
+  }
+  unlockBinding("seq_row", imports)
+  assign("seq_row", admitted_seq_row, envir = imports)
+  lockBinding("seq_row", imports)
+  unlockBinding("seq_len", base_namespace)
+  assign("seq_len", replacement_seq_len, envir = base_namespace)
+  lockBinding("seq_len", base_namespace)
+
+  expect_identical(
+    param_set$get_values(check_required = FALSE),
+    list(parent = 0L, child = 1L)
+  )
+  expect_identical(callbacks, 1L)
 })
 
 test_that("dependency callbacks expose later live column and generic changes", {

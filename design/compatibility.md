@@ -35,6 +35,32 @@ Exact historical error text is characterized where consumers test it. New
 native-only argument corruption may use a clear package error instead of
 attempting to reproduce undefined R-level behavior.
 
+## Observed constructor surface
+
+A source-level scan of the retained maintained consumer corpus found 8,481
+short-form constructor calls in 968 parsed R files, with no parse failures:
+2,336 `p_dbl()`, 2,061 `p_int()`, 1,688 `p_lgl()`, 1,312 `p_uty()`, and 1,084
+`p_fct()` calls. This is the empirical compatibility surface for constructor
+representation and ID behavior, rather than only the examples in paradox.
+
+Tags occur in 77.4% of those calls. Literal character levels occur in 97.7% of
+the factor calls, and two-to-four-level literals alone account for 78.0% of
+them. Zero-argument calls and calls made only from safe scalar or short
+character-vector values cover roughly 55% of the complete corpus. Reaching
+about 90% would require rendering lists and function literals, while 14.4% of
+calls contain a dynamic expression, function, or list somewhere in the call.
+
+The native printable-ID encoder therefore optimizes the common unqualified,
+single-line atomic grammar and fails closed to `deparse1()` for dynamic
+language, lists, functions, dependencies, transformations, marked strings, or
+unsupported option-sensitive numbers. The R 4.6 standalone numeric constructor
+has an additional exact round-trip gate for common fractional doubles, while
+long or multiline calls still fall back. Standalone `p_fct()` remains on its R
+constructor because conservative native admission did not improve its
+representative common workload. These boundaries capture material real
+workloads without creating a second general R deparser whose subtle differences
+would be more damaging than the remaining R cost.
+
 ## Allowed breakage
 
 - Undocumented writes that replace private tables with malformed schemas are
@@ -52,6 +78,11 @@ attempting to reproduce undefined R-level behavior.
   methods are unaffected.
 - New third-party Domain subclasses use the retained S3 fallback and are not
   promised native performance.
+- Detached collection constraint and transformation wrappers preserve callback
+  values, names, calls, ordering, and errors, but their private closure cargo
+  now contains compact named child-state carriers rather than cloned
+  `ParamSet` objects. Code that introspects or mutates those undocumented
+  closure internals is outside the compatibility contract.
 - Registering methods for a new Domain class remains supported, but replacing
   paradox's own `domain_check`, `domain_sanitize`, or `domain_qunif` methods
   for the built-in `ParamDbl`, `ParamInt`, `ParamFct`, and `ParamLgl` classes
@@ -120,3 +151,12 @@ system stacks are unavailable.
 Every reverse-dependency failure that reveals a reusable assumption first gains
 a package-level regression test. This keeps future native work from depending
 on repeatedly running the full ecosystem to rediscover the same contract.
+
+Release convergence freezes discretionary performance changes. The internal
+split of the literal `ps()` native constructor into bounded planning and row
+construction helpers is not a compatibility exception: it preserves the same
+admission, evaluation, fallback, and object-ownership boundaries while allowing
+the bounded static analysis to complete. Final unit, differential, consumer,
+runtime, memory, documentation, and benchmark gates all consume one frozen Git
+candidate; a behavior-affecting source change reopens those gates rather than
+borrowing evidence from the earlier candidate.

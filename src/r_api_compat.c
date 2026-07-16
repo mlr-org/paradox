@@ -206,6 +206,30 @@ SEXP paradox_api_local_value(SEXP environment, SEXP symbol) {
 #endif
 }
 
+SEXP paradox_api_stable_local_value(SEXP environment, SEXP symbol) {
+  if (TYPEOF(environment) != ENVSXP || TYPEOF(symbol) != SYMSXP) {
+    return R_UnboundValue;
+  }
+#if R_VERSION >= R_Version(4, 6, 0)
+  const R_BindingType_t binding_type = R_GetBindingType(
+    symbol,
+    environment
+  );
+  if (binding_type != R_BindingTypeValue &&
+      binding_type != R_BindingTypeForced) {
+    return R_UnboundValue;
+  }
+  SEXP value = R_getVarEx(symbol, environment, FALSE, R_UnboundValue);
+  if (value == R_UnboundValue || value == R_MissingArg ||
+      TYPEOF(value) == PROMSXP) {
+    return R_UnboundValue;
+  }
+  return value;
+#else
+  return R_UnboundValue;
+#endif
+}
+
 SEXP paradox_api_evaluated_local_value(SEXP environment, SEXP symbol) {
   if (TYPEOF(environment) != ENVSXP || TYPEOF(symbol) != SYMSXP ||
       !R_existsVarInFrame(environment, symbol)) {

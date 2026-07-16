@@ -1,0 +1,17 @@
+key	value
+schema	1
+compiler_invoked_path	/usr/bin/clang++
+compiler_link_target	../lib/llvm-14/bin/clang++
+compiler_canonical_path	/usr/lib/llvm-14/bin/clang
+compiler_sha256	31925065812631303cf9af9a30b2f56427d2102667a87a9fb4ba03a306104589
+compiler_version_sha256	a09097b784a9df985ba9b033c4c4650d3052545a7f9fc4e6fa8ce304521383d5
+llvm_prefix	/usr/lib/llvm-14
+llvm_config_path	/usr/lib/llvm-14/bin/llvm-config
+llvm_config_canonical_path	/usr/lib/llvm-14/bin/llvm-config
+llvm_config_sha256	545130e5c9ca0b24c23ad75f44d9ed547eba0bb8d44c90cc7fc60d47184bbf4c
+llvm_config_identity_sha256	a427ac29dcbb5b1da97835e948860c7acbd8b4fa0e5bd6872d88b5f7a54bbbf0
+make_invoked_path	/usr/bin/make
+make_link_target	-
+make_canonical_path	/usr/bin/make
+make_sha256	92f646030615cd98490a68a94c0aefd87b552be3158b941c02e43b0bfdb576db
+make_version_sha256	8ee498ee2fc27e8dcdf99191b454077df95e3840d841ec94321748b6d7f36819

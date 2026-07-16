@@ -9,17 +9,22 @@ set -euo pipefail
 
 usage() {
   cat <<'EOF'
-Usage: valgrind-receipts COMMAND ROOT [PACKAGE_MANIFEST]
+Usage: valgrind-receipts COMMAND ROOT [ARGUMENT ...]
 
 Commands:
   expected-r-configuration  print the one accepted R build configuration
   verify-r-source           compare the retained source with the pinned archive
   create-r                  authenticate inputs and create the R tree receipt
   verify-r                  verify every R input and the complete installed tree
+  refresh-r                 migrate an authenticated legacy receipt, no rebuild
   validate-package-manifest validate the exact 29-package manifest shape
   verify-package-archives   verify all archives named by the package manifest
   create-library            create the package-library receipt
-  verify-library            verify archives, package metadata, and library tree
+  verify-library            verify package metadata and installed library tree
+  refresh-library           migrate a legacy library receipt, no reinstall
+  verify-memory-structure   verify sealed runtime inputs without rereading trees
+  verify-memory-content     verify each Valgrind runtime tree exactly once
+  verify-memory-semantics   execute authenticated R/package semantic checks
 EOF
 }
 
@@ -306,9 +311,13 @@ write_r_inputs() {
   local destination=$1
   local source_manifest=$2
   local toolchain_manifest=$3
+  local predecessor_seal=${4:-none}
+  [[ "$predecessor_seal" == none ||
+      "$predecessor_seal" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "instrumented-R predecessor receipt seal is malformed"
   prepare_managed_output "$destination" "instrumented-R input receipt"
   printf '%s\t%s\n' \
-    schema 1 \
+    schema 2 \
     kind instrumented-r \
     r_version "$R_VERSION" \
     prefix "$R_PREFIX" \
@@ -335,8 +344,7 @@ write_r_inputs() {
     make_sha256 "$(sha256 "$MAKE")" \
     valgrind_sha256 "$(sha256 "$VALGRIND")" \
     valgrind_header_sha256 "$(sha256 "$VALGRIND_HEADER")" \
-    receipt_helper_sha256 "$(sha256 "$SELF")" \
-    tree_helper_sha256 "$(sha256 "$TREE_HELPER")" \
+    predecessor_receipt_seal_sha256 "$predecessor_seal" \
     > "$destination"
 }
 
@@ -411,6 +419,7 @@ verify_r_source_against_archive() (
 )
 
 create_r_receipt() {
+  local predecessor_seal=${1:-none}
   local temporary source_manifest final_receipt
   validate_r_build_evidence
   ensure_plain_directory_chain "$RECEIPTS" "instrumented-R receipt root"
@@ -431,7 +440,7 @@ create_r_receipt() {
   "$RSCRIPT" --vanilla "$TREE_HELPER" create \
     "$R_PREFIX" "$temporary/installed-tree.tsv" >/dev/null
   write_r_inputs "$temporary/inputs.tsv" "$source_manifest" \
-    "$temporary/toolchain-tree.tsv"
+    "$temporary/toolchain-tree.tsv" "$predecessor_seal"
   write_r_seal "$temporary"
   final_receipt=$R_RECEIPT
   select_receipt_directory "$temporary" "$final_receipt"
@@ -440,7 +449,7 @@ create_r_receipt() {
 }
 
 verify_r_receipt() {
-  local temporary
+  local temporary predecessor_seal
   validate_r_build_text_evidence
   validate_plain_directory_chain "$R_RECEIPT" "instrumented-R receipt"
   for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv seal.tsv; do
@@ -452,8 +461,10 @@ verify_r_receipt() {
   validate_plain_directory_chain "$temporary" \
     "instrumented-R receipt verification directory"
   trap 'rm -rf "${temporary:-}"' EXIT
+  predecessor_seal=$(receipt_value "$R_RECEIPT/inputs.tsv" \
+    predecessor_receipt_seal_sha256)
   write_r_inputs "$temporary/inputs.tsv" "$R_RECEIPT/source-tree.tsv" \
-    "$R_RECEIPT/toolchain-tree.tsv"
+    "$R_RECEIPT/toolchain-tree.tsv" "$predecessor_seal"
   cmp -s "$temporary/inputs.tsv" "$R_RECEIPT/inputs.tsv" ||
     fail "instrumented-R input receipt does not match current pinned inputs"
   for name in source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
@@ -471,12 +482,6 @@ verify_r_receipt() {
   "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
     "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
   validate_r_runtime_evidence
-  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
-    "$R_SOURCE" "$R_RECEIPT/source-tree.tsv" >/dev/null
-  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
-    "$TOOLCHAIN" "$R_RECEIPT/toolchain-tree.tsv" >/dev/null
-  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
-    "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
   rm -rf "$temporary"
   trap - EXIT
   printf '%s\n' "instrumented-R receipt verified: $R_RECEIPT"
@@ -527,18 +532,17 @@ verify_package_archives() {
   done < "$manifest"
 }
 
-archive_set_sha256() {
-  local manifest=$1 package version expected extra archive temporary
+declared_archive_set_sha256() {
+  local manifest=$1 package version expected extra temporary
+  validate_package_manifest "$manifest"
   ensure_plain_directory_chain "$ROOT/.local/tmp" \
     "repository-local temporary root"
-  temporary=$(mktemp "$ROOT/.local/tmp/archive-set.XXXXXX")
-  require_managed_file "$temporary" "package archive-set scratch file"
+  temporary=$(mktemp "$ROOT/.local/tmp/declared-archive-set.XXXXXX")
+  require_managed_file "$temporary" "declared archive-set scratch file"
   while IFS=$'\t' read -r package version expected extra ||
       [[ -n "${package}${version}${expected}${extra:-}" ]]; do
     [[ "$package" == package ]] && continue
-    archive="$ROOT/.cache/downloads/valgrind-r-packages/${package}_${version}.tar.gz"
-    require_file "$archive"
-    printf '%s\t%s\t%s\n' "$package" "$version" "$(sha256 "$archive")" >> "$temporary"
+    printf '%s\t%s\t%s\n' "$package" "$version" "$expected" >> "$temporary"
   done < "$manifest"
   sha256 "$temporary"
   rm -f "$temporary"
@@ -568,15 +572,13 @@ write_library_inputs() {
   local destination=$1 manifest=$2
   prepare_managed_output "$destination" "package-library input receipt"
   printf '%s\t%s\n' \
-    schema 1 \
+    schema 2 \
     kind instrumented-r-package-library \
     library "$R_LIBRARY" \
     package_count 29 \
     package_manifest_sha256 "$(sha256 "$manifest")" \
-    archive_set_sha256 "$(archive_set_sha256 "$manifest")" \
+    archive_set_sha256 "$(declared_archive_set_sha256 "$manifest")" \
     r_receipt_seal_sha256 "$(sha256 "$R_RECEIPT/seal.tsv")" \
-    receipt_helper_sha256 "$(sha256 "$SELF")" \
-    tree_helper_sha256 "$(sha256 "$TREE_HELPER")" \
     > "$destination"
 }
 
@@ -592,11 +594,234 @@ write_library_seal() {
     > "$directory/seal.tsv"
 }
 
-create_library_receipt() {
-  local manifest=$1 temporary
-  verify_r_receipt >/dev/null
-  verify_package_archives "$manifest"
+# The standalone bootstrap verifiers above intentionally prove every input from
+# scratch.  A memory-check run has a different trust boundary: it has already
+# created a complete content receipt for the ordinary toolchain, holds the
+# instrumented-R state lock, and needs two (not many nested) content boundaries
+# around the work it executes.  These helpers validate the sealed receipt graph
+# and runtime semantics separately from those two tree traversals.
+
+receipt_value() {
+  local receipt=$1 key=$2
+  /usr/bin/awk -F '\t' -v wanted="$key" '
+    $1 == wanted {
+      if (found++ || NF != 2) exit 2
+      value = $2
+    }
+    END {
+      if (found != 1) exit 2
+      print value
+    }
+  ' "$receipt" || fail "receipt field is absent, duplicated, or malformed: $key"
+}
+
+require_receipt_sha256() {
+  local receipt=$1 key=$2 value
+  value=$(receipt_value "$receipt" "$key")
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "receipt SHA-256 field is malformed: $key"
+}
+
+require_receipt_value() {
+  local receipt=$1 key=$2 expected=$3 actual
+  actual=$(receipt_value "$receipt" "$key")
+  [[ "$actual" == "$expected" ]] ||
+    fail "receipt field differs from the accepted value: $key"
+}
+
+validate_memory_r_input_shape() {
+  local receipt=$R_RECEIPT/inputs.tsv observed expected key predecessor_seal
+  expected=$(printf '%s\n' \
+    schema kind r_version prefix r_archive_sha256 \
+    r_source_tree_sha256 toolchain_tree_sha256 toolchain_lock_sha256 \
+    build_configuration_sha256 build_config_h_sha256 \
+    build_tree_configuration_sha256 cc_sha256 cxx_sha256 fc_sha256 \
+    ar_sha256 ranlib_sha256 as_sha256 ld_sha256 nm_sha256 strip_sha256 \
+    objcopy_sha256 objdump_sha256 readelf_sha256 cpp_sha256 make_sha256 \
+    valgrind_sha256 valgrind_header_sha256 \
+    predecessor_receipt_seal_sha256)
+  observed=$(/usr/bin/awk -F '\t' 'NF != 2 { exit 2 } { print $1 }' "$receipt") ||
+    fail "instrumented-R input receipt is malformed"
+  [[ "$observed" == "$expected" ]] ||
+    fail "instrumented-R input receipt has an unexpected field inventory"
+  require_receipt_value "$receipt" schema 2
+  require_receipt_value "$receipt" kind instrumented-r
+  require_receipt_value "$receipt" r_version "$R_VERSION"
+  require_receipt_value "$receipt" prefix "$R_PREFIX"
+  require_receipt_value "$receipt" r_archive_sha256 "$R_ARCHIVE_SHA256"
+  require_receipt_value "$receipt" r_source_tree_sha256 \
+    "$(sha256 "$R_RECEIPT/source-tree.tsv")"
+  require_receipt_value "$receipt" toolchain_tree_sha256 \
+    "$(sha256 "$R_RECEIPT/toolchain-tree.tsv")"
+  require_receipt_value "$receipt" toolchain_lock_sha256 \
+    "$(sha256 "$TOOLCHAIN_LOCK")"
+  require_receipt_value "$receipt" build_configuration_sha256 \
+    "$(sha256 "$BUILD_CONFIGURATION")"
+  require_receipt_value "$receipt" build_config_h_sha256 \
+    "$(sha256 "$BUILD_CONFIG_H")"
+  require_receipt_value "$receipt" build_tree_configuration_sha256 \
+    "$(sha256 "$BUILD_CONFIGURATION_TEXT")"
+  predecessor_seal=$(receipt_value "$receipt" \
+    predecessor_receipt_seal_sha256)
+  [[ "$predecessor_seal" == none ||
+      "$predecessor_seal" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "instrumented-R predecessor receipt seal is malformed"
+  for key in \
+      cc_sha256 cxx_sha256 fc_sha256 ar_sha256 ranlib_sha256 as_sha256 \
+      ld_sha256 nm_sha256 strip_sha256 objcopy_sha256 objdump_sha256 \
+      readelf_sha256 cpp_sha256 make_sha256 valgrind_sha256 \
+      valgrind_header_sha256; do
+    # These files are already authenticated by the byte-identical complete
+    # toolchain tree receipt supplied by memory-check.
+    require_receipt_sha256 "$receipt" "$key"
+  done
+}
+
+validate_memory_library_input_shape() {
+  local manifest=$1 receipt=$LIBRARY_RECEIPT/inputs.tsv observed expected
+  expected=$(printf '%s\n' \
+    schema kind library package_count package_manifest_sha256 \
+    archive_set_sha256 r_receipt_seal_sha256)
+  observed=$(/usr/bin/awk -F '\t' 'NF != 2 { exit 2 } { print $1 }' "$receipt") ||
+    fail "package-library input receipt is malformed"
+  [[ "$observed" == "$expected" ]] ||
+    fail "package-library input receipt has an unexpected field inventory"
+  require_receipt_value "$receipt" schema 2
+  require_receipt_value "$receipt" kind instrumented-r-package-library
+  require_receipt_value "$receipt" library "$R_LIBRARY"
+  require_receipt_value "$receipt" package_count 29
+  require_receipt_value "$receipt" package_manifest_sha256 "$(sha256 "$manifest")"
+  require_receipt_value "$receipt" archive_set_sha256 \
+    "$(declared_archive_set_sha256 "$manifest")"
+  require_receipt_value "$receipt" r_receipt_seal_sha256 \
+    "$(sha256 "$R_RECEIPT/seal.tsv")"
+}
+
+validate_memory_receipt_seals() (
+  local temporary name
+  validate_plain_directory_chain "$R_RECEIPT" "instrumented-R receipt"
+  validate_plain_directory_chain "$LIBRARY_RECEIPT" \
+    "instrumented package-library receipt"
+  for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv seal.tsv; do
+    require_file "$R_RECEIPT/$name"
+  done
+  for name in inputs.tsv package-manifest.tsv installed-tree.tsv seal.tsv; do
+    require_file "$LIBRARY_RECEIPT/$name"
+  done
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$ROOT/.local/tmp/memory-receipt-seals.XXXXXX")
+  validate_plain_directory_chain "$temporary" \
+    "memory receipt-seal verification directory"
+  trap 'rm -rf "${temporary:-}"' EXIT
+  mkdir "$temporary/r" "$temporary/library"
+  for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
+    cp "$R_RECEIPT/$name" "$temporary/r/$name"
+  done
+  write_r_seal "$temporary/r"
+  cmp -s "$temporary/r/seal.tsv" "$R_RECEIPT/seal.tsv" ||
+    fail "instrumented-R receipt seal is invalid"
+  for name in inputs.tsv package-manifest.tsv installed-tree.tsv; do
+    cp "$LIBRARY_RECEIPT/$name" "$temporary/library/$name"
+  done
+  write_library_seal "$temporary/library"
+  cmp -s "$temporary/library/seal.tsv" "$LIBRARY_RECEIPT/seal.tsv" ||
+    fail "package-library receipt seal is invalid"
+)
+
+validate_memory_common_inputs() {
+  local required
+  validate_plain_directory_chain "$TOOLCHAIN" "repository-local toolchain"
+  for required in \
+      "$RSCRIPT" "$CC" "$CXX" "$FC" "$AR" "$RANLIB" "$AS" "$LD" \
+      "$NM" "$STRIP" "$OBJCOPY" "$OBJDUMP" "$READELF" "$CPP" "$MAKE" \
+      "$VALGRIND"; do
+    require_executable "$required"
+  done
+  require_file "$VALGRIND_HEADER"
+  require_file "$TREE_HELPER"
+  require_file "$SELF"
+  require_file "$TOOLCHAIN_LOCK"
+  # The archives are build provenance, not runtime inputs to memory-check.  The
+  # sealed receipts retain their accepted digests; bootstrap verification is
+  # responsible for re-authenticating archive contents before a rebuild.
+  require_file "$R_ARCHIVE"
+  validate_plain_directory_chain "$LOCAL_SYSROOT" \
+    "project-local compiler sysroot"
+  validate_plain_directory_chain "$ROOT/.local/bin" \
+    "repository-local binary root"
+  validate_plain_directory_chain "$R_SOURCE" "verified R source directory"
+  require_file "$R_SOURCE/VERSION"
+  [[ "$(<"$R_SOURCE/VERSION")" == "$R_VERSION" ]] ||
+    fail "R source VERSION does not match $R_VERSION"
+}
+
+validate_memory_r_build_text_evidence() {
+  local expected actual fingerprint
+  validate_memory_common_inputs
+  require_executable "$R_BINARY"
+  require_file "$BUILD_CONFIGURATION"
+  require_file "$BUILD_FINGERPRINT"
+  require_file "$BUILD_CONFIG_H"
+  require_file "$BUILD_CONFIGURATION_TEXT"
+  expected=$(expected_configuration)
+  actual=$(<"$BUILD_CONFIGURATION")
+  [[ "$actual" == "$expected" ]] ||
+    fail "instrumented-R configuration is not the accepted configuration"
+  [[ "$(<"$BUILD_CONFIGURATION_TEXT")" == "$expected" ]] ||
+    fail "retained build-tree configuration differs from the installed configuration"
+  fingerprint=$(printf '%s\n' "$expected" | sha256sum | cut -d ' ' -f 1)
+  [[ "$(<"$BUILD_FINGERPRINT")" == "$fingerprint" ]] ||
+    fail "instrumented-R configuration fingerprint is invalid"
+  grep -Eq '^#define R_MEMORY_PROFILING 1$' "$BUILD_CONFIG_H" ||
+    fail "instrumented R was not built with memory profiling"
+  grep -Eq '^#define VALGRIND_LEVEL 2$' "$BUILD_CONFIG_H" ||
+    fail "instrumented R was not built with Valgrind level 2"
+}
+
+verify_memory_structure() {
+  local manifest=$1 ordinary_toolchain_receipt=$2
+  require_file "$ordinary_toolchain_receipt"
+  validate_memory_receipt_seals
+  # memory-check created this receipt from the current toolchain and guarded it
+  # with a metadata boundary before calling us.  Match it to the sealed build
+  # receipt before executing even a compiler version query from that tree.
+  cmp -s "$ordinary_toolchain_receipt" "$R_RECEIPT/toolchain-tree.tsv" ||
+    fail "ordinary and instrumented-R toolchain content receipts differ"
+  validate_memory_r_build_text_evidence
+  validate_package_manifest "$manifest"
+  cmp -s "$manifest" "$LIBRARY_RECEIPT/package-manifest.tsv" ||
+    fail "package manifest differs from the authenticated library manifest"
+  validate_memory_r_input_shape
+  validate_memory_library_input_shape "$manifest"
+  printf '%s\n' \
+    "Valgrind runtime receipt structure verified without tree rereads"
+}
+
+verify_memory_content() {
+  validate_memory_receipt_seals
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_SOURCE" "$R_RECEIPT/source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
+  printf '%s\n' "Valgrind runtime content receipts verified once"
+}
+
+verify_memory_semantics() {
+  local manifest=$1
+  validate_memory_receipt_seals
+  validate_package_manifest "$manifest"
+  cmp -s "$manifest" "$LIBRARY_RECEIPT/package-manifest.tsv" ||
+    fail "package manifest differs from the authenticated library manifest"
+  validate_r_runtime_evidence
   validate_installed_library "$manifest"
+  printf '%s\n' "authenticated Valgrind runtime semantics verified"
+}
+
+create_library_receipt_from_validated_state() {
+  local manifest=$1 temporary
   ensure_plain_directory_chain "$RECEIPTS" "instrumented-R receipt root"
   temporary=$(mktemp -d "$RECEIPTS/.library.new.XXXXXX")
   validate_plain_directory_chain "$temporary" "staged package-library receipt"
@@ -615,10 +840,17 @@ create_library_receipt() {
   printf '%s\n' "instrumented package-library receipt created: $LIBRARY_RECEIPT"
 }
 
+create_library_receipt() {
+  local manifest=$1
+  verify_r_receipt >/dev/null
+  verify_package_archives "$manifest"
+  validate_installed_library "$manifest"
+  create_library_receipt_from_validated_state "$manifest"
+}
+
 verify_library_receipt() {
   local manifest=$1 temporary
   verify_r_receipt >/dev/null
-  verify_package_archives "$manifest"
   validate_plain_directory_chain "$LIBRARY_RECEIPT" \
     "instrumented package-library receipt"
   for name in inputs.tsv package-manifest.tsv installed-tree.tsv seal.tsv; do
@@ -647,11 +879,227 @@ verify_library_receipt() {
   "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
     "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
   validate_installed_library "$manifest"
-  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
-    "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
   rm -rf "$temporary"
   trap - EXIT
   printf '%s\n' "instrumented package-library receipt verified: $LIBRARY_RECEIPT"
+}
+
+write_legacy_r_inputs() {
+  local destination=$1 source_manifest=$2 toolchain_manifest=$3
+  local legacy_helper=$4 legacy_tree_helper=$5 intermediate
+  require_sha_value "$legacy_helper" "legacy receipt helper"
+  require_sha_value "$legacy_tree_helper" "legacy tree helper"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  intermediate=$(mktemp "$ROOT/.local/tmp/legacy-r-inputs-v2.XXXXXX")
+  rm -f "$intermediate"
+  write_r_inputs "$intermediate" "$source_manifest" "$toolchain_manifest" none
+  prepare_managed_output "$destination" "legacy instrumented-R input receipt"
+  /usr/bin/awk -F '\t' -v OFS='\t' \
+    -v receipt_helper="$legacy_helper" -v tree_helper="$legacy_tree_helper" '
+      $1 == "schema" { print "schema", "1"; next }
+      $1 == "predecessor_receipt_seal_sha256" {
+        print "receipt_helper_sha256", receipt_helper
+        print "tree_helper_sha256", tree_helper
+        next
+      }
+      { print }
+    ' "$intermediate" > "$destination"
+  rm -f "$intermediate"
+}
+
+require_sha_value() {
+  local value=$1 label=$2
+  [[ "$value" =~ ^[0-9a-f]{64}$ ]] || fail "$label SHA-256 is malformed"
+}
+
+validate_legacy_r_receipt_for_refresh() {
+  local temporary name helper_sha tree_sha observed expected
+  validate_plain_directory_chain "$R_RECEIPT" "legacy instrumented-R receipt"
+  for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv seal.tsv; do
+    require_file "$R_RECEIPT/$name"
+  done
+  expected=$(printf '%s\n' \
+    schema kind r_version prefix r_archive_sha256 \
+    r_source_tree_sha256 toolchain_tree_sha256 toolchain_lock_sha256 \
+    build_configuration_sha256 build_config_h_sha256 \
+    build_tree_configuration_sha256 cc_sha256 cxx_sha256 fc_sha256 \
+    ar_sha256 ranlib_sha256 as_sha256 ld_sha256 nm_sha256 strip_sha256 \
+    objcopy_sha256 objdump_sha256 readelf_sha256 cpp_sha256 make_sha256 \
+    valgrind_sha256 valgrind_header_sha256 receipt_helper_sha256 \
+    tree_helper_sha256)
+  observed=$(/usr/bin/awk -F '\t' 'NF != 2 { exit 2 } { print $1 }' \
+    "$R_RECEIPT/inputs.tsv") || fail "legacy instrumented-R inputs are malformed"
+  [[ "$observed" == "$expected" ]] ||
+    fail "only the exact legacy instrumented-R receipt schema can be refreshed"
+  require_receipt_value "$R_RECEIPT/inputs.tsv" schema 1
+  helper_sha=$(receipt_value "$R_RECEIPT/inputs.tsv" receipt_helper_sha256)
+  tree_sha=$(receipt_value "$R_RECEIPT/inputs.tsv" tree_helper_sha256)
+  require_sha_value "$helper_sha" "legacy receipt helper"
+  require_sha_value "$tree_sha" "legacy tree helper"
+  validate_common_inputs
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$ROOT/.local/tmp/legacy-r-refresh.XXXXXX")
+  validate_plain_directory_chain "$temporary" "legacy R refresh verification"
+  write_legacy_r_inputs "$temporary/inputs.tsv" \
+    "$R_RECEIPT/source-tree.tsv" "$R_RECEIPT/toolchain-tree.tsv" \
+    "$helper_sha" "$tree_sha"
+  cmp -s "$temporary/inputs.tsv" "$R_RECEIPT/inputs.tsv" || {
+    rm -rf "$temporary"
+    fail "legacy instrumented-R inputs differ from current build-affecting inputs"
+  }
+  for name in source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
+    cp "$R_RECEIPT/$name" "$temporary/$name"
+  done
+  write_r_seal "$temporary"
+  cmp -s "$temporary/seal.tsv" "$R_RECEIPT/seal.tsv" || {
+    rm -rf "$temporary"
+    fail "legacy instrumented-R receipt seal is invalid"
+  }
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_SOURCE" "$R_RECEIPT/source-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$TOOLCHAIN" "$R_RECEIPT/toolchain-tree.tsv" >/dev/null
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_PREFIX" "$R_RECEIPT/installed-tree.tsv" >/dev/null
+  validate_r_build_text_evidence
+  validate_r_runtime_evidence
+  rm -rf "$temporary"
+}
+
+refresh_r_receipt() {
+  local predecessor backup temporary name
+  validate_legacy_r_receipt_for_refresh
+  predecessor=$(sha256 "$R_RECEIPT/seal.tsv")
+  backup=$(mktemp -d "$RECEIPTS/.R-${R_VERSION}.legacy.XXXXXX")
+  validate_plain_directory_chain "$backup" "legacy R receipt backup"
+  for name in inputs.tsv source-tree.tsv toolchain-tree.tsv installed-tree.tsv seal.tsv; do
+    cp "$R_RECEIPT/$name" "$backup/$name"
+  done
+  temporary=$(mktemp -d "$RECEIPTS/.R-${R_VERSION}.refresh.XXXXXX")
+  validate_plain_directory_chain "$temporary" "refreshed R receipt staging"
+  for name in source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
+    cp "$backup/$name" "$temporary/$name"
+  done
+  write_r_inputs "$temporary/inputs.tsv" "$temporary/source-tree.tsv" \
+    "$temporary/toolchain-tree.tsv" "$predecessor"
+  write_r_seal "$temporary"
+  select_receipt_directory "$temporary" "$R_RECEIPT"
+  for name in source-tree.tsv toolchain-tree.tsv installed-tree.tsv; do
+    if ! cmp -s "$backup/$name" "$R_RECEIPT/$name"; then
+      select_receipt_directory "$backup" "$R_RECEIPT"
+      fail "refreshed instrumented-R content receipt differs from the authenticated legacy receipt"
+    fi
+  done
+  rm -rf "$backup"
+  printf '%s\n' "instrumented-R receipt refreshed without rebuilding: $R_RECEIPT"
+}
+
+write_legacy_library_inputs() {
+  local destination=$1 manifest=$2 legacy_r_seal=$3 legacy_helper=$4
+  local legacy_tree_helper=$5 intermediate
+  require_sha_value "$legacy_r_seal" "legacy R receipt seal"
+  require_sha_value "$legacy_helper" "legacy receipt helper"
+  require_sha_value "$legacy_tree_helper" "legacy tree helper"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  intermediate=$(mktemp "$ROOT/.local/tmp/legacy-library-inputs-v2.XXXXXX")
+  rm -f "$intermediate"
+  write_library_inputs "$intermediate" "$manifest"
+  prepare_managed_output "$destination" "legacy package-library input receipt"
+  /usr/bin/awk -F '\t' -v OFS='\t' \
+    -v r_seal="$legacy_r_seal" -v receipt_helper="$legacy_helper" \
+    -v tree_helper="$legacy_tree_helper" '
+      $1 == "schema" { print "schema", "1"; next }
+      $1 == "r_receipt_seal_sha256" {
+        print "r_receipt_seal_sha256", r_seal
+        print "receipt_helper_sha256", receipt_helper
+        print "tree_helper_sha256", tree_helper
+        next
+      }
+      { print }
+    ' "$intermediate" > "$destination"
+  rm -f "$intermediate"
+}
+
+validate_legacy_library_receipt_for_refresh() {
+  local manifest=$1 temporary name helper_sha tree_sha old_r_seal
+  local current_r_seal predecessor observed expected
+  validate_plain_directory_chain "$LIBRARY_RECEIPT" \
+    "legacy instrumented package-library receipt"
+  for name in inputs.tsv package-manifest.tsv installed-tree.tsv seal.tsv; do
+    require_file "$LIBRARY_RECEIPT/$name"
+  done
+  expected=$(printf '%s\n' schema kind library package_count \
+    package_manifest_sha256 archive_set_sha256 r_receipt_seal_sha256 \
+    receipt_helper_sha256 tree_helper_sha256)
+  observed=$(/usr/bin/awk -F '\t' 'NF != 2 { exit 2 } { print $1 }' \
+    "$LIBRARY_RECEIPT/inputs.tsv") || fail "legacy library inputs are malformed"
+  [[ "$observed" == "$expected" ]] ||
+    fail "only the exact legacy package-library receipt schema can be refreshed"
+  require_receipt_value "$LIBRARY_RECEIPT/inputs.tsv" schema 1
+  verify_r_receipt >/dev/null
+  helper_sha=$(receipt_value "$LIBRARY_RECEIPT/inputs.tsv" \
+    receipt_helper_sha256)
+  tree_sha=$(receipt_value "$LIBRARY_RECEIPT/inputs.tsv" tree_helper_sha256)
+  old_r_seal=$(receipt_value "$LIBRARY_RECEIPT/inputs.tsv" \
+    r_receipt_seal_sha256)
+  current_r_seal=$(sha256 "$R_RECEIPT/seal.tsv")
+  predecessor=$(receipt_value "$R_RECEIPT/inputs.tsv" \
+    predecessor_receipt_seal_sha256)
+  [[ "$old_r_seal" == "$current_r_seal" || "$old_r_seal" == "$predecessor" ]] ||
+    fail "legacy package library is not linked to the current or predecessor R receipt"
+  cmp -s "$manifest" "$LIBRARY_RECEIPT/package-manifest.tsv" ||
+    fail "legacy package manifest differs from the selected manifest"
+  ensure_plain_directory_chain "$ROOT/.local/tmp" \
+    "repository-local temporary root"
+  temporary=$(mktemp -d "$ROOT/.local/tmp/legacy-library-refresh.XXXXXX")
+  validate_plain_directory_chain "$temporary" "legacy library refresh verification"
+  cp "$LIBRARY_RECEIPT/package-manifest.tsv" "$temporary/package-manifest.tsv"
+  write_legacy_library_inputs "$temporary/inputs.tsv" \
+    "$temporary/package-manifest.tsv" "$old_r_seal" "$helper_sha" "$tree_sha"
+  cmp -s "$temporary/inputs.tsv" "$LIBRARY_RECEIPT/inputs.tsv" || {
+    rm -rf "$temporary"
+    fail "legacy package-library inputs differ from current build-affecting inputs"
+  }
+  cp "$LIBRARY_RECEIPT/installed-tree.tsv" "$temporary/installed-tree.tsv"
+  write_library_seal "$temporary"
+  cmp -s "$temporary/seal.tsv" "$LIBRARY_RECEIPT/seal.tsv" || {
+    rm -rf "$temporary"
+    fail "legacy package-library receipt seal is invalid"
+  }
+  "$RSCRIPT" --vanilla "$TREE_HELPER" verify \
+    "$R_LIBRARY" "$LIBRARY_RECEIPT/installed-tree.tsv" >/dev/null
+  validate_installed_library "$manifest"
+  rm -rf "$temporary"
+}
+
+refresh_library_receipt() {
+  local manifest=$1 backup temporary name
+  validate_legacy_library_receipt_for_refresh "$manifest"
+  backup=$(mktemp -d "$RECEIPTS/.library.legacy.XXXXXX")
+  validate_plain_directory_chain "$backup" "legacy library receipt backup"
+  for name in inputs.tsv package-manifest.tsv installed-tree.tsv seal.tsv; do
+    cp "$LIBRARY_RECEIPT/$name" "$backup/$name"
+  done
+  temporary=$(mktemp -d "$RECEIPTS/.library.refresh.XXXXXX")
+  validate_plain_directory_chain "$temporary" \
+    "refreshed package-library receipt staging"
+  cp "$backup/package-manifest.tsv" "$temporary/package-manifest.tsv"
+  cp "$backup/installed-tree.tsv" "$temporary/installed-tree.tsv"
+  write_library_inputs "$temporary/inputs.tsv" \
+    "$temporary/package-manifest.tsv"
+  write_library_seal "$temporary"
+  select_receipt_directory "$temporary" "$LIBRARY_RECEIPT"
+  for name in package-manifest.tsv installed-tree.tsv; do
+    if ! cmp -s "$backup/$name" "$LIBRARY_RECEIPT/$name"; then
+      select_receipt_directory "$backup" "$LIBRARY_RECEIPT"
+      fail "refreshed package-library content receipt differs from the authenticated legacy receipt"
+    fi
+  done
+  rm -rf "$backup"
+  printf '%s\n' "package-library receipt refreshed without reinstalling: $LIBRARY_RECEIPT"
 }
 
 case "$COMMAND" in
@@ -672,6 +1120,10 @@ case "$COMMAND" in
     [[ $# -eq 0 ]] || fail "verify-r takes no package manifest"
     verify_r_receipt
     ;;
+  refresh-r)
+    [[ $# -eq 0 ]] || fail "refresh-r takes no package manifest"
+    refresh_r_receipt
+    ;;
   validate-package-manifest)
     [[ $# -eq 1 ]] || fail "validate-package-manifest requires PACKAGE_MANIFEST"
     validate_package_manifest "$1"
@@ -689,6 +1141,24 @@ case "$COMMAND" in
   verify-library)
     [[ $# -eq 1 ]] || fail "verify-library requires PACKAGE_MANIFEST"
     verify_library_receipt "$1"
+    ;;
+  refresh-library)
+    [[ $# -eq 1 ]] || fail "refresh-library requires PACKAGE_MANIFEST"
+    refresh_library_receipt "$1"
+    ;;
+  verify-memory-structure)
+    [[ $# -eq 2 ]] ||
+      fail "verify-memory-structure requires PACKAGE_MANIFEST and ORDINARY_TOOLCHAIN_RECEIPT"
+    verify_memory_structure "$1" "$2"
+    ;;
+  verify-memory-content)
+    [[ $# -eq 0 ]] || fail "verify-memory-content takes no arguments"
+    verify_memory_content
+    ;;
+  verify-memory-semantics)
+    [[ $# -eq 1 ]] ||
+      fail "verify-memory-semantics requires PACKAGE_MANIFEST"
+    verify_memory_semantics "$1"
     ;;
   -h|--help|help)
     usage

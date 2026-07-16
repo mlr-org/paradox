@@ -1,5 +1,9 @@
 context	reason
 native-altrep-lifetimes	Direct native-facade lifetime assertions require the R 4.6 local-binding inspection APIs; public fallback lifetime behavior remains covered by characterization tests.
+native-design-dependencies	Direct native Design dependency-planner admission assertions require the R 4.6 local-binding inspection APIs; public dependency behavior remains covered by characterization tests.
+native-design-transpose-trafo	Direct native Design transformation admission assertions require the R 4.6 local-binding inspection APIs; public transformation behavior remains covered by characterization tests.
+native-domain-builtin-direct	Direct built-in Domain-constructor admission assertions require the R 4.6 local-binding inspection APIs; public constructor behavior remains covered by characterization tests.
+native-generate-design-grid	Direct native grid-construction admission assertions require the R 4.6 local-binding inspection APIs; public grid behavior remains covered by characterization tests.
 native-paramset-domains	Direct native ParamSet domains admission assertions require the R 4.6 local-binding inspection APIs; public domains behavior remains covered by characterization tests.
 native-paramset-get-domain	Direct native get_domain admission assertions require the R 4.6 local-binding inspection APIs; public get_domain behavior remains covered by characterization tests.
 native-paramset-get-values	Direct native get_values admission assertions require the R 4.6 local-binding inspection APIs; public values behavior remains covered by characterization tests.
@@ -7,9 +11,13 @@ native-paramset-params	Direct native params admission assertions require the R 4
 native-paramset-qunif	Direct native ParamSet qunif admission assertions require the R 4.6 local-binding inspection APIs; public qunif behavior remains covered by characterization tests.
 native-paramset-subset	Direct native subset admission assertions require the R 4.6 local-binding inspection APIs; public subset behavior remains covered by characterization tests.
 native-paramset-value-mutation	Direct native value-mutation admission assertions require the R 4.6 local-binding inspection APIs; public mutation behavior remains covered by characterization tests.
+native-paramsetcollection-callback-detach	Direct native collection callback-detachment admission assertions require the R 4.6 local-binding inspection APIs; public callback behavior remains covered by characterization tests.
 native-paramsetcollection-construction	Direct native collection-construction admission assertions require the R 4.6 local-binding inspection APIs; public construction behavior remains covered by characterization tests.
 native-paramsetcollection-deps	Direct native collection-deps admission assertions require the R 4.6 local-binding inspection APIs; public dependency behavior remains covered by characterization tests.
 native-paramsetcollection-exact-state	Direct native collection-state admission assertions require the R 4.6 local-binding inspection APIs; public exact-state behavior remains covered by characterization tests.
 native-paramsetcollection-params	Direct native collection-params admission assertions require the R 4.6 local-binding inspection APIs; public params behavior remains covered by characterization tests.
 native-paramsetcollection-values	Direct native collection-values admission assertions require the R 4.6 local-binding inspection APIs; public values behavior remains covered by characterization tests.
+native-ps-construction	Direct native ps-constructor admission assertions require the R 4.6 local-binding inspection APIs; public ps behavior remains covered by characterization tests.
 native-r6-surface-auth	Direct native R6 surface-authentication assertions inspect binding forms using public APIs first available in R 4.6; the focused probe authenticates the older evaluated fallback.
+native-sampler-1d-unif-shell	Direct native Sampler1DUnif shell admission assertions require the R 4.6 local-binding inspection APIs; public sampler construction remains covered by characterization tests.
+native-sampler-unif-bulk	Direct native uniform-sampler admission assertions require the R 4.6 local-binding inspection APIs; public sampling behavior remains covered by characterization tests.

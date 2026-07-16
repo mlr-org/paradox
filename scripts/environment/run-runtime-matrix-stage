@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Execute one already-prepared runtime-matrix stage.  The coordinator runs this
+# script in its own supervised process group; all mutable R state is scoped to
+# the version-specific retained stage below RUN_ROOT.
+
+fail() {
+  printf 'run-runtime-matrix-stage: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 3 ]] ||
+  fail "usage: run-runtime-matrix-stage ROOT RUN_ROOT VERSION"
+
+ROOT=$1
+RUN_ROOT=$2
+VERSION=$3
+case "$VERSION" in 4.3.3|4.5.2) ;; *) fail "unsupported runtime version" ;; esac
+[[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" &&
+  "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] || fail "ROOT is not canonical"
+[[ "$RUN_ROOT" == "$ROOT/.local/checks/"*/runtime-matrix &&
+  -d "$RUN_ROOT" && ! -L "$RUN_ROOT" &&
+  "$(cd "$RUN_ROOT" && pwd -P)" == "$RUN_ROOT" ]] ||
+  fail "RUN_ROOT is not one canonical retained runtime-matrix directory"
+
+STAGE="$RUN_ROOT/R-$VERSION"
+ARTIFACTS="$STAGE/artifacts"
+SOURCE="$ARTIFACTS/source"
+BUILD="$ARTIFACTS/build"
+LIBRARY="$ARTIFACTS/library"
+LOGS="$ARTIFACTS/logs"
+INPUTS="$ARTIFACTS/inputs"
+for directory in "$SOURCE" "$BUILD" "$LIBRARY" "$LOGS" "$INPUTS"; do
+  [[ -d "$directory" && ! -L "$directory" ]] ||
+    fail "prepared stage directory is absent or symbolic: $directory"
+done
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+audit_symbols() {
+  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol branch
+  local -a required forbidden
+  configured_nm=$(R CMD config NM)
+  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" &&
+      "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]] ||
+    fail "runtime compiler activation did not select the expected NM"
+  [[ "${configured_nm##*/}" == "$NM" ]] ||
+    fail "runtime R and compiler activation disagree about NM: $configured_nm / $NM"
+  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$NM"
+  [[ -x "$nm_tool" && "$(command -v -- "$NM")" == "$nm_tool" ]] ||
+    fail "authenticated runtime compiler NM is absent: $nm_tool"
+  symbols=${log%.log}.symbols.txt
+  "$nm_tool" -D --undefined-only "$dso" > "$symbols"
+  {
+    printf 'runtime=%s\n' "$version"
+    printf 'r_config_nm=%s\n' "$configured_nm"
+    printf 'nm=%s\n' "$nm_tool"
+    printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
+  } > "$log"
+  symbol=Rf_eval
+  rg -q "[[:space:]]${symbol}$" "$symbols" ||
+    fail "expected R API symbol is absent on R $version: $symbol"
+  printf 'required_symbol=%s\n' "$symbol" >> "$log"
+  if [[ "$version" == 4.3.3 ]]; then
+    required=()
+    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
+    branch=pre-4.5-evaluated-public-fallback
+  else
+    required=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx)
+    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
+    branch=4.5-direct-closure-and-evaluated-binding
+  fi
+  for symbol in "${required[@]}"; do
+    rg -q "[[:space:]]${symbol}$" "$symbols" ||
+      fail "expected R API symbol is absent on R $version: $symbol"
+    printf 'required_symbol=%s\n' "$symbol" >> "$log"
+  done
+  for symbol in "${forbidden[@]}"; do
+    if rg -q "[[:space:]]${symbol}$" "$symbols"; then
+      fail "too-new R API symbol leaked into the R $version package DSO: $symbol"
+    fi
+    printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
+  done
+  printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
+}
+
+cd "$ROOT"
+# shellcheck disable=SC1091
+. "$ROOT/scripts/activate-runtime-matrix" "$VERSION"
+
+# The two independently isolated R-version stages are the currently proved
+# safe outer overlap.  Do not let a package, BLAS, OpenMP runtime,
+# future/parallel, or a nested build multiply the admitted process and memory
+# budget inside either stage.
+export R_LIBS_USER="$LIBRARY"
+export R_LIBS_SITE=
+export LC_ALL=C.UTF-8
+export LANG=C.UTF-8
+export TMPDIR="$ARTIFACTS/tmp"
+export XDG_RUNTIME_DIR="$ARTIFACTS/runtime"
+export XDG_CACHE_HOME="$ARTIFACTS/cache/xdg"
+export R_USER_CACHE_DIR="$ARTIFACTS/cache/R"
+export CCACHE_DIR="$ARTIFACTS/cache/ccache"
+export CCACHE_TEMPDIR="$ARTIFACTS/tmp/ccache"
+export PIP_CACHE_DIR="$ARTIFACTS/cache/pip"
+export UV_CACHE_DIR="$ARTIFACTS/cache/uv"
+export MAKEFLAGS=-j1
+export CMAKE_BUILD_PARALLEL_LEVEL=1
+export CARGO_BUILD_JOBS=1
+export TESTTHAT_CPUS=1
+export MC_CORES=1
+export R_PARALLELLY_AVAILABLECORES_FALLBACK=1
+export R_FUTURE_AVAILABLECORES_FALLBACK=1
+export OMP_NUM_THREADS=1
+export OMP_THREAD_LIMIT=1
+export OPENBLAS_NUM_THREADS=1
+export MKL_NUM_THREADS=1
+export BLIS_NUM_THREADS=1
+export VECLIB_MAXIMUM_THREADS=1
+export NUMEXPR_NUM_THREADS=1
+mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
+  "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
+  "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+cd "$BUILD"
+R CMD build --no-build-vignettes --no-manual "$SOURCE" \
+  > "$LOGS/build.log" 2>&1
+mapfile -t archives < <(find "$BUILD" -maxdepth 1 -type f \
+  -name 'paradox_*.tar.gz' -print)
+[[ ${#archives[@]} -eq 1 ]] ||
+  fail "R $VERSION build did not produce one source archive"
+archive=${archives[0]}
+R CMD INSTALL --preclean --clean --install-tests --library="$LIBRARY" "$archive" \
+  > "$LOGS/install.log" 2>&1
+Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" "$LIBRARY" \
+  > "$LOGS/focused-probe.log" 2>&1
+audit_symbols "$VERSION" "$LIBRARY/paradox/libs/paradox.so" \
+  "$LOGS/r-api-symbol-audit.log"
+NOT_CRAN=false Rscript --vanilla \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
+  "$SOURCE" "$LIBRARY" "$INPUTS/source-test-scope" \
+  > "$LOGS/source-tests.log" 2>&1
+Rscript --vanilla -e 'sessionInfo()' > "$LOGS/session-info.log" 2>&1
+Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
+  > "$LOGS/r-packages.tsv" 2>&1
+R CMD config CC > "$LOGS/cc.txt" 2>&1
+cc=$(R CMD config CC)
+"$cc" --version > "$LOGS/compiler-version.log" 2>&1
+printf 'runtime_stage_worker=passed\nruntime=%s\n' "$VERSION"

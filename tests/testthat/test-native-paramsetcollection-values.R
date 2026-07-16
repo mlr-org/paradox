@@ -522,11 +522,17 @@ test_that("semantically equal supported encodings remain admissible", {
   private = collection$.__enclos_env__$private
   names(private$.sets) = latin1_owner
   utf8_id = paste0(utf8_owner, ".x")
+  latin1_id = iconv(utf8_id, from = "UTF-8", to = "latin1")
+  skip_if(is.na(latin1_id))
+  Encoding(latin1_id) = "latin1"
   params_attributes = attributes(private$.params)
   data.table::set(private$.params, 1L, "id", utf8_id)
   attributes(private$.params) = params_attributes
   translation_attributes = attributes(private$.translation)
-  data.table::set(private$.translation, 1L, "id", utf8_id)
+  # Keep the two ids semantically equal but pointer-distinct.  The native
+  # small-table pointer matcher must decline to the general encoding-aware
+  # matcher without declining the otherwise exact collection.
+  data.table::set(private$.translation, 1L, "id", latin1_id)
   data.table::set(private$.translation, 1L, "owner_name", utf8_owner)
   attributes(private$.translation) = translation_attributes
   direct = native_collection_values_call(collection)
@@ -534,6 +540,23 @@ test_that("semantically equal supported encodings remain admissible", {
   expect_false(is.null(direct))
   expect_identical(unname(direct), list(1L))
   expect_identical(enc2utf8(names(direct)), "caf\u00e9.x")
+})
+
+test_that("small translation matching is exact at its size boundary", {
+  skip_if_not(native_collection_values_available())
+
+  for (size in c(16L, 17L)) {
+    child = ParamSet$new(setNames(
+      replicate(size, p_int(init = 1L), simplify = FALSE),
+      sprintf("value%02d", seq_len(size))
+    ))
+    collection = ParamSetCollection$new(list(owner = child))
+    expect_identical(
+      native_collection_values_call(collection),
+      native_collection_values_reference(collection),
+      info = sprintf("parameter count %d", size)
+    )
+  }
 })
 
 test_that("serialized and cloned exact values graphs remain admissible", {

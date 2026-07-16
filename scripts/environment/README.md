@@ -7,15 +7,147 @@ Run the harness only after activating the repository-contained toolchain:
 scripts/native-check --mode strict-gcc --mode strict-clang --tests focused
 ```
 
+`resource-jobs` computes reviewed parallel ceilings from online CPUs, affinity,
+cgroup v1/v2 CPU and memory constraints, and currently available RAM. Its
+`--report` mode is evidence-friendly; `--max-jobs` can only lower the result.
+It fails closed when even one job would invade the reserved memory headroom.
+The conservative profiles are: `compile`, one CPU and 1024 MiB per job with a
+16-job cap; `api-compile`, one CPU and 768 MiB per job; `light-test`, one CPU
+and 2048 MiB per job with a 16-job cap; and `consumer`, two CPUs and 8192 MiB
+per job with a four-job cap and 16384 MiB minimum reserve. These are admission
+budgets, not measured peaks. The serial `rchk` profile admits one analyzer only
+with a 20480 MiB address-space budget and at least 16384 MiB retained for the
+host; the analyzer also receives an independent hard `RLIMIT_AS`.
+`run-compiler-batch` executes isolated compiler admissions under that ceiling,
+keeps deterministic input-order aggregates, and waits for the complete batch
+before failing. Its schema-4 plan binds the admission report, authenticated
+util-linux `setsid`, and the count plus NUL-framed SHA-256 of the complete
+compiler argument vector. Each source-order task-ledger row binds the source hash,
+invoked/link-target/canonical compiler identity, retained wrapper and Bash,
+exit and timeout state, and hashes of both the compiler log and the separate
+supervisor-only log. The wave inventory hashes both exact compiler-lane ledgers
+and their admission-bound plans; the API parent also retains exact header-task
+and authenticated cleanup-retry ledgers before compiling. Their fast
+adversarial tests are:
+
+```sh
+scripts/environment/test-resource-jobs
+scripts/environment/test-compiler-batch
+scripts/environment/test-verification-economy
+```
+
+The last command is a fast static preflight for the long harnesses. It rejects
+repeated tree traversals, verifier-dependent cache keys, execution before
+content authentication, misplaced final seals, first-failure test batches, and
+functional ledgers that are not bound to the loaded DSO. The broader
+`test-validation-hardening` invokes it before constructing its slower tamper
+fixtures, so a scheduling or ordering regression fails early. That harness
+constructs each valid focused/full native-evidence fixture once, then restores
+independent cached copies for its mutations; adding a tamper case must not
+regenerate the same valid fixture from scratch.
+
+The offline public-R-API gate uses `r-api-header-cache` to avoid retaining a
+roughly 424 MiB extraction in every run. On a cache miss the helper verifies
+the pinned archive, configures R in a supervised private process group, copies
+the complete `src/include` tree and generated `Rconfig.h`/`Rversion.h`, then
+deletes all source/build staging before it receipts and atomically promotes the
+small entry. The schema 3 key and receipts bind every configure input, the
+archive, platform, toolchain lock, the executing helper and tree-receipt helper,
+the fixed configure shell, and the complete reviewed configure/make command
+inventory. That inventory records present and absent commands, selected paths,
+bounded link chains, executable bytes, and identity probes. Same-key builders
+serialize with `flock`; interrupted staging is removed on exit or by the next
+lock owner. A hit verifies the canonical input, seal, and full header tree
+without hashing the archive. Compilation never reads the cache directly: each
+retained run gets an independent copy or reflink, creates and verifies a fresh
+receipt for the actual published output, requires it to equal the authenticated
+cache receipt, and binds both receipts into completion evidence.
+
+On Linux, `compiler-identity.R` similarly avoids an indiscriminate whole-
+toolchain hash. It receipts the invoked and canonical GCC and Clang drivers,
+their version/target/search state, GCC specs and `cc1`, resolved dynamic
+libraries, their effective preprocessing plans, Clang's target configuration,
+and every default or explicit header tree used by the gate (GCC builtin/fixed,
+local sysroot, explicit toolchain include, and Clang resource) before header
+preparation, then verifies the exact closure again before final sealing.
+
 `scripts/native-check --help` lists the independent modes. There is no default
 mode. `--mode static` runs the two strict compiler installs, a GCC `-fanalyzer`
 package build, Clang 22's static analyzer over every C translation unit,
 cppcheck, and the native registration/ELF audit. The Clang mode retains an
 individual plist and command log for each source and fails on either textual
 warnings or a nonempty diagnostics array. `--mode all` additionally runs ASan
-and UBSan as two separate builds. `--tests full` includes tests normally
-skipped on CRAN by setting `NOT_CRAN=true`; focused tests select files whose
-names contain `characterization`, `native`, or `regression`.
+and UBSan as two separate builds. Functional tests are deliberately owned by
+one selected DSO (strict GCC when it is present); the other compiler and
+sanitizer builds dynamically exercise every ordinary registered routine in the
+reviewed coverage manifest and four allocation/callback hazards through
+`run-native-probes.R`. The current ordinary DSO and manifest contain 61
+routines; the compile-time row-name-rooting fixture belongs only to its
+dedicated instrumented build. The gate compares names and arities exactly, so
+the prose count is never accepted in place of the manifest. Every such
+probe-mode DSO also runs a bounded analyzer-sensitive corpus: the exact
+`native-altrep-lifetimes`, `native-adversarial-storage`,
+`native-paramset-value-mutation`, `native-paramsetcollection-exact-state`,
+`native-domain-kernels`, and `native-r6-surface-auth` files. That corpus sets
+`NOT_CRAN=false`, retains an independently verified ledger, and requires six
+files, at least 70 test blocks, at least 650 passing expectations, and the
+exact four reviewed `On CRAN` skips; only the exact absent-miesmuschel skip is
+optional. `--tests probes` runs this fast combined inventory in every selected
+executable mode. `--tests full` includes tests normally skipped on CRAN by
+setting `NOT_CRAN=true` and
+then runs one ordinary `--as-cran` check plus a test-free depends-only check;
+focused tests select files whose names contain `characterization`, `native`, or
+`regression`. The functional owner emits a structured per-test ledger. Its
+trusted verifier requires the exact selected file inventory, zero failures,
+errors, and warnings, reviewed lower bounds for files, test blocks, and passing
+expectations, and evidence that every source scope using `skip_on_cran()` was
+admitted by `NOT_CRAN=true` rather than silently skipped. Outside the bounded
+analyzer corpus, the only admissible remaining Linux skips are the exact
+absent-miesmuschel and inactive-legacy-data.table bridge rows embedded in the
+verifier; either may disappear when its optional surface is active, but no new
+title or reason is accepted implicitly.
+On Linux, that one focused/full corpus uses independent file-level R workers
+under the `resource-jobs light-test` ceiling (lowerable with
+`PARADOX_NATIVE_TEST_JOBS`). Every worker starts with a unique home, temp, and
+cache tree, loads only the installed mode library with `load_package = "none"`,
+and proves the candidate DSO hash before and after its task. The coordinator
+waits for the complete bounded batch, publishes results in source-file order,
+and binds a deterministic `*-workers.tsv` task ledger into the semantic test
+ledger. Nested make/CMake, testthat, `parallel`/`future`, BLAS, OpenMP, and
+related numerical pools are forced to one. Each isolated task has a 30-minute
+deadline; timeout and interruption use bounded TERM/KILL cleanup of the whole
+task group plus token-marked nested sessions. The terminal row always records
+requested jobs, effective jobs, and
+the scheduler backend; the trusted verifier joins the requested count to the
+retained `light-test` decision and the effective count to every worker row. A
+task-token watchdog removes nested callr/processx descendants if the
+coordinator is interrupted. The two ConfigSpace files share one exclusive
+worker after the ordinary wave so they cannot race reticulate's managed Python
+state. Direct runner invocations default to serial; non-Linux systems,
+including Darwin, retain an explicit requested-many/effective-one fallback
+until an equally strong native process-tree primitive is available. Analyzer,
+probe, sanitizer, GCT, and Valgrind scopes remain serial.
+
+Ordinary `R CMD INSTALL` compilation uses a separately retained
+`resource-jobs compile` decision and may be lowered with
+`PARADOX_NATIVE_COMPILE_JOBS`; nested runtime/test make and numerical-library
+parallelism remains capped at one. GCC `-fanalyzer` installation stays serial
+because its per-translation-unit peak memory does not fit the ordinary compile
+profile without a separate measured budget. Before sealing, the native gate
+requires the exact ordered install/functional decision inventory, validates
+every report's profile arithmetic and lowering-only ceiling, and joins the
+functional report to its test ledger. Missing, duplicate, raised, reordered,
+or rehashed-but-inconsistent decisions are rejected.
+`scripts/environment/test-native-test-batch` is the cheap runner regression: a
+two-failure corpus must execute both blocks plus a successful sibling,
+atomically retain the complete batch and terminal aggregate, and only then
+return a failing status. It also proves genuine worker overlap, deterministic
+ledger order, wrong-DSO rejection, exact effective-worker policy, the exclusive
+ConfigSpace lane, bounded timeout and TERM-ignoring-worker cleanup, and cleanup
+of active workers plus marked grandchildren after coordinator SIGTERM. The same
+command runs a 58-file, 580-block, 1,740-expectation clean corpus through the
+real ledger writer and trusted verifier, including 27 admitted
+`skip_on_cran()` scopes.
 
 Cppcheck uses its exhaustive analysis level on the actual Linux/C17 package
 configuration. It deliberately does not force every imagined preprocessor
@@ -24,8 +156,9 @@ for API macros such as `NORET` and produces header syntax errors unrelated to
 any package build. The strict Linux builds and cross-platform CI cover the
 real compiler configurations separately.
 
-Each invocation creates a fresh `.local/checks/<run-id>/` and never reuses an
-installed candidate. The input is the tracked plus non-ignored untracked state
+Each invocation creates a fresh `.local/checks/<run-id>/`; each selected build
+is installed once inside that run and then reused by its tests or probes. The
+input is the tracked plus non-ignored untracked state
 of the current worktree. The snapshotter explicitly rejects `.git`, `.local`,
 and `.cache`, preserves tracked deletions, hashes every regular file before and
 after copying, and aborts if Git state or file membership changes during the
@@ -33,7 +166,12 @@ copy. The run retains the immutable source tree, manifest and its SHA-256,
 HEAD/diff/status, source archive, compiler versions, replayable command log,
 per-mode library, compiled DLL, analysis output, and result status. R startup,
 temporary directories, caches, target libraries, and Makevars are all set to
-project- or run-local paths. Commands do not consult user R startup files.
+project- or run-local paths. Python bytecode is disabled and redirected below
+the disposable mode cache, so reticulate cannot mutate the shared dependency
+library. Commands do not consult user R startup files. Probe, focused, and
+compile-only runs do not authenticate or put TinyTeX on `PATH`; the relatively
+expensive archive/tree authentication is owned only by `--tests full`, whose
+CRAN-style documentation surfaces actually use it.
 
 `--source-run <prior-id>` instead replays a prior run's retained source while
 the live worktree is changing. The replay helper rejects unexpected files and
@@ -86,8 +224,61 @@ The sanitizer results have deliberately limited scope:
 The symbol mode requires dynamic lookup to be disabled, forced registered
 symbols, a one-to-one mapping between `.Call` registrations and `C_*`
 namespace bindings, no literal-string `.Call` in shipped R, and no dynamically
-exported package symbols except `R_init_paradox`. On Linux it also rejects an
+exported package symbols except `R_init_paradox` and `R_unload_paradox`. On
+Linux it also rejects an
 executable stack and text relocations and requires GNU RELRO metadata.
+
+The bounded analyzer executable is a separate cached prerequisite.
+`scripts/fetch-reference-sources` authenticates the exact
+`gaborcsardi/rchk` commit
+`56b621a4e7112246d7b640bee6219ee9c6eb4bf8` and tree
+`d08d5b88ab6c469ac1b6d9c4beeece322e223ac5`; after the pinned rchk image is
+local, `scripts/prepare-bounded-rchk-bcheck` compiles only `bcheck` inside that image
+with explicit Clang 14, LLVM 14, 800,000 bcheck states, and 1,000,000 allocator
+states. It never runs package analysis. The atomically published
+`.local/rchk-bounded-bcheck/<input-key>` entry retains the immutable source and
+complete receipt, image and tool identities, exact command/environment and
+macros, full build log, binary hash/mode, payload receipt, and seal. A cache hit
+and `--verify` are build-free and read-only with respect to the cache; an
+invalid existing entry is reported rather than replaced. Exercise the same
+publication verifier plus re-receipted tamper cases with
+`scripts/environment/test-bounded-rchk-bcheck-cache`.
+
+`scripts/memory-check --source-run NATIVE_RUN_ID --mode rchk` verifies that
+cache and mounts its bcheck read-only. It does not call the image's `rchk.sh`,
+image bcheck, or upstream
+`check_package.sh`: a small retained driver performs
+`R CMD INSTALL --libs-only --no-test-load` with WLLVM, extracts the candidate
+DSO bitcode, and runs bounded
+bcheck plus the image-pinned maacheck and fficheck directly against the same
+R/package bitcode. Each analyzer is wrapped by `/usr/bin/prlimit` with soft and
+hard `RLIMIT_AS` set to exactly 21474836480 bytes. Before starting the serial
+container, `resource-jobs rchk` must admit one 20480-MiB job while reserving at
+least 16384 MiB for the host. Rootless Podman memory flags are unsupported on
+this cgroup-v1 host and are not trusted as a limit.
+
+The frozen source supplies `policy.tsv`, `blocks.tsv`, and `rationales.tsv`
+under `environment/rchk-bcheck-policy/`. It binds the analyzer identity,
+complete report hashes, exact
+ordered Function blocks and UP/PB counts, and one reviewed analyzer-model
+rationale for each block. Any report drift or package-local `ERROR:` is fatal;
+this is not a wildcard suppression. maacheck must be byte-empty, and fficheck
+must report `R_init_paradox`, exactly 61 functions, and exactly one registration
+call. The post-refactor prefreeze review completed 854 functions and 41,293
+states without package state exhaustion; final release claims require a fresh
+policy-matching run from the frozen candidate, while the authenticated bcheck
+cache is reused without recompilation.
+
+The Valgrind branch of `scripts/memory-check` separates fast sealed
+receipt/runtime validation from expensive content traversal. Its ordinary
+toolchain receipt must exactly match the instrumented-R build receipt, so that
+multi-gigabyte tree is not reread by a nested verifier. Under the shared state
+lock, the R source, installed R prefix, and dedicated package library are each
+content-verified once before and once after execution, with a sealed
+three-stage `start`/`post-before`/`post-after` metadata ledger covering the
+interval. Source archives are authenticated when a build or install consumes
+them; cache-hit and memory verification instead authenticate the installed
+trees and retained pinned digests without repeatedly hashing unused archives.
 
 The opt-in Linux consumer dependency overlay is independent of this native
 harness. `scripts/environment/test-compat-system` performs its fast structural
@@ -140,10 +331,10 @@ builds and installs paradox into a fresh stage library, runs the focused
 public-R-API facade probe and an authenticated supported source-test scope, and
 audits undefined DSO symbols against that release's allowed accessor set. Both
 old interpreters stage all public, characterization, regression, and compatible
-native tests, while the 14 R-4.6-binding-admission implementation contexts in
+native tests, while the 22 R-4.6-binding-admission implementation contexts in
 `environment/runtime-matrix-pre46-exclusions.tsv` are explicitly retained as
-excluded. The current inventory is 71 discovered files, 57 executed files,
-and 14 exclusions, with a 4,900-expectation clean floor. The two ConfigSpace
+excluded. The current inventory is 79 discovered files, 57 executed files,
+and 22 exclusions, with a 4,900-expectation clean floor. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated

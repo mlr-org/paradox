@@ -1,4 +1,5 @@
 #include <math.h>
+#include <limits.h>
 #include <stdint.h>
 #include <string.h>
 
@@ -6,6 +7,7 @@
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 enum param_column {
@@ -119,11 +121,14 @@ static int strings_equal(SEXP left, SEXP right) {
       strcmp(CHAR(left), CHAR(right)) == 0;
   }
 
+  PROTECT(left);
+  PROTECT(right);
   const void *vmax = vmaxget();
   const char *left_text = Rf_translateCharUTF8(left);
   const char *right_text = Rf_translateCharUTF8(right);
   const int equal = strcmp(left_text, right_text) == 0;
   vmaxset(vmax);
+  UNPROTECT(2);
   return equal;
 }
 
@@ -265,10 +270,12 @@ static uint64_t hash_string(SEXP string) {
     return hash_bytes((const unsigned char *) CHAR(string), hash);
   }
 
+  PROTECT(string);
   const void *vmax = vmaxget();
   const char *text = Rf_translateCharUTF8(string);
   hash = hash_bytes((const unsigned char *) text, hash);
   vmaxset(vmax);
+  UNPROTECT(1);
   return hash;
 }
 
@@ -298,7 +305,7 @@ static int initialize_id_map(SEXP ids, id_map_t *map) {
   const R_xlen_t mask = capacity - 1;
   for (R_xlen_t row = 0; row < size; ++row) {
     account_work(&work_since_interrupt);
-    SEXP id = STRING_ELT(ids, row);
+    SEXP id = PROTECT(STRING_ELT(ids, row));
     const uint64_t hash = hash_string(id);
     R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
     while (slots[slot].row_plus_one != 0) {
@@ -306,12 +313,14 @@ static int initialize_id_map(SEXP ids, id_map_t *map) {
       const R_xlen_t present = slots[slot].row_plus_one - 1;
       if (slots[slot].hash == hash &&
           strings_equal(STRING_ELT(ids, present), id)) {
+        UNPROTECT(1);
         return FALSE;
       }
       slot = (slot + 1) & mask;
     }
     slots[slot].hash = hash;
     slots[slot].row_plus_one = row + 1;
+    UNPROTECT(1);
   }
 
   map->slots = slots;
@@ -595,6 +604,177 @@ static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
   return TRUE;
 }
 
+#if R_VERSION >= R_Version(4, 6, 0)
+static int grid_resolution_at(SEXP resolutions, R_xlen_t index,
+    int *result) {
+  if (TYPEOF(resolutions) == INTSXP) {
+    const int value = INTEGER_ELT(resolutions, index);
+    if (value == NA_INTEGER || value < 0) {
+      return FALSE;
+    }
+    *result = value;
+    return TRUE;
+  }
+
+  const double value = REAL_ELT(resolutions, index);
+  if (!R_FINITE(value) || value < 0.0 || value > (double) INT_MAX ||
+      floor(value) != value) {
+    return FALSE;
+  }
+  *result = (int) value;
+  return TRUE;
+}
+#endif
+
+static int snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
+    int *counts) {
+#if R_VERSION >= R_Version(4, 6, 0)
+  if (R_getAttribCount(resolutions) != 1 ||
+      !R_hasAttrib(resolutions, R_NamesSymbol)) {
+    return FALSE;
+  }
+  SEXP names = Rf_getAttrib(resolutions, R_NamesSymbol);
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isObject(names) ||
+      XLENGTH(names) != XLENGTH(resolutions) ||
+      R_getAttribCount(names) != 0) {
+    return FALSE;
+  }
+
+  /* Everything above and below this loop is allocation-free. Once copied,
+   * later factor-level materialization and character translation use only
+   * these stable names and counts, so a GC finalizer cannot create a grid from
+   * a mixture of pre- and post-callback resolution state. */
+  for (R_xlen_t index = 0; index < XLENGTH(resolutions); ++index) {
+    int count;
+    SEXP name = STRING_ELT(names, index);
+    if (name == NA_STRING ||
+        !grid_resolution_at(resolutions, index, &count) || count == 0) {
+      return FALSE;
+    }
+    counts[index] = count;
+    SET_STRING_ELT(stable_names, index, name);
+  }
+  return TRUE;
+#else
+  (void) resolutions;
+  (void) stable_names;
+  (void) counts;
+  return FALSE;
+#endif
+}
+
+static int load_grid_specs(const param_columns_t *columns,
+    const id_map_t *id_map, SEXP resolution_names,
+    qunif_spec_t *specs, const int *counts, R_xlen_t *strides,
+    unsigned char *selected, SEXP spec_roots, R_xlen_t *rows,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t row = 0; row < columns->size; ++row) {
+    account_work(work_since_interrupt);
+    selected[row] = 0;
+  }
+
+  for (R_xlen_t column = 0; column < columns->size; ++column) {
+    account_work(work_since_interrupt);
+    const SEXP name = STRING_ELT(resolution_names, column);
+    const int count = counts[column];
+    R_xlen_t param_row;
+    if (!find_id(
+          id_map,
+          name,
+          &param_row,
+          work_since_interrupt
+        ) || selected[param_row] || !load_spec(
+          columns,
+          param_row,
+          &specs[column],
+          spec_roots,
+          column,
+          work_since_interrupt
+        )) {
+      return FALSE;
+    }
+    if ((specs[column].kind == QUNIF_KIND_FCT &&
+          (R_xlen_t) count != XLENGTH(specs[column].levels)) ||
+        (specs[column].kind == QUNIF_KIND_LGL && count != 2)) {
+      return FALSE;
+    }
+    selected[param_row] = 1;
+  }
+
+  R_xlen_t total = 1;
+  for (R_xlen_t remaining = columns->size; remaining > 0; --remaining) {
+    const R_xlen_t column = remaining - 1;
+    account_work(work_since_interrupt);
+    strides[column] = total;
+    if (total > (R_xlen_t) INT_MAX / (R_xlen_t) counts[column]) {
+      return FALSE;
+    }
+    total *= (R_xlen_t) counts[column];
+  }
+  *rows = total;
+  return TRUE;
+}
+
+static double grid_unit_value(R_xlen_t level, int resolution) {
+  if (level == 0 || resolution <= 1) {
+    return 0.0;
+  }
+  if (level == (R_xlen_t) resolution - 1) {
+    return 1.0;
+  }
+  return (double) level * (1.0 / (double) (resolution - 1));
+}
+
+static int fill_grid_column(SEXP output, R_xlen_t rows, int resolution,
+    R_xlen_t stride, const qunif_spec_t *spec,
+    R_xlen_t *work_since_interrupt) {
+  if (rows != 0 && (resolution <= 0 || stride <= 0)) {
+    return FALSE;
+  }
+
+  for (R_xlen_t row = 0; row < rows; ++row) {
+    account_work(work_since_interrupt);
+    const R_xlen_t level = (row / stride) % (R_xlen_t) resolution;
+    const double unit = grid_unit_value(level, resolution);
+    switch (spec->kind) {
+    case QUNIF_KIND_DBL:
+      REAL(output)[row] = paradox_qunif_double_value(
+        unit,
+        spec->lower,
+        spec->upper
+      );
+      break;
+    case QUNIF_KIND_INT:
+      if (!paradox_qunif_integer_value(
+            unit,
+            spec->lower,
+            spec->upper,
+            &INTEGER(output)[row]
+          )) {
+        return FALSE;
+      }
+      break;
+    case QUNIF_KIND_FCT: {
+      const R_xlen_t choice = paradox_qunif_level_index(
+        unit,
+        XLENGTH(spec->levels)
+      );
+      if (choice == R_XLEN_T_MAX) {
+        return FALSE;
+      }
+      SET_STRING_ELT(output, row, STRING_ELT(spec->levels, choice));
+      break;
+    }
+    case QUNIF_KIND_LGL:
+      LOGICAL(output)[row] = unit < 0.5;
+      break;
+    case QUNIF_KIND_UNKNOWN:
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
 SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
   param_columns_t columns;
   matrix_info_t matrix;
@@ -684,5 +864,110 @@ SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
     matrix.rows
   ));
   UNPROTECT(6);
+  return prepared;
+}
+
+SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
+  const SEXPTYPE resolution_type = (SEXPTYPE) TYPEOF(resolutions);
+  if ((resolution_type != INTSXP && resolution_type != REALSXP) ||
+      ALTREP(resolutions) || Rf_isObject(resolutions) ||
+      !paradox_api_has_single_attribute(resolutions, "names")) {
+    return R_NilValue;
+  }
+
+  param_columns_t columns;
+  SEXP column_roots = PROTECT(Rf_allocVector(VECSXP, QUNIF_ROOT_COUNT));
+  if (!load_param_columns(params, &columns, column_roots) ||
+      columns.size == 0 || XLENGTH(resolutions) != columns.size) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+
+  SEXP resolution_names = PROTECT(Rf_getAttrib(
+    resolutions,
+    R_NamesSymbol
+  ));
+  if (TYPEOF(resolution_names) != STRSXP || ALTREP(resolution_names) ||
+      Rf_isObject(resolution_names) ||
+      XLENGTH(resolution_names) != columns.size ||
+      !paradox_api_has_no_attributes(resolution_names)) {
+    UNPROTECT(2);
+    return R_NilValue;
+  }
+
+  id_map_t id_map;
+  if (!initialize_id_map(columns.ids, &id_map)) {
+    UNPROTECT(2);
+    return R_NilValue;
+  }
+
+  qunif_spec_t *specs = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*specs)
+  );
+  int *counts = paradox_temporary_alloc(columns.size, sizeof(*counts));
+  R_xlen_t *strides = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*strides)
+  );
+  unsigned char *selected = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*selected)
+  );
+  SEXP spec_roots = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  SEXP stable_resolution_names = PROTECT(Rf_allocVector(
+    STRSXP,
+    columns.size
+  ));
+  R_xlen_t rows;
+  R_xlen_t work_since_interrupt = 0;
+  if (!snapshot_grid_resolutions(
+        resolutions,
+        stable_resolution_names,
+        counts
+      ) || !load_grid_specs(
+        &columns,
+        &id_map,
+        stable_resolution_names,
+        specs,
+        counts,
+        strides,
+        selected,
+        spec_roots,
+        &rows,
+        &work_since_interrupt
+      )) {
+    UNPROTECT(4);
+    return R_NilValue;
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  SEXP result_names = PROTECT(copy_column_names(
+    stable_resolution_names,
+    &work_since_interrupt
+  ));
+  for (R_xlen_t column = 0; column < columns.size; ++column) {
+    account_work(&work_since_interrupt);
+    SEXP output = PROTECT(Rf_allocVector(
+      output_type(specs[column].kind),
+      rows
+    ));
+    SET_VECTOR_ELT(result, column, output);
+    if (!fill_grid_column(
+          output,
+          rows,
+          counts[column],
+          strides[column],
+          &specs[column],
+          &work_since_interrupt
+        )) {
+      UNPROTECT(7);
+      return R_NilValue;
+    }
+    UNPROTECT(1);
+  }
+
+  SEXP prepared = PROTECT(set_table_attributes(result, result_names, rows));
+  UNPROTECT(7);
   return prepared;
 }

@@ -242,11 +242,39 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-"$RECEIPT_HELPER" verify-r "$ROOT"
 "$RECEIPT_HELPER" validate-package-manifest "$ROOT" "$MANIFEST"
-if "$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST" >/dev/null 2>&1; then
-  "$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST"
+CURRENT_RECEIPT_LOG="$LOGS/current-library-receipt.log"
+if "$RECEIPT_HELPER" verify-library "$ROOT" "$MANIFEST" \
+    > "$CURRENT_RECEIPT_LOG" 2>&1; then
+  cat "$CURRENT_RECEIPT_LOG"
   printf '%s\n' "Instrumented-R package library is current: $LIBRARY"
+  exit 0
+fi
+
+# A verifier/schema change is not a byte-affecting build input.  Migrate the
+# old receipts only after their complete legacy trees authenticate; rebuild R
+# or packages solely when that migration or current content verification fails.
+R_RECEIPT_REFRESH_LOG="$LOGS/refresh-r-receipt.log"
+R_RECEIPT_VERIFY_LOG="$LOGS/current-r-receipt.log"
+if "$RECEIPT_HELPER" refresh-r "$ROOT" \
+    > "$R_RECEIPT_REFRESH_LOG" 2>&1; then
+  cat "$R_RECEIPT_REFRESH_LOG"
+elif "$RECEIPT_HELPER" verify-r "$ROOT" \
+    > "$R_RECEIPT_VERIFY_LOG" 2>&1; then
+  cat "$R_RECEIPT_VERIFY_LOG"
+else
+  cat "$CURRENT_RECEIPT_LOG" >&2
+  cat "$R_RECEIPT_REFRESH_LOG" >&2
+  cat "$R_RECEIPT_VERIFY_LOG" >&2
+  fail "instrumented R is not authenticated; run scripts/build-valgrind-r"
+fi
+
+LIBRARY_RECEIPT_REFRESH_LOG="$LOGS/refresh-library-receipt.log"
+if "$RECEIPT_HELPER" refresh-library "$ROOT" "$MANIFEST" \
+    > "$LIBRARY_RECEIPT_REFRESH_LOG" 2>&1; then
+  cat "$LIBRARY_RECEIPT_REFRESH_LOG"
+  printf '%s\n' \
+    "Instrumented-R package bytes were unchanged; refreshed receipt: $LIBRARY"
   exit 0
 fi
 

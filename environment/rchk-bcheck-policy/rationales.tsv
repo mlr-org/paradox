@@ -1,0 +1,8 @@
+rationale_id	rationale
+ADDRESS_TAKEN_MODEL	Bcheck deliberately stops tracking a local whose address is passed; the audited value remains rooted by the protected input or output carrier.
+BORROWED_OWNER_ROOT	The reported child is borrowed from a protected argument, attribute owner, closure, or environment that remains live across the audited call.
+DYNAMIC_PROTECT_DEPTH	The function uses reviewed variable-count or helper-owned protection accounting that exceeds bcheck's stack-depth abstraction and is covered by maacheck and dynamic memory gates.
+FRESH_VALUE_HANDOFF	The fresh value is immediately installed in a protected container or handed to a callee under an audited ownership contract before another allocation can expose it.
+PRESERVED_RUNTIME_GRAPH	The reported object remains reachable through the process-preserved canonical runtime graph authenticated and retained from namespace initialization.
+PROTECTED_ROOT_CARRIER	The reported values are stored in an explicitly protected vector, environment, or root carrier before the subsequent allocating operation.
+TEST_ALTREP_CONTRACT	The test-only ALTREP callback deliberately uses caller-balanced protection to create an adversarial collection schedule; it is not shipped production behavior.

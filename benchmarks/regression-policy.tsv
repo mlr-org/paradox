@@ -16,7 +16,14 @@ paired	check_scalar	-	hot	common-validation-path
 paired	sanitize_scalar	-	hot	common-sanitization-path
 paired	check_dt	-	hot	common-batch-validation
 paired	qunif	-	hot	common-design-transform
+paired	paramset_subspaces	-	hot	common-one-dimensional-space-construction
+paired	paramset_subspaces_deps	-	hot	dependency-bearing-one-dimensional-space-construction
+paired	sampler_unif_construct	-	hot	common-uniform-sampler-construction
+paired	sampler_unif_construct_deps	-	hot	dependency-bearing-uniform-sampler-construction
+paired	sampler_unif_sample	-	hot	optimizer-loop-uniform-sampling
 paired	generate_design_random	-	hot	common-design-generation
+paired	generate_design_grid_mixed4	-	hot	common-grid-generation
+paired	generate_design_grid_mixed8	-	hot	larger-grid-generation
 paired	design_transpose_plain	-	standard	design-materialization
 paired	design_transpose_filtered	-	standard	design-filtering
 paired	design_transpose_trafo	-	standard	design-transformation

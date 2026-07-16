@@ -236,7 +236,10 @@ Domain = function(cls, grouping,
   if (isTRUE(reprargs$logscale)) reprargs$trafo = NULL
   param_repr = as.call(c(constructorcall[[1]], reprargs))
 
-  param_id = deparse1(param_repr, collapse = "\n", width.cutoff = 80)
+  param_id = .Call(C_domain_simple_repr_id, param_repr)
+  if (is.null(param_id)) {
+    param_id = deparse1(param_repr, collapse = "\n", width.cutoff = 80)
+  }
   # Opaque values are not part of native admission. Explicit short-form
   # arguments may already have been forced by representation capture; hidden
   # wrapper promises are first observed in this historical row order.

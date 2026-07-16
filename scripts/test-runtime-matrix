@@ -5,6 +5,10 @@ ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
 GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
+STAGE_WORKER="$ROOT/scripts/environment/run-runtime-matrix-stage"
+WAVE_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-wave"
+STAGE_TIMEOUT_SECONDS=5400
 
 usage() {
   cat <<'USAGE'
@@ -23,7 +27,9 @@ Each stage builds a source archive, installs it in a fresh run-specific
 library, executes a focused r_api_compat probe and the authenticated supported
 source-test scope with NOT_CRAN=false, audits the DSO's version-specific
 undefined public R symbols, and seals all retained artifacts below
-.local/checks/ID/.
+.local/checks/ID/.  With --runtime all, the two isolated stages share one
+resource-aware light-test admission and run concurrently when two workers are
+safe. PARADOX_RUNTIME_MATRIX_JOBS may lower that ceiling to 1.
 USAGE
 }
 
@@ -61,6 +67,15 @@ case "$selection" in
   4.3.3|4.5.2) versions=("$selection") ;;
   *) fail "Runtime must be 4.3.3, 4.5.2, or all" ;;
 esac
+runtime_jobs_limit=2
+if [[ -n "${PARADOX_RUNTIME_MATRIX_JOBS:-}" ]]; then
+  [[ "$PARADOX_RUNTIME_MATRIX_JOBS" =~ ^[12]$ ]] ||
+    fail "PARADOX_RUNTIME_MATRIX_JOBS may only lower the stage ceiling to 1 or 2"
+  runtime_jobs_limit=$PARADOX_RUNTIME_MATRIX_JOBS
+fi
+if ((runtime_jobs_limit > ${#versions[@]})); then
+  runtime_jobs_limit=${#versions[@]}
+fi
 [[ "$run_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ ]] ||
   fail "--run-id is required and must have a safe shape"
 [[ "$source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
@@ -91,6 +106,9 @@ trusted_inputs=(
   scripts/environment/runtime-matrix-inventory.R
   scripts/environment/runtime-matrix-probe.R
   scripts/environment/run-runtime-matrix-tests.R
+  scripts/environment/resource-jobs
+  scripts/environment/run-runtime-matrix-stage
+  scripts/environment/run-runtime-matrix-wave
   environment/runtime-matrix-pre46-exclusions.tsv
   environment/runtime-matrix-whole-file-skips.tsv
   environment/runtime-matrix-result-skips.tsv
@@ -136,52 +154,13 @@ seal_metadata() {
   )
 }
 
-audit_symbols() {
-  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol
-  configured_nm=$(R CMD config NM)
-  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" &&
-      "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]] ||
-    fail "Runtime compiler activation did not select the expected NM"
-  [[ "${configured_nm##*/}" == "$NM" ]] ||
-    fail "Runtime R and compiler activation disagree about NM: $configured_nm / $NM"
-  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$NM"
-  [[ -x "$nm_tool" && "$(command -v -- "$NM")" == "$nm_tool" ]] ||
-    fail "Authenticated runtime compiler NM is absent: $nm_tool"
-  symbols=${log%.log}.symbols.txt
-  "$nm_tool" -D --undefined-only "$dso" > "$symbols"
-  {
-    printf 'runtime=%s\n' "$version"
-    printf 'r_config_nm=%s\n' "$configured_nm"
-    printf 'nm=%s\n' "$nm_tool"
-    printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
-  } > "$log"
-  symbol=Rf_eval
-  rg -q "[[:space:]]${symbol}$" "$symbols" ||
-    fail "Expected R API symbol is absent on R $version: $symbol"
-  printf 'required_symbol=%s\n' "$symbol" >> "$log"
-  if [[ "$version" == 4.3.3 ]]; then
-    required=()
-    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
-      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
-    branch=pre-4.5-evaluated-public-fallback
-  else
-    required=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx)
-    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
-    branch=4.5-direct-closure-and-evaluated-binding
-  fi
-  for symbol in "${required[@]}"; do
-    rg -q "[[:space:]]${symbol}$" "$symbols" || fail "Expected R API symbol is absent on R $version: $symbol"
-    printf 'required_symbol=%s\n' "$symbol" >> "$log"
-  done
-  for symbol in "${forbidden[@]}"; do
-    if rg -q "[[:space:]]${symbol}$" "$symbols"; then
-      fail "Too-new R API symbol leaked into the R $version package DSO: $symbol"
-    fi
-    printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
-  done
-  printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
-}
+declare -A source_git_tar_hashes=()
+declare -A source_manifest_hashes=()
+declare -A git_identity_hashes=()
 
+# Prepare every immutable input before admitting external R workers.  The
+# version-specific mutable trees do not overlap, so the expensive stages can
+# then run as one bounded sibling wave.
 for version in "${versions[@]}"; do
   stage="$run_root/R-$version"
   artifacts="$stage/artifacts"
@@ -204,6 +183,9 @@ for version in "${versions[@]}"; do
   source_manifest_sha256=$(sha256_file "$inputs/source.manifest.tsv")
   "$GIT_HELPER" identity "$ROOT" > "$inputs/git-identity.tsv"
   git_identity_sha256=$(sha256_file "$inputs/git-identity.tsv")
+  source_git_tar_hashes[$version]=$source_git_tar_sha256
+  source_manifest_hashes[$version]=$source_manifest_sha256
+  git_identity_hashes[$version]=$git_identity_sha256
   for relative in "${trusted_inputs[@]}" "environment/runtime-r-${version}-linux-64.lock"; do
     mkdir -p -- "$inputs/${relative%/*}"
     cp -- "$ROOT/$relative" "$inputs/$relative"
@@ -219,50 +201,83 @@ for version in "${versions[@]}"; do
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
     printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
     printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
+    printf 'scheduling\tresource-jobs light-test; at most two outer stages; all nested parallelism fixed to one\n'
   } > "$inputs/commands.tsv"
+done
 
-  (
-    cd "$ROOT"
-    # shellcheck disable=SC1091
-    . "$ROOT/scripts/activate-runtime-matrix" "$version"
-    export R_LIBS_USER="$library"
-    export R_LIBS_SITE=
-    export TMPDIR="$artifacts/tmp"
-    export XDG_RUNTIME_DIR="$artifacts/runtime"
-    export XDG_CACHE_HOME="$artifacts/cache/xdg"
-    export R_USER_CACHE_DIR="$artifacts/cache/R"
-    export CCACHE_DIR="$artifacts/cache/ccache"
-    export CCACHE_TEMPDIR="$artifacts/tmp/ccache"
-    export PIP_CACHE_DIR="$artifacts/cache/pip"
-    export UV_CACHE_DIR="$artifacts/cache/uv"
-    mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
-      "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
-      "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
-    chmod 0700 "$XDG_RUNTIME_DIR"
+resource_report="$run_root/metadata/resource-jobs.tsv"
+task_list="$run_root/metadata/stage-tasks.tsv"
+wave_directory="$run_root/metadata/stage-wave"
+"$RESOURCE_JOBS" light-test --max-jobs "$runtime_jobs_limit" --report \
+  > "$resource_report.staging"
+mv "$resource_report.staging" "$resource_report"
+runtime_jobs=$(awk -F '\t' '$1 == "jobs" {print $2}' "$resource_report")
+[[ "$runtime_jobs" =~ ^[12]$ && "$runtime_jobs" -le "${#versions[@]}" ]] ||
+  fail "Runtime stage admission returned an invalid worker count"
+{
+  printf 'ordinal\tversion\n'
+  for ((index = 0; index < ${#versions[@]}; index++)); do
+    printf '%s\t%s\n' "$((index + 1))" "${versions[index]}"
+  done
+} > "$task_list"
+bash_path=$(command -v bash)
+setsid_path=$(command -v setsid)
+timeout_path=$(command -v timeout)
+wave_status=0
+wave_pid=
+forward_wave_signal() {
+  local signal=$1 exit_status
+  trap - HUP INT TERM
+  if [[ -n "$wave_pid" ]]; then
+    kill -s "$signal" "$wave_pid" 2>/dev/null || true
+    wait "$wave_pid" 2>/dev/null || true
+  fi
+  case "$signal" in HUP) exit_status=129 ;; INT) exit_status=130 ;; TERM) exit_status=143 ;; esac
+  exit "$exit_status"
+}
+trap 'forward_wave_signal HUP' HUP
+trap 'forward_wave_signal INT' INT
+trap 'forward_wave_signal TERM' TERM
+"$WAVE_RUNNER" --jobs "$runtime_jobs" --admission-report "$resource_report" \
+  --task-list "$task_list" --output-directory "$wave_directory" \
+  --worker "$STAGE_WORKER" --root "$ROOT" --run-root "$run_root" \
+  --bash "$bash_path" --setsid "$setsid_path" --timeout-tool "$timeout_path" \
+  --task-timeout-seconds "$STAGE_TIMEOUT_SECONDS" &
+wave_pid=$!
+wait "$wave_pid" || wave_status=$?
+wave_pid=
+trap - HUP INT TERM
 
-    cd "$build"
-    R CMD build --no-build-vignettes --no-manual "$source" \
-      > "$logs/build.log" 2>&1
-    mapfile -t archives < <(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
-    [[ ${#archives[@]} -eq 1 ]] || fail "R $version build did not produce one source archive"
-    archive=${archives[0]}
-    R CMD INSTALL --preclean --clean --install-tests --library="$library" "$archive" \
-      > "$logs/install.log" 2>&1
-    Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" "$library" \
-      > "$logs/focused-probe.log" 2>&1
-    audit_symbols "$version" "$library/paradox/libs/paradox.so" \
-      "$logs/r-api-symbol-audit.log"
-    NOT_CRAN=false Rscript --vanilla \
-      "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
-      "$source" "$library" "$inputs/source-test-scope" \
-      > "$logs/source-tests.log" 2>&1
-    Rscript --vanilla -e 'sessionInfo()' > "$logs/session-info.log" 2>&1
-    Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
-      > "$logs/r-packages.tsv" 2>&1
-    R CMD config CC > "$logs/cc.txt" 2>&1
-    cc=$(R CMD config CC)
-    "$cc" --version > "$logs/compiler-version.log" 2>&1
-  )
+[[ -f "$wave_directory/task-ledger.tsv" &&
+  -f "$wave_directory/wave-plan.tsv" ]] ||
+  fail "Runtime stage scheduler did not retain its complete result"
+"$PREFIX_RECEIPT" create "$wave_directory" \
+  "$run_root/metadata/stage-wave.manifest.tsv" >/dev/null
+resource_report_sha256=$(sha256_file "$resource_report")
+stage_tasks_sha256=$(sha256_file "$task_list")
+wave_plan_sha256=$(sha256_file "$wave_directory/wave-plan.tsv")
+wave_task_ledger_sha256=$(sha256_file "$wave_directory/task-ledger.tsv")
+wave_manifest_sha256=$(sha256_file "$run_root/metadata/stage-wave.manifest.tsv")
+stage_worker_sha256=$(sha256_file "$STAGE_WORKER")
+
+# Promote and seal successful siblings in deterministic runtime order, even if
+# another stage failed.  This preserves all useful diagnostics from one wave.
+for version in "${versions[@]}"; do
+  worker_status=$(awk -F '\t' -v version="$version" \
+    '$3 == version {print $4 ":" $5 ":" $6}' "$wave_directory/task-ledger.tsv")
+  [[ "$worker_status" == 0:false:true ]] || continue
+
+  stage="$run_root/R-$version"
+  artifacts="$stage/artifacts"
+  metadata="$stage/metadata"
+  source="$artifacts/source"
+  build="$artifacts/build"
+  library="$artifacts/library"
+  logs="$artifacts/logs"
+  inputs="$artifacts/inputs"
+  source_git_tar_sha256=${source_git_tar_hashes[$version]}
+  source_manifest_sha256=${source_manifest_hashes[$version]}
+  git_identity_sha256=${git_identity_hashes[$version]}
 
   branch=$(awk -F = '$1 == "r_api_compat_branch" {print $2}' "$logs/r-api-symbol-audit.log")
   archive=$(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
@@ -302,8 +317,8 @@ for version in "${versions[@]}"; do
       "$minimum_expectations" "$expected_result_skips"; do
     [[ "$value" =~ ^[0-9]+$ ]] || fail "Runtime source-test counts are malformed"
   done
-  [[ "$discovered_test_files" == 71 && "$executed_test_files" == 57 &&
-    "$excluded_test_files" == 14 && "$reported_test_files" == 55 &&
+  [[ "$discovered_test_files" == 79 && "$executed_test_files" == 57 &&
+    "$excluded_test_files" == 22 && "$reported_test_files" == 55 &&
     "$whole_file_skips" == 2 && "$minimum_expectations" == 4900 ]] ||
     fail "Runtime source-test scope differs from the reviewed policy"
   case "$version:$result_skips:$expected_result_skips" in
@@ -341,6 +356,12 @@ for version in "${versions[@]}"; do
     printf 'source_git_tar_sha256\t%s\n' "$source_git_tar_sha256"
     printf 'source_manifest_sha256\t%s\n' "$source_manifest_sha256"
     printf 'git_identity_sha256\t%s\n' "$git_identity_sha256"
+    printf 'scheduler_resource_report_sha256\t%s\n' "$resource_report_sha256"
+    printf 'scheduler_stage_tasks_sha256\t%s\n' "$stage_tasks_sha256"
+    printf 'scheduler_wave_plan_sha256\t%s\n' "$wave_plan_sha256"
+    printf 'scheduler_task_ledger_sha256\t%s\n' "$wave_task_ledger_sha256"
+    printf 'scheduler_wave_manifest_sha256\t%s\n' "$wave_manifest_sha256"
+    printf 'stage_worker_sha256\t%s\n' "$stage_worker_sha256"
     printf 'discovered_test_file_count\t%s\n' "$discovered_test_files"
     printf 'executed_test_file_count\t%s\n' "$executed_test_files"
     printf 'excluded_test_file_count\t%s\n' "$excluded_test_files"
@@ -357,6 +378,9 @@ for version in "${versions[@]}"; do
   seal_metadata "$metadata" run.tsv artifacts.manifest.tsv
 done
 
+((wave_status == 0)) ||
+  fail "Runtime stage wave failed after every sibling result was retained"
+
 "$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
   "$source_tree" >/dev/null ||
   fail "Source ref or tree moved during the runtime-matrix run"
@@ -369,13 +393,18 @@ done
   done
 } > "$run_root/metadata/stages.tsv"
 {
-  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\n' \
-    "$run_id" "$source_ref" "$source_commit" "$source_tree" "${#versions[@]}"
+  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\nruntime_jobs\t%s\nstage_timeout_seconds\t%s\nresource_report_sha256\t%s\nstage_tasks_sha256\t%s\nwave_plan_sha256\t%s\nwave_task_ledger_sha256\t%s\nwave_manifest_sha256\t%s\n' \
+    "$run_id" "$source_ref" "$source_commit" "$source_tree" \
+    "${#versions[@]}" "$runtime_jobs" "$STAGE_TIMEOUT_SECONDS" \
+    "$resource_report_sha256" "$stage_tasks_sha256" "$wave_plan_sha256" \
+    "$wave_task_ledger_sha256" "$wave_manifest_sha256"
 } > "$run_root/metadata/run.tsv"
 (
   cd "$run_root/metadata"
   : > completion.inputs.tsv
-  sha256sum run.tsv stages.tsv >> completion.inputs.tsv
+  sha256sum run.tsv stages.tsv resource-jobs.tsv stage-tasks.tsv \
+    stage-wave.manifest.tsv stage-wave/wave-plan.tsv \
+    stage-wave/task-ledger.tsv >> completion.inputs.tsv
   for version in "${versions[@]}"; do
     sha256sum "../R-$version/metadata/completion.seal" >> completion.inputs.tsv
   done

@@ -49,7 +49,7 @@ SEXP paradox_get_named_column_checked(SEXP table, const char *corrupt_context,
     );
   }
 
-  SEXP names = Rf_getAttrib(table, R_NamesSymbol);
+  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
   const R_xlen_t n_columns = XLENGTH(table);
   if (TYPEOF(names) != STRSXP) {
     Rf_error(
@@ -84,6 +84,7 @@ SEXP paradox_get_named_column_checked(SEXP table, const char *corrupt_context,
   }
 
   if (matches == 1) {
+    UNPROTECT(1);
     return result;
   }
   if (matches > 1) {
@@ -340,11 +341,11 @@ static void validate_capacity_bridge(SEXP source, SEXP result,
     }
   }
 
-  SEXP names = Rf_getAttrib(result, R_NamesSymbol);
-  SEXP selfref = Rf_getAttrib(
+  SEXP names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
+  SEXP selfref = PROTECT(Rf_getAttrib(
     result,
     Rf_install(".internal.selfref")
-  );
+  ));
   if (TYPEOF(names) != STRSXP || XLENGTH(names) != XLENGTH(result) ||
       TYPEOF(selfref) != EXTPTRSXP ||
       R_ExternalPtrAddr(selfref) != (void *) R_NilValue ||
@@ -369,10 +370,10 @@ static void validate_capacity_bridge(SEXP source, SEXP result,
   if (TYPEOF(truelength) != INTSXP || XLENGTH(truelength) != 1 ||
       INTEGER_ELT(truelength, 0) < 0 ||
       (R_xlen_t) INTEGER_ELT(truelength, 0) < XLENGTH(result)) {
-    UNPROTECT(3);
+    UNPROTECT(5);
     Rf_error("data.table::alloc.col() did not allocate its table shell");
   }
-  UNPROTECT(3);
+  UNPROTECT(5);
 }
 
 static void own_named_data_table_columns(SEXP table) {
@@ -459,7 +460,7 @@ SEXP paradox_finalize_data_table(SEXP table) {
       !Rf_inherits(table, "data.table")) {
     Rf_error("Internal error: expected an ordinary data.table shell");
   }
-  SEXP names = Rf_getAttrib(table, R_NamesSymbol);
+  SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
   if (TYPEOF(names) != STRSXP || ALTREP(names) ||
       XLENGTH(names) != XLENGTH(table)) {
     Rf_error("Internal error: expected ordinary data.table names");
@@ -489,6 +490,6 @@ SEXP paradox_finalize_data_table(SEXP table) {
   SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
   Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
   Rf_setAttrib(result, R_NamesSymbol, result_names);
-  UNPROTECT(6);
+  UNPROTECT(7);
   return result;
 }

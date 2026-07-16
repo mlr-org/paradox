@@ -4,6 +4,15 @@ design_transpose_param_trafos = function(xs, param_set) {
   ps = param_set
   fallback = function() map(xs, function(x) ps$trafo(x))
 
+  # Exact package-generated log-scale transformations are pure scalar kernels.
+  # The native lane authenticates their complete ParamSet/function state and
+  # declines before invoking any user callback; everything else retains the
+  # callback-preserving implementation below.
+  native = .Call(C_design_transpose_logscale_builtin, xs, param_set)
+  if (!is.null(native)) {
+    return(native)
+  }
+
   if (!isTRUE(.Call(C_param_set_surface_auth, param_set, 1L)) ||
       !identical(class(param_set), c("ParamSet", "R6")) ||
       !is.null(param_set$extra_trafo)) {
@@ -201,6 +210,22 @@ Design = R6Class("Design",
     set_deps_to_na = function(remove_dupl) {
 
       ps = self$param_set
+      native = .Call(C_design_dependency_plan_builtin, self$data, ps)
+      if (!is.null(native)) {
+        # The native lane is a read-only, all-or-nothing planner. Keep the
+        # established data.table by-reference mutation and one set() call for
+        # every dependency row, including empty row selections.
+        for (edge in seq_along(native$rows)) {
+          set(
+            self$data,
+            i = native$rows[[edge]],
+            j = native$columns[[edge]],
+            value = native$values[[edge]]
+          )
+        }
+        return(invisible(NULL))
+      }
+
       graph = ps$deps[, 1:2]
       colnames(graph) = c("id", "parents")
       # we need to make sure that every param has a (maybe empty) row in the graph table

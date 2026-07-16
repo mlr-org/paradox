@@ -478,18 +478,28 @@ static int disjoint_names(SEXP left, SEXP right,
 
 static int exact_row_names(SEXP table, R_xlen_t row_count,
     R_xlen_t *work_since_interrupt) {
-  SEXP row_names = Rf_getAttrib(table, R_RowNamesSymbol);
+  /* Compact data-frame row names are expanded by Rf_getAttrib() into a fresh
+   * ALTREP vector which is not owned by `table`.  Keep that facade rooted while
+   * interrupt checks and Elt access can allocate. */
+  SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
   if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
       XLENGTH(row_names) != row_count ||
       !paradox_api_has_no_attributes(row_names)) {
+    UNPROTECT(1);
     return FALSE;
   }
+  PARADOX_TEST_GC_ROW_NAMES_BARRIER(
+    row_names,
+    PARADOX_TEST_GC_ROW_NAMES_STORE
+  );
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
     if (INTEGER_ELT(row_names, row) != (int) row + 1) {
+      UNPROTECT(1);
       return FALSE;
     }
   }
+  UNPROTECT(1);
   return TRUE;
 }
 

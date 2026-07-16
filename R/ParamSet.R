@@ -13,6 +13,39 @@ new_empty_deps = function() {
   )
 }
 
+param_set_bulk_subspace_shells = function(plans) {
+  if (!length(plans)) return(NULL)
+  # Generator authentication and shell allocation are one native transaction.
+  # The live `$new` closure is never invoked speculatively: any altered R6
+  # surface returns NULL with every token intact for the historical fallback.
+  .Call(C_param_set_bulk_shells, ParamSet, plans)
+}
+
+param_set_subspaces_fallback = function(param_set, private, ids, values) {
+  sapply(ids, simplify = FALSE, function(get_id) {
+    result = ParamSet$new()
+    result$extra_trafo = param_set$extra_trafo
+    # constraint make no sense here, basically by definition
+    result$.__enclos_env__$private$.params = setindexv(
+      private$.params[get_id, on = "id"],
+      c("id", "cls", "grouping")
+    )
+    # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
+    result$.__enclos_env__$private$.trafos = setkeyv(
+      private$.trafos[get_id, on = "id", nomatch = NULL],
+      "id"
+    )
+    result$.__enclos_env__$private$.tags = setkeyv(
+      private$.tags[get_id, on = "id", nomatch = NULL],
+      "id"
+    )
+    result$assert_values = FALSE
+    result$values = values[match(get_id, names(values), nomatch = 0)]
+    result$assert_values = TRUE
+    result
+  })
+}
+
 # R < 4.6 deliberately retains the data.table implementation of Domain
 # reconstruction because its public binding API cannot authenticate inert R6
 # locals. Normalize that compatible path to the same owned, by-reference-safe
@@ -68,6 +101,45 @@ param_set_call_trafo_at = function(ids, callbacks, values, index) {
   trafo = callbacks[[index]]
   value = values[[index]]
   param_set_call_trafo(id, trafo, value)
+}
+
+# Build authenticated, single-use one-row ParamSet states without consuming
+# them. NULL is an atomic fallback sentinel: callers either adopt every token
+# exactly once or retain the complete historical construction path.
+param_set_subspace_plans = function(param_set, private, ids,
+    values = param_set$values) {
+  if (!identical(class(param_set), c("ParamSet", "R6")) ||
+      !is.character(ids) || !is.null(attributes(ids))) {
+    return(NULL)
+  }
+  # Validate and index the complete request once, then create every detached
+  # singleton state in one native transaction. No token becomes visible if a
+  # later allocation or final audit forces the complete request to fall back.
+  plans = .Call(
+    C_param_set_subspace_states,
+    private,
+    param_set,
+    ids,
+    values
+  )
+  if (!is.list(plans) || length(plans) != length(ids) ||
+      !identical(names(plans), ids)) {
+    return(NULL)
+  }
+  plans
+}
+
+# Preserve the observed three-formal internal hook used by compatibility tests
+# and downstream diagnostics. The package implementation accepts the captured
+# values snapshot explicitly; a replacement with the historical signature is
+# still called with exactly those three arguments and can force fallback.
+param_set_call_subspace_plans = function(param_set, private, ids, values) {
+  planner = param_set_subspace_plans
+  if ("values" %in% names(formals(planner))) {
+    planner(param_set, private, ids, values)
+  } else {
+    planner(param_set, private, ids)
+  }
 }
 
 #' @title ParamSet
@@ -149,10 +221,16 @@ ParamSet = R6Class("ParamSet",
           params
         ))) {
         # The historical subset path installs this secondary index on every
-        # result. Deep-cloned data.tables can lose secondary indices, so the
-        # adopted native state must restore it as well; otherwise equivalent
-        # clone/union sequences expose different `$params` attributes.
-        setindexv(private$.params, c("id", "cls", "grouping"))
+        # result. Exact one-row subspace tokens already carry the probed native
+        # representation; every other token and unsupported data.table layout
+        # retains the setter so clone/union sequences expose the same marker.
+        if (is.null(attr(
+            attr(private$.params, "index", exact = TRUE),
+            "__id__cls__grouping",
+            exact = TRUE
+          ))) {
+          setindexv(private$.params, c("id", "cls", "grouping"))
+        }
         return(invisible(NULL))
       }
 
@@ -171,11 +249,23 @@ ParamSet = R6Class("ParamSet",
         private$.trafos = native$trafos
         initvalues = native$init_values
 
-        # The tables are already in key order. Let data.table attach its
-        # optional lookup metadata without asking it to assemble or reorder
-        # any constructor state.
-        setindexv(paramtbl, c("id", "cls", "grouping"))
-        setindexv(private$.tags, "tag")
+        # Canonical ASCII bundles already carry the probed data.table index
+        # layout. Unsupported encodings and runtime layouts retain data.table's
+        # own constructor as a conservative fallback.
+        if (is.null(attr(
+            attr(paramtbl, "index", exact = TRUE),
+            "__id__cls__grouping",
+            exact = TRUE
+          ))) {
+          setindexv(paramtbl, c("id", "cls", "grouping"))
+        }
+        if (is.null(attr(
+            attr(private$.tags, "index", exact = TRUE),
+            "__tag",
+            exact = TRUE
+          ))) {
+          setindexv(private$.tags, "tag")
+        }
         private$.params = paramtbl
 
         for (row in seq_along(native$requirements)) {
@@ -583,6 +673,27 @@ ParamSet = R6Class("ParamSet",
       # missing required parameters.
       if (!length(xs) && presence == "none") return(trueret)
 
+      self_class = class(self)
+      native_collection = identical(
+        self_class,
+        c("ParamSetCollection", "ParamSet", "R6")
+      )
+      # The common collection assignment path uses presence = "none". Enter
+      # C before materializing IDs or running vectorized membership checks;
+      # every unsupported or invalid input returns NULL and receives the
+      # established diagnostic from the R implementation below.
+      if (presence == "none" && native_collection) {
+        native = .Call(
+          C_param_set_collection_check_builtin,
+          private,
+          self,
+          xs,
+          sanitize,
+          check_strict
+        )
+        if (!is.null(native)) return(native)
+      }
+
       params = private$.params
       ns = names(xs)
       ids = private$.params$id
@@ -646,11 +757,23 @@ ParamSet = R6Class("ParamSet",
       # custom-Domain values return NULL and retain the exact R diagnostics.
       # Restricting this to the base class also preserves subclass overrides of
       # test_constraint() and check_dependencies().
-      native_safe = identical(class(self), c("ParamSet", "R6")) &&
-        isTRUE(.Call(C_param_set_surface_auth, self, 2L)) &&
-        (!check_strict || (is.null(private$.constraint) && !nrow(private$.deps)))
-      if (native_safe) {
-        native = .Call(C_param_set_check_builtin, params, xs, sanitize)
+      if (identical(self_class, c("ParamSet", "R6"))) {
+        native_safe = isTRUE(.Call(C_param_set_surface_auth, self, 2L)) &&
+          (!check_strict ||
+            (is.null(private$.constraint) && !nrow(private$.deps)))
+        if (native_safe) {
+          native = .Call(C_param_set_check_builtin, params, xs, sanitize)
+          if (!is.null(native)) return(native)
+        }
+      } else if (native_collection && presence != "none") {
+        native = .Call(
+          C_param_set_collection_check_builtin,
+          private,
+          self,
+          xs,
+          sanitize,
+          check_strict
+        )
         if (!is.null(native)) return(native)
       }
 
@@ -863,33 +986,53 @@ ParamSet = R6Class("ParamSet",
       # in that order through self$check(). Native admission must retain both
       # that laziness and that error priority.
       native = if (isTRUE(.Call(C_param_set_surface_auth, self, 3L))) {
-        .Call(C_param_set_check_dt_builtin, private$.params, xdt)
+        .Call(C_param_set_check_dt_plan_builtin, private$.params, xdt)
       }
-      if (isTRUE(native)) {
+      if (is.list(native)) {
+        # R 4.6 can wrap ordinary data-frame lists in ALTREP. C materializes
+        # that shell once and returns it even when later admission declines;
+        # use the same snapshot for fallback so an element callback is never
+        # replayed after partial observation.
+        xdt = native[[2L]]
+        native = native[[1L]]
+      }
+      if (is.integer(native) && length(native) == 1L && !is.na(native)) {
         if (!length(xdt) || !length(xdt[[1L]])) return(TRUE)
 
         # Forward these promises through the same validators used by check().
         # Besides retaining error priority, this preserves the condition call
         # when evaluating an argument itself raises an error.
         assert_choice(presence, c("none", "all", "required"))
-        canonical_presence = identical(presence, "none")
         assert_flag(check_strict)
 
-        # check() has no eager validator for allow_token. A nonliteral promise
-        # must therefore be forced by the unchanged row path below, where its
-        # side effects, errors, and callback frame remain compatible. Default
-        # and explicit literal flags are the common native-safe cases.
-        allow_token_expression = substitute(allow_token)
+        # The generated R6 wrapper forwards these arguments as symbols. Inspect
+        # its authenticated caller frame so only defaults and explicit literals
+        # enter the one-pass shortcut. Expressions with side effects stay on
+        # the row path: historically they may change the table or ParamSet
+        # state before later rows are checked.
+        presence_expression = substitute(presence, parent.frame())
+        check_strict_expression = substitute(check_strict, parent.frame())
+        allow_token_expression = substitute(allow_token, parent.frame())
+        canonical_presence = identical(presence_expression, "none") ||
+          identical(presence_expression, "all")
+        canonical_check_strict = identical(check_strict_expression, FALSE) ||
+          identical(check_strict_expression, TRUE)
         canonical_allow_token = identical(allow_token_expression, FALSE) ||
           identical(allow_token_expression, TRUE)
-
-        # Presence modes other than "none" require row-specific dependency
-        # reasoning and deliberately stay on the compatibility path for now.
-        native_safe = canonical_presence && canonical_allow_token &&
+        native_safe = (identical(presence, "none") ||
+            identical(presence, "all")) &&
+          canonical_presence && canonical_check_strict &&
+          canonical_allow_token &&
           (identical(check_strict, FALSE) ||
             (identical(check_strict, TRUE) &&
-              is.null(private$.constraint) && !nrow(private$.deps)))
-        if (native_safe) return(native)
+              is.null(private$.constraint) && !nrow(private$.deps))) &&
+          isTRUE(.Call(C_param_set_surface_auth, self, 3L))
+        if (native_safe) {
+          all_complete = bitwAnd(native, 1L) != 0L
+          all_params = bitwAnd(native, 2L) != 0L
+          if (identical(presence, "none") ||
+              (all_complete && all_params)) return(TRUE)
+        }
       }
 
       xss = map(transpose_list(xdt), discard, is.na)
@@ -1076,20 +1219,28 @@ ParamSet = R6Class("ParamSet",
     #'   IDs for which to create `ParamSet`s. Defaults to all IDs.
     #' @return named `list()` of `ParamSet`.
     subspaces = function(ids = private$.params$id) {
+      # Preserve the historical first observation before native admission.
+      # Altered active bindings therefore keep their callback/error priority,
+      # while exact objects expose the same private value snapshot to C.
       values = self$values
-      sapply(ids, simplify = FALSE, function(get_id) {
-        result = ParamSet$new()
-        result$extra_trafo = self$extra_trafo
-        # constraint make no sense here, basically by definition
-        result$.__enclos_env__$private$.params = setindexv(private$.params[get_id, on = "id"], c("id", "cls", "grouping"))
-        # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
-        result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[get_id, on = "id", nomatch = NULL], "id")
-        result$.__enclos_env__$private$.tags = setkeyv(private$.tags[get_id, on = "id", nomatch = NULL], "id")
-        result$assert_values = FALSE
-        result$values = values[match(get_id, names(values), nomatch = 0)]
-        result$assert_values = TRUE
-        result
-      })
+
+      # Reuse the authenticated single-use subset hand-off for the common
+      # exact base ParamSet. NA selects the internal subspace mode, which emits
+      # the historically empty dependency table for every detached child.
+      native = param_set_call_subspace_plans(self, private, ids, values)
+      if (!is.null(native)) {
+        result = param_set_bulk_subspace_shells(native)
+        if (is.null(result)) {
+          result = param_set_subspaces_fallback(self, private, ids, values)
+        }
+        for (subspace in result) {
+          subspace$extra_trafo = self$extra_trafo
+        }
+        names(result) = ids
+        return(result)
+      }
+
+      param_set_subspaces_fallback(self, private, ids, values)
     },
 
     #' @description

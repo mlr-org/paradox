@@ -138,7 +138,9 @@ static int exact_forwarding_body(SEXP body, const char *target,
 }
 
 static int active_list_contains(surface_state_t *state,
-    const char *binding_name, SEXP closure) {
+    const char *binding_name, SEXP closure, SEXP closure_environment,
+    const char *target, const char *const *formal_names,
+    const formal_default_t *formal_defaults, R_xlen_t formal_count) {
   SEXP active = PROTECT(paradox_domain_local_value(
     state->enclosure,
     ".__active__"
@@ -167,13 +169,47 @@ static int active_list_contains(surface_state_t *state,
     return FALSE;
   }
   SEXP registered_closure = PROTECT(VECTOR_ELT(active, found));
-  const Rboolean identical = R_compute_identical(
-    registered_closure,
-    closure,
-    IDENT_USE_CLOENV
-  );
-  UNPROTECT(3);
-  return identical != FALSE;
+  if (registered_closure == closure) {
+    UNPROTECT(3);
+    return TRUE;
+  }
+
+  /* Serialization duplicates the active binding closure and the R6 registry
+   * closure separately.  Match that canonical representation without
+   * R_compute_identical(): its default closure comparison strips source
+   * references by allocating duplicate closures, so a finalizer could change
+   * state authenticated earlier in this call.  The native lane is unavailable
+   * before R 4.6; on admitted runtimes these public closure accessors are
+   * direct, and the exact generated formals/body checks below do not allocate.
+   * A merely similar closure with different executable structure still fails
+   * closed. */
+  if (TYPEOF(registered_closure) != CLOSXP) {
+    UNPROTECT(3);
+    return FALSE;
+  }
+  SEXP registered_formals = PROTECT(paradox_api_closure_formals(
+    registered_closure
+  ));
+  SEXP registered_body = PROTECT(paradox_api_closure_expression(
+    registered_closure
+  ));
+  SEXP registered_environment = PROTECT(paradox_api_closure_environment(
+    registered_closure
+  ));
+  const int canonical = registered_environment == closure_environment &&
+    exact_formals(
+      registered_formals,
+      formal_names,
+      formal_defaults,
+      formal_count
+    ) && exact_forwarding_body(
+      registered_body,
+      target,
+      formal_names,
+      formal_count
+    );
+  UNPROTECT(6);
+  return canonical;
 }
 
 static int canonical_wrapper(surface_state_t *state, SEXP container,
@@ -237,7 +273,12 @@ static int canonical_wrapper(surface_state_t *state, SEXP container,
     (!active || (container == state->self && active_list_contains(
       state,
       binding_name,
-      closure
+      closure,
+      environment,
+      target,
+      formal_names,
+      formal_defaults,
+      formal_count
     )));
   UNPROTECT(4);
   return exact;
@@ -440,7 +481,8 @@ static int authenticate_design_trafo(surface_state_t *state) {
   );
 }
 
-static int authenticate_check(surface_state_t *state, int table) {
+static int authenticate_check(surface_state_t *state, int table,
+    int allow_collection) {
   static const char *const check_names[] = {
     "xs", "check_strict", "sanitize", "presence", "allow_token"
   };
@@ -464,12 +506,17 @@ static int authenticate_check(surface_state_t *state, int table) {
   static const formal_default_t active_default[] = {FORMAL_MISSING};
   static const char *const deps_name[] = {"v"};
   static const formal_default_t deps_default[] = {FORMAL_MISSING};
-  if (state->is_collection || !direct_private_binding(state, ".params") ||
-      !direct_private_binding(state, ".constraint") ||
-      !direct_private_binding(state, ".deps") || !canonical_method(
+  SEXP inherited = inherited_environment(state);
+  if ((state->is_collection && !allow_collection) ||
+      !direct_private_binding(state, ".params") ||
+      !direct_private_binding(state, ".deps") ||
+      (!state->is_collection &&
+        !direct_private_binding(state, ".constraint")) ||
+      (state->is_collection && !direct_private_binding(state, ".sets")) ||
+      !canonical_method(
       state,
       state->self,
-      state->enclosure,
+      inherited,
       R_UnboundValue,
       "check",
       ".__ParamSet__check",
@@ -479,7 +526,7 @@ static int authenticate_check(surface_state_t *state, int table) {
     ) || !canonical_method(
       state,
       state->self,
-      state->enclosure,
+      inherited,
       R_UnboundValue,
       "test_constraint",
       ".__ParamSet__test_constraint",
@@ -489,7 +536,7 @@ static int authenticate_check(surface_state_t *state, int table) {
     ) || !canonical_method(
       state,
       state->self,
-      state->enclosure,
+      inherited,
       R_UnboundValue,
       "check_dependencies",
       ".__ParamSet__check_dependencies",
@@ -499,18 +546,22 @@ static int authenticate_check(surface_state_t *state, int table) {
     ) || !canonical_active(
       state,
       state->enclosure,
-      R_UnboundValue,
+      state->is_collection ? state->super_object : R_UnboundValue,
       "constraint",
-      ".__ParamSet__constraint",
+      state->is_collection
+        ? ".__ParamSetCollection__constraint"
+        : ".__ParamSet__constraint",
       active_name,
       active_default,
       1
     ) || !canonical_active(
       state,
       state->enclosure,
-      R_UnboundValue,
+      state->is_collection ? state->super_object : R_UnboundValue,
       "deps",
-      ".__ParamSet__deps",
+      state->is_collection
+        ? ".__ParamSetCollection__deps"
+        : ".__ParamSet__deps",
       deps_name,
       deps_default,
       1
@@ -520,7 +571,7 @@ static int authenticate_check(surface_state_t *state, int table) {
   return !table || canonical_method(
     state,
     state->self,
-    state->enclosure,
+    inherited,
     R_UnboundValue,
     "check_dt",
     ".__ParamSet__check_dt",
@@ -644,6 +695,100 @@ static int authenticate_random_design(surface_state_t *state) {
   );
 }
 
+static int authenticate_design_dependencies(surface_state_t *state) {
+  static const char *const ids_names[] = {"class", "tags", "any_tags"};
+  static const formal_default_t ids_defaults[] = {
+    FORMAL_NULL, FORMAL_NULL, FORMAL_NULL
+  };
+  static const char *const value_name[] = {"v"};
+  static const formal_default_t value_default[] = {FORMAL_MISSING};
+  if (state->is_collection ||
+      !direct_private_binding(state, ".params") ||
+      !direct_private_binding(state, ".deps") || !canonical_method(
+        state,
+        state->self,
+        state->enclosure,
+        R_UnboundValue,
+        "ids",
+        ".__ParamSet__ids",
+        ids_names,
+        ids_defaults,
+        3
+      ) || !canonical_active(
+        state,
+        state->enclosure,
+        R_UnboundValue,
+        "deps",
+        ".__ParamSet__deps",
+        value_name,
+        value_default,
+        1
+      )) {
+    return FALSE;
+  }
+
+  static const char *const active_names[] = {
+    "storage_type", "has_deps"
+  };
+  static const char *const active_targets[] = {
+    ".__ParamSet__storage_type", ".__ParamSet__has_deps"
+  };
+  for (R_xlen_t index = 0; index < 2; ++index) {
+    if (!canonical_active(
+        state,
+        state->enclosure,
+        R_UnboundValue,
+        active_names[index],
+        active_targets[index],
+        NULL,
+        NULL,
+        0
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+int paradox_param_set_design_dependencies_auth(SEXP self) {
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, SURFACE_ROOT_COUNT));
+  surface_state_t state;
+  const int authenticated = load_state(self, &state, roots) &&
+    authenticate_design_dependencies(&state);
+  UNPROTECT(1);
+  return authenticated;
+}
+
+int paradox_param_set_design_trafo_auth(SEXP self) {
+  /* Allocate the root plan before inspecting the R6 object.  Callers use this
+   * internal integer result at their final admission boundary, avoiding the
+   * ScalarLogical allocation required by the registered diagnostic wrapper. */
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, SURFACE_ROOT_COUNT));
+  surface_state_t state;
+  const int authenticated = load_state(self, &state, roots) &&
+    authenticate_design_trafo(&state);
+  UNPROTECT(1);
+  return authenticated;
+}
+
+int paradox_param_set_collection_check_auth(SEXP self) {
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, SURFACE_ROOT_COUNT));
+  surface_state_t state;
+  const int authenticated = load_state(self, &state, roots) &&
+    state.is_collection && authenticate_check(&state, FALSE, TRUE);
+  UNPROTECT(1);
+  return authenticated;
+}
+
+int paradox_param_set_random_design_auth(SEXP self) {
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, SURFACE_ROOT_COUNT));
+  surface_state_t state;
+  const int authenticated = load_state(self, &state, roots) &&
+    authenticate_random_design(&state);
+  UNPROTECT(1);
+  return authenticated;
+}
+
 SEXP paradox_param_set_surface_auth(SEXP self, SEXP mode) {
   if (TYPEOF(mode) != INTSXP || ALTREP(mode) || XLENGTH(mode) != 1 ||
       !paradox_api_has_no_attributes(mode)) {
@@ -668,10 +813,10 @@ SEXP paradox_param_set_surface_auth(SEXP self, SEXP mode) {
       authenticated = authenticate_design_trafo(&state);
       break;
     case SURFACE_CHECK:
-      authenticated = authenticate_check(&state, FALSE);
+      authenticated = authenticate_check(&state, FALSE, FALSE);
       break;
     case SURFACE_CHECK_DT:
-      authenticated = authenticate_check(&state, TRUE);
+      authenticated = authenticate_check(&state, TRUE, FALSE);
       break;
     case SURFACE_RANDOM_DESIGN:
       authenticated = authenticate_random_design(&state);
