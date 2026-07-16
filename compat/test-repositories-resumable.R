@@ -113,9 +113,9 @@ if (!identical(Sys.getenv("PARADOX_ACTIVE_ROOT", unset = ""), root)) {
 expected_r <- file.path(root, ".local", "toolchain", "bin", "R")
 expected_rscript <- file.path(root, ".local", "toolchain", "bin", "Rscript")
 expected_git <- file.path(root, ".local", "toolchain", "bin", "git")
-if (!identical(Sys.which("R"), expected_r) ||
-    !identical(Sys.which("Rscript"), expected_rscript) ||
-    !identical(Sys.which("git"), expected_git) ||
+if (!identical(unname(Sys.which("R")), expected_r) ||
+    !identical(unname(Sys.which("Rscript")), expected_rscript) ||
+    !identical(unname(Sys.which("git")), expected_git) ||
     !identical(normalizePath(R.home(), winslash = "/", mustWork = TRUE),
       file.path(root, ".local", "toolchain", "lib", "R"))) {
   stop("the exact repository-local R, Rscript, and Git must be active",
