@@ -143,7 +143,16 @@ ancestor_paths <- function(paths) {
 }
 expected_directories <- sort(ancestor_paths(retained$path), method = "radix")
 observed_directories <- sort(tree$path[tree_directories], method = "radix")
-if (!identical(observed_directories, expected_directories)) {
+# testthat creates this directory while discovering snapshot tests, even when
+# no snapshot is written.  It has no leaf in the tree receipt, and therefore
+# cannot carry source content.  Keep the exception exact: any file, symlink,
+# nested directory, or different empty directory still changes the inventories
+# above or the unexplained-directory set below.
+allowed_empty_directories <- "tests/testthat/_snaps"
+missing_directories <- setdiff(expected_directories, observed_directories)
+unexplained_directories <- setdiff(observed_directories, expected_directories)
+if (length(missing_directories) ||
+    any(!unexplained_directories %in% allowed_empty_directories)) {
   fail("memory source tree contains an empty or unexplained directory")
 }
 

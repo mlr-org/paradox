@@ -562,7 +562,9 @@ validate_metadata_ledger "$ORDINARY_LEDGER" "$ORDINARY_DIRECTORY" ordinary \
 mapfile -t observed_modes < <(find "$MODES" -mindepth 1 -maxdepth 1 \
   -printf '%f\t%y\n' | LC_ALL=C sort)
 expected_modes=()
-for mode in gct valgrind rchk; do
+# Keep this in the same bytewise order as the sorted filesystem inventory.
+# Execution and metadata-ledger order remain gct, valgrind, rchk above.
+for mode in gct rchk valgrind; do
   [[ "${run_fields[$mode]}" == true ]] && expected_modes+=("$mode"$'\t'd)
 done
 [[ "${observed_modes[*]}" == "${expected_modes[*]}" ]] ||
@@ -727,8 +729,11 @@ if [[ "${run_fields[valgrind]}" == true ]]; then
     find "$SCRATCH" -path '*/valgrind-*/output.log' -type f -exec cat {} + >&2 || true
     fail "retained Valgrind logs failed trusted zero-error replay"
   fi
+  require_exact_lines "$MODES/valgrind/logs/valgrind-version.log" \
+    'valgrind-3.27.1'
   while IFS= read -r valgrind_log; do
     valgrind_name=$(basename "$valgrind_log")
+    [[ "$valgrind_name" == valgrind-version.log ]] && continue
     [[ "$valgrind_name" =~ ^valgrind-(smoke|baseline|probes|analyzer)\.[0-9]+\.log$ ]] ||
       fail "unexpected Valgrind process-log family: $valgrind_name"
   done < <(find "$MODES/valgrind/logs" -maxdepth 1 -type f \
@@ -855,6 +860,8 @@ if [[ "${run_fields[rchk]}" == true ]]; then
       value[$1] = $2
     }
     END {
+      available = value["memory_available_mib"] + 0
+      required = value["memory_reserve_mib"] + 20480
       if (NR != count || value["field"] != "value" ||
           value["schema"] != "1" || value["profile"] != "rchk" ||
           value["cpu_per_job"] != "1" ||
@@ -865,8 +872,7 @@ if [[ "${run_fields[rchk]}" == true ]]; then
           !positive(value["memory_reserve_mib"]) ||
           value["memory_reserve_mib"] + 0 < 16384 ||
           !positive(value["memory_jobs"]) ||
-          value["memory_available_mib"] + 0 <
-            value["memory_reserve_mib"] + 20480) exit 1
+          available < required) exit 1
     }
   ' "$RCHK_RESOURCE_REPORT" ||
     fail "retained rchk resource admission is malformed or unsafe"

@@ -156,6 +156,7 @@ build_fixture() {
   mkdir -p "$RUN_DIRECTORY/metadata/ordinary-inputs" \
     "$RUN_DIRECTORY/source/scripts/environment" \
     "$RUN_DIRECTORY/source/environment" \
+    "$RUN_DIRECTORY/source/tests/testthat" \
     "$RUN_DIRECTORY/modes/gct/library/paradox/libs" \
     "$RUN_DIRECTORY/modes/gct/artifacts" \
     "$RUN_DIRECTORY/modes/gct/logs" \
@@ -214,6 +215,8 @@ build_fixture() {
     "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
   printf '%s\n' 'Package: paradox' 'Version: 2.0.0' \
     > "$RUN_DIRECTORY/source/DESCRIPTION"
+  printf '%s\n' '# synthetic source leaf' \
+    > "$RUN_DIRECTORY/source/tests/testthat/test-synthetic.R"
 
   "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
     "$RUN_DIRECTORY/metadata/source-for-manifest.tsv" >/dev/null
@@ -310,9 +313,23 @@ valid_replay_milliseconds=$((
   (valid_replay_finished_ns - valid_replay_started_ns) / 1000000
 ))
 
+# testthat creates an empty snapshot directory while discovering snapshot
+# tests.  It carries no source leaf and is the sole permitted empty-directory
+# side effect.  A neighboring empty directory must remain inadmissible.
+build_fixture
+mkdir "$RUN_DIRECTORY/source/tests/testthat/_snaps"
+seal_fixture
+"$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+build_fixture
+mkdir "$RUN_DIRECTORY/source/tests/testthat/unexplained-empty"
+seal_fixture
+expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+
 # Interrupt the verifier while both independent tree readers are live. Each
 # reader owns a process group; the signal/EXIT path must terminate and reap
 # both groups before the validator itself returns 143.
+build_fixture
 "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" \
   > "$RUN_DIRECTORY/interrupted.stdout" \
   2> "$RUN_DIRECTORY/interrupted.stderr" &
