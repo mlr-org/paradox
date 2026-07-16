@@ -496,7 +496,6 @@ dependency_copied_inputs <- c(
   "install-repository-test-dependencies.R" = dependency_harness,
   "fingerprint.R" = source_paths[["fingerprint"]],
   "repository-evidence.R" = source_paths[["evidence"]],
-  "resource-jobs" = source_paths[["resource_jobs"]],
   "verify-repository-evidence.R" = evidence_verifier
 )
 copied_dependency_paths <- file.path(dependency_metadata,
@@ -586,6 +585,7 @@ tool_files <- c(
   "repository-evidence.R" = source_paths[["evidence"]],
   "verify-repository-evidence.R" = evidence_verifier,
   "compat-system-evidence.R" = source_paths[["compat_system"]],
+  "resource-jobs" = source_paths[["resource_jobs"]],
   "github-repositories.tsv" = manifest_path,
   "github-snapshot.tsv" = snapshot_path,
   "install-repository-test-dependencies.R" = dependency_harness,
