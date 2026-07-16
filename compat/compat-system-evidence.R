@@ -69,6 +69,11 @@ compat_system_child_environment <- function() {
     stop("compatibility-system activation environment is incomplete", call. = FALSE)
   }
   if (!nzchar(active_root)) return(character())
+  child_path <- Sys.getenv(
+    "PARADOX_COMPAT_SYSTEM_CHILD_PATH", unset = NA_character_
+  )
+  child_path_missing <- length(child_path) != 1L || anyNA(child_path) ||
+    !nzchar(child_path)
   variables <- c(
     "PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT", "PARADOX_COMPAT_SYSTEM_ROOT",
     "PARADOX_COMPAT_SYSTEM_GEO", "PARADOX_COMPAT_SYSTEM_P1",
@@ -87,15 +92,20 @@ compat_system_child_environment <- function() {
     "FONTCONFIG_PATH", "FONTCONFIG_FILE", "R_MAKEVARS_USER"
   )
   values <- Sys.getenv(variables, unset = NA_character_)
-  if (anyNA(values) || any(!nzchar(values))) {
+  if (child_path_missing || anyNA(values) || any(!nzchar(values))) {
     stop(
       "active compatibility-system environment lacks: ",
-      paste(variables[is.na(values) | !nzchar(values)], collapse = ", "),
+      paste(c(
+        if (child_path_missing) {
+          "PARADOX_COMPAT_SYSTEM_CHILD_PATH"
+        },
+        variables[is.na(values) | !nzchar(values)]
+      ), collapse = ", "),
       call. = FALSE
     )
   }
   names(values) <- variables
-  values
+  c(PATH = child_path, values)
 }
 
 compat_system_capture_evidence <- function(root, metadata_directory) {

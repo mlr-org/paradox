@@ -125,7 +125,10 @@ env -i \
     overlay_prefix="$ordinary_prefix:$p1:$geo"
     assert_commands "$overlay_prefix"
     test "$PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT" = "$root"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = \
+      "$overlay_prefix:/usr/bin:/bin"
     first_path=$PATH
+    first_child_path=$PARADOX_COMPAT_SYSTEM_CHILD_PATH
     first_makevars=$R_MAKEVARS_USER
     first_pkg_config=$PKG_CONFIG_LIBDIR
 
@@ -133,6 +136,7 @@ env -i \
     . "$code_root/scripts/activate-compat-system"
     assert_commands "$overlay_prefix"
     test "$PATH" = "$first_path"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = "$first_child_path"
     test "$R_MAKEVARS_USER" = "$first_makevars"
     test "$PKG_CONFIG_LIBDIR" = "$first_pkg_config"
 
@@ -144,11 +148,13 @@ env -i \
     . "$code_root/scripts/activate-compat-system"
     assert_commands "$overlay_prefix"
     test "$PATH" = "$first_path"
+    test "$PARADOX_COMPAT_SYSTEM_CHILD_PATH" = "$first_child_path"
 
     # Ordinary activation removes the opt-in overlay and restores its own
     # documentation/runtime order.
     . "$code_root/scripts/activate"
     assert_commands "$ordinary_prefix"
+    test -z "${PARADOX_COMPAT_SYSTEM_CHILD_PATH:-}"
     case :$PATH: in
       *:"$p1":*|*:"$geo":*) exit 1 ;;
     esac
