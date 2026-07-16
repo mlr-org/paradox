@@ -1346,9 +1346,10 @@ rr_validate_install_cache <- function(target, expected_key, expected_inputs,
   installed <- rr_require_directory(
     file.path(target, "library", package), "cached installed package"
   )
-  installed_version <- as.character(utils::packageVersion(
+  installed_version <- utils::packageVersion(
     package, lib.loc = file.path(target, "library")
-  ))
+  )
+  expected_version <- package_version(version)
   manifest <- rr_read_tsv(
     file.path(target, rr_stage_manifest_relative), c("path", "size", "sha256")
   )
@@ -1357,7 +1358,7 @@ rr_validate_install_cache <- function(target, expected_key, expected_inputs,
       !identical(completion[["cache_key"]], expected_key) ||
       !identical(completion[["package"]], package) ||
       !identical(completion[["version"]], version) ||
-      !identical(installed_version, version) ||
+      !identical(installed_version, expected_version) ||
       !identical(completion[["installed_content_sha256"]], installed_content)) {
     rr_fail("install-cache semantic completion disagrees with installed bytes")
   }

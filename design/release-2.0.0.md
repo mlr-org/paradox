@@ -37,6 +37,7 @@ native, runtime, differential, or memory analyzers.
 |---|---|---|
 | Native compilers, analyzers, sanitizers, symbols, full tests, CRAN and depends-only checks | `release-native-20260716T165635Z` | Passed and independently replayed |
 | Public R API, four header releases, 35 translation units, GCC and Clang | `release-r-api-20260716T171343Z` | Passed and independently replayed |
+| Windows/Rtools and macOS ARM64 CI | Exact frozen-candidate remote run not yet available | Required external handoff before publication; the frozen ref is local only |
 | Real R 4.3.3 and 4.5.2 runtimes | `release-runtime-matrix-20260716T172036Z` | Passed; verifier replayed with restricted `PATH` |
 | Behavioral differential, 17 cases | `20260716T172358Z-922316` | 10 equal, 7 exact reviewed differences, 0 unexpected |
 | GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed and independently replayed |
@@ -81,6 +82,11 @@ independent evidence that they are outside Paradox 2.0.0:
 - `mlr3extralearners`: the huge optional-backend inventory reached the RWeka
   section before the fixed 60-minute deadline. Its factual timeout is retained;
   the runner was not restarted or granted an unbounded exception.
+- `mlr3resampling`: 117 passes and 16 errors. Fifteen errors and all 658
+  warnings are one `future` multisession cascade because the source-loaded
+  package is unavailable to spawned workers; the remaining error requires
+  `sbatch` on a non-SLURM host. There are no failed expectations and no Paradox
+  failure signature.
 
 These are bounded consumer/environment characterizations, not expected Paradox
 differences and not permissions to ignore a future failure with another
@@ -108,10 +114,10 @@ release boundary is:
 - Every R object retained beyond a call has explicit ownership. Preserved roots
   have deterministic teardown; borrowed values are protected across allocation;
   callbacks never run from an allocation-free region that assumes no callback.
-- The seven reviewed behavior changes fix likely bugs rather than emulating
-  accidental upstream failures. Everything else is expected to remain
-  compatible, including internal object shapes demonstrably used by current
-  consumers.
+- The reviewed behavior fixes produce seven normalized differential deltas;
+  they repair likely bugs rather than emulating accidental upstream failures.
+  Everything else is expected to remain compatible, including internal object
+  shapes demonstrably used by current consumers.
 
 ## Verification and performance policy
 
@@ -139,7 +145,8 @@ of every gate that consumes its package bytes; a verifier-only repair does not.
 Replace every pending row above with its sealed result, record benchmark ratios
 and any accepted consumer-specific environmental limitation, replay the final
 verifiers, confirm package-payload equivalence and a clean primary worktree,
-then declare 2.0.0 complete. Do not turn a consumer failure into an allowlist:
+and obtain exact-candidate Windows/Rtools and macOS ARM64 CI results before
+declaring 2.0.0 publishable. Do not turn a consumer failure into an allowlist:
 first reproduce it against upstream paradox under the identical environment,
 fix a harness artifact when proven, and add a package regression test for every
 genuine candidate defect.

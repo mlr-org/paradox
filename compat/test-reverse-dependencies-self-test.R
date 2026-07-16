@@ -515,19 +515,21 @@ fixture_content_hash <- function(path) {
   rr_sha256(path_out)
 }
 
-make_cache <- function(path, completion_hash) {
+make_cache <- function(path, completion_hash, inputs = install_inputs) {
+  version <- inputs$value[inputs$field == "version"]
+  if (length(version) != 1L) rr_fail("fixture cache version is not unique")
   dir.create(file.path(path, "metadata"), recursive = TRUE)
   package <- file.path(path, "library", "fixture")
   dir.create(package, recursive = TRUE)
-  writeLines(c("Package: fixture", "Version: 1.0.0"),
+  writeLines(c("Package: fixture", paste0("Version: ", version)),
     file.path(package, "DESCRIPTION"), useBytes = TRUE)
   writeLines("* DONE (fixture)", file.path(path, "install.log"), useBytes = TRUE)
-  rr_write_tsv(install_inputs, file.path(path, "metadata", "cache-inputs.tsv"))
+  rr_write_tsv(inputs, file.path(path, "metadata", "cache-inputs.tsv"))
   actual_hash <- fixture_content_hash(package)
   rr_write_tsv(data.frame(
     field = c("status", "cache_key", "package", "version",
       "installed_content_sha256", "finished_utc"),
-    value = c("installed", basename(path), "fixture", "1.0.0",
+    value = c("installed", basename(path), "fixture", version,
       if (identical(completion_hash, "actual")) actual_hash else completion_hash,
       "2026-07-15T00:00:00Z"), stringsAsFactors = FALSE
   ), file.path(path, "metadata", "completion.tsv"))
@@ -555,6 +557,20 @@ valid <- rr_validate_install_cache(
 )
 if (!identical(valid$installed_content_sha256, valid_hash)) {
   rr_fail("valid install cache semantic hash changed")
+}
+hyphenated_inputs <- install_inputs
+hyphenated_inputs$value[hyphenated_inputs$field == "version"] <- "0.0.4-3"
+hyphenated_key <- rr_install_cache_key(hyphenated_inputs)
+hyphenated_cache <- file.path(temporary, hyphenated_key)
+hyphenated_hash <- make_cache(
+  hyphenated_cache, "actual", inputs = hyphenated_inputs
+)
+hyphenated <- rr_validate_install_cache(
+  hyphenated_cache, hyphenated_key, hyphenated_inputs, "fixture", "0.0.4-3",
+  fixture_content_hash
+)
+if (!identical(hyphenated$installed_content_sha256, hyphenated_hash)) {
+  rr_fail("hyphenated package version invalidated a sound install cache")
 }
 corrupt_key_inputs <- install_inputs
 corrupt_key_inputs$value[corrupt_key_inputs$field == "archive_sha256"] <-
