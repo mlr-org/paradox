@@ -193,7 +193,33 @@ repository_runner_reserve_directory <- function(parent, name, label = "directory
   path
 }
 
-repository_runner_entries <- function(path, label = "tree") {
+# Git archives preserve symbolic links.  Admit only the narrow form used by
+# reviewed consumer sources: one relative link directly to a regular file in
+# the same authenticated tree.  Directory links, chains, broken links, dot
+# components, and escaping targets remain forbidden.
+repository_runner_symlink_target <- function(path, root, label = "source tree") {
+  root <- repository_runner_require_directory(root, paste0(label, " root"))
+  target <- Sys.readlink(path)
+  if (length(target) != 1L || is.na(target) ||
+      !repository_runner_safe_relative(target)) {
+    repository_runner_fail(label, " contains an unsafe symbolic-link target")
+  }
+  target_path <- file.path(dirname(path), target)
+  if (!file.exists(target_path) || dir.exists(target_path) ||
+      repository_runner_is_symbolic(target_path)) {
+    repository_runner_fail(
+      label, " symbolic links must directly target one regular file"
+    )
+  }
+  resolved <- normalizePath(target_path, winslash = "/", mustWork = TRUE)
+  if (!startsWith(resolved, paste0(root, "/"))) {
+    repository_runner_fail(label, " contains an escaping symbolic link")
+  }
+  target
+}
+
+repository_runner_entries <- function(path, label = "tree",
+                                      allow_symlinks = FALSE) {
   path <- repository_runner_require_directory(path, paste0(label, " root"))
   if (!requireNamespace("fs", quietly = TRUE)) {
     repository_runner_fail("fs is required for non-following tree inspection")
@@ -210,7 +236,8 @@ repository_runner_entries <- function(path, label = "tree") {
   }
   info <- fs::file_info(paths)
   type <- as.character(info$type)
-  if (anyNA(type) || any(!type %in% c("file", "directory"))) {
+  allowed_types <- c("file", "directory", if (allow_symlinks) "symlink")
+  if (anyNA(type) || any(!type %in% allowed_types)) {
     repository_runner_fail(label, " contains a symbolic or special path")
   }
   relative <- substring(paths, nchar(path, type = "chars") + 2L)
@@ -223,9 +250,11 @@ repository_runner_entries <- function(path, label = "tree") {
   relative <- relative[order]
   info <- info[order, , drop = FALSE]
   type <- type[order]
-  files <- type == "file"
+  leaves <- type %in% c("file", "symlink")
   size <- rep("-", length(paths))
-  size[files] <- format(as.numeric(info$size[files]), scientific = FALSE, trim = TRUE)
+  size[leaves] <- format(
+    as.numeric(info$size[leaves]), scientific = FALSE, trim = TRUE
+  )
   data.frame(
     absolute = paths, path = relative, type = type,
     mode = sprintf("%04o", as.integer(info$permissions)), size = size,
@@ -237,27 +266,56 @@ repository_runner_entries <- function(path, label = "tree") {
 }
 
 repository_runner_tree_manifest <- function(path) {
-  entries <- repository_runner_entries(path)
+  path <- repository_runner_require_directory(path, "source tree root")
+  entries <- repository_runner_entries(path, "source tree", allow_symlinks = TRUE)
   files <- entries$type == "file"
+  links <- entries$type == "symlink"
   sha256 <- rep("-", nrow(entries))
   if (any(files)) sha256[files] <- repository_runner_sha256(entries$absolute[files])
+  if (any(links)) {
+    targets <- vapply(
+      entries$absolute[links], repository_runner_symlink_target,
+      character(1L), root = path, label = "source tree"
+    )
+    sha256[links] <- vapply(
+      targets, repository_runner_object_sha256, character(1L),
+      prefix = "repository-runner-symlink-"
+    )
+  }
   data.frame(path = entries$path, type = entries$type, mode = entries$mode,
     size = entries$size, sha256 = sha256, stringsAsFactors = FALSE)
 }
 
 repository_runner_file_manifest <- function(path, exclude_git = FALSE) {
-  entries <- repository_runner_entries(path)
+  path <- repository_runner_require_directory(path, "source manifest root")
+  entries <- repository_runner_entries(
+    path, "source manifest", allow_symlinks = TRUE
+  )
   if (exclude_git) {
     entries <- entries[entries$path != ".git" & !startsWith(entries$path, ".git/"),
       , drop = FALSE]
   }
-  entries <- entries[entries$type == "file", , drop = FALSE]
+  entries <- entries[entries$type %in% c("file", "symlink"), , drop = FALSE]
   modes <- strtoi(entries$mode, base = 8L)
   if (anyNA(modes)) repository_runner_fail("file manifest contains an invalid mode")
+  files <- entries$type == "file"
+  links <- entries$type == "symlink"
+  sha256 <- character(nrow(entries))
+  if (any(files)) sha256[files] <- repository_runner_sha256(entries$absolute[files])
+  if (any(links)) {
+    targets <- vapply(
+      entries$absolute[links], repository_runner_symlink_target,
+      character(1L), root = path, label = "source manifest"
+    )
+    sha256[links] <- vapply(
+      targets, repository_runner_object_sha256, character(1L),
+      prefix = "repository-runner-symlink-"
+    )
+  }
   data.frame(
     path = entries$path, size = entries$size,
-    executable = ifelse(bitwAnd(modes, 64L) != 0L, "true", "false"),
-    sha256 = if (nrow(entries)) repository_runner_sha256(entries$absolute) else character(),
+    executable = ifelse(files & bitwAnd(modes, 64L) != 0L, "true", "false"),
+    sha256 = sha256,
     stringsAsFactors = FALSE
   )
 }
@@ -527,7 +585,8 @@ repository_runner_git_tree <- function(authentication) {
       repository_runner_fail("pinned Git tree contains an unsafe path")
     }
     header <- strsplit(pieces[[1L]], " ", fixed = TRUE)[[1L]]
-    if (length(header) != 3L || !header[[1L]] %in% c("100644", "100755") ||
+    if (length(header) != 3L ||
+        !header[[1L]] %in% c("100644", "100755", "120000") ||
         !identical(header[[2L]], "blob") ||
         !grepl("^([0-9a-f]{40}|[0-9a-f]{64})$", header[[3L]])) {
       repository_runner_fail("pinned Git tree contains a non-regular entry")
@@ -549,15 +608,40 @@ repository_runner_validate_extraction <- function(authentication, source) {
   if (!identical(manifest$path, tree$path)) {
     repository_runner_fail("archive extraction paths differ from the pinned Git tree")
   }
-  input <- repository_runner_tempfile("repository-runner-hash-object-")
-  on.exit(unlink(input), add = TRUE)
-  # Absolute paths prevent an enclosing checkout (the retained evidence lives
-  # below the project) from changing Git's stdin-paths prefix semantics.
-  writeLines(file.path(source, manifest$path), input, useBytes = TRUE)
-  hashes <- repository_runner_git_run(authentication$git, source,
-    c("hash-object", "--no-filters", "--stdin-paths"),
-    "hashing archive files as Git blobs", stdin = input)$stdout
-  hashes <- strsplit(trimws(hashes), "\n", fixed = TRUE)[[1L]]
+  regular <- tree$mode != "120000"
+  links <- !regular
+  hashes <- character(nrow(tree))
+  if (any(regular)) {
+    input <- repository_runner_tempfile("repository-runner-hash-object-")
+    on.exit(unlink(input), add = TRUE)
+    # Absolute paths prevent an enclosing checkout (the retained evidence lives
+    # below the project) from changing Git's stdin-paths prefix semantics.
+    writeLines(file.path(source, manifest$path[regular]), input, useBytes = TRUE)
+    regular_hashes <- repository_runner_git_run(authentication$git, source,
+      c("hash-object", "--no-filters", "--stdin-paths"),
+      "hashing archive files as Git blobs", stdin = input)$stdout
+    hashes[regular] <- strsplit(
+      trimws(regular_hashes), "\n", fixed = TRUE
+    )[[1L]]
+  }
+  if (any(links)) {
+    targets <- vapply(
+      file.path(source, manifest$path[links]),
+      repository_runner_symlink_target, character(1L), root = source,
+      label = "archive extraction"
+    )
+    blobs <- vapply(which(links), function(index) {
+      repository_runner_git_run(
+        authentication$git, authentication$checkout,
+        c("cat-file", "blob", tree$object[[index]]),
+        "reading symbolic-link Git blob"
+      )$stdout
+    }, character(1L))
+    if (!identical(unname(blobs), unname(targets))) {
+      repository_runner_fail("archive symbolic links differ from the Git tree")
+    }
+    hashes[links] <- tree$object[links]
+  }
   executable <- ifelse(tree$mode == "100755", "true", "false")
   if (!identical(hashes, tree$object) || !identical(manifest$executable, executable)) {
     repository_runner_fail("archive bytes or executable modes differ from the Git tree")
@@ -1967,7 +2051,7 @@ repository_runner_verify_attempt <- function(context, row, attempt_override = NU
         identical(normalized, "source") || (startsWith(entry, "source/") &&
           repository_runner_safe_relative(substring(entry, 8L)))
       }, logical(1L))) || anyDuplicated(archive_entries$path) ||
-      any(!expected_tree$mode %in% c("100644", "100755")) ||
+      any(!expected_tree$mode %in% c("100644", "100755", "120000")) ||
       any(!grepl("^([0-9a-f]{40}|[0-9a-f]{64})$", expected_tree$object)) ||
       any(!vapply(expected_tree$path, repository_runner_safe_relative,
         logical(1L))) || anyDuplicated(expected_tree$path) ||
