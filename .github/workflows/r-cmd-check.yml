@@ -17,7 +17,7 @@ jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -31,20 +31,28 @@ jobs:
           - {os: macos-15,        arch: arm64,  r: 'release'}
           # setup-r installs the Rtools version appropriate for release R.
           - {os: windows-latest,  arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'devel'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
-          # Compile against the declared minimum R API as well as current R.
-          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          # The workflow comes from this harness-only companion, but compiler
+          # and check inputs always come from the exact frozen candidate.
+          ref: paradox-2.0.0-ci-afa5668
+          persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - name: Verify frozen candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly expected=afa56689e4037ee14a75b32811686f563f95effe
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           r-version: ${{ matrix.config.r }}
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           extra-packages: any::rcmdcheck
           needs: check
@@ -88,7 +96,73 @@ jobs:
             length(getDLLRegisteredRoutines(dll)[[".Call"]]) > 0L
           )
 
-      - uses: r-lib/actions/check-r-package@v2
+      - name: Run R CMD check
+        shell: Rscript {0}
         env:
-          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || '' }}
-          NOT_CRAN: ${{ matrix.config.depends_only && 'FALSE' || 'TRUE' }}
+          _R_CHECK_DEPENDS_ONLY_: 'FALSE'
+          NOT_CRAN: 'TRUE'
+        run: |
+          options(crayon.enabled = TRUE)
+          if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") {
+            Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
+          }
+          if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") {
+            Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+          }
+          result = rcmdcheck::rcmdcheck(
+            args = c("--no-manual", "--as-cran"),
+            build_args = "--no-manual",
+            error_on = "warning",
+            check_dir = "check"
+          )
+          if (!identical(result$status, 0L)) {
+            stop("rcmdcheck returned nonzero status: ", result$status)
+          }
+
+      - name: Verify R CMD check completion
+        if: always()
+        shell: Rscript {0}
+        run: |
+          path = file.path("check", "paradox.Rcheck", "00check.log")
+          logs = Sys.glob(file.path("check", "*.Rcheck", "00check.log"))
+          if (!identical(logs, path) || !file.exists(path)) {
+            stop("R CMD check did not create exactly one expected log: ", path)
+          }
+          lines = readLines(path, warn = FALSE)
+          status = grep("^Status:", lines, value = TRUE)
+          nonempty = lines[nzchar(trimws(lines))]
+          if (any(grepl("Execution halted", lines, fixed = TRUE)) ||
+              !identical(status, "Status: OK") ||
+              !identical(tail(nonempty, 1L), "Status: OK")) {
+            cat(lines, sep = "\n")
+            stop("R CMD check did not finish cleanly with one final `Status: OK`")
+          }
+
+      - name: Retain run provenance
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e ci-evidence
+          mkdir ci-evidence
+          {
+            printf 'workflow_sha=%s\n' "$GITHUB_SHA"
+            printf 'workflow_ref=%s\n' "$GITHUB_REF"
+            printf 'checked_out_sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            # The single-quoted text is R code, not shell.
+            # shellcheck disable=SC2016
+            printf 'r_platform=%s\n' "$(Rscript --vanilla -e 'cat(R.version$platform)')"
+          } > ci-evidence/provenance.txt
+
+      - name: Upload check evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: paradox-2.0.0-portability-${{ matrix.config.os }}-${{ matrix.config.arch }}
+          path: |
+            ci-evidence/provenance.txt
+            check
+          if-no-files-found: error
+          retention-days: 30
