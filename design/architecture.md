@@ -814,6 +814,22 @@ column order is retained, row names use the standard compact representation,
 zero-row inputs retain typed zero-length columns, and neither input values nor
 input names are shared mutably with the result.
 
+Numeric quantile mapping deliberately preserves the historical sequence of R
+floating-point primitives.  The affine kernel materializes `x - 1`, both
+products, and then the subtraction through automatic `volatile double`
+intermediates.  These are rounding barriers, not shared-state synchronization,
+and must not be removed or replaced by an expression that permits contraction.
+Apple Clang otherwise emits a fused multiply-add on ARM64: the ordinary `.499`
+probe differs from R by 64 representable doubles, and an adversarial integer
+probe crosses a `floor()` boundary and returns `-2L` instead of `-1L`.  The
+barriers remain effective under forced contraction with both GCC and Clang.
+Pinned AB/BA benchmarks in
+`.local/benchmarks/release-fma-affine-20260717`, pooled by library identity
+rather than command-position labels, measured a 1.2--2.5% cost for public mixed
+`ParamSet$qunif()` workloads.  Allocations were unchanged, and the release
+workload remains about 9.8 times faster than the R implementation.  This
+bounded cost is part of the compatibility contract.
+
 ## Grid-design bulk boundary
 
 After the public wrapper has constructed and validated the named resolution

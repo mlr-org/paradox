@@ -476,6 +476,33 @@ test_that("native quantile kernels preserve formulas, endpoints, and attributes"
   )
 })
 
+test_that("numeric quantile kernels preserve historical rounding boundaries", {
+  symbol = native_domain_symbol("domain_qunif_builtin")
+
+  # Apple clang contracts the unseparated affine expression to an ARM64 FMA.
+  # This interior value distinguishes that result from the historical sequence
+  # of R vector primitives by 64 ulps.
+  double_domain = p_dbl(-10, 10)
+  double_unit = 0.499
+  double_expected = paradox:::domain_qunif.ParamDbl(
+    double_domain,
+    double_unit
+  )
+  expect_identical(double_expected, -0x1.47ae147ae14p-6)
+  expect_identical(.Call(symbol, double_domain, double_unit), double_expected)
+
+  # At an integer bucket boundary the same contraction is behavioral rather
+  # than cosmetic: the fused value is one ulp below -1 and floor() selects -2.
+  integer_domain = p_int(-2, 2)
+  integer_unit = 0x1.9999999999999p-3
+  integer_expected = paradox:::domain_qunif.ParamInt(
+    integer_domain,
+    integer_unit
+  )
+  expect_identical(integer_expected, -1L)
+  expect_identical(.Call(symbol, integer_domain, integer_unit), integer_expected)
+})
+
 test_that("quantile dimension and empty-domain contracts remain explicit", {
   domain = native_domain_bind(rep(list(p_dbl(0, 1)), 2L))
 

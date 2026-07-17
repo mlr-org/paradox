@@ -743,6 +743,19 @@ static double clamp(double value, double lower, double upper) {
   return value;
 }
 
+static double r_compatible_affine_map(double unit, double lower, double upper) {
+  /* The historical R methods evaluate these operators as separate vector
+   * primitives.  On targets with fused multiply-add, contracting the single C
+   * expression changes observable doubles and can cross an integer floor
+   * boundary.  Volatile automatic intermediates supply portable rounding
+   * barriers even when an embedding build enables aggressive contraction;
+   * they do not protect shared state. */
+  volatile double shifted_unit = unit - 1.0;
+  volatile double upper_product = unit * upper;
+  volatile double lower_product = shifted_unit * lower;
+  return upper_product - lower_product;
+}
+
 double paradox_qunif_double_value(double unit, double lower, double upper) {
   /* Preserve every value of a fixed Domain, including +/-Inf.  Handle the
    * closed interval endpoints before the affine expression so a defined
@@ -758,7 +771,7 @@ double paradox_qunif_double_value(double unit, double lower, double upper) {
     return upper;
   }
   return clamp(
-    unit * upper - (unit - 1.0) * lower,
+    r_compatible_affine_map(unit, lower, upper),
     lower,
     upper
   );
@@ -775,7 +788,7 @@ int paradox_qunif_integer_value(double unit, double lower, double upper,
     mapped = upper;
   } else {
     mapped = floor(clamp(
-      unit * (upper + 1.0) - (unit - 1.0) * lower,
+      r_compatible_affine_map(unit, lower, upper + 1.0),
       lower,
       upper
     ));
