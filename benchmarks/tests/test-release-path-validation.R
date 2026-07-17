@@ -40,6 +40,22 @@ if (!identical(contains_control(controls), rep(TRUE, length(controls)))) {
   stop("release path controls are not rejected", call. = FALSE)
 }
 
+is_error_compactor_binding <- function(expression) {
+  is.call(expression) && length(expression) == 3L &&
+    identical(expression[[1L]], quote(`<-`)) &&
+    identical(expression[[2L]], quote(release_compact_error))
+}
+compactor_bindings <- Filter(is_error_compactor_binding, as.list(tree))
+if (length(compactor_bindings) != 1L) {
+  stop("release error compactor has an unexpected shape", call. = FALSE)
+}
+eval(compactor_bindings[[1L]], envir = environment)
+message <- "return runtime candidate\rline\nnext\ttab\001byte"
+expected_message <- "return runtime candidate line next tab byte"
+if (!identical(environment$release_compact_error(message), expected_message)) {
+  stop("release error compactor changes letters or retains controls", call. = FALSE)
+}
+
 is_role_binding <- function(expression) {
   is.call(expression) && length(expression) == 3L &&
     identical(expression[[1L]], quote(`<-`)) &&
@@ -88,6 +104,42 @@ for (fixture in role_fixtures) {
   if (!identical(observed, fixture$expected) ||
       length(observed) != expected_length) {
     stop("release library roles do not match their path inventory", call. = FALSE)
+  }
+}
+
+is_library_binding <- function(expression, symbol) {
+  is.call(expression) && length(expression) == 3L &&
+    identical(expression[[1L]], quote(`<-`)) &&
+    identical(expression[[2L]], symbol)
+}
+evaluate_library_binding <- function(symbol, values) {
+  bindings <- Filter(
+    function(expression) is_library_binding(expression, symbol),
+    as.list(tree)
+  )
+  if (length(bindings) != 1L) {
+    stop("release library binding has an unexpected shape: ", symbol,
+      call. = FALSE)
+  }
+  fixture <- list2env(list(
+    release_arguments = list(
+      dependency_libraries = values,
+      protected_libraries = values
+    ),
+    release_require_local_directory = function(path, label) path
+  ), parent = baseenv())
+  eval(bindings[[1L]], envir = fixture)
+  fixture[[as.character(symbol)]]
+}
+for (symbol in list(
+  quote(release_dependency_libraries), quote(release_extra_libraries)
+)) {
+  for (values in list(character(), "one", c("one", "two", "three"))) {
+    observed <- evaluate_library_binding(symbol, values)
+    if (!identical(observed, unname(values)) || !is.null(names(observed))) {
+      stop("release library paths retain input names: ", symbol,
+        call. = FALSE)
+    }
   }
 }
 

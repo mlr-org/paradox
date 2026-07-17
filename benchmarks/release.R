@@ -479,7 +479,8 @@ release_dependency_libraries <- vapply(
   release_arguments$dependency_libraries,
   release_require_local_directory,
   character(1L),
-  label = "dependency library"
+  label = "dependency library",
+  USE.NAMES = FALSE
 )
 release_mies_library <- release_require_local_directory(
   release_arguments$mies_library, "miesmuschel library"
@@ -488,7 +489,8 @@ release_extra_libraries <- vapply(
   release_arguments$protected_libraries,
   release_require_local_directory,
   character(1L),
-  label = "additional protected library"
+  label = "additional protected library",
+  USE.NAMES = FALSE
 )
 release_ordinary_library <- release_require_local_directory(
   file.path(release_root, ".local", "R", "library"),
@@ -1754,6 +1756,9 @@ release_pass <- all(!is.na(release_status) & release_status == 0L) &&
 release_completion_value <- function(value) {
   if (length(value) != 1L || is.na(value)) "-" else as.character(value)
 }
+release_compact_error <- function(value) {
+  gsub("[[:cntrl:]]", " ", value)
+}
 release_regression_status <- if (is.na(release_regression_summary$fail_count)) {
   "not-run"
 } else if (release_regression_summary$fail_count > 0L) {
@@ -1874,12 +1879,16 @@ release_completion <- c(
     if (is.null(release_validation_error)) {
       "-"
     } else {
-      gsub("[\\r\\n\\t]", " ", release_validation_error)
+      release_compact_error(release_validation_error)
     }
   ),
   paste0(
     "postcondition_error=",
-    if (is.null(release_post_error)) "-" else gsub("[\\r\\n\\t]", " ", release_post_error)
+    if (is.null(release_post_error)) {
+      "-"
+    } else {
+      release_compact_error(release_post_error)
+    }
   )
 )
 release_write_lines(
