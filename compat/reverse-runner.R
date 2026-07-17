@@ -1492,6 +1492,44 @@ rr_log_excerpt <- function(path, max_bytes = rr_log_file_limit_bytes,
   )
 }
 
+rr_compact_external_text <- function(value, limit = 8000L) {
+  omission <- " [... complete output retained in package log ...] "
+  omission_length <- nchar(omission, type = "chars")
+  if (!is.character(value) || length(value) != 1L || is.na(value)) {
+    rr_fail("external diagnostic must be one non-missing character value")
+  }
+  if (!is.numeric(limit) || length(limit) != 1L || is.na(limit) ||
+      !is.finite(limit) || limit != floor(limit) ||
+      limit < omission_length + 2L || limit > .Machine$integer.max) {
+    rr_fail("external diagnostic limit is invalid")
+  }
+
+  # Consumer output is emitted under C.UTF-8, but arbitrary dependencies can
+  # still write invalid bytes.  Decode valid UTF-8 (including strings marked
+  # "bytes" by rr_log_excerpt()) and render each invalid input byte as an
+  # ASCII <xx> escape before any character-oriented operation.
+  value <- iconv(value, from = "UTF-8", to = "UTF-8", sub = "byte")
+  if (length(value) != 1L || is.na(value)) {
+    rr_fail("external diagnostic could not be made UTF-8 safe")
+  }
+  value <- gsub("[\r\n\t]+", " ", value)
+  value_length <- nchar(value, type = "chars")
+  if (is.na(value_length)) {
+    rr_fail("external diagnostic has an indeterminate character length")
+  }
+  limit <- as.integer(limit)
+  if (value_length <= limit) return(value)
+
+  retained <- limit - omission_length
+  left <- retained %/% 2L
+  right <- retained - left
+  paste0(
+    substr(value, 1L, left),
+    omission,
+    substr(value, value_length - right + 1L, value_length)
+  )
+}
+
 rr_scan_test_output <- function(path, max_bytes = rr_log_file_limit_bytes,
                                 chunk_bytes = rr_log_sample_bytes,
                                 line_limit_bytes = rr_log_sample_bytes) {

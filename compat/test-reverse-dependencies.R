@@ -1701,17 +1701,6 @@ if (arguments$plan_only) {
   quit(save = "no", status = 0L)
 }
 
-reverse_compact <- function(value, limit = 8000L) {
-  value <- gsub("[\r\n\t]+", " ", value)
-  if (nchar(value, type = "chars") <= limit) return(value)
-  side <- as.integer((limit - 80L) / 2L)
-  paste0(
-    substr(value, 1L, side),
-    " [... complete output retained in package log ...] ",
-    substr(value, nchar(value, type = "chars") - side + 1L, nchar(value, type = "chars"))
-  )
-}
-
 reverse_quote <- function(value) shQuote(value, type = "sh")
 
 reverse_write_command <- function(path, environment, command, command_arguments) {
@@ -1907,7 +1896,11 @@ reverse_write_results <- function(values) {
   values <- Filter(Negate(is.null), values)
   combined <- if (length(values)) do.call(rbind, values) else reverse_empty_results()
   output <- combined
-  if (nrow(output)) output$error <- vapply(output$error, reverse_compact, character(1L))
+  if (nrow(output)) {
+    output$error <- vapply(
+      output$error, rr_compact_external_text, character(1L)
+    )
+  }
   rr_write_tsv(output, results_path, replace = file.exists(results_path))
   combined
 }
@@ -2400,7 +2393,7 @@ reverse_row <- function(plan_row, package_directory, protected_before) {
     count_value(counts$warn), count_value(counts$skip), count_value(counts$pass),
     "true", substring(check_log, nchar(run_directory) + 2L),
     if (identical(status, "failed")) {
-      reverse_compact(paste(tail(log_lines, 100L), collapse = "\n"))
+      rr_compact_external_text(paste(tail(log_lines, 100L), collapse = "\n"))
     } else "-"
   ), reverse_result_columns)), stringsAsFactors = FALSE)
   row[] <- lapply(row, as.character)
@@ -3026,7 +3019,7 @@ while (length(pending_queue)) {
         field = c("plan_index", "package", "wave", "error", "finished_utc"),
         value = c(
           as.character(index), plan$package[[index]], as.character(wave_number),
-          reverse_compact(worker_result$error),
+          rr_compact_external_text(worker_result$error),
           format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
         ), stringsAsFactors = FALSE
       ), file.path(package_directories[[position]], "metadata", "worker-error.tsv"))

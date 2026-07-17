@@ -73,6 +73,7 @@ if (sum(grepl("rr_record_full_hash_pass\\(", tracked_lines)) != 2L ||
     !any(grepl("resource-jobs", tracked_lines, fixed = TRUE)) ||
     !any(grepl("reverse_recover_external_workers", tracked_lines,
       fixed = TRUE)) ||
+    !any(grepl("rr_compact_external_text", tracked_lines, fixed = TRUE)) ||
     !any(grepl("wave_worker_script", tracked_lines, fixed = TRUE)) ||
     !any(grepl('if (!arguments$plan_only)', tracked_lines, fixed = TRUE)) ||
     !any(grepl('if (arguments$resume)', tracked_lines, fixed = TRUE))) {
@@ -140,6 +141,58 @@ expect_error <- function(expression, pattern = NULL) {
 temporary <- tempfile("paradox-reverse-economy-self-test-")
 if (!dir.create(temporary)) rr_fail("could not create self-test root")
 on.exit(unlink(temporary, recursive = TRUE, force = TRUE), add = TRUE)
+
+# Failed consumer logs can contain byte-marked UTF-8 backtraces or genuinely
+# invalid external bytes.  Both must become safe, bounded TSV diagnostics
+# without turning a factual consumer failure into a worker failure.
+box_drawing <- rawToChar(charToRaw("alpha\t└─\nomega"))
+Encoding(box_drawing) <- "bytes"
+box_compacted <- rr_compact_external_text(box_drawing)
+if (!identical(box_compacted, "alpha └─ omega") ||
+    !identical(nchar(box_compacted, type = "chars"), 14L)) {
+  rr_fail("valid byte-marked UTF-8 diagnostic was not preserved")
+}
+invalid_byte <- rawToChar(c(charToRaw("alpha"), as.raw(255L),
+  charToRaw("omega")))
+Encoding(invalid_byte) <- "bytes"
+if (!identical(
+    rr_compact_external_text(invalid_byte), "alpha<ff>omega"
+  )) {
+  rr_fail("invalid external diagnostic byte was not escaped")
+}
+bounded <- rr_compact_external_text(
+  paste0("left-", strrep("x", 200L), "-right"), 96L
+)
+if (nchar(bounded, type = "chars") > 96L ||
+    !startsWith(bounded, "left-") || !endsWith(bounded, "-right") ||
+    !grepl("complete output retained in package log", bounded, fixed = TRUE)) {
+  rr_fail("external diagnostic compaction did not respect its bound")
+}
+failed_row_snippets <- c(
+  paste0(
+    "Running the tests in ‘tests/testthat.R’ failed.\n",
+    "  9. └─mlr3 (local) .f(learner = `<LrnrClXM>`)\n",
+    "Required Weka package 'XMeans' is not installed."
+  ),
+  paste0(
+    "Running the tests in ‘tests/testthat.R’ failed.\n",
+    " 29. └─checkmate::assert_list(filters, types = \"Filter\")\n",
+    "argument \"filters\" is missing, with no default"
+  )
+)
+failed_row_snippets <- lapply(failed_row_snippets, function(value) {
+  value <- rawToChar(charToRaw(value))
+  Encoding(value) <- "bytes"
+  value
+})
+failed_row_compacted <- vapply(
+  failed_row_snippets, rr_compact_external_text, character(1L)
+)
+if (anyNA(failed_row_compacted) ||
+    any(nchar(failed_row_compacted, type = "chars") > 8000L) ||
+    !all(grepl("└─", failed_row_compacted, fixed = TRUE))) {
+  rr_fail("representative failed-row diagnostics were not compacted")
+}
 
 # A worker must replace hostile inherited locale and timezone values before it
 # deserializes or executes any consumer-row closure.
