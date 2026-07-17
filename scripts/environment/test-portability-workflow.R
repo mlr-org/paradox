@@ -3,6 +3,12 @@
 fail <- function(...) stop(..., call. = FALSE)
 `%||%` <- function(left, right) if (is.null(left)) right else left
 arguments <- commandArgs(trailingOnly = TRUE)
+if (length(arguments) > 5L) {
+  fail(paste0(
+    "usage: test-portability-workflow.R [ROOT [MODE [WORKFLOW ",
+    "[CANDIDATE_TAG CANDIDATE_COMMIT]]]]"
+  ))
+}
 root <- if (length(arguments)) arguments[[1L]] else getwd()
 root <- normalizePath(root, winslash = "/", mustWork = TRUE)
 mode <- if (length(arguments) >= 2L) arguments[[2L]] else "general"
@@ -17,6 +23,17 @@ workflow_path <- if (length(arguments) >= 3L) {
 workflow_path <- normalizePath(
   workflow_path, winslash = "/", mustWork = TRUE
 )
+candidate_tag <- if (length(arguments) >= 4L) arguments[[4L]] else NULL
+candidate_commit <- if (length(arguments) >= 5L) arguments[[5L]] else NULL
+if (mode == "release") {
+  if (is.null(candidate_tag) || is.null(candidate_commit) ||
+      !grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", candidate_tag) ||
+      !grepl("^[0-9a-f]{40}$", candidate_commit)) {
+    fail("release workflow tests require an exact candidate tag and commit")
+  }
+} else if (!is.null(candidate_tag) || !is.null(candidate_commit)) {
+  fail("candidate identity arguments are valid only in release mode")
+}
 
 if (!file.exists(workflow_path) || dir.exists(workflow_path) ||
     nzchar(Sys.readlink(workflow_path))) {
@@ -63,16 +80,16 @@ if (mode == "general") {
       checkout[[1L]]$uses,
       "actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10"
     ) ||
-      !identical(checkout[[1L]]$with$ref, "paradox-2.0.0-ci-afa5668") ||
+      !identical(checkout[[1L]]$with$ref, candidate_tag) ||
       !identical(checkout[[1L]]$with[["persist-credentials"]], FALSE)) {
     fail("release workflow does not pin a credential-free frozen checkout")
   }
   identity <- step_by_name("Verify frozen candidate checkout")
-  if (!grepl(
-      "afa56689e4037ee14a75b32811686f563f95effe",
-      identity$run,
-      fixed = TRUE
-    )) {
+  identity_lines <- trimws(strsplit(identity$run, "\n", fixed = TRUE)[[1L]])
+  expected_lines <- grep("^readonly expected=", identity_lines, value = TRUE)
+  if (!identical(expected_lines, paste0("readonly expected=", candidate_commit)) ||
+      sum(identity_lines ==
+        'test "$(git rev-parse HEAD)" = "$expected"') != 1L) {
     fail("workflow checkout assertion is not bound to the frozen commit")
   }
 }
