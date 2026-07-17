@@ -40,4 +40,57 @@ if (!identical(contains_control(controls), rep(TRUE, length(controls)))) {
   stop("release path controls are not rejected", call. = FALSE)
 }
 
-cat("PASS: release paths distinguish ordinary r/n/t from control bytes\n")
+is_role_binding <- function(expression) {
+  is.call(expression) && length(expression) == 3L &&
+    identical(expression[[1L]], quote(`<-`)) &&
+    identical(expression[[2L]], quote(release_library_roles))
+}
+role_bindings <- Filter(is_role_binding, as.list(tree))
+if (length(role_bindings) != 1L) {
+  stop("release library-role binding has an unexpected shape", call. = FALSE)
+}
+library_roles <- function(dependencies, protected) {
+  fixture <- list2env(list(
+    release_dependency_libraries = dependencies,
+    release_extra_libraries = protected
+  ), parent = baseenv())
+  eval(role_bindings[[1L]], envir = fixture)
+  fixture$release_library_roles
+}
+fixed_roles <- c("baseline", "candidate", "miesmuschel")
+suffix_roles <- c("ordinary-project", "r-base-library")
+role_fixtures <- list(
+  list(
+    dependencies = "dependency",
+    protected = character(),
+    expected = c(fixed_roles[1:2], "dependency-1", fixed_roles[3], suffix_roles)
+  ),
+  list(
+    dependencies = "dependency",
+    protected = "protected",
+    expected = c(
+      fixed_roles[1:2], "dependency-1", fixed_roles[3], "protected-1",
+      suffix_roles
+    )
+  ),
+  list(
+    dependencies = c("dependency-a", "dependency-b"),
+    protected = c("protected-a", "protected-b", "protected-c"),
+    expected = c(
+      fixed_roles[1:2], "dependency-1", "dependency-2", fixed_roles[3],
+      "protected-1", "protected-2", "protected-3", suffix_roles
+    )
+  )
+)
+for (fixture in role_fixtures) {
+  observed <- library_roles(fixture$dependencies, fixture$protected)
+  expected_length <- 5L + length(fixture$dependencies) + length(fixture$protected)
+  if (!identical(observed, fixture$expected) ||
+      length(observed) != expected_length) {
+    stop("release library roles do not match their path inventory", call. = FALSE)
+  }
+}
+
+cat(
+  "PASS: release paths reject controls and library roles match optional paths\n"
+)

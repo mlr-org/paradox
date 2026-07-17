@@ -938,9 +938,9 @@ release_candidate <- release_authenticate_candidate()
 
 release_library_roles <- c(
   "baseline", "candidate",
-  paste0("dependency-", seq_along(release_dependency_libraries)),
+  sprintf("dependency-%d", seq_along(release_dependency_libraries)),
   "miesmuschel",
-  paste0("protected-", seq_along(release_extra_libraries)),
+  sprintf("protected-%d", seq_along(release_extra_libraries)),
   "ordinary-project", "r-base-library"
 )
 release_fingerprint_libraries <- function() {
