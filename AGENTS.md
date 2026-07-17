@@ -620,27 +620,57 @@ and fficheck must inspect exactly 61 registered functions. All commands,
 source, cache identity, metadata, limits, tool versions, logs, and reports
 remain below `.local/checks/<run-id>`.
 
-## Frozen release workflow
+## Release-candidate portability workflow
 
-The exact external Windows/Rtools and Apple ARM64 handoff for the frozen 2.0.0
-candidate is in `design/portability-ci.md`. Remote writes are user-controlled:
-the exact candidate tag was published manually, and the replacement requires
-only the detached harness tag. The harness workflow checks out and authenticates
-the candidate tag before compiling; never substitute a push of local `main`, a
-broad `--tags` push, the benchmark companion, or the custom local release-ref
-namespace. Retain SHA-bound run/job metadata, individual logs, provenance,
-check artifacts, and the executed workflow, then record both platform job and
-raw `Status: OK` conclusions in `design/release-2.0.0.md`. Do not repeat the
-already sealed Linux matrices: the replacement dispatch intentionally contains
-only Windows release and macOS ARM64 release.
+The `afa56689` candidate and `b840d9c4` companion are immutable rejected
+historical evidence. Run `29559803987` contained false-green portability jobs;
+run `29561742772` fixed that harness defect and exposed a genuine Apple ARM64
+FMA correctness failure. Never move, recreate, or reuse either tag. The exact
+job, artifact, log, workflow, and manifest identities are retained in
+`design/portability-ci.md` and `design/release-2.0.0.md`.
+
+The corrected 2.0.0 candidate is frozen at
+`refs/paradox-release/candidate-20260717T083921Z`, commit
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, tree
+`91eea910212ea15f4ccba598929f8a61844bcc35`. Its 211-file source archive is
+`.local/compat/candidate-freeze-2f40e3e/build/paradox_2.0.0.tar.gz`, SHA-256
+`508a596b435f0e017c60cb54143656a8b85ad0f78f37476730d282334102aeb8`;
+it has no `.git` member. Compared with the exact delta-gate archive, 209 files
+are byte-identical and only the `DESCRIPTION` `Packaged` timestamp and
+stochastically rendered `inst/doc/indepth.html` differ. The candidate's
+`.Rbuildignore` addition `^\.git$` is build control for linked worktrees.
+
+Its direct-child companion is frozen locally at
+`refs/paradox-release/portability-harness-ede67fc`, commit
+`ede67fc5780c9b1f6f91325189f8f7560376060c`, tree
+`578abec87a84c706f3a77803f9c645c933619aac`. Its sole changed path is
+`.github/workflows/r-cmd-check.yml`, whose SHA-256 is
+`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
+The intended tags are `paradox-2.0.0-ci-2f40e3e` and
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`; publishing and dispatch remain
+user-controlled and pending. Publish only those two reviewed tags, never local
+`main`, a broad `--tags` push, the benchmark companion, or the custom local
+release-ref namespace. The companion must check out and authenticate the
+candidate tag before compiling. Retain SHA-bound run/job metadata, individual
+logs, provenance, check artifacts, the executed workflow, and both raw final
+`Status: OK` conclusions before recording the run in the release ledger.
+
+The replacement dispatch intentionally contains only Windows release and macOS
+ARM64 release. The earlier full Linux, consumer, documentation, and memory
+evidence is carried forward under the bounded analysis in
+`design/release-2.0.0.md`; the corrected scalar delta has its own retained gate
+and focused benchmark. Do not repeat those broad gates solely for that audited
+delta, but reopen proportionate validation for any further package-source
+change.
 
 Release evidence starts only after all intended package files are committed and
 a full Git ref is fixed on that commit. Keep the primary checkout on that exact
 clean commit only while commands such as the differential and benchmark drivers
 snapshot its current worktree. Compatibility and documentation gates instead
 authenticate the frozen detached source, so excluded harness/report work may
-continue in the primary checkout. A final native, public-R API, and memory
-sequence uses new run IDs:
+continue in the primary checkout. For a future release, or when a current
+impact analysis requires a complete replay, the final native, public-R API, and
+memory sequence uses new run IDs:
 
 ```sh
 . scripts/activate
@@ -670,8 +700,9 @@ of repeating the R corpus.
 the dedicated instrumented-R Valgrind gate, and rchk. The memory gate must use
 the passed native run that retained the same frozen source; an API-only run is
 not a valid `--source-run`. Any later package-source change requires a new
-commit/ref and new native, API, memory, compatibility, documentation, and
-performance evidence. Final checks consume that frozen candidate and
+commit/ref, a documented impact analysis, and proportionate new evidence for
+every conclusion it can affect; it must never silently inherit evidence from
+different package bytes. Final checks consume that frozen candidate and
 content-addressed caches whose byte-affecting keys still verify; they do not
 rebuild or resnapshot the moving primary checkout merely because a report or
 verifier changed.
