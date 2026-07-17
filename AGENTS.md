@@ -623,14 +623,16 @@ remain below `.local/checks/<run-id>`.
 ## Frozen release workflow
 
 The exact external Windows/Rtools and Apple ARM64 handoff for the frozen 2.0.0
-candidate is in `design/portability-ci.md`. It deliberately requires explicit
-authorization before publishing the single CI-only tag and dispatching the
-workflow. Never substitute a push of local `main`, a broad `--tags` push, the
-benchmark companion, or the custom local release-ref namespace. Retain the
-SHA-bound run metadata and logs, then record the platform job conclusions and
-retained metadata/log/workflow hashes in `design/release-2.0.0.md`; do not
-repeat byte-identical local release matrices just because the remote matrix
-includes Linux jobs.
+candidate is in `design/portability-ci.md`. Remote writes are user-controlled:
+the exact candidate tag was published manually, and the replacement requires
+only the detached harness tag. The harness workflow checks out and authenticates
+the candidate tag before compiling; never substitute a push of local `main`, a
+broad `--tags` push, the benchmark companion, or the custom local release-ref
+namespace. Retain SHA-bound run/job metadata, individual logs, provenance,
+check artifacts, and the executed workflow, then record both platform job and
+raw `Status: OK` conclusions in `design/release-2.0.0.md`. Do not repeat the
+already sealed Linux matrices: the replacement dispatch intentionally contains
+only Windows release and macOS ARM64 release.
 
 Release evidence starts only after all intended package files are committed and
 a full Git ref is fixed on that commit. Keep the primary checkout on that exact

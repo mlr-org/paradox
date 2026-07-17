@@ -50,13 +50,24 @@ and their native shared-library disassemblies are identical. The companion is
 therefore evidence for the same distributable package source, not a second
 package implementation.
 
+The portability replacement harness is the detached local ref
+`refs/paradox-release/portability-harness-b840d9c`, commit
+`b840d9c4a4d118c70595f0ce00d38ed7951761ee`, tree
+`f624cd5bf8b8faeedf2e77ced6dc8f4904504689`. Its direct parent is the frozen
+candidate and its sole changed path is `.github/workflows/r-cmd-check.yml`,
+which `.Rbuildignore` excludes. The workflow SHA-256 is
+`54b1265d48ca60fc6ccd8e1f42d9798b8af5e7f2d2dfb12e593a4d079cefe392`.
+Each replacement job loads this workflow but explicitly checks out and
+authenticates remote candidate tag `paradox-2.0.0-ci-afa5668` at the full
+frozen SHA before compiling or checking package code.
+
 ## Release evidence
 
 | Gate | Retained ID | Status |
 |---|---|---|
 | Native compilers, analyzers, sanitizers, symbols, full tests, CRAN and depends-only checks | `release-native-20260716T165635Z` | Passed and independently replayed |
 | Public R API, four header releases, 35 translation units, GCC and Clang | `release-r-api-20260716T171343Z` | Passed and independently replayed |
-| Windows/Rtools and macOS ARM64 CI | Exact frozen-candidate remote run not yet available | Required external handoff before publication; publish only CI tag `paradox-2.0.0-ci-afa5668`, then follow `design/portability-ci.md` |
+| Windows/Rtools and macOS ARM64 CI | First run `29559803987` rejected; hardened two-platform companion pending | Four false-green truncated checks exposed an empty-logical/wrapper-policy defect; manually publish only harness tag `paradox-2.0.0-ci-afa5668-harness-b840d9c`, then follow `design/portability-ci.md` |
 | Real R 4.3.3 and 4.5.2 runtimes | `release-runtime-matrix-20260716T172036Z` | Passed; verifier replayed with restricted `PATH` |
 | Behavioral differential, 17 cases | `20260717T030312Z-2192945` | Exact frozen candidate: 10 equal, 7 exact reviewed differences, 0 unexpected; verifier passed over 689 files |
 | GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed and independently replayed |
@@ -81,6 +92,30 @@ The benchmark pair is
 `f0c69e95d1e5e97f199794ad6be495770eb15ae3c36ea96c2a2b3b2ec5ceaaf8`.
 Each pair is the evidence-manifest content hash followed by the retained
 completion-seal file hash.
+
+### Rejected portability run
+
+GitHub Actions run
+[`29559803987`](https://github.com/mlr-org/paradox/actions/runs/29559803987)
+is retained diagnostic evidence, not a platform pass. Four ordinary rows
+(Linux release, Linux devel, Windows release, and macOS ARM64) installed the
+package but then passed a present empty `_R_CHECK_DEPENDS_ONLY_` value to R.
+R converted it to `NA`, aborted at `if (R_cdo_tests)`, and logged
+`Execution halted`. `rcmdcheck` 1.4.0 accepted that child status because no
+formal check finding was parsed, so all four job labels were false green. The
+Linux release no-Suggests row alone completed with `Status: OK`. The R 4.3 row
+correctly failed after 9,602 passes because all 832 failures belonged to 20 of
+the 22 already authenticated pre-4.6 direct-native exclusion contexts.
+
+The incident is retained under
+`.local/ci/r-cmd-check-29559803987-failed`. The run-metadata SHA-256 is
+`e9f05278069f9e9222d2ddfc3870233fbdddfc208948d4cda6d9d1f82cba899a`,
+the six individual job-log manifest is
+`8380c769e779ce1217d0b0748b90738a050f4882fdfe68c7b7603d6b4af34ad0`,
+and the 687-file downloaded-artifact manifest is
+`5630de7d50535b7208f4a66afb26a1fb4c0198dfaaab6ebf2c9eaf2d6c6070a5`.
+The hardened replacement emits only legal logical values, checks the retained
+child status directly, and independently requires one final `Status: OK`.
 
 The differential differences are not broad allowlists: both complete result
 fingerprints and their reasons are fixed in
@@ -333,13 +368,15 @@ handoff. The classified failures and marginal benchmark rows above are explicit
 reviewed limitations, not open-ended allowlists.
 
 The release is not yet publishable. Exact frozen-candidate Windows/Rtools and
-Apple ARM64 CI must still pass after the local ref is made available remotely;
-the ref currently exists only in this repository and no push is authorized.
-The minimal handoff is the single CI-only tag and manual dispatch specified in
-`design/portability-ci.md`; do not push local `main`, the benchmark companion,
-all tags, or the custom release-ref namespace. After the run, this ledger must
-retain its run ID and URL, exact `headSha`, both named platform conclusions,
-and hashes of the metadata, complete log, and workflow before publication.
+Apple ARM64 checks must still pass through the hardened companion. The original
+candidate tag is remote, but the companion ref exists only locally and remote
+writes remain user-controlled. The minimal handoff is the single harness-only
+tag and manual dispatch specified in `design/portability-ci.md`; do not push
+local `main`, the benchmark companion, all tags, or the custom release-ref
+namespace. After the run, this ledger must retain its run ID and URL, companion
+`headSha`, exact candidate checkout identities, both named platform
+conclusions, artifact provenance and check-log conclusions, and hashes of all
+retained metadata, individual logs, workflow, and artifacts before publication.
 Do not turn any future consumer failure into an allowlist: first reproduce it
 against upstream paradox under the identical environment, fix a harness
 artifact when proven, and add a package regression test for every genuine

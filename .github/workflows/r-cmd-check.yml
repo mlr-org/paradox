@@ -17,7 +17,7 @@ jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}${{ matrix.config.no_tests && ' – noTests' || '' }}
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -35,7 +35,12 @@ jobs:
           - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
           - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
           # Compile against the declared minimum R API as well as current R.
-          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true}
+          # The authenticated local old-runtime gate exercises the reviewed
+          # 57-file public-behavior scope. This row independently checks that
+          # the distributable package builds, installs, and checks against the
+          # declared minimum API without rerunning the 22 R-4.6-only admission
+          # implementation contexts.
+          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true, no_tests: true}
 
     steps:
       - uses: actions/checkout@v6
@@ -88,7 +93,57 @@ jobs:
             length(getDLLRegisteredRoutines(dll)[[".Call"]]) > 0L
           )
 
-      - uses: r-lib/actions/check-r-package@v2
+      # Run rcmdcheck directly and reject its child status explicitly: its
+      # normal policy accepts one nonzero status class when it cannot parse a
+      # formal check finding. The independent log-completion assertion below
+      # also rejects incomplete output and future wrapper-policy regressions.
+      - name: Run R CMD check
+        shell: Rscript {0}
         env:
-          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || '' }}
+          # An empty value becomes NA in R 4.6 and crashes R CMD check when it
+          # evaluates R_cdo_tests. Always provide a legal logical spelling.
+          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || 'FALSE' }}
           NOT_CRAN: ${{ matrix.config.depends_only && 'FALSE' || 'TRUE' }}
+          PARADOX_CHECK_NO_TESTS: ${{ matrix.config.no_tests && 'TRUE' || 'FALSE' }}
+        run: |
+          options(crayon.enabled = TRUE)
+          if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") {
+            Sys.setenv("_R_CHECK_FORCE_SUGGESTS_" = "false")
+          }
+          if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") {
+            Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
+          }
+          args = c("--no-manual", "--as-cran")
+          if (identical(Sys.getenv("PARADOX_CHECK_NO_TESTS"), "TRUE")) {
+            args = c(args, "--no-tests")
+          }
+          result = rcmdcheck::rcmdcheck(
+            args = args,
+            build_args = "--no-manual",
+            error_on = "warning",
+            check_dir = "check"
+          )
+          if (!identical(result$status, 0L)) {
+            stop("rcmdcheck returned nonzero status: ", result$status)
+          }
+
+      # This independent top-level step catches a truncated check even if a
+      # future runner or wrapper again loses the process exit status.
+      - name: Verify R CMD check completion
+        if: always()
+        shell: Rscript {0}
+        run: |
+          path = file.path("check", "paradox.Rcheck", "00check.log")
+          logs = Sys.glob(file.path("check", "*.Rcheck", "00check.log"))
+          if (!identical(logs, path) || !file.exists(path)) {
+            stop("R CMD check did not create exactly one expected log: ", path)
+          }
+          lines = readLines(path, warn = FALSE)
+          status = grep("^Status:", lines, value = TRUE)
+          nonempty = lines[nzchar(trimws(lines))]
+          if (any(grepl("Execution halted", lines, fixed = TRUE)) ||
+              !identical(status, "Status: OK") ||
+              !identical(tail(nonempty, 1L), "Status: OK")) {
+            cat(lines, sep = "\n")
+            stop("R CMD check did not finish cleanly with one final `Status: OK`")
+          }
