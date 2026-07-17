@@ -161,7 +161,7 @@ and rejects exactly because the run conclusion is `failure`. This is evidence
 that the hardened workflow exposed a real defect, not release portability
 evidence. Never move, delete, or reuse either the candidate or companion tag.
 
-## Corrected candidate and companion frozen; remote run pending
+## Accepted final 2.0.0 run
 
 The corrected package candidate is frozen at
 `refs/paradox-release/candidate-20260717T083921Z`, commit
@@ -186,24 +186,59 @@ candidate `2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and its only changed path 
 The static release-workflow regression test and repository-local `actionlint`
 both pass on this companion.
 
-The intended new immutable tags are `paradox-2.0.0-ci-2f40e3e` for the exact
-candidate and `paradox-2.0.0-ci-2f40e3e-harness-ede67fc` for the exact
-companion. They have not been published or dispatched. Before any remote write,
-independently recheck both local refs. A user-controlled shell may then publish
-only those two reviewed tags and dispatch the companion tag; it must not push
-`main`, `--tags`, the benchmark companion, or the local
-`refs/paradox-release/` namespace. Do not substitute the rejected `afa5668` or
-`b840d9c` identities.
+The immutable tags are `paradox-2.0.0-ci-2f40e3e` for the exact candidate and
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc` for the exact companion. They were
+published by the user without pushing `main`, the benchmark companion, or the
+local `refs/paradox-release/` namespace. The rejected `afa5668` and `b840d9c`
+identities remain immutable historical evidence.
 
-The corrected run must have event `workflow_dispatch`, head SHA equal to the
-new companion commit, and exactly two successful jobs named
-`macos-15 / arm64 (release)` and `windows-latest / x86_64 (release)`. Each job
-must pass `Verify frozen candidate checkout`, native compilation, direct
-`R CMD check`, the independent completion verifier, provenance retention, and
-artifact upload. The two downloaded provenance files must bind workflow SHA to
-the new companion and checked-out SHA to the new candidate; both check logs
-must lack `Execution halted`, contain exactly one status line, and end with
-their sole `Status: OK`. Retain and authenticate the REST run/job/artifact
-metadata, individual job logs, executed workflow, original artifact archives,
-extracted artifacts, provenance, verifier and output, and the complete checksum
-manifest hierarchy before updating the release ledger.
+Manual run
+[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
+was attempt 1, event `workflow_dispatch`, head branch
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`, head SHA
+`ede67fc5780c9b1f6f91325189f8f7560376060c`, and conclusion `success`. Both
+jobs authenticated checkout
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`; the executed workflow SHA-256 was
+`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
+
+| Job ID | Matrix row and interval | Runtime | Result and retained hashes |
+|---|---|---|---|
+| `87861491934` | `windows-latest / x86_64 (release)`, `10:21:11Z`–`10:53:20Z` | `x86_64-w64-mingw32`, R 4.6.1 UCRT | `success`; 19,011 pass, 2 skip, 0 fail/warn; sole final `Status: OK`; job log `3112a7d5804191751b5652e5c62b243925c00de0b4b91f3d5429ba21d488a228`; check log `c47f8c8bb33b514e800957508532f80e703eaecb8df087b845e494d441543418`; provenance `1b57eceeacf7d2998415dae1f957937715e74348f65364dfb841d3b6b43fd6e8` |
+| `87861491957` | `macos-15 / arm64 (release)`, `10:21:09Z`–`10:36:42Z` | `aarch64-apple-darwin23`, R 4.6.1, Apple Clang 17 | `success`; 19,013 pass, 2 skip, 0 fail/warn; sole final `Status: OK`, including clean temporary-detritus check; job log `2f5c11fc5ef5d1d86e54610a66e20ab90e80960aa9f9ca0d018684b9e00fb338`; check log `edf3c4fbbd9abfb39309bccc18a611fb8c4ada55bf4935ef4d8cb27fe9fd0bf9`; provenance `6bf22f031a8f5c885e9e503f5243b9c72178e2446ea89e20cda9452024ca0035` |
+
+| Artifact ID | Platform | Size | REST digest / raw ZIP SHA-256 | Extracted files |
+|---|---|---:|---|---:|
+| `8404629035` | Windows x86-64 | 3,000,388 bytes | `df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc` | 375 |
+| `8404256296` | macOS ARM64 | 4,146,086 bytes | `228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53` | 377 |
+
+The accepted evidence is retained exactly once at
+`.local/ci/r-cmd-check-29573168344`. The REST metadata hashes are `run.json`
+`069181abcfc38e4f29d725c2d647b3622399a3b6290af71e07217c1bb9aed307`,
+`jobs.json`
+`fe0740f581fa08e4a577163e1e3fa73065259faa25e47d881d22a2cb0dfbe7f7`,
+and `artifacts.json`
+`0dc36716c03f6000ab0718b85070910b0076046b07b02dade423dbf6020cad02`.
+The exact six-manifest hierarchy is:
+
+- `ARCHIVE-SHA256SUMS` (2 rows):
+  `ad02591bc69faadeeec988cad28e1723dd2120442c7eafe656c9b0927adb7f80`;
+- `ARTIFACT-SHA256SUMS` (752 rows):
+  `36cad6980df7af4b5d9a4987c402b1979b8087404eb23e484c15e3513d24d649`;
+- `EVIDENCE-SHA256SUMS` (5 rows):
+  `7e8eb7097d3b403b5b4e712f5da65d1a8018c6d6cd0eb0efc533abd9b4b79484`;
+- `JOB-LOG-SHA256SUMS` (2 rows):
+  `9fc6cc750d1b0d3699e206ddccff3e245d35834acb920777e9cbf0e7f18e668d`;
+- `METADATA-SHA256SUMS` (4 rows):
+  `3227de2dc55f56797586f3236e10858a05230cc3119ffb382122c30301955b59`;
+- `VERIFIER-SHA256SUMS` (2 rows):
+  `34696b48062cd3bed7a6b87d2f79a89b99aea5e6116d6580c32b8d76fa126674`.
+
+Those manifests cover exactly 767 rows. The retained verifier SHA-256 is
+`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`,
+and its deterministic acceptance receipt has SHA-256
+`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
+The verifier accepted the evidence once after checking the REST identities,
+raw archives, extracted trees, job logs, workflow, candidate provenance, sole
+final check statuses, and complete manifest coverage. This closes the final
+portability gate; it does not assert that a CRAN upload or publication has
+occurred.

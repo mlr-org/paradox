@@ -646,22 +646,41 @@ Its direct-child companion is frozen locally at
 `578abec87a84c706f3a77803f9c645c933619aac`. Its sole changed path is
 `.github/workflows/r-cmd-check.yml`, whose SHA-256 is
 `3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
-The intended tags are `paradox-2.0.0-ci-2f40e3e` and
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`; publishing and dispatch remain
-user-controlled and pending. Publish only those two reviewed tags, never local
-`main`, a broad `--tags` push, the benchmark companion, or the custom local
-release-ref namespace. The companion must check out and authenticate the
-candidate tag before compiling. Retain SHA-bound run/job metadata, individual
-logs, provenance, check artifacts, the executed workflow, and both raw final
-`Status: OK` conclusions before recording the run in the release ledger.
+The immutable tags are `paradox-2.0.0-ci-2f40e3e` and
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`; the user published and dispatched
+them without pushing local `main`, a broad `--tags` set, the benchmark
+companion, or the custom local release-ref namespace. Attempt-1
+`workflow_dispatch` run
+[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
+executed companion `ede67fc5780c9b1f6f91325189f8f7560376060c`, authenticated
+candidate checkout `2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and concluded
+`success`. Windows x86-64 job `87861491934` and macOS ARM64 job `87861491957`
+both passed their direct checks and independent completion checks with sole
+final `Status: OK`; the latter used R 4.6.1 and Apple Clang 17 and also proved
+the temporary-detritus correction.
+
+The accepted evidence is retained exactly once at
+`.local/ci/r-cmd-check-29573168344`. Its Windows artifact is ID `8404629035`,
+3,000,388 bytes, raw-ZIP SHA-256
+`df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc`;
+its macOS artifact is ID `8404256296`, 4,146,086 bytes, raw-ZIP SHA-256
+`228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53`.
+The retained verifier SHA-256 is
+`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`,
+and its deterministic acceptance receipt SHA-256 is
+`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
+The exact REST, job/check log, provenance, archive, extracted-tree, and
+six-manifest hashes are in `design/portability-ci.md` and
+`design/release-2.0.0.md`. All required gates are accepted and the frozen
+candidate is release-ready; this records no CRAN upload or publication.
 
 The replacement dispatch intentionally contains only Windows release and macOS
 ARM64 release. The earlier full Linux, consumer, documentation, and memory
 evidence is carried forward under the bounded analysis in
 `design/release-2.0.0.md`; the corrected scalar delta has its own retained gate
 and focused benchmark. Do not repeat those broad gates solely for that audited
-delta, but reopen proportionate validation for any further package-source
-change.
+delta. No more broad replay is required for the frozen candidate, but reopen
+proportionate validation for any further package-source change.
 
 Release evidence starts only after all intended package files are committed and
 a full Git ref is fixed on that commit. Keep the primary checkout on that exact

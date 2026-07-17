@@ -27,9 +27,15 @@ The direct-child two-platform companion is frozen locally at
 candidate, its sole changed path is `.github/workflows/r-cmd-check.yml`, and
 that workflow's SHA-256 is
 `3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
-The intended new tags are `paradox-2.0.0-ci-2f40e3e` and
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`; neither the user-controlled remote
-write nor the dispatch has occurred. No old tag may be moved or reused.
+The immutable tags are `paradox-2.0.0-ci-2f40e3e` and
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`. The user published them and
+dispatched the companion without moving an old tag. Authenticated GitHub
+Actions run
+[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
+completed successfully on Windows x86-64 and Apple ARM64 against the exact
+candidate, closing the final portability gate. All required release gates are
+now accepted and the candidate is release-ready; no CRAN upload or publication
+is asserted by this ledger.
 
 The complete corrected-candidate delta from `afa56689` is deliberately narrow:
 
@@ -175,7 +181,7 @@ must never be moved or reused.
 | Full native compilers, static analyzers, sanitizers, symbols, tests, CRAN and depends-only checks | `release-native-20260716T165635Z` | Passed and independently replayed for `afa56689`; full unchanged-core evidence carried forward under the delta analysis below |
 | Exact affine/test delta: strict GCC/Clang, full suite, CRAN, depends-only, ASan and UBSan | `release-fma-delta-20260717` | Passed on the amended built payload; exact final-delta evidence after frozen-payload equivalence is recorded |
 | Public R API, four header releases, 35 translation units, GCC and Clang | `release-r-api-20260716T171343Z` | Passed for `afa56689`; carried forward because the delta adds no R API use or declaration |
-| Windows/Rtools and macOS ARM64 CI | Runs `29559803987` and `29561742772` rejected; corrected candidate `2f40e3e5` and companion `ede67fc5` frozen locally, remote run pending | Blocking: both rows must pass against the exact candidate |
+| Windows/Rtools and macOS ARM64 CI | Accepted run `29573168344`; rejected runs `29559803987` and `29561742772` retained as history | Passed against exact candidate `2f40e3e5`: Windows x86-64 and Apple ARM64 each succeeded with sole final `Status: OK` |
 | Real R 4.3.3 and 4.5.2 runtimes | `release-runtime-matrix-20260716T172036Z` | Passed for `afa56689`; carried forward with exact delta source tests and the current-R full check |
 | Behavioral differential, 17 cases | `20260717T030312Z-2192945` | `afa56689`: 10 equal, 7 reviewed exact differences, 0 unexpected; carried forward except for affine bytes now covered by exact R-method regression tests |
 | GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed for `afa56689`; carried forward because the C delta has no pointer, R object, allocation, callback, or ownership operation, with exact ASan/UBSan probes on the amended DSO |
@@ -305,6 +311,77 @@ and `18ce43ffb4c85d3863a85c6736f9981cc646c49ab31f0d58c35d92dbbeb43fa1`.
 The retained verifier rejected exactly on the failed run conclusion. The full
 step, provenance, and manifest inventory is in `design/portability-ci.md`.
 Neither rejected tag is a valid base for the corrected handoff.
+
+### Accepted portability run
+
+GitHub Actions run
+[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
+was attempt 1, event `workflow_dispatch`, head branch
+`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`, head SHA
+`ede67fc5780c9b1f6f91325189f8f7560376060c`, and final conclusion `success`.
+The workflow SHA-256 was
+`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`,
+and both jobs authenticated candidate checkout
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`.
+
+Windows job `87861491934` succeeded from `10:21:11Z` through `10:53:20Z` on
+`x86_64-w64-mingw32` with R 4.6.1 UCRT. Testthat recorded 19,011 passes, two
+skips, and no failure or warning; the check had one status line and its final
+line was `Status: OK`. The job-log, check-log, and provenance SHA-256 values are
+`3112a7d5804191751b5652e5c62b243925c00de0b4b91f3d5429ba21d488a228`,
+`c47f8c8bb33b514e800957508532f80e703eaecb8df087b845e494d441543418`,
+and `1b57eceeacf7d2998415dae1f957937715e74348f65364dfb841d3b6b43fd6e8`.
+Its artifact is ID `8404629035`, 3,000,388 bytes, with identical REST digest
+and raw-ZIP SHA-256
+`df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc`;
+the extracted tree has 375 files.
+
+macOS job `87861491957` succeeded from `10:21:09Z` through `10:36:42Z` on
+`aarch64-apple-darwin23` with R 4.6.1 and Apple Clang 17. Testthat recorded
+19,013 passes, two skips, and no failure or warning; the check had one status
+line, ended `Status: OK`, and its temporary-detritus check was clean. The
+job-log, check-log, and provenance SHA-256 values are
+`2f5c11fc5ef5d1d86e54610a66e20ab90e80960aa9f9ca0d018684b9e00fb338`,
+`edf3c4fbbd9abfb39309bccc18a611fb8c4ada55bf4935ef4d8cb27fe9fd0bf9`,
+and `6bf22f031a8f5c885e9e503f5243b9c72178e2446ea89e20cda9452024ca0035`.
+Its artifact is ID `8404256296`, 4,146,086 bytes, with identical REST digest
+and raw-ZIP SHA-256
+`228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53`;
+the extracted tree has 377 files.
+
+The accepted evidence is retained once at
+`.local/ci/r-cmd-check-29573168344`. The run, jobs, and artifacts REST hashes
+are respectively
+`069181abcfc38e4f29d725c2d647b3622399a3b6290af71e07217c1bb9aed307`,
+`fe0740f581fa08e4a577163e1e3fa73065259faa25e47d881d22a2cb0dfbe7f7`,
+and `0dc36716c03f6000ab0718b85070910b0076046b07b02dade423dbf6020cad02`.
+The six manifest hashes and row counts are:
+
+- `ARCHIVE-SHA256SUMS`:
+  `ad02591bc69faadeeec988cad28e1723dd2120442c7eafe656c9b0927adb7f80`
+  (2);
+- `ARTIFACT-SHA256SUMS`:
+  `36cad6980df7af4b5d9a4987c402b1979b8087404eb23e484c15e3513d24d649`
+  (752);
+- `EVIDENCE-SHA256SUMS`:
+  `7e8eb7097d3b403b5b4e712f5da65d1a8018c6d6cd0eb0efc533abd9b4b79484`
+  (5);
+- `JOB-LOG-SHA256SUMS`:
+  `9fc6cc750d1b0d3699e206ddccff3e245d35834acb920777e9cbf0e7f18e668d`
+  (2);
+- `METADATA-SHA256SUMS`:
+  `3227de2dc55f56797586f3236e10858a05230cc3119ffb382122c30301955b59`
+  (4);
+- `VERIFIER-SHA256SUMS`:
+  `34696b48062cd3bed7a6b87d2f79a89b99aea5e6116d6580c32b8d76fa126674`
+  (2).
+
+The hierarchy covers exactly 767 rows. The retained verifier SHA-256 is
+`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`;
+its deterministic acceptance receipt has SHA-256
+`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
+It accepted the evidence exactly once. `design/portability-ci.md` records the
+complete platform and artifact inventory.
 
 The differential differences are not broad allowlists: both complete result
 fingerprints and their reasons are fixed in
@@ -564,27 +641,22 @@ worktree must be clean at handoff, and the classified failures and marginal
 benchmark rows above remain explicit reviewed limitations rather than
 open-ended allowlists.
 
-The release is not yet publishable. Its remaining handoff is:
-
-1. Recheck both frozen local refs, then manually publish only candidate tag
-   `paradox-2.0.0-ci-2f40e3e` at
-   `2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa` and companion tag
-   `paradox-2.0.0-ci-2f40e3e-harness-ede67fc` at
-   `ede67fc5780c9b1f6f91325189f8f7560376060c`. Do not move or reuse either
-   rejected tag, and do not push local `main`, the benchmark companion, all
-   tags, or the custom release-ref namespace.
-2. Manually dispatch the new companion and require both Windows/Rtools
-   and Apple ARM64 jobs to pass with sole final `Status: OK` conclusions. Retain
-   and verify the complete run/job metadata, individual logs, workflow,
-   artifacts, manifests, and provenance before publication.
-3. Add the new run ID and URL, companion `headSha`, candidate checkout
-   identities, named platform conclusions, artifact provenance, check-log
-   conclusions, and retained-file hashes to this ledger.
+All required release gates are accepted. The immutable candidate
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa` is release-ready: accepted run
+`29573168344` closed the remaining Windows/Rtools and Apple ARM64 gate with
+both check logs ending in their sole `Status: OK`, and the complete remote
+evidence passed the checksum-bound verifier once. The broad consumer,
+documentation, memory, and performance evidence remains valid only through the
+bounded carry-forward decision above; another broad replay now has no release
+information value and is not required. This completion state authorizes the
+ordinary human-controlled release process but does not claim that CRAN upload
+or publication has happened.
 
 The `afa56689` and `b840d9c4` refs and runs `29559803987` and `29561742772`
 remain immutable rejected historical evidence. The scalar helper and test-only
 reticulate teardown do not require another full consumer, documentation, or
-rchk campaign for the reasons recorded in the carry-forward boundary. Any
+rchk campaign for the reasons recorded in the carry-forward boundary. No more
+broad validation should be run for this frozen payload. Any
 further package-source edit beyond that audited delta reopens impact analysis
 and proportionate validation.
 
