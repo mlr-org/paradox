@@ -14,6 +14,10 @@ provenance is not equivalent evidence.
 - Installed package-content SHA-256:
   `b628565f839e2743e064fd42c042aec960b159919964b2469a2e66ec9869ee6a`
 - Version: `2.0.0`
+- Sealed source tarball:
+  `.local/checks/release-native-20260716T165635Z/source-package/build/paradox_2.0.0.tar.gz`
+- Source-tarball SHA-256:
+  `60cb9cc2f9ccd1b75d1cbf72b4f935d9f5c510c83166dc67ea9dbf40c9ee074f`
 - Language/toolchain contract: portable C17 through the public R C API,
   R 4.3 or newer; no architecture-specific intrinsics.
 - Detached source:
@@ -52,7 +56,7 @@ package implementation.
 |---|---|---|
 | Native compilers, analyzers, sanitizers, symbols, full tests, CRAN and depends-only checks | `release-native-20260716T165635Z` | Passed and independently replayed |
 | Public R API, four header releases, 35 translation units, GCC and Clang | `release-r-api-20260716T171343Z` | Passed and independently replayed |
-| Windows/Rtools and macOS ARM64 CI | Exact frozen-candidate remote run not yet available | Required external handoff before publication; the frozen ref is local only |
+| Windows/Rtools and macOS ARM64 CI | Exact frozen-candidate remote run not yet available | Required external handoff before publication; publish only CI tag `paradox-2.0.0-ci-afa5668`, then follow `design/portability-ci.md` |
 | Real R 4.3.3 and 4.5.2 runtimes | `release-runtime-matrix-20260716T172036Z` | Passed; verifier replayed with restricted `PATH` |
 | Behavioral differential, 17 cases | `20260717T030312Z-2192945` | Exact frozen candidate: 10 equal, 7 exact reviewed differences, 0 unexpected; verifier passed over 689 files |
 | GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed and independently replayed |
@@ -331,6 +335,11 @@ reviewed limitations, not open-ended allowlists.
 The release is not yet publishable. Exact frozen-candidate Windows/Rtools and
 Apple ARM64 CI must still pass after the local ref is made available remotely;
 the ref currently exists only in this repository and no push is authorized.
+The minimal handoff is the single CI-only tag and manual dispatch specified in
+`design/portability-ci.md`; do not push local `main`, the benchmark companion,
+all tags, or the custom release-ref namespace. After the run, this ledger must
+retain its run ID and URL, exact `headSha`, both named platform conclusions,
+and hashes of the metadata, complete log, and workflow before publication.
 Do not turn any future consumer failure into an allowlist: first reproduce it
 against upstream paradox under the identical environment, fix a harness
 artifact when proven, and add a package regression test for every genuine
