@@ -232,7 +232,7 @@ release_require_regular_file <- function(path, label) {
 }
 
 release_contains_control <- function(value) {
-  grepl("[\\r\\n\\t]", value)
+  grepl("[[:cntrl:]]", value)
 }
 
 release_absolute <- function(path) {
