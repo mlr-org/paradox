@@ -795,8 +795,11 @@ environment. That same authenticated candidate is then used for:
   `mlr3` worker-contract exception that exposes exactly two CPUs while make,
   CMake, testthat, BLAS, and Rcpp remain at one;
 - `compat/test-documentation`, with the same candidate/dependency libraries,
-  the clean detached `--candidate-source`, the mlr3verse core as
-  `--extra-library`, a new run ID, and `--scope all`;
+  the clean detached `--candidate-source`, the mlr3verse core and
+  `library-documentation-extra-final3` as two explicit, repeated
+  `--extra-library` arguments, a new run ID, and `--scope all`. The second
+  overlay supplies `gt` and its locked `V8`/`bigD`/`juicyjuice` closure for the
+  mandatory website benchmark;
   this also runs the pinned mbo_config and reviewed documentation migration
   workloads; and
 - `benchmarks/release`, with the sealed full-inventory differential run,

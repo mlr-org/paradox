@@ -135,10 +135,42 @@ and `TZ=UTC`. Documentation gates authenticate the same managed detached
 candidate source at every workload boundary, so excluded primary-checkout work
 cannot replace the package being documented.
 
+The documentation gate receives two explicit protected overlays. The
+mlr3verse-core library supplies the reviewed hard-import closure. The second,
+`library-documentation-extra-final3`, supplies `gt` 1.3.0, `V8` 8.2.0,
+`bigD` 0.3.1, and `juicyjuice` 0.1.0 from
+`environment/r-packages-linux-64.lock`; its pre-release content SHA-256 is
+`169286c9080e0c5a3b58a3ffd51a24e258d817030cd1f8c991411453a84c99d6`.
+The schema-8 gate binds both overlay paths and content hashes, checks their
+metadata at every workload boundary, and rehashes them at postflight. This
+release reuses the second overlay from sealed documentation evidence; a future
+release should give that small overlay its own reproducible preparation
+receipt.
+
 Discretionary performance work is frozen. Reopen native code only if the final
 full benchmark exposes a clear release-relevant regression with a low-risk,
 measured fix. A source edit requires a new candidate and proportionate replay
 of every gate that consumes its package bytes; a verifier-only repair does not.
+
+### Reverse-gate harness incidents
+
+Two pre-release reverse runs were deliberately rejected rather than cited as
+evidence. `release-reverse-p1-afa5668-20260716` compared the raw legal package
+version `0.0.4-3` with R's canonical `0.0.4.3` spelling and stopped before
+checking `miesmuschel`. The validator now keeps the exact raw version in the
+receipt but compares installed versions as parsed `package_version` objects;
+the focused synthetic cache test covers the incident and genuine mismatches.
+
+`release-reverse-p1-afa5668-20260717` completed its first wave and all four
+checks in its second wave, but failed to seal two factual non-green rows because
+raw log excerpts were marked with `Encoding = "bytes"` before character-based
+diagnostic truncation. The shared compactor now converts valid UTF-8, escapes
+invalid external bytes as ASCII `<xx>`, normalizes newlines and tabs,
+and truncates to an exact character bound. Synthetic Unicode, invalid-byte,
+head/tail, and representative failed-row tests cover that path. Both changes
+alter authenticated runner bytes, so each required a fresh run ID; package
+installations remained in their content-addressed caches and the frozen
+candidate package was neither rebuilt nor changed.
 
 ## Release completion rule
 

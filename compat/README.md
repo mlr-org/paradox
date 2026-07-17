@@ -562,12 +562,16 @@ The documentation and corpus-workload harness uses the same sealed candidate
 and the pinned, clean `mlr3book`, `mlr3website`, `mlr3gallery`,
 `mlr3cheatsheets`, `mlr3benchmark`, `mbo_config`, `mlr3-targets`, and
 `mlr3verse` checkouts.
-Give it a new evidence ID and supply the reviewed `mlr3verse` hard-import
-overlay:
+Give it a new evidence ID and supply both reviewed overlays: the `mlr3verse`
+hard-import library and the locked documentation-only library containing `gt`,
+`V8`, `bigD`, and `juicyjuice`:
 
 ```sh
 documentation_run_id="$run_id-documentation"
+documentation_extra_library="$PARADOX_ROOT/.local/compat/R/library-documentation-extra-final3"
 test ! -e "$PARADOX_ROOT/.local/compat/runs/$documentation_run_id"
+test -d "$mlr3verse_library"
+test -d "$documentation_extra_library"
 unset PARADOX_CONSUMER_EXTRA_LIBS
 
 Rscript compat/test-documentation \
@@ -576,6 +580,7 @@ Rscript compat/test-documentation \
   --candidate-source "$candidate_source" \
   --dependency-library "$dependency_library" \
   --extra-library "$mlr3verse_library" \
+  --extra-library "$documentation_extra_library" \
   --run-id "$documentation_run_id" \
   --scope all \
   --timeout 7200
