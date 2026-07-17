@@ -240,9 +240,76 @@ documentation_format_metadata_number <- function(value) {
   format(value, scientific = FALSE, trim = TRUE, digits = 22L)
 }
 
-# fs performs the recursive scan in native code without following directory
-# symlinks.  file_info(follow = FALSE) then supplies lstat data for the root and
-# every descendant, including directories and symbolic links themselves.
+# Use only non-recursive base-R directory reads here.  Every child is retained,
+# but only a present, non-symbolic directory is admitted to the queue.  This
+# keeps traversal outside fs's recursively growing native collector while
+# preserving file_info(follow = FALSE) for the actual lstat metadata.
+documentation_list_descendants <- function(root) {
+  if (!is.character(root) || length(root) != 1L || is.na(root) || !nzchar(root)) {
+    fail("protected metadata traversal requires one nonempty root")
+  }
+  root_link <- Sys.readlink(root)
+  if (length(root_link) != 1L || is.na(root_link) || nzchar(root_link) ||
+      !dir.exists(root)) {
+    fail("protected metadata traversal root is absent, non-directory, or symbolic: ",
+      root)
+  }
+
+  queue <- root
+  position <- 1L
+  blocks <- list()
+  while (position <= length(queue)) {
+    directory <- queue[[position]]
+    block <- position
+    position <- position + 1L
+    directory_link <- Sys.readlink(directory)
+    directory_access <- file.access(directory, mode = 5L)
+    if (length(directory_link) != 1L || is.na(directory_link) ||
+        nzchar(directory_link) || !dir.exists(directory) ||
+        length(directory_access) != 1L || is.na(directory_access) ||
+        directory_access != 0L) {
+      fail("protected metadata traversal reached an unreadable or unsafe directory: ",
+        directory)
+    }
+    children <- list.files(
+      directory, all.files = TRUE, full.names = TRUE, no.. = TRUE,
+      recursive = FALSE
+    )
+    if (!is.character(children) || anyNA(children) || anyDuplicated(children)) {
+      fail("protected metadata traversal returned unreadable or duplicate children below ",
+        directory)
+    }
+    blocks[[block]] <- children
+    if (!length(children)) next
+    prefix <- paste0(directory, .Platform$file.sep)
+    if (any(!startsWith(children, prefix))) {
+      fail("protected metadata traversal returned an unsafe path below ",
+        directory)
+    }
+    link_targets <- Sys.readlink(children)
+    if (length(link_targets) != length(children) || anyNA(link_targets)) {
+      fail("protected metadata traversal could not inspect every child below ",
+        directory)
+    }
+    ordinary <- !nzchar(link_targets)
+    if (any(ordinary)) {
+      child_directories <- dir.exists(children[ordinary])
+      if (anyNA(child_directories)) {
+        fail("protected metadata traversal could not classify a child below ",
+          directory)
+      }
+      queue <- c(queue, children[ordinary][child_directories])
+    }
+  }
+  descendants <- unname(unlist(blocks, use.names = FALSE))
+  if (anyDuplicated(queue) || anyDuplicated(descendants)) {
+    fail("protected metadata traversal produced duplicate paths below ", root)
+  }
+  descendants
+}
+
+# file_info(follow = FALSE) supplies lstat data for the root and every
+# descendant, including directories and symbolic links themselves.
 documentation_metadata_ledger <- function(roots) {
   if (!is.character(roots) || !length(roots) || is.null(names(roots)) ||
       anyNA(roots) || any(!nzchar(roots)) || anyNA(names(roots)) ||
@@ -274,9 +341,7 @@ documentation_metadata_ledger <- function(roots) {
     protected_root <- normalized_roots[[root_index]]
     paths <- c(
       protected_root,
-      as.character(fs::dir_ls(
-        protected_root, all = TRUE, recurse = TRUE, type = "any", fail = TRUE
-      ))
+      documentation_list_descendants(protected_root)
     )
     if (anyDuplicated(paths)) {
       fail("protected metadata traversal returned duplicate paths below ",

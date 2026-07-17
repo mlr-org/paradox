@@ -151,8 +151,9 @@ helper_environment$is_symbolic <- function(path) {
 }
 for (name in c(
   "documentation_write_tsv", "documentation_format_metadata_number",
-  "documentation_metadata_ledger", "documentation_assert_metadata",
-  "sample_classification_log", "classify_failure"
+  "documentation_list_descendants", "documentation_metadata_ledger",
+  "documentation_assert_metadata", "sample_classification_log",
+  "classify_failure"
 )) {
   assign(name, eval(function_binding(name), helper_environment),
     envir = helper_environment)
@@ -160,6 +161,9 @@ for (name in c(
 helper_environment$classification_log_head_bytes <- 64L
 helper_environment$classification_log_tail_bytes <- 128L
 helper_environment$classification_log_max_bytes <- 192L
+if (any(grepl("fs::dir_ls", readLines(harness, warn = FALSE), fixed = TRUE))) {
+  fail("documentation harness reintroduced the GC-unsafe recursive fs collector")
+}
 
 scratch <- tempfile("documentation-economy-", tmpdir = temporary_parent)
 if (!dir.create(scratch, recursive = FALSE, showWarnings = FALSE)) {
@@ -169,21 +173,31 @@ on.exit(unlink(scratch, recursive = TRUE, force = TRUE), add = TRUE)
 first <- file.path(scratch, "first")
 second <- file.path(scratch, "second")
 outside <- file.path(scratch, "outside")
-for (path in c(first, second, outside, file.path(first, "directory"))) {
+directory <- file.path(first, "directory")
+nested <- file.path(directory, "nested")
+for (path in c(first, second, outside, directory, nested)) {
   if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
     fail("could not create metadata fixture directory: ", path)
   }
 }
-ordinary <- file.path(first, "directory", "ordinary")
+ordinary <- file.path(directory, "ordinary")
+deep <- file.path(nested, "deep")
+hidden <- file.path(first, ".hidden")
 hardlink <- file.path(first, "hardlink")
 outside_file <- file.path(outside, "must-not-be-followed")
 writeLines("fixture", ordinary, useBytes = TRUE)
+writeLines("deep", deep, useBytes = TRUE)
+writeLines("hidden", hidden, useBytes = TRUE)
 writeLines("outside", outside_file, useBytes = TRUE)
 if (!file.link(ordinary, hardlink)) fail("could not create fixture hard link")
 directory_link <- file.path(second, "directory-link")
 if (!file.symlink(outside, directory_link)) {
   fail("could not create fixture directory symlink")
 }
+dangling_link <- file.path(second, "dangling-link")
+dangling_created <- file.symlink(
+  file.path(outside, "absent-target"), dangling_link
+)
 
 ledger <- helper_environment$documentation_metadata_ledger(c(
   first = first, second = second
@@ -195,7 +209,16 @@ expected_columns <- c(
 if (!identical(names(ledger), expected_columns)) {
   fail("protected metadata ledger has an unexpected schema")
 }
-if (!all(c(".", "directory") %in% ledger$path[ledger$root == "first"])) {
+expected_first <- sort(c(
+  ".", ".hidden", "directory", "directory/nested",
+  "directory/nested/deep", "directory/ordinary", "hardlink"
+), method = "radix")
+expected_second <- sort(c(
+  ".", "directory-link", if (dangling_created) "dangling-link"
+), method = "radix")
+if (!identical(ledger$path[ledger$root == "first"], expected_first) ||
+    !identical(ledger$path[ledger$root == "second"], expected_second) ||
+    anyDuplicated(paste(ledger$root, ledger$path, sep = "/"))) {
   fail("protected metadata ledger omits roots or descendant directories")
 }
 if (!identical(
@@ -203,6 +226,17 @@ if (!identical(
     "symlink"
   ) || any(grepl("must-not-be-followed", ledger$path, fixed = TRUE))) {
   fail("protected metadata traversal followed a directory symlink")
+}
+if (dangling_created && (!identical(
+    ledger$type[ledger$root == "second" & ledger$path == "dangling-link"],
+    "symlink"
+  ) || !identical(
+    ledger$link_target[
+      ledger$root == "second" & ledger$path == "dangling-link"
+    ],
+    file.path(outside, "absent-target")
+  ))) {
+  fail("protected metadata ledger did not retain a dangling symbolic link")
 }
 ordinary_row <- ledger[ledger$root == "first" &
   ledger$path == "directory/ordinary", , drop = FALSE]
@@ -221,6 +255,19 @@ helper_environment$documentation_assert_metadata(
   ledger,
   "in unchanged fixture"
 )
+
+repeated_ledgers <- tryCatch({
+  gctorture(TRUE)
+  lapply(seq_len(1L), function(index) {
+    gc()
+    helper_environment$documentation_metadata_ledger(c(
+      first = first, second = second
+    ))
+  })
+}, finally = gctorture(FALSE))
+if (!all(vapply(repeated_ledgers, identical, logical(1L), ledger))) {
+  fail("protected metadata ledger changed under repeated GC-pressure traversal")
+}
 
 old_mode <- ordinary_row$mode[[1L]]
 new_mode <- if (endsWith(old_mode, "600")) "0644" else "0600"
