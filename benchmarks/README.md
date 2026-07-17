@@ -163,12 +163,20 @@ the same host:
 |---|---:|---:|---:|---:|---:|
 | `hot` | 1.20 | 1.35 | 0.75 | 1.25 | 16 KiB |
 | `standard` | 1.35 | 1.60 | 0.80 | 1.50 | 64 KiB |
+| `authenticated-read` | 1.60 | 1.70 | 0.80 | 1.50 | 16 KiB |
 
 Common constructors, ID/value/domain access, validation, design generation,
 mutation, and maintained consumer paths use the stricter `hot` tier. Structural
-stress, nested, and callback-extension cases use `standard`. These are portable
-relative budgets; the policy assumes no processor model, instruction set, or
-absolute nanosecond target.
+stress, nested, and callback-extension cases use `standard`. The narrow
+`authenticated-read` tier applies only to the three direct
+`ParamSetCollection$values` active-binding workloads. Those reads deliberately
+re-authenticate live R6 wrappers, child private tables, value snapshots,
+translation ownership, and graph edges before assembling the result. The tier
+keeps that reviewed safety cost visible as a marginal row while still failing a
+median ratio of 1.60 or an upper-quartile ratio of 1.70. It does not apply to
+`get_values()` or any mutation path. These are portable relative budgets; the
+policy assumes no processor model, instruction set, or absolute nanosecond
+target.
 
 Timing decisions use all retained samples, not only the summary median. For
 both the median ratio and the 75th-percentile ratio, the evaluator computes
@@ -205,8 +213,8 @@ of the applicable tier budget consumed, so a tiny allocation above a zero-byte
 baseline cannot hide a larger material increase. The raw ratio, byte delta, and
 budget fraction are all retained. Any `fail` row prevents the evidence seal.
 The deterministic policy fixtures cover stable passes, a noisy marginal, a
-clear timing failure, and both harmless and material zero-baseline allocation
-changes:
+clear timing failure, both harmless and material zero-baseline allocation
+changes, and the reviewed authenticated-read margin:
 
 ```sh
 Rscript --vanilla benchmarks/tests/test-regression-policy.R

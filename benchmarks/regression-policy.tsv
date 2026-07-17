@@ -40,9 +40,9 @@ paired	set_values_insert	-	hot	common-value-write
 paired	collection_construct_plain	-	hot	common-collection-construction
 paired	collection_construct_rich	-	hot	common-collection-construction
 paired	collection_assign_values	-	hot	common-collection-value-write
-paired	collection_values_plain	-	hot	common-collection-value-read
-paired	collection_values_rich	-	hot	common-collection-value-read
-paired	collection_values_nested	-	standard	nested-collection-value-read
+paired	collection_values_plain	-	authenticated-read	live-surface-authenticated-value-read
+paired	collection_values_rich	-	authenticated-read	live-surface-authenticated-value-read
+paired	collection_values_nested	-	authenticated-read	live-surface-authenticated-value-read
 paired	collection_get_values_rich	-	hot	consumer-observed-filtered-read
 paired	collection_get_values_nested	-	standard	nested-filtered-read
 paired	collection_deps_rich	-	standard	dependency-aggregation
