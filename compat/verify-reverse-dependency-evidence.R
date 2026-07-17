@@ -248,6 +248,8 @@ for (index in seq_len(nrow(results))) {
   rr_verify_stage(row_stage)
   row <- rr_read_tsv(file.path(row_stage, "result.tsv"),
     rr_reverse_result_columns())
+  row.names(row) <- NULL
+  row.names(result) <- NULL
   if (!identical(row, result)) rr_fail("row result differs from aggregate: ", package)
   acceptance_row <- accepted[accepted$package == package, , drop = FALSE]
   wave_number <- as.integer(acceptance_row$wave[[1L]])

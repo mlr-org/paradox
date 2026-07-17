@@ -79,6 +79,46 @@ if (sum(grepl("rr_record_full_hash_pass\\(", tracked_lines)) != 2L ||
     !any(grepl('if (arguments$resume)', tracked_lines, fixed = TRUE))) {
   rr_fail("tracked reverse runner lost its verification-economy call graph")
 }
+tracked_verifier <- file.path(
+  dirname(script), "verify-reverse-dependency-evidence.R"
+)
+tracked_verifier_lines <- trimws(readLines(tracked_verifier, warn = FALSE))
+row_comparison <- which(tracked_verifier_lines ==
+  'if (!identical(row, result)) rr_fail("row result differs from aggregate: ", package)')
+expected_row_comparison <- c(
+  "row.names(row) <- NULL",
+  "row.names(result) <- NULL",
+  'if (!identical(row, result)) rr_fail("row result differs from aggregate: ", package)'
+)
+if (length(row_comparison) != 1L || row_comparison < 3L ||
+    !identical(
+      tracked_verifier_lines[(row_comparison - 2L):row_comparison],
+      expected_row_comparison
+    )) {
+  rr_fail("reverse evidence verifier lost row-name-only result normalization")
+}
+aggregate_fixture <- data.frame(
+  package = c("first", "second"), status = c("passed", "failed"),
+  stringsAsFactors = FALSE
+)
+aggregate_slice <- aggregate_fixture[2L, , drop = FALSE]
+row_fixture <- aggregate_slice
+row.names(row_fixture) <- NULL
+if (identical(row_fixture, aggregate_slice)) {
+  rr_fail("multi-row aggregate fixture does not expose the row-name mismatch")
+}
+row.names(aggregate_slice) <- NULL
+if (!identical(row_fixture, aggregate_slice)) {
+  rr_fail("row-name normalization changed a multi-row aggregate result")
+}
+changed_value <- row_fixture
+changed_value$status[[1L]] <- "passed"
+changed_schema <- row_fixture
+names(changed_schema)[[2L]] <- "classification"
+if (identical(changed_value, aggregate_slice) ||
+    identical(changed_schema, aggregate_slice)) {
+  rr_fail("result normalization weakened value or schema comparison")
+}
 controls <- rr_reverse_nested_controls()
 if (anyDuplicated(names(controls)) ||
     !identical(controls[["TESTTHAT_CPUS"]], "1") ||
