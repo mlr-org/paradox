@@ -17,7 +17,7 @@ jobs:
   r-cmd-check:
     runs-on: ${{ matrix.config.os }}
 
-    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})${{ matrix.config.depends_only && ' – noSuggests' || '' }}${{ matrix.config.no_tests && ' – noTests' || '' }}
+    name: ${{ matrix.config.os }} / ${{ matrix.config.arch }} (${{ matrix.config.r }})
 
     env:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
@@ -31,25 +31,28 @@ jobs:
           - {os: macos-15,        arch: arm64,  r: 'release'}
           # setup-r installs the Rtools version appropriate for release R.
           - {os: windows-latest,  arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'devel'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
-          - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
-          # Compile against the declared minimum R API as well as current R.
-          # The authenticated local old-runtime gate exercises the reviewed
-          # 57-file public-behavior scope. This row independently checks that
-          # the distributable package builds, installs, and checks against the
-          # declared minimum API without rerunning the 22 R-4.6-only admission
-          # implementation contexts.
-          - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true, no_tests: true}
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10
+        with:
+          # The workflow comes from this harness-only companion, but compiler
+          # and check inputs always come from the exact frozen candidate.
+          ref: paradox-2.0.0-ci-2f40e3e
+          persist-credentials: false
 
-      - uses: r-lib/actions/setup-r@v2
+      - name: Verify frozen candidate checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          readonly expected=2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa
+          test "$(git rev-parse HEAD)" = "$expected"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - uses: r-lib/actions/setup-r@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           r-version: ${{ matrix.config.r }}
 
-      - uses: r-lib/actions/setup-r-dependencies@v2
+      - uses: r-lib/actions/setup-r-dependencies@d3c5be51b12e724e68f33216ca3c148b66d5f0b6
         with:
           extra-packages: any::rcmdcheck
           needs: check
@@ -93,18 +96,11 @@ jobs:
             length(getDLLRegisteredRoutines(dll)[[".Call"]]) > 0L
           )
 
-      # Run rcmdcheck directly and reject its child status explicitly: its
-      # normal policy accepts one nonzero status class when it cannot parse a
-      # formal check finding. The independent log-completion assertion below
-      # also rejects incomplete output and future wrapper-policy regressions.
       - name: Run R CMD check
         shell: Rscript {0}
         env:
-          # An empty value becomes NA in R 4.6 and crashes R CMD check when it
-          # evaluates R_cdo_tests. Always provide a legal logical spelling.
-          _R_CHECK_DEPENDS_ONLY_: ${{ matrix.config.depends_only && 'TRUE' || 'FALSE' }}
-          NOT_CRAN: ${{ matrix.config.depends_only && 'FALSE' || 'TRUE' }}
-          PARADOX_CHECK_NO_TESTS: ${{ matrix.config.no_tests && 'TRUE' || 'FALSE' }}
+          _R_CHECK_DEPENDS_ONLY_: 'FALSE'
+          NOT_CRAN: 'TRUE'
         run: |
           options(crayon.enabled = TRUE)
           if (Sys.getenv("_R_CHECK_FORCE_SUGGESTS_", "") == "") {
@@ -113,12 +109,8 @@ jobs:
           if (Sys.getenv("_R_CHECK_CRAN_INCOMING_", "") == "") {
             Sys.setenv("_R_CHECK_CRAN_INCOMING_" = "false")
           }
-          args = c("--no-manual", "--as-cran")
-          if (identical(Sys.getenv("PARADOX_CHECK_NO_TESTS"), "TRUE")) {
-            args = c(args, "--no-tests")
-          }
           result = rcmdcheck::rcmdcheck(
-            args = args,
+            args = c("--no-manual", "--as-cran"),
             build_args = "--no-manual",
             error_on = "warning",
             check_dir = "check"
@@ -127,8 +119,6 @@ jobs:
             stop("rcmdcheck returned nonzero status: ", result$status)
           }
 
-      # This independent top-level step catches a truncated check even if a
-      # future runner or wrapper again loses the process exit status.
       - name: Verify R CMD check completion
         if: always()
         shell: Rscript {0}
@@ -147,3 +137,32 @@ jobs:
             cat(lines, sep = "\n")
             stop("R CMD check did not finish cleanly with one final `Status: OK`")
           }
+
+      - name: Retain run provenance
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          test ! -e ci-evidence
+          mkdir ci-evidence
+          {
+            printf 'workflow_sha=%s\n' "$GITHUB_SHA"
+            printf 'workflow_ref=%s\n' "$GITHUB_REF"
+            printf 'checked_out_sha=%s\n' "$(git rev-parse HEAD)"
+            printf 'runner_os=%s\n' "$RUNNER_OS"
+            printf 'runner_arch=%s\n' "$RUNNER_ARCH"
+            # The single-quoted text is R code, not shell.
+            # shellcheck disable=SC2016
+            printf 'r_platform=%s\n' "$(Rscript --vanilla -e 'cat(R.version$platform)')"
+          } > ci-evidence/provenance.txt
+
+      - name: Upload check evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: paradox-2.0.0-portability-${{ matrix.config.os }}-${{ matrix.config.arch }}
+          path: |
+            ci-evidence/provenance.txt
+            check
+          if-no-files-found: error
+          retention-days: 30
