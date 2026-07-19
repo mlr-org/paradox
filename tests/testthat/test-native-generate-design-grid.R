@@ -23,7 +23,7 @@ native_grid_reference = function(param_set, resolutions) {
 native_grid_visible_attributes = function(table) {
   result = attributes(table)
   result$.internal.selfref = NULL
-  result
+  result[sort(names(result), method = "radix")]
 }
 
 native_grid_numeric_bytes = function(table) {
@@ -71,6 +71,20 @@ test_that("zero-dimensional grids are constructed by the native engine", {
     .Call(native_grid_symbol(), params, c(extra = 1L)),
     "one value per parameter"
   )
+})
+
+test_that("grid facades use one canonical native attribute order", {
+  param_set = ps(x = p_int(0L, 1L))
+  observed = .Call(
+    native_grid_symbol(),
+    native_grid_params(param_set),
+    c(x = 2L)
+  )
+  expect_identical(
+    names(attributes(observed)),
+    c("row.names", "class", "names", ".internal.selfref")
+  )
+  expect_identical(data.table:::selfrefok(observed, verbose = FALSE), 1L)
 })
 
 test_that("one-shot grids preserve randomized resolution order exactly", {
@@ -251,7 +265,10 @@ test_that("public mixed grids retain values, dependencies, and table facade", {
   )
 
   expect_identical(as.list(observed$data), as.list(expected$data))
-  expect_identical(attributes(observed$data), attributes(expected$data))
+  expect_identical(
+    native_grid_visible_attributes(observed$data),
+    native_grid_visible_attributes(expected$data)
+  )
   expect_identical(vapply(observed$data, typeof, character(1L)), c(
     x = "double",
     enabled = "logical",

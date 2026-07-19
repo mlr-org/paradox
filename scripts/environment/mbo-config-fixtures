@@ -1,0 +1,256 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Stage or verify the two historical mbo_config objects without trusting the
+# checkout worktree.  The candidate's two reviewed repository ledgers select
+# one exact commit/tree; fixture bytes are read from those immutable Git
+# objects through the authenticated runtime-matrix Git facade.
+
+OWNER_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+GIT_HELPER="$OWNER_ROOT/scripts/environment/runtime-matrix-git"
+PREFIX_RECEIPT="$OWNER_ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+EXPECTED_ORIGIN=https://github.com/mlr-org/mbo_config.git
+FIXTURE_PATHS=(
+  common/mixed_search_space.rds
+  common/numeric_search_space.rds
+)
+
+usage() {
+  cat <<'USAGE'
+Usage: mbo-config-fixtures stage|verify SOURCE_ROOT CHECKOUT DESTINATION
+
+Authenticate the reviewed mbo_config commit/tree selected by SOURCE_ROOT's
+compat/github-snapshot.tsv and compat/mlr-org-review.tsv, then stage or verify
+the two legacy-upgrade RDS files below DESTINATION/common.  Staging publishes
+an absent destination atomically and makes the fixture bytes read-only.
+USAGE
+}
+
+fail() {
+  printf 'mbo-config-fixtures: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 4 && ${1:-} =~ ^(stage|verify)$ ]] || {
+  usage >&2
+  exit 2
+}
+operation=$1
+source_root=$2
+checkout=$3
+destination=$4
+
+[[ -d "$source_root" && ! -L "$source_root" ]] ||
+  fail "source root is absent or symbolic"
+source_root=$(cd "$source_root" && pwd -P)
+snapshot_manifest="$source_root/compat/github-snapshot.tsv"
+review_manifest="$source_root/compat/mlr-org-review.tsv"
+for manifest in "$snapshot_manifest" "$review_manifest"; do
+  [[ -f "$manifest" && ! -L "$manifest" ]] ||
+    fail "reviewed repository manifest is absent or symbolic: $manifest"
+done
+snapshot_manifest_sha256=$(sha256sum -- "$snapshot_manifest" | cut -d ' ' -f 1)
+review_manifest_sha256=$(sha256sum -- "$review_manifest" | cut -d ' ' -f 1)
+[[ -x "$GIT_HELPER" && -f "$GIT_HELPER" && ! -L "$GIT_HELPER" &&
+  -x "$PREFIX_RECEIPT" && -f "$PREFIX_RECEIPT" && ! -L "$PREFIX_RECEIPT" ]] ||
+  fail "authenticated Git or receipt helper is absent"
+
+snapshot_record=$(awk -F '\t' -v origin="$EXPECTED_ORIGIN" '
+  NR == 1 {
+    if ($0 != "repository\turl\tpriority\tcommit\tcommit_date\tbranch") exit 10
+    next
+  }
+  $1 == "mbo_config" {
+    if (NF != 6 || ++count != 1 || $2 != origin || $3 != "1" ||
+        $4 !~ /^[0-9a-f]{40}$/ || $5 == "" || $6 == "") exit 11
+    record = $2 "\t" $4 "\t" $5
+  }
+  END {
+    if (count != 1 || record == "") exit 12
+    print record
+  }
+' "$snapshot_manifest") ||
+  fail "github snapshot has no unique reviewed mbo_config row"
+IFS=$'\t' read -r snapshot_origin snapshot_commit snapshot_date \
+  <<< "$snapshot_record"
+
+review_record=$(awk -F '\t' -v origin="$EXPECTED_ORIGIN" '
+  NR == 1 {
+    if ($0 != "repository\torigin\tcommit\ttree\tcommit_date\tarchived\tclean_status\tsource_archive_sha256\tsource_type\tscoped_files\tscope_receipt_sha256\tparadox_lines\tapi_lines\tall_text_paradox_lines\tall_text_api_lines\tuse_class\treview_decision\tevidence\trationale") exit 20
+    next
+  }
+  $1 == "mbo_config" {
+    if (NF != 19 || ++count != 1 || $2 != origin ||
+        $3 !~ /^[0-9a-f]{40}$/ || $4 !~ /^[0-9a-f]{40}$/ ||
+        $5 == "" || $6 != "false" || $7 != "clean" ||
+        $8 !~ /^[0-9a-f]{64}$/ || $9 != "consumer-corpus" ||
+        $11 !~ /^[0-9a-f]{64}$/ || $17 != "retain-gate-p1") exit 21
+    record = $2 "\t" $3 "\t" $4 "\t" $5
+  }
+  END {
+    if (count != 1 || record == "") exit 22
+    print record
+  }
+' "$review_manifest") ||
+  fail "mlr-org review has no unique retained mbo_config row"
+IFS=$'\t' read -r review_origin review_commit review_tree review_date \
+  <<< "$review_record"
+[[ $(sha256sum -- "$snapshot_manifest" | cut -d ' ' -f 1) == \
+    "$snapshot_manifest_sha256" &&
+  $(sha256sum -- "$review_manifest" | cut -d ' ' -f 1) == \
+    "$review_manifest_sha256" ]] ||
+  fail "reviewed mbo_config repository manifests changed during admission"
+[[ "$snapshot_origin" == "$review_origin" &&
+  "$snapshot_commit" == "$review_commit" &&
+  "$snapshot_date" == "$review_date" ]] ||
+  fail "reviewed mbo_config repository manifests disagree"
+commit=$review_commit
+tree=$review_tree
+
+"$GIT_HELPER" audit "$checkout" >/dev/null
+observed_tree=$("$GIT_HELPER" resolve-tree "$checkout" "$commit") ||
+  fail "reviewed mbo_config commit is absent from the authenticated checkout"
+[[ "$observed_tree" == "$tree" ]] ||
+  fail "reviewed mbo_config commit resolves to an unexpected tree"
+for relative in "${FIXTURE_PATHS[@]}"; do
+  "$GIT_HELPER" cat-file-exists "$checkout" "$commit:$relative" 2>/dev/null ||
+    fail "reviewed mbo_config fixture object is absent: $relative"
+done
+
+metadata_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' \
+    "$destination/provenance.tsv"
+}
+
+verify_bundle() {
+  local relative path expected_sha observed
+  [[ -d "$destination" && ! -L "$destination" ]] ||
+    fail "fixture bundle is absent or symbolic: $destination"
+  destination=$(cd "$destination" && pwd -P)
+  [[ -d "$destination/common" && ! -L "$destination/common" &&
+    -f "$destination/provenance.tsv" && ! -L "$destination/provenance.tsv" &&
+    -f "$destination/common.manifest.tsv" &&
+    ! -L "$destination/common.manifest.tsv" ]] ||
+    fail "fixture bundle structure is incomplete or symbolic"
+  diff -u \
+    <(printf '%s\n' common common.manifest.tsv \
+      common/mixed_search_space.rds common/numeric_search_space.rds \
+      provenance.tsv | LC_ALL=C sort) \
+    <(find "$destination" -mindepth 1 -printf '%P\n' | LC_ALL=C sort) \
+    >/dev/null || fail "fixture bundle contains an unexpected member"
+  awk -F '\t' '
+    NR == 1 {if ($0 != "field\tvalue") exit 1; next}
+    NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+    END {if (NR != 12) exit 1}
+  ' "$destination/provenance.tsv" ||
+    fail "fixture provenance is malformed"
+  [[ $(metadata_value schema) == 1 &&
+    $(metadata_value repository) == mbo_config &&
+    $(metadata_value origin) == "$EXPECTED_ORIGIN" &&
+    $(metadata_value commit) == "$commit" &&
+    $(metadata_value tree) == "$tree" &&
+    $(metadata_value snapshot_manifest_sha256) == \
+      "$snapshot_manifest_sha256" &&
+    $(metadata_value review_manifest_sha256) == \
+      "$review_manifest_sha256" &&
+    $(metadata_value fixture_count) == 2 &&
+    $(metadata_value fixture_root) == common ]] ||
+    fail "fixture provenance differs from the reviewed repository manifests"
+  receipt_verify=$(mktemp -d "${destination%/*}/.mbo-config-receipt-verify.XXXXXX")
+  trap 'rm -rf -- "${receipt_verify:-}"' RETURN
+  cp -- "$destination/common.manifest.tsv" "$receipt_verify/common.manifest.tsv"
+  if ! "$PREFIX_RECEIPT" verify "$destination/common" \
+      "$receipt_verify/common.manifest.tsv" >/dev/null; then
+    rm -rf -- "$receipt_verify"
+    trap - RETURN
+    fail "fixture bytes differ from their retained receipt"
+  fi
+  rm -rf -- "$receipt_verify"
+  trap - RETURN
+  [[ $(stat -c '%a' -- "$destination/common") == 555 &&
+    $(stat -c '%a' -- "$destination") == 555 &&
+    $(stat -c '%a' -- "$destination/provenance.tsv") == 444 &&
+    $(stat -c '%a' -- "$destination/common.manifest.tsv") == 444 ]] ||
+    fail "fixture bundle is not retained read-only"
+  for relative in "${FIXTURE_PATHS[@]}"; do
+    path="$destination/$relative"
+    [[ -f "$path" && ! -L "$path" && $(stat -c '%a' -- "$path") == 444 ]] ||
+      fail "retained fixture is absent, symbolic, or writable: $relative"
+    case "$relative" in
+      common/mixed_search_space.rds)
+        expected_sha=$(metadata_value mixed_search_space_sha256)
+        ;;
+      common/numeric_search_space.rds)
+        expected_sha=$(metadata_value numeric_search_space_sha256)
+        ;;
+    esac
+    observed=$(sha256sum -- "$path" | cut -d ' ' -f 1)
+    [[ "$expected_sha" =~ ^[0-9a-f]{64}$ && "$observed" == "$expected_sha" ]] ||
+      fail "retained fixture hash is inconsistent: $relative"
+    "$GIT_HELPER" show-file "$checkout" "$commit:$relative" |
+      cmp -s -- "$path" - ||
+      fail "retained fixture differs from its reviewed Git object: $relative"
+  done
+  "$GIT_HELPER" audit "$checkout" >/dev/null
+  [[ $("$GIT_HELPER" resolve-tree "$checkout" "$commit") == "$tree" &&
+    $(sha256sum -- "$snapshot_manifest" | cut -d ' ' -f 1) == \
+      "$snapshot_manifest_sha256" &&
+    $(sha256sum -- "$review_manifest" | cut -d ' ' -f 1) == \
+      "$review_manifest_sha256" ]] ||
+    fail "mbo_config object provenance changed during fixture verification"
+}
+
+if [[ "$operation" == stage ]]; then
+  case "$destination" in /*) ;; *) destination=$PWD/$destination ;; esac
+  parent=${destination%/*}
+  [[ -d "$parent" && ! -L "$parent" ]] ||
+    fail "fixture destination parent is absent or symbolic"
+  parent=$(cd "$parent" && pwd -P)
+  name=${destination##*/}
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,95}$ &&
+    "$destination" == "$parent/$name" &&
+    ! -e "$destination" && ! -L "$destination" ]] ||
+    fail "fixture destination is noncanonical, unsafe, or already present"
+  staging=$(mktemp -d "$parent/.mbo-config-fixtures.XXXXXX")
+  trap 'chmod -R u+w -- "${staging:-}" 2>/dev/null || true; rm -rf -- "${staging:-}"' EXIT
+  mkdir "$staging/common"
+  for relative in "${FIXTURE_PATHS[@]}"; do
+    "$GIT_HELPER" show-file "$checkout" "$commit:$relative" > "$staging/$relative"
+    [[ -s "$staging/$relative" && ! -L "$staging/$relative" ]] ||
+      fail "could not stage one regular nonempty fixture: $relative"
+    chmod 0444 "$staging/$relative"
+  done
+  {
+    printf 'field\tvalue\n'
+    printf 'schema\t1\n'
+    printf 'repository\tmbo_config\n'
+    printf 'origin\t%s\n' "$EXPECTED_ORIGIN"
+    printf 'commit\t%s\n' "$commit"
+    printf 'tree\t%s\n' "$tree"
+    printf 'snapshot_manifest_sha256\t%s\n' \
+      "$snapshot_manifest_sha256"
+    printf 'review_manifest_sha256\t%s\n' \
+      "$review_manifest_sha256"
+    printf 'fixture_count\t2\n'
+    printf 'mixed_search_space_sha256\t%s\n' \
+      "$(sha256sum -- "$staging/common/mixed_search_space.rds" | cut -d ' ' -f 1)"
+    printf 'numeric_search_space_sha256\t%s\n' \
+      "$(sha256sum -- "$staging/common/numeric_search_space.rds" | cut -d ' ' -f 1)"
+    printf 'fixture_root\tcommon\n'
+  } > "$staging/provenance.tsv"
+  "$PREFIX_RECEIPT" create "$staging/common" \
+    "$staging/common.manifest.tsv" >/dev/null
+  chmod 0444 "$staging/provenance.tsv"
+  chmod 0555 "$staging/common"
+  chmod 0555 "$staging"
+  mv -n -- "$staging" "$destination"
+  [[ -d "$destination" && ! -e "$staging" ]] ||
+    fail "could not publish the fixture bundle without replacement"
+  trap - EXIT
+fi
+
+verify_bundle
+printf 'mbo_config_fixtures=%s\n' "$operation"
+printf 'commit=%s\ntree=%s\nfixture_root=%s/common\n' \
+  "$commit" "$tree" "$destination"

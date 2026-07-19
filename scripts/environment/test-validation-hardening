@@ -37,6 +37,7 @@ cleanup() {
       "retained failed hardening fixtures: $TEST_ROOT $RUN_DIRECTORY" >&2
     return
   fi
+  chmod -R u+w "$TEST_ROOT" "$RUN_DIRECTORY" 2>/dev/null || true
   rm -rf "$TEST_ROOT" "$RUN_DIRECTORY"
 }
 trap cleanup EXIT
@@ -1262,6 +1263,10 @@ write_source_manifest() {
   for relative in environment/native-routine-coverage.tsv \
       environment/tinytex-linux-x86_64.tsv \
       environment/toolchain-linux-64.lock \
+      compat/github-snapshot.tsv compat/mlr-org-review.tsv \
+      scripts/environment/mbo-config-fixtures \
+      scripts/environment/runtime-matrix-git \
+      scripts/environment/runtime-matrix-prefix-receipt \
       scripts/environment/resource-jobs \
       scripts/environment/run-native-test-worker-group \
       scripts/environment/run-native-test-worker.R \
@@ -1605,6 +1610,7 @@ build_valid_native_fixture() {
     focused|full) ;;
     *) fail "unsupported native fixture scope: $FIXTURE_TESTS" ;;
   esac
+  chmod -R u+w "$RUN_DIRECTORY" 2>/dev/null || true
   rm -rf "$RUN_DIRECTORY"
   if [[ -d "$cached_fixture" && ! -L "$cached_fixture" ]]; then
     cp -a -- "$cached_fixture" "$RUN_DIRECTORY"
@@ -1613,6 +1619,7 @@ build_valid_native_fixture() {
   [[ ! -e "$cached_fixture" && ! -L "$cached_fixture" ]] ||
     fail "cached native fixture is non-directory or symbolic: $cached_fixture"
   mkdir -p "$RUN_DIRECTORY/metadata" "$RUN_DIRECTORY/source/environment" \
+    "$RUN_DIRECTORY/source/compat" \
     "$RUN_DIRECTORY/source/scripts/environment" "$RUN_DIRECTORY/source/src" \
     "$RUN_DIRECTORY/source-package/build" \
     "$RUN_DIRECTORY/modes/strict-gcc/logs" \
@@ -1642,6 +1649,16 @@ build_valid_native_fixture() {
     "$RUN_DIRECTORY/source/scripts/environment/run-native-test-worker-group"
   cp "$ROOT/scripts/environment/resource-jobs" \
     "$RUN_DIRECTORY/source/scripts/environment/resource-jobs"
+  cp "$ROOT/scripts/environment/mbo-config-fixtures" \
+    "$RUN_DIRECTORY/source/scripts/environment/mbo-config-fixtures"
+  cp "$ROOT/scripts/environment/runtime-matrix-git" \
+    "$RUN_DIRECTORY/source/scripts/environment/runtime-matrix-git"
+  cp "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \
+    "$RUN_DIRECTORY/source/scripts/environment/runtime-matrix-prefix-receipt"
+  cp "$ROOT/compat/github-snapshot.tsv" \
+    "$RUN_DIRECTORY/source/compat/github-snapshot.tsv"
+  cp "$ROOT/compat/mlr-org-review.tsv" \
+    "$RUN_DIRECTORY/source/compat/mlr-org-review.tsv"
   cp "$ROOT/scripts/environment/verify-native-probes.R" \
     "$RUN_DIRECTORY/source/scripts/environment/verify-native-probes.R"
   cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
@@ -1755,6 +1772,10 @@ build_valid_native_fixture() {
         "$(sha256sum "$RUN_DIRECTORY/modes/$evidence" | cut -d ' ' -f 1)"
     done
   } > "$RUN_DIRECTORY/modes/tool-status.tsv"
+  "$ROOT/scripts/environment/mbo-config-fixtures" stage \
+    "$RUN_DIRECTORY/source" "$ROOT/.local/compat/github/mbo_config" \
+    "$RUN_DIRECTORY/modes/strict-gcc/artifacts/mbo-config-fixtures" \
+    >/dev/null
   "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/source" \
     "$RUN_DIRECTORY/metadata/source-tree.tsv" >/dev/null
   "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
@@ -1769,6 +1790,17 @@ build_valid_native_fixture() {
 
 build_valid_native_fixture
 "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY" >/dev/null
+
+# Rehashing the complete modes tree cannot bless substituted historical
+# upgrade bytes: the source-run validator replays their reviewed Git objects.
+build_valid_native_fixture
+native_mbo_fixture="$RUN_DIRECTORY/modes/strict-gcc/artifacts/mbo-config-fixtures/common/mixed_search_space.rds"
+chmod 0644 "$native_mbo_fixture"
+printf 'substituted\n' >> "$native_mbo_fixture"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 
 # A valid hash cannot bless an incomplete or duplicated scheduler inventory.
 build_valid_native_fixture

@@ -672,9 +672,9 @@ static SEXP set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
     INTEGER(row_names)[1] = -(int) rows;
   }
 
-  /* `as.data.table(set_names(...))`, which assembled the historical result,
-   * leaves these visible attributes in row.names/class/names order. Attribute
-   * order is observable through `attributes()` and is therefore retained. */
+  /* Keep one native construction order on every supported R runtime.
+   * Historical data.table::CJ() pairlist order varied with R itself; that
+   * incidental order is not part of the public grid contract. */
   Rf_setAttrib(table, R_RowNamesSymbol, row_names);
   Rf_setAttrib(table, R_ClassSymbol, classes);
   Rf_setAttrib(table, R_NamesSymbol, names);

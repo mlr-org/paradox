@@ -58,6 +58,11 @@ SOURCE_FUNCTIONAL_WORKER="$SOURCE/scripts/environment/run-native-test-worker.R"
 SOURCE_FUNCTIONAL_WORKER_GROUP="$SOURCE/scripts/environment/run-native-test-worker-group"
 SOURCE_FUNCTIONAL_VERIFIER="$SOURCE/scripts/environment/verify-native-test-ledger.R"
 SOURCE_RESOURCE_JOBS_HELPER="$SOURCE/scripts/environment/resource-jobs"
+SOURCE_MBO_CONFIG_HELPER="$SOURCE/scripts/environment/mbo-config-fixtures"
+SOURCE_RUNTIME_GIT_HELPER="$SOURCE/scripts/environment/runtime-matrix-git"
+SOURCE_RUNTIME_RECEIPT_HELPER="$SOURCE/scripts/environment/runtime-matrix-prefix-receipt"
+SOURCE_GITHUB_SNAPSHOT="$SOURCE/compat/github-snapshot.tsv"
+SOURCE_MLR_ORG_REVIEW="$SOURCE/compat/mlr-org-review.tsv"
 LOCAL_RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
 TRUSTED_HARNESS="$ROOT/scripts/native-check"
 TRUSTED_HELPER_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
@@ -71,6 +76,9 @@ TRUSTED_FUNCTIONAL_WORKER="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker.R"
 TRUSTED_FUNCTIONAL_WORKER_GROUP="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker-group"
 TRUSTED_FUNCTIONAL_VERIFIER="$TRUSTED_HELPER_DIRECTORY/verify-native-test-ledger.R"
 TRUSTED_RESOURCE_JOBS_HELPER="$TRUSTED_HELPER_DIRECTORY/resource-jobs"
+TRUSTED_MBO_CONFIG_HELPER="$TRUSTED_HELPER_DIRECTORY/mbo-config-fixtures"
+TRUSTED_RUNTIME_GIT_HELPER="$TRUSTED_HELPER_DIRECTORY/runtime-matrix-git"
+TRUSTED_RUNTIME_RECEIPT_HELPER="$TRUSTED_HELPER_DIRECTORY/runtime-matrix-prefix-receipt"
 
 for path in "$METADATA" "$SOURCE" "$MODES"; do
   [[ -d "$path" && ! -L "$path" ]] ||
@@ -86,14 +94,20 @@ for path in "$RUN_METADATA" "$RESULT_METADATA" "$COMPLETION_METADATA" \
     "$SOURCE_PROBE_VERIFIER" \
     "$SOURCE_FUNCTIONAL_RUNNER" "$SOURCE_FUNCTIONAL_WORKER" \
     "$SOURCE_FUNCTIONAL_WORKER_GROUP" \
-    "$SOURCE_FUNCTIONAL_VERIFIER" "$SOURCE_RESOURCE_JOBS_HELPER"; do
+    "$SOURCE_FUNCTIONAL_VERIFIER" "$SOURCE_RESOURCE_JOBS_HELPER" \
+    "$SOURCE_MBO_CONFIG_HELPER" "$SOURCE_RUNTIME_GIT_HELPER" \
+    "$SOURCE_RUNTIME_RECEIPT_HELPER" "$SOURCE_GITHUB_SNAPSHOT" \
+    "$SOURCE_MLR_ORG_REVIEW"; do
   [[ -f "$path" && ! -L "$path" ]] ||
     fail "required source-run evidence is missing or symbolic: $path"
 done
 [[ -x "$LOCAL_RSCRIPT" ]] || fail "repository-local Rscript is missing"
 for path in "$RESOURCE_JOBS_HELPER" "$SOURCE_RESOURCE_JOBS_HELPER" \
     "$SOURCE_FUNCTIONAL_WORKER_GROUP" "$TRUSTED_RESOURCE_JOBS_HELPER" \
-    "$TRUSTED_FUNCTIONAL_WORKER_GROUP"; do
+    "$TRUSTED_FUNCTIONAL_WORKER_GROUP" "$SOURCE_MBO_CONFIG_HELPER" \
+    "$SOURCE_RUNTIME_GIT_HELPER" "$SOURCE_RUNTIME_RECEIPT_HELPER" \
+    "$TRUSTED_MBO_CONFIG_HELPER" "$TRUSTED_RUNTIME_GIT_HELPER" \
+    "$TRUSTED_RUNTIME_RECEIPT_HELPER"; do
   [[ -x "$path" ]] || fail "required retained native helper is not executable: $path"
 done
 for path in "$TRUSTED_HARNESS" "$TRUSTED_TREE_RECEIPT_HELPER" \
@@ -102,7 +116,8 @@ for path in "$TRUSTED_HARNESS" "$TRUSTED_TREE_RECEIPT_HELPER" \
     "$TRUSTED_FUNCTIONAL_RUNNER" \
     "$TRUSTED_FUNCTIONAL_WORKER" "$TRUSTED_FUNCTIONAL_WORKER_GROUP" \
     "$TRUSTED_FUNCTIONAL_VERIFIER" \
-    "$TRUSTED_RESOURCE_JOBS_HELPER"; do
+    "$TRUSTED_RESOURCE_JOBS_HELPER" "$TRUSTED_MBO_CONFIG_HELPER" \
+    "$TRUSTED_RUNTIME_GIT_HELPER" "$TRUSTED_RUNTIME_RECEIPT_HELPER"; do
   [[ -f "$path" && ! -L "$path" ]] || fail "trusted validator input is absent or symbolic: $path"
 done
 
@@ -356,6 +371,13 @@ cmp -s "$RESOURCE_JOBS_HELPER" "$TRUSTED_RESOURCE_JOBS_HELPER" ||
   fail "retained resource scheduler differs from the trusted current helper"
 cmp -s "$SOURCE_RESOURCE_JOBS_HELPER" "$TRUSTED_RESOURCE_JOBS_HELPER" ||
   fail "source resource scheduler differs from the trusted current helper"
+cmp -s "$SOURCE_MBO_CONFIG_HELPER" "$TRUSTED_MBO_CONFIG_HELPER" ||
+  fail "source mbo_config helper differs from the trusted current helper"
+cmp -s "$SOURCE_RUNTIME_GIT_HELPER" "$TRUSTED_RUNTIME_GIT_HELPER" ||
+  fail "source runtime Git helper differs from the trusted current helper"
+cmp -s "$SOURCE_RUNTIME_RECEIPT_HELPER" \
+  "$TRUSTED_RUNTIME_RECEIPT_HELPER" ||
+  fail "source runtime receipt helper differs from the trusted current helper"
 cmp -s "$SOURCE_PROBE_MANIFEST" "$TRUSTED_PROBE_MANIFEST" ||
   fail "retained native-probe manifest differs from the trusted current manifest"
 cmp -s "$SOURCE_PROBE_RUNNER" "$TRUSTED_PROBE_RUNNER" ||
@@ -462,6 +484,10 @@ fi
   "$SOURCE" "$SOURCE_TREE_RECEIPT" >/dev/null
 "$LOCAL_RSCRIPT" --vanilla "$TRUSTED_TREE_RECEIPT_HELPER" verify \
   "$MODES" "$MODES_TREE_RECEIPT" >/dev/null
+MBO_CONFIG_BUNDLE="$MODES/strict-gcc/artifacts/mbo-config-fixtures"
+"$TRUSTED_MBO_CONFIG_HELPER" verify "$SOURCE" \
+  "$ROOT/.local/compat/github/mbo_config" "$MBO_CONFIG_BUNDLE" >/dev/null ||
+  fail "native source run has no authenticated retained mbo_config fixture bundle"
 
 MODE_STATUS="$MODES/tool-status.tsv"
 [[ -f "$MODE_STATUS" && ! -L "$MODE_STATUS" ]] ||

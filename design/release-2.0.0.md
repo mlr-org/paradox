@@ -228,7 +228,9 @@ not a local compatibility workaround.
 - [ ] package reference documentation, vignettes, migration guide, website,
   and downstream bridge docs describe the final behavior consistently;
 - [ ] routine/analyzer/runtime ledgers discover current files dynamically and
-  contain no historical hard-coded test counts.
+  contain no historical hard-coded test counts; the final old-R run stages the
+  reviewed `mbo_config` Git-object bundle before worker admission and executes
+  its upgrade test without an environment skip.
 
 ### Downstream coordination
 

@@ -364,6 +364,14 @@ suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported
 inventory, skip ledgers, counts, and hashes.
+The coordinator also runs `mbo-config-fixtures` before resource admission.
+That helper joins the candidate's snapshot and organization-review manifests,
+reads the two upgrade fixtures from the selected immutable Git commit rather
+than its worktree, and publishes one read-only shared bundle. Both stages set
+`PARADOX_MBO_CONFIG_ROOT` to that bundle's `common/` directory, so the legacy
+upgrade test executes instead of contributing an environment-dependent skip.
+The top-level receipt and each stage's digest claims are replayed by
+`verify-runtime-matrix-evidence`.
 Committed-source reads and archives use the authenticated project-local Git
 with replacements and unreviewed object/attribute inputs rejected, global and
 system attributes disabled, and the tar umask pinned. Its identity and

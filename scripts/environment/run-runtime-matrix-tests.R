@@ -39,6 +39,21 @@ if (!requireNamespace("testthat", quietly = TRUE)) {
 if (!requireNamespace("rlang", quietly = TRUE)) {
   stop("the exact runtime lock does not provide rlang", call. = FALSE)
 }
+mbo_config_root <- Sys.getenv("PARADOX_MBO_CONFIG_ROOT", unset = "")
+if (!nzchar(mbo_config_root)) {
+  stop("PARADOX_MBO_CONFIG_ROOT is required by the complete runtime suite",
+    call. = FALSE)
+}
+mbo_config_root <- normalizePath(mbo_config_root, mustWork = TRUE)
+mbo_config_files <- file.path(
+  mbo_config_root,
+  c("mixed_search_space.rds", "numeric_search_space.rds")
+)
+if (any(!file.exists(mbo_config_files)) || any(dir.exists(mbo_config_files)) ||
+    any(is_symbolic(mbo_config_files))) {
+  stop("retained mbo_config upgrade fixtures are absent or symbolic",
+    call. = FALSE)
+}
 skip_policy_helper <- file.path(
   snapshot, "scripts", "environment", "runtime-matrix-skip-policy.R"
 )
@@ -60,6 +75,8 @@ library("paradox", character.only = TRUE, lib.loc = candidate_library)
 cat("runtime=", as.character(getRversion()), "\n", sep = "")
 cat("installed_path=", installed, "\n", sep = "")
 cat("not_cran=", Sys.getenv("NOT_CRAN"), "\n", sep = "")
+cat("mbo_config_fixture_count=", length(mbo_config_files), "\n", sep = "")
+cat("mbo_config_fixture_source=retained-reviewed-git-objects\n")
 
 test_directory <- file.path(snapshot, "tests", "testthat")
 test_files <- dir(

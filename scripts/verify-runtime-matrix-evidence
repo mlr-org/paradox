@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
 GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
+MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 
 usage() {
@@ -59,6 +61,42 @@ verify_seal() {
 metadata_value() {
   local metadata=$1 key=$2
   awk -F '\t' -v key="$key" '$1 == key {print $2}' "$metadata/run.tsv"
+}
+
+verify_mbo_config_evidence() {
+  local top_metadata=$1 source=$2
+  local bundle="$run_root/inputs/mbo-config-fixtures"
+  local provenance="$bundle/provenance.tsv"
+  local manifest="$top_metadata/mbo-config-fixtures.manifest.tsv"
+  local mixed="$bundle/common/mixed_search_space.rds"
+  local numeric="$bundle/common/numeric_search_space.rds"
+  for path in "$provenance" "$manifest" "$mixed" "$numeric"; do
+    [[ -f "$path" && ! -L "$path" ]] ||
+      fail "Retained mbo_config fixture evidence is absent or symbolic: $path"
+  done
+  [[ -d "$bundle" && ! -L "$bundle" ]] ||
+    fail "Retained mbo_config fixture bundle is absent or symbolic"
+  "$PREFIX_RECEIPT" verify "$bundle" "$manifest" >/dev/null ||
+    fail "Retained mbo_config fixture bundle differs from its complete receipt"
+  "$MBO_CONFIG_FIXTURE_HELPER" verify "$source" "$MBO_CONFIG_CHECKOUT" \
+    "$bundle" >/dev/null ||
+    fail "Retained mbo_config fixtures fail reviewed Git-object authentication"
+  provenance_value() {
+    awk -F '\t' -v key="$1" '$1 == key {print $2}' "$provenance"
+  }
+  [[ $(metadata_value "$top_metadata" mbo_config_commit) == \
+      "$(provenance_value commit)" &&
+    $(metadata_value "$top_metadata" mbo_config_tree) == \
+      "$(provenance_value tree)" &&
+    $(metadata_value "$top_metadata" mbo_config_provenance_sha256) == \
+      "$(sha256sum "$provenance" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_fixture_manifest_sha256) == \
+      "$(sha256sum "$manifest" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_mixed_search_space_sha256) == \
+      "$(sha256sum "$mixed" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$top_metadata" mbo_config_numeric_search_space_sha256) == \
+      "$(sha256sum "$numeric" | cut -d ' ' -f 1)" ]] ||
+    fail "Retained mbo_config fixture digest claims are inconsistent"
 }
 
 log_value() {
@@ -237,6 +275,7 @@ verify_trusted_inputs() {
     scripts/verify-runtime-matrix-evidence
     scripts/environment/runtime-matrix-prefix-receipt
     scripts/environment/runtime-matrix-git
+    scripts/environment/mbo-config-fixtures
     scripts/environment/runtime-matrix-inventory.R
     scripts/environment/runtime-matrix-probe.R
     scripts/environment/runtime-matrix-skip-policy.R
@@ -247,6 +286,8 @@ verify_trusted_inputs() {
     environment/runtime-matrix-pre46-exclusions.tsv
     environment/runtime-matrix-whole-file-skips.tsv
     environment/runtime-matrix-result-skips.tsv
+    compat/github-snapshot.tsv
+    compat/mlr-org-review.tsv
     "environment/runtime-r-${version}-linux-64.lock"
   )
   for relative in "${trusted_inputs[@]}"; do
@@ -624,6 +665,9 @@ verify_source_scope() {
       environment/runtime-matrix-result-skips.tsv &&
     $(log_value "$log" pre46_exclusion_manifest) == \
       environment/runtime-matrix-pre46-exclusions.tsv &&
+    $(log_value "$log" mbo_config_fixture_count) == 2 &&
+    $(log_value "$log" mbo_config_fixture_source) == \
+      retained-reviewed-git-objects &&
     $(log_value "$log" testthat_reported_file_form) == basename &&
     $(log_value "$log" expectations_failed) == 0 &&
     $(log_value "$log" warnings) == 0 && $(log_value "$log" errors) == 0 ]] ||
@@ -682,6 +726,8 @@ top_stage_count=$(metadata_value "$top_metadata" stage_count)
   "$top_stage_count" =~ ^[12]$ &&
   "$top_stage_count" -eq "${#versions[@]}" ]] ||
   fail "Top-level runtime provenance is malformed or inconsistent"
+verify_mbo_config_evidence "$top_metadata" \
+  "$run_root/R-${versions[0]}/artifacts/source"
 verify_scheduler_evidence "$top_metadata" "${versions[@]}"
 "$GIT_HELPER" verify-ref "$ROOT" "$top_source_ref" "$top_commit" \
   "$top_tree" >/dev/null ||
@@ -718,6 +764,14 @@ for version in "${versions[@]}"; do
     $(metadata_value "$metadata" stage_worker_sha256) == \
       "$(sha256sum "$artifacts/inputs/scripts/environment/run-runtime-matrix-stage" | cut -d ' ' -f 1)" ]] ||
     fail "Stage scheduler evidence differs from the top-level admission"
+  for fixture_field in mbo_config_commit mbo_config_tree \
+      mbo_config_provenance_sha256 mbo_config_fixture_manifest_sha256 \
+      mbo_config_mixed_search_space_sha256 \
+      mbo_config_numeric_search_space_sha256; do
+    [[ $(metadata_value "$metadata" "$fixture_field") == \
+      "$(metadata_value "$top_metadata" "$fixture_field")" ]] ||
+      fail "Stage mbo_config evidence differs from the shared retained input: $fixture_field"
+  done
   verify_source_scope "$artifacts" "$metadata"
   recorded_run_id=$(awk -F '\t' '$1 == "run_id" {print $2}' "$metadata/run.tsv")
   recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")

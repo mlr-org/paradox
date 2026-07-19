@@ -8,6 +8,8 @@ LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
 STAGE_WORKER="$ROOT/scripts/environment/run-runtime-matrix-stage"
 WAVE_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-wave"
+MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
+MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 STAGE_TIMEOUT_SECONDS=5400
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
@@ -106,6 +108,7 @@ trusted_inputs=(
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
   scripts/environment/runtime-matrix-git
+  scripts/environment/mbo-config-fixtures
   scripts/environment/runtime-matrix-inventory.R
   scripts/environment/runtime-matrix-probe.R
   scripts/environment/runtime-matrix-skip-policy.R
@@ -117,6 +120,8 @@ trusted_inputs=(
   environment/runtime-matrix-whole-file-skips.tsv
   environment/runtime-matrix-result-skips.tsv
   environment/r-packages-linux-64.lock
+  compat/github-snapshot.tsv
+  compat/mlr-org-review.tsv
 )
 for relative in "${trusted_inputs[@]}"; do
   [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
@@ -213,6 +218,7 @@ for version in "${versions[@]}"; do
     printf 'snapshot\treplacement-disabled Git archive with isolated attributes and pre/post repository audits\n'
     printf 'source-integrity\tpre-execution source receipt; post-execution source and archive verification\n'
     printf 'git-identity\tauthenticated repository-local Git executable hash, version, path, and exec path\n'
+    printf 'mbo-config-fixtures\treviewed commit/tree Git objects staged once as read-only retained source-test inputs\n'
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     if [[ "$version" == 4.3.3 ]]; then
@@ -231,6 +237,26 @@ done
 # before resource admission or either build/install worker can start.  Both
 # runtime stages use the same exact Git archive bytes.
 preflight_source="$run_root/R-${versions[0]}/artifacts/source"
+mkdir -p -- "$run_root/inputs"
+mbo_config_bundle="$run_root/inputs/mbo-config-fixtures"
+"$MBO_CONFIG_FIXTURE_HELPER" stage "$preflight_source" \
+  "$MBO_CONFIG_CHECKOUT" "$mbo_config_bundle" \
+  > "$run_root/metadata/mbo-config-fixtures.log"
+"$PREFIX_RECEIPT" create "$mbo_config_bundle" \
+  "$run_root/metadata/mbo-config-fixtures.manifest.tsv" >/dev/null
+mbo_config_provenance="$mbo_config_bundle/provenance.tsv"
+mbo_config_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" '$1 == key {print $2}' \
+    "$mbo_config_provenance"
+}
+mbo_config_commit=$(mbo_config_value commit)
+mbo_config_tree=$(mbo_config_value tree)
+mbo_config_mixed_sha256=$(mbo_config_value mixed_search_space_sha256)
+mbo_config_numeric_sha256=$(mbo_config_value numeric_search_space_sha256)
+mbo_config_provenance_sha256=$(sha256_file "$mbo_config_provenance")
+mbo_config_manifest_sha256=$(sha256_file \
+  "$run_root/metadata/mbo-config-fixtures.manifest.tsv")
 Rscript --vanilla \
   "$preflight_source/scripts/environment/runtime-matrix-skip-policy.R" \
   "$preflight_source"
@@ -414,6 +440,12 @@ for version in "${versions[@]}"; do
     printf 'source_git_tar_sha256\t%s\n' "$source_git_tar_sha256"
     printf 'source_manifest_sha256\t%s\n' "$source_manifest_sha256"
     printf 'git_identity_sha256\t%s\n' "$git_identity_sha256"
+    printf 'mbo_config_commit\t%s\n' "$mbo_config_commit"
+    printf 'mbo_config_tree\t%s\n' "$mbo_config_tree"
+    printf 'mbo_config_provenance_sha256\t%s\n' "$mbo_config_provenance_sha256"
+    printf 'mbo_config_fixture_manifest_sha256\t%s\n' "$mbo_config_manifest_sha256"
+    printf 'mbo_config_mixed_search_space_sha256\t%s\n' "$mbo_config_mixed_sha256"
+    printf 'mbo_config_numeric_search_space_sha256\t%s\n' "$mbo_config_numeric_sha256"
     printf 'scheduler_resource_report_sha256\t%s\n' "$resource_report_sha256"
     printf 'scheduler_stage_tasks_sha256\t%s\n' "$stage_tasks_sha256"
     printf 'scheduler_wave_plan_sha256\t%s\n' "$wave_plan_sha256"
@@ -456,16 +488,20 @@ done
   done
 } > "$run_root/metadata/stages.tsv"
 {
-  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\nruntime_jobs\t%s\nstage_timeout_seconds\t%s\nresource_report_sha256\t%s\nstage_tasks_sha256\t%s\nwave_plan_sha256\t%s\nwave_task_ledger_sha256\t%s\nwave_manifest_sha256\t%s\n' \
+  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\nruntime_jobs\t%s\nstage_timeout_seconds\t%s\nresource_report_sha256\t%s\nstage_tasks_sha256\t%s\nwave_plan_sha256\t%s\nwave_task_ledger_sha256\t%s\nwave_manifest_sha256\t%s\nmbo_config_commit\t%s\nmbo_config_tree\t%s\nmbo_config_provenance_sha256\t%s\nmbo_config_fixture_manifest_sha256\t%s\nmbo_config_mixed_search_space_sha256\t%s\nmbo_config_numeric_search_space_sha256\t%s\n' \
     "$run_id" "$source_ref" "$source_commit" "$source_tree" \
     "${#versions[@]}" "$runtime_jobs" "$STAGE_TIMEOUT_SECONDS" \
     "$resource_report_sha256" "$stage_tasks_sha256" "$wave_plan_sha256" \
-    "$wave_task_ledger_sha256" "$wave_manifest_sha256"
+    "$wave_task_ledger_sha256" "$wave_manifest_sha256" \
+    "$mbo_config_commit" "$mbo_config_tree" \
+    "$mbo_config_provenance_sha256" "$mbo_config_manifest_sha256" \
+    "$mbo_config_mixed_sha256" "$mbo_config_numeric_sha256"
 } > "$run_root/metadata/run.tsv"
 (
   cd "$run_root/metadata"
   : > completion.inputs.tsv
   sha256sum run.tsv stages.tsv resource-jobs.tsv stage-tasks.tsv \
+    mbo-config-fixtures.log mbo-config-fixtures.manifest.tsv \
     stage-wave.manifest.tsv stage-wave/wave-plan.tsv \
     stage-wave/task-ledger.tsv >> completion.inputs.tsv
   for version in "${versions[@]}"; do

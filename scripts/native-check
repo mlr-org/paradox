@@ -427,6 +427,7 @@ require_plain_check_directory "$RUN_DIRECTORY"
 HARNESS_SCRIPT="$ROOT/scripts/native-check"
 TREE_RECEIPT_HELPER="$ROOT/scripts/environment/tree-receipt.R"
 RESOURCE_JOBS_HELPER="$ROOT/scripts/environment/resource-jobs"
+MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
 [ -f "$HARNESS_SCRIPT" ] && [ ! -L "$HARNESS_SCRIPT" ] ||
   fail "native-check harness is missing or symbolic: $HARNESS_SCRIPT"
 [ -f "$TREE_RECEIPT_HELPER" ] && [ ! -L "$TREE_RECEIPT_HELPER" ] ||
@@ -434,6 +435,10 @@ RESOURCE_JOBS_HELPER="$ROOT/scripts/environment/resource-jobs"
 [ -f "$RESOURCE_JOBS_HELPER" ] && [ ! -L "$RESOURCE_JOBS_HELPER" ] &&
   [ -x "$RESOURCE_JOBS_HELPER" ] ||
   fail "resource scheduler is missing, symbolic, or non-executable: $RESOURCE_JOBS_HELPER"
+[ -f "$MBO_CONFIG_FIXTURE_HELPER" ] &&
+  [ ! -L "$MBO_CONFIG_FIXTURE_HELPER" ] &&
+  [ -x "$MBO_CONFIG_FIXTURE_HELPER" ] ||
+  fail "mbo_config fixture helper is missing, symbolic, or non-executable"
 cp "$HARNESS_SCRIPT" "$RUN_DIRECTORY/metadata/native-check"
 cp "$TREE_RECEIPT_HELPER" "$RUN_DIRECTORY/metadata/tree-receipt.R"
 cp "$RESOURCE_JOBS_HELPER" "$RUN_DIRECTORY/metadata/resource-jobs"
@@ -891,46 +896,29 @@ fi
 MBO_CONFIG_FIXTURE_ROOT=
 case "$TEST_SELECTION" in
   focused|full)
-    MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
-    MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_CHECKOUT/common"
-    MBO_CONFIG_EXPECTED_COMMIT=$(awk -F '\t' '
-      $1 == "mbo_config" {
-        if (NF != 6 || ++count != 1) exit 2
-        commit = $4
-      }
-      END {
-        if (count != 1 || commit !~ /^[0-9a-f]{40}$/) exit 3
-        print commit
-      }
-    ' "$SOURCE_DIRECTORY/compat/github-snapshot.tsv") ||
-      fail "snapshot has no unique canonical mbo_config revision"
-    [ -d "$MBO_CONFIG_CHECKOUT/.git" ] &&
-      [ ! -L "$MBO_CONFIG_CHECKOUT" ] &&
-      [ ! -L "$MBO_CONFIG_CHECKOUT/.git" ] ||
-      fail "pinned mbo_config checkout is missing or symbolic"
-    MBO_CONFIG_COMMIT=$(git -C "$MBO_CONFIG_CHECKOUT" rev-parse HEAD) ||
-      fail "could not read the pinned mbo_config revision"
-    [ "$MBO_CONFIG_COMMIT" = "$MBO_CONFIG_EXPECTED_COMMIT" ] ||
-      fail "mbo_config checkout differs from the snapshot revision"
-    [ -z "$(git -C "$MBO_CONFIG_CHECKOUT" status --porcelain=v1 --untracked-files=all)" ] ||
-      fail "mbo_config checkout is dirty"
-    for fixture_name in mixed_search_space.rds numeric_search_space.rds; do
-      fixture_path="$MBO_CONFIG_FIXTURE_ROOT/$fixture_name"
-      [ -f "$fixture_path" ] && [ ! -L "$fixture_path" ] ||
-        fail "pinned mbo_config fixture is missing or symbolic: $fixture_name"
+    for fixture_helper_relative in \
+        scripts/environment/mbo-config-fixtures \
+        scripts/environment/runtime-matrix-git \
+        scripts/environment/runtime-matrix-prefix-receipt; do
+      [ -f "$SOURCE_DIRECTORY/$fixture_helper_relative" ] &&
+        [ ! -L "$SOURCE_DIRECTORY/$fixture_helper_relative" ] &&
+        cmp -s "$ROOT/$fixture_helper_relative" \
+          "$SOURCE_DIRECTORY/$fixture_helper_relative" ||
+        fail "retained source and active fixture helper differ: $fixture_helper_relative"
     done
-    {
-      printf 'field\tvalue\n'
-      printf 'schema\t1\n'
-      printf 'repository\tmbo_config\n'
-      printf 'commit\t%s\n' "$MBO_CONFIG_COMMIT"
-      printf 'tree\t%s\n' \
-        "$(git -C "$MBO_CONFIG_CHECKOUT" rev-parse 'HEAD^{tree}')"
-      printf 'mixed_search_space_sha256\t%s\n' \
-        "$(sha256sum "$MBO_CONFIG_FIXTURE_ROOT/mixed_search_space.rds" | cut -d ' ' -f 1)"
-      printf 'numeric_search_space_sha256\t%s\n' \
-        "$(sha256sum "$MBO_CONFIG_FIXTURE_ROOT/numeric_search_space.rds" | cut -d ' ' -f 1)"
-    } > "$RUN_DIRECTORY/metadata/mbo-config-fixtures.tsv"
+    MBO_CONFIG_EVIDENCE_MODE=
+    case "$STRICT_GCC_TEST_SCOPE" in focused|full) MBO_CONFIG_EVIDENCE_MODE=strict-gcc ;; esac
+    case "$STRICT_CLANG_TEST_SCOPE" in focused|full) MBO_CONFIG_EVIDENCE_MODE=strict-clang ;; esac
+    case "$ASAN_TEST_SCOPE" in focused|full) MBO_CONFIG_EVIDENCE_MODE=asan-clang ;; esac
+    case "$UBSAN_TEST_SCOPE" in focused|full) MBO_CONFIG_EVIDENCE_MODE=ubsan-clang ;; esac
+    [ -n "$MBO_CONFIG_EVIDENCE_MODE" ] ||
+      fail "no functional-test mode owns the retained mbo_config fixtures"
+    MBO_CONFIG_BUNDLE="$RUN_DIRECTORY/modes/$MBO_CONFIG_EVIDENCE_MODE/artifacts/mbo-config-fixtures"
+    mkdir -p "${MBO_CONFIG_BUNDLE%/*}"
+    run_logged "$RUN_DIRECTORY/metadata/mbo-config-fixtures.log" \
+      "$MBO_CONFIG_FIXTURE_HELPER" stage "$SOURCE_DIRECTORY" \
+      "$ROOT/.local/compat/github/mbo_config" "$MBO_CONFIG_BUNDLE"
+    MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_BUNDLE/common"
     ;;
 esac
 
@@ -1908,6 +1896,19 @@ fi
 [ "$MODE_UBSAN" = false ] || append_mode_status ubsan-clang \
   "ubsan-clang/logs/tests-$UBSAN_TEST_SCOPE.log"
 mv "$MODE_STATUS_NEW" "$RUN_DIRECTORY/modes/tool-status.tsv"
+if [ -n "$MBO_CONFIG_FIXTURE_ROOT" ]; then
+  for fixture_helper_relative in \
+      scripts/environment/mbo-config-fixtures \
+      scripts/environment/runtime-matrix-git \
+      scripts/environment/runtime-matrix-prefix-receipt; do
+    cmp -s "$ROOT/$fixture_helper_relative" \
+      "$SOURCE_DIRECTORY/$fixture_helper_relative" ||
+      fail "active fixture helper changed during native verification: $fixture_helper_relative"
+  done
+  run_logged "$RUN_DIRECTORY/metadata/mbo-config-fixtures-verify.log" \
+    "$MBO_CONFIG_FIXTURE_HELPER" verify "$SOURCE_DIRECTORY" \
+    "$ROOT/.local/compat/github/mbo_config" "$MBO_CONFIG_BUNDLE"
+fi
 RETAINED_TREE_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/tree-receipt.R"
 run_logged "$RUN_DIRECTORY/metadata/source-tree-receipt.log" \
   env -i "HOME=$RUN_DIRECTORY/metadata/home" \

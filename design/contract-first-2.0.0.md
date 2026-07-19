@@ -125,7 +125,10 @@ secondary index, spare-column capacity, or data.table self-reference. Native
 code reads their columns directly after complete shape validation. Public table
 accessors construct detached data.table facades at the boundary. Consequently
 there is no load-time data.table-layout probe, version-specific index synthesis,
-or permanent table facade to maintain.
+or permanent table facade to maintain. Required table attributes and their
+values are contractual by name, but their pairlist order is not legacy API;
+native grid facades use one fixed `row.names`/`class`/`names` construction
+order rather than reproducing R-version-specific `data.table::CJ()` order.
 
 Every supported mutation constructs a replacement capsule and swaps the
 private `.core` binding only after validation. Reads retain the capsule selected
@@ -787,7 +790,10 @@ Historical `mbo_config` RDS files are mandatory upgrade fixtures. Old objects
 may be inspected or passed to the upgrader after `readRDS()`, but direct
 operation without explicit upgrade is outside the Paradox 2 contract. Package
 documentation must show the upgrade step rather than implying transparent lazy
-migration.
+migration. Release harnesses obtain these bytes from the exact commit/tree
+jointly selected by the reviewed repository ledgers, stage one read-only
+receipted bundle, and must execute rather than environment-skip the fixture
+test; a mutable checkout path is not release provenance.
 
 Legacy miesmuschel shadows are bridged by miesmuschel, which can reconstruct the
 new package-owned `SHADOW` from their public origin and hidden-ID information;

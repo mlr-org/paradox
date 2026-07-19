@@ -211,13 +211,18 @@ families.
 Every consumer-discovered failure adds the smallest internal regression that
 would have caught it before the downstream fix is accepted.
 
-Complete unit evidence sets `PARADOX_MBO_CONFIG_ROOT` to the authenticated
-pinned checkout's `common/` directory, where `mixed_search_space.rds` and
+Complete unit evidence sets `PARADOX_MBO_CONFIG_ROOT` to a retained bundle's
+`common/` directory, where `mixed_search_space.rds` and
 `numeric_search_space.rds` reside. Leaving it unset is a development-only skip;
-pointing it at the checkout root is a harness error, not a missing-fixture
-allowance. The native release driver verifies the clean checkout against the
-source snapshot's exact repository revision and retains both fixture hashes
-before exporting this path to isolated test workers.
+pointing it at either a repository root or the mutable checkout's `common/`
+directory is not release evidence. The shared fixture helper requires the
+candidate's GitHub snapshot and mlr-org review ledgers to agree on one exact
+commit/tree, reads the files from those immutable Git objects, publishes them
+read-only, and records their complete receipt and hashes. The native driver
+seals this bundle under its functional mode. The supported-R coordinator
+stages it once before worker admission, both runtime stages consume the same
+bytes, and the evidence verifier reauthenticates the ledgers, tree, files, and
+receipt.
 
 ## Native build and API gates
 
@@ -253,6 +258,14 @@ counts.
 has a fresh candidate library, builds/installs Paradox once, runs the complete
 supported test inventory, audits DSO symbols, records package/compiler/session
 identity, and seals the source/build/library/log tree.
+
+Before either old-R worker is admitted, the coordinator also stages the two
+mandatory historical `mbo_config` objects through the shared authenticated
+Git-object helper. `test-upgrade-paradox-object.R` therefore executes in the
+complete runtime suite; an unset fixture root is an unexpected harness skip,
+not a reviewed runtime exclusion. The retained bundle is outside both mutable
+stage trees, is read-only, and is joined to top-level and per-stage evidence by
+commit, tree, receipt, provenance, and file digests.
 
 R 4.3.3 receives only the SHA-256-authenticated cached data.table 1.18.4 source
 overlay before Paradox is built. This is not a reason to skip tests or accept

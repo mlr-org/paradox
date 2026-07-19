@@ -9,6 +9,7 @@ scripts=(
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
   scripts/environment/runtime-matrix-git
+  scripts/environment/mbo-config-fixtures
   scripts/environment/run-runtime-matrix-stage
   scripts/environment/run-runtime-matrix-wave
   scripts/environment/test-runtime-matrix
@@ -120,6 +121,19 @@ done < "$result_skips"
 }
 rg -q 'Sys.setenv\(NOT_CRAN = "false"\)' \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -q 'PARADOX_MBO_CONFIG_ROOT is required by the complete runtime suite' \
+  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+rg -Fq 'NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT"' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'verify_mbo_config_evidence "$top_metadata"' \
+  "$ROOT/scripts/verify-runtime-matrix-evidence"
+rg -Fq '"$MBO_CONFIG_FIXTURE_HELPER" stage "$SOURCE_DIRECTORY"' \
+  "$ROOT/scripts/native-check"
+if rg -q 'MBO_CONFIG_CHECKOUT/common|git -C "[$]MBO_CONFIG_CHECKOUT"' \
+    "$ROOT/scripts/native-check"; then
+  echo "Native verification retains a second worktree-based mbo_config authority" >&2
+  exit 1
+fi
 if rg -q 'minimum_expectations_required|4900L else 6000L|\b(79|57|22|55)\b' \
     "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
     "$ROOT/scripts/verify-runtime-matrix-evidence"; then
@@ -287,10 +301,13 @@ resource_line=$(rg -n '^resource_report=' \
   "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
 worker_line=$(rg -n '^"[$]WAVE_RUNNER" ' \
   "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
-[[ "$preflight_line" =~ ^[0-9]+$ && "$resource_line" =~ ^[0-9]+$ &&
-  "$worker_line" =~ ^[0-9]+$ && "$preflight_line" -lt "$resource_line" &&
+fixture_line=$(rg -n '^"[$]MBO_CONFIG_FIXTURE_HELPER" stage ' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+[[ "$fixture_line" =~ ^[0-9]+$ && "$preflight_line" =~ ^[0-9]+$ &&
+  "$resource_line" =~ ^[0-9]+$ && "$worker_line" =~ ^[0-9]+$ &&
+  "$fixture_line" -lt "$preflight_line" && "$preflight_line" -lt "$resource_line" &&
   "$resource_line" -lt "$worker_line" ]] || {
-  echo "Runtime skip-policy preflight does not precede stage work" >&2
+  echo "Runtime immutable-input and skip-policy preflights do not precede stage work" >&2
   exit 1
 }
 
@@ -325,6 +342,43 @@ local_git="$ROOT/.local/toolchain/bin/git"
   echo "Authenticated runtime Git fixture inputs are absent" >&2
   exit 1
 }
+mbo_helper="$ROOT/scripts/environment/mbo-config-fixtures"
+mbo_checkout="$ROOT/.local/compat/github/mbo_config"
+mbo_bundle="$fixture/mbo-config-valid"
+"$mbo_helper" stage "$ROOT" "$mbo_checkout" "$mbo_bundle" >/dev/null
+"$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_bundle" >/dev/null
+chmod 0644 "$mbo_bundle/common/mixed_search_space.rds"
+printf 'tampered\n' >> "$mbo_bundle/common/mixed_search_space.rds"
+if "$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_bundle" \
+    >/dev/null 2>&1; then
+  echo "mbo_config fixture verifier accepted tampered retained bytes" >&2
+  exit 1
+fi
+
+mbo_metadata_bundle="$fixture/mbo-config-metadata-tamper"
+"$mbo_helper" stage "$ROOT" "$mbo_checkout" "$mbo_metadata_bundle" >/dev/null
+chmod 0644 "$mbo_metadata_bundle/provenance.tsv"
+printf 'extra\tmember\n' >> "$mbo_metadata_bundle/provenance.tsv"
+if "$mbo_helper" verify "$ROOT" "$mbo_checkout" "$mbo_metadata_bundle" \
+    >/dev/null 2>&1; then
+  echo "mbo_config fixture verifier accepted tampered provenance" >&2
+  exit 1
+fi
+
+mbo_manifest_source="$fixture/mbo-config-manifest-tamper"
+mkdir -p "$mbo_manifest_source/compat"
+cp "$ROOT/compat/github-snapshot.tsv" "$mbo_manifest_source/compat/github-snapshot.tsv"
+cp "$ROOT/compat/mlr-org-review.tsv" "$mbo_manifest_source/compat/mlr-org-review.tsv"
+awk -F '\t' 'BEGIN {OFS = FS} $1 == "mbo_config" {$4 = "0000000000000000000000000000000000000000"} {print}' \
+  "$mbo_manifest_source/compat/github-snapshot.tsv" \
+  > "$mbo_manifest_source/compat/github-snapshot.tsv.new"
+mv "$mbo_manifest_source/compat/github-snapshot.tsv.new" \
+  "$mbo_manifest_source/compat/github-snapshot.tsv"
+if "$mbo_helper" stage "$mbo_manifest_source" "$mbo_checkout" \
+    "$fixture/mbo-config-unreviewed" >/dev/null 2>&1; then
+  echo "mbo_config fixture staging accepted disagreeing repository manifests" >&2
+  exit 1
+fi
 fixture_git() {
   /usr/bin/env \
     -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \

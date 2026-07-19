@@ -33,11 +33,18 @@ STAGE_BUILD="$STAGE_ARTIFACTS/build"
 STAGE_LIBRARY="$STAGE_ARTIFACTS/library"
 STAGE_LOGS="$STAGE_ARTIFACTS/logs"
 STAGE_INPUTS="$STAGE_ARTIFACTS/inputs"
+MBO_CONFIG_BUNDLE="$RUN_ROOT/inputs/mbo-config-fixtures"
+MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_BUNDLE/common"
 for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_LIBRARY" \
     "$STAGE_LOGS" "$STAGE_INPUTS"; do
   [[ -d "$directory" && ! -L "$directory" ]] ||
     fail "prepared stage directory is absent or symbolic: $directory"
 done
+[[ -d "$MBO_CONFIG_BUNDLE" && ! -L "$MBO_CONFIG_BUNDLE" ]] ||
+  fail "prepared mbo_config fixture bundle is absent or symbolic"
+"$ROOT/scripts/environment/mbo-config-fixtures" verify \
+  "$STAGE_SOURCE" "$ROOT/.local/compat/github/mbo_config" \
+  "$MBO_CONFIG_BUNDLE" >/dev/null
 
 sha256_file() {
   sha256sum -- "$1" | cut -d ' ' -f 1
@@ -167,7 +174,8 @@ Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" \
   "$STAGE_LIBRARY" > "$STAGE_LOGS/focused-probe.log" 2>&1
 audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
   "$STAGE_LOGS/r-api-symbol-audit.log"
-NOT_CRAN=false Rscript --vanilla \
+NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
+  Rscript --vanilla \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
   "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
   > "$STAGE_LOGS/source-tests.log" 2>&1

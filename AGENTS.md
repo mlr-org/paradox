@@ -51,7 +51,11 @@ semantic vectors remain supported at their stated positions.
   missing, extra, or malformed attribute is corrupt state, never a fallback.
 - Capsule tables are canonical plain base `data.frame`s. They have no
   data.table key, index, spare capacity, or self-reference. Public table
-  accessors return detached, valid data.table facades.
+  accessors return detached, valid data.table facades. Attribute values,
+  classes, names, and row names are contractual by attribute name; incidental
+  pairlist order inherited from an R/data.table version is not. Native grid
+  facades use one fixed `row.names`/`class`/`names` construction order on every
+  supported runtime.
 - Mutations build and validate replacement capsules and swap `.core`
   atomically. Value assignment plans the complete BASE/COLLECTION/SHADOW
   graph through ultimate BASE targets, deduplicates shared targets with
@@ -430,8 +434,11 @@ scripts/bootstrap-runtime-matrix --verify
 exclusion policy and the reviewed result-skip manifest against the exact
 extracted candidate's current `skip_on_cran` test titles before resource
 admission or any runtime build/install worker starts. Keep that source-derived
-preflight shared with the old-runtime test runner so a malformed or stale
-policy fails cheaply instead of after two package installations. In
+policy preflight shared with the old-runtime test runner. The coordinator also
+stages and authenticates the mandatory `mbo_config` upgrade inputs before that
+same boundary, so the fixture test must execute and may not become an
+unreviewed environment-dependent skip. Malformed or stale input therefore
+fails cheaply instead of after two package installations. In
 particular, validate the header-only exclusion manifest as zero rows; do not
 construct a synthetic file name from its empty `context` column.
 
@@ -439,22 +446,39 @@ Reference R source, Writing R Extensions, R Internals, data.table source, and
 the analyzer sources are populated by `scripts/fetch-reference-sources`.
 Consult those pinned local sources rather than remembered C-API behavior.
 
-The mandatory legacy-upgrade fixtures live below the exact pinned
-`mbo_config` checkout, not at its repository root. Before a direct complete
-unit-test run, bind the directory that actually owns the two RDS files:
+The mandatory legacy-upgrade fixtures originate below the reviewed
+`mbo_config` commit's `common/` directory, not at its repository root. Before
+an ad-hoc direct complete unit-test run, bind the directory that actually owns
+the two RDS files:
 
 ```sh
-export PARADOX_MBO_CONFIG_ROOT="$PARADOX_ROOT/.local/compat/github/mbo_config/common"
+fixture_bundle="$PARADOX_ROOT/.local/tmp/mbo-config-fixtures-development"
+if test -d "$fixture_bundle"; then
+  scripts/environment/mbo-config-fixtures verify "$PARADOX_ROOT" \
+    "$PARADOX_ROOT/.local/compat/github/mbo_config" "$fixture_bundle"
+else
+  scripts/environment/mbo-config-fixtures stage "$PARADOX_ROOT" \
+    "$PARADOX_ROOT/.local/compat/github/mbo_config" "$fixture_bundle"
+fi
+export PARADOX_MBO_CONFIG_ROOT="$fixture_bundle/common"
 test -f "$PARADOX_MBO_CONFIG_ROOT/mixed_search_space.rds"
 test -f "$PARADOX_MBO_CONFIG_ROOT/numeric_search_space.rds"
 ```
 
-An unset value deliberately skips that optional unit-test fixture; a release
-run sets it and treats either missing file as a failure. The documentation and
-consumer runners have their own exact-corpus receipts and do not infer this
-path from HOME. `scripts/native-check` automatically authenticates the clean
-checkout against `compat/github-snapshot.tsv`, records both fixture hashes,
-and supplies this exact `common/` path for focused and full runs.
+An unset value deliberately skips that optional development fixture; every
+release run sets it and treats either missing file as a failure. The shared
+`scripts/environment/mbo-config-fixtures` helper requires
+`compat/github-snapshot.tsv` and `compat/mlr-org-review.tsv` to agree on the
+exact reviewed commit/tree, reads the two files from immutable Git objects
+rather than the checkout worktree, and publishes a read-only, receipted
+bundle. `scripts/native-check` retains that bundle inside the functional
+mode's sealed artifact tree. `scripts/test-runtime-matrix` stages one shared
+bundle before resource admission and gives both old-R workers its `common/`
+directory; the evidence verifier reauthenticates the repository manifests,
+Git tree, file bytes, and complete bundle receipt. A dirty or differently
+checked-out worktree is irrelevant provided the reviewed Git objects remain
+present. The documentation and consumer runners have their own exact-corpus
+receipts and do not infer this path from HOME.
 
 Documentation generation is optional development tooling and is deliberately
 kept out of the pinned runtime library.  The current generator is roxygen2
