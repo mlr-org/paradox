@@ -1012,3 +1012,17 @@ runs were stopped immediately. Their partial directories, the installed
 candidate, and the bridge overlay are diagnostic only and transfer no release
 conclusion. The replacement normalizes both predicate results explicitly and
 must rerun every package-byte-bound gate.
+
+The next candidate
+`refs/paradox-release/candidate-20260719T200549Z` at
+`70c6d728785464c98ffc8c658f20c1937467a593` passed the exact old-header API
+gate and installed the candidate and bridge overlay. Its R 4.3 runtime stage
+then exposed a test-fixture portability error: unlike R 4.6, R 4.3 did not
+choose a top-level base `wrap_list` ALTREP for the wide data.table after an
+attribute-only duplicate, so an internal materializer test incorrectly
+expected ALTREP-only cache removal from an unchanged ordinary table. This is
+not grounds for copying every ordinary table at a hot ingress. The native and
+runtime runs were stopped; none of this candidate's package-byte evidence
+transfers. Tests that require a top-level ALTREP must use the registered native
+fixture, while the base wrapper remains realistic conditional coverage when a
+runtime selects that optimization.

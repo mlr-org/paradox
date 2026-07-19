@@ -603,3 +603,16 @@ to `int`. Native and runtime work already in progress was stopped; all partial
 or completed package-byte evidence for this candidate is superseded and may
 not be promoted. The fix uses explicit truth comparisons and requires a new
 candidate with a complete fresh gate set.
+
+Candidate `refs/paradox-release/candidate-20260719T200549Z`, commit
+`70c6d728785464c98ffc8c658f20c1937467a593`, passed the replacement R-API gate
+and built its exact package and bridge bytes. The R 4.3 runtime stage then
+rejected an internal test which assumed that reinstalling an attribute on a
+wide data.table always creates base R's top-level `wrap_list` ALTREP. R 4.3
+left that input ordinary, for which the materializer correctly returns the
+table unchanged; only an admitted ALTREP shell is normalized and stripped of
+ignored caches. The fix makes the cache-disposal assertion use the portable
+native ALTREP fixture and retains the base wrapper as conditional realistic
+coverage. Expanding production copying to ordinary tables was rejected as an
+unnecessary hot-path cost. The partial native/runtime results and completed
+API/package/bridge evidence are all superseded.

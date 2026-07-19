@@ -1,9 +1,9 @@
 base_lazy_table_wrapper = function(table) {
   stopifnot(length(table) >= 64L, inherits(table, "data.frame"))
-  # R's attribute-only duplicate path wraps sufficiently wide vectors in the
-  # base `wrap_list` ALTREP (WRAP_THRESHOLD is 64 in supported R sources).
-  # Reinstalling an unchanged class gives us that production representation
-  # without a package-private constructor or an unbounded inspect call.
+  # R's attribute-only duplicate path can wrap sufficiently wide vectors in
+  # the base `wrap_list` ALTREP. That optimization differs across supported R
+  # versions, so tests which require an ALTREP shell use the native fixture;
+  # this helper covers the real base representation whenever R selects it.
   structure(table, class = class(table))
 }
 
@@ -311,9 +311,13 @@ test_that("real data.table key and index carriers pass every public ingress", {
   data.table::setkeyv(wide, ids[[1L]])
   data.table::setindexv(wide, ids[[2L]])
   wrapped_wide = base_lazy_table_wrapper(wide)
+  # Cache disposal is a property of materializing an admitted ALTREP shell.
+  # The base wrapper above is intentionally retained for realistic ingress
+  # coverage, but older supported R versions may leave it ordinary.
+  cache_shell = native_stateful_altrep(wide, wide)
   materialized = .Call(
     public_table_native_symbol("test_materialize_public_table_shell"),
-    wrapped_wide
+    cache_shell
   )
   expect_identical(names(materialized), ids)
   expect_identical(class(materialized), c("data.table", "data.frame"))
