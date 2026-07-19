@@ -593,11 +593,11 @@
     .upgrade_paradox_abort(path, "legacy `constraint` is malformed")
   }
 
-  tags_by_id = setNames(vector("list", length(ids)), ids)
+  tags_by_id = stats::setNames(vector("list", length(ids)), ids)
   for (index in seq_along(ids)) {
     tags_by_id[[index]] = .subset2(tags, "tag")[.subset2(tags, "id") == ids[[index]]]
   }
-  trafo_by_id = setNames(vector("list", length(ids)), ids)
+  trafo_by_id = stats::setNames(vector("list", length(ids)), ids)
   for (index in seq_along(ids)) {
     match_index = match(ids[[index]], .subset2(trafos, "id"), nomatch = 0L)
     trafo_by_id[index] = list(if (match_index) {
