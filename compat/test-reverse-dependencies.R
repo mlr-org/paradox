@@ -403,6 +403,42 @@ reverse_require_regular_provenance_file <- function(path, label) {
   invisible(path)
 }
 
+reverse_retain_plan_compat_input <- function(source, destination) {
+  source <- reverse_require_regular_provenance_file(
+    source, "plan compatibility-system source input"
+  )
+  destination_exists <- file.exists(destination) || dir.exists(destination) ||
+    reverse_is_symbolic(destination)
+  if (destination_exists) {
+    destination <- reverse_require_regular_provenance_file(
+      destination, "pre-retained plan compatibility-system input"
+    )
+    if (!identical(
+        unname(tools::sha256sum(source)),
+        unname(tools::sha256sum(destination))
+      )) {
+      stop("pre-retained plan compatibility-system input differs from source",
+        call. = FALSE)
+    }
+    return(destination)
+  }
+
+  if (!file.copy(source, destination, copy.mode = TRUE, copy.date = TRUE)) {
+    stop("could not retain plan compatibility-system input", call. = FALSE)
+  }
+  destination <- reverse_require_regular_provenance_file(
+    destination, "retained plan compatibility-system input"
+  )
+  if (!identical(
+      unname(tools::sha256sum(source)),
+      unname(tools::sha256sum(destination))
+    )) {
+    stop("retained plan compatibility-system input differs from source",
+      call. = FALSE)
+  }
+  destination
+}
+
 reverse_validate_candidate_provenance <- function(
   root,
   candidate_run_id,
@@ -1302,12 +1338,9 @@ reverse_capture_compat_system_plan <- function(root, metadata_directory) {
   )
   retained_paths <- file.path(metadata_directory, retained_names)
   for (index in seq_along(source_paths)) {
-    if (!file.copy(source_paths[[index]], retained_paths[[index]],
-        copy.mode = TRUE, copy.date = TRUE) ||
-        !identical(unname(tools::sha256sum(source_paths[[index]])),
-          unname(tools::sha256sum(retained_paths[[index]])))) {
-      stop("could not retain plan compatibility-system input", call. = FALSE)
-    }
+    retained_paths[[index]] <- reverse_retain_plan_compat_input(
+      source_paths[[index]], retained_paths[[index]]
+    )
   }
   source_sha256 <- unname(vapply(source_paths, tools::sha256sum, character(1L)))
   status_path <- file.path(metadata_directory, "compat-system.tsv")

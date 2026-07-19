@@ -936,6 +936,14 @@ experiments are rejected for this release because their extra semantic and
 validation surface is not low-hanging; neither is an omitted compatibility
 break or unfinished public contract.
 
+The final paired policy does not pretend that Paradox 1 performed Paradox 2's
+new integrity work. It assigns finite contract-reset budgets only to the direct
+live Shadow value read and three direct collection value reads, which validate
+an origin signature/generation or complete capsule DAG. All real consumer
+operations and filtered getters retain strict ordinary tiers. These rows remain
+visible and reviewable rather than waived, and their wider v1-relative budgets
+are expected to disappear once Paradox 2 is the release baseline.
+
 The chosen v1 representation is recorded above so maintainers do not recreate
 competing state engines. It is still not a downstream contract: a later
 Paradox release may change the carrier, schema tag, cache layout, field names,

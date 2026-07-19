@@ -1,24 +1,16 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 3L || length(args) > 5L) {
+if (length(args) != 5L) {
   stop(paste(
     "usage: value-mutation.R LABEL PARADOX_LIBRARY OUTPUT_CSV",
-    "[MIES_LIBRARY] [DEPENDENCY_LIBRARY]"
+    "MIES_LIBRARY DEPENDENCY_LIBRARY"
   ), call. = FALSE)
 }
 
 label <- args[[1L]]
 paradox_library <- normalizePath(args[[2L]], mustWork = TRUE)
 output <- args[[3L]]
-mies_library <- normalizePath(
-  if (length(args) >= 4L) args[[4L]] else
-    ".local/compat/R/library-mies-diagnose",
-  mustWork = TRUE
-)
-dependency_library <- normalizePath(
-  if (length(args) >= 5L) args[[5L]] else
-    ".local/compat/R/library-dependencies",
-  mustWork = TRUE
-)
+mies_library <- normalizePath(args[[4L]], mustWork = TRUE)
+dependency_library <- normalizePath(args[[5L]], mustWork = TRUE)
 ordinary_library <- normalizePath(".local/R/library", mustWork = TRUE)
 .libPaths(unique(c(
   paradox_library,

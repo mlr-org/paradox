@@ -346,6 +346,13 @@ semantic vectors remain supported at their stated positions.
   membership uses base `identical()` without S3/S4 dispatch.
 - data.table >= 1.18.4 is an outward interoperability dependency only. Do not
   restore the old `alloc.col()` capacity bridge or call data.table internals.
+  The sole cold presentation exception is the identity lookup in
+  `R/ParamSet.R` for data.table's unexported `.reassign_extracted_table` and
+  exported `set` R functions. It calls neither function: it only recognizes
+  the active data.table stack so detached `$params` facades retain historical
+  `:=`/`set()` reassignment behavior. This lookup supplies no semantic engine,
+  private C API, capacity/version bridge, or permission for another unexported
+  API.
 - Legacy Paradox objects require explicit `upgrade_paradox_object()`. The
   upgrader is non-mutating, callback-free while inspecting, preserves valid DAG
   identity, accepts current graphs idempotently after full validation, and
@@ -801,6 +808,20 @@ paths, retain portable scalar code unless a portable architecture-neutral
 improvement is proven, and rerun affected correctness tests after every
 optimization. Freeze performance changes before the final memory/portability
 matrix.
+
+The Paradox-1 comparison has two narrowly ledgered integrity-read budgets. Only
+`shadow_values_live` uses `integrity-shadow-read` (3.25 median/3.50 q75), and
+only `collection_values_{plain,rich,nested}` use
+`integrity-collection-read` (2.75/3.00). These synthetic direct reads perform
+generation/signature or complete capsule-DAG admission that the cached legacy
+surface did not. The exception is timing-only: both keep the `hot` 1.25 ratio
+and 16-KiB minimum allocation thresholds. All filtered getters,
+mutation/constraint/domain paths, and real miesmuschel/mlr3pipelines consumer
+rows keep their `hot`/`standard` tiers.
+Never widen a global tier or add another integrity row without retained profile
+evidence and explicit design review. Treat non-pass integrity rows as required
+raw-distribution review, and normally retire these contract-reset tiers once
+Paradox 2 is the authenticated baseline.
 
 ## Historical candidate
 

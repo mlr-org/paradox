@@ -129,7 +129,7 @@ benchmarks/release \
   --baseline-evidence .local/compat/differential/runs/DIFFERENTIAL_RUN \
   --candidate-library .local/compat/runs/CANDIDATE_RUN/library-candidate \
   --dependency-library .local/compat/R/library-dependencies \
-  --mies-library .local/compat/R/library-mies-diagnose \
+  --mies-library .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
   --output .local/benchmarks/release-YYYYMMDDTHHMMSSZ
 ```
 
@@ -146,6 +146,10 @@ automatically. All baseline, candidate, dependency, miesmuschel, additional,
 ordinary project, and repository-local R base libraries are fingerprinted
 before and after the gate. All user-supplied library roots must be distinct,
 disjoint, plain directories below this repository's `.local/` tree.
+The `--mies-library` must be the exact bridge library produced for the same
+candidate run, not a mutable diagnostic installation; where other overlay
+libraries are supplied, keep this bridge ahead of mlr3verse or documentation
+extras in the effective library order.
 
 `--plan-only` performs the same provenance, Git, evidence, candidate, library,
 workload-inventory, and regression-policy authentication and prints the exact
@@ -188,16 +192,34 @@ the same host:
 |---|---:|---:|---:|---:|---:|
 | `hot` | 1.20 | 1.35 | 0.75 | 1.25 | 16 KiB |
 | `standard` | 1.35 | 1.60 | 0.80 | 1.50 | 64 KiB |
+| `integrity-shadow-read` | 3.25 | 3.50 | 0.80 | 1.25 | 16 KiB |
+| `integrity-collection-read` | 2.75 | 3.00 | 0.80 | 1.25 | 16 KiB |
 
 Common constructors, ID/value/domain access, validation, design generation,
 mutation, and maintained consumer paths use the stricter `hot` tier. Structural
 stress, nested graph traversal, and callback-bearing cases use `standard`.
-The Shadow constructor and value read/write paths are `hot`; complete live
-Domain reconstruction is `standard` because it is a structural materialization.
-Direct `ParamSetCollection$values` reads now traverse only the authoritative
-capsule graph; they no longer receive a special budget for authenticating R6
-wrappers or private tables. These are portable relative budgets; the policy
+The two integrity tiers are deliberately narrower than a generic compatibility
+waiver. They apply only to `shadow_values_live` and the three synthetic direct
+`collection_values_*` rows. A live Shadow read validates its origin generation,
+signature, hidden-value merge, and visible schema; a direct collection read
+admits the complete authoritative capsule DAG before assembling its detached
+result. Paradox 1 did not provide those integrity contracts, so its cached R
+surfaces are not an honest strict-latency budget for the additional work.
+
+The finite ceilings retain that major-version contract-reset cost in every
+decision ledger, turn a material fraction of it into a visible `marginal`
+review, and still reject a materially slower implementation.
+They cover the measured optimized ratios with reviewable headroom and would
+reject the retained pre-optimization nested collection stage. Shadow
+construction, constraints, domains, and writes remain `hot` or `standard` as
+listed; filtered getters and every real miesmuschel/mlr3pipelines consumer row
+remain `hot`. Thus a synthetic safety boundary cannot hide an end-to-end
+consumer regression. These are portable same-host relative budgets: the policy
 assumes no processor model, instruction set, or absolute nanosecond target.
+The exception is timing-only; both integrity tiers retain the strict `hot`
+allocation ratio and minimum-byte thresholds.
+After Paradox 2 becomes the authenticated baseline, review and normally retire
+the contract-reset tiers instead of carrying their wider ratios forward.
 
 Timing decisions use all retained samples, not only the summary median. For
 both the median ratio and the 75th-percentile ratio, the evaluator computes
@@ -234,8 +256,8 @@ of the applicable tier budget consumed, so a tiny allocation above a zero-byte
 baseline cannot hide a larger material increase. The raw ratio, byte delta, and
 budget fraction are all retained. Any `fail` row prevents the evidence seal.
 The deterministic policy fixtures cover stable passes, a noisy marginal, a
-clear timing failure, and both harmless and material zero-baseline allocation
-changes:
+clear timing failure, both integrity-tier margins and a limit breach, and both
+harmless and material zero-baseline allocation changes:
 
 ```sh
 Rscript --vanilla benchmarks/tests/test-regression-policy.R
@@ -284,17 +306,20 @@ run the dedicated worker once for each immutable package installation:
 
 ```sh
 Rscript benchmarks/paramsetcollection-consumers.R \
-  candidate .local/compat/runs/RUN/library-candidate consumer-candidate.csv
+  candidate .local/compat/runs/CANDIDATE_RUN/library-candidate \
+  consumer-candidate.csv \
+  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  .local/compat/R/library-dependencies
 ```
 
 It measures `miesmuschel`'s `MutatorMaybe(MutatorGauss)` and `OptimizerMies`
 parameter sets plus a two-node `mlr3pipelines` graph. Each object measures
 `$params`, `$values`, and the common
-`$get_values(check_required = FALSE)` read path. Optional fourth and fifth
-arguments select the miesmuschel and shared dependency libraries when their
-compatibility-run locations differ from the defaults. An optional sixth
-argument selects the raw-sample CSV; otherwise it is written beside the summary
-as `<summary-name>-samples.csv`.
+`$get_values(check_required = FALSE)` read path. The fourth and fifth arguments
+are mandatory: use the exact candidate-specific downstream bridge and protected
+shared dependency libraries, respectively. An optional sixth argument selects
+the raw-sample CSV; otherwise it is written beside the summary as
+`<summary-name>-samples.csv`.
 
 For the collection initializer itself, the focused worker adds plain and
 metadata-rich 8-by-8 and 32-by-8 synthetic collections to those three retained
@@ -303,9 +328,13 @@ candidate, then compare the emitted CSV files:
 
 ```sh
 Rscript benchmarks/paramsetcollection-construction.R \
-  baseline .local/checks/psc-constructor/baseline-library baseline.csv
+  baseline .local/checks/psc-constructor/baseline-library baseline.csv \
+  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  .local/compat/R/library-dependencies
 Rscript benchmarks/paramsetcollection-construction.R \
-  candidate .local/checks/psc-constructor/candidate-library candidate.csv
+  candidate .local/checks/psc-constructor/candidate-library candidate.csv \
+  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  .local/compat/R/library-dependencies
 ```
 
 Child sets are constructed before timing. Each workload verifies public IDs,
@@ -319,7 +348,11 @@ workload verifies the stored values before and after timing:
 
 ```sh
 Rscript benchmarks/value-mutation.R \
-  baseline .local/checks/value-mutation/baseline-library baseline.csv
+  baseline .local/checks/value-mutation/baseline-library baseline.csv \
+  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  .local/compat/R/library-dependencies
 Rscript benchmarks/value-mutation.R \
-  candidate .local/checks/value-mutation/candidate-library candidate.csv
+  candidate .local/checks/value-mutation/candidate-library candidate.csv \
+  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  .local/compat/R/library-dependencies
 ```

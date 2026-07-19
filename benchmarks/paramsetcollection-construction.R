@@ -1,7 +1,10 @@
 args = commandArgs(trailingOnly = TRUE)
-if (length(args) != 3L) {
+if (length(args) != 5L) {
   stop(
-    "usage: paramsetcollection-construction.R LABEL PARADOX_LIBRARY OUTPUT_CSV",
+    paste(
+      "usage: paramsetcollection-construction.R LABEL PARADOX_LIBRARY",
+      "OUTPUT_CSV MIES_LIBRARY DEPENDENCY_LIBRARY"
+    ),
     call. = FALSE
   )
 }
@@ -9,10 +12,12 @@ if (length(args) != 3L) {
 label = args[[1L]]
 paradox_library = normalizePath(args[[2L]], mustWork = TRUE)
 output = args[[3L]]
+mies_library = normalizePath(args[[4L]], mustWork = TRUE)
+dependency_library = normalizePath(args[[5L]], mustWork = TRUE)
 libraries = c(
   paradox_library,
-  ".local/compat/R/library-mies-diagnose",
-  ".local/compat/R/library-dependencies",
+  mies_library,
+  dependency_library,
   ".local/compat/R/library-mlr3verse-core",
   ".local/R/library"
 )
@@ -72,7 +77,7 @@ specs = list(
 
 suppressPackageStartupMessages(library(
   miesmuschel,
-  lib.loc = normalizePath(".local/compat/R/library-mies-diagnose")
+  lib.loc = mies_library
 ))
 specs$mies_mutator_maybe = list(
   sets = mut("maybe", mut("gauss"))$param_set$sets,
@@ -89,7 +94,7 @@ specs$mies_optimizer = list(
 
 suppressPackageStartupMessages(library(
   mlr3pipelines,
-  lib.loc = normalizePath(".local/compat/R/library-dependencies")
+  lib.loc = dependency_library
 ))
 specs$mlr3pipelines_graph = list(
   sets = (po("scale") %>>% po("imputemean"))$param_set$sets,

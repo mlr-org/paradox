@@ -372,6 +372,20 @@ lookup, allocation, or per-row overhead while keeping portable C17 and readable
 ownership. After each optimization run affected correctness tests; after the
 performance source freezes rerun the final memory/portability evidence once.
 
+The upstream-v1 comparison distinguishes ordinary hot paths from integrity work
+introduced by the 2.0.0 contract. The sole wider rows are the synthetic direct
+live reads `shadow_values_live` (`integrity-shadow-read`, median 3.25/q75 3.50)
+and `collection_values_{plain,rich,nested}`
+(`integrity-collection-read`, 2.75/3.00). They validate an origin
+generation/signature or the complete capsule DAG before returning a detached
+value. The ceilings are finite same-host ratios, preserve marginal review, and
+still reject retained pre-optimization evidence. The exception is timing-only;
+allocation retains the `hot` 1.25 ratio and 16-KiB minimum. Filtered getters and
+every real downstream consumer operation remain `hot`; domains, dependencies,
+params, constraints, and mutation do not inherit the exception. Reassess and
+normally remove these contract-reset tiers when Paradox 2 replaces v1 as the
+authenticated baseline.
+
 ## Acceptance and replay
 
 Each release stage records a unique run ID and exact ref/commit/tree, and seals

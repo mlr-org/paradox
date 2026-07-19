@@ -409,14 +409,18 @@ commits used by the compatibility baseline.
 
 Consumer dependencies and the candidate package use separate local libraries,
 so pak cannot replace the package under test with CRAN paradox. Run the
-mandatory priority-zero/one checkout gate with the reviewed hard-import-only `mlr3verse`
-overlay explicitly present in the child library path:
+mandatory priority-zero/one checkout gate with the exact candidate-specific
+downstream bridge library and reviewed hard-import-only `mlr3verse` overlay
+explicitly present in the child library path, in that order after the candidate
+library:
 
 ```sh
+bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
 mlr3verse_library="$PARADOX_ROOT/.local/compat/R/library-mlr3verse-core"
+test -d "$bridge_library"
 test -d "$mlr3verse_library"
 export NOT_CRAN=true
-export PARADOX_CONSUMER_EXTRA_LIBS="$mlr3verse_library"
+export PARADOX_CONSUMER_EXTRA_LIBS="$bridge_library:$mlr3verse_library"
 export PARADOX_CANDIDATE_SOURCE="$candidate_source"
 
 Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
@@ -593,14 +597,15 @@ The documentation and corpus-workload harness uses the same sealed candidate
 and the pinned, clean `mlr3book`, `mlr3website`, `mlr3gallery`,
 `mlr3cheatsheets`, `mlr3benchmark`, `mbo_config`, `mlr3-targets`, and
 `mlr3verse` checkouts.
-Give it a new evidence ID and supply both reviewed overlays: the `mlr3verse`
-hard-import library and the locked documentation-only library containing `gt`,
-`V8`, `bigD`, and `juicyjuice`:
+Give it a new evidence ID and supply the candidate-specific exact downstream
+bridge first, followed by the `mlr3verse` hard-import library and the locked
+documentation-only library containing `gt`, `V8`, `bigD`, and `juicyjuice`:
 
 ```sh
 documentation_run_id="$run_id-documentation"
 documentation_extra_library="$PARADOX_ROOT/.local/compat/R/library-documentation-extra-final3"
 test ! -e "$PARADOX_ROOT/.local/compat/runs/$documentation_run_id"
+test -d "$bridge_library"
 test -d "$mlr3verse_library"
 test -d "$documentation_extra_library"
 unset PARADOX_CONSUMER_EXTRA_LIBS
@@ -610,6 +615,7 @@ Rscript compat/test-documentation \
   --candidate-library "$candidate_library" \
   --candidate-source "$candidate_source" \
   --dependency-library "$dependency_library" \
+  --extra-library "$bridge_library" \
   --extra-library "$mlr3verse_library" \
   --extra-library "$documentation_extra_library" \
   --run-id "$documentation_run_id" \
@@ -686,8 +692,9 @@ the library that directly provides miesmuschel:
 ```sh
 benchmark_output="$PARADOX_ROOT/.local/benchmarks/$run_id-release"
 differential_run="$PARADOX_ROOT/.local/compat/differential/runs/DIFFERENTIAL_RUN"
-mies_library="$PARADOX_ROOT/.local/compat/R/library-mies-diagnose"
+mies_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
 test ! -e "$benchmark_output"
+test -d "$mies_library"
 
 benchmarks/release \
   --baseline-evidence "$differential_run" \

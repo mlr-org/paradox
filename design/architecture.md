@@ -115,6 +115,15 @@ the result with `set()` or `:=` cannot mutate the capsule. `Design$data` remains
 an intentionally public mutable data.table and is treated as operation input,
 not internal state.
 
+There is one ledgered cold presentation-only data.table identity lookup in
+`R/ParamSet.R`. It resolves the unexported `.reassign_extracted_table` and the
+exported `set` R functions from the data.table namespace and compares
+them with functions already on the active call stack so an extracted detached
+`$params` facade can retain historical `:=`/`set()` reassignment behavior. It
+calls neither function and supplies no semantic admission, mutation engine,
+private C API, capacity contract, or data.table-version bridge. No other
+unexported data.table lookup is authorized.
+
 `all.equal.ParamSet()` is intentionally ordinary S3 comparison glue over these
 detached native projections. Each node record contains class and
 `assert_values`, params, values, tags, dependencies, and BASE callbacks;
@@ -637,8 +646,10 @@ Do not add any of the following:
 - complete R/checkmate/data.table/S3 semantic fallbacks;
 - `NULL` or other private decline sentinels that restart an operation;
 - generated R6 method/body/formal/environment authentication;
-- permanent internal data.tables, private data.table APIs, synthesized indices,
-  or version-specific spare-capacity bridges;
+- permanent internal data.tables, private data.table execution APIs,
+  synthesized indices, or version-specific spare-capacity bridges; the sole
+  permitted unexported R lookup is the non-calling presentation identity check
+  ledgered above;
 - third-party Domain or Condition dispatch as an implicit extension ABI;
 - third-party TuneToken subclasses/methods, arbitrary TuneToken metadata, or an
   R token-shape validator parallel to native exact admission;

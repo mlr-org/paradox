@@ -1,24 +1,16 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) < 3L || length(args) > 6L) {
+if (length(args) < 5L || length(args) > 6L) {
   stop(paste(
     "usage: paramsetcollection-consumers.R LABEL PARADOX_LIBRARY OUTPUT_CSV",
-    "[MIES_LIBRARY] [DEPENDENCY_LIBRARY] [SAMPLES_CSV]"
+    "MIES_LIBRARY DEPENDENCY_LIBRARY [SAMPLES_CSV]"
   ), call. = FALSE)
 }
 
 label <- args[[1L]]
 paradox_library <- normalizePath(args[[2L]], mustWork = TRUE)
 output <- args[[3L]]
-mies_library <- normalizePath(
-  if (length(args) >= 4L) args[[4L]] else
-    ".local/compat/R/library-mies-diagnose",
-  mustWork = TRUE
-)
-dependency_library <- normalizePath(
-  if (length(args) >= 5L) args[[5L]] else
-    ".local/compat/R/library-dependencies",
-  mustWork = TRUE
-)
+mies_library <- normalizePath(args[[4L]], mustWork = TRUE)
+dependency_library <- normalizePath(args[[5L]], mustWork = TRUE)
 samples_output <- if (length(args) >= 6L) {
   args[[6L]]
 } else {

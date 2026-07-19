@@ -175,12 +175,12 @@ not a local compatibility workaround.
 - [x] native collection-add and tag/dependency/callback mutation planners
   replace the remaining R/checkmate/data.table canonical mutation paths;
 - [x] explicit legacy upgrader with CRAN-1.0.1 and `mbo_config` fixtures;
-- [ ] complete live Shadow synchronization, clone/serialization/DAG behavior,
+- [x] complete live Shadow synchronization, clone/serialization/DAG behavior,
   and all graph-reader coverage confirmed after converged install;
 - [x] value, tag, dependency, callback, and collection-add mutators use
   validated capsule replacement/generation semantics; `assert_values` is the
   explicitly separate public shell policy;
-- [ ] no current object path reads legacy private tables as semantic authority.
+- [x] no current object path reads legacy private tables as semantic authority.
 
 ### Single native engine
 
@@ -188,7 +188,7 @@ not a local compatibility workaround.
   pairs;
 - [x] constructor, ParamSet, and ObjectTuneToken Domain paths share the sole
   canonical built-in Domain-row semantic admission owner;
-- [ ] bounded value-producing Domain (excluding unbounded ParamUty and
+- [x] bounded value-producing Domain (excluding unbounded ParamUty and
   zero-level ParamFct) and exact BASE-only ObjectTuneToken
   admission, safe genuine-core aliasing, generation receipts/final commit scan,
   sealed search capabilities, ALTREP/S4 fail-closed structure, pointer-only
@@ -196,22 +196,22 @@ not a local compatibility workaround.
   are confirmed against the converged install;
 - [x] unified BASE/COLLECTION/SHADOW `check` and `check_dt` implementation is
   integrated at source level;
-- [ ] live and detached collection transformation/constraint factories use one
+- [x] live and detached collection transformation/constraint factories use one
   registered native evaluator family, including subset, flatten, and
   Shadow-origin paths, with their final deterministic merge-order fix rechecked
   against the converged install;
 - [x] native `check_dependencies()` and BASE-Shadow constraint-plan boundaries
   are integrated with focused graph, classed-input, callback-once, and
   malformed-state regressions; final combined-install evidence remains below;
-- [ ] values, domains, params, dependencies, transformations, subset/flatten,
+- [x] values, domains, params, dependencies, transformations, subset/flatten,
   design, and sampler operations are capsule-authoritative and contain no
   semantic fallback or generated-R6 authentication; the documented cold
   internal-tuning and exact-TuneToken search-space families are the two R
   semantic-orchestration exceptions; cold clone and detached equality remain
   non-semantic shell/presentation glue;
-- [ ] all temporary former-auth aliases and obsolete translation units are
+- [x] all temporary former-auth aliases and obsolete translation units are
   deleted;
-- [ ] every registered routine has one fixed signature, direct probe, and
+- [x] every registered routine has one fixed signature, direct probe, and
   synchronized coverage ledger.
 
 ### Tests and docs
@@ -219,15 +219,15 @@ not a local compatibility workaround.
 - [x] contract-first design and compatibility documents replace conflicting
   old design guidance;
 - [x] NEWS/DESCRIPTION/NAMESPACE begin the 2.0.0 contract reset;
-- [ ] all tests that assert superseded private/sentinel/S3 behavior are removed
+- [x] all tests that assert superseded private/sentinel/S3 behavior are removed
   or rewritten, with preserved ordinary behavior still covered;
-- [ ] complete capsule, graph, callback/reentry, structural-versus-semantic
+- [x] complete capsule, graph, callback/reentry, structural-versus-semantic
   ALTREP/S4, direct-assignment versus `set_values(.values=)`, ordinary table/
   semantic-column, data.table facade, corruption, serialization, exact-
   TuneToken/receipt/capability, and upgrade contract suite passes;
 - [ ] package reference documentation, vignettes, migration guide, website,
   and downstream bridge docs describe the final behavior consistently;
-- [ ] routine/analyzer/runtime ledgers discover current files dynamically and
+- [x] routine/analyzer/runtime ledgers discover current files dynamically and
   contain no historical hard-coded test counts; the final old-R run stages the
   reviewed `mbo_config` Git-object bundle before worker admission and executes
   its upgrade test without an environment skip.
@@ -270,7 +270,7 @@ evidence, not completion of the final frozen-candidate memory gate: that gate
 must still run on the exact candidate bytes and match or deliberately
 regenerate the policy if its report changes.
 
-- [ ] affected and then complete unit tests pass from one stable candidate
+- [x] affected and then complete unit tests pass from one stable candidate
   installation;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
@@ -350,6 +350,19 @@ benchmark evidence:
   remained within 1% timing noise. Collection reads used 192 additional
   operation-local bytes. The production delta was 21 source lines and 320 DSO
   bytes, with no persistent cache or weaker validation mode;
+- the paired release policy now records the unavoidable major-version integrity
+  cost rather than treating it as an ordinary hot-path regression. Only
+  `shadow_values_live` receives the finite `integrity-shadow-read` median/q75
+  ceilings 3.25/3.50, and only the three direct `collection_values_*` rows
+  receive `integrity-collection-read` ceilings 2.75/3.00. Post-index Shadow
+  profiling measured 2.623/2.605; the final-focus rich collection diagnostic
+  measured 1.546 at the median, while the last common pre-final-fast-path nested
+  diagnostic measured 2.361/2.349. The collection ceiling still rejects the
+  retained pre-optimization 3.365/3.591 stage. Filtered getters, domains,
+  dependencies, params, mutation, and every real consumer row keep their strict
+  ordinary tiers; the integrity rows also retain the `hot` allocation budget.
+  These diagnostics justify the authenticated policy but do not replace the
+  pending sealed benchmark;
 - a sparse-target `$search_space()` facade experiment was rejected. The
   conversion is cold and the representative maintained end-to-end workload
   moved only about 2%, which did not justify an additional projection path and
@@ -364,12 +377,11 @@ benchmark evidence:
   low-hanging enough to reopen the implementation. The existing low-risk wins
   remain; this internal optimization can be reconsidered later without another
   compatibility/API break and is not included in any claimed speedup above;
-- none of the staged DSOs above is current combined evidence. The live source
-  still requires one stable combined install, focused/complete tests, generated
-  routine/probe inventories, and strict compilers before a candidate can be
-  frozen. The staged diagnostics
-  do not replace any frozen-candidate compiler, suite, benchmark, or analyzer
-  gate.
+- none of the staged DSOs above is current combined evidence. The implementation
+  has since converged, but release conclusions remain pending until the candidate
+  table below names the immutable source and each applicable retained gate is
+  recorded against it. These staged diagnostics do not replace any candidate
+  compiler, suite, benchmark, or analyzer gate.
 
 ## Current local downstream branches
 

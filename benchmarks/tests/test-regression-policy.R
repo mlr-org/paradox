@@ -77,10 +77,10 @@ if (!identical(ledger, ledger_again)) {
   fail("regression decisions are not deterministic")
 }
 summary <- benchmark_regression_summarize(ledger)
-if (!identical(summary$row_count, 5L) ||
+if (!identical(summary$row_count, 8L) ||
     !identical(summary$pass_count, 2L) ||
-    !identical(summary$marginal_count, 1L) ||
-    !identical(summary$fail_count, 2L) ||
+    !identical(summary$marginal_count, 3L) ||
+    !identical(summary$fail_count, 3L) ||
     !identical(summary$worst_median_case, "fail_timing") ||
     !identical(
       summary$worst_allocation_case, "fail_zero_baseline_allocation"
@@ -134,6 +134,38 @@ if (nrow(reviewed_policy) != nrow(expected_inventory) ||
     )) {
   fail("reviewed policy does not cover the full registered inventory")
 }
+integrity_rows <- reviewed_policy$tier %in% c(
+  "integrity-shadow-read", "integrity-collection-read"
+)
+expected_integrity_cases <- c(
+  "shadow_values_live", "collection_values_plain",
+  "collection_values_rich", "collection_values_nested"
+)
+if (!identical(reviewed_policy$case[integrity_rows], expected_integrity_cases) ||
+    any(reviewed_policy$scope[integrity_rows] != "paired") ||
+    any(reviewed_policy$scope == "consumer" & integrity_rows)) {
+  fail("integrity-read tiers are not confined to the reviewed synthetic rows")
+}
+integrity_spec <- benchmark_regression_policy_spec()$tiers
+shadow_tier <- integrity_spec[
+  integrity_spec$tier == "integrity-shadow-read", , drop = FALSE
+]
+collection_tier <- integrity_spec[
+  integrity_spec$tier == "integrity-collection-read", , drop = FALSE
+]
+if (nrow(shadow_tier) != 1L || nrow(collection_tier) != 1L ||
+    !identical(shadow_tier$median_ratio_limit, 3.25) ||
+    !identical(shadow_tier$q75_ratio_limit, 3.50) ||
+    !identical(shadow_tier$slower_probability_limit, 0.80) ||
+    !identical(shadow_tier$allocation_ratio_limit, 1.25) ||
+    !identical(shadow_tier$allocation_min_delta_bytes, 16384) ||
+    !identical(collection_tier$median_ratio_limit, 2.75) ||
+    !identical(collection_tier$q75_ratio_limit, 3.00) ||
+    !identical(collection_tier$slower_probability_limit, 0.80) ||
+    !identical(collection_tier$allocation_ratio_limit, 1.25) ||
+    !identical(collection_tier$allocation_min_delta_bytes, 16384)) {
+  fail("integrity-read tier ceilings changed without fixture review")
+}
 
 temporary_policy <- tempfile("paradox-regression-policy-", fileext = ".tsv")
 on.exit(unlink(temporary_policy), add = TRUE)
@@ -156,8 +188,8 @@ expect_error(
 )
 
 cat(
-  "PASS: deterministic pass, marginal/noisy, timing-fail, and ",
-  "zero-allocation regression policy fixtures\n",
+  "PASS: deterministic pass, marginal/noisy, timing-fail, integrity-read, ",
+  "and zero-allocation regression policy fixtures\n",
   sep = ""
 )
 }

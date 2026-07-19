@@ -1,13 +1,18 @@
 benchmark_regression_test_fixture <- function() {
   cases <- c(
     "pass_stable", "marginal_noisy", "fail_timing",
-    "pass_zero_allocation", "fail_zero_baseline_allocation"
+    "pass_zero_allocation", "fail_zero_baseline_allocation",
+    "margin_integrity_shadow", "margin_integrity_collection",
+    "fail_integrity_collection"
   )
   policy <- data.frame(
     scope = rep("paired", length(cases)),
     case = cases,
     operation = rep("-", length(cases)),
-    tier = rep("hot", length(cases)),
+    tier = c(
+      rep("hot", 5L), "integrity-shadow-read",
+      "integrity-collection-read", "integrity-collection-read"
+    ),
     rationale = rep("deterministic-policy-fixture", length(cases)),
     stringsAsFactors = FALSE
   )
@@ -21,7 +26,10 @@ benchmark_regression_test_fixture <- function() {
     ), 6L),
     fail_timing = baseline_pattern * 1.50,
     pass_zero_allocation = baseline_pattern,
-    fail_zero_baseline_allocation = baseline_pattern
+    fail_zero_baseline_allocation = baseline_pattern,
+    margin_integrity_shadow = baseline_pattern * 2.80,
+    margin_integrity_collection = baseline_pattern * 2.40,
+    fail_integrity_collection = baseline_pattern * 3.30
   )
   make_samples <- function(patterns) {
     do.call(rbind, lapply(cases, function(case) {
@@ -39,8 +47,8 @@ benchmark_regression_test_fixture <- function() {
   baseline_patterns <- setNames(
     rep(list(baseline_pattern), length(cases)), cases
   )
-  baseline_allocations <- c(4096, 4096, 4096, 0, 0)
-  candidate_allocations <- c(4096, 4096, 4096, 1024, 32768)
+  baseline_allocations <- c(4096, 4096, 4096, 0, 0, 4096, 4096, 4096)
+  candidate_allocations <- c(4096, 4096, 4096, 1024, 32768, 4096, 4096, 4096)
   allocation_table <- function(values) {
     data.frame(
       scope = rep("paired", length(cases)),
@@ -56,6 +64,9 @@ benchmark_regression_test_fixture <- function() {
     candidate_samples = make_samples(candidate_patterns),
     baseline_allocations = allocation_table(baseline_allocations),
     candidate_allocations = allocation_table(candidate_allocations),
-    expected_decisions = c("pass", "marginal", "fail", "pass", "fail")
+    expected_decisions = c(
+      "pass", "marginal", "fail", "pass", "fail",
+      "marginal", "marginal", "fail"
+    )
   )
 }

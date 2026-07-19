@@ -2759,6 +2759,86 @@ for lock_harness in scripts/build-valgrind-r \
   fi
 done
 
+# The activated reverse-dependency plan retains compat-system-evidence.R after
+# the general metadata copier has already placed the same source at that exact
+# destination. Exercise the production helper directly: an identical plain
+# file is reusable, while changed bytes and symbolic destinations fail closed.
+"$RSCRIPT" --vanilla - "$ROOT/compat/test-reverse-dependencies.R" \
+  "$TEST_ROOT/reverse-plan-compat-retention" <<'RSCRIPT'
+arguments <- commandArgs(TRUE)
+runner <- arguments[[1L]]
+fixture <- arguments[[2L]]
+dir.create(fixture, recursive = TRUE)
+
+tree <- parse(runner, keep.source = FALSE)
+required <- c(
+  "reverse_is_symbolic", "reverse_require_regular_provenance_file",
+  "reverse_retain_plan_compat_input"
+)
+bindings <- list()
+for (expression in as.list(tree)) {
+  if (is.call(expression) && identical(expression[[1L]], quote(`<-`)) &&
+      is.symbol(expression[[2L]]) && as.character(expression[[2L]]) %in% required) {
+    bindings[[as.character(expression[[2L]])]] <- expression
+  }
+}
+if (!identical(sort(names(bindings)), sort(required))) {
+  stop("could not extract exact plan-retention helpers", call. = FALSE)
+}
+environment <- new.env(parent = baseenv())
+for (name in required) eval(bindings[[name]], envir = environment)
+
+expect_error <- function(expression, pattern) {
+  message <- tryCatch({ force(expression); NULL }, error = conditionMessage)
+  if (is.null(message) || !grepl(pattern, message, fixed = TRUE)) {
+    stop("unexpected plan-retention result: ", message %||% "success",
+      call. = FALSE)
+  }
+}
+`%||%` <- function(left, right) if (is.null(left)) right else left
+
+source <- file.path(fixture, "source")
+writeBin(charToRaw("canonical\n"), source)
+copied <- file.path(fixture, "copied")
+invisible(environment$reverse_retain_plan_compat_input(source, copied))
+if (!identical(readBin(copied, "raw", n = 64L), charToRaw("canonical\n"))) {
+  stop("absent plan input was not retained exactly", call. = FALSE)
+}
+
+identical_destination <- file.path(fixture, "already-retained")
+if (!file.copy(source, identical_destination)) {
+  stop("could not construct pre-retained fixture", call. = FALSE)
+}
+invisible(environment$reverse_retain_plan_compat_input(
+  source, identical_destination
+))
+
+changed_destination <- file.path(fixture, "changed")
+writeBin(charToRaw("substitute\n"), changed_destination)
+expect_error(
+  environment$reverse_retain_plan_compat_input(source, changed_destination),
+  "differs from source"
+)
+
+symbolic_destination <- file.path(fixture, "symbolic")
+if (!file.symlink(source, symbolic_destination)) {
+  stop("could not construct symbolic fixture", call. = FALSE)
+}
+expect_error(
+  environment$reverse_retain_plan_compat_input(source, symbolic_destination),
+  "not a regular file, or symbolic"
+)
+
+dangling_destination <- file.path(fixture, "dangling")
+if (!file.symlink(file.path(fixture, "absent"), dangling_destination)) {
+  stop("could not construct dangling-symbolic fixture", call. = FALSE)
+}
+expect_error(
+  environment$reverse_retain_plan_compat_input(source, dangling_destination),
+  "not a regular file, or symbolic"
+)
+RSCRIPT
+
 "$RSCRIPT" --vanilla "$REVERSE_DEPENDENCY_PREP_TEST" \
   > "$TEST_ROOT/reverse-dependency-preparation.log" 2>&1 || {
   cat "$TEST_ROOT/reverse-dependency-preparation.log" >&2
