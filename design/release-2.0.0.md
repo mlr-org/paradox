@@ -592,3 +592,14 @@ top-shell Elt callback could mutate a still-shared names vector with
 `data.table::setnames()`. This candidate is superseded. No completed or partial
 package-byte evidence from it transfers to a replacement candidate; the
 unsealed memory run is retained only as diagnostic history.
+
+The following candidate,
+`refs/paradox-release/candidate-20260719T194741Z`, commit
+`60704fcc6a899c508f5adffbec35bb61723d3704`, installed successfully and built
+the exact downstream bridge overlay, but failed its R-API gate before release
+convergence. Strict Clang against the pinned R 4.3 and 4.4 headers rejected two
+implicit signedness conversions from the `Rboolean` result of `Rf_isObject()`
+to `int`. Native and runtime work already in progress was stopped; all partial
+or completed package-byte evidence for this candidate is superseded and may
+not be promoted. The fix uses explicit truth comparisons and requires a new
+candidate with a complete fresh gate set.

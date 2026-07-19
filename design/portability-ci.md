@@ -62,6 +62,11 @@ backports for `R_ClosureFormals`, `ANY_ATTRIB`, `R_getAttribCount`, and
 `R_hasAttrib`; raw stored-attribute selection uses `R_mapAttrib()` on R >= 4.6
 and that established `ATTRIB` traversal on R 4.3--4.5. They do not evaluate
 R-level `formals()`/`attributes()` helpers or call data.table code.
+Code also must not assume that an R API predicate has the same signed integer
+typedef in every supported header. A predicate retained in C state is
+normalized by an explicit truth comparison (for example, `Rf_isObject(x) !=
+FALSE`); the old-header GCC/Clang matrix rejects implicit signedness
+conversions.
 
 There is exactly one exception to the public-API rule. R 4.3--4.5 has no public
 non-forcing classifier for one binding. The public R-level `substitute()`

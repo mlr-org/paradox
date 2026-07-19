@@ -442,7 +442,10 @@ semantic vectors remain supported at their stated positions.
   pre-4.6 build path: the older runtime DSOs must contain the symbol, while
   every current-R (R >= 4.6) DSO
   audit must prove that it is absent. It is no permission for any other internal
-  R API. Linux, Windows x86-64, and Apple
+  R API. Treat R API predicates as predicates rather than assuming a stable
+  integer typedef: when storing their result, normalize it with an explicit
+  comparison such as `predicate(...) != FALSE`. The pinned old-header compiler
+  matrix is authoritative for signedness and declaration drift. Linux, Windows x86-64, and Apple
   ARM64 remain first-class targets. Corrupt/forged state must error and must
   never cause an out-of-bounds access, stale pointer, double evaluation, or
   segfault.
@@ -997,3 +1000,15 @@ could retain a shared mutable names vector across a hostile top-shell Elt
 callback using `data.table::setnames()`. The candidate is superseded. None of
 its package-byte evidence transfers to a replacement candidate, including the
 completed gates; the partial memory directory is diagnostic evidence only.
+
+The subsequent candidate
+`refs/paradox-release/candidate-20260719T194741Z` at
+`60704fcc6a899c508f5adffbec35bb61723d3704` reached package installation and
+downstream-bridge construction, but its exact R-API gate rejected two direct
+assignments of `Rf_isObject()` to `int` under the pinned R 4.3 and 4.4 headers:
+those headers expose an `Rboolean` return type and strict Clang correctly
+reported the implicit signedness conversion. The in-flight native and runtime
+runs were stopped immediately. Their partial directories, the installed
+candidate, and the bridge overlay are diagnostic only and transfer no release
+conclusion. The replacement normalizes both predicate results explicitly and
+must rerun every package-byte-bound gate.
