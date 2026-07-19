@@ -59,8 +59,9 @@ headers. Version adapters live in `src/r_api_compat.c` and may select equivalent
 APIs, but may not select a different semantic engine. For older supported
 headers, the adapters use the public, documented `FORMALS` and `ATTRIB`
 backports for `R_ClosureFormals`, `ANY_ATTRIB`, `R_getAttribCount`, and
-`R_hasAttrib`; they do not evaluate R-level `formals()` or `attributes()`
-helpers.
+`R_hasAttrib`; raw stored-attribute selection uses `R_mapAttrib()` on R >= 4.6
+and that established `ATTRIB` traversal on R 4.3--4.5. They do not evaluate
+R-level `formals()`/`attributes()` helpers or call data.table code.
 
 There is exactly one exception to the public-API rule. R 4.3--4.5 has no public
 non-forcing classifier for one binding. The public R-level `substitute()`
@@ -158,7 +159,9 @@ workflow's top-level green mark alone.
   snapshot, typed-special ALTREP/pointer-S4 and ParamUty base-`identical()`
   boundaries, exact BASE Object-token receipts and sealed search capabilities,
   ordinary non-ALTREP/non-S4 structural shell rejection, documented tables with
-  exact-class top-level ALTREP shells and semantic ALTREP columns, data.table
+  one shared exact classifier, exact-class top-level ALTREP shells, owned names
+  under reentry, strict cache carriers, count-only ordinary/stable-ALTREP row
+  names, zero-column Design semantics, semantic ALTREP columns, data.table
   facades, and package check;
 - no temporary source-tree detritus that makes a check falsely dirty.
 

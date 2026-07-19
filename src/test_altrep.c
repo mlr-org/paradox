@@ -9,6 +9,7 @@
 #include <limits.h>
 
 #include "paradox.h"
+#include "r_api_compat.h"
 #include <R_ext/Altrep.h>
 #include <R_ext/Rdynload.h>
 #if defined(PARADOX_TEST_GC_ROW_NAMES_ROOTS)
@@ -441,7 +442,7 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
   return wrapper;
 }
 
-SEXP paradox_test_stateful_altrep_rearm(SEXP value, SEXP callback_after) {
+static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
   if (!ALTREP(value) ||
       (!R_altrep_inherits(value, test_string_class) &&
         !R_altrep_inherits(value, test_list_class) &&
@@ -470,6 +471,22 @@ SEXP paradox_test_stateful_altrep_rearm(SEXP value, SEXP callback_after) {
     length_after
   );
   UNPROTECT(1);
+}
+
+SEXP paradox_test_stateful_altrep_rearm(SEXP value, SEXP callback_after) {
+  rearm_stateful_altrep(value, callback_after);
+  return R_NilValue;
+}
+
+SEXP paradox_test_stateful_altrep_row_names_rearm(
+    SEXP table, SEXP callback_after) {
+  PROTECT(table);
+  SEXP row_names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_RowNamesSymbol
+  ));
+  rearm_stateful_altrep(row_names, callback_after);
+  UNPROTECT(2);
   return R_NilValue;
 }
 

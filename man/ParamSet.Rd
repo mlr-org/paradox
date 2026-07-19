@@ -25,11 +25,14 @@ detached from capsule state. Mutating a returned table, list-column, or
 from the ParamSet family is additive only: Paradox core methods, active
 bindings, and private capsule state may not be replaced.
 Interpreted outer list and internal table shells and their structural
-metadata are ordinary non-ALTREP/non-S4 objects. At documented public table
-inputs, an exact-class, allowed-attribute top-level VECSXP ALTREP shell is
-materialized once before the same strict metadata validation. Stable ALTREP
-is supported for admitted semantic atomic values and table columns, with the
-documented \code{set_values(.values=)} list-shell exception described below.
+metadata are ordinary non-ALTREP/non-S4 objects. Documented public table
+inputs share one exact data-frame/data-table classifier. Their names/classes
+and accepted data.table cache carriers are ordinary; raw row names are
+attribute-free, nonobject, non-S4 integer or character vectors whose count,
+not labels, is used. An exact allowed top-level VECSXP ALTREP shell is
+materialized once after names/classes are owned. Stable ALTREP is supported
+for admitted semantic atomic values and table columns, with the documented
+\code{set_values(.values=)} list-shell exception described below.
 }
 \section{S3 methods and type converters}{
 
@@ -385,10 +388,13 @@ replace all values. Default is TRUE.}
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{x}}{(named \code{list()} | \code{data.frame})\cr
-The value(s) to be transformed. The outer list and the data-frame's
-structural names/list metadata must be non-ALTREP/non-S4. An exact-class,
-allowed-attribute top-level VECSXP ALTREP shell is materialized once.
-Admitted semantic atomic leaves or columns may be stable ALTREP.
+The value(s) to be transformed. A non-table outer list remains ordinary
+non-ALTREP/non-S4. A data.frame uses the shared exact public-table
+boundary: row-name structure is validated, but its row count is not
+compared with columns because transformation treats columns as named
+parameter values rather than rows. An allowed top-level VECSXP ALTREP
+is materialized once. Admitted semantic leaves/columns may be stable
+ALTREP.
 A callback result has the same ordinary list-shell
 requirement; there is no R fallback or replay.}
       \item{\code{param_set}}{(\code{ParamSet})\cr
@@ -519,10 +525,10 @@ If \code{x} does not satisfy these, an error will be thrown, given that \code{as
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{x}}{(\code{data.table})\cr
-The values to test. An exact-class, allowed-attribute top-level VECSXP
-ALTREP shell is materialized once; its structural metadata must remain
-ordinary non-ALTREP/non-S4. Admitted semantic atomic columns may be
-stable ALTREP.}
+The values to test. The shared exact public-table boundary applies;
+raw row names supply the row count and must agree with every column.
+An allowed top-level VECSXP ALTREP and admitted stable atomic columns
+are each materialized once.}
       \item{\code{assert_value}}{(\code{logical(1)})\cr
 Whether to verify that \code{x} satisfies the bounds and types given by this \code{ParamSet}.
 Should be \code{TRUE} unless this was already checked before.}
@@ -725,10 +731,11 @@ have fewer columns as there are params in the set.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).
-Its structural names, row/dim/dimnames, and list metadata must be
-ordinary non-ALTREP/non-S4. An exact-class, allowed-attribute top-level
-VECSXP ALTREP shell is materialized once; admitted semantic atomic
-columns may be stable ALTREP.}
+The shared exact public-table boundary applies. Names/classes and
+accepted data.table cache carriers are ordinary; raw integer/character
+row names supply the row count and must agree with every column. An
+allowed top-level VECSXP ALTREP and admitted stable atomic columns are
+each materialized once.}
       \item{\code{check_strict}}{(\code{logical(1)})\cr
 Whether to check that constraints and dependencies are satisfied.}
       \item{\code{presence}}{(\code{character(1)})\cr
@@ -847,11 +854,11 @@ feasible intervals of individual parameters.
       \item{\code{x}}{(\code{matrix} | \code{data.frame} | \code{data.table})\cr
 Values to map. Columns must be unclassed integer or double vectors.
 Column names must be unique and a subset of the parameter IDs.
-All structural names, row, dim, dimnames, and list metadata must be
-ordinary non-ALTREP/non-S4. An exact-class, allowed-attribute top-level
-data-frame/data-table VECSXP ALTREP shell is materialized once. A matrix
-or admitted atomic column may have stable ALTREP semantic storage,
-which native admission materializes once.
+Data frames/data.tables use the shared exact public-table boundary;
+raw row names supply the row count and must agree with every column.
+An allowed top-level VECSXP ALTREP is materialized once. A matrix or
+admitted atomic column may have stable ALTREP semantic storage, which
+native admission materializes once.
 \code{\link[=Domain]{ParamUty}} parameters do not define a quantile mapping.}
     }
     \if{html}{\out{</div>}}

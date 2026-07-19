@@ -11,15 +11,7 @@
 #include "r_utils.h"
 
 SEXP paradox_stored_attribute(SEXP object, SEXP symbol) {
-  SEXP holder = PROTECT(R_MakeExternalPtr(
-    NULL,
-    R_NilValue,
-    R_NilValue
-  ));
-  SHALLOW_DUPLICATE_ATTRIB(holder, object);
-  SEXP result = PROTECT(Rf_getAttrib(holder, symbol));
-  UNPROTECT(2);
-  return result;
+  return paradox_api_raw_attribute(object, symbol);
 }
 
 static int public_table_class_name(SEXP value, const char *expected) {
@@ -27,11 +19,59 @@ static int public_table_class_name(SEXP value, const char *expected) {
     strcmp(CHAR(value), expected) == 0;
 }
 
-static int recognized_public_table_shell(SEXP table) {
-  SEXP classes = PROTECT(Rf_getAttrib(table, R_ClassSymbol));
+static int ordinary_ignored_data_table_metadata(SEXP table) {
+  SEXP self_reference = PROTECT(paradox_api_raw_attribute(
+    table,
+    Rf_install(".internal.selfref")
+  ));
+  SEXP sorted = PROTECT(paradox_api_raw_attribute(
+    table,
+    Rf_install("sorted")
+  ));
+  SEXP index = PROTECT(paradox_api_raw_attribute(
+    table,
+    Rf_install("index")
+  ));
+  const int valid_self_reference = self_reference == R_NilValue ||
+    (TYPEOF(self_reference) == EXTPTRSXP && !Rf_isS4(self_reference) &&
+      !Rf_isObject(self_reference) &&
+      paradox_api_has_no_attributes(self_reference));
+  const int valid_sorted = sorted == R_NilValue ||
+    (TYPEOF(sorted) == STRSXP && !ALTREP(sorted) && !Rf_isS4(sorted) &&
+      !Rf_isObject(sorted) && paradox_api_has_no_attributes(sorted));
+  /* data.table stores secondary-index payloads below attributes of one
+   * ordinary integer(0) carrier. Paradox never consumes those caches: only
+   * the carrier's representation is structural, and it is dropped from the
+   * owned public-input snapshot. */
+  const int valid_index = index == R_NilValue ||
+    (TYPEOF(index) == INTSXP && !ALTREP(index) && !Rf_isS4(index) &&
+      !Rf_isObject(index) && XLENGTH(index) == 0);
+  UNPROTECT(3);
+  return valid_self_reference && valid_sorted && valid_index;
+}
+
+paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
+  if (TYPEOF(table) != VECSXP || Rf_isS4(table)) {
+    return PARADOX_PUBLIC_TABLE_NONE;
+  }
+  SEXP classes = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_ClassSymbol
+  ));
+  SEXP names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_NamesSymbol
+  ));
   const int ordinary_classes = TYPEOF(classes) == STRSXP &&
     !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
     paradox_api_has_no_attributes(classes);
+  /* Base structure(list(), class = "data.frame", row.names = ...) is a
+   * long-standing valid zero-column spelling with no names attribute. The
+   * operation-level length check admits that case only when the shell is
+   * actually empty. */
+  const int ordinary_names = names == R_NilValue ||
+    (TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
+      !Rf_isObject(names) && paradox_api_has_no_attributes(names));
   const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
   const int data_frame = count == 1 && public_table_class_name(
     STRING_ELT(classes, 0),
@@ -50,38 +90,135 @@ static int recognized_public_table_shell(SEXP table) {
   static const char *const table_attributes[] = {
     "names", "row.names", "class", ".internal.selfref", "sorted", "index"
   };
-  const int recognized = (data_frame && paradox_api_has_only_attributes(
+  const int recognized_frame = ordinary_names && data_frame &&
+    paradox_api_has_only_attributes(
       table,
       frame_attributes,
       3
-    )) || (data_table && paradox_api_has_only_attributes(
-      table,
-      table_attributes,
-      6
-    ));
+    );
+  const int recognized_table = ordinary_names && data_table &&
+    paradox_api_has_only_attributes(table, table_attributes, 6) &&
+    ordinary_ignored_data_table_metadata(table);
+  UNPROTECT(2);
+  return recognized_table
+    ? PARADOX_PUBLIC_DATA_TABLE
+    : recognized_frame
+      ? PARADOX_PUBLIC_DATA_FRAME
+      : PARADOX_PUBLIC_TABLE_NONE;
+}
+
+static int public_row_names_count(SEXP row_names, R_xlen_t *row_count) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(row_names);
+  if ((type != INTSXP && type != STRSXP) || Rf_isS4(row_names) ||
+      Rf_isObject(row_names) || !paradox_api_has_no_attributes(row_names)) {
+    return FALSE;
+  }
+
+  R_xlen_t rows;
+  if (ALTREP(row_names)) {
+    /* Modern base R legitimately retains compact integer sequences and
+     * deferred strings as explicit row names. Their labels are irrelevant to
+     * every admitted operation, so select one stable Length and no elements. */
+    rows = XLENGTH(row_names);
+  } else if (type == INTSXP && XLENGTH(row_names) == 2 &&
+      INTEGER_ELT(row_names, 0) == NA_INTEGER) {
+    const int encoded = INTEGER_ELT(row_names, 1);
+    if (encoded == NA_INTEGER) return FALSE;
+    rows = encoded < 0 ? (R_xlen_t) -encoded : (R_xlen_t) encoded;
+  } else {
+    rows = XLENGTH(row_names);
+  }
+  *row_count = rows;
+  return TRUE;
+}
+
+int paradox_public_table_row_count(SEXP table, R_xlen_t *row_count) {
+  if (row_count == NULL) {
+    Rf_error("Internal error: missing public table row-count destination");
+  }
+  SEXP row_names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_RowNamesSymbol
+  ));
+  const int valid = public_row_names_count(row_names, row_count);
   UNPROTECT(1);
-  return recognized;
+  return valid;
+}
+
+SEXP paradox_test_public_row_names_count(SEXP row_names) {
+  PROTECT(row_names);
+  R_xlen_t rows = 0;
+  if (!public_row_names_count(row_names, &rows)) {
+    UNPROTECT(1);
+    Rf_error("Test row-name metadata is invalid");
+  }
+  SEXP result = PROTECT(Rf_ScalarReal((double) rows));
+  UNPROTECT(2);
+  return result;
 }
 
 SEXP paradox_materialize_public_table_shell(SEXP table) {
   if (TYPEOF(table) != VECSXP || !ALTREP(table) || Rf_isS4(table) ||
-      !recognized_public_table_shell(table)) {
+      paradox_public_table_kind(table) == PARADOX_PUBLIC_TABLE_NONE) {
+    return table;
+  }
+
+  /* Select and own interpreted metadata before any callback-capable Length or
+   * Elt observation. SHALLOW_DUPLICATE_ATTRIB is insufficient here: an Elt
+   * callback can mutate a shared names vector in place. */
+  PROTECT(table);
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_NamesSymbol
+  ));
+  SEXP source_classes = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_ClassSymbol
+  ));
+  SEXP source_row_names = PROTECT(paradox_api_raw_attribute(
+    table,
+    R_RowNamesSymbol
+  ));
+  const int names_absent = source_names == R_NilValue;
+  if (!names_absent && (TYPEOF(source_names) != STRSXP ||
+      ALTREP(source_names) || Rf_isS4(source_names) ||
+      Rf_isObject(source_names) ||
+      !paradox_api_has_no_attributes(source_names))) {
+    UNPROTECT(4);
+    return table;
+  }
+  const R_xlen_t name_count = names_absent ? 0 : XLENGTH(source_names);
+  SEXP stable_names = PROTECT(names_absent
+    ? Rf_allocVector(STRSXP, 0)
+    : Rf_duplicate(source_names));
+  SEXP stable_classes = PROTECT(Rf_duplicate(source_classes));
+
+  R_xlen_t rows = 0;
+  if (!public_row_names_count(source_row_names, &rows) || rows > INT_MAX) {
+    UNPROTECT(6);
     return table;
   }
 
   /* Base's attribute-only duplicate wrapper is the common motivating case,
-   * but use only public ALTREP accessors and give every exact documented public
-   * table shell the same one-observation boundary: one Length call followed by
-   * one Elt call per column. Existing operation validators inspect the copied
-   * attributes and columns afterward.
-   */
-  PROTECT(table);
+   * but every admitted shell gets one top-level Length followed by one Elt per
+   * column. Metadata values above already belong to the selected generation. */
   const R_xlen_t count = XLENGTH(table);
+  if (name_count != count) {
+    UNPROTECT(6);
+    return table;
+  }
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
-  /* Select metadata before an Elt accessor can reenter R. Attribute values are
-   * retained exactly; the caller's existing validator decides whether every
-   * structural value is ordinary and admissible. */
-  SHALLOW_DUPLICATE_ATTRIB(result, table);
+  SEXP stable_row_names = PROTECT(Rf_allocVector(
+    INTSXP,
+    rows == 0 ? 0 : 2
+  ));
+  if (rows != 0) {
+    SET_INTEGER_ELT(stable_row_names, 0, NA_INTEGER);
+    SET_INTEGER_ELT(stable_row_names, 1, -(int) rows);
+  }
+  Rf_setAttrib(result, R_NamesSymbol, stable_names);
+  Rf_setAttrib(result, R_RowNamesSymbol, stable_row_names);
+  Rf_setAttrib(result, R_ClassSymbol, stable_classes);
   for (R_xlen_t column = 0; column < count; ++column) {
     if (column != 0 &&
         column % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
@@ -91,7 +228,7 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
     SET_VECTOR_ELT(result, column, value);
     UNPROTECT(1);
   }
-  UNPROTECT(2);
+  UNPROTECT(8);
   return result;
 }
 

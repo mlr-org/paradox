@@ -131,9 +131,11 @@ semantic vectors remain supported at their stated positions.
   cargo entries, class/name vectors, row containers, dimnames and other list
   metadata. A narrow documented public-table ingress may first materialize an
   exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
-  lazy attribute-only duplicate is the common motivating case. Its structural
-  metadata then follows this same strict rule. Admitted semantic atomic leaves
-  and columns may be stable ALTREP and are materialized once.
+  lazy attribute-only duplicate is the common motivating case. Public-table
+  names/classes and ignored data.table cache carriers remain strict ordinary
+  structure, while row names have the count-only integer/character exception
+  specified below. Admitted semantic atomic leaves and columns may be stable
+  ALTREP and are materialized once.
   In particular, the outer `special_vals` list, its names, and list metadata
   are structural for every Domain kind and must be ordinary non-ALTREP/non-S4.
   `ParamDbl`, `ParamInt`, `ParamFct`, and `ParamLgl` reject an ALTREP
@@ -352,20 +354,46 @@ semantic vectors remain supported at their stated positions.
   space and transformation list shells, ParamSet constructor `params` lists,
   Domain/Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo
   entries, internal table shells, rows, dimnames, class/name vectors, and other
-  list metadata. At documented public `data.frame`/`data.table` inputs, the one
-  structural exception is an exact-class top-level VECSXP ALTREP carrying only
-  the attributes allowed for that table class. Native admission captures its
-  attributes before element observation, calls Length once and Elt once per
-  column to materialize the shell, preserves column identities, and then runs
-  the existing strict table validator. Base R's lazy attribute-only duplicate
-  is the common motivating case; the contract does not depend on its current
-  internal width threshold. Table metadata remains ordinary non-ALTREP/non-S4,
-  while admitted semantic atomic columns may be stable ALTREP. This exception
-  applies only to `check_dt`,
-  `test_constraint_dt`, `qunif`, public `trafo` input, and the two Design table
-  operations; it does not admit ALTREP capsule, Domain, Condition, TuneToken,
-  row, callback-result, or general list shells. Direct checked or unchecked
-  `$values <-` assignment rejects an outer
+  list metadata. One shared native classifier governs the six public-table
+  ingresses: `check_dt`, `test_constraint_dt`, `qunif`, data-frame `trafo`
+  input, `Design$transpose()`, and Design dependency planning. It admits only
+  exact `"data.frame"` or `c("data.table", "data.frame")` classes and the
+  attributes allowed for that class. Names and classes are ordinary,
+  attribute-free character vectors; the historical zero-column
+  `structure(list(), class = "data.frame", row.names = ...)` spelling may omit
+  names. A data.table's optional `.internal.selfref` is an attribute-free,
+  non-S4, nonobject external pointer; `sorted` is an attribute-free ordinary
+  character vector; and `index` is an ordinary non-S4, nonobject integer(0)
+  carrier. Attributes
+  below that `index` carrier are uninspected cache payload. All three carriers
+  are discarded; Paradox never consumes their cache contents.
+
+  The raw `row.names` value is an integer or character vector that is non-S4,
+  non-object, and attribute-free. Ordinary compact `c(NA_integer_, -n)` and
+  `c(NA_integer_, n)` encodings are decoded. A stable integer or character
+  ALTREP row-name vector is observed with one Length and no Elt calls because
+  labels are irrelevant to all six operations. Row-consuming paths compare
+  that count with their admitted columns. Direct `trafo` and dependency
+  planning with no dependency rows validate row-name structure but do not add
+  column observations solely to compare an otherwise unused dimension. A
+  zero-column data.frame retains its row count: `Design$transpose()` returns
+  one empty configuration for each row, while an unclassed empty list still
+  represents zero rows.
+
+  An exact admitted top-level VECSXP ALTREP shell is materialized once. Native
+  admission owns names and classes before any callback-capable row-name Length
+  or top-shell Length/Elt observation, calls top-shell Length once and Elt once
+  per column, preserves column identities, canonicalizes captured row names by
+  count, and drops ignored data.table caches. Base R's lazy attribute-only
+  duplicate is the common motivating case; the contract does not depend on its
+  current internal width threshold. Admitted semantic atomic columns may be
+  stable ALTREP. Package-owned capsule tables and returned facades keep
+  canonical ordinary metadata; this input exception does not admit ALTREP
+  capsule, Domain, Condition, TuneToken, row, callback-result, or general list
+  shells. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the
+  established `ATTRIB` traversal backport on R 4.3--4.5. Neither path invokes R
+  or data.table fallback logic. Direct checked or unchecked `$values <-`
+  assignment rejects an outer
   ALTREP before observation and canonicalizes the accepted Paradox-1 empty
   spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
   vector, or an accepted empty list container) to a named list in C.
@@ -381,7 +409,7 @@ semantic vectors remain supported at their stated positions.
   admission is unsupported: its printed representation need not agree with the
   admitted value, but it must be rejected or handled without replay or Paradox
   itself causing a crash or memory corruption. Capsules never permanently
-  store semantic ALTREP vectors; compact data-frame row names are the
+  store semantic ALTREP vectors; canonical compact data-frame row names are the
   representation-only exception. This general support does not override the
   typed-Domain rule above: an ALTREP special-value leaf for Dbl/Int/Fct/Lgl is
   rejected rather than observed; an admitted S4 special matches only by pointer
@@ -622,6 +650,15 @@ library.
   coverage. Under release steering this is not low-hanging. Retain the landed
   low-risk wins; the batch design may be revisited as an internal optimization
   without another compatibility or API break.
+- Keep the shared public-table classifier and row-count admission explicit at
+  each ingress. The final bounded audit found representative hardened paths
+  flat to 2.8% faster than the superseded candidate; deliberately minimal
+  keyed/indexed data.table paths paid only 0.6--1.1 microseconds. Repeated
+  symbol lookup costs under 79 ns per table and a complete keyed/indexed
+  classifier costs under 0.47 microseconds, so cached symbols or plumbing a
+  prior classification through six operations is not release-worthy
+  low-hanging fruit. The exact DSO identities, allocation result, method, and
+  raw evidence paths are recorded in `benchmarks/README.md`.
 - CHARSXP equality uses pointer identity first. Equal UTF-8, Latin-1, or bytes
   encodings may compare their stored bytes; native-encoded strings may do so
   only when both are ASCII. Mixed encodings and non-ASCII native strings must
@@ -806,9 +843,14 @@ The package suite must directly cover, before downstream packages are used:
   replay or Paradox-caused crash/memory corruption; interpreted ParamSet
   `params`, non-table trafo input/result, Domain cargo, internal table,
   dimnames, and list metadata shells reject ALTREP/S4 before semantic
-  observation, while the documented public-table top shell is materialized
-  once before the same strict metadata/column validation and admitted atomic
-  leaves and columns remain supported;
+  observation, while the six documented public-table ingresses share one exact
+  classifier. Coverage includes allowed data.table cache-carrier shapes and
+  cache disposal, missing/S4/attributed/mismatched row names, compact positive
+  and negative counts, stable integer/character ALTREP row names with one
+  Length and no Elt, shared mutable names under top-shell Elt reentry, and
+  row-consuming versus non-row-consuming dimension checks. The public-table
+  top shell is materialized once and admitted atomic leaves and columns remain
+  supported;
 - detached data.table facades, documented data.frame/data.table input including
   exact-class top-level ALTREP shells and base R's lazy duplicate, stable
   semantic ALTREP columns, and public mutation isolation;
@@ -944,3 +986,14 @@ and `check_dt()` rejected that common representation. Its unsealed benchmark
 is defect evidence, not a performance result. The replacement design
 materializes exact public-table ALTREP shells once at the six documented
 ingresses and does not weaken general structural admission.
+
+The replacement candidate
+`refs/paradox-release/candidate-20260719T175053Z` at
+`4f28327f894fe17324410a45cabaf7221e6eca45` passed its exact-byte native,
+R-API, runtime, differential, and downstream-bridge gates. Its memory run was
+stopped and left unsealed when adversarial review found that the shared table
+boundary still admitted missing, S4, or dimension-mismatched `row.names` and
+could retain a shared mutable names vector across a hostile top-shell Elt
+callback using `data.table::setnames()`. The candidate is superseded. None of
+its package-byte evidence transfers to a replacement candidate, including the
+completed gates; the partial memory directory is diagnostic evidence only.

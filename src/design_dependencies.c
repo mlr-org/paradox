@@ -93,41 +93,11 @@ static int ordinary_design_shell(SEXP data) {
   if (!Rf_isObject(data)) {
     valid_shell = paradox_api_has_only_attributes(data, names_only, 1);
   } else {
-    SEXP classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
-    const int ordinary_classes = TYPEOF(classes) == STRSXP &&
-      !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
-      paradox_api_has_no_attributes(classes);
-    const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
-    const int data_frame = count == 1 && paradox_domain_string_is(
-      STRING_ELT(classes, 0),
-      "data.frame"
-    );
-    const int data_table = count == 2 && paradox_domain_string_is(
-        STRING_ELT(classes, 0),
-        "data.table"
-      ) && paradox_domain_string_is(
-        STRING_ELT(classes, 1),
-        "data.frame"
-      );
-    static const char *const frame_attributes[] = {
-      "names", "row.names", "class"
-    };
-    static const char *const table_attributes[] = {
-      "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-    };
-    valid_shell = (data_frame && paradox_api_has_only_attributes(
-      data,
-      frame_attributes,
-      3
-    )) || (data_table && paradox_api_has_only_attributes(
-      data,
-      table_attributes,
-      6
-    ));
-    UNPROTECT(1);
+    valid_shell = paradox_public_table_kind(data) !=
+      PARADOX_PUBLIC_TABLE_NONE;
   }
   if (!valid_shell) return FALSE;
-  SEXP names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  SEXP names = PROTECT(paradox_api_raw_attribute(data, R_NamesSymbol));
   const int valid_names = names == R_NilValue
     ? XLENGTH(data) == 0
     : TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
@@ -312,15 +282,15 @@ static void load_param_state(SEXP param_set, SEXP private,
 
 static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
     SEXP roots, R_xlen_t *work_since_interrupt) {
-  if (!ordinary_design_shell(data)) {
-    Rf_error("Design$data must be a list-like data frame");
-  }
   const R_xlen_t column_count = XLENGTH(data);
   if (column_count != snapshot->parameter_count) {
     Rf_error("Design$data must have one column for every parameter");
   }
 
-  SEXP source_names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(
+    data,
+    R_NamesSymbol
+  ));
   snapshot->data_names = PROTECT(snapshot_string_vector(
     source_names,
     "Design column names",
@@ -335,17 +305,25 @@ static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
   SET_VECTOR_ELT(roots, 2, snapshot->data_names);
   SET_VECTOR_ELT(roots, 3, snapshot->columns);
 
+  const int table_input = Rf_isObject(data);
   snapshot->row_count = 0;
+  if (table_input &&
+      !paradox_public_table_row_count(data, &snapshot->row_count)) {
+    UNPROTECT(3);
+    Rf_error("Design$data has invalid data.frame row names");
+  }
   for (R_xlen_t column = 0; column < column_count; ++column) {
     paradox_domain_account_work(work_since_interrupt);
     SEXP source = PROTECT(VECTOR_ELT(data, column));
     SEXP frozen = PROTECT(snapshot_column(source, work_since_interrupt));
     const R_xlen_t rows = XLENGTH(frozen);
-    if (column != 0 && rows != snapshot->row_count) {
+    if (rows != snapshot->row_count && (table_input || column != 0)) {
       UNPROTECT(5);
-      Rf_error("Design$data columns have inconsistent lengths");
+      Rf_error(column == 0
+        ? "Design$data has invalid data.frame row names"
+        : "Design$data columns have inconsistent lengths");
     }
-    if (column == 0) {
+    if (!table_input && column == 0) {
       snapshot->row_count = rows;
     }
     SET_VECTOR_ELT(snapshot->columns, column, frozen);
@@ -761,6 +739,13 @@ SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
     &work_since_interrupt
   );
   if (snapshot.dependency_count == 0) {
+    if (Rf_isObject(data)) {
+      R_xlen_t ignored_rows = 0;
+      if (!paradox_public_table_row_count(data, &ignored_rows)) {
+        UNPROTECT(5);
+        Rf_error("Design$data has invalid data.frame row names");
+      }
+    }
     SEXP result = PROTECT(empty_output());
     UNPROTECT(6);
     return result;

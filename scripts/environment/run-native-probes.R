@@ -830,6 +830,69 @@ main <- function() {
       check(is.null(return_value) && identical(observed, 1L) &&
         identical(callbacks, 1L), "ALTREP rearm operation differs")
     },
+    direct_test_stateful_altrep_row_names_rearm = function() {
+      callbacks <- 0L
+      outer <- NULL
+      row_names <- stateful(
+        c("row-a", "row-b"),
+        c("later-a", "later-b"),
+        callback = function() {
+          callbacks <<- callbacks + 1L
+          data.table::setnames(outer, c("mutated_y", "mutated_x"))
+          invisible(gc())
+        }
+      )
+      frame <- structure(
+        list(x = c(1L, 2L), y = c(3L, 4L)),
+        names = c("x", "y"),
+        row.names = row_names,
+        class = "data.frame"
+      )
+      outer <- frame
+      return_value <- .Call(
+        symbol("test_stateful_altrep_row_names_rearm"),
+        outer,
+        c(NA_integer_, 0L)
+      )
+      rows <- .Call(symbol("design_transpose"), outer, FALSE)
+      check(is.null(return_value) && identical(callbacks, 1L) &&
+        identical(names(outer), c("mutated_y", "mutated_x")) &&
+        identical(names(rows[[1L]]), c("x", "y")),
+        "row-name Length reentry escaped owned table metadata")
+    },
+    direct_test_public_row_names_count = function() {
+      callbacks <- 0L
+      value <- stateful(
+        c("row-a", "row-b"),
+        c("later-a", "later-b", "later-c"),
+        length_switch_after = 1L,
+        callback = function() {
+          callbacks <<- callbacks + 1L
+          invisible(gc())
+        },
+        callback_after = c(0L, 0L)
+      )
+      result <- .Call(symbol("test_public_row_names_count"), value)
+      check(identical(result, 2) && identical(callbacks, 1L),
+        "public row-name metadata was replayed or inspected by label")
+    },
+    direct_test_materialize_public_table_shell = function() {
+      table <- data.table::data.table(x = c(2L, 1L), y = c(1L, 2L))
+      data.table::setkeyv(table, "x")
+      data.table::setindexv(table, "y")
+      outer <- stateful(table, table)
+      result <- .Call(symbol("test_materialize_public_table_shell"), outer)
+      check(identical(names(result), c("x", "y")) &&
+        identical(class(result), c("data.table", "data.frame")) &&
+        is.null(attr(result, ".internal.selfref", exact = TRUE)) &&
+        is.null(attr(result, "sorted", exact = TRUE)) &&
+        is.null(attr(result, "index", exact = TRUE)) &&
+        identical(data.table::address(result[[1L]]),
+          data.table::address(table[[1L]])) &&
+        identical(data.table::address(result[[2L]]),
+          data.table::address(table[[2L]])),
+        "public-table materialization retained caches or changed columns")
+    },
     direct_test_gc_column_mutator = function() {
       table <- list(x = 1L)
       pointer <- .Call(symbol("test_gc_column_mutator"), table, 0L, 2L)

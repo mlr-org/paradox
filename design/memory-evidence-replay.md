@@ -32,9 +32,13 @@ kernels, values/checks, callbacks/reentry, stable/base ALTREP materialization,
 hostile custom-ALTREP rejection/admission safety, public table construction,
 ordinary non-ALTREP/non-S4 structural rejection for configuration/search/trafo
 and ParamSet-`params` lists, Domain/Condition/token/capsule/internal-table
-shells, cargo, dimnames, and list metadata, one-shot normalization of base R's
-stable public-table lazy wrapper, direct checked/unchecked assignment rejection
-before shell observation, the sole `set_values(.values=)` shell snapshot,
+shells, cargo, dimnames, and list metadata, the shared six-ingress public-table
+classifier, cache-carrier disposal, row-name form/count admission (including
+one-Length/no-Elt stable ALTREP), one-shot normalization of base R's stable
+public-table lazy wrapper, ownership of names before hostile Elt reentry,
+zero-column data.frame row preservation, direct checked/unchecked assignment
+rejection before shell observation, the sole `set_values(.values=)` shell
+snapshot,
 subset/collection/shadow, live and detached collection callback plans and
 their native evaluator, standalone Condition operand materialization and
 reentry, dependency-only checking, scalar/two-phase table constraint-only
@@ -88,8 +92,10 @@ structural ALTREP/S4 rejection (including every outer `special_vals` list),
 typed-special ALTREP rejection, typed S4 special
 pointer identity, opaque ParamUty S4 leaves and base-`identical()` special
 membership without dispatch in supported Domain/value operations, documented
-data.frame/data.table inputs with exact-class top-level ALTREP shells and stable
-semantic ALTREP columns, exact
+data.frame/data.table inputs with exact-class top-level ALTREP shells, ordinary
+discarded cache carriers, hostile shared-name mutation, malformed/mismatched
+and stable ALTREP row names, zero-column table counts, and stable semantic
+ALTREP columns, exact
 BASE-only ParamSet
 content, safe genuine-core aliases, candidate mutation during receipt lifetime,
 sealed search capabilities, serialization, clone, and explicit legacy upgrades.

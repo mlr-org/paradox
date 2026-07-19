@@ -66,5 +66,8 @@ param_set_adopt_subset_state	2	production	production-dynamic	direct_param_set_ad
 test_checked_affixed_size	2	fixture	fixture-dynamic	direct_test_checked_affixed_size	Internal arithmetic-boundary fixture is called dynamically
 test_stateful_altrep	6	fixture	fixture-dynamic	direct_test_stateful_altrep,hazard_altrep_snapshot_reentry,hazard_callback_reentry_rooting	Internal ALTREP constructor drives direct and callback hazards
 test_stateful_altrep_rearm	2	fixture	fixture-dynamic	direct_test_stateful_altrep_rearm	Internal ALTREP rearm operation is called dynamically
+test_stateful_altrep_row_names_rearm	2	fixture	fixture-dynamic	direct_test_stateful_altrep_row_names_rearm	Internal fixture rearms the raw retained row-name ALTREP so metadata-ownership ordering can be tested without R accessor normalization
+test_public_row_names_count	1	fixture	fixture-dynamic	direct_test_public_row_names_count	Internal parser fixture proves that deferred explicit row names contribute one selected length and no label reads
+test_materialize_public_table_shell	1	fixture	fixture-dynamic	direct_test_materialize_public_table_shell	Internal direct entry proves that an admitted lazy public-table shell owns metadata and drops ignored data.table cache carriers
 test_gc_column_mutator	3	fixture	fixture-dynamic	direct_test_gc_column_mutator,hazard_finalizer_column_mutation	Internal finalizer fixture is called and its finalizer is forced
 test_tune_token_gc_mutation_snapshot	3	fixture	fixture-dynamic	direct_test_tune_token_gc_mutation_snapshot	Internal fixture makes a finalizer mutate TuneToken content during its exact native snapshot

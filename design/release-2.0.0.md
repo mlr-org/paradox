@@ -16,8 +16,11 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 ## Decisions frozen for the first public release
 
 - Version is 2.0.0; R >= 4.3; portable C17; data.table >= 1.18.4.
-- R C API use is public except for one centralized R < 4.6 compatibility call:
-  `src/r_api_compat.c` declares/calls exported `Rf_findVarInFrame`, rejects
+- R C API use is public except for one centralized R < 4.6 compatibility call.
+  Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the established
+  `ATTRIB` traversal on R 4.3--4.5 without evaluating R or data.table code. The
+  sole exception is separate from that adapter: `src/r_api_compat.c`
+  declares/calls exported `Rf_findVarInFrame`, rejects
   `PROMSXP`, and R >= 4.6 instead uses the documented experimental API
   `R_GetBindingType`. R 4.3--4.5 has no public non-forcing binding classifier,
   so an R-level `substitute()`
@@ -97,11 +100,19 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   positions. Configuration/search-space/trafo and ParamSet-`params` lists,
   internal table/row/Domain/Condition/token/capsule shells, Domain cargo/
   interpreted cargo entries, dimnames, class/name vectors, and other list
-  metadata remain ordinary non-ALTREP/non-S4. Documented public
-  data.frame/data.table inputs additionally normalize an exact-class,
-  allowed-attribute top-level VECSXP ALTREP once before strict structural
-  validation and may carry stable semantic ALTREP columns. Base R's lazy
-  attribute-copy duplicate is the common motivating case. Direct
+  metadata remain ordinary non-ALTREP/non-S4. The six public-table ingresses
+  use one exact-class/allowed-attribute classifier. Names/classes and admitted
+  data.table cache carriers are ordinary; caches are discarded. Raw row names
+  are attribute-free, nonobject, non-S4 integer/character vectors: ordinary
+  compact `+/-n` forms decode to their count, while stable row-name ALTREP pays
+  one Length and no Elt. Row-consuming operations compare this count with their
+  columns; direct `trafo` and a no-edge Design dependency plan do not add
+  column observations for an unused dimension. A zero-column data.frame may
+  omit names and retains its row count in Design transpose. Exact top-level
+  VECSXP ALTREP snapshots own names/class before callback-capable observation,
+  use one Length/one Elt per column, and may retain stable semantic ALTREP
+  columns. Base R's lazy attribute-copy duplicate is the common motivating
+  case. Direct
   checked/unchecked `$values <-` rejects an outer ALTREP before observation and
   natively canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary
   attribute-free zero-length atomic/expression vector, or an accepted empty
@@ -247,8 +258,9 @@ not a local compatibility workaround.
 - [x] all tests that assert superseded private/sentinel/S3 behavior are removed
   or rewritten, with preserved ordinary behavior still covered;
 - [ ] complete capsule, graph, callback/reentry, structural-versus-semantic
-  ALTREP/S4, direct-assignment versus `set_values(.values=)`, ordinary table/
-  semantic-column, data.table facade, corruption, serialization, exact-
+  ALTREP/S4, direct-assignment versus `set_values(.values=)`, shared public-
+  table classifier/row-name/cache/name-reentry, semantic-column, data.table
+  facade, zero-column Design, corruption, serialization, exact-
   TuneToken/receipt/capability, and upgrade contract suite passes on the final
   frozen candidate (the prior suite and current affected development tests are
   green);
@@ -568,3 +580,15 @@ top-level base `wrap_list` ALTREP, which `check_dt()` rejected. The benchmark
 remains deliberately unsealed. This candidate and every package-byte-bound
 result for it are superseded; the retained evidence explains the replacement
 public-table snapshot boundary but cannot be promoted to the new candidate.
+
+The next candidate,
+`refs/paradox-release/candidate-20260719T175053Z`, commit
+`4f28327f894fe17324410a45cabaf7221e6eca45`, passed its exact-byte native,
+R-API, runtime, differential, and downstream-bridge gates. Its memory run was
+stopped and deliberately left unsealed after adversarial review found two
+release blockers in the shared public-table path: missing, S4, and
+dimension-mismatched `row.names` were not consistently rejected, and a hostile
+top-shell Elt callback could mutate a still-shared names vector with
+`data.table::setnames()`. This candidate is superseded. No completed or partial
+package-byte evidence from it transfers to a replacement candidate; the
+unsealed memory run is retained only as diagnostic history.

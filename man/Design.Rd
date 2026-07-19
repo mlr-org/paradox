@@ -7,11 +7,14 @@
 A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
 by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
-The public table has ordinary non-ALTREP/non-S4 structural
-names/row/dim/dimnames/list metadata. Native Design operations materialize
-an exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
-lazy attribute-only duplicate is the common case. Admitted semantic atomic
-columns may be stable ALTREP and are likewise materialized once.
+Design operations use Paradox's shared exact data-frame/data-table boundary.
+Names, classes, and accepted data.table cache carriers are ordinary
+structure. Raw row names are attribute-free, nonobject, non-S4 integer or
+character vectors; compact counts and stable ALTREP lengths are supported,
+but row labels are not interpreted. An exact allowed top-level VECSXP ALTREP
+shell is materialized once after names/classes are owned; semantic atomic
+columns may likewise be stable ALTREP. Package-created tables retain
+canonical ordinary metadata.
 }
 \section{Public fields}{
   \if{html}{\out{<div class="r6-fields">}}
@@ -19,9 +22,9 @@ columns may be stable ALTREP and are likewise materialized once.
     \item{\code{param_set}}{(\link{ParamSet}).}
 
     \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored data.table shell. An exact-class, allowed-attribute top-level
-VECSXP ALTREP is accepted once. Semantic atomic columns may be stable
-ALTREP; structural metadata may not.}
+Stored data.table shell. The shared exact public-table boundary and its
+count-only row-name rules apply. An allowed top-level VECSXP ALTREP is
+accepted once, and semantic atomic columns may be stable ALTREP.}
   }
   \if{html}{\out{</div>}}
 }
@@ -50,8 +53,8 @@ ALTREP; structural metadata may not.}
     \describe{
       \item{\code{param_set}}{(\link{ParamSet}).}
       \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}. Structural metadata must be ordinary non-ALTREP/non-S4;
-an exact-class, allowed-attribute top-level VECSXP ALTREP is accepted
+Stored \code{data}. The shared exact public-table boundary and its count-only
+row-name rules apply. An allowed top-level VECSXP ALTREP is accepted
 once, and admitted semantic atomic columns may be stable ALTREP.}
       \item{\code{remove_dupl}}{(\code{logical(1)})\cr
 Remove duplicates?}
@@ -105,10 +108,12 @@ Remove duplicates?}
   Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
 and possibly calls the \code{trafo} function of the \link{ParamSet}.
-The stored table must continue to satisfy the documented public-table
-boundary: an exact-class, allowed-attribute top-level VECSXP ALTREP is
-materialized once, structural metadata remains ordinary, and admitted
-stable ALTREP atomic columns are materialized once.
+The stored table must continue to satisfy the shared public-table
+boundary. Its captured row-name count must match its columns. A
+zero-column data.frame retains that count, so this method returns one
+empty configuration per row; an unclassed empty list represents zero
+rows. An allowed top-level VECSXP ALTREP and stable atomic columns are
+each materialized once.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}

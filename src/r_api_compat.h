@@ -23,6 +23,12 @@ attribute_hidden int paradox_api_has_only_attributes(
   size_t allowed_count
 );
 
+/* Return the stored attribute value without R's special row.names expansion.
+ * R >= 4.6 provides a public iterator. Older supported R versions use the
+ * documented ATTRIB traversal compatibility spelling already confined to this
+ * facade. The returned value is unprotected and remains owned by `value`. */
+attribute_hidden SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol);
+
 /* Select one ordinary frame binding without forcing a promise. R >= 4.6 has
  * the documented experimental binding-classification API. R 4.3--4.5 has no
  * public equivalent; the compatibility branch uses the declared/exported

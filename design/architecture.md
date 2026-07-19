@@ -99,14 +99,28 @@ Condition/TuneToken/capsule shell, ParamSet constructor `params` list,
 transformation input/result shell, Domain cargo container/interpreted cargo
 entry, row, dimnames, class/name vector, and other list metadata object is
 ordinary non-ALTREP and non-S4, except for the top-level shell of a documented
-public table input. One shared boundary admits an exact-class, allowed-attribute
-VECSXP ALTREP, captures its attributes before element observation, and copies
-the spine with one Length and one Elt call per column while retaining column
-identities. Each operation then applies its existing strict validator. Base R's
-lazy attribute-only duplicate is the common motivating case, but the contract
-does not depend on its implementation threshold. Structural metadata remains
-ordinary and admitted semantic atomic columns may be stable ALTREP;
-canonical capsule columns are their owned ordinary snapshots. Opaque leaves
+public table input. One shared classifier serves `check_dt`,
+`test_constraint_dt`, `qunif`, data-frame `trafo`, Design transpose, and Design
+dependency planning. It admits only exact data.frame/data.table classes and
+their allowed attributes. Names/classes and data.table cache carriers are
+ordinary structure; ignored `.internal.selfref`, `sorted`, and `index` carriers
+are discarded. Raw row names are attribute-free, nonobject, non-S4 integer or
+character vectors. Ordinary compact positive/negative counts are decoded, and
+a stable integer/character ALTREP row-name vector contributes one Length and no
+Elt because its labels are ignored.
+
+An exact admitted top-level VECSXP ALTREP is copied with one Length and one Elt
+per column while retaining column identities. Names and classes are owned
+before callback-capable row-name or top-shell observation, and the owned shell
+gets canonical row names from the captured count. Row-consuming operations
+compare this count with admitted column lengths; direct `trafo` and a no-edge
+Design dependency plan do not observe columns merely to compare an unused
+dimension. A zero-column data.frame may omit names and retains its row count,
+so Design transpose emits one empty configuration per row; an unclassed empty
+list remains zero rows. Base R's lazy attribute-only duplicate is the common
+top-shell case, but the contract does not depend on its implementation
+threshold. Admitted semantic atomic columns may be stable ALTREP; canonical
+capsule columns and facade metadata remain ordinary owned snapshots. Opaque leaves
 such as ParamUty values, environments, and
 external pointers are rooted but not recursively copied or interpreted.
 ParamUty value/default/init/special leaves are the opaque S4 exception, with
@@ -435,9 +449,9 @@ rather than constructing and collapsing an R list of every dependency error.
 
 `ParamSet$test_constraint()` and `$test_constraint_dt()` are registered native
 boundaries over the same graph plan, point initializer, and constraint kernel.
-The table operation first materializes an exact-class, allowed-attribute
-top-level VECSXP ALTREP once if present, then requires the same exact data.table
-class and ordinary non-S4, non-ALTREP structural dim/dimnames/list metadata. Its
+The table operation enters the shared public-table classifier/materializer,
+then requires the exact data.table class. Names, class, and cache carriers are
+strict ordinary structure; row names use the shared count-only rule. Its
 admitted semantic atomic columns may be stable ALTREP. When value assertion is enabled,
 it admits every row before executing any constraint callback; a
 ParamUty custom check may run as part of that preceding Domain-value admission.
@@ -519,10 +533,12 @@ turn interpreted structure into a materialization surface: configuration/
 search-space and transformation list shells, ParamSet `params` lists, Domain/
 Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo entries,
 internal table/row shells, dimnames, class/name vectors, and list metadata must
-be ordinary non-ALTREP/non-S4 objects. A documented public
-data.frame/data.table ingress materializes an exact-class, allowed-attribute
-top-level VECSXP ALTREP once before its existing strict validation; admitted
-atomic columns may be stable ALTREP. Direct
+be ordinary non-ALTREP/non-S4 objects. The six documented public-table
+ingresses use the single classifier and ownership sequence above: exact-class
+top-shell ALTREP is copied once, names/classes are owned before callback-capable
+observation, data.table cache carriers are checked then ignored, and row names
+use the narrow count-only integer/character rule. Admitted atomic columns may
+be stable ALTREP. Direct
 checked/unchecked `$values <-` rejects an outer ALTREP before observation and
 canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary attribute-free
 zero-length atomic/expression vector, or an accepted empty list container) to a
@@ -551,10 +567,12 @@ sandboxed by Paradox and is outside this guarantee.
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
   planners and kernels over capsule state;
 - `src/r_utils.c` and `src/r_api_compat.c`: small R-API ownership and version
-  adapters, never alternate semantics. Older supported R releases use the
-  documented public `FORMALS` and `ATTRIB` backports for newer closure/attribute
-  inspection APIs; these adapters never evaluate `formals()`, `attributes()`,
-  or another R helper. The sole non-public compatibility exception is also
+  adapters, never alternate semantics. Raw stored-attribute selection uses
+  `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
+  4.3--4.5; older supported R releases also use the documented public `FORMALS`
+  backport for newer closure inspection. These adapters never evaluate
+  `formals()`, `attributes()`, or another R/data.table helper. The sole
+  non-public compatibility exception is also
   centralized here: for R < 4.6, one declared/exported
   `Rf_findVarInFrame` call supplies the non-forcing ordinary-binding lookup and
   rejects `PROMSXP`; R >= 4.6 uses the documented experimental API

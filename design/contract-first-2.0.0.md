@@ -706,17 +706,49 @@ transformation list shells, ParamSet constructor `params` lists, Domain/
 Condition/TuneToken/capsule shells, Domain cargo containers and interpreted
 cargo entries, internal table shells, row containers, class/name vectors,
 dimnames, and other list metadata are interpreted structure and must be
-ordinary non-ALTREP and non-S4 objects. At documented public `data.frame` and
-`data.table` ingresses, the native boundary admits an exact-class top-level
-VECSXP ALTREP carrying only the attributes allowed for that table class. It
-captures attributes before element observation, calls Length once and Elt once
-per column, preserves column identities, and then applies the unchanged strict
-table validator. Base R's lazy attribute-only duplicate is the common
-motivating case; admission does not depend on its current internal width
-threshold. Structural names/classes/row metadata remain ordinary
-non-ALTREP/non-S4, while admitted
-semantic atomic columns may be stable ALTREP. This narrow table exception does
-not extend to general list, row, callback-result, or package-state shells.
+ordinary non-ALTREP and non-S4 objects. The six documented public-table
+ingresses—`check_dt`, `test_constraint_dt`, `qunif`, data-frame `trafo` input,
+`Design$transpose()`, and Design dependency planning—share one native
+classifier. It accepts only exact `"data.frame"` or
+`c("data.table", "data.frame")` classes and the allowed attributes for that
+class. Names and classes are ordinary, attribute-free character vectors. An
+empty `structure(list(), class = "data.frame", row.names = ...)` may omit its
+names attribute, preserving the base-compatible zero-column spelling.
+
+A data.table's optional `.internal.selfref` is an attribute-free, non-S4,
+nonobject external pointer; `sorted` is an attribute-free ordinary character
+vector; and `index` is an ordinary non-S4, nonobject integer(0) carrier. Any
+attributes below that `index` carrier are uninspected data.table cache payload.
+Paradox never consumes a key, index, or self-reference cache; all three
+carriers are discarded from an owned ALTREP-shell snapshot and ignored by an
+ordinary-shell semantic snapshot. Package-owned capsule tables and outward
+facades continue to use canonical ordinary metadata and never retain this
+ingress exception.
+
+The raw `row.names` attribute is a non-S4, non-object, attribute-free integer
+or character vector. Ordinary compact `c(NA_integer_, -n)` and
+`c(NA_integer_, n)` forms decode to `n`; other ordinary values contribute only
+their length. Stable integer and character ALTREP row names are admitted with
+one Length observation and no Elt observation because labels have no semantics
+for these operations. Each row-consuming path compares the captured count with
+its admitted columns. Direct `trafo` and Design dependency planning when there
+are no dependency rows validate the row-name structure but do not observe
+columns merely to authenticate an unused dimension. A zero-column data.frame
+therefore retains its declared rows: `Design$transpose()` produces one empty
+configuration per row, whereas an unclassed empty list still represents zero
+rows.
+
+An admitted exact-class top-level VECSXP ALTREP is materialized once. Native
+admission owns names and classes before a callback-capable row-name Length or
+top-shell Length/Elt observation, calls top-shell Length once and Elt once per
+column, preserves column identities, canonicalizes row names from the captured
+count, and drops ignored data.table caches. Base R's lazy attribute-only
+duplicate is the common motivating case; admission does not depend on its
+current internal width threshold. Semantic atomic columns may themselves be
+stable ALTREP. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and an
+`ATTRIB` traversal on R 4.3--4.5; neither route evaluates R code, calls
+data.table, or supplies a fallback engine. This narrow table exception does not
+extend to general list, row, callback-result, or package-state shells.
 Direct checked and unchecked `$values <-` reject an outer ALTREP
 shell before observing its length, names, or elements. They canonicalize the
 Paradox-1 clear-values spellings—`NULL`, an ordinary attribute-free zero-length
@@ -913,9 +945,12 @@ The package suite must contain contract tests for:
 - ordinary non-ALTREP/non-S4 structural admission across Domains, Conditions,
   TuneTokens, ParamSet candidates/constructor lists, value/search containers,
   transformation input/results, Domain cargo, internal table shells, dimnames,
-  and list metadata, plus one-shot materialization of exact-class,
-  allowed-attribute public data.frame/data.table ALTREP shells before the same
-  strict table checks;
+  and list metadata, plus the shared exact public-table classifier at all six
+  ingresses. Public-table coverage includes one-shot top-shell ALTREP
+  materialization, allowed/discarded data.table cache carriers, ordinary and
+  compact row-name forms, stable integer/character ALTREP row names with one
+  Length and no Elt, missing/S4/attributed/mismatched row-name rejection,
+  mutable shared-name reentry, and zero-column data.frame row counts;
   typed special-leaf ALTREP rejection, pointer-only typed S4 special/
   default/init matching, and opaque ParamUty S4 leaves with base-`identical()`
   special membership and no dispatch;
@@ -933,7 +968,9 @@ The package suite must contain contract tests for:
   exercises the structural one-snapshot exception;
 - detached data.table 1.18.4+ facades, documented data.frame/data.table inputs
   including exact-class top-level ALTREP shells and base R's lazy duplicate,
-  stable semantic ALTREP columns, and the absence of internal data.table state;
+  stable semantic ALTREP columns, row-consuming versus non-row-consuming count
+  checks, canonical ordinary package metadata, and the absence of internal
+  data.table state;
 - current serialization plus explicit upgrades of pinned Paradox-1 fixtures,
   `mbo_config`, nested collections, callbacks, shared graphs, and rejected
   extensions;

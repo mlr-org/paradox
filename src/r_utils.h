@@ -22,9 +22,9 @@ typedef struct {
   SEXP string;
 } paradox_utf8_piece_t;
 
-/* Copy the raw attribute pairlist to a non-vector holder, then return `symbol`
- * without dispatching the source ALTREP's Length method. Use only when an
- * already scoped public ALTREP snapshot must not be observed a second time. */
+/* Return one raw stored attribute without R's special row-name expansion or
+ * dispatching the source ALTREP's Length method. The caller must root the
+ * returned value before a callback-capable observation. */
 attribute_hidden SEXP paradox_stored_attribute(SEXP object, SEXP symbol);
 
 /* Named-column lookup rejects ALTREP list/name shells and returns an exact
@@ -125,14 +125,35 @@ attribute_hidden NORET void paradox_error_from_scalar_string(SEXP message);
  * allocating operation. */
 attribute_hidden SEXP paradox_snapshot_semantic_vector(SEXP value);
 
-/* Materialize an exact-class, allowed-attribute public data.frame/data.table
- * ALTREP top-level shell once while retaining its attributes and column
- * identities. Base R's lazy attribute-only duplicate is the common motivating
- * case, but admission deliberately does not depend on an internal base-R
- * implementation threshold. Unrecognized/non-table inputs are returned
- * unchanged so each operation's existing strict validator remains
- * authoritative. The result is unprotected and must be rooted immediately by
- * the caller. */
+typedef enum {
+  PARADOX_PUBLIC_TABLE_NONE = 0,
+  PARADOX_PUBLIC_DATA_FRAME,
+  PARADOX_PUBLIC_DATA_TABLE
+} paradox_public_table_kind_t;
+
+/* Classify an exact-class, allowed-attribute public data.frame/data.table.
+ * The top-level VECSXP may be ALTREP; interpreted metadata must satisfy the
+ * shared public-table contract. */
+attribute_hidden paradox_public_table_kind_t paradox_public_table_kind(
+  SEXP table
+);
+
+/* Capture the public table's structural row count without interpreting row
+ * labels. The raw row.names value must be integer/character, non-S4,
+ * non-object, and attribute-free. Stable row-name ALTREP pays exactly one
+ * Length observation and no element observations. */
+attribute_hidden int paradox_public_table_row_count(
+  SEXP table,
+  R_xlen_t *row_count
+);
+
+/* Materialize an exact public data.frame/data.table ALTREP top-level shell
+ * once. Interpreted names/class metadata is copied before callback-capable
+ * Length/Elt observations, row labels are normalized to their captured count,
+ * ignored data.table cache attributes are dropped, and column identities are
+ * retained. Unrecognized inputs are returned unchanged so operation-specific
+ * validators remain authoritative. The result is unprotected and must be
+ * rooted immediately by the caller. */
 attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);
 
 attribute_hidden SEXP paradox_prepare_data_table(SEXP table, int growable);

@@ -67,11 +67,6 @@ static int ordinary_string_vector(SEXP value) {
     paradox_api_has_no_attributes(value);
 }
 
-static int exact_class_string(SEXP value, const char *expected) {
-  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES &&
-    strcmp(CHAR(value), expected) == 0;
-}
-
 static int valid_list_shell(SEXP source, trafo_list_policy_t policy) {
   static const char *const names_only[] = {"names"};
   if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source)) {
@@ -81,33 +76,7 @@ static int valid_list_shell(SEXP source, trafo_list_policy_t policy) {
     return paradox_api_has_only_attributes(source, names_only, 1);
   }
   if (policy != TRAFO_LIST_INPUT) return FALSE;
-
-  SEXP classes = PROTECT(Rf_getAttrib(source, R_ClassSymbol));
-  const R_xlen_t class_count = ordinary_string_vector(classes)
-    ? XLENGTH(classes)
-    : 0;
-  const int data_frame = class_count == 1 &&
-    exact_class_string(STRING_ELT(classes, 0), "data.frame");
-  const int data_table = class_count == 2 &&
-    exact_class_string(STRING_ELT(classes, 0), "data.table") &&
-    exact_class_string(STRING_ELT(classes, 1), "data.frame");
-  static const char *const frame_attributes[] = {
-    "names", "row.names", "class"
-  };
-  static const char *const table_attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  const int valid = (data_frame && paradox_api_has_only_attributes(
-      source,
-      frame_attributes,
-      3
-    )) || (data_table && paradox_api_has_only_attributes(
-      source,
-      table_attributes,
-      6
-    ));
-  UNPROTECT(1);
-  return valid;
+  return paradox_public_table_kind(source) != PARADOX_PUBLIC_TABLE_NONE;
 }
 
 static SEXP snapshot_names(SEXP source, R_xlen_t expected,
@@ -159,6 +128,13 @@ static SEXP snapshot_list(SEXP source, int require_names,
       work_since_interrupt
     ));
     ++protect_count;
+  }
+  if (Rf_isObject(source) && policy == TRAFO_LIST_INPUT) {
+    R_xlen_t ignored_rows = 0;
+    if (!paradox_public_table_row_count(source, &ignored_rows)) {
+      UNPROTECT(protect_count);
+      Rf_error("%s has invalid data.frame row names", description);
+    }
   }
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
   ++protect_count;

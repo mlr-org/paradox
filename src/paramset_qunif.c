@@ -438,39 +438,9 @@ static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
 
 static int ordinary_frame_shell(SEXP x) {
   if (TYPEOF(x) != VECSXP || ALTREP(x) || Rf_isS4(x)) return FALSE;
-  SEXP classes = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
-  const R_xlen_t count = ordinary_character_metadata(classes, FALSE)
-    ? XLENGTH(classes)
-    : 0;
-  const int data_frame = count == 1 && paradox_domain_string_is(
-    STRING_ELT(classes, 0),
-    "data.frame"
-  );
-  const int data_table = count == 2 && paradox_domain_string_is(
-      STRING_ELT(classes, 0),
-      "data.table"
-    ) && paradox_domain_string_is(
-      STRING_ELT(classes, 1),
-      "data.frame"
-    );
-  static const char *const frame_attributes[] = {
-    "names", "row.names", "class"
-  };
-  static const char *const table_attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  int valid = (data_frame && paradox_api_has_only_attributes(
-      x,
-      frame_attributes,
-      3
-    )) || (data_table && paradox_api_has_only_attributes(
-      x,
-      table_attributes,
-      6
-    ));
-  UNPROTECT(1);
+  int valid = paradox_public_table_kind(x) != PARADOX_PUBLIC_TABLE_NONE;
   if (valid) {
-    SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+    SEXP names = PROTECT(paradox_api_raw_attribute(x, R_NamesSymbol));
     valid = ordinary_character_metadata(names, FALSE) &&
       XLENGTH(names) == XLENGTH(x);
     UNPROTECT(1);
@@ -488,6 +458,28 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     Rf_error("`x` must have at least one column");
   }
 
+  /* Own names before a row-name Length or column accessor can reenter and
+   * mutate shared metadata in place. */
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(
+    x,
+    R_NamesSymbol
+  ));
+  snapshot_input_names(
+    source_names,
+    info->columns,
+    FALSE,
+    roots,
+    work_since_interrupt
+  );
+  if (!paradox_public_table_row_count(x, &info->rows)) {
+    UNPROTECT(1);
+    Rf_error("`x` has invalid data.frame row names");
+  }
+  if (info->rows > INT_MAX) {
+    UNPROTECT(1);
+    Rf_error("`x` has too many rows for a data.frame result");
+  }
+
   /* Own every observed column before invoking an ALTREP Length/Elt method.
    * A callback may replace a data.frame column, but this operation must finish
    * from the single input generation selected at entry. */
@@ -497,36 +489,20 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
     SEXP source = PROTECT(VECTOR_ELT(x, column));
     const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
     if ((type != REALSXP && type != INTSXP) || Rf_isObject(source)) {
-      UNPROTECT(2);
+      UNPROTECT(3);
       Rf_error("Every column of `x` must be an unclassed numeric vector");
+    }
+    if (XLENGTH(source) != info->rows) {
+      UNPROTECT(3);
+      Rf_error(column == 0
+        ? "`x` has invalid data.frame row names"
+        : "Columns of `x` must have equal lengths");
     }
     SET_VECTOR_ELT(source_columns, column, source);
     UNPROTECT(1);
   }
   SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, source_columns);
-
-  info->rows = XLENGTH(VECTOR_ELT(source_columns, 0));
-  if (info->rows > INT_MAX) {
-    UNPROTECT(1);
-    Rf_error("`x` has too many rows for a data.frame result");
-  }
-  for (R_xlen_t column = 1; column < info->columns; ++column) {
-    account_work(work_since_interrupt);
-    if (XLENGTH(VECTOR_ELT(source_columns, column)) != info->rows) {
-      UNPROTECT(1);
-      Rf_error("Columns of `x` must have equal lengths");
-    }
-  }
   const R_xlen_t size = checked_input_size(info->rows, info->columns);
-
-  SEXP source_names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
-  snapshot_input_names(
-    source_names,
-    info->columns,
-    FALSE,
-    roots,
-    work_since_interrupt
-  );
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
   for (R_xlen_t column = 0; column < info->columns; ++column) {

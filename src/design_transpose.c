@@ -44,41 +44,11 @@ static int ordinary_design_shell(SEXP data) {
   if (!Rf_isObject(data)) {
     valid_shell = paradox_api_has_only_attributes(data, names_only, 1);
   } else {
-    SEXP classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
-    const int ordinary_classes = TYPEOF(classes) == STRSXP &&
-      !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
-      paradox_api_has_no_attributes(classes);
-    const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
-    const int data_frame = count == 1 && paradox_domain_string_is(
-      STRING_ELT(classes, 0),
-      "data.frame"
-    );
-    const int data_table = count == 2 && paradox_domain_string_is(
-        STRING_ELT(classes, 0),
-        "data.table"
-      ) && paradox_domain_string_is(
-        STRING_ELT(classes, 1),
-        "data.frame"
-      );
-    static const char *const frame_attributes[] = {
-      "names", "row.names", "class"
-    };
-    static const char *const table_attributes[] = {
-      "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-    };
-    valid_shell = (data_frame && paradox_api_has_only_attributes(
-      data,
-      frame_attributes,
-      3
-    )) || (data_table && paradox_api_has_only_attributes(
-      data,
-      table_attributes,
-      6
-    ));
-    UNPROTECT(1);
+    valid_shell = paradox_public_table_kind(data) !=
+      PARADOX_PUBLIC_TABLE_NONE;
   }
   if (!valid_shell) return FALSE;
-  SEXP names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  SEXP names = PROTECT(paradox_api_raw_attribute(data, R_NamesSymbol));
   const int valid_names = names == R_NilValue
     ? XLENGTH(data) == 0
     : TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
@@ -250,36 +220,45 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
 
   R_xlen_t work_since_interrupt = 0;
   const R_xlen_t column_count = XLENGTH(data);
-  if (column_count == 0) {
-    SEXP empty = PROTECT(Rf_allocVector(VECSXP, 0));
-    UNPROTECT(3);
-    return empty;
-  }
-
-  SEXP source_names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
-  SEXP names = PROTECT(snapshot_strings(
-    source_names,
-    "Design column names",
-    &work_since_interrupt
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(
+    data,
+    R_NamesSymbol
   ));
+  SEXP names = column_count == 0
+    ? PROTECT(Rf_allocVector(STRSXP, 0))
+    : PROTECT(snapshot_strings(
+        source_names,
+        "Design column names",
+        &work_since_interrupt
+      ));
   if (XLENGTH(names) != column_count ||
       Rf_any_duplicated(names, FALSE) != 0) {
     UNPROTECT(4);
     Rf_error("Design$data must have unique column names");
   }
 
+  const int table_input = Rf_isObject(data);
+  R_xlen_t table_rows = 0;
+  if (table_input &&
+      !paradox_public_table_row_count(data, &table_rows)) {
+    UNPROTECT(4);
+    Rf_error("Design$data has invalid data.frame row names");
+  }
+
   SEXP columns = PROTECT(Rf_allocVector(VECSXP, column_count));
-  R_xlen_t row_count = 0;
+  R_xlen_t row_count = table_input ? table_rows : 0;
   for (R_xlen_t column = 0; column < column_count; ++column) {
     paradox_domain_account_work(&work_since_interrupt);
     SEXP source = PROTECT(VECTOR_ELT(data, column));
     SEXP frozen = PROTECT(snapshot_column(source, &work_since_interrupt));
     const R_xlen_t rows = XLENGTH(frozen);
-    if (column != 0 && rows != row_count) {
+    if (rows != row_count && (table_input || column != 0)) {
       UNPROTECT(7);
-      Rf_error("Design$data columns have inconsistent lengths");
+      Rf_error(column == 0
+        ? "Design$data has invalid data.frame row names"
+        : "Design$data columns have inconsistent lengths");
     }
-    if (column == 0) {
+    if (!table_input && column == 0) {
       row_count = rows;
     }
     SET_VECTOR_ELT(columns, column, frozen);

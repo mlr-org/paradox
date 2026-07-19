@@ -210,9 +210,15 @@ families.
   top-level VECSXP ALTREP at a documented public-table ingress;
 - detached public data.table facades with valid self-reference and no capsule
   aliasing; no internal data.table state; documented data.frame/data.table
-  inputs accept exact-class top-level ALTREP shells (including base R's lazy
-  duplicate) and stable admitted semantic ALTREP columns while their structural
-  metadata remains ordinary;
+  inputs use one classifier at all six ingresses. Tests cover exact classes and
+  attribute sets, ordinary/discarded data.table cache carriers, absent/S4/
+  object/attributed/mismatched row names, compact positive/negative counts,
+  stable integer/character ALTREP row names with one Length/no Elt, and shared
+  mutable names under top-shell Elt reentry. They also distinguish row-consuming
+  count checks from direct trafo/no-edge dependency planning, preserve unnamed
+  zero-column data.frames, and prove Design transpose emits one empty
+  configuration per declared row. Exact top-level ALTREP shells (including
+  base R's lazy duplicate) and stable admitted semantic columns remain covered;
 - current serialization and explicit upgrade of CRAN Paradox 1.0.1,
   shared/nested graphs, callbacks, both pinned `mbo_config` fixtures, and
   rejected legacy extensions;

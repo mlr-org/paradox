@@ -3108,38 +3108,10 @@ static int ordinary_table_class(SEXP table, const char *required_class) {
   if (TYPEOF(table) != VECSXP || ALTREP(table) || Rf_isS4(table)) {
     return FALSE;
   }
-  SEXP classes = PROTECT(Rf_getAttrib(table, R_ClassSymbol));
-  const int ordinary_classes = TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
-    !Rf_isS4(classes) && !Rf_isObject(classes) &&
-    paradox_api_has_no_attributes(classes);
-  const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
-  const int data_frame = count == 1 && paradox_domain_string_is(
-    STRING_ELT(classes, 0),
-    "data.frame"
-  );
-  const int data_table = count == 2 && paradox_domain_string_is(
-      STRING_ELT(classes, 0),
-      "data.table"
-    ) && paradox_domain_string_is(
-      STRING_ELT(classes, 1),
-      "data.frame"
-    );
-  static const char *const frame_attributes[] = {
-    "names", "row.names", "class"
-  };
-  static const char *const table_attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  int valid = strcmp(required_class, "data.table") == 0
-    ? data_table
-    : data_frame || data_table;
-  if (valid) {
-    valid = data_table
-      ? paradox_api_has_only_attributes(table, table_attributes, 6)
-      : paradox_api_has_only_attributes(table, frame_attributes, 3);
-  }
-  UNPROTECT(1);
-  return valid;
+  const paradox_public_table_kind_t kind = paradox_public_table_kind(table);
+  return strcmp(required_class, "data.table") == 0
+    ? kind == PARADOX_PUBLIC_DATA_TABLE
+    : kind != PARADOX_PUBLIC_TABLE_NONE;
 }
 
 static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
@@ -3174,46 +3146,13 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
     return check_message("Table column names must be unique.");
   }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns));
   R_xlen_t rows = 0;
-  if (columns == 0) {
-    /* Read the raw stored attribute so R does not expand canonical compact
-     * row names into an ALTREP sequence.  This is the one table path where
-     * row.names carries semantic row-count information. */
-    SEXP row_names = PROTECT(paradox_stored_attribute(
-      table,
-      R_RowNamesSymbol
-    ));
-    const SEXPTYPE row_name_type = (SEXPTYPE) TYPEOF(row_names);
-    if ((row_name_type != INTSXP && row_name_type != STRSXP) ||
-        Rf_isS4(row_names) ||
-        Rf_isObject(row_names) || !no_attributes(row_names)) {
-      UNPROTECT(4);
-      return check_message("Invalid data.frame row names.");
-    }
-    if (ALTREP(row_names)) {
-      /* R expands its canonical compact row-name marker to a compact integer
-       * ALTREP when read through the public attribute API. This stable base
-       * representation is the documented structural ALTREP exception. */
-      if (row_name_type != INTSXP) {
-        UNPROTECT(4);
-        return check_message("Invalid data.frame row names.");
-      }
-      rows = XLENGTH(row_names);
-    } else if (row_name_type == INTSXP && XLENGTH(row_names) == 2 &&
-        INTEGER_ELT(row_names, 0) == NA_INTEGER &&
-        INTEGER_ELT(row_names, 1) <= 0) {
-      const int encoded = INTEGER_ELT(row_names, 1);
-      if (encoded == INT_MIN) {
-        UNPROTECT(4);
-        return check_message("Invalid data.frame row names.");
-      }
-      rows = (R_xlen_t) -encoded;
-    } else {
-      rows = XLENGTH(row_names);
-    }
-    UNPROTECT(1);
+  if (!paradox_public_table_row_count(table, &rows)) {
+    UNPROTECT(2);
+    return check_message("Invalid data.frame row names.");
   }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns));
   for (R_xlen_t column = 0; column < columns; ++column) {
     SEXP source = PROTECT(VECTOR_ELT(table, column));
     SEXP stable = PROTECT(snapshot_table_column(source));
@@ -3225,10 +3164,11 @@ static SEXP snapshot_table(SEXP table, R_xlen_t *row_count) {
       return check_message("Unsupported table column type '%s'.",
         Rf_type2char(type));
     }
-    if (column == 0) rows = XLENGTH(stable);
     if (XLENGTH(stable) != rows) {
       UNPROTECT(5);
-      return check_message("Table columns must have equal lengths.");
+      return check_message(column == 0
+        ? "Invalid data.frame row names."
+        : "Table columns must have equal lengths.");
     }
     SET_VECTOR_ELT(result, column, stable);
     UNPROTECT(2);

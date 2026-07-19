@@ -57,6 +57,27 @@ on both sides, so this evidence demonstrates a latency win, not an allocation
 reduction. `metadata.json`, the raw samples, and both allocation traces retain
 the complete audit trail.
 
+The final public-table metadata hardening received a separate bounded
+development audit before the replacement candidate was frozen. Four balanced,
+pinned-core fresh-process pairs compared the superseded `4f28327` DSO
+(`2ebe2483051ad41d4ce985b89c966de373afdb1b0e333400b47b4b4a09eb2a5e`)
+with the hardened DSO
+(`ce99a2896f9f4f69a6387ed3b2c9da040ef6f011999f7ae6c028c13d56cda8a2`).
+Representative `check_dt`, `qunif`, `trafo`, Design transpose/dependency, wide
+base-wrapper, and zero-column medians were flat to 2.8% faster. On deliberately
+minimal one-row inputs, the strict classifier/count checks cost only about
+0.6--1.1 microseconds for keyed/indexed data.tables. Ordinary paths retained
+the same measured R-heap allocations; owning metadata for a wide lazy wrapper
+added 568 bytes. A direct diagnostic put all three repeated `Rf_install()`
+lookups below 79 ns per table and one complete classifier below 0.47
+microseconds even for a keyed/indexed data.table. Caching those symbols or
+threading a second classifier result through six operations would therefore
+save less than half a microsecond while adding release-risk plumbing. No such
+optimization was retained. The raw development evidence is
+`.local/tmp/public-table-perf-robust.tsv` and
+`.local/tmp/public-table-cache-perf.tsv`; it justifies the engineering decision
+but does not replace the exact-candidate release benchmark.
+
 The value group separates the default dependency-aware `$get_values()` call,
 the callback-free `remove_dependencies = FALSE` case, and the ubiquitous
 `tags = "train"` filter. It also measures default filtered getters on rich and

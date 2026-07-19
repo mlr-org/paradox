@@ -1,4 +1,5 @@
 #include "paradox.h"
+#include "r_utils.h"
 #include "core_state.h"
 #include "paramset_shadow.h"
 #include <R_ext/Rdynload.h>
@@ -120,6 +121,12 @@ static const R_CallMethodDef call_methods[] = {
   {"test_stateful_altrep", (DL_FUNC) &paradox_test_stateful_altrep, 6},
   {"test_stateful_altrep_rearm",
     (DL_FUNC) &paradox_test_stateful_altrep_rearm, 2},
+  {"test_stateful_altrep_row_names_rearm",
+    (DL_FUNC) &paradox_test_stateful_altrep_row_names_rearm, 2},
+  {"test_public_row_names_count",
+    (DL_FUNC) &paradox_test_public_row_names_count, 1},
+  {"test_materialize_public_table_shell",
+    (DL_FUNC) &paradox_materialize_public_table_shell, 1},
   {"test_gc_column_mutator",
     (DL_FUNC) &paradox_test_gc_column_mutator, 3},
   {"test_tune_token_gc_mutation_snapshot",

@@ -97,6 +97,45 @@ int paradox_api_has_only_attributes(SEXP value,
 #endif
 }
 
+#if R_VERSION >= R_Version(4, 6, 0)
+typedef struct {
+  SEXP symbol;
+  SEXP value;
+  int found;
+} raw_attribute_state_t;
+
+static SEXP select_raw_attribute(SEXP tag, SEXP value, void *data) {
+  raw_attribute_state_t *state = data;
+  if (tag != state->symbol) return NULL;
+  state->value = value;
+  state->found = TRUE;
+  /* R_mapAttrib() uses a C NULL as its continue sentinel. A symbol is an
+   * allocation-free, non-NULL stop value even when the stored value is NULL. */
+  return tag;
+}
+#endif
+
+SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol) {
+  if (TYPEOF(symbol) != SYMSXP) {
+    Rf_error("Internal error: attribute selector must be a symbol");
+  }
+#if R_VERSION >= R_Version(4, 6, 0)
+  raw_attribute_state_t state = {symbol, R_NilValue, FALSE};
+  (void) R_mapAttrib(value, select_raw_attribute, &state);
+  return state.found ? state.value : R_NilValue;
+#else
+  for (SEXP attributes = ATTRIB(value);
+      attributes != R_NilValue;
+      attributes = CDR(attributes)) {
+    if (TYPEOF(attributes) != LISTSXP || TYPEOF(TAG(attributes)) != SYMSXP) {
+      Rf_error("Internal error: malformed attribute pairlist");
+    }
+    if (TAG(attributes) == symbol) return CAR(attributes);
+  }
+  return R_NilValue;
+#endif
+}
+
 static int plain_binding_boundary(SEXP environment, SEXP symbol) {
   return TYPEOF(environment) == ENVSXP && !Rf_isS4(environment) &&
     TYPEOF(symbol) == SYMSXP &&
