@@ -237,7 +237,7 @@ SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
     Rf_error("Design$data must have unique column names");
   }
 
-  const int table_input = Rf_isObject(data);
+  const int table_input = Rf_isObject(data) != FALSE;
   R_xlen_t table_rows = 0;
   if (table_input &&
       !paradox_public_table_row_count(data, &table_rows)) {

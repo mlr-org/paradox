@@ -305,7 +305,7 @@ static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
   SET_VECTOR_ELT(roots, 2, snapshot->data_names);
   SET_VECTOR_ELT(roots, 3, snapshot->columns);
 
-  const int table_input = Rf_isObject(data);
+  const int table_input = Rf_isObject(data) != FALSE;
   snapshot->row_count = 0;
   if (table_input &&
       !paradox_public_table_row_count(data, &snapshot->row_count)) {
