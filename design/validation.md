@@ -167,10 +167,11 @@ families.
   spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
   vector, or an accepted empty list container); only `set_values(.values=)`
   exercises the one-snapshot shell exception;
-- transformation inputs/results require ordinary non-ALTREP/non-S4 list shells,
-  including unnamed BASE output and named collection output cases; documented
-  ordinary data-frame inputs and stable semantic ALTREP leaves/columns remain
-  admitted;
+- transformation results and non-table inputs require ordinary
+  non-ALTREP/non-S4 list shells, including unnamed BASE output and named
+  collection output cases; documented data-frame inputs may use the exact
+  top-level ALTREP table boundary, and stable semantic ALTREP leaves/columns
+  remain admitted;
 - scalar and data.table constraint-only calls reuse the native graph/point/
   constraint kernels; table tests cover all-rows-before-constraint-callback
   validation (including ParamUty checks during Domain admission), once-per-row
@@ -201,14 +202,17 @@ families.
   corrupt memory; typed Domain ALTREP special leaves reject before observation,
   typed S4 specials match only by pointer identity, and ParamUty opaque leaves
   are not materialized except for base-`identical()` special membership;
-  structural configuration/search/trafo and ParamSet-`params` lists, table/row/
-  Domain/Condition/token/capsule shells, Domain cargo/interpreted cargo entries,
-  dimnames, class/name vectors, and list metadata reject ALTREP/S4, except for
-  the explicit one-snapshot `set_values(.values=)` merge boundary;
+  structural configuration/search/trafo and ParamSet-`params` lists, internal
+  table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted
+  cargo entries, dimnames, class/name vectors, and list metadata reject
+  ALTREP/S4, except for the explicit one-snapshot `set_values(.values=)` merge
+  boundary and one-shot normalization of an exact-class, allowed-attribute
+  top-level VECSXP ALTREP at a documented public-table ingress;
 - detached public data.table facades with valid self-reference and no capsule
-  aliasing; no internal data.table state; documented ordinary data.frame/
-  data.table inputs accept stable admitted semantic ALTREP columns while their
-  shells and structural metadata remain ordinary;
+  aliasing; no internal data.table state; documented data.frame/data.table
+  inputs accept exact-class top-level ALTREP shells (including base R's lazy
+  duplicate) and stable admitted semantic ALTREP columns while their structural
+  metadata remains ordinary;
 - current serialization and explicit upgrade of CRAN Paradox 1.0.1,
   shared/nested graphs, callbacks, both pinned `mbo_config` fixtures, and
   rejected legacy extensions;

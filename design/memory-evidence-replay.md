@@ -31,8 +31,9 @@ family: capsule construction/replacement, graph traversal, Domain/Condition
 kernels, values/checks, callbacks/reentry, stable/base ALTREP materialization,
 hostile custom-ALTREP rejection/admission safety, public table construction,
 ordinary non-ALTREP/non-S4 structural rejection for configuration/search/trafo
-and ParamSet-`params` lists, Domain/Condition/token/capsule/table shells, cargo,
-dimnames, and list metadata, direct checked/unchecked assignment rejection
+and ParamSet-`params` lists, Domain/Condition/token/capsule/internal-table
+shells, cargo, dimnames, and list metadata, one-shot normalization of base R's
+stable public-table lazy wrapper, direct checked/unchecked assignment rejection
 before shell observation, the sole `set_values(.values=)` shell snapshot,
 subset/collection/shadow, live and detached collection callback plans and
 their native evaluator, standalone Condition operand materialization and
@@ -87,7 +88,8 @@ structural ALTREP/S4 rejection (including every outer `special_vals` list),
 typed-special ALTREP rejection, typed S4 special
 pointer identity, opaque ParamUty S4 leaves and base-`identical()` special
 membership without dispatch in supported Domain/value operations, documented
-ordinary data.frame/data.table shells with stable semantic ALTREP columns, exact
+data.frame/data.table inputs with exact-class top-level ALTREP shells and stable
+semantic ALTREP columns, exact
 BASE-only ParamSet
 content, safe genuine-core aliases, candidate mutation during receipt lifetime,
 sealed search capabilities, serialization, clone, and explicit legacy upgrades.
@@ -102,7 +104,9 @@ The read-only verifier accepts only a completed run directly below
 retained source/mode trees once (in at most a bounded two-worker wave), and
 semantically rescans analyzer output. It validates:
 
-- exact source/archive/DSO/routine/harness identity;
+- exact source/archive/DSO/routine/harness identity, including the native-test
+  coordinator, worker-group process boundary, individual worker, and ledger
+  verifier;
 - compiler, R, analyzer, package, container, and resource-admission identity;
 - ordered mode status and all required probe/test ledgers;
 - zero-error/zero-unreviewed-suppression Valgrind summaries;

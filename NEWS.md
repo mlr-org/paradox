@@ -63,16 +63,20 @@ hazards that Paradox 2 is intended to remove.
   compatibility guarantee; it is rejected
   or consumed from the one native snapshot without replay. Typed Dbl/Int/Fct/
   Lgl Domain special-value leaves are deliberately narrower and reject ALTREP
-  before observation. Interpreted outer list/table/Domain/Condition/token/
-  capsule shells, ParamSet `params` lists, transformation list shells, Domain
-  cargo/interpreted cargo entries, rows, dimnames, class/name vectors, and other
-  list metadata must be ordinary non-ALTREP and non-S4 structure. Documented
-  ordinary data.frame/data.table inputs remain supported, and their semantic
-  atomic columns may be stable ALTREP. Direct checked and unchecked `$values <-`
+  before observation. Interpreted outer general-list/internal-table/Domain/
+  Condition/token/capsule shells, ParamSet `params` lists, non-table
+  transformation inputs and all transformation result shells, Domain cargo/
+  interpreted cargo entries, rows, dimnames, class/name vectors, and other list
+  metadata must be ordinary non-ALTREP and non-S4 structure. The narrow
+  exception is an exact-class, allowed-attribute top-level VECSXP ALTREP at a
+  documented public data.frame/data.table ingress. Native admission snapshots
+  that shell once before the unchanged strict metadata checks; base R's lazy
+  attribute-copy duplicate is the common motivating case. Semantic atomic
+  columns may be stable ALTREP. Direct checked and unchecked `$values <-`
   reject an outer ALTREP before observing it. The Paradox-1 clear-values
   spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
   vector, or an accepted empty list container—are canonicalized to a named
-  native `list()`. The sole outer-list exception is
+  native `list()`. The sole general-list exception is
   `set_values(.values=)`, which snapshots its supplied shell once before
   interpreting it.
   The outer `special_vals` list is structural for every Domain kind and follows
@@ -81,9 +85,10 @@ hazards that Paradox 2 is intended to remove.
 * Base `extra_trafo` callbacks retain unnamed list results, including the
   one-dimensional form used by `to_tune(ParamSet)`. Collection child callbacks
   require names so their output can be translated into the collection namespace.
-  Transformation input and result shells are ordinary non-ALTREP/non-S4 lists;
-  admitted semantic atomic leaves and documented data-frame columns may still
-  be stable ALTREP.
+  Transformation results and non-table input shells are ordinary
+  non-ALTREP/non-S4 lists. A documented data-frame input may use the exact
+  top-level ALTREP table boundary above; admitted semantic atomic leaves and
+  columns may still be stable ALTREP.
 * Live collection callbacks and the detached callbacks produced by subset,
   flatten, or a Shadow over a collection now use one registered native
   evaluator family with shared semantic helpers. Their thin R closures contain
@@ -92,6 +97,10 @@ hazards that Paradox 2 is intended to remove.
   ParamSet methods. Retained/untransformed inputs remain in input order,
   followed by changed child outputs in callback-plan order; omitted child
   outputs are removed.
+* Removed the dormant, unexported namespace-level R `transpose()` engine and
+  the unused `col_to_nl()` and `rbindlist_proto()` helpers. `Design$transpose()`
+  has one registered native implementation; these internals had no callers in
+  Paradox or the maintained/downstream corpus and are not compatibility APIs.
 * `ParamSet$subset()` now has an additive final `keep_trafo = TRUE` argument,
   also supported by collections and shadows. `keep_trafo = FALSE` removes both
   per-parameter transformations and `extra_trafo` in the native subset
@@ -153,10 +162,10 @@ hazards that Paradox 2 is intended to remove.
 * Internal tables are canonical base data.frames. data.table >= 1.18.4 is used
   only for independently owned outward-facing facades; returned tables remain
   safe to mutate with normal data.table operations without changing the
-  ParamSet. Documented ordinary data.frame/data.table operation inputs remain
-  accepted, but table shells and structural dim/dimnames/list metadata must be
-  ordinary non-ALTREP/non-S4; admitted semantic atomic columns may be stable
-  ALTREP.
+  ParamSet. Documented data.frame/data.table operation inputs snapshot an
+  exact-class, allowed-attribute top-level VECSXP ALTREP once; structural dim/
+  dimnames/list metadata must remain ordinary non-ALTREP/non-S4, and admitted
+  semantic atomic columns may be stable ALTREP.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
   `crate()` closure for every Domain instance.

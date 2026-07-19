@@ -391,10 +391,12 @@ param_set_subspace_shells = function(param_set, private, ids) {
 #' `$values`, `$tags`, `$deps`, and `$add_dep()` instead. Third-party inheritance
 #' from the ParamSet family is additive only: Paradox core methods, active
 #' bindings, and private capsule state may not be replaced.
-#' Interpreted outer list/table shells and their structural metadata are
-#' ordinary non-ALTREP/non-S4 objects. Stable ALTREP is supported for admitted
-#' semantic atomic values and table columns, with the one documented
-#' `set_values(.values=)` shell exception described below.
+#' Interpreted outer list and internal table shells and their structural
+#' metadata are ordinary non-ALTREP/non-S4 objects. At documented public table
+#' inputs, an exact-class, allowed-attribute top-level VECSXP ALTREP shell is
+#' materialized once before the same strict metadata validation. Stable ALTREP
+#' is supported for admitted semantic atomic values and table columns, with the
+#' documented `set_values(.values=)` list-shell exception described below.
 #'
 #' @section S3 methods and type converters:
 #' * `as.data.table()`\cr
@@ -549,9 +551,10 @@ ParamSet = R6Class("ParamSet",
     #'   Named parameter values.
     #' @param .values (named `list()`)\cr
     #'   Named list with parameter values. Names must not already appear in
-    #'   `...`. This is the sole public structural-list ALTREP exception: native
+    #'   `...`. This is the sole public general-list ALTREP exception: native
     #'   code snapshots the supplied shell once before interpreting its names
-    #'   and elements. S4 shells remain unsupported. Direct `$values <-`
+    #'   and elements. The separate exact-class public-table boundary does not
+    #'   admit general lists. S4 shells remain unsupported. Direct `$values <-`
     #'   assignment does not share this exception.
     #' @param .insert (`logical(1)`)\cr
     #'   Whether to insert the values (old values are being kept, if not overwritten), or to
@@ -579,10 +582,11 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Perform transformation specified by the `trafo` of [`Domain`] objects, as well as the `$extra_trafo` field.
     #' @param x (named `list()` | `data.frame`)\cr
-    #'   The value(s) to be transformed. The outer list or documented ordinary
-    #'   data-frame shell and its structural names/list metadata must be
-    #'   non-ALTREP/non-S4. Admitted semantic atomic leaves or columns may be
-    #'   stable ALTREP. A callback result has the same ordinary list-shell
+    #'   The value(s) to be transformed. The outer list and the data-frame's
+    #'   structural names/list metadata must be non-ALTREP/non-S4. An exact-class,
+    #'   allowed-attribute top-level VECSXP ALTREP shell is materialized once.
+    #'   Admitted semantic atomic leaves or columns may be stable ALTREP.
+    #'   A callback result has the same ordinary list-shell
     #'   requirement; there is no R fallback or replay.
     #' @param param_set (`ParamSet`)\cr
     #'   Passed to `extra_trafo()`. Note that the `extra_trafo` of `self` is used, not the `extra_trafo` of the
@@ -694,9 +698,10 @@ ParamSet = R6Class("ParamSet",
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
     #' @param x (`data.table`)\cr
-    #'   The values to test. The documented data.table shell and its structural
-    #'   metadata must be ordinary non-ALTREP/non-S4; admitted semantic atomic
-    #'   columns may be stable ALTREP.
+    #'   The values to test. An exact-class, allowed-attribute top-level VECSXP
+    #'   ALTREP shell is materialized once; its structural metadata must remain
+    #'   ordinary non-ALTREP/non-S4. Admitted semantic atomic columns may be
+    #'   stable ALTREP.
     #' @param assert_value (`logical(1)`)\cr
     #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
     #'   Should be `TRUE` unless this was already checked before.
@@ -832,9 +837,10 @@ ParamSet = R6Class("ParamSet",
     #' have fewer columns as there are params in the set.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
-    #'   An ordinary non-ALTREP/non-S4 table shell whose structural names,
-    #'   row/dim/dimnames, and list metadata are ordinary. Admitted semantic
-    #'   atomic columns may be stable ALTREP.
+    #'   Its structural names, row/dim/dimnames, and list metadata must be
+    #'   ordinary non-ALTREP/non-S4. An exact-class, allowed-attribute top-level
+    #'   VECSXP ALTREP shell is materialized once; admitted semantic atomic
+    #'   columns may be stable ALTREP.
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param presence (`character(1)`)\cr
@@ -907,10 +913,11 @@ ParamSet = R6Class("ParamSet",
     #' @param x (`matrix` | `data.frame` | `data.table`)\cr
     #'   Values to map. Columns must be unclassed integer or double vectors.
     #'   Column names must be unique and a subset of the parameter IDs.
-    #'   Data-frame/data-table shells and all structural names, row, dim,
-    #'   dimnames, and list metadata must be ordinary non-ALTREP/non-S4. A
-    #'   matrix or admitted atomic column may have stable ALTREP semantic
-    #'   storage, which native admission materializes once.
+    #'   All structural names, row, dim, dimnames, and list metadata must be
+    #'   ordinary non-ALTREP/non-S4. An exact-class, allowed-attribute top-level
+    #'   data-frame/data-table VECSXP ALTREP shell is materialized once. A matrix
+    #'   or admitted atomic column may have stable ALTREP semantic storage,
+    #'   which native admission materializes once.
     #'   [`ParamUty`][Domain] parameters do not define a quantile mapping.
     #' @return `data.table`.
     qunif = function(x) {

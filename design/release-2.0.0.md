@@ -95,10 +95,13 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   `upgrade_paradox_object()`.
 - Stable/base ALTREP support is materialize-once in admitted semantic atomic
   positions. Configuration/search-space/trafo and ParamSet-`params` lists,
-  table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted
-  cargo entries, dimnames, class/name vectors, and other list metadata remain
-  ordinary non-ALTREP/non-S4. Ordinary documented data.frame/data.table inputs
-  remain supported and may carry stable semantic ALTREP columns. Direct
+  internal table/row/Domain/Condition/token/capsule shells, Domain cargo/
+  interpreted cargo entries, dimnames, class/name vectors, and other list
+  metadata remain ordinary non-ALTREP/non-S4. Documented public
+  data.frame/data.table inputs additionally normalize an exact-class,
+  allowed-attribute top-level VECSXP ALTREP once before strict structural
+  validation and may carry stable semantic ALTREP columns. Base R's lazy
+  attribute-copy duplicate is the common motivating case. Direct
   checked/unchecked `$values <-` rejects an outer ALTREP before observation and
   natively canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary
   attribute-free zero-length atomic/expression vector, or an accepted empty
@@ -109,9 +112,14 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   replay nor itself cause a crash or memory corruption.
 - Base `extra_trafo` results may remain unnamed for public and TuneToken
   compatibility; collection child results require complete unique names for
-  namespace translation. Transformation input/result shells are ordinary
-  non-ALTREP/non-S4, while admitted atomic leaves and documented data-frame
+  namespace translation. Transformation results and non-table inputs have
+  ordinary non-ALTREP/non-S4 shells. A documented data-frame input may use the
+  exact top-level ALTREP table boundary above, while admitted atomic leaves and
   columns may be stable ALTREP. Both use the single native transformation engine.
+- The unreachable namespace-level R `transpose()` implementation and unused
+  `col_to_nl()`/`rbindlist_proto()` table helpers are deleted. Known consumers
+  call the public `Design$transpose()` method; the removed internals were neither
+  exported nor used by the maintained/downstream corpus.
 - Live collection callback bindings, detached subset/flatten callback
   factories, and SHADOW adapters over COLLECTION origins all use that same
   native evaluator family. Their R closures retain only exact validated
@@ -159,8 +167,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   named list without dispatch, enters this same admission, and replaces every
   live BASE candidate with a sealed single-use capability before closed
   conversion.
-- Domain/Condition/token/ParamSet and all other interpreted structural ALTREP/
-  S4 shells are rejected. The outer `special_vals` list is ordinary
+- Apart from the public-table and `set_values(.values=)` boundaries above,
+  Domain/Condition/token/ParamSet and every other interpreted structural
+  ALTREP/S4 shell is rejected. The outer `special_vals` list is ordinary
   non-ALTREP/non-S4 for every Domain kind. Typed Domain special leaves reject ALTREP; an admitted
   typed S4 special, default, or init matches only by pointer identity. ParamUty
   leaves remain opaque, including S4, while Paradox-1 special membership alone
@@ -548,3 +557,14 @@ bulk-dependency, downstream-bridge, and `$has_deps` changes. All of these refs,
 hashes, logs, and artifacts are historical only. They authorize no conclusion
 about current package bytes and must not be copied into the pending fields
 above.
+
+The still later candidate
+`refs/paradox-release/candidate-20260719T150831Z`, commit
+`612345ceb403c70a0ea6c1149c367c6782d9870b`, passed the native, R-API,
+runtime, differential, and memory gates recorded for its exact bytes. Its final
+release benchmark then found a release-blocking correctness defect before any
+candidate timing: R 4.6 exposed the benchmark's ordinary wide data.frame as a
+top-level base `wrap_list` ALTREP, which `check_dt()` rejected. The benchmark
+remains deliberately unsealed. This candidate and every package-byte-bound
+result for it are superseded; the retained evidence explains the replacement
+public-table snapshot boundary but cannot be promoted to the new candidate.

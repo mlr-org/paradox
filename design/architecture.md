@@ -98,10 +98,16 @@ vectors are canonical owned vectors. Every interpreted list/table/Domain/
 Condition/TuneToken/capsule shell, ParamSet constructor `params` list,
 transformation input/result shell, Domain cargo container/interpreted cargo
 entry, row, dimnames, class/name vector, and other list metadata object is
-ordinary non-ALTREP and non-S4. At documented input boundaries, ordinary
-`data.frame`/`data.table` shells remain supported and their admitted semantic
-atomic columns may be stable ALTREP; canonical capsule columns are their owned
-ordinary snapshots. Opaque leaves such as ParamUty values, environments, and
+ordinary non-ALTREP and non-S4, except for the top-level shell of a documented
+public table input. One shared boundary admits an exact-class, allowed-attribute
+VECSXP ALTREP, captures its attributes before element observation, and copies
+the spine with one Length and one Elt call per column while retaining column
+identities. Each operation then applies its existing strict validator. Base R's
+lazy attribute-only duplicate is the common motivating case, but the contract
+does not depend on its implementation threshold. Structural metadata remains
+ordinary and admitted semantic atomic columns may be stable ALTREP;
+canonical capsule columns are their owned ordinary snapshots. Opaque leaves
+such as ParamUty values, environments, and
 external pointers are rooted but not recursively copied or interpreted.
 ParamUty value/default/init/special leaves are the opaque S4 exception, with
 special membership preserved through base `identical()` and no S3/S4 dispatch.
@@ -337,10 +343,12 @@ evaluates them in documented order, protects all arguments/results, and
 propagates each warning or error once. It does not infer compatibility from a
 callback's closure body.
 
-The unified transformation engine requires ordinary non-ALTREP/non-S4 input
-and result list shells and snapshots each callback result once. Documented
-ordinary data-frame input is accepted, and admitted atomic leaves or columns
-may be stable ALTREP. A BASE extra transformation accepts either an unnamed
+The unified transformation engine requires ordinary non-ALTREP/non-S4 result
+and non-table input list shells and snapshots each callback result once. A
+documented data-frame input may use the exact top-level ALTREP table boundary,
+which is materialized once before the same validation; admitted atomic leaves
+or columns may be stable ALTREP. A BASE extra transformation accepts
+either an unnamed
 list or a completely and uniquely named list, retaining that outward shape. A
 COLLECTION child result requires complete unique names before the same engine
 translates and merges it into the parent namespace. The distinction is a
@@ -365,7 +373,7 @@ before observing its length, names, or elements. The Paradox-1 clear-values
 spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
 vector, or an accepted empty base/S3-representation list—are canonicalized to
 a named native `list()` by the store operation. `set_values(.values=)` is the
-sole outer-list ALTREP exception and
+sole general-list ALTREP exception and
 owns its one native shell snapshot; it does not weaken direct assignment.
 
 ParamSet-bearing `ObjectTuneToken`s follow the same atomic boundary. Native
@@ -427,9 +435,10 @@ rather than constructing and collapsing an R list of every dependency error.
 
 `ParamSet$test_constraint()` and `$test_constraint_dt()` are registered native
 boundaries over the same graph plan, point initializer, and constraint kernel.
-The table operation first requires an ordinary non-ALTREP/non-S4 data.table
-shell and structural dim/dimnames/list metadata, then snapshots it. Its admitted
-semantic atomic columns may be stable ALTREP. When value assertion is enabled,
+The table operation first materializes an exact-class, allowed-attribute
+top-level VECSXP ALTREP once if present, then requires the same exact data.table
+class and ordinary non-S4, non-ALTREP structural dim/dimnames/list metadata. Its
+admitted semantic atomic columns may be stable ALTREP. When value assertion is enabled,
 it admits every row before executing any constraint callback; a
 ParamUty custom check may run as part of that preceding Domain-value admission.
 Only then does it evaluate the snapshotted constraints once per row in order.
@@ -465,9 +474,11 @@ Every operation follows the same lifecycle:
 1. the R wrapper captures language-level inputs and outward representation
    metadata that C cannot capture directly; this is not semantic admission;
 2. public arguments are forced left-to-right; interpreted outer shells reject
-   ALTREP/S4 before semantic observation, while supported ALTREP atomic
-   semantic vectors are materialized once at native admission; that native
-   materialized state, not captured representation text, is semantic authority;
+   ALTREP/S4 before semantic observation except at the exact public-table and
+   `set_values(.values=)` one-snapshot boundaries, while supported ALTREP
+   atomic semantic vectors are materialized once at native admission; that
+   native materialized state, not captured representation text, is semantic
+   authority;
 3. the complete required capsule graph and callback set is structurally
    validated and rooted;
 4. a bounded native plan is built from that snapshot;
@@ -507,14 +518,16 @@ as `1:n`, are supported in admitted semantic-vector positions. This does not
 turn interpreted structure into a materialization surface: configuration/
 search-space and transformation list shells, ParamSet `params` lists, Domain/
 Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo entries,
-table/row shells, dimnames, class/name vectors, and list metadata must be
-ordinary non-ALTREP/non-S4 objects. Ordinary documented data.frame/data.table
-input remains supported; admitted atomic columns may be stable ALTREP. Direct
+internal table/row shells, dimnames, class/name vectors, and list metadata must
+be ordinary non-ALTREP/non-S4 objects. A documented public
+data.frame/data.table ingress materializes an exact-class, allowed-attribute
+top-level VECSXP ALTREP once before its existing strict validation; admitted
+atomic columns may be stable ALTREP. Direct
 checked/unchecked `$values <-` rejects an outer ALTREP before observation and
 canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary attribute-free
 zero-length atomic/expression vector, or an accepted empty list container) to a
 named native list. The public
-`set_values(.values=)` merge is the one outer-list exception and owns one
+`set_values(.values=)` merge is the one general-list exception and owns one
 operation-specific shell snapshot before validation. A hostile custom ALTREP may change after R-side
 language/representation capture but before native admission; exact semantics
 or matching printed representation are not promised for that boundary. It is
@@ -697,7 +710,10 @@ Do not add any of the following:
   semantic admission/kernel (prior R-side representation capture is explicitly
   non-semantic and covered by the hostile-custom-ALTREP boundary above);
 - materialization or observation of an interpreted ALTREP/S4 shell, except for
-  the exact one-snapshot `set_values(.values=)` boundary;
+  the exact one-snapshot `set_values(.values=)` boundary and the exact-class,
+  allowed-attribute public-table boundary;
+- a namespace-level R implementation of Design transpose or dormant table
+  helpers parallel to the registered native engine;
 - direct downstream access to `.core` or its protected payload;
 - unmanaged state reachable only through an external-pointer address;
 - package-byte evidence carried from the superseded candidate.

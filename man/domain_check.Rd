@@ -47,7 +47,8 @@ Domain operations use a closed native implementation for \code{\link[=p_dbl]{p_d
 S3 dispatch. Invalid values receive a stable native diagnostic; malformed or
 unknown Domain objects raise an error. The diagnostic text is deliberately
 not an exact \code{checkmate} compatibility contract.
-Domain/table shells and structural metadata are ordinary non-ALTREP/non-S4.
+A Domain's own table shell and structural metadata are ordinary
+non-ALTREP/non-S4.
 A value-list shell is likewise structural; admitted semantic atomic leaves
 may be stable ALTREP. Typed S4 specials match only by pointer identity.
 ParamUty leaves remain opaque, with special membership alone using base

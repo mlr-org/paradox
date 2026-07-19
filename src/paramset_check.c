@@ -3479,12 +3479,14 @@ SEXP paradox_param_set_test_constraint_builtin(
 
 SEXP paradox_param_set_test_constraint_dt_builtin(
     SEXP private_environment, SEXP self, SEXP table, SEXP assert_value) {
-  if (!ordinary_table_class(table, "data.table")) {
+  SEXP table_shell = PROTECT(paradox_materialize_public_table_shell(table));
+  if (!ordinary_table_class(table_shell, "data.table")) {
+    UNPROTECT(1);
     Rf_error("Assertion on 'x' failed: Must be a data.table.");
   }
   const int validate = exact_flag(assert_value, "assert_value");
   R_xlen_t rows = 0;
-  SEXP stable_table = PROTECT(snapshot_table(table, &rows));
+  SEXP stable_table = PROTECT(snapshot_table(table_shell, &rows));
   if (TYPEOF(stable_table) != VECSXP) {
     constraint_input_error(stable_table, "x");
   }
@@ -3514,7 +3516,7 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
   SEXP result = PROTECT(Rf_allocVector(LGLSXP, rows));
   if (!plan_has_constraint(&plan)) {
     for (R_xlen_t row = 0; row < rows; ++row) LOGICAL(result)[row] = TRUE;
-    UNPROTECT(3);
+    UNPROTECT(4);
     return result;
   }
 
@@ -3531,7 +3533,7 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
     UNPROTECT(2);
     vmaxset(row_watermark);
   }
-  UNPROTECT(3);
+  UNPROTECT(4);
   return result;
 }
 
@@ -3541,10 +3543,11 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
   const presence_t required_presence = exact_presence(presence);
   const int tokens = exact_flag(allow_token, "allow_token");
 
+  SEXP table_shell = PROTECT(paradox_materialize_public_table_shell(table));
   R_xlen_t rows = 0;
-  SEXP stable_table = PROTECT(snapshot_table(table, &rows));
+  SEXP stable_table = PROTECT(snapshot_table(table_shell, &rows));
   if (TYPEOF(stable_table) != VECSXP) {
-    UNPROTECT(1);
+    UNPROTECT(2);
     return stable_table;
   }
   PROTECT_INDEX root_plan_index;
@@ -3570,12 +3573,12 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
     ));
     if (TYPEOF(result) != LGLSXP || XLENGTH(result) != 1 ||
         LOGICAL_ELT(result, 0) != TRUE) {
-      UNPROTECT(4);
+      UNPROTECT(5);
       return result;
     }
     UNPROTECT(2);
   }
   SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
-  UNPROTECT(3);
+  UNPROTECT(4);
   return result;
 }

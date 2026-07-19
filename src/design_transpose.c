@@ -4,6 +4,7 @@
 
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
+#include "r_utils.h"
 
 /*
  * Snapshot Design$data once and emit independently owned named row shells.
@@ -239,7 +240,7 @@ static int parse_flag(SEXP value) {
 }
 
 SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
-  PROTECT(data);
+  data = PROTECT(paradox_materialize_public_table_shell(data));
   PROTECT(filter_na);
   const int do_filter = parse_flag(filter_na);
   if (!ordinary_design_shell(data)) {

@@ -125,6 +125,16 @@ attribute_hidden NORET void paradox_error_from_scalar_string(SEXP message);
  * allocating operation. */
 attribute_hidden SEXP paradox_snapshot_semantic_vector(SEXP value);
 
+/* Materialize an exact-class, allowed-attribute public data.frame/data.table
+ * ALTREP top-level shell once while retaining its attributes and column
+ * identities. Base R's lazy attribute-only duplicate is the common motivating
+ * case, but admission deliberately does not depend on an internal base-R
+ * implementation threshold. Unrecognized/non-table inputs are returned
+ * unchanged so each operation's existing strict validator remains
+ * authoritative. The result is unprotected and must be rooted immediately by
+ * the caller. */
+attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);
+
 attribute_hidden SEXP paradox_prepare_data_table(SEXP table, int growable);
 
 #endif

@@ -125,12 +125,15 @@ semantic vectors remain supported at their stated positions.
   requested; any positive-row quantile or sampling request errors before RNG
   entry or indexing. Empty levels are semantic emptiness, not corrupt schema.
 - Interpreted structure must be ordinary non-ALTREP and non-S4. This includes
-  outer list/table/Domain/Condition/TuneToken/capsule shells, ParamSet
-  constructor `params` lists, transformation input/result list shells, Domain
-  cargo containers and interpreted cargo entries, class/name vectors, row
-  containers, dimnames and other list metadata. Ordinary `data.frame` and
-  `data.table` shells remain supported where documented; admitted semantic
-  atomic leaves and columns may be stable ALTREP and are materialized once.
+  outer general-list/internal-table/Domain/Condition/TuneToken/capsule shells,
+  ParamSet constructor `params` lists, non-table transformation inputs and all
+  transformation result list shells, Domain cargo containers and interpreted
+  cargo entries, class/name vectors, row containers, dimnames and other list
+  metadata. A narrow documented public-table ingress may first materialize an
+  exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
+  lazy attribute-only duplicate is the common motivating case. Its structural
+  metadata then follows this same strict rule. Admitted semantic atomic leaves
+  and columns may be stable ALTREP and are materialized once.
   In particular, the outer `special_vals` list, its names, and list metadata
   are structural for every Domain kind and must be ordinary non-ALTREP/non-S4.
   `ParamDbl`, `ParamInt`, `ParamFct`, and `ParamLgl` reject an ALTREP
@@ -186,9 +189,13 @@ semantic vectors remain supported at their stated positions.
   order, then appends all changed child outputs in callback-plan order (and in
   each callback's result order). Child-owned inputs omitted by their callback
   disappear, and a changed name that collides with retained input is an error.
-  Every transformation input and result outer list is ordinary non-ALTREP and
-  non-S4. Semantic atomic leaves (and columns of a documented ordinary
-  data-frame input) may be stable ALTREP and enter the same native admission.
+  Every transformation result and non-table input outer list is ordinary
+  non-ALTREP and non-S4. A documented data-frame input may use the exact
+  public-table ALTREP boundary above. Semantic atomic leaves and admitted
+  columns may be stable ALTREP and enter the same native admission.
+  Do not restore the removed namespace-level R `transpose()` implementation or
+  the unused table helpers: `Design$transpose()` has one registered native
+  semantic engine.
 - Direct public `$values <-` assignment accepts an ordinary named base list or
   an ordinary S3-classed named list container. Checked and unchecked assignment
   both reject an outer ALTREP shell before observing its length, names, or
@@ -344,14 +351,25 @@ semantic vectors remain supported at their stated positions.
   remain deliberately ordinary non-ALTREP and non-S4: configuration/search-
   space and transformation list shells, ParamSet constructor `params` lists,
   Domain/Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo
-  entries, table shells, rows, dimnames, class/name vectors, and other list
-  metadata. Ordinary base `data.frame` and `data.table` inputs remain supported
-  where documented, while their admitted semantic atomic columns may be stable
-  ALTREP. Direct checked or unchecked `$values <-` assignment rejects an outer
+  entries, internal table shells, rows, dimnames, class/name vectors, and other
+  list metadata. At documented public `data.frame`/`data.table` inputs, the one
+  structural exception is an exact-class top-level VECSXP ALTREP carrying only
+  the attributes allowed for that table class. Native admission captures its
+  attributes before element observation, calls Length once and Elt once per
+  column to materialize the shell, preserves column identities, and then runs
+  the existing strict table validator. Base R's lazy attribute-only duplicate
+  is the common motivating case; the contract does not depend on its current
+  internal width threshold. Table metadata remains ordinary non-ALTREP/non-S4,
+  while admitted semantic atomic columns may be stable ALTREP. This exception
+  applies only to `check_dt`,
+  `test_constraint_dt`, `qunif`, public `trafo` input, and the two Design table
+  operations; it does not admit ALTREP capsule, Domain, Condition, TuneToken,
+  row, callback-result, or general list shells. Direct checked or unchecked
+  `$values <-` assignment rejects an outer
   ALTREP before observation and canonicalizes the accepted Paradox-1 empty
   spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
   vector, or an accepted empty list container) to a named list in C.
-  `set_values(.values=)` is the sole outer-list exception: its merge boundary
+  `set_values(.values=)` is the sole general-list exception: its merge boundary
   snapshots the supplied shell once before validation. This is
   an explicit operation contract, not a general list-ALTREP fallback. The
   semantic materialize-once guarantee begins at native
@@ -786,11 +804,14 @@ The package suite must directly cover, before downstream packages are used:
 - materialize-once stable/base ALTREP under allocation/finalizers/reentry, plus
   rejection or admission of hostile state-changing custom ALTREP without
   replay or Paradox-caused crash/memory corruption; interpreted ParamSet
-  `params`, trafo input/result, Domain cargo, table, dimnames, and list metadata
-  shells reject ALTREP/S4 before semantic observation, while admitted atomic
+  `params`, non-table trafo input/result, Domain cargo, internal table,
+  dimnames, and list metadata shells reject ALTREP/S4 before semantic
+  observation, while the documented public-table top shell is materialized
+  once before the same strict metadata/column validation and admitted atomic
   leaves and columns remain supported;
-- detached data.table facades, documented ordinary data.frame/data.table input,
-  stable semantic ALTREP columns, and public mutation isolation;
+- detached data.table facades, documented data.frame/data.table input including
+  exact-class top-level ALTREP shells and base R's lazy duplicate, stable
+  semantic ALTREP columns, and public mutation isolation;
 - detached ParamSet-family equality covers complete state and distinguishes
   shared from duplicated DAG topology without traversing private R6 bindings;
 - serialization and explicit upgrades of CRAN 1.0.1, shared/nested graphs,
@@ -913,3 +934,13 @@ dependency, downstream, and `$has_deps` work. Their evidence remains below
 ignored `.local/` paths and in Git history, but none is a baseline for current
 source completeness, compatibility policy, routine inventory, test counts, or
 release readiness.
+
+The later candidate `refs/paradox-release/candidate-20260719T150831Z` at
+`612345ceb403c70a0ea6c1149c367c6782d9870b` passed its native, R-API,
+runtime, differential, and memory gates, but the final release benchmark
+correctly rejected it before candidate timing: R 4.6 had represented the
+benchmark's ordinary wide data.frame as a top-level base `wrap_list` ALTREP,
+and `check_dt()` rejected that common representation. Its unsealed benchmark
+is defect evidence, not a performance result. The replacement design
+materializes exact public-table ALTREP shells once at the six documented
+ingresses and does not weaken general structural admission.

@@ -69,3 +69,10 @@ test_that("Design observes its then-current public data exactly once", {
     list(list(x = 2, y = "a"), list(y = NULL))
   )
 })
+
+test_that("Design transpose has no dormant R semantic engine", {
+  namespace = asNamespace("paradox")
+  expect_false(exists("transpose", namespace, inherits = FALSE))
+  expect_false(exists("col_to_nl", namespace, inherits = FALSE))
+  expect_false(exists("rbindlist_proto", namespace, inherits = FALSE))
+})

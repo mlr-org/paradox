@@ -7,10 +7,11 @@
 A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
 by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
-The public table is an ordinary non-ALTREP/non-S4 data.table shell with
-ordinary structural names/row/dim/dimnames/list metadata. Its admitted
-semantic atomic columns may be stable ALTREP and are materialized once by
-native operations.
+The public table has ordinary non-ALTREP/non-S4 structural
+names/row/dim/dimnames/list metadata. Native Design operations materialize
+an exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
+lazy attribute-only duplicate is the common case. Admitted semantic atomic
+columns may be stable ALTREP and are likewise materialized once.
 }
 \section{Public fields}{
   \if{html}{\out{<div class="r6-fields">}}
@@ -18,7 +19,8 @@ native operations.
     \item{\code{param_set}}{(\link{ParamSet}).}
 
     \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored ordinary data.table shell. Semantic atomic columns may be stable
+Stored data.table shell. An exact-class, allowed-attribute top-level
+VECSXP ALTREP is accepted once. Semantic atomic columns may be stable
 ALTREP; structural metadata may not.}
   }
   \if{html}{\out{</div>}}
@@ -48,8 +50,9 @@ ALTREP; structural metadata may not.}
     \describe{
       \item{\code{param_set}}{(\link{ParamSet}).}
       \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}. The table shell and structural metadata must be ordinary
-non-ALTREP/non-S4; admitted semantic atomic columns may be stable ALTREP.}
+Stored \code{data}. Structural metadata must be ordinary non-ALTREP/non-S4;
+an exact-class, allowed-attribute top-level VECSXP ALTREP is accepted
+once, and admitted semantic atomic columns may be stable ALTREP.}
       \item{\code{remove_dupl}}{(\code{logical(1)})\cr
 Remove duplicates?}
     }
@@ -102,8 +105,10 @@ Remove duplicates?}
   Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
 and possibly calls the \code{trafo} function of the \link{ParamSet}.
-The stored table must continue to satisfy the ordinary structural-shell
-boundary; admitted stable ALTREP atomic columns are materialized once.
+The stored table must continue to satisfy the documented public-table
+boundary: an exact-class, allowed-attribute top-level VECSXP ALTREP is
+materialized once, structural metadata remains ordinary, and admitted
+stable ALTREP atomic columns are materialized once.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}

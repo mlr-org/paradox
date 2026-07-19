@@ -454,13 +454,8 @@ test_that("Design columns materialize while trafo shells stay structural", {
   )
 })
 
-test_that("structural table and batch shells reject before ALTREP callbacks", {
+test_that("public tables snapshot ALTREP shells while other shells reject", {
   altrep2_skip_without_helpers()
-  callbacks = 0L
-  callback = function() {
-    callbacks <<- callbacks + 1L
-    stop("structural shell was observed", call. = FALSE)
-  }
   param_set = ps(x = p_dbl(0, 1))
   table = structure(
     list(x = c(0.25, 0.75)),
@@ -468,10 +463,10 @@ test_that("structural table and batch shells reject before ALTREP callbacks", {
     row.names = c(NA_integer_, -2L),
     class = "data.frame"
   )
-  outer_table = native_stateful_altrep(
-    table,
-    table,
-    callback = callback,
+  table_callbacks = 0L
+  wrapped_table = function(value = table) native_stateful_altrep(
+    value, value,
+    callback = function() table_callbacks <<- table_callbacks + 1L,
     callback_after = 0L
   )
 
@@ -479,27 +474,49 @@ test_that("structural table and batch shells reject before ALTREP callbacks", {
     altrep2_symbol("param_set_check_dt_builtin"),
     altrep2_private(param_set),
     param_set,
-    outer_table,
+    wrapped_table(),
     TRUE,
     "none",
     TRUE
-  ), "Must be a data.frame or data.table.")
-  expect_error(.Call(
+  ), TRUE)
+  expect_identical(table_callbacks, 1L)
+  expect_identical(.Call(
     altrep2_symbol("param_set_qunif_builtin"),
     altrep2_private(param_set),
     param_set,
-    outer_table
-  ), "numeric matrix or data.frame", fixed = TRUE)
-  expect_error(
-    .Call(altrep2_symbol("design_transpose"), outer_table, FALSE),
-    "list-like data frame",
-    fixed = TRUE
+    wrapped_table()
+  )$x, c(0.25, 0.75))
+  expect_identical(table_callbacks, 2L)
+  expect_identical(
+    param_set$trafo(wrapped_table()),
+    list(x = c(0.25, 0.75))
   )
-  expect_error(
-    .Call(altrep2_symbol("design_dependency_plan"), outer_table, param_set),
-    "list-like data frame",
-    fixed = TRUE
+  expect_identical(table_callbacks, 3L)
+  expect_identical(
+    .Call(altrep2_symbol("design_transpose"), wrapped_table(), FALSE),
+    list(list(x = 0.25), list(x = 0.75))
   )
+  expect_identical(table_callbacks, 4L)
+  expect_length(.Call(
+    altrep2_symbol("design_dependency_plan"),
+    wrapped_table(),
+    param_set
+  )$rows, 0L)
+  expect_identical(table_callbacks, 5L)
+
+  data_table = data.table::as.data.table(table)
+  param_set$constraint = function(x) TRUE
+  expect_identical(
+    param_set$test_constraint_dt(wrapped_table(data_table)),
+    c(TRUE, TRUE)
+  )
+  expect_identical(table_callbacks, 6L)
+
+  callbacks = 0L
+  callback = function() {
+    callbacks <<- callbacks + 1L
+    stop("structural shell was observed", call. = FALSE)
+  }
 
   rows = native_stateful_altrep(
     list(list(x = 0.5)),

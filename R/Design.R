@@ -4,10 +4,11 @@
 #' A lightweight wrapper around a [ParamSet] and a [data.table::data.table()], where the
 #' latter is a design of configurations produced from the former - e.g.,
 #' by calling a [generate_design_grid()] or by sampling.
-#' The public table is an ordinary non-ALTREP/non-S4 data.table shell with
-#' ordinary structural names/row/dim/dimnames/list metadata. Its admitted
-#' semantic atomic columns may be stable ALTREP and are materialized once by
-#' native operations.
+#' The public table has ordinary non-ALTREP/non-S4 structural
+#' names/row/dim/dimnames/list metadata. Native Design operations materialize
+#' an exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
+#' lazy attribute-only duplicate is the common case. Admitted semantic atomic
+#' columns may be stable ALTREP and are likewise materialized once.
 #'
 #' @export
 Design = R6Class("Design",
@@ -16,7 +17,8 @@ Design = R6Class("Design",
     param_set = NULL,
 
     #' @field data ([data.table::data.table()])\cr
-    #' Stored ordinary data.table shell. Semantic atomic columns may be stable
+    #' Stored data.table shell. An exact-class, allowed-attribute top-level
+    #' VECSXP ALTREP is accepted once. Semantic atomic columns may be stable
     #' ALTREP; structural metadata may not.
     data = NULL,
 
@@ -25,8 +27,9 @@ Design = R6Class("Design",
     #'
     #' @param param_set ([ParamSet]).
     #' @param data ([data.table::data.table()])\cr
-    #'   Stored `data`. The table shell and structural metadata must be ordinary
-    #'   non-ALTREP/non-S4; admitted semantic atomic columns may be stable ALTREP.
+    #'   Stored `data`. Structural metadata must be ordinary non-ALTREP/non-S4;
+    #'   an exact-class, allowed-attribute top-level VECSXP ALTREP is accepted
+    #'   once, and admitted semantic atomic columns may be stable ALTREP.
     #' @param remove_dupl (`logical(1)`)\cr
     #'   Remove duplicates?
     initialize = function(param_set, data, remove_dupl) {
@@ -69,8 +72,10 @@ Design = R6Class("Design",
     #' Converts `data` into a list of lists of row-configurations,
     #' possibly removes `NA` entries of inactive parameter values due to unsatisfied dependencies,
     #' and possibly calls the `trafo` function of the [ParamSet].
-    #' The stored table must continue to satisfy the ordinary structural-shell
-    #' boundary; admitted stable ALTREP atomic columns are materialized once.
+    #' The stored table must continue to satisfy the documented public-table
+    #' boundary: an exact-class, allowed-attribute top-level VECSXP ALTREP is
+    #' materialized once, structural metadata remains ordinary, and admitted
+    #' stable ALTREP atomic columns are materialized once.
     #'
     #' @param filter_na (`logical(1)`)\cr
     #'   Should `NA` entries of inactive parameter values due to unsatisfied

@@ -51,6 +51,8 @@ TRUSTED_MEMORY_EVIDENCE="$TRUSTED_DIRECTORY/validate-memory-evidence"
 TRUSTED_PROBE_RUNNER="$TRUSTED_DIRECTORY/run-native-probes.R"
 TRUSTED_PROBE_VERIFIER="$TRUSTED_DIRECTORY/verify-native-probes.R"
 TRUSTED_TEST_RUNNER="$TRUSTED_DIRECTORY/run-native-tests.R"
+TRUSTED_TEST_WORKER="$TRUSTED_DIRECTORY/run-native-test-worker.R"
+TRUSTED_TEST_WORKER_GROUP="$TRUSTED_DIRECTORY/run-native-test-worker-group"
 TRUSTED_TEST_VERIFIER="$TRUSTED_DIRECTORY/verify-native-test-ledger.R"
 TRUSTED_DEBUG_SYMBOL_HELPER="$ROOT/scripts/bootstrap-valgrind-debug-symbols"
 TRUSTED_RESOURCE_JOBS="$TRUSTED_DIRECTORY/resource-jobs"
@@ -69,7 +71,8 @@ for trusted_input in "$TRUSTED_MEMORY_CHECK" "$TRUSTED_COPY_SNAPSHOT" \
     "$TRUSTED_SOURCE_RUN_VALIDATOR" "$TRUSTED_VALGRIND_RECEIPTS" \
     "$TRUSTED_TREE_RECEIPT" "$TRUSTED_MEMORY_EVIDENCE" \
     "$TRUSTED_PROBE_RUNNER" "$TRUSTED_PROBE_VERIFIER" \
-    "$TRUSTED_TEST_RUNNER" "$TRUSTED_TEST_VERIFIER" \
+    "$TRUSTED_TEST_RUNNER" "$TRUSTED_TEST_WORKER" \
+    "$TRUSTED_TEST_WORKER_GROUP" "$TRUSTED_TEST_VERIFIER" \
     "$TRUSTED_DEBUG_SYMBOL_HELPER" \
     "$TRUSTED_RESOURCE_JOBS" "$TRUSTED_BOUNDED_RCHK_PREPARER" \
     "$TRUSTED_BOUNDED_RCHK_BUILD_DRIVER" "$TRUSTED_BOUNDED_RCHK_CONFIG" \
@@ -296,6 +299,7 @@ declare -a harness_names=(
   memory-check copy-check-snapshot.R validate-native-source-run
   valgrind-receipts tree-receipt.R validate-memory-evidence
   run-native-probes.R verify-native-probes.R run-native-tests.R
+  run-native-test-worker.R run-native-test-worker-group
   verify-native-test-ledger.R
   bootstrap-valgrind-debug-symbols resource-jobs
   prepare-bounded-rchk-bcheck build-bounded-rchk-bcheck
@@ -312,6 +316,8 @@ declare -A trusted_harness=(
   [run-native-probes.R]="$TRUSTED_PROBE_RUNNER"
   [verify-native-probes.R]="$TRUSTED_PROBE_VERIFIER"
   [run-native-tests.R]="$TRUSTED_TEST_RUNNER"
+  [run-native-test-worker.R]="$TRUSTED_TEST_WORKER"
+  [run-native-test-worker-group]="$TRUSTED_TEST_WORKER_GROUP"
   [verify-native-test-ledger.R]="$TRUSTED_TEST_VERIFIER"
   [bootstrap-valgrind-debug-symbols]="$TRUSTED_DEBUG_SYMBOL_HELPER"
   [resource-jobs]="$TRUSTED_RESOURCE_JOBS"
@@ -387,6 +393,8 @@ for relative in \
     scripts/environment/run-native-probes.R \
     scripts/environment/verify-native-probes.R \
     scripts/environment/run-native-tests.R \
+    scripts/environment/run-native-test-worker.R \
+    scripts/environment/run-native-test-worker-group \
     scripts/environment/verify-native-test-ledger.R \
     environment/native-routine-coverage.tsv; do
   require_regular "$SOURCE/$relative"
@@ -397,6 +405,10 @@ cmp -s "$SOURCE/scripts/environment/verify-native-probes.R" "$TRUSTED_PROBE_VERI
   fail "frozen source probe verifier differs from trusted current policy"
 cmp -s "$SOURCE/scripts/environment/run-native-tests.R" "$TRUSTED_TEST_RUNNER" ||
   fail "frozen source test runner differs from trusted current policy"
+cmp -s "$SOURCE/scripts/environment/run-native-test-worker.R" "$TRUSTED_TEST_WORKER" ||
+  fail "frozen source test worker differs from trusted current policy"
+cmp -s "$SOURCE/scripts/environment/run-native-test-worker-group" "$TRUSTED_TEST_WORKER_GROUP" ||
+  fail "frozen source test worker group differs from trusted current policy"
 cmp -s "$SOURCE/scripts/environment/verify-native-test-ledger.R" "$TRUSTED_TEST_VERIFIER" ||
   fail "frozen source test verifier differs from trusted current policy"
 cmp -s "$SOURCE/environment/native-routine-coverage.tsv" "$TRUSTED_PROBE_MANIFEST" ||

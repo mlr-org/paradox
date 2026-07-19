@@ -157,8 +157,9 @@ workflow's top-level green mark alone.
   direct-assignment rejection versus the sole `set_values(.values=)` shell
   snapshot, typed-special ALTREP/pointer-S4 and ParamUty base-`identical()`
   boundaries, exact BASE Object-token receipts and sealed search capabilities,
-  ordinary non-ALTREP/non-S4 structural shell rejection, documented ordinary
-  tables with semantic ALTREP columns, data.table facades, and package check;
+  ordinary non-ALTREP/non-S4 structural shell rejection, documented tables with
+  exact-class top-level ALTREP shells and semantic ALTREP columns, data.table
+  facades, and package check;
 - no temporary source-tree detritus that makes a check falsely dirty.
 
 ## Sanitizers and analyzers

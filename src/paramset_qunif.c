@@ -550,11 +550,13 @@ static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
 
 static void snapshot_qunif_input(SEXP x, qunif_input_t *info, SEXP roots) {
   R_xlen_t work_since_interrupt = 0;
-  if (ordinary_frame_shell(x)) {
-    snapshot_frame_input(x, info, roots, &work_since_interrupt);
+  SEXP stable_shell = PROTECT(paradox_materialize_public_table_shell(x));
+  if (ordinary_frame_shell(stable_shell)) {
+    snapshot_frame_input(stable_shell, info, roots, &work_since_interrupt);
   } else {
-    snapshot_matrix_input(x, info, roots, &work_since_interrupt);
+    snapshot_matrix_input(stable_shell, info, roots, &work_since_interrupt);
   }
+  UNPROTECT(1);
 }
 
 static SEXP snapshot_factor_levels(SEXP levels,

@@ -288,6 +288,8 @@ harmless and material zero-baseline allocation changes:
 
 ```sh
 Rscript --vanilla benchmarks/tests/test-regression-policy.R
+Rscript --vanilla benchmarks/tests/test-release-path-validation.R
+Rscript --vanilla benchmarks/tests/test-worker-validation-diagnostics.R
 ```
 
 For the development runner, supply `--baseline-ref` whenever the source

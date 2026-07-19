@@ -22,6 +22,40 @@ benchmark_named_value <- function(values, name, default = NA_character_) {
   if (name %in% names(values)) unname(values[[name]]) else default
 }
 
+benchmark_validate_workload_result <- function(
+  workload,
+  result,
+  workload_name,
+  phase,
+  expected_key
+) {
+  key <- tryCatch(
+    workload$validate(result),
+    error = function(condition) {
+      stop(
+        sprintf(
+          "Workload '%s' semantic validation failed in phase '%s': %s",
+          workload_name,
+          phase,
+          conditionMessage(condition)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  if (!missing(expected_key) && !identical(key, expected_key)) {
+    stop(
+      sprintf(
+        "Workload '%s' changed its validated result in phase '%s'.",
+        workload_name,
+        phase
+      ),
+      call. = FALSE
+    )
+  }
+  key
+}
+
 benchmark_package_fingerprint <- function(package_path) {
   files <- sort(list.files(
     package_path,
@@ -218,7 +252,9 @@ benchmark_worker <- function(
   names(validation_keys) <- names(workloads)
   for (i in seq_along(workloads)) {
     result <- eval(workloads[[i]]$expression, envir = environment())
-    validation_keys[[i]] <- workloads[[i]]$validate(result)
+    validation_keys[[i]] <- benchmark_validate_workload_result(
+      workloads[[i]], result, names(workloads)[[i]], "initial"
+    )
   }
 
   # Explicit warmups keep compilation, lazy loading, and first-use data.table
@@ -232,10 +268,10 @@ benchmark_worker <- function(
   # Revalidate after warmup to catch accidental mutation of shared fixtures.
   for (i in seq_along(workloads)) {
     result <- eval(workloads[[i]]$expression, envir = environment())
-    key <- workloads[[i]]$validate(result)
-    if (!identical(key, validation_keys[[i]])) {
-      stop(sprintf("Workload '%s' changed its validated result during warmup.", names(workloads)[[i]]))
-    }
+    benchmark_validate_workload_result(
+      workloads[[i]], result, names(workloads)[[i]], "post-warmup",
+      validation_keys[[i]]
+    )
   }
   rm(result)
   invisible(gc())
@@ -272,10 +308,10 @@ benchmark_worker <- function(
   # semantic validator after the complete sample run.
   for (i in seq_along(workloads)) {
     result <- eval(workloads[[i]]$expression, envir = environment())
-    key <- workloads[[i]]$validate(result)
-    if (!identical(key, validation_keys[[i]])) {
-      stop(sprintf("Workload '%s' changed its validated result during timing.", names(workloads)[[i]]))
-    }
+    benchmark_validate_workload_result(
+      workloads[[i]], result, names(workloads)[[i]], "post-timing",
+      validation_keys[[i]]
+    )
   }
   rm(result)
 

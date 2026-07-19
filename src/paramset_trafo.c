@@ -898,7 +898,7 @@ SEXP paradox_param_set_trafo(SEXP private_environment, SEXP self,
     SEXP x, SEXP param_set_argument) {
   PROTECT(private_environment);
   PROTECT(self);
-  PROTECT(x);
+  x = PROTECT(paradox_materialize_public_table_shell(x));
   PROTECT(param_set_argument);
   R_xlen_t work_since_interrupt = 0;
   SEXP frozen_row = PROTECT(snapshot_row(x, &work_since_interrupt));

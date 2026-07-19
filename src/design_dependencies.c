@@ -737,7 +737,7 @@ static SEXP empty_output(void) {
 }
 
 SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
-  PROTECT(data);
+  data = PROTECT(paradox_materialize_public_table_shell(data));
   PROTECT(param_set);
   if (!ordinary_design_shell(data)) {
     UNPROTECT(2);

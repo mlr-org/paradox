@@ -22,6 +22,79 @@ SEXP paradox_stored_attribute(SEXP object, SEXP symbol) {
   return result;
 }
 
+static int public_table_class_name(SEXP value, const char *expected) {
+  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES &&
+    strcmp(CHAR(value), expected) == 0;
+}
+
+static int recognized_public_table_shell(SEXP table) {
+  SEXP classes = PROTECT(Rf_getAttrib(table, R_ClassSymbol));
+  const int ordinary_classes = TYPEOF(classes) == STRSXP &&
+    !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
+    paradox_api_has_no_attributes(classes);
+  const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
+  const int data_frame = count == 1 && public_table_class_name(
+    STRING_ELT(classes, 0),
+    "data.frame"
+  );
+  const int data_table = count == 2 && public_table_class_name(
+      STRING_ELT(classes, 0),
+      "data.table"
+    ) && public_table_class_name(
+      STRING_ELT(classes, 1),
+      "data.frame"
+    );
+  static const char *const frame_attributes[] = {
+    "names", "row.names", "class"
+  };
+  static const char *const table_attributes[] = {
+    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
+  };
+  const int recognized = (data_frame && paradox_api_has_only_attributes(
+      table,
+      frame_attributes,
+      3
+    )) || (data_table && paradox_api_has_only_attributes(
+      table,
+      table_attributes,
+      6
+    ));
+  UNPROTECT(1);
+  return recognized;
+}
+
+SEXP paradox_materialize_public_table_shell(SEXP table) {
+  if (TYPEOF(table) != VECSXP || !ALTREP(table) || Rf_isS4(table) ||
+      !recognized_public_table_shell(table)) {
+    return table;
+  }
+
+  /* Base's attribute-only duplicate wrapper is the common motivating case,
+   * but use only public ALTREP accessors and give every exact documented public
+   * table shell the same one-observation boundary: one Length call followed by
+   * one Elt call per column. Existing operation validators inspect the copied
+   * attributes and columns afterward.
+   */
+  PROTECT(table);
+  const R_xlen_t count = XLENGTH(table);
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
+  /* Select metadata before an Elt accessor can reenter R. Attribute values are
+   * retained exactly; the caller's existing validator decides whether every
+   * structural value is ordinary and admissible. */
+  SHALLOW_DUPLICATE_ATTRIB(result, table);
+  for (R_xlen_t column = 0; column < count; ++column) {
+    if (column != 0 &&
+        column % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+      R_CheckUserInterrupt();
+    }
+    SEXP value = PROTECT(VECTOR_ELT(table, column));
+    SET_VECTOR_ELT(result, column, value);
+    UNPROTECT(1);
+  }
+  UNPROTECT(2);
+  return result;
+}
+
 static SEXP argument_class(SEXP value) {
   if (!Rf_isObject(value)) {
     return R_NilValue;

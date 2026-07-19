@@ -61,9 +61,10 @@ Transformation function. Settable on a base \code{\link{ParamSet}}; read-only an
 derived from children on a \code{\link{ParamSetCollection}}.
 User has to pass a \verb{function(x)}, of the form\cr
 (named \code{list()}, \link{ParamSet}) -> \code{list()}.\cr
-Input and result list shells, names, and list metadata must be ordinary
-non-ALTREP/non-S4. Admitted semantic atomic leaves (or columns of a
-documented ordinary data-frame input) may be stable ALTREP.
+Result and non-table input list shells, names, and list metadata must be
+ordinary non-ALTREP/non-S4. A documented data-frame input may use the exact
+top-level ALTREP table boundary; admitted semantic atomic leaves or columns
+may be stable ALTREP.
 The function is responsible to transform a feasible configuration into another encoding,
 before potentially evaluating the configuration with the target algorithm.
 For the output, not many things have to hold.
