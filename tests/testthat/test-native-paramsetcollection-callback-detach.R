@@ -1,41 +1,36 @@
-native_collection_detach_available = function() {
-  exists(
-    "C_param_set_collection_detach_plan",
-    envir = asNamespace("paradox"),
-    inherits = FALSE
-  )
-}
-
 native_collection_detach_plan = function(collection, ids = NULL) {
   .Call(
-    C_param_set_collection_detach_plan,
+    paradox:::C_param_set_collection_detach_plan,
     collection$.__enclos_env__$private,
     collection,
     ids
   )
 }
 
-test_that("callback-free collection subsets bypass detachment admission", {
-  skip_if_not(native_collection_detach_available())
-  plain = psc(component = ps(x = p_int(), y = p_lgl()))
-  constrained_child = ps(x = p_int())
-  constrained_child$constraint = function(x) TRUE
-  constrained = psc(component = constrained_child)
-
-  # Make entry into the native planner observable without adding production
-  # instrumentation.  The callback-free gate must return the ParamSet already
-  # produced by super$subset(); a retained callback still uses the planner and
-  # is covered by the callback tests below.
+test_that("collection callback entries are registered and forced", {
+  symbols = c(
+    param_set_collection_detach_plan = 3L,
+    param_set_collection_has_callback = 3L,
+    param_set_collection_extra_trafo = 3L,
+    param_set_collection_constraint = 3L,
+    param_set_collection_detached_extra_trafo = 2L,
+    param_set_collection_detached_constraint = 2L,
+    param_set_collection_owner_subset_state = 3L
+  )
   namespace = asNamespace("paradox")
-  symbol = "C_param_set_collection_detach_plan"
-  registered = get(symbol, envir = namespace, inherits = FALSE)
-  unlockBinding(symbol, namespace)
-  on.exit({
-    assign(symbol, registered, envir = namespace)
-    lockBinding(symbol, namespace)
-  }, add = TRUE)
-  assign(symbol, NULL, envir = namespace)
+  for (name in names(symbols)) {
+    symbol = get(paste0("C_", name), envir = namespace)
+    expect_s3_class(symbol, "NativeSymbolInfo")
+    expect_identical(symbol$numParameters, unname(symbols[[name]]))
+  }
+  expect_error(
+    .Call("param_set_collection_detach_plan", PACKAGE = "paradox"),
+    "not available"
+  )
+})
 
+test_that("callback-free collection subsets bypass callback planning", {
+  plain = psc(component = ps(x = p_int(), y = p_lgl()))
   observed = plain$subset(
     "component.x",
     allow_dangling_dependencies = TRUE
@@ -43,18 +38,9 @@ test_that("callback-free collection subsets bypass detachment admission", {
   expect_identical(observed$ids(), "component.x")
   expect_null(observed$constraint)
   expect_null(observed$extra_trafo)
-
-  omitted = constrained$subset(
-    "component.x",
-    allow_dangling_dependencies = TRUE,
-    keep_constraint = FALSE
-  )
-  expect_null(omitted$constraint)
-  expect_null(omitted$extra_trafo)
 })
 
-test_that("native collection callback plans retain immediate-child order", {
-  skip_if_not(native_collection_detach_available())
+test_that("native plans flatten nested capsule routes in schema order", {
   first = ps(x = p_int(), plain = p_lgl())
   second = ps(y = p_int())
   third = ps(z = p_int())
@@ -67,101 +53,88 @@ test_that("native collection callback plans retain immediate-child order", {
     x$z = x$z + 100L
     x
   }
-  collection = psc(first = first, second = second, third = third)
+  nested = psc(
+    layer = psc(first = first, second = second),
+    third = third
+  )
 
   plan = native_collection_detach_plan(
-    collection,
-    c("third.z", "first.x", "second.y", "second.y")
+    nested,
+    c("third.z", "layer.first.x", "layer.second.y", "layer.second.y")
   )
-  expect_type(plan, "list")
-  expect_identical(plan$translation$id, c(
-    "first.x", "second.y", "third.z"
-  ))
+  expect_identical(
+    plan$translation$id,
+    c("layer.first.x", "layer.second.y", "third.z")
+  )
   expect_identical(
     names(plan$translation),
-    c("id", "original_id", "owner_ps_index", "owner_name")
+    c(
+      "id", "original_id", "owner_ps_index", "owner_name", ".prefix",
+      ".suffix"
+    )
   )
+  expect_identical(plan$translation$original_id, c("x", "y", "z"))
   expect_identical(plan$constraint_indices, 1L)
   expect_identical(plan$trafo_indices, c(2L, 3L))
-  expect_identical(names(plan$constraint_sets), "first")
-  expect_identical(names(plan$trafo_sets), c("second", "third"))
 
-  snapshot = collection$subset(
-    c("third.z", "first.x", "second.y"),
+  snapshot = nested$subset(
+    c("third.z", "layer.first.x", "layer.second.y"),
     allow_dangling_dependencies = TRUE
   )
   expect_identical(
     snapshot$trafo(list(
       third.z = 1L,
-      unknown = 9L,
-      second.y = 2L,
-      first.x = 3L
+      ignored = 9L,
+      layer.second.y = 2L,
+      layer.first.x = 3L
     )),
-    list(first.x = 3L, second.y = 12L, third.z = 101L)
-  )
-
-  postfix_child = ps(x = p_int())
-  postfix_child$extra_trafo = function(x) {
-    x$x = x$x + 1L
-    x
-  }
-  postfix = ParamSetCollection$new(
-    list(component = postfix_child),
-    postfix_names = TRUE
-  )$subset("x.component", allow_dangling_dependencies = TRUE)
-  expect_identical(
-    postfix$trafo(list(x.component = 1L)),
-    list(x.component = 2L)
+    list(
+      ignored = 9L,
+      layer.first.x = 3L,
+      layer.second.y = 12L,
+      third.z = 101L
+    )
   )
 })
 
-test_that("native detached wrappers preserve callback frames and names", {
-  skip_if_not(native_collection_detach_available())
-  observed = new.env(parent = emptyenv())
-  child = ps(x = p_int(), y = p_int())
-  child$constraint = function(x) {
-    observed$constraint_call = deparse(sys.call())
-    observed$constraint_parent = ls(parent.frame(), all.names = TRUE)
-    observed$constraint_names = names(x)
-    TRUE
-  }
+test_that("prefix and postfix routes compose without retaining collections", {
+  child = ps(x = p_int())
   child$extra_trafo = function(x) {
-    observed$trafo_call = deparse(sys.call())
-    observed$trafo_parent = ls(parent.frame(), all.names = TRUE)
-    observed$trafo_names = names(x)
+    x$x = x$x + 1L
+    x$new = 5L
     x
   }
-  snapshot = psc(component = child)$subset(
-    c("component.x", "component.y"),
+  inner = ParamSetCollection$new(
+    list(component = child),
+    postfix_names = TRUE
+  )
+  outer = psc(layer = inner)
+  snapshot = outer$subset(
+    "layer.x.component",
     allow_dangling_dependencies = TRUE
   )
+  expect_identical(
+    snapshot$trafo(list(layer.x.component = 1L)),
+    list(layer.x.component = 2L, layer.new.component = 5L)
+  )
+  shadow = ParamSetShadow$new(outer, character())
+  expect_identical(
+    shadow$trafo(list(layer.x.component = 1L)),
+    list(layer.x.component = 2L, layer.new.component = 5L)
+  )
 
-  expect_true(snapshot$constraint(list(
-    component.y = 2L,
-    ignored = 0L,
-    component.x = 1L
+  bindings = ls(environment(snapshot$extra_trafo), all.names = TRUE)
+  expect_identical(bindings, "plan")
+  expect_null(get("plan", environment(snapshot$extra_trafo))$sets[[1L]]$param_set)
+  expect_false(any(vapply(
+    mget(bindings, environment(snapshot$extra_trafo)),
+    inherits,
+    logical(1L),
+    what = "ParamSetCollection"
   )))
-  expect_identical(observed$constraint_call, "constraint(constraining_values)")
-  expect_identical(observed$constraint_names, c("y", "x"))
-  expect_true(all(c(
-    "constraint", "constraining_ids", "constraining_values",
-    "set_index", "sets_with_constraints", "translation", "x"
-  ) %in% observed$constraint_parent))
-
-  snapshot$trafo(list(
-    component.y = 2L,
-    ignored = 0L,
-    component.x = 1L
-  ))
-  expect_identical(observed$trafo_call, "trafo(changing_values_in)")
-  expect_identical(observed$trafo_names, c("y", "x"))
-  expect_true(all(c(
-    "changing_ids", "changing_values_in", "i", "set_index", "trafo"
-  ) %in% observed$trafo_parent))
 })
 
-test_that("native callback snapshots detach slots but share closure state", {
-  skip_if_not(native_collection_detach_available())
+test_that("callback replacements after subset do not change snapshots", {
   closure_state = new.env(parent = emptyenv())
   closure_state$increment = 1L
   closure_state$limit = 5L
@@ -171,8 +144,7 @@ test_that("native callback snapshots detach slots but share closure state", {
     x
   }
   child$constraint = function(x) x$x <= closure_state$limit
-  collection = psc(component = child)
-  snapshot = collection$subset(
+  snapshot = psc(component = child)$subset(
     "component.x",
     allow_dangling_dependencies = TRUE
   )
@@ -197,147 +169,222 @@ test_that("native callback snapshots detach slots but share closure state", {
   expect_false(snapshot$constraint(list(component.x = 4L)))
 })
 
-test_that("detached constraints short circuit and keep_constraint is honored", {
-  skip_if_not(native_collection_detach_available())
-  events = character()
-  first = ps(x = p_int())
-  second = ps(y = p_int())
-  first$constraint = function(x) {
-    events <<- c(events, "first")
-    FALSE
+test_that("documented two-argument trafos receive detached leaf ParamSets", {
+  observed = new.env(parent = emptyenv())
+  child = ps(x = p_int(), y = p_lgl())
+  child$extra_trafo = function(x, param_set) {
+    observed$ids = param_set$ids()
+    observed$class = class(param_set)
+    x
   }
-  second$constraint = function(x) {
-    events <<- c(events, "second")
-    TRUE
-  }
-  collection = psc(first = first, second = second)
-  snapshot = collection$subset(
-    c("second.y", "first.x"),
-    allow_dangling_dependencies = TRUE
-  )
-  expect_false(snapshot$constraint(list(first.x = 1L, second.y = 2L)))
-  expect_identical(events, "first")
-
-  without = collection$subset(
-    c("first.x", "second.y"),
-    allow_dangling_dependencies = TRUE,
-    keep_constraint = FALSE
-  )
-  expect_null(without$constraint)
-})
-
-test_that("unsupported collection callback graphs fail closed", {
-  skip_if_not(native_collection_detach_available())
-  two_argument = ps(x = p_int())
-  two_argument$extra_trafo = function(x, param_set) x
-  expect_null(native_collection_detach_plan(
-    psc(component = two_argument),
-    "component.x"
-  ))
-
-  nested = psc(layer = psc(component = ps(x = p_int())))
-  expect_null(native_collection_detach_plan(nested, "layer.component.x"))
-
-  ChildSubclass = R6::R6Class(
-    "NativeDetachChildSubclass",
-    inherit = ParamSet
-  )
-  child_subclass = ChildSubclass$new(list(x = p_int()))
-  expect_null(native_collection_detach_plan(
-    psc(component = child_subclass),
-    "component.x"
-  ))
-
-  CollectionSubclass = R6::R6Class(
-    "NativeDetachCollectionSubclass",
-    inherit = ParamSetCollection
-  )
-  collection_subclass = CollectionSubclass$new(list(
-    component = ps(x = p_int())
-  ))
-  expect_null(native_collection_detach_plan(
-    collection_subclass,
-    "component.x"
-  ))
-
-  public_environment = ps(x = p_int())
-  public_callback = function(x) x
-  environment(public_callback) = public_environment
-  public_environment$extra_trafo = public_callback
-  expect_null(native_collection_detach_plan(
-    psc(component = public_environment),
-    "component.x"
-  ))
-
-  private_environment = ps(x = p_int())
-  private_callback = function(x) TRUE
-  environment(private_callback) =
-    private_environment$.__enclos_env__$private
-  private_environment$constraint = private_callback
-  expect_null(native_collection_detach_plan(
-    psc(component = private_environment),
-    "component.x"
-  ))
-
-  enclosure_environment = ps(x = p_int())
-  enclosure_callback = function(x) TRUE
-  environment(enclosure_callback) =
-    enclosure_environment$.__enclos_env__
-  enclosure_environment$constraint = enclosure_callback
-  expect_null(native_collection_detach_plan(
-    psc(component = enclosure_environment),
-    "component.x"
-  ))
-
-  Box = R6::R6Class(
-    "NativeDetachValueBox",
-    public = list(value = NULL)
-  )
-  value_child = ps(payload = p_uty())
-  value_child$values = list(payload = Box$new())
-  value_child$extra_trafo = function(x) x
-  expect_null(native_collection_detach_plan(
-    psc(component = value_child),
-    "component.payload"
-  ))
-})
-
-test_that("feature factories retain only their own callback state", {
-  skip_if_not(native_collection_detach_available())
-  child = ps(x = p_int())
-  child$constraint = function(x) TRUE
-  child$extra_trafo = function(x) x
   snapshot = psc(component = child)$subset(
     "component.x",
-    allow_dangling_dependencies = TRUE,
-    keep_constraint = FALSE
+    allow_dangling_dependencies = TRUE
   )
-  bindings = ls(environment(snapshot$extra_trafo), all.names = TRUE)
-  expect_setequal(
-    bindings,
-    c("postfix", "runner", "trafo_indices", "trafo_sets", "translation")
-  )
-  expect_false("plan" %in% bindings)
-  expect_false("constraint_sets" %in% bindings)
+  child$values = list(y = TRUE)
+  snapshot$trafo(list(component.x = 1L))
+
+  expect_identical(observed$ids, "x")
+  expect_identical(observed$class, c("ParamSet", "R6"))
+  carriers = get("plan", environment(snapshot$extra_trafo))$sets
+  expect_false(".source" %in% names(carriers[[1L]]))
+  expect_s3_class(carriers[[1L]]$param_set, "ParamSet")
+  expect_false(identical(carriers[[1L]]$param_set, child))
 })
 
-test_that("native callback admission never forces delayed private slots", {
-  skip_if_not(native_collection_detach_available())
-  events = new.env(parent = emptyenv())
-  events$forced = 0L
-  child = ps(x = p_int())
-  private = child$.__enclos_env__$private
-  unlockBinding(".extra_trafo", private)
-  delayedAssign(
-    ".extra_trafo",
-    {
-      events$forced = events$forced + 1L
-      function(x) x
-    },
-    assign.env = private
+test_that("live collection callbacks use capsule state, not overridable methods", {
+  observed = new.env(parent = emptyenv())
+  HostileParamSet = R6::R6Class(
+    "HostileParamSet",
+    inherit = ParamSet,
+    public = list(
+      initialize = function() {
+        super$initialize(list(x = p_int(), y = p_int()))
+        paradox:::param_set_core_replace(
+          private,
+          extra_trafo = function(x, param_set) {
+            observed$ids = param_set$ids()
+            list(x = x$x + length(param_set$ids()))
+          },
+          constraint = function(x) is.null(x$x) || x$x <= 2L
+        )
+      },
+      subset = function(...) stop("overridden subset dispatched"),
+      trafo = function(...) stop("overridden trafo dispatched")
+    ),
+    active = list(
+      extra_trafo = function(value) {
+        if (!missing(value)) stop("overridden extra_trafo setter dispatched")
+        stop("overridden extra_trafo getter dispatched")
+      },
+      constraint = function(value) {
+        if (!missing(value)) stop("overridden constraint setter dispatched")
+        stop("overridden constraint getter dispatched")
+      },
+      has_extra_trafo = function() FALSE,
+      has_constraint = function() FALSE
+    )
   )
-  lockBinding(".extra_trafo", private)
+  hostile = HostileParamSet$new()
+  collection = psc(component = hostile)
+
+  expect_identical(
+    collection$extra_trafo(list(component.x = 1L, component.y = 2L)),
+    list(component.x = 3L)
+  )
+  expect_identical(
+    collection$trafo(list(component.x = 1L, component.y = 2L)),
+    list(component.x = 3L)
+  )
+  expect_true(collection$constraint(list(component.x = 2L)))
+  expect_false(collection$constraint(list(component.x = 3L)))
+  expect_true(collection$check(list(component.x = 2L)))
+  expect_identical(
+    collection$check(list(component.x = 3L)),
+    "Constraint not fulfilled."
+  )
+
+  detached = collection$subset(
+    "component.x",
+    allow_dangling_dependencies = TRUE
+  )
+  expect_identical(
+    detached$trafo(list(component.x = 1L)),
+    list(component.x = 2L)
+  )
+  expect_identical(observed$ids, "x")
+})
+
+test_that("native aggregate replacement handles omission and collisions", {
+  child = ps(x = p_int(), y = p_int())
+  child$extra_trafo = function(x) list(x = x$x + 1L)
   collection = psc(component = child)
-  expect_null(native_collection_detach_plan(collection, "component.x"))
-  expect_identical(events$forced, 0L)
+  detached = collection$flatten()
+  shadow = ParamSetShadow$new(collection, character())
+  input = list(
+    unknown = 9L,
+    component.x = 1L,
+    component.y = 2L
+  )
+  expected = list(unknown = 9L, component.x = 2L)
+
+  expect_identical(collection$extra_trafo(input), expected)
+  expect_identical(collection$trafo(input), expected)
+  expect_identical(detached$trafo(input), expected)
+  expect_identical(shadow$trafo(input), expected)
+
+  child$extra_trafo = function(x) list()
+  expect_identical(
+    collection$extra_trafo(input),
+    list(unknown = 9L)
+  )
+
+  child$extra_trafo = function(x) unname(list(x$x))
+  expect_error(
+    collection$extra_trafo(input),
+    "must have one name for every element"
+  )
+  child$extra_trafo = function(x) structure(
+    list(x$x, x$y),
+    names = c("same", "same")
+  )
+  expect_error(collection$extra_trafo(input), "unique names")
+
+  child$extra_trafo = function(x) list(collision = x$x)
+  expect_error(
+    collection$extra_trafo(c(
+      input,
+      list(component.collision = 10L)
+    )),
+    "collides with a retained value"
+  )
+})
+
+test_that("native collection constraints require an exact logical scalar", {
+  child = ps(x = p_int())
+  collection = psc(component = child)
+  expect_null(collection$constraint)
+  expect_null(collection$extra_trafo)
+
+  for (answer in list(NA, logical(), c(TRUE, FALSE), 1L)) {
+    child$constraint = local({
+      value = answer
+      function(x) value
+    })
+    expect_error(
+      collection$constraint(list(component.x = 1L)),
+      "one non-missing logical value"
+    )
+    detached = collection$subset(
+      "component.x",
+      allow_dangling_dependencies = TRUE
+    )
+    expect_error(
+      detached$constraint(list(component.x = 1L)),
+      "one non-missing logical value"
+    )
+  }
+})
+
+test_that("detached callback plans fail closed when their mapping is forged", {
+  child = ps(x = p_int())
+  child$extra_trafo = function(x) x
+  detached = psc(component = child)$subset(
+    "component.x",
+    allow_dangling_dependencies = TRUE
+  )
+  plan = get("plan", environment(detached$extra_trafo))
+
+  invalid_unit = plan
+  invalid_unit$indices = 0L
+  expect_error(
+    .Call(
+      paradox:::C_param_set_collection_detached_extra_trafo,
+      invalid_unit,
+      list(component.x = 1L)
+    ),
+    "callback order"
+  )
+
+  invalid_mapping = plan
+  invalid_mapping$translation = as.data.frame(plan$translation)
+  invalid_mapping$translation$id = "different.x"
+  expect_error(
+    .Call(
+      paradox:::C_param_set_collection_detached_extra_trafo,
+      invalid_mapping,
+      list(component.x = 1L)
+    ),
+    "callback translation"
+  )
+})
+
+test_that("shared DAG paths remain distinct callback units", {
+  events = character()
+  shared = ps(x = p_int())
+  shared$constraint = function(x) {
+    events <<- c(events, names(x))
+    TRUE
+  }
+  snapshot = ParamSetCollection$new(list(left = shared, right = shared))$subset(
+    c("left.x", "right.x"),
+    allow_dangling_dependencies = TRUE
+  )
+  expect_true(snapshot$constraint(list(left.x = 1L, right.x = 2L)))
+  expect_identical(events, c("x", "x"))
+})
+
+test_that("corrupt callback graphs error instead of returning a sentinel", {
+  child = ps(x = p_int())
+  child$constraint = function(x) TRUE
+  collection = psc(component = child)
+  private = collection$.__enclos_env__$private
+  paradox:::param_set_core_replace(
+    private,
+    sets = structure(list(collection), names = "component")
+  )
+  expect_error(
+    native_collection_detach_plan(collection, "component.x"),
+    "cycle"
+  )
 })

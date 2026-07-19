@@ -1,12 +1,4 @@
-native_collection_values_available = function() {
-  exists(
-    "C_param_set_collection_values",
-    envir = asNamespace("paradox"),
-    inherits = FALSE
-  )
-}
-
-native_collection_values_symbol = function() {
+collection_values_symbol = function() {
   get(
     "C_param_set_collection_values",
     envir = asNamespace("paradox"),
@@ -14,594 +6,250 @@ native_collection_values_symbol = function() {
   )
 }
 
-native_collection_values_call = function(collection, private = NULL) {
-  if (is.null(private)) private = collection$.__enclos_env__$private
-  .Call(native_collection_values_symbol(), private, collection)
+collection_values_native = function(x) {
+  .Call(
+    collection_values_symbol(),
+    x$.__enclos_env__$private,
+    x
+  )
 }
 
-native_collection_values_reference = function(collection) {
+mixed_encoding_collection_values_fixture = function() {
+  utf8_inner = enc2utf8("caf\u00e9")
+  latin1_inner = iconv(utf8_inner, from = "UTF-8", to = "latin1")
+  if (is.na(latin1_inner)) return(NULL)
+  Encoding(latin1_inner) = "latin1"
+  utf8_outer = enc2utf8(paste0("owner.", utf8_inner))
+  latin1_outer = iconv(utf8_outer, from = "UTF-8", to = "latin1")
+  if (is.na(latin1_outer)) return(NULL)
+  Encoding(latin1_outer) = "latin1"
+
+  child = ps(x = p_int(init = 1L))
+  collection = ParamSetCollection$new(list(owner = child))
+  child_private = child$.__enclos_env__$private
+  child_state = paradox:::param_set_core_state(child_private)
+  child_params = child_state$.params
+  child_params$id[[1L]] = utf8_inner
+  child_values = child_state$.values
+  names(child_values) = utf8_inner
+  paradox:::param_set_core_replace(
+    child_private,
+    params = child_params,
+    values = child_values
+  )
+
   private = collection$.__enclos_env__$private
-  sets = private$.sets
-  if (private$.postfix && !is.null(names(sets))) {
-    values = lapply(seq_along(sets), function(index) {
-      value = sets[[index]]$values
-      owner = names(sets)[[index]]
-      if (nchar(owner)) {
-        names(value) = sprintf("%s.%s", names(value), owner)
-      }
-      value
-    })
-    values = unlist(unname(values), recursive = FALSE)
-  } else {
-    values = lapply(sets, function(set) set$values)
-    values = unlist(values, recursive = FALSE)
-  }
-  if (length(values)) values else setNames(list(), character())
-}
-
-native_collection_values_rich = function(postfix = FALSE) {
-  marker = new.env(parent = emptyenv())
-  marker$value = 1L
-  left = ps(
-    zeta = p_int(init = 1L),
-    alpha = p_lgl(init = TRUE),
-    payload = p_uty()
+  state = paradox:::param_set_core_state(private)
+  params = state$.params
+  params$id[[1L]] = latin1_outer
+  translation = state$.translation
+  translation$id[[1L]] = utf8_outer
+  translation$original_id[[1L]] = latin1_inner
+  paradox:::param_set_core_replace(
+    private,
+    params = params,
+    translation = translation
   )
-  left$values = list(zeta = 2L, alpha = FALSE, payload = NULL)
-  right = ps(amount = p_dbl(-2, 2), marker = p_uty())
-  right$values = list(amount = 0.25, marker = marker)
-  ParamSetCollection$new(
-    list(owner = left, other = right),
-    postfix_names = postfix
+
+  list(
+    collection = collection,
+    expected = setNames(list(1L), latin1_outer)
   )
 }
 
-test_that("native collection values is registered with forced arity two", {
-  skip_if_not(native_collection_values_available())
-  symbol = native_collection_values_symbol()
+test_that("collection values native entry has one fixed capsule interface", {
+  symbol = collection_values_symbol()
   expect_s3_class(symbol, "NativeSymbolInfo")
   expect_identical(symbol$numParameters, 2L)
-  expect_error(
-    .Call("param_set_collection_values", PACKAGE = "paradox"),
-    "not available"
-  )
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
 })
 
-test_that("native values preserves empty, prefix, postfix, and nested order", {
-  skip_if_not(native_collection_values_available())
-  prefix = native_collection_values_rich(FALSE)
-  postfix = native_collection_values_rich(TRUE)
-  nested = ParamSetCollection$new(list(
-    outer = postfix,
-    tail = ps(last = p_dbl(init = 0.5))
-  ))
-  unnamed = ParamSetCollection$new(setNames(list(
-    ps(first = p_int(init = 1L)),
-    ps(second = p_lgl(init = TRUE))
-  ), c("", "")))
-  empty_children = ParamSetCollection$new(setNames(
-    replicate(20L, ParamSet$new(), simplify = FALSE),
-    c("", "", sprintf("empty%02d", seq_len(18L)))
-  ))
+test_that("collection values preserve nested prefix/postfix order and NULL", {
+  left = ps(
+    zeta = p_int(init = 2L),
+    alpha = p_lgl(init = FALSE),
+    payload = p_uty()
+  )
+  left$values = list(zeta = 3L, alpha = TRUE, payload = NULL)
+  right = ps(amount = p_dbl(init = 0.25))
+  inner = ParamSetCollection$new(
+    list(owner = left, other = right),
+    postfix_names = TRUE
+  )
+  outer = ParamSetCollection$new(list(outer = inner))
 
-  for (collection in list(
-      ParamSetCollection$new(list()),
-      empty_children,
-      unnamed,
-      prefix,
-      postfix,
-      nested
-    )) {
-    expected = native_collection_values_reference(collection)
-    direct = native_collection_values_call(collection)
-    expect_false(is.null(direct))
-    expect_identical(direct, expected)
-    expect_identical(collection$values, expected)
-  }
-  expect_identical(
-    names(prefix$values),
-    c(
-      "owner.zeta", "owner.alpha", "owner.payload",
-      "other.amount", "other.marker"
-    )
+  expected = list(
+    outer.zeta.owner = 3L,
+    outer.alpha.owner = TRUE,
+    outer.payload.owner = NULL,
+    outer.amount.other = 0.25
   )
+  expect_identical(collection_values_native(outer), expected)
+  expect_identical(outer$values, expected)
   expect_identical(
-    names(postfix$values),
-    c(
-      "zeta.owner", "alpha.owner", "payload.owner",
-      "amount.other", "marker.other"
-    )
+    ParamSetCollection$new(list())$values,
+    setNames(list(), character())
   )
-  expect_identical(names(nested$values), c(
-    "outer.zeta.owner", "outer.alpha.owner", "outer.payload.owner",
-    "outer.amount.other", "outer.marker.other", "tail.last"
-  ))
-  expect_type(ParamSetCollection$new(list())$values, "list")
-  expect_identical(names(ParamSetCollection$new(list())$values), character())
 })
 
-test_that("native values owns output shells while retaining opaque leaves", {
-  skip_if_not(native_collection_values_available())
-  collection = native_collection_values_rich()
-  marker = collection$sets$other$values$marker
-  first = native_collection_values_call(collection)
-  second = native_collection_values_call(collection)
-
-  expect_identical(first, second)
-  expect_false(identical(
-    data.table::address(first),
-    data.table::address(second)
-  ))
-  expect_false(identical(
-    data.table::address(names(first)),
-    data.table::address(names(second))
-  ))
-  expect_identical(first$other.marker, marker)
-
-  names(first)[[1L]] = "changed"
-  first[[2L]] = TRUE
-  expect_identical(native_collection_values_call(collection), second)
-  first$other.marker$value = 42L
-  expect_identical(marker$value, 42L)
-})
-
-test_that("repeated sibling references are values DAG occurrences", {
-  skip_if_not(native_collection_values_available())
+test_that("collection values use one live snapshot for shared DAG nodes", {
   shared = ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
-  repeated = ParamSetCollection$new(list(left = shared, right = shared))
-  direct = native_collection_values_call(repeated)
+  collection = ParamSetCollection$new(list(left = shared, right = shared))
 
-  expect_false(is.null(direct))
-  expect_identical(direct, list(
+  expect_identical(collection$values, list(
     left.x = 1L,
     left.y = TRUE,
     right.x = 1L,
     right.y = TRUE
   ))
-  shared$values = list(x = 2L)
-  expect_identical(repeated$values, list(left.x = 2L, right.x = 2L))
+  shared$values = list(x = 4L)
+  expect_identical(collection$values, list(left.x = 4L, right.x = 4L))
 })
 
-test_that("collection values cycles error without rejecting sibling reuse", {
-  skip_if_not(native_collection_values_available())
-  cyclic = ParamSetCollection$new(list())
-  cyclic$.__enclos_env__$private$.sets = list(self = cyclic)
-  expect_error(
-    native_collection_values_call(cyclic),
-    "Cyclic ParamSetCollection values graph is unsupported",
-    fixed = TRUE
-  )
-})
-
-test_that("subclass values fall back before invoking extension callbacks", {
-  skip_if_not(native_collection_values_available())
-  events = new.env(parent = emptyenv())
-  events$reads = 0L
-  CountingValues = R6::R6Class(
-    "NativeCollectionValuesCountingValues",
-    inherit = ParamSet,
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          super$values = value
-          return(value)
-        }
-        events$reads = events$reads + 1L
-        super$values
-      }
-    )
-  )
-  child = CountingValues$new(list(x = p_int(init = 1L)))
-  collection = ParamSetCollection$new(list(child = child))
-
-  events$reads = 0L
-  expect_null(native_collection_values_call(collection))
-  expect_identical(events$reads, 0L)
-  expect_identical(collection$values, list(child.x = 1L))
-  expect_identical(events$reads, 1L)
-
-  SubCollection = R6::R6Class(
-    "NativeCollectionValuesSubCollection",
-    inherit = ParamSetCollection
-  )
-  subclass = SubCollection$new(list(child = ps(x = p_int(init = 1L))))
-  expect_null(native_collection_values_call(subclass))
-  expect_null(native_collection_values_call(
-    ParamSetCollection$new(list(outer = subclass))
-  ))
-
-  make_custom = function() paradox:::Domain(
-    cls = "NativeCollectionValuesExtension",
-    grouping = "NativeCollectionValuesExtension",
-    storage_type = "list"
-  )
-  custom_child = ParamSet$new(list(custom = make_custom()))
-  custom_child$.__enclos_env__$private$.values = list(custom = 3L)
-  custom_collection = ParamSetCollection$new(list(child = custom_child))
-  expect_null(native_collection_values_call(custom_collection))
-  expect_identical(custom_collection$values, list(child.custom = 3L))
-})
-
-test_that("replaced public and private getters decline before execution", {
-  skip_if_not(native_collection_values_available())
-  child = ps(x = p_int(init = 1L))
-  collection = ParamSetCollection$new(list(child = child))
-  original_values = activeBindingFunction("values", child)
-  public_reads = 0L
-  makeActiveBinding("values", function(value) {
-    public_reads <<- public_reads + 1L
-    original_values(value)
-  }, child)
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(public_reads, 0L)
-  expect_identical(collection$values, list(child.x = 1L))
-  expect_identical(public_reads, 1L)
-
-  child = ps(x = p_int(init = 2L))
-  collection = ParamSetCollection$new(list(child = child))
-  private = child$.__enclos_env__$private
-  original_getter = private$.get_values
-  private_reads = 0L
-  unlockBinding(".get_values", private)
-  private$.get_values = function() {
-    private_reads <<- private_reads + 1L
-    original_getter()
-  }
-  lockBinding(".get_values", private)
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(private_reads, 0L)
-  expect_identical(collection$values, list(child.x = 2L))
-  expect_identical(private_reads, 1L)
-})
-
-test_that("reparented R6 getter wrappers decline before execution", {
-  skip_if_not(native_collection_values_available())
-  namespace = asNamespace("paradox")
-
-  collection = native_collection_values_rich()
-  events = new.env(parent = emptyenv())
-  events$public = 0L
-  forged_parent = new.env(parent = namespace)
-  forged_parent$.__ParamSet__values = function(self, private, super, xs) {
-    events$public = events$public + 1L
-    list(forged = 11L)
-  }
-  wrapper_environment = environment(activeBindingFunction(
-    "values",
-    collection
-  ))
-  parent.env(wrapper_environment) = forged_parent
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(events$public, 0L)
-  expect_identical(collection$values, list(forged = 11L))
-  expect_identical(events$public, 1L)
-
-  collection = native_collection_values_rich()
-  events$private = 0L
-  forged_parent = new.env(parent = namespace)
-  forged_parent$.__ParamSetCollection__.get_values = function(
-      self, private, super) {
-    events$private = events$private + 1L
-    list(forged = 12L)
-  }
-  wrapper_environment = environment(
-    collection$.__enclos_env__$private$.get_values
-  )
-  parent.env(wrapper_environment) = forged_parent
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(events$private, 0L)
-  expect_identical(collection$values, list(forged = 12L))
-  expect_identical(events$private, 1L)
-})
-
-test_that("delayed private values decline without forcing", {
-  skip_if_not(native_collection_values_available())
-  child = ps(x = p_int())
-  collection = ParamSetCollection$new(list(child = child))
-  private = child$.__enclos_env__$private
-  reads = new.env(parent = emptyenv())
-  reads$count = 0L
-  delayedAssign(
-    ".values",
-    {
-      reads$count = reads$count + 1L
-      list(x = 3L)
-    },
-    assign.env = private,
-    eval.env = environment()
-  )
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(reads$count, 0L)
-  expect_identical(collection$values, list(child.x = 3L))
-  expect_identical(reads$count, 1L)
-})
-
-test_that("collection values rejects public wrapper shadows without forcing", {
-  skip_if_not(native_collection_values_available())
-  namespace = asNamespace("paradox")
-
-  for (kind in c("active", "delayed")) {
-    for (shadow in c(".__ParamSet__values", "super")) {
-      child = ps(x = p_int(init = 3L))
-      collection = ParamSetCollection$new(list(child = child))
-      wrapper_environment = environment(activeBindingFunction(
-        "values",
-        child
-      ))
-      reads = new.env(parent = emptyenv())
-      reads$count = 0L
-      value = if (shadow == "super") {
-        NULL
-      } else {
-        get(shadow, envir = namespace, inherits = FALSE)
-      }
-      if (kind == "active") {
-        makeActiveBinding(shadow, function(replacement) {
-          reads$count = reads$count + 1L
-          value
-        }, wrapper_environment)
-      } else {
-        evaluation_environment = list2env(
-          list(reads = reads, value = value),
-          parent = baseenv()
-        )
-        delayedAssign(
-          shadow,
-          {
-            reads$count = reads$count + 1L
-            value
-          },
-          eval.env = evaluation_environment,
-          assign.env = wrapper_environment
-        )
-      }
-
-      expect_null(
-        native_collection_values_call(collection),
-        info = paste(kind, shadow)
-      )
-      expect_identical(reads$count, 0L, info = paste(kind, shadow))
-      expect_identical(collection$values, list(child.x = 3L))
-      if (shadow == "super") {
-        expect_identical(reads$count, 0L, info = paste(kind, shadow))
-      } else {
-        expect_true(reads$count > 0L, info = paste(kind, shadow))
-      }
-    }
-  }
-})
-
-test_that("collection values authenticates private superclass captures", {
-  skip_if_not(native_collection_values_available())
-  namespace = asNamespace("paradox")
-
-  for (kind in c("active", "delayed")) {
-    for (shadow in c(".__ParamSetCollection__.get_values", "super")) {
-      collection = ParamSetCollection$new(list(
-        child = ps(x = p_int(init = 4L))
-      ))
-      enclosure = collection$.__enclos_env__
-      saved_super = get("super", envir = enclosure, inherits = FALSE)
-      reads = new.env(parent = emptyenv())
-      reads$count = 0L
-      value = if (shadow == "super") {
-        rm(list = "super", envir = enclosure)
-        saved_super
-      } else {
-        get(shadow, envir = namespace, inherits = FALSE)
-      }
-      if (kind == "active") {
-        makeActiveBinding(shadow, function(replacement) {
-          reads$count = reads$count + 1L
-          value
-        }, enclosure)
-      } else {
-        evaluation_environment = list2env(
-          list(reads = reads, value = value),
-          parent = baseenv()
-        )
-        delayedAssign(
-          shadow,
-          {
-            reads$count = reads$count + 1L
-            value
-          },
-          eval.env = evaluation_environment,
-          assign.env = enclosure
-        )
-      }
-
-      expect_null(
-        native_collection_values_call(collection),
-        info = paste(kind, shadow)
-      )
-      expect_identical(reads$count, 0L, info = paste(kind, shadow))
-      expect_identical(collection$values, list(child.x = 4L))
-      if (shadow == "super") {
-        expect_identical(reads$count, 0L, info = paste(kind, shadow))
-      } else {
-        expect_true(reads$count > 0L, info = paste(kind, shadow))
-      }
-    }
-  }
-})
-
-test_that("malformed value order and collection metadata decline", {
-  skip_if_not(native_collection_values_available())
-  child = ps(a = p_int(init = 1L), b = p_lgl(init = TRUE))
-  collection = ParamSetCollection$new(list(child = child))
+test_that("collection values reuse admitted rows across nested shared paths", {
+  child = ps(first = p_int(), second = p_lgl(), third = p_dbl())
   child_private = child$.__enclos_env__$private
-  child_private$.values = list(b = FALSE, a = 2L)
-
-  expect_null(native_collection_values_call(collection))
-  expect_identical(collection$values, list(child.b = FALSE, child.a = 2L))
-
-  collection = native_collection_values_rich()
-  private = collection$.__enclos_env__$private
-  with_private_value = function(name, value, code) {
-    original = private[[name]]
-    on.exit(private[[name]] <- original)
-    private[[name]] = value
-    force(code)
-  }
-  expect_null(with_private_value(
-    ".postfix",
-    structure(FALSE, note = TRUE),
-    native_collection_values_call(collection)
-  ))
-  sets = private$.sets
-  attr(sets, "note") = TRUE
-  expect_null(with_private_value(
-    ".sets",
-    sets,
-    native_collection_values_call(collection)
-  ))
-  translation = data.table::copy(private$.translation)
-  translation$owner_name[[1L]] = "wrong"
-  expect_null(with_private_value(
-    ".translation",
-    translation,
-    native_collection_values_call(collection)
-  ))
-  params = data.table::copy(private$.params)
-  params$id[[1L]] = "wrong.affix"
-  expect_null(with_private_value(
-    ".params",
-    params,
-    native_collection_values_call(collection)
-  ))
-})
-
-test_that("unsupported bytes names decline before a child read", {
-  skip_if_not(native_collection_values_available())
-  events = new.env(parent = emptyenv())
-  events$reads = 0L
-  ByteCounting = R6::R6Class(
-    "NativeCollectionValuesByteCounting",
-    inherit = ParamSet,
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          super$values = value
-          return(value)
-        }
-        events$reads = events$reads + 1L
-        super$values
-      }
-    )
+  paradox:::param_set_core_replace(
+    child_private,
+    values = list(third = 3.5, first = 1L)
   )
-  child = ByteCounting$new(list(x = p_int(init = 1L)))
-  collection = ParamSetCollection$new(list(owner = child))
-  private = collection$.__enclos_env__$private
-  owner = "owner"
-  Encoding(owner) = "bytes"
-  names(private$.sets) = owner
+  nested = ParamSetCollection$new(list(inner = child))
+  collection = ParamSetCollection$new(list(left = nested, right = nested))
 
-  expect_null(native_collection_values_call(collection))
-  expect_identical(events$reads, 0L)
-  expect_identical(collection$values, list(owner.x = 1L))
-  expect_identical(events$reads, 1L)
-})
-
-test_that("semantically equal supported encodings remain admissible", {
-  skip_if_not(native_collection_values_available())
-  utf8_owner = enc2utf8("caf\u00e9")
-  latin1_owner = iconv(utf8_owner, from = "UTF-8", to = "latin1")
-  skip_if(is.na(latin1_owner))
-  Encoding(latin1_owner) = "latin1"
-
-  collection = ParamSetCollection$new(list(
-    cafe = ps(x = p_int(init = 1L))
+  expect_identical(collection$values, list(
+    left.inner.third = 3.5,
+    left.inner.first = 1L,
+    right.inner.third = 3.5,
+    right.inner.first = 1L
   ))
-  private = collection$.__enclos_env__$private
-  names(private$.sets) = latin1_owner
-  utf8_id = paste0(utf8_owner, ".x")
-  latin1_id = iconv(utf8_id, from = "UTF-8", to = "latin1")
-  skip_if(is.na(latin1_id))
-  Encoding(latin1_id) = "latin1"
-  params_attributes = attributes(private$.params)
-  data.table::set(private$.params, 1L, "id", utf8_id)
-  attributes(private$.params) = params_attributes
-  translation_attributes = attributes(private$.translation)
-  # Keep the two ids semantically equal but pointer-distinct.  The native
-  # small-table pointer matcher must decline to the general encoding-aware
-  # matcher without declining the otherwise exact collection.
-  data.table::set(private$.translation, 1L, "id", latin1_id)
-  data.table::set(private$.translation, 1L, "owner_name", utf8_owner)
-  attributes(private$.translation) = translation_attributes
-  direct = native_collection_values_call(collection)
-
-  expect_false(is.null(direct))
-  expect_identical(unname(direct), list(1L))
-  expect_identical(enc2utf8(names(direct)), "caf\u00e9.x")
 })
 
-test_that("small translation matching is exact at its size boundary", {
-  skip_if_not(native_collection_values_available())
-
-  for (size in c(16L, 17L)) {
-    child = ParamSet$new(setNames(
-      replicate(size, p_int(init = 1L), simplify = FALSE),
-      sprintf("value%02d", seq_len(size))
-    ))
-    collection = ParamSetCollection$new(list(owner = child))
-    expect_identical(
-      native_collection_values_call(collection),
-      native_collection_values_reference(collection),
-      info = sprintf("parameter count %d", size)
-    )
-  }
-})
-
-test_that("serialized and cloned exact values graphs remain admissible", {
-  skip_if_not(native_collection_values_available())
-  original = native_collection_values_rich()
-  cases = list(
-    unserialize(serialize(original, NULL)),
-    original$clone(deep = FALSE),
-    original$clone(deep = TRUE)
+test_that("collection values refresh a shared ParamSetShadow live", {
+  origin = ps(
+    visible = p_int(init = 1L),
+    flag = p_lgl(init = TRUE),
+    hidden = p_dbl(init = 0.5)
   )
-  for (collection in cases) {
-    direct = native_collection_values_call(collection)
-    expect_false(is.null(direct))
-    expect_identical(direct, native_collection_values_reference(collection))
-  }
+  shadow = ParamSetShadow$new(origin, "hidden")
+  collection = ParamSetCollection$new(list(a = shadow, b = shadow))
+
+  expect_identical(collection$values, list(
+    a.visible = 1L,
+    a.flag = TRUE,
+    b.visible = 1L,
+    b.flag = TRUE
+  ))
+  origin$values = list(visible = 5L, hidden = 0.75)
+  expect_identical(collection$values, list(a.visible = 5L, b.visible = 5L))
 })
 
-test_that("native collection values survives forced collection", {
+test_that("collection stores do not couple translation and parameter row order", {
+  make_child = function(shadow) {
+    child = ps(hidden = p_int(), x = p_int(), flag = p_lgl())
+    child$values = list(hidden = 9L, x = 1L, flag = TRUE)
+    if (shadow) ParamSetShadow$new(child, "hidden") else child
+  }
+
+  for (postfix in c(FALSE, TRUE)) {
+    for (shadow in c(FALSE, TRUE)) {
+      collection = ParamSetCollection$new(
+        list(view = make_child(shadow)),
+        postfix_names = postfix
+      )
+      target = if (postfix) "flag.view" else "view.flag"
+      collection$values = setNames(list(FALSE), target)
+      expect_identical(collection$values[[target]], FALSE)
+    }
+  }
+
+  inner = ParamSetCollection$new(list(
+    a = ps(x = p_int()),
+    b = ps(y = p_lgl())
+  ))
+  outer = ParamSetCollection$new(list(top = inner))
+  outer$values = list(top.a.x = 3L, top.b.y = TRUE)
+  expect_identical(outer$values, list(top.a.x = 3L, top.b.y = TRUE))
+})
+
+test_that("collection value shells detach while opaque leaves remain shallow", {
+  marker = new.env(parent = emptyenv())
+  child = ps(x = p_int(init = 1L), payload = p_uty())
+  child$values = list(x = 2L, payload = marker)
+  collection = ParamSetCollection$new(list(child = child))
+
+  first = collection$values
+  second = collection$values
+  expect_identical(first, second)
+  expect_false(identical(data.table::address(first), data.table::address(second)))
+  expect_false(identical(
+    data.table::address(names(first)),
+    data.table::address(names(second))
+  ))
+  names(first)[[1L]] = "changed"
+  first[[1L]] = 9L
+  expect_identical(collection$values, second)
+  expect_identical(first$child.payload, marker)
+})
+
+test_that("collection values reject malformed capsules and active-path cycles", {
+  collection = ParamSetCollection$new(list())
+  private = collection$.__enclos_env__$private
+  paradox:::param_set_core_replace(private, sets = list(self = collection))
+  expect_error(collection$values, "cycle", ignore.case = TRUE)
+
+  valid = ParamSetCollection$new(list(child = ps(x = p_int(init = 1L))))
+  private = valid$.__enclos_env__$private
+  state = paradox:::param_set_core_state(private)
+  bad = state$.translation
+  bad$owner_ps_index[[1L]] = 99L
+  paradox:::param_set_core_replace(private, translation = bad)
+  expect_error(valid$values, "Corrupt ParamSetCollection")
+
+  child = ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
+  invalid_value = ParamSetCollection$new(list(child = child))
+  child_private = child$.__enclos_env__$private
+  paradox:::param_set_core_replace(
+    child_private,
+    values = setNames(list(1L), "missing")
+  )
+  expect_error(invalid_value$values, "Corrupt ParamSetCollection")
+
+  duplicate_translation = ParamSetCollection$new(list(
+    child = ps(x = p_int(), y = p_lgl())
+  ))
+  duplicate_private = duplicate_translation$.__enclos_env__$private
+  duplicate_state = paradox:::param_set_core_state(duplicate_private)
+  bad = duplicate_state$.translation
+  bad$id[[2L]] = bad$id[[1L]]
+  paradox:::param_set_core_replace(duplicate_private, translation = bad)
+  expect_error(duplicate_translation$values, "Corrupt ParamSetCollection")
+})
+
+test_that("collection values compare supported string encodings semantically", {
+  fixture = mixed_encoding_collection_values_fixture()
+  skip_if(
+    is.null(fixture),
+    "this platform cannot represent the latin1 fixture"
+  )
+
+  observed = fixture$collection$values
+  expect_identical(observed, fixture$expected)
+  expect_identical(Encoding(names(observed)), "latin1")
+})
+
+test_that("mixed-encoding collection value matching survives forced collection", {
   skip_on_cran()
+  fixture = mixed_encoding_collection_values_fixture()
+  skip_if(
+    is.null(fixture),
+    "this platform cannot represent the latin1 fixture"
+  )
 
-  skip_if_not(native_collection_values_available())
-  collection = ParamSetCollection$new(list(
-    outer = native_collection_values_rich(TRUE),
-    tail = ps(last = p_int(init = 4L))
-  ))
-  expected = native_collection_values_reference(collection)
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
-  observed = native_collection_values_call(collection)
+  observed = fixture$collection$values
   gctorture(previous)
-  expect_identical(observed, expected)
-})
 
-test_that("native collection values rejects mismatched entry arguments", {
-  skip_if_not(native_collection_values_available())
-  first = native_collection_values_rich()
-  second = native_collection_values_rich()
-  expect_null(.Call(
-    native_collection_values_symbol(),
-    second$.__enclos_env__$private,
-    first
-  ))
-  expect_null(.Call(
-    native_collection_values_symbol(),
-    first$.__enclos_env__$private,
-    new.env(parent = emptyenv())
-  ))
+  expect_identical(observed, fixture$expected)
+  expect_identical(Encoding(names(observed)), "latin1")
 })

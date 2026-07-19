@@ -147,3 +147,23 @@ jobs:
             cat(lines, sep = "\n")
             stop("R CMD check did not finish cleanly with one final `Status: OK`")
           }
+
+  portability-complete:
+    name: Verify required check jobs
+    if: ${{ always() }}
+    needs:
+      - r-cmd-check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Verify required job conclusions
+        shell: bash
+        env:
+          R_CMD_CHECK_RESULT: ${{ needs.r-cmd-check.result }}
+        run: |
+          set -euo pipefail
+          readonly result="$R_CMD_CHECK_RESULT"
+          if [[ "$result" != success ]]; then
+            printf 'required r-cmd-check matrix result: %s\n' "$result" >&2
+            exit 1
+          fi

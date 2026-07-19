@@ -6,9 +6,8 @@ test_that("every allocating native entry point survives forced collection", {
     paste0("C_", c(
       "design_transpose",
       "domain_construct",
-      "domain_construct_frame",
-      "domain_numeric_bounds_admit",
       "domain_check_builtin",
+      "domain_property_builtin",
       "domain_qunif_builtin",
       "domain_sanitize_builtin",
       "param_set_construct",
@@ -16,8 +15,6 @@ test_that("every allocating native entry point survives forced collection", {
       "param_set_property",
       "param_set_check_builtin",
       "param_set_check_dt_builtin",
-      "param_set_check_dt_complete_builtin",
-      "param_set_check_dt_all_builtin",
       "param_set_qunif_builtin",
       "sampler_unif_sample_builtin",
       "generate_design_grid_builtin",
@@ -26,6 +23,7 @@ test_that("every allocating native entry point survives forced collection", {
       "param_set_params",
       "param_set_collection_params",
       "param_set_collection_deps",
+      "param_set_core_state",
       "param_set_subset_state",
       "param_set_adopt_subset_state"
     )),
@@ -44,8 +42,9 @@ test_that("every allocating native entry point survives forced collection", {
   private = parameter_set$.__enclos_env__$private
   collection = ParamSetCollection$new(list(inner = parameter_set))
   collection_private = collection$.__enclos_env__$private
-  params = private$.params
-  tags = private$.tags
+  state = private$.state()
+  params = state$.params
+  tags = state$.tags
   scalar_values = list(
     double = -1 - 5e-7,
     integer = 1,
@@ -56,7 +55,8 @@ test_that("every allocating native entry point survives forced collection", {
     double = c(-0.5, 0.5),
     integer = c(-1L, 1L),
     factor = c("slow", "fast"),
-    logical = c(TRUE, FALSE),
+    # `logical` is inactive in row 1 because `integer != 1`.
+    logical = c(NA, FALSE),
     stringsAsFactors = FALSE
   )
   transpose_values = data.table::as.data.table(tabular_values)
@@ -66,50 +66,11 @@ test_that("every allocating native entry point survives forced collection", {
     dimnames = list(NULL, names(domains))
   )
   subset_private = new.env(parent = emptyenv())
-  subset_private$.params = NULL
-  subset_private$.tags = NULL
-  subset_private$.trafos = NULL
-  subset_private$.deps = NULL
-  subset_private$.values = NULL
-  subset_private$.extra_trafo = NULL
+  subset_private$.core = NULL
   collection_subset_private = new.env(parent = emptyenv())
-  collection_subset_private$.params = NULL
-  collection_subset_private$.tags = NULL
-  collection_subset_private$.trafos = NULL
-  collection_subset_private$.deps = NULL
-  collection_subset_private$.values = NULL
-  collection_subset_private$.extra_trafo = NULL
+  collection_subset_private$.core = NULL
   sampler = SamplerUnif$new(ParamSet$new(domains))
   sampler$sample(0L)
-
-  construct_domain_frame = function(
-      cls = "ParamLgl",
-      grouping = "ParamLgl",
-      cargo = list(),
-      lower = NA_real_,
-      upper = NA_real_,
-      tolerance = NA_real_,
-      levels = c(TRUE, FALSE),
-      special_vals = list(),
-      default = stop("default was forced", call. = FALSE),
-      tags = character(),
-      trafo = NULL,
-      depends_expr = stop("depends_expr was forced", call. = FALSE),
-      storage_type = stop("storage_type was forced", call. = FALSE),
-      init = stop("init was forced", call. = FALSE)) {
-    .Call(symbols$C_domain_construct_frame, environment())
-  }
-  construct_numeric_bounds = function(
-      tolerance = 0,
-      lower = -1,
-      upper = 1,
-      logscale = FALSE) {
-    .Call(
-      symbols$C_domain_numeric_bounds_admit,
-      environment(),
-      FALSE
-    )
-  }
 
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
@@ -129,14 +90,22 @@ test_that("every allocating native entry point survives forced collection", {
     NULL,
     "numeric",
     FALSE,
+    NULL,
+    1L,
+    FALSE,
+    "x",
     NULL
   )
-  constructed_domain_plan = construct_domain_frame()
-  admitted_numeric_bounds = construct_numeric_bounds()
   checked_domain = .Call(
     symbols$C_domain_check_builtin,
     domains$double,
-    list(0.25)
+    list(0.25),
+    FALSE
+  )
+  domain_levels = .Call(
+    symbols$C_domain_property_builtin,
+    domains$double,
+    0L
   )
   mapped_domain = .Call(
     symbols$C_domain_qunif_builtin,
@@ -160,33 +129,34 @@ test_that("every allocating native entry point survives forced collection", {
   properties = .Call(symbols$C_param_set_property, params, 0L)
   checked_values = .Call(
     symbols$C_param_set_check_builtin,
-    params,
+    private,
+    parameter_set,
     scalar_values,
+    TRUE,
+    TRUE,
+    "none",
     TRUE
   )
   checked_table = .Call(
     symbols$C_param_set_check_dt_builtin,
-    params,
-    tabular_values
+    private,
+    parameter_set,
+    tabular_values,
+    TRUE,
+    "all",
+    TRUE
   )
-  checked_complete_table = .Call(
-    symbols$C_param_set_check_dt_complete_builtin,
-    params,
-    tabular_values
+  mapped_set = .Call(
+    symbols$C_param_set_qunif_builtin,
+    private,
+    parameter_set,
+    units
   )
-  checked_all_table = .Call(
-    symbols$C_param_set_check_dt_all_builtin,
-    params,
-    tabular_values
-  )
-  mapped_set = .Call(symbols$C_param_set_qunif_builtin, params, units)
   set.seed(1729L)
   sampler_seed_before_zero = .Random.seed
   sampled_zero = .Call(
     symbols$C_sampler_unif_sample_builtin,
-    sampler,
     sampler$param_set,
-    sampler$samplers,
     0L
   )
   sampler_seed_after_zero = .Random.seed
@@ -194,9 +164,7 @@ test_that("every allocating native entry point survives forced collection", {
   sampler_seed_before_one = serialize(.Random.seed, NULL)
   sampled_one = .Call(
     symbols$C_sampler_unif_sample_builtin,
-    sampler,
     sampler$param_set,
-    sampler$samplers,
     1L
   )
   sampler_seed_after_one = .Random.seed
@@ -204,9 +172,7 @@ test_that("every allocating native entry point survives forced collection", {
   sampler_seed_before_rows = serialize(.Random.seed, NULL)
   sampled_rows = .Call(
     symbols$C_sampler_unif_sample_builtin,
-    sampler,
     sampler$param_set,
-    sampler$samplers,
     7L
   )
   sampler_seed_after_rows = .Random.seed
@@ -241,47 +207,48 @@ test_that("every allocating native entry point survives forced collection", {
     collection_private,
     collection
   )
-  subset_plan = .Call(
+  subset_token = .Call(
     symbols$C_param_set_subset_state,
     private,
     parameter_set,
     c("factor", "double"),
-    FALSE
+    FALSE,
+    TRUE,
+    parameter_set$constraint,
+    parameter_set$extra_trafo
   )
   adopted_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     subset_private,
-    subset_plan$state
+    subset_token
   )
   consumed_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     subset_private,
-    subset_plan$state
+    subset_token
   )
-  collection_subset_plan = .Call(
+  collection_subset_token = .Call(
     symbols$C_param_set_subset_state,
     collection_private,
     collection,
     c("inner.factor", "inner.double"),
-    FALSE
+    FALSE,
+    TRUE,
+    collection$constraint,
+    collection$extra_trafo
   )
   adopted_collection_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     collection_subset_private,
-    collection_subset_plan$state
+    collection_subset_token
   )
   transposed = .Call(symbols$C_design_transpose, transpose_values, TRUE)
 
   gctorture(previous)
 
   expect_identical(names(constructed_domain), paradox:::domain_names)
-  expect_identical(constructed_domain_plan[[2L]], "logical")
-  expect_identical(
-    names(constructed_domain_plan[[1L]]),
-    paradox:::domain_names
-  )
-  expect_true(admitted_numeric_bounds)
   expect_true(checked_domain)
+  expect_identical(domain_levels, Inf)
   expect_identical(mapped_domain, c(-1, 0, 1))
   expect_identical(sanitized_domain, list(-1, 1))
   expect_named(
@@ -289,12 +256,13 @@ test_that("every allocating native entry point survives forced collection", {
     c("params", "tags", "trafos", "requirements", "init_values")
   )
   expect_identical(selected_ids, "double")
-  expect_length(properties, 2L)
+  expect_identical(
+    properties,
+    c(double = Inf, integer = 5, factor = 2, logical = 2)
+  )
   expect_true(checked_values)
   expect_named(attr(checked_values, "sanitized"), names(scalar_values))
   expect_true(checked_table)
-  expect_true(checked_complete_table)
-  expect_true(checked_all_table)
   expect_s3_class(mapped_set, "data.table")
   expect_identical(names(mapped_set), names(domains))
   expect_s3_class(sampled_zero, "data.table")
@@ -356,11 +324,17 @@ test_that("every allocating native entry point survives forced collection", {
     1L
   )
   expect_true(adopted_subset_token)
-  expect_identical(subset_private$.params$id, c("factor", "double"))
+  expect_identical(
+    .Call(symbols$C_param_set_core_state, subset_private)$.params$id,
+    c("factor", "double")
+  )
   expect_false(consumed_subset_token)
   expect_true(adopted_collection_subset_token)
   expect_identical(
-    collection_subset_private$.params$id,
+    .Call(
+      symbols$C_param_set_core_state,
+      collection_subset_private
+    )$.params$id,
     c("inner.factor", "inner.double")
   )
   expect_identical(transposed[[1L]]$double, -0.5)

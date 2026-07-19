@@ -12,7 +12,7 @@ test_that("basic example works", {
   x = list(th_param_int = 1, th_param_fct = "b")
   expect_string(ps$check(x, check_strict = TRUE), fixed = "th_param_int: can only be set")
   x = list(th_param_int = NA, th_param_fct = "b")
-  expect_string(ps$check(x, check_strict = TRUE), fixed = "May not be NA")
+  expect_string(ps$check(x, check_strict = TRUE), fixed = "expected one finite integer-valued numeric within the Domain bounds")
   x = list(th_param_fct = "a")
   expect_true(ps$check(x, check_strict = TRUE))
   x = list(th_param_fct = "b")

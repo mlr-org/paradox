@@ -1,10 +1,13 @@
+#include <limits.h>
 #include <string.h>
 
 #include "paramset_domain_common.h"
 #include <R_ext/Utils.h>
 
+#include "builtin_condition.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "core_state.h"
 
 typedef enum {
   DOMAIN_KIND_UNKNOWN = 0,
@@ -47,6 +50,42 @@ static int has_no_attributes(SEXP value) {
   return paradox_api_has_no_attributes(value);
 }
 
+static char *copy_utf8_string(SEXP string) {
+  const size_t size = strlen(Rf_translateCharUTF8(string));
+  if (size >= (size_t) R_XLEN_T_MAX) {
+    Rf_error("Unable to copy a canonical string");
+  }
+  char *copy = paradox_temporary_alloc(
+    (R_xlen_t) size + 1,
+    sizeof(*copy)
+  );
+  memcpy(copy, Rf_translateCharUTF8(string), size + 1U);
+  return copy;
+}
+
+static int native_ascii_strings_equal(SEXP left, SEXP right, int *known) {
+  const unsigned char *left_text = (const unsigned char *) CHAR(left);
+  const unsigned char *right_text = (const unsigned char *) CHAR(right);
+  for (;;) {
+    const unsigned char left_byte = *left_text;
+    const unsigned char right_byte = *right_text;
+    if ((left_byte | right_byte) >= 0x80U) {
+      *known = FALSE;
+      return FALSE;
+    }
+    if (left_byte != right_byte) {
+      *known = TRUE;
+      return FALSE;
+    }
+    if (left_byte == '\0') {
+      *known = TRUE;
+      return TRUE;
+    }
+    ++left_text;
+    ++right_text;
+  }
+}
+
 int paradox_domain_strings_equal(SEXP left, SEXP right) {
   if (left == right) {
     return TRUE;
@@ -57,15 +96,27 @@ int paradox_domain_strings_equal(SEXP left, SEXP right) {
 
   const cetype_t left_encoding = Rf_getCharCE(left);
   const cetype_t right_encoding = Rf_getCharCE(right);
+  if (left_encoding == right_encoding) {
+    if (left_encoding == CE_UTF8 || left_encoding == CE_LATIN1 ||
+        left_encoding == CE_BYTES) {
+      return strcmp(CHAR(left), CHAR(right)) == 0;
+    }
+    if (left_encoding == CE_NATIVE) {
+      int known = FALSE;
+      const int equal = native_ascii_strings_equal(left, right, &known);
+      if (known) {
+        return equal;
+      }
+    }
+  }
   if (left_encoding == CE_BYTES || right_encoding == CE_BYTES) {
-    return left_encoding == CE_BYTES && right_encoding == CE_BYTES &&
-      strcmp(CHAR(left), CHAR(right)) == 0;
+    return FALSE;
   }
 
   PROTECT(left);
   PROTECT(right);
   const void *vmax = vmaxget();
-  const char *left_text = Rf_translateCharUTF8(left);
+  const char *left_text = copy_utf8_string(left);
   const char *right_text = Rf_translateCharUTF8(right);
   const int equal = strcmp(left_text, right_text) == 0;
   vmaxset(vmax);
@@ -92,9 +143,13 @@ int paradox_domain_exact_string_vector(SEXP value,
   return TRUE;
 }
 
-static int exact_data_table(SEXP table, const char *const *column_names,
-    R_xlen_t column_count, R_xlen_t *work_since_interrupt) {
-  static const char *const table_classes[] = {"data.table", "data.frame"};
+int paradox_domain_exact_plain_table(SEXP table,
+    const char *const *column_names, R_xlen_t column_count,
+    R_xlen_t *row_count, R_xlen_t *work_since_interrupt) {
+  static const char *const table_classes[] = {"data.frame"};
+  static const char *const allowed_attributes[] = {
+    "names", "class", "row.names"
+  };
   if (TYPEOF(table) != VECSXP || ALTREP(table)) {
     return FALSE;
   }
@@ -102,7 +157,13 @@ static int exact_data_table(SEXP table, const char *const *column_names,
   const R_xlen_t observed_column_count = XLENGTH(table);
   SEXP names = PROTECT(Rf_getAttrib(table, R_NamesSymbol));
   SEXP classes = PROTECT(Rf_getAttrib(table, R_ClassSymbol));
-  const int valid = observed_column_count == column_count &&
+  SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
+  R_xlen_t observed_row_count = 0;
+  if (column_count != 0 && observed_column_count == column_count) {
+    observed_row_count = XLENGTH(VECTOR_ELT(table, 0));
+  }
+  int valid = observed_column_count == column_count &&
+    paradox_api_has_only_attributes(table, allowed_attributes, 3) &&
     has_no_attributes(names) &&
     has_no_attributes(classes) &&
     paradox_domain_exact_string_vector(
@@ -114,37 +175,81 @@ static int exact_data_table(SEXP table, const char *const *column_names,
     paradox_domain_exact_string_vector(
       classes,
       table_classes,
-      2,
+      1,
       work_since_interrupt
-    );
-  UNPROTECT(3);
+    ) && TYPEOF(row_names) == INTSXP &&
+    paradox_api_has_no_attributes(row_names) &&
+    XLENGTH(row_names) == observed_row_count;
+  if (valid) {
+    for (R_xlen_t row = 0; row < observed_row_count; ++row) {
+      paradox_domain_account_work(work_since_interrupt);
+      if (INTEGER_ELT(row_names, row) != row + 1) {
+        valid = FALSE;
+        break;
+      }
+    }
+  }
+  if (valid && row_count != NULL) {
+    *row_count = observed_row_count;
+  }
+  UNPROTECT(4);
   return valid;
 }
 
-static int keyed_by_id(SEXP table, R_xlen_t *work_since_interrupt) {
-  static const char *const key[] = {"id"};
-  PROTECT(table);
-  SEXP sorted = PROTECT(Rf_getAttrib(table, Rf_install("sorted")));
-  const int valid = has_no_attributes(sorted) &&
-    paradox_domain_exact_string_vector(
-    sorted,
-    key,
-    1,
-    work_since_interrupt
-  );
-  UNPROTECT(2);
-  return valid;
+SEXP paradox_domain_plain_table_snapshot(SEXP source,
+    const char *const *column_names, R_xlen_t column_count) {
+  if (column_count < 0 || TYPEOF(source) != VECSXP || ALTREP(source) ||
+      XLENGTH(source) != column_count) {
+    return R_NilValue;
+  }
+  PROTECT(source);
+  R_xlen_t row_count = 0;
+  if (column_count != 0) {
+    row_count = XLENGTH(VECTOR_ELT(source, 0));
+  }
+  if (row_count > INT_MAX) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+  for (R_xlen_t column = 1; column < column_count; ++column) {
+    if (XLENGTH(VECTOR_ELT(source, column)) != row_count) {
+      UNPROTECT(1);
+      return R_NilValue;
+    }
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, column_count));
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    SET_VECTOR_ELT(result, column, VECTOR_ELT(source, column));
+  }
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, column_count));
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    SET_STRING_ELT(names, column, Rf_mkChar(column_names[column]));
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 1));
+  SET_STRING_ELT(classes, 0, Rf_mkChar("data.frame"));
+  Rf_setAttrib(result, R_ClassSymbol, classes);
+  SEXP row_names = PROTECT(Rf_allocVector(
+    INTSXP,
+    row_count == 0 ? 0 : 2
+  ));
+  if (row_count != 0) {
+    SET_INTEGER_ELT(row_names, 0, NA_INTEGER);
+    SET_INTEGER_ELT(row_names, 1, -(int) row_count);
+  }
+  Rf_setAttrib(result, R_RowNamesSymbol, row_names);
+  UNPROTECT(5);
+  return result;
 }
 
 SEXP paradox_domain_local_value(SEXP environment, const char *name) {
   if (TYPEOF(environment) != ENVSXP) {
     return R_UnboundValue;
   }
-  SEXP symbol = Rf_install(name);
-  /* The facade accepts only an ordinary direct binding. It never evaluates
-   * active or delayed bindings, and fails closed on R releases that cannot
-   * classify binding kinds through the public API. */
-  return paradox_api_local_value(environment, symbol);
+  /* Current state has exactly one authority. Retired private-table bindings
+   * are neither inspected nor used as a compatibility path. */
+  return paradox_core_local_value(environment, name);
 }
 
 int paradox_domain_owns_private_environment(SEXP self,
@@ -152,18 +257,43 @@ int paradox_domain_owns_private_environment(SEXP self,
   if (TYPEOF(self) != ENVSXP || TYPEOF(private_environment) != ENVSXP) {
     return FALSE;
   }
-  SEXP enclosure = PROTECT(paradox_domain_local_value(
-    self,
-    ".__enclos_env__"
-  ));
-  if (TYPEOF(enclosure) != ENVSXP) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  const int owned = paradox_domain_local_value(enclosure, "private") ==
-    private_environment;
+  /* Current package-generated shells are authorized by their sealed capsule,
+   * not by replaying R6's generated closure/private-environment topology.
+   * Registered entry points receive `self` and `private` from thin package
+   * wrappers; direct calls with a different environment remain unsupported,
+   * while every payload field is still structurally validated before use. */
+  SEXP owned_private = PROTECT(paradox_domain_private_environment(self));
+  const int owns = owned_private != R_UnboundValue &&
+    owned_private == private_environment;
   UNPROTECT(1);
-  return owned;
+  return owns;
+}
+
+SEXP paradox_domain_private_environment(SEXP self) {
+  if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
+    return R_UnboundValue;
+  }
+  SEXP enclosure_symbol = Rf_install(".__enclos_env__");
+  SEXP enclosure = PROTECT(paradox_api_plain_binding_snapshot(
+    self,
+    enclosure_symbol
+  ));
+  if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure)) {
+    UNPROTECT(1);
+    return R_UnboundValue;
+  }
+  SEXP private_symbol = Rf_install("private");
+  SEXP private_environment = PROTECT(paradox_api_plain_binding_snapshot(
+    enclosure,
+    private_symbol
+  ));
+  SEXP result = TYPEOF(private_environment) == ENVSXP &&
+      !Rf_isS4(private_environment) &&
+      paradox_core_from_private(private_environment) != R_UnboundValue
+    ? private_environment
+    : R_UnboundValue;
+  UNPROTECT(2);
+  return result;
 }
 
 static domain_kind_t domain_kind(SEXP cls, SEXP storage_type) {
@@ -353,10 +483,11 @@ int paradox_domain_validate_params(SEXP params, SEXP selected_id,
   PROTECT(params);
   PROTECT(selected_id);
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, PARADOX_DOMAIN_TAGS));
-  if (!exact_data_table(
+  if (!paradox_domain_exact_plain_table(
       params,
       permanent_column_names,
       PARADOX_DOMAIN_TAGS,
+      NULL,
       work_since_interrupt
     ) || (selected_id != R_NilValue &&
       (TYPEOF(selected_id) != STRSXP || ALTREP(selected_id) ||
@@ -389,8 +520,9 @@ int paradox_domain_validate_tags(SEXP tags, paradox_domain_tags_t *result,
     R_xlen_t *work_since_interrupt) {
   static const char *const column_names[] = {"id", "tag"};
   PROTECT(tags);
-  if (!exact_data_table(tags, column_names, 2, work_since_interrupt) ||
-      !keyed_by_id(tags, work_since_interrupt)) {
+  if (!paradox_domain_exact_plain_table(
+      tags, column_names, 2, NULL, work_since_interrupt
+    )) {
     UNPROTECT(1);
     return FALSE;
   }
@@ -428,8 +560,9 @@ int paradox_domain_validate_trafos(SEXP trafos,
     R_xlen_t *work_since_interrupt) {
   static const char *const column_names[] = {"id", "trafo"};
   PROTECT(trafos);
-  if (!exact_data_table(trafos, column_names, 2, work_since_interrupt) ||
-      !keyed_by_id(trafos, work_since_interrupt)) {
+  if (!paradox_domain_exact_plain_table(
+      trafos, column_names, 2, NULL, work_since_interrupt
+    )) {
     UNPROTECT(1);
     return FALSE;
   }
@@ -467,10 +600,11 @@ int paradox_domain_validate_dependencies(SEXP dependencies,
     R_xlen_t *work_since_interrupt) {
   static const char *const column_names[] = {"id", "on", "cond"};
   PROTECT(dependencies);
-  if (!exact_data_table(
+  if (!paradox_domain_exact_plain_table(
       dependencies,
       column_names,
       3,
+      NULL,
       work_since_interrupt
     )) {
     UNPROTECT(1);
@@ -497,20 +631,22 @@ int paradox_domain_validate_dependencies(SEXP dependencies,
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
     SEXP condition = PROTECT(VECTOR_ELT(conditions, row));
-    SEXP condition_classes = PROTECT(Rf_getAttrib(
-      condition,
-      R_ClassSymbol
-    ));
+    paradox_builtin_condition_kind_t kind;
+    SEXP rhs = R_NilValue;
     if (STRING_ELT(ids, row) == NA_STRING ||
         STRING_ELT(on, row) == NA_STRING ||
-        ALTREP(condition) ||
-        (condition_classes != R_NilValue &&
-         (TYPEOF(condition_classes) != STRSXP || ALTREP(condition_classes))) ||
-        !Rf_inherits(condition, "Condition")) {
-      UNPROTECT(6);
+        !paradox_builtin_condition_exact(
+          condition,
+          &kind,
+          &rhs,
+          work_since_interrupt
+        )) {
+      UNPROTECT(5);
       return FALSE;
     }
-    UNPROTECT(2);
+    (void) kind;
+    (void) rhs;
+    UNPROTECT(1);
   }
   result->ids = ids;
   result->on = on;

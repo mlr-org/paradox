@@ -1047,7 +1047,10 @@ release_policy_manifest_sha256 <- unname(
 unlink(release_policy_manifest_file)
 
 release_support_libraries <- c(
-  release_dependency_libraries, release_mies_library,
+  # The reviewed dual-version bridge must win over any CRAN miesmuschel copy
+  # retained in the shared dependency closure. Both paired workers receive
+  # this exact order through --dependency-library and R_LIBS(_USER).
+  release_mies_library, release_dependency_libraries,
   release_extra_libraries, release_ordinary_library
 )
 release_paired_output <- file.path(release_output, "paired")

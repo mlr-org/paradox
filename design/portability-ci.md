@@ -1,244 +1,190 @@
-# Native portability CI
+# Paradox 2 portability and CI policy
 
-The normal package check matrix treats portability as a release requirement,
-not as a best-effort downstream check. It covers:
+This policy applies to the contract-first candidate. Historical workflow runs
+for the superseded compatibility-first source are not accepted evidence.
 
-- release and development R on Linux x86-64;
-- release R without Suggests on Linux x86-64;
-- release R on Windows x86-64, using the suitable Rtools version selected by
-  `r-lib/actions/setup-r`; and
-- release R on the standard `macos-15` GitHub-hosted runner. GitHub documents
-  that label as an Apple silicon ARM64 image; it is pinned instead of relying
-  on a moving `macos-latest` architecture.
+## Supported baseline
 
-The R 4.3 depends-only row builds, installs, checks examples and vignettes, but
-uses `--no-tests`. The sealed local old-runtime matrix owns the reviewed public
-test scope: it runs 57 of 79 files and authenticates the 22 direct-native
-admission contexts that require R 4.6 inspection APIs. Running those 22
-implementation tests indiscriminately on R 4.3 creates hundreds of expected
-fallback differences without adding compatibility evidence.
+- R >= 4.3;
+- ISO C17 through the toolchain selected by R;
+- Linux x86-64, Windows x86-64, and macOS Apple-silicon ARM64;
+- data.table >= 1.18.4 as an outward interoperability dependency;
+- public R C APIs available at the selected supported runtime, except for the
+  single R < 4.6 compatibility symbol described below.
 
-The matrix checks both GitHub's runner architecture and R's reported
-architecture. Each entry then performs a clean source installation, loads the
-resulting shared library, and verifies that registered `.Call` routines are
-present before running the ordinary package check. This makes a missing native
-build visible even if a future check configuration happens to reuse an
-installed package.
+The source must not rely on GNU-only C behavior, x86 floating-point details,
+unaligned access, little-endian layout, pointer ordering, `long` width,
+architecture-specific vector instructions, or private data.table APIs. Use
+`R_xlen_t`, checked conversions, R's NA/NaN predicates, and portable math.
 
-The check runs through a direct `rcmdcheck` call, rejects its retained child
-status explicitly, and then applies an independent top-level completion check.
-That check requires exactly one expected `00check.log`, no `Execution halted`,
-one status line, and a final nonempty line equal to `Status: OK`. The raw-log
-boundary is mandatory because wrapper policies can accept a nonzero child
-status when an internal R error does not form a conventional check section.
+## Local supported-runtime matrix
 
-The workflow follows the current major-version recommendations from the
-[`r-lib/actions` examples](https://github.com/r-lib/actions/tree/v2/examples).
-The runner labels and architectures are defined in GitHub's
-[`actions/runner-images` inventory](https://github.com/actions/runner-images#available-images).
-No compiler path or platform-specific compilation flags are overridden: R,
-Apple Clang, and Rtools remain responsible for selecting their supported C17
-toolchains.
+Repository-local pinned prefixes exercise R 4.3.3 and R 4.5.2 independently of
+the development R 4.6.1 prefix:
 
-## Rejected first 2.0.0 run
+```sh
+scripts/bootstrap-runtime-matrix
+scripts/bootstrap-runtime-matrix --verify
+scripts/test-runtime-matrix --runtime all \
+  --source-ref refs/paradox-release/candidate-YYYYMMDDTHHMMSSZ \
+  --run-id release-runtime-YYYYMMDDTHHMMSSZ
+scripts/verify-runtime-matrix-evidence \
+  --run-id release-runtime-YYYYMMDDTHHMMSSZ
+```
 
-Manual run
-[`29559803987`](https://github.com/mlr-org/paradox/actions/runs/29559803987)
-checked out immutable candidate tag `paradox-2.0.0-ci-afa5668` at
-`afa56689e4037ee14a75b32811686f563f95effe`. It is diagnostic evidence only.
-The run was attempt 1, event `workflow_dispatch`, and concluded `failure`.
-Four ordinary rows—Linux release, Linux devel, Windows release, and macOS
-ARM64—exported `_R_CHECK_DEPENDS_ONLY_` as the present-but-empty string. R
-converted it to `NA`, aborted at `if (R_cdo_tests)` after package installation,
-and emitted `Execution halted`. `rcmdcheck` 1.4.0 accepted that child status
-because the abort did not form a conventional ERROR/WARNING/NOTE section, so
-GitHub labeled all four jobs green. The Linux release no-Suggests row completed
-with `Status: OK`. The R 4.3 row genuinely ran tests and its 832 failures were
-confined to 20 of the 22 authenticated pre-4.6 exclusion contexts.
+The two stages use isolated libraries and caches and may overlap only when the
+memory-aware resource report admits two workers. Nested make, testthat,
+parallel/future, BLAS, and OpenMP pools remain one.
 
-The exact job inventory is:
+R 4.3 has no authenticated conda-forge R-4.3 build of data.table 1.18.4. The
+stage therefore authenticates the source row in
+`environment/r-packages-linux-64.lock`, copies the cached exact archive into its
+retained inputs, installs it into the fresh stage library, verifies the resolved
+version, and then builds Paradox. R 4.5.2 already contains the exact minimum.
+This overlay never changes the host, persistent runtime prefix, or package
+minimum.
 
-| Job ID | Matrix row | GitHub conclusion | Retained log SHA-256 |
-|---|---|---|---|
-| `87819643660` | `ubuntu-latest / x86_64 (release) – noSuggests` | `success`; genuine final `Status: OK` | `00a41857b7df5d733d12cd8b0f8d3ebec14b95eeeb02a966c90717d4d46859d0` |
-| `87819643667` | `ubuntu-latest / x86_64 (release)` | `success`; false green after `Execution halted` | `77b50f27e28ba2a3a46db684080bb36ec1a111a9bb4d3d07b38f6aaba8a7b228` |
-| `87819643668` | `windows-latest / x86_64 (release)` | `success`; false green after `Execution halted` | `0f8cd01243c78f59408076701d7100b9382cd913516c0c3f3a32ccf05cfc9305` |
-| `87819643686` | `ubuntu-latest / x86_64 (4.3) – noSuggests` | `failure`; 9,602 passes, 832 reviewed pre-4.6 failures | `4628bd7276861e88a9da0c3f54c681f6c0c018288a23b9304a9ee2d515baa1fd` |
-| `87819643694` | `ubuntu-latest / x86_64 (devel)` | `success`; false green after `Execution halted` | `11385ea89c9d208db257194ddc4823620512ea8c09a154055ba5330c1471dd67` |
-| `87819643708` | `macos-15 / arm64 (release)` | `success`; false green after `Execution halted` | `e7f4b815b69b634eb121c2ff84295e0a5eb5fded08d7e654994751f734bd86ab` |
+Each stage must discover the current test inventory, run supported contract
+tests, audit the DSO's undefined R symbols against the public API plus the exact
+exception ledger, and seal source, build,
+library, inputs, commands, logs, compiler, package, and session information.
+Historical fixed file/skip/expectation counts are removed; a narrow exclusion
+must name a current unsupported runtime capability and be independently
+validated.
 
-The sole uploaded artifact was ID `8398884805`, name
-`Linux-X64-r4.3-5-results`, size 7,388,076 bytes, and REST digest
-`sha256:5b1ca972d9eeea4a6adea745b3c39880456422bc2e6bb6f917b1ed1cbf568fb2`.
-Its 687 extracted files are authenticated by the artifact manifest below.
+## R API discipline and sole compatibility exception
 
-The completed run is retained at
-`.local/ci/r-cmd-check-29559803987-failed`. Its run metadata SHA-256 is
-`e9f05278069f9e9222d2ddfc3870233fbdddfc208948d4cda6d9d1f82cba899a`;
-the six-job log-manifest SHA-256 is
-`8380c769e779ce1217d0b0748b90738a050f4882fdfe68c7b7603d6b4af34ad0`;
-the workflow SHA-256 is
-`21d2ac45d6d25207b374969f41c013bbe11bd4cce58fb8d87b47e215d734b0e0`;
-the artifact metadata SHA-256 is
-`861605ab59119669bfadacf796a912c59367067e15338a65fba9ee46b25cf65d`;
-the downloaded R 4.3 artifact-manifest SHA-256 is
-`5630de7d50535b7208f4a66afb26a1fb4c0198dfaaab6ebf2c9eaf2d6c6070a5`;
-and the top-level evidence-manifest SHA-256 is
-`8c0c38376f2e014a2866a6f5c4477251a6721c043036c70c9c644968fabe7c5f`.
-Never infer check completion from its four green labels, and never move or
-reuse its candidate tag.
+Shipped C compiles against the pinned R 4.3.0, 4.4.0, 4.5.2, and development
+headers. Version adapters live in `src/r_api_compat.c` and may select equivalent
+APIs, but may not select a different semantic engine. For older supported
+headers, the adapters use the public, documented `FORMALS` and `ATTRIB`
+backports for `R_ClosureFormals`, `ANY_ATTRIB`, `R_getAttribCount`, and
+`R_hasAttrib`; they do not evaluate R-level `formals()` or `attributes()`
+helpers.
 
-## Rejected second 2.0.0 run
+There is exactly one exception to the public-API rule. R 4.3--4.5 has no public
+non-forcing classifier for one binding. The public R-level `substitute()`
+workaround is forcing/unsound for the simultaneous generation and TuneToken
+receipt scans.
+The pinned R 4.5 Writing R Extensions manual explicitly says that detailed
+delayed-binding information is unavailable in the API. The R 4.6 manual labels
+`R_GetBindingType` experimental and continues to classify
+`Rf_findVarInFrame` as too low-level for the API; R 4.6 `tools` includes the
+latter in its warned non-API symbols. Thus this exception is a reviewed
+supported-runtime compromise, not a CRAN allowlist justification.
+Consequently, only the R < 4.6 branch in `src/r_api_compat.c` declares and calls
+the exported `Rf_findVarInFrame` once, and treats `R_UnboundValue` or a returned
+`PROMSXP` as rejection. R >= 4.6 uses the documented experimental API
+`R_GetBindingType` and does not compile that call path.
+`environment/r-api-exceptions.tsv` is the exact ledger;
+the source audit requires one raw token and one occurrence/path, and the pinned
+header and real-runtime matrices exercise both sides. This symbol is not
+CRAN-allowlisted for the supported pre-4.6 build path. The R 4.3--4.5 DSO
+inventories must contain it, and the current-R symbol audit must prove it is
+absent from every R >= 4.6 package DSO. The exception does not permit another
+internal API, another caller,
+forcing a promise, or a different semantic engine.
+`native-check --mode symbols` retains the current-R undefined-symbol inventory
+and requires exactly zero `Rf_findVarInFrame` entries and one
+`R_GetBindingType` entry. The retained-evidence validator rechecks that policy.
+Each older runtime-matrix stage instead requires exactly one
+`Rf_findVarInFrame` entry and forbids `R_GetBindingType`.
 
-The hardened detached companion was:
+The registered routine table has fixed arities and dynamic lookup disabled.
+Symbol audits reject too-new R APIs in older-runtime DSOs, any unledgered
+internal R API, an `Rf_findVarInFrame` count/path or version-branch mismatch,
+and any private data.table symbols. Direct probes exercise each registered
+routine on valid and malformed inputs.
 
-- local ref: `refs/paradox-release/portability-harness-b840d9c`;
-- commit: `b840d9c4a4d118c70595f0ce00d38ed7951761ee`;
-- tree: `f624cd5bf8b8faeedf2e77ced6dc8f4904504689`;
-- direct parent/package candidate:
-  `afa56689e4037ee14a75b32811686f563f95effe`;
-- workflow SHA-256:
-  `54b1265d48ca60fc6ccd8e1f42d9798b8af5e7f2d2dfb12e593a4d079cefe392`;
-- immutable remote tag:
-  `paradox-2.0.0-ci-afa5668-harness-b840d9c`.
+## Floating-point portability
 
-Manual run
-[`29561742772`](https://github.com/mlr-org/paradox/actions/runs/29561742772)
-was attempt 1, event `workflow_dispatch`, branch the immutable harness tag,
-head SHA the full companion commit, and conclusion `failure`. Both artifacts
-bind the workflow to `b840d9c4a4d118c70595f0ce00d38ed7951761ee` and the checked-out package to
-`afa56689e4037ee14a75b32811686f563f95effe`.
+Comparisons, tolerances, quantiles, exponential transformations, and integer
+conversion receive cross-architecture boundary tests. Do not require fused
+multiply-add contraction or a particular intermediate rounding result. Avoid
+tests that compare stochastic floating output bit-for-bit when the public
+contract is tolerance-based, but keep exact tests for deterministic categorical
+selection, integer bounds, NA/NaN/Inf classification, and RNG state restoration.
 
-| Job ID | Matrix row | Result | Retained log SHA-256 |
-|---|---|---|---|
-| `87825499474` | `windows-latest / x86_64 (release)` | `success`; every required step passed and the sole check status was final `Status: OK` | `625b19371ae2164ef18207ae72755c746aee33df0e1dbf820e71cdd0b2d8b2c2` |
-| `87825499523` | `macos-15 / arm64 (release)` | `failure`; checkout, architecture, compilation, provenance, and upload passed, while direct check and independent completion verification failed | `1c87983826ca74e5bda0727c7f47fb59085139f28f17611044f730d987d403b0` |
+Apple ARM64 previously exposed an FMA-sensitive defect in different source.
+Fresh candidate evidence must exercise the focused floating-point boundary
+tests and real hardware CI. The historical correction is guidance, not
+evidence.
 
-The macOS check ran 19,008 successful expectations before one genuine failure
-at `test-native-paramset-qunif.R:58`: native `.499` mapping returned
-`-0.01999999999999980`, while the historical R primitive sequence returned
-`-0.01999999999999957`. Apple Clang had contracted the affine expression into
-an ARM64 fused operation. The check therefore emitted `Execution halted` and
-ended `Status: 1 ERROR, 1 NOTE`. The NOTE separately reported the reticulate/uv
-coordination file `uv-setuptools-d489c7a91649635e.lock` as temporary-directory
-detritus. Both are candidate defects; the Windows pass does not transfer to
-package bytes that contain their corrections.
+## GitHub portability workflow
 
-| Artifact ID | Name | Size | REST SHA-256 digest |
-|---|---|---|---|
-| `8400111188` | `paradox-2.0.0-portability-windows-latest-x86_64` | 2,997,115 bytes | `d991c5abf562c35ab7a7f491f13168c2dbce77a49983b353dcb35587442eb8d3` |
-| `8399808867` | `paradox-2.0.0-portability-macos-15-arm64` | 4,185,166 bytes | `00bff571f283cbd3abcc047fece0437617819a5a07596d7830104c7dcf507688` |
+The release workflow checks the exact frozen candidate ref on at least:
 
-The rejected run is retained at `.local/ci/r-cmd-check-29561742772`. Its exact
-metadata hashes are `run.json`
-`6cb32298ec0b142d61ee691772955a1ae2f0d50dac89b9c13698bb94b44a1b53`,
-`jobs.json`
-`e54eaf77e6fb70ee6b10d5cb003cc2bdb97e57d59ba509454044c572957529c3`,
-`artifacts.json`
-`b81afa50589c4d2901b0c5bf5b57d7e66d21954bd6dd52378c18c49d2a127af4`,
-and executed workflow
-`54b1265d48ca60fc6ccd8e1f42d9798b8af5e7f2d2dfb12e593a4d079cefe392`.
-The manifest-file SHA-256 values are:
+- Windows release R, x86-64, with the matching Rtools;
+- macOS release R on a pinned Apple-silicon runner label;
+- Linux release/development R as appropriate for package-check integration.
 
-- `ARCHIVE-SHA256SUMS`:
-  `591a501d68e85a26a710e9d3a1906b30a2adfe70c1287229bf3de405362c750a`;
-- `ARTIFACT-SHA256SUMS` (754 extracted files):
-  `e484378567d711e8a8b910f01a6ed57904a296bcb75a8a6feaba9ff47a2e71ff`;
-- `JOB-LOG-SHA256SUMS`:
-  `369bb35828866aa8d4b48a97b5e579f01b7c3c8e92db42cd93aec3470044bb95`;
-- `METADATA-SHA256SUMS`:
-  `faa6ace38dc4539a447ecdff7e9dabd577548a5f41f4f68d5892a23ad8d8c091`;
-- `VERIFIER-SHA256SUMS`:
-  `e61285926dde11028e7083b5e9abbb83c5df51fd9bd264190cf796fca969801d`;
-- `EVIDENCE-SHA256SUMS`, which binds the five subordinate manifests:
-  `18ce43ffb4c85d3863a85c6736f9981cc646c49ab31f0d58c35d92dbbeb43fa1`.
+Every platform job records checked-out ref/commit/tree and verifies that
+provenance before building. Shell and R steps use failure-propagating wrappers:
+R errors, failed `R CMD check`, missing logs, or absent final `Status: OK` must
+terminate the job nonzero. The matrix has `fail-fast: false`, so every required
+platform runs. A separate always-run completion job waits for the entire matrix
+and rejects its aggregate `needs` result unless it is exactly `success`; the
+offline acceptance verifier additionally enumerates and requires success from
+each individual REST job and required step. The completion gate must not use an
+R expression such as
+`if (Sys.getenv(...) )` without strict logical parsing; the earlier false-green
+`missing value where TRUE/FALSE needed` incident is a permanent harness
+regression case.
 
-The retained verifier has SHA-256
-`d6541a76e8eaec5c4a2489c4bb8055d515d751eaeaa7dc7692229603be98adb7`;
-its rejection log has SHA-256
-`d1e2a722c341a6d8f47983c69d4a92a9c784c76ef30881e2baec8824c2abef10`
-and rejects exactly because the run conclusion is `failure`. This is evidence
-that the hardened workflow exposed a real defect, not release portability
-evidence. Never move, delete, or reuse either the candidate or companion tag.
+CI uploads source/check artifacts and logs even on failure, but artifact upload
+steps use `if: always()` without masking the preceding command's conclusion.
+The acceptance verifier checks job conclusions, log terminal status, source
+identity, artifact hashes, and required manifests rather than trusting the
+workflow's top-level green mark alone.
 
-## Accepted final 2.0.0 run
+## Windows-specific checks
 
-The corrected package candidate is frozen at
-`refs/paradox-release/candidate-20260717T083921Z`, commit
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, tree
-`91eea910212ea15f4ccba598929f8a61844bcc35`. Its source archive is
-`.local/compat/candidate-freeze-2f40e3e/build/paradox_2.0.0.tar.gz`, SHA-256
-`508a596b435f0e017c60cb54143656a8b85ad0f78f37476730d282334102aeb8`.
-It contains 211 files and no `.git` member. A complete comparison with the
-delta-gate archive found 209 byte-identical files; only the expected
-`DESCRIPTION` `Packaged` timestamp and stochastically rendered
-`inst/doc/indepth.html` differ. The candidate's final `.Rbuildignore` addition
-`^\.git$` is the build-control fix that prevents linked-worktree Git metadata
-from entering the archive.
+- strict registration and DLL loading with no unresolved symbols;
+- C17 compilation under the selected Rtools GCC;
+- path, encoding, line-ending, temporary-directory, and file-lock behavior;
+- no POSIX-only shipped code or shell dependency in package execution;
+- serialization and data.table facade behavior;
+- complete package check with examples/tests/vignettes relevant to Windows.
 
-The direct-child portability companion is frozen locally at
-`refs/paradox-release/portability-harness-ede67fc`, commit
-`ede67fc5780c9b1f6f91325189f8f7560376060c`, tree
-`578abec87a84c706f3a77803f9c645c933619aac`. Its direct parent is exact
-candidate `2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and its only changed path is
-`.github/workflows/r-cmd-check.yml`. The executed workflow must have SHA-256
-`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
-The static release-workflow regression test and repository-local `actionlint`
-both pass on this companion.
+## macOS ARM64-specific checks
 
-The immutable tags are `paradox-2.0.0-ci-2f40e3e` for the exact candidate and
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc` for the exact companion. They were
-published by the user without pushing `main`, the benchmark companion, or the
-local `refs/paradox-release/` namespace. The rejected `afa5668` and `b840d9c`
-identities remain immutable historical evidence.
+- Apple Clang C17 warning-clean compile and link;
+- ARM64 floating/quantile/tolerance boundary suite;
+- alignment-safe object access and checked integer widths;
+- no x86-only compiler flags or intrinsic assumptions;
+- current serialization, callbacks, stable/base ALTREP materialization, hostile
+  custom-ALTREP safety (no replay or Paradox-caused crash/corruption),
+  direct-assignment rejection versus the sole `set_values(.values=)` shell
+  snapshot, typed-special ALTREP/pointer-S4 and ParamUty base-`identical()`
+  boundaries, exact BASE Object-token receipts and sealed search capabilities,
+  ordinary non-ALTREP/non-S4 structural shell rejection, documented ordinary
+  tables with semantic ALTREP columns, data.table facades, and package check;
+- no temporary source-tree detritus that makes a check falsely dirty.
 
-Manual run
-[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
-was attempt 1, event `workflow_dispatch`, head branch
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`, head SHA
-`ede67fc5780c9b1f6f91325189f8f7560376060c`, and conclusion `success`. Both
-jobs authenticated checkout
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`; the executed workflow SHA-256 was
-`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
+## Sanitizers and analyzers
 
-| Job ID | Matrix row and interval | Runtime | Result and retained hashes |
-|---|---|---|---|
-| `87861491934` | `windows-latest / x86_64 (release)`, `10:21:11Z`–`10:53:20Z` | `x86_64-w64-mingw32`, R 4.6.1 UCRT | `success`; 19,011 pass, 2 skip, 0 fail/warn; sole final `Status: OK`; job log `3112a7d5804191751b5652e5c62b243925c00de0b4b91f3d5429ba21d488a228`; check log `c47f8c8bb33b514e800957508532f80e703eaecb8df087b845e494d441543418`; provenance `1b57eceeacf7d2998415dae1f957937715e74348f65364dfb841d3b6b43fd6e8` |
-| `87861491957` | `macos-15 / arm64 (release)`, `10:21:09Z`–`10:36:42Z` | `aarch64-apple-darwin23`, R 4.6.1, Apple Clang 17 | `success`; 19,013 pass, 2 skip, 0 fail/warn; sole final `Status: OK`, including clean temporary-detritus check; job log `2f5c11fc5ef5d1d86e54610a66e20ab90e80960aa9f9ca0d018684b9e00fb338`; check log `edf3c4fbbd9abfb39309bccc18a611fb8c4ada55bf4935ef4d8cb27fe9fd0bf9`; provenance `6bf22f031a8f5c885e9e503f5243b9c72178e2446ea89e20cda9452024ca0035` |
+The package-DSO ASan and UBSan profiles use the reviewed Clang toolchain and
+remain separate; strict warning builds cover both GCC and Clang. GCT and
+Valgrind focus on R object lifetime; rchk covers protection, allocation, and
+registration statically. Long-vector/arithmetic and corrupt capsule tests are
+platform-neutral requirements, not Linux-only analyzer extras.
 
-| Artifact ID | Platform | Size | REST digest / raw ZIP SHA-256 | Extracted files |
-|---|---|---:|---|---:|
-| `8404629035` | Windows x86-64 | 3,000,388 bytes | `df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc` | 375 |
-| `8404256296` | macOS ARM64 | 4,146,086 bytes | `228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53` | 377 |
+No sanitizer flag or analyzer suppression may weaken ordinary semantics. Every
+suppression is source- and tool-version-specific, minimal, documented, and
+reviewed. Zero exit without parsed reports is insufficient.
 
-The accepted evidence is retained exactly once at
-`.local/ci/r-cmd-check-29573168344`. The REST metadata hashes are `run.json`
-`069181abcfc38e4f29d725c2d647b3622399a3b6290af71e07217c1bb9aed307`,
-`jobs.json`
-`fe0740f581fa08e4a577163e1e3fa73065259faa25e47d881d22a2cb0dfbe7f7`,
-and `artifacts.json`
-`0dc36716c03f6000ab0718b85070910b0076046b07b02dade423dbf6020cad02`.
-The exact six-manifest hierarchy is:
+## Remote-write boundary
 
-- `ARCHIVE-SHA256SUMS` (2 rows):
-  `ad02591bc69faadeeec988cad28e1723dd2120442c7eafe656c9b0927adb7f80`;
-- `ARTIFACT-SHA256SUMS` (752 rows):
-  `36cad6980df7af4b5d9a4987c402b1979b8087404eb23e484c15e3513d24d649`;
-- `EVIDENCE-SHA256SUMS` (5 rows):
-  `7e8eb7097d3b403b5b4e712f5da65d1a8018c6d6cd0eb0efc533abd9b4b79484`;
-- `JOB-LOG-SHA256SUMS` (2 rows):
-  `9fc6cc750d1b0d3699e206ddccff3e245d35834acb920777e9cbf0e7f18e668d`;
-- `METADATA-SHA256SUMS` (4 rows):
-  `3227de2dc55f56797586f3236e10858a05230cc3119ffb382122c30301955b59`;
-- `VERIFIER-SHA256SUMS` (2 rows):
-  `34696b48062cd3bed7a6b87d2f79a89b99aea5e6116d6580c32b8d76fa126674`.
+Agents may prepare workflow changes, local tags/refs only when explicitly
+authorized, and PR-ready downstream commits. They do not push branches, publish
+tags, dispatch remote workflows, or open PRs. The user performs each remote
+write manually. After publication, agents may read and verify the resulting CI
+run and artifacts.
 
-Those manifests cover exactly 767 rows. The retained verifier SHA-256 is
-`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`,
-and its deterministic acceptance receipt has SHA-256
-`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
-The verifier accepted the evidence once after checking the REST identities,
-raw archives, extracted trees, job logs, workflow, candidate provenance, sole
-final check statuses, and complete manifest coverage. This closes the final
-portability gate; it does not assert that a CRAN upload or publication has
-occurred.
+## Acceptance
+
+Portability is accepted only when the local R matrix, pinned-header/symbol and
+exact exception-ledger audits, Windows x86-64, and real macOS ARM64 rows all
+name the same candidate source and their independent verifiers pass. Any source
+change affecting C, registration, R wrappers, tests, build configuration, or
+portability harness reopens the corresponding rows.

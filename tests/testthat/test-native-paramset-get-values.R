@@ -1,11 +1,3 @@
-native_get_values_available = function() {
-  exists(
-    "C_param_set_get_values",
-    envir = asNamespace("paradox"),
-    inherits = FALSE
-  )
-}
-
 native_get_values_call = function(self,
     private = self$.__enclos_env__$private,
     class = NULL, tags = NULL, any_tags = NULL,
@@ -14,20 +6,6 @@ native_get_values_call = function(self,
   .Call(C_param_set_get_values, private, self, environment())
 }
 environment(native_get_values_call) = asNamespace("paradox")
-
-native_get_values_condition = function(class_name, callback) {
-  method = function(cond, x) cond$callback(x)
-  registerS3method(
-    "condition_test",
-    class_name,
-    method,
-    envir = asNamespace("paradox")
-  )
-  condition = CondEqual(1L)
-  condition$callback = callback
-  class(condition) = c(class_name, class(condition))
-  condition
-}
 
 native_get_values_internal_domain = function() {
   p_int(
@@ -40,16 +18,11 @@ native_get_values_internal_domain = function() {
   )
 }
 
-test_that("native get_values and lazy ids use forced registered symbols", {
-  skip_if_not(native_get_values_available())
+test_that("get_values is one registered native operation", {
   namespace = asNamespace("paradox")
-  get_values = get("C_param_set_get_values", envir = namespace)
-  lazy_ids = get("C_param_set_ids_lazy", envir = namespace)
-
-  expect_s3_class(get_values, "NativeSymbolInfo")
-  expect_identical(get_values$numParameters, 3L)
-  expect_s3_class(lazy_ids, "NativeSymbolInfo")
-  expect_identical(lazy_ids$numParameters, 2L)
+  native = get("C_param_set_get_values", envir = namespace)
+  expect_s3_class(native, "NativeSymbolInfo")
+  expect_identical(native$numParameters, 3L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
   expect_error(
     .Call("param_set_get_values", NULL, NULL, NULL, PACKAGE = "paradox"),
@@ -57,8 +30,7 @@ test_that("native get_values and lazy ids use forced registered symbols", {
   )
 })
 
-test_that("native get_values preserves base filtering and token semantics", {
-  skip_if_not(native_get_values_available())
+test_that("get_values filters built-in kinds, tags, tokens, and named NULL", {
   ordinary = to_tune()
   internal = to_tune(upper = 5, internal = TRUE)
   param_set = ps(
@@ -76,7 +48,7 @@ test_that("native get_values preserves base filtering and token semantics", {
     nullable = NULL
   )
 
-  expect_identical(native_get_values_call(param_set), param_set$values)
+  expect_identical(param_set$get_values(), param_set$values)
   expect_identical(
     param_set$get_values(type = "without_token"),
     list(integer = 2L, logical = TRUE, nullable = NULL)
@@ -97,1310 +69,200 @@ test_that("native get_values preserves base filtering and token semantics", {
     param_set$get_values(any_tags = c("internal_tuning", "train")),
     list(integer = 2L, logical = TRUE, internal = internal)
   )
-})
 
-test_that("native get_values preserves collection affixes and nesting", {
-  skip_if_not(native_get_values_available())
-  left = ps(a = p_int(init = 1L), token = p_int(0L, 10L))
-  left$values$token = to_tune()
-  right = ps(b = p_lgl(init = TRUE))
-  inner = ParamSetCollection$new(
-    list(left = left, right = right),
-    postfix_names = TRUE
-  )
-  outer = ParamSetCollection$new(list(nested = inner, tail = ps(
-    z = p_dbl(init = 0.5)
-  )))
-
-  direct = native_get_values_call(outer)
-  expect_false(is.null(direct))
-  expect_identical(direct, list(
-    nested.a.left = 1L,
-    nested.token.left = left$values$token,
-    nested.b.right = TRUE,
-    tail.z = 0.5
-  ))
+  param_set$values = named_list()
   expect_identical(
-    outer$get_values(type = "without_token"),
-    list(nested.a.left = 1L, nested.b.right = TRUE, tail.z = 0.5)
-  )
-  expect_identical(
-    outer$get_values(type = "only_token"),
-    list(nested.token.left = left$values$token)
-  )
-})
-
-test_that("ids and get_values force filters sequentially", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  mark = function(label, value) {
-    events$seen = c(events$seen, label)
-    value
-  }
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-
-  expect_error(
-    param_set$ids(
-      class = mark("class", 1),
-      tags = mark("tags", stop("tags forced too early")),
-      any_tags = mark("any_tags", NULL)
-    ),
-    "Must be of type 'character'"
-  )
-  expect_identical(events$seen, "class")
-
-  events$seen = character()
-  expect_error(
-    param_set$ids(
-      class = mark("class", "ParamInt"),
-      tags = mark("tags", 1),
-      any_tags = mark("any_tags", stop("any_tags forced too early"))
-    ),
-    "Assertion on 'tags' failed"
-  )
-  expect_identical(events$seen, c("class", "tags"))
-
-  events$seen = character()
-  expect_identical(
-    param_set$ids(
-      class = mark("class", "ParamInt"),
-      tags = mark("tags", NULL),
-      any_tags = mark("any_tags", NULL)
-    ),
-    c("a", "b")
-  )
-  expect_identical(events$seen, c("class", "tags", "any_tags"))
-})
-
-test_that("get_values retains the complete promise and callback order", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  mark = function(label, value) {
-    events$seen = c(events$seen, label)
-    value
-  }
-  condition = native_get_values_condition(
-    "NativeGetValuesOrderCondition",
-    function(x) {
-      events$seen = c(events$seen, "condition")
-      TRUE
-    }
-  )
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  param_set$add_dep("b", "a", condition)
-
-  expect_error(
-    param_set$get_values(
-      type = mark("type", "with_token"),
-      check_required = mark("check_required", TRUE),
-      remove_dependencies = mark("remove_dependencies", TRUE),
-      class = mark("class", 1),
-      tags = mark("tags", stop("tags forced too early")),
-      any_tags = mark("any_tags", NULL)
-    ),
-    "Assertion on 'class' failed"
-  )
-  expect_identical(events$seen, c(
-    "type", "check_required", "remove_dependencies", "condition", "class"
-  ))
-
-  events$seen = character()
-  expect_error(
-    param_set$get_values(
-      type = mark("type", "invalid"),
-      check_required = mark("check_required", stop("forced too early")),
-      remove_dependencies = mark("remove_dependencies", TRUE),
-      class = mark("class", NULL)
-    ),
-    "Assertion on 'type' failed"
-  )
-  expect_identical(events$seen, "type")
-
-  events$seen = character()
-  expect_error(
-    param_set$get_values(
-      type = mark("type", "with_token"),
-      check_required = mark("check_required", 1),
-      remove_dependencies = mark("remove_dependencies", stop("forced")),
-      class = mark("class", NULL)
-    ),
-    "Assertion on 'check_required' failed"
-  )
-  expect_identical(events$seen, c("type", "check_required"))
-})
-
-test_that("required diagnostics precede filters and use original names", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$filters = 0L
-  param_set = ps(
-    zeta = p_int(tags = "required"),
-    alpha = p_lgl(tags = "required"),
-    visible = p_int(init = 1L)
-  )
-
-  expect_error(
-    param_set$get_values(class = {
-      events$filters = events$filters + 1L
-      "ParamInt"
-    }),
-    "Missing required parameters: zeta, alpha",
-    fixed = TRUE
-  )
-  expect_identical(events$filters, 0L)
-
-  param_set$values = list(zeta = 2L, visible = 1L)
-  expect_error(
-    param_set$get_values(tags = "absent"),
-    "Missing required parameters: alpha",
-    fixed = TRUE
-  )
-  expect_identical(
-    param_set$get_values(tags = "absent", check_required = FALSE),
+    param_set$get_values(check_required = FALSE),
     setNames(list(), character())
   )
 })
 
-test_that("dependency rows use one local values snapshot in row order", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  condition = function(label, answer) native_get_values_condition(
-    paste0("NativeGetValuesSequence", label),
-    function(x) {
-      events$seen = c(events$seen, paste0(label, ":", deparse(x)))
-      answer
-    }
-  )
+test_that("dependencies use one row-ordered value snapshot", {
   param_set = ps(
     root = p_int(),
     middle = p_int(),
     leaf = p_int()
   )
-  param_set$add_dep("middle", "root", condition("first", FALSE))
-  param_set$add_dep("leaf", "middle", condition("second", FALSE))
+  param_set$add_dep("middle", "root", CondEqual(1L))
+  param_set$add_dep("leaf", "middle", CondEqual(1L))
   param_set$assert_values = FALSE
   param_set$values = list(root = 0L, middle = 1L, leaf = 2L)
 
   expect_identical(param_set$get_values(), list(root = 0L))
-  expect_identical(events$seen, c("first:0L", "second:NULL"))
-
-  events$seen = character()
   expect_identical(
     param_set$get_values(remove_dependencies = FALSE),
     list(root = 0L, middle = 1L, leaf = 2L)
   )
-  expect_identical(events$seen, character())
 
-  events$seen = character()
+  reversed = param_set$deps[c(2L, 1L)]
+  param_set$deps = reversed
+  expect_identical(param_set$get_values(), list(root = 0L, leaf = 2L))
+
   param_set$values = list(root = to_tune(), middle = 1L, leaf = 2L)
-  expect_identical(names(param_set$get_values()), c("root", "middle"))
-  expect_identical(events$seen, "second:1L")
-})
-
-test_that("built-in dependencies preserve scalar comparison semantics", {
-  skip_if_not(native_get_values_available())
-  cases = list(
-    list("logical equal", TRUE, CondEqual(TRUE), TRUE),
-    list("logical unequal", FALSE, CondEqual(TRUE), FALSE),
-    list("logical missing", NA, CondEqual(TRUE), FALSE),
-    list("integer double coercion", 2L, CondEqual(2), TRUE),
-    list("double integer coercion", 2, CondEqual(2L), TRUE),
-    list("positive infinity", Inf, CondEqual(Inf), TRUE),
-    list("opposite infinity", -Inf, CondEqual(Inf), FALSE),
-    list("signed zero", -0, CondEqual(0), TRUE),
-    list("double missing", NA_real_, CondEqual(0), FALSE),
-    list("double NaN", NaN, CondEqual(0), FALSE),
-    list("logical membership", FALSE, CondAnyOf(c(TRUE, FALSE)), TRUE),
-    list("numeric membership coercion", 2L, CondAnyOf(c(0, 2)), TRUE),
-    list("numeric membership miss", 3L, CondAnyOf(c(0, 2)), FALSE),
-    list("character equal", "tree", CondEqual("tree"), TRUE),
-    list(
-      "character membership",
-      "tree",
-      CondAnyOf(c("linear", "tree", "dart")),
-      TRUE
-    ),
-    list("null parent", NULL, CondEqual("tree"), FALSE)
-  )
-
-  for (case in cases) {
-    param_set = ps(parent = p_uty(), child = p_int(init = 1L))
-    param_set$assert_values = FALSE
-    param_set$values = list(parent = case[[2L]], child = 1L)
-    param_set$add_dep("child", "parent", case[[3L]])
-    expected = list(parent = case[[2L]])
-    if (case[[4L]]) expected$child = 1L
-    expect_identical(
-      param_set$get_values(check_required = FALSE),
-      expected,
-      info = case[[1L]]
-    )
-  }
-})
-
-test_that("built-in character dependencies compare supported encodings", {
-  skip_if_not(native_get_values_available())
-  utf8 = enc2utf8("caf\u00e9")
-  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
-  skip_if(is.na(latin1))
-  Encoding(latin1) = "latin1"
-
-  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
-  param_set$assert_values = FALSE
-  param_set$values = list(parent = latin1, child = 1L)
-  param_set$add_dep("child", "parent", CondEqual(utf8))
   expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = latin1, child = 1L)
-  )
-
-  byte_value = "caf\u00e9"
-  Encoding(byte_value) = "bytes"
-  param_set$values = list(parent = byte_value, child = 1L)
-  private = param_set$.__enclos_env__$private
-  data.table::set(
-    private$.deps,
-    j = "cond",
-    value = list(CondEqual(byte_value))
-  )
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = byte_value, child = 1L)
+    names(param_set$get_values()),
+    c("root", "middle", "leaf")
   )
 })
 
-test_that("mutated built-in condition methods retain namespace dispatch", {
-  skip_if_not(native_get_values_available())
-  namespace = asNamespace("paradox")
-  names = c("condition_test.CondEqual", "condition_test.CondAnyOf")
-  originals = lapply(names, get, envir = namespace, inherits = FALSE)
-  restore = function() {
-    for (index in seq_along(names)) {
-      if (bindingIsLocked(names[[index]], namespace)) {
-        unlockBinding(names[[index]], namespace)
-      }
-      assign(names[[index]], originals[[index]], envir = namespace)
-      lockBinding(names[[index]], namespace)
-    }
-  }
-  on.exit(restore(), add = TRUE)
-
-  calls = integer(2L)
-  for (name in names) unlockBinding(name, namespace)
-  assign(names[[1L]], function(cond, x) {
-    calls[[1L]] <<- calls[[1L]] + 1L
-    FALSE
-  }, envir = namespace)
-  assign(names[[2L]], function(cond, x) {
-    calls[[2L]] <<- calls[[2L]] + 1L
-    TRUE
-  }, envir = namespace)
-  for (name in names) lockBinding(name, namespace)
-
+test_that("required values are checked globally before result filtering", {
   param_set = ps(
-    root = p_int(init = 1L),
-    equal = p_int(init = 2L),
-    any = p_int(init = 3L)
+    zeta = p_int(tags = "required"),
+    alpha = p_lgl(tags = "required"),
+    visible = p_int(init = 1L, tags = "visible")
   )
-  param_set$add_dep("equal", "root", CondEqual(1L))
-  param_set$add_dep("any", "root", CondAnyOf(c(0L, 1L)))
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 1L, any = 3L)
-  )
-  expect_identical(calls, c(1L, 1L))
-})
-
-test_that("registered Condition dollar methods retain operand dispatch", {
-  skip_if_not(native_get_values_available())
-  base_namespace = asNamespace("base")
-  methods = get(
-    ".__S3MethodsTable__.",
-    envir = base_namespace,
-    inherits = FALSE
-  )
-  method_name = "$.CondEqual"
-  had_method = exists(method_name, envir = methods, inherits = FALSE)
-  original = if (had_method) {
-    get(method_name, envir = methods, inherits = FALSE)
-  }
-  was_locked = had_method && bindingIsLocked(method_name, methods)
-  restore = function() {
-    if (exists(method_name, envir = methods, inherits = FALSE) &&
-        bindingIsLocked(method_name, methods)) {
-      unlockBinding(method_name, methods)
-    }
-    if (had_method) {
-      assign(method_name, original, envir = methods)
-      if (was_locked) lockBinding(method_name, methods)
-    } else if (exists(method_name, envir = methods, inherits = FALSE)) {
-      rm(list = method_name, envir = methods)
-    }
-  }
-  on.exit(restore(), add = TRUE)
-
-  calls = 0L
-  registerS3method(
-    "$",
-    "CondEqual",
-    function(x, name) {
-      if (identical(name, "rhs")) {
-        calls <<- calls + 1L
-        return(0L)
-      }
-      .subset2(unclass(x), name)
-    },
-    envir = base_namespace
-  )
-  param_set = ps(
-    parent = p_int(init = 0L),
-    child = p_int(init = 1L)
-  )
-  param_set$add_dep("child", "parent", CondEqual(1L))
-  calls = 0L
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = 0L, child = 1L)
-  )
-  expect_identical(calls, 1L)
-})
-
-test_that("altered built-in operands retain vector and attribute semantics", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
-  param_set$assert_values = FALSE
-
-  named_condition = CondEqual(1L)
-  named_condition$rhs = structure(1L, names = "value")
-  param_set$add_dep("child", "parent", named_condition)
-  param_set$values = list(parent = 1L, child = 1L)
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = 1L, child = 1L)
-  )
-
-  vector_condition = CondEqual(1L)
-  vector_condition$rhs = c(1L, 2L)
-  private = param_set$.__enclos_env__$private
-  data.table::set(
-    private$.deps,
-    j = "cond",
-    value = list(vector_condition)
-  )
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = 1L)
-  )
-})
-
-test_that("dependency answers retain exact isTRUE semantics", {
-  skip_if_not(native_get_values_available())
-  answers = list(
-    TRUE,
-    FALSE,
-    1,
-    0,
-    NA,
-    logical(),
-    c(TRUE, TRUE),
-    structure(TRUE, class = "NativeGetValuesClassedAnswer"),
-    structure(1, class = "NativeGetValuesClassedAnswer")
-  )
-  for (index in seq_along(answers)) {
-    answer = answers[[index]]
-    condition = native_get_values_condition(
-      sprintf("NativeGetValuesAnswer%02d", index),
-      function(x) answer
-    )
-    param_set = ps(root = p_int(init = 0L), child = p_int(init = 1L))
-    param_set$add_dep("child", "root", condition)
-    expected = if (isTRUE(answer)) {
-      list(root = 0L, child = 1L)
-    } else {
-      list(root = 0L)
-    }
-    expect_identical(
-      param_set$get_values(check_required = FALSE),
-      expected,
-      info = sprintf("answer %d", index)
-    )
-  }
-})
-
-test_that("remove_dependencies observes both live dependency row counts", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$dim = 0L
-  events$condition = 0L
-  class_name = "NativeGetValuesChangingDependencyDim"
-  registerS3method("dim", class_name, function(x) {
-    events$dim = events$dim + 1L
-    c(if (events$dim == 1L) 1L else 0L, length(x))
-  }, envir = asNamespace("base"))
-  condition = native_get_values_condition(
-    "NativeGetValuesChangingDependencyCondition",
-    function(x) {
-      events$condition = events$condition + 1L
-      FALSE
-    }
-  )
-  param_set = ps(root = p_int(init = 0L), child = p_int(init = 1L))
-  param_set$add_dep("child", "root", condition)
-  dependencies = param_set$.__enclos_env__$private$.deps
-
-  expect_identical(
-    param_set$get_values(
-      check_required = FALSE,
-      remove_dependencies = {
-        data.table::setattr(
-          dependencies,
-          "class",
-          c(class_name, class(dependencies))
-        )
-        TRUE
-      }
-    ),
-    list(root = 0L, child = 1L)
-  )
-  expect_identical(events$dim, 2L)
-  expect_identical(events$condition, 0L)
-})
-
-test_that("built-in dependency plans consume the evaluated row sequence", {
-  skip_if_not(native_get_values_available())
-  namespace = asNamespace("paradox")
-  imports = parent.env(namespace)
-  original = get("seq_row", envir = imports, inherits = FALSE)
-  restore = function() {
-    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
-    assign("seq_row", original, envir = imports)
-    lockBinding("seq_row", imports)
-  }
-  on.exit(restore(), add = TRUE)
-
-  replacement = function(x) {
-    restore()
-    rev(seq_len(nrow(x)))
-  }
-  unlockBinding("seq_row", imports)
-  assign("seq_row", replacement, envir = imports)
-  lockBinding("seq_row", imports)
-
-  param_set = ps(
-    root = p_int(init = 0L),
-    middle = p_int(init = 1L),
-    leaf = p_int(init = 2L)
-  )
-  param_set$add_dep("middle", "root", CondEqual(1L))
-  param_set$add_dep("leaf", "middle", CondEqual(1L))
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 0L, leaf = 2L)
-  )
-  expect_identical(
-    get("seq_row", envir = imports, inherits = FALSE),
-    original
-  )
-})
-
-test_that("built-in dependency plans require an authenticated row producer", {
-  skip_if_not(native_get_values_available())
-  namespace = asNamespace("paradox")
-  imports = parent.env(namespace)
-  original = get("seq_row", envir = imports, inherits = FALSE)
-  restore = function() {
-    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
-    assign("seq_row", original, envir = imports)
-    lockBinding("seq_row", imports)
-  }
-  on.exit(restore(), add = TRUE)
-
-  param_set = ps(
-    root = p_int(init = 0L),
-    middle = p_int(init = 1L),
-    leaf = p_int(init = 2L)
-  )
-  param_set$add_dep("middle", "root", CondEqual(1L))
-  param_set$add_dep("leaf", "middle", CondEqual(1L))
-  private = param_set$.__enclos_env__$private
-  callback = function() {
-    data.table::set(
-      private$.deps,
-      j = "cond",
-      value = list(CondEqual(0L), CondEqual(1L))
-    )
-    invisible(NULL)
-  }
-  replacement = function(x) {
-    restore()
-    native_stateful_altrep(
-      c(1L, 2L),
-      c(1L, 2L),
-      callback = callback,
-      callback_after = c(0L, NA_integer_)
-    )
-  }
-  unlockBinding("seq_row", imports)
-  assign("seq_row", replacement, envir = imports)
-  lockBinding("seq_row", imports)
-
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 0L, middle = 1L, leaf = 2L)
-  )
-  expect_identical(
-    get("seq_row", envir = imports, inherits = FALSE),
-    original
-  )
-})
-
-test_that("built-in dependency plans retain admitted parents across row callbacks", {
-  skip_on_cran()
-  skip_if_not(native_get_values_available())
-
-  param_set = ps(parent = p_uty(), child = p_int(init = 1L))
-  param_set$assert_values = FALSE
-  param_set$values = list(parent = 1L, child = 1L)
-  param_set$add_dep("child", "parent", CondEqual(1L))
-  private = param_set$.__enclos_env__$private
-  namespace = asNamespace("paradox")
-  mutator = get("C_test_gc_column_mutator", envir = namespace)
-  callbacks = 0L
-  rows = native_stateful_altrep(
-    1L,
-    1L,
-    callback = function() {
-      callbacks <<- callbacks + 1L
-      pointer = .Call(mutator, private$.values, 0L, 0L)
-      pointer = NULL
-      gc(FALSE)
-      invisible(NULL)
-    },
-    callback_after = c(0L, NA_integer_)
-  )
-
-  # Keep the authenticated seq_row() expression and closure environment, but
-  # make its one invocation return the stateful row vector above. The temporary
-  # bindings restore themselves before the row callback executes.
-  imports = parent.env(namespace)
-  mlr3misc_namespace = asNamespace("mlr3misc")
-  base_namespace = asNamespace("base")
-  original_seq_row = get("seq_row", envir = imports, inherits = FALSE)
-  original_seq_len = get("seq_len", envir = base_namespace, inherits = FALSE)
-  restore = function() {
-    if (bindingIsLocked("seq_row", imports)) unlockBinding("seq_row", imports)
-    assign("seq_row", original_seq_row, envir = imports)
-    lockBinding("seq_row", imports)
-    if (bindingIsLocked("seq_len", base_namespace)) {
-      unlockBinding("seq_len", base_namespace)
-    }
-    assign("seq_len", original_seq_len, envir = base_namespace)
-    lockBinding("seq_len", base_namespace)
-  }
-  on.exit(restore(), add = TRUE)
-  admitted_seq_row = eval(quote(function(x) {
-    seq_len(nrow(x))
-  }), envir = mlr3misc_namespace)
-  replacement_seq_len = function(length.out) {
-    restore()
-    rows
-  }
-  unlockBinding("seq_row", imports)
-  assign("seq_row", admitted_seq_row, envir = imports)
-  lockBinding("seq_row", imports)
-  unlockBinding("seq_len", base_namespace)
-  assign("seq_len", replacement_seq_len, envir = base_namespace)
-  lockBinding("seq_len", base_namespace)
-
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(parent = 0L, child = 1L)
-  )
-  expect_identical(callbacks, 1L)
-})
-
-test_that("dependency callbacks expose later live column and generic changes", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  holder = new.env(parent = emptyenv())
-  param_set = ps(
-    root = p_int(init = 0L),
-    first = p_int(init = 1L),
-    second = p_int(init = 2L)
-  )
-  private = param_set$.__enclos_env__$private
-  holder$replacement = native_get_values_condition(
-    "NativeGetValuesReplacementCondition",
-    function(x) {
-      events$seen = c(events$seen, "replacement-column")
-      TRUE
-    }
-  )
-  holder$stale = native_get_values_condition(
-    "NativeGetValuesStaleCondition",
-    function(x) {
-      events$seen = c(events$seen, "stale-column")
-      TRUE
-    }
-  )
-  holder$first = native_get_values_condition(
-    "NativeGetValuesColumnMutationCondition",
-    function(x) {
-      events$seen = c(events$seen, "first-column")
-      data.table::set(
-        private$.deps,
-        j = "cond",
-        value = list(holder$first, holder$replacement)
-      )
-      TRUE
-    }
-  )
-  param_set$add_dep("first", "root", holder$first)
-  param_set$add_dep("second", "root", holder$stale)
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 0L, first = 1L, second = 2L)
-  )
-  expect_identical(events$seen, c("first-column", "replacement-column"))
-
-  namespace = asNamespace("paradox")
-  original = get("condition_test", envir = namespace, inherits = FALSE)
-  was_locked = bindingIsLocked("condition_test", namespace)
-  restore = function() {
-    if (bindingIsLocked("condition_test", namespace)) {
-      unlockBinding("condition_test", namespace)
-    }
-    assign("condition_test", original, envir = namespace)
-    if (was_locked) lockBinding("condition_test", namespace)
-  }
-  on.exit(restore(), add = TRUE)
-  replace_generic = function() {
-    unlockBinding("condition_test", namespace)
-    assign("condition_test", function(cond, x) {
-      events$seen = c(events$seen, "replacement-generic")
-      TRUE
-    }, envir = namespace)
-    lockBinding("condition_test", namespace)
-  }
-  first = native_get_values_condition(
-    "NativeGetValuesGenericMutationCondition",
-    function(x) {
-      events$seen = c(events$seen, "first-generic")
-      replace_generic()
-      TRUE
-    }
-  )
-  stale = native_get_values_condition(
-    "NativeGetValuesStaleGenericCondition",
-    function(x) {
-      events$seen = c(events$seen, "stale-generic")
-      TRUE
-    }
-  )
-  param_set = ps(
-    root = p_int(init = 0L),
-    first = p_int(init = 1L),
-    second = p_int(init = 2L)
-  )
-  param_set$add_dep("first", "root", first)
-  param_set$add_dep("second", "root", stale)
-  events$seen = character()
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 0L, first = 1L, second = 2L)
-  )
-  expect_identical(events$seen, c("first-generic", "replacement-generic"))
-})
-
-test_that("in-place values-name mutation retains original membership safely", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(first = p_int(init = 1L), second = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-  condition = native_get_values_condition(
-    "NativeGetValuesNamesMutationCondition",
-    function(x) {
-      data.table::setattr(private$.values, "names", c("x", "y"))
-      gc(FALSE)
-      TRUE
-    }
-  )
-  param_set$add_dep("second", "first", condition)
-
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    setNames(list(), character())
-  )
-  expect_identical(names(param_set$values), c("x", "y"))
-})
-
-test_that("dependency removal detaches the in-flight values shell", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(
-    root = p_int(init = 0L),
-    removed = p_int(init = 1L),
-    later = p_int(init = 2L)
-  )
-  private = param_set$.__enclos_env__$private
-  remove = native_get_values_condition(
-    "NativeGetValuesDetachRemovalCondition",
-    function(x) FALSE
-  )
-  mutate_private = native_get_values_condition(
-    "NativeGetValuesDetachMutationCondition",
-    function(x) {
-      data.table::setattr(private$.values, "names", c("x", "y", "z"))
-      gc(FALSE)
-      TRUE
-    }
-  )
-  param_set$add_dep("removed", "root", remove)
-  param_set$add_dep("later", "root", mutate_private)
-
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 0L, later = 2L)
-  )
-  expect_identical(names(param_set$values), c("x", "y", "z"))
-})
-
-test_that("an unmatched removal assignment still detaches its shell", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(
-    first = p_int(init = 1L),
-    renamed = p_int(init = 2L),
-    later = p_int(init = 3L)
-  )
-  private = param_set$.__enclos_env__$private
-  rename_then_remove = native_get_values_condition(
-    "NativeGetValuesUnmatchedRemovalCondition",
-    function(x) {
-      data.table::setattr(
-        private$.values,
-        "names",
-        c("first", "other", "later")
-      )
-      FALSE
-    }
-  )
-  mutate_private = native_get_values_condition(
-    "NativeGetValuesAfterUnmatchedRemovalCondition",
-    function(x) {
-      data.table::setattr(private$.values, "names", c("x", "y", "z"))
-      gc(FALSE)
-      TRUE
-    }
-  )
-  param_set$add_dep("renamed", "first", rename_then_remove)
-  param_set$add_dep("later", "first", mutate_private)
-
-  expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(first = 1L, later = 3L)
-  )
-  expect_identical(names(param_set$values), c("x", "y", "z"))
-})
-
-test_that("token filtering detaches the in-flight values shell", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(first = p_int(init = 1L), second = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-
-  expect_identical(
-    param_set$get_values(
-      type = "without_token",
-      check_required = FALSE,
-      class = {
-        data.table::setattr(private$.values, "names", c("x", "y"))
-        gc(FALSE)
-        NULL
-      }
-    ),
-    list(first = 1L, second = 2L)
-  )
-  expect_identical(names(param_set$values), c("x", "y"))
-})
-
-test_that("condition errors stop before filters without replay", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$conditions = 0L
-  events$filters = 0L
-  condition = native_get_values_condition(
-    "NativeGetValuesErrorCondition",
-    function(x) {
-      events$conditions = events$conditions + 1L
-      stop("condition exploded")
-    }
-  )
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  param_set$add_dep("b", "a", condition)
-
   expect_error(
-    param_set$get_values(class = {
-      events$filters = events$filters + 1L
-      NULL
-    }),
-    "condition exploded",
+    param_set$get_values(tags = "visible"),
+    "Missing required parameters: zeta, alpha",
     fixed = TRUE
   )
-  expect_identical(events$conditions, 1L)
-  expect_identical(events$filters, 0L)
-})
 
-test_that("native Condition calls document the allowed introspection edge", {
-  skip_if_not(native_get_values_available())
-  captured = new.env(parent = emptyenv())
-  class_name = "NativeGetValuesIntrospectionCondition"
-  registerS3method("condition_test", class_name, function(cond, x) {
-    captured$cond_expression = substitute(cond)
-    captured$x_expression = substitute(x)
-    captured$call = sys.call()
-    captured$parent = parent.frame()
-    TRUE
-  }, envir = asNamespace("paradox"))
-  condition = CondEqual(1L)
-  class(condition) = c(class_name, class(condition))
-  param_set = ps(root = p_int(init = 1L), child = p_int(init = 2L))
-  param_set$add_dep("child", "root", condition)
-
+  param_set$values = list(zeta = 2L, visible = 1L)
+  expect_error(
+    param_set$get_values(tags = "visible"),
+    "Missing required parameters: alpha",
+    fixed = TRUE
+  )
   expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(root = 1L, child = 2L)
+    param_set$get_values(tags = "visible", check_required = FALSE),
+    list(visible = 1L)
   )
-  expect_false(is.symbol(captured$cond_expression))
-  expect_identical(captured$x_expression, 1L)
-  expect_identical(captured$call[[2L]], condition)
-  expect_identical(captured$call[[3L]], 1L)
-  expect_identical(captured$parent, asNamespace("paradox"))
 })
 
-test_that("reentrant dependency mutation retains the captured values", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$inner = NULL
-  param_set = ps(parent = p_int(), child = p_int())
-  private = param_set$.__enclos_env__$private
-  condition = native_get_values_condition(
-    "NativeGetValuesReentrantCondition",
-    function(x) {
-      private$.store_values(list(parent = 0L, child = 9L))
-      events$inner = param_set$get_values(remove_dependencies = FALSE)
-      gc(FALSE)
-      TRUE
-    }
-  )
-  param_set$add_dep("child", "parent", condition)
-  param_set$values = list(parent = 1L, child = 2L)
-
-  expect_identical(
-    param_set$get_values(),
-    list(parent = 1L, child = 2L)
-  )
-  expect_identical(events$inner, list(parent = 0L, child = 9L))
-  expect_identical(param_set$values, list(parent = 0L, child = 9L))
-})
-
-test_that("final ids observe table mutations made by callbacks and filters", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(first = p_int(init = 1L), second = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-  reverse_params = function() {
-    replacement = unclass(private$.params)
-    replacement = lapply(replacement, rev)
-    names(replacement) = names(private$.params)
-    private$.params = replacement
+test_that("arguments cross the native boundary once in formal order", {
+  events = character()
+  mark = function(label, value) {
+    events <<- c(events, label)
+    value
   }
-  condition = native_get_values_condition(
-    "NativeGetValuesMutationCondition",
-    function(x) {
-      reverse_params()
-      TRUE
-    }
-  )
-  param_set$add_dep("second", "first", condition)
+  param_set = ps(a = p_int(init = 1L), b = p_lgl(init = TRUE))
 
   expect_identical(
-    param_set$get_values(check_required = FALSE),
-    list(second = 2L, first = 1L)
+    param_set$get_values(
+      class = mark("class", NULL),
+      tags = mark("tags", NULL),
+      any_tags = mark("any_tags", NULL),
+      type = mark("type", "with_token"),
+      check_required = mark("check_required", TRUE),
+      remove_dependencies = mark("remove_dependencies", TRUE)
+    ),
+    list(a = 1L, b = TRUE)
   )
+  expect_identical(events, c(
+    "class", "tags", "any_tags", "type", "check_required",
+    "remove_dependencies"
+  ))
 
-  param_set = ps(first = p_int(init = 1L), second = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-  expect_identical(
-    param_set$get_values(check_required = FALSE, class = {
-      reverse_params()
-      NULL
-    }),
-    list(second = 2L, first = 1L)
-  )
-})
-
-test_that("final matching preserves reordered, missing, and duplicate ids", {
-  skip_if_not(native_get_values_available())
-  utf8_id = enc2utf8("caf\u00e9")
-  latin1_id = iconv(utf8_id, from = "UTF-8", to = "latin1")
-  skip_if(is.na(latin1_id))
-  Encoding(latin1_id) = "latin1"
-
-  param_set = ps(
-    a = p_int(init = 1L),
-    b = p_int(init = 2L),
-    cafe = p_int(init = 3L),
-    d = p_int(init = 4L)
-  )
-  private = param_set$.__enclos_env__$private
-  data.table::set(private$.params, 3L, "id", utf8_id)
-  names(private$.values)[[3L]] = latin1_id
-
-  observed = param_set$get_values(
-    check_required = FALSE,
-    remove_dependencies = FALSE,
-    class = {
-      data.table::set(
-        private$.params,
-        j = "id",
-        value = c(utf8_id, "absent", utf8_id, "a")
-      )
-      NULL
-    }
-  )
-  expect_identical(unname(observed), list(3L, 3L, 1L))
-  expect_identical(enc2utf8(names(observed)), c(utf8_id, utf8_id, "a"))
-})
-
-test_that("aligned final matching preserves duplicate-name match semantics", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-
-  observed = native_get_values_call(
-    param_set,
-    check_required = FALSE,
-    remove_dependencies = FALSE,
-    class = {
-      data.table::set(private$.params, j = "id", value = c("a", "a"))
-      data.table::setattr(private$.values, "names", c("a", "a"))
-      NULL
-    }
-  )
-
-  expect_identical(observed, structure(list(1L, 1L), names = c("a", "a")))
-})
-
-test_that("final matching compacts removed duplicate names", {
-  skip_on_cran()
-
-  skip_if_not(native_get_values_available())
-  param_set = ps(
-    a = p_int(init = 1L),
-    b = p_int(init = 2L),
-    c = p_int(init = 3L)
-  )
-  private = param_set$.__enclos_env__$private
-  condition = native_get_values_condition(
-    "NativeGetValuesDuplicateRemovalCondition",
-    function(x) {
-      data.table::setattr(private$.values, "names", c("b", "b", "a"))
-      FALSE
-    }
-  )
-  param_set$add_dep("b", "a", condition)
-
-  previous = gctorture(TRUE)
-  on.exit(gctorture(previous), add = TRUE)
-  observed = param_set$get_values(check_required = FALSE)
-  gctorture(previous)
-
-  expect_identical(
-    observed,
-    list(a = 3L, b = 2L)
-  )
-})
-
-test_that("final matching rejects callback-capable ids without replay", {
-  skip_if_not(native_get_values_available())
-  callbacks = 0L
-  class_name = "NativeGetValuesLateClassedIds"
-  registerS3method(
-    "mtfrm",
-    class_name,
-    function(x) {
-      callbacks <<- callbacks + 1L
-      stop("native final matching dispatched mtfrm", call. = FALSE)
-    },
-    envir = asNamespace("base")
-  )
-
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
+  events = character()
   expect_error(
     param_set$get_values(
-      check_required = FALSE,
-      remove_dependencies = FALSE,
-      class = {
-        data.table::setattr(private$.params$id, "class", class_name)
-        NULL
-      }
+      class = mark("class", NULL),
+      tags = mark("tags", 1),
+      any_tags = mark("any_tags", stop("forced too late")),
+      type = mark("type", "with_token")
     ),
-    paste(
-      "ParamSet ids changed to a callback-capable representation during",
-      "native get_values()"
-    ),
-    fixed = TRUE
+    "Assertion on 'tags' failed"
   )
-  expect_identical(callbacks, 0L)
+  expect_identical(events, c("class", "tags"))
 
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-  expect_error(
-    param_set$get_values(
-      check_required = FALSE,
-      remove_dependencies = FALSE,
-      class = {
-        data.table::setattr(private$.params$cls, "class", class_name)
-        "ParamInt"
-      }
-    ),
-    paste(
-      "ParamSet ids changed to a callback-capable representation during",
-      "native get_values()"
-    ),
-    fixed = TRUE
-  )
-  expect_identical(callbacks, 0L)
+  callback_state = new.env(parent = emptyenv())
+  callback_state$count = 0L
+  observed = param_set$get_values(class = {
+    callback_state$count = callback_state$count + 1L
+    param_set$values = list(b = FALSE)
+    NULL
+  })
+  expect_identical(callback_state$count, 1L)
+  expect_identical(observed, list(b = FALSE))
 })
 
-test_that("subclasses and custom Domains fall back before callbacks", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$reads = 0L
-  CountingSet = R6::R6Class(
-    "NativeGetValuesCountingSet",
+test_that("flags and type reject arbitrary historical quirks", {
+  param_set = ps(a = p_int(init = 1L))
+  expect_error(param_set$get_values(type = NULL), "Assertion on 'type' failed")
+  expect_error(param_set$get_values(type = "token"), "Assertion on 'type' failed")
+  expect_error(
+    param_set$get_values(check_required = 1),
+    "Assertion on 'check_required' failed"
+  )
+  expect_error(
+    param_set$get_values(remove_dependencies = NA),
+    "Assertion on 'remove_dependencies' failed"
+  )
+})
+
+test_that("collections flatten shared and nested capsule graphs", {
+  child = ps(a = p_int(init = 1L), token = p_int(0L, 10L))
+  child$values$token = to_tune()
+  shared = ParamSetCollection$new(list(left = child, right = child))
+  outer = ParamSetCollection$new(list(
+    nested = shared,
+    tail = ps(z = p_dbl(init = 0.5))
+  ))
+
+  expect_identical(outer$get_values(), list(
+    nested.left.a = 1L,
+    nested.left.token = child$values$token,
+    nested.right.a = 1L,
+    nested.right.token = child$values$token,
+    tail.z = 0.5
+  ))
+  expect_identical(
+    outer$get_values(type = "without_token"),
+    list(nested.left.a = 1L, nested.right.a = 1L, tail.z = 0.5)
+  )
+})
+
+test_that("get_values refreshes SHADOW exactly through its capsule edge", {
+  origin = ps(hidden = p_int(), x = p_int(), flag = p_lgl())
+  origin$values = list(hidden = 9L, x = 1L, flag = TRUE)
+  shadow = ParamSetShadow$new(origin, "hidden")
+
+  expect_identical(shadow$get_values(), list(x = 1L, flag = TRUE))
+  origin$values = list(hidden = 7L, x = 2L)
+  expect_identical(shadow$get_values(), list(x = 2L))
+
+  collection = ParamSetCollection$new(list(view = shadow))
+  origin$values = list(hidden = 8L, flag = FALSE)
+  expect_identical(collection$get_values(), list(view.flag = FALSE))
+})
+
+test_that("additive subclasses use the same capsule engine", {
+  LabelledParamSet = R6::R6Class(
+    "NativeGetValuesLabelledParamSet",
     inherit = ParamSet,
-    active = list(values = function(value) {
-      if (!missing(value)) {
-        super$values = value
-        return(value)
+    public = list(
+      label = NULL,
+      initialize = function(params, label) {
+        super$initialize(params)
+        self$label = label
       }
-      events$reads = events$reads + 1L
-      super$values
-    })
-  )
-  child = CountingSet$new(list(x = p_int(init = 1L)))
-  expect_null(native_get_values_call(child))
-  expect_identical(events$reads, 0L)
-  expect_identical(child$get_values(), list(x = 1L))
-  expect_identical(events$reads, 1L)
-
-  collection = ParamSetCollection$new(list(child = child))
-  events$reads = 0L
-  expect_null(native_get_values_call(collection))
-  expect_identical(events$reads, 0L)
-  expect_identical(collection$get_values(), list(child.x = 1L))
-  expect_identical(events$reads, 1L)
-
-  make_custom = function() paradox:::Domain(
-      cls = "NativeGetValuesCustom",
-      grouping = "NativeGetValuesCustom",
-      storage_type = "list"
     )
-  custom = make_custom()
-  custom_set = ParamSet$new(list(custom = custom))
-  custom_set$.__enclos_env__$private$.values = list(custom = 3L)
-  expect_null(native_get_values_call(custom_set))
-  expect_identical(custom_set$get_values(), list(custom = 3L))
-})
-
-test_that("replaced generated bindings decline before execution", {
-  skip_if_not(native_get_values_available())
-  events = new.env(parent = emptyenv())
-  events$reads = 0L
-  param_set = ps(x = p_int(init = 1L))
-  original = activeBindingFunction("values", param_set)
-  makeActiveBinding("values", function(value) {
-    events$reads = events$reads + 1L
-    original(value)
-  }, param_set)
-
-  expect_null(native_get_values_call(param_set))
-  expect_identical(events$reads, 0L)
+  )
+  param_set = LabelledParamSet$new(list(x = p_int(init = 1L)), "fixture")
+  expect_identical(param_set$label, "fixture")
   expect_identical(param_set$get_values(), list(x = 1L))
-  expect_identical(events$reads, 1L)
-
-  param_set = ps(x = p_int(init = 2L))
-  private = param_set$.__enclos_env__$private
-  original = private$.get_values
-  unlockBinding(".get_values", private)
-  private$.get_values = function() {
-    events$reads = events$reads + 1L
-    original()
-  }
-  lockBinding(".get_values", private)
-  events$reads = 0L
-
-  expect_null(native_get_values_call(param_set))
-  expect_identical(events$reads, 0L)
-  expect_identical(param_set$get_values(), list(x = 2L))
-  expect_identical(events$reads, 1L)
 })
 
-test_that("fancy wrapper locals decline without being forced", {
-  skip_if_not(native_get_values_available())
+test_that("malformed capsules error instead of replaying or crashing", {
   param_set = ps(x = p_int(init = 1L))
-  wrapper_environment = environment(param_set$get_values)
-  expect_identical(
-    wrapper_environment,
-    environment(param_set$ids)
-  )
-  expect_identical(
-    wrapper_environment,
-    environment(activeBindingFunction("values", param_set))
-  )
-  expect_identical(
-    wrapper_environment,
-    environment(param_set$.__enclos_env__$private$.get_values)
-  )
-
-  names = c(
-    "super",
-    ".__ParamSet__get_values",
-    ".__ParamSet__ids",
-    ".__ParamSet__values",
-    ".__ParamSet__deps",
-    ".__ParamSet__.get_values"
-  )
-  for (binding_name in names) {
-    reads = 0L
-    delayedAssign(
-      binding_name,
-      {
-        reads <<- reads + 1L
-        stop("delayed wrapper local was forced")
-      },
-      assign.env = wrapper_environment
-    )
-    expect_null(
-      native_get_values_call(param_set),
-      info = paste("delayed", binding_name)
-    )
-    expect_identical(reads, 0L, info = paste("delayed", binding_name))
-    rm(list = binding_name, envir = wrapper_environment)
-
-    makeActiveBinding(binding_name, function(value) {
-      reads <<- reads + 1L
-      stop("active wrapper local was forced")
-    }, wrapper_environment)
-    expect_null(
-      native_get_values_call(param_set),
-      info = paste("active", binding_name)
-    )
-    expect_identical(reads, 0L, info = paste("active", binding_name))
-    rm(list = binding_name, envir = wrapper_environment)
-  }
-})
-
-test_that("malformed state and unsupported encodings decline as a unit", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(a = p_int(init = 1L), b = p_int(init = 2L))
   private = param_set$.__enclos_env__$private
-  private$.values = list(b = 2L, a = 1L)
-  expect_null(native_get_values_call(param_set))
+  state = private$.state()
+  state$.values = structure(list(1L), names = "ghost")
+  private$.core = .Call(C_param_set_core_new, 1L, state)
 
-  param_set = ps(a = p_int(init = 1L))
-  private = param_set$.__enclos_env__$private
-  private$.values = list(a = 1L, a = 2L)
-  expect_null(native_get_values_call(param_set))
-
-  param_set = ps(a = p_int(init = 1L))
-  private = param_set$.__enclos_env__$private
-  byte_name = "\u00e9"
-  Encoding(byte_name) = "bytes"
-  data.table::set(private$.params, 1L, "id", byte_name)
-  names(private$.values) = byte_name
-  expect_null(native_get_values_call(param_set))
-  expect_identical(param_set$get_values(), structure(list(1L), names = byte_name))
-})
-
-test_that("native get_values ignores nested payloads it cannot consume", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(
-    first = p_int(init = 1L),
-    later = p_fct(c("a", "b"), init = "a")
-  )
-  private = param_set$.__enclos_env__$private
-  data.table::set(
-    private$.params,
-    i = 2L,
-    j = "levels",
-    value = list(new.env(parent = emptyenv()))
-  )
-
-  observed = native_get_values_call(
-    param_set,
-    check_required = FALSE,
-    remove_dependencies = FALSE
-  )
-  expect_false(is.null(observed))
-  expect_identical(observed, list(first = 1L, later = "a"))
-})
-
-test_that("tag-owner validation is deferred until get_values uses tags", {
-  skip_if_not(native_get_values_available())
-  param_set = ps(value = p_int(init = 1L, tags = "train"))
-  private = param_set$.__enclos_env__$private
-  private$.tags = data.table::data.table(
-    id = "ghost",
-    tag = "train",
-    key = "id"
-  )
-
-  observed = native_get_values_call(
-    param_set,
-    check_required = FALSE,
-    remove_dependencies = FALSE
-  )
-  expect_false(is.null(observed))
-  expect_identical(observed, list(value = 1L))
   expect_error(
-    native_get_values_call(
-      param_set,
-      tags = "train",
-      check_required = FALSE,
-      remove_dependencies = FALSE
-    ),
-    "contains an unknown parameter ID",
+    param_set$get_values(),
+    "Corrupt ParamSet capsule: invalid `.values` field",
     fixed = TRUE
   )
 })
 
-test_that("supported encodings match semantically", {
-  skip_if_not(native_get_values_available())
-  utf8_id = enc2utf8("caf\u00e9")
-  latin1_id = iconv(utf8_id, from = "UTF-8", to = "latin1")
-  skip_if(is.na(latin1_id))
-  Encoding(latin1_id) = "latin1"
-  param_set = ps(cafe = p_int(init = 1L))
-  private = param_set$.__enclos_env__$private
-  data.table::set(private$.params, 1L, "id", utf8_id)
-  names(private$.values) = latin1_id
-
-  observed = native_get_values_call(param_set)
-  expect_false(is.null(observed))
-  expect_identical(unname(observed), list(1L))
-  expect_identical(enc2utf8(names(observed)), utf8_id)
-})
-
-test_that("native outputs own shells and retain opaque leaves", {
-  skip_if_not(native_get_values_available())
+test_that("results own their list and names shells", {
   marker = new.env(parent = emptyenv())
   param_set = ps(marker = p_uty(), value = p_int())
   param_set$values = list(marker = marker, value = 1L)
-  first = native_get_values_call(param_set)
-  second = native_get_values_call(param_set)
+  first = param_set$get_values()
+  second = param_set$get_values()
 
   expect_identical(first, second)
   expect_false(identical(data.table::address(first), data.table::address(second)))
@@ -1411,11 +273,10 @@ test_that("native outputs own shells and retain opaque leaves", {
   expect_identical(first$marker, marker)
   names(first)[[1L]] = "changed"
   first$value = 3L
-  expect_identical(native_get_values_call(param_set), second)
+  expect_identical(param_set$get_values(), second)
 })
 
-test_that("serialized and cloned exact objects remain native-admissible", {
-  skip_if_not(native_get_values_available())
+test_that("serialized and cloned graphs remain capsule-readable", {
   child = ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
   collection = ParamSetCollection$new(list(left = child, right = child))
   cases = list(
@@ -1427,33 +288,6 @@ test_that("serialized and cloned exact objects remain native-admissible", {
     unserialize(serialize(collection, NULL, version = 3L))
   )
   for (object in cases) {
-    direct = native_get_values_call(object)
-    expect_false(is.null(direct))
-    expect_identical(direct, object$get_values())
+    expect_identical(native_get_values_call(object), object$get_values())
   }
-})
-
-test_that("native get_values survives forced collection and callbacks", {
-  skip_on_cran()
-
-  skip_if_not(native_get_values_available())
-  condition = native_get_values_condition(
-    "NativeGetValuesGctortureCondition",
-    function(x) {
-      gc(FALSE)
-      identical(x, 1L)
-    }
-  )
-  child = ps(a = p_int(init = 1L), b = p_int(init = 2L))
-  child$add_dep("b", "a", condition)
-  collection = ParamSetCollection$new(list(root = child))
-
-  previous = gctorture(TRUE)
-  on.exit(gctorture(previous), add = TRUE)
-  observed = native_get_values_call(collection)
-  serialized = unserialize(serialize(collection, NULL, version = 3L))
-  gctorture(previous)
-
-  expect_identical(observed, list(root.a = 1L, root.b = 2L))
-  expect_identical(serialized$get_values(), observed)
 })

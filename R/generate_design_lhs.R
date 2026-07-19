@@ -41,5 +41,5 @@ generate_design_lhs = function(param_set, n, lhs_fun = NULL) {
   }
   colnames(d) = ids
   d = param_set$qunif(d)
-  Design$new(param_set, d, remove_dupl = FALSE) # user wants n-points, dont remove
+  Design$new(param_set, d, remove_dupl = FALSE) # Preserve the requested number of points.
 }

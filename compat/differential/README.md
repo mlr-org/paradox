@@ -9,13 +9,98 @@ applies tracked changes, and overlays non-ignored untracked files into a
 run-local candidate source snapshot, so no build step writes into the working
 package directory.
 
+`cases.R` has been refreshed for the contract-first Paradox-2 boundary. The
+checked-in `expected-differences.tsv` pins the complete normalized Paradox-1
+and Paradox-2 fingerprints reviewed for the contract-first candidate. The
+manifest was populated only after a strict run and full capture review; no
+fingerprint from the superseded compatibility-first candidate was retained.
+
+Use `--strict` while diagnosing the changing source so the fail-closed intent
+is explicit in the run receipt.
+
+## Reviewed contract-first inventory
+
+The public-API-first inventory now covers:
+
+- all five built-in Domain and both built-in Condition kinds, plus deliberate
+  observations of the now-closed third-party subclass seams;
+- named scalar Domain inputs, S3-classed value/check containers, and the
+  deliberately stricter ordinary transformation-shell boundary;
+- additive ParamSet inheritance, values, checks, dependencies,
+  transformations, constraints, serialization, designs, and random sampling;
+- BASE and COLLECTION behavior, repeated-ID subset behavior, detached
+  subset/flatten callbacks, and detached semantic equality;
+- the official live `ParamSetShadow` when available, with a public detached
+  projection serving as the legacy-side reference; and
+- the recovered-TuneToken search-space boundary plus exact package-built token
+  admission and deliberate rejection of subclassed or extra-metadata tokens.
+
+The differential intentionally does not inspect private R6 fields or capsule
+layout and does not duplicate legacy-upgrade fixtures, deep/cyclic token
+forgery, adversarial corruption, or the full downstream corpus. Those belong to
+their dedicated package, upgrade, memory, and consumer gates. Its TuneToken case
+uses only small fixed root-shape violations so both package processes can report
+the intentional contract delta safely.
+
+Each reviewed manifest row contains both complete normalized fingerprints and
+a reason naming an intentional compatibility change or retained bug fix.
+Equality, an unlisted delta, an old fingerprint, or a row without a current
+direct regression fails. The exact clean candidate must still rerun the default
+gate and seal its evidence; a dirty review run is not release evidence.
+
+There is deliberately no fingerprint auto-accept generator. The runner's
+`compare.R` writes the proposed values to
+`RUN/results/report.rds` in `case_fingerprints` and prints the relevant values
+in `report.txt`. The reviewed workflow is:
+
+```sh
+. scripts/activate
+compat/differential/run \
+  --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9 \
+  --strict
+
+Rscript --vanilla -e '
+  report = readRDS(".local/compat/differential/runs/RUN/results/report.rds")
+  print(report$case_fingerprints, row.names = FALSE)
+'
+
+# After reviewing cases, full normalized results, NEWS, and direct tests:
+compat/differential/run \
+  --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9 \
+  --expected-differences /absolute/path/to/proposed-contract-first.tsv
+```
+
+After changing the reviewed `cases.R` or `expected-differences.tsv`, rerun the
+default command from the exact clean frozen source, then independently verify
+its seal:
+
+```sh
+Rscript --vanilla compat/verify-repository-evidence.R \
+  .local/compat/differential/runs/RUN
+```
+
+`compat/differential/run --help` is the runner interface. The runner executes
+the authenticated `test-normalize.R` self-test, captures baseline and candidate
+in separate processes, invokes `compare.R`, and seals only a clean candidate
+whose comparison passes. The generic verifier checks the retained manifest and
+seal without regenerating or reclassifying results.
+
+The normalizer policy also has a cheap standalone self-test:
+
+```sh
+Rscript --vanilla compat/differential/test-normalize.R \
+  compat/differential/normalize.R
+```
+
 All mirrors, archives, libraries, logs, captures, and reports live below
 `.local/compat/differential/`. The runner refuses to use the host R: bootstrap
 once and activate the repository-local toolchain first.
 
 ```sh
 . scripts/activate
-compat/differential/run --baseline-ref 06091b5 --case shape
+compat/differential/run \
+  --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9 \
+  --case shape
 ```
 
 Use an immutable commit for a reproducible compatibility gate. With no
@@ -24,7 +109,7 @@ focused group:
 
 ```sh
 compat/differential/run \
-  --baseline-ref 06091b5 \
+  --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9 \
   --case validation \
   --case dependencies \
   --case transformations
@@ -63,19 +148,18 @@ identical or exactly matches the checked `expected-differences.tsv` manifest.
 Each expected row pins separate fingerprints of the complete normalized
 baseline and candidate result. The gate fails if either side changes, if an
 unlisted difference appears, or if a selected expected case becomes equal.
-Thus a new regression inside an otherwise allowlisted case is not hidden.
-The checked manifest names every case that characterizes historical behavior
-for a bug this rewrite intentionally fixes, including boundary/presence,
-collection callback, ID filtering, grouped sanitization, infinite-bound, and
-repeated-ID subset behavior. Review those reports alongside the documented
-exceptions in `design/compatibility.md`.
+Thus a new regression inside an otherwise allowlisted case is not hidden. The
+checked manifest was reviewed against the documented exceptions in
+[`design/compatibility.md`](../../design/compatibility.md), NEWS, direct package
+regressions, and both complete normalized captures.
 
 Use `--strict` to disable the manifest and make any difference fail. An
 alternative manifest can be supplied with `--expected-differences FILE`. The
-full pinned release gate is therefore:
+full pinned release gate is:
 
 ```sh
-compat/differential/run --baseline-ref 06091b5
+compat/differential/run \
+  --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9
 ```
 
 Package versions, revisions, install paths, R versions, the case-file SHA-256,
@@ -101,7 +185,8 @@ Never update a fingerprint merely to make the gate green. Run the pinned gate
 with `--strict`, inspect the case's full `all.equal()` report and both capture
 objects, and confirm that every changed observation is covered by an intended
 compatibility decision and regression test. The proposed values can then be
-read from the failed run without recomputing them by hand:
+read from the failed run without recomputing them by hand; this extraction is
+not an acceptance generator:
 
 ```sh
 Rscript --vanilla -e '

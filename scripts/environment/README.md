@@ -46,6 +46,22 @@ constructs each valid focused/full native-evidence fixture once, then restores
 independent cached copies for its mutations; adding a tamper case must not
 regenerate the same valid fixture from scratch.
 
+The GitHub portability workflow has a separate always-run completion job in
+addition to its platform matrix. Keep its raw-log and aggregate-result guards
+covered by the cheap structural/adversarial tests:
+
+```sh
+Rscript scripts/environment/test-portability-workflow.R "$PARADOX_ROOT" general
+Rscript scripts/environment/test-portability-ci-evidence-verifier.R
+"$PARADOX_ROOT/.local/tools/bin/actionlint" \
+  "$PARADOX_ROOT/.github/workflows/r-cmd-check.yml"
+```
+
+The release-only direct-child companion may reduce the matrix to macOS ARM64
+and Windows x86-64 and pin the immutable candidate checkout, but it retains the
+completion job. Its offline evidence must contain three successful REST jobs
+(both platform rows plus completion) and exactly two platform artifacts.
+
 The offline public-R-API gate uses `r-api-header-cache` to avoid retaining a
 roughly 424 MiB extraction in every run. On a cache miss the helper verifies
 the pinned archive, configures R in a supervised private process group, copies
@@ -81,31 +97,27 @@ and UBSan as two separate builds. Functional tests are deliberately owned by
 one selected DSO (strict GCC when it is present); the other compiler and
 sanitizer builds dynamically exercise every ordinary registered routine in the
 reviewed coverage manifest and four allocation/callback hazards through
-`run-native-probes.R`. The current ordinary DSO and manifest contain 61
-routines; the compile-time row-name-rooting fixture belongs only to its
-dedicated instrumented build. The gate compares names and arities exactly, so
-the prose count is never accepted in place of the manifest. Every such
-probe-mode DSO also runs a bounded analyzer-sensitive corpus: the exact
-`native-altrep-lifetimes`, `native-adversarial-storage`,
-`native-paramset-value-mutation`, `native-paramsetcollection-exact-state`,
-`native-domain-kernels`, and `native-r6-surface-auth` files. That corpus sets
-`NOT_CRAN=false`, retains an independently verified ledger, and requires six
-files, at least 70 test blocks, at least 650 passing expectations, and the
-exact four reviewed `On CRAN` skips; only the exact absent-miesmuschel skip is
-optional. `--tests probes` runs this fast combined inventory in every selected
-executable mode. `--tests full` includes tests normally skipped on CRAN by
-setting `NOT_CRAN=true` and
+`run-native-probes.R`. The compile-time row-name-rooting fixture belongs only
+to its dedicated instrumented build. The gate discovers and compares names and
+arities exactly; prose never substitutes for the current manifest. Every such
+probe-mode DSO also runs a bounded analyzer-sensitive corpus covering
+adversarial storage, materialize-once ALTREP, Domain kernels, allocating-entry
+GCT, ParamSet quantile/trafo GCT, graph value transactions, and canonical
+collection construction. That corpus sets `NOT_CRAN=false`, retains an
+independently verified ledger, and requires the exact reviewed analyzer file
+manifest and `NOT_CRAN` skip policy discovered from current source. `--tests
+probes` runs this fast combined
+inventory in every selected executable mode. `--tests full` includes tests
+normally skipped on CRAN by setting `NOT_CRAN=true` and
 then runs one ordinary `--as-cran` check plus a test-free depends-only check;
 focused tests select files whose names contain `characterization`, `native`, or
 `regression`. The functional owner emits a structured per-test ledger. Its
 trusted verifier requires the exact selected file inventory, zero failures,
-errors, and warnings, reviewed lower bounds for files, test blocks, and passing
-expectations, and evidence that every source scope using `skip_on_cran()` was
-admitted by `NOT_CRAN=true` rather than silently skipped. Outside the bounded
-analyzer corpus, the only admissible remaining Linux skips are the exact
-absent-miesmuschel and inactive-legacy-data.table bridge rows embedded in the
-verifier; either may disappear when its optional surface is active, but no new
-title or reason is accepted implicitly.
+errors, and warnings, a nonempty result with passing expectations, and evidence
+that every source scope using `skip_on_cran()` was admitted by `NOT_CRAN=true`
+rather than silently skipped. Exact source discovery is the coverage authority;
+there is no historical count floor to become stale. Outside the bounded
+analyzer corpus no Linux skip is accepted implicitly.
 On Linux, that one focused/full corpus uses independent file-level R workers
 under the `resource-jobs light-test` ceiling (lowerable with
 `PARADOX_NATIVE_TEST_JOBS`). Every worker starts with a unique home, temp, and
@@ -145,9 +157,9 @@ return a failing status. It also proves genuine worker overlap, deterministic
 ledger order, wrong-DSO rejection, exact effective-worker policy, the exclusive
 ConfigSpace lane, bounded timeout and TERM-ignoring-worker cleanup, and cleanup
 of active workers plus marked grandchildren after coordinator SIGTERM. The same
-command runs a 58-file, 580-block, 1,740-expectation clean corpus through the
-real ledger writer and trusted verifier, including 27 admitted
-`skip_on_cran()` scopes.
+command runs a compact generated clean corpus through the real ledger writer
+and trusted verifier, including admitted `skip_on_cran()` scopes; its size is a
+runner fixture, not a coverage baseline.
 
 Cppcheck uses its exhaustive analysis level on the actual Linux/C17 package
 configuration. It deliberately does not force every imagined preprocessor
@@ -218,14 +230,16 @@ The sanitizer results have deliberately limited scope:
   library conflicts with Clang 17 and later, and describes package-only UBSan
   as the successful setup. Every sanitizer run records
   `release_gate_complete=false`: neither mode exercises R's own native code as
-  an instrumented runtime would. A separately built sanitizer-enabled R is a
-  distinct future validation gate.
+  an instrumented runtime would. A separately built sanitizer-enabled R would
+  be a distinct validation scope; these package-only results do not claim that
+  coverage.
 
 The symbol mode requires dynamic lookup to be disabled, forced registered
 symbols, a one-to-one mapping between `.Call` registrations and `C_*`
 namespace bindings, no literal-string `.Call` in shipped R, and no dynamically
-exported package symbols except `R_init_paradox` and `R_unload_paradox`. On
-Linux it also rejects an
+exported package symbols except `R_init_paradox`. Paradox has no unload hook:
+the capsule rewrite retains no process-global package state to release. On
+Linux the symbol mode also rejects an
 executable stack and text relocations and requires GNU RELRO metadata.
 
 The bounded analyzer executable is a separate cached prerequisite.
@@ -263,11 +277,12 @@ complete report hashes, exact
 ordered Function blocks and UP/PB counts, and one reviewed analyzer-model
 rationale for each block. Any report drift or package-local `ERROR:` is fatal;
 this is not a wildcard suppression. maacheck must be byte-empty, and fficheck
-must report `R_init_paradox`, exactly 61 functions, and exactly one registration
-call. The post-refactor prefreeze review completed 854 functions and 41,293
-states without package state exhaustion; final release claims require a fresh
-policy-matching run from the frozen candidate, while the authenticated bcheck
-cache is reused without recompilation.
+must report `R_init_paradox`, the exact dynamically discovered registered
+routine inventory, and exactly one registration call. The checked-in rchk
+policy is deliberately stale evidence for superseded source and is not release
+evidence. Regenerate all function/state/report inventories from the frozen
+candidate; only the authenticated bounded-analyzer executable cache may be
+reused without recompilation.
 
 The Valgrind branch of `scripts/memory-check` separates fast sealed
 receipt/runtime validation from expensive content traversal. Its ordinary
@@ -305,8 +320,8 @@ mode-0700 XDG runtime root.
 
 ## Real supported-R runtime matrix
 
-Header compilation cannot prove that fallback paths behave correctly inside
-the actual R interpreter. The opt-in runtime matrix therefore provisions
+Header compilation cannot prove that versioned public-API paths behave
+correctly inside the actual R interpreter. The opt-in runtime matrix therefore provisions
 exact conda environments for R 4.3.3 and R 4.5.2 from the SHA-256 explicit
 locks in `environment/runtime-r-*-linux-64.lock`:
 
@@ -330,18 +345,22 @@ For each selected actual interpreter it archives a committed source ref,
 builds and installs paradox into a fresh stage library, runs the focused
 public-R-API facade probe and an authenticated supported source-test scope, and
 audits undefined DSO symbols against that release's allowed accessor set. Both
-old interpreters stage all public, characterization, regression, and compatible
-native tests, while the 22 R-4.6-binding-admission implementation contexts in
-`environment/runtime-matrix-pre46-exclusions.tsv` are explicitly retained as
-excluded. The current inventory is 79 discovered files, 57 executed files,
-and 22 exclusions, with a 4,900-expectation clean floor. The two ConfigSpace
+old interpreters stage the complete discovered public, characterization,
+regression, and native source suite. The header-only
+`environment/runtime-matrix-pre46-exclusions.tsv` authenticates that there are
+no remaining pre-R-4.6 implementation exclusions. R 4.3 uses the ATTRIB and
+FORMALS backports documented in Writing R Extensions rather than evaluating R
+inspection shims. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated
 as executed result files. Every result-block skip title and reason is likewise
-matched against `environment/runtime-matrix-result-skips.tsv` (six on R 4.3.3,
-seven on R 4.5.2). The stage retains the exact scope ledger, staged source
-copies, testthat-reported inventory, skip ledgers, counts, and hashes.
+derived from the current block-scoped `skip_on_cran()` source and matched
+against `environment/runtime-matrix-result-skips.tsv` for both runtimes. The
+suite must be clean and nonempty; file, context, support, and skip counts are
+joined to their retained inventories instead of frozen prose floors. The stage
+retains the exact scope ledger, staged source copies, testthat-reported
+inventory, skip ledgers, counts, and hashes.
 Committed-source reads and archives use the authenticated project-local Git
 with replacements and unreviewed object/attribute inputs rejected, global and
 system attributes disabled, and the tar umask pinned. Its identity and

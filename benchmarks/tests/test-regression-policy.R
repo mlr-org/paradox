@@ -88,57 +88,6 @@ if (!identical(summary$row_count, 5L) ||
   fail("regression summary aggregates are incorrect")
 }
 
-spec <- benchmark_regression_policy_spec()
-authenticated_tier <- spec$tiers[
-  spec$tiers$tier == "authenticated-read", , drop = FALSE
-]
-expected_authenticated_tier <- data.frame(
-  tier = "authenticated-read",
-  median_ratio_limit = 1.60,
-  q75_ratio_limit = 1.70,
-  slower_probability_limit = 0.80,
-  allocation_ratio_limit = 1.50,
-  allocation_min_delta_bytes = 16384,
-  stringsAsFactors = FALSE
-)
-rownames(authenticated_tier) <- NULL
-if (!identical(authenticated_tier, expected_authenticated_tier)) {
-  fail("authenticated-read tier differs from its reviewed release budget")
-}
-authenticated_policy <- data.frame(
-  scope = "paired", case = "authenticated", operation = "-",
-  tier = "authenticated-read", rationale = "release-safety-fixture",
-  stringsAsFactors = FALSE
-)
-authenticated_baseline <- data.frame(
-  scope = rep("paired", 60L), case = rep("authenticated", 60L),
-  operation = rep("-", 60L), iteration = seq_len(60L),
-  elapsed_ns = rep(seq.int(96, 105), 6L), stringsAsFactors = FALSE
-)
-authenticated_candidate <- authenticated_baseline
-authenticated_candidate$elapsed_ns <-
-  authenticated_candidate$elapsed_ns * 1.50
-authenticated_allocation <- data.frame(
-  scope = "paired", case = "authenticated", operation = "-",
-  mem_alloc_bytes = 0, stringsAsFactors = FALSE
-)
-authenticated_candidate_allocation <- authenticated_allocation
-authenticated_candidate_allocation$mem_alloc_bytes <- 10600
-authenticated_ledger <- benchmark_regression_evaluate(
-  authenticated_policy,
-  authenticated_baseline,
-  authenticated_candidate,
-  authenticated_allocation,
-  authenticated_candidate_allocation
-)
-if (!identical(authenticated_ledger$decision, "marginal") ||
-    !grepl("review:median-time", authenticated_ledger$reasons, fixed = TRUE) ||
-    !grepl("review:upper-quartile-time", authenticated_ledger$reasons,
-      fixed = TRUE) ||
-    !grepl("review:allocation", authenticated_ledger$reasons, fixed = TRUE)) {
-  fail("authenticated-read safety cost is not retained as a marginal review")
-}
-
 missing_samples <- fixture$baseline_samples[-1L, , drop = FALSE]
 expect_error(
   benchmark_regression_evaluate(
@@ -208,7 +157,7 @@ expect_error(
 
 cat(
   "PASS: deterministic pass, marginal/noisy, timing-fail, and ",
-  "zero-allocation/authenticated-read regression policy fixtures\n",
+  "zero-allocation regression policy fixtures\n",
   sep = ""
 )
 }

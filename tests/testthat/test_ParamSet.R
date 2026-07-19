@@ -99,8 +99,8 @@ test_that("ParamSet$check", {
   expect_true(ps$check(list(th_param_int = 5, th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
   expect_character(ps$check(list(th_param_dbl = 5, new_param = 5)), fixed = "not available")
-  expect_character(ps$check(list(th_param_dbl = 5, th_param_intx = 5)), fixed = "Did you mean")
-  expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "not <= 10")
+  expect_character(ps$check(list(th_param_dbl = 5, th_param_intx = 5)), fixed = "not available")
+  expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "expected one finite integer-valued numeric within the Domain bounds")
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
 
@@ -110,16 +110,19 @@ test_that("ParamSet$check", {
 })
 
 test_that("we cannot create ParamSet with non-strict R names", {
-  expect_error(ParamDbl$new("$foo"), "does not comply")
+  expect_error(ParamDbl$new("$foo"), "strict ASCII IDs")
 })
 
 test_that("ParamSets cannot have duplicated ids", {
   p1 = ParamDbl$new("x1")
   p2 = ParamDbl$new("x1")
-  expect_error(ParamSet_legacy$new(list(p1, p2)), "duplicated")
+  expect_error(ParamSet_legacy$new(list(p1, p2)), "translated parameter IDs must be unique")
   ps = ParamSet_legacy$new(list(p1))
-  expect_error(ps_union(list(ps, p2)), "duplicated")
-  expect_error(ps_union(list(ps, ParamSet_legacy$new(list(p2)))), "duplicated")
+  expect_error(ps_union(list(ps, p2)), "translated parameter IDs must be unique")
+  expect_error(
+    ps_union(list(ps, ParamSet_legacy$new(list(p2)))),
+    "translated parameter IDs must be unique"
+  )
 })
 
 test_that("ParamSet$print", {
@@ -340,9 +343,9 @@ test_that("ParamSet$check_dt", {
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 1))
   expect_true(ps$check_dt(xdt))
   xdt = data.table(th_param_dbl = c(20, 20), th_param_int = c(1, 1))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_dbl: Element 1 is not <= 10")
+  expect_character(ps$check_dt(xdt), fixed = "th_param_dbl: expected one non-missing numeric value within the Domain bounds")
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 20))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_int: Element 1 is not <= 10")
+  expect_character(ps$check_dt(xdt), fixed = "th_param_int: expected one finite integer-valued numeric within the Domain bounds")
   xdt = data.table(th_param_dbl = c(1, 1), new_param = c(1, 20))
   expect_character(ps$check_dt(xdt), fixed = "not available")
   ps = ps_replicate(ParamLgl$new("x"), 2)
@@ -542,8 +545,13 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
 
   param_set = ps(a = p_int())
   param_set$set_values(a = 1)
-  # .insert = FALSE can also set values to NULL
-  expect_error(param_set$set_values(.values = list(a = NULL), .insert = FALSE), "not 'NULL'")
+  # Replacement preserves a named NULL until native Domain admission.  It is
+  # rejected normally for a non-nullable parameter and commits nothing.
+  expect_error(
+    param_set$set_values(.values = list(a = NULL), .insert = FALSE),
+    "expected one finite integer-valued numeric within the Domain bounds"
+  )
+  expect_identical(param_set$values, list(a = 1L))
   param_set = ps(a = p_int(special_vals = list(NULL)))
   param_set$set_values(a = 1)
   param_set$set_values(.values = list(a = NULL), .insert = FALSE)

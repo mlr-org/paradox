@@ -7,15 +7,19 @@ repositories returned by the cached GitHub organization inventory collected on
 That JSON is retained below `.cache/` as collection evidence, while the tracked
 ledger freezes the source identities and decisions needed by later work.
 
-Forty-three repositories reuse the exact clean mlr-org checkouts now pinned by
-`github-snapshot.tsv`. The other 48 were downloaded separately below
-`.local/compat/github-org-scan/checkouts/`; the existing consumer checkouts
-were not fetched, reset, cleaned, or otherwise changed. Ninety repositories
-have an exact commit, tree, committer date, and deterministic `git archive`
-SHA-256. `mlr-org/docker` is a real empty repository, so its absent commit,
-tree, and date are represented by `-`, its status is `empty-no-head`, and its
-content receipt is the SHA-256 of the empty byte sequence. No provenance value
-is invented for it.
+Forty-one repositories reuse the exact clean mlr-org checkout heads pinned by
+`github-snapshot.tsv`. The bbotk and miesmuschel checkouts instead sit at the
+exact local Paradox-2 bridge descendants selected by that executable snapshot.
+Their reviewed upstream census bases remain the rows in `mlr-org-review.tsv`,
+and `github-bridge-provenance.tsv` binds both base identities to the exact
+bridge heads and branches. The other 48 sources were downloaded separately
+below `.local/compat/github-org-scan/checkouts/`; the existing consumer
+checkouts were not fetched, reset, cleaned, or otherwise changed. Ninety
+repositories have an exact census commit, tree, committer date, and
+deterministic `git archive` SHA-256. `mlr-org/docker` is a real empty
+repository, so its absent commit, tree, and date are represented by `-`, its
+status is `empty-no-head`, and its content receipt is the SHA-256 of the empty
+byte sequence. No provenance value is invented for it.
 
 ## Scan and review method
 
@@ -68,7 +72,9 @@ compat/verify-mlr-org-review --fetch
 
 `--fetch` creates only absent `org-scan` checkouts at their exact ledger
 commits. It refuses to alter an existing checkout and refuses to populate a
-missing `consumer-corpus` source. Once all sources exist, the offline form is:
+missing `consumer-corpus` source. Until the user publishes the two prepared
+bridge branches, the already authenticated local bbotk and miesmuschel
+checkouts are therefore required. Once all sources exist, the offline form is:
 
 ```sh
 compat/verify-mlr-org-review
@@ -76,7 +82,9 @@ compat/verify-mlr-org-review
 
 The verifier checks the 91-row schema and uniqueness, exact origin, clean
 status, commit, tree, commit date, full source-archive SHA-256, scan-scope
-SHA-256, and all four match counts. It also checks the fixed partition of 43
-reused consumer sources and 48 separately downloaded census sources. The
-ignored raw match files are convenient review artifacts, not an input to the
-verification.
+SHA-256, and all four match counts. For bbotk and miesmuschel it additionally
+authenticates the executable snapshot head/tree/date/branch, the complete base
+identity, and base-to-bridge ancestry while calculating census receipts from
+the base commit. It also checks the fixed partition of 43 consumer sources and
+48 separately downloaded census sources. The ignored raw match files are
+convenient review artifacts, not an input to the verification.

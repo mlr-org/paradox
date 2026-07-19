@@ -66,6 +66,15 @@ if run_fixture "$V2/proc" "$V2/cgroup" rchk \
   exit 1
 fi
 grep -q 'insufficient memory for one rchk job' "$SCRATCH/unsafe-rchk.err"
+if run_fixture "$V2/proc" "$V2/cgroup" valgrind \
+    > "$SCRATCH/unsafe-valgrind.out" \
+    2> "$SCRATCH/unsafe-valgrind.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: low-memory Valgrind received an unsafe worker' >&2
+  exit 1
+fi
+grep -q 'insufficient memory for one valgrind job' \
+  "$SCRATCH/unsafe-valgrind.err"
 for noncanonical in 00 08 9999999999; do
   if run_fixture "$V2/proc" "$V2/cgroup" api-compile \
       --max-jobs "$noncanonical" > "$SCRATCH/noncanonical-$noncanonical.out" \
@@ -99,6 +108,51 @@ run_fixture "$RCHK/proc" "$RCHK/cgroup" rchk --report > "$RCHK_REPORT"
 [[ "$(field memory_mib_per_job "$RCHK_REPORT")" == 20480 ]]
 [[ "$(field memory_reserve_mib "$RCHK_REPORT")" == 16384 ]]
 [[ "$(field profile_max_jobs "$RCHK_REPORT")" == 1 ]]
+
+# Valgrind executes one instrumented-R process at a time. Its admission budget
+# is deliberately distinct from virtual address-space use: Valgrind reserves
+# large mappings, while the live scheduler protects resident host memory.
+VALGRIND="$SCRATCH/valgrind"
+write_file "$VALGRIND/proc/meminfo" 'MemTotal:       67108864 kB' \
+  'MemAvailable:   50331648 kB'
+write_file "$VALGRIND/proc/self/status" $'Cpus_allowed_list:\t0-31'
+write_file "$VALGRIND/proc/self/cgroup" '0::/'
+mkdir -p "$VALGRIND/cgroup"
+VALGRIND_REPORT="$SCRATCH/valgrind-report.tsv"
+run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind --report \
+  > "$VALGRIND_REPORT"
+[[ "$(field jobs "$VALGRIND_REPORT")" == 1 ]]
+[[ "$(field memory_mib_per_job "$VALGRIND_REPORT")" == 16384 ]]
+[[ "$(field memory_reserve_mib "$VALGRIND_REPORT")" == 16384 ]]
+[[ "$(field profile_max_jobs "$VALGRIND_REPORT")" == 1 ]]
+[[ "$(run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind \
+  --verify-report "$VALGRIND_REPORT")" == \
+  resource_report_verified=valgrind ]]
+
+VALGRIND_TAMPERED="$SCRATCH/valgrind-report-tampered.tsv"
+awk -F '\t' 'BEGIN { OFS = "\t" }
+  $1 == "memory_reserve_mib" { $2 = 8192 }
+  { print }
+' "$VALGRIND_REPORT" > "$VALGRIND_TAMPERED"
+if run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind \
+    --verify-report "$VALGRIND_TAMPERED" \
+    > "$SCRATCH/tampered-valgrind.out" \
+    2> "$SCRATCH/tampered-valgrind.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: under-reserved Valgrind report was accepted' >&2
+  exit 1
+fi
+grep -q 'malformed or inconsistent with valgrind' \
+  "$SCRATCH/tampered-valgrind.err"
+if run_fixture "$VALGRIND/proc" "$VALGRIND/cgroup" valgrind --report \
+    --verify-report "$VALGRIND_REPORT" \
+    > "$SCRATCH/mixed-valgrind-mode.out" \
+    2> "$SCRATCH/mixed-valgrind-mode.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: live report and replay modes were combined' >&2
+  exit 1
+fi
+grep -q 'cannot be combined' "$SCRATCH/mixed-valgrind-mode.err"
 
 # Split v1 controllers use different cgroup paths.  Infinity at the leaf must
 # not hide a finite ancestor quota, and the memory controller must use

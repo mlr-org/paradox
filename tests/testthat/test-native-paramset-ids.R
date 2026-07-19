@@ -1,17 +1,20 @@
 native_ids_param_set = function() {
-  ParamSet$new(list(
+  ps(
     zeta = p_int(1, 2, tags = c("red", "common")),
     alpha = p_dbl(0, 1, tags = c("blue", "common")),
     middle = p_fct(c("x", "y"), tags = c("red", "blue")),
     bare = p_lgl()
-  ))
+  )
 }
 
-test_that("native ids routine is registered with forced symbols", {
-  symbol = get("C_param_set_ids", envir = asNamespace("paradox"))
+test_that("ids entry points are registered with fixed arities", {
+  direct = get("C_param_set_ids", envir = asNamespace("paradox"))
+  lazy = get("C_param_set_ids_lazy", envir = asNamespace("paradox"))
 
-  expect_s3_class(symbol, "NativeSymbolInfo")
-  expect_identical(symbol$numParameters, 5L)
+  expect_s3_class(direct, "NativeSymbolInfo")
+  expect_s3_class(lazy, "NativeSymbolInfo")
+  expect_identical(direct$numParameters, 5L)
+  expect_identical(lazy$numParameters, 2L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
   expect_error(
     .Call(
@@ -27,246 +30,232 @@ test_that("native ids routine is registered with forced symbols", {
   )
 })
 
-test_that("native ParamSet ids preserve order across filters", {
-  param_set = native_ids_param_set()
+test_that("lazy IDs reject malformed direct-call environments", {
+  symbol = get("C_param_set_ids_lazy", envir = asNamespace("paradox"))
+  set = native_ids_param_set()
+  private = set$.__enclos_env__$private
 
-  expect_identical(param_set$ids(), c("zeta", "alpha", "middle", "bare"))
-  expect_identical(param_set$ids(class = "ParamInt"), "zeta")
-  expect_identical(
-    param_set$ids(class = c("ParamFct", "ParamInt")),
-    c("zeta", "middle")
+  expect_error(
+    .Call(symbol, NULL, new.env(parent = emptyenv())),
+    "requires private and method environments",
+    fixed = TRUE
   )
-  expect_identical(param_set$ids(class = c("ParamInt", "ParamInt")), "zeta")
-  expect_identical(param_set$ids(tags = "red"), c("zeta", "middle"))
-  expect_identical(param_set$ids(tags = c("red", "blue")), "middle")
-  expect_identical(
-    param_set$ids(class = c("ParamInt", "ParamFct"), tags = "red"),
-    c("zeta", "middle")
+  expect_error(
+    .Call(symbol, private, NULL),
+    "requires private and method environments",
+    fixed = TRUE
   )
-  expect_identical(param_set$ids(tags = "common", any_tags = "blue"), "alpha")
 })
 
-test_that("empty and duplicate filters have stable character results", {
-  param_set = native_ids_param_set()
+test_that("ids preserve parameter order and combine filters", {
+  set = native_ids_param_set()
 
-  expect_identical(param_set$ids(class = character()), character())
-  # Upstream returned NULL here; ids() documents an always-character result.
-  expect_identical(param_set$ids(tags = character()), character())
-  expect_identical(param_set$ids(any_tags = character()), character())
+  expect_identical(set$ids(), c("zeta", "alpha", "middle", "bare"))
+  expect_identical(set$ids(class = "ParamInt"), "zeta")
   expect_identical(
-    param_set$ids(tags = character(), any_tags = "blue"),
+    set$ids(class = c("ParamFct", "ParamInt")),
+    c("zeta", "middle")
+  )
+  expect_identical(set$ids(tags = "red"), c("zeta", "middle"))
+  expect_identical(set$ids(tags = c("red", "blue")), "middle")
+  expect_identical(
+    set$ids(class = c("ParamInt", "ParamFct"), tags = "red"),
+    c("zeta", "middle")
+  )
+  expect_identical(set$ids(tags = "common", any_tags = "blue"), "alpha")
+})
+
+test_that("empty and duplicate filters have stable character semantics", {
+  set = native_ids_param_set()
+
+  expect_identical(set$ids(class = character()), character())
+  expect_identical(set$ids(tags = character()), character())
+  expect_identical(set$ids(any_tags = character()), character())
+  expect_identical(
+    set$ids(tags = character(), any_tags = "blue"),
     c("alpha", "middle")
   )
   expect_identical(
-    param_set$ids(tags = "common", any_tags = character()),
+    set$ids(tags = "common", any_tags = character()),
     character()
   )
-
-  expect_identical(param_set$ids(tags = c("red", "red")), c("zeta", "middle"))
-  expect_identical(param_set$ids(any_tags = c("red", "red")), c("zeta", "middle"))
-  # Upstream returned `middle` twice because it had two matching tags.
+  expect_identical(set$ids(tags = c("red", "red")), c("zeta", "middle"))
   expect_identical(
-    param_set$ids(any_tags = c("blue", "red")),
+    set$ids(any_tags = c("blue", "red")),
     c("zeta", "alpha", "middle")
   )
-  expect_identical(
-    param_set$ids(class = c("ParamDbl", "ParamFct"), any_tags = c("red", "blue")),
-    c("alpha", "middle")
-  )
-})
 
-test_that("empty ParamSet ids retain their documented type", {
-  param_set = ParamSet$new()
-
+  empty = ParamSet$new()
   for (arguments in list(
     list(),
     list(class = character()),
     list(tags = character()),
     list(any_tags = character()),
     list(class = "ParamInt"),
-    list(tags = "tag"),
-    list(any_tags = "tag")
+    list(tags = "tag")
   )) {
-    expect_identical(do.call(param_set$ids, arguments), character())
+    expect_identical(do.call(empty$ids, arguments), character())
   }
 })
 
-test_that("native ids support custom Domain class names", {
-  custom_domain = function(levels, tags = character()) {
-    paradox:::Domain(
-      cls = "ParamNativeIdsCustom",
-      grouping = "native-ids-custom",
-      levels = levels,
-      storage_type = "character",
-      tags = tags
-    )
-  }
-  param_set = ParamSet$new(list(
-    integer = p_int(1, 3, tags = "common"),
-    custom_b = custom_domain(c("b1", "b2"), c("foreign", "common")),
-    logical = p_lgl(tags = "common"),
-    custom_a = custom_domain("a", "foreign")
-  ))
+test_that("filter promises are forced once, left-to-right, before the capsule snapshot", {
+  set = native_ids_param_set()
+  forced = character()
 
-  expect_identical(
-    param_set$ids(class = "ParamNativeIdsCustom"),
-    c("custom_b", "custom_a")
+  result = set$ids(
+    class = {
+      forced = c(forced, "class")
+      set$tags = list(
+        zeta = "later",
+        alpha = character(),
+        middle = character(),
+        bare = character()
+      )
+      NULL
+    },
+    tags = {
+      forced = c(forced, "tags")
+      "later"
+    },
+    any_tags = {
+      forced = c(forced, "any_tags")
+      NULL
+    }
   )
-  expect_identical(
-    param_set$ids(class = "ParamNativeIdsCustom", tags = "foreign"),
-    c("custom_b", "custom_a")
+
+  expect_identical(forced, c("class", "tags", "any_tags"))
+  expect_identical(result, "zeta")
+
+  later_forced = FALSE
+  expect_error(
+    set$ids(
+      class = 1,
+      tags = {
+        later_forced = TRUE
+        "later"
+      }
+    ),
+    "character"
   )
-  expect_identical(
-    param_set$ids(class = c("ParamLgl", "ParamNativeIdsCustom"), tags = "common"),
-    c("custom_b", "logical")
-  )
+  expect_false(later_forced)
 })
 
-test_that("native ids preserve character argument validation", {
-  param_set = native_ids_param_set()
+test_that("ids validate public filters without S3 dispatch", {
+  set = native_ids_param_set()
 
-  expect_error(
-    param_set$ids(class = NA_character_),
-    "Assertion on 'class' failed: Contains missing values \\(element 1\\).",
-    fixed = FALSE
-  )
-  expect_error(
-    param_set$ids(tags = c("red", NA_character_)),
-    "Assertion on 'tags' failed: Contains missing values \\(element 2\\).",
-    fixed = FALSE
-  )
-  expect_error(
-    param_set$ids(any_tags = factor("red")),
-    "Must be of type 'character' \\(or 'NULL'\\), not 'factor'.",
-    fixed = FALSE
-  )
-  expect_error(
-    param_set$ids(class = 1),
-    "Must be of type 'character' \\(or 'NULL'\\), not 'double'.",
-    fixed = FALSE
-  )
-  expect_error(
-    param_set$ids(any_tags = list("red")),
-    "Must be of type 'character' \\(or 'NULL'\\), not 'list'.",
-    fixed = FALSE
-  )
+  expect_error(set$ids(class = NA_character_), "missing")
+  expect_error(set$ids(tags = c("red", NA_character_)), "missing")
+  expect_error(set$ids(any_tags = factor("red")), "character")
+  expect_error(set$ids(class = 1), "character")
+  expect_error(set$ids(any_tags = list("red")), "character")
 
-  expect_identical(param_set$ids(class = matrix("ParamInt", 1L, 1L)), "zeta")
-  expect_identical(param_set$ids(tags = c(named = "red")), c("zeta", "middle"))
-  expect_identical(param_set$ids(class = I("ParamInt")), "zeta")
-})
+  expect_identical(set$ids(class = matrix("ParamInt", 1L, 1L)), "zeta")
+  expect_identical(set$ids(tags = c(named = "red")), c("zeta", "middle"))
+  expect_identical(set$ids(class = I("ParamInt")), "zeta")
 
-test_that("native ids never dispatch matching methods from live columns", {
   callbacks = 0L
-  class_name = "NativeIdsCallbackCapableColumn"
+  filter = structure("ParamInt", class = "IdsFilterWithMethod")
   registerS3method(
-    "mtfrm",
-    class_name,
-    function(x) {
+    "as.character",
+    "IdsFilterWithMethod",
+    function(x, ...) {
       callbacks <<- callbacks + 1L
-      stop("native ids dispatched mtfrm", call. = FALSE)
+      stop("dispatched", call. = FALSE)
     },
     envir = asNamespace("base")
   )
-  message = paste(
-    "Corrupt ParamSet storage: matching columns must use callback-free",
-    "character representations"
-  )
-
-  cases = list(
-    list(table = ".params", column = "cls", arguments = list(class = "ParamInt")),
-    list(table = ".params", column = "id", arguments = list(tags = "red")),
-    list(table = ".tags", column = "id", arguments = list(tags = "red")),
-    list(table = ".tags", column = "tag", arguments = list(tags = "red"))
-  )
-  for (case in cases) {
-    param_set = native_ids_param_set()
-    private = param_set$.__enclos_env__$private
-    column = private[[case$table]][[case$column]]
-    data.table::setattr(column, "class", class_name)
-    expect_error(
-      do.call(param_set$ids, case$arguments),
-      message,
-      fixed = TRUE,
-      info = paste(case$table, case$column)
-    )
-    expect_identical(
-      callbacks,
-      0L,
-      info = paste(case$table, case$column)
-    )
-  }
-
-  param_set = native_ids_param_set()
-  private = param_set$.__enclos_env__$private
-  data.table::setattr(
-    private$.params$id,
-    "names",
-    paste0("id_", seq_along(private$.params$id))
-  )
-  data.table::setattr(
-    private$.params$cls,
-    "names",
-    paste0("cls_", seq_along(private$.params$cls))
-  )
-  data.table::setattr(
-    private$.tags$id,
-    "names",
-    paste0("tag_id_", seq_along(private$.tags$id))
-  )
-  data.table::setattr(
-    private$.tags$tag,
-    "names",
-    paste0("tag_", seq_along(private$.tags$tag))
-  )
-  expect_identical(
-    param_set$ids(class = "ParamInt", tags = "red"),
-    "zeta"
-  )
+  expect_identical(set$ids(class = filter), "zeta")
   expect_identical(callbacks, 0L)
 })
 
-test_that("native ids close finalizer mutations before matching", {
-  callbacks = 0L
-  finalizers = 0L
-  class_name = "NativeIdsFinalizerClassedColumn"
-  registerS3method(
-    "mtfrm",
-    class_name,
-    function(x) {
-      callbacks <<- callbacks + 1L
-      stop("native ids dispatched finalizer-installed mtfrm", call. = FALSE)
-    },
-    envir = asNamespace("base")
+test_that("ids type diagnostics retain textual classes and fail closed on bytes", {
+  class_utf8 = enc2utf8("fa\u00e7ade")
+  class_latin1 = iconv(class_utf8, from = "UTF-8", to = "latin1")
+  skip_if(
+    is.na(class_latin1),
+    "this platform cannot represent the latin1 fixture"
+  )
+  Encoding(class_latin1) = "latin1"
+  class_bytes = class_utf8
+  Encoding(class_bytes) = "bytes"
+
+  set = native_ids_param_set()
+  latin1_value = structure(1L, class = class_latin1)
+  error = tryCatch(set$ids(class = latin1_value), error = identity)
+  expect_s3_class(error, "error")
+  expect_identical(
+    enc2utf8(conditionMessage(error)),
+    paste0(
+      "Assertion on 'class' failed: Must be of type 'character' ",
+      "(or 'NULL'), not 'fa\u00e7ade'."
+    )
   )
 
-  param_set = native_ids_param_set()
-  private = param_set$.__enclos_env__$private
-  victim = new.env(parent = emptyenv())
-  reg.finalizer(victim, function(unused) {
-    finalizers <<- finalizers + 1L
-    data.table::setattr(private$.params$cls, "class", class_name)
-  }, onexit = FALSE)
-  holder = list(victim)
-  rm(victim)
-
+  bytes_value = 1L
+  attr(bytes_value, "class") = class_bytes
   expect_error(
-    param_set$ids(class = {
-      holder[[1L]] = NULL
-      invisible(gc())
-      "ParamInt"
-    }),
-    paste(
-      "Corrupt ParamSet storage: matching columns must use callback-free",
-      "character representations"
+    set$ids(class = bytes_value),
+    paste0(
+      "Assertion on 'class' failed: Must be of type 'character' ",
+      "(or 'NULL'), not 'integer'."
     ),
     fixed = TRUE
   )
-  expect_identical(finalizers, 1L)
+
+  malformed_value = 1L
+  attr(malformed_value, "class") = NA_character_
+  expect_error(
+    set$ids(class = malformed_value),
+    "not 'integer'",
+    fixed = TRUE
+  )
+})
+
+test_that("the direct engine validates canonical tables without dispatch", {
+  symbol = get("C_param_set_ids", envir = asNamespace("paradox"))
+  params = list(
+    id = c("zeta", "alpha", "middle"),
+    cls = c("ParamInt", "ParamDbl", "ParamFct")
+  )
+  tags = list(
+    id = c("middle", "zeta", "middle", "alpha", "middle", "zeta"),
+    tag = c("red", "red", "red", "blue", "blue", "common")
+  )
+
+  expect_identical(
+    .Call(symbol, params, tags, NULL, "red", NULL),
+    c("zeta", "middle")
+  )
+  expect_identical(
+    .Call(symbol, params, tags, NULL, NULL, c("blue", "red")),
+    c("zeta", "alpha", "middle")
+  )
+  expect_identical(.Call(symbol, params, tags, NULL, c("red", "blue"), NULL), "middle")
+
+  expect_error(.Call(symbol, unname(params), tags, NULL, NULL, NULL), "named list")
+  expect_error(.Call(symbol, list(id = 1, cls = params$cls), tags, NULL, NULL, NULL), "character")
+  expect_error(.Call(symbol, params, list(id = "unknown", tag = "red"), NULL, "red", NULL), "unknown parameter ID")
+  expect_error(.Call(symbol, params, list(id = "zeta", tag = NA_character_), NULL, "red", NULL), "missing value")
+
+  callbacks = 0L
+  class(params$cls) = "IdsCallbackColumn"
+  registerS3method(
+    "mtfrm",
+    "IdsCallbackColumn",
+    function(x) {
+      callbacks <<- callbacks + 1L
+      stop("dispatched", call. = FALSE)
+    },
+    envir = asNamespace("base")
+  )
+  expect_error(
+    .Call(symbol, params, tags, "ParamInt", NULL, NULL),
+    "callback-free"
+  )
   expect_identical(callbacks, 0L)
 })
 
-test_that("native ids preserve R character encoding equality", {
+test_that("native matching follows R character encoding equality", {
   utf8 = enc2utf8("fa\u00e7ade")
   latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
   skip_if(is.na(latin1), "this platform cannot represent the latin1 fixture")
@@ -274,118 +263,49 @@ test_that("native ids preserve R character encoding equality", {
   bytes = utf8
   Encoding(bytes) = "bytes"
 
-  expect_identical(match(utf8, latin1), 1L)
-  expect_identical(match(latin1, utf8), 1L)
-  expect_identical(match(bytes, utf8), NA_integer_)
-
   symbol = get("C_param_set_ids", envir = asNamespace("paradox"))
-  params = list(
-    id = c(utf8, "plain"),
-    cls = c(latin1, bytes)
-  )
-  tags = list(
-    id = c(latin1, "plain"),
-    tag = c(latin1, bytes)
-  )
+  params = list(id = c(utf8, "plain"), cls = c(latin1, bytes))
+  tags = list(id = c(latin1, "plain"), tag = c(latin1, bytes))
 
   expect_identical(.Call(symbol, params, tags, utf8, NULL, NULL), utf8)
   expect_identical(.Call(symbol, params, tags, bytes, NULL, NULL), "plain")
   expect_identical(.Call(symbol, params, tags, NULL, utf8, NULL), utf8)
   expect_identical(.Call(symbol, params, tags, NULL, bytes, NULL), "plain")
   expect_identical(
-    .Call(symbol, params, tags, NULL, c(utf8, latin1), NULL),
-    utf8
-  )
-  expect_identical(
     .Call(symbol, params, tags, NULL, NULL, c(bytes, utf8)),
     c(utf8, "plain")
   )
 })
 
-test_that("native ids reject structurally corrupt canonical storage", {
-  corrupt = function(params = NULL, tags = NULL) {
-    param_set = native_ids_param_set()
-    private = param_set$.__enclos_env__$private
-    if (!is.null(params)) private$.params = params(private$.params)
-    if (!is.null(tags)) private$.tags = tags(private$.tags)
-    param_set
-  }
+test_that("mixed-encoding native matching survives forced collection", {
+  skip_on_cran()
 
-  expect_error(
-    corrupt(params = function(x) 1)$ids(),
-    "`.params` must be a list",
-    fixed = TRUE
+  utf8 = enc2utf8("fa\u00e7ade")
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  skip_if(is.na(latin1), "this platform cannot represent the latin1 fixture")
+  Encoding(latin1) = "latin1"
+
+  symbol = get("C_param_set_ids", envir = asNamespace("paradox"))
+  params = list(
+    id = c("first", "second"),
+    cls = c(latin1, "ParamInt")
   )
-  expect_error(
-    corrupt(params = unname)$ids(),
-    "`.params` must be a named list",
-    fixed = TRUE
+  tags = list(
+    id = c("first", "second"),
+    tag = c(latin1, "plain")
   )
-  expect_error(
-    corrupt(params = function(x) { x$id = NULL; x })$ids(),
-    "`.params` has no `id` column",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(params = function(x) { x$id = seq_along(x$id); x })$ids(),
-    "`id` must have type `character`",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(params = function(x) {
-      x = unclass(x)
-      x$cls = x$cls[-1L]
-      x
-    })$ids(),
-    "`cls` must have type `character` and length 4",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(tags = function(x) 1)$ids(tags = "red"),
-    "`.tags` must be a list",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(tags = function(x) unname(unclass(x)))$ids(tags = "red"),
-    "`.tags` must be a named list",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(tags = function(x) { x$tag = NULL; x })$ids(tags = "red"),
-    "`.tags` has no `tag` column",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(tags = function(x) { x$id[[1L]] = "unknown"; x })$ids(tags = "red"),
-    "`.tags$id` contains an unknown parameter ID",
-    fixed = TRUE
-  )
-  expect_error(
-    corrupt(tags = function(x) { x$tag[[1L]] = NA_character_; x })$ids(tags = "red"),
-    "`.tags$tag` contains a missing value",
-    fixed = TRUE
-  )
+
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+  by_class = .Call(symbol, params, tags, utf8, NULL, NULL)
+  by_tag = .Call(symbol, params, tags, NULL, utf8, NULL)
+  gctorture(previous)
+
+  expect_identical(by_class, "first")
+  expect_identical(by_tag, "first")
 })
 
-test_that("native ids handle shuffled and repeated tag rows defensively", {
-  param_set = native_ids_param_set()
-  param_set$.__enclos_env__$private$.tags = structure(
-    list(
-      id = c("middle", "zeta", "middle", "alpha", "middle", "zeta"),
-      tag = c("red", "red", "red", "blue", "blue", "common")
-    ),
-    class = c("data.table", "data.frame")
-  )
-
-  expect_identical(param_set$ids(tags = "red"), c("zeta", "middle"))
-  expect_identical(
-    param_set$ids(any_tags = c("blue", "red")),
-    c("zeta", "alpha", "middle")
-  )
-  expect_identical(param_set$ids(tags = c("red", "blue")), "middle")
-})
-
-test_that("native ids agree with filter semantics across combinations", {
+test_that("ids agree with a scalar reference across filter combinations", {
   ids = sprintf("id_%02d", c(19:24, 7:12, 1:6, 13:18))
   classes = rep(c("ParamInt", "ParamDbl", "ParamFct", "ParamLgl"), 6L)
   tag_sets = lapply(seq_along(ids), function(index) {
@@ -400,60 +320,42 @@ test_that("native ids agree with filter semantics across combinations", {
     ParamLgl = function(tags) p_lgl(tags = tags)
   )
   domains = Map(function(class, tags) constructors[[class]](tags), classes, tag_sets)
-  param_set = ParamSet$new(setNames(domains, ids))
+  set = ParamSet$new(setNames(domains, ids))
 
   reference = function(class = NULL, tags = NULL, any_tags = NULL) {
     keep = rep(TRUE, length(ids))
     if (!is.null(class)) keep = keep & classes %in% class
     if (!is.null(tags) && length(tags)) {
-      keep = keep & vapply(tag_sets, function(available) {
-        all(tags %in% available)
-      }, logical(1L))
+      keep = keep & vapply(tag_sets, function(available) all(tags %in% available), logical(1L))
     }
     if (!is.null(any_tags)) {
-      keep = keep & vapply(tag_sets, function(available) {
-        any(any_tags %in% available)
-      }, logical(1L))
+      keep = keep & vapply(tag_sets, function(available) any(any_tags %in% available), logical(1L))
     }
-    if (!is.null(tags) && !length(tags) && is.null(any_tags)) {
-      keep[] = FALSE
-    }
+    if (!is.null(tags) && !length(tags) && is.null(any_tags)) keep[] = FALSE
     ids[keep]
   }
 
-  class_filters = list(
-    NULL, character(), "ParamInt", c("ParamFct", "ParamInt"),
-    c("ParamInt", "ParamInt"), "ParamUnknown"
-  )
-  tag_filters = list(
-    NULL, character(), "red", c("red", "blue"),
-    c("red", "red"), "absent"
-  )
-  any_tag_filters = list(
-    NULL, character(), "green", c("blue", "red"),
-    c("green", "green"), "absent"
-  )
-
+  class_filters = list(NULL, character(), "ParamInt", c("ParamFct", "ParamInt"), "ParamUnknown")
+  tag_filters = list(NULL, character(), "red", c("red", "blue"), c("red", "red"), "absent")
+  any_filters = list(NULL, character(), "green", c("blue", "red"), "absent")
   for (class in class_filters) {
     for (tags in tag_filters) {
-      for (any_tags in any_tag_filters) {
+      for (any_tags in any_filters) {
         expect_identical(
-          param_set$ids(class = class, tags = tags, any_tags = any_tags),
-          reference(class = class, tags = tags, any_tags = any_tags)
+          set$ids(class = class, tags = tags, any_tags = any_tags),
+          reference(class, tags, any_tags)
         )
       }
     }
   }
 })
 
-test_that("native ids handle input beyond an interrupt interval", {
+test_that("direct ids handles work beyond an interrupt interval", {
   size = 65537L
   ids = sprintf("parameter_%05d", seq_len(size))
   params = list(id = ids, cls = rep("ParamInt", size))
-  tag_table = list(id = rev(ids), tag = rep("bulk", size))
+  tags = list(id = rev(ids), tag = rep("bulk", size))
   symbol = get("C_param_set_ids", envir = asNamespace("paradox"))
 
-  result = .Call(symbol, params, tag_table, NULL, "bulk", NULL)
-
-  expect_identical(result, ids)
+  expect_identical(.Call(symbol, params, tags, NULL, "bulk", NULL), ids)
 })

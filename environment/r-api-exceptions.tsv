@@ -1,0 +1,2 @@
+symbol	source	count	versions	policy	rationale
+Rf_findVarInFrame	src/r_api_compat.c	1	R-4.3.x--R-4.5.x	declared-exported-pre-4.6-only	Only available non-forcing frame-binding lookup before public R_GetBindingType in R 4.6; centralized and excluded from all R >= 4.6 builds

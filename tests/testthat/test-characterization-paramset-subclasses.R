@@ -1,18 +1,25 @@
-test_that("ParamSet subclasses can initialize through super", {
+context("contract: additive ParamSet subclasses")
+
+test_that("additive subclasses can initialize through super", {
   CompatCodomain = R6::R6Class(
     "CompatCodomain",
     inherit = ParamSet,
     public = list(
-      initialize = function(params) {
+      initialize = function(params, label = "objectives") {
         super$initialize(params)
+        private$.label = label
         if (!length(self$ids(any_tags = c("minimize", "maximize")))) {
           stop("no target")
         }
+      },
+      summary_label = function() {
+        sprintf("%s:%s", private$.label, paste(self$target_ids, collapse = ","))
       }
     ),
     active = list(
       target_ids = function() self$ids(any_tags = c("minimize", "maximize"))
-    )
+    ),
+    private = list(.label = NULL)
   )
 
   codomain = CompatCodomain$new(list(
@@ -24,120 +31,54 @@ test_that("ParamSet subclasses can initialize through super", {
   expect_identical(class(codomain), c("CompatCodomain", "ParamSet", "R6"))
   expect_identical(codomain$ids(), c("loss", "score", "runtime"))
   expect_identical(codomain$target_ids, c("loss", "score"))
-  expect_identical(codomain$is_number, c(loss = TRUE, score = TRUE, runtime = TRUE))
+  expect_identical(codomain$summary_label(), "objectives:loss,score")
+  expect_identical(
+    codomain$is_number,
+    c(loss = TRUE, score = TRUE, runtime = TRUE)
+  )
   expect_true(codomain$check(list(loss = 1, score = 2, runtime = 3)))
 
-  restored = unserialize(serialize(codomain, NULL, version = 3L))
-  expect_identical(class(restored), class(codomain))
-  expect_identical(restored$target_ids, codomain$target_ids)
-  expect_true(restored$check(list(loss = 1, score = 2, runtime = 3)))
+  codomain$values = list(loss = 1, score = 2, runtime = 3)
+  codomain$add_dep("runtime", "loss", CondEqual(1))
+  expect_identical(codomain$values, list(loss = 1, score = 2, runtime = 3))
+  expect_identical(codomain$deps$id, "runtime")
 })
 
-test_that("subclass add_dep observes the historical transient Domain table", {
-  observed = NULL
-  TransientDependencyProbe = R6::R6Class(
-    "CharacterizationTransientDependencyProbe",
+test_that("additive subclass state survives clone and serialization", {
+  AdditiveParamSet = R6::R6Class(
+    "AdditiveParamSet",
     inherit = ParamSet,
     public = list(
-      add_dep = function(...) {
-        # Copy the names while the callback is running: data.table removes the
-        # transient columns by reference after add_dep() returns.
-        observed <<- list(
-          names = base::c(names(private$.params)),
-          class = class(private$.params),
-          key = data.table::key(private$.params),
-          indices = data.table::indices(private$.params),
-          rows = nrow(private$.params),
-          dependency_rows = nrow(private$.deps)
-        )
-        super$add_dep(...)
-      }
-    )
-  )
-
-  param_set = TransientDependencyProbe$new(list(
-    parent = p_lgl(),
-    child = p_int(0, 2, depends = parent == TRUE)
-  ))
-
-  expect_identical(observed, list(
-    names = c(
-      "id", "cls", "grouping", "cargo", "lower", "upper",
-      "tolerance", "levels", "special_vals", "default", "storage_type",
-      ".tags", ".trafo", ".requirements", ".init_given", ".init"
+      initialize = function(params, note) {
+        super$initialize(params)
+        private$.note = note
+      },
+      note = function() private$.note,
+      bounded_ids = function() names(self$is_bounded)[self$is_bounded]
     ),
-    class = c("data.table", "data.frame"),
-    key = NULL,
-    indices = NULL,
-    rows = 2L,
-    dependency_rows = 0L
-  ))
-  expect_identical(
-    names(param_set$.__enclos_env__$private$.params),
-    paradox:::domain_names_permanent
-  )
-  expect_identical(param_set$deps$id, "child")
-  expect_identical(param_set$deps$on, "parent")
-})
-
-test_that("ParamSet subclasses can install canonical private tables directly", {
-  DirectTableSubset = R6::R6Class(
-    "DirectTableSubset",
-    inherit = ParamSet,
-    public = list(
-      initialize = function(origin, ids) {
-        source = origin$.__enclos_env__$private
-        positions = match(ids, source$.params$id)
-        if (anyNA(positions)) stop("unknown id")
-
-        private$.params = data.table::copy(source$.params[positions])
-        data.table::setindexv(private$.params, c("id", "cls", "grouping"))
-
-        private$.tags = data.table::copy(source$.tags[source$.tags$id %in% ids])
-        data.table::setkeyv(private$.tags, "id")
-        data.table::setindexv(private$.tags, "tag")
-
-        private$.trafos = data.table::copy(source$.trafos[source$.trafos$id %in% ids])
-        data.table::setkeyv(private$.trafos, "id")
-
-        private$.deps = data.table::copy(
-          source$.deps[source$.deps$id %in% ids & source$.deps$on %in% ids]
-        )
-        private$.values = source$.values[
-          match(ids, names(source$.values), nomatch = 0L)
-        ]
-      }
-    )
+    private = list(.note = NULL)
   )
 
-  origin = ps(
-    count = p_int(0, 5, tags = c("control", "kept"), init = 2L),
-    mode = p_fct(
-      c("small", "large"),
-      tags = "kept",
-      depends = count %in% 1:5
-    ),
-    scale = p_dbl(0, 1, tags = "dropped", trafo = sqrt)
+  original = AdditiveParamSet$new(
+    list(x = p_int(0L, 4L, init = 2L), payload = p_uty()),
+    note = "kept"
   )
-  subset = DirectTableSubset$new(origin, c("mode", "count"))
+  original$values$payload = new.env(parent = emptyenv())
 
-  expect_identical(class(subset), c("DirectTableSubset", "ParamSet", "R6"))
-  expect_identical(subset$ids(), c("mode", "count"))
-  expect_identical(subset$ids(tags = "kept"), c("mode", "count"))
-  expect_identical(subset$class, c(mode = "ParamFct", count = "ParamInt"))
-  expect_identical(subset$nlevels, c(mode = 2, count = 6))
-  expect_identical(subset$values, list(count = 2L))
-  expect_identical(subset$deps$id, "mode")
-  expect_identical(subset$deps$on, "count")
-  expect_true(subset$check(list(mode = "large", count = 2L)))
-  expect_false(subset$test(list(mode = "large")))
+  shallow = original$clone(deep = FALSE)
+  deep = original$clone(deep = TRUE)
+  restored = unserialize(serialize(original, NULL, version = 3L))
 
-  cloned = subset$clone(deep = TRUE)
-  restored = unserialize(serialize(subset, NULL, version = 3L))
-  for (copy in list(cloned, restored)) {
-    expect_identical(class(copy), class(subset))
-    expect_identical(copy$ids(), subset$ids())
-    expect_identical(copy$values, subset$values)
-    expect_true(copy$check(list(mode = "small", count = 1L)))
+  for (copy in list(shallow, deep, restored)) {
+    expect_identical(class(copy), class(original))
+    expect_identical(copy$note(), "kept")
+    expect_identical(copy$ids(), c("x", "payload"))
+    expect_identical(copy$bounded_ids(), "x")
+    expect_true(copy$check(list(x = 3L, payload = copy$values$payload)))
   }
+
+  deep$values$x = 4L
+  expect_identical(original$values$x, 2L)
+  restored$values$x = 1L
+  expect_identical(original$values$x, 2L)
 })

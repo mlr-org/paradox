@@ -92,7 +92,7 @@ paradox_differential_cases <- list(
   ),
 
   domain_construction = diff_case(
-    "Built-in Domain construction, NSE representation, callbacks, initialization, and extension fallback",
+    "Built-in Domain construction, NSE representation, callbacks, and initialization",
     function() {
       lower <- 2L
       upper <- 8L
@@ -151,19 +151,6 @@ paradox_differential_cases <- list(
       }
 
       factor_requirement <- domains$fct$.requirements[[1L]][[1L]]
-      p_custom <- function(lower = 0, upper = 1, init) {
-        paradox:::Domain(
-          cls = "ParamCustom",
-          grouping = "ParamCustom",
-          lower = lower,
-          upper = upper,
-          tolerance = 0,
-          storage_type = "numeric",
-          init = init
-        )
-      }
-      custom <- p_custom(-1, 2)
-
       list(
         domains = lapply(domains, observe_domain),
         transformations = list(
@@ -185,11 +172,6 @@ paradox_differential_cases <- list(
           custom_valid = domains$uty$cargo[[1L]]$custom_check(list()),
           custom_invalid = domains$uty$cargo[[1L]]$custom_check(1L)
         ),
-        extension = observe_domain(custom),
-        extension_roundtrip = identical(
-          unserialize(serialize(custom, NULL, version = 3L)),
-          custom
-        ),
         diagnostics = list(
           duplicate_tags = observe_call(paradox::p_lgl(tags = c("x", "x"))),
           special_and_trafo = observe_call(paradox::p_lgl(
@@ -204,8 +186,232 @@ paradox_differential_cases <- list(
     seed = 31L
   ),
 
+  representation_inputs = diff_case(
+    paste(
+      "Named scalar Domain inputs and classed value/check containers are",
+      "representation-only while transformation shells remain ordinary"
+    ),
+    function() {
+      double_domain <- paradox::p_dbl(
+        lower = c(parameter = -1),
+        upper = c(parameter = 1),
+        tolerance = c(parameter = 0.125),
+        tags = c(source = "bounded")
+      )
+      integer_domain <- paradox::p_int(
+        lower = c(parameter = 0L),
+        upper = c(parameter = 10L),
+        tolerance = c(parameter = 0)
+      )
+      parameter_set <- paradox::ps(
+        n_searches = paradox::p_int(1L, 20L),
+        mut_sd = paradox::p_dbl(0, 1)
+      )
+      configuration <- structure(
+        list(n_searches = 10L, mut_sd = 0.1),
+        class = "local_search_control"
+      )
+
+      assignment <- observe_call({
+        parameter_set$values <- configuration
+        list(
+          values = parameter_set$values,
+          stored_class = attr(parameter_set$values, "class", exact = TRUE),
+          check = parameter_set$check(configuration),
+          transformed = parameter_set$trafo(unclass(configuration)),
+          classed_trafo = observe_call(parameter_set$trafo(configuration))
+        )
+      })
+
+      list(
+        double = list(
+          lower = double_domain$lower,
+          upper = double_domain$upper,
+          tolerance = double_domain$tolerance,
+          tags = double_domain$.tags,
+          names = lapply(
+            list(
+              lower = double_domain$lower,
+              upper = double_domain$upper,
+              tolerance = double_domain$tolerance,
+              tags = double_domain$.tags[[1L]]
+            ),
+            names
+          )
+        ),
+        integer = list(
+          lower = integer_domain$lower,
+          upper = integer_domain$upper,
+          tolerance = integer_domain$tolerance,
+          names = lapply(
+            list(
+              lower = integer_domain$lower,
+              upper = integer_domain$upper,
+              tolerance = integer_domain$tolerance
+            ),
+            names
+          )
+        ),
+        configuration_input_class = class(configuration),
+        assignment = assignment
+      )
+    },
+    seed = 32L
+  ),
+
+  closed_extension_boundary = diff_case(
+    "Five built-in Domains and two built-in Conditions remain while unknown subclasses are rejected",
+    function() {
+      built_in_domains <- list(
+        double = paradox::p_dbl(0, 1),
+        integer = paradox::p_int(0L, 1L),
+        factor = paradox::p_fct(c("a", "b")),
+        logical = paradox::p_lgl(),
+        utility = paradox::p_uty(custom_check = function(x) {
+          if (is.list(x)) TRUE else "must be a list"
+        })
+      )
+      built_in_conditions <- list(
+        equal = paradox::CondEqual(1L),
+        any_of = paradox::CondAnyOf(c(1L, 3L))
+      )
+      p_custom <- function(lower = 0, upper = 1, init) {
+        paradox:::Domain(
+          cls = "ParamCustom",
+          grouping = "ParamCustom",
+          lower = lower,
+          upper = upper,
+          tolerance = 0,
+          storage_type = "numeric",
+          init = init
+        )
+      }
+      custom_domain <- observe_call({
+        domain <- p_custom(-1, 2)
+        project_domain(domain)
+      })
+
+      equal <- paradox::CondEqual(1L)
+      custom_condition <- structure(
+        equal,
+        class = c("CondCustom", class(equal))
+      )
+      dependency_with_custom_condition <- observe_call({
+        parameter_set <- paradox::ps(
+          parent = paradox::p_int(0L, 2L),
+          child = paradox::p_int(0L, 2L)
+        )
+        parameter_set$add_dep("child", "parent", custom_condition)
+        list(
+          dependency_class = class(parameter_set$deps$cond[[1L]]),
+          active = parameter_set$check_dependencies(list(
+            parent = 1L,
+            child = 2L
+          ))
+        )
+      })
+
+      list(
+        domain_classes = vapply(
+          built_in_domains,
+          function(domain) class(domain)[[1L]],
+          character(1L)
+        ),
+        utility_escape_hatch = list(
+          valid = paradox::domain_check(
+            built_in_domains$utility,
+            list(list(value = 1L))
+          ),
+          invalid = paradox::domain_check(
+            built_in_domains$utility,
+            list(1L)
+          )
+        ),
+        conditions = lapply(built_in_conditions, function(condition) {
+          list(
+            class = class(condition),
+            text = paradox::condition_as_string(condition, "parent"),
+            probes = paradox::condition_test(condition, c(1L, 2L, 3L))
+          )
+        }),
+        custom_domain = custom_domain,
+        custom_condition = list(
+          test = observe_call(paradox::condition_test(
+            custom_condition,
+            c(1L, 2L)
+          )),
+          format = observe_call(paradox::condition_as_string(
+            custom_condition,
+            "parent"
+          )),
+          dependency = dependency_with_custom_condition
+        )
+      )
+    },
+    seed = 33L
+  ),
+
+  additive_paramset_subclass = diff_case(
+    "Additive ParamSet subclasses retain their own state while using public ParamSet semantics",
+    function() {
+      AdditiveParamSet <- R6::R6Class(
+        "DifferentialAdditiveParamSet",
+        inherit = paradox::ParamSet,
+        public = list(
+          initialize = function(params, note) {
+            super$initialize(params)
+            private$.note <- note
+          },
+          summary_label = function() {
+            paste(private$.note, paste(self$target_ids, collapse = ","), sep = ":")
+          }
+        ),
+        active = list(
+          target_ids = function() {
+            self$ids(any_tags = c("minimize", "maximize"))
+          }
+        ),
+        private = list(.note = NULL)
+      )
+      parameter_set <- AdditiveParamSet$new(
+        list(
+          loss = paradox::p_dbl(tags = "minimize"),
+          score = paradox::p_dbl(tags = "maximize"),
+          runtime = paradox::p_dbl(0, Inf)
+        ),
+        note = "objectives"
+      )
+      parameter_set$values <- list(loss = 1, score = 2, runtime = 3)
+      parameter_set$add_dep(
+        "runtime",
+        "loss",
+        paradox::CondEqual(1)
+      )
+      deep <- parameter_set$clone(deep = TRUE)
+      restored <- unserialize(serialize(parameter_set, NULL, version = 3L))
+
+      observe <- function(x) {
+        list(
+          class = class(x),
+          ids = x$ids(),
+          target_ids = x$target_ids,
+          summary = x$summary_label(),
+          values = x$values,
+          dependency_ids = x$deps$id,
+          check = x$check(x$values)
+        )
+      }
+      list(
+        original = observe(parameter_set),
+        deep = observe(deep),
+        restored = observe(restored)
+      )
+    },
+    seed = 34L
+  ),
+
   domain_lazy_arguments = diff_case(
-    "Domain validation and representation preserve opaque promise forcing order",
+    "Domain construction observes opaque promises once without promising internal failure priority",
     function() {
       events <- new.env(parent = emptyenv())
       events$seen <- character()
@@ -316,24 +522,16 @@ paradox_differential_cases <- list(
           requested,
           allow_dangling_dependencies = TRUE
         )
-        private <- result$.__enclos_env__$private
         list(
           class = class(result),
           ids = result$ids(),
           values = result$values,
-          params = private$.params,
-          tags = private$.tags,
-          trafos = list(
-            ids = private$.trafos$id,
-            count = nrow(private$.trafos),
-            all_identity = all(vapply(
-              private$.trafos$trafo,
-              identical,
-              logical(1L),
-              identity
-            ))
-          ),
-          deps = private$.deps,
+          params = result$params,
+          data = result$data,
+          tags = result$tags,
+          deps = result$deps,
+          has_trafo_param = result$has_trafo_param,
+          transformed = result$trafo(list(repeated = 4L)),
           assert_values = result$assert_values
         )
       })
@@ -697,6 +895,98 @@ paradox_differential_cases <- list(
     seed = 404L
   ),
 
+  tune_token_search_space = diff_case(
+    "A TuneToken recovered through a Domain builds an unfixed search space",
+    function() {
+      parameter_set <- paradox::ps(x = paradox::p_dbl(-10, 10))
+      parameter_set$values$x <- paradox::to_tune()
+
+      observe_call({
+        search_space <- parameter_set$search_space()
+        random <- paradox::generate_design_random(search_space, 3L)
+        list(
+          ids = search_space$ids(),
+          values = search_space$values,
+          values_class = class(search_space$values),
+          check_empty = search_space$check(search_space$values),
+          random = random$data,
+          random_transposed = random$transpose(trafo = FALSE)
+        )
+      })
+    },
+    seed = 405L
+  ),
+
+  tune_token_closed_shape = diff_case(
+    "TuneToken admission accepts package output and rejects extension metadata",
+    function() {
+      parameter_set <- paradox::ps(x = paradox::p_dbl(0, 1))
+      normal <- paradox::to_tune()
+      restored <- unserialize(serialize(normal, NULL, version = 3L))
+
+      subclassed <- normal
+      class(subclassed) <- c("ExternalTuneToken", class(subclassed))
+
+      with_metadata <- normal
+      with_metadata[["external_metadata"]] <- list(marker = 1L)
+
+      list(
+        normal = observe_call(parameter_set$check(list(x = normal))),
+        restored = observe_call(parameter_set$check(list(x = restored))),
+        subclassed = observe_call(parameter_set$check(list(x = subclassed))),
+        with_metadata = observe_call(parameter_set$check(list(x = with_metadata)))
+      )
+    },
+    seed = 406L
+  ),
+
+  semantic_equality = diff_case(
+    "all.equal compares detached ParamSet-family semantic state",
+    function() {
+      left <- paradox::ps(
+        x = paradox::p_dbl(0, 1),
+        flag = paradox::p_lgl()
+      )
+      right <- paradox::ps(
+        x = paradox::p_dbl(0, 1),
+        flag = paradox::p_lgl()
+      )
+      equal_base <- observe_call(all.equal(left, right))
+      right$values <- list(x = 0.5)
+      different_base <- observe_call(all.equal(left, right))
+
+      left_collection <- paradox::psc(
+        component = paradox::ps(x = paradox::p_dbl(0, 1))
+      )
+      right_collection <- paradox::psc(
+        component = paradox::ps(x = paradox::p_dbl(0, 1))
+      )
+      equal_collection <- observe_call(all.equal(
+        left_collection,
+        right_collection
+      ))
+      right_collection$sets$component$values <- list(x = 0.25)
+      different_collection <- observe_call(all.equal(
+        left_collection,
+        right_collection
+      ))
+
+      list(
+        base = list(
+          equal = equal_base,
+          different = different_base
+        ),
+        collection = list(
+          equal = equal_collection,
+          different = different_collection,
+          cross_kind = observe_call(all.equal(left_collection, left)),
+          wrong_type = observe_call(all.equal(left_collection, list()))
+        )
+      )
+    },
+    seed = 406L
+  ),
+
   presence = diff_case(
     "Required/all presence checks, including empty settings",
     function() {
@@ -779,6 +1069,147 @@ paradox_differential_cases <- list(
     seed = 606L
   ),
 
+  collection_detachment = diff_case(
+    "Collection subset and flatten callbacks are detached public snapshots",
+    function() {
+      child <- paradox::ps(
+        x = paradox::p_dbl(0, 10, tags = "old", init = 1),
+        enabled = paradox::p_lgl(init = TRUE),
+        .extra_trafo = function(x) {
+          x$x <- x$x + 1
+          x
+        },
+        .constraint = function(x) {
+          is.null(x$x) || x$x <= 5
+        }
+      )
+      child$add_dep("x", "enabled", paradox::CondEqual(TRUE))
+      collection <- paradox::psc(component = child)
+      subset <- collection$subset(
+        c("component.x", "component.enabled"),
+        allow_dangling_dependencies = TRUE
+      )
+      flattened <- collection$flatten()
+
+      child$values <- list(x = 4, enabled = TRUE)
+      child$deps <- child$deps[0L]
+      child$tags <- list(x = "new", enabled = character())
+      child$extra_trafo <- function(x) {
+        x$x <- x$x + 100
+        x
+      }
+      child$constraint <- function(x) FALSE
+
+      observe_snapshot <- function(snapshot) {
+        list(
+          class = class(snapshot),
+          ids = snapshot$ids(),
+          values = snapshot$values,
+          dependency_ids = snapshot$deps$id,
+          tags = snapshot$tags,
+          transformed = snapshot$trafo(list(component.x = 1)),
+          constraint = snapshot$test_constraint(
+            list(component.x = 4),
+            assert_value = FALSE
+          )
+        )
+      }
+      list(
+        live = list(
+          values = collection$values,
+          dependency_ids = collection$deps$id,
+          tags = collection$tags,
+          transformed = collection$trafo(list(component.x = 1)),
+          constraint = collection$test_constraint(
+            list(component.x = 4),
+            assert_value = FALSE
+          )
+        ),
+        subset = observe_snapshot(subset),
+        flattened = observe_snapshot(flattened)
+      )
+    },
+    seed = 607L
+  ),
+
+  paramset_shadow = diff_case(
+    "The official ParamSetShadow is a live public view while legacy has only a detached reference projection",
+    function() {
+      origin <- paradox::ps(
+        hidden = paradox::p_int(),
+        x = paradox::p_dbl(trafo = function(value) value + 1),
+        flag = paradox::p_lgl()
+      )
+      origin$values <- list(hidden = 2L, x = 0.5, flag = TRUE)
+      origin$constraint <- function(x) is.null(x$x) || x$x < x$hidden
+      detached <- origin$subset(
+        c("x", "flag"),
+        allow_dangling_dependencies = TRUE
+      )
+      reference <- list(
+        origin_ids = origin$ids(),
+        origin_values = origin$values,
+        detached_ids = detached$ids(),
+        detached_values = detached$values
+      )
+
+      namespace <- asNamespace("paradox")
+      available <- exists(
+        "ParamSetShadow",
+        envir = namespace,
+        inherits = FALSE
+      )
+      if (!available) {
+        return(list(
+          available = FALSE,
+          reference = reference,
+          shadow = NULL
+        ))
+      }
+
+      Shadow <- get("ParamSetShadow", envir = namespace, inherits = FALSE)
+      shadow <- Shadow$new(origin, "hidden")
+      initial <- list(
+        class = class(shadow),
+        ids = shadow$ids(),
+        values = shadow$values,
+        tags = shadow$tags,
+        constraint_true = shadow$test_constraint(list(x = 1)),
+        constraint_false = shadow$test_constraint(list(x = 3)),
+        transformed = shadow$trafo(list(x = 2))
+      )
+
+      visible_configuration <- structure(
+        list(x = 0.75, flag = FALSE),
+        class = "shadow_configuration"
+      )
+      shadow$values <- visible_configuration
+      after_visible_write <- list(
+        shadow_values = shadow$values,
+        origin_values = origin$values
+      )
+
+      origin$constraint <- function(x) is.null(x$x) || x$x > x$hidden
+      origin$extra_trafo <- function(x) list(answer = x$x * 2)
+      live_update <- list(
+        constraint_false = shadow$test_constraint(list(x = 1)),
+        constraint_true = shadow$test_constraint(list(x = 3)),
+        transformed = shadow$trafo(list(x = 2))
+      )
+
+      list(
+        available = TRUE,
+        reference = reference,
+        shadow = list(
+          initial = initial,
+          after_visible_write = after_visible_write,
+          live_update = live_update
+        )
+      )
+    },
+    seed = 608L
+  ),
+
   designs = diff_case(
     "Deterministic grid/random design generation and transposition",
     function() {
@@ -838,11 +1269,21 @@ paradox_differential_cases <- list(
   diagnostics = diff_case(
     "Stable condition classes/messages for representative invalid calls",
     function() {
+      multiple_dependencies <- paradox::ps(
+        on = paradox::p_lgl(),
+        first = paradox::p_int(depends = on == TRUE),
+        second = paradox::p_int(depends = on == TRUE)
+      )
       list(
         inverted_bounds = observe_call(paradox::p_dbl(2, 1)),
         duplicate_ids = observe_call(paradox::ParamSet$new(list(x = paradox::p_int(), x = paradox::p_dbl()))),
         invalid_factor = observe_call(paradox::p_fct(c("a", "a"))),
         invalid_dependency = observe_call(paradox::ps(x = paradox::p_int(depends = absent == 1L))),
+        multiple_dependency_failures = multiple_dependencies$check_dependencies(list(
+          on = FALSE,
+          first = 1L,
+          second = 2L
+        )),
         malformed_values = observe_call({
           parameter_set <- paradox::ps(x = paradox::p_int())
           parameter_set$values <- list(unnamed = NULL)

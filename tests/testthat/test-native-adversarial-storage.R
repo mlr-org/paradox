@@ -3,7 +3,13 @@ native_adversarial_symbol = function(name) {
 }
 
 native_adversarial_private_params = function(param_set) {
-  param_set$.__enclos_env__$private$.params
+  paradox:::param_set_core_state(
+    param_set$.__enclos_env__$private
+  )$.params
+}
+
+native_adversarial_state = function(param_set) {
+  paradox:::param_set_core_state(param_set$.__enclos_env__$private)
 }
 
 native_adversarial_plain_copy = function(value) {
@@ -76,11 +82,11 @@ test_that("native table access rejects corrupt ParamSet storage safely", {
   expect_error(.Call(property, params, NA_integer_), "invalid ParamSet property selector")
 
   expect_error(
-    .Call(ids, params, param_set$.__enclos_env__$private$.tags, NA_character_, NULL, NULL),
+    .Call(ids, params, native_adversarial_state(param_set)$.tags, NA_character_, NULL, NULL),
     "Contains missing values"
   )
   expect_error(
-    .Call(ids, params, param_set$.__enclos_env__$private$.tags, 1L, NULL, NULL),
+    .Call(ids, params, native_adversarial_state(param_set)$.tags, 1L, NULL, NULL),
     "Must be of type 'character'"
   )
 
@@ -105,22 +111,22 @@ test_that("native Domain kernels validate recognized storage before reading it",
   unnamed = native_adversarial_plain_copy(domain)
   names(unnamed) = NULL
   expect_error(
-    .Call(check, unnamed, list(0.5)),
+    .Call(check, unnamed, list(0.5), FALSE),
     "`Domain` must be a named list",
     fixed = TRUE
   )
 
   wrong_grouping = native_adversarial_replace(domain, "grouping", 1L)
-  expect_error(.Call(check, wrong_grouping, list(0.5)), "`grouping` must have type `character`")
+  expect_error(.Call(check, wrong_grouping, list(0.5), FALSE), "`grouping` must have type `character`")
 
   wrong_lower = native_adversarial_replace(domain, "lower", list(0))
-  expect_error(.Call(check, wrong_lower, list(0.5)), "`lower` must be numeric")
+  expect_error(.Call(check, wrong_lower, list(0.5), FALSE), "`lower` must be numeric")
   expect_error(.Call(qunif, wrong_lower, 0.5), "`lower` must be numeric")
   expect_error(.Call(sanitize, wrong_lower, list(0.5)), "`lower` must be numeric")
 
   invalid_tolerance = native_adversarial_replace(domain, "tolerance", -1)
   expect_error(
-    .Call(check, invalid_tolerance, list(0.5)),
+    .Call(check, invalid_tolerance, list(0.5), FALSE),
     "invalid numeric bounds or tolerance"
   )
   inverted_bounds = native_adversarial_replace(domain, "lower", 2)
@@ -141,7 +147,7 @@ test_that("native Domain kernels validate recognized storage before reading it",
     list(new.env(parent = emptyenv()))
   )
   expect_error(
-    .Call(check, factor, list("a")),
+    .Call(check, factor, list("a"), FALSE),
     "each `levels` element must be character"
   )
   expect_error(
@@ -155,7 +161,7 @@ test_that("native Domain kernels validate recognized storage before reading it",
     list(c("a", NA_character_))
   )
   expect_error(
-    .Call(check, missing_factor, list("a")),
+    .Call(check, missing_factor, list("a"), FALSE),
     "`levels` may not contain missing values",
     fixed = TRUE
   )
@@ -165,25 +171,33 @@ test_that("native Domain kernels validate recognized storage before reading it",
     fixed = TRUE
   )
 
-  # An unrecognized class is an extension/fallback request, not corrupt
-  # built-in storage. It must return the documented sentinel without touching
-  # arbitrary fields.
+  # Unknown classes are rejected without touching arbitrary fields. There is
+  # no extension sentinel or R replay path.
   unknown = structure(list(bad = new.env()), class = "ParamThirdParty")
-  expect_identical(.Call(check, unknown, list(1)), FALSE)
-  expect_null(.Call(qunif, unknown, 0.5))
-  expect_null(.Call(sanitize, unknown, list(1)))
+  expect_error(.Call(check, unknown, list(1), FALSE), "Unsupported Domain class")
+  expect_error(.Call(qunif, unknown, 0.5), "Unsupported Domain class")
+  expect_error(.Call(sanitize, unknown, list(1)), "Unsupported Domain class")
 })
 
 test_that("native construction gates fail closed on malformed shapes", {
   construct_param_set = native_adversarial_symbol("param_set_construct")
   construct_domain = native_adversarial_symbol("domain_construct")
 
-  expect_null(.Call(construct_param_set, 1L))
-  expect_null(.Call(construct_param_set, list(p_dbl(0, 1))))
-  expect_null(.Call(construct_param_set, setNames(list(list()), "x")))
+  expect_error(.Call(construct_param_set, 1L), "ordinary named list")
+  expect_error(
+    .Call(construct_param_set, list(p_dbl(0, 1))),
+    "ordinary character names"
+  )
+  expect_error(
+    .Call(construct_param_set, setNames(list(list()), "x")),
+    "canonical built-in Domain"
+  )
 
   bad_domain = native_adversarial_replace(p_dbl(0, 1), "lower", numeric())
-  expect_null(.Call(construct_param_set, list(x = bad_domain)))
+  expect_error(
+    .Call(construct_param_set, list(x = bad_domain)),
+    "noncanonical field.*lower/upper/tolerance"
+  )
 
   valid = p_dbl(0, 1)
   call_domain = function(
@@ -200,45 +214,74 @@ test_that("native construction gates fail closed on malformed shapes", {
       trafo = valid$.trafo[[1L]],
       storage_type = valid$storage_type,
       init_given = valid$.init_given,
-      init = valid$.init[[1L]]) {
+      init = valid$.init[[1L]],
+      numeric_source_kind = 1L,
+      numeric_logscale = FALSE,
+      id = valid$id,
+      requirements = valid$.requirements[[1L]]) {
     .Call(
       construct_domain, cls, grouping, cargo, lower, upper, tolerance,
       levels, special_vals, default, tags, trafo, storage_type, init_given,
-      init
+      init, numeric_source_kind, numeric_logscale, id, requirements
     )
   }
 
   expect_type(call_domain(), "list")
-  expect_null(call_domain(cls = "ParamUnknown"))
-  expect_null(call_domain(grouping = character()))
-  expect_null(call_domain(lower = numeric()))
-  expect_null(call_domain(tags = c("x", "x")))
-  expect_null(call_domain(trafo = 1L))
-  expect_null(call_domain(init_given = NA))
+  expect_error(call_domain(cls = "ParamUnknown"), "Invalid built-in Domain state")
+  expect_error(call_domain(grouping = character()), "Invalid built-in Domain state")
+  expect_error(
+    call_domain(lower = numeric()),
+    "`lower` must be one number",
+    fixed = TRUE
+  )
+  expect_error(call_domain(tags = c("x", "x")), "Invalid built-in Domain state")
+  expect_error(call_domain(trafo = 1L), "Invalid built-in Domain state")
+  expect_error(call_domain(init_given = NA), "Invalid built-in Domain state")
 })
 
-test_that("native ParamSet checking gates return fallback sentinels safely", {
+test_that("unified ParamSet checking rejects malformed calls without replay", {
   scalar = native_adversarial_symbol("param_set_check_builtin")
   table = native_adversarial_symbol("param_set_check_dt_builtin")
   param_set = ps(x = p_dbl(0, 1))
-  params = native_adversarial_private_params(param_set)
+  private = param_set$.__enclos_env__$private
 
-  expect_null(.Call(scalar, 1L, list(x = 0.5), FALSE))
-  expect_null(.Call(scalar, params, list(x = 0.5), NA))
-  expect_null(.Call(scalar, params, structure(list(0.5), names = NULL), FALSE))
-  expect_null(.Call(scalar, params, list(unknown = 0.5), FALSE))
-
-  malformed = native_adversarial_replace(
-    params,
-    "storage_type",
-    logical(length(params$storage_type))
+  expect_error(.Call(
+    scalar, 1L, param_set, list(x = 0.5), TRUE, FALSE, "none", TRUE
+  ))
+  expect_error(.Call(
+    scalar, private, param_set, list(x = 0.5), NA, FALSE, "none", TRUE
+  ))
+  unnamed_result = .Call(
+    scalar, private, param_set, structure(list(0.5), names = NULL),
+    TRUE, FALSE, "none", TRUE
   )
-  expect_null(.Call(scalar, malformed, list(x = 0.5), FALSE))
+  non_table_result = .Call(
+    table, private, param_set, list(x = 0.5), TRUE, "none", TRUE
+  )
+  expect_identical(unnamed_result, "Must be a named list.")
+  expect_identical(non_table_result, "Must be a data.frame or data.table.")
 
-  expect_null(.Call(table, params, list(x = 0.5)))
-  expect_null(.Call(table, params, data.frame(unknown = 0.5)))
-  expect_null(.Call(table, malformed, data.frame(x = 0.5)))
-  duplicate_id = c(params, list(id = params$id))
-  expect_null(.Call(scalar, duplicate_id, list(x = 0.5), FALSE))
-  expect_null(.Call(table, duplicate_id, data.frame(x = 0.5)))
+  corrupt_private = new.env(parent = emptyenv())
+  corrupt_private$.core = new("externalptr")
+  expect_error(.Call(
+    scalar, corrupt_private, param_set, list(x = 0.5),
+    TRUE, FALSE, "none", TRUE
+  ), "Corrupt ParamSet")
+  expect_error(.Call(
+    table, corrupt_private, param_set, data.frame(x = 0.5),
+    TRUE, "none", TRUE
+  ), "Corrupt ParamSet")
+
+  scalar_result = .Call(
+    scalar, private, param_set, list(unknown = 0.5),
+    TRUE, FALSE, "none", TRUE
+  )
+  table_result = .Call(
+    table, private, param_set, data.frame(unknown = 0.5),
+    TRUE, "none", TRUE
+  )
+  expect_type(scalar_result, "character")
+  expect_type(table_result, "character")
+  expect_false(is.null(scalar_result))
+  expect_false(is.null(table_result))
 })

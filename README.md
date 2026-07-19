@@ -22,13 +22,18 @@ remotes::install_github("mlr-org/paradox")
 
 ## Usage
 
-Create a simple ParamSet using all supported Parameter Types:
+Paradox 2 supports five built-in Parameter types:
 
 * integer numbers (`"int"`)
 * real-valued numbers (`"dbl"`)
 * truth values `TRUE` or `FALSE` (`"lgl"`)
 * categorical values from a set of possible strings (`"fct"`)
-* further types are only possible by using transformations.
+* opaque R values (`"uty"`), optionally validated with
+  `p_uty(custom_check = ...)`.
+
+The introductory sampled space below uses the first four. `p_uty()` is useful
+for values supplied by a caller or produced by a transformation, but an opaque
+value has no automatic uniform-sampling range.
 
 
 ```r
@@ -173,4 +178,3 @@ xst
 ```
 
 Further documentation can be found in the [in-depth tutorial](https://paradox.mlr-org.com/dev/articles/indepth.html)
-

@@ -1,4 +1,8 @@
-context("characterization: ParamSet values")
+context("contract: ParamSet values")
+
+values_empty_named = function() {
+  structure(list(), names = character())
+}
 
 values_characterization_internal_domain = function() {
   p_int(
@@ -31,26 +35,31 @@ test_that("values assignment sanitizes and stores in parameter order", {
   expect_identical(param_set$values$count, 3L)
 
   param_set$values = NULL
-  expect_identical(param_set$values, named_list())
+  expect_identical(param_set$values, values_empty_named())
   param_set$values = integer()
-  expect_identical(param_set$values, named_list())
+  expect_identical(param_set$values, values_empty_named())
 
   expect_error(
     { param_set$values = list(1L) },
-    "Must have names",
+    "plain named list",
     fixed = TRUE
   )
   expect_error(
     { param_set$values = 1L },
-    "Must be of type 'list', not 'integer'",
+    "plain named list",
     fixed = TRUE
   )
 
   param_set$assert_values = FALSE
-  param_set$values = structure(
-    list(9L, 2L, 4L),
-    names = c("count", "count", "unknown")
+  expect_error(
+    param_set$values <- structure(
+      list(9L, 2L, 4L),
+      names = c("count", "count", "unknown")
+    ),
+    "unique and non-missing"
   )
+  expect_identical(param_set$values, values_empty_named())
+  param_set$values = list(count = 9L, unknown = 4L)
   expect_identical(param_set$values, list(count = 9L))
 })
 
@@ -74,17 +83,17 @@ test_that("set_values validates both sources before merging", {
 
   expect_error(
     param_set$set_values(1L),
-    "Assertion on 'dots' failed: Must have names.",
+    "`...` values must be a plain named list",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(.values = list(1L)),
-    "Assertion on '.values' failed: Must have names.",
+    "`.values` must be a plain named list",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(a = 1L, a = 2L),
-    "Must have unique names, but element 2 is duplicated",
+    "ParamSet value inputs must have unique, disjoint names",
     fixed = TRUE
   )
   expect_error(
@@ -92,38 +101,38 @@ test_that("set_values validates both sources before merging", {
       list(1L, 2L),
       names = c("a", "a")
     )),
-    "Must have unique names, but element 2 is duplicated",
+    "ParamSet value inputs must have unique, disjoint names",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(a = 1L, .values = list(a = 2L)),
-    "Must be disjunct",
+    "ParamSet value inputs must have unique, disjoint names",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(.values = NULL),
-    "Must be of type 'list', not 'NULL'",
+    "`.values` must be a plain named list",
     fixed = TRUE
   )
 
   expect_error(
     param_set$set_values(a = 1L, .insert = NULL),
-    "argument is of length zero",
+    "`.insert` must be TRUE or FALSE",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(a = 1L, .insert = NA),
-    "missing value where TRUE/FALSE needed",
+    "`.insert` must be TRUE or FALSE",
     fixed = TRUE
   )
   expect_error(
     param_set$set_values(a = 1L, .insert = c(TRUE, FALSE)),
-    "the condition has length > 1",
+    "`.insert` must be TRUE or FALSE",
     fixed = TRUE
   )
 })
 
-test_that("set_values insert and replacement preserve historical NULL rules", {
+test_that("set_values insert and replacement preserve documented NULL rules", {
   param_set = ps(
     a = p_int(),
     b = p_int(),
@@ -162,9 +171,11 @@ test_that("set_values insert and replacement preserve historical NULL rules", {
   )
   expect_identical(param_set$values, list(b = 1L, nullable = NULL))
 
-  # `.insert` is historically not passed through assert_flag().
-  expect_invisible(param_set$set_values(a = 2L, .insert = 1))
-  expect_identical(param_set$values, list(a = 2L, b = 1L, nullable = NULL))
+  expect_error(
+    param_set$set_values(a = 2L, .insert = 1),
+    "`.insert` must be TRUE or FALSE",
+    fixed = TRUE
+  )
 })
 
 test_that("get_values filters tokens after dependency processing", {
@@ -230,7 +241,7 @@ test_that("get_values required checks are global and use original names", {
   )
 })
 
-test_that("get_values retains argument validation and remove quirks", {
+test_that("get_values validates its closed argument contract", {
   param_set = ps(a = p_int(tags = "required"), b = p_int())
   param_set$values = list(a = 1L, b = 2L)
 
@@ -241,13 +252,11 @@ test_that("get_values retains argument validation and remove quirks", {
   )
   expect_error(
     param_set$get_values(type = "token"),
-    "but is 'token'",
-    fixed = TRUE
+    "Assertion on 'type' failed"
   )
   expect_error(
     param_set$get_values(check_required = 1),
-    "Must be of type 'logical flag', not 'double'",
-    fixed = TRUE
+    "Assertion on 'check_required' failed"
   )
   expect_error(
     param_set$get_values(class = 1),
@@ -256,20 +265,11 @@ test_that("get_values retains argument validation and remove quirks", {
   )
   expect_error(
     param_set$get_values(remove_dependencies = NULL),
-    "invalid 'x' type in 'x && y'",
-    fixed = TRUE
+    "Assertion on 'remove_dependencies' failed"
   )
-
-  # NA is tolerated only because `NA && FALSE` is false for empty deps.
-  expect_identical(
-    param_set$get_values(remove_dependencies = NA),
-    list(a = 1L, b = 2L)
-  )
-  param_set$add_dep("b", "a", CondEqual(1L))
   expect_error(
     param_set$get_values(remove_dependencies = NA),
-    "missing value where TRUE/FALSE needed",
-    fixed = TRUE
+    "Assertion on 'remove_dependencies' failed"
   )
 })
 
@@ -290,8 +290,7 @@ test_that("dependency rows are evaluated sequentially against a local snapshot",
     list(root = 0L, middle = 1L, leaf = 2L)
   )
 
-  private = param_set$.__enclos_env__$private
-  private$.deps = private$.deps[2:1]
+  param_set$deps = param_set$deps[c(2L, 1L)]
   expect_identical(param_set$get_values(), list(root = 0L, leaf = 2L))
 
   token = to_tune()
@@ -307,216 +306,30 @@ test_that("dependency rows are evaluated sequentially against a local snapshot",
   expect_identical(param_set$get_values(), list(leaf = 2L))
 })
 
-test_that("condition callbacks can reenter while the outer getter stays coherent", {
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-
-  method = function(cond, x) {
-    events$seen = c(events$seen, sprintf("condition:%s", x))
-    cond$mutate()
-    x == cond$rhs
-  }
-  registerS3method(
-    "condition_test",
-    "CharacterizationValuesCondition",
-    method,
-    envir = asNamespace("paradox")
-  )
-
-  param_set = ps(parent = p_int(0L, 2L), child = p_int(0L, 10L))
-  private = param_set$.__enclos_env__$private
-  condition = CondEqual(1L)
-  condition$mutate = function() {
-    private$.store_values(list(parent = 0L, child = 9L))
-    gc(FALSE)
-  }
-  class(condition) = c("CharacterizationValuesCondition", class(condition))
-  param_set$add_dep("child", "parent", condition)
-  param_set$values = list(parent = 1L, child = 2L)
-  events$seen = character()
-
-  # The callback changes the live object, but the in-flight result is based on
-  # the values list captured before dependency dispatch.
-  expect_identical(
-    param_set$get_values(),
-    list(parent = 1L, child = 2L)
-  )
-  expect_identical(events$seen, "condition:1")
-  expect_identical(param_set$values, list(parent = 0L, child = 9L))
-})
-
-test_that("subclass value, dependency, and id dispatch order is retained", {
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-
-  DispatchParamSet = R6::R6Class(
-    "CharacterizationValuesDispatchParamSet",
-    inherit = ParamSet,
-    public = list(
-      ids = function(class = NULL, tags = NULL, any_tags = NULL) {
-        label = if (identical(tags, "required")) "ids:required" else "ids:final"
-        events$seen = c(events$seen, label)
-        super$ids(class = class, tags = tags, any_tags = any_tags)
-      }
-    ),
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          events$seen = c(events$seen, "values:set")
-          super$values = value
-          return(value)
-        }
-        events$seen = c(events$seen, "values:get")
-        super$values
-      },
-      deps = function(value) {
-        if (!missing(value)) {
-          super$deps = value
-          return(value)
-        }
-        events$seen = c(events$seen, "deps:get")
-        super$deps
-      }
-    )
-  )
-
-  param_set = DispatchParamSet$new(list(a = p_int(init = 1L)))
-  events$seen = character()
-  expect_identical(param_set$get_values(), list(a = 1L))
-  expect_identical(
-    events$seen,
-    c("values:get", "deps:get", "ids:required", "ids:final")
-  )
-
-  events$seen = character()
-  param_set$set_values(a = 2L)
-  expect_identical(events$seen, c("values:get", "values:set", "deps:get"))
-
-  events$seen = character()
-  param_set$set_values(a = 3L, .insert = FALSE)
-  expect_identical(events$seen, c("values:set", "deps:get"))
-})
-
-test_that("delayed private values and active subclass values remain observable", {
-  param_set = ps(a = p_int())
-  private = param_set$.__enclos_env__$private
-  events = new.env(parent = emptyenv())
-  events$count = 0L
-  delayedAssign(
-    ".values",
-    {
-      events$count = events$count + 1L
-      list(a = events$count)
-    },
-    assign.env = private,
-    eval.env = environment()
-  )
-
-  expect_identical(events$count, 0L)
-  expect_identical(param_set$values, list(a = 1L))
-  expect_identical(param_set$get_values(), list(a = 1L))
-  expect_identical(events$count, 1L)
-
-  ActivePrivateValues = R6::R6Class(
-    "CharacterizationActivePrivateValues",
-    inherit = ParamSet,
-    lock_objects = FALSE
-  )
-  active_set = ActivePrivateValues$new(list(a = p_int()))
-  active_private = active_set$.__enclos_env__$private
-  rm(".values", envir = active_private)
-  makeActiveBinding(
-    ".values",
-    function(value) {
-      if (!missing(value)) stop("active private values are read-only")
-      events$count = events$count + 1L
-      list(a = events$count)
-    },
-    active_private
-  )
-  before = events$count
-  expect_identical(active_set$get_values(), list(a = before + 1L))
-  expect_identical(events$count, before + 1L)
-})
-
-test_that("collection values delegate subclass stores through public bindings", {
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-
-  Child = R6::R6Class(
-    "CharacterizationCollectionValueChild",
-    inherit = ParamSet,
-    public = list(
-      initialize = function(label, params) {
-        private$.label = label
-        super$initialize(params)
-      }
-    ),
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          events$seen = c(events$seen, sprintf("%s:active-set", private$.label))
-          super$values = value
-          return(value)
-        }
-        events$seen = c(events$seen, sprintf("%s:get", private$.label))
-        super$values
-      }
-    ),
-    private = list(
-      .label = NULL,
-      .store_values = function(xs) {
-        events$seen = c(events$seen, sprintf("%s:store", private$.label))
-        super$.store_values(xs)
-      }
-    )
-  )
-
-  one = Child$new("one", list(a = p_int(init = 1L)))
-  two = Child$new("two", list(b = p_int(init = 2L)))
-  three = Child$new("three", list(c = p_int(init = 3L)))
+test_that("collection stores preserve public ordering and replacement rules", {
+  one = ps(a = p_int(init = 1L))
+  two = ps(b = p_int(init = 2L))
+  three = ps(c = p_int(init = 3L))
   collection = ParamSetCollection$new(list(one = one, two = two, three = three))
 
-  events$seen = character()
   expect_identical(
     collection$values,
     list(one.a = 1L, two.b = 2L, three.c = 3L)
   )
-  expect_identical(events$seen, c("one:get", "two:get", "three:get"))
 
-  events$seen = character()
   collection$values = list(three.c = 4L, one.a = 5L)
-  expect_identical(
-    events$seen,
-    c(
-      "one:active-set", "one:store",
-      "three:active-set", "three:store",
-      "two:active-set", "two:store"
-    )
-  )
   expect_identical(collection$values, list(one.a = 5L, three.c = 4L))
+  expect_identical(one$values, list(a = 5L))
+  expect_identical(two$values, values_empty_named())
+  expect_identical(three$values, list(c = 4L))
 
-  events$seen = character()
   collection$set_values(two.b = 6L, .insert = FALSE)
-  expect_identical(
-    events$seen,
-    c(
-      "two:active-set", "two:store",
-      "one:active-set", "one:store",
-      "three:active-set", "three:store"
-    )
-  )
+  expect_identical(collection$values, list(two.b = 6L))
 
-  events$seen = character()
   collection$set_values(one.a = 7L)
   expect_identical(
-    events$seen,
-    c(
-      "one:get", "two:get", "three:get",
-      "one:active-set", "one:store",
-      "two:active-set", "two:store",
-      "three:active-set", "three:store"
-    )
+    collection$values,
+    list(one.a = 7L, two.b = 6L)
   )
 })
 
@@ -558,91 +371,26 @@ test_that("nested prefix and postfix collections expose live child values", {
   prefix$values = list(nested.right.b = 4L, tail.q = 0.75)
   expect_identical(right$values, list(b = 4L))
   expect_identical(tail$values, list(q = 0.75))
-  expect_identical(left$values, named_list())
+  expect_identical(left$values, values_empty_named())
 })
 
-test_that("collection child getters observe mutations made by earlier children", {
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  events$callback = NULL
-
-  CallbackChild = R6::R6Class(
-    "CharacterizationLiveCollectionValueChild",
-    inherit = ParamSet,
-    public = list(
-      initialize = function(label, params) {
-        private$.label = label
-        super$initialize(params)
-      }
-    ),
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          events$seen = c(events$seen, sprintf("%s:set", private$.label))
-          super$values = value
-          return(value)
-        }
-        events$seen = c(events$seen, sprintf("%s:get", private$.label))
-        callback = events$callback
-        events$callback = NULL
-        if (is.function(callback)) callback()
-        super$values
-      }
-    ),
-    private = list(.label = NULL)
-  )
-
-  left = CallbackChild$new("left", list(a = p_int(init = 1L)))
-  right = CallbackChild$new("right", list(b = p_int(init = 2L)))
+test_that("collection value reads reflect later child mutations", {
+  left = ps(a = p_int(init = 1L))
+  right = ps(b = p_int(init = 2L))
   collection = ParamSetCollection$new(list(left = left, right = right))
-  events$seen = character()
-  events$callback = function() {
-    right$values = list(b = 9L)
-  }
+  before = collection$values
 
-  expect_identical(collection$values, list(left.a = 1L, right.b = 9L))
-  expect_identical(events$seen, c("left:get", "right:set", "right:get"))
+  left$values = list(a = 7L)
+  right$values = values_empty_named()
+
+  expect_identical(before, list(left.a = 1L, right.b = 2L))
+  expect_identical(collection$values, list(left.a = 7L))
 })
 
-test_that("shadow-like subclasses retain values dispatch and shared origins", {
-  Shadow = R6::R6Class(
-    "CharacterizationParamSetShadowLike",
-    inherit = ParamSet,
-    public = list(
-      initialize = function(origin, shadowed) {
-        private$.origin = origin
-        private$.shadowed = shadowed
-        kept = setdiff(origin$ids(), shadowed)
-        super$initialize(origin$domains[kept])
-      }
-    ),
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          self$assert(value)
-          all_values = private$.origin$values
-          all_values = all_values[
-            intersect(names(all_values), private$.shadowed)
-          ]
-          private$.origin$values = c(all_values, value)
-        }
-        values = private$.origin$values
-        values[private$.shadowed] = NULL
-        values
-      },
-      origin = function(value) {
-        if (!missing(value) && !identical(value, private$.origin)) {
-          stop("origin is read-only")
-        }
-        private$.origin
-      }
-    ),
-    private = list(.origin = NULL, .shadowed = NULL)
-  )
-
+test_that("official ParamSetShadow retains live values and graph identity", {
   origin = ps(x = p_int(), y = p_lgl())
   origin$values = list(x = 1L, y = TRUE)
-  shadow = Shadow$new(origin, "x")
+  shadow = ParamSetShadow$new(origin, "x")
 
   expect_identical(shadow$values, list(y = TRUE))
   expect_identical(shadow$get_values(), list(y = TRUE))
@@ -650,23 +398,24 @@ test_that("shadow-like subclasses retain values dispatch and shared origins", {
   expect_identical(origin$values, list(x = 1L, y = FALSE))
 
   cloned = shadow$clone(deep = TRUE)
-  expect_identical(cloned$origin, origin)
+  expect_false(identical(cloned$origin, origin))
   cloned$values = list(y = TRUE)
-  expect_identical(origin$values, list(x = 1L, y = TRUE))
+  expect_identical(cloned$origin$values, list(x = 1L, y = TRUE))
+  expect_identical(origin$values, list(x = 1L, y = FALSE))
 
   collection = ParamSetCollection$new(list(shadow = shadow))
-  collection$values = list(shadow.y = FALSE)
-  expect_identical(origin$values, list(x = 1L, y = FALSE))
-  expect_identical(shadow$values, list(y = FALSE))
-  expect_identical(collection$values, list(shadow.y = FALSE))
+  collection$values = list(shadow.y = TRUE)
+  expect_identical(origin$values, list(x = 1L, y = TRUE))
+  expect_identical(shadow$values, list(y = TRUE))
+  expect_identical(collection$values, list(shadow.y = TRUE))
 
-  collection$values = named_list()
+  collection$values = values_empty_named()
   expect_identical(origin$values, list(x = 1L))
-  expect_identical(shadow$values, named_list())
-  expect_identical(collection$values, named_list())
+  expect_identical(shadow$values, values_empty_named())
+  expect_identical(collection$values, values_empty_named())
 })
 
-test_that("deep clone and serialization retain established value aliasing", {
+test_that("deep clone preserves graph identity and established value aliasing", {
   Box = R6::R6Class(
     "CharacterizationValuesCloneBox",
     public = list(
@@ -706,14 +455,14 @@ test_that("deep clone and serialization retain established value aliasing", {
   child$values = list(value = box)
   collection = ParamSetCollection$new(list(left = child, right = child))
   deep_collection = collection$clone(deep = TRUE)
-  expect_false(identical(
+  expect_identical(
     deep_collection$sets[[1L]],
     deep_collection$sets[[2L]]
-  ))
-  expect_false(identical(
+  )
+  expect_identical(
     deep_collection$sets[[1L]]$values$value,
     deep_collection$sets[[2L]]$values$value
-  ))
+  )
 
   restored_collection = unserialize(serialize(
     collection,

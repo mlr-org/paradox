@@ -2,8 +2,8 @@ native_paramset_qunif_symbol = function() {
   get("C_param_set_qunif_builtin", envir = asNamespace("paradox"))
 }
 
-native_paramset_qunif_params = function(param_set) {
-  param_set$.__enclos_env__$private$.params
+native_paramset_qunif_private = function(param_set) {
+  param_set$.__enclos_env__$private
 }
 
 native_paramset_qunif_space = function() {
@@ -18,11 +18,12 @@ native_paramset_qunif_space = function() {
 test_that("native ParamSet qunif is registered with a forced symbol", {
   symbol = native_paramset_qunif_symbol()
   expect_s3_class(symbol, "NativeSymbolInfo")
-  expect_identical(symbol$numParameters, 2L)
+  expect_identical(symbol$numParameters, 3L)
   expect_error(
     .Call(
       "param_set_qunif_builtin",
-      list(),
+      new.env(parent = emptyenv()),
+      new.env(parent = emptyenv()),
       matrix(0, nrow = 1L, dimnames = list(NULL, "x")),
       PACKAGE = "paradox"
     ),
@@ -42,7 +43,8 @@ test_that("bulk qunif preserves requested order, storage, and endpoints", {
 
   native = .Call(
     native_paramset_qunif_symbol(),
-    native_paramset_qunif_params(param_set),
+    native_paramset_qunif_private(param_set),
+    param_set,
     units
   )
   expected = list(
@@ -141,11 +143,22 @@ test_that("integer matrices, data frames, subsets, and zero rows are supported",
   expect_identical(frame_result$factor, c("slow", "turbo"))
   expect_identical(frame_result$double, c(-5, 5))
   expect_identical(row.names(frame_result), c("1", "2"))
-  expect_null(.Call(
+  expect_identical(.Call(
     native_paramset_qunif_symbol(),
-    native_paramset_qunif_params(param_set),
+    native_paramset_qunif_private(param_set),
+    param_set,
     frame
-  ))
+  ), frame_result)
+
+  table = data.table::as.data.table(frame)
+  table_result = param_set$qunif(table)
+  expect_identical(table_result, frame_result)
+  expect_identical(.Call(
+    native_paramset_qunif_symbol(),
+    native_paramset_qunif_private(param_set),
+    param_set,
+    table
+  ), frame_result)
 
   empty = matrix(
     numeric(),
@@ -157,6 +170,32 @@ test_that("integer matrices, data frames, subsets, and zero rows are supported",
   expect_identical(empty_result$logical, logical())
   expect_identical(empty_result$integer, integer())
   expect_identical(.row_names_info(empty_result, type = 0L), integer())
+})
+
+test_that("zero-level factor parameters retain typed zero-row quantiles", {
+  param_set = ps(choice = p_fct(character()))
+  units = matrix(
+    numeric(),
+    nrow = 0L,
+    ncol = 1L,
+    dimnames = list(NULL, "choice")
+  )
+
+  result = param_set$qunif(units)
+  expect_s3_class(result, "data.table")
+  expect_identical(dim(result), c(0L, 1L))
+  expect_identical(result$choice, character())
+  expect_identical(data.table:::selfrefok(result, verbose = FALSE), 1L)
+
+  expect_error(
+    param_set$qunif(matrix(
+      0.5,
+      nrow = 1L,
+      dimnames = list(NULL, "choice")
+    )),
+    "Cannot map quantiles for a factor parameter with no levels",
+    fixed = TRUE
+  )
 })
 
 test_that("result names never alias matrix dimnames", {
@@ -196,67 +235,44 @@ test_that("ParamSetCollection uses the same public bulk contract", {
   expect_identical(result$right.i, c(11L, 12L))
 })
 
-test_that("custom and utility Domains retain established dispatch", {
-  class_name = "ParamNativeParamSetQunifCustom"
-  calls = 0L
-  registerS3method(
-    "domain_qunif",
-    class_name,
-    function(param, x) {
-      calls <<- calls + 1L
-      x + 10
-    },
-    envir = asNamespace("paradox")
-  )
-  make_custom_domain = function() {
-    paradox:::Domain(
-      cls = class_name,
-      grouping = class_name,
-      storage_type = "numeric"
-    )
-  }
-  custom = make_custom_domain()
-  param_set = ParamSet$new(list(
-    custom = custom,
-    double = p_dbl(0, 2)
-  ))
-  params = native_paramset_qunif_params(param_set)
-  units = cbind(custom = c(0, 1), double = c(0.25, 0.75))
-
-  expect_null(.Call(native_paramset_qunif_symbol(), params, units))
-  result = param_set$qunif(units)
-  expect_identical(result$custom, c(10, 11))
-  expect_identical(result$double, c(0.5, 1.5))
-  expect_identical(calls, 1L)
-
-  # An extension elsewhere in a ParamSet does not disable a requested built-in
-  # slice: only selected rows need native mappings.
-  built_in = units[, "double", drop = FALSE]
-  expect_s3_class(
-    .Call(native_paramset_qunif_symbol(), params, built_in),
-    "data.table"
-  )
-  expect_identical(param_set$qunif(built_in)$double, c(0.5, 1.5))
-  expect_identical(calls, 1L)
-
+test_that("utility parameters deterministically reject quantile mapping", {
   utility = ps(value = p_uty())
   utility_units = matrix(
     0.5,
     nrow = 1L,
     dimnames = list(NULL, "value")
   )
-  expect_null(.Call(
+  expect_error(.Call(
     native_paramset_qunif_symbol(),
-    native_paramset_qunif_params(utility),
+    native_paramset_qunif_private(utility),
+    utility,
     utility_units
-  ))
-  expect_error(utility$qunif(utility_units), "undefined")
+  ), "undefined for ParamUty", fixed = TRUE)
+  expect_error(utility$qunif(utility_units), "undefined for ParamUty", fixed = TRUE)
 })
 
-test_that("public validation diagnostics still precede native dispatch", {
+test_that("integer range failures warn once and yield missing values", {
+  param_set = ps(x = p_int(0, Inf), y = p_int(-Inf, 2))
+  units = matrix(
+    c(0, 1, 0, 1),
+    nrow = 2L,
+    dimnames = list(NULL, c("x", "y"))
+  )
+
+  expect_warning(
+    {
+      result = param_set$qunif(units)
+    },
+    "NAs introduced by coercion to integer range"
+  )
+  expect_identical(result$x, c(0L, NA_integer_))
+  expect_identical(result$y, c(NA_integer_, 2L))
+})
+
+test_that("native qunif owns public type, range, and name diagnostics", {
   param_set = native_paramset_qunif_space()
   unnamed = matrix(0.5, nrow = 1L)
-  expect_error(param_set$qunif(unnamed), "Must have names", fixed = TRUE)
+  expect_error(param_set$qunif(unnamed), "one column name", fixed = TRUE)
 
   unknown = matrix(
     0.5,
@@ -284,13 +300,20 @@ test_that("public validation diagnostics still precede native dispatch", {
     nrow = 1L,
     dimnames = list(NULL, "double")
   )
-  expect_error(param_set$qunif(outside), "Assertion on 'x' failed", fixed = TRUE)
+  expect_error(param_set$qunif(outside), "between zero and one", fixed = TRUE)
+
+  expect_error(param_set$qunif(TRUE), "numeric matrix or data.frame", fixed = TRUE)
+  expect_error(
+    param_set$qunif(data.frame(double = factor("a"))),
+    "unclassed numeric vector",
+    fixed = TRUE
+  )
 })
 
-test_that("direct native qunif rejects unsupported input without mutation", {
+test_that("direct native qunif errors on malformed input without mutation", {
   symbol = native_paramset_qunif_symbol()
   param_set = native_paramset_qunif_space()
-  params = native_paramset_qunif_params(param_set)
+  private = native_paramset_qunif_private(param_set)
   valid = matrix(
     c(0.25, 0.75),
     ncol = 1L,
@@ -299,32 +322,52 @@ test_that("direct native qunif rejects unsupported input without mutation", {
   before = valid
 
   invalid_inputs = list(
-    unname(valid),
-    structure(valid, class = "native_qunif_matrix"),
-    matrix(numeric(), nrow = 1L, ncol = 0L),
-    matrix(NA_real_, nrow = 1L, dimnames = list(NULL, "double")),
-    matrix(NaN, nrow = 1L, dimnames = list(NULL, "double")),
-    matrix(-0.01, nrow = 1L, dimnames = list(NULL, "double")),
-    matrix(1.01, nrow = 1L, dimnames = list(NULL, "double")),
-    matrix(0.5, nrow = 1L, dimnames = list(NULL, "unknown")),
-    matrix(
+    list(unname(valid), "one column name"),
+    list(structure(valid, class = "native_qunif_matrix"), "numeric matrix or data.frame"),
+    list(matrix(numeric(), nrow = 1L, ncol = 0L), "at least one column"),
+    list(matrix(NA_real_, nrow = 1L, dimnames = list(NULL, "double")), "missing"),
+    list(matrix(NaN, nrow = 1L, dimnames = list(NULL, "double")), "NaN"),
+    list(matrix(Inf, nrow = 1L, dimnames = list(NULL, "double")), "finite"),
+    list(matrix(-0.01, nrow = 1L, dimnames = list(NULL, "double")), "between zero and one"),
+    list(matrix(1.01, nrow = 1L, dimnames = list(NULL, "double")), "between zero and one"),
+    list(matrix(0.5, nrow = 1L, dimnames = list(NULL, "unknown")), "subset of"),
+    list(matrix(
       c(0.25, 0.75),
       nrow = 1L,
       dimnames = list(NULL, c("double", "double"))
-    )
+    ), "unique")
   )
-  for (input in invalid_inputs) {
-    expect_null(.Call(symbol, params, input), info = deparse(input))
+  for (case in invalid_inputs) {
+    expect_error(
+      .Call(symbol, private, param_set, case[[1L]]),
+      case[[2L]],
+      fixed = TRUE,
+      info = deparse(case[[1L]])
+    )
   }
-  expect_null(.Call(symbol, params, as.data.frame(valid)))
-  expect_null(.Call(symbol, unclass(params), valid))
+  expect_identical(
+    .Call(symbol, private, param_set, as.data.frame(valid)),
+    param_set$qunif(as.data.frame(valid))
+  )
+  expect_error(
+    .Call(symbol, new.env(parent = emptyenv()), param_set, valid),
+    "shell ownership",
+    fixed = TRUE
+  )
+  expect_error(
+    .Call(symbol, private, new.env(parent = emptyenv()), valid),
+    "shell ownership",
+    fixed = TRUE
+  )
   expect_identical(valid, before)
 })
 
 test_that("direct native qunif fails closed on corrupt ParamSet storage", {
   symbol = native_paramset_qunif_symbol()
-  param_set = native_paramset_qunif_space()
-  params = native_paramset_qunif_params(param_set)
+  template_set = native_paramset_qunif_space()
+  params = paradox:::param_set_core_state(
+    native_paramset_qunif_private(template_set)
+  )$.params
   units = matrix(
     0.5,
     nrow = 1L,
@@ -334,35 +377,79 @@ test_that("direct native qunif fails closed on corrupt ParamSet storage", {
 
   corruptions = list()
   column_order = c(2L, 1L, seq.int(3L, length(params)))
-  corruptions[[1L]] = params[, column_order, with = FALSE]
+  corruptions[[1L]] = params[, column_order, drop = FALSE]
 
-  corruptions[[2L]] = data.table::copy(params)
-  data.table::set(
-    corruptions[[2L]],
-    i = 2L,
-    j = "id",
-    value = corruptions[[2L]]$id[[1L]]
-  )
+  corruptions[[2L]] = params
+  corruptions[[2L]]$id[[2L]] = corruptions[[2L]]$id[[1L]]
 
-  corruptions[[3L]] = data.table::copy(params)
-  data.table::set(corruptions[[3L]], i = 1L, j = "grouping", value = NA_character_)
+  corruptions[[3L]] = params
+  corruptions[[3L]]$grouping[[1L]] = NA_character_
 
-  corruptions[[4L]] = data.table::copy(params)
+  corruptions[[4L]] = params
   double_row = match("double", corruptions[[4L]]$id)
-  data.table::set(corruptions[[4L]], i = double_row, j = "lower", value = NA_real_)
+  corruptions[[4L]]$lower[[double_row]] = NA_real_
 
-  corruptions[[5L]] = data.table::copy(params)
+  corruptions[[5L]] = params
   factor_row = match("factor", corruptions[[5L]]$id)
-  data.table::set(
-    corruptions[[5L]],
-    i = factor_row,
-    j = "levels",
-    value = list(c("slow", NA_character_))
-  )
+  corruptions[[5L]]$levels[[factor_row]] = c("slow", NA_character_)
 
   for (corrupt in corruptions) {
-    expect_null(.Call(symbol, corrupt, units))
+    param_set = native_paramset_qunif_space()
+    private = native_paramset_qunif_private(param_set)
+    paradox:::param_set_core_replace(private, params = corrupt)
+    expect_error(
+      .Call(symbol, private, param_set, units),
+      "Corrupt ParamSet quantile state",
+      fixed = TRUE
+    )
   }
+})
+
+test_that("qunif refreshes a live ParamSetShadow before selecting state", {
+  origin = ps(x = p_dbl(0, 1), hidden = p_lgl())
+  origin$values = list(x = 0.25, hidden = TRUE)
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = native_paramset_qunif_private(shadow)
+  expect_identical(paradox:::param_set_core_state(private)$.values$x, 0.25)
+
+  origin$values = list(x = 0.75, hidden = FALSE)
+  expect_identical(paradox:::param_set_core_state(private)$.values$x, 0.25)
+  result = shadow$qunif(matrix(
+    c(0, 0.5, 1),
+    ncol = 1L,
+    dimnames = list(NULL, "x")
+  ))
+
+  expect_identical(result$x, c(0, 0.5, 1))
+  expect_identical(paradox:::param_set_core_state(private)$.values$x, 0.75)
+})
+
+test_that("qunif snapshots ALTREP input before selecting capsule state", {
+  param_set = ps(x = p_dbl(0, 1))
+  private = native_paramset_qunif_private(param_set)
+  first = matrix(c(0, 0.5, 1), ncol = 1L,
+    dimnames = list(NULL, "x"))
+  later = matrix(rep(0.25, 3L), ncol = 1L,
+    dimnames = dimnames(first))
+  callbacks = 0L
+  units = native_stateful_altrep(
+    first,
+    later,
+    elt_switch_after = length(first),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      params = unserialize(serialize(
+        paradox:::param_set_core_state(private)$.params,
+        NULL
+      ))
+      params$upper[] = 2
+      paradox:::param_set_core_replace(private, params = params)
+    },
+    callback_after = 0L
+  )
+
+  expect_identical(param_set$qunif(units)$x, c(0, 1, 2))
+  expect_identical(callbacks, 1L)
 })
 
 test_that("bulk qunif remains rooted under adversarial collection", {
@@ -380,7 +467,8 @@ test_that("bulk qunif remains rooted under adversarial collection", {
   on.exit(gctorture(previous), add = TRUE)
   result = .Call(
     symbol,
-    native_paramset_qunif_params(param_set),
+    native_paramset_qunif_private(param_set),
+    param_set,
     units
   )
   gctorture(previous)
@@ -396,9 +484,13 @@ test_that("bulk qunif remains rooted under adversarial collection", {
 test_that("bulk qunif accumulates work across many short columns", {
   size = 32769L
   ids = sprintf("logical_%05d", seq_len(size))
-  template = native_paramset_qunif_params(ps(x = p_lgl()))
-  params = template[rep.int(1L, size)]
-  data.table::set(params, j = "id", value = ids)
+  param_set = ps(x = p_lgl())
+  private = native_paramset_qunif_private(param_set)
+  template = paradox:::param_set_core_state(private)$.params
+  params = template[rep.int(1L, size), , drop = FALSE]
+  params$id = ids
+  params = paradox:::param_set_internal_table(params)
+  paradox:::param_set_core_replace(private, params = params)
   units = matrix(
     0.5,
     nrow = 1L,
@@ -406,7 +498,9 @@ test_that("bulk qunif accumulates work across many short columns", {
     dimnames = list(NULL, ids)
   )
 
-  result = .Call(native_paramset_qunif_symbol(), params, units)
+  result = .Call(
+    native_paramset_qunif_symbol(), private, param_set, units
+  )
   expect_s3_class(result, "data.table")
   expect_identical(names(result), ids)
   expect_identical(unname(lengths(result)), rep.int(1L, size))

@@ -5,6 +5,8 @@ export LC_ALL=C
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 LEDGER="$ROOT/compat/mlr-org-review.tsv"
+SNAPSHOT="$ROOT/compat/github-snapshot.tsv"
+BRIDGE_PROVENANCE="$ROOT/compat/github-bridge-provenance.tsv"
 CONSUMER_ROOT="$ROOT/.local/compat/github"
 SCAN_ROOT="$ROOT/.local/compat/github-org-scan/checkouts"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
@@ -22,10 +24,12 @@ usage() {
 Usage: compat/verify-mlr-org-review [--fetch]
 
 Verify all 91 exact sources, source-archive receipts, scan-scope receipts, and
-match counts in compat/mlr-org-review.tsv. The default is offline and changes
-nothing. --fetch creates only absent org-scan checkouts; it never fetches,
-resets, cleans, or otherwise changes an existing checkout. Populate the
-consumer corpus first with compat/fetch-github-repositories.
+match counts in compat/mlr-org-review.tsv. The two reviewed Paradox-2 bridge
+heads are authenticated through github-snapshot.tsv and their exact upstream
+census bases through github-bridge-provenance.tsv. The default is offline and
+changes nothing. --fetch creates only absent org-scan checkouts; it never
+fetches, resets, cleans, or otherwise changes an existing checkout. Populate
+the consumer corpus first with compat/fetch-github-repositories.
 EOF
 }
 
@@ -57,6 +61,10 @@ esac
 [[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" ]] ||
   fail "activate the repository-local environment first: . scripts/activate"
 [[ -f "$LEDGER" && ! -L "$LEDGER" ]] || fail "ledger is missing or symbolic"
+[[ -f "$SNAPSHOT" && ! -L "$SNAPSHOT" ]] ||
+  fail "GitHub snapshot is missing or symbolic"
+[[ -f "$BRIDGE_PROVENANCE" && ! -L "$BRIDGE_PROVENANCE" ]] ||
+  fail "bridge provenance is missing or symbolic"
 [[ -x "$LOCAL_GIT" && ! -L "$LOCAL_GIT" ]] ||
   fail "repository-local Git is missing or symbolic"
 [[ $(command -v git) == "$LOCAL_GIT" ]] ||
@@ -116,6 +124,52 @@ validate_ledger() {
   ' "$LEDGER" || fail "ledger schema, ordering, uniqueness, or row count is invalid"
 }
 
+validate_snapshot() {
+  /usr/bin/awk -F '\t' '
+    NR == 1 {
+      if ($0 != "repository\turl\tpriority\tcommit\tcommit_date\tbranch") exit 1
+      next
+    }
+    {
+      if (NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+          $2 !~ /^https:\/\/github\.com\/[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+\.git$/ ||
+          $3 !~ /^[0-3]$/ || $4 !~ /^[0-9a-f]+$/ || length($4) != 40 ||
+          $5 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ ||
+          $6 == "" || seen[$1]++) exit 1
+      rows += 1
+      if ($2 ~ /^https:\/\/github\.com\/mlr-org\//) mlr_org += 1
+    }
+    END { if (rows == 0 || mlr_org != 43) exit 1 }
+  ' "$SNAPSHOT" || fail "GitHub snapshot schema or mlr-org coverage is invalid"
+}
+
+validate_bridge_provenance() {
+  /usr/bin/awk -F '\t' '
+    BEGIN {
+      expected = "repository\torigin\tupstream_commit\tupstream_tree\tupstream_commit_date\tupstream_branch\tbridge_commit\tbridge_tree\tbridge_commit_date\tbridge_branch\trationale"
+      names[1] = "bbotk"
+      names[2] = "miesmuschel"
+    }
+    NR == 1 {
+      if ($0 != expected) exit 1
+      next
+    }
+    {
+      if (NF != 11 || $1 != names[NR - 1] || seen[$1]++ ||
+          $2 != "https://github.com/mlr-org/" $1 ".git" ||
+          $3 !~ /^[0-9a-f]+$/ || length($3) != 40 ||
+          $4 !~ /^[0-9a-f]+$/ || length($4) != 40 ||
+          $5 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ ||
+          $6 == "" || $7 !~ /^[0-9a-f]+$/ || length($7) != 40 ||
+          $8 !~ /^[0-9a-f]+$/ || length($8) != 40 ||
+          $9 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ ||
+          $10 == "" || $11 == "" || $3 == $7) exit 1
+      rows += 1
+    }
+    END { if (rows != 2) exit 1 }
+  ' "$BRIDGE_PROVENANCE" || fail "bridge provenance schema or identity is invalid"
+}
+
 source_path() {
   local repository=$1 source_type=$2
   case "$source_type" in
@@ -151,7 +205,7 @@ fetch_absent_source() {
 }
 
 grep_to_file() {
-  local checkout=$1 output=$2 pattern=$3 scope=$4 status
+  local checkout=$1 output=$2 pattern=$3 scope=$4 revision=$5 status
   local -a paths
   if [[ "$scope" == scoped ]]; then
     paths=(
@@ -159,14 +213,14 @@ grep_to_file() {
       ':(icase,glob)**/*.rmd' ':(icase,glob)**/*.qmd'
       ':(glob)**/scripts/**'
     )
-    if corpus_git -C "$checkout" grep -n -I -E "$pattern" HEAD -- \
+    if corpus_git -C "$checkout" grep -n -I -E "$pattern" "$revision" -- \
       "${paths[@]}" >"$output"; then
       return 0
     else
       status=$?
     fi
   else
-    if corpus_git -C "$checkout" grep -n -I -E "$pattern" HEAD >"$output"; then
+    if corpus_git -C "$checkout" grep -n -I -E "$pattern" "$revision" >"$output"; then
       return 0
     else
       status=$?
@@ -177,6 +231,51 @@ grep_to_file() {
 }
 
 validate_ledger
+validate_snapshot
+validate_bridge_provenance
+
+declare -A snapshot_origin snapshot_commit snapshot_date snapshot_branch
+declare -A bridge_origin bridge_upstream_commit bridge_upstream_tree
+declare -A bridge_upstream_date bridge_upstream_branch bridge_commit
+declare -A bridge_tree bridge_date bridge_branch
+declare -a bridge_repositories=()
+
+while IFS=$'\t' read -r repository origin _priority commit commit_date branch; do
+  [[ "$repository" != repository ]] || continue
+  snapshot_origin[$repository]=$origin
+  snapshot_commit[$repository]=$commit
+  snapshot_date[$repository]=$commit_date
+  snapshot_branch[$repository]=$branch
+  corpus_git check-ref-format --branch "$branch" >/dev/null 2>&1 ||
+    fail "snapshot branch is malformed for $repository"
+done <"$SNAPSHOT"
+
+while IFS=$'\t' read -r repository origin upstream_commit upstream_tree \
+  upstream_date upstream_branch current_commit current_tree current_date \
+  current_branch _rationale; do
+  [[ "$repository" != repository ]] || continue
+  bridge_repositories+=("$repository")
+  bridge_origin[$repository]=$origin
+  bridge_upstream_commit[$repository]=$upstream_commit
+  bridge_upstream_tree[$repository]=$upstream_tree
+  bridge_upstream_date[$repository]=$upstream_date
+  bridge_upstream_branch[$repository]=$upstream_branch
+  bridge_commit[$repository]=$current_commit
+  bridge_tree[$repository]=$current_tree
+  bridge_date[$repository]=$current_date
+  bridge_branch[$repository]=$current_branch
+  corpus_git check-ref-format --branch "$upstream_branch" >/dev/null 2>&1 ||
+    fail "upstream branch is malformed for $repository"
+  corpus_git check-ref-format --branch "$current_branch" >/dev/null 2>&1 ||
+    fail "bridge branch is malformed for $repository"
+  [[ -v "snapshot_origin[$repository]" &&
+     "${snapshot_origin[$repository]}" == "$origin" &&
+     "${snapshot_commit[$repository]}" == "$current_commit" &&
+     "${snapshot_date[$repository]}" == "$current_date" &&
+     "${snapshot_branch[$repository]}" == "$current_branch" ]] ||
+    fail "bridge provenance differs from the executable snapshot for $repository"
+done <"$BRIDGE_PROVENANCE"
+
 [[ -d "$CONSUMER_ROOT" && ! -L "$CONSUMER_ROOT" ]] ||
   fail "populate the ordinary consumer corpus first"
 if [[ "$FETCH" == true ]]; then
@@ -195,6 +294,7 @@ broad_api_pattern='(ParamSet(Collection)?|Param(Dbl|Int|Fct|Lgl|Uty|Cnst|Special
 rows=0
 consumer_rows=0
 scan_rows=0
+bridge_rows=0
 
 while IFS=$'\t' read -r repository origin commit tree commit_date archived \
   clean_status archive_sha source_type scoped_files scope_sha paradox_lines \
@@ -203,6 +303,35 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
   [[ "$repository" != repository ]] || continue
   : "$archived" "$clean_status" "$use_class" "$review_decision" "$evidence" \
     "$rationale"
+  expected_head_commit=$commit
+  expected_head_tree=$tree
+  expected_head_date=$commit_date
+  expected_head_branch=
+  if [[ "$source_type" == consumer-corpus ]]; then
+    [[ -v "snapshot_origin[$repository]" &&
+       "${snapshot_origin[$repository]}" == "$origin" ]] ||
+      fail "$repository census source is absent or differs in the executable snapshot"
+    expected_head_commit=${snapshot_commit[$repository]}
+    expected_head_date=${snapshot_date[$repository]}
+    expected_head_branch=${snapshot_branch[$repository]}
+    if [[ -v "bridge_commit[$repository]" ]]; then
+      [[ "${bridge_origin[$repository]}" == "$origin" &&
+         "${bridge_upstream_commit[$repository]}" == "$commit" &&
+         "${bridge_upstream_tree[$repository]}" == "$tree" &&
+         "${bridge_upstream_date[$repository]}" == "$commit_date" &&
+         "${bridge_upstream_branch[$repository]}" != "$expected_head_branch" &&
+         "${bridge_commit[$repository]}" == "$expected_head_commit" &&
+         "${bridge_date[$repository]}" == "$expected_head_date" &&
+         "${bridge_branch[$repository]}" == "$expected_head_branch" ]] ||
+        fail "$repository bridge does not descend from its exact reviewed census base"
+      expected_head_tree=${bridge_tree[$repository]}
+      bridge_rows=$((bridge_rows + 1))
+    else
+      [[ "$expected_head_commit" == "$commit" &&
+         "$expected_head_date" == "$commit_date" ]] ||
+        fail "$repository executable snapshot differs from its reviewed census source"
+    fi
+  fi
   checkout=$(source_path "$repository" "$source_type")
   if [[ ! -d "$checkout/.git" ]]; then
     [[ ! -e "$checkout" && ! -L "$checkout" ]] ||
@@ -244,23 +373,46 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
     : >"$broad_api_file"
     observed_archive_sha=$(printf '' | sha256sum | /usr/bin/awk '{print $1}')
   else
-    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{commit}') == "$commit" ]] ||
-      fail "$repository commit differs from the ledger"
-    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{tree}') == "$tree" ]] ||
-      fail "$repository tree differs from the ledger"
-    [[ $(corpus_git -C "$checkout" show -s --format=%cI HEAD) == "$commit_date" ]] ||
-      fail "$repository commit date differs from the ledger"
-    observed_archive_sha=$(corpus_git -C "$checkout" archive --format=tar HEAD | \
+    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{commit}') == \
+       "$expected_head_commit" ]] ||
+      fail "$repository checkout is not at its exact executable snapshot"
+    [[ $(corpus_git -C "$checkout" rev-parse --verify 'HEAD^{tree}') == \
+       "$expected_head_tree" ]] ||
+      fail "$repository executable tree differs from its reviewed identity"
+    [[ $(corpus_git -C "$checkout" show -s --format=%cI HEAD) == \
+       "$expected_head_date" ]] ||
+      fail "$repository executable commit date differs from its reviewed identity"
+    if [[ "$source_type" == consumer-corpus ]]; then
+      [[ $(corpus_git -C "$checkout" branch --show-current) == \
+         "$expected_head_branch" ]] ||
+        fail "$repository checkout is on an unexpected executable branch"
+    fi
+    [[ $(corpus_git -C "$checkout" rev-parse --verify "$commit^{commit}") == \
+       "$commit" ]] || fail "$repository census base commit is unavailable"
+    [[ $(corpus_git -C "$checkout" rev-parse --verify "$commit^{tree}") == \
+       "$tree" ]] || fail "$repository census base tree differs from the ledger"
+    [[ $(corpus_git -C "$checkout" show -s --format=%cI "$commit") == \
+       "$commit_date" ]] || fail "$repository census base date differs from the ledger"
+    if [[ -v "bridge_commit[$repository]" ]]; then
+      corpus_git -C "$checkout" merge-base --is-ancestor \
+        "$commit" "$expected_head_commit" ||
+        fail "$repository reviewed upstream base is not an ancestor of its bridge"
+    fi
+    observed_archive_sha=$(corpus_git -C "$checkout" archive --format=tar "$commit" | \
       sha256sum | /usr/bin/awk '{print $1}')
-    corpus_git -C "$checkout" ls-tree -r HEAD | /usr/bin/awk -F '\t' '
+    corpus_git -C "$checkout" ls-tree -r "$commit" | /usr/bin/awk -F '\t' '
       { path=$2; lower=tolower(path) }
       path == "DESCRIPTION" || path == "NAMESPACE" ||
         lower ~ /\.(r|rmd|qmd)$/ || path ~ /(^|\/)scripts\// { print }
     ' >"$scope_file"
-    grep_to_file "$checkout" "$scoped_paradox_file" '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' scoped
-    grep_to_file "$checkout" "$scoped_api_file" "$scope_api_pattern" scoped
-    grep_to_file "$checkout" "$broad_paradox_file" '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' broad
-    grep_to_file "$checkout" "$broad_api_file" "$broad_api_pattern" broad
+    grep_to_file "$checkout" "$scoped_paradox_file" \
+      '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' scoped "$commit"
+    grep_to_file "$checkout" "$scoped_api_file" \
+      "$scope_api_pattern" scoped "$commit"
+    grep_to_file "$checkout" "$broad_paradox_file" \
+      '[Pp][Aa][Rr][Aa][Dd][Oo][Xx]' broad "$commit"
+    grep_to_file "$checkout" "$broad_api_file" \
+      "$broad_api_pattern" broad "$commit"
   fi
   [[ "$observed_archive_sha" == "$archive_sha" ]] ||
     fail "$repository source archive receipt differs from the ledger"
@@ -285,6 +437,7 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
   fi
 done <"$LEDGER"
 
-[[ $rows -eq 91 && $consumer_rows -eq 43 && $scan_rows -eq 48 ]] ||
-  fail "verified source partition differs from 91 = 43 consumer + 48 scan"
-printf '%s\n' "verified 91 mlr-org repositories (43 pinned consumer sources, 48 census sources)"
+[[ $rows -eq 91 && $consumer_rows -eq 43 && $scan_rows -eq 48 &&
+   $bridge_rows -eq ${#bridge_repositories[@]} ]] ||
+  fail "verified source partition or bridge coverage is incomplete"
+printf '%s\n' "verified 91 mlr-org repositories (43 consumer sources, including 2 reviewed bridges; 48 census sources)"

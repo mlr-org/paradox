@@ -143,6 +143,39 @@ for (symbol in list(
   }
 }
 
+support_bindings <- Filter(
+  function(expression) is_library_binding(
+    expression, quote(release_support_libraries)
+  ),
+  as.list(tree)
+)
+if (length(support_bindings) != 1L) {
+  stop("release support-library binding has an unexpected shape",
+    call. = FALSE)
+}
+support_fixture <- list2env(list(
+  release_mies_library = "exact-miesmuschel-bridge",
+  release_dependency_libraries = c(
+    "dependency-with-stale-miesmuschel", "dependency-two"
+  ),
+  release_extra_libraries = "protected",
+  release_ordinary_library = "ordinary"
+), parent = baseenv())
+eval(support_bindings[[1L]], envir = support_fixture)
+expected_support_order <- c(
+  "exact-miesmuschel-bridge", "dependency-with-stale-miesmuschel",
+  "dependency-two", "protected", "ordinary"
+)
+if (!identical(
+    support_fixture$release_support_libraries, expected_support_order
+  )) {
+  stop("the exact miesmuschel bridge does not precede stale dependency copies",
+    call. = FALSE)
+}
+
 cat(
-  "PASS: release paths reject controls and library roles match optional paths\n"
+  paste(
+    "PASS: release paths reject controls, library roles match optional paths,",
+    "and the exact miesmuschel bridge has package-loading precedence\n"
+  )
 )

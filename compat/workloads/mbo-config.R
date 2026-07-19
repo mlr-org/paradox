@@ -45,7 +45,15 @@ results <- lapply(seq_along(fixtures), function(index) {
     fail("missing or symbolic mbo_config fixture: ", path)
   }
 
-  parameter_set <- readRDS(path)
+  legacy_parameter_set <- readRDS(path)
+  legacy_bytes <- serialize(legacy_parameter_set, NULL, version = 3L)
+  parameter_set <- upgrade_paradox_object(legacy_parameter_set)
+  if (!identical(
+    serialize(legacy_parameter_set, NULL, version = 3L),
+    legacy_bytes
+  )) {
+    fail("upgrading the serialized ", fixture, " search space mutated its input")
+  }
   ids <- parameter_set$ids()
   if (!inherits(parameter_set, "ParamSet") ||
       !identical(ids, expected_ids) ||

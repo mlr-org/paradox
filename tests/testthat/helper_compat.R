@@ -13,35 +13,35 @@ library("checkmate")
 
 ParamInt = list(
   new = function(id, ...) {
-    ParamSet$new(set_names(list(p_int(...)), id))
+    ParamSet$new(setNames(list(p_int(...)), id))
   },
   classname = "ParamInt"
 )
 
 ParamDbl = list(
   new = function(id, ...) {
-    ParamSet$new(set_names(list(p_dbl(...)), id))
+    ParamSet$new(setNames(list(p_dbl(...)), id))
   },
   classname = "ParamDbl"
 )
 
 ParamFct = list(
   new = function(id, ...) {
-    ParamSet$new(set_names(list(p_fct(...)), id))
+    ParamSet$new(setNames(list(p_fct(...)), id))
   },
   classname = "ParamFct"
 )
 
 ParamLgl = list(
   new = function(id, ...) {
-    ParamSet$new(set_names(list(p_lgl(...)), id))
+    ParamSet$new(setNames(list(p_lgl(...)), id))
   },
   classname = "ParamLgl"
 )
 
 ParamUty = list(
   new = function(id, ...) {
-    ParamSet$new(set_names(list(p_uty(...)), id))
+    ParamSet$new(setNames(list(p_uty(...)), id))
   },
   classname = "ParamUty"
 )

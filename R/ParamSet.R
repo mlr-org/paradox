@@ -1,58 +1,325 @@
-# Return a fresh, zero-row dependency table without invoking data.table's
-# comparatively expensive constructor. In particular, the outer list must
-# never be shared between R6 instances: data.table may attach optional lookup
-# metadata to it by reference. Initializers that override both ParamSet and
-# ParamSetCollection without calling super must install their own dependency
-# store in the same way. The self-reference is optional and is installed lazily
-# by data.table operations that need it.
+# Return a fresh canonical zero-row dependency store. Capsule tables are plain
+# data.frames; data.table metadata is added only to a detached public facade.
 new_empty_deps = function() {
-  structure(
+  param_set_internal_table(structure(
     list(id = character(0L), on = character(0L), cond = list()),
     row.names = integer(0L),
-    class = c("data.table", "data.frame")
+    class = "data.frame"
+  ))
+}
+
+# Capsule tables are deliberately ordinary data.frames, never data.tables.
+# They are fixed-width aligned column stores: package code replaces a complete
+# table when it mutates state, while public accessors construct detached
+# data.table facades. Keeping this conversion in one place prevents a
+# constructor or legacy upgrader from accidentally retaining data.table's
+# mutable indices, spare capacity, or external self-reference in the capsule.
+param_set_internal_table = function(x) {
+  if (!is.list(x) || is.null(names(x)) || anyDuplicated(names(x))) {
+    stop("Internal error: invalid ParamSet state table", call. = FALSE)
+  }
+  columns = unname(as.list(x))
+  sizes = lengths(columns)
+  rows = if (length(sizes)) sizes[[1L]] else 0L
+  if (length(sizes) && any(sizes != rows)) {
+    stop("Internal error: unaligned ParamSet state table", call. = FALSE)
+  }
+  structure(
+    columns,
+    names = names(x),
+    row.names = if (rows) seq_len(rows) else integer(),
+    class = "data.frame"
   )
 }
 
-param_set_bulk_subspace_shells = function(plans) {
-  if (!length(plans)) return(NULL)
-  # Generator authentication and shell allocation are one native transaction.
-  # The live `$new` closure is never invoked speculatively: any altered R6
-  # surface returns NULL with every token intact for the historical fallback.
-  .Call(C_param_set_bulk_shells, ParamSet, plans)
+# Construct the outward mutable facade without invoking data.table. The native
+# finalizer owns the shell/names and installs a valid self-reference; capsule
+# columns stay shared only through R's copy-on-write rules and the capsule never
+# retains the facade itself.
+param_set_data_table_facade = function(x) {
+  x = param_set_internal_table(x)
+  table = structure(
+    lapply(unname(as.list(x)), function(column) column[seq_along(column)]),
+    names = names(x),
+    row.names = if (nrow(x)) seq_len(nrow(x)) else integer(),
+    class = c("data.table", "data.frame")
+  )
+  finalize_domain_data_table(table)
 }
 
-param_set_subspaces_fallback = function(param_set, private, ids, values) {
-  sapply(ids, simplify = FALSE, function(get_id) {
-    result = ParamSet$new()
-    result$extra_trafo = param_set$extra_trafo
-    # constraint make no sense here, basically by definition
-    result$.__enclos_env__$private$.params = setindexv(
-      private$.params[get_id, on = "id"],
-      c("id", "cls", "grouping")
-    )
-    # setkeyv not strictly necessary since get_id is scalar, but we do it for consistency
-    result$.__enclos_env__$private$.trafos = setkeyv(
-      private$.trafos[get_id, on = "id", nomatch = NULL],
-      "id"
-    )
-    result$.__enclos_env__$private$.tags = setkeyv(
-      private$.tags[get_id, on = "id", nomatch = NULL],
-      "id"
-    )
-    result$assert_values = FALSE
-    result$values = values[match(get_id, names(values), nomatch = 0)]
-    result$assert_values = TRUE
-    result
+param_set_table_rows = function(table, rows) {
+  param_set_internal_table(table[rows, , drop = FALSE])
+}
+
+param_set_table_match = function(table, values, column = "id",
+    nomatch = 0L) {
+  rows = match(values, table[[column]], nomatch = nomatch)
+  if (nomatch == 0L) rows = rows[rows != 0L]
+  param_set_table_rows(table, rows)
+}
+
+param_set_table_first = function(table, value, result, column = "id") {
+  row = match(value, table[[column]])
+  if (is.na(row)) NULL else table[[result]][[row]]
+}
+
+param_set_dependencies_snapshot = function(deps) {
+  .Call(C_param_set_dependency_table_snapshot, deps)
+}
+
+# The only mutable binding in a ParamSet's private environment is `.core`.
+# Its NULL-address external pointer protects this fixed, serializable payload.
+# Package code captures the payload once per operation; every mutation installs
+# a fresh capsule, so callbacks can mutate the object without changing the
+# snapshot already being consumed by the outer operation.
+param_set_core_new = function(kind, params, values = named_list(), tags,
+    deps = new_empty_deps(), trafos, extra_trafo = NULL,
+    constraint = NULL, sets = NULL, translation = NULL, postfix = FALSE) {
+  .Call(C_param_set_core_new, as.integer(kind), list(
+    .params = param_set_internal_table(params),
+    .values = values,
+    .tags = param_set_internal_table(tags),
+    .deps = param_set_dependencies_snapshot(deps),
+    .trafos = param_set_internal_table(trafos),
+    .extra_trafo = extra_trafo,
+    .constraint = constraint,
+    .sets = sets,
+    .translation = if (is.null(translation)) NULL else param_set_internal_table(translation),
+    .postfix = postfix
+  ))
+}
+
+param_set_core_state = function(private) {
+  .Call(C_param_set_core_state, private)
+}
+
+param_set_core_replace = function(private, ...) {
+  updates = list(...)
+  table_fields = intersect(names(updates), c("params", "tags", "trafos", "translation"))
+  for (field in table_fields) {
+    if (!is.null(updates[[field]])) {
+      updates[[field]] = param_set_internal_table(updates[[field]])
+    }
+  }
+  if ("deps" %in% names(updates)) {
+    updates$deps = param_set_dependencies_snapshot(updates$deps)
+  }
+  if (length(updates)) {
+    names(updates) = paste0(".", names(updates))
+  }
+  invisible(.Call(C_param_set_core_replace, private, updates))
+}
+
+# R6 invokes this hook while it is constructing the root shell. Recursing via
+# `child$clone(deep = TRUE)` here would start an independent clone transaction
+# for every edge: a shared child would be duplicated and a Shadow's origin
+# could disagree with the origin stored in its capsule. Instead, discover the
+# complete package node graph first, shallow-clone each non-root shell once,
+# and install post-order capsule copies using one identity memo. Clone is a
+# cold operation, so the deliberately simple linear identity lookup is a much
+# better tradeoff than exposing a second native graph engine.
+param_set_core_deep_clone = function(self, core) {
+  node_index = function(node, nodes) {
+    for (index in seq_along(nodes)) {
+      if (identical(node, nodes[[index]])) return(index)
+    }
+    0L
+  }
+
+  node_private = function(node) {
+    private = get_private(node)
+    if (!inherits(node, "ParamSet") || !is.environment(private)) {
+      stop("Corrupt ParamSet node in capsule graph", call. = FALSE)
+    }
+    private
+  }
+
+  node_snapshot = function(node, expected_core = NULL) {
+    private = node_private(node)
+    current_core = private$.core
+    if (!is.null(expected_core) && !identical(current_core, expected_core)) {
+      stop("ParamSet capsule changed during deep clone", call. = FALSE)
+    }
+    kind = .Call(C_param_set_core_kind, current_core)
+    if (identical(kind, 3L)) {
+      # A clone rebuilds derived Shadow metadata against cloned identities, but
+      # it must first admit the source through the same authoritative refresh
+      # as every semantic reader. Malformed signatures therefore error instead
+      # of being silently healed by cloning the protected payload alone.
+      current_core = .Call(C_param_set_shadow_refresh, node, private)
+    }
+    state = .Call(C_param_set_core_state, current_core)
+    sets = state$.sets
+    if (identical(kind, 1L)) {
+      if (!is.null(sets)) {
+        stop("Corrupt BASE ParamSet graph edges", call. = FALSE)
+      }
+      sets = list()
+    } else if (identical(kind, 2L)) {
+      if (!is.list(sets) || is.object(sets)) {
+        stop("Corrupt COLLECTION ParamSet graph edges", call. = FALSE)
+      }
+    } else if (identical(kind, 3L)) {
+      if (!is.list(sets) || is.object(sets) || length(sets) != 1L) {
+        stop("Corrupt SHADOW ParamSet graph edge", call. = FALSE)
+      }
+    } else {
+      stop("Corrupt ParamSet capsule kind", call. = FALSE)
+    }
+    if (length(sets) && any(!vapply(
+        sets,
+        function(child) inherits(child, "ParamSet") && is.environment(child),
+        logical(1L)
+      ))) {
+      stop("Corrupt ParamSet capsule graph child", call. = FALSE)
+    }
+    list(private = private, core = current_core, kind = kind, state = state,
+      sets = sets)
+  }
+
+  same_edges = function(left, right) {
+    length(left) == length(right) && identical(names(left), names(right)) &&
+      all(vapply(seq_along(left), function(index) {
+        identical(left[[index]], right[[index]])
+      }, logical(1L)))
+  }
+
+  # Phase one is callback-free topology discovery. The three colors distinguish
+  # a shared completed node from a repeated node on the active path.
+  root = node_snapshot(self, core)
+  nodes = list(self)
+  snapshots = list(root)
+  edges = list(root$sets)
+  colors = 1L
+  next_child = 1L
+  stack = 1L
+  postorder = integer()
+
+  while (length(stack)) {
+    index = stack[[length(stack)]]
+    children = edges[[index]]
+    child_position = next_child[[index]]
+    if (child_position <= length(children)) {
+      child = children[[child_position]]
+      next_child[[index]] = child_position + 1L
+      child_index = node_index(child, nodes)
+      if (child_index && colors[[child_index]] == 1L) {
+        stop("ParamSet capsule graph contains a cycle", call. = FALSE)
+      }
+      if (child_index) next
+
+      child_snapshot = node_snapshot(child)
+      child_index = length(nodes) + 1L
+      nodes[[child_index]] = child
+      snapshots[[child_index]] = child_snapshot
+      edges[[child_index]] = child_snapshot$sets
+      colors[[child_index]] = 1L
+      next_child[[child_index]] = 1L
+      stack[[length(stack) + 1L]] = child_index
+      next
+    }
+
+    colors[[index]] = 2L
+    postorder[[length(postorder) + 1L]] = index
+    stack = stack[-length(stack)]
+  }
+
+  edge_indices = lapply(edges, function(children) {
+    vapply(children, node_index, integer(1L), nodes = nodes)
   })
+
+  # Retain established ParamUty deep-clone behavior: each top-level R6 value
+  # occurrence is cloned independently, while opaque nested containers and
+  # non-R6 environments keep their ordinary R identity semantics.
+  clone_value = function(value) {
+    is_r6 = is.environment(value) && inherits(value, "R6") &&
+      is.function(tryCatch(value$clone, error = function(error) NULL))
+    if (is_r6) value$clone(deep = TRUE) else value
+  }
+
+  clone_payload = function(snapshot, cloned_sets) {
+    state = snapshot$state
+    if (identical(snapshot$kind, 3L)) {
+      template = param_set_core_new(
+        3L,
+        params = state$.params,
+        values = named_list(),
+        tags = state$.tags,
+        deps = new_empty_deps(),
+        trafos = state$.trafos,
+        extra_trafo = NULL,
+        constraint = NULL,
+        sets = cloned_sets,
+        translation = NULL,
+        postfix = FALSE
+      )
+      return(.Call(
+        C_param_set_shadow_core_new,
+        template,
+        cloned_sets[[1L]]
+      ))
+    }
+    values = lapply(state$.values, clone_value)
+    deps = state$.deps
+    trafos = state$.trafos
+    extra_trafo = state$.extra_trafo
+    constraint = state$.constraint
+    param_set_core_new(
+      snapshot$kind,
+      params = state$.params,
+      values = values,
+      tags = state$.tags,
+      deps = deps,
+      trafos = trafos,
+      extra_trafo = extra_trafo,
+      constraint = constraint,
+      sets = if (identical(snapshot$kind, 1L)) NULL else cloned_sets,
+      translation = state$.translation,
+      postfix = state$.postfix
+    )
+  }
+
+  # Origins are cloned before Shadows and children before Collections. The
+  # authoritative native Shadow builder therefore derives dynamic fields from
+  # the already rewired origin. Its immutable edge is checked again before use.
+  clones = vector("list", length(nodes))
+  cloned_cores = vector("list", length(nodes))
+  for (index in postorder) {
+    snapshot = snapshots[[index]]
+    if (identical(snapshot$kind, 3L)) {
+      current = node_snapshot(nodes[[index]])
+      if (!identical(current$kind, snapshot$kind) ||
+          !same_edges(current$sets, snapshot$sets)) {
+        stop("ParamSet capsule graph changed during deep clone", call. = FALSE)
+      }
+      snapshot = current
+    }
+
+    children = edge_indices[[index]]
+    cloned_sets = if (!length(children)) list() else {
+      result = lapply(children, function(child) clones[[child]])
+      names(result) = names(snapshot$sets)
+      result
+    }
+    cloned_core = clone_payload(snapshot, cloned_sets)
+    cloned_cores[[index]] = cloned_core
+    if (index != 1L) {
+      clone = nodes[[index]]$clone(deep = FALSE)
+      if (!inherits(clone, "ParamSet") || !is.environment(clone) ||
+          identical(clone, nodes[[index]])) {
+        stop("Cannot clone ParamSet capsule graph child", call. = FALSE)
+      }
+      clone_private = node_private(clone)
+      clone_private$.core = cloned_core
+      clones[[index]] = clone
+    }
+  }
+  cloned_cores[[1L]]
 }
 
-# R < 4.6 deliberately retains the data.table implementation of Domain
-# reconstruction because its public binding API cannot authenticate inert R6
-# locals. Normalize that compatible path to the same owned, by-reference-safe
-# facade as the native result. The small registered finalizer uses the common
-# table-capacity bridge and reattaches its exact names vector last, preserving
-# the self-reference while restoring the characterized attribute order. The
-# R path still performs all Domain assembly and callback-sensitive work.
+# Install outward data.table metadata on a detached table shell. This helper is
+# presentation-only; semantic state has already been constructed and validated
+# by the native engine.
 finalize_domain_data_table = function(table) {
   .Call(C_finalize_data_table, table)
 }
@@ -82,64 +349,23 @@ params_data_table_temporary_reassignment = function() {
   depth > 5L && !is.null(set) && identical(sys.function(depth - 5L), set)
 }
 
-# Keep individual transformations in R even when their matching and snapshots
-# come from C. Besides avoiding user-code evaluation during a native unwind,
-# this preserves the historical promise expression and immediate callback
-# frame: `id`, `trafo`, and `value` are the three pmap formals, and conditions
-# record the call as `trafo(value)`.
-param_set_call_trafo = function(id, trafo, value) {
-  trafo(value)
-}
-
-# Freeze loop-dependent lookups in a per-invocation frame without forcing the
-# callback's `value` argument. A callback may return a closure that forces its
-# argument only after the outer loop has advanced; the intermediate bindings
-# must therefore outlive that iteration, just as pmap's row frame does.
-param_set_call_trafo_at = function(ids, callbacks, values, index) {
-  index = force(index)
-  id = ids[[index]]
-  trafo = callbacks[[index]]
-  value = values[[index]]
-  param_set_call_trafo(id, trafo, value)
-}
-
-# Build authenticated, single-use one-row ParamSet states without consuming
-# them. NULL is an atomic fallback sentinel: callers either adopt every token
-# exactly once or retain the complete historical construction path.
-param_set_subspace_plans = function(param_set, private, ids,
-    values = param_set$values) {
-  if (!identical(class(param_set), c("ParamSet", "R6")) ||
-      !is.character(ids) || !is.null(attributes(ids))) {
-    return(NULL)
-  }
-  # Validate and index the complete request once, then create every detached
-  # singleton state in one native transaction. No token becomes visible if a
-  # later allocation or final audit forces the complete request to fall back.
-  plans = .Call(
+# Build and consume package-owned one-row BASE capsules. The native call owns
+# the complete node snapshot; the R loop performs only the unavoidable public
+# R6 shell construction and never reimplements subset semantics.
+param_set_subspace_shells = function(param_set, private, ids) {
+  tokens = .Call(
     C_param_set_subspace_states,
     private,
     param_set,
     ids,
-    values
+    param_set$extra_trafo
   )
-  if (!is.list(plans) || length(plans) != length(ids) ||
-      !identical(names(plans), ids)) {
-    return(NULL)
+  result = vector("list", length(tokens))
+  for (index in seq_along(tokens)) {
+    result[[index]] = ParamSet$new(tokens[[index]])
   }
-  plans
-}
-
-# Preserve the observed three-formal internal hook used by compatibility tests
-# and downstream diagnostics. The package implementation accepts the captured
-# values snapshot explicitly; a replacement with the historical signature is
-# still called with exactly those three arguments and can force fallback.
-param_set_call_subspace_plans = function(param_set, private, ids, values) {
-  planner = param_set_subspace_plans
-  if ("values" %in% names(formals(planner))) {
-    planner(param_set, private, ids, values)
-  } else {
-    planner(param_set, private, ids)
-  }
+  names(result) = names(tokens)
+  result
 }
 
 #' @title ParamSet
@@ -159,10 +385,22 @@ param_set_call_subspace_plans = function(param_set, private, ids, values) {
 #' `ParamSet`s can also be created using the [`ps()`] shorthand, which is the recommended way when the set of parameters is fixed.
 #' In practice, the majority of cases where a `ParamSet` is created, the [`ps()`] should be used.
 #'
+#' Public parameter/dependency tables and reconstructed [`Domain`] objects are
+#' detached from capsule state. Mutating a returned table, list-column, or
+#' [`Condition`] does not mutate the `ParamSet`; use documented setters such as
+#' `$values`, `$tags`, `$deps`, and `$add_dep()` instead. Third-party inheritance
+#' from the ParamSet family is additive only: Paradox core methods, active
+#' bindings, and private capsule state may not be replaced.
+#' Interpreted outer list/table shells and their structural metadata are
+#' ordinary non-ALTREP/non-S4 objects. Stable ALTREP is supported for admitted
+#' semantic atomic values and table columns, with the one documented
+#' `set_values(.values=)` shell exception described below.
+#'
 #' @section S3 methods and type converters:
 #' * `as.data.table()`\cr
 #'   `ParamSet` -> [data.table::data.table()]\cr
-#'   Compact representation as datatable. Col types are:\cr
+#'   Detached compact representation as a data table. Mutating it does not
+#'   mutate the `ParamSet`. Column types are:\cr
 #'     - id: character
 #'     - class: character
 #'     - lower, upper: numeric
@@ -196,7 +434,7 @@ ParamSet = R6Class("ParamSet",
   public = list(
 
     #' @field assert_values (`logical(1)`)\cr
-    #' Should values be checked for validity during assigment to active binding `$values`?
+    #' Should values be checked for validity during assignment to active binding `$values`?
     #' Default is `TRUE`, only switch this off if you know what you are doing.
     assert_values = TRUE,
 
@@ -204,155 +442,64 @@ ParamSet = R6Class("ParamSet",
     #' Creates a new instance of this [R6][R6::R6Class] class.
     #'
     #' @param params (named `list()`)\cr
-    #'   List of [`Domain`], named with their respective ID.
+    #'   Ordinary non-ALTREP/non-S4 list of [`Domain`] objects, named with their
+    #'   respective ID. Its names/list metadata is interpreted structure.
     #' @param allow_dangling_dependencies (`character(1)`)\cr
     #'   Whether dependencies depending on parameters that are not present should be allowed. A parameter `x` having
     #'   `depends = y == 0` if `y` is not present would usually throw an error, but if dangling
     #'   dependencies are allowed, the dependency is added regardless. This is mainly for internal
     #'   use.
     initialize = function(params = named_list(), allow_dangling_dependencies = FALSE) {
-      # Native subset state is a private, authenticated, single-use hand-off.
+      # Native subset state is a private, validated, single-use hand-off.
       # Keeping it in the existing `params` formal preserves the public R6
       # constructor signature and makes ordinary external pointers continue
       # through the established validation path.
-      if (typeof(params) == "externalptr" && isTRUE(.Call(
-          C_param_set_adopt_subset_state,
-          private,
-          params
-        ))) {
-        # The historical subset path installs this secondary index on every
-        # result. Exact one-row subspace tokens already carry the probed native
-        # representation; every other token and unsupported data.table layout
-        # retains the setter so clone/union sequences expose the same marker.
-        if (is.null(attr(
-            attr(private$.params, "index", exact = TRUE),
-            "__id__cls__grouping",
-            exact = TRUE
-          ))) {
-          setindexv(private$.params, c("id", "cls", "grouping"))
+      if (typeof(params) == "externalptr") {
+        adopted = .Call(C_param_set_adopt_subset_state, private, params)
+        if (!isTRUE(adopted)) {
+          stop(
+            "Invalid or already consumed ParamSet subset state",
+            call. = FALSE
+          )
         }
         return(invisible(NULL))
       }
 
-      private$.deps = new_empty_deps()
+      deps = new_empty_deps()
 
-      # Subclasses may observe the transient Domain-shaped table while
-      # initialize() delegates dependency installation through self$add_dep().
-      # Keep that extension contract on the R path; the exact base class is the
-      # common construction hot path and can use the compact native result.
-      native = if (identical(class(self), c("ParamSet", "R6"))) {
-        .Call(C_param_set_construct, params)
-      }
-      if (!is.null(native)) {
-        paramtbl = native$params
-        private$.tags = native$tags
-        private$.trafos = native$trafos
-        initvalues = native$init_values
+      # Additive subclasses share the same sealed state. Overriding core
+      # methods or replacing generator members is intentionally unsupported;
+      # subclass identity is therefore not a reason to duplicate construction
+      # in R.
+      native = .Call(C_param_set_construct, params)
+      paramtbl = native$params
+      tags = native$tags
+      trafos = native$trafos
+      initvalues = native$init_values
+      private$.core = param_set_core_new(
+        1L,
+        params = paramtbl,
+        tags = tags,
+        deps = deps,
+        trafos = trafos
+      )
 
-        # Canonical ASCII bundles already carry the probed data.table index
-        # layout. Unsupported encodings and runtime layouts retain data.table's
-        # own constructor as a conservative fallback.
-        if (is.null(attr(
-            attr(paramtbl, "index", exact = TRUE),
-            "__id__cls__grouping",
-            exact = TRUE
-          ))) {
-          setindexv(paramtbl, c("id", "cls", "grouping"))
-        }
-        if (is.null(attr(
-            attr(private$.tags, "index", exact = TRUE),
-            "__tag",
-            exact = TRUE
-          ))) {
-          setindexv(private$.tags, "tag")
-        }
-        private$.params = paramtbl
-
-        for (row in seq_along(native$requirements)) {
-          for (req in native$requirements[[row]]) {
-            invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
-              .args = req)
-          }
-        }
-
-        private$.params = paramtbl
-        if (!is.null(initvalues)) self$values = initvalues
-        return(invisible(initvalues))
-      }
-
-      # The native gate fully validates canonical built-in rows. Extensions,
-      # malformed inputs, and unsupported shapes retain the established
-      # checkmate diagnostics and data.table assembly path.
-      assert_list(params, types = "Domain")
-
-      if (length(params)) assert_names(names(params), type = "strict")
-
-      if (!length(params)) {
-        paramtbl = copy(empty_domain)
-      } else {
-        paramtbl = rbindlist(params)
-        set(paramtbl, , "id", names(params))
-      }
-      if (".tags" %in% colnames(paramtbl)) {
-        # fastest way to init a data.table
-        private$.tags = structure(list(
-            id = rep(paramtbl$id, lengths(paramtbl$.tags)),
-            tag = unlist(paramtbl$.tags, use.names = FALSE)
-          ), class = c("data.table", "data.frame")
-        )
-      } else {
-        private$.tags = structure(list(
-            id = character(0), tag = character(0)
-          ), class = c("data.table", "data.frame")
-        )
-      }
-      setkeyv(private$.tags, "id")
-      setindexv(private$.tags, "tag")
-
-
-      # get initvalues here, so we can delete the relevant column.
-      # we only assign it later, so checks can run normally.
-      .init_given = .init = NULL  # pacify checks
-      initvalues = if (".init" %in% names(paramtbl)) structure(
-          paramtbl$.init[paramtbl$.init_given],
-          names = paramtbl$id[paramtbl$.init_given]
-        )
-
-      if (".trafo" %in% names(paramtbl)) {
-        trafo_given = lengths(paramtbl$.trafo) != 0
-        private$.trafos = structure(list(
-            id = paramtbl$id[trafo_given],
-            trafo = paramtbl$.trafo[trafo_given]
-          ), class = c("data.table", "data.frame")
-        )
-      } else {
-        private$.trafos = structure(list(
-            id = character(0), trafo = list()
-          ), class = c("data.table", "data.frame")
-        )
-      }
-      setkeyv(private$.trafos, "id")
-
-      if (".requirements" %in% names(paramtbl)) {
-        requirements = paramtbl$.requirements
-        private$.params = paramtbl  # self$add_dep needs this
-        for (row in seq_len(nrow(paramtbl))) {
-          for (req in requirements[[row]]) {
-            invoke(self$add_dep, id = paramtbl$id[[row]], allow_dangling_dependencies = allow_dangling_dependencies,
-              .args = req)
-          }
+      for (row in seq_along(native$requirements)) {
+        for (req in native$requirements[[row]]) {
+          invoke(
+            self$add_dep,
+            id = paramtbl$id[[row]],
+            allow_dangling_dependencies = allow_dangling_dependencies,
+            .args = req
+          )
         }
       }
 
-      delendum_cols = setdiff(colnames(paramtbl), domain_names_permanent)
-      if (length(delendum_cols)) set(paramtbl, , delendum_cols, NULL)
-      assert_names(colnames(paramtbl), identical.to = domain_names_permanent)
-
-      setindexv(paramtbl, c("id", "cls", "grouping"))
-
-      private$.params = paramtbl  # I am 99% sure this is not necessary, but maybe set() creates a copy when deleting too many cols?
-
-      if (!is.null(initvalues)) self$values = initvalues
+      # The native constructor always returns an ordinary named list. Avoid
+      # installing an identical empty value generation when no Domain supplied
+      # an initial value.
+      if (length(initvalues)) self$values = initvalues
+      invisible(initvalues)
     },
 
     #' @description
@@ -362,7 +509,6 @@ ParamSet = R6Class("ParamSet",
     #'
     #' @param class (`character()`)\cr
     #'   Typically a subset of `"ParamDbl"`, `"ParamInt"`, `"ParamFct"`, `"ParamLgl"`, `"ParamUty"`.
-    #'   Other classes are possible if implemented by 3rd party packages.
     #'   Return only IDs of dimensions with the given class.
     #' @param tags (`character()`).
     #'   Return only IDs of dimensions that have *all* tags given in this argument.
@@ -392,84 +538,40 @@ ParamSet = R6Class("ParamSet",
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
-      native = .Call(C_param_set_get_values, private, self, environment())
-      if (!is.null(native)) return(native)
-
-      assert_choice(type, c("with_token", "without_token", "only_token", "with_internal"))
-
-      assert_flag(check_required)
-
-      values = self$values
-      ns = names(values)
-
-      deps = self$deps
-      if (remove_dependencies && nrow(deps)) {
-        for (j in seq_row(deps)) {
-          p1id = deps$id[[j]]
-          p2id = deps$on[[j]]
-          cond = deps$cond[[j]]
-          if (p1id %in% ns && !inherits(values[[p2id]], "TuneToken") && !isTRUE(condition_test(cond, values[[p2id]]))) {
-            values[p1id] = NULL
-          }
-        }
-      }
-
-      if (type == "without_token") {
-        values = discard(values, inherits, "TuneToken")
-      } else if (type == "only_token") {
-        values = keep(values, inherits, "TuneToken")
-      } else if (type == "with_internal") {
-        values = keep(values, inherits, "InternalTuneToken")
-      }
-
-      if (check_required) {
-        required = setdiff(self$ids(tags = "required"), ns)
-        if (length(required) > 0L) {
-          stop(sprintf("Missing required parameters: %s", str_collapse(required)))
-        }
-      }
-
-      values[match(self$ids(class = class, tags = tags, any_tags = any_tags), names(values), nomatch = 0)]
+      .Call(C_param_set_get_values, private, self, environment())
     },
 
     #' @description
-    #' Allows to to modify (and overwrite) or replace the parameter values.
+    #' Modifies (and overwrites) or replaces the parameter values.
     #' Per default already set values are being kept unless new values are being provided.
     #'
     #' @param ... (any)\cr
     #'   Named parameter values.
     #' @param .values (named `list()`)\cr
-    #'   Named list with parameter values. Names must not already appear in `...`.
+    #'   Named list with parameter values. Names must not already appear in
+    #'   `...`. This is the sole public structural-list ALTREP exception: native
+    #'   code snapshots the supplied shell once before interpreting its names
+    #'   and elements. S4 shells remain unsupported. Direct `$values <-`
+    #'   assignment does not share this exception.
     #' @param .insert (`logical(1)`)\cr
     #'   Whether to insert the values (old values are being kept, if not overwritten), or to
     #'   replace all values. Default is TRUE.
     #'
     set_values = function(..., .values = list(), .insert = TRUE) {
       dots = list(...)
-      assert_list(dots, names = "unique")
-      assert_list(.values, names = "unique")
-      assert_disjunct(names(dots), names(.values))
-      insert = FALSE
-      current_values = NULL
-      if (.insert) {
-        insert = TRUE
-        current_values = self$values
+      # Capture language inputs in documented left-to-right order before the
+      # native merge observes them. Validation itself remains native-only.
+      force(.values)
+      if (!identical(.insert, TRUE) && !identical(.insert, FALSE)) {
+        stop("`.insert` must be TRUE or FALSE", call. = FALSE)
       }
       new_values = .Call(
         C_param_set_values_merge,
         dots,
         .values,
-        current_values,
-        insert
+        if (.insert) self$values else NULL,
+        .insert
       )
-      if (is.null(new_values)) {
-        new_values = insert_named(dots, .values)
-        if (insert) {
-          discarding = names(keep(new_values, is.null))
-          new_values = insert_named(current_values, new_values)
-          new_values = new_values[names(new_values) %nin% discarding]
-        }
-      }
       self$values = new_values
       invisible(self)
     },
@@ -477,53 +579,17 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Perform transformation specified by the `trafo` of [`Domain`] objects, as well as the `$extra_trafo` field.
     #' @param x (named `list()` | `data.frame`)\cr
-    #'   The value(s) to be transformed.
+    #'   The value(s) to be transformed. The outer list or documented ordinary
+    #'   data-frame shell and its structural names/list metadata must be
+    #'   non-ALTREP/non-S4. Admitted semantic atomic leaves or columns may be
+    #'   stable ALTREP. A callback result has the same ordinary list-shell
+    #'   requirement; there is no R fallback or replay.
     #' @param param_set (`ParamSet`)\cr
     #'   Passed to `extra_trafo()`. Note that the `extra_trafo` of `self` is used, not the `extra_trafo` of the
     #'   `ParamSet` given in the `param_set` argument.
     #'   In almost all cases, the default `param_set = self` should be used.
     trafo = function(x, param_set = self) {
-      if (is.data.frame(x)) x = as.list(x)
-      assert_list(x, names = "unique")
-      input_attributes = attributes(x)
-      ordinary_input = (length(x) == 0L && is.null(input_attributes)) ||
-        identical(names(input_attributes), "names")
-      plan = if (ordinary_input &&
-          identical(class(self), c("ParamSet", "R6"))) {
-        .Call(C_param_set_trafo_plan, x, private$.trafos)
-      }
-      if (is.null(plan)) {
-        trafos = private$.trafos[names(x), .(id, trafo), nomatch = 0]
-        value = NULL  # static checks
-        if (nrow(trafos)) {
-          trafos[, value := x[id]]
-          transformed = pmap(trafos, function(id, trafo, value) trafo(value))
-          x = insert_named(x, set_names(transformed, trafos$id))
-        }
-      } else if (length(plan[[1L]])) {
-        ids = plan[[1L]]
-        callbacks = plan[[2L]]
-        values = plan[[3L]]
-        transformed = vector("list", length(ids))
-        for (index in seq_along(ids)) {
-          transformed[index] = list(param_set_call_trafo_at(
-            ids, callbacks, values, index
-          ))
-        }
-        x = insert_named(x, set_names(transformed, ids))
-      }
-      extra_trafo = self$extra_trafo
-      if (!is.null(extra_trafo)) {
-        # need to give the input of extra_trafo a different name than the output; otherwise the user would have to
-        # "force()" the x-argument of extra_trafo.
-        xin = x
-        if (test_function(extra_trafo, args = c("x", "param_set"))) {
-          x = extra_trafo(x = xin, param_set = param_set)
-        } else {
-          x = extra_trafo(xin)
-        }
-      }
-      x
+      .Call(C_param_set_trafo, private, self, x, param_set)
     },
 
     #' @description
@@ -537,8 +603,12 @@ ParamSet = R6Class("ParamSet",
     #' @return (named `list()`)
     aggr_internal_tuned_values = function(x) {
       assert_list(x, types = "list")
-      aggrs = private$.params[map_lgl(get("cargo"), function(cargo) is.function(cargo$aggr)), list(id = get("id"), aggr = map(get("cargo"), "aggr"))]
-      assert_subset(names(x), aggrs$id)
+      params = private$.state()$.params
+      present = vapply(params$cargo, function(cargo) is.function(cargo$aggr), logical(1L))
+      aggr_ids = params$id[present]
+      aggrs = lapply(params$cargo[present], "[[", "aggr")
+      names(aggrs) = aggr_ids
+      assert_subset(names(x), aggr_ids)
       if (!length(x)) {
         return(named_list())
       }
@@ -546,7 +616,7 @@ ParamSet = R6Class("ParamSet",
         if (!length(value)) {
           stopf("Trying to aggregate values of parameters '%s', but there are no values", .id)
         }
-        aggr = aggrs[list(.id), "aggr", on = "id"][[1L]][[1L]](value)
+        aggrs[[.id]](value)
       })
     },
 
@@ -559,7 +629,9 @@ ParamSet = R6Class("ParamSet",
     #' @return `Self`
     disable_internal_tuning = function(ids) {
       assert_subset(ids, self$ids(tags = "internal_tuning"))
-      pvs = Reduce(c, map(private$.params[ids, "cargo", on = "id"][[1]], "disable_in_tune")) %??% named_list()
+      state = private$.state()
+      cargos = state$.params$cargo[match(ids, state$.params$id)]
+      pvs = Reduce(c, map(cargos, "disable_in_tune")) %??% named_list()
       self$set_values(.values = pvs)
     },
 
@@ -571,14 +643,25 @@ ParamSet = R6Class("ParamSet",
     #' @return (named `list()`)
     convert_internal_search_space = function(search_space) {
       assert_class(search_space, "ParamSet")
-      param_vals = self$values
-
-      imap(search_space$domains, function(token, .id) {
-        converter = private$.params[list(.id), "cargo", on = "id"][[1L]][[1L]]$in_tune_fn
+      # A Shadow value read refreshes its dynamic origin snapshot. Capture the
+      # resulting capsule generation only afterward; BASE reads select the
+      # same generation without an extra semantic path.
+      param_vals = private$.get_values()
+      state = private$.state()
+      domains = search_space$domains
+      converters = lapply(names(domains), function(.id) {
+        converter = param_set_table_first(
+          state$.params, .id, "cargo"
+        )$in_tune_fn
         if (!is.function(converter)) {
           stopf("No converter exists for parameter '%s'", .id)
         }
-        converter(token, param_vals)
+        converter
+      })
+      names(converters) = names(domains)
+
+      imap(domains, function(token, .id) {
+        converters[[.id]](token, param_vals)
       })
     },
 
@@ -588,19 +671,21 @@ ParamSet = R6Class("ParamSet",
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
     #' @param x (named `list()`)\cr
-    #'   The value to test.
+    #'   The value to test. Its outer shell must be an ordinary
+    #'   non-ALTREP/non-S4 list; admitted semantic atomic leaves may be stable
+    #'   ALTREP.
     #' @param assert_value (`logical(1)`)\cr
     #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
     #'   Should be `TRUE` unless this was already checked before.
     #' @return `logical(1)`: Whether `x` satisfies the `$constraint`.
     test_constraint = function(x, assert_value = TRUE) {
-      if (assert_value) self$assert(x, check_strict = FALSE)
-      if (inherits(self, "ParamSetCollection")) {
-        constraint = self$constraint
-        assert_flag(is.null(constraint) || constraint(x))
-      } else {
-        assert_flag(is.null(private$.constraint) || private$.constraint(x))
-      }
+      .Call(
+        C_param_set_test_constraint_builtin,
+        private,
+        self,
+        x,
+        assert_value
+      )
     },
 
     #' @description
@@ -609,15 +694,21 @@ ParamSet = R6Class("ParamSet",
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
     #' @param x (`data.table`)\cr
-    #'   The values to test.
+    #'   The values to test. The documented data.table shell and its structural
+    #'   metadata must be ordinary non-ALTREP/non-S4; admitted semantic atomic
+    #'   columns may be stable ALTREP.
     #' @param assert_value (`logical(1)`)\cr
     #'   Whether to verify that `x` satisfies the bounds and types given by this `ParamSet`.
     #'   Should be `TRUE` unless this was already checked before.
     #' @return `logical`: For each row in `x`, whether it satisfies the `$constraint`.
     test_constraint_dt = function(x, assert_value = TRUE) {
-      assert_data_table(x)
-      if (assert_value) self$assert_dt(x, check_strict = FALSE)
-      map_lgl(transpose(x), self$test_constraint, assert_value = FALSE)
+      .Call(
+        C_param_set_test_constraint_dt_builtin,
+        private,
+        self,
+        x,
+        assert_value
+      )
     },
 
     #' @description
@@ -633,6 +724,10 @@ ParamSet = R6Class("ParamSet",
     #' but some algorithm from a search space param set in optimization.
     #'
     #' @param xs (named `list()`).
+    #'   The outer container must be an ordinary non-ALTREP list. An S3-classed
+    #'   list carrying only `names` and `class` is accepted as representation
+    #'   metadata and its class is discarded; no S3 method is dispatched. S4
+    #'   shells remain unsupported.
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param sanitize (`logical(1)`)\cr
@@ -649,267 +744,36 @@ ParamSet = R6Class("ParamSet",
     #' @param allow_token (`logical(1)`)\cr
     #'   Whether to allow `TuneToken`s to be present in `xs`.
     #'   Default is `TRUE`.
-    #' @return If successful `TRUE`, if not a string with an error message.
+    #' @return If successful `TRUE`, if not a string with an error message for
+    #'   ordinary value infeasibility. Malformed exact TuneToken or Domain
+    #'   structure raises a boundary error instead of returning a value
+    #'   diagnostic.
     check = function(xs, check_strict = TRUE, sanitize = FALSE, presence = "none",  allow_token = TRUE) {
-      assert_choice(presence, c("none", "all", "required"))
-      assert_flag(check_strict)
-      ok = check_list(xs, names = "unique")
-      if (!isTRUE(ok)) {
-        return(ok)
-      }
-
-      trueret = TRUE
-      if (sanitize) {
-        attr(trueret, "sanitized") = xs
-      }
-
-      if (!allow_token && some(xs, inherits, "TuneToken")) {
-        return("TuneTokens are not allowed to be present.")
-      }
-
-      # Preserve the established empty, presence-free fast return before any
-      # private parameter storage is observed. Unlike the old unconditional
-      # return, non-default presence modes continue below so they can report
-      # missing required parameters.
-      if (!length(xs) && presence == "none") return(trueret)
-
-      self_class = class(self)
-      native_collection = identical(
-        self_class,
-        c("ParamSetCollection", "ParamSet", "R6")
+      .Call(
+        C_param_set_check_builtin,
+        private,
+        self,
+        xs,
+        check_strict,
+        sanitize,
+        presence,
+        allow_token
       )
-      # The common collection assignment path uses presence = "none". Enter
-      # C before materializing IDs or running vectorized membership checks;
-      # every unsupported or invalid input returns NULL and receives the
-      # established diagnostic from the R implementation below.
-      if (presence == "none" && native_collection) {
-        native = .Call(
-          C_param_set_collection_check_builtin,
-          private,
-          self,
-          xs,
-          sanitize,
-          check_strict
-        )
-        if (!is.null(native)) return(native)
-      }
-
-      params = private$.params
-      ns = names(xs)
-      ids = private$.params$id
-
-      extra = wf(ns %nin% ids)
-      if (length(extra)) {
-        return(sprintf("Parameter '%s' not available.%s", ns[extra], did_you_mean(extra, ids)))
-      }
-
-
-      if (presence != "none") {
-        check_ids = if (presence == "required") {
-          self$ids(tags = "required")
-        } else {
-          ids
-        }
-
-        # check if parameters are present
-        # only parameters with unsatisfied dependencies can be missing
-        missing = setdiff(check_ids, ns)
-        if (length(missing)) {
-          deps = self$deps
-
-          # parameters without dependencies must always be present
-          must_be_present = missing[missing %nin% deps$id]
-          if (length(must_be_present)) {
-            return(sprintf("All parameters must be present. Missing parameters: %s", str_collapse(sort(must_be_present))))
-          }
-
-          if (nrow(deps)) {
-            dep_miss = deps[id %in% missing]
-            if (nrow(dep_miss)) {
-              # group dependencies by parameter (`id`) to check all dependencies belonging to the same parameter at once
-              required_ids = dep_miss[, {
-                # parameter becomes required if all its dependencies are satisfied by xs
-                ok = TRUE
-                for (i in seq_len(.N)) {
-                  on_i = on[[i]]
-                  onval = xs[[on_i]]
-                  if (!inherits(onval, "TuneToken") && !isTRUE(condition_test(cond[[i]], onval))) {
-                    ok = FALSE
-                    break
-                  }
-                }
-                list(required = ok)
-              }, by = "id"][required == TRUE, id]
-
-              if (length(required_ids)) {
-                return(sprintf("All parameters must be present. Missing parameters with satisfied dependencies: %s", str_collapse(sort(required_ids))))
-              }
-            }
-          }
-        }
-      }
-
-      # return early, this makes the following code easier since we don't need to consider edgecases with empty vectors.
-      if (!length(xs)) return(trueret)
-
-      # The native gate only returns a result after proving that all supplied
-      # values are canonical built-ins. Invalid, special, token, utility, and
-      # custom-Domain values return NULL and retain the exact R diagnostics.
-      # Restricting this to the base class also preserves subclass overrides of
-      # test_constraint() and check_dependencies().
-      if (identical(self_class, c("ParamSet", "R6"))) {
-        native_safe = isTRUE(.Call(C_param_set_surface_auth, self, 2L)) &&
-          (!check_strict ||
-            (is.null(private$.constraint) && !nrow(private$.deps)))
-        if (native_safe) {
-          native = .Call(C_param_set_check_builtin, params, xs, sanitize)
-          if (!is.null(native)) return(native)
-        }
-      } else if (native_collection && presence != "none") {
-        native = .Call(
-          C_param_set_collection_check_builtin,
-          private,
-          self,
-          xs,
-          sanitize,
-          check_strict
-        )
-        if (!is.null(native)) return(native)
-      }
-
-      has_tune_tokens = some(xs, inherits, "TuneToken")
-      if (has_tune_tokens) {
-        tunecheck = tryCatch({
-          private$get_tune_ps(xs)
-          TRUE
-        }, error = function(e) paste("tune token invalid:", conditionMessage(e)))
-        if (!isTRUE(tunecheck)) return(tunecheck)
-        xs_nontune = discard(xs, inherits, "TuneToken")
-        xs_internaltune = keep(xs, inherits, "InternalTuneToken")
-
-        # only had TuneTokens, nothing else to check here.
-        if (!length(xs_nontune) && !length(xs_internaltune)) {
-          return(trueret)
-        }
-      } else {
-        xs_nontune = xs
-        xs_internaltune = named_list()
-      }
-
-      walk(names(xs_internaltune), function(pid) {
-        if ("internal_tuning" %nin% self$tags[[pid]]) {
-          stopf("Trying to assign InternalTuneToken to parameter '%s' which is not tagged with 'internal_tuning'.", pid)
-        }
-      })
-
-
-      # check each parameter group's feasibility
-      pidx = match(names(xs_nontune), params$id)
-      special_vals = params$special_vals[pidx]
-      has_special_vals = lengths(special_vals) != 0L
-      nonspecial = rep(TRUE, length(pidx))
-      if (any(has_special_vals)) {
-        nonspecial[has_special_vals] = !pmap_lgl(
-          list(special_vals[has_special_vals], xs_nontune[has_special_vals]),
-          has_element
-        )
-      }
-      pidx = pidx[nonspecial]
-
-      if (sanitize) {
-        bylevels = paste0(params$cls[pidx], params$grouping[pidx])
-        if (length(unique(bylevels)) <= 7) {
-          # if we do few splits, it is faster to do the subsetting of `params` manually instead of using data.table `by`.
-          checkresults = list()
-          sanitized_list = list()
-          for (spl in split(pidx, bylevels)) {
-            values = xs[params$id[spl]]
-            spltbl = params[spl]
-            spltbl = recover_domain(spltbl)
-            cr = domain_check(spltbl, values, internal = TRUE)
-            if (isTRUE(cr)) {
-              sanitized_list[[length(sanitized_list) + 1]] = structure(domain_sanitize(spltbl, values), names = names(values))
-            }
-            checkresults[[length(checkresults) + 1]] = cr
-          }
-        } else {
-
-          params = params[pidx]
-          set(params, , "values", list(xs_nontune[nonspecial]))
-
-          checks = params[, {
-              domain = recover_domain(.SD)
-              cr = domain_check(domain, values, internal = TRUE)
-              if (isTRUE(cr)) {
-                values = domain_sanitize(domain, values)
-              }
-              list(list(cr), list(structure(values, names = id)))
-            }, by = c("cls", "grouping"),
-           .SDcols = colnames(params)]
-          checkresults = checks[[3]]
-          sanitized_list = checks[[4]]
-        }
-        sanitized = unlist(sanitized_list, recursive = FALSE)
-        sanitized_all = xs
-        sanitized_all[names(sanitized)] = sanitized
-        attr(trueret, "sanitized") = sanitized_all
-      } else {
-        params = params[pidx]
-        set(params, , "values", list(xs_nontune[nonspecial]))
-
-        checkresults = params[, list(list(domain_check(recover_domain(.SD), values))), by = c("cls", "grouping"),
-          .SDcols = colnames(params)][[3]]  # first two cols are 'cls' and 'grouping'
-      }
-      checkresults = discard(checkresults, isTRUE)
-      if (length(checkresults)) {
-        return(str_collapse(checkresults, sep = "\n"))
-      }
-
-      if (check_strict) {
-        ## required = setdiff(self$ids(tags = "required"), ns)
-        ## if (length(required) > 0L) {
-        ##   return(sprintf("Missing required parameters: %s", str_collapse(required)))
-        ## }
-        if (!self$test_constraint(xs, assert_value = FALSE)) return(sprintf("Constraint not fulfilled."))
-        cd = self$check_dependencies(xs)
-        if (!isTRUE(cd)) return(cd)
-      }
-
-      trueret # we passed all checks
     },
 
     #' @description
-    #' \pkg{checkmate}-like check-function. Takes a named list.
-    #' Checks that all individual param dependencies are satisfied.
+    #' \pkg{checkmate}-like check-function that checks only parameter
+    #' dependencies. `xs` must be an ordinary non-ALTREP/non-S4 base list with complete, unique
+    #' names; classed list containers are not admitted by this dependency-only
+    #' boundary. Unknown parameter IDs are diagnosed even when the set has no
+    #' dependencies. A dependent value or its parent supplied as a
+    #' [`TuneToken`] is skipped, matching `$check()` dependency semantics.
     #'
-    #' @param xs (named `list()`).
-    #' @return If successful `TRUE`, if not a string with an error message.
+    #' @param xs (uniquely named base `list()`).
+    #' @return If successful `TRUE`, otherwise the first dependency or input
+    #'   diagnostic as a string.
     check_dependencies = function(xs) {
-      deps = self$deps
-      if (!nrow(deps)) return(TRUE)
-      params = private$.params
-      ns = names(xs)
-      errors = pmap(deps[id %in% ns], function(id, on, cond) {
-        onval = xs[[on]]
-        if (inherits(xs[[id]], "TuneToken") || inherits(onval, "TuneToken")) return(NULL)
-
-        # we are ONLY ok if:
-        # - if 'id' is there, then 'on' must be there, and cond must be true
-        # - if 'id' is not there. but that is skipped (deps[id %in% ns] filter)
-        if (on %in% ns && condition_test(cond, onval)) return(NULL)
-        msg = sprintf("%s: can only be set if the following condition is met '%s'.",
-          id, condition_as_string(cond, on))
-        if (is.null(onval)) {
-          msg = sprintf(paste("%s Instead the parameter value for '%s' is not set at all.",
-              "Try setting '%s' to a value that satisfies the condition"), msg, on, on)
-        } else {
-          msg = sprintf("%s Instead the current parameter value is: %s == %s", msg, on, as_short_string(onval))
-        }
-        msg
-      })
-      errors = unlist(errors, use.names = FALSE)
-      if (!length(errors)) return(TRUE)
-      str_collapse(errors, sep = "\n")
+      .Call(C_param_set_check_dependencies_builtin, private, self, xs)
     },
 
     #' @description
@@ -968,6 +832,9 @@ ParamSet = R6Class("ParamSet",
     #' have fewer columns as there are params in the set.
     #'
     #' @param xdt ([data.table::data.table] | `data.frame()`).
+    #'   An ordinary non-ALTREP/non-S4 table shell whose structural names,
+    #'   row/dim/dimnames, and list metadata are ordinary. Admitted semantic
+    #'   atomic columns may be stable ALTREP.
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param presence (`character(1)`)\cr
@@ -980,77 +847,23 @@ ParamSet = R6Class("ParamSet",
     #'   Default is `TRUE`.
     #' @return If successful `TRUE`, if not a string with the error message.
     check_dt = function(xdt, check_strict = TRUE, presence = "none", allow_token = TRUE) {
-      # Probe the table before touching the optional arguments. Historically,
-      # check_dt() does not force any of them when there are no points, while a
-      # non-empty point validates/forces presence, check_strict, and allow_token
-      # in that order through self$check(). Native admission must retain both
-      # that laziness and that error priority.
-      native = if (isTRUE(.Call(C_param_set_surface_auth, self, 3L))) {
-        .Call(C_param_set_check_dt_plan_builtin, private$.params, xdt)
-      }
-      if (is.list(native)) {
-        # R 4.6 can wrap ordinary data-frame lists in ALTREP. C materializes
-        # that shell once and returns it even when later admission declines;
-        # use the same snapshot for fallback so an element callback is never
-        # replayed after partial observation.
-        xdt = native[[2L]]
-        native = native[[1L]]
-      }
-      if (is.integer(native) && length(native) == 1L && !is.na(native)) {
-        if (!length(xdt) || !length(xdt[[1L]])) return(TRUE)
-
-        # Forward these promises through the same validators used by check().
-        # Besides retaining error priority, this preserves the condition call
-        # when evaluating an argument itself raises an error.
-        assert_choice(presence, c("none", "all", "required"))
-        assert_flag(check_strict)
-
-        # The generated R6 wrapper forwards these arguments as symbols. Inspect
-        # its authenticated caller frame so only defaults and explicit literals
-        # enter the one-pass shortcut. Expressions with side effects stay on
-        # the row path: historically they may change the table or ParamSet
-        # state before later rows are checked.
-        presence_expression = substitute(presence, parent.frame())
-        check_strict_expression = substitute(check_strict, parent.frame())
-        allow_token_expression = substitute(allow_token, parent.frame())
-        canonical_presence = identical(presence_expression, "none") ||
-          identical(presence_expression, "all")
-        canonical_check_strict = identical(check_strict_expression, FALSE) ||
-          identical(check_strict_expression, TRUE)
-        canonical_allow_token = identical(allow_token_expression, FALSE) ||
-          identical(allow_token_expression, TRUE)
-        native_safe = (identical(presence, "none") ||
-            identical(presence, "all")) &&
-          canonical_presence && canonical_check_strict &&
-          canonical_allow_token &&
-          (identical(check_strict, FALSE) ||
-            (identical(check_strict, TRUE) &&
-              is.null(private$.constraint) && !nrow(private$.deps))) &&
-          isTRUE(.Call(C_param_set_surface_auth, self, 3L))
-        if (native_safe) {
-          all_complete = bitwAnd(native, 1L) != 0L
-          all_params = bitwAnd(native, 2L) != 0L
-          if (identical(presence, "none") ||
-              (all_complete && all_params)) return(TRUE)
-        }
-      }
-
-      xss = map(transpose_list(xdt), discard, is.na)
-      msgs = list()
-      for (i in seq_along(xss)) {
-        xs = xss[[i]]
-        ok = self$check(xs, check_strict = check_strict, presence = presence, allow_token = allow_token)
-        if (!isTRUE(ok)) {
-          return(ok)
-        }
-      }
-      TRUE
+      .Call(
+        C_param_set_check_dt_builtin,
+        private,
+        self,
+        xdt,
+        check_strict,
+        presence,
+        allow_token
+      )
     },
 
     #' @description
     #' \pkg{checkmate}-like test-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
+    #'   The table-shell and semantic-column boundary is the same as
+    #'   `$check_dt()`.
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param presence (`character(1)`)\cr
@@ -1068,6 +881,8 @@ ParamSet = R6Class("ParamSet",
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
     #'
     #' @param xdt ([data.table::data.table]).
+    #'   The table-shell and semantic-column boundary is the same as
+    #'   `$check_dt()`.
     #' @param check_strict (`logical(1)`)\cr
     #'   Whether to check that constraints and dependencies are satisfied.
     #' @param .var.name (`character(1)`)\cr
@@ -1085,35 +900,21 @@ ParamSet = R6Class("ParamSet",
     assert_dt = function(xdt, check_strict = TRUE, presence = "none", .var.name = vname(xdt), allow_token = TRUE) makeAssertion(xdt, self$check_dt(xdt, check_strict = check_strict, presence = presence, allow_token = allow_token), .var.name, NULL), # nolint
 
     #' @description
-    #' Map a `matrix` or `data.frame` of values between 0 and 1 to proportional values inside the feasible intervals of individual parameters.
+    #' Map an unclassed numeric `matrix`, numeric `data.frame`, or
+    #' `data.table` of values between 0 and 1 to proportional values inside the
+    #' feasible intervals of individual parameters.
     #'
-    #' @param x (`matrix` | `data.frame`)\cr
-    #'   Values to map. Column names must be a subset of the names of parameters.
+    #' @param x (`matrix` | `data.frame` | `data.table`)\cr
+    #'   Values to map. Columns must be unclassed integer or double vectors.
+    #'   Column names must be unique and a subset of the parameter IDs.
+    #'   Data-frame/data-table shells and all structural names, row, dim,
+    #'   dimnames, and list metadata must be ordinary non-ALTREP/non-S4. A
+    #'   matrix or admitted atomic column may have stable ALTREP semantic
+    #'   storage, which native admission materializes once.
+    #'   [`ParamUty`][Domain] parameters do not define a quantile mapping.
     #' @return `data.table`.
     qunif = function(x) {
-      assert(check_data_frame(x, types = "numeric", min.cols = 1), check_matrix(x, mode = "numeric", min.cols = 1))
-      if (is.matrix(x)) {
-        qassert(x, "N[0,1]")
-      } else {
-        qassertr(x, "N[0,1]")
-        x = as.matrix(x)
-      }
-      assert_names(colnames(x), type = "unique", subset.of = private$.params$id)
-
-      # Canonical built-in slices are mapped column-wise in native code and
-      # returned in the established data.table facade. Custom Domains and
-      # unsupported storage shapes retain grouped S3 dispatch below.
-      native = .Call(C_param_set_qunif_builtin, private$.params, x)
-      if (!is.null(native)) return(native)
-
-      x = t(x)
-      params = private$.params[rownames(x), on = "id"]
-      params$result = list()
-      result = NULL  # static checks
-      params[, result := list(as.list(as.data.frame(t(matrix(domain_qunif(recover_domain(.SD), x[id, ]), nrow = .N))))),
-        by = c("cls", "grouping"),
-        .SDcols = colnames(private$.params)]
-      as.data.table(set_names(params$result, params$id))
+      .Call(C_param_set_qunif_builtin, private, self, x)
     },
 
     #' @description
@@ -1122,26 +923,7 @@ ParamSet = R6Class("ParamSet",
     #' @param id (`character(1)`).
     #' @return [`Domain`].
     get_domain = function(id) {
-      native = .Call(C_param_set_get_domain, private, self, id)
-      if (!is.null(native)) return(native)
-
-      assert_string(id)
-      paramrow = private$.params[id, on = "id", nomatch = NULL]
-
-      if (!nrow(paramrow)) stopf("No param with id '%s'", id)
-
-      vals = self$values
-      depstbl = self$deps[id, .(on, cond), on = "id", nomatch = 0]
-      paramrow[, `:=`(
-        .tags = list(private$.tags[id, tag, nomatch = 0]),
-        .trafo = private$.trafos[id, trafo],
-        .requirements = list(if (nrow(depstbl)) transpose_list(depstbl)),  # NULL if no deps
-        .init_given = id %in% names(vals),
-        .init = unname(vals[id]))
-      ]
-
-      paramrow = set_class(paramrow, c(paramrow$cls, "Domain", class(paramrow)))
-      finalize_domain_data_table(paramrow)
+      .Call(C_param_set_get_domain, private, self, id)
     },
 
     #' @description
@@ -1154,63 +936,17 @@ ParamSet = R6Class("ParamSet",
     #'   Whether to keep the `$constraint` function.
     #' @return `ParamSet`.
     subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
-      param_ids = private$.params$id
-
-      assert_subset(ids, param_ids)
-      deps = self$deps
-      check_dependencies = FALSE
-      if (!allow_dangling_dependencies && nrow(deps)) {
-        check_dependencies = TRUE
-      }
-
-      # Exact base ParamSets with canonical built-in storage can transfer a
-      # complete, freshly sliced state directly into the ordinary constructor.
-      # Subclasses, extension Domains, and malformed stores fall back as one
-      # unit so their R dispatch and historical diagnostics remain visible.
-      native = .Call(
+      token = .Call(
         C_param_set_subset_state,
         private,
         self,
         ids,
-        check_dependencies
+        allow_dangling_dependencies,
+        keep_constraint,
+        self$constraint,
+        self$extra_trafo
       )
-      if (!is.null(native)) {
-        pids_not_there = native$missing_parents
-        if (length(pids_not_there) > 0L) {
-          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
-              "\nIf you still want to subset, set allow_dangling_dependencies to TRUE."), str_collapse(pids_not_there))
-        }
-
-        result = ParamSet$new(native$state)
-        if (keep_constraint) result$constraint = self$constraint
-        result$extra_trafo = self$extra_trafo
-        return(result)
-      }
-
-      if (check_dependencies) { # check that all required / leftover parents are still in new ids
-        on = NULL
-        parents = unique(deps[ids, on, on = "id", nomatch = NULL])
-        pids_not_there = setdiff(parents, ids)
-        if (length(pids_not_there) > 0L) {
-          stopf(paste0("Subsetting so that dependencies on params exist which would be gone: %s.",
-              "\nIf you still want to subset, set allow_dangling_dependencies to TRUE."), str_collapse(pids_not_there))
-        }
-      }
-      result = ParamSet$new()
-
-
-      result$.__enclos_env__$private$.params = setindexv(private$.params[ids, on = "id"], c("id", "cls", "grouping"))
-      result$.__enclos_env__$private$.trafos = setkeyv(private$.trafos[ids, on = "id", nomatch = NULL], "id")
-      result$.__enclos_env__$private$.tags = setkeyv(private$.tags[ids, on = "id", nomatch = NULL], "id")
-      result$assert_values = FALSE
-      result$deps = deps[ids, on = "id", nomatch = NULL]
-      if (keep_constraint) result$constraint = self$constraint
-      result$extra_trafo = self$extra_trafo
-      # restrict to ids already in pvals
-      values = self$values
-      result$values = values[match(ids, names(values), nomatch = 0)]
-      result$assert_values = TRUE
-      result
+      ParamSet$new(token)
     },
 
     #' @description
@@ -1218,43 +954,29 @@ ParamSet = R6Class("ParamSet",
     #' @param ids (`character()`)\cr
     #'   IDs for which to create `ParamSet`s. Defaults to all IDs.
     #' @return named `list()` of `ParamSet`.
-    subspaces = function(ids = private$.params$id) {
-      # Preserve the historical first observation before native admission.
-      # Altered active bindings therefore keep their callback/error priority,
-      # while exact objects expose the same private value snapshot to C.
-      values = self$values
-
-      # Reuse the authenticated single-use subset hand-off for the common
-      # exact base ParamSet. NA selects the internal subspace mode, which emits
-      # the historically empty dependency table for every detached child.
-      native = param_set_call_subspace_plans(self, private, ids, values)
-      if (!is.null(native)) {
-        result = param_set_bulk_subspace_shells(native)
-        if (is.null(result)) {
-          result = param_set_subspaces_fallback(self, private, ids, values)
-        }
-        for (subspace in result) {
-          subspace$extra_trafo = self$extra_trafo
-        }
-        names(result) = ids
-        return(result)
-      }
-
-      param_set_subspaces_fallback(self, private, ids, values)
+    subspaces = function(ids = self$ids()) {
+      param_set_subspace_shells(self, private, ids)
     },
 
     #' @description
     #' Create a `ParamSet` from this object, even if this object itself is not
     #' a `ParamSet` but e.g. a [`ParamSetCollection`].
-    flatten = function() self$subset(private$.params$id, allow_dangling_dependencies = TRUE),
+    flatten = function() self$subset(private$.state()$.params$id, allow_dangling_dependencies = TRUE),
 
     #' @description
     #' Construct a [`ParamSet`] to tune over. Constructed from [`TuneToken`] in `$values`, see [`to_tune()`].
     #'
-    #' @param  values (`named list`): optional named list of [`TuneToken`] objects to convert, in place of `$values`.
+    #' @param values (`named list`)
+    #'   Optional ordinary non-ALTREP named list, or ordinary non-ALTREP
+    #'   S3-classed named list carrying only
+    #'   `names` and `class`, of exact-shape [`TuneToken`] objects to convert in
+    #'   place of `$values`. The outer class is discarded and no subsetting
+    #'   method is dispatched. ALTREP, S4/list-like, and other attributed
+    #'   containers are rejected. Construct tokens with [`to_tune()`]; subclasses and
+    #'   metadata-extended tokens are not supported. Exact creator provenance is
+    #'   not authenticated, so an indistinguishable manual copy may pass even
+    #'   though the representation is not an API.
     search_space = function(values = self$values) {
-      assert_list(values)
-      assert_names(names(values), subset.of = self$ids())
       pars = private$get_tune_ps(values)
       on = NULL  # pacify static code check
       dangling_deps = pars$deps[!pars$ids(), on = "on"]
@@ -1272,23 +994,15 @@ ParamSet = R6Class("ParamSet",
     #' @param allow_dangling_dependencies (`logical(1)`): Whether to allow dependencies on parameters that are not present.
     #' @param cond ([Condition]).
     add_dep = function(id, on, cond, allow_dangling_dependencies = FALSE) {
-      params = private$.params
-      ids = params$id
-      assert_choice(id, ids)
-      if (allow_dangling_dependencies) assert_string(on) else assert_choice(on, ids)
-      assert_class(cond, "Condition")
-      if (id == on) {
-        stopf("A param cannot depend on itself!")
-      }
-
-      if (on %in% ids) {  # not necessarily true when allow_dangling_dependencies
-        feasible_on_values = map_lgl(cond$rhs, function(x) domain_test(self$get_domain(on), list(x)))
-        if (any(!feasible_on_values)) {
-          stopf("Condition has infeasible values for %s: %s", on, str_collapse(cond$rhs[!feasible_on_values]))
-        }
-      }
-      private$.deps = rbind(private$.deps, data.table(id = id, on = on, cond = list(cond)))
-      invisible(self)
+      invisible(.Call(
+        C_param_set_add_dependency,
+        private,
+        self,
+        id,
+        on,
+        cond,
+        allow_dangling_dependencies
+      ))
     },
 
     #' @description
@@ -1326,18 +1040,31 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$has_trafo) {
         catf("Trafo is set.")
-      } # printing the trafa functions sucks (can be very long). dont see a nother option then to suppress it for now
+      } # Transformation functions can be very long, so omit them from the compact display.
     }
   ),
 
   active = list(
 
-    #' @field data (`data.table`) `data.table` representation of the `ParamSet`.
+    #' @field data (`data.table`) Detached `data.table` representation of the
+    #'   `ParamSet`. Mutating it does not mutate capsule state. Its table shell
+    #'   and structural metadata are ordinary non-ALTREP/non-S4.
     data = function(v) {
       if (!missing(v)) stop("data is read-only")
-      lower = upper = levels = special_vals = default = NULL  # static check
-      private$.params[, list(id, class = cls, lower, upper, levels, nlevels = self$nlevels,
-        is_bounded = self$is_bounded, special_vals, default, storage_type = self$storage_type, tags = self$tags)]
+      params = private$.state()$.params
+      param_set_data_table_facade(list(
+        id = params$id,
+        class = params$cls,
+        lower = params$lower,
+        upper = params$upper,
+        levels = params$levels,
+        nlevels = self$nlevels,
+        is_bounded = self$is_bounded,
+        special_vals = params$special_vals,
+        default = params$default,
+        storage_type = params$storage_type,
+        tags = self$tags
+      ))
     },
 
     #' @template field_values
@@ -1345,15 +1072,16 @@ ParamSet = R6Class("ParamSet",
       if (missing(xs)) {
         return(private$.get_values())
       }
-      if (length(xs) == 0L) {
-        xs = named_list()
-      } else if (self$assert_values) {
-        native = .Call(C_param_set_assign_values_checked, private, self, xs)
-        if (!is.null(native)) return(native)
-        # this only makes sense when we have asserts on
-        # convert all integer params really to storage type int, move doubles to within bounds etc.
-        # solves issue #293, #317
-        xs = self$assert(xs, sanitize = TRUE)
+      if (self$assert_values) {
+        # One native transaction snapshots the complete capsule graph,
+        # validates strict dependency/constraint semantics, and commits every
+        # ultimate BASE target only after all callbacks have returned. Both
+        # checked and unchecked native stores reject a structural outer ALTREP
+        # before observation. The native store canonicalizes the Paradox-1
+        # NULL/ordinary zero-length clear-values spellings; R never
+        # pre-observes that shell.
+        xs = .Call(C_param_set_assign_values_checked, private, self, xs)
+        return(xs)
       }
       private$.store_values(xs)
       xs
@@ -1362,15 +1090,9 @@ ParamSet = R6Class("ParamSet",
     #' @template field_tags
     tags = function(v) {
       if (!missing(v)) {
-        assert_list(v, any.missing = FALSE, types = "character")
-        if (length(v)) assert_names(names(v), permutation.of = private$.params$id)
-        # as.character() to handle empty lists and resulting NULL-valures.
-        private$.tags = data.table(id = rep(as.character(names(v)), map_int(v, length)), tag = as.character(unlist(v, use.names = FALSE)), key = "id")
-        setindexv(private$.tags, "tag")
-        # return value with original ordering
-        return(v)
+        return(.Call(C_param_set_set_tags, private, self, v))
       }
-      insert_named(named_list(private$.params$id, character(0)), with(private$.tags[, list(tag = list(tag)), by = "id"], set_names(tag, id)))
+      .Call(C_param_set_get_tags, private, self)
     },
 
     #' @template field_params
@@ -1382,58 +1104,34 @@ ParamSet = R6Class("ParamSet",
         stop("params is read-only.")
       }
 
-      native = .Call(C_param_set_params, private, self)
-      if (!is.null(native)) return(native)
-
-      result = copy(private$.params)
-      result[, .tags := list(self$tags)]
-      result[private$.trafos, .trafo := list(trafo), on = "id"]
-      .requirements = NULL  # pacify static check
-      result[self$deps, .requirements := transpose_list(.(on, cond)), on = "id"]
-      vals = self$values
-      result[, `:=`(
-        .init_given = id %in% names(vals),
-        .init = unname(vals[id])
-      )]
-
-      result[]
+      .Call(C_param_set_params, private, self)
     },
 
     #' @field domains (named `list` of [`Domain`])
-    #' List of [`Domain`] objects that could be used to initialize this `ParamSet`.
+    #' Detached [`Domain`] objects that could be used to initialize this
+    #' `ParamSet`. Mutating them does not mutate capsule state.
     domains = function(rhs) {
       if (!missing(rhs)) {
         stop("domains is read-only.")
       }
-      native = .Call(C_param_set_domains, private, self)
-      if (!is.null(native)) return(native)
-
-      nm = self$ids()
-      # Subsetting owns a new outer STRSXP without re-encoding its CHARSXPs.
-      # `paste0(nm)` also owns storage, but transcodes Latin-1 IDs on old R.
-      owned_nm = nm[seq_along(nm)]
-      set_names(map(nm, self$get_domain), owned_nm)
+      .Call(C_param_set_domains, private, self)
     },
 
     #' @template field_extra_trafo
     extra_trafo = function(f) {
       if (missing(f)) {
-        private$.extra_trafo
+        private$.state()$.extra_trafo
       } else {
-        if (!is.null(f)) {  # for speed, since asserts below are slow apparently
-          assert(check_function(f, args = c("x", "param_set"), null.ok = TRUE), check_function(f, args = "x", null.ok = TRUE))
-        }
-        private$.extra_trafo = f
+        .Call(C_param_set_set_callback, private, self, f, 0L)
       }
     },
 
     #' @template field_constraint
     constraint = function(f) {
       if (missing(f)) {
-        private$.constraint
+        private$.state()$.constraint
       } else {
-        assert_function(f, args = "x", null.ok = TRUE)
-        private$.constraint = f
+        .Call(C_param_set_set_callback, private, self, f, 1L)
       }
     },
 
@@ -1441,19 +1139,11 @@ ParamSet = R6Class("ParamSet",
     #' @template field_deps
     deps = function(v) {
       if (missing(v)) {
-        private$.deps
+        param_set_data_table_facade(
+          .Call(C_param_set_dependencies, private, self)
+        )
       } else {
-        assert_data_table(v)
-        if (nrow(v)) {
-          # only test for things without which things would seriously break
-          assert_names(colnames(v), identical.to = c("id", "on", "cond"))
-          assert_subset(v$id, private$.params$id)
-          assert_character(v$on, any.missing = FALSE)
-          assert_list(v$cond, types = "Condition", any.missing = FALSE)
-        } else {
-          v = data.table(id = character(0), on = character(0), cond = list())  # make sure we have the right columns
-        }
-        private$.deps = v
+        .Call(C_param_set_set_dependencies, private, self, v)
       }
     },
 
@@ -1461,11 +1151,11 @@ ParamSet = R6Class("ParamSet",
     # ParamSet flags
 
     #' @field length (`integer(1)`)\cr Number of contained parameters.
-    length = function() nrow(private$.params),
+    length = function() nrow(private$.state()$.params),
     #' @field is_empty (`logical(1)`)\cr Is the `ParamSet` empty? Named with parameter IDs.
-    is_empty = function() nrow(private$.params) == 0L,
+    is_empty = function() nrow(private$.state()$.params) == 0L,
     #' @field has_trafo (`logical(1)`)\cr Whether a `trafo` function is present, in parameters or in `extra_trafo`.
-    has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.trafos),
+    has_trafo = function() !is.null(self$extra_trafo) || nrow(private$.state()$.trafos),
     #' @field has_extra_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
     has_extra_trafo = function() !is.null(self$extra_trafo),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
@@ -1475,7 +1165,7 @@ ParamSet = R6Class("ParamSet",
       if (inherits(self, "ParamSetCollection")) {
         !is.null(self$constraint)
       } else {
-        !is.null(private$.constraint)
+        !is.null(private$.state()$.constraint)
       }
     },
     #' @field all_numeric (`logical(1)`)\cr Is `TRUE` if all parameters are [`p_dbl()`] or [`p_int()`].
@@ -1489,154 +1179,136 @@ ParamSet = R6Class("ParamSet",
     # Per-Parameter properties
 
     #' @field class (named `character()`)\cr Classes of contained parameters. Named with parameter IDs.
-    class = function() with(private$.params, set_names(cls, id)),
+    class = function() with(private$.state()$.params, set_names(cls, id)),
     #' @field lower (named `double()`)\cr Lower bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    lower = function() with(private$.params, set_names(lower, id)),
+    lower = function() with(private$.state()$.params, set_names(lower, id)),
     #' @field upper (named `double()`)\cr Upper bounds of numeric parameters (`NA` for non-numerics). Named with parameter IDs.
-    upper = function() with(private$.params, set_names(upper, id)),
+    upper = function() with(private$.state()$.params, set_names(upper, id)),
     #' @field levels (named `list()` of `character`)\cr Allowed levels of categorical parameters (`NULL` for non-categoricals).
     #' Named with parameter IDs.
-    levels = function() with(private$.params, set_names(levels, id)),
+    levels = function() with(private$.state()$.params, set_names(levels, id)),
     #' @field storage_type (`character()`)\cr Data types of parameters when stored in tables. Named with parameter IDs.
-    storage_type = function() with(private$.params, set_names(storage_type, id)),
+    storage_type = function() with(private$.state()$.params, set_names(storage_type, id)),
     #' @field special_vals (named `list()` of `list()`)\cr Special values for all parameters. Named with parameter IDs.
-    special_vals = function() with(private$.params, set_names(special_vals, id)),
+    special_vals = function() with(private$.state()$.params, set_names(special_vals, id)),
     #' @field default (named `list()`)\cr Default values of all parameters. If no default exists, element is not present.
     #' Named with parameter IDs.
-    default = function() with(private$.params[!map_lgl(default, is_nodefault), .(default, id)], set_names(default, id)),
+    default = function() {
+      params = private$.state()$.params
+      keep = !map_lgl(params$default, is_nodefault)
+      set_names(params$default[keep], params$id[keep])
+    },
     #' @field has_trafo_param (`logical()`)\cr Whether `trafo` is set for any parameter.
-    has_trafo_param = function() with(private$.params, set_names(id %in% private$.trafos$id, id)),
+    has_trafo_param = function() with(private$.state()$.params, set_names(id %in% private$.state()$.trafos$id, id)),
     #' @field is_logscale (`logical()`)\cr Whether `trafo` was set to `logscale` during construction.\cr
     #' Note that this only refers to the `logscale` flag set during construction, e.g. `p_dbl(logscale = TRUE)`.
     #' If the parameter was set to logscale manually, e.g. through `p_dbl(trafo = exp)`,
     #' this `is_logscale` will be `FALSE`.
-    is_logscale = function() with(private$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & map_lgl(cargo, function(x) isTRUE(x$logscale)), id)),
+    is_logscale = function() with(private$.state()$.params, set_names(cls %in% c("ParamDbl", "ParamInt") & map_lgl(cargo, function(x) isTRUE(x$logscale)), id)),
 
     ############################
-    # Per-Parameter class properties (S3 method call)
+    # Per-parameter properties for the five maintained native Domain kinds
 
     #' @field nlevels (named `integer()`)\cr Number of distinct levels of parameters. `Inf` for double parameters or unbounded integer parameters.
     #' Named with param IDs.
     nlevels = function() {
-      value = param_set_static_property(private$.params, 0L)
-      if (!is.null(value)) return(value)
-
-      tmp = private$.params[,
-        list(id, nlevels = domain_nlevels(recover_domain(.SD))),
-        by = c("cls", "grouping"),
-        .SDcols = colnames(private$.params)
-      ]
-      with(tmp[private$.params$id, on = "id"], set_names(nlevels, id))
+      .Call(C_param_set_property, private$.state()$.params, 0L)
     },
 
     #' @field is_number (named `logical()`)\cr Whether parameter is [`p_dbl()`] or [`p_int()`]. Named with parameter IDs.
     is_number = function() {
-      value = param_set_static_property(private$.params, 1L)
-      if (!is.null(value)) return(value)
-
-      tmp = private$.params[,
-        list(id, is_number = rep(domain_is_number(recover_domain(.SD)), .N)),
-        by = c("cls", "grouping"),
-        .SDcols = colnames(private$.params)
-      ]
-      with(tmp[private$.params$id, on = "id"], set_names(is_number, id))
+      .Call(C_param_set_property, private$.state()$.params, 1L)
     },
 
     #' @field is_categ (named `logical()`)\cr Whether parameter is [`p_fct()`] or [`p_lgl()`]. Named with parameter IDs.
     is_categ = function() {
-      value = param_set_static_property(private$.params, 2L)
-      if (!is.null(value)) return(value)
-
-      tmp = private$.params[,
-        list(id, is_categ = rep(domain_is_categ(recover_domain(.SD)), .N)),
-        by = c("cls", "grouping"),
-        .SDcols = colnames(private$.params)
-      ]
-      with(tmp[private$.params$id, on = "id"], set_names(is_categ, id))
+      .Call(C_param_set_property, private$.state()$.params, 2L)
     },
 
     #' @field is_bounded (named `logical()`)\cr Whether parameters have finite bounds. Named with parameter IDs.
     is_bounded = function() {
-      value = param_set_static_property(private$.params, 3L)
-      if (!is.null(value)) return(value)
-
-      tmp = private$.params[,
-        list(id, is_bounded = domain_is_bounded(recover_domain(.SD))),
-        by = c("cls", "grouping"),
-        .SDcols = colnames(private$.params)
-      ]
-      with(tmp[private$.params$id, on = "id"], set_names(is_bounded, id))
+      .Call(C_param_set_property, private$.state()$.params, 3L)
     }
   ),
 
   private = list(
+    .core = NULL,
+    .state = function() param_set_core_state(private),
     .store_values = function(xs) {
-      native = .Call(C_param_set_store_values, private, self, xs)
-      if (!is.null(native)) return(invisible(native))
-      # store with param ordering
-      private$.values = xs[match(private$.params$id, names(xs), nomatch = 0)]
+      invisible(.Call(C_param_set_store_values, private, self, xs))
     },
-    .get_values = function() private$.values,
-    .extra_trafo = NULL,
-    .constraint = NULL,
-    .params = NULL,
-    .values = named_list(),
-    .tags = data.table(id = character(0L), tag = character(0), key = "id"),
-    .deps = data.table(id = character(0L), on = character(0L), cond = list()),
-    .trafos = data.table(id = character(0L), trafo = list(), key = "id"),
+    .get_values = function() private$.state()$.values,
 
     get_tune_ps = function(values) {
-      values = keep(values, inherits, "TuneToken")
+      # C receives the complete container so S3 `[` methods cannot participate
+      # in filtering. It selects exact built-in TuneTokens, snapshots their
+      # target Domains (including dependency requirements), and seals exact
+      # BASE ParamSet candidates before any candidate callback can run.
+      admitted = .Call(C_tune_token_snapshot_list, private, self, values)
+      values = admitted$tokens
       if (!length(values)) return(ParamSet$new())
-      params = map(names(values), function(pn) {
-        domain = private$.params[pn, on = "id"]
-        set_class(domain, c(domain$cls, "Domain", class(domain)))
-      })
-      names(params) = names(values)
+      params = admitted$targets
 
-      # package-internal S3 fails if we don't call the function indirectly here
-      partsets = pmap(list(values, params), function(...) tunetoken_to_ps(...))
+      # Reconstruct the relevant dependency rows solely from the detached
+      # entry-state Domain requirements. Candidate callbacks may mutate the
+      # source ParamSet; this operation still uses the generation selected at
+      # its native admission boundary, while the next call observes mutation.
+      requirement_counts = vapply(
+        params,
+        function(param) length(param$.requirements[[1L]]),
+        integer(1L)
+      )
+      source_deps = vector("list", sum(requirement_counts))
+      output = 0L
+      for (index in seq_along(params)) {
+        requirements = params[[index]]$.requirements[[1L]]
+        if (is.null(requirements)) next
+        for (requirement in requirements) {
+          output = output + 1L
+          source_deps[[output]] = list(
+            id = names(params)[[index]],
+            on = requirement$on[[1L]],
+            cond = requirement$cond
+          )
+        }
+      }
+
+      partsets = pmap(list(values, params), tunetoken_to_ps)
       pars = ps_union(partsets)  # partsets does not have names here, wihch is what we want.
 
       names(partsets) = names(values)
       idmapping = map(partsets, function(x) x$ids())
 
-      # only add the dependencies that are also in the tuning PS
-      on = id = NULL  # pacify static code check
-      pmap(self$deps[id %in% names(idmapping) & on %in% names(partsets), c("on", "id", "cond")], function(on, id, cond) {
+      # Only add dependencies whose child and parent both survived token
+      # selection. Keep this as an ordinary-list loop: no temporary
+      # data.table facade or second dependency engine is needed.
+      for (dependency in source_deps) {
+        id = dependency$id
+        on = dependency$on
+        if (!(id %in% names(idmapping)) || !(on %in% names(partsets))) next
+        cond = dependency$cond
         onpar = partsets[[on]]
         if (onpar$has_trafo || !identical(onpar$ids(), on)) {
           # cannot have dependency on a parameter that is being trafo'd
-          return(NULL)
+          next
         }
         # remove infeasible values from condition
         cond$rhs = keep(cond$rhs, function(x) partsets[[on]]$test(set_names(list(x), on)))
         if (!length(cond$rhs)) {
           # no value is feasible, but there may be a trafo that fixes this
           # so we are forgiving here.
-          return(NULL)
+          next
         }
         for (idname in idmapping[[id]]) {
           pars$add_dep(idname, on, cond)
         }
-      })
+      }
       pars
     },
 
     deep_clone = function(name, value) {
       switch(name,
-        .deps = copy(value),
-        .values = map(value, function(x) {
-          # clones R6 objects in values, leave other things as they are
-
-          # safely get .__enclos_env, errors if packages overwrite `$` i.e. in reticulate.
-          # https://github.com/rstudio/reticulate/blob/master/R/python.R L 343
-          if (is.environment(x) && !is.null(tryCatch(x$.__enclos_env__, error = function(e) NULL))) {
-            x$clone(deep = TRUE)
-          } else {
-            x
-          }
-        }),
+        .core = param_set_core_deep_clone(self, value),
         value
       )
     }
@@ -1646,15 +1318,6 @@ ParamSet = R6Class("ParamSet",
 recover_domain = function(sd) {
   class(sd) = c(sd$cls[1], "Domain", class(sd))
   sd
-}
-
-# Built-in static properties are derived directly from the canonical columns in
-# native code. Unknown Domain classes retain the grouped S3 dispatch used by the
-# R implementation, so downstream packages can continue to define new types.
-param_set_static_property = function(params, property) {
-  native = .Call(C_param_set_property, params, property)
-  if (is.null(native)) return(NULL)
-  if (all(native[[2L]])) native[[1L]] else NULL
 }
 
 #' @export

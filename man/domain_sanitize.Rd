@@ -9,7 +9,9 @@ domain_sanitize(param, values)
 \arguments{
 \item{param}{(\code{Domain}).}
 
-\item{values}{(\code{any}) -- format depending on the \code{Domain}.}
+\item{values}{(\code{any}) -- format depending on the \code{Domain}. Structural outer
+list metadata must be ordinary non-ALTREP/non-S4; admitted semantic atomic
+leaves may be stable ALTREP.}
 }
 \value{
 \code{any} -- format depending on the \code{Domain}.

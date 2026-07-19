@@ -28,23 +28,6 @@ typedef struct {
   R_xlen_t *trafo_index;
 } paradox_params_state_t;
 
-attribute_hidden int paradox_params_exact_base_param_set(
-  SEXP self,
-  R_xlen_t *work_since_interrupt
-);
-attribute_hidden int paradox_params_canonical_active_member(
-  SEXP self,
-  SEXP private_environment,
-  const char *member_name,
-  const char *method_name,
-  const char *argument_name,
-  const char *super_method_name,
-  R_xlen_t *work_since_interrupt
-);
-attribute_hidden int paradox_params_canonical_private_getter(
-  SEXP self,
-  SEXP private_environment
-);
 attribute_hidden int paradox_params_supported_table_attributes(
   SEXP table,
   int allow_sorted

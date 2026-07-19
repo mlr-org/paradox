@@ -3,7 +3,9 @@ native_grid_symbol = function() {
 }
 
 native_grid_params = function(param_set) {
-  param_set$.__enclos_env__$private$.params
+  paradox:::param_set_core_state(
+    param_set$.__enclos_env__$private
+  )$.params
 }
 
 native_grid_reference = function(param_set, resolutions) {
@@ -44,6 +46,31 @@ test_that("native grid generation is registered with a forced symbol", {
     "not available"
   )
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
+})
+
+test_that("zero-dimensional grids are constructed by the native engine", {
+  param_set = ParamSet$new()
+  params = native_grid_params(param_set)
+  counts = setNames(integer(), character())
+  observed = .Call(native_grid_symbol(), params, counts)
+  expect_s3_class(observed, "data.table")
+  expect_identical(dim(observed), c(0L, 0L))
+  expect_identical(names(observed), character())
+  expect_identical(data.table:::selfrefok(observed, verbose = FALSE), 1L)
+
+  design = generate_design_grid(param_set)
+  expect_s3_class(design$data, "data.table")
+  expect_identical(dim(design$data), c(0L, 0L))
+  expect_identical(names(design$data), character())
+
+  expect_error(
+    .Call(native_grid_symbol(), params, integer()),
+    "exactly one `names` attribute"
+  )
+  expect_error(
+    .Call(native_grid_symbol(), params, c(extra = 1L)),
+    "one value per parameter"
+  )
 })
 
 test_that("one-shot grids preserve randomized resolution order exactly", {
@@ -110,7 +137,9 @@ test_that("grid length one and endpoints match seq length.out", {
     factor = 1,
     logical = 2
   )
-  expect_null(.Call(symbol, params, zero_counts))
+  zero = .Call(symbol, params, zero_counts)
+  expect_identical(dim(zero), c(0L, length(zero_counts)))
+  expect_identical(names(zero), names(zero_counts))
 
   one_counts = c(
     fixed_integer = 1L,
@@ -147,20 +176,19 @@ test_that("grid length one and endpoints match seq length.out", {
   expect_identical(range(edges$integer), c(-2L, 2L))
 })
 
-test_that("zero-axis grids retain mapping warnings before the empty join", {
+test_that("zero-axis grids return an owned typed empty design", {
   param_set = ps(
     empty = p_dbl(0, 1),
     infinite_integer = p_int(0, Inf)
   )
-  expect_warning(
+  expect_no_warning(
     {
       observed = generate_design_grid(
         param_set,
         resolution = 0L,
         param_resolutions = c(infinite_integer = 2L)
       )
-    },
-    "NAs introduced by coercion to integer range"
+    }
   )
   expect_identical(dim(observed$data), c(0L, 2L))
   expect_identical(names(observed$data), c("empty", "infinite_integer"))
@@ -168,6 +196,38 @@ test_that("zero-axis grids retain mapping warnings before the empty join", {
     vapply(observed$data, typeof, character(1L)),
     c(empty = "double", infinite_integer = "integer")
   )
+})
+
+test_that("zero-level factors produce typed empty categorical and mixed grids", {
+  categorical = ps(choice = p_fct(character()))
+  categorical_design = generate_design_grid(categorical)
+  expect_identical(dim(categorical_design$data), c(0L, 1L))
+  expect_identical(names(categorical_design$data), "choice")
+  expect_identical(categorical_design$data$choice, character())
+
+  mixed = ps(
+    choice = p_fct(character()),
+    number = p_dbl(0, 1),
+    flag = p_lgl()
+  )
+  counts = c(choice = 0L, number = 3L, flag = 2L)
+  direct = .Call(native_grid_symbol(), native_grid_params(mixed), counts)
+  expect_identical(dim(direct), c(0L, 3L))
+  expect_identical(names(direct), names(counts))
+  expect_identical(vapply(direct, typeof, character(1L)), c(
+    choice = "character",
+    number = "double",
+    flag = "logical"
+  ))
+
+  mixed_design = generate_design_grid(mixed, resolution = 3L)
+  expect_identical(dim(mixed_design$data), c(0L, 3L))
+  expect_identical(names(mixed_design$data), mixed$ids())
+  expect_identical(vapply(mixed_design$data, typeof, character(1L)), c(
+    choice = "character",
+    number = "double",
+    flag = "logical"
+  ))
 })
 
 test_that("public mixed grids retain values, dependencies, and table facade", {
@@ -201,46 +261,6 @@ test_that("public mixed grids retain values, dependencies, and table facade", {
   expect_true(all(is.na(observed$data$child[!observed$data$enabled])))
 })
 
-test_that("subclassed and replaced qunif methods retain the R grid path", {
-  subclass_calls = 0L
-  GridParamSetSubclass = R6::R6Class(
-    "GridParamSetSubclass",
-    inherit = ParamSet,
-    public = list(
-      qunif = function(x) {
-        subclass_calls <<- subclass_calls + 1L
-        super$qunif(x)
-      }
-    )
-  )
-  subclass = GridParamSetSubclass$new(list(
-    x = p_dbl(0, 1),
-    flag = p_lgl()
-  ))
-  subclass_design = generate_design_grid(subclass, resolution = 3L)
-  expect_identical(subclass_calls, 2L)
-  expect_s3_class(subclass_design$param_set, "GridParamSetSubclass")
-  expect_identical(nrow(subclass_design$data), 6L)
-
-  replaced_calls = 0L
-  replaced = ps(x = p_dbl(0, 1), flag = p_lgl())
-  inherited_qunif = replaced$qunif
-  unlockBinding("qunif", replaced)
-  assign(
-    "qunif",
-    function(x) {
-      replaced_calls <<- replaced_calls + 1L
-      inherited_qunif(x)
-    },
-    envir = replaced
-  )
-  lockBinding("qunif", replaced)
-
-  replaced_design = generate_design_grid(replaced, resolution = 3L)
-  expect_identical(replaced_calls, 2L)
-  expect_identical(as.list(replaced_design$data), as.list(subclass_design$data))
-})
-
 test_that("direct grid admission fails closed without allocating huge grids", {
   symbol = native_grid_symbol()
   param_set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
@@ -249,42 +269,64 @@ test_that("direct grid admission fails closed without allocating huge grids", {
   before = valid
 
   invalid = list(
-    unname(valid),
-    structure(valid, class = "grid_resolution"),
-    c(y = NA_real_, x = 2),
-    c(y = NaN, x = 2),
-    c(y = Inf, x = 2),
-    c(y = -1, x = 2),
-    c(y = 1.5, x = 2),
-    c(y = 3),
-    c(y = 3, unknown = 2),
-    c(y = 3, y = 2),
-    c(y = 50000, x = 50000)
+    list(unname(valid), "exactly one `names` attribute"),
+    list(structure(valid, class = "grid_resolution"), "ordinary named numeric vector"),
+    list(c(y = NA_real_, x = 2), "non-negative whole numbers"),
+    list(c(y = NaN, x = 2), "non-negative whole numbers"),
+    list(c(y = Inf, x = 2), "non-negative whole numbers"),
+    list(c(y = -1, x = 2), "non-negative whole numbers"),
+    list(c(y = 1.5, x = 2), "non-negative whole numbers"),
+    list(c(y = 3), "one value per parameter"),
+    list(c(y = 3, unknown = 2), "match ParamSet IDs"),
+    list(c(y = 3, y = 2), "unique"),
+    list(c(y = 50000, x = 50000), "Grid product exceeds")
   )
-  for (counts in invalid) {
-    expect_null(.Call(symbol, params, counts), info = deparse(counts))
+  for (case in invalid) {
+    expect_error(
+      .Call(symbol, params, case[[1L]]),
+      case[[2L]],
+      fixed = TRUE,
+      info = deparse(case[[1L]])
+    )
   }
 
   mixed = ps(x = p_dbl(0, 1), factor = p_fct(c("a", "b")))
-  expect_null(.Call(
+  expect_error(.Call(
     symbol,
     native_grid_params(mixed),
     c(x = 2, factor = 1)
-  ))
+  ), "Categorical grid resolution", fixed = TRUE)
 
-  corrupt = data.table::copy(params)
-  data.table::set(corrupt, i = 1L, j = "cls", value = "ParamCustom")
-  expect_null(.Call(symbol, corrupt, valid))
+  utility = ps(x = p_uty())
+  expect_error(.Call(
+    symbol,
+    native_grid_params(utility),
+    c(x = 1)
+  ), "undefined for ParamUty", fixed = TRUE)
+
+  corrupt = params
+  corrupt$cls[[1L]] = "ParamCustom"
+  expect_error(
+    .Call(symbol, corrupt, valid),
+    "Corrupt ParamSet grid state",
+    fixed = TRUE
+  )
   expect_identical(valid, before)
 })
 
-test_that("unsupported infinite integer grids retain their warning fallback", {
+test_that("infinite integer grids warn once in the native engine", {
   param_set = ps(x = p_int(0, Inf))
-  expect_null(.Call(
-    native_grid_symbol(),
-    native_grid_params(param_set),
-    c(x = 2)
-  ))
+  expect_warning(
+    {
+      direct = .Call(
+        native_grid_symbol(),
+        native_grid_params(param_set),
+        c(x = 2)
+      )
+    },
+    "NAs introduced by coercion to integer range"
+  )
+  expect_identical(direct$x, c(0L, NA_integer_))
   expect_warning(
     {
       observed = generate_design_grid(param_set, resolution = 2L)

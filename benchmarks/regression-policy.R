@@ -13,12 +13,12 @@ benchmark_regression_policy_spec <- function() {
     marginal_fraction = 0.50,
     marginal_probability = 0.55,
     tiers = data.frame(
-      tier = c("hot", "standard", "authenticated-read"),
-      median_ratio_limit = c(1.20, 1.35, 1.60),
-      q75_ratio_limit = c(1.35, 1.60, 1.70),
-      slower_probability_limit = c(0.75, 0.80, 0.80),
-      allocation_ratio_limit = c(1.25, 1.50, 1.50),
-      allocation_min_delta_bytes = c(16384, 65536, 16384),
+      tier = c("hot", "standard"),
+      median_ratio_limit = c(1.20, 1.35),
+      q75_ratio_limit = c(1.35, 1.60),
+      slower_probability_limit = c(0.75, 0.80),
+      allocation_ratio_limit = c(1.25, 1.50),
+      allocation_min_delta_bytes = c(16384, 65536),
       stringsAsFactors = FALSE
     )
   )

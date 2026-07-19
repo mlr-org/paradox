@@ -20,13 +20,19 @@ test_that("TuneToken printers", {
 
 test_that("validity checks", {
 
-  expect_error(to_tune(p_dbl(2, 1)), "lower <= upper")
+  expect_error(to_tune(p_dbl(2, 1)), "must not be greater than")
 
   expect_error(to_tune(p_dbl()), "must be bounded")
 
-  expect_error(to_tune(ParamDbl$new("x")), "must be bounded")
+  unbounded_param_set = to_tune(ParamDbl$new("x"))
+  expect_s3_class(unbounded_param_set, "ObjectTuneToken")
+  target = ps(value = p_uty())
+  expect_error(
+    target$values$value <- unbounded_param_set,
+    "nonempty and bounded"
+  )
 
-  expect_error(to_tune(ps(x = p_dbl())), "must be bounded")
+  expect_s3_class(to_tune(ps(x = p_dbl())), "ObjectTuneToken")
 
   expect_error(ParamSet_legacy$new(list(ParamInt$new("x")))$search_space(list(x = to_tune())), "must give a range for unbounded parameter")
 
@@ -45,8 +51,10 @@ test_that("$check() works on TuneToken", {
   ))
 
   expect_equal(pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = TRUE)), TRUE)
-  expect_string(pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = 1)),
-    pattern = "Must be of type .*logical.*not.*double")
+  expect_identical(
+    pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = 1)),
+    "lgl: expected one non-missing logical value"
+  )
 
 
   expect_equal(pars$check(list(x = to_tune(), xub = to_tune(0, 1), y = to_tune(p_int(1, 10)),
@@ -63,26 +71,29 @@ test_that("$check() works on TuneToken", {
   expect_error(pars$search_space(list(xub = to_tune())), "must give a range for unbounded parameter xub")
 
   expect_equal(pars$check(list(y = to_tune(list(1, 2, "x")))), TRUE)
-  expect_string(pars$check(list(y = to_tune(list(1, 2, "z")))), "y: tune token invalid.*\"z\"")
+  expect_identical(pars$check(list(y = to_tune(list(1, 2, "z")))), TRUE)
   expect_error(pars$search_space(list(y = to_tune(list(1, 2, "z")))), "generates points that are not compatible.*\"z\"")
 
   expect_string(pars$check(list(uty = to_tune())), "must give a range for unbounded parameter uty")
   expect_error(pars$search_space(list(uty = to_tune())), "must give a range for unbounded parameter uty")
   expect_equal(pars$check(list(uty = to_tune(1))), TRUE)
   expect_equal(pars$check(list(uty1 = to_tune(1))), TRUE)
-  expect_string(pars$check(list(uty1 = to_tune(2))), "not compatible with param uty1.*2")
+  expect_identical(pars$check(list(uty1 = to_tune(2))), TRUE)
   expect_error(pars$search_space(list(uty1 = to_tune(2))), "not compatible with param uty1.*2")
 
-  expect_string(pars$check(list(fct = to_tune("z"))), "not compatible with param fct.*\"z\"")
+  expect_identical(pars$check(list(fct = to_tune("z"))), TRUE)
   expect_error(pars$search_space(list(fct = to_tune("z"))), "not compatible with param fct.*\"z\"")
 
-  expect_string(pars$check(list(lgl = to_tune("z"))), "not compatible with param lgl.*\"z\"")
+  expect_identical(pars$check(list(lgl = to_tune("z"))), TRUE)
   expect_error(pars$search_space(list(lgl = to_tune("z"))), "not compatible with param lgl.*\"z\"")
 
   expect_string(pars$check(list(lgl = to_tune(0, 1))), "must have zero or one argument")
   expect_error(pars$search_space(list(lgl = to_tune(0, 1))), "must have zero or one argument")
 
-  expect_error(pars$search_space(list(xxx = to_tune())), "ust be a subset of .*x.*xub.*y.*uty.*uty1.*fct.*lgl")
+  expect_error(
+    pars$search_space(list(xxx = to_tune())),
+    "unknown parameter ID"
+  )
 })
 
 test_that("Tune ParamSet is created", {
@@ -96,11 +107,8 @@ test_that("Tune ParamSet is created", {
 
   pars_tune = pars$search_space(list(x = to_tune(), y = to_tune(), fct = to_tune(), lgl = to_tune()))
 
-  # the following is necessary because $add modifies index of the .deps table, and one of the `$values` is not named.
+  # Search spaces do not retain the source values.
   pars_tune$values = list()
-
-  reset_indices(pars)
-  reset_indices(pars_tune)
   expect_equal_ps(pars, pars_tune)
 
   pars_unbound = ParamSet_legacy$new(list(
@@ -112,7 +120,6 @@ test_that("Tune ParamSet is created", {
 
   pars_tune = pars_unbound$search_space(list(x = to_tune(p_int(0, 10)), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
-  setindex(pars_tune$deps, NULL)
   expect_equal_ps(pars, pars_tune)
 
   pars_unbound_2 = ParamSet_legacy$new(list(
@@ -124,7 +131,6 @@ test_that("Tune ParamSet is created", {
 
   pars_tune = pars_unbound_2$search_space(list(x = to_tune(0, 10), y = to_tune(p_dbl(0, 10, special_vals = list("x"))), fct = to_tune(c("x", "y")), lgl = to_tune(p_lgl())))
   pars_tune$values = list()
-  setindex(pars_tune$deps, NULL)
   expect_equal_ps(pars, pars_tune)
 
   pars_tune = pars_unbound$search_space(list(x = to_tune(ParamInt$new("y", 0, 10)), y = to_tune(ps(z = p_dbl(0, 10, special_vals = list("x")))),
@@ -138,6 +144,17 @@ test_that("Tune ParamSet is created", {
   expect_equal(generate_design_grid(pars_tune)$transpose(),
     list(list(fct = "x", lgl = TRUE), list(fct = "y", lgl = TRUE)))
 
+})
+
+test_that("a recovered TuneToken is not a fixed search-space value", {
+  domain = ps(x = p_dbl(-10, 10))
+  domain$values$x = to_tune()
+
+  search_space = domain$search_space()
+
+  expect_identical(search_space$ids(), "x")
+  expect_identical(search_space$values, named_list())
+  expect_silent(generate_design_random(search_space, 10L))
 })
 
 
@@ -191,7 +208,9 @@ test_that("Dependencies work", {
 
   tuneps = pars$search_space(list(x = to_tune(), y = to_tune(ps(y1 = p_int(0, 1), y2 = p_int(0, 1), .extra_trafo = function(x, param_set) list(abs(x$y1 - x$y2))))))
 
-  # all dependencies lost
+  # Dependencies embedded in the recovered x Domain are temporary source
+  # metadata. The transformed y part makes x's edge on y inapplicable, while
+  # z is absent, so neither may leak into the combined search space.
   expect_equal(nrow(tuneps$deps), 0)
 
   pars = ParamSet_legacy$new(list(
@@ -375,10 +394,19 @@ test_that("logscale in tunetoken", {
     ParamDbl$new("y", lower = 0)
   ))
 
-  expect_equal(reset_indices(pars$search_space(list(x = to_tune(logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
-    reset_indices(ParamDbl$new("x", lower = log(.5), upper = log(11)))$.__enclos_env__$private$.params)
-  expect_equal(reset_indices(pars$search_space(list(y = to_tune(lower = 1, upper = 10, logscale = TRUE))))$.__enclos_env__$private$.params[, cargo := list(list(NULL))],
-    reset_indices(ParamDbl$new("y", lower = log(1), upper = log(10)))$.__enclos_env__$private$.params)
+  x_log = pars$search_space(list(x = to_tune(logscale = TRUE)))
+  expect_equal(x_log$lower, c(x = log(.5)))
+  expect_equal(x_log$upper, c(x = log(11)))
+  expect_identical(x_log$is_logscale, c(x = TRUE))
+  expect_equal(x_log$trafo(list(x = log(2)))$x, 2)
+
+  y_log = pars$search_space(list(
+    y = to_tune(lower = 1, upper = 10, logscale = TRUE)
+  ))
+  expect_equal(y_log$lower, c(y = log(1)))
+  expect_equal(y_log$upper, c(y = log(10)))
+  expect_identical(y_log$is_logscale, c(y = TRUE))
+  expect_equal(y_log$trafo(list(y = log(5)))$y, 5)
 
   expect_error(pars$search_space(list(y = to_tune(upper = 10, logscale = TRUE))), "When logscale is TRUE then lower bound must be strictly greater than 0")
 
@@ -455,6 +483,786 @@ test_that("internal and aggr", {
     a = to_tune(internal = TRUE, aggr = function(x) -60)
   )
   expect_equal(param_set$search_space()$aggr_internal_tuned_values(list(a = list(1, 2, 3))), list(a = -60))
+})
+
+test_that("user ParamSet trafos use the direct one-value boundary", {
+  parameter_set = ps(target = p_uty())
+
+  classed_token = to_tune(ps(
+    left = p_int(0L, 1L),
+    right = p_int(0L, 1L),
+    .extra_trafo = function(x) structure(
+      list(x$left + x$right),
+      class = "tune_result"
+    )
+  ))
+  expect_error(
+    parameter_set$search_space(list(target = classed_token)),
+    "ordinary list",
+    fixed = TRUE
+  )
+
+  search_space = parameter_set$search_space(list(
+    target = to_tune(ps(
+      left = p_int(0L, 1L),
+      right = p_int(0L, 1L),
+      .extra_trafo = function(x) list(x$left + x$right)
+    ))
+  ))
+  expect_identical(search_space$ids(), c("left", "right"))
+  expect_identical(
+    search_space$trafo(list(left = 1L, right = 0L)),
+    list(target = 1L)
+  )
+  utility_token = to_tune(ps(
+    value = p_int(0L, 1L),
+    .extra_trafo = function(x) list(x$value)
+  ))
+  expect_silent(parameter_set$values$target <- utility_token)
+  expect_identical(
+    parameter_set$search_space()$trafo(list(value = 1L)),
+    list(target = 1L)
+  )
+
+  integer_parameter = ps(target = p_int(0L, 2L))
+  integer_token = to_tune(ps(
+    left = p_int(0L, 1L),
+    right = p_int(0L, 1L),
+    .extra_trafo = function(x) list(x$left + x$right)
+  ))
+  expect_silent(integer_parameter$values$target <- integer_token)
+  expect_identical(
+    integer_parameter$search_space()$trafo(list(left = 1L, right = 1L)),
+    list(target = 2L)
+  )
+
+  double_parameter = ps(target = p_dbl(0, 2))
+  double_token = to_tune(ps(
+    left = p_dbl(0, 1),
+    right = p_dbl(0, 1),
+    .extra_trafo = function(x) list(x$left + x$right)
+  ))
+  expect_silent(double_parameter$values$target <- double_token)
+  expect_identical(
+    double_parameter$search_space()$trafo(list(left = 1, right = 1)),
+    list(target = 2)
+  )
+
+  expect_error(
+    parameter_set$search_space(list(
+      target = to_tune(ps(
+        value = p_int(0L, 1L),
+        .extra_trafo = function(x) data.frame(value = x$value)
+      ))
+    )),
+    "ordinary list",
+    fixed = TRUE
+  )
+})
+
+test_that("native search snapshots preserve empty and one-token Domain rows", {
+  parameter_set = ps(value = p_int(0L, 1L))
+
+  expect_identical(parameter_set$search_space(list())$ids(), character())
+  expect_identical(
+    parameter_set$search_space(list(value = to_tune()))$ids(),
+    "value"
+  )
+})
+
+test_that("ParamSet TuneTokens separate structural admission from output validation", {
+  target = ps(value = p_int(0L, 1L))
+  incompatible = to_tune(ps(candidate = p_int(2L, 3L)))
+
+  # Atomic value assignment admits and snapshots the candidate graph without
+  # running its transformations. The deterministic search-space conversion is
+  # the sole place that evaluates output compatibility.
+  expect_identical(target$check(list(value = incompatible)), TRUE)
+  expect_silent(target$values$value <- incompatible)
+  expect_error(
+    target$search_space(),
+    "generates points that are not compatible with param value",
+    fixed = TRUE
+  )
+
+  corrupt = ps(candidate = p_int(0L, 1L), gate = p_lgl())
+  corrupt$add_dep("candidate", "gate", CondEqual(TRUE))
+  private = corrupt$.__enclos_env__$private
+  state = paradox:::param_set_core_state(private)
+  state$.deps$id[[1L]] = "missing"
+  private$.core = .Call(paradox:::C_param_set_core_new, 1L, state)
+  corrupt_token = to_tune(corrupt)
+  before = target$values
+
+  expect_error(
+    target$check(list(value = corrupt_token)),
+    "Corrupt ParamSet"
+  )
+  expect_error(target$values$value <- corrupt_token, "Corrupt ParamSet")
+  expect_identical(target$values, before)
+})
+
+test_that("live ParamSet TuneToken generations cannot change during validation", {
+  make_case = function(callback_kind) {
+    candidate = ps(candidate = p_int(0L, 1L))
+    armed = FALSE
+    mutate_candidate = function() {
+      if (armed) candidate$values$candidate = 1L
+      TRUE
+    }
+    target = if (identical(callback_kind, "custom_check")) {
+      ps(
+        token = p_uty(),
+        trigger = p_uty(custom_check = function(x) mutate_candidate())
+      )
+    } else {
+      result = ps(token = p_uty(), trigger = p_lgl())
+      result$constraint = function(x) mutate_candidate()
+      result
+    }
+    armed = TRUE
+    list(candidate = candidate, target = target, token = to_tune(candidate))
+  }
+
+  for (callback_kind in c("custom_check", "constraint")) {
+    check_case = make_case(callback_kind)
+    expect_error(
+      check_case$target$check(list(token = check_case$token, trigger = TRUE)),
+      "candidate changed during validation",
+      fixed = TRUE,
+      info = callback_kind
+    )
+
+    assignment_case = make_case(callback_kind)
+    before = assignment_case$target$values
+    expect_error(
+      {
+        assignment_case$target$values = list(
+          token = assignment_case$token,
+          trigger = TRUE
+        )
+      },
+      "candidate changed during validation",
+      fixed = TRUE,
+      info = callback_kind
+    )
+    expect_identical(
+      assignment_case$target$values,
+      before,
+      info = callback_kind
+    )
+    expect_identical(
+      assignment_case$candidate$values$candidate,
+      1L,
+      info = callback_kind
+    )
+  }
+})
+
+test_that("TuneToken receipts reject delayed candidate cores without forcing", {
+  forced = 0L
+  candidate = ps(candidate = p_int(0L, 1L))
+  candidate_private = candidate$.__enclos_env__$private
+  candidate_core = candidate_private$.core
+  token = to_tune(candidate)
+  armed = FALSE
+  target = ps(
+    token = p_uty(),
+    trigger = p_uty(custom_check = function(value) {
+      if (armed) {
+        delayedAssign(
+          ".core",
+          {
+            forced <<- forced + 1L
+            candidate_core
+          },
+          assign.env = candidate_private
+        )
+      }
+      TRUE
+    })
+  )
+  armed = TRUE
+
+  expect_error(
+    target$check(list(token = token, trigger = TRUE)),
+    "candidate changed during validation",
+    fixed = TRUE
+  )
+  expect_identical(forced, 0L)
+  expect_type(substitute(.core, candidate_private), "language")
+})
+
+test_that("TuneToken receipts reject a literal-core delayed binding", {
+  candidate = ps(candidate = p_int(0L, 1L))
+  candidate_private = candidate$.__enclos_env__$private
+  candidate_core = candidate_private$.core
+  token = to_tune(candidate)
+  armed = FALSE
+  target = ps(
+    token = p_uty(),
+    trigger = p_uty(custom_check = function(value) {
+      if (armed) {
+        eval(as.call(list(
+          quote(delayedAssign),
+          ".core",
+          candidate_core,
+          candidate_private,
+          candidate_private
+        )), baseenv())
+      }
+      TRUE
+    })
+  )
+  armed = TRUE
+
+  expect_error(
+    target$check(list(token = token, trigger = TRUE)),
+    "candidate changed during validation",
+    fixed = TRUE
+  )
+  expect_identical(substitute(.core, candidate_private), candidate_core)
+})
+
+test_that("TuneToken metadata has one closed nonrecursive shape", {
+  make_token = function(content, next_token = NULL) {
+    token = structure(
+      list(content = content, call = "forged TuneToken"),
+      class = c("ObjectTuneToken", "TuneToken")
+    )
+    if (!is.null(next_token)) token[["next_token"]] = next_token
+    token
+  }
+
+  domain = p_int(0L, 1L)
+  normal_target = ps(value = p_uty())
+  expect_silent(normal_target$values$value <- unserialize(serialize(
+    make_token(domain),
+    NULL
+  )))
+  numeric_target = ps(value = p_dbl(0, 1))
+  named_scalar_token = to_tune(
+    lower = c(lower_name = 0),
+    upper = c(upper_name = 1),
+    logscale = c(scale_name = FALSE)
+  )
+  expect_identical(numeric_target$check(list(value = named_scalar_token)), TRUE)
+  expect_silent(numeric_target$values$value <- named_scalar_token)
+  stored_content = numeric_target$values$value$content
+  expect_null(names(stored_content$lower))
+  expect_null(names(stored_content$upper))
+  expect_null(names(stored_content$logscale))
+  target = ps(value = p_uty())
+
+  # Extra metadata is outside the TuneToken contract. Rejecting the fixed root
+  # shape means even a very deep forged tail is never traversed natively.
+  deep = make_token(domain)
+  for (index in seq_len(4096L)) deep = make_token(domain, deep)
+  before = target$values
+  expect_error(
+    target$check(list(value = deep)),
+    "expected the fixed {content, call} list",
+    fixed = TRUE
+  )
+  expect_error(
+    target$values$value <- deep,
+    "expected the fixed {content, call} list",
+    fixed = TRUE
+  )
+  expect_identical(target$values, before)
+  while (length(deep) == 3L) {
+    child = deep[["next_token"]]
+    deep[["next_token"]] = NULL
+    deep = child
+  }
+  rm(deep)
+  gc()
+
+  cyclic = make_token(domain)
+  mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    cyclic,
+    0L,
+    cyclic
+  )
+  rm(mutator)
+  gc()
+  expect_identical(
+    data.table::address(cyclic$content),
+    data.table::address(cyclic)
+  )
+  before = target$values
+  expect_error(
+    target$check(list(value = cyclic)),
+    "content must be a Domain or ParamSet",
+    fixed = TRUE
+  )
+  assignment_error = tryCatch(
+    {
+      target$values$value <- cyclic
+      NULL
+    },
+    error = identity
+  )
+  expect_match(
+    conditionMessage(assignment_error),
+    "content must be a Domain or ParamSet",
+    fixed = TRUE
+  )
+  rm(assignment_error)
+  breaker = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    cyclic,
+    0L,
+    domain
+  )
+  rm(breaker)
+  gc()
+  expect_identical(target$values, before)
+})
+
+test_that("search_space admits exact TuneTokens before closed kind selection", {
+  make_object_token = function(content) structure(
+    list(content = content, call = "forged TuneToken"),
+    class = c("ObjectTuneToken", "TuneToken")
+  )
+  target = ps(value = p_uty())
+  domain = p_int(0L, 1L)
+
+  subclass = to_tune(domain)
+  class(subclass) = c("ExternalTuneToken", class(subclass))
+  expect_error(
+    target$search_space(list(value = subclass)),
+    "unsupported class vector",
+    fixed = TRUE
+  )
+
+  flatten_called = FALSE
+  forged_param_set = new.env(parent = emptyenv())
+  forged_param_set$flatten = function() {
+    flatten_called <<- TRUE
+    ps(value = p_int(0L, 1L))
+  }
+  class(forged_param_set) = c("ParamSet", "R6")
+  expect_error(
+    target$search_space(list(
+      value = make_object_token(forged_param_set)
+    )),
+    "malformed exact BASE ParamSet",
+    fixed = TRUE
+  )
+  expect_false(flatten_called)
+
+  extra = make_object_token(domain)
+  extra$metadata = TRUE
+  expect_error(
+    target$search_space(list(value = extra)),
+    "expected the fixed {content, call} list",
+    fixed = TRUE
+  )
+
+  deep = make_object_token(domain)
+  for (index in seq_len(4096L)) {
+    parent = make_object_token(domain)
+    parent$metadata = deep
+    deep = parent
+  }
+  expect_error(
+    target$search_space(list(value = deep)),
+    "expected the fixed {content, call} list",
+    fixed = TRUE
+  )
+  while (length(deep) == 3L) {
+    child = deep$metadata
+    deep$metadata = NULL
+    deep = child
+  }
+  rm(deep)
+  gc()
+
+  cyclic = make_object_token(domain)
+  mutator = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    cyclic,
+    0L,
+    cyclic
+  )
+  rm(mutator)
+  gc()
+  expect_error(
+    target$search_space(list(value = cyclic)),
+    "content must be a Domain or ParamSet",
+    fixed = TRUE
+  )
+  breaker = .Call(
+    get("C_test_gc_column_mutator", envir = asNamespace("paradox")),
+    cyclic,
+    0L,
+    domain
+  )
+  rm(breaker, cyclic)
+  gc()
+})
+
+test_that("TuneToken and search metadata use the closed ordinary shape", {
+  target = ps(value = p_dbl(0, 1))
+  token = to_tune(0, 1)
+
+  expect_identical(
+    target$search_space(structure(
+      list(value = token),
+      class = "configuration"
+    ))$ids(),
+    "value"
+  )
+
+  exact_hand_built = structure(
+    list(
+      content = list(lower = 0, upper = 1, logscale = FALSE),
+      call = "exact hand-built token"
+    ),
+    class = c("RangeTuneToken", "TuneToken")
+  )
+  expect_identical(
+    target$search_space(list(value = exact_hand_built))$ids(),
+    "value"
+  )
+
+  forge = function(change) {
+    candidate = unserialize(serialize(token, NULL))
+    change(candidate)
+  }
+  malformed = list(
+    outer = asS4(unserialize(serialize(token, NULL))),
+    names = forge(function(x) {
+      attr(x, "names") = asS4(names(x))
+      x
+    }),
+    classes = forge(function(x) {
+      attr(x, "class") = asS4(class(x))
+      x
+    }),
+    content = forge(function(x) {
+      x$content = asS4(x$content)
+      x
+    }),
+    content_names = forge(function(x) {
+      attr(x$content, "names") = asS4(names(x$content))
+      x
+    }),
+    lower = forge(function(x) {
+      x$content$lower = asS4(x$content$lower)
+      x
+    }),
+    logscale = forge(function(x) {
+      x$content$logscale = asS4(x$content$logscale)
+      x
+    }),
+    call = forge(function(x) {
+      x$call = asS4(x$call)
+      x
+    })
+  )
+  for (case in names(malformed)) {
+    expect_error(
+      target$search_space(list(value = malformed[[case]])),
+      "Malformed|ordinary",
+      info = case
+    )
+  }
+
+  s4_values = asS4(list(value = token))
+  expect_error(target$search_space(s4_values), "ordinary named list")
+  s4_value_names = list(value = token)
+  attr(s4_value_names, "names") = asS4(names(s4_value_names))
+  expect_error(target$search_space(s4_value_names), "ordinary character")
+  s4_value_classes = structure(list(value = token), class = "configuration")
+  attr(s4_value_classes, "class") = asS4(class(s4_value_classes))
+  expect_error(target$search_space(s4_value_classes), "malformed S3 class")
+
+  object_target = ps(value = p_uty())
+  s4_domain = asS4(p_int(0L, 1L))
+  expect_error(
+    object_target$search_space(list(value = structure(
+      list(content = s4_domain, call = "S4 Domain"),
+      class = c("ObjectTuneToken", "TuneToken")
+    ))),
+    "Malformed"
+  )
+  s4_param_set = asS4(ps(candidate = p_int(0L, 1L)))
+  expect_error(
+    object_target$search_space(list(value = structure(
+      list(content = s4_param_set, call = "S4 ParamSet"),
+      class = c("ObjectTuneToken", "TuneToken")
+    ))),
+    "Malformed"
+  )
+})
+
+test_that("TuneToken snapshots revalidate after allocation finalizers", {
+  token = to_tune(0, 1)
+  expect_error(
+    .Call(
+      get(
+        "C_test_tune_token_gc_mutation_snapshot",
+        envir = asNamespace("paradox")
+      ),
+      token,
+      0L,
+      asS4(0)
+    ),
+    "Malformed RangeTuneToken bounds",
+    fixed = TRUE
+  )
+  expect_true(isS4(token$content$lower))
+})
+
+test_that("Domain TuneTokens fail closed on forged candidate storage", {
+  forge_column = function(domain, name, value) {
+    attrs = attributes(domain)
+    domain = unclass(domain)
+    domain[[name]] = value
+    attributes(domain) = attrs
+    domain
+  }
+  drop_column = function(domain, name) {
+    attrs = attributes(domain)
+    domain = unclass(domain)
+    domain[[name]] = NULL
+    attrs$names = names(domain)
+    attributes(domain) = attrs
+    domain
+  }
+  forge_attribute = function(domain, name, value) {
+    attr(domain, name) = value
+    domain
+  }
+
+  bad_condition = CondAnyOf(c("a", "b"))
+  bad_condition$rhs = c("a", "a")
+  special_and_trafo = forge_column(
+    p_dbl(1, 9, trafo = identity),
+    "special_vals",
+    list(list(Inf))
+  )
+  required_default = forge_column(
+    forge_column(p_dbl(1, 9), "default", list(2)),
+    ".tags",
+    list("required")
+  )
+  initialized_trafo = forge_column(
+    forge_column(p_dbl(1, 9, trafo = identity), ".init_given", TRUE),
+    ".init",
+    list(2)
+  )
+  attributed_cargo = p_uty()$cargo[[1L]]
+  attr(attributed_cargo, "external") = TRUE
+  attributed_disable = p_dbl(
+    1,
+    9,
+    tags = "internal_tuning",
+    aggr = identity,
+    in_tune_fn = function(domain, values) domain$upper,
+    disable_in_tune = list(flag = FALSE)
+  )
+  attributed_disable_cargo = attributed_disable$cargo[[1L]]
+  attr(attributed_disable_cargo$disable_in_tune, "external") = TRUE
+  attributed_logscale = p_dbl(1, 9, logscale = TRUE)
+  attributed_logscale_cargo = attributed_logscale$cargo[[1L]]
+  attr(attributed_logscale_cargo$logscale, "external") = TRUE
+
+  malformed = list(
+    reversed_bounds = forge_column(
+      forge_column(p_dbl(1, 9), "lower", 8), "upper", 2
+    ),
+    logical_lower = forge_column(p_dbl(1, 9), "lower", TRUE),
+    empty_factor = forge_column(p_fct(c("a", "b")), "levels", list(character())),
+    list_lower = forge_column(p_dbl(1, 9), "lower", list(1)),
+    environment_lower = forge_column(p_dbl(1, 9), "lower", new.env()),
+    infinite_tolerance = forge_column(p_dbl(1, 9), "tolerance", Inf),
+    reordered_logical = forge_column(p_lgl(), "levels", list(c(FALSE, TRUE))),
+    invalid_trafo = forge_column(p_dbl(1, 9), ".trafo", list(1L)),
+    invalid_cargo_column = forge_column(p_dbl(1, 9), "cargo", 1L),
+    missing_cargo = drop_column(p_dbl(1, 9), "cargo"),
+    attributed_cargo = forge_column(
+      p_uty(), "cargo", list(attributed_cargo)
+    ),
+    attributed_disable_in_tune = forge_column(
+      attributed_disable, "cargo", list(attributed_disable_cargo)
+    ),
+    attributed_logscale = forge_column(
+      attributed_logscale, "cargo", list(attributed_logscale_cargo)
+    ),
+    missing_id = forge_column(p_dbl(1, 9), "id", NA_character_),
+    empty_id = forge_column(p_dbl(1, 9), "id", ""),
+    mismatched_grouping = forge_column(p_dbl(1, 9), "grouping", "ParamInt"),
+    unknown_cargo = forge_column(
+      p_dbl(1, 9), "cargo", list(list(unknown = 1L))
+    ),
+    invalid_aggr = forge_column(
+      p_dbl(1, 9), "cargo", list(list(aggr = 1L))
+    ),
+    incomplete_internal_cargo = forge_column(
+      p_dbl(1, 9),
+      "cargo",
+      list(list(in_tune_fn = identity, disable_in_tune = list(x = 1)))
+    ),
+    invalid_utility_repr = forge_column(
+      p_uty(), "cargo", list(list(custom_check = NULL, repr = 1L))
+    ),
+    duplicate_cargo_names = forge_column(
+      p_dbl(1, 9),
+      "cargo",
+      list(structure(list(NULL, NULL), names = c("aggr", "aggr")))
+    ),
+    classed_special_values = forge_column(
+      p_dbl(1, 9),
+      "special_vals",
+      list(structure(list(Inf), class = "external"))
+    ),
+    attributed_special_values = forge_column(
+      p_dbl(1, 9),
+      "special_vals",
+      list(structure(list(Inf), note = "external"))
+    ),
+    special_and_trafo = special_and_trafo,
+    malformed_default_marker = forge_column(
+      p_dbl(1, 9),
+      "default",
+      list(structure(list(2), class = "NoDefault"))
+    ),
+    required_default = required_default,
+    duplicate_tags = forge_column(
+      p_dbl(1, 9), ".tags", list(c("x", "x"))
+    ),
+    missing_tag = forge_column(
+      p_dbl(1, 9), ".tags", list(NA_character_)
+    ),
+    malformed_requirement_names = forge_column(
+      p_dbl(1, 9),
+      ".requirements",
+      list(list(list(parent = "x", cond = CondEqual(1))))
+    ),
+    empty_requirement_parent = forge_column(
+      p_dbl(1, 9),
+      ".requirements",
+      list(list(list(on = "", cond = CondEqual(1))))
+    ),
+    unknown_requirement_condition = forge_column(
+      p_dbl(1, 9),
+      ".requirements",
+      list(list(list(
+        on = "x",
+        cond = structure(list(), class = c("ExternalCondition", "Condition"))
+      )))
+    ),
+    duplicate_requirement_rhs = forge_column(
+      p_dbl(1, 9),
+      ".requirements",
+      list(list(list(on = "x", cond = bad_condition)))
+    ),
+    false_init_with_value = forge_column(
+      p_dbl(1, 9), ".init", list(2)
+    ),
+    initialized_trafo = initialized_trafo,
+    tune_token_init = forge_column(
+      forge_column(p_dbl(1, 9), ".init_given", TRUE),
+      ".init",
+      list(to_tune())
+    ),
+    extra_table_attribute = forge_attribute(
+      p_dbl(1, 9), "external", TRUE
+    ),
+    invalid_row_names = forge_attribute(
+      p_dbl(1, 9), "row.names", 2L
+    ),
+    invalid_selfref = forge_attribute(
+      p_dbl(1, 9), ".internal.selfref", 1L
+    )
+  )
+  subclassed = p_dbl(1, 9)
+  class(subclassed) = c("ExternalParamDbl", class(subclassed))
+  malformed$subclassed = subclassed
+
+  target = ps(value = p_uty())
+  before = target$values
+  for (case in names(malformed)) {
+    domain = malformed[[case]]
+    token = structure(
+      list(content = domain, call = "forged Domain"),
+      class = c("ObjectTuneToken", "TuneToken")
+    )
+    expect_error(
+      target$check(list(value = token)),
+      paste0(
+        "Malformed ObjectTuneToken Domain|",
+        "Unsupported Condition class"
+      ),
+      info = case
+    )
+    expect_error(
+      target$values$value <- token,
+      paste0(
+        "Malformed ObjectTuneToken Domain|",
+        "Unsupported Condition class"
+      ),
+      info = case
+    )
+    expect_identical(target$values, before, info = case)
+  }
+})
+
+test_that("Domain TuneTokens accept canonical live and copied rows", {
+  opaque_default = new.env(parent = emptyenv())
+  opaque_init = new.env(parent = emptyenv())
+  domains = list(
+    p_dbl(0, 1, special_vals = list(Inf)),
+    p_int(0L, 10L, logscale = TRUE),
+    p_fct(list(one = 1L, two = 2L)),
+    p_lgl(depends = gate == TRUE),
+    p_fct(
+      c("one", "two"),
+      special_vals = list(opaque_default, opaque_init),
+      default = opaque_default,
+      init = opaque_init
+    )
+  )
+  target = ps(value = p_uty())
+  make_token = function(domain) structure(
+    list(content = domain, call = "canonical Domain"),
+    class = c("ObjectTuneToken", "TuneToken")
+  )
+
+  for (domain in domains) {
+    variants = list(
+      domain,
+      unserialize(serialize(domain, NULL)),
+      data.table::copy(domain)
+    )
+    for (variant in variants) {
+      expect_identical(target$check(list(value = make_token(variant))), TRUE)
+    }
+  }
+
+  unbounded_utility = make_token(p_uty())
+  expect_error(
+    target$check(list(value = unbounded_utility)),
+    "lower/upper/tolerance"
+  )
+
+  token = make_token(domains[[5L]])
+  expect_silent(target$values$value <- token)
+  stored = target$values$value$content
+  expect_identical(stored$default[[1L]], opaque_default)
+  expect_identical(stored$.init[[1L]], opaque_init)
+  expect_error(
+    p_dbl(0, 1, default = 0.5, tags = "required"),
+    "required.*default"
+  )
+  expect_error(
+    p_dbl(0, 1, trafo = identity, init = 0.5),
+    "Initial value and trafo"
+  )
 })
 
 test_that("cannot mark non-int-tuneable parameters for int tuning", {

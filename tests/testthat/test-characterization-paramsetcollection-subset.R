@@ -1,4 +1,4 @@
-context("characterization: ParamSetCollection subset and flatten")
+context("contract: ParamSetCollection subset and flatten")
 
 psc_subset_characterization_fixture = function(postfix = FALSE,
     nested = FALSE) {
@@ -30,7 +30,6 @@ psc_subset_characterization_fixture = function(postfix = FALSE,
 }
 
 psc_subset_characterization_projection = function(param_set) {
-  private = param_set$.__enclos_env__$private
   dependencies = param_set$deps
   list(
     class = class(param_set),
@@ -45,38 +44,41 @@ psc_subset_characterization_projection = function(param_set) {
       class = lapply(dependencies$cond, class),
       rhs = lapply(dependencies$cond, function(condition) condition$rhs)
     ),
-    params_class = class(private$.params),
-    params_names = names(private$.params),
-    params_key = data.table::key(private$.params),
-    tags_key = data.table::key(private$.tags),
-    trafos_key = data.table::key(private$.trafos)
+    params_class = class(param_set$params),
+    params_names = names(param_set$params),
+    params_key = data.table::key(param_set$params),
+    params_indices = data.table::indices(param_set$params)
   )
 }
 
-test_that("collection subsets preserve selection order, repetition, and facades", {
+test_that("collection subsets preserve selection order and facades", {
   prefix = psc_subset_characterization_fixture()
   selected = prefix$subset(
-    c("right.mode", "left.enabled", "right.score", "right.mode"),
+    c("right.mode", "left.enabled", "right.score"),
     allow_dangling_dependencies = TRUE
   )
   expect_identical(
     selected$ids(),
-    c("right.mode", "left.enabled", "right.score", "right.mode")
+    c("right.mode", "left.enabled", "right.score")
   )
   expect_identical(
     selected$values,
     list(
       right.mode = "large",
       left.enabled = TRUE,
-      right.score = 0.5,
-      right.mode = "large"
+      right.score = 0.5
     )
   )
-  expect_identical(selected$deps$id, rep("right.mode", 2L))
-  expect_identical(selected$deps$on, rep("left.enabled", 2L))
+  expect_identical(selected$deps$id, "right.mode")
+  expect_identical(selected$deps$on, "left.enabled")
   expect_identical(
     lapply(selected$deps$cond, function(condition) condition$rhs),
-    list(TRUE, TRUE)
+    list(TRUE)
+  )
+  expect_error(
+    prefix$subset(c("right.mode", "right.mode")),
+    "must not contain duplicates",
+    fixed = TRUE
   )
   unique_selected = prefix$subset(
     c("right.mode", "left.enabled", "right.score"),
@@ -86,19 +88,10 @@ test_that("collection subsets preserve selection order, repetition, and facades"
     "choice", "set_right", "param_mode"
   ))
   expect_identical(class(selected), c("ParamSet", "R6"))
-  expect_identical(data.table::key(
-    selected$.__enclos_env__$private$.tags
-  ), "id")
-  expect_identical(data.table::key(
-    selected$.__enclos_env__$private$.trafos
-  ), "id")
-  expect_identical(
-    data.table:::selfrefok(
-      selected$.__enclos_env__$private$.params,
-      FALSE
-    ),
-    1L
-  )
+  expect_identical(class(selected$params), c("data.table", "data.frame"))
+  expect_identical(data.table::key(selected$params), NULL)
+  expect_identical(data.table::indices(selected$params), NULL)
+  expect_identical(data.table:::selfrefok(selected$params, FALSE), 1L)
 
   postfix = psc_subset_characterization_fixture(postfix = TRUE)
   postfix_subset = postfix$subset(
@@ -172,17 +165,19 @@ test_that("collection subset and flatten are detached snapshots", {
     expect_true(snapshot$test_constraint(list(component.x = 4)))
   }
 
-  subset_private = subset$.__enclos_env__$private
-  source_private = collection$.__enclos_env__$private
-  data.table::set(subset_private$.params, 1L, "lower", -100)
-  expect_identical(source_private$.params$lower[[1L]], 0)
-  data.table::set(subset_private$.tags, 1L, "tag", "mutated")
-  expect_false("mutated" %in% source_private$.tags$tag)
-  subset_private$.values[[1L]] = 9
+  params = subset$params
+  data.table::set(params, 1L, "lower", -100)
+  expect_identical(collection$params$lower[[1L]], 0)
+  subset$tags = list(
+    component.x = "mutated",
+    component.enabled = character()
+  )
+  expect_false("mutated" %in% collection$tags[["component.x"]])
+  subset$values$component.x = 9
   expect_identical(collection$values$component.x, 3)
 })
 
-test_that("collection subset retains flag laziness and dependency priority", {
+test_that("collection subset forces arguments in public order", {
   collection = psc(
     left = ps(parent = p_lgl(init = TRUE)),
     right = ps(child = p_int(0, 1, init = 1L))
@@ -213,7 +208,8 @@ test_that("collection subset retains flag laziness and dependency priority", {
       FALSE,
       stop("keep_constraint was forced")
     ),
-    "dependencies on params exist"
+    "keep_constraint was forced",
+    fixed = TRUE
   )
 })
 

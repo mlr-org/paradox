@@ -1,1064 +1,666 @@
-# Native architecture
-
-## Decision
-
-Paradox 2 keeps its R6 classes as the compatibility shell and replaces the
-computation beneath them with registered C routines. Ordinary R objects remain
-the canonical, serializable state. In particular, `ParamSet` continues to expose
-the established private fields `.params`, `.values`, `.tags`, `.deps`, and
-`.trafos` through its R6 enclosure.
-
-This is deliberate. `bbotk` subclasses `ParamSet`; `miesmuschel` both subclasses
-it and reaches into these fields; `ParamSetCollection` itself depends on the
-same representation. Making an external pointer the sole source of truth would
-break subclass initialization, reference semantics, deep cloning, ordinary R
-serialization, debugging, and important consumers.
-
-The R6 shell is not the execution engine. Public methods should perform only
-argument capture that genuinely requires R semantics, then call one native
-entry point for the complete logical operation. C routines operate directly on
-the vectors held by canonical state and construct their results without calls
-to checkmate or data.table.
-
-`checkmate`, `data.table`, and `R6` remain package imports because they define
-the established public objects, diagnostics, extension fallbacks, and legacy
-facade behavior. This is a compatibility decision, not a native dependency:
-shipping C includes no private header from those packages and calls none of
-their C APIs. The one deliberate R-level exception is the authenticated
-`data.table::alloc.col()` bridge required by data.table releases before 1.18;
-the data-table facade section below records that boundary. Removing these R
-imports is not a 2.0 goal: doing so would discard supported fallback and object
-behavior for little benefit on the admitted native paths, which do not enter
-the imported implementations.
-
-Native admission is deliberately narrower than the public API. Exact
-package-generated built-in objects enter C; subclasses, replaced methods,
-third-party Domains, callback-capable state, and shapes that cannot be proved
-safe retain the established R implementation. A declined native call returns
-its private sentinel before mutation, callback execution, or other observable
-commit. Once an operation crosses an observable callback or commit boundary it
-finishes on that path or raises one deterministic error; it never retries the R
-implementation and replays user code. This fail-closed split is the central
-compatibility tradeoff behind the individual boundaries below.
-
-## State model
-
-The transitional private tables retain their current column names and types:
-
-- `.params`: one row per parameter, in public parameter order;
-- `.values`: a named list in parameter order, omitting unset values;
-- `.tags`: long-form `id` / `tag` columns;
-- `.deps`: `id` / `on` / `cond` columns;
-- `.trafos`: `id` / `trafo` columns.
-
-The following metadata was considered for persistent caches alongside them:
-
-- an aligned integer type-code vector;
-- cached aligned property vectors;
-- an ID-to-position hash environment;
-- per-parameter tag, transformation, and dependency adjacency lists;
-- dependency topology and schema/dependency version counters.
-
-The release implementation deliberately does not make such a cache another
-source of truth. Important downstream code mutates the established private
-tables directly, so reliable invalidation would either break that implicit API
-or require enough revalidation to erase the gain. Native operations instead
-validate canonical state once per complete operation and keep transient aligned
-indices only for that call. A future immutable cache is acceptable only if it
-can be discarded without changing behavior and is authenticated against the
-ordinary-R state before use.
-
-Every base `ParamSet` and `ParamSetCollection` initializer installs a fresh
-empty `.deps` table before exposing the object. R6 class defaults are templates,
-not instance-owned storage, and data.table may attach indexes by reference.
-Downstream subclasses that replace `initialize()` without calling its parent
-therefore remain responsible for initializing any inherited mutable private
-state they expose.
-
-## Versioned public C API boundary
-
-All version-specific R access is centralized in `r_api_compat.c`. R 4.5 and
-newer provide documented closure and parent-environment accessors; older
-supported releases use the equivalent `body()`, `formals()`, `environment()`,
-and `parent.env()` primitives from the locked base environment. Attribute
-fallbacks copy raw attributes to a neutral protected carrier and inspect them
-through base `attributes()`, so tagged pairlists and language objects are
-neither evaluated nor mistaken for objects with raw attributes. Namespace
-fallbacks likewise resolve only an already loaded namespace through locked
-base bindings.
-
-Exact non-forcing binding classification is different: the public API needed
-to distinguish direct values from delayed or active bindings was added only in
-R 4.6. On R 4.3 through 4.5, every native gate that authenticates private R6
-state therefore fails closed and immediately executes its established R
-implementation. Pure vector kernels and constructors that do not require this
-inspection remain native. This preserves the R 4.3 support contract without
-using object-layout internals or forcing a promise merely to decide whether a
-fast path is safe; R 4.6 receives the complete optimized path.
-
-## Built-in type engine
-
-The native core uses a small internal type enumeration for `ParamDbl`,
-`ParamInt`, `ParamFct`, `ParamLgl`, and `ParamUty`. Each supported operation has
-a type-specific implementation: scalar validation, batch validation,
-sanitization, quantile mapping, and static properties.
-
-Column-oriented `check_dt()` first validates all supported built-in columns
-without forcing its optional promises, retaining the established empty-table
-return. That pass also records whether every cell is nonmissing and every
-parameter is represented. For nonempty tables it forces `presence` and
-`check_strict` in their historical order. A literal `presence = "none"` can
-then accept the first pass directly; literal `presence = "all"` additionally
-requires both recorded completeness bits. The canonical scalar checker and a
-second complete-table scan are not replayed when strict checking is disabled
-or there are no dependencies or constraints.
-
-After authenticating the generated R6 caller, the gate inspects the forwarded
-optional promises without forcing them again and admits only defaults or
-explicit literals. A computed argument retains the row-major R implementation,
-where forcing it may change the table, bounds, methods, or other state observed
-by later rows. Required-mode presence, tokens, extensions, special values,
-dependencies, constraints, diagnostic failures, or a changed method surface
-likewise retain that implementation and its diagnostics.
-
-An exact `ParamSetCollection` has a separate scalar-check entry because its
-inherited R method otherwise pays the vectorized grouping cost before it can
-reach the same built-in kernels. For strict checks, C iteratively authenticates
-the complete current-path graph: every node is an exact base `ParamSet` or
-`ParamSetCollection`, generated public and private wrappers are canonical,
-dependency tables are empty, leaf constraints are `NULL`, and cycles are
-rejected. Shared children in sibling branches remain valid. Non-strict checks
-skip this feature graph because the public contract already ignores
-dependencies and constraints in that mode. The flattened parameter columns
-and plain scalar input are copied into narrow ordinary snapshots before the
-kernel runs. After it allocates, an allocation-free audit proves that the live
-parameter state, input bytes, R6 methods, collection edges, constraints, and
-dependencies still match admission. Unsupported values—including arbitrary
-`ParamUty` payloads—decline on their type before any vector length or element
-access and execute the unchanged R path. This entry is success-only: invalid
-values also return the sentinel so checkmate retains its exact diagnostics.
-
-Row-oriented design conversion is also native for ordinary unclassed atomic
-and list columns. The kernel returns a sentinel instead of interpreting
-classed atomic vectors or dispatch-sensitive scalar list elements; the R6
-method then executes the historical generic transpose and S3 filtering path.
-ALTREP containers, names, and columns take that same fallback before any
-length or element accessor is called, because such an accessor is an arbitrary
-reentrant callback and cannot safely be mixed with a later sentinel return.
-
-After conversion, an exact base `ParamSet` with no `extra_trafo` may apply its
-individual transformations as one row-oriented batch. The R gate accepts only
-the exact `c("ParamSet", "R6")` class and a keyed, canonical `id` / `trafo`
-data.table with unique, nonmissing, nonempty character IDs and functions in
-every transformation slot. Before reading private state, a callback-free C
-gate authenticates the generated public `trafo`, `extra_trafo`, and `has_trafo`
-wrappers, their exact formals and forwarding bodies, owned enclosure, namespace
-parent, and active-method registry. Replaced, reparented, or delayed bindings
-therefore decline without being forced. It snapshots the table once, validates and matches
-all row names before invoking user code, and then evaluates `trafo(value)` in
-the same three-local `id` / `trafo` / `value` callback frame used by
-`ParamSet$trafo()`, in historical row-major and parameter-major order. List-element assignment
-preserves `NULL` and multivalue results without changing their nesting. If a
-callback mutates the private transformation table or installs an `extra_trafo`,
-the current row retains its pre-callback individual snapshot, the newly
-installed extra transformation is applied to that row, and only the untouched
-tail returns to the public per-row method. The generated surface is
-re-authenticated after each row as well, so a callback that replaces the public
-`trafo` wrapper takes effect on the next row just as it does in the historical
-loop. Callback side effects are therefore never repeated merely to leave the
-batch path.
-Subclasses, an `extra_trafo`, malformed private state, or malformed rows retain
-the complete per-row `ParamSet$trafo()` path. The batch owns its row-list
-results and does not alter the stored design table.
-
-Exact package-generated log-scale transformations have a narrower
-callback-free lane. After authenticating the same base `ParamSet` surface, C
-requires either the canonical `exp` transformation used by `p_dbl()` or the
-exact crate closure generated by `p_int()`, including its body, environment,
-and bounds. Admission is all-or-nothing. Output shells are allocated before a
-final allocation-free audit, then every scalar is transformed without R
-dispatch or callback frames. Custom closures and any changed or unsupported
-surface retain the callback-preserving batch above.
-
-Unknown Domain subclasses take a slow R/S3 fallback. Third-party extension is
-not a primary design constraint, but retaining this fallback costs little and
-prevents unnecessary breakage. A future package-owned built-in type does not
-require redesigning `ParamSet`, but it is a deliberate cross-cutting change:
-maintainers must extend classification and construction, the relevant domain
-and ParamSet kernels, properties/checks/quantiles/subsetting, design generators
-and samplers where applicable, R fallbacks, differential cases, and native and
-R regression tests. There is intentionally no third-party native plug-in ABI.
-
-The scalar Domain checker also treats its table columns as an authenticated
-boundary. IDs, classes, grouping, numeric bounds, tolerances, and outer and
-nested factor levels must be ordinary attribute-free vectors. Every
-`special_vals` row must be an ordinary empty list; a nonempty row declines the
-whole grouped check before observing its arbitrary contents. This matters even
-when the submitted scalar itself is a valid built-in value: the historical R
-prelude can dispatch through classed metadata or inspect every special-value
-row before reaching the type method. Unsupported nested factor storage returns
-the fallback sentinel rather than inventing a native corruption error, so R
-retains its established coercion behavior.
-
-## R object construction
-
-The common `ps()` shorthand captures its complete `...` call before evaluating
-an argument. A registered planner accepts only named, syntactic ASCII IDs and
-exact unqualified built-in constructor calls whose supplied arguments belong
-to a small numeric and character literal grammar. It authenticates the live
-constructor bindings and every helper referenced by a literal call before
-building anonymous Domain-shaped rows directly. Those rows deliberately omit
-print-only representation state that `ParamSet$new()` immediately discards;
-the ordinary R6 constructor remains the ownership and extension boundary.
-Duplicate IDs, namespace qualification, overrides, active or delayed
-bindings, rich constructor features, invalid literals, and arbitrary
-expressions return the `NULL` sentinel before user evaluation, after which
-`list(...)` runs once in its original frame and order.
-
-The planner, literal decoders, constant preparation, and per-row construction
-are separate bounded helpers. This decomposition preserves the same one-shot
-admission and fallback transaction, but prevents a static analyzer from
-cross-multiplying every constructor kind, optional literal, and allocation
-path inside one monolithic function. Before the split, the package constructor
-exhausted bcheck's per-function state budget; the bounded 800,000-state
-prefreeze review after the split completed 854 functions and 41,293 states
-without a package-local state-exhaustion error. Those counts are historical
-analyzer evidence, not a runtime-performance claim or a substitute for the
-frozen-candidate release gate.
-
-Native table-shaped results are ordinary `VECSXP` objects whose columns are
-allocated with the correct storage types and whose names, compact row names,
-and class are set to `c("data.table", "data.frame")`. Shipped C does not link
-to a data.table C symbol or include a private header. It normally installs
-data.table's public object-level
-`.internal.selfref` representation through the public R API: the outer pointer
-tags the exact names vector and protects an owner pointer for the table. This
-is necessary because consumers routinely pass returned tables straight to
-`data.table::set()` or `:=`; without a valid self-reference, those operations
-warn, copy unexpectedly, or try to assign a modified value back through an R6
-active binding.
-
-data.table before 1.18 assumes that every table carrying a valid self-reference
-also has at least `ncol()` allocated column-pointer slots. A native `VECSXP`
-has zero `TRUELENGTH`, so those releases otherwise try to copy nonempty tables
-into a zero-slot shallow shell. Only for such older releases, the common table
-finalizer evaluates the exported `data.table::alloc.col()` closure and adopts
-its returned shell. Private construction state passes `0L`, allocating exactly
-`ncol()` pointer slots and avoiding the usual 1024 spare slots. Publicly
-returned facades use data.table's configured spare capacity so direct `set()`
-calls can add columns by reference. Setting `datatable.alloccol` to zero
-deliberately disables that spare capacity, just as it does for data.table's own
-constructor. Both forms keep every canonical unnamed column shared. Named
-column vectors receive an owned shallow copy before their names are removed,
-because the legacy `alloc.col()` wrapper would otherwise remove those names
-through a shared reference. The bridge validates the returned columns,
-owner/self-reference, and capacity and fails
-closed on a changed contract. data.table 1.18 and newer retain the
-allocation-free public-R API path and its native construction performance.
-
-ParamSet construction also avoids asking data.table to sort state that C has
-already validated and ordered. During `.onLoad`, official `setindexv()` calls
-produce nonidentity, duplicate, identity, and empty secondary-index probes. A
-registered configurator accepts only exact reviewed data.table versions and
-exact carrier/cache metadata, retaining only a process-local C capability.
-Its first invocation seals either the enabled or disabled state until the DSO
-is unloaded, so the registered entry point cannot be replayed to change the
-load-time decision. Canonical ASCII
-parameter and tag tables can then receive equivalent composite and tag indices
-directly. Unknown versions, changed layouts, marked/non-ASCII strings, and any
-unsupported shape simply omit the native index; the R initializer detects the
-missing marker and calls `setindexv()` as before.
-
-Result metadata is owned by the result. In particular, native table names are
-copied into a fresh plain character vector instead of attaching an input
-matrix's `dimnames` vector. A later by-reference `setnames()` call therefore
-cannot mutate the input matrix or the character vector from which its column
-names were created. The pre-R-4.6 Domain fallback applies the same rule by
-shallowly owning its outer table shell and copying its names before replacing
-the self-reference. Existing key and secondary-index metadata receive the same
-owned copies as data.table's shallow allocator. Its Domain-list names are
-copied by subsetting the ID vector, which owns the outer `STRSXP` while
-preserving the encoding of each `CHARSXP`.
-
-The same rule applies to Domain rows, conditions, and other small S3 objects.
-R remains responsible for language capture such as `substitute(depends)`,
-constructor calls used for printing, and evaluation of arbitrary user
-callbacks. A utility Domain's `custom_check(1)` therefore remains an R call in
-the established frame. Its ordinary scalar-`TRUE` or scalar-string result is
-classified by a tiny native gate; only those success shapes skip the generic
-assertion machinery, while ALTREP, invalid, and unusual objects retain the
-original checkmate path. On R 4.5 and newer, a second narrow native gate
-returns printable IDs for the exact plain calls `p_dbl()`, `p_int()`,
-`p_lgl()`, and `p_uty()`, whose `deparse1()` output is fixed. The same encoder
-admits compact calls with only known named formals and a deliberately small
-literal grammar: plain `NULL`, logical and integer scalars, infinities,
-integral double scalars from -9999 through 9999 when `scipen` is exactly zero,
-and short native-encoding printable-ASCII character vectors. Namespace
-qualification, attributes, objects, unknown heads or formals, and unsupported
-argument values retain the historical `deparse1()` path. Output is capped at
-80 bytes, so
-the encoder never reproduces deparse's line-breaking state machine. It reads
-the option before touching the live call, performs an allocation-free
-authentication and render, allocates the result, then repeats the option read
-and complete render; any changed shape or byte rejects the result. R releases
-before 4.5 lack allocation-free public attribute inspection and therefore use
-`deparse1()` for the complete classifier.
-
-R 4.6 adds a separate standalone-constructor boundary for exact unqualified
-`p_dbl()`, `p_int()`, and `p_lgl()` calls. The wrapper crosses into C before
-ordinary validation. C authenticates the exact installed closure and caller
-binding, verifies every delayed formal without forcing it, and retains forced
-values in the original function frame so a decline cannot evaluate an
-expression twice. It constructs the established Domain columns and attributes
-directly only after a final allocation-free audit of the call, bindings,
-values, and runtime roots. For fractional representation values, the owned
-deep duplicate is formatted through R's full-precision numeric coercion; text
-is accepted only with all significant digits or an exact complete
-`R_strtod()` round trip, and `scipen` plus `OutDec` are audited around every
-allocating render. Long, multiline, extended, or mutated calls retain the R
-constructor. Standalone `p_fct()` also remains on the R path because
-conservative direct admission did not improve its representative common
-workload; its grouping collapse is still native.
-
-## Native source boundaries
-
-- `src/init.c`: registration and package initialization;
-- `src/paradox.h`: shared types, declarations, and invariants;
-- `src/r_api_compat.c` and `src/r_api_compat.h`: the only version-dependent R
-  accessor boundary, including fail-closed old-R fallbacks;
-- `src/r_utils.c`: checked accessors and R object/table construction;
-- `src/r_utils.h`: shared checked-construction helpers;
-- `src/builtin_condition.c` and `src/builtin_condition.h`: exact built-in
-  dependency-condition classification and comparison;
-- `src/domain_construct.c`: conservative construction gate for the five
-  built-in Domain types;
-- `src/domain_construct_builtin.c`: authenticated standalone `p_dbl()`,
-  `p_int()`, and `p_lgl()` construction on R 4.6 and newer;
-- `src/domain_kernels.c`: built-in Domain validation, sanitization, and
-  quantiles;
-- `src/properties.c`: aligned static ParamSet properties;
-- `src/ids.c`: ordered class and tag filtering;
-- `src/paramset_get_values.c`: exact-base value selection with dependency,
-  TuneToken, required-value, and final ID filtering;
-- `src/paramset_construct.c`: canonical ParamSet table assembly;
-- `src/paramset_collection_construct.c`: conservative exact-collection state
-  assembly without evaluating child callbacks;
-- `src/paramset_check.c`: scalar and column-oriented batch validation;
-- `src/paramset_collection_check.c`: exact-collection graph authentication,
-  stable snapshots, and scalar built-in validation;
-- `src/paramset_qunif.c`: bulk built-in quantile mapping and typed table
-  construction;
-- `src/sampler_unif.c`: authenticated whole-operation uniform sampling and
-  typed table construction for exact retained samplers;
-- `src/paramset_domain_common.c`: shared canonical-state validation and Domain
-  table construction;
-- `src/paramset_domain_common.h`: shared validated Domain-state declarations;
-- `src/paramset_get_domain.c`: single-Domain reconstruction, including guarded
-  collection callbacks;
-- `src/paramset_domains.c`: one-pass reconstruction of all ordinary Domains;
-- `src/paramset_params.c`: one-pass construction of the enriched `$params`
-  table and the shared static/dynamic assembly boundary;
-- `src/paramset_params_internal.h`: internal authenticated parameter-table
-  snapshot contract;
-- `src/paramset_collection_params.c`: recursive exact-collection admission and
-  enriched `$params` construction around the public dependency/value snapshot;
-- `src/paramset_collection_deps.c`: callback-free graph admission and
-  postorder dependency aggregation for exact collections;
-- `src/paramset_collection_values.c`: callback-free graph admission and
-  one-pass assembly of exact-collection `$values`;
-- `src/paramset_collection_detach.c`: callback-feature discovery and compact
-  detachment plans for collection subsets and flattening;
-- `src/paramset_values_store.c`: value-list merging, authenticated exact-base
-  validation and storage, and collection child-assignment planning;
-- `src/paramset_subset.c`: validated slicing and single-use state transfer;
-- `src/paramset_bulk_shell.c`: transactional construction of canonical
-  one-dimensional ParamSet R6 shells on R 4.6 and newer;
-- `src/paramset_bulk_shell_internal.h`: shared validate/prepare/adopt contract
-  used by the ParamSet and sampler graph factories;
-- `src/paramset_trafo.c`: callback planning for batched transformations;
-- `src/r6_surface_auth.c`: callback-free authentication of the generated R6
-  surfaces used by Design transformations, native checks, and random designs;
-- `src/design_transpose.c`: ordinary design row conversion;
-- `src/design_transpose_trafo.c`: exact built-in log-scale batch
-  transformations;
-- `src/design_dependencies.c`: dependency planning and built-in masking for an
-  entire Design operation;
-- `src/ps_construct_builtin.c`: literal built-in `ps()` call planning and
-  anonymous Domain-row construction;
-- `src/sampler_1d_unif_shell.c`: transactional construction of complete
-  `Sampler1DUnif` / `Sampler1D` / `Sampler` R6 graphs around owned ParamSets;
-- `src/test_altrep.c`: package-private native fixtures used by lifetime,
-  arithmetic-boundary, finalizer, and ALTREP regressions.
-
-Source files follow complete logical operations rather than an R-class mirror;
-empty architectural layers are not added merely to match a diagram.
-
-## Value-mutation boundary
-
-Public mutation is split into four narrow native responsibilities. The merge
-entry combines the already captured `...`, `.values`, and optional current
-value lists; it preserves current order, applies replacements in input order,
-deletes `NULL` updates only in insertion mode, and returns a newly owned list
-shell. The ordered-store entry filters unknown names, selects the first
-duplicate, and stores known values in parameter order while shallow-sharing
-opaque leaves. An unnamed empty private list is deliberately not normalized:
-it returns the fallback sentinel so the R method preserves that internal
-object shape.
-
-The checked-assignment entry is a success-only atomic fast path for an exact
-base `ParamSet` with canonical built-in rows, no dependencies, and no
-constraint. It authenticates the generated `values`, `deps`, and `constraint`
-bindings plus `assert()`, `check()`, `test_constraint()`,
-`check_dependencies()`, and private `.store_values()`. Authentication covers
-the exact wrapper body and formals, owned enclosure, package-namespace parent,
-and explicit absence of local `super` or implementation shadows; active,
-delayed, reparented, or replaced wrappers therefore decline without being
-forced. Validation and sanitization complete before the single ordered commit,
-and no user callback may occur between them. Unsupported values, extensions,
-malformed state, or a failed check return literal `NULL` without mutation and
-execute the established R validation, diagnostics, and callback path.
-
-The collection entry only builds a distribution plan. R still performs each
-planned child assignment through its public `values` binding, with touched
-children before cleared children, so subclass behavior such as
-`ParamSetShadow`, nested prefix/postfix translation, shared-child last-owner
-semantics, and extension errors retain their established dispatch and order.
-Explicit `NULL` values, input ordering, and list ownership follow the ordinary
-setter rules. All inspected tables, wrapper environments, sanitized values,
-and plans remain rooted across allocation and garbage collection; direct
-private state is installed only after complete admission and validation.
-
-## ParamSetCollection construction boundary
-
-The exact base collection initializer calls the registered arity-four
-`param_set_collection_construct` helper only after R has validated the public
-arguments and normalized the child names. The helper admits exact base
-`ParamSet` and `ParamSetCollection` children with owned R6 enclosures and
-canonical ordinary private construction tables. It inspects only permanent
-schema state: constructing a collection does not read values, dependencies, or
-callbacks, so those child properties remain live after construction.
-
-On admission, one pass preserves child and row order while affixing IDs,
-creates independently owned mutable shells for `.params`, `.tags`, `.trafos`,
-and `.translation`, and shallow-shares only the same opaque leaves as the R
-implementation. Existing tags precede generated set and parameter tags,
-duplicates are retained, and the generated tag and transformation tables use
-the historical stable ID order. Child objects themselves remain the identical
-references supplied by the caller. The native tables are ordinary R objects;
-data.table-shaped tables receive a valid public object-level self-reference
-without calling data.table C code.
-
-The literal `NULL` result is a pre-callback fallback sentinel. Subclasses,
-custom or malformed storage, active or delayed private bindings, unsupported
-string encodings, and translated ID collisions therefore execute the complete
-historical R initializer and retain its diagnostics. No partially constructed
-native state is installed before admission succeeds. This boundary preserves
-extension behavior without making it part of the fast path and uses only the
-public R C API available throughout the R 4.3-and-newer support range.
-
-## ParamSetCollection Domains boundary
-
-The arity-two `param_set_domains` ABI continues to serve both ordinary sets and
-collections. An exact nonempty `ParamSetCollection` is admitted only after an
-iterative, callback-free walk of its complete current-path graph. Every node
-must have an exact base class, its owned R6 enclosure, canonical built-in
-private tables, and the unmodified generated `values`, `deps`, `ids`,
-`.get_values`, and collection prefix wrappers. Collection names and postfix
-flags are validated without forcing promises or active private bindings.
-Reusing one child in separate branches is a valid DAG; encountering a node
-already on the current path raises a deterministic cycle error.
-
-The admission plan roots every object, enclosure, wrapper, and source table it
-has inspected. Before evaluating R, the kernel copies all eleven permanent
-parameter columns into immutable native-owned snapshots, including an owned ID
-vector used for result names. It then evaluates the captured root values
-binding exactly once, resolves and evaluates the then-current public root
-dependencies active binding exactly once, in that order. Tags and
-transformations are read after those callbacks, matching single-Domain
-collection reconstruction; all four dynamic stores are validated and copied
-into rooted shells before matching or result construction.
-
-`NULL` remains the literal fallback sentinel only before either callback has
-started. Subclasses, extension Domains, replaced wrappers, delayed or active
-private stores, malformed tables, and inconsistent nested objects therefore
-retain the complete R path without duplicated side effects. Once values have
-started, malformed callback results, missing or corrupt live metadata, and
-duplicate value or transformation owners raise a collection-state error. The
-kernel never returns `NULL` after a callback and consequently never replays a
-callback through the fallback.
-
-Successful output is the same named list of independently owned, mutable
-data.table-shaped Domain facades as repeated `get_domain()` calls. All
-dependency rows and their order are retained, explicit named `NULL` values stay
-distinguishable from absence, and opaque leaves such as closures and
-environments keep their historical shallow sharing. The implementation calls
-neither data.table nor checkmate and uses only public R APIs available across
-the package's R 4.3-and-newer C17 baseline.
-
-## ParamSetCollection values boundary
-
-Exact base `ParamSetCollection$values` has a dedicated arity-two registered
-entry point. It performs a complete callback-free admission before allocating
-the result: every current-path node must have its exact base class and owned
-private environment, canonical generated public and private getter wrappers
-parented by the package namespace, canonical permanent ID/class/storage
-columns, direct value bindings, and row-for-row collection translation.
-Collection names, postfix
-flags, affixed IDs, value order, and supported string encodings are checked as
-part of the same preflight. A sibling may refer to the same set more than once;
-only identity already present on the active path is a cycle and raises a
-deterministic error.
-
-The iterative plan roots every inspected object and state vector through the
-entire call. Each leaf occurrence records only its root-row offset and the
-ordered subset of parameters that currently have values. After admission, one
-fresh list and one fresh names vector are filled from the root collection's
-canonical ID order. Opaque leaves, including environments and closures, remain
-shallowly shared as before, while mutation of either returned shell cannot
-alter stored state or another call's result. Empty output is always a named
-list. Once a collection frame itself is authenticated, its immediate child
-count reserves the corresponding root-carrier capacity without observing those
-children early. Canonical constructions also reuse identical, same-position
-parameter and translation `CHARSXP`s in one linear pass; small permuted inputs
-retain the direct scan and all other encodings retain R's general match.
-
-Subclasses such as miesmuschel's `ParamSetShadow`, custom Domains, replaced or
-reparented R6 wrappers, promises and active private bindings, bytes-encoded
-names, and malformed relevant tables return the `NULL` sentinel before any
-extension callback can run. The R wrapper then executes the established
-delegated path.
-The native path calls neither data.table nor checkmate, checks long loops for
-interrupts, and uses only the public C API available from R 4.3 onward.
-
-## ParamSetCollection dependencies boundary
-
-Exact base `ParamSetCollection$deps` uses a dedicated registered arity-two
-entry point. Before reading any public child member, an iterative preflight
-validates every current-path node's exact base class, owned R6 private
-environment, generated dependency binding, canonical built-in parameter and
-dependency tables, direct collection fields, names, postfix flag, and supported
-ASCII encoding. Generated `ids()` wrappers are authenticated only on the edges
-where the historical implementation would call them: a named child whose
-aggregated dependency result is nonempty. Subclasses, custom Domains, replaced
-wrappers, promises, active private state, unsupported encodings, and malformed
-tables therefore reach the unchanged R aggregation path before any extension
-callback has run.
-
-The protected plan records one occurrence per graph edge, so a shared sibling
-is a valid DAG while identity already on the active path raises a deterministic
-cycle error. Source tables and their parsed columns remain rooted throughout
-construction. Dependency rows are emitted once in depth-first postorder into
-fresh columns, with collection-local rows appended after descendants and the
-outer local rows last. Prefix and postfix translation is applied independently
-at every outward edge; dangling and duplicate strings retain the established
-`map_values()` behavior, including coincidental matches at a higher layer.
-
-Every Condition is deeply duplicated, ordinary list aliases are detached, and
-opaque leaves such as environments remain shared. The resulting three-column
-data.table facade has compact row names, no key or secondary index, and a valid
-object-level self-reference without calling data.table. Long loops poll for
-interrupts, all row and allocation arithmetic is checked, and the traversal
-does not consume the C stack.
-
-## ParamSet get-values boundary
-
-The public `$get_values()` wrapper passes only its owned private environment,
-`self`, and the current method frame to the registered arity-three native
-entry. Keeping the public filters in that frame is intentional: `type` and
-`check_required` are forced and validated first, while `class`, `tags`, and
-`any_tags` remain promises until after dependency callbacks, TuneToken
-filtering, and required-value diagnostics. The adjacent arity-two `ids()`
-entry similarly forces and validates those three filters one at a time before
-reading the live parameter and tag tables.
-
-Admission is callback-free and exact-base only. It authenticates the generated
-`get_values()`, `ids()`, values/dependency bindings and private getter, owned
-R6 enclosure, canonical built-in tables, ordered value names, and, for a
-collection, the complete graph through the callback-free native values and
-dependency aggregators. A `NULL` sentinel can be returned only before
-`remove_dependencies` or a Condition callback is evaluated. Subclasses,
-custom Domains, altered wrappers, malformed tables, promises in private state,
-and bytes names therefore enter the unchanged R path without replay.
-
-The operation retains the historical split between snapshots and live state.
-Values and their original names are rooted independently, and the dependency
-table is captured once. The `remove_dependencies && nrow(dependencies)` test
-and the later `seq_row(dependencies)` call each make their historical live row-
-count observation. The exact imported `seq_row` closure is resolved and
-authenticated before invocation; a replacement still produces the live row
-vector but cannot enter the planned lane after restoring the import. After both
-observations, an exact table made solely from
-canonical `CondEqual` and `CondAnyOf` objects can enter a second callback-free
-lane. That lane revalidates the live columns and values names, authenticates
-the locked generic and methods, rejects classed, ALTREP, or otherwise
-dispatch-capable operands, roots every planned right-hand operand independently
-of the mutable condition table, and matches all IDs in batches. It then traverses
-the already evaluated `seq_row()` result in its actual order, including valid
-permutations or duplicates, while evaluating the sequential removal plan in C.
-After the final dispatch authentication and before committing to that plan,
-each parent scalar is read again, revalidated, and rooted independently. The
-comparison loop uses those snapshots rather than rereading a user-visible list
-after an allocating operation.
-Logical, integer, double, and character scalars retain R numeric coercion,
-missing-value, encoding, infinity, signed-zero, and membership behavior. Any
-custom class, changed binding, malformed condition, unsupported operand, or
-observable extension declines before a value is removed and uses the unchanged
-live S3 loop instead. In that loop, correctly shaped column and
-`condition_test` replacements made by an earlier callback are observed on the
-next row. The
-public binding API before R 4.6 cannot distinguish this forced canonical
-surface from a new delayed replacement, so those releases conservatively use
-the live loop while retaining the same package ABI. The
-first dependency-removal assignment shallow-copies the local
-values shell and its names even if a callback renamed the target and no element
-matches, reproducing R's copy-on-write detachment from
-`private$.values`; every non-`with_token` type filter establishes the same
-boundary even when all elements survive. Opaque elements remain shallowly
-shared. Required IDs are checked against the original names, then final filters
-read the live parameter/tag tables and emit in current parameter order.
-
-After the first callback, unsupported mutation raises a deterministic state
-error instead of falling back and repeating side effects. The retained roots
-cover the original names, current detached shell, callback-visible tables, and
-selected IDs across allocation and garbage collection. The implementation
-calls neither checkmate nor data.table and compiles against the public strict R
-C API from R 4.3 onward.
-
-## ParamSetCollection params boundary
-
-An exact `ParamSetCollection$params` call has a dedicated registered entry
-point; it does not broaden the ordinary `ParamSet$params` ABI. Before invoking
-R, the collection routine iteratively validates the complete current-path
-graph: exact base class vectors and owned private environments, canonical
-built-in state and data-frame row names, generated R6 bindings and superclass
-proxies, collection name/postfix rules, keyed translation ownership, one-layer
-prefix/postfix spelling, and row-for-row snapshot agreement. Reusing one child
-in sibling branches is valid. Reaching the same collection again on the active
-path is a cycle and raises a deterministic error, because the historical
-recursive fallback cannot finish.
-
-Every admitted frame and source table is retained in a protected R root plan.
-The shared builder first copies the collection's static `.params`, `.tags`, and
-`.trafos` snapshots into an owned 16-column result. Only after that snapshot is
-complete does it read public `$deps` and then public `$values`, exactly once and
-in their historical order. The first callback result and all admitted sources
-remain rooted across the second callback. Dynamic joins use the result's owned
-ID vector, so a finalizer or delegated callback that rebinds private state
-cannot invalidate or retarget the in-flight table.
-
-The native call returns its `NULL` fallback sentinel only during this
-callback-free admission phase. Once public dependency or value evaluation has
-begun, dangling dependency IDs are handled like an unmatched data.table update
-join and ignored. Any other unsupported callback result raises one deterministic
-state-change error instead of returning to the R implementation and executing
-the callbacks a second time.
-
-Subclasses, custom Domains, replaced active bindings, malformed or delayed
-private bindings, noncanonical translation/index metadata, and inconsistent
-nested snapshots return the `NULL` sentinel before public callbacks. The R6
-binding then executes the established implementation. Successful results own
-the table, column and produced list shells, preserve the private opaque
-secondary index and valid data.table self-reference, and continue sharing only
-historical opaque leaves such as closures and environments.
-
-## Subset and flatten state-transfer boundary
-
-`ParamSet$subset()` validates its public arguments and observes `$deps` at the
-historical R point before calling the registered subset planner. The planner
-admits either an exact base `ParamSet` or an exact base
-`ParamSetCollection`. Ordinary sets read their private dependency and value
-stores directly. Collections independently authenticate their complete graph
-through the callback-free native dependency and value aggregators; an external
-caller cannot inject a table that later becomes constructor state. Any custom
-child, replaced wrapper, malformed translation, unsupported Domain, or cycle
-therefore returns the `NULL` fallback sentinel before a delegated value
-binding is evaluated.
-
-The planner roots the complete source state, validates requested IDs and all
-owner maps, preserves request order and repetition, and allocates fresh
-parameter, tag, transformation, dependency, and values shells. A missing
-dependency is reported before `keep_constraint` is forced. Otherwise the
-result is protected by a process-local external-pointer capability that is
-accepted only by a fresh exact `ParamSet` constructor and consumed on first
-use. This keeps table ownership independent while retaining the historical
-leaf-sharing or duplication rules for opaque values, transformations, and
-Conditions.
-
-`ParamSet$subspaces()` uses a separate internal mode of the same capability.
-The native planner freezes the complete attribute-free ID vector, validates
-and indexes the source once, and first creates one unreachable composite state
-in request order. It then splits that rooted state into independently owned
-one-row parameter, tag, transformation, values, and historically empty
-dependency tables for every requested occurrence, including duplicates. Each
-fresh singleton is validated again before its capability is created. The
-planner snapshots the source table children and relevant metadata before any
-of this work and performs one final source, surface, request, and values audit
-after every child and result attribute has been allocated. A failure exposes
-no partial token batch. Each token also carries the authenticated direct
-`extra_trafo` value. `SamplerUnif` may transfer these fresh states directly
-into `Sampler1DUnif`; `Sampler1D` probes and consumes the capability,
-constructs the one-row `ParamSet`, replays the public `extra_trafo` setter
-validation, and skips the otherwise redundant deep clone.
-On a reviewed data.table layout, each singleton payload also carries the exact
-composite `id` / `cls` / `grouping` secondary index synthesized by the native
-constructor. Adoption skips `setindexv()` only when that marker is present;
-unsupported layouts or encodings retain the data.table setter.
-
-Subspace planning is bound to the one public `$values` result captured before
-the caller observes the private ID vector. The single validate-once transaction
-requires that exact private value pointer at admission and audits it again
-after its allocations. A finalizer or other replacement observed before the
-final audit therefore declines the complete native plan; a pending finalizer
-that R runs only after the single native call cannot alter the already detached
-batch. Both public `$subspaces()` and exact-base `SamplerUnif` reuse the already
-captured value snapshot in their historical R fallback instead of mixing child
-states.
-
-On R 4.6 and newer, public `$subspaces()` hands a complete token batch to
-`src/paramset_bulk_shell.c`. Package load preserves one unexposed canonical
-empty ParamSet graph and snapshots the live generator's complete sorted
-binding inventory, ordinary binding types, locks, parent, attributes, exact
-top-level values, and owned copies of every list container. The factory never
-invokes the live generator. It authenticates that full snapshot, allocates
-fresh public, enclosure, and private environments plus one clone of every
-generated closure per child, and installs each active closure at pointer
-identity in both the active binding and `.__active__` registry. These three
-environments are non-hashed, matching R6's observable `env.profile()` state;
-their parents, class, binding inventory and locks match ordinary ParamSet
-construction. After installing result attributes, the factory makes one final
-generator-name allocation, then reaudits the generator and every token before
-the no-allocation adopt-and-lock loop. A generator mutation or invalid token
-returns `NULL` without consuming any state, so only the historical R path
-invokes altered constructors. R 4.3 through 4.5 always use that R path because
-their public API cannot inertly distinguish every generator binding type.
-R's debugger can toggle a closure's internal debug bit without replacing that
-closure, and the public extension API exposes no inert inspection for that bit.
-This diagnostic-only in-place mutation is intentionally unsupported by the
-factory: ordinary method replacement is detected, but a breakpoint placed
-directly on an unchanged generator wrapper is not reproduced on canonical
-children.
-
-`SamplerUnif$new()` has a still narrower combined factory in
-`src/sampler_1d_unif_shell.c`. Package load records an unexposed canonical
-`Sampler1DUnif -> Sampler1D -> Sampler` prototype, all four participating R6
-generators (including `ParamSet`), the R6 generator capsule helpers, and the
-exact package-namespace constructor targets. Admission requires their binding
-types, pointer identities, parents, attributes, insertion order, lock state,
-and owned list snapshots to remain unchanged. One all-or-nothing call prepares
-every ParamSet token, builds every ParamSet shell, and then constructs all three
-non-hashed sampler slices per child with their shared private environment,
-super chain, cloned generated closures, active-binding registry identities,
-and historical locks. The last allocation is followed by an allocation-free
-reaudit; only then are all single-use tokens adopted. Any altered generator,
-capsule, namespace target, source graph, token, or special environment value
-declines the whole batch without consuming state and runs the ordinary R6
-constructors. This specialized copier is intentionally not a general R6 clone
-API and is not an extension boundary.
-
-Every load-time prototype and authentication snapshot held with
-`R_PreserveObject()` has a paired, idempotent release routine called from
-`R_unload_paradox`. This includes the combined sampler graph, the ParamSet shell
-prototype, the standalone built-in Domain constructor state, and the literal
-`ps()` constructor state. Release helpers clear their static roots after
-`R_ReleaseObject()`. Both initialization and unload are exported on Windows;
-reloading the namespace must establish a fresh set of roots rather than reuse
-addresses from the prior DSO lifetime.
-
-If a selected fixed/special value is an environment, it retains the ordinary
-Sampler initializer so R6 objects receive the same deep clone as before.
-Foreign pointers, subclasses, altered surfaces, delayed private state, and
-ALTREP requests never enter this owned hand-off.
-
-The collection override still creates detached snapshots of live child
-constraints and extra transformations. Its common exact-graph no-feature case
-returns the already constructed result immediately, before graph admission or
-translation copying. Callback-bearing exact graphs use a fail-closed direct
-private traversal. Before inspecting a private feature slot, it authenticates
-the instance's generated R6 active binding, closure owner, namespace parent,
-formals, and body without invoking that binding. The resulting wrapper closes
-over compact named lists containing only the child callback state and the full
-four-column translation, not cloned source `ParamSet` objects. Encountering a
-replacement, subclass, or malformed/cyclic graph restores the public
-active-binding traversal. `flatten()` additionally scans plain cargo first and
-rewrites only rows containing internal-tuning callbacks, rather than running a
-data.table callback over every parameter when there is nothing to detach.
-
-## Bulk ParamSet quantile boundary
-
-`ParamSet$qunif()` retains its public R validation before native dispatch:
-inputs must be numeric matrices or data frames with at least one column, contain
-only finite values in `[0, 1]`, and have unique column names drawn from the
-ParamSet. Data frames are normalized with the established `as.matrix()` step.
-This preserves checkmate diagnostics for every invalid public input.
-
-The native routine accepts only the exact permanent `.params` representation:
-the two-class `data.table` / `data.frame` facade, all eleven columns in their
-canonical order and storage modes, nonmissing metadata, and unique parameter
-IDs. It accepts an unclassed integer or double matrix with valid dimensions and
-column names, then resolves requested IDs through an interruptible hash table.
-Only requested parameter rows must be supported, so an unselected extension
-does not disable a built-in slice.
-
-Selected rows map natively only when they are canonical `ParamDbl`, `ParamInt`,
-`ParamFct`, or `ParamLgl` rows with matching storage metadata. Factor choices
-must be nonempty, nonmissing character vectors and the logical level vector
-must be exactly `c(TRUE, FALSE)`. Selected `ParamUty` or custom Domain rows,
-altered metadata, malformed tables, and unsupported matrix objects return the
-`NULL` sentinel without mutation. The R method then executes its prior grouped
-`domain_qunif()` / S3 implementation, including its diagnostics and extension
-callbacks.
-
-The successful path allocates one correctly typed output vector per requested
-column and constructs the ordinary data.table-shaped result directly. Input
-column order is retained, row names use the standard compact representation,
-zero-row inputs retain typed zero-length columns, and neither input values nor
-input names are shared mutably with the result.
-
-Numeric quantile mapping deliberately preserves the historical sequence of R
-floating-point primitives.  The affine kernel materializes `x - 1`, both
-products, and then the subtraction through automatic `volatile double`
-intermediates.  These are rounding barriers, not shared-state synchronization,
-and must not be removed or replaced by an expression that permits contraction.
-Apple Clang otherwise emits a fused multiply-add on ARM64: the ordinary `.499`
-probe differs from R by 64 ulps, and an adversarial integer
-probe crosses a `floor()` boundary and returns `-2L` instead of `-1L`.  The
-barriers remain effective under forced contraction with both GCC and Clang.
-Alternating AB/BA benchmarks in
-`.local/benchmarks/release-fma-affine-20260717`, pooled by library identity
-rather than command-position labels, measured a 1.2--2.5% cost for public mixed
-`ParamSet$qunif()` workloads.  Allocations were unchanged, and applying that
-cost to the frozen release benchmark leaves the workload about 9.7 times
-faster than the R implementation.  This bounded cost is part of the
-compatibility contract.
-
-## Grid-design bulk boundary
-
-After the public wrapper has constructed and validated the named resolution
-vector, an exact generated base `ParamSet` may hand all axes to the registered
-grid routine at once. The routine reuses the built-in quantile specifications,
-but allocates the complete Cartesian table directly instead of constructing a
-one-column table per parameter and joining those tables in R. Resolution order
-is output-column order and the last axis varies fastest, matching the previous
-unsorted cross join. Interior unit values use the same reciprocal multiplication
-as `seq.default()` and explicit endpoints, including bit-for-bit floating-point
-agreement.
-
-Admission is deliberately narrower than bulk `qunif()`. It requires R 4.6's
-allocation-free attribute inspection, all current parameter rows to be
-canonical built-ins, a plain named integerish resolution vector containing
-each ID exactly once, categorical counts equal to their live level counts, and
-a Cartesian product representable by an ordinary data frame. Names and counts
-are copied into rooted carriers in one allocation-free snapshot before factor
-levels or output columns are allocated. Translated ID operands remain rooted
-through hash collision probes.
-
-Any zero resolution declines even though C could cheaply return an empty
-table: historically every axis is quantile-mapped before the cross join, so a
-different unsupported axis can warn first. Infinite integer bounds, extensions,
-replaced generated methods, old R runtimes, altered metadata, overflow, and all
-other unsupported shapes likewise return the `NULL` sentinel and execute the
-complete R path. `Design$new()` remains the compatibility boundary for values,
-dependencies, and duplicate removal; profiling that boundary, rather than
-further tuning the grid fill loop, determines the next optimization.
-
-## Design dependency planning boundary
-
-For an exact base `ParamSet`, `Design$new()` asks one registered routine for a
-complete dependency plan after fixed values have already been installed. C
-reconstructs the historical stable, layered `topo_sort()` order, evaluates
-exact `CondEqual` and `CondAnyOf` columns, and returns one typed row mask and
-child ID per dependency edge. R then performs the same character-`j`
-`data.table::set()` call for every edge, including empty masks. This retains
-by-reference aliases outside the table, key/index invalidation, `.Last.updated`,
-and the fixed-values / dependencies / duplicate-removal order without calling
-data.table from C.
-
-Admission is all-or-nothing and callback-free. The generated R6 surfaces,
-imported helpers, the live S3 method table, condition `$` dispatch, private
-tables, column types, and string encodings must be exact. The cloned topology
-is enabled only for reviewed `mlr3misc` source versions; an unknown future
-implementation falls back rather than silently adopting different tie rules.
-Columns that share storage with another design column, parameter/dependency
-table state, or any exact condition child or class/name vector are rejected,
-because an earlier historical `set()` can otherwise change a later lookup or
-dispatch.
-
-Every ID, storage type, dependency endpoint, and data name is copied before
-workspace allocation and must remain unchanged at the commit boundary. Output
-allocation and allocation-capable shape/surface checks finish before a final
-allocation-free state, alias, condition, and dispatch validation; only then is
-the plan simulated a second time into its exact-sized row vectors. Inactive
-state is a sparse-parent bit set capped at 64 MiB, and edge/index-plan caps make
-oversized cases decline before an avoidable native allocation. No `NULL`
-fallback is possible after R begins the ordered `set()` loop.
-
-## Random design bulk boundary
-
-`generate_design_random()` admits only exact base `ParamSet` and
-`ParamSetCollection` R6 objects whose rows are built-in `ParamDbl`, `ParamInt`,
-`ParamFct`, or `ParamLgl` Domains. Collection children are checked recursively;
-any subclass, custom Domain, altered required R6 shape, or collection cycle
-fails closed to the established `SamplerUnif` implementation. Zero-dimensional
-spaces also retain that path because their historical result has zero rows even
-when a positive sample count was requested.
-
-Admission authenticates the exact generated `clone`, `ids`, `qunif`, and
-`subspaces` methods and the `length`, `class`, `is_bounded`, `has_deps`, and
-`values` active bindings. Collections additionally authenticate their own
-`clone` and `sets` wrappers plus the inherited superclass enclosure. The check
-reads binding metadata and promises without evaluation, so an ordinary delayed
-replacement declines before its expression or any extension callback runs.
-
-The bulk path preserves the sampler's operation order. It first validates the
-parameter support, makes one deep clone, and then validates `n`. It draws one
-column-major vector of `n * p` uniforms, gives the resulting named matrix to the
-cloned set's bulk `qunif()` method, and constructs one `Design` without duplicate
-removal. A single column-major draw consumes exactly the same random stream as
-the former ordered sequence of `p` calls to `runif(n)`; `runif(0)` neither
-creates nor changes `.Random.seed`.
-
-Differential tests compare the complete data columns, storage types, table
-metadata, cloned parameter-set state, and final RNG state against
-`SamplerUnif` over mixed, fixed, dependent, collection, zero-row, and multiple
-seed cases. Separate regressions cover clone isolation, empty-space behavior,
-validation/error priority, subclasses at both the root and nested collection
-levels, custom Domains, and spoofed non-R6 objects. The coordinated clean build
-results used during development are diagnostic only; the frozen-candidate
-workflow in `AGENTS.md` owns the release claim.
-
-## Repeated uniform-sampler boundary
-
-`SamplerUnif` has its own whole-operation kernel because consumers such as
-bbotk and mlr3hyperband retain one sampler and invoke `$sample()` inside their
-optimizer loops. The exact generated private method enters C immediately. A
-successful call allocates one typed column per parameter, draws the same
-column-major stream as the former ordered `runif(n)` calls, maps each value
-with the shared built-in quantile primitives, and returns a complete
-data.table facade. The existing public `Sampler$sample()` method still creates
-the sole outer `Design`, applies root dependencies, and retains the sampler's
-`param_set` identity.
-
-Admission is intentionally narrower than `generate_design_random()`. The
-first retained lane requires a nonempty exact base `ParamSet`, an exact
-`SamplerUnif` / `Sampler1DUnif` R6 graph in root parameter order, canonical
-built-in one-row child sets, and empty root and child fixed-value stores. Each
-child's type, bounds, and levels must still equal the detached root row from
-which it was constructed; altered bounds, reordered or duplicate children,
-replaced public, private, or active methods, dependencies installed on a child,
-subclasses, collections, and serialized malformed state all decline. The
-hierarchical implementation then observes those supported mutable surfaces in
-its established order.
-
-Package and imported method targets must already be forced canonical closures;
-the admission check never forces a delayed lazy-load binding merely to decide
-whether C is safe. A sampler's first call may therefore use the hierarchical
-path to establish those package bindings, while retained subsequent calls enter
-the native lane. Zero-row priming does not create or advance the RNG state.
-
-For positive row counts, the RNG binding must be an ordinary unlocked,
-unaliased direct integer seed for one of R's seven built-in uniform generators.
-Active, delayed, locked, shared, absent, malformed, and user-supplied RNG
-bindings decline without a read, write, force, warning, or consumed variate.
-Zero rows do not inspect, create, or change `.Random.seed`. This restriction
-lets `PutRNGstate()` reuse the admitted seed and removes callback and allocation
-interleaving from the committed draw while retaining the exact
-values and final seed for Wichmann-Hill, Marsaglia-Multicarry, Super-Duper,
-Mersenne-Twister, both Knuth variants, and L'Ecuyer-CMRG.
-
-The graph is authenticated once to size the output and again after every
-output, data.table self-reference, factor-level snapshot, and root carrier has
-been allocated. All borrowed R6 objects, tables, columns, closures, and level
-copies are retained in that carrier. A final allocation-free audit compares
-the live graph and seed with the retained snapshot; only then does C call
-`GetRNGstate()`. No fallback, allocation, callback, diagnostic, or interrupt
-check remains inside the column-major draw, matching base `runif()`'s committed
-loop. After `PutRNGstate()`, C no longer reads any borrowed sampler state.
-
-## Validation evidence
-
-The native bulk-quantile tests cover forced registration, exact endpoint and
-storage behavior, randomized agreement with individual built-in Domains,
-reordered subsets, integer matrices, normalized data frames, zero rows,
-`ParamSetCollection`, selected and unselected custom Domains, `ParamUty`, public
-diagnostics, corrupt storage, nonmutation, result-name ownership, and GC torture.
-Intermediate focused and full-suite results are useful while editing, but are
-invalidated by later source changes.
-
-Development iterations passed strict GCC and Clang builds, focused tests, GCC
-`-fanalyzer`, per-translation-unit Clang Static Analyzer reports, exhaustive
-cppcheck, forced-registration auditing, and ELF export and hardening checks.
-These intermediate results are not release evidence. The frozen release
-workflow in `AGENTS.md` and the retained run receipts described in
-`design/validation.md` are authoritative for any release claim.
-
-rchk is intentionally treated as a bounded, source-specific model rather than
-an oracle that understands every R root carrier. The release policy hashes the
-complete report and assigns every ordered diagnostic block to a narrow reviewed
-model limitation; maacheck remains exactly empty and fficheck must account for
-all 61 registered routines. A changed diagnostic, block count, rationale, or
-package-local analyzer error fails closed. This keeps the remaining UP/PB
-reports visible without contorting correct, ownership-explicit C merely to fit
-bcheck's abstraction.
-
-## C rules
-
-- Portable C17 is the shipping baseline, avoiding dependence on C23 semantic
-  changes while retaining a current compiler contract. There are no
-  architecture-specific
-  intrinsics or `-march=native`; Apple silicon is a first-class target. The
-  documented `SystemRequirements: USE_C17` mechanism requires R 4.3 or newer.
-- Define `R_NO_REMAP` and `STRICT_R_HEADERS`; use the public R API only.
-- Use `R_xlen_t` and `XLENGTH`, not `int` and `LENGTH`, for R vector lengths.
-- Register every entry point, disable dynamic lookup, and force native symbols.
-- Use no variable-length arrays, unchecked fixed-size formatting buffers, or
-  pointers into R vectors across a call that can allocate.
-- Protect every newly allocated object across any allocating call. Preserved
-  objects have explicit, paired release paths.
-- Treat ALTREP accessors as arbitrary R callbacks. Canonical private table
-  shells, their names and attributes, and any column used through a retained
-  raw pointer must have an ordinary representation. Transient public inputs
-  are either copied once into an ordinary, protected snapshot or declined to
-  the R compatibility path; `duplicate()` alone is not a materialization
-  guarantee.
-- A callback-capable input is declined before its first `Length` or `Elt`
-  observation whenever the R wrapper can perform the whole operation as the
-  sole observer. In particular, native design transposition rejects ALTREP
-  containers, column names, and columns, and native Domain lookup rejects an
-  ALTREP requested ID. This prevents a callback from invalidating admission or
-  being replayed after a later fallback decision.
-- Never size an output from live R state and then reread that state while
-  filling it. Cache the validated decisions or source positions once, or use a
-  checked maximum-capacity output and trim it after a single extraction pass.
-  Every writer checks its capacity and verifies the final count even when
-  admission currently proves the equality.
-- A protected container is not a permanent root for a child that can be
-  replaced by reference. Exact columns, attributes, callbacks, and selected
-  list elements remain independently rooted until their final use.
-- Treat every user callback as a reentrant boundary: retain no transient vector
-  pointer or assumed mutable-state snapshot across evaluation.
-- Do not call the R API from worker threads. Long loops check for interrupts.
-- Preserve the distinction between an absent named element and a present
-  element whose value is `NULL`.
-
-## Completed migration record
-
-The implementation proceeded by first freezing structures, serialization,
-errors, aliases, callbacks, and consumer assumptions; introducing registered
-checked C utilities; moving built-in Domain and ParamSet operations; replacing
-row-list validation with column-oriented passes; and finally moving whole
-Design, collection, subset, constructor, and sampler operations where measured
-consumer paths justified the risk. Unknown Domain classes, subclasses, altered
-R6 surfaces, callbacks that cannot be safely snapshotted, and older R runtimes
-retain explicit R fallbacks. This sequence is complete for 2.0.0. New native
-work now requires a measured release-relevant bottleneck plus differential and
-priority-consumer coverage; it is not part of release convergence by default.
-
-The performance freeze is deliberate rather than a claim that every R wrapper
-has disappeared. Standalone built-in Domain construction is already dominated
-by the unavoidable public-call and compatible-object shell boundary; an
-attempted direct `p_fct()` lane did not improve representative factor calls and
-was reverted. Replacing arbitrary R6 deep cloning with a general native clone
-engine would enlarge the compatibility and lifetime surface well beyond the
-measured gain. The release therefore keeps the narrow ParamSet and
-`Sampler1DUnif` graph factories that address the observed bulk-construction hot
-paths, and leaves a general R6 copier out of scope.
+# Paradox 2 implementation architecture
+
+This document maps the normative contract in
+[`contract-first-2.0.0.md`](contract-first-2.0.0.md) to the chosen source
+architecture. It replaces the superseded compatibility-first design. Git
+history contains that design and its measurements; none of its R6-surface or
+fallback mechanisms are current requirements.
+
+The first public 2.0 release deliberately establishes the strict structural
+boundary described below. Exotic ALTREP/S4 shells are not retained as a
+temporary compatibility layer: no maintained consumer needs them, and doing so
+would preserve multiple-observation and duplicate-admission complexity.
+
+## Shape of the system
+
+```text
+public R constructor/method/active binding
+                    |
+       language capture and argument order only
+                    |
+            registered .Call operation
+                    |
+       validate + snapshot capsule graph once
+                    |
+        BASE / COLLECTION / SHADOW planning
+                    |
+      native kernel + documented R callbacks
+                    |
+       detached R / data.table outward result
+```
+
+There is one semantic path. A native routine either returns the operation's
+documented result or raises an error. It never returns a private sentinel that
+causes R to repeat the operation through checkmate, data.table, S3 dispatch, or
+a second R implementation.
+
+## R6 shell and capsule
+
+`ParamSet`, `ParamSetCollection`, and `ParamSetShadow` keep their public R6
+class vectors, constructors, methods, active bindings, reference semantics,
+serialization, and supported clone behavior. Each package-created object owns
+one private `.core` binding. It is necessarily replaceable by package mutation
+transactions, but downstream replacement is unsupported. Core logic ignores
+generated wrapper bodies, method registries, closure environments, and legacy
+private fields.
+
+`.core` is a NULL-address `EXTPTRSXP`. It has no unmanaged memory and no
+finalizer. Its tag is exactly one of:
+
+- `paradox.core.base.v1`;
+- `paradox.core.collection.v1`;
+- `paradox.core.shadow.v1`.
+
+The protected slot is the sole complete serializable capsule/model truth: an
+ordinary, exactly named ten-element list containing `.params`, `.values`,
+`.tags`, `.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`,
+`.translation`, and `.postfix`. The identical physical schema avoids three
+subtly different state implementations. Node-kind validation decides which
+fields are meaningful.
+
+The documented public `assert_values` field is the sole stateful R-shell policy
+outside that model. It selects checked versus unchecked native value-store
+entry, is retained by ordinary R6 clone/serialization, and is included in
+semantic equality, but it is not schema/value/graph authority and does not
+alter the fixed payload ABI.
+
+A SHADOW external pointer additionally has exactly one internal attribute,
+`.paradox.shadow.snapshot.v1`. It is an exact ordinary alternating
+shell/capsule-generation list for the origin graph that produced the current
+payload. This attribute is a derived cache only: `.sets[[1L]]` remains the sole
+origin edge, callback factories are resolved from the locked package namespace
+only on construction or a cache miss, and the attribute contains no semantic
+callback or parallel origin. Unchanged refresh performs identity validation and
+returns immediately. Deep clone rebuilds the signature for cloned identities;
+ordinary serialization can retain it with the serialized graph. Any extra,
+missing, or malformed attribute is corrupt state and errors without replay.
+
+This physical layout is documented for maintainers, not exposed as a
+downstream ABI. Native code validates the tag, list shape, field types, table
+shapes, lengths, names, indices, graph edges, and operation-specific invariants
+before access. A forged tag is therefore an error boundary, not a memory-safety
+shortcut.
+
+Mutations shallow-copy the payload, replace changed ordinary children, create a
+new capsule shell, and swap `.core` only after validation. An operation retains
+the capsule selected at entry, so reentrant code observes a precise old or new
+generation instead of partially mutated private tables.
+
+## Canonical state
+
+The `.params`, `.tags`, `.deps`, `.trafos`, and `.translation` stores are exact
+plain base `data.frame`s with canonical column types, ordinary non-ALTREP
+semantic columns, compact base row names, and class `data.frame`. They have no
+key, secondary index, `truelength` capacity contract, or `.internal.selfref`.
+
+Values and callback lists are ordinary named lists. Structural strings and
+vectors are canonical owned vectors. Every interpreted list/table/Domain/
+Condition/TuneToken/capsule shell, ParamSet constructor `params` list,
+transformation input/result shell, Domain cargo container/interpreted cargo
+entry, row, dimnames, class/name vector, and other list metadata object is
+ordinary non-ALTREP and non-S4. At documented input boundaries, ordinary
+`data.frame`/`data.table` shells remain supported and their admitted semantic
+atomic columns may be stable ALTREP; canonical capsule columns are their owned
+ordinary snapshots. Opaque leaves such as ParamUty values, environments, and
+external pointers are rooted but not recursively copied or interpreted.
+ParamUty value/default/init/special leaves are the opaque S4 exception, with
+special membership preserved through base `identical()` and no S3/S4 dispatch.
+A typed-Domain S4 special is a pointer-identity token; typed default/init may
+use it only when it is that exact admitted special leaf.
+
+Public accessors build independently owned objects. Accessors historically
+returning a data.table attach the public `c("data.table", "data.frame")` class
+and a valid self-reference only after every column shell is detached. Mutating
+the result with `set()` or `:=` cannot mutate the capsule. `Design$data` remains
+an intentionally public mutable data.table and is treated as operation input,
+not internal state.
+
+`all.equal.ParamSet()` is intentionally ordinary S3 comparison glue over these
+detached native projections. Each node record contains class and
+`assert_values`, params, values, tags, dependencies, and BASE callbacks;
+COLLECTION records expose named child edges and SHADOW records their origin
+edge. The result is a flat ordinary `list(root = 1L, nodes = ...)`; every node
+stores `edge_kind`, `edge_names`, and traversal-canonical integer `edge_nodes`.
+An explicit R work stack, not recursive graph calls, preserves shared-node
+topology without making independently constructed but equivalent DAGs differ.
+Derived COLLECTION/SHADOW callback adapters are omitted because their
+child/origin authority is already present, and an active-path repeat errors as
+a cycle. The projection never traverses R6/private environments or interprets
+capsules itself. There is no parallel native equality routine, so this is one
+cold presentation-level implementation rather than an R fallback for a C
+result.
+
+## Node graph
+
+All native semantic/admission graph traversal is iterative, uses checked
+`R_xlen_t` arithmetic, supports shared child identity, and rejects a node
+repeated on the current active path. It does not reject a shared node seen on a
+completed sibling path.
+
+Deep cloning is deliberately cold R orchestration over the same capsule graph,
+not a second semantic engine. It discovers topology iteratively, memoizes shell
+identity, shallow-clones every non-root shell exactly once, and installs cloned
+capsules in post-order. Consequently repeated COLLECTION children and a SHADOW
+origin that is also reachable by another edge remain one shared node in the
+cloned graph. R's serializer preserves the same topology without a custom
+serialization format. Opaque ParamUty R6 values retain the established R6 deep
+clone behavior: each top-level occurrence is cloned independently, while
+opaque nested containers are not recursively interpreted.
+
+This is R6 shell-lifecycle orchestration only. Native capsule validation,
+replacement, generation checks, and Shadow signature rebuilding remain the
+semantic authority. Cold internal tuning and exact-TuneToken search-space
+conversion are the two narrow R *semantic* orchestration families; clone and
+detached equality do not own admission, checking, callback selection, or
+mutation rules.
+
+### BASE
+
+A BASE node owns one immutable parameter schema snapshot plus its current
+values, tags, dependency edges, transformations, extra transformation,
+constraint, and supported metadata. Constructing it snapshots and validates
+the five closed Domain kinds. A later mutation of the source Domain or a
+detached `$domains` result does not affect it.
+
+### COLLECTION
+
+A COLLECTION owns ordered child object references, names, postfix mode, and one
+canonical translation table per capsule generation. Construction and `$add()`
+install a validated replacement generation; a translation table is never
+mutated in place. `$add()` is one registered native transaction. It snapshots
+the current graph and the proposed child graph, follows COLLECTION and SHADOW
+origin edges, rejects corruption and any existing or proposed cycle before
+commit, builds the complete new tables/capsule, rechecks every admitted graph
+generation, and swaps only the root collection core. It does not copy dynamic
+child values, dependencies, transformations, or constraints into a second
+source of truth.
+Each operation snapshots the required child capsules and translates their
+results in deterministic nested order. Prefix/postfix spelling, named empty
+results, named NULL values, and shared-child behavior remain public behavior.
+
+Live `$extra_trafo` and `$constraint` accessors return package-owned thin
+closures that enter the collection native evaluator family. Subset and flatten
+closures retain exactly translation, callback carriers, and owner indices for
+the detached view. An extra-transformation carrier owns the detached BASE shell
+needed for the documented `param_set` callback argument; a constraint carrier
+does not. A SHADOW over a COLLECTION uses the same engine.
+Callback selection comes from the admitted capsule graph, not from a child R6
+method override. Translation, collision checks, child-result admission,
+merging, and scalar constraint validation therefore have one implementation
+for live and detached uses. The merge first copies retained/untransformed
+inputs in input order. It drops every callback-owned input, then appends the
+changed outputs in callback-plan order and in each callback's result order;
+omitted owned names therefore disappear. A changed name colliding with a
+retained input is rejected.
+
+### SHADOW
+
+A SHADOW owns exactly one origin object reference plus a construction-time
+snapshot of its fixed visible schema in capsule `.params`. `shadowed` is
+constructor input rather than retained state; current origin IDs outside the
+fixed schema are the hidden complement. Origin values,
+dependencies, constraints, individual transformations, and extra
+transformation are synchronized at operation entry. Visible value assignment
+writes through while preserving every hidden value. A dependency crossing the
+fixed boundary is checked both at construction and at every live dependency
+snapshot.
+
+Direct origins are BASE or COLLECTION nodes. A SHADOW does not wrap another
+SHADOW directly; the caller expresses the combined hidden-ID partition against
+the ultimate origin, avoiding layered refresh authorities.
+
+The origin edge in `.sets[[1L]]` is the sole origin authority; there is no
+parallel private `.origin` field to synchronize. Public `$origin`, live-value
+adapters, constraint plans, and graph cloning all derive from that edge. A
+BASE-origin constraint closure does not retain the origin: refresh reduces the
+admitted edge to the exact callback/hidden-values plan described below. Deep
+clone derives replacement adapters from the memoized cloned origin rather than
+retaining the old Shadow's private environment.
+
+For a BASE origin, the constraint closure retains one exact two-field plan:
+the admitted callback and hidden values. Its native evaluator snapshots both,
+builds an ordinary hidden-first/visible-second list manually, preserves opaque
+leaf identity, calls the callback once, and admits only one non-missing logical
+answer. It never uses `c()` and therefore cannot dispatch on an S3-classed
+visible-list container. A COLLECTION-origin adapter continues through the
+shared collection evaluator family, with the same native Shadow merge boundary
+where hidden values must be restored.
+
+The R6 shell likewise stores no parallel visible-ID or hidden-ID fields.
+Construction admits and materializes the visible schema once in C; later
+operations derive that fixed schema from capsule `.params` and the hidden
+complement from the authoritative origin edge. An origin that no longer
+supplies a compatible visible ID is corrupt/unsupported and errors; a newly
+added collection ID remains outside the fixed view.
+
+Central native admission refreshes a SHADOW once when traversed through any
+operation, including inside a COLLECTION, and validates the complete path
+before reentry. R wrappers must not perform a duplicate synchronization.
+Shadow-to-origin is a real graph edge for cycle detection, even where a
+flattened outward result treats the shadow as a semantic leaf.
+
+## Closed kinds and callbacks
+
+Domain operations switch over exactly ParamDbl, ParamInt, ParamFct, ParamLgl,
+and ParamUty. Dependency operations switch over exactly CondEqual and
+CondAnyOf. Exported compatibility functions are closed ordinary functions, not
+`UseMethod()` extension points. Adding a future package-owned kind requires one
+reviewed central kind entry and implementation in every affected operation.
+
+The standalone `condition_test()` wrapper enters the registered built-in
+Condition operation directly. It shares exact closed admission and comparison
+semantics with dependency evaluation while using an optimized native vector
+kernel for direct input. A built-in RHS is an attribute-free logical, integer,
+double, or character vector without missing values; `CondEqual` requires one
+element and `CondAnyOf` a non-empty unique vector. Public admission roots the
+selected RHS and copies each element once, so compact or stateful ALTREP never
+enters the strict capsule representation. The compared `x` may be `NULL` or a
+plain vector of the same four kinds carrying at most names; stable ALTREP `x`
+is likewise materialized once. Classed and otherwise attributed operands
+reject rather than dispatching through `Ops` or `%in%`. Condition shells and
+structural class/name metadata are ordinary non-ALTREP/non-S4. Atomic RHS and
+direct operands may be admitted stable ALTREP, but explicitly reject S4.
+`condition_as_string()` is deliberately cold R formatting over an already
+closed built-in shape; it is not a competing semantic evaluator.
+
+`p_dbl()` and `p_int()` pass their raw bounds, numeric source kind, and
+`logscale` flag to the row constructor once. That registered operation owns
+type/range admission, materialization, logscale-bound normalization, the fixed
+mapping callback, and canonical row construction. There is no preliminary
+native bounds probe and no independently callable partial numeric admission.
+The exact package-owned zero-row `empty_domain` shape is likewise admitted by
+the native Domain kernels; R wrappers do not short-circuit empty checks,
+properties, quantiles, or sanitization.
+
+`paradox_admit_builtin_domain_row()` is the sole canonical semantic owner for a
+built-in Domain row. The constructor's final-state assertion, ParamSet
+construction, and ObjectTuneToken Domain admission all call it. Boundary code
+may validate an outward table/class envelope and extract its one row, but cargo,
+kind/storage, grouping, bounds/tolerance, levels, special values, default, tags,
+transformation, requirements, and initialization are not restated there. The
+owner returns the admitted kind/field view used by operation-specific target
+compatibility or construction.
+
+The shared owner rejects ALTREP or S4 structural Domain objects/metadata. For
+Dbl, Int, Fct, Lgl, and Uty the outer special-values list, names, and metadata
+must be ordinary non-ALTREP/non-S4. For Dbl, Int, Fct, and Lgl it rejects an
+ALTREP special-value leaf before observing it. An admitted typed S4 special is
+opaque and matches only by pointer identity;
+an S4 default/init passes only when it is that same special leaf. ParamUty
+leaves remain opaque, including S4 objects, but special membership preserves
+Paradox-1 base `identical()` semantics as the sole narrow observation and does
+not dispatch. None of these leaf rules relaxes surrounding Domain structure.
+
+Static ParamSet properties (`nlevels`, `is_number`, `is_categ`, and
+`is_bounded`) use the same closed native kind switch and return their named
+vector directly. There is no parallel “known kind” mask, NULL decline sentinel,
+or grouped S3 property replay. Factor levels are ordinary materialized capsule
+storage before this operation; encountering a semantic ALTREP or unknown kind
+inside a current capsule is corruption, not an alternate dispatch request.
+
+Quantile and grid operations admit the same canonical plain parameter table
+through the shared validator; they do not recognize an internal data.table
+shape or depend on R-4.6-only attribute APIs. Integer range warnings and typed
+zero-row and zero-dimensional grid results are produced by the native engine
+itself, never by an R retry.
+A zero-level `ParamFct` is canonical. Zero-row quantile, grid, and uniform
+sampling results retain a `character(0)` column; a positive-row quantile or
+uniform-sampling request errors before level indexing or RNG entry.
+
+Supported callbacks remain first-class state: ParamUty custom checks,
+individual transformations, extra transformations, constraints, aggregation,
+and internal tuning. Native code snapshots callback objects before execution,
+evaluates them in documented order, protects all arguments/results, and
+propagates each warning or error once. It does not infer compatibility from a
+callback's closure body.
+
+The unified transformation engine requires ordinary non-ALTREP/non-S4 input
+and result list shells and snapshots each callback result once. Documented
+ordinary data-frame input is accepted, and admitted atomic leaves or columns
+may be stable ALTREP. A BASE extra transformation accepts either an unnamed
+list or a completely and uniquely named list, retaining that outward shape. A
+COLLECTION child result requires complete unique names before the same engine
+translates and merges it into the parent namespace. The distinction is a
+node-kind validation rule in one C path, not a wrapper that repairs or
+re-executes callback output.
+
+Fixed R closure factories exist only to return callable public callbacks. Their
+environments contain the minimum exact native evaluation plan and do not
+traverse child shells, select callbacks, or reproduce collection semantics.
+The wrapper installed by `to_tune(ParamSet)` similarly calls its documented
+user transformation once, checks the single list result, and assigns its public
+name directly instead of paying checkmate/mlr3misc dispatch on every call.
+
+`ParamSet$set_values()` captures `...` in R, validates the scalar `.insert`
+language argument without checkmate, and hands both value sources to one native
+merge. The C entry point owns name uniqueness/disjointness and merge ordering;
+there is no preliminary R scan followed by the same native scan, and malformed
+direct calls raise instead of returning a replay sentinel.
+
+Direct checked and unchecked `$values <-` both reject an outer ALTREP shell
+before observing its length, names, or elements. The Paradox-1 clear-values
+spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
+vector, or an accepted empty base/S3-representation list—are canonicalized to
+a named native `list()` by the store operation. `set_values(.values=)` is the
+sole outer-list ALTREP exception and
+owns its one native shell snapshot; it does not weaken direct assignment.
+
+ParamSet-bearing `ObjectTuneToken`s follow the same atomic boundary. Native
+checking builds and validates one rooted exact BASE candidate, requires at least
+one bounded dimension, and never runs candidate callbacks.
+Before that graph work, the engine admits one exact closed token snapshot. The
+token is exactly `{content, call}` with only names/class attributes and one of
+the five package class vectors for Full, Range, Object, Internal-Full, or
+Internal-Range. Full/Range content has its exact built-in fields; scalar names
+are normalized away; Object content is an admitted bounded, value-producing
+built-in Domain or an exact `c("ParamSet", "R6")` shell with ordinary
+self/private linkage to a canonical BASE core. Because a ParamUty Domain is
+unbounded, it is not valid in the Domain form. A zero-level ParamFct remains
+canonical for typed empty operations but cannot be Object-token Domain content
+because it produces no tuning value. Other bounded typed Domains may still
+carry admitted opaque leaves,
+and the BASE-ParamSet form may construct an opaque target value. COLLECTION,
+SHADOW, and additive subclasses reject. A subclass,
+extra/reordered field/class/attribute, S4 structure, malformed
+call/content, or recursive metadata rejects at the fixed root without arbitrary
+traversal. Exact creator provenance is intentionally not inferred from mutable
+R6 method bodies or registries: a shell alias retaining the exact genuine BASE
+private/core linkage may pass, safely, because native code never calls its
+methods.
+
+Checking records a rooted `{shell, private, core}` receipt for each admitted
+live candidate. Receipt reauthentication follows callback-capable validation;
+checked assignment retains receipts through replacement construction and ends
+with a non-forcing, allocation-free identity scan immediately before commit.
+Candidate mutation therefore wins and the outer write errors without a partial
+commit.
+
+Explicit `$search_space(values=)` enters the same native snapshot boundary. Its
+outer input is an ordinary named list or a names/class-only S3 named list; C
+discards the class and selects tokens without S3 subsetting. S4/list-like or
+otherwise attributed containers reject. Each live BASE candidate is replaced
+in the admitted token copy by a sealed, single-use BASE subset capability before
+R or a candidate callback runs. R constructs the detached candidate from that
+capability and never rereads or invokes the original shell.
+
+The deterministic `$search_space()` conversion exclusively owns transformation
+execution plus one-dimensional/output compatibility. It is one cold R
+orchestration over the stable native snapshot and uses closed built-in
+switching, not `UseMethod()` or third-party token/Domain methods. This separates
+structural admission from callback-dependent plausibility without a second
+engine or a reentrant R preflight before value commit.
+
+Malformed exact-token or Domain structure raises at the public boundary,
+including from `$check()`. Only an ordinary structurally admitted value that is
+infeasible for its target follows the returned character-diagnostic protocol.
+
+`ParamSet$check_dependencies()` is a separate strict dependency-only boundary,
+not a wrapper around an R data.table traversal. It requires an ordinary,
+uniquely named base list, builds the same graph snapshot and point mapping as
+`$check()`, and invokes the same dependency kernel. Unknown IDs are diagnosed
+even when the graph has zero dependency rows; TuneToken endpoints skip that
+edge. The operation stops at and returns the first deterministic diagnostic
+rather than constructing and collapsing an R list of every dependency error.
+
+`ParamSet$test_constraint()` and `$test_constraint_dt()` are registered native
+boundaries over the same graph plan, point initializer, and constraint kernel.
+The table operation first requires an ordinary non-ALTREP/non-S4 data.table
+shell and structural dim/dimnames/list metadata, then snapshots it. Its admitted
+semantic atomic columns may be stable ALTREP. When value assertion is enabled,
+it admits every row before executing any constraint callback; a
+ParamUty custom check may run as part of that preceding Domain-value admission.
+Only then does it evaluate the snapshotted constraints once per row in order.
+This preserves all-or-no-constraint-callback validation and operation-entry
+constraint selection without an R row loop or a second constraint engine.
+
+The tag, dependency, and BASE callback mutators are collected in
+`src/paramset_mutate.c`. Tag get/set and dependency snapshot/get/set/add own
+their canonical detached/replacement objects. Dependency feasibility invokes
+the shared check kernel and then verifies that callback reentry did not replace
+the target generation. SHADOW dependency append first proves both IDs remain
+visible and routes to the origin through the same native entry. Constraint and
+extra-transformation setters admit their callback shape and atomically replace
+the selected BASE field. R wrappers do not plan these mutations.
+
+## Operation transaction
+
+Every operation follows the same lifecycle:
+
+1. the R wrapper captures language-level inputs and outward representation
+   metadata that C cannot capture directly; this is not semantic admission;
+2. public arguments are forced left-to-right; interpreted outer shells reject
+   ALTREP/S4 before semantic observation, while supported ALTREP atomic
+   semantic vectors are materialized once at native admission; that native
+   materialized state, not captured representation text, is semantic authority;
+3. the complete required capsule graph and callback set is structurally
+   validated and rooted;
+4. a bounded native plan is built from that snapshot;
+5. the native kernel executes, calling only documented user callbacks;
+6. a mutating operation checks every generation on which its write depends and
+   swaps replacement capsules in an allocation/callback-free commit section.
+
+A nested callback mutation is visible to later operations. A read-only outer
+operation may finish from its snapshot. A mutating outer operation whose
+dependency generation changed errors rather than overwriting or retrying the
+nested mutation.
+
+Checked value assignment plans the complete BASE/COLLECTION/SHADOW graph
+through the ultimate BASE targets before invoking ParamUty or constraint
+callbacks. Shared targets are deduplicated with deterministic last-owner
+semantics. The plan captures every target generation, validates the complete
+assignment once, and prebuilds every replacement capsule. It then rechecks all
+target generations and swaps every replacement `.core` in one allocation- and
+callback-free commit wave. A nested public assignment to any planned target
+therefore wins: the outer setter raises before changing any target. Validation,
+callback, or allocation failure likewise leaves the complete graph unchanged;
+there is no second child-store pass or root-only generation guard.
+
+ParamSet-bearing ObjectTuneTokens add a generation dependency outside the
+write-target graph. Candidate receipts are rooted before callbacks and retained
+through sanitized-result and replacement allocations. After normal target-core
+generation checks, the commit path performs one final allocation-free scan of
+every candidate's ordinary self/private/core linkage and pointer identity, then
+immediately swaps the replacement target cores. This closes callback and
+finalizer validate-then-mutate races without replaying admission or invoking a
+candidate method.
+
+ALTREP methods may allocate and reenter R. Hence no kernel sizes from one
+ALTREP observation and fills from another, and no raw pointer survives an
+accessor. Stable ALTREP implementations, including base compact sequences such
+as `1:n`, are supported in admitted semantic-vector positions. This does not
+turn interpreted structure into a materialization surface: configuration/
+search-space and transformation list shells, ParamSet `params` lists, Domain/
+Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo entries,
+table/row shells, dimnames, class/name vectors, and list metadata must be
+ordinary non-ALTREP/non-S4 objects. Ordinary documented data.frame/data.table
+input remains supported; admitted atomic columns may be stable ALTREP. Direct
+checked/unchecked `$values <-` rejects an outer ALTREP before observation and
+canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary attribute-free
+zero-length atomic/expression vector, or an accepted empty list container) to a
+named native list. The public
+`set_values(.values=)` merge is the one outer-list exception and owns one
+operation-specific shell snapshot before validation. A hostile custom ALTREP may change after R-side
+language/representation capture but before native admission; exact semantics
+or matching printed representation are not promised for that boundary. It is
+rejected or admitted from one native materialization without an R retry or
+Paradox itself causing a crash or memory corruption. An ALTREP implementation
+that violates the R C API or crashes inside its own accessor cannot be
+sandboxed by Paradox and is outside this guarantee.
+
+## Source organization
+
+- `src/core_state.[ch]`: capsule creation, validation, field replacement,
+  ownership, SHADOW refresh, and graph-path safety;
+- `src/domain_construct.c`, `src/domain_admission.h`, `src/domain_kernels.c`,
+  `src/paramset_domain_common.[ch]`: closed Domain construction, the sole shared
+  built-in row-admission owner, and canonical capsule table/kind validation;
+- `src/builtin_condition.[ch]`: closed Condition admission/evaluation;
+- `src/paramset_construct.c`, `src/paramset_collection_construct.c`: BASE and
+  COLLECTION construction and atomic collection add;
+- `src/paramset_mutate.c`: tag/dependency projection and atomic mutation plus
+  BASE callback replacement;
+- operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
+  planners and kernels over capsule state;
+- `src/r_utils.c` and `src/r_api_compat.c`: small R-API ownership and version
+  adapters, never alternate semantics. Older supported R releases use the
+  documented public `FORMALS` and `ATTRIB` backports for newer closure/attribute
+  inspection APIs; these adapters never evaluate `formals()`, `attributes()`,
+  or another R helper. The sole non-public compatibility exception is also
+  centralized here: for R < 4.6, one declared/exported
+  `Rf_findVarInFrame` call supplies the non-forcing ordinary-binding lookup and
+  rejects `PROMSXP`; R >= 4.6 uses the documented experimental API
+  `R_GetBindingType`. The former is required because R 4.3--4.5 has no public
+  non-forcing classifier and an
+  R-level `substitute()` workaround would make simultaneous generation/receipt
+  scans unsound.
+  It is ledgered in
+  `environment/r-api-exceptions.tsv`, raw-token-audited to one occurrence/path,
+  and pinned-header/runtime tested. It is not CRAN-allowlisted for the supported
+  pre-4.6 build path: those DSOs require the symbol, while the current-R DSO audit
+  requires its absence. No other internal R API is permitted;
+- `src/init.c`: fixed-arity registration with dynamic lookup disabled;
+- `R/ParamSet*.R`, `R/Domain*.R`, `R/Condition.R`: public shells, language
+  capture, fixed native-entry callback factories, and documented cold graph
+  orchestration only;
+- `R/to_tune.R`: package-owned token construction and the one cold exact-token
+  search-space conversion over an already admitted native snapshot;
+- `R/all_equal.R`: cold detached-view equality glue, with no capsule/private
+  environment interpretation;
+- `R/upgrade_paradox_object.R`: explicit nonexecuting conversion of accepted
+  legacy graphs.
+
+The first narrow cold R semantic-orchestration family is internal tuning for
+`$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
+`$convert_internal_search_space()`. Each captures its required capsule cargo,
+translation, Domain, and owner-value state before the first callback and is the
+sole implementation of its documented cargo behavior. Commits use native
+value/capsule mutation. After native subset/flatten has returned canonical
+detached state, collection flattening may walk the validated translation
+snapshot and rebind documented `cargo` callbacks to flattened IDs, then replace
+that one column in the detached BASE capsule through the package replacement
+primitive. This family neither repeats structural admission nor competes with
+native graph, value, checking, or callback-selection semantics.
+
+The second is exact-TuneToken `$search_space()` conversion. Its R code receives
+only the one rooted native token/target-Domain snapshot, in which every live
+ParamSet content has already been replaced by a sealed, single-use BASE subset
+capability. It switches over the five built-in token class vectors and owns
+callback-dependent plausibility, one-dimensional compatibility, dependency
+reconstruction, and outward ParamSet assembly. It does not admit structure
+independently, call a third-party S3/candidate method, reread a live candidate,
+or select a competing native/R path. Its deterministic sampling restores the
+caller's RNG kind/state on success or failure.
+
+Constructor-owned callbacks capture only the bindings they need. In
+particular, categorical value mapping and integer log-scale mapping use
+package-owned closure factories whose call frames contain exactly their level
+or bound state. They do not invoke `compiler::cmpfun()`/`mlr3misc::crate()` for
+every Domain instance: per-instance compilation was measured constructor
+overhead, not an isolation or compatibility requirement. The returned closures
+remain ordinary serializable R functions and documented user callbacks retain
+identity.
+
+Three final measured hot-path changes remove redundant work while retaining the
+same validation boundary. A ParamSet constructor with no initial values skips an
+empty value-store transaction. Complete collection-value admission retains the
+already resolved BASE parameter row and translates that validated offset upward
+instead of looking up the ID again. The inherited native Shadow dependency
+reader owns refresh, so the R binding does not request a second refresh. These
+are operation-local shortcuts, not persistent validation caches.
+
+A proposed sparse-target search-space projection was also measured and rejected.
+Search-space construction is cold, and the maintained end-to-end workload moved
+only about 2%; a second target-facade path would cost more design and validation
+surface than it saves. A native bulk-dependency constructor transaction is also
+rejected for the 2.0.0 release. The isolated 64-parameter/27-requirement estimate
+moved from 6.57 ms to 4.11 ms, with requirement-heavy estimates spanning about
+1.4--2.5x, but representative xgboost learner construction improved only about
+6--7%. That gain does not justify a moderate-risk new native batch transaction
+while the maintained release workload lacks dependency-rich constructor
+coverage. This is an internal optimization boundary, not a compatibility
+decision, so it may be reconsidered later without another API or major-version
+break.
+
+SHADOW related-state validation uses an operation-local open-addressed index
+over admitted CHARSXP IDs. Pointer identity is the common fast path and an
+encoding-aware comparison preserves correct matching when identities differ.
+The index is derived scratch state, retains no unrooted pointer across an
+allocating boundary, and is never stored in a capsule. This replaces repeated
+quadratic ID scans without weakening corrupt-state validation.
+
+The shared string comparator and COLLECTION affixed-ID validator use the same
+portable nonallocating boundary: pointer identity first; stored-byte equality
+for equal UTF-8, Latin-1, or bytes encodings; and stored-byte equality for
+native encoding only when both strings are ASCII. Mixed encodings and
+non-ASCII native strings retain the translating UTF-8 path. This removes a
+measured translation hot spot while keeping R's encoding semantics. It is not
+a graph cache or a weaker reader mode: every collection read still validates
+the complete admitted graph, translation table, permanent rows, and dynamic
+state.
+
+Uniform random sampling is one closed `src/sampler_unif.c` operation over the
+selected BASE/COLLECTION/SHADOW capsule graph. It allocates typed columns,
+draws in public parameter/column-major order, and constructs the outward
+data.table without executing the per-dimension R6 objects. `SamplerUnif` keeps
+its inherited `$samplers` list only as descriptive compatibility metadata;
+replacement/reordering is rejected and child mutation has no semantic effect.
+Users wanting executable custom child samplers use `SamplerHierarchical`.
+`generate_design_random()` and `SamplerUnif` both pass the native table through
+the one `Design$new()` boundary for fixed values and dependency masking.
+
+Translation units may be split for readability, but a split must not create a
+second semantic engine. Legacy files named around “surface auth”, “builtin
+fallback”, or constructor fast/slow pairs are deleted once their operation is
+on capsule authority.
+
+## Error and ownership policy
+
+Common public failures retain useful stable Paradox message fragments; exact
+checkmate wording, internal implementation frames, and behavior after private
+corruption are not contracts. Corrupt current state receives a deterministic
+`Corrupt ... capsule/state/graph` error before unsafe access. Direct native
+calls with malformed objects are adversarial test inputs and must never crash.
+Malformed exact-token or Domain structure is likewise a hard public-boundary
+error; the returned check diagnostic is reserved for ordinary structurally
+admitted value infeasibility.
+
+Every allocating or callback-capable boundary has explicit protection. Long
+loops poll interrupts without holding unrooted objects or raw pointers. Output
+sizes, byte counts, recursion replacements, row/column products, and C casts
+are checked before allocation or indexing. Portable scalar C17 is the baseline;
+architecture-specific code is not required for performance.
+
+## Forbidden architecture regressions
+
+Do not add any of the following:
+
+- complete R/checkmate/data.table/S3 semantic fallbacks;
+- `NULL` or other private decline sentinels that restart an operation;
+- generated R6 method/body/formal/environment authentication;
+- permanent internal data.tables, private data.table APIs, synthesized indices,
+  or version-specific spare-capacity bridges;
+- third-party Domain or Condition dispatch as an implicit extension ABI;
+- third-party TuneToken subclasses/methods, arbitrary TuneToken metadata, or an
+  R token-shape validator parallel to native exact admission;
+- generated-surface creator-provenance authentication for an exact BASE
+  ObjectTuneToken shell; safe genuine-private/core aliases must remain harmless
+  because no alias method is invoked;
+- any internal R API beyond the single R < 4.6 `Rf_findVarInFrame` compatibility
+  call ledgered in `environment/r-api-exceptions.tsv`;
+- permanent semantic ALTREP vectors or repeated observation inside one native
+  semantic admission/kernel (prior R-side representation capture is explicitly
+  non-semantic and covered by the hostile-custom-ALTREP boundary above);
+- materialization or observation of an interpreted ALTREP/S4 shell, except for
+  the exact one-snapshot `set_values(.values=)` boundary;
+- direct downstream access to `.core` or its protected payload;
+- unmanaged state reachable only through an external-pointer address;
+- package-byte evidence carried from the superseded candidate.
+
+## Implementation convergence rule
+
+Before the release candidate is frozen, search the complete R/C source for
+remaining compatibility-first seams, delete unreachable machinery rather than
+silencing it, and add a contract test for every consumer-discovered gap. The
+active completion state is maintained only in
+[`release-2.0.0.md`](release-2.0.0.md); this architecture describes the final
+target and must not be weakened to match a transitional implementation.

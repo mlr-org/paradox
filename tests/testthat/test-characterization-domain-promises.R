@@ -14,7 +14,7 @@ domain_promise_probe = function(style = c("direct", "hidden", "exposed"), stop_a
     Domain(
       cls = observe("cls", "ParamLgl"),
       grouping = observe("grouping", "ParamLgl"),
-      cargo = observe("cargo", list()),
+      cargo = observe("cargo", NULL),
       lower = observe("lower", NA_real_),
       upper = observe("upper", NA_real_),
       tolerance = observe("tolerance", NA_real_),
@@ -31,7 +31,7 @@ domain_promise_probe = function(style = c("direct", "hidden", "exposed"), stop_a
   wrapper = function(
       cls = observe("cls", "ParamLgl"),
       grouping = observe("grouping", "ParamLgl"),
-      cargo = observe("cargo", list()),
+      cargo = observe("cargo", NULL),
       lower = observe("lower", NA_real_),
       upper = observe("upper", NA_real_),
       tolerance = observe("tolerance", NA_real_),
@@ -70,7 +70,7 @@ domain_promise_probe = function(style = c("direct", "hidden", "exposed"), stop_a
         exposed = wrapper(
           cls = observe("cls", "ParamLgl"),
           grouping = observe("grouping", "ParamLgl"),
-          cargo = observe("cargo", list()),
+          cargo = observe("cargo", NULL),
           lower = observe("lower", NA_real_),
           upper = observe("upper", NA_real_),
           tolerance = observe("tolerance", NA_real_),
@@ -93,29 +93,31 @@ domain_promise_probe = function(style = c("direct", "hidden", "exposed"), stop_a
   list(events = state$events, error = error)
 }
 
-test_that("Domain forces direct and wrapper promises in historical order", {
-  order = c(
-    "tags", "cargo", "cls", "grouping", "lower", "upper", "tolerance",
-    "levels", "special_vals", "trafo", "depends_expr", "default",
+test_that("Domain observes side-effecting promises once without replay", {
+  arguments = c(
+    "cls", "grouping", "cargo", "lower", "upper", "tolerance", "levels",
+    "special_vals", "default", "tags", "trafo", "depends_expr",
     "storage_type", "init"
   )
 
   for (style in c("direct", "hidden", "exposed")) {
     success = domain_promise_probe(style)
-    expect_identical(success$events, order, info = style)
+    expect_setequal(success$events, arguments)
+    expect_identical(anyDuplicated(success$events), 0L, info = style)
     expect_true(is.na(success$error), info = style)
 
-    for (position in seq_along(order)) {
-      stopped = domain_promise_probe(style, order[[position]])
-      expect_identical(
-        stopped$events,
-        order[seq_len(position)],
-        info = sprintf("%s:%s", style, order[[position]])
-      )
+    for (argument in arguments) {
+      stopped = domain_promise_probe(style, argument)
+      # Representation capture and native admission are deliberately distinct
+      # phases. Their internal promise priority is not an API, but neither
+      # phase may replay an already observed promise.
+      expect_true(all(stopped$events %in% arguments), info = style)
+      expect_identical(anyDuplicated(stopped$events), 0L, info = style)
+      expect_identical(tail(stopped$events, 1L), argument, info = style)
       expect_identical(
         stopped$error,
-        sprintf("forced:%s", order[[position]]),
-        info = sprintf("%s:%s", style, order[[position]])
+        sprintf("forced:%s", argument),
+        info = sprintf("%s:%s", style, argument)
       )
     }
   }
@@ -136,7 +138,7 @@ test_that("Domain assembles default, storage, requirements, and init in row orde
     Domain(
       cls = "ParamLgl",
       grouping = "ParamLgl",
-      cargo = list(),
+      cargo = NULL,
       levels = c(TRUE, FALSE),
       default = default,
       storage_type = storage_type,
@@ -157,7 +159,7 @@ test_that("Domain preserves recursively missing init promises", {
     Domain(
       cls = "ParamLgl",
       grouping = "ParamLgl",
-      cargo = list(),
+      cargo = NULL,
       levels = c(TRUE, FALSE),
       storage_type = "logical",
       init = init
@@ -167,7 +169,7 @@ test_that("Domain preserves recursively missing init promises", {
     Domain(
       cls = "ParamLgl",
       grouping = "ParamLgl",
-      cargo = list(),
+      cargo = NULL,
       levels = c(TRUE, FALSE),
       storage_type = "logical"
     )

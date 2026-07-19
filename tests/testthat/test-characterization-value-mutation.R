@@ -1,4 +1,4 @@
-context("characterization: value mutation")
+context("contract: value mutation")
 
 empty_named_values = function() {
   structure(list(), names = character())
@@ -31,7 +31,7 @@ test_that("direct assignment sanitizes only after validation and is atomic", {
   expect_identical(
     events$seen,
     list(list(
-      candidate = assigned,
+      candidate = list(count = 2.1, ratio = 1.05),
       stored = list(count = 1L, ratio = 0.5)
     ))
   )
@@ -40,7 +40,7 @@ test_that("direct assignment sanitizes only after validation and is atomic", {
   events$seen = list()
   expect_error(
     { param_set$values = list(count = 3L, ratio = 2) },
-    "Element 1 is not <= 1.1",
+    "ratio: expected one non-missing numeric value within the Domain bounds",
     fixed = TRUE
   )
   expect_identical(events$seen, list())
@@ -97,10 +97,10 @@ test_that("set_values keeps promise forcing and failure atomicity", {
         FALSE
       }
     ),
-    "Must have unique names",
+    "ParamSet value inputs must have unique, disjoint names",
     fixed = TRUE
   )
-  expect_identical(events, character())
+  expect_identical(events, c("values", "insert"))
   expect_identical(param_set$values, list(a = 3L, b = 2L, c = 4L))
 
   expect_error(
@@ -111,20 +111,27 @@ test_that("set_values keeps promise forcing and failure atomicity", {
   expect_identical(param_set$values, list(a = 3L, b = 2L, c = 4L))
 })
 
-test_that("unchecked storage chooses first duplicates and owns its shell", {
+test_that("unchecked public storage rejects duplicate names and owns its shell", {
   param_set = ps(a = p_int(), b = p_uty())
   param_set$assert_values = FALSE
   reference = new.env(parent = emptyenv())
   reference$value = 1L
-  incoming = structure(
+  duplicated = structure(
     list(reference, 2L, 9L, "ignored"),
     names = c("b", "a", "a", "unknown")
   )
 
+  expect_error(
+    param_set$values <- duplicated,
+    "unique and non-missing"
+  )
+  expect_identical(param_set$values, empty_named_values())
+
+  incoming = list(b = reference, a = 2L, unknown = "ignored")
   param_set$values = incoming
   expect_identical(param_set$values, list(a = 2L, b = reference))
-  incoming[[2L]] = 8L
-  incoming[[1L]] = NULL
+  incoming$a = 8L
+  incoming$b = NULL
   expect_identical(param_set$values, list(a = 2L, b = reference))
   reference$value = 3L
   expect_identical(param_set$values$b$value, 3L)
@@ -134,15 +141,10 @@ test_that("unchecked storage chooses first duplicates and owns its shell", {
   expect_identical(returned$value, integer())
   expect_identical(param_set$values, empty_named_values())
 
-  private = param_set$.__enclos_env__$private
-  unnamed = private$.store_values(list())
-  expect_identical(unnamed, list())
-  expect_null(names(unnamed))
-  expect_null(names(private$.values))
-
-  named = private$.store_values(structure(list(), names = character()))
-  expect_identical(named, structure(list(), names = character()))
-  expect_identical(names(private$.values), character())
+  incoming = list(a = 4L, b = reference)
+  param_set$values = incoming
+  incoming$a = 9L
+  expect_identical(param_set$values, list(a = 4L, b = reference))
 })
 
 test_that("shared collection children retain last-owner mutation semantics", {
@@ -209,7 +211,7 @@ test_that("collection validation failures do not touch any child", {
 
   expect_error(
     { collection$values = list(left.a = 2L, right.b = 9L) },
-    "right.b: Element 1 is not <= 2.5",
+    "right.b: expected one finite integer-valued numeric within the Domain bounds",
     fixed = TRUE
   )
   expect_identical(left$values, list(a = 1L))
@@ -222,54 +224,6 @@ test_that("collection validation failures do not touch any child", {
   )
   expect_identical(left$values, list(a = 1L))
   expect_identical(right$values, list(b = 1L))
-})
-
-test_that("extension setter errors retain historical delegation order", {
-  events = new.env(parent = emptyenv())
-  events$seen = character()
-  events$fail = NULL
-
-  Child = R6::R6Class(
-    "CharacterizationMutationChild",
-    inherit = ParamSet,
-    public = list(
-      initialize = function(label) {
-        private$.label = label
-        super$initialize(list(value = p_int(init = 0L)))
-      }
-    ),
-    active = list(
-      values = function(value) {
-        if (!missing(value)) {
-          events$seen = c(events$seen, paste0(private$.label, ":set"))
-          if (identical(events$fail, private$.label)) {
-            stop(paste0(private$.label, " rejected values"))
-          }
-          super$values = value
-          return(value)
-        }
-        super$values
-      }
-    ),
-    private = list(.label = NULL)
-  )
-
-  one = Child$new("one")
-  two = Child$new("two")
-  three = Child$new("three")
-  collection = ParamSetCollection$new(list(one = one, two = two, three = three))
-  events$seen = character()
-  events$fail = "two"
-
-  expect_error(
-    { collection$values = list(one.value = 1L, two.value = 2L) },
-    "two rejected values",
-    fixed = TRUE
-  )
-  expect_identical(events$seen, c("one:set", "two:set"))
-  expect_identical(one$values, list(value = 1L))
-  expect_identical(two$values, list(value = 0L))
-  expect_identical(three$values, list(value = 0L))
 })
 
 test_that("mutation survives clone, serialization, and forced collection", {

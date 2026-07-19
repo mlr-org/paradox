@@ -12,12 +12,16 @@ benchmark_workload_names <- function() {
     "construct_ps_small",
     "construct_paramset_bulk",
     "construct_full_mixed",
+    "shadow_construct_budget",
     "ids_all",
     "ids_class",
     "ids_tags",
     "ids_any_tags",
     "static_properties",
     "check_scalar",
+    "check_dependencies",
+    "condition_equal_vector",
+    "test_constraint_dt",
     "sanitize_scalar",
     "check_dt",
     "qunif",
@@ -42,6 +46,10 @@ benchmark_workload_names <- function() {
     "get_values_no_dependencies",
     "get_values_tags",
     "set_values_insert",
+    "shadow_values_live",
+    "shadow_constraint_live",
+    "shadow_domains_live",
+    "shadow_assign_values",
     "collection_construct_plain",
     "collection_construct_rich",
     "collection_assign_values",
@@ -265,12 +273,101 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     tag_params = TRUE
   )
 
+  # ParamSetShadow was introduced in Paradox 2 after being maintained by
+  # miesmuschel. Use the package-owned generator when it exists and the exact
+  # downstream compatibility implementation for the upstream baseline. This
+  # keeps the paired result tied to the implementation users are migrating
+  # from instead of timing a benchmark-only imitation.
+  shadow_generator <- if ("ParamSetShadow" %in% getNamespaceExports("paradox")) {
+    getExportedValue("paradox", "ParamSetShadow")
+  } else {
+    if (!requireNamespace("miesmuschel", quietly = TRUE)) {
+      stop(
+        "the upstream Shadow benchmark requires miesmuschel",
+        call. = FALSE
+      )
+    }
+    getExportedValue("miesmuschel", "ParamSetShadow")
+  }
+  shadow_hidden_id <- parameter_ids[[1L]]
+  shadow_visible_ids <- parameter_ids[-1L]
+
+  shadow_constructor_origin <- ParamSet$new(prebuilt_domains)
+  make_shadow <- function() {
+    shadow_generator$new(shadow_constructor_origin, shadow_hidden_id)
+  }
+
+  # Change a visible value after constructing the read fixture. The first
+  # admission therefore proves that reads follow the origin's current
+  # generation; timed repetitions then measure the normal unchanged-generation
+  # hot path used by primed miesmuschel operators.
+  shadow_read_origin <- ParamSet$new(prebuilt_domains)
+  shadow_read_origin$values <- scalar_values
+  shadow_read <- shadow_generator$new(shadow_read_origin, shadow_hidden_id)
+  shadow_live_id <- parameter_ids[[2L]]
+  shadow_read_expected <- scalar_values[shadow_visible_ids]
+  shadow_read_expected[[shadow_live_id]] <- 11L
+  shadow_read_origin$set_values(
+    .values = setNames(list(11L), shadow_live_id)
+  )
+
+  # Keep mutation state independent from the read fixture: assignment is
+  # intentionally idempotent across validation, warmup, and timed samples.
+  shadow_write_origin <- ParamSet$new(prebuilt_domains)
+  shadow_write_origin$values <- scalar_values
+  shadow_write <- shadow_generator$new(shadow_write_origin, shadow_hidden_id)
+  shadow_assignment_ids <- shadow_visible_ids[
+    seq_len(min(4L, length(shadow_visible_ids)))
+  ]
+  shadow_assignment <- scalar_values[shadow_assignment_ids]
+  shadow_assignment[[1L]] <- 11L
+  if (length(shadow_assignment) >= 2L) shadow_assignment[[2L]] <- "d"
+  if (length(shadow_assignment) >= 3L) shadow_assignment[[3L]] <- FALSE
+  if (length(shadow_assignment) >= 4L) shadow_assignment[[4L]] <- 0.5
+  shadow_write_expected <- c(
+    scalar_values[shadow_hidden_id],
+    shadow_assignment
+  )
+
+  # Exercise the live hidden-value merge used by miesmuschel's former
+  # ParamSetShadow and the package-owned implementation. Keep the callback
+  # deliberately tiny so the paired result exposes adapter overhead instead
+  # of timing unrelated user work.
+  shadow_constraint_origin <- ParamSet$new(prebuilt_domains)
+  shadow_constraint_origin$values <- scalar_values[shadow_hidden_id]
+  shadow_constraint_visible_id <- parameter_ids[[4L]]
+  shadow_constraint_origin$constraint <- local({
+    hidden_id <- shadow_hidden_id
+    visible_id <- shadow_constraint_visible_id
+    hidden_expected <- scalar_values[[hidden_id]]
+    visible_expected <- scalar_values[[visible_id]]
+    function(x) {
+      identical(x[[hidden_id]], hidden_expected) &&
+        identical(x[[visible_id]], visible_expected)
+    }
+  })
+  shadow_constraint <- shadow_generator$new(
+    shadow_constraint_origin,
+    shadow_hidden_id
+  )
+  shadow_constraint_values <- scalar_values[shadow_visible_ids]
+
   batch <- as.data.frame(
     lapply(scalar_values, rep, times = n_rows),
     optional = TRUE,
     stringsAsFactors = FALSE
   )
   names(batch) <- parameter_ids
+  constraint_batch <- data.table::as.data.table(batch)
+  constraint_batch_space <- ParamSet$new(prebuilt_domains)
+  constraint_batch_space$constraint <- local({
+    observed_id <- parameter_ids[[1L]]
+    function(x) !is.null(x[[observed_id]])
+  })
+
+  condition_equal <- CondEqual(2L)
+  condition_values <- rep_len(1:4, n_rows)
+  condition_expected <- condition_values == 2L
 
   unit_values <- ((seq_len(n_rows * n_params) - 1L) %% 997L + 0.5) / 997
   unit_matrix <- matrix(unit_values, nrow = n_rows, ncol = n_params)
@@ -315,9 +412,29 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     space = space,
     sampler_unif = sampler_unif,
     params_space = params_space,
+    constraint_batch_space = constraint_batch_space,
+    constraint_batch = constraint_batch,
+    condition_equal = condition_equal,
+    condition_values = condition_values,
+    condition_expected = condition_expected,
     mutation_space = mutation_space,
     mutation_update = mutation_update,
     mutation_expected = mutation_expected,
+    shadow_hidden_id = shadow_hidden_id,
+    shadow_visible_ids = shadow_visible_ids,
+    shadow_constructor_origin = shadow_constructor_origin,
+    make_shadow = make_shadow,
+    shadow_read_origin = shadow_read_origin,
+    shadow_read = shadow_read,
+    shadow_live_id = shadow_live_id,
+    shadow_read_expected = shadow_read_expected,
+    shadow_write_origin = shadow_write_origin,
+    shadow_write = shadow_write,
+    shadow_assignment = shadow_assignment,
+    shadow_write_expected = shadow_write_expected,
+    shadow_constraint_origin = shadow_constraint_origin,
+    shadow_constraint = shadow_constraint,
+    shadow_constraint_values = shadow_constraint_values,
     plain_collection = plain_collection,
     mutation_collection = mutation_collection,
     mutation_collection_values = mutation_collection_values,
@@ -473,6 +590,24 @@ benchmark_make_workloads <- function(inputs) {
       expression = quote(inputs$make_full_mixed()),
       validate = function(result) exact_param_set(result, inputs$parameter_ids)
     ),
+    shadow_construct_budget = list(
+      expression = quote(inputs$make_shadow()),
+      validate = function(result) {
+        stopifnot(
+          inherits(result, "ParamSetShadow"),
+          inherits(result, "ParamSet"),
+          identical(result$origin, inputs$shadow_constructor_origin),
+          identical(result$ids(), inputs$shadow_visible_ids)
+        )
+        paste(
+          result$length,
+          inputs$shadow_hidden_id,
+          result$ids()[[1L]],
+          result$ids()[[result$length]],
+          sep = "|"
+        )
+      }
+    ),
     ids_all = list(
       expression = quote(inputs$space$ids()),
       validate = function(result) exact_ids(result, inputs$parameter_ids)
@@ -531,6 +666,43 @@ benchmark_make_workloads <- function(inputs) {
       validate = function(result) {
         stopifnot(isTRUE(result), is.null(attributes(result)))
         "TRUE"
+      }
+    ),
+    check_dependencies = list(
+      expression = quote(inputs$params_space$check_dependencies(
+        inputs$scalar_values
+      )),
+      validate = function(result) {
+        stopifnot(isTRUE(result), is.null(attributes(result)))
+        "TRUE"
+      }
+    ),
+    condition_equal_vector = list(
+      expression = quote(condition_test(
+        inputs$condition_equal,
+        inputs$condition_values
+      )),
+      validate = function(result) {
+        stopifnot(
+          is.logical(result),
+          is.null(attributes(result)),
+          identical(result, inputs$condition_expected)
+        )
+        paste(length(result), sum(result), sep = "x")
+      }
+    ),
+    test_constraint_dt = list(
+      expression = quote(inputs$constraint_batch_space$test_constraint_dt(
+        inputs$constraint_batch,
+        assert_value = FALSE
+      )),
+      validate = function(result) {
+        stopifnot(
+          is.logical(result),
+          is.null(attributes(result)),
+          identical(result, rep(TRUE, inputs$n_rows))
+        )
+        paste(length(result), "TRUE", sep = "x")
       }
     ),
     sanitize_scalar = list(
@@ -879,6 +1051,86 @@ benchmark_make_workloads <- function(inputs) {
           observed[[2L]],
           observed[[3L]],
           observed[[4L]],
+          sep = "|"
+        )
+      }
+    ),
+    shadow_values_live = list(
+      expression = quote(inputs$shadow_read$values),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$shadow_visible_ids),
+          identical(result, inputs$shadow_read_expected),
+          identical(
+            inputs$shadow_read_origin$values[[inputs$shadow_hidden_id]],
+            inputs$scalar_values[[inputs$shadow_hidden_id]]
+          )
+        )
+        paste(
+          length(result),
+          inputs$shadow_live_id,
+          result[[inputs$shadow_live_id]],
+          sep = "|"
+        )
+      }
+    ),
+    shadow_constraint_live = list(
+      expression = quote(inputs$shadow_constraint$constraint(
+        inputs$shadow_constraint_values
+      )),
+      validate = function(result) {
+        stopifnot(
+          isTRUE(result),
+          identical(
+            inputs$shadow_constraint_origin$values,
+            inputs$scalar_values[inputs$shadow_hidden_id]
+          )
+        )
+        "TRUE"
+      }
+    ),
+    shadow_domains_live = list(
+      expression = quote(inputs$shadow_read$domains),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(names(result), inputs$shadow_visible_ids),
+          all(vapply(result, inherits, logical(1L), "Domain")),
+          identical(
+            result[[inputs$shadow_live_id]]$.init[[1L]],
+            inputs$shadow_read_expected[[inputs$shadow_live_id]]
+          )
+        )
+        paste(
+          length(result),
+          inputs$shadow_live_id,
+          result[[inputs$shadow_live_id]]$.init[[1L]],
+          sep = "|"
+        )
+      }
+    ),
+    shadow_assign_values = list(
+      expression = quote(
+        inputs$shadow_write$values <- inputs$shadow_assignment
+      ),
+      validate = function(result) {
+        stopifnot(
+          identical(result, inputs$shadow_assignment),
+          identical(inputs$shadow_write$values, inputs$shadow_assignment),
+          identical(
+            inputs$shadow_write_origin$values,
+            inputs$shadow_write_expected
+          ),
+          identical(
+            inputs$shadow_write_origin$values[[inputs$shadow_hidden_id]],
+            inputs$scalar_values[[inputs$shadow_hidden_id]]
+          )
+        )
+        paste(
+          length(result),
+          inputs$shadow_hidden_id,
+          inputs$shadow_write_origin$values[[inputs$shadow_hidden_id]],
           sep = "|"
         )
       }

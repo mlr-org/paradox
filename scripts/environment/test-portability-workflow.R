@@ -44,11 +44,17 @@ if (!requireNamespace("yaml", quietly = TRUE)) {
 }
 
 workflow <- yaml::read_yaml(workflow_path)
+if (!identical(sort(names(workflow$jobs)),
+    sort(c("r-cmd-check", "portability-complete")))) {
+  fail("portability workflow must contain only the check and completion jobs")
+}
 job <- workflow$jobs[["r-cmd-check"]]
 configs <- job$strategy$matrix$config
 steps <- job$steps
 expected_rows <- if (mode == "general") 6L else 2L
-if (!is.list(configs) || length(configs) != expected_rows || !is.list(steps)) {
+if (!identical(job$strategy[["fail-fast"]], FALSE) ||
+    !is.null(job[["continue-on-error"]]) ||
+    !is.list(configs) || length(configs) != expected_rows || !is.list(steps)) {
   fail("portability workflow has an unexpected matrix size for mode ", mode)
 }
 
@@ -230,6 +236,43 @@ if (!inherits(evaluate_completion(), "try-error")) {
 writeLines(c("* DONE", "Status: OK"), log_path)
 if (inherits(evaluate_completion(), "try-error")) {
   fail("completion verifier rejects one exact successful check status")
+}
+
+completion_job <- workflow$jobs[["portability-complete"]]
+if (!identical(completion_job$name, "Verify required check jobs") ||
+    !identical(completion_job[["if"]], "${{ always() }}") ||
+    !identical(completion_job$needs, "r-cmd-check") ||
+    !identical(completion_job[["runs-on"]], "ubuntu-latest") ||
+    !is.list(completion_job$steps) || length(completion_job$steps) != 1L) {
+  fail("required-job completion gate has an unexpected shape")
+}
+required_results <- completion_job$steps[[1L]]
+if (!identical(required_results$name, "Verify required job conclusions") ||
+    !identical(required_results$shell, "bash") ||
+    !identical(
+      required_results$env$R_CMD_CHECK_RESULT,
+      "${{ needs.r-cmd-check.result }}"
+    ) ||
+    !grepl("set -euo pipefail", required_results$run, fixed = TRUE)) {
+  fail("required-job completion step is not bound fail-closed to the matrix")
+}
+
+evaluate_required_results <- function(result) {
+  suppressWarnings(system2(
+    "/usr/bin/bash",
+    args = c("-c", shQuote(required_results$run)),
+    env = paste0("R_CMD_CHECK_RESULT=", result),
+    stdout = FALSE,
+    stderr = FALSE
+  ))
+}
+if (evaluate_required_results("success") != 0L ||
+    any(vapply(
+      c("failure", "cancelled", "skipped", ""),
+      function(result) evaluate_required_results(result) == 0L,
+      logical(1L)
+    ))) {
+  fail("required-job completion gate does not reject every non-success result")
 }
 
 cat("portability workflow regression tests passed\n")

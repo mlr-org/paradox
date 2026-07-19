@@ -1,198 +1,203 @@
-design_logscale_trafo_symbol = function() {
-  get(
-    "C_design_transpose_logscale_builtin",
-    envir = asNamespace("paradox")
-  )
-}
-
-design_logscale_rows = function(data, filter_na) {
-  native = get("C_design_transpose", envir = asNamespace("paradox"))
-  rows = .Call(native, data, filter_na)
-  if (is.null(rows)) {
-    rows = transpose_list(data)
-    if (filter_na) {
-      rows = map(rows, function(row) Filter(Negate(is_scalar_na), row))
-    }
-  }
-  rows
-}
-
-design_logscale_legacy = function(data, param_set, filter_na) {
-  map(
-    design_logscale_rows(data, filter_na),
-    function(row) param_set$trafo(row)
-  )
-}
-
-test_that("native Design logscale trafo is registered and exact", {
+test_that("ParamSet and Design share the registered transformation engine", {
   routines = getDLLRegisteredRoutines("paradox")$.Call
-  expect_identical(
-    routines$design_transpose_logscale_builtin$numParameters,
-    2L
-  )
+  expect_identical(routines$param_set_trafo$numParameters, 4L)
+  expect_identical(routines$design_transpose_trafos$numParameters, 2L)
+  expect_false("param_set_trafo_plan" %in% names(routines))
+  expect_false("design_transpose_logscale_builtin" %in% names(routines))
 
-  parameter_set = ps(
-    double = p_dbl(1e-6, 1e3, logscale = TRUE),
-    integer = p_int(0, 100, logscale = TRUE),
-    plain = p_lgl()
-  )
-  data = data.table(
-    double = c(log(1e-6), 0, log(1e3), NA_real_, NaN, Inf),
-    integer = c(log(0.5), log(2), log(101), NA_real_, NaN, log(5)),
-    plain = c(TRUE, FALSE, TRUE, FALSE, NA, TRUE)
-  )
-  design = Design$new(parameter_set, copy(data), remove_dupl = FALSE)
-  symbol = design_logscale_trafo_symbol()
-
-  for (filter_na in c(FALSE, TRUE)) {
-    rows = design_logscale_rows(design$data, filter_na)
-    before = unserialize(serialize(rows, NULL))
-    native = .Call(symbol, rows, parameter_set)
-    expected = design_logscale_legacy(
-      design$data,
-      parameter_set,
-      filter_na
-    )
-    expect_identical(native, expected)
-    expect_identical(rows, before)
-    expect_identical(
-      design$transpose(filter_na = filter_na, trafo = TRUE),
-      expected
-    )
-  }
-
-  rows = design_logscale_rows(design$data, FALSE)
-  native = .Call(symbol, rows, parameter_set)
-  names(native[[1L]])[[1L]] = "changed"
-  expect_identical(names(rows[[1L]]), c("double", "integer", "plain"))
-  expect_identical(names(native[[2L]]), c("double", "integer", "plain"))
-})
-
-test_that("native Design logscale lane never evaluates arbitrary callbacks", {
-  symbol = design_logscale_trafo_symbol()
-  calls = 0L
-  custom = function(value) {
-    calls <<- calls + 1L
-    value + 1
+  events = character()
+  record = function(id, fn) {
+    force(id)
+    force(fn)
+    function(value) {
+      events <<- c(events, id)
+      fn(value)
+    }
   }
   parameter_set = ps(
-    logscale = p_dbl(1, 10, logscale = TRUE),
-    custom = p_dbl(0, 1, trafo = custom)
+    z = p_dbl(trafo = record("z", function(value) value + 0.5)),
+    nothing = p_uty(trafo = record("nothing", function(value) NULL)),
+    many = p_int(trafo = record("many", function(value) c(value, value + 10L)))
   )
-  data = data.table(logscale = c(0, 1), custom = c(0.25, 0.75))
-  design = Design$new(parameter_set, copy(data), remove_dupl = FALSE)
-  rows = design_logscale_rows(design$data, FALSE)
-
-  expect_null(.Call(symbol, rows, parameter_set))
-  expect_identical(calls, 0L)
-  expected = design_logscale_legacy(design$data, parameter_set, FALSE)
-  expect_identical(calls, 2L)
-  calls = 0L
-  expect_identical(design$transpose(), expected)
-  expect_identical(calls, 2L)
-
-  user_exp = ps(x = p_dbl(-1, 1, trafo = exp))
-  user_rows = list(list(x = 0))
-  expect_null(.Call(symbol, user_rows, user_exp))
-
-  extra = ps(
-    x = p_dbl(1, 10, logscale = TRUE),
-    .extra_trafo = function(x) c(x, list(extra = TRUE))
-  )
-  expect_null(.Call(symbol, list(list(x = 0)), extra))
-  expect_identical(
-    Design$new(extra, data.table(x = 0), remove_dupl = FALSE)$transpose(),
-    list(list(x = 1, extra = TRUE))
-  )
-})
-
-test_that("native integer logscale admission rejects executable bindings", {
-  symbol = design_logscale_trafo_symbol()
-
-  active = ps(x = p_int(0, 100, logscale = TRUE))
-  active_callback = active$.__enclos_env__$private$.trafos$trafo[[1L]]
-  active_environment = environment(active_callback)
-  active_calls = 0L
-  rm("lower", envir = active_environment)
-  makeActiveBinding("lower", function(value) {
-    active_calls <<- active_calls + 1L
-    if (!missing(value)) stop("unexpected active-binding write")
-    0
-  }, active_environment)
-  expect_null(.Call(symbol, list(list(x = 0)), active))
-  expect_identical(active_calls, 0L)
-
-  delayed = ps(x = p_int(0, 100, logscale = TRUE))
-  delayed_callback = delayed$.__enclos_env__$private$.trafos$trafo[[1L]]
-  delayed_environment = environment(delayed_callback)
-  delayed_calls = 0L
-  rm("upper", envir = delayed_environment)
-  delayedAssign("upper", {
-    delayed_calls <<- delayed_calls + 1L
-    100
-  }, assign.env = delayed_environment)
-  expect_null(.Call(symbol, list(list(x = 0)), delayed))
-  expect_identical(delayed_calls, 0L)
-})
-
-test_that("native Design logscale lane fails closed on altered surfaces", {
-  symbol = design_logscale_trafo_symbol()
-  parameter_set = ps(x = p_dbl(1, 10, logscale = TRUE))
-  rows = list(list(x = 0))
-
-  cargo_changed = parameter_set$clone(deep = TRUE)
-  cargo_changed$.__enclos_env__$private$.params$cargo[[1L]]$logscale = NULL
-  expect_null(.Call(symbol, rows, cargo_changed))
-  expect_identical(cargo_changed$trafo(rows[[1L]]), list(x = 1))
-
-  callback_changed = parameter_set$clone(deep = TRUE)
-  callback_changed$.__enclos_env__$private$.trafos$trafo[[1L]] = identity
-  expect_null(.Call(symbol, rows, callback_changed))
-
-  method_changed = parameter_set$clone(deep = TRUE)
-  unlockBinding("trafo", method_changed)
-  method_changed$trafo = function(x, param_set = method_changed) {
-    list(overridden = TRUE)
-  }
-  lockBinding("trafo", method_changed)
-  expect_null(.Call(symbol, rows, method_changed))
-
-  expect_null(.Call(symbol, structure(rows, note = TRUE), parameter_set))
-  expect_null(.Call(
-    symbol,
-    list(structure(list(x = 0), class = "custom")),
-    parameter_set
-  ))
-  expect_null(.Call(
-    symbol,
-    list(list(x = structure(0, class = "custom"))),
-    parameter_set
+  input = list(many = 1L, nothing = "x", z = 2)
+  single = parameter_set$trafo(input)
+  expect_identical(events, c("many", "nothing", "z"))
+  expect_identical(single, list(
+    many = c(1L, 11L),
+    nothing = NULL,
+    z = 2.5
   ))
 
-  unicode_rows = list(setNames(list(0), "xθ"))
-  expect_null(.Call(symbol, unicode_rows, parameter_set))
-  expect_identical(
-    map(unicode_rows, function(row) parameter_set$trafo(row)),
-    unicode_rows
+  events = character()
+  design = Design$new(
+    parameter_set,
+    data.table(many = 1:2, nothing = list("x", "y"), z = c(2, 3)),
+    remove_dupl = FALSE
   )
-})
-
-test_that("integer logscale warning cases retain the R callback", {
-  symbol = design_logscale_trafo_symbol()
-  parameter_set = ps(x = p_int(0, Inf, logscale = TRUE))
-  data = data.table(x = 1000)
-  design = Design$new(parameter_set, data, remove_dupl = FALSE)
-  rows = design_logscale_rows(design$data, FALSE)
-
-  expect_null(.Call(symbol, rows, parameter_set))
-  warnings = character()
-  result = withCallingHandlers(
+  expect_identical(
     design$transpose(),
-    warning = function(condition) {
-      warnings <<- c(warnings, conditionMessage(condition))
-      invokeRestart("muffleWarning")
+    list(
+      list(many = c(1L, 11L), nothing = NULL, z = 2.5),
+      list(many = c(2L, 12L), nothing = NULL, z = 3.5)
+    )
+  )
+  expect_identical(events, rep(c("many", "nothing", "z"), 2L))
+})
+
+test_that("extra_trafo arity, replacement, warnings, and errors propagate once", {
+  seen = NULL
+  two_argument = ps(
+    x = p_dbl(),
+    .extra_trafo = function(x, param_set) {
+      seen <<- param_set
+      c(x, list(extra = TRUE))
     }
   )
-  expect_match(warnings, "NAs introduced by coercion to integer range")
-  expect_identical(result, list(list(x = NA_integer_)))
+  expect_identical(
+    two_argument$trafo(list(x = 1)),
+    list(x = 1, extra = TRUE)
+  )
+  expect_identical(seen, two_argument)
+
+  one_argument = ps(
+    x = p_dbl(),
+    .extra_trafo = function(x) list(replaced = x$x + 1)
+  )
+  expect_identical(
+    one_argument$trafo(list(x = 1)),
+    list(replaced = 2)
+  )
+
+  warning_calls = 0L
+  warning_set = ps(x = p_dbl(trafo = function(value) {
+    warning_calls <<- warning_calls + 1L
+    warning("once")
+    value
+  }))
+  expect_warning(warning_set$trafo(list(x = 1)), "once")
+  expect_identical(warning_calls, 1L)
+
+  error_calls = 0L
+  error_set = ps(x = p_dbl(trafo = function(value) {
+    error_calls <<- error_calls + 1L
+    stop("expected callback failure", call. = FALSE)
+  }))
+  expect_error(error_set$trafo(list(x = 1)), "expected callback failure")
+  expect_identical(error_calls, 1L)
+})
+
+test_that("base extra_trafo retains legacy unnamed one-dimensional output", {
+  parameter_set = ps(
+    x = p_dbl(),
+    .extra_trafo = function(x) list(x$x + 1)
+  )
+  expect_identical(parameter_set$trafo(list(x = 1)), list(2))
+
+  design = Design$new(
+    parameter_set,
+    data.table(x = c(1, 2)),
+    remove_dupl = FALSE
+  )
+  expect_identical(design$transpose(), list(list(2), list(3)))
+
+  collection = psc(unit = parameter_set)
+  expect_error(
+    collection$trafo(list(unit.x = 1)),
+    "one name for every element",
+    fixed = TRUE
+  )
+})
+
+test_that("Design freezes callback selection across reentry", {
+  calls = character()
+  parameter_set = ps(x = p_dbl())
+  replacement = function(x) {
+    calls <<- c(calls, "new")
+    c(x, list(source = "new"))
+  }
+  original = function(x, param_set) {
+    calls <<- c(calls, "old")
+    if (length(calls) == 1L) param_set$extra_trafo = replacement
+    c(x, list(source = "old"))
+  }
+  parameter_set$extra_trafo = original
+  design = Design$new(
+    parameter_set,
+    data.table(x = c(1, 2)),
+    remove_dupl = FALSE
+  )
+
+  first = design$transpose()
+  expect_identical(map_chr(first, "source"), c("old", "old"))
+  expect_identical(calls, c("old", "old"))
+
+  second = design$transpose()
+  expect_identical(map_chr(second, "source"), c("new", "new"))
+  expect_identical(calls, c("old", "old", "new", "new"))
+})
+
+test_that("Design materializes ALTREP before selecting transformation state", {
+  callbacks = 0L
+  parameter_set = ps(
+    x = p_dbl(),
+    .extra_trafo = function(x) c(x, list(source = "old"))
+  )
+  column = native_stateful_altrep(
+    c(1, 2),
+    c(1, 2),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      parameter_set$extra_trafo = function(x) c(x, list(source = "new"))
+    },
+    callback_after = 0L
+  )
+  data = structure(
+    list(x = column),
+    names = "x",
+    row.names = c(NA_integer_, -2L),
+    class = c("data.table", "data.frame")
+  )
+  design = Design$new(parameter_set, data, remove_dupl = FALSE)
+  expect_identical(callbacks, 0L)
+
+  result = design$transpose()
+  expect_identical(callbacks, 1L)
+  expect_identical(map_chr(result, "source"), c("new", "new"))
+})
+
+test_that("collection extra trafos use local names and deterministic translation", {
+  left = ps(
+    x = p_dbl(trafo = function(value) value + 1),
+    .extra_trafo = function(x, param_set) {
+      expect_identical(param_set, left)
+      list(x = x$x * 2, bonus = x$x + 10)
+    }
+  )
+  right = ps(y = p_int())
+  collection = psc(left = left, right = right)
+  result = collection$trafo(list(left.x = 1, right.y = 2L))
+  expect_identical(result, list(
+    right.y = 2L,
+    left.x = 4,
+    left.bonus = 12
+  ))
+
+  postfix = ParamSetCollection$new(list(unit = left), postfix_names = TRUE)
+  expect_identical(
+    postfix$trafo(list(x.unit = 1)),
+    list(x.unit = 4, bonus.unit = 12)
+  )
+})
+
+test_that("transformation outputs own shells while opaque leaves retain identity", {
+  opaque = new.env(parent = emptyenv())
+  parameter_set = ps(
+    x = p_uty(trafo = identity),
+    y = p_dbl(1, 10, logscale = TRUE)
+  )
+  input = list(x = opaque, y = 0)
+  output = parameter_set$trafo(input)
+  expect_identical(output, list(x = opaque, y = 1))
+  names(output)[[1L]] = "changed"
+  expect_named(input, c("x", "y"))
 })

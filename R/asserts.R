@@ -2,7 +2,7 @@
 #'
 #' @param param_set ([`ParamSet`]).
 #' @param cl (`character()`)\cr
-#'   Allowed subclasses.
+#'   Allowed parameter/Domain classes.
 #' @param no_untyped (`logical(1)`)\cr
 #'   Are untyped [`Domain`]s allowed?
 #' @param must_bounded (`logical(1)`)\cr

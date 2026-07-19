@@ -205,9 +205,11 @@ analyzer_files <- c(
   "test-native-adversarial-storage.R",
   "test-native-altrep-lifetimes.R",
   "test-native-domain-kernels.R",
+  "test-native-gctorture.R",
+  "test-native-paramset-qunif.R",
+  "test-native-paramset-trafo-gctorture.R",
   "test-native-paramset-value-mutation.R",
-  "test-native-paramsetcollection-exact-state.R",
-  "test-native-r6-surface-auth.R"
+  "test-native-paramsetcollection-construction.R"
 )
 filter <- switch(selection,
   analyzer = paste0(
@@ -218,7 +220,14 @@ filter <- switch(selection,
     ),
     ")$"
   ),
-  focused = "(characterization|native|regression)",
+  # The focused wave is architectural, not merely filename-conventional.
+  # Keep the explicit Paradox-2 contract/token suites here even when their
+  # public class/API names intentionally do not contain "native".
+  focused = paste0(
+    "(characterization|native|regression|",
+    "ParamSetShadow|core-state-contract|paramset-equality|to_tune|",
+    "upgrade-paradox-object)"
+  ),
   NULL
 )
 test_directory <- file.path(snapshot, "tests", "testthat")

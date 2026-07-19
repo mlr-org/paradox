@@ -5,11 +5,19 @@
 \title{SamplerUnif Class}
 \description{
 Uniform random sampling for an arbitrary (bounded) \link{ParamSet}.
-Constructs 1 uniform sampler per parameter, then passes them to \link{SamplerHierarchical}.
-Hence, also works for \link{ParamSet}s sets with dependencies.
+Sampling itself is one native operation over the parameter-set capsule and
+works for base sets, collections, live shadows, and dependencies.
+A zero-level categorical parameter can produce a typed zero-row design;
+requesting one or more rows from it errors before randomness is consumed.
+
+The inherited \verb{$samplers} field remains a list of \code{\link{Sampler1DUnif}} objects
+for source compatibility and introspection. It is descriptive: changing a
+child object does not change the uniform engine. Replacing or reordering the
+list is rejected; construct a \code{\link{SamplerHierarchical}} when custom one-
+dimensional sampler behavior is required.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
@@ -21,57 +29,59 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super classes}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:SamplerHierarchical]{paradox::SamplerHierarchical}} -> \code{SamplerUnif}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{\link[paradox:SamplerHierarchical]{SamplerHierarchical}} -> \code{SamplerUnif}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-SamplerUnif-new}{\code{SamplerUnif$new()}}
-\item \href{#method-SamplerUnif-clone}{\code{SamplerUnif$clone()}}
+  \itemize{
+    \item \href{#method-SamplerUnif-initialize}{\code{SamplerUnif$new()}}
+    \item \href{#method-SamplerUnif-clone}{\code{SamplerUnif$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-SamplerUnif-new"></a>}}
-\if{latex}{\out{\hypertarget{method-SamplerUnif-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerUnif$new(param_set)}\if{html}{\out{</div>}}
+\if{html}{\out{<a id="method-SamplerUnif-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-SamplerUnif-initialize}{}}}
+\subsection{\code{SamplerUnif$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerUnif$new(param_set)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param_set}}{(\code{\link{ParamSet}})\cr
+The \code{\link{ParamSet}} to associated with this \code{SamplerUnif}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param_set}}{(\code{\link{ParamSet}})\cr
-The \code{\link{ParamSet}} to associated with this \code{SamplerUnif}.}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-SamplerUnif-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-SamplerUnif-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{SamplerUnif$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{SamplerUnif$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{SamplerUnif$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

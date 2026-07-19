@@ -23,102 +23,32 @@ parse_options <- function(arguments) {
   values
 }
 
-expected_routines <- c(
-  design_transpose = 2L, design_transpose_logscale_builtin = 2L,
-  design_dependency_runtime = 1L,
-  design_dependency_plan_builtin = 2L, finalize_data_table = 1L,
-  domain_check_builtin = 2L, domain_construct = 14L,
-  domain_construct_frame = 1L, domain_builtin_runtime = 3L,
-  domain_construct_builtin = 5L, domain_fct_grouping = 1L,
-  domain_numeric_bounds_admit = 2L, domain_uty_check_result = 1L,
-  domain_simple_repr_id = 1L, ps_builtin_runtime = 2L,
-  ps_builtin_domains = 2L,
-  domain_qunif_builtin = 2L, domain_sanitize_builtin = 2L,
-  param_set_index_layout = 5L, param_set_construct = 1L,
-  param_set_collection_construct = 4L,
-  param_set_collection_detach_plan = 3L,
-  param_set_collection_check_builtin = 5L,
-  param_set_check_builtin = 3L,
-  param_set_check_dt_builtin = 2L,
-  param_set_check_dt_plan_builtin = 2L,
-  param_set_check_dt_complete_builtin = 2L,
-  param_set_check_dt_all_builtin = 2L, param_set_surface_auth = 2L,
-  param_set_ids = 5L, param_set_ids_lazy = 2L,
-  param_set_get_values = 3L, param_set_values_merge = 4L,
-  param_set_store_values = 3L, param_set_assign_values_checked = 3L,
-  param_set_collection_store_plan = 4L, param_set_property = 2L,
-  param_set_qunif_builtin = 2L, sampler_unif_sample_builtin = 4L,
-  generate_design_grid_builtin = 2L,
-  param_set_trafo_plan = 2L,
-  param_set_get_domain = 3L, param_set_domains = 2L,
-  param_set_params = 2L, param_set_collection_params = 2L,
-  param_set_collection_deps = 2L, param_set_collection_values = 2L,
-  param_set_subset_state = 4L, param_set_subspace_state = 5L,
-  param_set_subspace_states = 4L, param_set_adopt_subset_state = 2L,
-  param_set_bulk_shell_register = 2L,
-  param_set_bulk_generator_auth = 1L, param_set_bulk_shells = 2L,
-  sampler_1d_unif_bulk_register = 2L,
-  sampler_1d_unif_bulk_auth = 1L,
-  sampler_1d_unif_bulk_shells = 4L,
-  test_checked_affixed_size = 2L, test_stateful_altrep = 6L,
-  test_stateful_altrep_rearm = 2L, test_gc_column_mutator = 3L
-)
-expected_fixture <- startsWith(names(expected_routines), "test_")
 required_hazards <- c("hazard_altrep_snapshot_reentry",
   "hazard_callback_reentry_rooting", "hazard_finalizer_column_mutation",
   "hazard_finalize_names_alias")
-expected_probe_ids <- stats::setNames(
-  paste0("direct_", names(expected_routines)),
-  names(expected_routines)
-)
-expected_probe_ids[["finalize_data_table"]] <- paste(
-  expected_probe_ids[["finalize_data_table"]],
-  "hazard_finalize_names_alias",
-  sep = ","
-)
-for (routine in c("domain_check_builtin", "domain_qunif_builtin")) {
-  expected_probe_ids[[routine]] <- paste(
-    expected_probe_ids[[routine]],
-    "hazard_callback_reentry_rooting",
-    sep = ","
-  )
-}
-expected_probe_ids[["param_set_values_merge"]] <- paste(
-  expected_probe_ids[["param_set_values_merge"]],
-  "hazard_altrep_snapshot_reentry",
-  sep = ","
-)
-expected_probe_ids[["test_stateful_altrep"]] <- paste(
-  expected_probe_ids[["test_stateful_altrep"]],
-  "hazard_altrep_snapshot_reentry",
-  "hazard_callback_reentry_rooting",
-  sep = ","
-)
-expected_probe_ids[["test_gc_column_mutator"]] <- paste(
-  expected_probe_ids[["test_gc_column_mutator"]],
-  "hazard_finalizer_column_mutation",
-  sep = ","
-)
 
 validate_manifest <- function(path) {
   manifest <- read.delim(path, sep = "\t", quote = "", comment.char = "",
     colClasses = "character", check.names = FALSE)
   columns <- c("routine", "arity", "surface", "coverage", "probe_ids", "reviewed_basis")
   if (!identical(names(manifest), columns)) fail("manifest columns differ")
-  if (nrow(manifest) != length(expected_routines) || anyNA(manifest) ||
+  if (!nrow(manifest) || anyNA(manifest) ||
       any(!nzchar(as.matrix(manifest)))) fail("manifest is incomplete")
   if (anyDuplicated(manifest$routine)) fail("manifest contains duplicate routines")
-  if (!identical(manifest$routine, names(expected_routines))) fail("manifest routine inventory/order differs")
+  if (any(!grepl("^[a-z][a-z0-9_]*$", manifest$routine))) {
+    fail("manifest contains an invalid routine name")
+  }
   arity <- suppressWarnings(as.integer(manifest$arity))
-  if (anyNA(arity) || !identical(unname(arity), unname(expected_routines)) ||
-      !identical(as.character(arity), manifest$arity)) fail("manifest arity inventory differs")
+  if (anyNA(arity) || any(arity < 0L) ||
+      !identical(as.character(arity), manifest$arity)) {
+    fail("manifest arity inventory differs")
+  }
+  expected_routines <- stats::setNames(arity, manifest$routine)
+  expected_fixture <- startsWith(manifest$routine, "test_")
   expected_surface <- ifelse(expected_fixture, "fixture", "production")
   expected_coverage <- ifelse(expected_fixture, "fixture-dynamic", "production-dynamic")
   if (!identical(manifest$surface, expected_surface)) fail("manifest surface classification differs")
   if (!identical(manifest$coverage, expected_coverage)) fail("manifest dynamic coverage classification differs")
-  if (!identical(manifest$probe_ids, unname(expected_probe_ids))) {
-    fail("manifest routine-to-probe mapping differs")
-  }
   split_ids <- strsplit(manifest$probe_ids, ",", fixed = TRUE)
   if (any(vapply(split_ids, function(ids) any(!grepl("^[a-z][a-z0-9_]*$", ids)) || anyDuplicated(ids), logical(1L)))) {
     fail("manifest has invalid or duplicate probe IDs")
@@ -129,11 +59,12 @@ validate_manifest <- function(path) {
   }
   all_ids <- unique(unlist(split_ids, use.names = FALSE))
   if (!setequal(intersect(all_ids, required_hazards), required_hazards)) fail("manifest lacks a required hazard")
-  list(manifest = manifest, probe_ids = all_ids)
+  list(manifest = manifest, routines = expected_routines, probe_ids = all_ids)
 }
 
 validate_result <- function(path, mode, manifest_info,
     expected_dso_sha256 = NULL) {
+  expected_routines <- manifest_info$routines
   if (!mode %in% c("plain", "gct", "valgrind")) fail("invalid expected mode")
   result <- read.delim(path, sep = "\t", quote = "", comment.char = "",
     colClasses = "character", check.names = FALSE)

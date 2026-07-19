@@ -183,7 +183,6 @@ NATIVE_TEST_RUNNER="$ROOT/scripts/environment/run-native-tests.R"
 NATIVE_TEST_WORKER="$ROOT/scripts/environment/run-native-test-worker.R"
 NATIVE_TEST_WORKER_GROUP="$ROOT/scripts/environment/run-native-test-worker-group"
 NATIVE_TEST_VERIFIER="$ROOT/scripts/environment/verify-native-test-ledger.R"
-NATIVE_TEST_BASELINE="$ROOT/environment/native-functional-baseline.tsv"
 RESOURCE_JOBS_HELPER="$ROOT/scripts/environment/resource-jobs"
 BOUNDED_RCHK_PREPARER="$ROOT/scripts/prepare-bounded-rchk-bcheck"
 BOUNDED_RCHK_BUILD_DRIVER="$ROOT/scripts/environment/build-bounded-rchk-bcheck"
@@ -221,7 +220,7 @@ done
 for required in "$NATIVE_PROBE_RUNNER" "$NATIVE_PROBE_VERIFIER" \
     "$NATIVE_TEST_RUNNER" "$NATIVE_TEST_WORKER" \
     "$NATIVE_TEST_WORKER_GROUP" "$NATIVE_TEST_VERIFIER" \
-    "$NATIVE_TEST_BASELINE" "$RESOURCE_JOBS_HELPER" \
+    "$RESOURCE_JOBS_HELPER" \
     "$BOUNDED_RCHK_PREPARER" "$BOUNDED_RCHK_BUILD_DRIVER" \
     "$BOUNDED_RCHK_CONFIG" "$BOUNDED_RCHK_COMMAND" \
     "$BOUNDED_RCHK_ENVIRONMENT" "$BOUNDED_RCHK_TOOL_IDENTITY"; do
@@ -310,8 +309,6 @@ cp "$NATIVE_TEST_WORKER_GROUP" \
   "$RUN_DIRECTORY/metadata/run-native-test-worker-group"
 cp "$NATIVE_TEST_VERIFIER" \
   "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R"
-cp "$NATIVE_TEST_BASELINE" \
-  "$RUN_DIRECTORY/metadata/native-functional-baseline.tsv"
 cp "$DEBUG_SYMBOL_HELPER" \
   "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
 cp "$RESOURCE_JOBS_HELPER" \
@@ -346,7 +343,6 @@ sha256sum "$RUN_DIRECTORY/metadata/memory-check" \
   "$RUN_DIRECTORY/metadata/verify-native-probes.R" \
   "$RUN_DIRECTORY/metadata/run-native-tests.R" \
   "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R" \
-  "$RUN_DIRECTORY/metadata/native-functional-baseline.tsv" \
   "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols" \
   "$RUN_DIRECTORY/metadata/resource-jobs" \
   "$RUN_DIRECTORY/metadata/prepare-bounded-rchk-bcheck" \
@@ -364,7 +360,6 @@ RETAINED_NATIVE_PROBE_RUNNER="$RUN_DIRECTORY/metadata/run-native-probes.R"
 RETAINED_NATIVE_PROBE_VERIFIER="$RUN_DIRECTORY/metadata/verify-native-probes.R"
 RETAINED_NATIVE_TEST_RUNNER="$RUN_DIRECTORY/metadata/run-native-tests.R"
 RETAINED_NATIVE_TEST_VERIFIER="$RUN_DIRECTORY/metadata/verify-native-test-ledger.R"
-RETAINED_NATIVE_TEST_BASELINE="$RUN_DIRECTORY/metadata/native-functional-baseline.tsv"
 RETAINED_TREE_RECEIPT_HELPER="$RUN_DIRECTORY/metadata/tree-receipt.R"
 RETAINED_DEBUG_SYMBOL_HELPER="$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
 RETAINED_RESOURCE_JOBS_HELPER="$RUN_DIRECTORY/metadata/resource-jobs"
@@ -492,29 +487,19 @@ resource_report_value() {
   ' "$1"
 }
 
-validate_rchk_resource_report() {
+validate_serial_resource_report() {
   resource_report=$1
-  awk -F '\t' '
-    BEGIN {
-      count = split("field schema profile platform online_cpus affinity_cpus cgroup_cpu_limit cpu_limit cpu_reserve cpu_per_job cpu_jobs memory_source memory_available_mib cgroup_memory_available_mib memory_reserve_mib memory_mib_per_job memory_jobs profile_max_jobs operator_max_jobs jobs", keys, " ")
-    }
-    {
-      if (NF != 2 || NR > count || $1 != keys[NR]) exit 1
-      value[$1] = $2
-    }
-    END {
-      if (NR != count || value["field"] != "value" ||
-          value["schema"] != "1" || value["profile"] != "rchk" ||
-          value["cpu_per_job"] != "1" ||
-          value["memory_mib_per_job"] != "20480" ||
-          value["profile_max_jobs"] != "1" ||
-          value["operator_max_jobs"] != "none" || value["jobs"] != "1" ||
-          value["memory_reserve_mib"] !~ /^[1-9][0-9]*$/ ||
-          value["memory_reserve_mib"] + 0 < 16384 ||
-          value["memory_jobs"] !~ /^[1-9][0-9]*$/) exit 1
-    }
-  ' "$resource_report" ||
-    fail "rchk resource admission report is malformed or unsafe"
+  expected_profile=$2
+  validation_log=$3
+  run_logged "$validation_log" env -i \
+    "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_RESOURCE_JOBS_HELPER" "$expected_profile" \
+    --verify-report "$resource_report"
+  [ "$(cat "$validation_log")" = \
+      "resource_report_verified=$expected_profile" ] ||
+    fail "$expected_profile resource admission validation output is malformed"
 }
 
 ORDINARY_INPUT_RECEIPTS="$RUN_DIRECTORY/metadata/ordinary-inputs"
@@ -761,8 +746,7 @@ for probe_helper in run-native-probes.R verify-native-probes.R; do
 done
 for test_input in \
     scripts/environment/run-native-tests.R \
-    scripts/environment/verify-native-test-ledger.R \
-    environment/native-functional-baseline.tsv; do
+    scripts/environment/verify-native-test-ledger.R; do
   [ -f "$SOURCE_DIRECTORY/$test_input" ] && \
     [ ! -L "$SOURCE_DIRECTORY/$test_input" ] ||
     fail "source-run native analyzer input is absent or symbolic: $test_input"
@@ -773,9 +757,6 @@ cmp -s "$RETAINED_NATIVE_TEST_RUNNER" \
 cmp -s "$RETAINED_NATIVE_TEST_VERIFIER" \
   "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" ||
   fail "trusted native-test verifier differs from the frozen source"
-cmp -s "$RETAINED_NATIVE_TEST_BASELINE" \
-  "$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" ||
-  fail "trusted native-test baseline differs from the frozen source"
 NATIVE_PROBE_MANIFEST="$SOURCE_DIRECTORY/environment/native-routine-coverage.tsv"
 [ -f "$NATIVE_PROBE_MANIFEST" ] && [ ! -L "$NATIVE_PROBE_MANIFEST" ] ||
   fail "frozen source has no regular native routine coverage manifest"
@@ -977,7 +958,7 @@ verify_native_analyzer_result() {
     "LC_ALL=C.UTF-8" "TZ=UTC" \
     "$ORDINARY_RSCRIPT" --vanilla "$RETAINED_NATIVE_TEST_VERIFIER" \
     "--source=$SOURCE_DIRECTORY" "--ledger=$analyzer_ledger" \
-    --selection=analyzer "--baseline=$RETAINED_NATIVE_TEST_BASELINE" \
+    --selection=analyzer \
     "--expected-dso-sha256=$(sha256sum "$analyzer_dso" | cut -d ' ' -f 1)"
 }
 
@@ -1400,7 +1381,6 @@ scan_valgrind_rc_files() {
 if [ "$MODE_VALGRIND" = true ]; then
   verify_ordinary_input_receipt_seal pre-valgrind
   verify_ordinary_input_metadata pre-valgrind
-  acquire_valgrind_state_lock
   VALGRIND_PREFIX="$ROOT/.local/r-valgrind/4.6.1"
   VALGRIND_R="$VALGRIND_PREFIX/bin/R"
   VALGRIND_LIBRARY="$ROOT/.local/r-valgrind/library"
@@ -1443,6 +1423,13 @@ if [ "$MODE_VALGRIND" = true ]; then
   mkdir -p "$MODE_LIBRARY" "$MODE_WORK" "$MODE_LOGS" \
     "$MODE_ARTIFACTS" "$MODE_HOME" "$MODE_WORK/tmp" \
     "$MODE_WORK/cache/R"
+  run_logged "$MODE_ARTIFACTS/resource-jobs.tsv" env -i \
+    "HOME=$MODE_HOME" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_RESOURCE_JOBS_HELPER" valgrind --report
+  validate_serial_resource_report "$MODE_ARTIFACTS/resource-jobs.tsv" \
+    valgrind "$MODE_LOGS/resource-admission-validation.log"
+  acquire_valgrind_state_lock
   VALGRIND_RECEIPT_COPY="$MODE_ARTIFACTS/prerequisite-receipts"
   retain_valgrind_receipts "$VALGRIND_RECEIPT_COPY"
   compare_retained_valgrind_receipts "$VALGRIND_RECEIPT_COPY"
@@ -1532,6 +1519,7 @@ if [ "$MODE_VALGRIND" = true ]; then
       'leak_detail=definite,indirect,possible; full summary retained' \
       'read_var_info=false (avoids non-actionable DWARF parser warnings)' \
       'child_silent_after_fork=true (rejects header-only fork-child logs)' \
+      'resource_admission=serial valgrind profile with 16384 MiB working-set allowance and at least 16384 MiB host reserve' \
       "extra_debuginfo_path=$VALGRIND_DEBUG_PREFIX"
   } > "$MODE_ARTIFACTS/scope.txt"
 
@@ -2127,7 +2115,8 @@ EOF
     "HOME=$MODE_DIRECTORY/home" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
     "PATH=/usr/bin:/bin" "LC_ALL=C.UTF-8" "TZ=UTC" \
     "$RETAINED_RESOURCE_JOBS_HELPER" rchk --report
-  validate_rchk_resource_report "$MODE_ARTIFACTS/resource-jobs.tsv"
+  validate_serial_resource_report "$MODE_ARTIFACTS/resource-jobs.tsv" \
+    rchk "$MODE_LOGS/resource-admission-validation.log"
   [ -x /usr/bin/timeout ] && [ ! -L /usr/bin/timeout ] ||
     fail "authenticated timeout supervisor is unavailable"
 
@@ -2301,8 +2290,6 @@ fi
     "$(sha256sum "$RETAINED_NATIVE_TEST_RUNNER" | cut -d ' ' -f 1)"
   printf 'native_test_verifier_sha256=%s\n' \
     "$(sha256sum "$RETAINED_NATIVE_TEST_VERIFIER" | cut -d ' ' -f 1)"
-  printf 'native_test_baseline_sha256=%s\n' \
-    "$(sha256sum "$RETAINED_NATIVE_TEST_BASELINE" | cut -d ' ' -f 1)"
   printf 'tree_receipt_helper_sha256=%s\n' \
     "$(sha256sum "$RETAINED_TREE_RECEIPT_HELPER" | cut -d ' ' -f 1)"
   printf 'source_manifest_sha256=%s\n' \

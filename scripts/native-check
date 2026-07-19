@@ -26,7 +26,7 @@ Modes:
 Options:
   --tests LEVEL  none, probes, focused, or full (default: focused).  Probes
                  dynamically exercise every registered routine and reviewed
-                 allocation/callback hazard plus a bounded six-file analyzer
+                 allocation/callback hazard plus the reviewed bounded analyzer
                  corpus.  Focused/full functional tests run once, preferring
                  strict GCC; other compiler and sanitizer builds run probes.
                  A full strict-GCC run additionally performs one clean --as-cran
@@ -43,7 +43,7 @@ The repository-local environment must already be active:
 Every command, log, compiler version, installed library, source archive, Git
 state, and content-hashed snapshot is retained below .local/checks/ID.  ASan
 and UBSan are never combined.  These sanitizer modes instrument only the
-package DSO; they are not substitutes for a future sanitizer-built R gate.
+package DSO and do not claim coverage of a sanitizer-built R runtime.
 PARADOX_NATIVE_COMPILE_JOBS and PARADOX_NATIVE_TEST_JOBS may lower, but never
 raise, the retained resource-aware install and focused/full test ceilings.
 EOF
@@ -888,6 +888,52 @@ if [ ! -f "$SOURCE_DIRECTORY/scripts/environment/resource-jobs" ] ||
   fail "snapshot resource scheduler differs from the retained trusted helper"
 fi
 
+MBO_CONFIG_FIXTURE_ROOT=
+case "$TEST_SELECTION" in
+  focused|full)
+    MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
+    MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_CHECKOUT/common"
+    MBO_CONFIG_EXPECTED_COMMIT=$(awk -F '\t' '
+      $1 == "mbo_config" {
+        if (NF != 6 || ++count != 1) exit 2
+        commit = $4
+      }
+      END {
+        if (count != 1 || commit !~ /^[0-9a-f]{40}$/) exit 3
+        print commit
+      }
+    ' "$SOURCE_DIRECTORY/compat/github-snapshot.tsv") ||
+      fail "snapshot has no unique canonical mbo_config revision"
+    [ -d "$MBO_CONFIG_CHECKOUT/.git" ] &&
+      [ ! -L "$MBO_CONFIG_CHECKOUT" ] &&
+      [ ! -L "$MBO_CONFIG_CHECKOUT/.git" ] ||
+      fail "pinned mbo_config checkout is missing or symbolic"
+    MBO_CONFIG_COMMIT=$(git -C "$MBO_CONFIG_CHECKOUT" rev-parse HEAD) ||
+      fail "could not read the pinned mbo_config revision"
+    [ "$MBO_CONFIG_COMMIT" = "$MBO_CONFIG_EXPECTED_COMMIT" ] ||
+      fail "mbo_config checkout differs from the snapshot revision"
+    [ -z "$(git -C "$MBO_CONFIG_CHECKOUT" status --porcelain=v1 --untracked-files=all)" ] ||
+      fail "mbo_config checkout is dirty"
+    for fixture_name in mixed_search_space.rds numeric_search_space.rds; do
+      fixture_path="$MBO_CONFIG_FIXTURE_ROOT/$fixture_name"
+      [ -f "$fixture_path" ] && [ ! -L "$fixture_path" ] ||
+        fail "pinned mbo_config fixture is missing or symbolic: $fixture_name"
+    done
+    {
+      printf 'field\tvalue\n'
+      printf 'schema\t1\n'
+      printf 'repository\tmbo_config\n'
+      printf 'commit\t%s\n' "$MBO_CONFIG_COMMIT"
+      printf 'tree\t%s\n' \
+        "$(git -C "$MBO_CONFIG_CHECKOUT" rev-parse 'HEAD^{tree}')"
+      printf 'mixed_search_space_sha256\t%s\n' \
+        "$(sha256sum "$MBO_CONFIG_FIXTURE_ROOT/mixed_search_space.rds" | cut -d ' ' -f 1)"
+      printf 'numeric_search_space_sha256\t%s\n' \
+        "$(sha256sum "$MBO_CONFIG_FIXTURE_ROOT/numeric_search_space.rds" | cut -d ' ' -f 1)"
+    } > "$RUN_DIRECTORY/metadata/mbo-config-fixtures.tsv"
+    ;;
+esac
+
 GIT_HEAD=$(sed -n '1p' "$RUN_DIRECTORY/metadata/git-head.txt")
 SOURCE_DATE_EPOCH=$(git show -s --format=%ct "$GIT_HEAD")
 export SOURCE_DATE_EPOCH
@@ -1049,6 +1095,7 @@ run_mode_r_logged() {
     "R_TESTS=" \
     "R_KEEP_PKG_SOURCE=yes" \
     "NOT_CRAN=true" \
+    "PARADOX_MBO_CONFIG_ROOT=$MBO_CONFIG_FIXTURE_ROOT" \
     "TMPDIR=$MODE_DIRECTORY/tmp" \
     "XDG_CACHE_HOME=$MODE_DIRECTORY/cache" \
     "R_USER_CACHE_DIR=$MODE_DIRECTORY/cache/R" \
@@ -1138,7 +1185,6 @@ test_mode() {
       "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
       "--source=$SOURCE_DIRECTORY" "--ledger=$analyzer_ledger" \
       --selection=analyzer \
-      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
       "--expected-dso-sha256=$test_dso_sha256"
     set -- \
       "$MODE_DIRECTORY/logs/probes-run.log" \
@@ -1177,7 +1223,6 @@ test_mode() {
         "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
         "--source=$SOURCE_DIRECTORY" "--ledger=$functional_ledger" \
         "--selection=$test_scope" \
-        "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
         "--expected-dso-sha256=$test_dso_sha256" \
         "--expected-requested-jobs=$functional_jobs"
     fi
@@ -1371,11 +1416,10 @@ if [ "$MODE_SYMBOLS" = true ]; then
   windows_exported_symbols=$(awk '
     NF && $1 != "EXPORTS" && substr($1, 1, 1) != ";" { print $1 }
   ' "$WINDOWS_EXPORTS")
-  expected_exported_symbols='R_init_paradox
-R_unload_paradox'
+  expected_exported_symbols='R_init_paradox'
   [ "$windows_exported_symbols" = "$expected_exported_symbols" ] || {
     printf '%s\n' "$windows_exported_symbols" >&2
-    fail "the Windows DLL allow-list differs from the init/unload lifecycle ABI"
+    fail "the Windows DLL allow-list differs from the initialization ABI"
   }
   install_mode strict-gcc "$STRICT_GCC_PROFILE" none
   STRICT_GCC_LIBRARY=$MODE_LIBRARY
@@ -1385,6 +1429,21 @@ R_unload_paradox'
     "$TOOLCHAIN/bin/Rscript" --vanilla \
     "$SOURCE_DIRECTORY/scripts/environment/audit-registration.R" \
     "$STRICT_GCC_LIBRARY" "$SOURCE_DIRECTORY"
+  run_logged "$MODE_DIRECTORY/logs/undefined-symbols.log" \
+    env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
+    "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$NM" -D --undefined-only "$STRICT_GCC_DLL"
+  binding_symbol_scope=$(awk '
+    NF {
+      symbol = $NF
+      sub(/@.*/, "", symbol)
+      if (symbol == "Rf_findVarInFrame") legacy += 1
+      if (symbol == "R_GetBindingType") current += 1
+    }
+    END { printf "%d:%d", legacy + 0, current + 0 }
+  ' "$MODE_DIRECTORY/logs/undefined-symbols.log")
+  [ "$binding_symbol_scope" = 0:1 ] ||
+    fail "the current-R DLL retained the legacy binding API or omitted R_GetBindingType"
   run_logged "$MODE_DIRECTORY/logs/dynamic-symbols.log" \
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \
@@ -1393,7 +1452,7 @@ R_unload_paradox'
     "$MODE_DIRECTORY/logs/dynamic-symbols.log")
   [ "$exported_symbols" = "$expected_exported_symbols" ] || {
     printf '%s\n' "$exported_symbols" >&2
-    fail "the DLL exports symbols outside the init/unload lifecycle ABI"
+    fail "the DLL exports symbols outside the initialization ABI"
   }
   run_logged "$MODE_DIRECTORY/logs/program-headers.log" \
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
@@ -1541,7 +1600,6 @@ require_test_scope_evidence() {
       "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
       "--source=$SOURCE_DIRECTORY" "--ledger=$analyzer_ledger" \
       --selection=analyzer \
-      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
       "--expected-dso-sha256=$retained_dso_sha256"
   elif [ "$evidence_scope" = focused ] || [ "$evidence_scope" = full ]; then
     functional_ledger="$evidence_root/artifacts/native-tests-$evidence_scope.tsv"
@@ -1565,7 +1623,6 @@ require_test_scope_evidence() {
       "$SOURCE_DIRECTORY/scripts/environment/verify-native-test-ledger.R" \
       "--source=$SOURCE_DIRECTORY" "--ledger=$functional_ledger" \
       "--selection=$evidence_scope" \
-      "--baseline=$SOURCE_DIRECTORY/environment/native-functional-baseline.tsv" \
       "--expected-dso-sha256=$(sha256sum \
         "$evidence_root/library/paradox/libs/paradox.so" | cut -d ' ' -f 1)" \
       "--expected-requested-jobs=$retained_functional_jobs"
@@ -1638,7 +1695,8 @@ validate_completed_mode_evidence() {
     require_nonempty_retained_file "$RUN_DIRECTORY/modes/cppcheck/logs/cppcheck.log"
   fi
   if [ "$MODE_SYMBOLS" = true ]; then
-    for symbol_evidence in registration dynamic-symbols program-headers dynamic-section; do
+    for symbol_evidence in registration undefined-symbols dynamic-symbols \
+        program-headers dynamic-section; do
       require_nonempty_retained_file "$RUN_DIRECTORY/modes/symbols/logs/$symbol_evidence.log"
     done
   fi

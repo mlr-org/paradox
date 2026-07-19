@@ -77,7 +77,7 @@ test_that("some operations are not allowed", {
   ps2 = th_paramset_full()
   psc = ParamSetCollection$new(list(s1 = ps1, s2 = ps2))
 
-  expect_error(psc$subset("foo"), "Must be a subset of")
+  expect_error(psc$subset("foo"), "unknown parameter 'foo'", fixed = TRUE)
 })
 
 test_that("deps", {
@@ -234,7 +234,7 @@ test_that("set_id inference in values assignment works now", {
   expect_equal(pscol2$values, list(a.b.parama = 1, a.b.paramb = 2, a.c.paramc = 3))
 
   expect_error(ParamSetCollection$new(list(a = pscol1, pstest)),
-    "duplicated parameter.* a\\.c\\.paramc")
+    "translated parameter IDs must be unique")
 })
 
 test_that("disable internal tuning works", {
@@ -449,7 +449,10 @@ test_that("PSC postfix", {
   expect_equal(psc$trafo(list()), list(x.z.y = 999, zzz = 888))
 
   # x.y generated twice here
-  expect_error(ParamSetCollection$new(list(y = ps1, ps3), postfix_names = TRUE), "would contain duplicated parameter.* x.y")
+  expect_error(
+    ParamSetCollection$new(list(y = ps1, ps3), postfix_names = TRUE),
+    "translated parameter IDs must be unique"
+  )
 
   # don't get confused when no names are given
   psc = ParamSetCollection$new(list(ps3, ps4), postfix_names = TRUE)

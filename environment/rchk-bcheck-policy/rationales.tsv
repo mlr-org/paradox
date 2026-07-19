@@ -1,8 +1,6 @@
 rationale_id	rationale
-ADDRESS_TAKEN_MODEL	Bcheck deliberately stops tracking a local whose address is passed; the audited value remains rooted by the protected input or output carrier.
-BORROWED_OWNER_ROOT	The reported child is borrowed from a protected argument, attribute owner, closure, or environment that remains live across the audited call.
-DYNAMIC_PROTECT_DEPTH	The function uses reviewed variable-count or helper-owned protection accounting that exceeds bcheck's stack-depth abstraction and is covered by maacheck and dynamic memory gates.
-FRESH_VALUE_HANDOFF	The fresh value is immediately installed in a protected container or handed to a callee under an audited ownership contract before another allocation can expose it.
-PRESERVED_RUNTIME_GRAPH	The reported object remains reachable through the process-preserved canonical runtime graph authenticated and retained from namespace initialization.
-PROTECTED_ROOT_CARRIER	The reported values are stored in an explicitly protected vector, environment, or root carrier before the subsequent allocating operation.
+ADDRESS_TAKEN_MODEL	Bcheck deliberately stops tracking a local whose address is passed; the audited value remains reachable through the operation's protected input, output, receipt, or indexed graph-root carrier.
+BORROWED_OWNER_ROOT	The reported child or capsule is borrowed from a directly protected argument or from an attribute, protected slot, closure, environment binding, or transaction value whose owner remains rooted across the audited call.
+DYNAMIC_PROTECT_DEPTH	The function uses reviewed branch-dependent or variable-count protection accounting that bcheck cannot model; every branch has an exact balance, any address-taken graph output has an indexed protected carrier, and maacheck plus the dynamic memory gates cover stack discipline.
+PROTECTED_ROOT_CARRIER	The reported value and every borrowed child are retained by a direct PROTECT or an explicitly protected vector, environment, transaction chain, or indexed root carrier before the subsequent allocating operation.
 TEST_ALTREP_CONTRACT	The test-only ALTREP callback deliberately uses caller-balanced protection to create an adversarial collection schedule; it is not shipped production behavior.

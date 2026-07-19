@@ -16,7 +16,7 @@ assert_param_set(
 \item{param_set}{(\code{\link{ParamSet}}).}
 
 \item{cl}{(\code{character()})\cr
-Allowed subclasses.}
+Allowed parameter/Domain classes.}
 
 \item{no_untyped}{(\code{logical(1)})\cr
 Are untyped \code{\link{Domain}}s allowed?}

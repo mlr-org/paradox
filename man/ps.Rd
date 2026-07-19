@@ -77,8 +77,8 @@ pars$values = list(
 pars$search_space()
 }
 \seealso{
-Other ParamSet construction helpers: 
-\code{\link{Domain}()},
-\code{\link{to_tune}()}
+Other ParamSet construction helpers:
+\code{\link[=Domain]{Domain()}},
+\code{\link[=to_tune]{to_tune()}}
 }
 \concept{ParamSet construction helpers}

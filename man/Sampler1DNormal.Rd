@@ -7,7 +7,7 @@
 Normal sampling (potentially truncated) for \code{\link[=p_dbl]{p_dbl()}}.
 }
 \seealso{
-Other Sampler: 
+Other Sampler:
 \code{\link{Sampler}},
 \code{\link{Sampler1D}},
 \code{\link{Sampler1DCateg}},
@@ -19,77 +19,77 @@ Other Sampler:
 }
 \concept{Sampler}
 \section{Super classes}{
-\code{\link[paradox:Sampler]{paradox::Sampler}} -> \code{\link[paradox:Sampler1D]{paradox::Sampler1D}} -> \code{\link[paradox:Sampler1DRfun]{paradox::Sampler1DRfun}} -> \code{Sampler1DNormal}
+\code{\link[paradox:Sampler]{Sampler}} -> \code{\link[paradox:Sampler1D]{Sampler1D}} -> \code{\link[paradox:Sampler1DRfun]{Sampler1DRfun}} -> \code{Sampler1DNormal}
 }
 \section{Active bindings}{
-\if{html}{\out{<div class="r6-active-bindings">}}
-\describe{
-\item{\code{mean}}{(\code{numeric(1)})\cr
+  \if{html}{\out{<div class="r6-active-bindings">}}
+  \describe{
+    \item{\code{mean}}{(\code{numeric(1)})\cr
 Mean parameter of the normal distribution.}
 
-\item{\code{sd}}{(\code{numeric(1)})\cr
+    \item{\code{sd}}{(\code{numeric(1)})\cr
 SD parameter of the normal distribution.}
-}
-\if{html}{\out{</div>}}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Sampler1DNormal-new}{\code{Sampler1DNormal$new()}}
-\item \href{#method-Sampler1DNormal-clone}{\code{Sampler1DNormal$clone()}}
+  \itemize{
+    \item \href{#method-Sampler1DNormal-initialize}{\code{Sampler1DNormal$new()}}
+    \item \href{#method-Sampler1DNormal-clone}{\code{Sampler1DNormal$clone()}}
+  }
 }
-}
-\if{html}{\out{
-<details open><summary>Inherited methods</summary>
+\if{html}{\out{<details open><summary>Inherited methods</summary>
 <ul>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>paradox::Sampler$format()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>paradox::Sampler$print()</code></a></span></li>
-<li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>paradox::Sampler$sample()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="format"><a href='../../paradox/html/Sampler.html#method-Sampler-format'><code>Sampler$format()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="print"><a href='../../paradox/html/Sampler.html#method-Sampler-print'><code>Sampler$print()</code></a></span></li>
+  <li><span class="pkg-link" data-pkg="paradox" data-topic="Sampler" data-id="sample"><a href='../../paradox/html/Sampler.html#method-Sampler-sample'><code>Sampler$sample()</code></a></span></li>
 </ul>
-</details>
-}}
+</details>}}
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Sampler1DNormal-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Sampler1DNormal-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1DNormal$new(param, mean = NULL, sd = NULL)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param}}{(\code{\link{ParamSet}})\cr
+\if{html}{\out{<a id="method-Sampler1DNormal-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Sampler1DNormal-initialize}{}}}
+\subsection{\code{Sampler1DNormal$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1DNormal$new(param, mean = NULL, sd = NULL)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param}}{(\code{\link{ParamSet}})\cr
 Domain / support of the distribution we want to sample from.
 Must be one-dimensional.}
-
-\item{\code{mean}}{(\code{numeric(1)})\cr
+      \item{\code{mean}}{(\code{numeric(1)})\cr
 Mean parameter of the normal distribution.
 Default is \verb{mean(c(param$lower, param$upper)}.}
-
-\item{\code{sd}}{(\code{numeric(1)})\cr
+      \item{\code{sd}}{(\code{numeric(1)})\cr
 SD parameter of the normal distribution.
 Default is \code{(param$upper - param$lower)/4}.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Sampler1DNormal-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Sampler1DNormal-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Sampler1DNormal$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Sampler1DNormal$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Sampler1DNormal$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

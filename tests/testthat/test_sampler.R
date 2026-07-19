@@ -107,25 +107,11 @@ test_that("we had a bug where creating the joint sampler changed the ps-ref of t
 
   s1_expected = ParamSet_legacy$new(list(th_param_fct()))
 
-  # reset indices: they are set but do not make the param_set unequal
-  setindexv(s1_expected$.__enclos_env__$private$.params, NULL)
-  setindexv(s1$param_set$.__enclos_env__$private$.params, NULL)
-  setindexv(s1_expected$.__enclos_env__$private$.tags, NULL)
-  setindexv(s1$param_set$.__enclos_env__$private$.tags, NULL)
-  setindexv(s1_expected$.__enclos_env__$private$.deps, NULL)
-  setindexv(s1$param_set$.__enclos_env__$private$.deps, NULL)
-  expect_equal(s1$param_set, s1_expected)
+  expect_equal_ps(s1$param_set, s1_expected)
 
   s2_expected = ParamSet_legacy$new(list(th_param_dbl()))
 
-  setindexv(s2_expected$.__enclos_env__$private$.params, NULL)
-  setindexv(s2$param_set$.__enclos_env__$private$.params, NULL)
-  setindexv(s2_expected$.__enclos_env__$private$.tags, NULL)
-  setindexv(s2$param_set$.__enclos_env__$private$.tags, NULL)
-  setindexv(s2_expected$.__enclos_env__$private$.deps, NULL)
-  setindexv(s2$param_set$.__enclos_env__$private$.deps, NULL)
-
-  expect_equal(s2$param_set, s2_expected)
+  expect_equal_ps(s2$param_set, s2_expected)
 })
 
 test_that("Sampler1DRfun with 0 samples (#338)", {

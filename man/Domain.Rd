@@ -92,16 +92,24 @@ Upper bound can be \code{+Inf}.}
 Arbitrary special values this parameter is allowed to take, to make it
 feasible. This allows extending the domain of the parameter. Note that
 these values are only used in feasibility checks, neither in generating
-designs nor sampling.}
+designs nor sampling. The outer \code{special_vals} list shell, names, and list
+metadata must always be ordinary non-ALTREP/non-S4. For \code{p_dbl()},
+\code{p_int()}, \code{p_fct()}, and \code{p_lgl()}, each leaf must not be ALTREP; an S4
+leaf is an opaque pointer-identity token and matches only the exact same
+object. \code{p_uty()} leaves are opaque and may include S4 objects. Its
+Paradox-1 special membership is preserved with base \code{identical()} against
+each leaf, including S4, without S3/S4 dispatch.}
 
 \item{default}{(\code{any})\cr
 Default value. Can be from the domain of the parameter or an element of
 \code{special_vals}. Has value \link{NO_DEF} if no default exists. \code{NULL} can be a
-valid default.
+valid default. For \code{p_dbl()}, \code{p_int()}, \code{p_fct()}, and \code{p_lgl()}, an S4
+default is accepted only when it is pointer-identical to an admitted S4
+special value. \code{p_uty()} defaults are opaque and may be S4; membership in
+its special values uses base \code{identical()} without S3/S4 dispatch.
 The value has no effect on \code{ParamSet$values} or the behavior of
 \code{ParamSet$check()}, \verb{$test()} or \verb{$assert()}.
-The \code{default} is intended to be used for documentation purposes.
-`}
+The \code{default} is intended to be used for documentation purposes.}
 
 \item{tags}{(\code{character()})\cr
 Arbitrary tags to group and subset parameters. Some tags serve a special
@@ -152,7 +160,10 @@ defining domains or hyperparameter ranges of learning algorithms, because these 
 
 \item{init}{(\code{any})\cr
 Initial value. When this is given, then the corresponding entry in \code{ParamSet$values} is initialized with this
-value upon construction.}
+value upon construction. For \code{p_dbl()}, \code{p_int()}, \code{p_fct()}, and
+\code{p_lgl()}, an S4 initial value is accepted only when it is the exact
+pointer-identical admitted S4 special value. \code{p_uty()} initial values are
+opaque and may be S4.}
 
 \item{aggr}{(\code{function})\cr
 Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"internal_tuning"}.
@@ -166,12 +177,20 @@ set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost
 
 \item{disable_in_tune}{(named \code{list()})\cr
 The parameter values that need to be set in the \code{ParamSet} to disable the internal tuning for the parameter.
-For \code{XGBoost} this would e.g. be \code{list(early_stopping_rounds = NULL)}.}
+For \code{XGBoost} this would e.g. be \code{list(early_stopping_rounds = NULL)}.
+This interpreted metadata container and its structural entries must be
+ordinary non-ALTREP/non-S4 objects.}
 
 \item{levels}{(\code{character} | \code{atomic} | \code{list})\cr
 Allowed categorical values of the parameter. If this is not a \code{character}, then a \code{trafo} is generated that
 converts the names (if not given: \code{as.character()} of the values) of the \code{levels} argument to the values.
-This trafo is then performed \emph{before} the function given as the \code{trafo} argument.}
+An atomic semantic vector may be stable ALTREP and is admitted once. A
+list-valued outer shell and its names/list metadata must be ordinary
+non-ALTREP/non-S4; opaque list leaves retain identity.
+This trafo is then performed \emph{before} the function given as the \code{trafo} argument.
+\code{character()} is a valid empty categorical Domain. It produces typed
+zero-row quantile, grid, and uniform-sampling results; requesting a
+nonempty quantile or uniform sample errors.}
 
 \item{custom_check}{(\verb{function()})\cr
 Custom function to check the feasibility.
@@ -199,6 +218,14 @@ bounds and behavior.
 \code{Domain} objects are representations of parameter ranges and are intermediate objects to be used in short form
 constructions in \code{\link[=to_tune]{to_tune()}} and \code{\link[=ps]{ps()}}. Because of their nature, they should not be modified by the user, once constructed.
 The \code{Domain} object's internals are subject to change and should not be relied upon.
+Paradox 2 closes Domain execution over the five package-provided kinds.
+Third-party Domain classes and S3 methods are not supported; use
+\code{p_uty(custom_check = )} when an opaque value needs package-external
+validation. Domain/table shells, cargo containers and interpreted cargo
+entries, class/name vectors, rows, and other structural metadata must be
+ordinary non-ALTREP and non-S4. Admitted semantic atomic vectors may be
+stable ALTREP and are materialized once; the documented opaque value-leaf
+exceptions below retain identity instead.
 }
 \details{
 Although the \code{levels} values of a constructed \code{p_fct()} will always be \code{character}-valued, the \code{p_fct} function admits
@@ -277,8 +304,8 @@ param_set$disable_internal_tuning("iters")
 param_set$values$early_stopping
 }
 \seealso{
-Other ParamSet construction helpers: 
-\code{\link{ps}()},
-\code{\link{to_tune}()}
+Other ParamSet construction helpers:
+\code{\link[=ps]{ps()}},
+\code{\link[=to_tune]{to_tune()}}
 }
 \concept{ParamSet construction helpers}

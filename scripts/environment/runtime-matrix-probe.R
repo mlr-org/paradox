@@ -13,9 +13,9 @@ if (!runtime %in% c("4.3.3", "4.5.2")) {
   stop("probe must run under an exact matrix runtime", call. = FALSE)
 }
 branch <- if (getRversion() < "4.5.0") {
-  "pre-4.5-evaluated-public-fallback"
+  "pre-4.5-documented-public-backports"
 } else {
-  "4.5-direct-closure-and-evaluated-binding"
+  "4.5-direct-public-accessors"
 }
 
 cases <- 0L
@@ -25,10 +25,10 @@ check <- function(value, message) {
   invisible(TRUE)
 }
 
-# These operations jointly authenticate closures, their formals/body/parent
-# environments, the loaded paradox namespace, attribute allow-lists, and R6
-# bindings through r_api_compat.c.  R < 4.6 deliberately rejects inert local
-# binding inspection and continues through the compatible R implementation.
+# These operations jointly exercise closure formals, attribute allow-lists,
+# callbacks, capsule-backed R6 shells, and outward facades through the native
+# engine. R 4.3 uses the public ATTRIB/FORMALS backports documented in Writing
+# R Extensions; neither runtime replays an operation through an R engine.
 left <- ps(
   width = p_dbl(lower = 0, upper = 4, default = 1,
     tags = "numeric", trafo = function(x) x * 2),
@@ -80,6 +80,6 @@ for (iteration in seq_len(25L)) {
 
 cat("runtime=", runtime, "\n", sep = "")
 cat("r_api_compat_branch=", branch, "\n", sep = "")
-cat("pre_4_6_local_binding_policy=authenticated-r-fallback\n")
+cat("public_api_compatibility_policy=documented-versioned-accessors\n")
 cat("focused_cases=", cases, "\n", sep = "")
 cat("runtime_matrix_focused_probe=passed\n")

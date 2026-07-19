@@ -1,666 +1,500 @@
-# paradox 2.0.0 release ledger
-
-This is the internal, append-only handoff for the native 2.0.0 release. It is
-excluded from the package tarball. A retained row is evidence for the immutable
-identity that it names. Evidence for an older payload may support the final
-release only through the explicit bounded carry-forward decision below and
-exact evidence for the changed delta; it must never be silently relabeled as a
-run of newer package bytes. An old diagnostic run, an unsealed run, or a
-successful command without retained provenance is not equivalent evidence.
-
-## Current release state
-
-Candidate `afa56689e4037ee14a75b32811686f563f95effe` and its portability
-companion `b840d9c4a4d118c70595f0ce00d38ed7951761ee` are immutable rejected
-historical evidence. GitHub Actions run `29561742772` exposed an ARM64
-floating-point compatibility defect in the candidate and temporary-directory
-detritus in its source tests. The corrected final package candidate is frozen
-at full ref `refs/paradox-release/candidate-20260717T083921Z`, commit
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and tree
-`91eea910212ea15f4ccba598929f8a61844bcc35`. Its source archive is
-`.local/compat/candidate-freeze-2f40e3e/build/paradox_2.0.0.tar.gz`, SHA-256
-`508a596b435f0e017c60cb54143656a8b85ad0f78f37476730d282334102aeb8`.
-The direct-child two-platform companion is frozen locally at
-`refs/paradox-release/portability-harness-ede67fc`, commit
-`ede67fc5780c9b1f6f91325189f8f7560376060c`, and tree
-`578abec87a84c706f3a77803f9c645c933619aac`. Its parent is the exact corrected
-candidate, its sole changed path is `.github/workflows/r-cmd-check.yml`, and
-that workflow's SHA-256 is
-`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
-The immutable tags are `paradox-2.0.0-ci-2f40e3e` and
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`. The user published them and
-dispatched the companion without moving an old tag. Authenticated GitHub
-Actions run
-[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
-completed successfully on Windows x86-64 and Apple ARM64 against the exact
-candidate, closing the final portability gate. All required release gates are
-now accepted and the candidate is release-ready; no CRAN upload or publication
-is asserted by this ledger.
-
-The complete corrected-candidate delta from `afa56689` is deliberately narrow:
-
-- `.Rbuildignore` adds `^\.git$`, preventing a linked-worktree Git metadata
-  file from entering `R CMD build`. This is build control only and does not
-  alter the installed interface or native runtime.
-
-- `src/domain_kernels.c` evaluates the existing affine quantile formula through
-  three automatic `volatile double` rounding barriers. The helper has no
-  `SEXP`, R C API, pointer, allocation, ownership, callback, or shared-state
-  operation.
-- `tests/testthat/test-native-domain-kernels.R` characterizes the ARM64 double
-  difference and an adversarial integer `floor()` boundary.
-- `tests/testthat/teardown.R` removes only a
-  `uv-setuptools-[0-9A-Fa-f]{16}.lock` file from Python's temporary directory,
-  and only when reticulate has already initialized Python. It is test-only and
-  does not initialize Python, alter installed runtime behavior, or delete a
-  broader class of files.
-
-No `NEWS.md` entry was added. This correction was found before Paradox 2.0.0
-was released, so it is not a behavior change from any released 2.0.0. Adding a
-candidate-internal fix entry would be misleading and would unnecessarily
-change the already validated package payload.
-
-The amended payload has exact local delta evidence at
-`.local/checks/release-fma-delta-20260717`. Its retained source archive SHA-256
-is `e6955eedec5ff982acb186237f8fdd27d59281a0bb581c0e25de74f369a1f07f`;
-the strict-GCC installed-content hash is
-`b286ca087629577d3316c733da6a488bd575b3812eb12431dd8aaa4d61d19c59`
-and its DSO hash is
-`1bc34e7c95eb484cfb0c1c77b05048bccc69e644f508d625b626e2660147a2bd`.
-The source-manifest, source-tree, and modes-tree SHA-256 values are respectively
-`dd11fd7e188e49598fec94d46a2e369c5f90650fe43dafb5169871f75803c293`,
-`d7929789f820e39df7311045909fab36ba2847ec63489f246f7f19750d63a0fc`,
-and `a0e125fbdd3139e9ad04ea9f542ffaee19a7680f068f4b79ce80038788e251ff`;
-their retained receipts verify 485 source and 996 mode entries. The completion
-record SHA-256 is
-`54f9f8968c05ec66cb2d59018360dfb5d21215026f4e11b55912358a0e55ff04`;
-the `completion.sha256` file itself has SHA-256
-`edc768d4fc0fd055f92f17cc26b413ef5a05be3b6c5525a8967b7b0053431cd1`.
-
-Strict GCC ran 38,014 expectations: 38,010 passed, four were reviewed skips,
-and none failed, errored, or warned. Its CRAN check ran 18,832 passes and 31
-skips with no failure or warning and ended in its sole `Status: OK`; the
-depends-only check also ended in its sole `Status: OK`. Strict Clang, ASan, and
-UBSan each retained 135 successful native-probe records. The final C, test, and
-teardown source hashes in the run match the current package-bearing files. The
-frozen candidate archive contains 211 files and no `.git` member. Of those,
-209 are byte-identical to the delta-gate archive; the only differences are the
-expected `DESCRIPTION` `Packaged` timestamp and the stochastically rendered
-`inst/doc/indepth.html`. This comparison binds the run to the corrected
-candidate without relabeling the two archives as byte-identical.
-
-The checksum-bound freeze summary
-`.local/compat/candidate-freeze-2f40e3e/README.txt` has SHA-256
-`dc77d1a5608bf9af0702ec98e173320ed6fca3db0abdf13f86de8583b59562a2`.
-Its complete 455-entry `SHA256SUMS` verifies and has SHA-256
-`03330fbd13cfed4554001f3c9766e420780bbfcc864c5e00308a362c76618c3e`.
-The candidate and gate 211-file payload manifests have SHA-256
-`690fd4d0bb95939294c0cee835977c5d9ccdff748c7a33109f7a46bf6db0ac0b`
-and `ed2bf09658dee2bc3a4466f007ce52937c2d3554ca3643156f78d0872fdf07b0`.
-The candidate installed-content fingerprint is
-`5ba4d1842a1f80811299632d05ee1238178587544fc7262c11aa8311a4d83be2`;
-its raw DSO SHA-256 is
-`30e4e169061d035c953b2cca8a6f5c0fd0c21073f86436dc290d52a962fc93df`.
-The candidate and gate DSOs differ only in debug paths and build IDs and are
-byte-identical after removing those sections, both with SHA-256
-`3099a2c88bf26a7639cec39ead58a575f1f9654e56ccbbce5bab35fab8a0a865`.
-The installed candidate's exact affine-boundary probe passes.
-
-Focused performance and code-generation evidence is retained at
-`.local/benchmarks/release-fma-affine-20260717`. Its 104-row `SHA256SUMS`
-authenticates every other retained file and has SHA-256
-`7bf4bdadd1fced161bf49392cb0ad7b37966c34879aacbe525ad35cdb8c115fb`.
-Six AB/BA repetitions for each of two public
-`ParamSet$qunif()` workloads give identity-pooled costs of 1.205% at 64 mixed
-parameters by 128 rows and 2.428% at 64 by 4,096. Allocations were byte-identical
-at 126,800 and 3,682,128 bytes. Applying the representative 1.205% cost to the
-sealed pre-barrier 9.801104x release speedup gives approximately 9.684x, reported
-as about 9.7x rather than preserving the stale 9.8x claim. Retained
-Apple-M1-target Clang assembly at `-O2` and `-O3 -ffp-contract=fast` contains
-separate multiply/subtract operations and no fused instruction in the
-registered affine paths.
-
-## Superseded package identity: `afa56689`
-
-- Full ref: `refs/paradox-release/candidate-20260716T180137Z`
-- Commit: `afa56689e4037ee14a75b32811686f563f95effe`
-- Tree: `06a6a8eccaca02d30baf950aca7bc352a3aeaf5a`
-- Installed package-content SHA-256:
-  `b628565f839e2743e064fd42c042aec960b159919964b2469a2e66ec9869ee6a`
-- Version: `2.0.0`
-- Sealed source tarball:
-  `.local/checks/release-native-20260716T165635Z/source-package/build/paradox_2.0.0.tar.gz`
-- Source-tarball SHA-256:
-  `60cb9cc2f9ccd1b75d1cbf72b4f935d9f5c510c83166dc67ea9dbf40c9ee074f`
-- Language/toolchain contract: portable C17 through the public R C API,
-  R 4.3 or newer; no architecture-specific intrinsics.
-- Detached source:
-  `.local/compat/candidate-snapshots/afa56689e4037ee14a75b32811686f563f95effe`
-- Run-local installation:
-  `.local/compat/runs/release-consumers-p1-afa5668-20260716/library-candidate`
-
-At the time this candidate was frozen, the native/API evidence source commit
-`aa07cce11e4c99ff777fe374700ba565cfa6b345`, the runtime/differential source
-commit `c2847df4d4af989d5b1329ff0187f082280e17b9`, and this candidate had
-identical package payloads. Their intervening changes are confined to
-`.Rbuildignore`-excluded `scripts/`. This remains historical evidence for
-`afa56689`; it does not assert that the later affine/test delta is identical.
-
-The superseded full benchmark used the authenticated harness companion
-`refs/paradox-release/candidate-20260717T035858Z`, commit
-`fe9bd8cea27e3418c16437fe62c1994f70476533`, tree
-`eea6098d93896721afe15f87604f42772c1e4b8a`, and run-local installation
-`.local/compat/runs/release-benchmark-final3-fe9bd8c-20260717/library-candidate`.
-Its installed-tree fingerprint is
-`4d3699199bf7e09eec4472aefd622ab34fba82323d55553dcafefcf4beecbb13`;
-this is expected to differ because R installation embeds build time and source
-location metadata. No package-bearing path differed from candidate `afa56689`,
-their canonical 207-file `R CMD build` payload manifests match at
-`cfea9374a31002a7fd04f3f00b4d34e9f36e584010e43674d10505d77bcc635c`,
-and their native shared-library disassemblies are identical. The companion is
-therefore evidence for that same superseded distributable package source, not a
-second package implementation.
-
-The rejected portability replacement harness is the detached local ref
-`refs/paradox-release/portability-harness-b840d9c`, commit
-`b840d9c4a4d118c70595f0ce00d38ed7951761ee`, tree
-`f624cd5bf8b8faeedf2e77ced6dc8f4904504689`. Its direct parent is the frozen
-candidate and its sole changed path is `.github/workflows/r-cmd-check.yml`,
-which `.Rbuildignore` excludes. The workflow SHA-256 is
-`54b1265d48ca60fc6ccd8e1f42d9798b8af5e7f2d2dfb12e593a4d079cefe392`.
-Each replacement job loaded this workflow but explicitly checked out and
-authenticated remote candidate tag `paradox-2.0.0-ci-afa5668` at the full
-frozen SHA before compiling or checking package code. Both this tag and
-`paradox-2.0.0-ci-afa5668-harness-b840d9c` are immutable historical tags and
-must never be moved or reused.
-
-## Release evidence
-
-| Gate | Retained ID | Release use |
-|---|---|---|
-| Full native compilers, static analyzers, sanitizers, symbols, tests, CRAN and depends-only checks | `release-native-20260716T165635Z` | Passed and independently replayed for `afa56689`; full unchanged-core evidence carried forward under the delta analysis below |
-| Exact affine/test delta: strict GCC/Clang, full suite, CRAN, depends-only, ASan and UBSan | `release-fma-delta-20260717` | Passed on the amended built payload; exact final-delta evidence after frozen-payload equivalence is recorded |
-| Public R API, four header releases, 35 translation units, GCC and Clang | `release-r-api-20260716T171343Z` | Passed for `afa56689`; carried forward because the delta adds no R API use or declaration |
-| Windows/Rtools and macOS ARM64 CI | Accepted run `29573168344`; rejected runs `29559803987` and `29561742772` retained as history | Passed against exact candidate `2f40e3e5`: Windows x86-64 and Apple ARM64 each succeeded with sole final `Status: OK` |
-| Real R 4.3.3 and 4.5.2 runtimes | `release-runtime-matrix-20260716T172036Z` | Passed for `afa56689`; carried forward with exact delta source tests and the current-R full check |
-| Behavioral differential, 17 cases | `20260717T030312Z-2192945` | `afa56689`: 10 equal, 7 reviewed exact differences, 0 unexpected; carried forward except for affine bytes now covered by exact R-method regression tests |
-| GCT, Valgrind, and bounded rchk | `release-memory-20260716T172507Z` | Passed for `afa56689`; carried forward because the C delta has no pointer, R object, allocation, callback, or ownership operation, with exact ASan/UBSan probes on the amended DSO |
-| CRAN/Bioconductor P0/P1 hard dependency preparation | `release-reverse-dependencies-p1-afa5668-20260716` | Passed and sealed; dependency closure unchanged |
-| GitHub P0/P1 hard dependency preparation | `release-consumers-p1-afa5668-20260716` | Passed and sealed; dependency closure unchanged |
-| GitHub P0/P1 source tests | `release-consumers-p1-afa5668-20260716` | Full `afa56689` evidence carried forward: 20 passed, 7 classified non-candidate failures, 1 bounded timeout |
-| CRAN/Bioconductor P0/P1 source checks | `release-reverse-p1-afa5668-20260717-v3` | Full `afa56689` evidence carried forward: all 21 completed, 17 passed, 4 factual non-candidate failures |
-| Documentation, books, galleries, and serialized migration workloads | `release-documentation-afa5668-20260717-v2` | Full `afa56689` evidence carried forward: no exported interface, object shape, help, or vignette input changed |
-| Full release benchmark inventory | `release-final3-fe9bd8c-20260717` | Full unaffected-path inventory carried forward: 59 paired plus 9 focused rows, 64 passed, 4 marginal, 0 failed |
-| Focused affine performance and Apple-M1 code generation | `release-fma-affine-20260717` | Exact C delta: 12 AB/BA runs, unchanged allocations, 1.205%/2.428% identity-pooled cost, and no fused instruction under forced contraction |
-
-The final differential manifest/seal SHA-256 pair is
-`a1a678b778926b3efddbe0f9380e4dd0c8756595ddfd651736247f34bdcf8cf8` /
-`0a9bfc7e4cc2673aa28dbd67f79374de61f20ab2b32c3547790c2dba2192ec0b`.
-The reverse pair is
-`5acb8201ac01721b7b976b75951764b6a2e8297cec7badb11b7bf46bfb74ac88` /
-`e9d44a8bc98a35861ac1e706fe3dc983f50867ff5f3c2839a54d6d094ca1d9f6`.
-The documentation pair is
-`59c85298eae17b7ef438f2514d8abb53ee4610076e07c88be1f72d880e673d61` /
-`76ab9be9de4d4f81e2f3b8ccf5fe7d3d004ad2d4b6dedd1a95c6b3215f6b1ee6`.
-The benchmark pair is
-`c1074c6aebeeb87da93926d6102d42405cc3ad4e9d0d82588f5dd9277611ce17` /
-`f0c69e95d1e5e97f199794ad6be495770eb15ae3c36ea96c2a2b3b2ec5ceaaf8`.
-Each pair is the evidence-manifest content hash followed by the retained
-completion-seal file hash.
-
-### Evidence carry-forward boundary
-
-Repeating the full P0/P1 consumer, reverse-dependency, documentation, and rchk
-corpora would have very low information value for this delta. The only shipped
-C change is a scalar arithmetic helper called from the same admitted quantile
-paths. It introduces no R API, object access, pointer, allocation, preservation,
-callback, dispatch, class, outward shape, dependency, or documentation change.
-The teardown change is confined to source-test cleanup after Python is already
-initialized. The `.Rbuildignore` addition is build control that can only exclude
-the linked-worktree `.git` metadata file; the frozen archive confirms that the
-member is absent and that the remaining payload comparison has only the two
-recorded generated-file differences. Consequently the old full evidence remains
-the broad compatibility and lifetime corpus, while the amended bytes are
-covered by the full package suite, both CRAN check profiles, strict GCC and
-Clang, ASan, UBSan, exact double/integer R-method comparisons, focused
-public-path performance, forced-contraction assembly, and the still-required
-real Apple ARM64 and Windows checks. This is a bounded source-impact decision,
-not permission to carry a future native edit forward.
-
-The old real-runtime and public-API gates are also retained rather than
-repeated: the helper uses only standard C17 scalar arithmetic and the current
-delta gate rebuilt every translation unit. The behavioral differential remains
-valid for every reviewed case outside affine rounding; the new regression
-compares the changed path directly with the historical R methods, including a
-bucket-changing integer boundary. Any further package-bearing change reopens
-this decision and requires a new impact review and proportionate evidence.
-
-### Rejected portability runs
-
-GitHub Actions run
-[`29559803987`](https://github.com/mlr-org/paradox/actions/runs/29559803987)
-is immutable diagnostic evidence for `afa56689`, not a platform pass. Four ordinary rows
-(Linux release, Linux devel, Windows release, and macOS ARM64) installed the
-package but then passed a present empty `_R_CHECK_DEPENDS_ONLY_` value to R.
-R converted it to `NA`, aborted at `if (R_cdo_tests)`, and logged
-`Execution halted`. `rcmdcheck` 1.4.0 accepted that child status because no
-formal check finding was parsed, so all four job labels were false green. The
-Linux release no-Suggests row alone completed with `Status: OK`. The R 4.3 row
-correctly failed after 9,602 passes because all 832 failures belonged to 20 of
-the 22 already authenticated pre-4.6 direct-native exclusion contexts.
-
-The incident is retained under
-`.local/ci/r-cmd-check-29559803987-failed`. The run-metadata SHA-256 is
-`e9f05278069f9e9222d2ddfc3870233fbdddfc208948d4cda6d9d1f82cba899a`,
-the six individual job-log manifest is
-`8380c769e779ce1217d0b0748b90738a050f4882fdfe68c7b7603d6b4af34ad0`,
-and the 687-file downloaded-artifact manifest is
-`5630de7d50535b7208f4a66afb26a1fb4c0198dfaaab6ebf2c9eaf2d6c6070a5`.
-The executed workflow, artifact metadata, and top-manifest hashes are
-`21d2ac45d6d25207b374969f41c013bbe11bd4cce58fb8d87b47e215d734b0e0`,
-`861605ab59119669bfadacf796a912c59367067e15338a65fba9ee46b25cf65d`,
-and `8c0c38376f2e014a2866a6f5c4477251a6721c043036c70c9c644968fabe7c5f`.
-The six job ID/log-hash pairs were:
-
-- `87819643660` / `00a41857b7df5d733d12cd8b0f8d3ebec14b95eeeb02a966c90717d4d46859d0`
-  (no-Suggests, genuine pass);
-- `87819643667` / `77b50f27e28ba2a3a46db684080bb36ec1a111a9bb4d3d07b38f6aaba8a7b228`
-  (Linux release false green);
-- `87819643668` / `0f8cd01243c78f59408076701d7100b9382cd913516c0c3f3a32ccf05cfc9305`
-  (Windows false green);
-- `87819643686` / `4628bd7276861e88a9da0c3f54c681f6c0c018288a23b9304a9ee2d515baa1fd`
-  (R 4.3 genuine failure);
-- `87819643694` / `11385ea89c9d208db257194ddc4823620512ea8c09a154055ba5330c1471dd67`
-  (Linux devel false green);
-- `87819643708` / `e7f4b815b69b634eb121c2ff84295e0a5eb5fded08d7e654994751f734bd86ab`
-  (ARM64 false green).
-
-Its sole artifact was ID `8398884805`, name `Linux-X64-r4.3-5-results`, size
-7,388,076 bytes, and REST digest
-`5b1ca972d9eeea4a6adea745b3c39880456422bc2e6bb6f917b1ed1cbf568fb2`.
-
-The hardened companion run
-[`29561742772`](https://github.com/mlr-org/paradox/actions/runs/29561742772)
-is also immutable rejected evidence. It executed companion
-`b840d9c4a4d118c70595f0ce00d38ed7951761ee` and checked out `afa56689`.
-Windows job `87825499474` genuinely passed with final `Status: OK`; macOS ARM64
-job `87825499523` failed after 19,008 passes because fused affine rounding
-changed the `.499` double result, then reported the uv lock as detritus.
-Their log hashes are
-`625b19371ae2164ef18207ae72755c746aee33df0e1dbf820e71cdd0b2d8b2c2`
-and `1c87983826ca74e5bda0727c7f47fb59085139f28f17611044f730d987d403b0`.
-Artifact `8400111188` is the 2,997,115-byte Windows archive with digest
-`d991c5abf562c35ab7a7f491f13168c2dbce77a49983b353dcb35587442eb8d3`;
-artifact `8399808867` is the 4,185,166-byte macOS archive with digest
-`00bff571f283cbd3abcc047fece0437617819a5a07596d7830104c7dcf507688`.
-
-The retained directory is `.local/ci/r-cmd-check-29561742772`. Its run, jobs,
-artifacts, and workflow hashes are respectively
-`6cb32298ec0b142d61ee691772955a1ae2f0d50dac89b9c13698bb94b44a1b53`,
-`e54eaf77e6fb70ee6b10d5cb003cc2bdb97e57d59ba509454044c572957529c3`,
-`b81afa50589c4d2901b0c5bf5b57d7e66d21954bd6dd52378c18c49d2a127af4`,
-and `54b1265d48ca60fc6ccd8e1f42d9798b8af5e7f2d2dfb12e593a4d079cefe392`.
-The archive, artifact, job-log, metadata, verifier, and enclosing evidence
-manifest hashes are
-`591a501d68e85a26a710e9d3a1906b30a2adfe70c1287229bf3de405362c750a`,
-`e484378567d711e8a8b910f01a6ed57904a296bcb75a8a6feaba9ff47a2e71ff`,
-`369bb35828866aa8d4b48a97b5e579f01b7c3c8e92db42cd93aec3470044bb95`,
-`faa6ace38dc4539a447ecdff7e9dabd577548a5f41f4f68d5892a23ad8d8c091`,
-`e61285926dde11028e7083b5e9abbb83c5df51fd9bd264190cf796fca969801d`,
-and `18ce43ffb4c85d3863a85c6736f9981cc646c49ab31f0d58c35d92dbbeb43fa1`.
-The retained verifier rejected exactly on the failed run conclusion. The full
-step, provenance, and manifest inventory is in `design/portability-ci.md`.
-Neither rejected tag is a valid base for the corrected handoff.
-
-### Accepted portability run
-
-GitHub Actions run
-[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
-was attempt 1, event `workflow_dispatch`, head branch
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`, head SHA
-`ede67fc5780c9b1f6f91325189f8f7560376060c`, and final conclusion `success`.
-The workflow SHA-256 was
-`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`,
-and both jobs authenticated candidate checkout
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`.
-
-Windows job `87861491934` succeeded from `10:21:11Z` through `10:53:20Z` on
-`x86_64-w64-mingw32` with R 4.6.1 UCRT. Testthat recorded 19,011 passes, two
-skips, and no failure or warning; the check had one status line and its final
-line was `Status: OK`. The job-log, check-log, and provenance SHA-256 values are
-`3112a7d5804191751b5652e5c62b243925c00de0b4b91f3d5429ba21d488a228`,
-`c47f8c8bb33b514e800957508532f80e703eaecb8df087b845e494d441543418`,
-and `1b57eceeacf7d2998415dae1f957937715e74348f65364dfb841d3b6b43fd6e8`.
-Its artifact is ID `8404629035`, 3,000,388 bytes, with identical REST digest
-and raw-ZIP SHA-256
-`df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc`;
-the extracted tree has 375 files.
-
-macOS job `87861491957` succeeded from `10:21:09Z` through `10:36:42Z` on
-`aarch64-apple-darwin23` with R 4.6.1 and Apple Clang 17. Testthat recorded
-19,013 passes, two skips, and no failure or warning; the check had one status
-line, ended `Status: OK`, and its temporary-detritus check was clean. The
-job-log, check-log, and provenance SHA-256 values are
-`2f5c11fc5ef5d1d86e54610a66e20ab90e80960aa9f9ca0d018684b9e00fb338`,
-`edf3c4fbbd9abfb39309bccc18a611fb8c4ada55bf4935ef4d8cb27fe9fd0bf9`,
-and `6bf22f031a8f5c885e9e503f5243b9c72178e2446ea89e20cda9452024ca0035`.
-Its artifact is ID `8404256296`, 4,146,086 bytes, with identical REST digest
-and raw-ZIP SHA-256
-`228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53`;
-the extracted tree has 377 files.
-
-The accepted evidence is retained once at
-`.local/ci/r-cmd-check-29573168344`. The run, jobs, and artifacts REST hashes
-are respectively
-`069181abcfc38e4f29d725c2d647b3622399a3b6290af71e07217c1bb9aed307`,
-`fe0740f581fa08e4a577163e1e3fa73065259faa25e47d881d22a2cb0dfbe7f7`,
-and `0dc36716c03f6000ab0718b85070910b0076046b07b02dade423dbf6020cad02`.
-The six manifest hashes and row counts are:
-
-- `ARCHIVE-SHA256SUMS`:
-  `ad02591bc69faadeeec988cad28e1723dd2120442c7eafe656c9b0927adb7f80`
-  (2);
-- `ARTIFACT-SHA256SUMS`:
-  `36cad6980df7af4b5d9a4987c402b1979b8087404eb23e484c15e3513d24d649`
-  (752);
-- `EVIDENCE-SHA256SUMS`:
-  `7e8eb7097d3b403b5b4e712f5da65d1a8018c6d6cd0eb0efc533abd9b4b79484`
-  (5);
-- `JOB-LOG-SHA256SUMS`:
-  `9fc6cc750d1b0d3699e206ddccff3e245d35834acb920777e9cbf0e7f18e668d`
-  (2);
-- `METADATA-SHA256SUMS`:
-  `3227de2dc55f56797586f3236e10858a05230cc3119ffb382122c30301955b59`
-  (4);
-- `VERIFIER-SHA256SUMS`:
-  `34696b48062cd3bed7a6b87d2f79a89b99aea5e6116d6580c32b8d76fa126674`
-  (2).
-
-The hierarchy covers exactly 767 rows. The retained verifier SHA-256 is
-`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`;
-its deterministic acceptance receipt has SHA-256
-`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
-It accepted the evidence exactly once. `design/portability-ci.md` records the
-complete platform and artifact inventory.
-
-The differential differences are not broad allowlists: both complete result
-fingerprints and their reasons are fixed in
-`compat/differential/expected-differences.tsv`. They cover corrected empty
-presence handling, repeated-ID subsetting, grouped sanitization, infinite
-bounds, collection callbacks, and ID-filter order/type behavior.
-
-### Classified GitHub consumer limitations
-
-The source-checkout gate retains ordinary upstream failures as factual rows;
-they are not relabeled as passes. The following observed non-green results have
-independent evidence that they are outside Paradox 2.0.0:
-
-- `mlr3tuningspaces`: 430 passes and one `expect_learner()` helper-scope error.
-  The exact test and helper bytes fail identically with paradox 1.0.1.
-- `mlr3cluster`: 3,669 passes; the one failure and two errors all require the
-  Weka Package Manager `XMeans` plug-in absent from isolated `WEKA_HOME`. The
-  exact error reproduces with paradox 1.0.1; its ClusterR warning does too.
-- `mlr3filters`: 502 passes and three errors caused by installed CRAN
-  mlr3pipelines 0.11.0 registering `FilterEnsemble` without prototype
-  arguments. Candidate/baseline probes are identical; the pinned GitHub
-  mlr3pipelines source contains the upstream fix and passed 76,848 expectations.
-- `mlr3torch`: all 85 Paradox-facing expectations passed. The wider row is
-  non-green because Lantern/libtorch is not provisioned and two external CIFAR
-  mirrors timed out; its independent clone-hash failure reproduces byte-for-byte
-  with paradox 1.0.1.
-- `xplainfi`: 1,838 passes and 15 errors caused by unqualified `tgen()` in
-  helpers whose source-load lexical environment does not import it. A focused
-  paradox 1.0.1 probe reproduces the same error; all 15 sites share that helper.
-- `mlr3forecast`: 981 passes. Its 41 help-index errors require an installed
-  package although the checkout is source-loaded; its one source-loaded R6
-  callback failure reproduces with paradox 1.0.1.
-- `mlr3extralearners`: the huge optional-backend inventory reached the RWeka
-  section before the fixed 60-minute deadline. Its factual timeout is retained;
-  the runner was not restarted or granted an unbounded exception.
-- `mlr3resampling`: 117 passes and 16 errors. Fifteen errors and all 658
-  warnings are one `future` multisession cascade because the source-loaded
-  package is unavailable to spawned workers; the remaining error requires
-  `sbatch` on a non-SLURM host. There are no failed expectations and no Paradox
-  failure signature.
-
-These are bounded consumer/environment characterizations, not expected Paradox
-differences and not permissions to ignore a future failure with another
-signature.
-
-### Classified reverse-dependency limitations
-
-The final reverse gate ran six resource-bounded waves. Eight installation
-caches were reused, thirteen packages were built once, no package was rebuilt,
-and the complete protected-library fingerprint passed twice. Its four
-non-green rows are retained as failures with these factual classifications:
-
-- `mlr3cluster` requires the Weka `XMeans` plug-in absent from the isolated
-  environment; the exact failure reproduces with paradox 1.0.1.
-- `mlr3filters` encounters CRAN mlr3pipelines 0.11.0's incompatible
-  `FilterEnsemble` prototype. The baseline probe is identical and the pinned
-  GitHub mlr3pipelines source contains the fix and passes.
-- CRAN `mlr3spatiotempcv` 2.3.4 creates two vdiffr snapshots whose titles
-  normalize to the same filename: 1 failure follows 1,325 passes. The pinned
-  GitHub source removed the duplicate and passed 1,315 expectations with three
-  skips.
-- `mlrintermbo` 0.5.1-1 successfully traverses the Paradox accessors before
-  its examples and tests require the unavailable Suggested package
-  `ParamHelpers`. This is an environmental dependency failure, not a Paradox
-  assertion or crash.
-
-### Documentation outcomes
-
-All mandatory documentation contracts passed: both mlr3book install workloads
-and the Paradox chapter, the website install helper and 67-chunk benchmark, the
-Paradox cheatsheets, and the 128-row serialized `mbo_config` spaces. Seven
-advisory workloads also passed, including the full website, all four
-cheatsheets, both mlr3benchmark nested-values contracts, the 2,048-row
-`mbo_config` workload, and both mlr3-targets contracts. The three factual
-advisory failures were the full book, where an unrelated mlr3fairness
-`MeasureFairness` prototype lacks `base_measure`, and both archived gallery
-renders, which require the obsolete unavailable package `distill`.
-
-Every one of the 17 workloads passed both protected pre/post boundaries: 34/34
-checks over nine roots and 131,709 inventory rows retained the identical
-metadata hash
-`395411555e08e1bb13c1d1d418c11a2444976955c1ddd0275fcef724585888bf`.
-The final full content boundaries also matched for the candidate, package
-libraries, local R base, both overlays, toolchain, TinyTeX, and Quarto.
-
-## Engineering decisions and compatibility boundary
-
-The detailed implementation contract is in `design/architecture.md`; the
-observable compatibility decisions are in `design/compatibility.md`; ownership
-and adversarial teardown requirements are in `design/validation.md`. The
-release boundary is:
-
-- Exact canonical built-in `Domain`, `ParamSet`, and `ParamSetCollection`
-  surfaces enter registered C immediately. The public R6 classes, ordinary R
-  values, error sequencing, callback frames, and data.table-compatible outward
-  shapes remain the compatibility boundary.
-- C constructs and traverses those canonical shapes without calling checkmate
-  or data.table on hot paths. It authenticates callback-capable or replaceable
-  R surfaces before using fast lanes and declines to the established R/S3 path
-  when semantics cannot be preserved.
-- Unknown third-party Domain classes retain the slow S3 fallback. There is no
-  native third-party plug-in ABI. Adding another package-owned built-in type is
-  supported as a deliberate cross-kernel maintainer change, not as one unsafe
-  table entry.
-- Every R object retained beyond a call has explicit ownership. Preserved roots
-  have deterministic teardown; borrowed values are protected across allocation;
-  callbacks never run from an allocation-free region that assumes no callback.
-- The reviewed behavior fixes produce seven normalized differential deltas;
-  they repair likely bugs rather than emulating accidental upstream failures.
-  Everything else is expected to remain compatible, including internal object
-  shapes demonstrably used by current consumers.
-
-## Verification and performance policy
-
-The repository/reverse/documentation runners reuse the one authenticated
-candidate installation and content-addressed dependency/install caches. Their
-outer scheduler admits at most four 8-GiB consumer rows on this host and
-rechecks live CPU/memory headroom before every wave. Nested work is normally
-single-threaded. The GitHub `mlr3` row alone receives a receipt-bound two-CPU
-exception for upstream tests that explicitly assert its worker contract. The
-reverse runner applies the same five-field projection only to the CRAN `mlr3`
-R CMD check child; its installation and outer worker remain at one. In both
-cases make, CMake, testthat, BLAS, and Rcpp stay at one. All consumer and
-documentation children force `LC_ALL=C.UTF-8`, `LANG=C.UTF-8`, `LANGUAGE=C`,
-and `TZ=UTC`. Documentation gates authenticate the same managed detached
-candidate source at every workload boundary, so excluded primary-checkout work
-cannot replace the package being documented.
-
-The documentation gate receives two explicit protected overlays. The
-mlr3verse-core library supplies the reviewed hard-import closure. The second,
-`library-documentation-extra-final3`, supplies `gt` 1.3.0, `V8` 8.2.0,
-`bigD` 0.3.1, and `juicyjuice` 0.1.0 from
-`environment/r-packages-linux-64.lock`; its pre-release content SHA-256 is
-`169286c9080e0c5a3b58a3ffd51a24e258d817030cd1f8c991411453a84c99d6`.
-The schema-8 gate binds both overlay paths and content hashes, checks their
-metadata at every workload boundary, and rehashes them at postflight. This
-release reuses the second overlay from sealed documentation evidence; a future
-release should give that small overlay its own reproducible preparation
-receipt.
-
-Discretionary performance work is frozen for 2.0.0. Native source was reopened
-once after the second external portability run exposed the Apple ARM64 FMA
-correctness defect, not for a performance experiment. That bounded scalar
-change is covered by the exact delta gate and focused benchmark recorded above;
-the earlier full evidence is carried forward only within the documented impact
-boundary. Any further package-source edit requires a new candidate, a fresh
-impact analysis, and proportionate replay of the gates whose conclusions it can
-affect. A verifier- or report-only repair does not invalidate package-byte
-evidence whose authenticated inputs exclude that repair.
-
-### Reviewed direct-values performance tradeoff
-
-The first complete diagnostic benchmark classified two direct
-`ParamSetCollection$values` reads as regressions under the generic tiers. The
-flat rich read measured 120.1 microseconds versus 80.0 upstream and the nested
-read 183.7 versus 133.7; the plain read was 110.2 versus 107.3 and allocated
-10,600 bytes from an upstream zero. Triage found no unsafe C loop or
-release-worthy low-hanging fix. A flat-only R fallback measured about 82
-microseconds but nested fallback was about 170 versus 148--161 native; selecting
-only the flat shortcut would add another dispatch boundary and abandon native
-admission for about 40 microseconds.
-
-The cost buys per-read authentication of nine flat or eleven nested frames:
-the public and private R6 wrappers, child ParamSet tables, value snapshots,
-IDs and types, translation ownership, graph edges, affixed output IDs, and
-fallback safety are all checked against live mutable R state. The reviewed
-`authenticated-read` tier is therefore restricted to the three direct active
-binding workloads. Its median, upper-quartile, slower-probability, allocation
-ratio, and allocation-delta limits are 1.60, 1.70, 0.80, 1.50, and 16 KiB.
-It does not cover `get_values()`, assignments, or any other path.
-
-The fresh sealed run kept all three reads visible as marginal allocation rows:
-plain median ratio 1.236, rich 1.266, and nested 1.166. The only additional
-marginal was `mlr3pipelines_graph/values`, whose median ratio was 1.080 and
-upper-quartile ratio 1.189 under the stricter hot tier. There were no failed
-rows. Related collection paths materially improve: construction is 3.1--3.5x,
-assignment 14.8x, filtered reads 10.9--11.0x, dependency aggregation
-22.8--25.1x, and domain aggregation 744--982x faster. The remaining root-carrier
-sizing idea had already measured only about 4--9%, so native source was not
-reopened.
-
-### Reverse-gate harness incidents
-
-Two pre-release reverse runs were deliberately rejected rather than cited as
-evidence. `release-reverse-p1-afa5668-20260716` compared the raw legal package
-version `0.0.4-3` with R's canonical `0.0.4.3` spelling and stopped before
-checking `miesmuschel`. The validator now keeps the exact raw version in the
-receipt but compares installed versions as parsed `package_version` objects;
-the focused synthetic cache test covers the incident and genuine mismatches.
-
-`release-reverse-p1-afa5668-20260717` completed its first wave and all four
-checks in its second wave, but failed to seal two factual non-green rows because
-raw log excerpts were marked with `Encoding = "bytes"` before character-based
-diagnostic truncation. The shared compactor now converts valid UTF-8, escapes
-invalid external bytes as ASCII `<xx>`, normalizes newlines and tabs,
-and truncates to an exact character bound. Synthetic Unicode, invalid-byte,
-head/tail, and representative failed-row tests cover that path. Both changes
-alter authenticated runner bytes, so each required a fresh run ID; package
-installations remained in their content-addressed caches and the frozen
-candidate package was neither rebuilt nor changed.
-
-The final verifier initially rejected the aggregate reverse slice solely
-because a one-row aggregate retained positional `row.names = "2"` while the
-corresponding per-package file used `"1"`. The verifier now removes only the
-positional row-name attribute before `identical()`. Multirow fixtures prove
-that schema, order, and values remain exact and that any substantive change is
-still fatal. This verifier-only repair did not change the already completed
-runner evidence and did not warrant another reverse execution.
-
-### Documentation-gate harness incident
-
-The rejected `release-documentation-afa5668-20260716` stage died after workload
-10 inside fs 2.1.0's recursive `dir_map` while repeatedly scanning 131,709
-entries. All nine roots were individually valid; a cumulative reproduction
-corrupted state after 27 successful mixed scans. The replacement collector is
-an explicit nonrecursive base-R queue. It records symlinks without descending
-through them and retains `fs::file_info(follow = FALSE)` metadata. Hidden and
-nested paths, hardlinks, directory and dangling symlinks, repeated GC, and the
-real protected tree are covered by focused tests. The crashed stage is unsealed
-forensic material only; the v2 stage above is the sole documentation evidence.
-
-### Benchmark-gate harness incidents
-
-Four benchmark-only defects were exposed before or after measurement and fixed
-without changing package bytes:
-
-- TRE interpreted `"[\\r\\n\\t]"` as the literal letters `r`, `n`, and `t`,
-  so ordinary release paths were rejected. `[[:cntrl:]]` now performs the
-  intended byte classification.
-- `paste0()` with a zero-length optional protected-library index produced one
-  spurious role. `sprintf()` now preserves zero length, with 0/1/many fixtures.
-- `vapply()` retained path names in the expected support-library vector while
-  JSON correctly returned the same values unnamed. Both optional path vectors
-  now use `USE.NAMES = FALSE`.
-- The completion error compactor repeated the TRE mistake and removed literal
-  letters. One shared control-character compactor now preserves ordinary text.
-
-The fully measured `release-final2-97b5fe0-20260717` stage has three successful
-commands, complete 59-by-100 paired samples and 9-by-100 focused samples,
-matching protected boundaries, and empty stderr, but it failed after timing on
-the names-attribute check. It remains deliberately unsealed and is not release
-evidence. Rather than inventing a post-hoc recovery schema, every downstream
-shape, quantile, policy, provenance, and sealing check was replayed read-only,
-the harness was fixed and tested, and the final gate was rerun once from
-scratch. The successful final stage is the sealed row above.
-
-## Release completion rule
-
-The broad local package, compatibility, memory, consumer, documentation, and
-performance rows above have final factual outcomes for the superseded frozen
-payload and have passed their independent verifiers. They are carried forward
-only within the explicit impact boundary above. The exact delta gate and
-focused affine benchmark separately validate the corrected delta. The 211-file
-archive comparison binds that evidence to frozen candidate `2f40e3e5` with only
-the recorded timestamp and stochastic-vignette differences. The primary
-worktree must be clean at handoff, and the classified failures and marginal
-benchmark rows above remain explicit reviewed limitations rather than
-open-ended allowlists.
-
-All required release gates are accepted. The immutable candidate
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa` is release-ready: accepted run
-`29573168344` closed the remaining Windows/Rtools and Apple ARM64 gate with
-both check logs ending in their sole `Status: OK`, and the complete remote
-evidence passed the checksum-bound verifier once. The broad consumer,
-documentation, memory, and performance evidence remains valid only through the
-bounded carry-forward decision above; another broad replay now has no release
-information value and is not required. This completion state authorizes the
-ordinary human-controlled release process but does not claim that CRAN upload
-or publication has happened.
-
-The `afa56689` and `b840d9c4` refs and runs `29559803987` and `29561742772`
-remain immutable rejected historical evidence. The scalar helper and test-only
-reticulate teardown do not require another full consumer, documentation, or
-rchk campaign for the reasons recorded in the carry-forward boundary. No more
-broad validation should be run for this frozen payload. Any
-further package-source edit beyond that audited delta reopens impact analysis
-and proportionate validation.
-
-Do not turn any future consumer failure into an allowlist: first reproduce it
-against upstream paradox under the identical environment, fix a harness
-artifact when proven, and add a package regression test for every genuine
-candidate defect.
+# Paradox 2.0.0 active release ledger
+
+## Status
+
+**Not release-ready.** The contract-first source rewrite is in implementation
+convergence. No package-byte-dependent result from the superseded
+compatibility-first candidate is accepted for this source. This ledger changes
+to release-ready only after one clean immutable ref satisfies every mandatory
+gate below.
+
+Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
+Implementation map: [`architecture.md`](architecture.md). Compatibility and
+migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
+[`validation.md`](validation.md).
+
+## Decisions frozen for the first public release
+
+- Version is 2.0.0; R >= 4.3; portable C17; data.table >= 1.18.4.
+- R C API use is public except for one centralized R < 4.6 compatibility call:
+  `src/r_api_compat.c` declares/calls exported `Rf_findVarInFrame`, rejects
+  `PROMSXP`, and R >= 4.6 instead uses the documented experimental API
+  `R_GetBindingType`. R 4.3--4.5 has no public non-forcing binding classifier,
+  so an R-level `substitute()`
+  workaround is unsound for the simultaneous generation/receipt scan. The exact
+  exception is ledgered in `environment/r-api-exceptions.tsv`, raw-token-audited
+  to one occurrence and path, and pinned-header/runtime tested. It is not
+  CRAN-allowlisted for the supported pre-4.6 build path: those runtime DSOs must
+  contain the symbol and
+  every R >= 4.6 DSO audit must prove it absent. No broader internal-API
+  permission exists.
+- One opaque v1 capsule and BASE/COLLECTION/SHADOW node graph are the current
+  state model.
+- The public `assert_values` flag is the sole stateful R-shell policy outside
+  that model. It selects checked versus unchecked native storage and remains
+  clone/serialization/equality-visible without changing the ten-field capsule.
+- Capsule tables are plain data.frames; data.table is outward-only.
+- Domain and Condition kinds are closed; ParamUty custom checking remains.
+- Canonical built-in Domain-row semantics have one native admission owner shared
+  by constructor final-state validation, ParamSet construction, and
+  ObjectTuneToken Domain admission. Boundary-specific outward table/class checks
+  do not duplicate row semantics.
+- Standalone `condition_test()` uses the registered closed comparator for
+  `NULL` or plain logical/integer/double/character vectors with names only;
+  stable ALTREP operands materialize once and classed/attributed operands do
+  not dispatch through `Ops` or `%in%`.
+- Built-in Condition RHS values are attribute-free, non-missing vectors of the
+  same four kinds. `CondEqual` has one element and `CondAnyOf` is non-empty and
+  unique. Public admission roots and materializes the RHS once; strict capsule
+  validation accepts only that ordinary snapshot.
+- Additive-only ParamSet-family subclassing is supported; core ParamSet
+  overrides/private state are not. The documented Sampler subclass API remains.
+- ParamSetShadow belongs to Paradox and replaces miesmuschel's private-layout
+  implementation on the Paradox-2 branch.
+- `ParamSetCollection$add()` is an atomic native replacement transaction. It
+  follows Shadow origins, rejects corruption and existing/proposed cycles
+  before commit, and generation-checks the complete current/child graphs.
+- Shadow live refresh is native and generation-based. Its sole non-payload
+  attribute is an exact derived origin-graph signature; `.sets[[1L]]` is the
+  only origin authority and fixed factories are not cached as state. The
+  signature is package-rebuildable cache data but mandatory and exact on every
+  current SHADOW core.
+- Checked value assignment is one graph-wide native transaction over ultimate
+  BASE targets, including collections and shadows. It deduplicates shared
+  targets, validates once, preserves nested callback writes, and commits all
+  replacements atomically without a second R or child-store pass. ParamSet
+  Object-token inputs add rooted generation receipts and one final allocation-
+  free candidate reauthentication immediately before commit.
+- `check_dependencies()` reuses the native check graph/point/dependency kernel,
+  accepts only an ordinary uniquely named base list, validates unknown IDs even
+  without dependency rows, skips TuneToken edges, and returns the first
+  diagnostic rather than reproducing R/pmap multi-error collapse.
+- `test_constraint()` and `test_constraint_dt()` reuse the native check graph,
+  point admission, and constraint kernel. A validating table call admits every
+  row before any constraint callback and then evaluates one immutable
+  constraint snapshot once per row; ParamUty custom checks may run during
+  Domain admission, and reentrant mutation affects only later public operations.
+- Tag access/mutation, dependency snapshot/access/mutation/append, and BASE
+  callback replacement are native capsule operations. Dependency feasibility
+  uses the shared check kernel and generation-checks callback reentry; Shadow
+  append routes natively only within the fixed visible schema.
+- A BASE-origin Shadow constraint closure contains exactly a callback and
+  hidden-values plan. Its native evaluator performs the hidden-first merge
+  without S3 dispatch, preserves leaf identity, calls once, and admits one
+  non-missing logical result; collection origins stay on the collection native
+  evaluator family.
+- Current objects serialize normally; old objects use explicit
+  `upgrade_paradox_object()`.
+- Stable/base ALTREP support is materialize-once in admitted semantic atomic
+  positions. Configuration/search-space/trafo and ParamSet-`params` lists,
+  table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted
+  cargo entries, dimnames, class/name vectors, and other list metadata remain
+  ordinary non-ALTREP/non-S4. Ordinary documented data.frame/data.table inputs
+  remain supported and may carry stable semantic ALTREP columns. Direct
+  checked/unchecked `$values <-` rejects an outer ALTREP before observation and
+  natively canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary
+  attribute-free zero-length atomic/expression vector, or an accepted empty
+  list container) to a named list; only
+  `set_values(.values=)` has an operation-specific outer-list snapshot.
+  Hostile state-changing custom ALTREP across prior R-side representation capture has
+  no exact semantic/printed-representation guarantee. Paradox must neither
+  replay nor itself cause a crash or memory corruption.
+- Base `extra_trafo` results may remain unnamed for public and TuneToken
+  compatibility; collection child results require complete unique names for
+  namespace translation. Transformation input/result shells are ordinary
+  non-ALTREP/non-S4, while admitted atomic leaves and documented data-frame
+  columns may be stable ALTREP. Both use the single native transformation engine.
+- Live collection callback bindings, detached subset/flatten callback
+  factories, and SHADOW adapters over COLLECTION origins all use that same
+  native evaluator family. Their R closures retain only exact validated
+  owner/mapping plans and contain no parallel callback selection/translation
+  engine. Retained/untransformed inputs remain in input order, followed by
+  changed child outputs in callback-plan order; omissions remove owned inputs.
+- Exactly two narrow cold R semantic-orchestration families remain, and neither
+  is a fallback. The first contains the three internal-tuning operations—
+  aggregation, disabling, and internal search-space conversion—as single R
+  implementations over one captured cargo/translation/Domain/owner-value
+  snapshot and commits through native mutation.
+  After native flattening, the same cold family may rebind documented `cargo`
+  closures and replace that one column in the detached BASE result. It is the
+  first narrow exception to thin wrappers, not a second graph/check/value/
+  callback-selection engine. The second is exact-TuneToken `$search_space()`
+  conversion: it consumes one rooted native snapshot, switches only over the
+  package's built-in token kinds, and solely owns callback-dependent
+  one-dimensional output compatibility and outward search-space construction.
+  It has no S3 extension or competing native/R conversion path.
+- Ordinary non-ALTREP S3-classed named value-list containers are admitted with
+  the outer class discarded; scalar Domain argument names are likewise
+  representation-only. Direct checked/unchecked assignment rejects an outer
+  ALTREP before observation and canonicalizes empty input in native code.
+  Neither is an extension/dispatch mechanism.
+- TuneTokens have one native exact-shape snapshot boundary: exact `{content, call}`
+  names, five built-in class vectors, exact Full/Range/Internal content, and an
+  admitted bounded value-producing built-in Domain or exact BASE
+  `c("ParamSet", "R6")` shell/core for
+  Object content. An unbounded `ParamUty` Domain rejects; bounded typed Domain
+  coverage retains opaque leaves without treating ParamUty itself as a range.
+  COLLECTION, SHADOW, and additive subclasses reject. Exact
+  creator provenance is not inferred: a shell alias retaining genuine BASE
+  private/core linkage may pass safely because C never calls alias methods.
+  Scalar names are normalized away. Subclasses, extra/reordered metadata,
+  S4 structure, malformed calls/content, and recursive forgery reject before
+  traversal. `$search_space(values=)` accepts an ordinary or names/class-only S3
+  named list without dispatch, enters this same admission, and replaces every
+  live BASE candidate with a sealed single-use capability before closed
+  conversion.
+- Domain/Condition/token/ParamSet and all other interpreted structural ALTREP/
+  S4 shells are rejected. The outer `special_vals` list is ordinary
+  non-ALTREP/non-S4 for every Domain kind. Typed Domain special leaves reject ALTREP; an admitted
+  typed S4 special, default, or init matches only by pointer identity. ParamUty
+  leaves remain opaque, including S4, while Paradox-1 special membership alone
+  uses base `identical()` without S3/S4 dispatch. Malformed exact-token/Domain
+  structure is a hard boundary error, while ordinary value infeasibility
+  remains a check diagnostic.
+- ParamSet-family equality is a detached complete-state graph comparison and
+  never walks private/inherited R6 active bindings. Canonical node references
+  distinguish shared from duplicated topology without distinguishing
+  independently built equivalent DAGs.
+- All major compatibility breaks above ship now. They are not deferred to a
+  later release.
+
+Changing one of these requires an explicit contract/design/NEWS/test update,
+not a local compatibility workaround.
+
+## Implementation convergence checklist
+
+### State and public model
+
+- [x] v1 NULL-address external-pointer capsule with ordinary protected truth;
+- [x] fixed ten-field BASE/COLLECTION/SHADOW schema;
+- [x] canonical plain internal table constructors/validators;
+- [x] package-owned exported ParamSetShadow shell and initial bridge contract;
+- [x] closed Domain and Condition public dispatch;
+- [x] standalone Condition comparison and scalar/table constraint-only calls
+  enter registered native operations with no S3 or R row-evaluation engine;
+- [x] native collection-add and tag/dependency/callback mutation planners
+  replace the remaining R/checkmate/data.table canonical mutation paths;
+- [x] explicit legacy upgrader with CRAN-1.0.1 and `mbo_config` fixtures;
+- [ ] complete live Shadow synchronization, clone/serialization/DAG behavior,
+  and all graph-reader coverage confirmed after converged install;
+- [x] value, tag, dependency, callback, and collection-add mutators use
+  validated capsule replacement/generation semantics; `assert_values` is the
+  explicitly separate public shell policy;
+- [ ] no current object path reads legacy private tables as semantic authority.
+
+### Single native engine
+
+- [x] native Domain/ParamSet constructors replace former fast/slow constructor
+  pairs;
+- [x] constructor, ParamSet, and ObjectTuneToken Domain paths share the sole
+  canonical built-in Domain-row semantic admission owner;
+- [ ] bounded value-producing Domain (excluding unbounded ParamUty and
+  zero-level ParamFct) and exact BASE-only ObjectTuneToken
+  admission, safe genuine-core aliasing, generation receipts/final commit scan,
+  sealed search capabilities, ALTREP/S4 fail-closed structure, pointer-only
+  typed-S4 special matching, and ParamUty base-`identical()` special membership
+  are confirmed against the converged install;
+- [x] unified BASE/COLLECTION/SHADOW `check` and `check_dt` implementation is
+  integrated at source level;
+- [ ] live and detached collection transformation/constraint factories use one
+  registered native evaluator family, including subset, flatten, and
+  Shadow-origin paths, with their final deterministic merge-order fix rechecked
+  against the converged install;
+- [x] native `check_dependencies()` and BASE-Shadow constraint-plan boundaries
+  are integrated with focused graph, classed-input, callback-once, and
+  malformed-state regressions; final combined-install evidence remains below;
+- [ ] values, domains, params, dependencies, transformations, subset/flatten,
+  design, and sampler operations are capsule-authoritative and contain no
+  semantic fallback or generated-R6 authentication; the documented cold
+  internal-tuning and exact-TuneToken search-space families are the two R
+  semantic-orchestration exceptions; cold clone and detached equality remain
+  non-semantic shell/presentation glue;
+- [ ] all temporary former-auth aliases and obsolete translation units are
+  deleted;
+- [ ] every registered routine has one fixed signature, direct probe, and
+  synchronized coverage ledger.
+
+### Tests and docs
+
+- [x] contract-first design and compatibility documents replace conflicting
+  old design guidance;
+- [x] NEWS/DESCRIPTION/NAMESPACE begin the 2.0.0 contract reset;
+- [ ] all tests that assert superseded private/sentinel/S3 behavior are removed
+  or rewritten, with preserved ordinary behavior still covered;
+- [ ] complete capsule, graph, callback/reentry, structural-versus-semantic
+  ALTREP/S4, direct-assignment versus `set_values(.values=)`, ordinary table/
+  semantic-column, data.table facade, corruption, serialization, exact-
+  TuneToken/receipt/capability, and upgrade contract suite passes;
+- [ ] package reference documentation, vignettes, migration guide, website,
+  and downstream bridge docs describe the final behavior consistently;
+- [ ] routine/analyzer/runtime ledgers discover current files dynamically and
+  contain no historical hard-coded test counts.
+
+### Downstream coordination
+
+- [x] local bbotk bridge commits `0909e60` and `94e4c22` on
+  `codex/public-paramsetcollection-sets`;
+- [x] local miesmuschel bridge commits `68686ef`, `f0e4736`, `cf64981`,
+  `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`, `2ca3030`, and
+  `d9d5c01` on `codex/paradox-paramsetshadow-bridge`;
+- [x] mlr3mbo reviewed with no current source patch required;
+- [ ] both bridge branches retested against the exact frozen candidate and
+  updated for any final API adjustment;
+- [ ] other priority packages and active documentation tested against exact
+  reviewed revisions;
+- [ ] user has manually pushed branches and opened the required PRs (agents
+  have no remote-write authorization).
+
+### Performance and correctness
+
+The checked-in `environment/rchk-bcheck-policy/` now binds the reviewed
+pre-freeze source seal and its replacement bounded-analyzer reports. Bcheck
+analyzed 769 functions and 27,845 states, with 76 exact Function blocks, 195 UP
+diagnostics, and 13 PB diagnostics; its report SHA-256 is
+`44969344c11bbe7b0c033615fa5663e5a45bce825e5887cde0a0ae9e0e3805e3`.
+Maacheck is byte-empty (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`),
+and fficheck reports 68 registered routines and one checked registration call
+(`4f927fb55903a10502ddac1a867a7a826640ca99f8de684368a49c173a6b04bc`).
+The generated policy, block table, and rationale table SHA-256 values are
+`127a734e1fd98ff1d3d501581dff54f410f57d11ba4e7664d74342c67f60a67f`,
+`038d289fdd9847092de867d72567624b93a6a10aaf282220dd8accb7fe3a8056`,
+and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+The first pre-freeze report exposed a real `snapshot_dependencies()` root-
+lifetime defect across callback-capable feasibility validation. The result and
+its columns now remain protected through that validation, a successful
+allocating-callback regression covers the commit path, and the superseded raw
+run was discarded before generating this policy. This is current pre-freeze
+evidence, not completion of the final frozen-candidate memory gate: that gate
+must still run on the exact candidate bytes and match or deliberately
+regenerate the policy if its report changes.
+
+- [ ] affected and then complete unit tests pass from one stable candidate
+  installation;
+- [x] the final profiling decisions are closed: sparse search-target projection
+  and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
+- [x] measured hot-path changes are implemented and revalidated in affected
+  development tests; the sealed release benchmark remains pending below;
+- [ ] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
+  and R-API/exception-ledger checks are clean;
+- [ ] R 4.3.3, 4.5.2, development R, Windows x86-64, and real macOS ARM64 are
+  clean for the same source;
+- [ ] priority consumer, documentation, differential, and benchmark gates are
+  accepted with retained source-bound evidence.
+
+Current profiling diagnostics are implementation guidance, not release
+benchmark evidence:
+
+- the operation-local SHADOW ID index is retained in
+  `.local/benchmarks/dev-shadow-pointer-index-ab-20260718`; its A/B medians
+  improved construction by 1.39x, live values by 7.72x (293 to 38 microseconds),
+  live domains by 2.17x, and assignment by 1.70x while keeping complete
+  corrupt-state validation;
+- the direct base checks in the `to_tune(ParamSet)` callback wrapper measured
+  4.47 microseconds versus 24.31 microseconds for the former
+  checkmate/mlr3misc layers in the focused probe. The final paired gate must
+  still validate representative end-to-end workloads on the frozen candidate;
+- an earlier isolated `check_dependencies()` and BASE-Shadow constraint-plan
+  stage compiled with the complete strict C17 warning set under GCC 14 and
+  Clang 22 without a diagnostic. Its immutable GCC installation (DSO SHA-256
+  `ff1755578568856af74b11f868a7da981b13395c974329f2096ea7e31f76b456`)
+  first passed 35 focused test blocks with 241 expectations. After adding two
+  test-only first-diagnostic assertions, the unchanged installation reran the
+  affected dependency file (14 blocks and 111 expectations), leaving 243
+  focused expectations for that source. Its 55 registered calls, 55 direct
+  probes, and four hazard probes passed. Evidence is retained in
+  `.local/tmp/native-semantic-leftovers-20260718/`;
+- the subsequent isolated standalone-Condition and constraint-only stage (DSO
+  SHA-256
+  `b8de34b72ee5fac27ade0777058f7a7a70ac1d4e7c5d33c0cff025a44f313c4e`)
+  passed five affected files, 37 test blocks, and 243 expectations, plus 58
+  registrations, 58 direct probes, and four hazards. GCC 14 and Clang 22 were
+  warning-clean. Its 10,000-row constraint batch measured 0.0148 seconds per
+  call versus 0.511 seconds for the old R row engine, a 34.5x improvement.
+  Evidence is retained in
+  `.local/tmp/native-constraint-stage2-20260718/`. A later measured
+  `CondEqual` pointer fast path and the merged native mutation/add operations
+  changed the source again. The vector fast path is now guarded by the
+  permanent `condition_equal_vector` workload and regression-policy row;
+- a final collection-reader profile attributed about 86% of the representative
+  rich-read instruction count to complete graph admission. Within that required
+  validation, encoding translation and affixed-ID comparison were measured hot
+  spots. Two conservative byte fast paths were retained: equal UTF-8/Latin-1
+  encodings and native ASCII compare without translation, while mixed encodings
+  and non-ASCII native strings keep the UTF-8 path. With 5,000 samples pinned to
+  one CPU and both execution orders, the shared string change improved rich
+  reads by 1.127--1.131x and nested reads by 1.253--1.294x; the affixed-ID change
+  then improved plain reads by 1.105--1.121x, rich reads by 1.083--1.104x, and
+  nested reads by 1.106--1.115x. Allocations were unchanged. The tested stage
+  DSO was
+  `40784de682305cd1ca7322b375e5504aa3b483428944b149e9d6958e47503ea7`;
+  retained A/B evidence is under
+  `.local/benchmarks/collection-values-ab-{string,affix}-long-20260719` and the
+  corresponding `-reverse-` runs. Translation caches, alternate validation
+  modes, and skipped corruption checks were rejected;
+- a fused Shadow-values reader experiment was also rejected and fully reverted:
+  100-sample exact A/B medians were 60.345 versus 60.205 microseconds (1.002x)
+  with identical 2,200-byte allocation. It added a routine and duplicated
+  reader surface for no material gain. Evidence remains under
+  `.local/benchmarks/fused-shadow-values-ab-20260719`;
+- the final low-hanging pass retained three compact changes: skip an empty value
+  transaction when a ParamSet has no initial values, reuse the already resolved
+  BASE row while translating admitted collection values, and let the inherited
+  native Shadow dependency reader own refresh. Forward/reverse paired evidence
+  is retained in `.local/benchmarks/final-hotpath-ab-20260719` and
+  `.local/benchmarks/final-hotpath-ab-reverse-20260719`. Small construction was
+  4.3--6.5% faster with 880 fewer allocated bytes; 64-parameter bulk
+  construction was 8.0--12.3% faster with 1,744 fewer bytes; rich collection
+  reads were 4.6--5.8% faster and nested reads 18.1--18.8% faster. Plain reads
+  remained within 1% timing noise. Collection reads used 192 additional
+  operation-local bytes. The production delta was 21 source lines and 320 DSO
+  bytes, with no persistent cache or weaker validation mode;
+- a sparse-target `$search_space()` facade experiment was rejected. The
+  conversion is cold and the representative maintained end-to-end workload
+  moved only about 2%, which did not justify an additional projection path and
+  validation surface;
+- a native bulk-dependency constructor transaction was also rejected for this
+  release after measurement. The isolated 64-parameter/27-requirement estimate
+  moved from 6.57 ms to 4.11 ms, with requirement-heavy estimates spanning
+  roughly 1.4--2.5x, but representative xgboost learner construction improved
+  only about 6--7%. Implementing it requires a moderate-risk new native batch
+  transaction, and the maintained release workload currently lacks dependency-
+  rich constructor coverage. Under the release-steering policy this is not
+  low-hanging enough to reopen the implementation. The existing low-risk wins
+  remain; this internal optimization can be reconsidered later without another
+  compatibility/API break and is not included in any claimed speedup above;
+- none of the staged DSOs above is current combined evidence. The live source
+  still requires one stable combined install, focused/complete tests, generated
+  routine/probe inventories, and strict compilers before a candidate can be
+  frozen. The staged diagnostics
+  do not replace any frozen-candidate compiler, suite, benchmark, or analyzer
+  gate.
+
+## Current local downstream branches
+
+These are local PR preparation only. Repository policy requires the user to
+push and create PRs manually.
+
+| Package | Worktree | Branch | Commits | Intent |
+|---|---|---|---|---|
+| miesmuschel | `.local/compat/github/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | `68686ef`, `f0e4736`, `cf64981`, `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`, `2ca3030`, `d9d5c01` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals, and retain version-gated expectations for the two Shadow dependency diagnostics. |
+| bbotk | `.local/compat/github/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22` | Replace one private collection `.sets` read with public `$sets` and accept version-gated native diagnostics. |
+| mlr3mbo | `.local/compat/github/mlr3mbo` | `main` | none | No identified source migration. |
+
+As a development diagnostic, the final miesmuschel public-state equality commit
+passed its dictionary (693 expectations) and shortform (20 expectations) files
+against both development candidate C and legacy Paradox. This is evidence for
+the bridge shape, not a substitute for retesting the exact branch head against
+the exact frozen candidate.
+
+The final handoff must include exact push commands and PR title/body text only
+after retesting these heads against the exact frozen candidate.
+
+## Development evidence policy
+
+While source is changing, record only focused diagnostic results. A source
+parse, strict translation-unit compile, or focused test is useful development
+evidence but not a release gate. Broad checks are deliberately delayed until
+the architecture converges so that package/dependency binaries are not rebuilt
+and entire suites are not rerun for each isolated failure.
+
+Use one stable copied source tree and one disposable installation for a
+coherent batch. Run independent test files/consumer rows in memory-aware outer
+parallel waves, with nested compilation/test/BLAS/OpenMP at one. Mine every
+failed wave for its full failure set, fix the shared cause, rerun affected rows,
+then perform one final broad confirmation.
+
+Authenticated toolchain, package-download, dependency-library, consumer-install,
+reference-source, header, analyzer-runtime, and container caches remain valid
+when their byte-affecting inputs match. A candidate DSO, package installation,
+memory report, differential, consumer result, documentation result, or
+benchmark is not transferable across source changes.
+
+For an R/docs-only inner-loop change, a development DSO may be reused only
+after recording byte identity of every native build input plus compiler/profile,
+`NAMESPACE`, and `DESCRIPTION`, reinstalling the R/help databases, and verifying
+the loaded DSO hash. This exception is diagnostic-only. The final immutable
+candidate receives one clean full source build per distinct
+R/compiler/instrumentation profile; compatible evidence families may share
+that exact authenticated installation, never development component objects.
+
+## Candidate freeze record
+
+The immutable package candidate is committed only after all implementation,
+test, documentation, and downstream-bridge work is staged and the primary
+checkout is clean. A commit cannot contain its own commit, tree, or archive
+identity without a circular mutation. Therefore the candidate intentionally
+ships this table as pending. After every local and remote gate has completed, a
+separate evidence-ledger commit is created as a direct child of the candidate;
+its only changed path is this file, and it populates the table and release
+decision. The package/release tag continues to point to the candidate, never to
+the evidence-ledger or portability-harness commit.
+
+The two allowed direct-child records are siblings: the evidence ledger changes
+only `design/release-2.0.0.md`, while the portability harness changes only
+`.github/workflows/r-cmd-check.yml`. Every package/source-dependent result names
+the candidate. Creating the evidence ledger reopens only repository hygiene and
+ledger cross-checks; creating or correcting the portability harness reopens only
+its structural tests, `actionlint`, and the two real-platform portability rows.
+Any other post-freeze change requires a new candidate and new source-bound
+evidence.
+
+| Field | Value |
+|---|---|
+| Full candidate ref | pending |
+| Commit | pending |
+| Tree | pending |
+| Source archive SHA-256 | pending |
+| Version | 2.0.0 |
+| Source file count | pending |
+| Routine inventory hash | pending |
+| Test inventory hash | pending |
+| Downstream bridge commits | pending final retest |
+
+No annotated tag or remote branch is created by an agent. The user performs
+all remote writes after reviewing this record.
+
+## Mandatory release evidence
+
+For the exact candidate ref, retain and verify:
+
+1. strict GCC and Clang C17 warning-clean builds, registration/probe audit,
+   ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
+2. real R 4.3.3 and 4.5.2 runtime stages plus development R, pinned-header
+   compilation, and the exact R-API-exception ledger/raw-token/version-gated DSO
+   audit, including the authenticated R-4.3 data.table 1.18.4 overlay;
+3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
+4. exact bbotk and miesmuschel bridge heads, then priority-zero/one reverse
+   dependencies and maintained mlr-org repositories;
+5. GCT, instrumented-R Valgrind, bounded rchk, direct routine/hazard probes,
+   and adversarial corrupt-capsule/graph/ALTREP cases, treating hostile
+   state-changing custom ALTREP as a safety/no-replay gate rather than an exact
+   representation-equivalence gate;
+6. package manuals/vignettes, active book/gallery/website/cheatsheets, and
+   legacy serialized configuration upgrades;
+7. GitHub Windows x86-64 and macOS Apple-silicon ARM64 checks whose failure
+   status is correctly propagated and whose exact source provenance is retained;
+8. representative paired benchmarks on an idle host, including downstream
+   call patterns, with raw distributions and regression thresholds reviewed.
+
+Every accepted row receives a unique run ID, exact source ref/commit/tree,
+commands, versions, logs, manifests, and completion seal. Verifier-only changes
+never relabel old execution as a new package run.
+
+## Release decision
+
+The release decision is `pending`. It becomes `accepted` only when every box in
+the convergence checklist is complete, the candidate table is immutable, all
+mandatory evidence rows name that exact source, downstream migration paths are
+available, and the benchmark review finds no release-relevant low-hanging
+regression.
+
+## Historical rejected candidate
+
+The compatibility-first candidate at
+`refs/paradox-release/candidate-20260717T083921Z`, commit
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and its portability companion are
+historical only. Their extensive hashes and logs remain in Git history and
+ignored local evidence directories. They once satisfied a different contract
+that preserved private surfaces and dual engines. They authorize no conclusion
+about the current capsule implementation and must not be copied into the
+pending fields above.

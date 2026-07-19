@@ -1,7 +1,7 @@
 repository	url	relation	priority	action	notes
-bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	ParamSet subclass and private ParamSetCollection child access.
+bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	Exact local Paradox-2 bridge using public collection sets while retaining additive Codomain inheritance.
 mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	Depends	0	clone	Core tuning gate.
-miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	ParamSet subclass and extensive private-layout compatibility code.
+miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	Exact local dual-version bridge selecting Paradox's official ParamSetShadow for Paradox 2.
 celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Active GitHub-only consumer.
 smashy	https://github.com/mlr-org/smashy.git	Depends	3	clone	Experimental consumer pinned to an obsolete paradox development branch; retained as source characterization only.
 mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Core framework gate.

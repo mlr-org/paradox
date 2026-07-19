@@ -9,7 +9,9 @@ domain_qunif(param, x)
 \arguments{
 \item{param}{(\code{Domain}).}
 
-\item{x}{\code{numeric} between 0 and 1.}
+\item{x}{\code{numeric} between 0 and 1.
+Stable ALTREP semantic vectors are materialized once; structural Domain
+and name metadata must remain ordinary non-ALTREP/non-S4.}
 }
 \value{
 \code{any} -- format depending on the \code{Domain}.

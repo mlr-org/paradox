@@ -1,21 +1,391 @@
-# Paradox C rewrite working notes
+# Paradox 2 C rewrite: maintainer and agent notes
 
-## Isolation contract
+## Authority
 
-The host R installation is deliberately unsupported for development. It is R
-3.6.3 and must not be upgraded or modified. Do not install packages into a user
-or system library outside this repository, do not edit shell startup files, and
-do not use `sudo`.
+The first public Paradox 2 release is a contract reset, not a continuation of
+the compatibility-first native candidate frozen in July 2026. The normative
+behavioral and architectural contract is
+[`design/contract-first-2.0.0.md`](design/contract-first-2.0.0.md). The shorter
+implementation map is [`design/architecture.md`](design/architecture.md), the
+intentional compatibility boundary is
+[`design/compatibility.md`](design/compatibility.md), and the active release
+ledger is [`design/release-2.0.0.md`](design/release-2.0.0.md).
 
-Run `scripts/bootstrap` once, then start every development shell from the
-repository root with:
+Old candidate commits, refs, logs, and artifacts are historical evidence for
+different bytes only. Git history retains the former long design narratives;
+do not copy their R6-surface authentication, S3 fallback, sentinel replay, or
+pre-data.table-1.18 decisions back into current source.
+
+The structural boundary below is an intentional Paradox-2 break made in this
+release, not a migration shim to relax later. Supporting exotic structural
+ALTREP/S4 shells or parallel R/native admission would preserve no known
+maintained use while retaining duplicate authority, dispatch, and
+multi-observation hazards. Ordinary documented containers and stable ALTREP
+semantic vectors remain supported at their stated positions.
+
+## Non-negotiable design decisions
+
+- `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` are serializable R6
+  shells over one package-owned `.core` capsule. Public R6 names and ordinary
+  behavior remain; private layout is not an API.
+- `.core` is a NULL-address external pointer with no allocation or finalizer.
+  Its tag is `paradox.core.base.v1`, `paradox.core.collection.v1`, or
+  `paradox.core.shadow.v1`; its protected slot is the complete ordinary-R
+  capsule/model state. The sole stateful R-shell policy outside it is the
+  documented public `assert_values` flag, which selects checked versus
+  unchecked native value assignment. It is serialized/cloned with the R6 shell
+  and compared by `all.equal()`, but is not graph/schema/value authority and
+  does not change the ten-field ABI.
+- The v1 payload is the fixed ten-field list `.params`, `.values`, `.tags`,
+  `.deps`, `.trafos`, `.extra_trafo`, `.constraint`, `.sets`, `.translation`,
+  and `.postfix`. It is one internal schema shared by all three node kinds.
+- A SHADOW `.core` has exactly one package-private derived-cache attribute,
+  `.paradox.shadow.snapshot.v1`. Its value is an ordinary, attribute-free list
+  alternating every origin-graph shell with the exact capsule generation used
+  to build the protected payload. It is only a derived refresh signature:
+  origin authority remains `.sets[[1L]]`, callbacks come from the locked
+  Paradox namespace on a rebuild, and neither origin nor callback factories
+  are duplicated in the attribute. Deep clone rebuilds the signature against
+  the memoized cloned graph; serialization may preserve its graph-relative
+  identities. Every read validates the exact attribute/signature shape, and a
+  missing, extra, or malformed attribute is corrupt state, never a fallback.
+- Capsule tables are canonical plain base `data.frame`s. They have no
+  data.table key, index, spare capacity, or self-reference. Public table
+  accessors return detached, valid data.table facades.
+- Mutations build and validate replacement capsules and swap `.core`
+  atomically. Value assignment plans the complete BASE/COLLECTION/SHADOW
+  graph through ultimate BASE targets, deduplicates shared targets with
+  deterministic last-owner semantics, and commits every replacement in one
+  allocation- and callback-free wave. A callback mutation of any planned
+  target wins and makes the outer assignment error before any target is
+  changed. Native readers retain the capsule chosen at operation entry.
+- `BASE` owns a schema and mutable values. Each `COLLECTION` capsule generation
+  owns ordered child references and an immutable translation snapshot; `$add()`
+  is one native transaction that validates both complete graphs, rejects an
+  existing or proposed cycle (including a SHADOW origin path), checks every
+  admitted generation again, and only then installs a replacement generation.
+  Corruption, name collision, reentry, or allocation leaves the old collection
+  unchanged. `SHADOW` owns one origin edge and a
+  fixed visible schema while reading/writing dynamic origin semantics live.
+  Shared DAG nodes are valid; a repeated node on one active path is a cycle.
+  Deep clone memoizes the complete graph and clones each shell once; never
+  restore independent per-edge `$clone(deep = TRUE)` recursion.
+- `ParamSetShadow` is supplied by Paradox. Visible writes preserve hidden
+  origin values; dependencies, constraints, and transformations are live;
+  dependencies crossing the visible/hidden boundary are errors. Its capsule
+  origin edge is the only origin authority; do not add a parallel private
+  origin field. A direct SHADOW-to-SHADOW origin is rejected; construct the
+  combined view over the ultimate BASE or COLLECTION origin instead. The R6
+  private environment must not cache a second `.visible`/`.shadowed` schema;
+  constructor `shadowed` input is not retained authority. The fixed capsule
+  `.params` plus current origin IDs define the visible/hidden partition.
+- A BASE-origin Shadow constraint adapter has one exact two-field
+  `{callback, hidden_values}` plan and a thin native evaluator. The evaluator
+  validates and snapshots both inputs, merges hidden values before visible
+  values without `c()`/S3 dispatch, preserves opaque leaf identity, executes
+  the callback once, and requires one non-missing logical result.
+- Third-party inheritance from the ParamSet family is additive only. Core
+  ParamSet method/active-binding replacement, generated-wrapper mutation,
+  reparenting, delayed bindings, and capsule/private-table writes are
+  unsupported. `bbotk::Codomain` is the maintained additive-subclass case.
+  This restriction does not remove the documented `Sampler` subclass API.
+- Domain dispatch is closed over `ParamDbl`, `ParamInt`, `ParamFct`, `ParamLgl`,
+  and `ParamUty`. Condition dispatch is closed over `CondEqual` and `CondAnyOf`.
+  The existing exported names and built-in outward shapes remain; third-party
+  S3 methods are not an extension contract. Standalone `condition_test()` uses
+  the same exact built-in admission and comparison semantics as dependency
+  execution, with an optimized native vector kernel for direct input.
+  It accepts `NULL` or a plain logical, integer, double, or character vector
+  with at most names, materializes a stable ALTREP operand once, and rejects
+  classed or otherwise attributed vectors rather than invoking `Ops`/`%in%`
+  dispatch. `condition_as_string()` is cold presentation glue, not a second
+  evaluator. `p_uty(custom_check=)` remains the general callback escape hatch.
+  A built-in Condition RHS is likewise an attribute-free logical, integer,
+  double, or character vector without missing values: `CondEqual` has one
+  element and `CondAnyOf` is non-empty and unique. Native dependency or direct
+  comparison admission roots that selected RHS, materializes every element
+  once, and validates the ordinary snapshot. The strict capsule validator does
+  not accept ALTREP; it validates only the already admitted snapshot.
+  Numeric bounds/logscale admission and row construction are one registered
+  operation; exact empty Domain operations and zero-dimensional grids also
+  enter C and have no R special-case engine. Canonical semantic admission of
+  one built-in Domain row has exactly one native owner, shared by constructor
+  final-state validation, ParamSet construction, and ObjectTuneToken Domain
+  admission. Boundary code may validate the outward table/class container, but
+  it must not restate cargo, kind/storage, grouping, bounds, levels, default,
+  tags, requirements, initialization, or special-value/transformation rules.
+  After admission it receives the closed kind and validated fields and handles
+  only its operation-specific work.
+  A canonical `ParamFct` may have zero levels. Quantile/grid/uniform-sampling
+  operations preserve its typed `character(0)` result when zero rows are
+  requested; any positive-row quantile or sampling request errors before RNG
+  entry or indexing. Empty levels are semantic emptiness, not corrupt schema.
+- Interpreted structure must be ordinary non-ALTREP and non-S4. This includes
+  outer list/table/Domain/Condition/TuneToken/capsule shells, ParamSet
+  constructor `params` lists, transformation input/result list shells, Domain
+  cargo containers and interpreted cargo entries, class/name vectors, row
+  containers, dimnames and other list metadata. Ordinary `data.frame` and
+  `data.table` shells remain supported where documented; admitted semantic
+  atomic leaves and columns may be stable ALTREP and are materialized once.
+  In particular, the outer `special_vals` list, its names, and list metadata
+  are structural for every Domain kind and must be ordinary non-ALTREP/non-S4.
+  `ParamDbl`, `ParamInt`, `ParamFct`, and `ParamLgl` reject an ALTREP
+  `special_vals` leaf before observing it. An S4 special leaf for those kinds
+  is an opaque identity token: it matches only the pointer-identical object,
+  and an S4 `default` or `init` is accepted only when pointer-identical to an
+  already admitted special leaf. `ParamUty` values, defaults, initial values,
+  and special leaves are opaque and may be S4; its retained Paradox-1 special
+  membership is exactly base `identical()` over the admitted leaves, including
+  S4, and is the sole narrow native observation of those objects. Neither rule
+  invokes S3/S4 dispatch. Condition structure is never opaque.
+- Every capsule operation has one native semantic implementation. Thin R
+  wrappers may capture R language constructs and call documented callbacks,
+  but there is no complete R/checkmate/data.table/S3 fallback, no `NULL`
+  sentinel replay, and no second implementation used to authenticate the first.
+  There are exactly two narrow cold R semantic-orchestration families. The
+  first is internal tuning.
+  `$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
+  `$convert_internal_search_space()` are single R implementations over one
+  captured capsule/cargo/translation/value snapshot and execute only their
+  documented cargo callbacks; commits still use native value/capsule mutation.
+  After native flatten semantics are complete, R may also rebind cargo closures
+  whose lexical environments must change. Its only canonical write is a
+  package-owned replacement of the detached result's rewritten `cargo` column.
+  This family supplies no alternate structural admission, checking,
+  callback-selection, or graph engine and is never a fallback. The second is
+  exact-TuneToken `$search_space()` conversion. It consumes one natively
+  admitted and rooted exact token/target-Domain snapshot, with live BASE
+  candidates already replaced by sealed single-use capabilities, switches only
+  over the package's built-in token kinds, and solely owns callback-dependent
+  one-dimensional output compatibility and construction of the outward search
+  space. It performs no independent token/Domain/graph admission, exposes no S3
+  extension seam, and has no competing native or R conversion path.
+- Deep clone is cold R6 shell-lifecycle orchestration, not another semantic
+  exception. It uses an explicit work stack only to preserve shell identity and
+  graph topology while shallow-cloning shells; native capsule validation,
+  replacement, generation checks, and Shadow signature rebuilding remain the
+  authority. Thus the two families above are the complete cold R *semantic*
+  orchestration boundary, while clone and detached equality are outward
+  shell/presentation glue and must not acquire independent admission or
+  mutation rules.
+- Collection callbacks are not an exception. Live `$extra_trafo` and
+  `$constraint` access, detached subset/flatten callbacks, and the corresponding
+  adapters used when a SHADOW wraps a COLLECTION all enter one registered
+  native evaluator family with shared semantic helpers. Package-owned closures
+  retain exactly three plan fields: translation, callback carriers, and owner
+  indices. An extra-transformation carrier additionally contains the detached
+  BASE shell required for its documented `param_set` argument; a constraint
+  carrier does not. Callback selection, translation, merging, result admission,
+  and constraint scalar validation are not reimplemented in R and never
+  dispatch through an overridden child ParamSet method. Collection
+  extra-transformation merging keeps retained/untransformed inputs in input
+  order, then appends all changed child outputs in callback-plan order (and in
+  each callback's result order). Child-owned inputs omitted by their callback
+  disappear, and a changed name that collides with retained input is an error.
+  Every transformation input and result outer list is ordinary non-ALTREP and
+  non-S4. Semantic atomic leaves (and columns of a documented ordinary
+  data-frame input) may be stable ALTREP and enter the same native admission.
+- Direct public `$values <-` assignment accepts an ordinary named base list or
+  an ordinary S3-classed named list container. Checked and unchecked assignment
+  both reject an outer ALTREP shell before observing its length, names, or
+  elements. Both preserve the Paradox-1 clear-values spellings: `NULL`, an
+  ordinary attribute-free zero-length atomic/expression vector, or an accepted
+  empty list container is canonicalized to a named native `list()`. The outer
+  S3 class is representation-only and is discarded before
+  validation/storage; it never selects dispatch or another value engine.
+  S4/list-like objects and semantic attributes other than `names` and `class`
+  remain unsupported. This preserves ordinary configuration objects such as
+  bbotk's `local_search_control` without reopening S3 extension seams.
+- Explicit `$search_space(values=)` input has the same outer-container
+  representation boundary: an ordinary named list or an S3-classed named list
+  carrying only `names` and `class`. Native code discards the class and selects
+  tokens without `[`/S3 dispatch. S4/list-like containers and other semantic
+  attributes reject.
+- TuneToken admission is closed over exactly five format class vectors:
+  `c("FullTuneToken", "TuneToken")`,
+  `c("RangeTuneToken", "TuneToken")`,
+  `c("ObjectTuneToken", "TuneToken")`, and the two corresponding Full/Range
+  vectors prefixed by `"InternalTuneToken"`. The token is an ordinary named
+  list with exactly `{content, call}` and no attributes other than exact names
+  and class. `call` is an attribute-free, non-missing `character(1)`.
+  Full content is exactly `{logscale}`; Range content is exactly
+  `{lower, upper, logscale}`; Internal Full/Range content may append one `aggr`
+  function and requires false `logscale`; Object content is one admitted
+  bounded, value-producing built-in Domain or an exact
+  `c("ParamSet", "R6")` shell linked through
+  ordinary `self`/`private` bindings to a canonical BASE core. A `ParamUty`
+  Domain is unbounded and therefore invalid in the Domain form. A canonical
+  zero-level `ParamFct` remains valid for typed empty operations but is not a
+  value-producing tuning range. Opaque leaves may still be retained through a
+  bounded typed Domain, and opaque target
+  results may be constructed through the BASE-ParamSet form. COLLECTION, SHADOW, and
+  additive-subclass content is rejected. Names on public scalar
+  bounds/flags are representation-only and are discarded from the native
+  snapshot. Every interpreted token shell/container/class/name/scalar is
+  non-S4. Token internals are not an API: subclasses, extra or
+  reordered fields/classes/attributes, malformed calls/content, and recursive
+  metadata are rejected before traversal. Opaque documented leaves retain
+  identity; Paradox never recursively interprets arbitrary token metadata.
+- Exact creator provenance is deliberately not authenticated by generated-R6
+  surface inspection. A shell alias that retains the exact genuine BASE
+  `self`/`private`/core linkage may therefore be indistinguishable and pass.
+  This is safe, but not an extension API: C never calls a candidate/alias method
+  and admits only the selected capsule generation. Do not claim that every
+  manually assembled look-alike is detected merely because it was not returned
+  by a package constructor.
+- An `ObjectTuneToken` containing a ParamSet is admitted by `$check()` and
+  checked value assignment only after the exact token snapshot above and native
+  validation of its nonempty, bounded BASE capsule. Admission executes no
+  candidate callback. A rooted private receipt records the exact
+  `{shell, private, core}` generation before validation callbacks; all receipts
+  are reauthenticated after callback-capable work, and checked assignment ends
+  with one allocation-free scan immediately before its atomic commit. A changed
+  candidate wins and the outer operation errors without committing.
+  Explicit `$search_space(values=)` input enters the same structural boundary,
+  then replaces every live ParamSet candidate with a sealed, single-use BASE
+  subset capability before any R callback. The cold converter constructs its
+  detached search-space ParamSet from that capability and never invokes or
+  rereads the original shell.
+  The one deterministic `$search_space()` conversion remains the sole boundary
+  that evaluates the candidate transformation, one-dimensional result, and
+  compatibility with the target Domain. Consequently a structurally valid but
+  output-incompatible candidate stores successfully and errors when its search
+  space is requested. This intentional Paradox-2 timing change avoids an
+  unsnapshotted R callback preflight racing an atomic native commit; malformed
+  or corrupt candidate state still fails before storage without mutation.
+  Malformed exact-token or Domain structure is a hard boundary error, including
+  when encountered by `$check()`; ordinary target-value infeasibility remains a
+  returned check diagnostic. Do not turn structural forgery into an ordinary
+  value diagnostic or add a recovery path.
+- `ParamSet$check_dependencies()` is deliberately narrower than value
+  assignment: it accepts one ordinary, uniquely named base list with only its
+  names attribute. It reuses the native `$check()` graph snapshot, point
+  initializer, and dependency kernel; validates unknown IDs even when there are
+  no dependency rows; skips a dependency whose child or parent value is a
+  TuneToken; and returns `TRUE` or the first diagnostic. Do not restore the R
+  data.table/pmap traversal or newline-collapsed multi-error result.
+- `ParamSet$test_constraint()` and `$test_constraint_dt()` reuse the native
+  check graph, point admission, and constraint kernel; there is no scalar or
+  per-row R constraint engine. With `assert_value = TRUE`, the table method
+  validates every row before running any constraint callback, then calls the
+  snapshotted callback set once per row in order. Reentrant callback mutation
+  is visible only to the next public operation. The table boundary continues
+  to require a data.table.
+- Public tag get/set, dependency snapshot/get/set/add, and BASE constraint/
+  extra-transformation callback replacement enter registered native mutators.
+  They build owned canonical replacements, validate closed Conditions and
+  feasible dependency RHS values in the same check kernel, detect callback
+  reentry by capsule generation, and swap only after validation. SHADOW
+  `$add_dep()` routes through the same native mutator and rejects any edge that
+  leaves its visible schema. Do not restore R/checkmate/data.table mutation
+  planners for these fields.
+- Names attached by ordinary R subsetting/arithmetic to scalar Domain
+  constructor arguments are representation-only and are discarded from the
+  owned native snapshot. Classes and other attributes remain fail-closed.
+  Named scalar bounds are common R behavior, not a third-party Domain kind.
+- `all.equal()` on the ParamSet family compares a detached semantic view.
+  Never delegate equality to `all.equal.environment()`: evaluating inherited
+  R6 active bindings can select the wrong parent reader for a COLLECTION, and
+  private capsule environments are not the equality contract. This S3 method
+  may use base R equality over state projected by the native readers; it has no
+  competing C/R equality path and does not validate or interpret capsule state
+  independently. The projection contains node class and `assert_values`,
+  detached params, values, tags, and dependencies, BASE callbacks, COLLECTION
+  children, and the complete SHADOW origin state. It is one flat ordinary list
+  with `root`, traversal-ordered `nodes`, and per-node `edge_kind`, `edge_names`,
+  and canonical `edge_nodes` IDs. Build it with an explicit work stack: two
+  independently constructed equivalent DAGs compare equal while shared and
+  duplicated topology compare different; an active-path cycle errors. Derived
+  COLLECTION/SHADOW adapter closures are omitted because their authoritative
+  child/origin state is already compared.
+- A base `ParamSet$extra_trafo` may return an unnamed list; the native engine
+  retains it because `to_tune(ParamSet)` and maintained callers use unnamed
+  one-dimensional results. If names are supplied they must be complete and
+  unique. A child `extra_trafo` in a `ParamSetCollection` must return complete,
+  unique names because translating child output into the collection namespace
+  is semantically required. This distinction is one native result-admission
+  branch, not an R fallback or a second transformation engine.
+- `SamplerUnif` and `generate_design_random()` share one capsule-driven native
+  uniform engine. `SamplerUnif$samplers` remains descriptive compatibility
+  metadata: replacing/reordering the list is an error and child mutation never
+  selects another engine. Use `SamplerHierarchical` for custom 1-D samplers.
+  Fixed values and dependency masking remain the single `Design$new()` boundary.
+- Stable ALTREP inputs, including base compact sequences such as `1:n`, are
+  supported in documented semantic-vector positions. Structural containers
+  remain deliberately ordinary non-ALTREP and non-S4: configuration/search-
+  space and transformation list shells, ParamSet constructor `params` lists,
+  Domain/Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo
+  entries, table shells, rows, dimnames, class/name vectors, and other list
+  metadata. Ordinary base `data.frame` and `data.table` inputs remain supported
+  where documented, while their admitted semantic atomic columns may be stable
+  ALTREP. Direct checked or unchecked `$values <-` assignment rejects an outer
+  ALTREP before observation and canonicalizes the accepted Paradox-1 empty
+  spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
+  vector, or an accepted empty list container) to a named list in C.
+  `set_values(.values=)` is the sole outer-list exception: its merge boundary
+  snapshots the supplied shell once before validation. This is
+  an explicit operation contract, not a general list-ALTREP fallback. The
+  semantic materialize-once guarantee begins at native
+  admission, after a thin R wrapper may have captured documented language or
+  printable representation metadata. Native admission materializes each
+  semantic vector once into rooted ordinary storage before the operation
+  snapshot, and that native snapshot is the sole semantic authority. A hostile
+  custom ALTREP whose observation changes between R-side capture and native
+  admission is unsupported: its printed representation need not agree with the
+  admitted value, but it must be rejected or handled without replay or Paradox
+  itself causing a crash or memory corruption. Capsules never permanently
+  store semantic ALTREP vectors; compact data-frame row names are the
+  representation-only exception. This general support does not override the
+  typed-Domain rule above: an ALTREP special-value leaf for Dbl/Int/Fct/Lgl is
+  rejected rather than observed; an admitted S4 special matches only by pointer
+  identity. ParamUty opaque leaves are not materialized, except that special
+  membership uses base `identical()` without S3/S4 dispatch.
+- data.table >= 1.18.4 is an outward interoperability dependency only. Do not
+  restore the old `alloc.col()` capacity bridge or call data.table internals.
+- Legacy Paradox objects require explicit `upgrade_paradox_object()`. The
+  upgrader is non-mutating, callback-free while inspecting, preserves valid DAG
+  identity, accepts current graphs idempotently after full validation, and
+  rejects cycles, unknown extensions, core overrides, and malformed state.
+- Shipped C is portable C17 and otherwise uses public R C APIs available in
+  R >= 4.3. There is exactly one centralized compatibility exception:
+  `src/r_api_compat.c` calls the declared/exported `Rf_findVarInFrame` only when
+  compiling for R < 4.6, and rejects a returned `PROMSXP`; R >= 4.6 uses the
+  documented experimental API `R_GetBindingType`. R 4.3--4.5 exposes no public
+  non-forcing binding classifier, and an R-level `substitute()` workaround is
+  forcing/unsound for
+  the simultaneous generation and TuneToken receipt scans that require this
+  helper. The exception is ledgered in `environment/r-api-exceptions.tsv`, raw-
+  token-audited to exactly one source occurrence/path, and tested against pinned
+  headers and real runtimes. It is not CRAN-allowlisted for the supported
+  pre-4.6 build path: the older runtime DSOs must contain the symbol, while
+  every current-R (R >= 4.6) DSO
+  audit must prove that it is absent. It is no permission for any other internal
+  R API. Linux, Windows x86-64, and Apple
+  ARM64 remain first-class targets. Corrupt/forged state must error and must
+  never cause an out-of-bounds access, stale pointer, double evaluation, or
+  segfault.
+
+Do not leave obsolete compatibility code merely unreachable. Before release,
+all semantic translation units must be free of generated-closure/body
+authentication and sentinel-to-R replay. Temporary migration adapters must be
+marked, have no alternate semantics, and be deleted before the candidate ref.
+
+## Repository-local environment
+
+The host R 3.6.3 and host/user libraries are out of scope and must not be
+modified. Never use `sudo`, edit shell startup files, or install into HOME,
+`/usr`, or a system R library.
+
+Provision once, then activate from the repository root:
 
 ```sh
+scripts/bootstrap
 . scripts/activate
 ```
 
-For retained release work, fail closed if that activation did not select the
-exact repository-local runtime:
+Activation selects the pinned local R 4.6.1/C17 toolchain and
+`.local/R/library`, clears inherited compiler/library variables, and redirects
+temporary and cache state below the repository. Confirm retained work with:
 
 ```sh
 test "$PARADOX_ACTIVE_ROOT" = "$(pwd -P)"
@@ -24,872 +394,382 @@ test "$(command -v Rscript)" = "$PARADOX_ROOT/.local/toolchain/bin/Rscript"
 test "$(R RHOME)" = "$PARADOX_ROOT/.local/toolchain/lib/R"
 ```
 
-`scripts/bootstrap --help` is read-only; the bootstrap itself accepts no
-arguments and is safe to rerun to verify or complete the pinned local state.
+Authoritative inputs are:
 
-This selects the project-contained R 4.6.1 toolchain, sets `R_LIBS_USER` to
-`.local/R/library`, and clears inherited site-library selection so `.libPaths()`
-contains only that repository-local project library and the toolchain's base
-library.
-Activation is reparative and idempotent: every source clears inherited
-R startup/library variables and compiler, linker, pkg-config, CMake, and make
-search inputs before rebuilding them from the pinned prefix. It rejects
-symbolic managed roots before creating cache or library directories. The
-toolchain and all bulky downloaded material live below `.local/` or `.cache/`
-and are ignored by Git. The prefix-free explicit conda
-input `environment/toolchain-linux-64.lock` is authoritative and carries a
-SHA-256 for every package artifact: bootstrap creates the toolchain from it and
-compares the installed explicit package set and hashes byte for byte on every
-rerun. Bootstrap also authenticates the selected micromamba executable against
-the sole `bin/micromamba` member of its SHA-256-pinned archive and checks its
-exact version before invoking it, including on reruns. `environment/toolchain.yml` records human-readable solver intent only
-and is never solved by an ordinary bootstrap. A mismatch fails closed; remove
-only `.local/toolchain` and rerun bootstrap to rebuild it from the reviewed
-lock. Deliberate toolchain updates require a separately reviewed lock refresh,
-not an automatic bootstrap rewrite. Apple silicon is covered by code/CI
-portability work, not by this Linux bootstrap. Activation sources the
-environment's compiler hooks explicitly but does not install a global
-micromamba hook.
+- `environment/toolchain-linux-64.lock`: local development toolchain;
+- `environment/r-packages-linux-64.lock`: exact source-package closure;
+- `environment/runtime-r-4.3.3-linux-64.lock` and
+  `environment/runtime-r-4.5.2-linux-64.lock`: supported-runtime prefixes;
+- `environment/r-api-sources.tsv`: local reference R sources/manuals;
+- `environment/r-api-exceptions.tsv`: the sole reviewed R C API exception;
+- `environment/valgrind-r-packages.tsv`: instrumented-R package closure.
 
-Actual execution on older supported public R APIs is an independent, opt-in
-matrix. Its prefix-free conda explicit inputs are
-`environment/runtime-r-4.3.3-linux-64.lock` and
-`environment/runtime-r-4.5.2-linux-64.lock`; every artifact has an exact
-SHA-256. R 4.3.3 exercises all pre-4.5 compatibility branches and R 4.5.2
-exercises the staggered direct closure/environment API without the new R 4.6
-binding and attribute inspection APIs. Provision and verify both isolated
-prefixes after ordinary bootstrap with:
+Bulky state is deliberately ignored below `.local/` and `.cache/`. Bootstrap
+is idempotent and checksum-verifying; reuse valid downloads and installations
+instead of rebuilding them. A lock mismatch fails closed and requires an
+explicit reviewed lock refresh.
+
+The R 4.3.3 conda prefix contains data.table 1.17.8 because no matching
+conda-forge R-4.3 build of 1.18.4 exists. `scripts/test-runtime-matrix` copies
+the SHA-256-pinned cached source
+`.cache/downloads/r-packages/data.table_1.18.4.tar.gz` into the isolated R-4.3
+stage and installs it before Paradox. R 4.5.2 and the primary library already
+contain 1.18.4. Never weaken `DESCRIPTION` or restore the capacity bridge for
+this test-infrastructure detail.
+
+Provision and inspect real older runtimes with:
 
 ```sh
 scripts/bootstrap-runtime-matrix
 scripts/bootstrap-runtime-matrix --verify
-scripts/environment/test-runtime-matrix-installed all
+. scripts/activate-runtime-matrix 4.3.3   # or 4.5.2
+. scripts/activate                        # return to R 4.6.1
 ```
 
-The prefixes, conda cache, mutable development libraries, temporary files,
-and receipts live below `.local/runtime-matrix` (with download/cache material
-below `.cache`) and are independent of `.local/R/library`, the geospatial/P1
-consumer overlay, and the instrumented Valgrind R. Bootstrap authenticates
-micromamba from the same pinned archive as ordinary bootstrap, compares the
-complete installed URL/SHA-256 inventory with the selected lock, runs an
-actual C17 extension probe, and seals the complete runtime-prefix tree.
-`--verify` is read-only and rehashes that tree. `--offline` can create an
-absent prefix only from the authenticated local conda cache.
+Reference R source, Writing R Extensions, R Internals, data.table source, and
+the analyzer sources are populated by `scripts/fetch-reference-sources`.
+Consult those pinned local sources rather than remembered C-API behavior.
 
-For interactive diagnosis, source exactly one verified runtime with
-`. scripts/activate-runtime-matrix 4.3.3` (or `4.5.2`). This clears inherited
-R/compiler/library state and selects a runtime-specific mutable library and
-caches inside the repository. Source ordinary `scripts/activate` again to
-return to development R 4.6.1. Never use a matrix prefix as a dependency
-library for another R version.
-
-The old-runtime source-test scope is explicit rather than inferred from a
-testthat filter. Both interpreters lack the R 4.6 binding inspection APIs, so
-the 22 direct native-admission implementation contexts listed in
-`environment/runtime-matrix-pre46-exclusions.tsv` are not meaningful there;
-their public behavior remains covered by characterization/regression tests and
-the focused public-API probe. The runner stages the other 57 of the current 79
-test files, all seven helper/setup inputs, and retains the complete
-executed/excluded ledger. `environment/runtime-matrix-whole-file-skips.tsv`
-separately authenticates the exact parsed leading-guard sequences of the two
-staged ConfigSpace files (including the old file's preceding available `callr`
-guard) before accepting their absent-reticulate whole-file skips.
-`environment/runtime-matrix-result-skips.tsv` authenticates every reported
-skip title and reason: six `NOT_CRAN=false` blocks on R 4.3.3 and those same
-six plus the inactive legacy-data.table bridge on R 4.5.2. Unknown, duplicate,
-symbolic, stale, reordered, or changed scope/skip rows fail closed.
-
-The mandatory Linux compatibility corpus has a separate, opt-in native
-dependency overlay. Its prefix-free explicit inputs are
-`environment/compat-system-geo-linux-64.lock` and
-`environment/compat-system-p1-linux-64.lock`; every artifact URL carries a
-SHA-256. The ordinary bootstrap deliberately does not install these large
-stacks. After ordinary activation, provision or verify them with:
+The mandatory legacy-upgrade fixtures live below the exact pinned
+`mbo_config` checkout, not at its repository root. Before a direct complete
+unit-test run, bind the directory that actually owns the two RDS files:
 
 ```sh
-scripts/bootstrap-compat-system
-scripts/bootstrap-compat-system --verify
-. scripts/activate-compat-system
+export PARADOX_MBO_CONFIG_ROOT="$PARADOX_ROOT/.local/compat/github/mbo_config/common"
+test -f "$PARADOX_MBO_CONFIG_ROOT/mixed_search_space.rds"
+test -f "$PARADOX_MBO_CONFIG_ROOT/numeric_search_space.rds"
 ```
 
-`--offline` creates an absent prefix only from the authenticated local conda
-cache. `--verify` is read-only and compares the complete installed explicit
-package sets with both locks, checks their direct compiler/geospatial/JVM
-capabilities, and authenticates the generated checkout-local Makevars and
-sealed receipt. `--verify-locks` and `--verify-receipt` are narrower
-read-only audits. Activation refuses an unverified overlay and exports only
-repository-local search paths. On Linux it reconstructs the managed executable
-prefix in this exact order: TinyTeX, Quarto, the ordinary toolchain,
-`.local/bin`, P1, and GEO. Thus `R` and `Rscript` continue to resolve to the
-top-level `.local/toolchain/bin` launchers while the repository TinyTeX tools
-remain ahead of conda-provided TeX programs. The reverse-dependency gate rejects
-any other resolution. Exercise hostile ordering, repeated activation, and the
-R-level command predicates with:
+An unset value deliberately skips that optional unit-test fixture; a release
+run sets it and treats either missing file as a failure. The documentation and
+consumer runners have their own exact-corpus receipts and do not infer this
+path from HOME. `scripts/native-check` automatically authenticates the clean
+checkout against `compat/github-snapshot.tsv`, records both fixture hashes,
+and supplies this exact `common/` path for focused and full runs.
 
-```sh
-PARADOX_COMPAT_TEST_INSTALLED_ROOT="$PARADOX_ROOT" \
-  scripts/environment/test-reverse-activation-contract
-```
-
-Do not use this overlay for native package
-validation or upstream differential baselines: it exists to reproduce the
-system dependencies of the P0/P1 Linux consumer corpus. Compatibility,
-reverse-dependency, and documentation evidence records whether it was active;
-active runs retain and protect the exact locks, receipt, helpers, and generated
-Makevars. Apple silicon and other platforms leave the overlay inactive and
-continue through their native compatibility gates.
-
-`environment/r-packages-linux-64.lock` is likewise an input, not a snapshot of
-the mutable installed library. It records the complete non-base source closure
-as exact package/version/SHA-256 rows. Bootstrap downloads only those named
-archives (using CRAN's current location and then its versioned Archive
-location), verifies every checksum and DESCRIPTION, resolves no dependencies
-from live repository metadata, and installs only missing or mismatched locked
-rows. It parses every hard `Depends`, `Imports`, and `LinkingTo` version
-constraint and verifies it against the selected R, base packages, and locked
-package versions. Unrelated extra packages are outside this narrow lock. The
-CRAN paradox 1.0.1 row is an authenticated bootstrap-only archive input: it is
-installed to seed a fresh library, but an already installed development paradox
-is preserved only when its version satisfies every locked constraint and is
-never overwritten to repair an incompatible version.
-The specification also carries the libgit2, libxml2, and GLPK development
-files needed by compiled optional dependencies in the mlr3 compatibility
-corpus. Do not satisfy those builds from `/usr`; that would make consumer-test
-results depend on the host image.
-PDF manuals and vignettes use the checksummed full TinyTeX 2026.07 distribution
-installed at `.local/tinytex`; activation places its `pdflatex`, `kpsewhich`,
-and `makeindex` before conda and host binaries. The complete distribution is
-authenticated by a tree receipt and made read-only. Mutable TeX state is
-redirected below `.local/texmf` interactively and into each retained check run.
-HTML checks use the pinned local HTML Tidy. Neither tool reads from or installs
-into the host TeX tree.
-The same bootstrap installs Quarto 1.9.38 below `.local/quarto`. Its official
-archive SHA-256 and complete extracted-tree manifest digest are pinned in
-`environment/quarto-linux-x86_64.tsv`; `scripts/bootstrap-quarto --verify`
-rechecks the archive, input receipt, seal, executable version, and every tree
-member without network access. Activation exposes that exact executable, and
-documentation gates call it by its repository-local absolute path. Do not use
-a Quarto binary from HOME, `/usr`, an editor, or a mutable container tag.
-Temporary files and caches for R, pak, pip/uv, ccache, and reticulate are also
-redirected below the repository. `HOME` is intentionally left unchanged so Git
-credentials continue to work; do not allow a tool to install into HOME.
-Ordinary activation also clears inherited `XDG_RUNTIME_DIR` and
-`CCACHE_TEMPDIR`, selects `.local/runtime` and `.local/tmp/ccache`, and
-repairs the runtime directory to mode 0700. This prevents ccache's runtime
-temporary files from escaping into a user-wide XDG directory.
-Containerized CRAN auxiliary checks must be invoked through
-`scripts/podman-local`. Bootstrap installs the SHA-256-pinned Podman 5.8.2
-static bundle, including crun, runc, conmon, pasta, netavark, aardvark-dns,
-rootlessport, and catatonit, below `.local/podman`. The wrapper verifies the
-whole extracted tree, invokes every runtime/helper by a project-local path, and
-isolates HOME, XDG state, configuration, authentication, the vfs image store,
-run root, and temporary files below `.local/containers`; invoking plain
-`podman` or `docker` bypasses these guarantees. `/usr/bin/newuidmap`,
-`newgidmap`, and `nsenter` are explicit read-only host bridges: the setuid and
-kernel namespace behavior of the first two cannot safely be reproduced by
-copying them into the repository.
-The two reference images are content-addressed in
-`environment/auxiliary-images.tsv`; never substitute a mutable `latest` tag in
-a retained validation result. `scripts/fetch-auxiliary-images` pulls those
-exact images into the repository-local store.
-
-The ordinary profile deliberately matches normal user warning behavior for
-reverse-dependency fidelity. Paradox-only adversarial jobs set
-`R_PROFILE_USER=environment/Rprofile-strict.R`; do not use that strict profile
-to interpret consumer warnings.
-
-Run `scripts/fetch-reference-sources` to download the checksum-pinned R source
-releases in `environment/r-api-sources.tsv`, the Writing R Extensions, R
-Internals, and R Installation and Administration manuals, a reference checkout
-of data.table, the upstream rchk source, the bounded-state rchk source used for
-the release analyzer, and pinned R-hub container sources used by the auxiliary
-memory gates. Each R extraction is checked against the complete tree digest in
-`environment/r-api-source-trees.tsv`. The four Git worktrees must have their
-reviewed origins and be exactly clean, including untracked and ignored files,
-before the command may move them to their exact detached commits. The command
-never discards checkout contents; move local material aside or recreate a
-dirty checkout before rerunning it. Manual PDFs are generated offline from the pinned R
-4.6.1 source with the authenticated repository-local R and TinyTeX, never
-downloaded from CRAN's mutable `r-release` paths. `--offline` reauthenticates
-and repairs the local material without fetching, but fails if an archive,
-checkout, or commit is absent. The PDF build takes its Texinfo macro, language,
-and index inputs only from the source archive pinned in
-`environment/texinfo-source.tsv`; it never mutates the authenticated TinyTeX
-tree. The same manifest authenticates the small static BusyBox awk used by
-Texinfo, so the manual build never falls back to the host's awk. The R set
-includes the declared minimum (4.3.0),
-the last release
-before the public attribute-API transition (4.4.0), the staggered transition
-release where `NO_ATTRIB` exists but `R_hasAttrib()` and `R_getAttribCount()` do
-not (4.5.2), and the development runtime (4.6.1). The C interface rules in
-those local sources and manuals take
-precedence over remembered behavior.
-
-Prepare the bounded bcheck executable once, without running an analysis, with:
-
-```sh
-scripts/prepare-bounded-rchk-bcheck
-scripts/prepare-bounded-rchk-bcheck --verify
-```
-
-This uses `gaborcsardi/rchk` commit
-`56b621a4e7112246d7b640bee6219ee9c6eb4bf8` and tree
-`d08d5b88ab6c469ac1b6d9c4beeece322e223ac5`, builds inside the exact local
-rchk image with networking and image pulls disabled, selects
-`/usr/bin/clang++`, `LLVM=/usr/lib/llvm-14`, `BCHECK_MAX_STATES=800000`, and
-`CALLOCATORS_MAX_STATES=1000000`, and atomically publishes a sealed cache below
-`.local/rchk-bounded-bcheck/<input-key>`. The key excludes the preparation
-verifier but includes every byte-producing input: the complete immutable source
-receipt, image identity, compiler/LLVM/make identity, exact build command and
-environment, macros, and container build driver. A cache hit and `--verify`
-never compile or execute bcheck, never replace an invalid entry, and require a
-mode-0555 final key directory with immutable, completely receipted descendants.
-Run `scripts/environment/test-bounded-rchk-bcheck-cache` after changing this
-layer; it proves publication and rejects stale and independently re-receipted
-command, source, and inventory tampering without compiling rchk.
-
-The release rchk gate does not invoke the image's `rchk.sh`, its unsafe
-high-state `bcheck`, or upstream `check_package.sh`. Inside the pinned image it
-performs a direct WLLVM libraries-only install of the frozen candidate,
-extracts the package bitcode, and runs the cached bounded bcheck plus the image-pinned
-maacheck and fficheck against the same R/package bitcode. Each analyzer receives
-the exact soft and hard address-space limit `RLIMIT_AS=21474836480` bytes
-(20 GiB). The
-serial `resource-jobs rchk` admission additionally budgets 20480 MiB and keeps
-at least 16384 MiB available for the host. Rootless Podman on this cgroup-v1
-host does not enforce `--memory`, so container memory flags are deliberately
-not part of the safety contract.
-
-The source snapshot carries `environment/rchk-bcheck-policy/`. Its policy binds
-the analyzer identity and complete bcheck, empty maacheck, and fficheck report
-hashes, plus every ordered bcheck Function block, exact UP/PB counts, and a
-reviewed rationale for each block. It accepts only those source-bound analyzer
-model limitations; it is not a general UP/PB suppression. Every package-local
-`ERROR:` remains fatal, maacheck must be byte-empty, and fficheck must report
-exactly 61 functions and one `R_registerRoutines` call. The prefreeze review
-after splitting the literal `ps()` constructor analyzed 854 functions and
-41,293 states without package-local state exhaustion. That measurement explains
-the policy and refactor; only a run consuming the frozen release candidate is
-release evidence.
-
-## Development invariants
-
-- Preserve the exported R API and the widely observed R6 object shape unless a
-  compatibility break is explicitly documented and covered by a regression
-  test.
-- Add characterization tests before replacing behavior with C. Consumer tests
-  belong in the package when they describe generally useful implicit behavior.
-- Native entry points are registered; dynamic symbol lookup stays disabled.
-- Every allocated R object is protected across any call that may allocate.
-- Do not cache a `SEXP` across garbage collections unless it is preserved and
-  released deliberately. Do not mutate shared R objects.
-- Use the public R C API only in shipped code. Reference R and data.table source
-  may inform compatible object construction, but do not copy internal APIs.
-- Keep C portable C17. R 4.6 exposes explicit C17 and C23 toolchain modes but
-  no longer exposes a C11 mode. The package selects it through
-  `SystemRequirements: USE_C17` and therefore depends on R 4.3 or newer; a
-  `C_STD` assignment in `src/Makevars` does not select the standard on current
-  R. No x86-only intrinsics; Apple silicon is a first-class target.
-- Treat warnings under both GCC and Clang as defects. Tests, `R CMD check`,
-  sanitizer runs, and Valgrind runs must be clean before release claims.
-- Never optimize from synthetic timings alone: retain representative benchmarks
-  derived from real reverse dependencies and record their inputs and results.
-- Discretionary performance work is frozen for 2.0.0. Reopen it before release
-  only for a clear release-relevant bottleneck whose measured gain justifies
-  invalidating the frozen candidate and its source-dependent evidence.
-
-## Verification economy and evidence
-
-Release validation must maximize information gained per unit of wall time and
-I/O without weakening provenance. Use this order and stop at the first failing
-gate: parse/static harness checks, directly affected tests, one strict compiler
-build, the complete paradox unit suite, the remaining compiler/runtime/API
-gates, the full differential gate, focused then full priority-zero/one consumer
-rows, memory analyzers, documentation, and finally benchmarks on an otherwise
-idle host. Do not use a full `R CMD check` as an inner development loop.
-Examples, vignettes, manuals, CRAN policy, native diagnostics, and consumer
-tests are separate gates and must not be repeated merely to exercise one
-another.
-
-Freeze package source at a full Git ref and validate it from a clean detached
-worktree. Continuing development in the primary checkout must not invalidate an
-already fixed candidate. A source change invalidates evidence that actually
-depends on those package bytes; a harness or report-only change invalidates the
-affected harness evidence, not an authenticated compiled cache whose key omits
-that input. Never cite evidence from an older package-content hash as evidence
-for a newer candidate.
-
-Install each ordinary candidate once per frozen stage. Cache expensive
-compiler-instrumented variants and consumer installations by content-addressed
-keys containing only inputs that can affect their bytes: source, install worker
-and command, relevant environment, R/configuration, compilers/build tools,
-platform, and dependency state. Authenticate the complete cache receipt
-immediately before starting a test child. Reporting, verifier, plan, or
-row-order changes must not cause a package rebuild. An incompatible or
-incompletely authenticated cache is quarantined and rebuilt once; it is never
-silently trusted. A fresh ordinary Paradox DSO currently compiles in roughly
-15--25 seconds; it may be rebuilt when doing so is cheaper and easier to audit
-than authenticating a cross-run binary cache. Never spend minutes to avoid
-seconds of deterministic compilation.
-
-For a protected multi-gigabyte library, compute a complete content hash once at
-stage start and once at final postflight. At each row boundary compare a cheap,
-non-following metadata fingerprint containing path, type, mode, size, mtime,
-ctime, device, inode, link count, and hard-link identity. Redirect Python
-bytecode, reticulate, XDG, R, compiler, and package caches into the disposable
-row directory so consumers cannot dirty shared libraries. Plan-only and
-self-test modes perform no full protected-library hashes.
-
-The memory gate follows the same two-boundary rule. Its initial ordinary
-toolchain receipt must be byte-identical to the toolchain receipt that built
-the instrumented R, so Valgrind receipt validation must not traverse that tree
-again. While holding the shared instrumented-R state lock, verify the complete
-R source, installed R prefix, and dedicated dependency library once before and
-once after execution; bind the interval with metadata fingerprints and sealed
-receipt/runtime checks. Package and R archives are authenticated when a build
-or install consumes them, but are not reread on a no-op cache verification or
-inside memory-check. The receipts retain their pinned digests; `verify-r` and
-`verify-library` traverse every runtime tree exactly once. A verifier-only
-change migrates an authenticated schema-1 receipt with `refresh-r` and
-`refresh-library`; it must never rebuild R or reinstall packages.
-
-Consumer validation is append-only and resumable per package. A row is accepted
-only after its tests, exact counts where available, provenance checks, protected
-input checks, and row seal all succeed; an interrupted or partially promoted row
-is never accepted. A verified sealed row is not rerun because a later package
-failed. For external datasets, services, credentials, or optional runtimes,
-retain one exact failure, classify it, and stop that external work at the row
-boundary. Collect all failures from a bounded targeted run and fix a coherent
-batch before rerunning only the affected target.
-Synthetic tamper suites should build one authenticated valid fixture per schema
-or scope and restore independent copies for mutations. Do not regenerate and
-rehash an identical valid fixture before every negative assertion.
-
-Reuse a build only across ABI-compatible gates: GCT copies and verifies the
-sealed strict-GCC installation, Valgrind compiles one instrumented-R-specific
-DSO, ASan and UBSan keep separate DSOs, and rchk uses its pinned analyzer
-environment. Prefer direct coverage of every registered native routine and
-known allocation/callback hazard over another complete functional package
-check. Static-analyzer reports are retained verbatim and audited by source line
-and root reachability; a green runtime torture probe is not presented as a
-deterministic regression for a static lifetime defect unless the probe
-guarantees an allocation in the unsafe window. Benchmarks run only after
-correctness evidence is complete and alone on an idle host.
-
-Use `scripts/environment/resource-jobs` instead of a raw CPU count for new
-parallel gates. It intersects online CPUs, process affinity, cgroup v1/v2 CPU
-quotas, Linux `MemAvailable` (or Darwin `vm_stat`), and the tightest cgroup
-memory headroom. Every profile keeps at least 12 GiB and normally 25% of
-currently available RAM free; heavyweight consumers are additionally capped at
-four processes with 8 GiB budgeted per process. `--max-jobs` and gate-level
-environment variables may only lower the detected ceiling. Retain the
-`--report` TSV with release evidence. If one job would consume the safety
-reserve, scheduling fails closed instead of forcing an unsafe serial process.
-The current conservative admission budgets are: `compile`, one CPU and 1024
-MiB per job with a maximum of 16; `api-compile`, one CPU and 768 MiB per job;
-`light-test`, one CPU and 2048 MiB per job with a maximum of 16; and `consumer`,
-two CPUs and 8192 MiB per job with a maximum of four and a 16384 MiB minimum
-reserve. The serial `rchk` profile budgets 20480 MiB for one process and keeps
-a 16384 MiB minimum reserve. These are scheduling budgets, not claims of
-observed peak usage.
-Heavyweight consumer checks may use only the repository and reverse runners'
-bounded external-`Rscript` waves. They recompute the live ceiling before every
-wave and normally force nested make, CMake, testthat, `parallel`, `future`,
-BLAS, and OpenMP work to one thread. The repository runner's `mlr3` row and the
-reverse runner's `mlr3` R CMD check child alone receive their receipted two-CPU
-worker-contract exceptions; reverse installation and outer workers remain at
-one, and build, test, BLAS, and Rcpp controls stay at one. The runners collect
-every sibling, seal the complete wave before deterministic promotion, and
-terminate worker descendants on interruption.
-Ordinary focused/full native tests use the same nested-thread caps inside
-file-isolated workers, enforce a 30-minute per-task deadline, and keep the two
-ConfigSpace files in one exclusive worker after the ordinary wave.
-Do not overlap heavyweight top-level gates: point-in-time admission reports are
-not a cross-gate resource lease, and this host has no swap. Do not parallelize
-Valgrind, GCT, rchk, ASan/UBSan execution, an unisolated functional-test
-process, or other jobs whose isolation has not been proved merely because CPUs
-are idle.
-
-## Repository layout used by the migration
-
-- `src/`: shipped C implementation and registration.
-- `tests/testthat/`: unit, compatibility, regression, and adversarial tests.
-- `benchmarks/`: reproducible performance cases and recorded baselines.
-- `compat/`: checked-in manifests and test orchestration; cloned consumer repos
-  themselves stay under `.local/compat/`.
-- `design/`: architecture and compatibility decisions.
-- `.local/sources/`: ignored R, data.table, rchk, and check-container reference
-  source trees.
-- `.local/compat/`: ignored CRAN and GitHub consumer checkouts.
-- `.local/compat/system/`: ignored, lock-reproducible Linux-only native
-  dependency overlay for the mandatory compatibility corpus.
-
-## Native validation commands
-
-After activation, `scripts/native-check --help` lists the isolated native
-profiles. There is intentionally no default mode. A typical development gate
-is:
-
-```sh
-scripts/native-check --mode strict-gcc --mode strict-clang --tests focused
-```
-
-`--mode static` additionally runs a GCC `-fanalyzer` package build, Clang 22's
-static analyzer over every C translation unit, exhaustive cppcheck, and the
-registration/ELF export audit. The Clang analyzer retains one plist and log per
-source file and rejects either textual warnings or nonempty diagnostics.
-`--mode all` adds separate Clang ASan and UBSan package-DSO builds; their
-retained scope files explicitly mark them as non-final because the local
-release R executable is not sanitizer-built. Every run operates on a
-hash-verified Git-visible snapshot and retains its source, commands, compilers,
-libraries, and logs below `.local/checks/`. The separate instrumented-R,
-`gctorture`, Valgrind, and rchk release gates remain mandatory.
-Use `--source-run <prior-id>` to validate an already retained snapshot in a
-fresh run while unrelated worktree edits are in flight; replay revalidates the
-complete manifest and carries its original Git provenance forward.
-Generated per-mode test caches and temporary directories are logged and pruned
-before the modes-tree receipt is created, because reticulate/uv places absolute
-interpreter symlinks there. They are not evidence; installed libraries,
-artifacts, tool profiles, commands, and full logs are retained.
-Functional tests run once, preferring strict GCC. Strict Clang, ASan, and UBSan
-use the tracked native probe inventory, which dynamically calls every
-registered routine and the reviewed allocation/callback hazards, followed by
-the exact six-file analyzer-sensitive subset with `NOT_CRAN=false`. `--tests
-probes` selects that bounded pair explicitly for fast development validation.
-The ordinary 2.0.0 DSO currently contains 61 registered `.Call` routines; the
-coverage manifest must match their names and arities exactly. The conditional
-row-name-rooting fixture is confined to its dedicated instrumented build and
-is not part of that ordinary inventory.
-Run `scripts/environment/test-native-test-batch` after changing the functional
-runner: it proves that one bounded invocation retains a complete two-failure
-batch before returning nonzero, instead of exposing one expectation per rerun,
-then passes a synthetic corpus at all reviewed focused-ledger minima through the
-real writer and trusted verifier.
-
-`scripts/check-r-api-compatibility` is the offline source-compatibility gate.
-It snapshots the Git-visible worktree and compiles every shipped C file with
-both strict GCC and strict Clang warnings against the releases in
-`environment/r-api-sources.tsv`. This catches accidental use of new public C
-APIs despite successful builds on the development R. Full archive extraction,
-configuration, and generation of `Rconfig.h`/`Rversion.h` happen only on a
-content-addressed cache miss below `.cache/r-api-headers`; those private trees
-are deleted before cache publication. Header-cache schema 3 binds its release
-and archive SHA-256, exact configure inputs and fixed shell, platform, pinned
-toolchain lock, the executing cache and tree-receipt helpers, and the complete
-reviewed configure/make command inventory. That inventory records present and
-absent commands, selected paths, bounded link chains, executable bytes, and
-identity probes. Per-key locking, unique staging, atomic promotion, complete
-tree receipts, and a sealed input receipt make simultaneous same-key runs safe.
-A hit verifies all of that state without rereading the source archive. Every
-run receives its own small copied or reflinked source-include tree plus
-generated headers, creates and verifies a fresh receipt for the published
-copy, and requires that receipt to equal the authenticated cache receipt. It
-compiles only against that run-local copy and never references mutable cache
-files.
-Thus retained evidence contains no full extracted R source or configure tree.
-Its artifacts remain below `.local/checks/`, and it never reads or changes the
-host R. On Linux, before header preparation, the gate receipts the exact
-compiler closure that can affect syntax admission: invoked and canonical GCC
-and Clang drivers, versions, targets and search paths, GCC specs and `cc1`,
-their effective preprocessing plans, Clang's target configuration, resolved
-dynamic libraries, and every default or explicit header tree used by the gate:
-GCC builtin/fixed headers, the local sysroot, the explicit toolchain include
-tree, and the Clang resource tree. It verifies that receipt again before final
-sealing instead of traversing the complete multi-gigabyte toolchain. Before
-compilation, Clang's raw lexer
-audits every shipped C source and header,
-including inactive preprocessor branches, and rejects the legacy object-layout
-and binding identifiers forbidden by Writing R Extensions, as well as either
-spelling of the C token-pasting operator. The audit is
-implemented by `scripts/environment/audit-public-api-tokens` and its report is
-part of the retained run. The gate authenticates its snapshot manifest before
-using it, receipts the complete package source and run-artifact trees,
-reverifies both at completion, and writes a checksum-protected completion
-record binding those receipts, the retained harness and helpers, the audit,
-header-cache ledger and receipts, compilers, and release count. A failed or
-interrupted run has no valid completion record and records `status=failed`.
-Strict syntax admissions are
-independent per translation unit and therefore use the resource-aware compiler
-batch runner. GCC and Clang share one live ceiling and, when that ceiling is
-greater than one, execute as balanced concurrent lanes rather than each
-claiming the full limit. Schema-4 lane plans bind the exact admission report,
-retained runner, timeout tool, compiler and wrapper identities, authenticated
-util-linux `setsid`, and the count plus NUL-framed SHA-256 of the complete
-compiler argument vector. The latter proves the strict warning profile and
-exact run-local include paths rather than merely the compiler executable. Its
-source-order task ledger binds every translation-unit hash, the invoked,
-link-target, and canonical compiler identities, exit and timeout state, and
-the hashes of both the compiler log and its separate supervisor-only log. The
-wave inventory hashes both exact lane ledgers and their inventories. It also
-retains deterministic input-order aggregates and reports failure only after
-every task in both compiler batches has completed.
-`PARADOX_API_JOBS` may conservatively lower, but never raise, the derived job
-ceiling. Header preparation uses its own retained light-test ceiling and
-supervised process groups; compilation recomputes a lowering-only live ceiling
-for every R release. The parent retains an exact row for every header task plus
-an authenticated cleanup-retry ledger, and a bounded four-release compiler
-matrix records all task failures before one aggregate failure is reported.
-
-`scripts/build-valgrind-r` builds a second, unoptimized R 4.6.1 below
-`.local/r-valgrind/4.6.1` from the pinned source, with reference BLAS,
-Valgrind instrumentation level 2, memory profiling, and only local compilers
-and libraries. It is deliberately not selected by normal activation. Set
-`PARADOX_BUILD_JOBS` to lower its automatically derived build parallelism; a
-value above the current safe CPU/RAM ceiling is rejected. The build retains the
-decision in `resource-jobs.tsv`. A verified cache hit performs no scheduling
-probe or rebuild; a real rebuild computes and stages its exact report
-immediately before removing the old build. A configuration mismatch fails
-instead of silently reusing a stale build tree.
-`scripts/bootstrap-valgrind-r-packages` then installs the exact, checksummed
-dependency closure in `environment/valgrind-r-packages.tsv` from source into
-`.local/r-valgrind/library`; it must not reuse the ordinary compiled library.
-The R build receipt is `.local/r-valgrind/receipts/R-4.6.1/`, and the separate
-package-library receipt is `.local/r-valgrind/receipts/library/`. Each contains
-authenticated input, package or source, installed-tree, and seal records. After
-normal activation, both can be checked without rebuilding or installing:
-
-```sh
-scripts/environment/valgrind-receipts verify-r "$PARADOX_ROOT"
-scripts/environment/valgrind-receipts verify-library \
-  "$PARADOX_ROOT" "$PARADOX_ROOT/environment/valgrind-r-packages.tsv"
-```
-
-`scripts/bootstrap-valgrind-debug-symbols` independently extracts the
-SHA-256-pinned Ubuntu loader debug package in
-`environment/valgrind-debug-symbols.tsv` below `.local/debug`, creates the exact
-debuglink mirror required by Valgrind, and receipts the full tree below
-`.local/receipts/valgrind-debug-symbols`. Verify it offline with
-`scripts/bootstrap-valgrind-debug-symbols --verify`. It never invokes apt/dpkg
-or writes to `/usr`.
-
-Normal `. scripts/activate` must continue to select the release R at
-`.local/toolchain/bin/R`. Do not prepend the instrumented R or its library to
-`PATH`, `R_HOME`, `R_LIBS`, or `R_LIBS_USER`; `scripts/memory-check` validates
-the receipts and invokes `.local/r-valgrind/4.6.1/bin/R` with the dedicated
-library directly.
-
-The release memory gates are orchestrated separately and never have a default
-heavy mode:
-
-```sh
-scripts/memory-check --source-run <passed-native-run> --mode gct
-scripts/memory-check --source-run <passed-native-run> --mode valgrind
-scripts/memory-check --source-run <passed-native-run> --mode rchk
-```
-
-`--source-run` is mandatory. The command verifies that run's source manifest
-against its source tree, built archive, completion seal, ordered mode statuses,
-and complete modes-tree receipt before copying it into a new retained run. The
-retained native harness and receipt helper must equal trusted current copies,
-so changing worktrees or transplanted evidence cannot alter the input. `gct`
-copies and tree-verifies the already sealed strict-GCC candidate installation,
-then runs the complete registered-routine and reviewed-hazard inventory once
-under `gctorture2(10)`. `valgrind` refuses to build prerequisites implicitly;
-it validates the dedicated R, exact package closure, level-2 instrumentation,
-and project-local reference BLAS, installs the candidate once for that R, and
-reuses the source archive already sealed by the frozen native run instead of
-rebuilding package or vignette inputs, then runs the same complete inventory
-under Valgrind. Valgrind then executes the exact six-file analyzer-sensitive
-subset (at least 70 blocks and 650 passing expectations) with four reviewed
-expensive scopes skipped; GCT relies on its complete probes and deterministic
-rooting regressions. Both modes bind the semantic result to the exact current
-DSO before execution and reverify it immediately before sealing. They do not
-repeat the full functional corpus, examples, vignettes, manuals, or `R CMD
-check` surfaces already owned by the frozen native and documentation gates.
-Under the Valgrind state lock, the complete R source,
-installed R, and dependency-library trees are authenticated at exactly the
-pre/post execution boundaries; cheap non-following metadata ledgers cover the
-interval, and the ordinary toolchain's already complete receipt is matched
-byte-for-byte instead of being traversed again. Retained Valgrind stage
-wrappers force exact
-command-line-only options, empty `VALGRIND_OPTS`, the receipted loader debug
-object, and complete suppressed-zero logs. Python bytecode and caches are
-disabled or redirected into the disposable mode work tree. The ordinary
-toolchain and dependency library receive full content receipts at stage start
-and final postflight; non-following type/mode/size/time/device/inode/link
-metadata protects every intermediate mode boundary without rereading all file
-contents. `rchk` refuses implicit image pulls and verifies the authenticated
-800,000-state bcheck cache before entering the exact image digest through
-`scripts/podman-local`. The container directly installs and extracts bitcode
-from the writable run-local copy of the frozen source; it never invokes the
-image bcheck wrapper. All three analyzers run serially with an exact 20-GiB
-`RLIMIT_AS`, and the host admits the mode only after the separate 20-GiB-budget,
-16-GiB-reserve resource check. The complete bcheck report and ordered
-block/rationale policy must match the source snapshot, maacheck must be empty,
-and fficheck must inspect exactly 61 registered functions. All commands,
-source, cache identity, metadata, limits, tool versions, logs, and reports
-remain below `.local/checks/<run-id>`.
-
-## Release-candidate portability workflow
-
-The `afa56689` candidate and `b840d9c4` companion are immutable rejected
-historical evidence. Run `29559803987` contained false-green portability jobs;
-run `29561742772` fixed that harness defect and exposed a genuine Apple ARM64
-FMA correctness failure. Never move, recreate, or reuse either tag. The exact
-job, artifact, log, workflow, and manifest identities are retained in
-`design/portability-ci.md` and `design/release-2.0.0.md`.
-
-The corrected 2.0.0 candidate is frozen at
-`refs/paradox-release/candidate-20260717T083921Z`, commit
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, tree
-`91eea910212ea15f4ccba598929f8a61844bcc35`. Its 211-file source archive is
-`.local/compat/candidate-freeze-2f40e3e/build/paradox_2.0.0.tar.gz`, SHA-256
-`508a596b435f0e017c60cb54143656a8b85ad0f78f37476730d282334102aeb8`;
-it has no `.git` member. Compared with the exact delta-gate archive, 209 files
-are byte-identical and only the `DESCRIPTION` `Packaged` timestamp and
-stochastically rendered `inst/doc/indepth.html` differ. The candidate's
-`.Rbuildignore` addition `^\.git$` is build control for linked worktrees.
-
-Its direct-child companion is frozen locally at
-`refs/paradox-release/portability-harness-ede67fc`, commit
-`ede67fc5780c9b1f6f91325189f8f7560376060c`, tree
-`578abec87a84c706f3a77803f9c645c933619aac`. Its sole changed path is
-`.github/workflows/r-cmd-check.yml`, whose SHA-256 is
-`3a08de120b85707611e8f1f94e73f88aa92e926e85352b8303b1d81a772d4f4a`.
-The immutable tags are `paradox-2.0.0-ci-2f40e3e` and
-`paradox-2.0.0-ci-2f40e3e-harness-ede67fc`; the user published and dispatched
-them without pushing local `main`, a broad `--tags` set, the benchmark
-companion, or the custom local release-ref namespace. Attempt-1
-`workflow_dispatch` run
-[`29573168344`](https://github.com/mlr-org/paradox/actions/runs/29573168344)
-executed companion `ede67fc5780c9b1f6f91325189f8f7560376060c`, authenticated
-candidate checkout `2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and concluded
-`success`. Windows x86-64 job `87861491934` and macOS ARM64 job `87861491957`
-both passed their direct checks and independent completion checks with sole
-final `Status: OK`; the latter used R 4.6.1 and Apple Clang 17 and also proved
-the temporary-detritus correction.
-
-The accepted evidence is retained exactly once at
-`.local/ci/r-cmd-check-29573168344`. Its Windows artifact is ID `8404629035`,
-3,000,388 bytes, raw-ZIP SHA-256
-`df9a1e7b334d76c0748383cb1808c744df22ecfbfaf0e20f4b8ba6d7ccd277fc`;
-its macOS artifact is ID `8404256296`, 4,146,086 bytes, raw-ZIP SHA-256
-`228bccc9d96fac3b6f41a9b9f248809d4bff8f09e88c3e14f424d0157419af53`.
-The retained verifier SHA-256 is
-`7a6a88fe06882bc7aa443f99e29e6c1b8aec8e0fca2389b131405e060487c670`,
-and its deterministic acceptance receipt SHA-256 is
-`d4872821afd51fa1101456dfe72136db6b5fad1dbbb67010a3a613dcc9ec60d5`.
-The exact REST, job/check log, provenance, archive, extracted-tree, and
-six-manifest hashes are in `design/portability-ci.md` and
-`design/release-2.0.0.md`. All required gates are accepted and the frozen
-candidate is release-ready; this records no CRAN upload or publication.
-
-The replacement dispatch intentionally contains only Windows release and macOS
-ARM64 release. The earlier full Linux, consumer, documentation, and memory
-evidence is carried forward under the bounded analysis in
-`design/release-2.0.0.md`; the corrected scalar delta has its own retained gate
-and focused benchmark. Do not repeat those broad gates solely for that audited
-delta. No more broad replay is required for the frozen candidate, but reopen
-proportionate validation for any further package-source change.
-
-Release evidence starts only after all intended package files are committed and
-a full Git ref is fixed on that commit. Keep the primary checkout on that exact
-clean commit only while commands such as the differential and benchmark drivers
-snapshot its current worktree. Compatibility and documentation gates instead
-authenticate the frozen detached source, so excluded harness/report work may
-continue in the primary checkout. For a future release, or when a current
-impact analysis requires a complete replay, the final native, public-R API, and
-memory sequence uses new run IDs:
+Documentation generation is optional development tooling and is deliberately
+kept out of the pinned runtime library.  The current generator is roxygen2
+8.0.0 in `.local/R/tooling-library`; its cached source archive is
+`.cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz` with SHA-256
+`75816bf3a25554f5752254b985b7242490b0fabe68a5ada335c340b820ba34e8`.
+Recreate it in the separate tooling library:
 
 ```sh
 . scripts/activate
-
-native_run=release-native-YYYYMMDDTHHMMSSZ
-r_api_run=release-r-api-YYYYMMDDTHHMMSSZ
-memory_run=release-memory-YYYYMMDDTHHMMSSZ
-
-scripts/native-check --mode all --tests full --run-id "$native_run"
-scripts/check-r-api-compatibility --run-id "$r_api_run"
-scripts/memory-check --source-run "$native_run" --mode all \
-  --run-id "$memory_run"
+mkdir -p .local/R/tooling-library .cache/downloads/r-tooling
+if [ ! -f .cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz ]; then
+  curl -fL https://cran.r-project.org/src/contrib/roxygen2_8.0.0.tar.gz \
+    -o .cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz ||
+    curl -fL https://cran.r-project.org/src/contrib/Archive/roxygen2/roxygen2_8.0.0.tar.gz \
+      -o .cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz
+fi
+test "$(sha256sum .cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz | cut -d' ' -f1)" = \
+  75816bf3a25554f5752254b985b7242490b0fabe68a5ada335c340b820ba34e8
+R CMD INSTALL --library=.local/R/tooling-library \
+  .cache/downloads/r-tooling/roxygen2_8.0.0.tar.gz
+Rscript -e '.libPaths(c(".local/R/tooling-library", .libPaths())); roxygen2::roxygenise(".")'
+rm -f src/*.o src/paradox.so
 ```
 
-The memory command is shown beside the source run that it consumes, but in a
-new release execute it only after the focused/full consumer gates are green;
-do not spend Valgrind/rchk time on a candidate already rejected by consumers.
+The hard dependencies of that generator are already in the pinned development
+library. Roxygen 8 needs the R6 method source references supplied by its normal
+pkgload method; its source-only loader exits successfully but writes incomplete
+R6 method documentation. Consequently a documentation refresh performs one
+disposable debug build. Run it only after the R surface has converged, remove
+the live-root build artifacts immediately, and do not treat that build as
+candidate evidence. Do not install an older generator closure into the runtime
+library.
 
-`--mode all` on `native-check` means all strict compiler, static-analysis,
-symbol, ASan, and UBSan modes. With `--tests full`, its strict-GCC mode also
-runs the complete skip-on-CRAN test corpus once, one clean `R CMD check
---as-cran`, and a test/example/vignette/manual-free depends-only check with
-forced Suggests disabled. Both checks must end at exact `Status: OK`; the
-strict-Clang and sanitizer DSOs run the complete native probe inventory instead
-of repeating the R corpus.
-`--mode all` on `memory-check` means gctorture,
-the dedicated instrumented-R Valgrind gate, and rchk. The memory gate must use
-the passed native run that retained the same frozen source; an API-only run is
-not a valid `--source-run`. Any later package-source change requires a new
-commit/ref, a documented impact analysis, and proportionate new evidence for
-every conclusion it can affect; it must never silently inherit evidence from
-different package bytes. Final checks consume that frozen candidate and
-content-addressed caches whose byte-affecting keys still verify; they do not
-rebuild or resnapshot the moving primary checkout merely because a report or
-verifier changed.
+## Editing and native-code rules
 
-Real supported-runtime evidence is retained separately from header-only API
-compilation. Run it against the same frozen full ref as the release gates:
+- Preserve unrelated user changes and dirty-worktree state.
+- Use `apply_patch` for source edits. Generated documentation may be refreshed
+  with its normal generator only when that is the intended mechanical change.
+- Register every `.Call` routine with a fixed arity, disable dynamic symbol
+  lookup, and keep headers, `src/init.c`, the routine coverage ledger, and
+  direct probes synchronized.
+- Validate every R type, length, name, attribute, row count, graph edge,
+  arithmetic conversion, and index before use. A version tag is not a safety
+  proof.
+- Never retain an unprotected R object or raw vector pointer across allocation,
+  callback evaluation, interrupt polling, ALTREP access, or error construction.
+- Use checked `R_xlen_t`/`size_t` arithmetic and iterative graph traversal.
+- Snapshot callback-bearing state before execution. A reentrant nested
+  operation sees current state; the enclosing operation finishes from its
+  snapshot. Mutating commits detect intervening capsule replacement and fail
+  without overwriting it.
+- Construct public data.table facades at the boundary, finalize their public
+  self-reference, and ensure every mutable column shell is detached from the
+  capsule. Never synthesize private indices or call private C APIs.
+- Prefer a compact readable native operation over layers of helpers that only
+  existed to reproduce an R vectorization pattern. Avoid per-row R calls except
+  documented callbacks.
+- Package-owned mapping closures should be created by small fixed factories
+  with only their required bindings. Do not compile a fresh closure through
+  `crate()` for every Domain construction; this was a measured hot-path cost
+  and provides no additional state isolation.
+- A ParamSet constructor with no initial values does not enter an empty native
+  value-store transaction. Complete collection-value admission retains the
+  already resolved BASE parameter row in its operation-local plan rather than
+  searching the same ID again during upward translation. The inherited native
+  Shadow dependency reader owns refresh; its R binding must not refresh a
+  second time. These measured shortcuts remove redundant work without caching
+  graph validity or weakening admission.
+- Keep unavoidable package-owned callback wrappers thin. In particular,
+  `to_tune(ParamSet)` may call the supplied transformation and perform its
+  one-list-result/name boundary directly; it must not add checkmate or
+  mlr3misc layers to every callback execution.
+- A sparse-target `$search_space()` facade redesign was measured and rejected:
+  search-space conversion is cold and the end-to-end maintained workload moved
+  only about 2%, which did not justify another target-projection path. Do not
+  restore that experiment without new representative evidence. A native bulk-
+  dependency constructor transaction is also a measured no-go for the 2.0.0
+  release. A 64-parameter/27-requirement isolated estimate moved from 6.57 ms to
+  4.11 ms (with requirement-heavy estimates spanning roughly 1.4--2.5x), but
+  representative xgboost learner construction improved only about 6--7%. The
+  change requires a moderate-risk new native batch transaction, while the
+  maintained release workload currently lacks dependency-rich constructor
+  coverage. Under release steering this is not low-hanging. Retain the landed
+  low-risk wins; the batch design may be revisited as an internal optimization
+  without another compatibility or API break.
+- CHARSXP equality uses pointer identity first. Equal UTF-8, Latin-1, or bytes
+  encodings may compare their stored bytes; native-encoded strings may do so
+  only when both are ASCII. Mixed encodings and non-ASCII native strings must
+  retain the translating UTF-8 comparison. Collection affixed-ID validation
+  follows the same rule. These portable fast paths were measured; do not add a
+  cached graph-validation mode, skip corrupt-state checks, or use raw bytes
+  outside this boundary merely to accelerate collection reads.
+
+Useful pre-build audits:
 
 ```sh
-scripts/test-runtime-matrix --runtime all \
-  --source-ref refs/paradox-release/candidate-YYYYMMDDTHHMMSSZ \
-  --run-id release-runtime-matrix-YYYYMMDDTHHMMSSZ
-scripts/verify-runtime-matrix-evidence \
-  --run-id release-runtime-matrix-YYYYMMDDTHHMMSSZ
+git diff --check
+rg -n 'surface_auth|fallback sentinel|R_ClosureExpr|R_BindingIsActive' src R
+rg -n 'UseMethod\("(domain_|condition_|tunetoken_|pslike_)|checkmate::|data\.table::' R src
+rg -n 'PARADOX_CORE_(BASE|COLLECTION|SHADOW)' src
 ```
 
-Each real runtime builds a source archive, installs it into an absent
-run-specific library, executes a focused `r_api_compat.c` behavior probe, and
-runs the authenticated public/characterization/regression and supported-native
-source scope described above with `NOT_CRAN=false` (so the deliberately
-expensive GC-torture jobs may skip). At least 4,900 clean expectations must run;
-the exact staged files, testthat-reported files, exclusions, parsed whole-file
-guards, reported skip blocks/reasons, and all counts and hashes are retained
-and verified. Source provenance operations use the authenticated
-repository-local Git 2.55.0 with replacements, grafts, alternate object stores,
-info attributes, global/system attributes, and mutable tar umasks disabled or
-rejected. The canonical byte-reproducible Git tar, Git executable identity,
-and an exact pre-execution source-tree receipt are retained and reverified after testing and
-again from a fresh archive extraction by the evidence verifier. The full source
-ref must still resolve to the recorded commit and tree. The DSO audit proves
-the exact version-specific public R symbol set: R 4.3 must not link any R
-4.5/4.6 accessor, while R 4.5 must link the direct closure and
-evaluated-binding accessors but no R 4.6 binding/attribute accessor. Complete
-source, build,
-library, logs, dependency inventory, compiler identity, bootstrap receipt,
-commands, and source-test scope are tree-receipted and completion-sealed below
-`.local/checks/<run-id>/runtime-matrix/`. Any later source change requires a
-fresh matrix run along with every other frozen release gate.
+Some words such as “fallback” legitimately describe mathematical/default
+choices. Review findings in context; the forbidden case is a second semantic
+execution or mutable-surface authentication path.
 
-While the primary checkout is still exactly the clean candidate, run the full
-pinned differential inventory and verify its sealed directory before consumer
-work begins:
+## Information-efficient development verification
 
-```sh
-compat/differential/run --baseline-ref 06091b5b64a78807d332ec95c5cdc1aaac5899b9
-Rscript --vanilla compat/verify-repository-evidence.R \
-  "$(cat .local/tmp/current-release-differential-run.txt)"
-```
+Verification should be trustworthy and proportional. During implementation:
 
-Every difference must either be absent or match both fingerprints and the
-reason in `compat/differential/expected-differences.tsv`; a dirty differential
-run is diagnostic only and cannot become release or benchmark evidence.
+1. parse changed R/tests and run `git diff --check`;
+2. compile only changed C translation units with the strict C17 warning set;
+3. install one stable source snapshot into one disposable library;
+4. run all directly affected test files in one batch and fix a coherent batch
+   of failures, not one failure per complete rerun;
+5. run the full Paradox unit suite once after affected tests converge.
 
-Before installing the frozen candidate, prepare the pinned source-package
-hard dependency closure with a separate unique evidence ID:
+Do not run `R CMD check`, the entire consumer corpus, Valgrind/rchk, all
+runtimes, documentation, and benchmarks in the inner loop. A changing source
+invalidates those expensive results, and repeating them has low information
+value. Do not build from the live root while another worker is compiling there;
+copy package sources (excluding `.o`/`.so`) to a stable stage first.
+Keep diagnostic probes bounded as well: do not use recursive
+`.Internal(inspect())` on R6/capsule graphs, because environments and shared
+edges can produce unbounded traversal and output. Inspect exact attributes,
+classes, payload fields, and identities explicitly instead.
 
-```sh
-reverse_dependency_run=release-reverse-dependencies-YYYYMMDDTHHMMSSZ
-dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
-Rscript --vanilla compat/install-reverse-dependency-dependencies.R \
-  --root "$PARADOX_ROOT" --max-priority 1 \
-  --dependency-library "$dependency_library" \
-  --run-id "$reverse_dependency_run"
-```
+Use `scripts/environment/resource-jobs` before parallel work. Parallelize
+independent test files, consumers, and runtime stages at the outer level while
+keeping nested make/testthat/BLAS/OpenMP pools at one. Honor the reported
+memory-aware ceiling. Never multiply every layer by the CPU count, and retain
+enough RAM that the controlling Codex process cannot be OOM-killed.
+`scripts/memory-check` performs this admission itself for its serial heavy
+modes: Valgrind receives one 16-GiB working-set allowance while at least 16 GiB
+remains reserved for the host, and rchk receives its one 20-GiB analyzer
+allowance with the same minimum reserve. The reports are release evidence;
+do not bypass or hand-edit them. Do not impose an address-space limit on
+Valgrind merely to mirror rchk: Valgrind's shadow mappings make virtual address
+space a poor resident-memory/OOM estimate.
 
-This stage authenticates the pinned CRAN/Bioconductor target sources, resolves
-only `Depends`, `Imports`, and `LinkingTo` through retained synthetic
-dependencies-only roots, rejects installing or updating paradox, replays the
-SHA-256-bearing pak lock, and seals its endpoints and inputs under
-`.local/compat/runs/<ID>/reverse-dependency-dependencies-priority-<N>/`.
-An existing paradox used to build a transitive dependency is allowed only as a
-protected `installed` lock row and must remain byte-identical. `--plan-only`
-requires a pre-existing selected dependency library and must leave it
-unchanged. The disposable fixture gate is
-`scripts/environment/test-reverse-dependency-preparation.R`; its real harness
-success and injected post-lock failure/retry runs verify cleanup without ever
-using the live shared dependency library.
+Caching policy:
 
-Install the consumer-test candidate only after its run ID and full ref, commit,
-and tree are exported, and only into the absent run-specific library reserved
-beside the dependency-preparation stage. The authoritative command shape and
-portable content-sentinel handling are in
-`compat/README.md`; `compat/install-candidate` takes candidate library,
-dependency library, and source worktree in that order. Installation and the
-consumer/documentation gates require the clean detached candidate source,
-full ref, commit, and tree all to identify the candidate; the primary checkout
-may contain unrelated later work. Differential and benchmark drivers are the
-exceptions and require exact candidate `HEAD` because they snapshot the primary
-checkout. Replacement refs, grafts, alternate object stores, external archive
-attributes, hidden index flags, and inherited repository-altering `GIT_*`
-inputs are forbidden. The
-sealed schema-2 receipt binds `PARADOX_CANDIDATE_RUN_ID`, both canonical library
-paths, the dependency-library content hash, and the exact installer and Git
-authenticator. Repository checks reuse that candidate run ID because their
-dependency stage is its sibling; reverse-dependency and documentation checks
-use new evidence run IDs while retaining the original candidate run ID in the
-environment. That same authenticated candidate is then used for:
+- toolchains, package downloads, installed dependency libraries, reference
+  sources, analyzer runtimes, and content-addressed consumer installs are
+  reused when their authenticated inputs match;
+- package objects/installations may be reused only for identical source and
+  compiler keys. During development only, an already compiled DSO may survive
+  an R/docs-only change when every native build input (all `src/` bytes,
+  headers, generated registration inputs, `NAMESPACE`, `DESCRIPTION`, compiler,
+  flags, and platform) is byte-identical; reinstall the R/help databases and
+  verify the loaded DSO hash. Record that identity check with the diagnostic;
+- a frozen release candidate always receives a clean full source build. DSO
+  component reuse is development evidence only and never satisfies a release,
+  check, runtime, memory, downstream, or benchmark row;
+- each distinct frozen R/compiler/instrumentation profile builds/installs the
+  candidate once from clean source, then shares that immutable installation
+  across its tests and any gates that explicitly authenticate the identical
+  profile and candidate bytes;
+- a failed broad run is mined for the complete failure set and logs before a
+  rerun; rerun affected rows first, then one final broad confirmation.
 
-- `compat/install-reverse-dependency-dependencies.R`, with named root,
-  priority, dependency-library, and unique run-ID options; its successful
-  sealed stage supplies the hard source-package closure before candidate
-  installation and reverse checks;
-- `compat/install-repository-test-dependencies.R`, with positional root,
-  maximum priority, and dependency library plus the mandatory named
-  `--run-id`; its retained ledger is written below the matching
-  `.local/compat/runs/<run-id>/repository-dependencies-priority-<N>/` stage;
-- `compat/test-reverse-dependencies.R`, with named options for the root,
-  priority, candidate/dependency libraries, full ref/commit/tree, portable
-  candidate content hash, clean detached `--candidate-source`, and a new
-  reverse-run ID. Its default tracked runner uses content-addressed consumer
-  installs, two protected-library content passes per actual stage, cheap
-  metadata wave boundaries, and sealed append-only acceptance with `--resume`.
-  Immediately before every wave it retains a fresh
-  `scripts/environment/resource-jobs consumer --report` decision, runs at most
-  that lowering-only limit, normally disables nested make/CMake, testthat,
-  `parallel`/`future`, BLAS, and OpenMP parallelism, waits for every sibling,
-  and lets only the parent seal and accept rows. Its `mlr3` R CMD check child
-  alone exposes the row's two-CPU allocation for five worker-contract controls;
-  installation, outer workers, build/test pools, BLAS, and Rcpp stay at one;
-  plan-only and its synthetic self-test perform no protected-library content
-  pass;
-- `compat/test-repositories.R`, whose positional interface is root, maximum
-  priority, candidate library, and dependency library, plus mandatory named
-  `--run-id`, optional `--plan-only` or `--verify`, candidate source/origin and
-  repository-selection controls, a task deadline, and a lowering-only `--jobs`
-  limit; priority zero also receives the reviewed `library-mlr3verse-core`
-  through `PARADOX_CONSUMER_EXTRA_LIBS`. Its default
-  resumable runner recomputes the same lowering-only consumer ceiling before
-  each wave, executes rows in independent supervised `Rscript` processes with
-  isolated homes, temporary trees, and caches, takes exactly one protected
-  pre/post boundary per wave, seals the complete wave before parent-only
-  promotion, and resumes a partially promoted sealed wave without rerunning
-  successful rows. Nested work is capped at one except for a receipt-bound
-  `mlr3` worker-contract exception that exposes exactly two CPUs while make,
-  CMake, testthat, BLAS, and Rcpp remain at one;
-- `compat/test-documentation`, with the same candidate/dependency libraries,
-  the clean detached `--candidate-source`, the mlr3verse core and
-  `library-documentation-extra-final3` as two explicit, repeated
-  `--extra-library` arguments, a new run ID, and `--scope all`. The second
-  overlay supplies `gt` and its locked `V8`/`bigD`/`juicyjuice` closure for the
-  mandatory website benchmark;
-  this also runs the pinned mbo_config and reviewed documentation migration
-  workloads; and
-- `benchmarks/release`, with the sealed full-inventory differential run,
-  authenticated candidate library, repeated dependency-library options,
-  miesmuschel library, and a new output directory. This release wrapper always
-  runs the complete workload inventory and both focused consumer processes.
+## Test contract
 
-Repository dependency and test ledgers are retained only below their unique
-run directories. The checked-in priority-zero ledgers are historical fixtures;
-release harnesses must never update files under `compat/`. Repository,
-reverse-dependency, and documentation stages use deterministic manifests
-authenticated by `metadata/completion.seal`. Verify repository and
-documentation stages with `compat/verify-repository-evidence.R`; verify the
-reverse stage's row-bound composite seal, structured counts, two-pass ledger,
-and retained install-cache receipts with
-`compat/verify-reverse-dependency-evidence.R` before citing it.
+The package suite must directly cover, before downstream packages are used:
 
-The documentation gate's essential book chapter, website paradox benchmark,
-tuning/pipeline cheatsheets, and both serialized mbo_config ParamSet workloads
-are mandatory. Full book/website/cheatsheet renders, both gallery probes, the
-mlr3benchmark nested-values contract, and mlr3-targets legacy migration remain
-recorded advisory workloads. `compat/verify-mlr-org-review` separately
-reauthenticates the complete 91-repository organization census; keep its
-consumer/source partition synchronized whenever a census repository is
-promoted into `github-snapshot.tsv`. The gate verifies pinned clean source
-checkouts, all explicitly selected protected libraries, the candidate
-provenance, and the pinned Quarto receipt. It seals commands, results, logs,
-archived sources, overlays, and metadata below
-`.local/compat/runs/<run-id>/documentation/`. Review advisory results and raw
-benchmark distributions; a zero exit status or a ratio table alone is not a
-release claim.
+- exact capsule schema/version validation and corrupt-state no-crash behavior;
+- BASE, nested/shared COLLECTION, and live SHADOW graphs, including cycles;
+- collection add rejects existing/proposed cycles and corruption before commit
+  and generation-checks both admitted graphs without rejecting shared DAGs;
+- additive subclasses and deterministic rejection/non-support of core
+  overrides or private replacement;
+- all five Domain kinds, two Condition kinds, and unknown-kind rejection; the
+  constructor and ObjectTuneToken boundaries exercise the same sole canonical
+  built-in Domain-row admission owner. Object-token Domain coverage admits only
+  bounded value-producing built-in Domains, rejects unbounded `ParamUty` and
+  zero-level `ParamFct` tuning ranges, and demonstrates
+  opaque-leaf identity through a bounded typed Domain rather than treating
+  `ParamUty` itself as a tuning range;
+  standalone Condition comparison also covers names, stable ALTREP operands,
+  separate snapshots under reentry, and fail-closed class/attribute/type/S4
+  cases; Domain coverage includes ordinary non-ALTREP/non-S4 structural shells,
+  typed special-leaf ALTREP rejection, pointer-only typed S4 special/default/
+  init matching, and opaque ParamUty S4 leaves whose special membership uses
+  base `identical()` without dispatch;
+- values, dependencies, transformations, constraints, TuneTokens, special
+  values, presence modes, sanitization, required tags, named NULL, and errors;
+  TuneToken coverage includes all five exact class/content shapes, scalar-name
+  normalization, serialization, explicit `$search_space(values=)`, and
+  fail-closed S4/subclass/extra-field/attribute/deep-or-cyclic-metadata cases;
+  Object content covers bounded value-producing built-in Domain acceptance,
+  unbounded `ParamUty` and zero-level `ParamFct` Domain rejection, exact BASE
+  acceptance, COLLECTION/SHADOW/additive-
+  subclass rejection, safe genuine-core shell aliases without method dispatch,
+  rooted generation receipts through allocation/finalizers, final no-allocation
+  commit reauthentication, and sealed single-use search capabilities;
+  explicit search values cover ordinary non-ALTREP and representation-only S3
+  named-list containers without dispatch, plus S4/semantic-attribute rejection;
+  direct checked/unchecked `$values <-` rejects an outer ALTREP before
+  observation and natively canonicalizes the accepted Paradox-1 empty
+  spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression
+  vector, or an accepted empty list container), while only
+  `set_values(.values=)` exercises the one-snapshot list-ALTREP exception;
+  malformed
+  exact-token/Domain structure raises while ordinary value mismatch remains a
+  check diagnostic;
+- `assert_values` shell-policy clone/serialization/equality behavior plus
+  native tag/dependency/callback admission, ownership, and reentry conflicts;
+- callback order, reentry, mutation snapshots, warning/error propagation, and
+  no replay;
+- strict native dependency-only checking across the graph, including
+  ordinary-list admission, unknown IDs, TuneToken edges, and first diagnostics;
+- scalar/table constraint-only checking uses the native graph/point/constraint
+  kernels, validates all table rows before callbacks, calls once per row from
+  one callback snapshot, and isolates reentrant mutation to later operations;
+- live collection callback bindings and detached subset/flatten/Shadow-origin
+  plans select capsule callbacks, enter the shared native evaluator family, and
+  preserve the specified retained-then-changed order and omission behavior;
+- BASE-Shadow constraint plans merge hidden/visible values natively without S3
+  dispatch, preserve leaf identity, call once, and validate the scalar result;
+- materialize-once stable/base ALTREP under allocation/finalizers/reentry, plus
+  rejection or admission of hostile state-changing custom ALTREP without
+  replay or Paradox-caused crash/memory corruption; interpreted ParamSet
+  `params`, trafo input/result, Domain cargo, table, dimnames, and list metadata
+  shells reject ALTREP/S4 before semantic observation, while admitted atomic
+  leaves and columns remain supported;
+- detached data.table facades, documented ordinary data.frame/data.table input,
+  stable semantic ALTREP columns, and public mutation isolation;
+- detached ParamSet-family equality covers complete state and distinguishes
+  shared from duplicated DAG topology without traversing private R6 bindings;
+- serialization and explicit upgrades of CRAN 1.0.1, shared/nested graphs,
+  both pinned `mbo_config` fixtures, and rejected legacy extensions;
+- constructor, accessor, subset/flatten, design, sampler, and hot-path
+  equivalence against maintained ordinary behavior.
+
+If a consumer exposes a gap, add the smallest package regression that would
+have caught it before fixing the consumer-facing issue.
+
+## Downstream transition worktrees
+
+Remote writes by an agentic process are forbidden. Agents may edit, test, and
+commit in local downstream worktrees, but the user must push branches and open
+or submit PRs manually.
+
+Current PR-ready local branches are:
+
+- `.local/compat/github/miesmuschel`, branch
+  `codex/paradox-paramsetshadow-bridge`, commits `68686ef`, `f0e4736`,
+  `cf64981`, `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`,
+  `2ca3030`, and `d9d5c01`: load-time version-gated bridge/re-export of
+  Paradox's `ParamSetShadow` plus the completed public-state/test and
+  version-gated native-diagnostic adaptation;
+- `.local/compat/github/bbotk`, branch
+  `codex/public-paramsetcollection-sets`, commits `0909e60` and `94e4c22`: one
+  private `.sets` read changed to public `$sets`, with version-gated native
+  diagnostic expectations;
+- `.local/compat/github/mlr3mbo` currently needs no source patch.
+
+Before handoff, rebase only if the user requests it, test each exact branch
+against the exact frozen candidate, record the commands/results, and provide
+the explicit `git -C ... push <remote> <branch>` commands plus PR title/body
+text for the user. Never push, open a remote PR, publish a tag, or alter remote
+state yourself. The
+reviewed exact heads, proposed titles/bodies, and manual commands live in
+`compat/downstream-pr-handoff.md`; update that file if either branch changes.
+
+The maintained priority consumers include bbotk, miesmuschel, mlr3mbo,
+ConfigSpace, celecx, mlr3, mlr3tuning, mlr3pipelines, and active mlr-org book,
+gallery, website, and serialized configuration workloads. Very old repositories
+that do not use current Paradox are evidence inventory, not release blockers.
+
+## Release convergence
+
+Only freeze a candidate after code, contract tests, docs, downstream bridges,
+and profiling converge. The active status and exact evidence IDs belong in
+`design/release-2.0.0.md`; never encode stale pass counts in scripts as a proxy
+for test discovery.
+
+Run release gates against one clean immutable full ref, broadly in this order:
+
+1. strict GCC/Clang C17, registered-routine/probe audit, ASan/UBSan, complete
+   package suite, and clean `R CMD check --as-cran`;
+2. actual R 4.3.3, 4.5.2, and development R plus pinned-header compilation and
+   exact `environment/r-api-exceptions.tsv`/raw-token/version-gated DSO audit;
+3. upstream differential with reviewed intentional Paradox-2 deltas;
+4. bbotk/miesmuschel focused bridges, then priority-zero/one reverse and GitHub
+   consumers and documentation workloads;
+5. GCT, instrumented-R Valgrind, bounded rchk, adversarial corruption, and
+   direct coverage of every registered routine/hazard family;
+6. examples, vignettes, manuals, pkgdown/book/gallery/website and legacy
+   upgrade workloads;
+7. Windows x86-64 and real macOS Apple-silicon ARM64 CI for the exact ref;
+8. paired release benchmarks on an otherwise idle host.
+
+Primary retained drivers include `scripts/native-check`,
+`scripts/check-r-api-compatibility`, `scripts/test-runtime-matrix`,
+`scripts/memory-check`, the `compat/` runners/verifiers, and
+`benchmarks/release`. Read their `--help` before use; do not copy historical
+run IDs or expected counts. Expensive analyzer and consumer gates run only
+after cheaper package/bridge gates are green.
+
+Never accept a green GitHub matrix label as portability evidence by itself.
+Each platform row must reject a nonzero `rcmdcheck` child status and require one
+sole final `Status: OK`; an always-run completion job must then reject the
+complete matrix aggregate unless it is exactly `success`. The offline verifier
+independently requires three successful REST jobs (macOS ARM64, Windows x86-64,
+and completion), both exact platform artifacts, their check logs, and frozen
+candidate provenance. A release-only direct-child companion changes only the
+workflow to pin and check out the immutable candidate and to reduce the matrix;
+it must retain both completion layers.
+
+Profile representative constructor, `check`/`check_dt`/`check_dependencies`,
+values, domains/params/dependencies, subset/collection, live Shadow constraint
+and read/write paths, design, and sampler workloads. Optimize only measured hot
+paths, retain portable scalar code unless a portable architecture-neutral
+improvement is proven, and rerun affected correctness tests after every
+optimization. Freeze performance changes before the final memory/portability
+matrix.
+
+## Historical candidate
+
+The rejected compatibility-first candidate ref was
+`refs/paradox-release/candidate-20260717T083921Z` at commit
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`. Its old release evidence remains
+below ignored `.local/` paths and in Git history. It was once green under its
+different contract, but it is not a baseline for current source completeness,
+compatibility policy, routine inventory, test counts, or release readiness.

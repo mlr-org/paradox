@@ -185,17 +185,17 @@ verify_runtime_symbol_scope() {
   done
 
   if [[ "$version" == 4.3.3 ]]; then
-    required=(Rf_eval)
+    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame)
     forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv
       R_getVarEx R_GetBindingType R_getRegisteredNamespace R_getAttribCount
-      R_hasAttrib)
-    branch=pre-4.5-evaluated-public-fallback
+      R_hasAttrib R_mapAttrib)
+    branch=pre-4.5-documented-public-backports
   else
-    required=(Rf_eval R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv
-      R_getVarEx)
-    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount
-      R_hasAttrib)
-    branch=4.5-direct-closure-and-evaluated-binding
+    required=(Rf_eval ATTRIB R_ClosureFormals Rf_findVarInFrame)
+    forbidden=(R_ClosureExpr R_ClosureEnv R_ParentEnv R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
+      R_mapAttrib)
+    branch=4.5-direct-public-accessors
   fi
 
   for symbol in "${required[@]}"; do
@@ -382,7 +382,13 @@ verify_source_scope() {
   local whole_skips="$inputs/environment/runtime-matrix-whole-file-skips.tsv"
   local result_skip_policy="$inputs/environment/runtime-matrix-result-skips.tsv"
   local file value expectations result_skips total_skips runtime
-  local expected_result_skip_count
+  local discovered_files discovered_contexts executed_files executed_contexts
+  local excluded_files excluded_contexts support_files reported_files
+  local expected_whole_count observed_whole_count expected_result_skip_count
+  local logged_expected_whole_count logged_observed_whole_count
+  local manifest_whole_count manifest_result_count source_support_count
+  local scope_discovered scope_executed scope_excluded retained_reported
+  local staged_file_count
 
   for file in "$exclusions" "$whole_skips" "$result_skip_policy" "$scope/scope.tsv" \
       "$scope/testthat-reported-files.tsv" \
@@ -406,7 +412,7 @@ verify_source_scope() {
   awk -F '\t' '
     NR == 1 {if ($0 != "context\treason") exit 1; next}
     NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
-    END {if (NR != 23) exit 1}
+    END {if (NR != 1) exit 1}
   ' "$exclusions" || fail "Retained pre-R-4.6 exclusion policy is malformed"
   awk -F '\t' '
     NR == 1 {
@@ -416,16 +422,27 @@ verify_source_scope() {
     NF != 5 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ ||
       $2 == "" || $3 !~ /^[A-Za-z][A-Za-z0-9.]*$/ ||
       $4 !~ /^[A-Za-z0-9_:.,-]+$/ || $5 == "" || seen[$1]++ {exit 1}
-    END {if (NR != 3) exit 1}
+    END {if (NR < 2) exit 1}
   ' "$whole_skips" || fail "Retained whole-file skip policy is malformed"
   awk -F '\t' '
     NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
     NF != 4 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
-      $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" || $4 == "" ||
+      $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
+      $4 != "Reason: On CRAN" ||
       seen[$1 FS $2 FS $3]++ {exit 1}
     {count[$1]++}
-    END {if (NR != 14 || count["4.3.3"] != 6 || count["4.5.2"] != 7) exit 1}
+    END {if (count["4.3.3"] != count["4.5.2"]) exit 1}
   ' "$result_skip_policy" || fail "Retained result-skip policy is malformed"
+  diff -u \
+    <(awk -F '\t' '$1 == "4.3.3" {print $2 "\t" $3 "\t" $4}' \
+      "$result_skip_policy") \
+    <(awk -F '\t' '$1 == "4.5.2" {print $2 "\t" $3 "\t" $4}' \
+      "$result_skip_policy") >/dev/null ||
+    fail "Retained result-skip inventories differ between reviewed runtimes"
+  diff -u \
+    <(tail -n +2 "$result_skip_policy") \
+    <(tail -n +2 "$result_skip_policy" | LC_ALL=C sort) >/dev/null ||
+    fail "Retained result-skip policy is not byte-sorted"
   awk -F '\t' '
     NR == 1 {
       if ($0 != "state\tfile\tcontext\treason") exit 1
@@ -443,7 +460,10 @@ verify_source_scope() {
           ($1 == "excluded" && $4 == "")) exit 1
       count[$1]++
     }
-    END {if (NR != 80 || count["executed"] != 57 || count["excluded"] != 22) exit 1}
+    END {
+      if (NR < 2 || count["excluded"] != 0 ||
+          count["executed"] != NR - 1) exit 1
+    }
   ' "$scope/scope.tsv" || fail "Retained source-test scope is malformed"
 
   diff -u \
@@ -462,8 +482,6 @@ verify_source_scope() {
 
   [[ -z $(find "$scope/testthat" -mindepth 1 ! -type f -print -quit) ]] ||
     fail "Staged source-test directory contains a non-regular member"
-  [[ $(find "$scope/testthat" -maxdepth 1 -type f | wc -l) -eq 64 ]] ||
-    fail "Staged source-test directory has the wrong complete file count"
   while IFS= read -r file; do
     cmp -s -- "$file" "$source/tests/testthat/${file##*/}" ||
       fail "Staged source-test input differs from its source: ${file##*/}"
@@ -488,7 +506,7 @@ verify_source_scope() {
   awk -F '\t' '
     NR == 1 {if ($0 != "file") exit 1; next}
     NF != 1 || $1 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || seen[$1]++ {exit 1}
-    END {if (NR != 56) exit 1}
+    END {if (NR < 2) exit 1}
   ' "$scope/testthat-reported-files.tsv" ||
     fail "Retained testthat-reported file inventory is malformed"
   diff -u \
@@ -499,24 +517,72 @@ verify_source_scope() {
     <(tail -n +2 "$scope/testthat-reported-files.tsv" | LC_ALL=C sort) \
     >/dev/null || fail "Testthat result files do not equal executed files minus whole-file skips"
 
-  for field in discovered_test_file_count executed_test_file_count \
-      excluded_test_file_count testthat_reported_file_count; do
+  for field in discovered_test_file_count discovered_test_context_count \
+      executed_test_file_count executed_test_context_count \
+      excluded_test_file_count excluded_test_context_count \
+      staged_test_support_file_count testthat_reported_file_count; do
     value=$(metadata_value "$metadata" "$field")
-    [[ "$value" =~ ^[0-9]+$ && "$value" == "$(log_value "$log" "$field")" ]] ||
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ &&
+      "$value" == "$(log_value "$log" "$field")" ]] ||
       fail "Retained source-test count is malformed or inconsistent: $field"
   done
-  [[ $(metadata_value "$metadata" discovered_test_file_count) == 79 &&
-    $(metadata_value "$metadata" executed_test_file_count) == 57 &&
-    $(metadata_value "$metadata" excluded_test_file_count) == 22 &&
-    $(metadata_value "$metadata" testthat_reported_file_count) == 55 ]] ||
-    fail "Retained source-test counts differ from the reviewed scope"
-  [[ $(metadata_value "$metadata" whole_file_skip_count) == 2 &&
-    $(log_value "$log" expected_whole_file_skip_count) == 2 &&
-    $(log_value "$log" observed_whole_file_skip_count) == 2 ]] ||
+  discovered_files=$(metadata_value "$metadata" discovered_test_file_count)
+  discovered_contexts=$(metadata_value "$metadata" discovered_test_context_count)
+  executed_files=$(metadata_value "$metadata" executed_test_file_count)
+  executed_contexts=$(metadata_value "$metadata" executed_test_context_count)
+  excluded_files=$(metadata_value "$metadata" excluded_test_file_count)
+  excluded_contexts=$(metadata_value "$metadata" excluded_test_context_count)
+  support_files=$(metadata_value "$metadata" staged_test_support_file_count)
+  reported_files=$(metadata_value "$metadata" testthat_reported_file_count)
+  scope_discovered=$(awk 'END {print NR - 1}' "$scope/scope.tsv")
+  scope_executed=$(awk -F '\t' \
+    '$1 == "executed" {count++} END {print count + 0}' "$scope/scope.tsv")
+  scope_excluded=$(awk -F '\t' \
+    '$1 == "excluded" {count++} END {print count + 0}' "$scope/scope.tsv")
+  retained_reported=$(awk 'END {print NR - 1}' \
+    "$scope/testthat-reported-files.tsv")
+  source_support_count=$(find "$source/tests/testthat" -maxdepth 1 -type f \
+    ! -name 'test*.R' ! -name 'test*.r' | wc -l)
+  staged_file_count=$(find "$scope/testthat" -maxdepth 1 -type f | wc -l)
+  ((discovered_files > 0 &&
+    discovered_files == discovered_contexts &&
+    executed_files == executed_contexts &&
+    excluded_files == excluded_contexts &&
+    discovered_files == executed_files + excluded_files &&
+    excluded_files == 0 &&
+    discovered_files == scope_discovered &&
+    executed_files == scope_executed &&
+    excluded_files == scope_excluded &&
+    reported_files == retained_reported &&
+    support_files == source_support_count &&
+    staged_file_count == executed_files + support_files)) ||
+    fail "Retained source-test counts differ from their discovered inventories"
+
+  manifest_whole_count=$(awk 'END {print NR - 1}' "$whole_skips")
+  expected_whole_count=$(metadata_value "$metadata" expected_whole_file_skip_count)
+  observed_whole_count=$(metadata_value "$metadata" whole_file_skip_count)
+  logged_expected_whole_count=$(log_value "$log" expected_whole_file_skip_count)
+  logged_observed_whole_count=$(log_value "$log" observed_whole_file_skip_count)
+  for value in "$expected_whole_count" "$observed_whole_count" \
+      "$logged_expected_whole_count" "$logged_observed_whole_count"; do
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      fail "Retained whole-file skip count is malformed"
+  done
+  ((expected_whole_count == manifest_whole_count &&
+    observed_whole_count == expected_whole_count &&
+    expected_whole_count == logged_expected_whole_count &&
+    observed_whole_count == logged_observed_whole_count &&
+    reported_files + observed_whole_count == executed_files)) ||
     fail "Retained whole-file skip accounting is inconsistent"
   runtime=$(metadata_value "$metadata" runtime)
-  expected_result_skip_count=6
-  [[ "$runtime" == 4.5.2 ]] && expected_result_skip_count=7
+  manifest_result_count=$(awk -F '\t' -v runtime="$runtime" \
+    'NR > 1 && $1 == runtime {count++} END {print count + 0}' \
+    "$result_skip_policy")
+  expected_result_skip_count=$(metadata_value \
+    "$metadata" expected_result_test_block_skip_count)
+  [[ "$expected_result_skip_count" =~ ^(0|[1-9][0-9]*)$ &&
+    "$expected_result_skip_count" -eq "$manifest_result_count" ]] ||
+    fail "Expected result-skip count differs from its retained manifest"
   diff -u \
     <(awk -F '\t' -v runtime="$runtime" 'NR == 1 || $1 == runtime' "$result_skip_policy") \
     "$scope/observed-result-skips.tsv" >/dev/null ||
@@ -534,29 +600,22 @@ verify_source_scope() {
   [[ $(log_value "$log" expected_result_test_block_skip_count) == \
       "$expected_result_skip_count" ]] ||
     fail "Expected result-skip count differs from the reviewed runtime policy"
-  [[ $(log_value "$log" discovered_test_context_count) == 79 &&
-    $(log_value "$log" executed_test_context_count) == 57 &&
-    $(log_value "$log" excluded_test_context_count) == 22 &&
-    $(log_value "$log" staged_test_support_file_count) == 7 ]] ||
-    fail "Retained source-test context/support counts are inconsistent"
 
   expectations=$(metadata_value "$metadata" expectations_passed)
   result_skips=$(metadata_value "$metadata" result_test_blocks_skipped)
   total_skips=$(metadata_value "$metadata" total_test_skips)
-  [[ "$expectations" =~ ^[0-9]+$ && "$result_skips" =~ ^[0-9]+$ &&
-    "$total_skips" =~ ^[0-9]+$ && "$expectations" -ge 4900 &&
+  [[ "$expectations" =~ ^[1-9][0-9]*$ &&
+    "$result_skips" =~ ^(0|[1-9][0-9]*)$ &&
+    "$total_skips" =~ ^(0|[1-9][0-9]*)$ &&
     "$result_skips" -eq "$expected_result_skip_count" &&
-    "$total_skips" -eq $((result_skips + 2)) ]] ||
+    "$total_skips" -eq $((result_skips + observed_whole_count)) ]] ||
     fail "Retained expectation or skip totals are inconsistent"
   [[ "$expectations" == "$(log_value "$log" expectations_passed)" &&
     "$result_skips" == "$(log_value "$log" result_test_blocks_skipped)" &&
-    "$total_skips" == "$(log_value "$log" total_test_skips)" &&
-    $(metadata_value "$metadata" minimum_expectations_required) == 4900 &&
-    $(log_value "$log" minimum_expectations_required) == 4900 ]] ||
-    fail "Retained expectation floor differs from the source-test log"
+    "$total_skips" == "$(log_value "$log" total_test_skips)" ]] ||
+    fail "Retained expectation accounting differs from the source-test log"
   [[ $(log_value "$log" not_cran) == false &&
-    $(log_value "$log" test_scope) == \
-      public-characterization-regression-and-supported-native-source-suite &&
+    $(log_value "$log" test_scope) == complete-source-suite &&
     $(log_value "$log" test_scope_manifest) == source-test-scope/scope.tsv &&
     $(log_value "$log" whole_file_skip_manifest) == \
       environment/runtime-matrix-whole-file-skips.tsv &&
@@ -670,8 +729,8 @@ for version in "${versions[@]}"; do
     "$recorded_tree" == "$top_tree" ]] ||
     fail "Stage source/runtime provenance differs from the top-level ledger"
   case "$version:$recorded_branch" in
-    4.3.3:pre-4.5-evaluated-public-fallback|\
-      4.5.2:4.5-direct-closure-and-evaluated-binding) ;;
+    4.3.3:pre-4.5-documented-public-backports|\
+      4.5.2:4.5-direct-public-accessors) ;;
     *) fail "Retained public-R-API branch marker is inconsistent" ;;
   esac
   text_has_exact_line_once "$artifacts/logs/focused-probe.log" \

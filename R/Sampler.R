@@ -2,6 +2,10 @@
 #'
 #' @description
 #' This is the abstract base class for sampling objects like [Sampler1D], [SamplerHierarchical] or [SamplerJointIndep].
+#' The Sampler family is intentionally subclassable: custom subclasses
+#' implement `private$.sample()` (and optionally `private$.print()`). The
+#' additive-only inheritance restriction of Paradox 2 applies to the ParamSet
+#' family, not to this documented Sampler extension point.
 #'
 #' @template param_param_set
 #'
@@ -32,7 +36,7 @@ Sampler = R6Class("Sampler",
     #' @return [`Design`].
     sample = function(n) {
       assert_count(n) # we do argcheck on toplevel
-      Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE) # user wants n points, dont remove
+      Design$new(self$param_set, private$.sample(n), remove_dupl = FALSE) # Preserve the requested number of points.
     },
 
     #' @description

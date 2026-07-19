@@ -21,11 +21,14 @@ Profiles:
   api-compile   syntax-only compiler jobs
   consumer      isolated, heavyweight consumer test processes
   light-test    isolated, bounded ordinary test processes
+  valgrind      one serial instrumented-R process under Valgrind
   rchk          one bounded static-analysis process
 
 The default output is one positive integer.  --report writes the complete
 CPU/RAM decision as a two-column TSV.  --max-jobs may only lower the detected
 limit and is intended for an explicit conservative operator override.
+--verify-report PATH validates one retained, no-override report against the
+selected profile without observing current CPU or memory state.
 EOF
 }
 
@@ -178,6 +181,7 @@ PROFILE=${1:-}
 shift
 REPORT=false
 MAX_JOBS=0
+VERIFY_REPORT=
 while (($#)); do
   case "$1" in
     --max-jobs)
@@ -194,6 +198,18 @@ while (($#)); do
       ;;
     --report)
       REPORT=true
+      shift
+      ;;
+    --verify-report)
+      (($# >= 2)) || fail "--verify-report requires a path"
+      [[ -z "$VERIFY_REPORT" ]] || fail "--verify-report may be supplied once"
+      VERIFY_REPORT=$2
+      shift 2
+      ;;
+    --verify-report=*)
+      [[ -z "$VERIFY_REPORT" ]] || fail "--verify-report may be supplied once"
+      VERIFY_REPORT=${1#--verify-report=}
+      [[ -n "$VERIFY_REPORT" ]] || fail "--verify-report requires a path"
       shift
       ;;
     -h|--help)
@@ -229,6 +245,12 @@ case "$PROFILE" in
     MINIMUM_RESERVE_MIB=12288
     PROFILE_MAX_JOBS=16
     ;;
+  valgrind)
+    CPU_PER_JOB=1
+    MEMORY_MIB_PER_JOB=16384
+    MINIMUM_RESERVE_MIB=16384
+    PROFILE_MAX_JOBS=1
+    ;;
   rchk)
     CPU_PER_JOB=1
     MEMORY_MIB_PER_JOB=20480
@@ -237,6 +259,108 @@ case "$PROFILE" in
     ;;
   *) fail "unknown profile '$PROFILE' (see --help)" ;;
 esac
+
+validate_report() {
+  local path=$1 size
+  [[ -f "$path" && ! -L "$path" ]] ||
+    fail "resource report is absent, non-regular, or symbolic: $path"
+  size=$(wc -c < "$path")
+  [[ "$size" =~ ^[0-9]+$ && "$size" -le 1048576 ]] ||
+    fail "resource report is unexpectedly large"
+  awk -F '\t' -v expected_profile="$PROFILE" \
+      -v expected_cpu_per_job="$CPU_PER_JOB" \
+      -v expected_memory_mib="$MEMORY_MIB_PER_JOB" \
+      -v minimum_reserve_mib="$MINIMUM_RESERVE_MIB" \
+      -v expected_profile_max_jobs="$PROFILE_MAX_JOBS" '
+    function positive(value) { return value ~ /^[1-9][0-9]*$/ }
+    function nonnegative(value) { return value ~ /^(0|[1-9][0-9]*)$/ }
+    function limit(value) { return value == "unlimited" || positive(value) }
+    function min(left, right) { return left < right ? left : right }
+    BEGIN {
+      count = split("field schema profile platform online_cpus affinity_cpus cgroup_cpu_limit cpu_limit cpu_reserve cpu_per_job cpu_jobs memory_source memory_available_mib cgroup_memory_available_mib memory_reserve_mib memory_mib_per_job memory_jobs profile_max_jobs operator_max_jobs jobs", keys, " ")
+    }
+    {
+      if (NF != 2 || NR > count || $1 != keys[NR]) exit 1
+      value[$1] = $2
+    }
+    END {
+      if (NR != count || value["field"] != "value" ||
+          value["schema"] != "1" ||
+          value["profile"] != expected_profile ||
+          (value["platform"] != "Linux" &&
+           value["platform"] != "Darwin") ||
+          !positive(value["online_cpus"]) ||
+          !positive(value["affinity_cpus"]) ||
+          !limit(value["cgroup_cpu_limit"]) ||
+          !positive(value["cpu_limit"]) ||
+          !nonnegative(value["cpu_reserve"]) ||
+          value["cpu_per_job"] != expected_cpu_per_job ||
+          !positive(value["cpu_jobs"]) ||
+          !positive(value["memory_available_mib"]) ||
+          !limit(value["cgroup_memory_available_mib"]) ||
+          !positive(value["memory_reserve_mib"]) ||
+          value["memory_mib_per_job"] != expected_memory_mib ||
+          !positive(value["memory_jobs"]) ||
+          value["operator_max_jobs"] != "none" ||
+          !positive(value["jobs"])) exit 1
+
+      cpu_limit = min(value["online_cpus"] + 0, value["affinity_cpus"] + 0)
+      if (value["cgroup_cpu_limit"] != "unlimited")
+        cpu_limit = min(cpu_limit, value["cgroup_cpu_limit"] + 0)
+      if (cpu_limit < 1) cpu_limit = 1
+      cpu_reserve = cpu_limit >= 16 ? 2 : (cpu_limit >= 4 ? 1 : 0)
+      cpu_budget = cpu_limit - cpu_reserve
+      if (cpu_budget < 1) cpu_budget = 1
+      cpu_jobs = int(cpu_budget / expected_cpu_per_job)
+      if (cpu_jobs < 1) cpu_jobs = 1
+
+      if (value["platform"] == "Linux") {
+        if (value["memory_source"] != "proc_memavailable" &&
+            value["memory_source"] != "proc_memavailable+cgroup") exit 1
+        cgroup_memory = value["cgroup_memory_available_mib"]
+        if (value["memory_source"] == "proc_memavailable+cgroup") {
+          if (cgroup_memory == "unlimited") exit 1
+          if (cgroup_memory + 0 != value["memory_available_mib"] + 0) exit 1
+        }
+        if (value["memory_source"] == "proc_memavailable" &&
+            cgroup_memory != "unlimited") {
+          if (cgroup_memory + 0 < value["memory_available_mib"] + 0) exit 1
+        }
+      } else {
+        if (value["memory_source"] != "darwin_vm_stat") exit 1
+        if (value["cgroup_cpu_limit"] != "unlimited") exit 1
+        if (value["cgroup_memory_available_mib"] != "unlimited") exit 1
+      }
+
+      memory_available = value["memory_available_mib"] + 0
+      dynamic_reserve = int(memory_available / 4)
+      memory_reserve = dynamic_reserve > minimum_reserve_mib ? dynamic_reserve : minimum_reserve_mib
+      memory_budget = memory_available > memory_reserve ? memory_available - memory_reserve : 0
+      if (memory_budget < expected_memory_mib) exit 1
+      memory_jobs = int(memory_budget / expected_memory_mib)
+      jobs = min(cpu_jobs, memory_jobs)
+      if (expected_profile_max_jobs > 0 &&
+          jobs > expected_profile_max_jobs) jobs = expected_profile_max_jobs
+      expected_profile_max = expected_profile_max_jobs > 0 ? expected_profile_max_jobs : "unlimited"
+
+      if (value["cpu_limit"] + 0 != cpu_limit ||
+          value["cpu_reserve"] + 0 != cpu_reserve ||
+          value["cpu_jobs"] + 0 != cpu_jobs ||
+          value["memory_reserve_mib"] + 0 != memory_reserve ||
+          value["memory_jobs"] + 0 != memory_jobs ||
+          value["profile_max_jobs"] != expected_profile_max ||
+          value["jobs"] + 0 != jobs) exit 1
+    }
+  ' "$path" || fail "resource report is malformed or inconsistent with $PROFILE"
+}
+
+if [[ -n "$VERIFY_REPORT" ]]; then
+  [[ "$REPORT" == false && "$MAX_JOBS" -eq 0 ]] ||
+    fail "--verify-report cannot be combined with --report or --max-jobs"
+  validate_report "$VERIFY_REPORT"
+  printf 'resource_report_verified=%s\n' "$PROFILE"
+  exit 0
+fi
 
 TEST_MODE=${PARADOX_RESOURCE_TEST_MODE:-false}
 if [[ "$TEST_MODE" == true ]]; then

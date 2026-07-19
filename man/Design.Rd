@@ -7,123 +7,138 @@
 A lightweight wrapper around a \link{ParamSet} and a \code{\link[data.table:data.table]{data.table::data.table()}}, where the
 latter is a design of configurations produced from the former - e.g.,
 by calling a \code{\link[=generate_design_grid]{generate_design_grid()}} or by sampling.
+The public table is an ordinary non-ALTREP/non-S4 data.table shell with
+ordinary structural names/row/dim/dimnames/list metadata. Its admitted
+semantic atomic columns may be stable ALTREP and are materialized once by
+native operations.
 }
 \section{Public fields}{
-\if{html}{\out{<div class="r6-fields">}}
-\describe{
-\item{\code{param_set}}{(\link{ParamSet}).}
+  \if{html}{\out{<div class="r6-fields">}}
+  \describe{
+    \item{\code{param_set}}{(\link{ParamSet}).}
 
-\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}.}
-}
-\if{html}{\out{</div>}}
+    \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored ordinary data.table shell. Semantic atomic columns may be stable
+ALTREP; structural metadata may not.}
+  }
+  \if{html}{\out{</div>}}
 }
 \section{Methods}{
 \subsection{Public methods}{
-\itemize{
-\item \href{#method-Design-new}{\code{Design$new()}}
-\item \href{#method-Design-format}{\code{Design$format()}}
-\item \href{#method-Design-print}{\code{Design$print()}}
-\item \href{#method-Design-transpose}{\code{Design$transpose()}}
-\item \href{#method-Design-clone}{\code{Design$clone()}}
-}
+  \itemize{
+    \item \href{#method-Design-initialize}{\code{Design$new()}}
+    \item \href{#method-Design-format}{\code{Design$format()}}
+    \item \href{#method-Design-print}{\code{Design$print()}}
+    \item \href{#method-Design-transpose}{\code{Design$transpose()}}
+    \item \href{#method-Design-clone}{\code{Design$clone()}}
+  }
 }
 \if{html}{\out{<hr>}}
-\if{html}{\out{<a id="method-Design-new"></a>}}
-\if{latex}{\out{\hypertarget{method-Design-new}{}}}
-\subsection{Method \code{new()}}{
-Creates a new instance of this \link[R6:R6Class]{R6} class.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$new(param_set, data, remove_dupl)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{param_set}}{(\link{ParamSet}).}
-
-\item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
-Stored \code{data}.}
-
-\item{\code{remove_dupl}}{(\code{logical(1)})\cr
+\if{html}{\out{<a id="method-Design-initialize"></a>}}
+\if{latex}{\out{\hypertarget{method-Design-initialize}{}}}
+\subsection{\code{Design$new()}}{
+  Creates a new instance of this \link[R6:R6Class]{R6} class.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$new(param_set, data, remove_dupl)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{param_set}}{(\link{ParamSet}).}
+      \item{\code{data}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
+Stored \code{data}. The table shell and structural metadata must be ordinary
+non-ALTREP/non-S4; admitted semantic atomic columns may be stable ALTREP.}
+      \item{\code{remove_dupl}}{(\code{logical(1)})\cr
 Remove duplicates?}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-format"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-format}{}}}
-\subsection{Method \code{format()}}{
-Helper for print outputs.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$format(...)}\if{html}{\out{</div>}}
+\subsection{\code{Design$format()}}{
+  Helper for print outputs.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$format(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-print"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-print}{}}}
-\subsection{Method \code{print()}}{
-Printer.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$print(...)}\if{html}{\out{</div>}}
+\subsection{\code{Design$print()}}{
+  Printer.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$print(...)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{...}}{(ignored).}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{...}}{(ignored).}
-}
-\if{html}{\out{</div>}}
-}
-}
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-transpose"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-transpose}{}}}
-\subsection{Method \code{transpose()}}{
-Converts \code{data} into a list of lists of row-configurations,
+\subsection{\code{Design$transpose()}}{
+  Converts \code{data} into a list of lists of row-configurations,
 possibly removes \code{NA} entries of inactive parameter values due to unsatisfied dependencies,
 and possibly calls the \code{trafo} function of the \link{ParamSet}.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}\if{html}{\out{</div>}}
-}
-
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{filter_na}}{(\code{logical(1)})\cr
+The stored table must continue to satisfy the ordinary structural-shell
+boundary; admitted stable ALTREP atomic columns are materialized once.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$transpose(filter_na = TRUE, trafo = TRUE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{filter_na}}{(\code{logical(1)})\cr
 Should \code{NA} entries of inactive parameter values due to unsatisfied
 dependencies be removed?}
-
-\item{\code{trafo}}{(\code{logical(1)})\cr
+      \item{\code{trafo}}{(\code{logical(1)})\cr
 Should the \code{trafo} function of the \link{ParamSet} be called?}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
-\if{html}{\out{</div>}}
-}
-}
+
 \if{html}{\out{<hr>}}
 \if{html}{\out{<a id="method-Design-clone"></a>}}
 \if{latex}{\out{\hypertarget{method-Design-clone}{}}}
-\subsection{Method \code{clone()}}{
-The objects of this class are cloneable with this method.
-\subsection{Usage}{
-\if{html}{\out{<div class="r">}}\preformatted{Design$clone(deep = FALSE)}\if{html}{\out{</div>}}
+\subsection{\code{Design$clone()}}{
+  The objects of this class are cloneable with this method.
+  \subsection{Usage}{
+    \if{html}{\out{<div class="r">}}
+    \preformatted{Design$clone(deep = FALSE)}
+    \if{html}{\out{</div>}}
+  }
+  \subsection{Arguments}{
+    \if{html}{\out{<div class="arguments">}}
+    \describe{
+      \item{\code{deep}}{Whether to make a deep clone.}
+    }
+    \if{html}{\out{</div>}}
+  }
 }
 
-\subsection{Arguments}{
-\if{html}{\out{<div class="arguments">}}
-\describe{
-\item{\code{deep}}{Whether to make a deep clone.}
-}
-\if{html}{\out{</div>}}
-}
-}
 }

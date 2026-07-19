@@ -1,4 +1,4 @@
-context("characterization: object shapes")
+context("contract: public object shapes")
 
 test_that("Domain objects retain their table structure and scalar column types", {
   domain = p_int(
@@ -172,42 +172,8 @@ test_that("ParamSet exposes the established R6 bindings and typed table views", 
   expect_identical(typeof(param_set$assert_values), "logical")
 })
 
-test_that("ParamSet private stores remain readable with stable table shapes", {
-  param_set = ps(
-    count = p_int(0, 10, tags = c("alpha", "common"), init = 3L),
-    scale = p_dbl(-1, 1, tags = c("beta", "common"), trafo = function(x) x * 2),
-    mode = p_fct(c("fast", "safe"), depends = count == 3L)
-  )
-  private = param_set$.__enclos_env__$private
-
-  expect_true(is.environment(private))
-  expect_true(all(c(".params", ".values", ".tags", ".deps", ".trafos") %in% names(private)))
-  expect_identical(
-    vapply(private$.params, typeof, character(1L)),
-    c(
-      id = "character", cls = "character", grouping = "character", cargo = "list",
-      lower = "double", upper = "double", tolerance = "double", levels = "list",
-      special_vals = "list", default = "list", storage_type = "character"
-    )
-  )
-  expect_identical(private$.params$id, c("count", "scale", "mode"))
-
-  expect_identical(typeof(private$.values), "list")
-  expect_identical(private$.values, list(count = 3L))
-  expect_identical(vapply(private$.tags, typeof, character(1L)), c(id = "character", tag = "character"))
-  expect_identical(private$.tags$id, c("count", "count", "scale", "scale"))
-  expect_identical(private$.tags$tag, c("alpha", "common", "beta", "common"))
-  expect_identical(vapply(private$.deps, typeof, character(1L)), c(id = "character", on = "character", cond = "list"))
-  expect_identical(private$.deps$id, "mode")
-  expect_identical(private$.deps$on, "count")
-  expect_identical(vapply(private$.trafos, typeof, character(1L)), c(id = "character", trafo = "list"))
-  expect_identical(private$.trafos$id, "scale")
-  expect_true(is.function(private$.trafos$trafo[[1L]]))
-})
-
-test_that("empty ParamSet stores and views preserve zero-row prototypes", {
+test_that("empty ParamSet public views preserve zero-row prototypes", {
   param_set = ParamSet$new()
-  private = param_set$.__enclos_env__$private
 
   expect_identical(param_set$ids(), character())
   expect_identical(param_set$values, setNames(list(), character()))
@@ -223,20 +189,13 @@ test_that("empty ParamSet stores and views preserve zero-row prototypes", {
       special_vals = "list", default = "list", storage_type = "character", tags = "list"
     )
   )
-  expect_identical(
-    vapply(private$.params, typeof, character(1L)),
-    c(
-      id = "character", cls = "character", grouping = "character", cargo = "list",
-      lower = "double", upper = "double", tolerance = "double", levels = "list",
-      special_vals = "list", default = "list", storage_type = "character"
-    )
-  )
-  expect_identical(vapply(private$.tags, typeof, character(1L)), c(id = "character", tag = "character"))
-  expect_identical(vapply(private$.deps, typeof, character(1L)), c(id = "character", on = "character", cond = "list"))
-  expect_identical(vapply(private$.trafos, typeof, character(1L)), c(id = "character", trafo = "list"))
+  expect_identical(dim(param_set$params), c(0L, 16L))
+  expect_identical(dim(param_set$deps), c(0L, 3L))
+  expect_identical(class(param_set$params), c("data.table", "data.frame"))
+  expect_identical(class(param_set$deps), c("data.table", "data.frame"))
 })
 
-test_that("ParamSetCollection adds the established collection bindings and stores", {
+test_that("ParamSetCollection adds established public collection bindings", {
   left = ps(enabled = p_lgl(tags = "control"), amount = p_int(0, 5))
   left$add_dep("amount", "enabled", CondEqual(TRUE))
   left$values = list(enabled = TRUE, amount = 2L)
@@ -298,32 +257,14 @@ test_that("ParamSetCollection adds the established collection bindings and store
   expect_identical(typeof(collection$has_deps), "logical")
   expect_identical(typeof(collection$assert_values), "logical")
 
-  private = collection$.__enclos_env__$private
-  expect_true(all(c(".params", ".values", ".tags", ".deps", ".trafos", ".sets") %in% names(private)))
-  expect_identical(private$.params$id, collection$ids())
-  expect_identical(vapply(private$.params, typeof, character(1L)), c(
-    id = "character", cls = "character", grouping = "character", cargo = "list",
-    lower = "double", upper = "double", tolerance = "double", levels = "list",
-    special_vals = "list", default = "list", storage_type = "character"
-  ))
-  expect_identical(private$.values, setNames(list(), character()))
-  expect_identical(vapply(private$.tags, typeof, character(1L)), c(id = "character", tag = "character"))
-  expect_identical(vapply(private$.deps, typeof, character(1L)), c(id = "character", on = "character", cond = "list"))
-  expect_identical(private$.deps$id, "right.scale")
-  expect_identical(private$.deps$on, "left.enabled")
-  expect_identical(vapply(private$.trafos, typeof, character(1L)), c(id = "character", trafo = "list"))
-  expect_identical(private$.trafos$id, "right.scale")
-  expect_identical(typeof(private$.sets), "list")
-  expect_identical(names(private$.sets), c("left", "right"))
-  expect_identical(private$.sets[[1L]]$values, list(enabled = TRUE, amount = 2L))
-  expect_identical(private$.sets[[2L]]$values, setNames(list(), character()))
-
-  expect_identical(
-    vapply(private$.translation, typeof, character(1L)),
-    c(id = "character", original_id = "character", owner_ps_index = "integer", owner_name = "character")
+  first_sets = collection$sets
+  second_sets = collection$sets
+  expect_identical(first_sets, second_sets)
+  expect_identical(first_sets[[1L]], left)
+  expect_identical(first_sets[[2L]], right)
+  expect_error(
+    { collection$sets = list() },
+    "sets is read-only",
+    fixed = TRUE
   )
-  expect_identical(private$.translation$id, c("left.amount", "left.enabled", "right.scale"))
-  expect_identical(private$.translation$original_id, c("amount", "enabled", "scale"))
-  expect_identical(private$.translation$owner_ps_index, c(1L, 1L, 2L))
-  expect_identical(private$.translation$owner_name, c("left", "left", "right"))
 })

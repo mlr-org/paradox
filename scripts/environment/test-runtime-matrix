@@ -39,32 +39,9 @@ done
 awk -F '\t' '
   NR == 1 {if ($0 != "context\treason") exit 1; next}
   NF != 2 || $1 !~ /^native-[a-z0-9][a-z0-9-]*$/ || $2 == "" || seen[$1]++ {exit 1}
-  END {if (NR != 23) exit 1}
+  END {if (NR != 1) exit 1}
 ' "$exclusions"
-expected_exclusions=(
-  native-altrep-lifetimes
-  native-design-dependencies
-  native-design-transpose-trafo
-  native-domain-builtin-direct
-  native-generate-design-grid
-  native-paramset-domains
-  native-paramset-get-domain
-  native-paramset-get-values
-  native-paramset-params
-  native-paramset-qunif
-  native-paramset-subset
-  native-paramset-value-mutation
-  native-paramsetcollection-callback-detach
-  native-paramsetcollection-construction
-  native-paramsetcollection-deps
-  native-paramsetcollection-exact-state
-  native-paramsetcollection-params
-  native-paramsetcollection-values
-  native-ps-construction
-  native-r6-surface-auth
-  native-sampler-1d-unif-shell
-  native-sampler-unif-bulk
-)
+expected_exclusions=()
 mapfile -t actual_exclusions < <(tail -n +2 "$exclusions" | cut -f 1)
 [[ "${actual_exclusions[*]}" == "${expected_exclusions[*]}" ]] || {
   echo "Runtime pre-R-4.6 exclusion policy differs from the reviewed contexts" >&2
@@ -109,11 +86,24 @@ done
 awk -F '\t' '
   NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
   NF != 4 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
-    $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" || $4 == "" ||
+    $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
+    $4 != "Reason: On CRAN" ||
     seen[$1 FS $2 FS $3]++ {exit 1}
   {count[$1]++}
-  END {if (NR != 14 || count["4.3.3"] != 6 || count["4.5.2"] != 7) exit 1}
+  END {if (count["4.3.3"] != count["4.5.2"]) exit 1}
 ' "$result_skips"
+diff -u \
+  <(awk -F '\t' '$1 == "4.3.3" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+  <(awk -F '\t' '$1 == "4.5.2" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+  >/dev/null || {
+  echo "Runtime result-skip inventories differ between runtimes" >&2
+  exit 1
+}
+diff -u <(tail -n +2 "$result_skips") \
+  <(tail -n +2 "$result_skips" | LC_ALL=C sort) >/dev/null || {
+  echo "Runtime result-skip manifest is not byte-sorted" >&2
+  exit 1
+}
 while IFS=$'\t' read -r runtime test_name _; do
   [[ "$runtime" == runtime ]] && continue
   [[ -f "$ROOT/tests/testthat/$test_name" && ! -L "$ROOT/tests/testthat/$test_name" ]] || {
@@ -121,15 +111,34 @@ while IFS=$'\t' read -r runtime test_name _; do
     exit 1
   }
 done < "$result_skips"
-[[ $(find "$ROOT/tests/testthat" -maxdepth 1 -type f -name 'test*.R' | wc -l) -eq 79 &&
-  $(find "$ROOT/tests/testthat" -maxdepth 1 -type f ! -name 'test*.R' | wc -l) -eq 7 ]] || {
-  echo "Runtime source-test inventory changed without a reviewed scope update" >&2
+[[ -z $(find "$ROOT/tests/testthat" -mindepth 1 -maxdepth 1 \
+    ! -type f ! -type d -print -quit) &&
+  $(find "$ROOT/tests/testthat" -maxdepth 1 -type f \
+    \( -name 'test*.R' -o -name 'test*.r' \) | wc -l) -gt 0 ]] || {
+  echo "Runtime source-test inventory is empty or contains a non-regular input" >&2
   exit 1
 }
 rg -q 'Sys.setenv\(NOT_CRAN = "false"\)' \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
-rg -q '4900L else 6000L' \
-  "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
+if rg -q 'minimum_expectations_required|4900L else 6000L|\b(79|57|22|55)\b' \
+    "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; then
+  echo "Runtime verification retains an obsolete count floor" >&2
+  exit 1
+fi
+if rg -q 'pre-4.5-evaluated-public-fallback|authenticated-r-fallback' \
+    "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; then
+  echo "Runtime verification retains the deleted R-evaluation shim contract" >&2
+  exit 1
+fi
+rg -Fq 'required=(ATTRIB FORMALS)' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'branch=pre-4.5-documented-public-backports' \
+  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+rg -Fq 'public_api_compatibility_policy=documented-versioned-accessors' \
+  "$ROOT/scripts/environment/runtime-matrix-probe.R"
 
 if command -v Rscript >/dev/null 2>&1; then
   Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
@@ -138,7 +147,7 @@ if command -v Rscript >/dev/null 2>&1; then
     "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
   Rscript --vanilla - "$ROOT" <<'RSCRIPT'
 root <- commandArgs(trailingOnly = TRUE)[[1L]]
-policy <- read.delim(
+whole_policy <- read.delim(
   file.path(root, "environment", "runtime-matrix-whole-file-skips.tsv"),
   quote = "", comment.char = "", colClasses = "character",
   check.names = FALSE
@@ -156,8 +165,10 @@ guard_label <- function(expression) {
   }
   NA_character_
 }
-for (i in seq_len(nrow(policy))) {
-  expressions <- parse(file.path(root, "tests", "testthat", policy$file[[i]]))
+for (i in seq_len(nrow(whole_policy))) {
+  expressions <- parse(file.path(
+    root, "tests", "testthat", whole_policy$file[[i]]
+  ))
   first_test <- which(vapply(expressions, function(expression) {
     is.call(expression) && is.name(expression[[1L]]) &&
       identical(as.character(expression[[1L]]), "test_that")
@@ -167,9 +178,81 @@ for (i in seq_len(nrow(policy))) {
   )
   stopifnot(
     !anyNA(observed),
-    identical(paste(observed, collapse = ","), policy$leading_guards[[i]])
+    identical(
+      paste(observed, collapse = ","), whole_policy$leading_guards[[i]]
+    )
   )
 }
+
+stopifnot(requireNamespace("rlang", quietly = TRUE))
+expression_children <- function(value) {
+  output <- list()
+  for (index in seq_along(value)) {
+    if (!rlang::is_missing(value[[index]])) {
+      output[[length(output) + 1L]] <- value[[index]]
+    }
+  }
+  output
+}
+contains_named_call <- function(value, target) {
+  if (!is.call(value) && !is.expression(value)) return(FALSE)
+  if (is.call(value) && is.name(value[[1L]]) &&
+      identical(as.character(value[[1L]]), target)) return(TRUE)
+  any(vapply(
+    expression_children(value), contains_named_call, logical(1L),
+    target = target
+  ))
+}
+not_cran_titles <- function(path) {
+  output <- character()
+  walk <- function(value) {
+    if (is.call(value) && is.name(value[[1L]]) &&
+        identical(as.character(value[[1L]]), "test_that") &&
+        contains_named_call(value, "skip_on_cran")) {
+      stopifnot(
+        is.character(value[[2L]]), length(value[[2L]]) == 1L,
+        !is.na(value[[2L]]), nzchar(value[[2L]])
+      )
+      output <<- c(output, value[[2L]])
+      return(invisible(NULL))
+    }
+    if (is.call(value) || is.expression(value)) {
+      for (child in expression_children(value)) walk(child)
+    }
+    invisible(NULL)
+  }
+  walk(parse(path, keep.source = FALSE))
+  output
+}
+test_directory <- file.path(root, "tests", "testthat")
+test_files <- dir(test_directory, "^test.*\\.[rR]$")
+source_rows <- do.call(rbind, lapply(test_files, function(file) {
+  titles <- not_cran_titles(file.path(test_directory, file))
+  if (!length(titles)) return(NULL)
+  data.frame(file = file, test = titles, stringsAsFactors = FALSE)
+}))
+if (is.null(source_rows)) {
+  source_rows <- data.frame(file = character(), test = character())
+}
+expected <- do.call(rbind, lapply(c("4.3.3", "4.5.2"), function(runtime) {
+  data.frame(
+    runtime = rep(runtime, nrow(source_rows)),
+    file = source_rows$file,
+    test = source_rows$test,
+    reason = rep("Reason: On CRAN", nrow(source_rows)),
+    stringsAsFactors = FALSE
+  )
+}))
+expected <- expected[do.call(order, c(
+  expected[c("runtime", "file", "test", "reason")], list(method = "radix")
+)), , drop = FALSE]
+row.names(expected) <- NULL
+result_policy <- read.delim(
+  file.path(root, "environment", "runtime-matrix-result-skips.tsv"),
+  quote = "", comment.char = "", colClasses = "character",
+  check.names = FALSE
+)
+stopifnot(identical(result_policy, expected))
 RSCRIPT
 fi
 

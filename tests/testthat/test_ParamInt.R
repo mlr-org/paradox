@@ -13,12 +13,12 @@ test_that("constructor works", {
   expect_equal(p$upper[["test"]], Inf)
 
   # check some invalid arg settings
-  expect_error(ParamInt$new(id = "x", lower = NULL), "not 'NULL'")
-  expect_error(ParamInt$new(id = "x", lower = 1.5), "not 'double'")
-  expect_error(ParamInt$new(id = "x", upper = NULL), "not 'NULL'")
-  expect_error(ParamInt$new(id = "x", upper = 1.5), "not 'double'")
-  expect_error(ParamInt$new(id = "x", lower = 1, upper = 0), "lower <= upper")
-  expect_error(ParamInt$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
+  expect_error(ParamInt$new(id = "x", lower = NULL), "`lower` must be one integer-valued number or infinity", fixed = TRUE)
+  expect_error(ParamInt$new(id = "x", lower = 1.5), "`lower` must be one integer-valued number or infinity", fixed = TRUE)
+  expect_error(ParamInt$new(id = "x", upper = NULL), "`upper` must be one integer-valued number or infinity", fixed = TRUE)
+  expect_error(ParamInt$new(id = "x", upper = 1.5), "`upper` must be one integer-valued number or infinity", fixed = TRUE)
+  expect_error(ParamInt$new(id = "x", lower = 1, upper = 0), "`lower` must not be greater than `upper`", fixed = TRUE)
+  expect_error(ParamInt$new(id = "x", lower = Inf, upper = 0), "`lower` must not be greater than `upper`", fixed = TRUE)
 })
 
 test_that("is_bounded works", {
@@ -52,7 +52,7 @@ test_that("assigning integer value results in int", {
   p = ParamSet_legacy$new(list(ParamInt$new("x")))
   p$values$x = 0
   expect_equal(typeof(p$values$x), "integer")
-  expect_error({p$values$x = 1e-2}, "be of type.*integerish")
+  expect_error({p$values$x = 1e-2}, "expected one finite integer-valued numeric within the Domain bounds")
 
 })
 
@@ -67,17 +67,19 @@ test_that("integer params are not corrected to the wrong value", {
 
 test_that("integer params are not corrected to the wrong value", {
   param_set = ps(a = p_int(tolerance = 0.4))
+  expect_true(domain_check(p_int(tolerance = 0.4), list(100.4)))
+  expect_true(domain_check(p_int(tolerance = 0.4), list(-100.4)))
   param_set$values$a = 100.4
   expect_identical(param_set$values$a, 100L)
   param_set$values$a = 100.6
   expect_identical(param_set$values$a, 101L)
-  expect_error({param_set$values$a = 100.41}, "Must be of type.*integerish.*not.*double")
-  expect_error({param_set$values$a = 100.59}, "Must be of type.*integerish.*not.*double")
+  expect_error({param_set$values$a = 100.41}, "expected one finite integer-valued numeric within the Domain bounds")
+  expect_error({param_set$values$a = 100.59}, "expected one finite integer-valued numeric within the Domain bounds")
 
   param_set$values$a = -100.4
   expect_identical(param_set$values$a, -100L)
   param_set$values$a = -100.6
   expect_identical(param_set$values$a, -101L)
-  expect_error({param_set$values$a = -100.41}, "Must be of type.*integerish.*not.*double")
-  expect_error({param_set$values$a = -100.59}, "Must be of type.*integerish.*not.*double")
+  expect_error({param_set$values$a = -100.41}, "expected one finite integer-valued numeric within the Domain bounds")
+  expect_error({param_set$values$a = -100.59}, "expected one finite integer-valued numeric within the Domain bounds")
 })

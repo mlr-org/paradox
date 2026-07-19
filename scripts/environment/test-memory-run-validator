@@ -39,7 +39,7 @@ sha256() { sha256sum "$1" | cut -d ' ' -f 1; }
 write_probe_fixture() {
   local result="$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
   local dso="$RUN_DIRECTORY/modes/gct/library/paradox/libs/paradox.so"
-  local dso_sha
+  local dso_sha records_before_summary
   dso_sha=$(sha256 "$dso")
   {
     printf 'kind\tid\tstatus\tdetail\n'
@@ -63,8 +63,10 @@ write_probe_fixture() {
       printf 'hazard\t%s\tpass\trounds=1\n' "$hazard"
     done
     printf 'gct\ttransition\tpass\tprevious=0;active=10;restored=0\n'
-    printf 'summary\tcomplete\tpass\trecords_before_summary=135;failures=0\n'
   } > "$result"
+  records_before_summary=$(( $(wc -l < "$result") - 1 ))
+  printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+    "$records_before_summary" >> "$result"
   printf '%s  paradox.so\n' "$dso_sha" \
     > "$RUN_DIRECTORY/modes/gct/artifacts/paradox.so.sha256"
 }
@@ -81,7 +83,6 @@ write_harness_receipt() {
     "$RUN_DIRECTORY/metadata/verify-native-probes.R" \
     "$RUN_DIRECTORY/metadata/run-native-tests.R" \
     "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R" \
-    "$RUN_DIRECTORY/metadata/native-functional-baseline.tsv" \
     "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols" \
     "$RUN_DIRECTORY/metadata/resource-jobs" \
     "$RUN_DIRECTORY/metadata/prepare-bounded-rchk-bcheck" \
@@ -113,8 +114,6 @@ write_completion() {
       "$(sha256 "$metadata/run-native-tests.R")"
     printf 'native_test_verifier_sha256=%s\n' \
       "$(sha256 "$metadata/verify-native-test-ledger.R")"
-    printf 'native_test_baseline_sha256=%s\n' \
-      "$(sha256 "$metadata/native-functional-baseline.tsv")"
     printf 'tree_receipt_helper_sha256=%s\n' \
       "$(sha256 "$metadata/tree-receipt.R")"
     printf 'source_manifest_sha256=%s\n' \
@@ -181,8 +180,6 @@ build_fixture() {
     "$RUN_DIRECTORY/metadata/run-native-tests.R"
   cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
     "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R"
-  cp "$ROOT/environment/native-functional-baseline.tsv" \
-    "$RUN_DIRECTORY/metadata/native-functional-baseline.tsv"
   cp "$ROOT/scripts/bootstrap-valgrind-debug-symbols" \
     "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols"
   cp "$ROOT/scripts/environment/resource-jobs" \
@@ -209,8 +206,6 @@ build_fixture() {
     "$RUN_DIRECTORY/source/scripts/environment/run-native-tests.R"
   cp "$ROOT/scripts/environment/verify-native-test-ledger.R" \
     "$RUN_DIRECTORY/source/scripts/environment/verify-native-test-ledger.R"
-  cp "$ROOT/environment/native-functional-baseline.tsv" \
-    "$RUN_DIRECTORY/source/environment/native-functional-baseline.tsv"
   cp "$ROOT/environment/native-routine-coverage.tsv" \
     "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
   printf '%s\n' 'Package: paradox' 'Version: 2.0.0' \
@@ -377,16 +372,20 @@ done
 
 # A semantically incomplete GCT ledger remains invalid even when the generic
 # modes-tree receipt and completion seal are recomputed around it.
-awk -F '\t' 'BEGIN { OFS = "\t" }
+awk -F '\t' '
   $1 == "gct" && $2 == "transition" { next }
-  $1 == "summary" {
-    sub("records_before_summary=135", "records_before_summary=134", $4)
-  }
+  $1 == "summary" { next }
   { print }
 ' "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv" \
   > "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv.new"
 mv "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv.new" \
   "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
+records_before_summary=$((
+  $(wc -l < "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv") - 1
+))
+printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+  "$records_before_summary" \
+  >> "$RUN_DIRECTORY/modes/gct/artifacts/native-probes.tsv"
 seal_fixture
 expect_failure "$VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 

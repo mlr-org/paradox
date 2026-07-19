@@ -12,6 +12,17 @@
 #'
 #' `domain_assert` will return the `param` argument silently for accepted values, and throw an error message otherwise.
 #'
+#' Domain operations use a closed native implementation for [`p_dbl()`],
+#' [`p_int()`], [`p_fct()`], [`p_lgl()`], and [`p_uty()`]. They do not perform
+#' S3 dispatch. Invalid values receive a stable native diagnostic; malformed or
+#' unknown Domain objects raise an error. The diagnostic text is deliberately
+#' not an exact `checkmate` compatibility contract.
+#' Domain/table shells and structural metadata are ordinary non-ALTREP/non-S4.
+#' A value-list shell is likewise structural; admitted semantic atomic leaves
+#' may be stable ALTREP. Typed S4 specials match only by pointer identity.
+#' ParamUty leaves remain opaque, with special membership alone using base
+#' `identical()` (including S4) and no S3/S4 dispatch.
+#'
 #' @param param (`Domain`).
 #' @param values (`any`).
 #' @param internal (`logical(1)`)\cr
@@ -21,26 +32,7 @@
 #' @keywords internal
 #' @export
 domain_check = function(param, values, internal = FALSE) {
-  if (length(values) == 0) return(TRUE)  # happens when there are no params + values to check
-  # The historical `if (!internal)` below rejects NA/NULL/vector conditions but
-  # accepts truthy numeric values. Only bypass it for the two canonical flags;
-  # otherwise a successful native value check would accidentally hide those
-  # established base-R diagnostics. Keep this after the empty-values return so
-  # that path still does not force a lazy `internal` argument.
-  canonical_internal = identical(internal, FALSE) || identical(internal, TRUE)
-  if (canonical_internal && .Call(C_domain_check_builtin, param, values)) return(TRUE)
-  if (!internal) {
-    if (!test_list(values, len = nrow(param))) return("values must be a list")
-    assert_string(unique(param$grouping))
-
-    special_vals_hit = pmap_lgl(list(param$special_vals, values), has_element)
-    if (any(special_vals_hit)) {
-      # don't annoy domain_check methods with the burdon of having to filter out
-      # values that match special_values
-      return(Recall(param[!special_vals_hit], values[!special_vals_hit], internal = TRUE))
-    }
-  }
-  UseMethod("domain_check")
+  .Call(C_domain_check_builtin, param, values, internal)
 }
 
 #' @export
@@ -63,9 +55,7 @@ domain_test = function(param, values) isTRUE(domain_check(param, values))
 #' @keywords internal
 #' @export
 domain_nlevels = function(param) {
-  if (!nrow(param)) return(integer(0))
-  assert_string(unique(param$grouping))
-  UseMethod("domain_nlevels")
+  .Call(C_domain_property_builtin, param, 0L)
 }
 
 #' @title Whether a Given Domain is Bounded
@@ -78,9 +68,7 @@ domain_nlevels = function(param) {
 #' @keywords internal
 #' @export
 domain_is_bounded = function(param) {
-  if (!nrow(param)) return(logical(0))
-  assert_string(unique(param$grouping))
-  UseMethod("domain_is_bounded")
+  .Call(C_domain_property_builtin, param, 1L)
 }
 
 #' @title Whether a Given Domain is Numeric
@@ -93,9 +81,7 @@ domain_is_bounded = function(param) {
 #' @keywords internal
 #' @export
 domain_is_number = function(param) {
-  if (!nrow(param)) return(logical(0))
-  assert_string(unique(param$grouping))
-  UseMethod("domain_is_number")
+  .Call(C_domain_property_builtin, param, 2L)
 }
 
 #' @title Whether a Given Domain is Categorical
@@ -108,9 +94,7 @@ domain_is_number = function(param) {
 #' @keywords internal
 #' @export
 domain_is_categ = function(param) {
-  if (!nrow(param)) return(logical(0))
-  assert_string(unique(param$grouping))
-  UseMethod("domain_is_categ")
+  .Call(C_domain_property_builtin, param, 3L)
 }
 
 #' @title Transform a Numeric Value to a Sample
@@ -120,17 +104,13 @@ domain_is_categ = function(param) {
 #'
 #' @param param (`Domain`).
 #' @param x `numeric` between 0 and 1.
+#'   Stable ALTREP semantic vectors are materialized once; structural Domain
+#'   and name metadata must remain ordinary non-ALTREP/non-S4.
 #' @return `any` -- format depending on the `Domain`.
 #' @keywords internal
 #' @export
 domain_qunif = function(param, x) {
-  if (!nrow(param)) return(logical(0))
-  assert_string(unique(param$grouping))
-  assert_numeric(x, lower = 0, upper = 1, any.missing = FALSE)
-  assert_true(length(x) %% nrow(param) == 0)
-  native = .Call(C_domain_qunif_builtin, param, x)
-  if (!is.null(native)) return(native)
-  UseMethod("domain_qunif")
+  .Call(C_domain_qunif_builtin, param, x)
 }
 
 #' @title Map to Acceptable Value
@@ -142,51 +122,12 @@ domain_qunif = function(param, x) {
 #' It is also used to convert integer-valued `numeric` values to `integer` values for [`p_int()`].
 #'
 #' @param param (`Domain`).
-#' @param values (`any`) -- format depending on the `Domain`.
+#' @param values (`any`) -- format depending on the `Domain`. Structural outer
+#'   list metadata must be ordinary non-ALTREP/non-S4; admitted semantic atomic
+#'   leaves may be stable ALTREP.
 #' @return `any` -- format depending on the `Domain`.
 #' @keywords internal
 #' @export
 domain_sanitize = function(param, values) {
-  if (!length(values)) return(values)
-  native = .Call(C_domain_sanitize_builtin, param, values)
-  if (!is.null(native)) return(native)
-  UseMethod("domain_sanitize")
-}
-
-#' @export
-domain_nlevels.Domain = function(param) rep(Inf, nrow(param))
-
-#' @export
-domain_is_bounded.Domain = function(param) rep(FALSE, nrow(param))
-
-#' @export
-domain_qunif.Domain = function(param, x) stop("undefined")
-
-#' @export
-domain_sanitize.Domain = function(param, values) values
-
-#' @export
-domain_is_categ.Domain = function(param) rep(FALSE, nrow(param))
-
-#' @export
-domain_is_number.Domain = function(param) rep(FALSE, nrow(param))
-
-
-# param:
-check_domain_vectorize = function(ids, values, checker, more_args = list()) {
-  if (is.function(checker)) {
-    errors = pmap(c(list(ids, values), more_args), function(id, value, ...) {
-      ch = checker(value, ...)
-      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
-    })
-  } else {
-    # `checker` is a list of functions with the same length as `values`
-    errors = pmap(c(list(ids, values, checker), more_args), function(id, value, chck, ...) {
-      ch = chck(value, ...)
-      if (isTRUE(ch)) NULL else sprintf("%s: %s", id, ch)
-    })
-  }
-  errors = unlist(errors, use.names = FALSE)
-  if (!length(errors)) return(TRUE)
-  str_collapse(errors, sep = "\n")
+  .Call(C_domain_sanitize_builtin, param, values)
 }

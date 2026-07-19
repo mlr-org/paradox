@@ -26,7 +26,7 @@ test_that("ParamSetCollection strict checks use live child constraints", {
   expect_true(collection$test_constraint(invalid))
 })
 
-test_that("ParamSetCollection constraint checks use its live public getter", {
+test_that("constraint checks do not authenticate a replaced R6 getter", {
   collection = psc(component = ps(x = p_int(0, 10)))
   reads = 0L
   original = activeBindingFunction("constraint", collection)
@@ -37,8 +37,6 @@ test_that("ParamSetCollection constraint checks use its live public getter", {
     function(x) FALSE
   }, collection)
 
-  expect_true(collection$has_constraint)
-  expect_identical(reads, 1L)
-  expect_false(collection$test_constraint(list(component.x = 1L)))
-  expect_identical(reads, 2L)
+  expect_true(collection$test_constraint(list(component.x = 1L)))
+  expect_identical(reads, 0L)
 })

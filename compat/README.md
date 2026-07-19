@@ -10,6 +10,35 @@ Priority 0 and 1 packages form the release gate; priority 2 packages are broad
 compatibility probes; priority 3 packages are optional consumers whose relevant
 tests are retained when their full stacks are impractical.
 
+## Local downstream bridges
+
+The Paradox-2 migrations for miesmuschel and bbotk are prepared and have passed
+development-candidate tests in the repository-local worktrees recorded in
+[`design/release-2.0.0.md`](../design/release-2.0.0.md). Release compatibility
+must retest those exact branch heads against the exact frozen candidate:
+miesmuschel selects/re-exports Paradox's
+official `ParamSetShadow` on version 2 while retaining its Paradox-1 bridge,
+and its fidelity tests compare operator public state instead of opaque R6
+environments. bbotk uses public collection state while retaining additive
+`Codomain` inheritance and version-gates expected native diagnostics. mlr3mbo
+currently needs no source patch.
+
+The executable [`github-snapshot.tsv`](github-snapshot.tsv) pins the exact two
+bridge heads and branch names. The organization census remains a review of the
+upstream sources from which those branches started;
+[`github-bridge-provenance.tsv`](github-bridge-provenance.tsv) binds each
+upstream commit/tree/date/branch to its bridge commit/tree/date/branch.
+`compat/verify-mlr-org-review` authenticates both endpoints, requires the base
+to be an ancestor of the bridge, and performs the census scan against the base
+bytes. The ordinary dependency and repository runners execute only the bridge
+heads selected by the snapshot.
+
+Agents may commit and test these local branches but must not push them or open
+remote PRs. The final handoff gives the user exact manual push commands and PR
+text after the branches pass against the frozen candidate. The reviewed titles,
+bodies, exact heads, and commands are retained in
+[`downstream-pr-handoff.md`](downstream-pr-handoff.md).
+
 ## Reproducible Linux system overlay
 
 The priority-zero and priority-one Linux corpus needs geospatial libraries,
@@ -167,10 +196,11 @@ candidate_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-candidate"
 dependency_library="$PARADOX_ROOT/.local/compat/R/library-dependencies"
 test ! -e "$PARADOX_ROOT/.local/compat/runs/$run_id"
 
-# Reconcile P0 GitHub consumer dependencies before the candidate and
-# protected-library hashes are taken.
+# Reconcile priority-zero/one GitHub consumer dependencies before the candidate
+# and protected-library hashes are taken. The dependency stage is immutable;
+# preparing only P0 here cannot later be extended for the mandatory P1 gate.
 Rscript compat/install-repository-test-dependencies.R \
-  "$PARADOX_ROOT" 0 "$dependency_library" --run-id "$run_id"
+  "$PARADOX_ROOT" 1 "$dependency_library" --run-id "$run_id"
 
 mkdir -p "$PARADOX_ROOT/.local/compat/candidate-snapshots"
 if test ! -e "$candidate_source"; then
@@ -187,7 +217,8 @@ export PARADOX_CANDIDATE_REF="$candidate_ref"
 export PARADOX_CANDIDATE_COMMIT="$candidate_commit"
 export PARADOX_CANDIDATE_TREE="$candidate_tree"
 export PARADOX_CANDIDATE_RUN_ID="$run_id"
-compat/install-candidate \
+compile_jobs="$(scripts/environment/resource-jobs compile)"
+MAKEFLAGS="-j$compile_jobs" compat/install-candidate \
   "$candidate_library" "$dependency_library" "$candidate_source"
 
 candidate_content="$(
@@ -596,9 +627,11 @@ full mlr3website render, all four current cheatsheets, mlr3gallery's legacy
 14-post corpus, the maintained mlr3benchmark nested-values example, and a
 2,048-row real-space workload are retained advisory probes. The essential
 scope makes the book's advanced paradox chapter, the website's paradox
-benchmark, the current tuning and pipelines cheatsheets, and 128-row design,
-quantile, subset, transpose, and serialization operations on both pinned
-`mbo_config` ParamSets mandatory. It also runs the three reviewed gallery posts,
+benchmark, the current tuning and pipelines cheatsheets, and an explicit legacy
+upgrade followed by 128-row design, quantile, subset, transpose, and current
+serialization operations on both pinned `mbo_config` ParamSets mandatory. The
+workload verifies that upgrading does not mutate either legacy input object. It
+also runs the three reviewed gallery posts,
 the mlr3benchmark nested active-binding contract, and the modern equivalent of
 mlr3-targets' pre-`ps()` legacy constructor surface as advisory evidence. A
 standalone `--scope full` or `--scope essential` runs only that half. Installing

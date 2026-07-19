@@ -1,3 +1,4 @@
+#include <float.h>
 #include <limits.h>
 #include <math.h>
 #include <stdint.h>
@@ -21,19 +22,22 @@ SEXP paradox_stored_attribute(SEXP object, SEXP symbol) {
   return result;
 }
 
-static const char *argument_type(SEXP value) {
-  if (Rf_isObject(value)) {
-    SEXP classes = Rf_getAttrib(value, R_ClassSymbol);
-    if (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
-        XLENGTH(classes) > 0) {
-      SEXP first_class = STRING_ELT(classes, 0);
-      if (first_class != NA_STRING) {
-        return CHAR(first_class);
-      }
-    }
+static SEXP argument_class(SEXP value) {
+  if (!Rf_isObject(value)) {
+    return R_NilValue;
   }
 
-  return Rf_type2char((SEXPTYPE) TYPEOF(value));
+  SEXP classes = PROTECT(Rf_getAttrib(value, R_ClassSymbol));
+  SEXP result = R_NilValue;
+  if (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
+      paradox_api_has_no_attributes(classes) && XLENGTH(classes) > 0) {
+    SEXP first_class = STRING_ELT(classes, 0);
+    if (first_class != NA_STRING && Rf_getCharCE(first_class) != CE_BYTES) {
+      result = first_class;
+    }
+  }
+  UNPROTECT(1);
+  return result;
 }
 
 SEXP paradox_get_named_column_checked(SEXP table, const char *corrupt_context,
@@ -219,17 +223,33 @@ double paradox_accepted_upper(double bound, double tolerance) {
   return bound + tolerance * fmax(1.0, fabs(bound));
 }
 
+int paradox_within_integer_tolerance(double value, double rounded,
+    double tolerance) {
+  const double subtraction_allowance =
+    fabs(value) * (2.0 * DBL_EPSILON);
+  return fabs(value - rounded) <= tolerance + subtraction_allowance;
+}
+
 void paradox_require_character_argument_type(SEXP value,
     const char *argument_name) {
   if (value == R_NilValue) {
     return;
   }
   if (TYPEOF(value) != STRSXP) {
-    Rf_error(
-      "Assertion on '%s' failed: Must be of type 'character' (or 'NULL'), not '%s'.",
-      argument_name,
-      argument_type(value)
-    );
+    SEXP class_name = PROTECT(argument_class(value));
+    paradox_utf8_piece_t pieces[] = {
+      paradox_utf8_ascii_piece("Assertion on '"),
+      paradox_utf8_ascii_piece(argument_name),
+      paradox_utf8_ascii_piece(
+        "' failed: Must be of type 'character' (or 'NULL'), not '"
+      ),
+      class_name == R_NilValue
+        ? paradox_utf8_ascii_piece(Rf_type2char((SEXPTYPE) TYPEOF(value)))
+        : paradox_utf8_charsxp_piece(class_name),
+      paradox_utf8_ascii_piece("'.")
+    };
+    SEXP message = PROTECT(paradox_utf8_message(pieces, 5));
+    paradox_error_from_scalar_string(message);
   }
 }
 
@@ -263,117 +283,303 @@ void *paradox_temporary_alloc(R_xlen_t count, size_t element_size) {
   return (void *) R_alloc((size_t) count, (int) element_size);
 }
 
-static int parse_version_component(const char **cursor, unsigned int *value) {
-  const unsigned char *position = (const unsigned char *) *cursor;
-  if (*position < (unsigned char) '0' || *position > (unsigned char) '9') {
+paradox_utf8_piece_t paradox_utf8_ascii_piece(const char *ascii) {
+  const paradox_utf8_piece_t result = {
+    .kind = PARADOX_UTF8_PIECE_ASCII,
+    .ascii = ascii,
+    .string = R_NilValue
+  };
+  return result;
+}
+
+paradox_utf8_piece_t paradox_utf8_charsxp_piece(SEXP string) {
+  const paradox_utf8_piece_t result = {
+    .kind = PARADOX_UTF8_PIECE_CHARSXP,
+    .ascii = NULL,
+    .string = string
+  };
+  return result;
+}
+
+static void utf8_piece_interrupt(R_xlen_t index) {
+  if (index != 0 && index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+    R_CheckUserInterrupt();
+  }
+}
+
+static size_t ascii_piece_size(const char *text) {
+  if (text != NULL) {
+    const size_t size = strlen(text);
+    for (size_t index = 0; index < size; ++index) {
+      if ((unsigned char) text[index] >= 0x80U) {
+        Rf_error("Internal error: a UTF-8 message literal is not ASCII");
+      }
+    }
+    return size;
+  }
+  Rf_error("Internal error: a UTF-8 message has a NULL ASCII fragment");
+}
+
+static int utf8_continuation(unsigned char byte) {
+  return byte >= 0x80U && byte <= 0xbfU;
+}
+
+static int valid_utf8_fragment(const char *text, size_t size) {
+  const unsigned char *bytes = (const unsigned char *) text;
+  size_t index = 0;
+  while (index < size) {
+    const unsigned char first = bytes[index];
+    if (first <= 0x7fU) {
+      ++index;
+      continue;
+    }
+    if (first >= 0xc2U && first <= 0xdfU) {
+      if (size - index < 2U || !utf8_continuation(bytes[index + 1U])) {
+        return FALSE;
+      }
+      index += 2U;
+      continue;
+    }
+    if (first >= 0xe0U && first <= 0xefU) {
+      if (size - index < 3U ||
+          !utf8_continuation(bytes[index + 2U])) {
+        return FALSE;
+      }
+      const unsigned char second = bytes[index + 1U];
+      if ((first == 0xe0U && (second < 0xa0U || second > 0xbfU)) ||
+          (first == 0xedU && (second < 0x80U || second > 0x9fU)) ||
+          (first != 0xe0U && first != 0xedU &&
+           !utf8_continuation(second))) {
+        return FALSE;
+      }
+      index += 3U;
+      continue;
+    }
+    if (first >= 0xf0U && first <= 0xf4U) {
+      if (size - index < 4U ||
+          !utf8_continuation(bytes[index + 2U]) ||
+          !utf8_continuation(bytes[index + 3U])) {
+        return FALSE;
+      }
+      const unsigned char second = bytes[index + 1U];
+      if ((first == 0xf0U && (second < 0x90U || second > 0xbfU)) ||
+          (first == 0xf4U && (second < 0x80U || second > 0x8fU)) ||
+          (first != 0xf0U && first != 0xf4U &&
+           !utf8_continuation(second))) {
+        return FALSE;
+      }
+      index += 4U;
+      continue;
+    }
     return FALSE;
   }
-
-  unsigned int result = 0;
-  do {
-    const unsigned int digit = (unsigned int) (*position - '0');
-    if (result > (UINT_MAX - digit) / 10U) {
-      return FALSE;
-    }
-    result = result * 10U + digit;
-    ++position;
-  } while (*position >= (unsigned char) '0' &&
-      *position <= (unsigned char) '9');
-
-  *cursor = (const char *) position;
-  *value = result;
   return TRUE;
 }
 
-static int data_table_requires_capacity_bridge(void) {
-  /* data.table 1.17.8's shallowwrapper() passes raw TRUELENGTH to its shell
-   * allocator whenever selfrefok() succeeds. Version 1.18 switched that
-   * decision to R_maxLength()/R_isResizable(), so only older releases need
-   * an explicitly allocated shell around paradox's exact-length VECSXP. */
-  static int cached_result = -1;
-  if (cached_result >= 0) {
-    return cached_result;
+static size_t translated_piece_size(SEXP string) {
+  const char *text = Rf_translateCharUTF8(string);
+  const size_t size = strlen(text);
+  if (!valid_utf8_fragment(text, size)) {
+    Rf_error("Internal error: a message fragment is not valid UTF-8");
   }
-
-  SEXP package = PROTECT(Rf_mkString("data.table"));
-  SEXP version_call = PROTECT(Rf_lang2(
-    Rf_install("getNamespaceVersion"),
-    package
-  ));
-  SEXP version = PROTECT(Rf_eval(version_call, R_BaseEnv));
-  SEXP character_call = PROTECT(Rf_lang2(
-    Rf_install("as.character"),
-    version
-  ));
-  SEXP character = PROTECT(Rf_eval(character_call, R_BaseEnv));
-  if (TYPEOF(character) != STRSXP || XLENGTH(character) != 1 ||
-      STRING_ELT(character, 0) == NA_STRING) {
-    UNPROTECT(5);
-    Rf_error("Unable to determine the loaded data.table version");
-  }
-
-  const char *cursor = CHAR(STRING_ELT(character, 0));
-  unsigned int major;
-  unsigned int minor;
-  if (!parse_version_component(&cursor, &major) || *cursor != '.') {
-    UNPROTECT(5);
-    Rf_error("Unable to parse the loaded data.table version");
-  }
-  ++cursor;
-  if (!parse_version_component(&cursor, &minor)) {
-    UNPROTECT(5);
-    Rf_error("Unable to parse the loaded data.table version");
-  }
-
-  cached_result = major < 1U || (major == 1U && minor < 18U);
-  UNPROTECT(5);
-  return cached_result;
+  return size;
 }
 
-static void validate_capacity_bridge(SEXP source, SEXP result,
-    SEXP namespace_environment) {
-  if (TYPEOF(result) != VECSXP || XLENGTH(result) != XLENGTH(source)) {
-    Rf_error("data.table::alloc.col() returned an invalid table shell");
+SEXP paradox_utf8_message(const paradox_utf8_piece_t *pieces,
+    R_xlen_t piece_count) {
+  if (piece_count < 0 ||
+      (piece_count != 0 && pieces == NULL) ||
+      (uintmax_t) piece_count >
+        (uintmax_t) PTRDIFF_MAX / sizeof(*pieces)) {
+    Rf_error("Internal error: invalid UTF-8 message piece array");
   }
-  for (R_xlen_t column = 0; column < XLENGTH(source); ++column) {
-    if (VECTOR_ELT(result, column) != VECTOR_ELT(source, column)) {
-      Rf_error("data.table::alloc.col() copied a native table column");
+
+  R_xlen_t string_count = 0;
+  /* Callers retain each CHARSXP through this non-allocating admission pass.
+   * One STRSXP then becomes the sole root for every allocating phase below. */
+  for (R_xlen_t index = 0; index < piece_count; ++index) {
+    utf8_piece_interrupt(index);
+    const paradox_utf8_piece_t *piece = &pieces[index];
+    if (piece->kind == PARADOX_UTF8_PIECE_ASCII) {
+      (void) ascii_piece_size(piece->ascii);
+      continue;
+    }
+    if (piece->kind != PARADOX_UTF8_PIECE_CHARSXP ||
+        TYPEOF(piece->string) != CHARSXP || piece->string == NA_STRING ||
+        Rf_getCharCE(piece->string) == CE_BYTES) {
+      Rf_error("Internal error: invalid UTF-8 message string fragment");
+    }
+    ++string_count;
+  }
+
+  SEXP roots = PROTECT(Rf_allocVector(STRSXP, string_count));
+  R_xlen_t string_index = 0;
+  for (R_xlen_t index = 0; index < piece_count; ++index) {
+    utf8_piece_interrupt(index);
+    if (pieces[index].kind == PARADOX_UTF8_PIECE_CHARSXP) {
+      SET_STRING_ELT(roots, string_index, pieces[index].string);
+      ++string_index;
+    }
+  }
+  if (string_index != string_count) {
+    UNPROTECT(1);
+    Rf_error("Internal error: incomplete UTF-8 message root vector");
+  }
+
+  size_t output_size = 0;
+  string_index = 0;
+  /* Translation workspaces are observed only long enough to validate and
+   * measure them.  No translated address survives into output allocation. */
+  for (R_xlen_t index = 0; index < piece_count; ++index) {
+    utf8_piece_interrupt(index);
+    const size_t piece_size = pieces[index].kind == PARADOX_UTF8_PIECE_ASCII
+      ? ascii_piece_size(pieces[index].ascii)
+      : translated_piece_size(STRING_ELT(roots, string_index++));
+    if (piece_size > (size_t) INT_MAX - output_size) {
+      UNPROTECT(1);
+      Rf_error("Internal error: UTF-8 message exceeds R's string limit");
+    }
+    output_size += piece_size;
+  }
+
+  char *output = paradox_temporary_alloc(
+    (R_xlen_t) output_size + 1,
+    sizeof(*output)
+  );
+  size_t offset = 0;
+  string_index = 0;
+  for (R_xlen_t index = 0; index < piece_count; ++index) {
+    utf8_piece_interrupt(index);
+    const char *text;
+    size_t piece_size;
+    if (pieces[index].kind == PARADOX_UTF8_PIECE_ASCII) {
+      text = pieces[index].ascii;
+      piece_size = ascii_piece_size(text);
+    } else {
+      SEXP string = STRING_ELT(roots, string_index++);
+      /* Reacquire after the sole output allocation and consume immediately,
+       * before the next interrupt check or translating call. */
+      text = Rf_translateCharUTF8(string);
+      piece_size = strlen(text);
+      if (!valid_utf8_fragment(text, piece_size)) {
+        UNPROTECT(1);
+        Rf_error("Internal error: a message fragment is not valid UTF-8");
+      }
+    }
+    if (piece_size > output_size - offset) {
+      UNPROTECT(1);
+      Rf_error("Internal error: UTF-8 message fragment changed while copying");
+    }
+    memcpy(output + offset, text, piece_size);
+    offset += piece_size;
+  }
+  if (offset != output_size || string_index != string_count) {
+    UNPROTECT(1);
+    Rf_error("Internal error: incomplete UTF-8 message construction");
+  }
+  output[output_size] = '\0';
+
+  SEXP string = PROTECT(Rf_mkCharLenCE(
+    output,
+    (int) output_size,
+    CE_UTF8
+  ));
+  SEXP result = PROTECT(Rf_ScalarString(string));
+  UNPROTECT(3);
+  return result;
+}
+
+NORET void paradox_error_from_scalar_string(SEXP message) {
+  PROTECT(message);
+  if (TYPEOF(message) != STRSXP || ALTREP(message) ||
+      XLENGTH(message) != 1 || STRING_ELT(message, 0) == NA_STRING ||
+      Rf_getCharCE(STRING_ELT(message, 0)) == CE_BYTES) {
+    UNPROTECT(1);
+    Rf_error("Internal error: expected one non-missing textual diagnostic");
+  }
+  SEXP string = PROTECT(STRING_ELT(message, 0));
+  const size_t size = strlen(Rf_translateChar(string));
+  if ((uintmax_t) size >= (uintmax_t) R_XLEN_T_MAX) {
+    UNPROTECT(2);
+    Rf_error("Internal error: diagnostic exceeds native string limits");
+  }
+  char *owned = paradox_temporary_alloc(
+    (R_xlen_t) size + 1,
+    sizeof(*owned)
+  );
+  memcpy(owned, Rf_translateChar(string), size + 1U);
+  UNPROTECT(2);
+  Rf_error("%s", owned);
+}
+
+SEXP paradox_snapshot_semantic_vector(SEXP value) {
+  if (value == R_NilValue) {
+    return value;
+  }
+
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != CPLXSXP && type != STRSXP && type != RAWSXP &&
+      type != VECSXP) {
+    Rf_error(
+      "Cannot snapshot semantic value of type `%s`",
+      Rf_type2char(type)
+    );
+  }
+
+  const R_xlen_t size = XLENGTH(value);
+  SEXP result = PROTECT(Rf_allocVector(type, size));
+  for (R_xlen_t index = 0; index < size; ++index) {
+    if (index != 0 && index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+      R_CheckUserInterrupt();
+    }
+    switch (type) {
+    case LGLSXP:
+      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(value, index));
+      break;
+    case INTSXP:
+      SET_INTEGER_ELT(result, index, INTEGER_ELT(value, index));
+      break;
+    case REALSXP:
+      SET_REAL_ELT(result, index, REAL_ELT(value, index));
+      break;
+    case CPLXSXP:
+      SET_COMPLEX_ELT(result, index, COMPLEX_ELT(value, index));
+      break;
+    case STRSXP:
+      SET_STRING_ELT(result, index, STRING_ELT(value, index));
+      break;
+    case RAWSXP:
+      SET_RAW_ELT(result, index, RAW_ELT(value, index));
+      break;
+    case VECSXP:
+      SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));
+      break;
+    default:
+      UNPROTECT(1);
+      Rf_error("Internal error: unsupported semantic vector type");
     }
   }
 
-  SEXP names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
-  SEXP selfref = PROTECT(Rf_getAttrib(
-    result,
-    Rf_install(".internal.selfref")
-  ));
-  if (TYPEOF(names) != STRSXP || XLENGTH(names) != XLENGTH(result) ||
-      TYPEOF(selfref) != EXTPTRSXP ||
-      R_ExternalPtrAddr(selfref) != (void *) R_NilValue ||
-      R_ExternalPtrTag(selfref) != names) {
-    Rf_error("data.table::alloc.col() returned an invalid self-reference");
-  }
-  SEXP owner = R_ExternalPtrProtected(selfref);
-  if (TYPEOF(owner) != EXTPTRSXP ||
-      R_ExternalPtrAddr(owner) != (void *) result) {
-    Rf_error("data.table::alloc.col() returned an invalid table owner");
+  SEXP names = PROTECT(Rf_getAttrib(value, R_NamesSymbol));
+  if (names != R_NilValue) {
+    if (TYPEOF(names) != STRSXP || XLENGTH(names) != size) {
+      UNPROTECT(2);
+      Rf_error("Invalid names on semantic vector");
+    }
+    SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, size));
+    for (R_xlen_t index = 0; index < size; ++index) {
+      if (index != 0 && index % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
+        R_CheckUserInterrupt();
+      }
+      SET_STRING_ELT(stable_names, index, STRING_ELT(names, index));
+    }
+    Rf_setAttrib(result, R_NamesSymbol, stable_names);
+    UNPROTECT(1);
   }
 
-  SEXP truelength_function = PROTECT(Rf_findFun(
-    Rf_install("truelength"),
-    namespace_environment
-  ));
-  SEXP truelength_call = PROTECT(Rf_lang2(truelength_function, result));
-  SEXP truelength = PROTECT(Rf_eval(
-    truelength_call,
-    namespace_environment
-  ));
-  if (TYPEOF(truelength) != INTSXP || XLENGTH(truelength) != 1 ||
-      INTEGER_ELT(truelength, 0) < 0 ||
-      (R_xlen_t) INTEGER_ELT(truelength, 0) < XLENGTH(result)) {
-    UNPROTECT(5);
-    Rf_error("data.table::alloc.col() did not allocate its table shell");
-  }
-  UNPROTECT(5);
+  UNPROTECT(2);
+  return result;
 }
 
 static void own_named_data_table_columns(SEXP table) {
@@ -397,43 +603,11 @@ static void own_named_data_table_columns(SEXP table) {
 }
 
 SEXP paradox_prepare_data_table(SEXP table, int growable) {
-  /* data.table::alloc.col() before 1.18 removes names from each column by
-   * reference, including a column shared with package state or a caller.
-   * Own only those unusual columns before normalization. Canonical unnamed
-   * columns remain shared, while current and legacy releases expose the same
-   * data.table column contract without mutating an input vector. */
+  (void) growable;
+  /* Public facade columns must not retain names that data.table may later
+   * remove by reference. Own only those unusual columns before normalization;
+   * canonical unnamed columns remain shared with the detached facade shell. */
   own_named_data_table_columns(table);
-  if (data_table_requires_capacity_bridge()) {
-    SEXP namespace_environment = PROTECT(
-      paradox_api_registered_namespace("data.table")
-    );
-    if (TYPEOF(namespace_environment) != ENVSXP) {
-      UNPROTECT(1);
-      Rf_error("The imported data.table namespace is not loaded");
-    }
-    SEXP allocate = PROTECT(Rf_findFun(
-      Rf_install("alloc.col"),
-      namespace_environment
-    ));
-    int protected_count = 2;
-    SEXP call;
-    if (growable) {
-      call = PROTECT(Rf_lang2(allocate, table));
-      ++protected_count;
-    } else {
-      SEXP zero = PROTECT(Rf_ScalarInteger(0));
-      ++protected_count;
-      call = PROTECT(Rf_lang3(allocate, table, zero));
-      ++protected_count;
-      SET_TAG(CDDR(call), Rf_install("n"));
-    }
-    SEXP result = PROTECT(Rf_eval(call, namespace_environment));
-    ++protected_count;
-    validate_capacity_bridge(table, result, namespace_environment);
-    UNPROTECT(protected_count);
-    return result;
-  }
-
   /* data.table's public object representation uses an external pointer whose
    * protected external pointer identifies the owning table and whose tag
    * identifies its names vector. Constructing the same representation solely
@@ -482,9 +656,8 @@ SEXP paradox_finalize_data_table(SEXP table) {
   Rf_setAttrib(shell, R_NamesSymbol, shell_names);
   Rf_setAttrib(shell, Rf_install("index"), shell_index);
   Rf_setAttrib(shell, Rf_install("sorted"), shell_sorted);
-  /* A fallback data.table may carry a copied or names-stale self-reference.
-   * Remove it before the legacy capacity bridge so alloc.col() cannot mistake
-   * spare pointer capacity for a fully valid shell. */
+  /* An input facade may carry a copied or names-stale self-reference. Remove
+   * it before installing the independently owned result reference. */
   Rf_setAttrib(shell, Rf_install(".internal.selfref"), R_NilValue);
   SEXP result = PROTECT(paradox_prepare_data_table(shell, TRUE));
   SEXP result_names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));

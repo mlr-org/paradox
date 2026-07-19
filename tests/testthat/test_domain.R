@@ -46,7 +46,7 @@ test_that("ps(p_xxx(...)) creates ParamSets", {
   expect_equal_ps(ps(x = p_uty(default = 1, tags = "xx", custom_check = check_int)),
     ParamSet_legacy$new(list(ParamUty$new("x", default = 1, tags = "xx", custom_check = check_int))))
 
-  expect_error(ps(x = p_int(), x = p_int()), "unique names")
+  expect_error(ps(x = p_int(), x = p_int()), "names must be unique")
 
   expect_error(p_int(id = 1), "unused argument.*id")
 
@@ -248,7 +248,11 @@ test_that("logscale in domains", {
   expect_error(p_dbl(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
   expect_error(p_int(trafo = exp, logscale = TRUE), "When a trafo is given then logscale must be FALSE")
 
-  expect_error(p_int(lower = 1, upper = 2.5, logscale = TRUE), "failed.*integer.*value.*not.*double")
+  expect_error(
+    p_int(lower = 1, upper = 2.5, logscale = TRUE),
+    "`upper` must be one integer-valued number or infinity",
+    fixed = TRUE
+  )
 
   expect_error(p_int(lower = -1, logscale = TRUE), "When logscale is TRUE then lower bound must be greater or equal 0")
   expect_error(p_dbl(lower = 0, logscale = TRUE), "When logscale is TRUE then lower bound must be strictly greater than 0")
@@ -370,4 +374,3 @@ test_that("internal", {
 
   expect_error(p_dbl(lower = 1, upper = 2, tags = "internal_tuning", "in_tune_fn"))
 })
-

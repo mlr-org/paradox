@@ -327,22 +327,23 @@ verify_portability_ci_evidence <- function(
 
   jobs_response <- read_json(jobs_path, "retained REST jobs metadata")
   jobs <- jobs_response$jobs
-  if (!is.list(jobs) || length(jobs) != 2L ||
+  if (!is.list(jobs) || length(jobs) != 3L ||
       !identical(integer_string(
         jobs_response$total_count, "jobs.total_count", allow_zero = TRUE
-      ), "2")) {
-    fail("retained REST jobs metadata does not contain exactly two jobs")
+      ), "3")) {
+    fail("retained REST jobs metadata does not contain exactly three jobs")
   }
   job_names <- vapply(jobs, function(job) {
     scalar_character(job$name, "job.name")
   }, character(1L))
   expected_job_names <- c(
     "macos-15 / arm64 (release)",
-    "windows-latest / x86_64 (release)"
+    "windows-latest / x86_64 (release)",
+    "Verify required check jobs"
   )
   if (!identical(sort(job_names), sort(expected_job_names)) ||
       anyDuplicated(job_names)) {
-    fail("retained REST job names differ from the two-platform release matrix")
+    fail("retained REST job names differ from the release matrix and completion gate")
   }
   expected_steps <- c(
     "Verify frozen candidate checkout" = "3",
@@ -383,7 +384,13 @@ verify_portability_ci_evidence <- function(
     step_names <- vapply(steps, function(step) {
       scalar_character(step$name, "job step name")
     }, character(1L))
-    for (step_name in names(expected_steps)) {
+    required_job_steps <- if (identical(job_names[[index]],
+        "Verify required check jobs")) {
+      c("Verify required job conclusions" = "2")
+    } else {
+      expected_steps
+    }
+    for (step_name in names(required_job_steps)) {
       matches <- which(step_names == step_name)
       if (length(matches) != 1L) {
         fail("required workflow step is absent or duplicated: ", step_name)
@@ -391,7 +398,7 @@ verify_portability_ci_evidence <- function(
       step <- steps[[matches]]
       if (!identical(
           integer_string(step$number, paste0(step_name, " step number")),
-          unname(expected_steps[[step_name]])
+          unname(required_job_steps[[step_name]])
         )) {
         fail("required workflow step number differs: ", step_name)
       }
@@ -634,7 +641,7 @@ verify_portability_ci_evidence <- function(
     "portability_ci_evidence=passed",
     paste0("run_id=", run_id),
     paste0("run_attempt=", run_attempt),
-    "jobs=2",
+    "jobs=3",
     "artifacts=2",
     paste0("sha_manifests=", length(manifest_paths)),
     paste0("sha_manifest_members=", sum(lengths(manifest_members)))

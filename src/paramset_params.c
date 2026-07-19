@@ -8,11 +8,11 @@
 #include "paramset_params_internal.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "core_state.h"
 
 typedef struct {
   SEXPTYPE type;
-  const int *integer_values;
-  const double *real_values;
+  SEXP values;
 } params_match_vector_t;
 
 /* One nested vector occupies a single slot in each caller's existing root
@@ -45,296 +45,10 @@ static const char *const params_column_names[PARADOX_DOMAIN_COLUMN_COUNT] = {
   ".trafo", ".requirements", ".init_given", ".init"
 };
 
-int paradox_params_exact_base_param_set(SEXP self,
-    R_xlen_t *work_since_interrupt) {
-  static const char *const classes[] = {"ParamSet", "R6"};
-  return TYPEOF(self) == ENVSXP && paradox_domain_exact_string_vector(
-    Rf_getAttrib(self, R_ClassSymbol),
-    classes,
-    2,
-    work_since_interrupt
-  );
-}
-
-static int exact_wrapper_call(SEXP function, const char *method_name,
-    const char *argument_name) {
-  SEXP body = PROTECT(paradox_api_closure_expression(function));
-  if (TYPEOF(body) != LANGSXP || CAR(body) != Rf_install(method_name)) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  static const char *const fixed_arguments[] = {"self", "private", "super"};
-  SEXP argument = CDR(body);
-  for (R_xlen_t index = 0; index < 3; ++index) {
-    SEXP symbol = Rf_install(fixed_arguments[index]);
-    if (argument == R_NilValue || TAG(argument) != symbol ||
-        CAR(argument) != symbol) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    argument = CDR(argument);
-  }
-  SEXP final_symbol = Rf_install(argument_name);
-  if (argument == R_NilValue || TAG(argument) != final_symbol ||
-      CAR(argument) != final_symbol || CDR(argument) != R_NilValue) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-
-  SEXP formals = PROTECT(paradox_api_closure_formals(function));
-  const int exact = formals != R_NilValue && TAG(formals) == final_symbol &&
-    CAR(formals) == R_MissingArg && CDR(formals) == R_NilValue;
-  UNPROTECT(2);
-  return exact;
-}
-
-static int exact_private_getter_call(SEXP function) {
-  SEXP body = PROTECT(paradox_api_closure_expression(function));
-  SEXP target_symbol = Rf_install(".__ParamSet__.get_values");
-  if (TYPEOF(body) != LANGSXP || CAR(body) != target_symbol) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  static const char *const fixed_arguments[] = {"self", "private", "super"};
-  SEXP argument = CDR(body);
-  for (R_xlen_t index = 0; index < 3; ++index) {
-    SEXP symbol = Rf_install(fixed_arguments[index]);
-    if (argument == R_NilValue || TAG(argument) != symbol ||
-        CAR(argument) != symbol) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    argument = CDR(argument);
-  }
-  SEXP formals = PROTECT(paradox_api_closure_formals(function));
-  const int exact = argument == R_NilValue && formals == R_NilValue;
-  UNPROTECT(2);
-  return exact;
-}
-
-static int exact_active_member_on(SEXP binding_environment,
-    SEXP expected_self, SEXP private_environment,
-    const char *member_name, const char *method_name,
-    const char *argument_name, int require_unbound_super,
-    SEXP *captured_super_out, SEXP *wrapper_environment_out,
-    R_xlen_t *work_since_interrupt) {
-  SEXP member_symbol = Rf_install(member_name);
-  if (TYPEOF(binding_environment) != ENVSXP ||
-      !R_existsVarInFrame(binding_environment, member_symbol) ||
-      !R_BindingIsActive(member_symbol, binding_environment)) {
-    return FALSE;
-  }
-  SEXP function = PROTECT(R_ActiveBindingFunction(
-    member_symbol,
-    binding_environment
-  ));
-  int protected_count = 1;
-  if (TYPEOF(function) != CLOSXP || !exact_wrapper_call(
-      function,
-      method_name,
-      argument_name
-    )) {
-    UNPROTECT(protected_count);
-    return FALSE;
-  }
-  SEXP environment = PROTECT(paradox_api_closure_environment(function));
-  ++protected_count;
-  SEXP namespace_environment = PROTECT(
-    paradox_api_registered_namespace("paradox")
-  );
-  ++protected_count;
-  SEXP method_symbol = Rf_install(method_name);
-  SEXP super_symbol = Rf_install("super");
-  if (TYPEOF(environment) != ENVSXP ||
-      TYPEOF(namespace_environment) != ENVSXP ||
-      paradox_api_parent_environment(environment) != namespace_environment ||
-      paradox_domain_local_value(environment, "self") != expected_self ||
-      paradox_domain_local_value(environment, "private") !=
-      private_environment ||
-      R_existsVarInFrame(environment, method_symbol) ||
-      (require_unbound_super &&
-        R_existsVarInFrame(environment, super_symbol)) ||
-      (!require_unbound_super &&
-        !R_existsVarInFrame(environment, super_symbol))) {
-    UNPROTECT(protected_count);
-    return FALSE;
-  }
-  SEXP captured_super = PROTECT(require_unbound_super
-    ? R_UnboundValue
-    : paradox_domain_local_value(environment, "super"));
-  ++protected_count;
-  if (!require_unbound_super && TYPEOF(captured_super) != ENVSXP) {
-    UNPROTECT(protected_count);
-    return FALSE;
-  }
-
-  SEXP active = PROTECT(paradox_domain_local_value(
-    environment,
-    ".__active__"
-  ));
-  ++protected_count;
-  SEXP active_names = PROTECT(Rf_getAttrib(active, R_NamesSymbol));
-  ++protected_count;
-  if (TYPEOF(active) != VECSXP || ALTREP(active) ||
-      TYPEOF(active_names) != STRSXP || ALTREP(active_names) ||
-      XLENGTH(active_names) != XLENGTH(active)) {
-    UNPROTECT(protected_count);
-    return FALSE;
-  }
-  R_xlen_t found = R_XLEN_T_MAX;
-  for (R_xlen_t index = 0; index < XLENGTH(active_names); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (paradox_domain_string_is(STRING_ELT(active_names, index), member_name)) {
-      if (found != R_XLEN_T_MAX) {
-        UNPROTECT(protected_count);
-        return FALSE;
-      }
-      found = index;
-    }
-  }
-  /* R6 cloning and serialization can duplicate an inherited wrapper
-   * separately from the `.__active__` entry.  Keep pointer identity as the
-   * common fast path; otherwise authenticate the registry copy directly.
-   * R_compute_identical() duplicates closures while stripping source
-   * references, opening a finalizer window after the live wrapper was already
-   * checked above. */
-  if (found == R_XLEN_T_MAX) {
-    UNPROTECT(protected_count);
-    return FALSE;
-  }
-  SEXP registered_function = PROTECT(VECTOR_ELT(active, found));
-  ++protected_count;
-  if (registered_function != function) {
-    if (TYPEOF(registered_function) != CLOSXP || !exact_wrapper_call(
-        registered_function,
-        method_name,
-        argument_name
-      )) {
-      UNPROTECT(protected_count);
-      return FALSE;
-    }
-    SEXP registered_environment = PROTECT(
-      paradox_api_closure_environment(registered_function)
-    );
-    ++protected_count;
-    if (registered_environment != environment) {
-      UNPROTECT(protected_count);
-      return FALSE;
-    }
-  }
-
-  if (captured_super_out != NULL) {
-    *captured_super_out = captured_super;
-  }
-  if (wrapper_environment_out != NULL) {
-    *wrapper_environment_out = environment;
-  }
-  UNPROTECT(protected_count);
-  return TRUE;
-}
-
-int paradox_params_canonical_active_member(SEXP self,
-    SEXP private_environment, const char *member_name,
-    const char *method_name, const char *argument_name,
-    const char *super_method_name,
-    R_xlen_t *work_since_interrupt) {
-  SEXP captured_super = R_UnboundValue;
-  if (!exact_active_member_on(
-      self,
-      self,
-      private_environment,
-      member_name,
-      method_name,
-      argument_name,
-      super_method_name == NULL,
-      &captured_super,
-      NULL,
-      work_since_interrupt
-    )) {
-    return FALSE;
-  }
-  if (super_method_name == NULL) {
-    return TRUE;
-  }
-
-  /* An overridden R6 member receives a superclass proxy in its generated
-   * closure.  The proxy is mutable, so checking only the captured `self` and
-   * `private` values would incorrectly admit a forged `super$params`. */
-  if (TYPEOF(captured_super) != ENVSXP) {
-    return FALSE;
-  }
-  PROTECT(captured_super);
-  SEXP super_enclosure = PROTECT(paradox_domain_local_value(
-    captured_super,
-    ".__enclos_env__"
-  ));
-  SEXP wrapper_environment = R_UnboundValue;
-  const int exact = TYPEOF(super_enclosure) == ENVSXP &&
-    exact_active_member_on(
-      captured_super,
-      self,
-      private_environment,
-      member_name,
-      super_method_name,
-      argument_name,
-      TRUE,
-      NULL,
-      &wrapper_environment,
-      work_since_interrupt
-    ) && wrapper_environment == super_enclosure;
-  UNPROTECT(2);
-  return exact;
-}
-
-int paradox_params_canonical_private_getter(SEXP self,
-    SEXP private_environment) {
-  SEXP enclosure = PROTECT(paradox_domain_local_value(
-    self,
-    ".__enclos_env__"
-  ));
-  SEXP getter_symbol = Rf_install(".get_values");
-  if (TYPEOF(enclosure) != ENVSXP ||
-      !R_existsVarInFrame(private_environment, getter_symbol) ||
-      R_BindingIsActive(getter_symbol, private_environment) ||
-      !R_BindingIsLocked(getter_symbol, private_environment)) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  SEXP function = PROTECT(paradox_domain_local_value(
-    private_environment,
-    ".get_values"
-  ));
-  if (TYPEOF(function) != CLOSXP || !exact_private_getter_call(function)) {
-    UNPROTECT(2);
-    return FALSE;
-  }
-  SEXP environment = PROTECT(paradox_api_closure_environment(function));
-  SEXP namespace_environment = PROTECT(
-    paradox_api_registered_namespace("paradox")
-  );
-  SEXP target_symbol = Rf_install(".__ParamSet__.get_values");
-  SEXP super_symbol = Rf_install("super");
-  const int canonical = TYPEOF(environment) == ENVSXP &&
-    environment == enclosure && TYPEOF(namespace_environment) == ENVSXP &&
-    paradox_api_parent_environment(environment) == namespace_environment &&
-    paradox_domain_local_value(environment, "self") == self &&
-    paradox_domain_local_value(environment, "private") ==
-      private_environment &&
-    !R_existsVarInFrame(environment, target_symbol) &&
-    !R_existsVarInFrame(environment, super_symbol);
-  UNPROTECT(4);
-  return canonical;
-}
-
 int paradox_params_supported_table_attributes(SEXP table, int allow_sorted) {
-  static const char *const supported[] = {
-    "names", "class", "row.names", "index", ".internal.selfref", "sorted"
-  };
-  return paradox_api_has_only_attributes(
-    table,
-    supported,
-    allow_sorted ? 6 : 5
-  );
+  static const char *const supported[] = {"names", "class", "row.names"};
+  (void) allow_sorted;
+  return paradox_api_has_only_attributes(table, supported, 3);
 }
 
 static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
@@ -342,7 +56,7 @@ static int exact_data_frame_row_names(SEXP table, R_xlen_t row_count,
   SEXP row_names = PROTECT(Rf_getAttrib(table, R_RowNamesSymbol));
   /* The public getter intentionally expands data-frame compact row names
    * (`c(NA, -n)`) to an ALTREP `1:n` vector. Row names do not participate in
-   * this kernel: the authenticated ordinary columns provide the row count and
+   * this kernel: the validated ordinary columns provide the row count and
    * the result receives fresh compact row names. Never ask a callback-capable
    * row-name facade for Length/Elt merely to validate unused metadata. */
   if (row_count > INT_MAX || TYPEOF(row_names) != INTSXP ||
@@ -380,21 +94,17 @@ static params_match_vector_t match_vector(SEXP value,
       XLENGTH(value) != expected_size) {
     Rf_error("Internal error: unexpected result from R's matching primitive");
   }
-  const params_match_vector_t result = {
-    type,
-    type == INTSXP ? INTEGER_RO(value) : NULL,
-    type == REALSXP ? REAL_RO(value) : NULL
-  };
+  const params_match_vector_t result = {type, value};
   return result;
 }
 
 static R_xlen_t match_at(const params_match_vector_t *matches,
     R_xlen_t index) {
   if (matches->type == INTSXP) {
-    const int value = matches->integer_values[index];
+    const int value = INTEGER_ELT(matches->values, index);
     return value == NA_INTEGER || value <= 0 ? 0 : (R_xlen_t) value;
   }
-  const double value = matches->real_values[index];
+  const double value = REAL_ELT(matches->values, index);
   return ISNAN(value) || value <= 0.0 ? 0 : (R_xlen_t) value;
 }
 
@@ -1028,49 +738,24 @@ int paradox_params_finish_dynamic(SEXP result,
 
 SEXP paradox_param_set_params(SEXP private_environment, SEXP self) {
   R_xlen_t work_since_interrupt = 0;
-  if (!paradox_params_exact_base_param_set(
-      self,
-      &work_since_interrupt
-    ) || !paradox_domain_owns_private_environment(
-      self,
-      private_environment
-    ) || !paradox_params_canonical_active_member(
-      self,
-      private_environment,
-      "params",
-      ".__ParamSet__params",
-      "rhs",
-      NULL,
-      &work_since_interrupt
-    ) || !paradox_params_canonical_active_member(
-      self,
-      private_environment,
-      "tags",
-      ".__ParamSet__tags",
-      "v",
-      NULL,
-      &work_since_interrupt
-    ) || !paradox_params_canonical_active_member(
-      self,
-      private_environment,
-      "deps",
-      ".__ParamSet__deps",
-      "v",
-      NULL,
-      &work_since_interrupt
-    ) || !paradox_params_canonical_active_member(
-      self,
-      private_environment,
-      "values",
-      ".__ParamSet__values",
-      "xs",
-      NULL,
-      &work_since_interrupt
-    ) || !paradox_params_canonical_private_getter(
-      self,
-      private_environment
-    )) {
-    return R_NilValue;
+  if (TYPEOF(private_environment) != ENVSXP || TYPEOF(self) != ENVSXP) {
+    Rf_error(
+      "Corrupt ParamSet parameter shell: private and self must be environments"
+    );
+  }
+  SEXP core = paradox_core_from_private(private_environment);
+  if (core == R_UnboundValue) {
+    Rf_error("Corrupt ParamSet parameter state: missing core capsule");
+  }
+  if (!paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet parameter shell ownership");
+  }
+  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
+    core = paradox_core_refresh_shadow(self, private_environment);
+  }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {
+    Rf_error("ParamSet parameter reader requires a BASE or SHADOW core");
   }
 
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, 5));
@@ -1083,7 +768,7 @@ SEXP paradox_param_set_params(SEXP private_environment, SEXP self) {
       &work_since_interrupt
     )) {
     UNPROTECT(1);
-    return R_NilValue;
+    Rf_error("Corrupt ParamSet parameter state capsule");
   }
   SEXP result = PROTECT(paradox_params_build_static(
     &state,
@@ -1097,7 +782,7 @@ SEXP paradox_param_set_params(SEXP private_environment, SEXP self) {
       &work_since_interrupt
     )) {
     UNPROTECT(2);
-    return R_NilValue;
+    Rf_error("Corrupt ParamSet dynamic parameter state capsule");
   }
   UNPROTECT(2);
   return result;

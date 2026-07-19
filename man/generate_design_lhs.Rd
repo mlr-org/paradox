@@ -35,9 +35,9 @@ if (requireNamespace("lhs", quietly = TRUE)) {
 }
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_grid}()},
-\code{\link{generate_design_random}()},
-\code{\link{generate_design_sobol}()}
+Other generate_design:
+\code{\link[=generate_design_grid]{generate_design_grid()}},
+\code{\link[=generate_design_random]{generate_design_random()}},
+\code{\link[=generate_design_sobol]{generate_design_sobol()}}
 }
 \concept{generate_design}

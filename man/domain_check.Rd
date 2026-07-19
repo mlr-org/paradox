@@ -41,5 +41,16 @@ before the call, if present.
 \code{domain_test} will return \code{TRUE} for accepted values, \code{FALSE} otherwise.
 
 \code{domain_assert} will return the \code{param} argument silently for accepted values, and throw an error message otherwise.
+
+Domain operations use a closed native implementation for \code{\link[=p_dbl]{p_dbl()}},
+\code{\link[=p_int]{p_int()}}, \code{\link[=p_fct]{p_fct()}}, \code{\link[=p_lgl]{p_lgl()}}, and \code{\link[=p_uty]{p_uty()}}. They do not perform
+S3 dispatch. Invalid values receive a stable native diagnostic; malformed or
+unknown Domain objects raise an error. The diagnostic text is deliberately
+not an exact \code{checkmate} compatibility contract.
+Domain/table shells and structural metadata are ordinary non-ALTREP/non-S4.
+A value-list shell is likewise structural; admitted semantic atomic leaves
+may be stable ALTREP. Typed S4 specials match only by pointer identity.
+ParamUty leaves remain opaque, with special membership alone using base
+\code{identical()} (including S4) and no S3/S4 dispatch.
 }
 \keyword{internal}

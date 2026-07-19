@@ -83,6 +83,23 @@ attribute_hidden int paradox_domain_exact_string_vector(
   R_xlen_t size,
   R_xlen_t *work_since_interrupt
 );
+/* Package-owned capsule tables are canonical plain data.frames.  They carry
+ * exactly names/class/row.names metadata, never data.table's mutable
+ * self-reference, key, index, or spare-capacity state.  The compact integer
+ * row.names representation used by R is admitted; table columns and names
+ * remain ordinary vectors and are validated by the schema-specific caller. */
+attribute_hidden int paradox_domain_exact_plain_table(
+  SEXP table,
+  const char *const *column_names,
+  R_xlen_t column_count,
+  R_xlen_t *row_count,
+  R_xlen_t *work_since_interrupt
+);
+attribute_hidden SEXP paradox_domain_plain_table_snapshot(
+  SEXP source,
+  const char *const *column_names,
+  R_xlen_t column_count
+);
 /* Exact private-state validators reject ALTREP table shells, structural
  * attributes, columns, and inspected nested vectors. Validators root every
  * borrowed child across their own allocation-capable checks. Returned child
@@ -97,6 +114,7 @@ attribute_hidden int paradox_domain_owns_private_environment(
   SEXP self,
   SEXP private_environment
 );
+attribute_hidden SEXP paradox_domain_private_environment(SEXP self);
 attribute_hidden int paradox_domain_validate_params(
   SEXP params,
   SEXP selected_id,

@@ -32,9 +32,9 @@ pset = ps(
 generate_design_grid(pset, 10)
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_lhs}()},
-\code{\link{generate_design_random}()},
-\code{\link{generate_design_sobol}()}
+Other generate_design:
+\code{\link[=generate_design_lhs]{generate_design_lhs()}},
+\code{\link[=generate_design_random]{generate_design_random()}},
+\code{\link[=generate_design_sobol]{generate_design_sobol()}}
 }
 \concept{generate_design}

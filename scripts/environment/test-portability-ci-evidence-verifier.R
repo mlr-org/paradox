@@ -89,7 +89,8 @@ make_steps <- function() {
 }
 job_specs <- list(
   list(id = 2001, name = "macos-15 / arm64 (release)"),
-  list(id = 2002, name = "windows-latest / x86_64 (release)")
+  list(id = 2002, name = "windows-latest / x86_64 (release)"),
+  list(id = 2003, name = "Verify required check jobs")
 )
 jobs <- lapply(job_specs, function(spec) {
   list(
@@ -107,7 +108,16 @@ jobs <- lapply(job_specs, function(spec) {
       "https://github.com/mlr-org/paradox/actions/runs/", run_id,
       "/job/", spec$id
     ),
-    steps = make_steps()
+    steps = if (identical(spec$name, "Verify required check jobs")) {
+      list(list(
+        name = "Verify required job conclusions",
+        number = 2L,
+        status = "completed",
+        conclusion = "success"
+      ))
+    } else {
+      make_steps()
+    }
   )
 })
 write_json(
@@ -249,7 +259,7 @@ writeLines(c(
   "portability_ci_evidence=passed",
   paste0("run_id=", run_id),
   paste0("run_attempt=", run_attempt),
-  "jobs=2",
+  "jobs=3",
   "artifacts=2",
   "sha_manifests=6",
   paste0("sha_manifest_members=", manifest_member_count)
@@ -299,6 +309,40 @@ if (status(result) != 0L ||
     result, collapse = "\n"
   ))
 }
+
+failed_completion_jobs <- jobs
+failed_completion_jobs[[3L]]$conclusion <- "failure"
+write_json(
+  list(total_count = length(failed_completion_jobs), jobs = failed_completion_jobs),
+  file.path(fixture, "jobs.json")
+)
+write_manifest("METADATA-SHA256SUMS", metadata_members)
+write_manifest(
+  "EVIDENCE-SHA256SUMS",
+  c(
+    "ARCHIVE-SHA256SUMS", "ARTIFACT-SHA256SUMS",
+    "JOB-LOG-SHA256SUMS", "METADATA-SHA256SUMS",
+    "VERIFIER-SHA256SUMS"
+  )
+)
+result <- invoke()
+if (status(result) == 0L ||
+    !any(grepl("job.conclusion differs", result, fixed = TRUE))) {
+  fail("verifier accepted a failed required-job completion gate")
+}
+write_json(
+  list(total_count = length(jobs), jobs = jobs),
+  file.path(fixture, "jobs.json")
+)
+write_manifest("METADATA-SHA256SUMS", metadata_members)
+write_manifest(
+  "EVIDENCE-SHA256SUMS",
+  c(
+    "ARCHIVE-SHA256SUMS", "ARTIFACT-SHA256SUMS",
+    "JOB-LOG-SHA256SUMS", "METADATA-SHA256SUMS",
+    "VERIFIER-SHA256SUMS"
+  )
+)
 
 mac_log <- file.path(
   fixture, "artifacts", artifact_specs[[1L]]$name,

@@ -1,11 +1,23 @@
-native_value_mutation_symbol = function(name) {
+native_value_symbol = function(name) {
   get(paste0("C_", name), envir = asNamespace("paradox"), inherits = FALSE)
+}
+
+native_value_private = function(param_set) {
+  param_set$.__enclos_env__$private
+}
+
+native_value_state = function(param_set) {
+  paradox:::param_set_core_state(native_value_private(param_set))
+}
+
+native_value_core_address = function(param_set) {
+  data.table::address(native_value_private(param_set)$.core)
 }
 
 native_value_merge = function(dots, values = list(), current = NULL,
     insert = FALSE) {
   .Call(
-    native_value_mutation_symbol("param_set_values_merge"),
+    native_value_symbol("param_set_values_merge"),
     dots,
     values,
     current,
@@ -13,56 +25,41 @@ native_value_merge = function(dots, values = list(), current = NULL,
   )
 }
 
-native_value_store = function(param_set, values) {
+native_value_store = function(param_set, values,
+    private = native_value_private(param_set)) {
   .Call(
-    native_value_mutation_symbol("param_set_store_values"),
-    param_set$.__enclos_env__$private,
+    native_value_symbol("param_set_store_values"),
+    private,
     param_set,
     values
   )
 }
 
-native_value_assign_checked = function(param_set, values) {
+native_value_check = function(param_set, values,
+    private = native_value_private(param_set)) {
   .Call(
-    native_value_mutation_symbol("param_set_assign_values_checked"),
-    param_set$.__enclos_env__$private,
+    native_value_symbol("param_set_assign_values_checked"),
+    private,
     param_set,
     values
   )
 }
 
-native_collection_store_plan = function(collection, values,
-    sets = collection$sets) {
-  .Call(
-    native_value_mutation_symbol("param_set_collection_store_plan"),
-    collection$.__enclos_env__$private,
-    collection,
-    sets,
-    values
-  )
-}
-
-test_that("value mutation routines are forced and have fixed arities", {
+test_that("value mutation routines have one forced native signature", {
   expected = c(
     param_set_values_merge = 4L,
     param_set_store_values = 3L,
-    param_set_assign_values_checked = 3L,
-    param_set_collection_store_plan = 4L
+    param_set_assign_values_checked = 3L
   )
   for (name in names(expected)) {
-    symbol = native_value_mutation_symbol(name)
+    symbol = native_value_symbol(name)
     expect_s3_class(symbol, "NativeSymbolInfo")
     expect_identical(symbol$numParameters, expected[[name]])
   }
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
-  expect_error(
-    .Call("param_set_values_merge", PACKAGE = "paradox"),
-    "not available",
-    fixed = TRUE
-  )
 })
 
-test_that("native merge retains insertion, replacement, and NULL rules", {
+test_that("native merge owns replacement and insertion semantics", {
   reference = new.env(parent = emptyenv())
   current = list(a = 1L, b = 2L, nullable = NULL, reference = reference)
 
@@ -81,333 +78,449 @@ test_that("native merge retains insertion, replacement, and NULL rules", {
     data.table::address(current)
   ))
 
-  replacement = native_value_merge(
-    list(nullable = NULL),
-    list(b = 5L),
-    NULL,
-    FALSE
+  expect_identical(
+    native_value_merge(list(nullable = NULL), list(b = 5L)),
+    list(nullable = NULL, b = 5L)
   )
-  expect_identical(replacement, list(nullable = NULL, b = 5L))
   expect_identical(native_value_merge(list(), list()), list())
-
-  expect_null(native_value_merge(
-    structure(list(1L, 2L), names = c("a", "a")),
-    list()
-  ))
-  expect_null(native_value_merge(
-    structure(list(a = 1L), class = "extension"),
-    list()
-  ))
-  expect_null(native_value_merge(list(a = 1L), list(a = 2L)))
 })
 
-test_that("checked assignment commits only canonical successful values", {
+test_that("native merge rejects malformed input without a sentinel", {
+  expect_error(
+    native_value_merge(
+      structure(list(1L, 2L), names = c("a", "a")),
+      list()
+    ),
+    "unique, disjoint names"
+  )
+  expect_error(
+    native_value_merge(list(a = 1L), list(a = 2L)),
+    "unique, disjoint names"
+  )
+  expect_error(
+    native_value_merge(list(1L), list()),
+    "plain named list"
+  )
+  expect_identical(
+    native_value_merge(
+      structure(list(a = 1L), class = "configuration_extension"),
+      list()
+    ),
+    list(a = 1L)
+  )
+  expect_error(
+    native_value_merge(list(a = 1L), list(), list(), NA),
+    "`.insert` must be TRUE or FALSE",
+    fixed = TRUE
+  )
+  expect_error(
+    native_value_merge(list(a = 1L), list(), list(1L), TRUE),
+    "Current ParamSet values are corrupt",
+    fixed = TRUE
+  )
+})
+
+test_that("value transactions ignore harmless outer S3 container classes", {
+  param_set = ps(
+    n_searches = p_int(1L, 20L),
+    mut_sd = p_dbl(0, 1)
+  )
+  configuration = structure(
+    list(n_searches = 10L, mut_sd = 0.1),
+    class = "local_search_control"
+  )
+
+  param_set$values = configuration
+
+  expect_identical(
+    param_set$values,
+    list(n_searches = 10L, mut_sd = 0.1)
+  )
+  expect_null(attr(param_set$values, "class", exact = TRUE))
+})
+
+test_that("public BASE setters commit one fresh canonical capsule", {
   param_set = ps(
     count = p_int(0L, 10L, tolerance = 0.2),
     ratio = p_dbl(0, 1, tolerance = 0.1),
     payload = p_uty()
   )
-  param_set$values = list(count = 1L, ratio = 0.5)
+  old_state = native_value_state(param_set)
+  old_address = native_value_core_address(param_set)
 
-  returned = native_value_assign_checked(
-    param_set,
-    list(ratio = 1.05, count = 2.1)
-  )
-  expect_identical(returned, list(ratio = 1, count = 2L))
+  param_set$values = list(ratio = 1.05, count = 2.1)
   expect_identical(param_set$values, list(count = 2L, ratio = 1))
+  expect_identical(old_state$.values, setNames(list(), character()))
+  expect_false(identical(old_address, native_value_core_address(param_set)))
 
-  before = param_set$values
-  expect_null(native_value_assign_checked(
-    param_set,
-    list(count = 50L)
-  ))
-  expect_identical(param_set$values, before)
-  expect_null(native_value_assign_checked(
-    param_set,
-    list(payload = "opaque")
-  ))
-  expect_identical(param_set$values, before)
+  accepted_address = native_value_core_address(param_set)
+  expect_error({
+    param_set$values = list(count = 50L)
+  }, "count:")
+  expect_identical(param_set$values, list(count = 2L, ratio = 1))
+  expect_identical(native_value_core_address(param_set), accepted_address)
 
-  events = new.env(parent = emptyenv())
-  events$count = 0L
-  constrained = ps(
-    value = p_int(),
-    .constraint = function(x) {
-      events$count = events$count + 1L
-      TRUE
-    }
+  param_set$set_values(count = 3L)
+  expect_identical(param_set$values, list(count = 3L, ratio = 1))
+  param_set$set_values(.values = list(ratio = 0.25), .insert = FALSE)
+  expect_identical(param_set$values, list(ratio = 0.25))
+  param_set$set_values(ratio = NULL)
+  expect_identical(param_set$values, setNames(list(), character()))
+
+  expect_error(
+    param_set$set_values(count = 1L, .values = list(count = 2L)),
+    "unique, disjoint names"
   )
-  constrained$assert_values = FALSE
-  constrained$values = list(value = 1L)
-  constrained$assert_values = TRUE
-  expect_null(native_value_assign_checked(
-    constrained,
-    list(value = 2L)
-  ))
-  expect_identical(events$count, 0L)
-  expect_identical(constrained$values, list(value = 1L))
-
-  dependent = ps(parent = p_int(), child = p_int())
-  dependent$add_dep("child", "parent", CondEqual(1L))
-  expect_null(native_value_assign_checked(
-    dependent,
-    list(parent = 1L, child = 2L)
-  ))
-  expect_identical(dependent$values, structure(list(), names = character()))
+  expect_error(
+    param_set$set_values(count = 1L, .insert = NA),
+    "`.insert` must be TRUE or FALSE",
+    fixed = TRUE
+  )
+  expect_identical(param_set$values, setNames(list(), character()))
 })
 
-test_that("checked assignment declines forged generated wrappers", {
-  replace_locked = function(environment, name, replacement) {
-    unlockBinding(name, environment)
-    assign(name, replacement, envir = environment)
-    lockBinding(name, environment)
-  }
-
-  param_set = ps(a = p_int())
+test_that("direct checked and unchecked calls each commit one capsule", {
+  param_set = ps(a = p_int(0L, 4L, tolerance = 0.2), b = p_uty())
   param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls = new.env(parent = emptyenv())
-  calls$count = 0L
-  original = param_set$assert
-  replace_locked(param_set, "assert", function(xs, ...) {
-    calls$count = calls$count + 1L
-    original(xs, ...)
-  })
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
+  old_state = native_value_state(param_set)
+  before_address = native_value_core_address(param_set)
 
-  param_set = ps(a = p_int())
-  param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls$count = 0L
-  original = param_set$check
-  replace_locked(param_set, "check", function(xs, ...) {
-    calls$count = calls$count + 1L
-    original(xs, ...)
-  })
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
+  checked = native_value_check(param_set, list(a = 2.1))
+  expect_identical(checked, list(a = 2L))
+  expect_identical(param_set$values, list(a = 2L))
+  expect_identical(old_state$.values, list(a = 1L))
+  expect_false(identical(native_value_core_address(param_set), before_address))
+  checked_address = native_value_core_address(param_set)
+  expect_error(native_value_check(param_set, list(a = 10L)), "a:")
+  expect_identical(param_set$values, list(a = 2L))
+  expect_identical(native_value_core_address(param_set), checked_address)
 
-  param_set = ps(a = p_int())
-  param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls$count = 0L
-  original = private$.store_values
-  replace_locked(private, ".store_values", function(xs) {
-    calls$count = calls$count + 1L
-    original(xs)
-  })
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
-
-  param_set = ps(a = p_int())
-  param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls$count = 0L
-  original = activeBindingFunction("values", param_set)
-  makeActiveBinding("values", function(xs) {
-    calls$count = calls$count + 1L
-    if (missing(xs)) original() else original(xs)
-  }, param_set)
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
-
-  param_set = ps(a = p_int())
-  param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls$count = 0L
-  namespace = asNamespace("paradox")
-  implementation = get(
-    ".__ParamSet__values",
-    envir = namespace,
-    inherits = FALSE
-  )
-  forged_parent = new.env(parent = namespace)
-  forged_parent$.__ParamSet__values = function(self, private, super, xs) {
-    calls$count = calls$count + 1L
-    implementation(self, private, super, xs)
-  }
-  wrapper_environment = environment(activeBindingFunction(
-    "values",
-    param_set
-  ))
-  parent.env(wrapper_environment) = forged_parent
-
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
-
-  param_set = ps(a = p_int())
-  param_set$values = list(a = 1L)
-  private = param_set$.__enclos_env__$private
-  calls$count = 0L
-  namespace = asNamespace("paradox")
-  implementation = get(
-    ".__ParamSet__values",
-    envir = namespace,
-    inherits = FALSE
-  )
-  wrapper_environment = environment(activeBindingFunction(
-    "values",
-    param_set
-  ))
-  delayedAssign(
-    ".__ParamSet__values",
-    {
-      calls$count = calls$count + 1L
-      function(self, private, super, xs) {
-        implementation(self, private, super, xs)
-      }
-    },
-    eval.env = environment(),
-    assign.env = wrapper_environment
-  )
-
-  expect_null(native_value_assign_checked(param_set, list(a = 2L)))
-  expect_identical(calls$count, 0L)
-  expect_identical(private$.values, list(a = 1L))
-  param_set$values = list(a = 2L)
-  expect_identical(calls$count, 1L)
-  expect_identical(private$.values, list(a = 2L))
-})
-
-test_that("checked assignment does not execute forged metadata bindings", {
-  param_set = ps(payload = p_uty())
-  private = param_set$.__enclos_env__$private
-  calls = new.env(parent = emptyenv())
-  calls$deps = 0L
-  calls$constraint = 0L
-  original_deps = activeBindingFunction("deps", param_set)
-  original_constraint = activeBindingFunction("constraint", param_set)
-  makeActiveBinding("deps", function(value) {
-    if (missing(value)) {
-      calls$deps = calls$deps + 1L
-      original_deps()
-    } else {
-      original_deps(value)
-    }
-  }, param_set)
-  makeActiveBinding("constraint", function(value) {
-    if (missing(value)) {
-      calls$constraint = calls$constraint + 1L
-      original_constraint()
-    } else {
-      original_constraint(value)
-    }
-  }, param_set)
-
-  expect_null(native_value_assign_checked(
-    param_set,
-    list(payload = "native-decline")
-  ))
-  expect_identical(calls$deps, 0L)
-  expect_identical(calls$constraint, 0L)
-  expect_identical(private$.values, structure(list(), names = character()))
-
-  param_set$values = list(payload = "r-fallback")
-  expect_identical(calls$deps, 1L)
-  # Ordinary ParamSets have always read the private constraint store through
-  # test_constraint(); only collections synthesize it from the public getter.
-  expect_identical(calls$constraint, 0L)
-  expect_identical(private$.values, list(payload = "r-fallback"))
-})
-
-test_that("native storage orders, filters, and owns the value shell", {
-  param_set = ps(a = p_int(), b = p_uty())
-  param_set$assert_values = FALSE
   reference = new.env(parent = emptyenv())
-  incoming = structure(
-    list(reference, 2L, 9L, "ignored"),
-    names = c("b", "a", "a", "unknown")
-  )
-
+  incoming = list(b = reference, a = 3L, unknown = "ignored")
+  checked_state = native_value_state(param_set)
   stored = native_value_store(param_set, incoming)
-  expect_identical(stored, list(a = 2L, b = reference))
+  expect_identical(stored, list(a = 3L, b = reference))
   expect_identical(param_set$values, stored)
+  expect_identical(checked_state$.values, list(a = 2L))
+  expect_false(identical(checked_address, native_value_core_address(param_set)))
   expect_false(identical(
     data.table::address(stored),
     data.table::address(incoming)
   ))
-  incoming[[2L]] = 8L
-  expect_identical(param_set$values$a, 2L)
-  expect_identical(param_set$values$b, reference)
+  incoming$a = 4L
+  expect_identical(param_set$values$a, 3L)
+})
 
-  before = param_set$values
-  expect_null(native_value_store(param_set, list()))
-  expect_identical(param_set$values, before)
-  expect_null(native_value_store(param_set, list(1L, 2L)))
-  expect_identical(param_set$values, before)
+test_that("value transactions reject structural ALTREP list shells", {
+  callbacks = 0L
+  values = native_stateful_altrep(
+    structure(list(x = 1L), names = "x"),
+    structure(list(x = 2L), names = "x"),
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = 0L
+  )
+  param_set = ps(x = p_int(0L, 2L))
+
+  expect_error(
+    { param_set$values = values },
+    "ParamSet values must be supplied as a plain named list",
+    fixed = TRUE
+  )
+  expect_error(
+    native_value_store(param_set, values),
+    "ParamSet values must be supplied as a plain named list",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+  expect_identical(param_set$values, setNames(list(), character()))
+
+  hostile_names = native_stateful_altrep(
+    "x",
+    "y",
+    callback = function() callbacks <<- callbacks + 1L,
+    callback_after = 0L
+  )
+  named_values = structure(list(1L), names = hostile_names)
+  native_stateful_altrep_rearm(hostile_names)
+  callbacks = 0L
+  expect_error(
+    { param_set$values = named_values },
+    "ParamSet values must be supplied as a plain named list",
+    fixed = TRUE
+  )
+  expect_error(
+    native_value_store(param_set, named_values),
+    "ParamSet values must be supplied as a plain named list",
+    fixed = TRUE
+  )
+  expect_identical(callbacks, 0L)
+
+  param_set$values = list()
+  expect_identical(param_set$values, setNames(list(), character()))
+  param_set$assert_values = FALSE
+  param_set$values = list()
+  expect_identical(param_set$values, setNames(list(), character()))
+})
+
+test_that("checked value diagnostics preserve non-native string encodings", {
+  diagnostic_utf8 = enc2utf8("gr\u00fcndlich rejected")
+  diagnostic_latin1 = iconv(
+    diagnostic_utf8,
+    from = "UTF-8",
+    to = "latin1"
+  )
+  skip_if(
+    is.na(diagnostic_latin1),
+    "this platform cannot represent the latin1 fixture"
+  )
+  Encoding(diagnostic_latin1) = "latin1"
+
+  armed = FALSE
+  param_set = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) diagnostic_latin1 else TRUE
+  }))
+  armed = TRUE
+  error = tryCatch(
+    native_value_check(param_set, list(payload = 1L)),
+    error = identity
+  )
+
+  expect_s3_class(error, "error")
   expect_identical(
-    param_set$.__enclos_env__$private$.store_values(list(1L, 2L)),
-    list()
+    enc2utf8(conditionMessage(error)),
+    "payload: gr\u00fcndlich rejected"
   )
-  expect_identical(param_set$values, list())
-
-  Subclass = R6::R6Class(
-    "NativeValueStoreSubclass",
-    inherit = ParamSet
-  )
-  subclass = Subclass$new(list(a = p_int()))
-  expect_null(native_value_store(subclass, list(a = 1L)))
+  expect_identical(param_set$values, setNames(list(), character()))
 })
 
-test_that("private native value storage retains invisible assignment semantics", {
-  param_set = ps(x = p_int())
-  private = param_set$.__enclos_env__$private
+test_that("checked diagnostics transcode unknown IDs, token calls, and dependencies", {
+  utf8 = enc2utf8(c(
+    "m\u00fcssing", "appel\u00e9()", "accept\u00e9", "refus\u00e9"
+  ))
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  skip_if(
+    anyNA(latin1),
+    "this platform cannot represent the latin1 fixtures"
+  )
+  Encoding(latin1) = "latin1"
 
-  observed = withVisible(private$.store_values(list(x = 1L)))
-  expect_false(observed$visible)
-  expect_identical(observed$value, list(x = 1L))
-  expect_identical(param_set$values, list(x = 1L))
+  checked = ps(payload = p_int())
+  error = tryCatch(
+    native_value_check(
+      checked,
+      setNames(list(1L), latin1[[1L]])
+    ),
+    error = identity
+  )
+  expect_s3_class(error, "error")
+  expect_identical(
+    enc2utf8(conditionMessage(error)),
+    "Parameter 'm\u00fcssing' not available."
+  )
+  bytes_id = utf8[[1L]]
+  Encoding(bytes_id) = "bytes"
+  expect_identical(
+    checked$check(setNames(list(1L), bytes_id)),
+    "Parameter 'm\\xc3\\xbcssing' not available."
+  )
+
+  token_target = ps(payload = p_dbl())
+  token = to_tune()
+  token$call = latin1[[2L]]
+  token_diagnostic = token_target$check(
+    list(payload = token)
+  )
+  expect_identical(
+    enc2utf8(token_diagnostic),
+    "appel\u00e9() must give a range for unbounded parameter payload."
+  )
+
+  dependent = ps(child = p_int(), parent = p_fct(latin1[3:4]))
+  dependent$add_dep("child", "parent", CondEqual(latin1[[3L]]))
+  dependency_diagnostic = dependent$check(list(
+    child = 1L,
+    parent = latin1[[4L]]
+  ))
+  expect_identical(
+    enc2utf8(dependency_diagnostic),
+    paste0(
+      "child: can only be set if the following condition is met '",
+      "parent == \"accept\u00e9\"'. Instead the current parameter value is: ",
+      "parent == \"refus\u00e9\""
+    )
+  )
 })
 
-test_that("native storage rejects delayed and malformed state before forcing", {
+test_that("Shadow unknown-value diagnostics admit text and reject bytes", {
+  unknown_utf8 = enc2utf8("m\u00fcssing")
+  unknown_latin1 = iconv(unknown_utf8, from = "UTF-8", to = "latin1")
+  skip_if(
+    is.na(unknown_latin1),
+    "this platform cannot represent the latin1 fixture"
+  )
+  Encoding(unknown_latin1) = "latin1"
+  unknown_bytes = unknown_utf8
+  Encoding(unknown_bytes) = "bytes"
+
+  origin = ps(hidden = p_int(), visible = p_int())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  error = tryCatch(
+    native_value_store(
+      shadow,
+      setNames(list(1L), unknown_latin1)
+    ),
+    error = identity
+  )
+  expect_s3_class(error, "error")
+  expect_identical(
+    enc2utf8(conditionMessage(error)),
+    "Parameter 'm\u00fcssing' not available in ParamSetShadow"
+  )
+
+  expect_error(
+    native_value_store(shadow, setNames(list(1L), unknown_bytes)),
+    "Unknown bytes-encoded parameter ID",
+    fixed = TRUE
+  )
+  expect_identical(origin$values, setNames(list(), character()))
+})
+
+test_that("direct mutation calls fail closed on malformed ownership and input", {
   param_set = ps(a = p_int())
-  private = param_set$.__enclos_env__$private
-  events = new.env(parent = emptyenv())
-  events$count = 0L
-  delayedAssign(
-    ".values",
-    {
-      events$count = events$count + 1L
-      list(a = 1L)
-    },
-    assign.env = private,
-    eval.env = environment()
-  )
-  expect_null(native_value_store(param_set, list(a = 2L)))
-  expect_identical(events$count, 0L)
-  expect_identical(param_set$values, list(a = 1L))
-  expect_identical(events$count, 1L)
+  other = ps(a = p_int())
 
-  malformed = ps(a = p_int())
-  malformed_private = malformed$.__enclos_env__$private
-  malformed_private$.params$id[[1L]] = NA_character_
-  before = malformed_private$.values
-  expect_null(native_value_store(malformed, list(a = 2L)))
-  expect_identical(malformed_private$.values, before)
+  expect_error(
+    native_value_store(param_set, list(1L)),
+    "named list"
+  )
+  expect_error(
+    native_value_store(
+      param_set,
+      structure(list(1L, 2L), names = c("a", "a"))
+    ),
+    "unique and non-missing"
+  )
+  expect_error(
+    native_value_store(param_set, list(a = 1L), native_value_private(other)),
+    "ownership|unsupported"
+  )
+  expect_error(
+    native_value_check(param_set, list(a = 1L), native_value_private(other)),
+    "ownership"
+  )
+
+  forged = new.env(parent = emptyenv())
+  forged$.core = new("externalptr")
+  expect_error(
+    native_value_store(param_set, list(a = 1L), forged),
+    "Corrupt|unsupported"
+  )
+  expect_error(
+    native_value_check(param_set, list(a = 1L), forged),
+    "Corrupt"
+  )
+  expect_identical(param_set$values, setNames(list(), character()))
 })
 
-test_that("collection plan groups touched children before clearing", {
+test_that("core-method overrides are not executed by the sealed native path", {
+  param_set = ps(a = p_int())
+  calls = 0L
+  unlockBinding("check", param_set)
+  param_set$check = function(...) {
+    calls <<- calls + 1L
+    stop("unsupported override executed", call. = FALSE)
+  }
+  lockBinding("check", param_set)
+
+  expect_identical(native_value_check(param_set, list(a = 1L)), list(a = 1L))
+  expect_identical(calls, 0L)
+  param_set$values = list(a = 2L)
+  expect_identical(param_set$values, list(a = 2L))
+  expect_identical(calls, 0L)
+})
+
+test_that("an intervening reentrant commit aborts the enclosing assignment", {
+  holder = new.env(parent = emptyenv())
+  armed = FALSE
+  nested = FALSE
+  param_set = ps(payload = p_uty(custom_check = function(value) {
+    if (armed && !nested) {
+      nested <<- TRUE
+      holder$param_set$assert_values = FALSE
+      holder$param_set$values = list(payload = "nested")
+      holder$param_set$assert_values = TRUE
+    }
+    TRUE
+  }))
+  holder$param_set = param_set
+  armed = TRUE
+
+  expect_error({
+    param_set$values = list(payload = "outer")
+  }, "changed")
+  expect_identical(param_set$values, list(payload = "nested"))
+})
+
+test_that("post-callback generation checks do not force delayed core bindings", {
+  forced = 0L
+  armed = FALSE
+  private = NULL
+  original_core = NULL
+  param_set = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) {
+      delayedAssign(
+        ".core",
+        {
+          forced <<- forced + 1L
+          original_core
+        },
+        assign.env = private
+      )
+    }
+    TRUE
+  }))
+  private = native_value_private(param_set)
+  original_core = private$.core
+  armed = TRUE
+
+  expect_error(
+    param_set$values <- list(payload = "outer"),
+    "changed during validation",
+    fixed = TRUE
+  )
+  expect_identical(forced, 0L)
+  expect_type(substitute(.core, private), "language")
+})
+
+test_that("generation checks reject a literal-core delayed binding", {
+  armed = FALSE
+  private = NULL
+  original_core = NULL
+  param_set = ps(payload = p_uty(custom_check = function(value) {
+    if (armed) {
+      eval(as.call(list(
+        quote(delayedAssign),
+        ".core",
+        original_core,
+        private,
+        private
+      )), baseenv())
+    }
+    TRUE
+  }))
+  private = native_value_private(param_set)
+  original_core = private$.core
+  armed = TRUE
+
+  expect_error(
+    param_set$values <- list(payload = "outer"),
+    "changed during validation",
+    fixed = TRUE
+  )
+  expect_identical(substitute(.core, private), original_core)
+})
+
+test_that("collection assignment routes all children through one transaction", {
   one = ps(a = p_int(), b = p_int())
   two = ps(c = p_int())
   three = ps(d = p_int())
@@ -417,20 +530,6 @@ test_that("collection plan groups touched children before clearing", {
     three = three
   ))
 
-  plan = native_collection_store_plan(
-    collection,
-    list(three.d = 4L, one.b = 2L, one.a = 1L, unknown = 9L)
-  )
-  expect_identical(plan[[1L]], c(1L, 3L, 2L))
-  expect_identical(
-    plan[[2L]],
-    list(
-      list(b = 2L, a = 1L),
-      list(d = 4L),
-      structure(list(), names = character())
-    )
-  )
-
   collection$assert_values = FALSE
   collection$values = list(
     three.d = 4L,
@@ -439,154 +538,108 @@ test_that("collection plan groups touched children before clearing", {
     unknown = 9L
   )
   expect_identical(one$values, list(a = 1L, b = 2L))
-  expect_identical(two$values, structure(list(), names = character()))
+  expect_identical(two$values, setNames(list(), character()))
   expect_identical(three$values, list(d = 4L))
 })
 
-test_that("collection planning supports postfix nesting and shared children", {
-  shared = ps(a = p_int(), b = p_int())
-  inner = ParamSetCollection$new(
-    list(left = shared, right = shared),
-    postfix_names = TRUE
-  )
-  tail = ps(q = p_dbl())
-  outer = ParamSetCollection$new(
-    list(inner = inner, tail = tail),
-    postfix_names = TRUE
-  )
-
-  plan = native_collection_store_plan(
-    outer,
-    list(b.right.inner = 4L, a.left.inner = 1L, q.tail = 0.5)
-  )
-  expect_identical(plan[[1L]], c(1L, 2L))
-  expect_identical(
-    plan[[2L]],
-    list(
-      list(b.right = 4L, a.left = 1L),
-      list(q = 0.5)
-    )
-  )
-
-  outer$values = list(
-    b.right.inner = 4L,
-    a.left.inner = 1L,
-    q.tail = 0.5
-  )
-  expect_identical(shared$values, list(b = 4L))
-  expect_identical(tail$values, list(q = 0.5))
-})
-
-test_that("collection plan falls back for extensions and malformed storage", {
-  child = ps(a = p_int())
-  collection = ParamSetCollection$new(list(owner = child))
-  private = collection$.__enclos_env__$private
-
-  malformed = data.table::copy(private$.translation)
-  malformed$id[[1L]] = "wrong.a"
-  private$.translation = malformed
-  expect_null(native_collection_store_plan(
-    collection,
-    list(owner.a = 1L)
-  ))
-
-  encoded = ParamSetCollection$new(list(owner = ps(a = p_int())))
-  encoded_private = encoded$.__enclos_env__$private
-  names(encoded_private$.sets) = "ownér"
-  encoded_translation = data.table::copy(encoded_private$.translation)
-  encoded_translation$id[[1L]] = "ownér.a"
-  encoded_translation$owner_name[[1L]] = "ownér"
-  encoded_private$.translation = encoded_translation
-  expect_null(native_collection_store_plan(
-    encoded,
-    setNames(list(1L), "ownér.a")
-  ))
-
-  ExtendedCollection = R6::R6Class(
-    "NativeValueStoreCollectionSubclass",
-    inherit = ParamSetCollection
-  )
-  extended = ExtendedCollection$new(list(owner = ps(a = p_int())))
-  expect_null(native_collection_store_plan(
-    extended,
-    list(owner.a = 1L)
-  ))
-})
-
-test_that("miesmuschel ParamSetShadow remains a public setter extension", {
-  skip_if_not_installed("miesmuschel")
-  origin = ps(x = p_int(), y = p_lgl())
-  origin$values = list(x = 1L, y = TRUE)
-  ParamSetShadow = getExportedValue("miesmuschel", "ParamSetShadow")
-  shadow = ParamSetShadow$new(origin, "x")
-  collection = ParamSetCollection$new(list(shadow = shadow))
-
-  collection$values = list(shadow.y = FALSE)
-  expect_identical(origin$values, list(x = 1L, y = FALSE))
-  expect_identical(shadow$values, list(y = FALSE))
-  collection$values = structure(list(), names = character())
-  expect_identical(origin$values, list(x = 1L))
-})
-
-test_that("reentrant custom checks may replace parameter storage and collect", {
-  skip_on_cran()
-
-  events = new.env(parent = emptyenv())
-  events$count = 0L
+test_that("collection validation preserves a nested commit in another child", {
   holder = new.env(parent = emptyenv())
-  param_set = ps(payload = p_uty(custom_check = function(value) {
-    events$count = events$count + 1L
-    private = holder$param_set$.__enclos_env__$private
-    private$.params = data.table::copy(private$.params)
-    gc(FALSE)
+  armed = FALSE
+  nested = FALSE
+  left = ps(payload = p_uty(custom_check = function(value) {
+    if (armed && !nested) {
+      nested <<- TRUE
+      holder$right$assert_values = FALSE
+      holder$right$values = list(x = 9L)
+      holder$right$assert_values = TRUE
+    }
     TRUE
   }))
-  holder$param_set = param_set
-  events$count = 0L
+  right = ps(x = p_int())
+  holder$right = right
+  collection = ParamSetCollection$new(list(left = left, right = right))
+  armed = TRUE
 
-  # The native success-only validator does not invoke extension callbacks.
-  expect_null(native_value_assign_checked(
-    param_set,
-    list(payload = "first")
-  ))
-  expect_identical(events$count, 0L)
-
-  previous = gctorture2(1L, wait = 0L)
-  on.exit(gctorture2(previous), add = TRUE)
-  param_set$values = list(payload = "second")
-  observed = param_set$values
-  gctorture2(previous)
-  expect_identical(events$count, 1L)
-  expect_identical(observed, list(payload = "second"))
+  expect_error({
+    collection$values = list(left.payload = "outer", right.x = 1L)
+  }, "changed")
+  expect_identical(left$values, setNames(list(), character()))
+  expect_identical(right$values, list(x = 9L))
 })
 
-test_that("native mutation entries and public setters survive gctorture", {
-  skip_on_cran()
+test_that("a malformed later child cannot partially commit an earlier child", {
+  first = ps(a = p_int())
+  second = ps(b = p_int())
+  first$values = list(a = 7L)
+  first_address = native_value_core_address(first)
+  collection = ParamSetCollection$new(list(first = first, second = second))
 
-  param_set = ps(a = p_int(), b = p_dbl())
-  param_set$values = list(a = 1L, b = 0.25)
-  other = ps(flag = p_lgl(init = TRUE))
-  collection = ParamSetCollection$new(list(left = param_set, right = other))
-
-  previous = gctorture2(1L, wait = 0L)
-  on.exit(gctorture2(previous), add = TRUE)
-  merged = native_value_merge(
-    list(a = 2L),
-    list(),
-    param_set$values,
-    TRUE
+  malformed = native_value_state(second)$.params
+  malformed$id[[1L]] = NA_character_
+  paradox:::param_set_core_replace(
+    native_value_private(second),
+    params = malformed
   )
-  checked = native_value_assign_checked(param_set, merged)
-  plan = native_collection_store_plan(
-    collection,
-    list(left.a = 3L, right.flag = FALSE)
-  )
-  collection$set_values(left.a = 3L, right.flag = FALSE, .insert = FALSE)
-  observed = collection$values
-  gctorture2(previous)
+  collection$assert_values = FALSE
 
-  expect_identical(merged, list(a = 2L, b = 0.25))
-  expect_identical(checked, merged)
-  expect_identical(plan[[1L]], c(1L, 2L))
-  expect_identical(observed, list(left.a = 3L, right.flag = FALSE))
+  expect_error(
+    collection$values <- list(first.a = 1L, second.b = 2L),
+    "Corrupt"
+  )
+  expect_identical(first$values, list(a = 7L))
+  expect_identical(native_value_core_address(first), first_address)
+})
+
+test_that("shared collection targets use deterministic last-owner semantics", {
+  shared = ps(a = p_int(), b = p_int())
+  collection = ParamSetCollection$new(list(left = shared, right = shared))
+  collection$assert_values = FALSE
+
+  collection$values = list(left.a = 1L, right.b = 2L)
+  expect_identical(shared$values, list(b = 2L))
+})
+
+test_that("shadow writes resolve to the origin and preserve hidden values", {
+  origin = ps(hidden = p_int(), visible = p_int())
+  origin$values = list(hidden = 7L, visible = 1L)
+  shadow = ParamSetShadow$new(origin, "hidden")
+
+  shadow$values = list(visible = 3L)
+  expect_identical(origin$values, list(hidden = 7L, visible = 3L))
+  expect_identical(shadow$values, list(visible = 3L))
+
+  collection = ParamSetCollection$new(list(view = shadow))
+  collection$values = list(view.visible = 4L)
+  expect_identical(origin$values, list(hidden = 7L, visible = 4L))
+
+  shadow$values = list()
+  expect_identical(origin$values, list(hidden = 7L))
+})
+
+test_that("shadow validation preserves a nested origin commit", {
+  holder = new.env(parent = emptyenv())
+  armed = FALSE
+  nested = FALSE
+  origin = ps(
+    hidden = p_int(),
+    visible = p_uty(custom_check = function(value) {
+      if (armed && !nested) {
+        nested <<- TRUE
+        holder$origin$assert_values = FALSE
+        holder$origin$values = list(hidden = 9L)
+        holder$origin$assert_values = TRUE
+      }
+      TRUE
+    })
+  )
+  holder$origin = origin
+  origin$values = list(hidden = 1L)
+  shadow = ParamSetShadow$new(origin, "hidden")
+  armed = TRUE
+
+  expect_error({
+    shadow$values = list(visible = "outer")
+  }, "changed")
+  expect_identical(origin$values, list(hidden = 9L))
+  expect_identical(shadow$values, setNames(list(), character()))
 })

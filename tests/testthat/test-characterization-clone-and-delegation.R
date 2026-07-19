@@ -30,16 +30,18 @@ test_that("ParamSet shallow and deep clones preserve the established alias bound
   expect_identical(deep$values$payload$value, "changed through deep clone")
 })
 
-test_that("dependency tables alias shallow clones but are copied by deep clones", {
+test_that("dependency facades and Conditions are detached from every clone", {
   original = ps(enabled = p_lgl(), amount = p_int())
   original$add_dep("amount", "enabled", CondEqual(TRUE))
   shallow = original$clone()
   deep = original$clone(deep = TRUE)
 
-  data.table::set(shallow$deps, i = 1L, j = "cond", value = list(CondEqual(FALSE)))
+  visible = shallow$deps
+  visible$cond[[1L]]$rhs = FALSE
 
-  expect_identical(original$deps$cond[[1L]]$rhs, FALSE)
-  expect_identical(shallow$deps$cond[[1L]]$rhs, FALSE)
+  expect_identical(visible$cond[[1L]]$rhs, FALSE)
+  expect_identical(original$deps$cond[[1L]]$rhs, TRUE)
+  expect_identical(shallow$deps$cond[[1L]]$rhs, TRUE)
   expect_identical(deep$deps$cond[[1L]]$rhs, TRUE)
 })
 

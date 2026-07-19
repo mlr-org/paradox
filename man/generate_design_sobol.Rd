@@ -36,9 +36,9 @@ if (requireNamespace("spacefillr", quietly = TRUE)) {
 }
 }
 \seealso{
-Other generate_design: 
-\code{\link{generate_design_grid}()},
-\code{\link{generate_design_lhs}()},
-\code{\link{generate_design_random}()}
+Other generate_design:
+\code{\link[=generate_design_grid]{generate_design_grid()}},
+\code{\link[=generate_design_lhs]{generate_design_lhs()}},
+\code{\link[=generate_design_random]{generate_design_random()}}
 }
 \concept{generate_design}

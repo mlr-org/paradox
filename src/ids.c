@@ -5,7 +5,7 @@
 #include "paradox.h"
 #include <R_ext/Utils.h>
 
-#include "r_api_compat.h"
+#include "core_state.h"
 #include "r_utils.h"
 
 typedef struct {
@@ -82,6 +82,19 @@ static uint64_t canonical_string_hash(SEXP string) {
   return hash;
 }
 
+static char *copy_utf8_string(SEXP string) {
+  const size_t size = strlen(Rf_translateCharUTF8(string));
+  if (size >= (size_t) R_XLEN_T_MAX) {
+    Rf_error("Unable to copy a canonical string");
+  }
+  char *copy = paradox_temporary_alloc(
+    (R_xlen_t) size + 1,
+    sizeof(*copy)
+  );
+  memcpy(copy, Rf_translateCharUTF8(string), size + 1U);
+  return copy;
+}
+
 static int canonical_strings_equal(SEXP left, SEXP right) {
   if (left == right) {
     return TRUE;
@@ -100,7 +113,7 @@ static int canonical_strings_equal(SEXP left, SEXP right) {
   PROTECT(left);
   PROTECT(right);
   const void *vmax = vmaxget();
-  const char *left_text = Rf_translateCharUTF8(left);
+  const char *left_text = copy_utf8_string(left);
   const char *right_text = Rf_translateCharUTF8(right);
   const int equal = strcmp(left_text, right_text) == 0;
   vmaxset(vmax);
@@ -131,15 +144,13 @@ static int needs_canonical_matching(SEXP table, SEXP value) {
   unsigned int encodings = 0;
   const R_xlen_t table_size = XLENGTH(table);
   const R_xlen_t value_size = XLENGTH(value);
-  const SEXP *table_strings = STRING_PTR_RO(table);
-  const SEXP *value_strings = STRING_PTR_RO(value);
   for (R_xlen_t row = 0; row < table_size; ++row) {
     periodic_interrupt(row);
-    encodings |= string_encoding_bit(table_strings[row]);
+    encodings |= string_encoding_bit(STRING_ELT(table, row));
   }
   for (R_xlen_t row = 0; row < value_size; ++row) {
     periodic_interrupt(row);
-    encodings |= string_encoding_bit(value_strings[row]);
+    encodings |= string_encoding_bit(STRING_ELT(value, row));
   }
   return encodings != 0 && (encodings & (encodings - 1U)) != 0;
 }
@@ -186,7 +197,7 @@ static void snapshot_match_operands(SEXP table, SEXP value, SEXP roots,
   SET_VECTOR_ELT(roots, IDS_ROOT_MATCH_VALUE, value_copy);
   UNPROTECT(1);
 
-  /* Both allocations happen before either exposed operand is authenticated.
+  /* Both allocations happen before either exposed operand is validated.
    * The adjacent guards therefore observe a finalizer mutation caused by
    * either allocation, and copying itself cannot allocate or dispatch. */
   require_callback_free_match_operand(table);
@@ -239,22 +250,24 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
 
   /* These are the actual matcher operands. In the canonical case they are
    * invocation-private snapshots; in the common case no allocation or R
-   * callback remains between these guards and the complete native match. */
+   * callback remains between these guards and the complete native match.
+   * Use element access throughout: retaining STRING_PTR_RO() across an
+   * interrupt poll is outside the native pointer-lifetime contract, and the
+   * canonical branch also translates strings and allocates transient copies. */
   require_callback_free_match_operand(table);
   require_callback_free_match_operand(value);
-  const SEXP *table_strings = STRING_PTR_RO(table);
-  const SEXP *value_strings = STRING_PTR_RO(value);
 
   if (table_size <= MATCH_LINEAR_THRESHOLD) {
     for (R_xlen_t row = 0; row < value_size; ++row) {
       periodic_interrupt(row);
-      const SEXP sought = value_strings[row];
       R_xlen_t matched = 0;
       for (R_xlen_t candidate = 0; candidate < table_size; ++candidate) {
-        const SEXP available = table_strings[candidate];
         if (canonical
-            ? canonical_strings_equal(available, sought)
-            : available == sought) {
+            ? canonical_strings_equal(
+                STRING_ELT(table, candidate),
+                STRING_ELT(value, row)
+              )
+            : STRING_ELT(table, candidate) == STRING_ELT(value, row)) {
           matched = candidate + 1;
           break;
         }
@@ -273,13 +286,15 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
     }
     for (R_xlen_t row = 0; row < table_size; ++row) {
       account_match_work(&work_since_interrupt);
-      const SEXP string = table_strings[row];
-      const uint64_t hash = canonical_string_hash(string);
+      const uint64_t hash = canonical_string_hash(STRING_ELT(table, row));
       R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
       while (slots[slot].row_plus_one != 0) {
         account_match_work(&work_since_interrupt);
         const R_xlen_t present = slots[slot].row_plus_one - 1;
-        if (canonical_strings_equal(table_strings[present], string)) {
+        if (canonical_strings_equal(
+            STRING_ELT(table, present),
+            STRING_ELT(table, row)
+          )) {
           break;
         }
         slot = (slot + 1) & mask;
@@ -290,13 +305,15 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
     }
     for (R_xlen_t row = 0; row < value_size; ++row) {
       account_match_work(&work_since_interrupt);
-      const SEXP string = value_strings[row];
-      const uint64_t hash = canonical_string_hash(string);
+      const uint64_t hash = canonical_string_hash(STRING_ELT(value, row));
       R_xlen_t slot = (R_xlen_t) (hash & (uint64_t) mask);
       while (slots[slot].row_plus_one != 0) {
         account_match_work(&work_since_interrupt);
         const R_xlen_t present = slots[slot].row_plus_one - 1;
-        if (canonical_strings_equal(table_strings[present], string)) {
+        if (canonical_strings_equal(
+            STRING_ELT(table, present),
+            STRING_ELT(value, row)
+          )) {
           break;
         }
         slot = (slot + 1) & mask;
@@ -315,14 +332,13 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
   }
   for (R_xlen_t row = 0; row < table_size; ++row) {
     account_match_work(&work_since_interrupt);
-    const SEXP string = table_strings[row];
     R_xlen_t slot = (R_xlen_t) (
-      pointer_hash(string) & (uint64_t) mask
+      pointer_hash(STRING_ELT(table, row)) & (uint64_t) mask
     );
     while (slots[slot].row_plus_one != 0) {
       account_match_work(&work_since_interrupt);
       const R_xlen_t present = slots[slot].row_plus_one - 1;
-      if (table_strings[present] == string) {
+      if (STRING_ELT(table, present) == STRING_ELT(table, row)) {
         break;
       }
       slot = (slot + 1) & mask;
@@ -334,14 +350,13 @@ static R_xlen_t *native_character_match(SEXP table, SEXP value, SEXP roots) {
 
   for (R_xlen_t row = 0; row < value_size; ++row) {
     account_match_work(&work_since_interrupt);
-    const SEXP string = value_strings[row];
     R_xlen_t slot = (R_xlen_t) (
-      pointer_hash(string) & (uint64_t) mask
+      pointer_hash(STRING_ELT(value, row)) & (uint64_t) mask
     );
     while (slots[slot].row_plus_one != 0) {
       account_match_work(&work_since_interrupt);
       const R_xlen_t present = slots[slot].row_plus_one - 1;
-      if (table_strings[present] == string) {
+      if (STRING_ELT(table, present) == STRING_ELT(value, row)) {
         break;
       }
       slot = (slot + 1) & mask;
@@ -441,18 +456,12 @@ SEXP paradox_param_set_filter_argument(SEXP frame,
   return result;
 }
 
-SEXP paradox_param_set_evaluated_local_value(SEXP environment,
-    const char *name) {
-  if (TYPEOF(environment) != ENVSXP) {
-    return R_UnboundValue;
-  }
-  SEXP symbol = Rf_install(name);
-  return paradox_api_evaluated_local_value(environment, symbol);
-}
-
 SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP frame) {
   if (TYPEOF(private_environment) != ENVSXP || TYPEOF(frame) != ENVSXP) {
-    return R_NilValue;
+    Rf_error(
+      "Internal error: ParamSet ID filtering requires private and method "
+      "environments"
+    );
   }
 
   /* Keep the promises in the public method frame until each earlier filter is
@@ -468,23 +477,17 @@ SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP frame) {
     "any_tags"
   ));
 
-  /* Upstream validates all filters before it reads either private table.  In
-   * particular, a filter promise is allowed to replace a table and the
-   * in-flight ids() call observes the replacement. */
-  SEXP params = PROTECT(paradox_param_set_evaluated_local_value(
-    private_environment,
-    ".params"
-  ));
-  SEXP tag_table = PROTECT(paradox_param_set_evaluated_local_value(
-    private_environment,
-    ".tags"
-  ));
-  if (params == R_UnboundValue) {
-    params = R_NilValue;
+  /* Filters are the public callback boundary. Snapshot the one authoritative
+   * capsule only after all three promises have been forced, so a nested
+   * mutation is observed without consulting retired private tables or
+   * replaying the operation in R. */
+  SEXP state = PROTECT(paradox_core_state_from_private(private_environment));
+  if (state == R_UnboundValue) {
+    UNPROTECT(4);
+    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (tag_table == R_UnboundValue) {
-    tag_table = R_NilValue;
-  }
+  SEXP params = VECTOR_ELT(state, PARADOX_CORE_PARAMS);
+  SEXP tag_table = VECTOR_ELT(state, PARADOX_CORE_TAGS);
 
   SEXP result = param_set_ids_impl(
     params,
@@ -494,7 +497,7 @@ SEXP paradox_param_set_ids_lazy(SEXP private_environment, SEXP frame) {
     any_tags,
     TRUE
   );
-  UNPROTECT(5);
+  UNPROTECT(4);
   return result;
 }
 

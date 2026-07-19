@@ -31,15 +31,38 @@
 #' * **`to_tune(levels)`**: Indicates a parameter should be tuned through the given discrete values. `levels` can be any
 #'   named or unnamed atomic vector or list (although in the unnamed case it must be possible to construct a
 #'   corresponding `character` vector with distinct values using `as.character`).
-#' * **`to_tune(<Domain>)`**: The given [`Domain`] object (constructed e.g. with [`p_int()`] or [`p_fct()`]) indicates
-#'   the range which should be tuned over. The supplied `trafo` function is used for parameter transformation.
-#' * **`to_tune(<ParamSet>)`**: The given [`ParamSet`] is used to tune over a single dimension. This is useful for cases
+#' * **`to_tune(<Domain>)`**: The given bounded, value-producing [`Domain`]
+#'   object (constructed e.g. with [`p_int()`] or [`p_fct()`]) indicates the
+#'   range which should be tuned over. The supplied `trafo` function is used
+#'   for parameter transformation. An unbounded [`p_uty()`] or zero-level
+#'   [`p_fct()`] Domain is not a tuning range; use another bounded typed Domain
+#'   or the BASE-ParamSet form when the resulting value is opaque.
+#' * **`to_tune(<ParamSet>)`**: The given exact BASE [`ParamSet`] is used to tune over a single dimension. This is useful for cases
 #'   where a single evaluation-time parameter value (e.g. [`p_uty()`]) is constructed from multiple tuner-visible
 #'   parameters (which may not be [`p_uty()`]). If not one-dimensional, the supplied [`ParamSet`] should always contain a `$extra_trafo` function,
-#'   which must then always return a `list` with a single entry.
+#'   which must then always return an ordinary non-ALTREP/non-S4 `list` shell
+#'   with a single entry. Its admitted semantic leaf may be stable ALTREP.
+#'   [`ParamSetCollection`], [`ParamSetShadow`], and third-party [`ParamSet`]
+#'   subclasses are not accepted as this token's content. Checked assignment
+#'   validates that the supplied BASE schema is non-empty, bounded, and
+#'   structurally valid without running its callbacks. A generation receipt is
+#'   retained until the surrounding write commits, so candidate mutation makes
+#'   that write fail without partial storage.
+#'   `$search_space()` alone runs the transformation and checks that its
+#'   one-dimensional output is compatible with the target parameter. Before it
+#'   runs R code, the live candidate has been replaced by a sealed one-use native
+#'   snapshot, so conversion does not invoke or reread the original shell.
 #'
-#' The `TuneToken` object's internals are subject to change and should not be relied upon. `TuneToken` objects should
-#' only be constructed via `to_tune()`, and should only be used by giving them to `$values` of a [`ParamSet`].
+#' `TuneToken` is a closed package-defined representation, not a subclassing or
+#' S3-extension interface. Construct tokens with `to_tune()` and use them
+#' through a [`ParamSet`]'s `$values` field or `$search_space(values=)`.
+#' Token/content list shells and their structural class/name metadata must be
+#' ordinary non-ALTREP/non-S4. Subclassed tokens, reordered or additional
+#' fields/classes, additional attributes, and recursive metadata are rejected. Native code
+#' authenticates the exact shape, not literal creator provenance, so a manually
+#' assembled or copied object that is structurally indistinguishable may pass;
+#' relying on that internal representation remains unsupported. Exact built-in
+#' tokens remain serializable and copyable.
 #' @param ... if given, restricts the range to be tuning over, as described above.
 #' @param internal (`logical(1)`)\cr
 #'   Whether to create an `InternalTuneToken`.
@@ -166,7 +189,10 @@ to_tune = function(..., internal = !is.null(aggr), aggr = NULL) {
       # one argument: tune over an object. that object can be something
       # that can be converted to a ParamSet (ParamSet itself, Param, or Domain),
       # otherwise it must be something that can be converted to a ParamFct Domain.
-      if (!test_multi_class(content, c("ParamSet", "Param", "Domain"))) {
+      is_domain = is.list(content) && inherits(content, "Domain")
+      is_base_param_set = is.environment(content) &&
+        identical(class(content), c("ParamSet", "R6"))
+      if (!is_domain && !is_base_param_set) {
         assert(
           check_atomic_vector(content, names = "unnamed"),
           check_atomic_vector(content, names = "unique"),
@@ -174,13 +200,8 @@ to_tune = function(..., internal = !is.null(aggr), aggr = NULL) {
           check_list(content, names = "unnamed")
         )
         content = p_fct(levels = content)
-      } else {
-        if (inherits(content, "Domain")) {
-          bounded = domain_is_bounded(content)
-        } else {
-          bounded = content$all_bounded
-        }
-        if (!bounded) {
+      } else if (is_domain) {
+        if (!domain_is_bounded(content)) {
           stop("tuning range must be bounded.")
         }
       }
@@ -236,40 +257,59 @@ print.ObjectTuneToken = function(x, ...) {
 # get the range (e.g. if `to_tune()` was used) and to verify that the `TuneToken`
 # does not go out of range.
 #
-# Makes liberal use to `pslike_to_ps` (converting Param, ParamSet, Domain to ParamSet)
-# param is a data.table that is potentially modified by reference using data.table set() methods.
+# `tt` has already crossed the exact native structural-admission boundary in
+# `get_tune_ps()`.  Kind selection is deliberately closed: these internal
+# helpers are not an S3 extension seam.
+# `param` is a detached Domain facade that may be modified by reference.
 tunetoken_to_ps = function(tt, param, ...) {
-  UseMethod("tunetoken_to_ps")
+  switch(class(tt)[[1L]],
+    FullTuneToken = tunetoken_full_to_ps(tt, param, ...),
+    RangeTuneToken = tunetoken_range_to_ps(tt, param, ...),
+    ObjectTuneToken = tunetoken_object_to_ps(tt, param, ...),
+    InternalTuneToken = tunetoken_internal_to_ps(tt, param, ...),
+    stop("Internal error: unsupported admitted TuneToken kind.", call. = FALSE)
+  )
 }
 
-tunetoken_to_ps.FullTuneToken = function(tt, param, ...) {
+tunetoken_full_to_ps = function(tt, param, ...) {
   if (!domain_is_bounded(param)) {
     stopf("%s must give a range for unbounded parameter %s.", tt$call, param$id)
   }
   if (isTRUE(tt$content$logscale)) {
     if (!domain_is_number(param)) stop("%s (%s): logscale only valid for numeric / integer parameters.", tt$call, param$id)
-    tunetoken_to_ps.RangeTuneToken(list(content = list(logscale = tt$content$logscale), tt$call), param)
+    tunetoken_range_to_ps(list(
+      content = list(lower = NULL, upper = NULL, logscale = tt$content$logscale),
+      call = tt$call
+    ), param, ...)
   } else {
     if (!is.null(tt$content$aggr)) {
       # https://github.com/Rdatatable/data.table/issues/6104
       param$cargo[[1L]] = list(insert_named(param$cargo[[1L]], list(aggr = tt$content$aggr)))
     }
-    pslike_to_ps(param, tt$call, param)
+    result = pslike_to_ps(param, tt$call, param)
+    # `param` is a detached Domain facade recovered from the source ParamSet.
+    # Its `.requirements` column describes the source graph, not an intrinsic
+    # dependency of this temporary one-parameter tuning part. `get_tune_ps()`
+    # reconstructs exactly the surviving source dependencies after all parts
+    # have been combined, so retaining them here would create dangling or
+    # duplicate edges before that reconstruction step.
+    result$deps = new_empty_deps()
+    result
   }
 }
 
-tunetoken_to_ps.InternalTuneToken = function(tt, param, ...) {
+tunetoken_internal_to_ps = function(tt, param, ...) {
   # Calling NextMethod with additional arguments behaves weirdly, as the InternalTuneToken only works with ranges right now
   # we just call it directly
   aggr = if (!is.null(tt$content$aggr)) tt$content$aggr else param$cargo[[1L]]$aggr
   if (is.null(aggr)) {
     stopf("%s must specify a aggregation function for parameter %s", tt$call, param$id)
   }
-  tunetoken_to_ps.RangeTuneToken(tt = tt, param = param, tags = "internal_tuning",
+  tunetoken_range_to_ps(tt = tt, param = param, tags = "internal_tuning",
     aggr = aggr)
 }
 
-tunetoken_to_ps.RangeTuneToken = function(tt, param, args = list(), ...) {
+tunetoken_range_to_ps = function(tt, param, ...) {
   if (!domain_is_number(param)) {
     stopf("%s for non-numeric param must have zero or one argument.", tt$call)
   }
@@ -295,7 +335,7 @@ tunetoken_to_ps.RangeTuneToken = function(tt, param, args = list(), ...) {
   pslike_to_ps(content, tt$call, param)
 }
 
-tunetoken_to_ps.ObjectTuneToken = function(tt, param, ...) {
+tunetoken_object_to_ps = function(tt, param, ...) {
   pslike_to_ps(tt$content, tt$call, param)
 }
 
@@ -308,18 +348,49 @@ tunetoken_to_ps.ObjectTuneToken = function(tt, param, ...) {
 # @param usersupplied: whether the `pslike` is supplied by the user (and should therefore be checked more thoroughly)
 #   This is currently used for user-supplied ParamSets, for which the trafo must be adjusted.
 pslike_to_ps = function(pslike, call, param, usersupplied = TRUE) {
-  UseMethod("pslike_to_ps")
+  if (is.list(pslike) && inherits(pslike, "Domain")) {
+    return(domain_to_tune_ps(pslike, call, param, usersupplied))
+  }
+  if (typeof(pslike) == "externalptr") {
+    # Package-private single-use capability produced by the native search
+    # snapshot. ParamSet$new() is its only consumer; no candidate method or
+    # active binding participates in conversion.
+    return(param_set_to_tune_ps(
+      ParamSet$new(pslike), call, param, usersupplied,
+      already_flattened = TRUE
+    ))
+  }
+  if (is.environment(pslike) && identical(class(pslike), c("ParamSet", "R6"))) {
+    return(param_set_to_tune_ps(pslike, call, param, usersupplied))
+  }
+  stopf("%s contains neither a built-in Domain nor a ParamSet.", call)
 }
 
-pslike_to_ps.Domain = function(pslike, call, param, usersupplied = TRUE) {
+domain_to_tune_ps = function(pslike, call, param, usersupplied = TRUE) {
   # 'pslike' could be the same as 'param', i.e. a Domain with some cols missing.
   # We could consider allowing construction of ParamSet from these unfinished domains instead.
+  # A Domain recovered from a ParamSet exposes its current value through
+  # `.init` for compatibility.  Clear that detached compatibility projection
+  # before the exact ParamSet constructor admits the row; it is the TuneToken
+  # being converted, not a fixed value of the generated search space.
+  pslike$.init_given[[1L]] = FALSE
+  # Replacing a single element through `$` on a data.table with `list(NULL)`
+  # is interpreted as deleting the entire column. Replace the detached list
+  # column as a whole so the exact 16-column Domain shape is retained.
+  pslike[[".init"]] = list(NULL)
   pslike = ParamSet$new(structure(list(pslike), names = param$id), allow_dangling_dependencies = TRUE)
-  pslike_to_ps(pslike, call, param, usersupplied = FALSE)
+  # Keep this explicit reset as a defense against future alternate Domain
+  # projections; the canonical row above normally produces no initial value.
+  pslike$values = named_list()
+  param_set_to_tune_ps(
+    pslike, call, param, usersupplied = FALSE,
+    already_flattened = TRUE
+  )
 }
 
-pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
-  pslike = pslike$flatten()
+param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
+    already_flattened = FALSE) {
+  if (!already_flattened) pslike = pslike$flatten()
   alldeps = pslike$deps
   # temporarily hide dangling deps
   on = NULL  # pacify static code check
@@ -363,12 +434,24 @@ pslike_to_ps.ParamSet = function(pslike, call, param, usersupplied = TRUE) {
     # we therefore always add a trafo here, even if the user-supplied ParamSet does not have a trafo itself
     trafo = pslike$extra_trafo %??% identity
     pname = param$id
-    pslike$extra_trafo = crate(function(x, param_set) {
-      mlr3misc::set_names(
-        checkmate::assert_list(trafo(x), len = 1, .var.name = sprintf("Trafo for tuning ParamSet for parameter %s", pname)),
-        pname
-      )
-    }, trafo, pname)
+    pslike$extra_trafo = .make_tune_param_set_trafo(trafo, pname)
   }
   pslike
+}
+
+.make_tune_param_set_trafo = function(trafo, pname) {
+  force(trafo)
+  force(pname)
+  function(x, param_set) {
+    result = trafo(x)
+    if (typeof(result) != "list" || inherits(result, "data.frame") ||
+        length(result) != 1L) {
+      stopf(
+        "Trafo for tuning ParamSet for parameter %s must return a list of length 1",
+        pname
+      )
+    }
+    names(result) = pname
+    result
+  }
 }

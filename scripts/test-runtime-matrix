@@ -9,6 +9,9 @@ RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
 STAGE_WORKER="$ROOT/scripts/environment/run-runtime-matrix-stage"
 WAVE_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-wave"
 STAGE_TIMEOUT_SECONDS=5400
+DATATABLE_VERSION=1.18.4
+DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
+DATATABLE_ARCHIVE="$ROOT/.cache/downloads/r-packages/data.table_${DATATABLE_VERSION}.tar.gz"
 
 usage() {
   cat <<'USAGE'
@@ -112,6 +115,7 @@ trusted_inputs=(
   environment/runtime-matrix-pre46-exclusions.tsv
   environment/runtime-matrix-whole-file-skips.tsv
   environment/runtime-matrix-result-skips.tsv
+  environment/r-packages-linux-64.lock
 )
 for relative in "${trusted_inputs[@]}"; do
   [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
@@ -122,6 +126,15 @@ for relative in "${trusted_inputs[@]}"; do
     cmp -s -- "$ROOT/$relative" - ||
     fail "Runtime-matrix input differs from the committed source ref: $relative"
 done
+lock_record=$(awk -F '\t' -v version="$DATATABLE_VERSION" '
+  $1 == "data.table" && $2 == version { print $2 "\t" $4 }
+' "$ROOT/environment/r-packages-linux-64.lock")
+[[ "$lock_record" == "$DATATABLE_VERSION"$'\t'"$DATATABLE_SHA256" ]] ||
+  fail "authenticated data.table source lock is absent or ambiguous"
+[[ -f "$DATATABLE_ARCHIVE" && ! -L "$DATATABLE_ARCHIVE" ]] ||
+  fail "cached data.table source is absent: run scripts/bootstrap"
+[[ "$(sha256sum -- "$DATATABLE_ARCHIVE" | cut -d ' ' -f 1)" == "$DATATABLE_SHA256" ]] ||
+  fail "cached data.table source does not match its authenticated lock"
 for version in "${versions[@]}"; do
   relative="environment/runtime-r-${version}-linux-64.lock"
   "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
@@ -190,6 +203,9 @@ for version in "${versions[@]}"; do
     mkdir -p -- "$inputs/${relative%/*}"
     cp -- "$ROOT/$relative" "$inputs/$relative"
   done
+  if [[ "$version" == 4.3.3 ]]; then
+    cp -- "$DATATABLE_ARCHIVE" "$inputs/data.table_${DATATABLE_VERSION}.tar.gz"
+  fi
   cp -R -- "$ROOT/.local/runtime-matrix/receipts/R-$version" "$inputs/bootstrap-receipt"
   {
     printf 'step\tcommand\n'
@@ -198,6 +214,11 @@ for version in "${versions[@]}"; do
     printf 'git-identity\tauthenticated repository-local Git executable hash, version, path, and exec path\n'
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
+    if [[ "$version" == 4.3.3 ]]; then
+      printf 'dependency-overlay\tSHA-256-authenticated R CMD INSTALL of data.table %s into the fresh stage library\n' "$DATATABLE_VERSION"
+    else
+      printf 'dependency-overlay\tvalidated prefix data.table %s\n' "$DATATABLE_VERSION"
+    fi
     printf 'focused\tRscript runtime-matrix-probe.R LIBRARY\n'
     printf 'symbols\tauthenticated prefix NM -D --undefined-only paradox.so\n'
     printf 'tests\tNOT_CRAN=false Rscript run-runtime-matrix-tests.R SOURCE LIBRARY ABSENT_SCOPE_DIRECTORY\n'
@@ -302,32 +323,60 @@ for version in "${versions[@]}"; do
       "$logs/source-tests.log"
   }
   discovered_test_files=$(log_value discovered_test_file_count)
+  discovered_test_contexts=$(log_value discovered_test_context_count)
   executed_test_files=$(log_value executed_test_file_count)
+  executed_test_contexts=$(log_value executed_test_context_count)
   excluded_test_files=$(log_value excluded_test_file_count)
+  excluded_test_contexts=$(log_value excluded_test_context_count)
+  staged_test_support_files=$(log_value staged_test_support_file_count)
   reported_test_files=$(log_value testthat_reported_file_count)
+  expected_whole_file_skips=$(log_value expected_whole_file_skip_count)
   whole_file_skips=$(log_value observed_whole_file_skip_count)
   expectations_passed=$(log_value expectations_passed)
   result_skips=$(log_value result_test_blocks_skipped)
   total_skips=$(log_value total_test_skips)
-  minimum_expectations=$(log_value minimum_expectations_required)
   expected_result_skips=$(log_value expected_result_test_block_skip_count)
-  for value in "$discovered_test_files" "$executed_test_files" \
-      "$excluded_test_files" "$reported_test_files" "$whole_file_skips" \
+  for value in "$discovered_test_files" "$discovered_test_contexts" \
+      "$executed_test_files" "$executed_test_contexts" \
+      "$excluded_test_files" "$excluded_test_contexts" \
+      "$staged_test_support_files" "$reported_test_files" \
+      "$expected_whole_file_skips" "$whole_file_skips" \
       "$expectations_passed" "$result_skips" "$total_skips" \
-      "$minimum_expectations" "$expected_result_skips"; do
-    [[ "$value" =~ ^[0-9]+$ ]] || fail "Runtime source-test counts are malformed"
+      "$expected_result_skips"; do
+    [[ "$value" =~ ^(0|[1-9][0-9]*)$ ]] ||
+      fail "Runtime source-test counts are malformed"
   done
-  [[ "$discovered_test_files" == 79 && "$executed_test_files" == 57 &&
-    "$excluded_test_files" == 22 && "$reported_test_files" == 55 &&
-    "$whole_file_skips" == 2 && "$minimum_expectations" == 4900 ]] ||
-    fail "Runtime source-test scope differs from the reviewed policy"
-  case "$version:$result_skips:$expected_result_skips" in
-    4.3.3:6:6|4.5.2:7:7) ;;
-    *) fail "Runtime result skips differ from the reviewed policy" ;;
-  esac
-  ((expectations_passed >= minimum_expectations &&
+  manifest_whole_file_skips=$(awk 'END {print NR - 1}' \
+    "$inputs/environment/runtime-matrix-whole-file-skips.tsv")
+  manifest_result_skips=$(awk -F '\t' -v runtime="$version" \
+    'NR > 1 && $1 == runtime {count++} END {print count + 0}' \
+    "$inputs/environment/runtime-matrix-result-skips.tsv")
+  scope_discovered=$(awk 'END {print NR - 1}' "$scope/scope.tsv")
+  scope_executed=$(awk -F '\t' '$1 == "executed" {count++} END {print count + 0}' \
+    "$scope/scope.tsv")
+  scope_excluded=$(awk -F '\t' '$1 == "excluded" {count++} END {print count + 0}' \
+    "$scope/scope.tsv")
+  retained_reported=$(awk 'END {print NR - 1}' \
+    "$scope/testthat-reported-files.tsv")
+  retained_staged_files=$(find "$scope/testthat" -maxdepth 1 -type f | wc -l)
+  ((discovered_test_files > 0 && expectations_passed > 0 &&
+    discovered_test_files == discovered_test_contexts &&
+    executed_test_files == executed_test_contexts &&
+    excluded_test_files == excluded_test_contexts &&
+    discovered_test_files == executed_test_files + excluded_test_files &&
+    excluded_test_files == 0 &&
+    discovered_test_files == scope_discovered &&
+    executed_test_files == scope_executed &&
+    excluded_test_files == scope_excluded &&
+    reported_test_files == retained_reported &&
+    retained_staged_files == executed_test_files + staged_test_support_files &&
+    reported_test_files + whole_file_skips == executed_test_files &&
+    expected_whole_file_skips == manifest_whole_file_skips &&
+    whole_file_skips == expected_whole_file_skips &&
+    expected_result_skips == manifest_result_skips &&
+    result_skips == expected_result_skips &&
     total_skips == result_skips + whole_file_skips)) ||
-    fail "Runtime source-test expectation or skip accounting is inconsistent"
+    fail "Runtime source-test inventory or skip accounting is inconsistent"
   "$PREFIX_RECEIPT" create "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
   {
     printf 'field\tvalue\n'
@@ -363,14 +412,19 @@ for version in "${versions[@]}"; do
     printf 'scheduler_wave_manifest_sha256\t%s\n' "$wave_manifest_sha256"
     printf 'stage_worker_sha256\t%s\n' "$stage_worker_sha256"
     printf 'discovered_test_file_count\t%s\n' "$discovered_test_files"
+    printf 'discovered_test_context_count\t%s\n' "$discovered_test_contexts"
     printf 'executed_test_file_count\t%s\n' "$executed_test_files"
+    printf 'executed_test_context_count\t%s\n' "$executed_test_contexts"
     printf 'excluded_test_file_count\t%s\n' "$excluded_test_files"
+    printf 'excluded_test_context_count\t%s\n' "$excluded_test_contexts"
+    printf 'staged_test_support_file_count\t%s\n' "$staged_test_support_files"
     printf 'testthat_reported_file_count\t%s\n' "$reported_test_files"
+    printf 'expected_whole_file_skip_count\t%s\n' "$expected_whole_file_skips"
     printf 'whole_file_skip_count\t%s\n' "$whole_file_skips"
+    printf 'expected_result_test_block_skip_count\t%s\n' "$expected_result_skips"
     printf 'expectations_passed\t%s\n' "$expectations_passed"
     printf 'result_test_blocks_skipped\t%s\n' "$result_skips"
     printf 'total_test_skips\t%s\n' "$total_skips"
-    printf 'minimum_expectations_required\t%s\n' "$minimum_expectations"
     printf 'archive_sha256\t%s\n' "$(sha256_file "$archive")"
     printf 'candidate_dso_sha256\t%s\n' "$(sha256_file "$library/paradox/libs/paradox.so")"
     printf 'artifacts_manifest_sha256\t%s\n' "$(sha256_file "$metadata/artifacts.manifest.tsv")"

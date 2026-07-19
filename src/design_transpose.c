@@ -2,267 +2,323 @@
 
 #include "paradox.h"
 
+#include "paramset_domain_common.h"
+#include "r_api_compat.h"
+
 /*
- * Turn the columns of an ordinary data frame into a list of named row lists.
- *
- * A classed atomic vector may have S3 subsetting semantics (factor, Date,
- * integer64, and user classes), so this kernel deliberately returns NULL for
- * those inputs. The R wrapper then uses mlr3misc::transpose_list(), retaining
- * historical dispatch. List-column elements are reused exactly; when NA
- * filtering could dispatch on a classed scalar element, the operation likewise
- * falls back.
+ * Snapshot Design$data once and emit independently owned named row shells.
+ * Atomic scalars retain ordinary column classes (factor, Date, and similar
+ * base representations); list-column leaves retain identity.  We deliberately
+ * do not invoke S3 `[[` or `is.na` methods for arbitrary column classes.
  */
 
-static inline void account_work(R_xlen_t *work_since_interrupt) {
-  ++*work_since_interrupt;
-  if (*work_since_interrupt >= PARADOX_INTERRUPT_CHECK_INTERVAL) {
-    R_CheckUserInterrupt();
-    *work_since_interrupt = 0;
+static SEXP snapshot_strings(SEXP source, const char *description,
+    R_xlen_t *work_since_interrupt) {
+  if (TYPEOF(source) != STRSXP || ALTREP(source) || Rf_isS4(source) ||
+      Rf_isObject(source) || !paradox_api_has_no_attributes(source)) {
+    Rf_error("%s must be a character vector", description);
   }
-}
-
-static int supported_container(SEXP data) {
-  /* The R fallback is the sole observer of callback-capable containers.  In
-   * particular, do not authenticate an ALTREP shell and then let Length or
-   * Elt callbacks invalidate that decision. */
-  if (ALTREP(data)) {
-    return 0;
-  }
-  if (!Rf_isObject(data)) {
-    return 1;
-  }
-
-  SEXP classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
-  int supported = TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
-    XLENGTH(classes) == 2;
-  if (supported) {
-    SEXP first = STRING_ELT(classes, 0);
-    SEXP second = STRING_ELT(classes, 1);
-    supported = first != NA_STRING && second != NA_STRING &&
-      strcmp(CHAR(first), "data.table") == 0 &&
-      strcmp(CHAR(second), "data.frame") == 0;
+  const R_xlen_t count = XLENGTH(source);
+  SEXP result = PROTECT(Rf_allocVector(STRSXP, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    paradox_domain_account_work(work_since_interrupt);
+    SEXP value = STRING_ELT(source, index);
+    if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES ||
+        CHAR(value)[0] == '\0') {
+      UNPROTECT(1);
+      Rf_error("%s contains an unsupported name", description);
+    }
+    SET_STRING_ELT(result, index, value);
   }
   UNPROTECT(1);
-  return supported;
+  return result;
 }
 
-static int supported_column(SEXP column) {
-  /* Reading either the length or an element of an ALTREP column can execute
-   * arbitrary R code.  Decline before either operation so fallback cannot
-   * replay a partially observed source. */
-  if (ALTREP(column)) {
-    return 0;
+static int ordinary_design_shell(SEXP data) {
+  static const char *const names_only[] = {"names"};
+  if (TYPEOF(data) != VECSXP || ALTREP(data) || Rf_isS4(data)) {
+    return FALSE;
   }
-  if (Rf_getAttrib(column, R_NamesSymbol) != R_NilValue) {
-    return 0;
+  int valid_shell = FALSE;
+  if (!Rf_isObject(data)) {
+    valid_shell = paradox_api_has_only_attributes(data, names_only, 1);
+  } else {
+    SEXP classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
+    const int ordinary_classes = TYPEOF(classes) == STRSXP &&
+      !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
+      paradox_api_has_no_attributes(classes);
+    const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
+    const int data_frame = count == 1 && paradox_domain_string_is(
+      STRING_ELT(classes, 0),
+      "data.frame"
+    );
+    const int data_table = count == 2 && paradox_domain_string_is(
+        STRING_ELT(classes, 0),
+        "data.table"
+      ) && paradox_domain_string_is(
+        STRING_ELT(classes, 1),
+        "data.frame"
+      );
+    static const char *const frame_attributes[] = {
+      "names", "row.names", "class"
+    };
+    static const char *const table_attributes[] = {
+      "names", "row.names", "class", ".internal.selfref", "sorted", "index"
+    };
+    valid_shell = (data_frame && paradox_api_has_only_attributes(
+      data,
+      frame_attributes,
+      3
+    )) || (data_table && paradox_api_has_only_attributes(
+      data,
+      table_attributes,
+      6
+    ));
+    UNPROTECT(1);
   }
-
-  switch (TYPEOF(column)) {
-    case LGLSXP:
-    case INTSXP:
-    case REALSXP:
-    case CPLXSXP:
-    case STRSXP:
-    case RAWSXP:
-      return !Rf_isObject(column);
-    case VECSXP:
-      return !Rf_isObject(column);
-    default:
-      return 0;
-  }
+  if (!valid_shell) return FALSE;
+  SEXP names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  const int valid_names = names == R_NilValue
+    ? XLENGTH(data) == 0
+    : TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
+      !Rf_isObject(names) && paradox_api_has_no_attributes(names) &&
+      XLENGTH(names) == XLENGTH(data);
+  UNPROTECT(1);
+  return valid_names;
 }
 
-static int atomic_scalar_na(SEXP value, int *supported) {
-  *supported = 1;
-  if (ALTREP(value) || Rf_isObject(value)) {
-    *supported = 0;
-    return 0;
+static int supported_column_type(SEXPTYPE type) {
+  return type == LGLSXP || type == INTSXP || type == REALSXP ||
+    type == CPLXSXP || type == STRSXP || type == RAWSXP ||
+    type == VECSXP;
+}
+
+static void validate_attributes(SEXP source) {
+  static const char *const allowed[] = {
+    "names", "class", "levels", "tzone", "units"
+  };
+  if (!paradox_api_has_only_attributes(source, allowed, 5)) {
+    Rf_error("Design columns have unsupported structural attributes");
   }
-  switch (TYPEOF(value)) {
-    case LGLSXP:
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      return LOGICAL_ELT(value, 0) == NA_LOGICAL;
-    case INTSXP:
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      return INTEGER_ELT(value, 0) == NA_INTEGER;
-    case REALSXP:
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      return ISNAN(REAL_ELT(value, 0));
-    case CPLXSXP: {
-      Rcomplex scalar;
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      scalar = COMPLEX_ELT(value, 0);
-      return ISNAN(scalar.r) || ISNAN(scalar.i);
+  const SEXP attributes[] = {
+    Rf_getAttrib(source, R_NamesSymbol),
+    Rf_getAttrib(source, R_ClassSymbol),
+    Rf_getAttrib(source, R_LevelsSymbol),
+    Rf_getAttrib(source, Rf_install("tzone")),
+    Rf_getAttrib(source, Rf_install("units"))
+  };
+  for (size_t index = 0; index < 5; ++index) {
+    if (attributes[index] != R_NilValue &&
+        (ALTREP(attributes[index]) || Rf_isS4(attributes[index]) ||
+          Rf_isObject(attributes[index]))) {
+      Rf_error("Design columns must have ordinary structural attributes");
     }
-    case STRSXP:
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      return STRING_ELT(value, 0) == NA_STRING;
-    case RAWSXP:
-      if (XLENGTH(value) != 1) {
-        return 0;
-      }
-      return 0;
-    default:
-      return 0;
   }
+}
+
+static SEXP snapshot_column(SEXP source,
+    R_xlen_t *work_since_interrupt) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if (Rf_isS4(source) || !supported_column_type(type)) {
+    Rf_error("Design contains an unsupported column type");
+  }
+  validate_attributes(source);
+
+  const R_xlen_t count = XLENGTH(source);
+  SEXP result = PROTECT(Rf_allocVector(type, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    paradox_domain_account_work(work_since_interrupt);
+    switch (type) {
+    case LGLSXP:
+      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(source, index));
+      break;
+    case INTSXP:
+      SET_INTEGER_ELT(result, index, INTEGER_ELT(source, index));
+      break;
+    case REALSXP:
+      SET_REAL_ELT(result, index, REAL_ELT(source, index));
+      break;
+    case CPLXSXP:
+      SET_COMPLEX_ELT(result, index, COMPLEX_ELT(source, index));
+      break;
+    case STRSXP:
+      SET_STRING_ELT(result, index, STRING_ELT(source, index));
+      break;
+    case RAWSXP:
+      SET_RAW_ELT(result, index, RAW_ELT(source, index));
+      break;
+    case VECSXP:
+      SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
+      break;
+    default:
+      UNPROTECT(1);
+      Rf_error("Internal error: unsupported Design column type");
+    }
+  }
+  DUPLICATE_ATTRIB(result, source);
+  UNPROTECT(1);
+  return result;
+}
+
+static int scalar_is_na(SEXP value) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != CPLXSXP && type != STRSXP) {
+    return FALSE;
+  }
+  if (ALTREP(value) || XLENGTH(value) != 1) {
+    return FALSE;
+  }
+  switch (type) {
+  case LGLSXP:
+    return LOGICAL_ELT(value, 0) == NA_LOGICAL;
+  case INTSXP:
+    return INTEGER_ELT(value, 0) == NA_INTEGER;
+  case REALSXP:
+    return ISNAN(REAL_ELT(value, 0));
+  case CPLXSXP: {
+    const Rcomplex scalar = COMPLEX_ELT(value, 0);
+    return ISNAN(scalar.r) || ISNAN(scalar.i);
+  }
+  case STRSXP:
+    return STRING_ELT(value, 0) == NA_STRING;
+  default:
+    return FALSE;
+  }
+}
+
+static SEXP atomic_scalar(SEXP column, R_xlen_t row) {
+  SEXP result;
+  switch (TYPEOF(column)) {
+  case LGLSXP:
+    result = PROTECT(Rf_ScalarLogical(LOGICAL_ELT(column, row)));
+    break;
+  case INTSXP:
+    result = PROTECT(Rf_ScalarInteger(INTEGER_ELT(column, row)));
+    break;
+  case REALSXP:
+    result = PROTECT(Rf_ScalarReal(REAL_ELT(column, row)));
+    break;
+  case CPLXSXP:
+    result = PROTECT(Rf_ScalarComplex(COMPLEX_ELT(column, row)));
+    break;
+  case STRSXP:
+    result = PROTECT(Rf_ScalarString(STRING_ELT(column, row)));
+    break;
+  case RAWSXP:
+    result = PROTECT(Rf_allocVector(RAWSXP, 1));
+    SET_RAW_ELT(result, 0, RAW_ELT(column, row));
+    break;
+  default:
+    Rf_error("Internal error: non-atomic Design column");
+    return R_NilValue;
+  }
+  DUPLICATE_ATTRIB(result, column);
+  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(result, R_DimSymbol, R_NilValue);
+  Rf_setAttrib(result, R_DimNamesSymbol, R_NilValue);
+  UNPROTECT(1);
+  return result;
 }
 
 static SEXP scalar_from_column(SEXP column, R_xlen_t row) {
-  switch (TYPEOF(column)) {
-    case LGLSXP:
-      return Rf_ScalarLogical(LOGICAL_ELT(column, row));
-    case INTSXP:
-      return Rf_ScalarInteger(INTEGER_ELT(column, row));
-    case REALSXP:
-      return Rf_ScalarReal(REAL_ELT(column, row));
-    case CPLXSXP:
-      return Rf_ScalarComplex(COMPLEX_ELT(column, row));
-    case STRSXP:
-      return Rf_ScalarString(STRING_ELT(column, row));
-    case RAWSXP: {
-      SEXP scalar = Rf_allocVector(RAWSXP, 1);
-      RAW(scalar)[0] = RAW_ELT(column, row);
-      return scalar;
-    }
-    case VECSXP:
-      return VECTOR_ELT(column, row);
-    default:
-      return R_NilValue;
+  return TYPEOF(column) == VECSXP
+    ? VECTOR_ELT(column, row)
+    : atomic_scalar(column, row);
+}
+
+static int parse_flag(SEXP value) {
+  if (TYPEOF(value) != LGLSXP || XLENGTH(value) != 1) {
+    Rf_error("`filter_na` must be one TRUE or FALSE value");
   }
+  const int result = LOGICAL_ELT(value, 0);
+  if (result == NA_LOGICAL) {
+    Rf_error("`filter_na` must be one TRUE or FALSE value");
+  }
+  return result;
 }
 
 SEXP paradox_design_transpose(SEXP data, SEXP filter_na) {
-  R_xlen_t column_count;
-  R_xlen_t row_count;
-  R_xlen_t column_index;
-  R_xlen_t row_index;
-  int do_filter;
-  SEXP column_names;
-  SEXP output_names;
-  SEXP result;
+  PROTECT(data);
+  PROTECT(filter_na);
+  const int do_filter = parse_flag(filter_na);
+  if (!ordinary_design_shell(data)) {
+    UNPROTECT(2);
+    Rf_error("Design$data must be a list-like data frame");
+  }
+
   R_xlen_t work_since_interrupt = 0;
-
-  if (TYPEOF(data) != VECSXP || ALTREP(data) ||
-      TYPEOF(filter_na) != LGLSXP ||
-      ALTREP(filter_na) ||
-      XLENGTH(filter_na) != 1) {
-    return R_NilValue;
-  }
-  do_filter = LOGICAL_ELT(filter_na, 0);
-  if (do_filter == NA_LOGICAL || !supported_container(data)) {
-    return R_NilValue;
-  }
-  column_count = XLENGTH(data);
+  const R_xlen_t column_count = XLENGTH(data);
   if (column_count == 0) {
-    return Rf_allocVector(VECSXP, 0);
+    SEXP empty = PROTECT(Rf_allocVector(VECSXP, 0));
+    UNPROTECT(3);
+    return empty;
   }
 
-  PROTECT(column_names = Rf_getAttrib(data, R_NamesSymbol));
-  if (TYPEOF(column_names) != STRSXP || ALTREP(column_names) ||
-      XLENGTH(column_names) != column_count) {
-    UNPROTECT(1);
-    return R_NilValue;
-  }
-  /* Own the names used by every output row. */
-  PROTECT(output_names = Rf_allocVector(STRSXP, column_count));
-  for (column_index = 0; column_index < column_count; ++column_index) {
-    account_work(&work_since_interrupt);
-    SEXP name = STRING_ELT(column_names, column_index);
-    if (name == NA_STRING || CHAR(name)[0] == '\0') {
-      UNPROTECT(2);
-      return R_NilValue;
-    }
-    SET_STRING_ELT(output_names, column_index, name);
+  SEXP source_names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  SEXP names = PROTECT(snapshot_strings(
+    source_names,
+    "Design column names",
+    &work_since_interrupt
+  ));
+  if (XLENGTH(names) != column_count ||
+      Rf_any_duplicated(names, FALSE) != 0) {
+    UNPROTECT(4);
+    Rf_error("Design$data must have unique column names");
   }
 
-  /* Keep every validated child independently rooted while output allocation
-   * can trigger collection. */
   SEXP columns = PROTECT(Rf_allocVector(VECSXP, column_count));
-  row_count = 0;
-  for (column_index = 0; column_index < column_count; ++column_index) {
-    account_work(&work_since_interrupt);
-    SEXP column = PROTECT(VECTOR_ELT(data, column_index));
-    if (!supported_column(column)) {
-      UNPROTECT(4);
-      return R_NilValue;
+  R_xlen_t row_count = 0;
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    paradox_domain_account_work(&work_since_interrupt);
+    SEXP source = PROTECT(VECTOR_ELT(data, column));
+    SEXP frozen = PROTECT(snapshot_column(source, &work_since_interrupt));
+    const R_xlen_t rows = XLENGTH(frozen);
+    if (column != 0 && rows != row_count) {
+      UNPROTECT(7);
+      Rf_error("Design$data columns have inconsistent lengths");
     }
-    const R_xlen_t column_size = XLENGTH(column);
-    if (column_index != 0 && column_size != row_count) {
-      UNPROTECT(4);
-      return R_NilValue;
+    if (column == 0) {
+      row_count = rows;
     }
-    if (column_index == 0) {
-      row_count = column_size;
-    }
-    SET_VECTOR_ELT(columns, column_index, column);
-    UNPROTECT(1);
+    SET_VECTOR_ELT(columns, column, frozen);
+    UNPROTECT(2);
   }
 
-  PROTECT(result = Rf_allocVector(VECSXP, row_count));
-  for (row_index = 0; row_index < row_count; ++row_index) {
-    R_xlen_t target_index = 0;
-    SEXP row;
-    SEXP row_names;
-
-    account_work(&work_since_interrupt);
-    PROTECT(row = Rf_allocVector(VECSXP, column_count));
-    PROTECT(row_names = Rf_allocVector(STRSXP, column_count));
-    for (column_index = 0; column_index < column_count; ++column_index) {
-      account_work(&work_since_interrupt);
-      SEXP column = VECTOR_ELT(columns, column_index);
-      SEXP value = PROTECT(scalar_from_column(column, row_index));
-      if (do_filter) {
-        int supported;
-        const int is_na = atomic_scalar_na(value, &supported);
-        if (!supported) {
-          UNPROTECT(7);
-          return R_NilValue;
-        }
-        if (is_na) {
-          UNPROTECT(1);
-          continue;
-        }
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, row_count));
+  for (R_xlen_t row_index = 0; row_index < row_count; ++row_index) {
+    paradox_domain_account_work(&work_since_interrupt);
+    SEXP row = PROTECT(Rf_allocVector(VECSXP, column_count));
+    SEXP row_names = PROTECT(Rf_allocVector(STRSXP, column_count));
+    R_xlen_t target = 0;
+    for (R_xlen_t column = 0; column < column_count; ++column) {
+      paradox_domain_account_work(&work_since_interrupt);
+      SEXP value = PROTECT(scalar_from_column(
+        VECTOR_ELT(columns, column),
+        row_index
+      ));
+      if (!do_filter || !scalar_is_na(value)) {
+        SET_VECTOR_ELT(row, target, value);
+        SET_STRING_ELT(row_names, target, STRING_ELT(names, column));
+        ++target;
       }
-      if (target_index >= column_count) {
-        UNPROTECT(7);
-        Rf_error("Internal error: transpose row exceeded its capacity");
-      }
-      SET_VECTOR_ELT(row, target_index, value);
-      SET_STRING_ELT(
-        row_names, target_index, STRING_ELT(output_names, column_index)
-      );
-      ++target_index;
       UNPROTECT(1);
     }
 
     SEXP final_row = row;
     SEXP final_names = row_names;
-    int trimmed_protects = 0;
-    if (target_index != column_count) {
-      final_row = PROTECT(Rf_xlengthgets(row, target_index));
-      ++trimmed_protects;
-      final_names = PROTECT(Rf_xlengthgets(row_names, target_index));
-      ++trimmed_protects;
-    }
-    if (XLENGTH(final_row) != target_index ||
-        XLENGTH(final_names) != target_index) {
-      UNPROTECT(6 + trimmed_protects);
-      Rf_error("Internal error: incomplete transpose row");
+    int trim_protects = 0;
+    if (target != column_count) {
+      final_row = PROTECT(Rf_xlengthgets(row, target));
+      ++trim_protects;
+      final_names = PROTECT(Rf_xlengthgets(row_names, target));
+      ++trim_protects;
     }
     Rf_setAttrib(final_row, R_NamesSymbol, final_names);
     SET_VECTOR_ELT(result, row_index, final_row);
-    UNPROTECT(2 + trimmed_protects);
+    UNPROTECT(2 + trim_protects);
   }
-  UNPROTECT(4);
+
+  UNPROTECT(6);
   return result;
 }

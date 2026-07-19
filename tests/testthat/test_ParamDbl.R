@@ -12,9 +12,9 @@ test_that("constructor works", {
   expect_equal(p$upper, c(test = Inf))
 
   # check some invalid arg settings
-  expect_error(ParamDbl$new(id = "x", lower = NULL), "not 'NULL'")
-  expect_error(ParamDbl$new(id = "x", lower = 1, upper = 0), "lower <= upper")
-  expect_error(ParamDbl$new(id = "x", lower = Inf, upper = 0), "lower <= upper")
+  expect_error(ParamDbl$new(id = "x", lower = NULL), "`lower` must be one number", fixed = TRUE)
+  expect_error(ParamDbl$new(id = "x", lower = 1, upper = 0), "`lower` must not be greater than `upper`", fixed = TRUE)
+  expect_error(ParamDbl$new(id = "x", lower = Inf, upper = 0), "`lower` must not be greater than `upper`", fixed = TRUE)
 })
 
 test_that("allowing inf as feasible value works", {
@@ -69,5 +69,5 @@ test_that("tolerance for setting values", {
   p = ParamSet_legacy$new(list(ParamDbl$new("x", lower = 0, upper = 1)))
   p$values$x = -1e-8
   expect_equal(p$values$x, 0)
-  expect_error({p$values$x = -1e-6}, "Element 1 is not >=")
+  expect_error({p$values$x = -1e-6}, "expected one non-missing numeric value within the Domain bounds")
 })

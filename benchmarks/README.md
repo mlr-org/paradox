@@ -1,8 +1,10 @@
 # Paired performance benchmarks
 
 `benchmarks/run` compares a pinned upstream installation with the candidate in
-two separate, fresh R processes. It never changes the CPU governor or writes to
-a global R library. The default inputs exercise calls repeatedly observed in
+two separate, fresh R processes. It loads the supplied immutable installations
+and does not rebuild either package for each process or workload. It never
+changes the CPU governor or writes to a global R library. The default inputs
+exercise calls repeatedly observed in
 the mlr-org compatibility corpus: `p_*()` and `ps()` construction,
 `ParamSet$new()`, filtered `ids()`, static properties, scalar and tabular
 checking, sanitization, `qunif()`, `subset()`, `get_domain()`, and `trafo()`.
@@ -12,6 +14,25 @@ mlr3hyperband instead of conflating sampling with constructor cost.
 Separate plain and dependency-bearing workloads time `ParamSet$subspaces()`
 and `SamplerUnif$new()` themselves, preserving visibility into their one-time
 construction and ownership costs.
+Five `ParamSetShadow` workloads retain the budget-view shape used by
+miesmuschel: construction over a mixed 64-parameter origin, a live `$values`
+read, the `shadow_constraint_live` hidden-value merge, live `$domains`
+reconstruction, and a write-through `$values <-` assignment that must preserve
+the hidden budget value. The read fixture is
+changed through its origin after construction, while the write fixture is
+independent and idempotent across warmup and timing. For the pinned Paradox 1
+baseline, the constructor resolves miesmuschel's version-gated legacy
+implementation; Paradox 2 resolves its package-owned generator. This compares
+the two real migration endpoints rather than a benchmark-only proxy.
+The scalar validation group separately times complete `$check()` and the
+`check_dependencies` dependency-only workload, so removing the latter's former
+R-side dependency walk remains visible without conflating it with Domain
+validation. `condition_equal_vector` isolates the vector comparison used by
+dependency masking in `Design`, including its public native admission cost. A
+separate `test_constraint_dt` workload times an already-admitted
+batch and a tiny real callback. It therefore exposes row-adapter and callback
+snapshot overhead instead of hiding the native batch evaluator behind repeated
+Domain validation.
 The value group separates the default dependency-aware `$get_values()` call,
 the callback-free `remove_dependencies = FALSE` case, and the ubiquitous
 `tags = "train"` filter. It also measures default filtered getters on rich and
@@ -31,9 +52,13 @@ and an exact collection `$values <-` assignment; both verify stored value order
 and contents after warmup and after the complete timed sample.
 Dedicated callback-bearing subset and flatten variants retain live child
 constraints and extra transformations, so the common callback-free case cannot
-hide detachment overhead or an extension-dispatch regression.
-This keeps the large pre-native collection costs visible in the normal paired report
-instead of relying only on one-off profiling scripts.
+hide detachment overhead or a regression that reintroduces R-side callback
+orchestration. Together with the Shadow read/write workloads, these cases keep
+the temporary native ID index and the shared live/detached collection evaluator
+visible in the normal paired report instead of relying only on one-off
+profiling scripts. The small direct `to_tune(ParamSet)` wrapper probe remains a
+development diagnostic; release claims come from these end-to-end workloads
+and the complete paired gate.
 
 For dependency aggregation specifically, retain both rich and nested shapes so
 the result covers local rows, per-edge affixing, and recursive postorder
@@ -163,20 +188,16 @@ the same host:
 |---|---:|---:|---:|---:|---:|
 | `hot` | 1.20 | 1.35 | 0.75 | 1.25 | 16 KiB |
 | `standard` | 1.35 | 1.60 | 0.80 | 1.50 | 64 KiB |
-| `authenticated-read` | 1.60 | 1.70 | 0.80 | 1.50 | 16 KiB |
 
 Common constructors, ID/value/domain access, validation, design generation,
 mutation, and maintained consumer paths use the stricter `hot` tier. Structural
-stress, nested, and callback-extension cases use `standard`. The narrow
-`authenticated-read` tier applies only to the three direct
-`ParamSetCollection$values` active-binding workloads. Those reads deliberately
-re-authenticate live R6 wrappers, child private tables, value snapshots,
-translation ownership, and graph edges before assembling the result. The tier
-keeps that reviewed safety cost visible as a marginal row while still failing a
-median ratio of 1.60 or an upper-quartile ratio of 1.70. It does not apply to
-`get_values()` or any mutation path. These are portable relative budgets; the
-policy assumes no processor model, instruction set, or absolute nanosecond
-target.
+stress, nested graph traversal, and callback-bearing cases use `standard`.
+The Shadow constructor and value read/write paths are `hot`; complete live
+Domain reconstruction is `standard` because it is a structural materialization.
+Direct `ParamSetCollection$values` reads now traverse only the authoritative
+capsule graph; they no longer receive a special budget for authenticating R6
+wrappers or private tables. These are portable relative budgets; the policy
+assumes no processor model, instruction set, or absolute nanosecond target.
 
 Timing decisions use all retained samples, not only the summary median. For
 both the median ratio and the 75th-percentile ratio, the evaluator computes
@@ -213,8 +234,8 @@ of the applicable tier budget consumed, so a tiny allocation above a zero-byte
 baseline cannot hide a larger material increase. The raw ratio, byte delta, and
 budget fraction are all retained. Any `fail` row prevents the evidence seal.
 The deterministic policy fixtures cover stable passes, a noisy marginal, a
-clear timing failure, both harmless and material zero-baseline allocation
-changes, and the reviewed authenticated-read margin:
+clear timing failure, and both harmless and material zero-baseline allocation
+changes:
 
 ```sh
 Rscript --vanilla benchmarks/tests/test-regression-policy.R

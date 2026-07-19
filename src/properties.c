@@ -105,18 +105,28 @@ static int param_is_bounded(param_class_t cls, double lower, double upper) {
   return FALSE;
 }
 
+static double numeric_at(SEXP column, R_xlen_t row) {
+  if (TYPEOF(column) == REALSXP) {
+    return REAL_ELT(column, row);
+  }
+  const int value = INTEGER_ELT(column, row);
+  return value == NA_INTEGER ? NA_REAL : (double) value;
+}
+
 SEXP paradox_param_set_property(SEXP params, SEXP property) {
   if (TYPEOF(params) != VECSXP) {
     Rf_error("Corrupt ParamSet storage: `.params` must be a list");
   }
   if (TYPEOF(property) != INTSXP || ALTREP(property) ||
       XLENGTH(property) != 1 ||
-      INTEGER(property)[0] == NA_INTEGER || INTEGER(property)[0] < 0 ||
-      INTEGER(property)[0] >= PROPERTY_COUNT) {
+      INTEGER_ELT(property, 0) == NA_INTEGER ||
+      INTEGER_ELT(property, 0) < 0 ||
+      INTEGER_ELT(property, 0) >= PROPERTY_COUNT) {
     Rf_error("Internal error: invalid ParamSet property selector");
   }
 
-  const property_t selected = (property_t) INTEGER(property)[0];
+  const int selector = INTEGER_ELT(property, 0);
+  const property_t selected = (property_t) selector;
   SEXP roots = PROTECT(Rf_allocVector(VECSXP, PROPERTY_ROOT_COUNT));
   SEXP ids = paradox_get_named_column(params, ".params", "id");
   SET_VECTOR_ELT(roots, PROPERTY_ROOT_IDS, ids);
@@ -153,24 +163,21 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
     ? (size == 0 ? INTSXP : REALSXP)
     : LGLSXP;
   SEXP value = PROTECT(Rf_allocVector(value_type, size));
-  SEXP known = PROTECT(Rf_allocVector(LGLSXP, size));
-  /* Acquire read-only vector pointers only after the last allocation which
-   * precedes their use. Their exact ordinary owners remain in `roots`. */
-  const paradox_numeric_column_t lower_data = paradox_get_numeric_column(
+  /* Reuse the shared canonical-column diagnostics, but deliberately discard
+   * their temporary raw views. Element APIs below keep no vector pointer live
+   * across an interrupt poll. */
+  (void) paradox_get_numeric_column(
     lower,
     size,
     "ParamSet storage",
     "lower"
   );
-  const paradox_numeric_column_t upper_data = paradox_get_numeric_column(
+  (void) paradox_get_numeric_column(
     upper,
     size,
     "ParamSet storage",
     "upper"
   );
-  double *real_value = value_type == REALSXP ? REAL(value) : NULL;
-  int *logical_value = selected == PROPERTY_NLEVELS ? NULL : LOGICAL(value);
-  int *known_data = LOGICAL(known);
 
   for (R_xlen_t row = 0; row < size; ++row) {
     if (row != 0 && row % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
@@ -178,8 +185,14 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
     }
 
     const param_class_t cls = classify_param(STRING_ELT(classes, row));
-    const double row_lower = paradox_numeric_at(&lower_data, row);
-    const double row_upper = paradox_numeric_at(&upper_data, row);
+    if (cls == PARAM_CLASS_UNKNOWN) {
+      Rf_error(
+        "Corrupt ParamSet storage: unsupported parameter class at row %lld",
+        (long long) (row + 1)
+      );
+    }
+    const double row_lower = numeric_at(lower, row);
+    const double row_upper = numeric_at(upper, row);
     SEXP row_levels = PROTECT(VECTOR_ELT(levels, row));
     if (selected == PROPERTY_NLEVELS && cls == PARAM_CLASS_FCT) {
       if (TYPEOF(row_levels) != STRSXP) {
@@ -189,45 +202,33 @@ SEXP paradox_param_set_property(SEXP params, SEXP property) {
         );
       }
       if (ALTREP(row_levels)) {
-        /* Numeric and other non-character factor levels are represented by a
-         * deferred-string ALTREP after p_fct() installs its automatic
-         * transformation.  Asking that provider for its length can execute
-         * arbitrary code, so decline the complete native property operation
-         * and let the established grouped R/S3 path observe it once. */
-        UNPROTECT(4);
-        return R_NilValue;
+        Rf_error(
+          "Corrupt ParamSet storage: factor levels must use ordinary representations"
+        );
       }
     }
-    known_data[row] = cls != PARAM_CLASS_UNKNOWN;
 
     if (selected == PROPERTY_NLEVELS) {
-      real_value[row] = param_nlevels(
-        cls,
-        row_lower,
-        row_upper,
-        row_levels
+      SET_REAL_ELT(
+        value,
+        row,
+        param_nlevels(cls, row_lower, row_upper, row_levels)
       );
-    } else if (cls == PARAM_CLASS_UNKNOWN) {
-      logical_value[row] = NA_LOGICAL;
     } else if (selected == PROPERTY_IS_NUMBER) {
-      logical_value[row] = param_is_number(cls);
+      SET_LOGICAL_ELT(value, row, param_is_number(cls));
     } else if (selected == PROPERTY_IS_CATEG) {
-      logical_value[row] = param_is_categ(cls);
+      SET_LOGICAL_ELT(value, row, param_is_categ(cls));
     } else {
-      logical_value[row] = param_is_bounded(
-        cls,
-        row_lower,
-        row_upper
+      SET_LOGICAL_ELT(
+        value,
+        row,
+        param_is_bounded(cls, row_lower, row_upper)
       );
     }
     UNPROTECT(1);
   }
 
   Rf_setAttrib(value, R_NamesSymbol, ids);
-
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, 2));
-  SET_VECTOR_ELT(result, 0, value);
-  SET_VECTOR_ELT(result, 1, known);
-  UNPROTECT(4);
-  return result;
+  UNPROTECT(2);
+  return value;
 }

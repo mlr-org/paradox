@@ -27,8 +27,8 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   ids = param_set$ids()
   ids_num = ids[param_set$is_number]
 
-  par_res = integer(0L) # here we construct the resolution for each param
-  if (length(ids_num) > 0L) { # if only categ we dont need to check
+  par_res = set_names(integer(0L), character(0L)) # here we construct the resolution for each param
+  if (length(ids_num) > 0L) { # Categorical-only spaces need no numeric-resolution check.
     if (is.null(resolution) && is.null(param_resolutions)) {
       stop("You must specify 'resolution' or 'param_resolutions'!")
     }
@@ -52,27 +52,12 @@ generate_design_grid = function(param_set, resolution = NULL, param_resolutions 
   isc = param_set$is_categ
   par_res = insert_named(par_res, param_set$nlevels[isc])
 
-  # The exact generated base ParamSet surface can assemble the complete grid
-  # in one native allocation-and-fill pass. Collections, extensions, replaced
-  # methods, malformed private storage, and unsupported numeric ranges decline
-  # cleanly and retain the established column-wise R implementation below.
-  res = NULL
-  if (length(par_res) > 0L &&
-      identical(class(param_set), c("ParamSet", "R6")) &&
-      is_exact_random_design_space(param_set)) {
-    res = .Call(
-      C_generate_design_grid_builtin,
-      param_set$.__enclos_env__$private$.params,
-      par_res
-    )
-  }
-
-  # generate regular grid from 0,1 then map it to the values of the param,
-  # then do a crossproduct
-  if (is.null(res)) {
-    grid_vec = lapply(par_res, function(r) seq(0, 1, length.out = r))
-    res = imap(grid_vec, function(value, id) param_set$qunif(setnames(data.table(value), id))[[1]])
-    res = cross_join(res, sorted = FALSE)
-  }
+  # Closed built-in schemas, including the zero-dimensional schema, use one
+  # allocation-and-fill kernel and never branch to a second R implementation.
+  res = .Call(
+    C_generate_design_grid_builtin,
+    param_set_core_state(get_private(param_set))$.params,
+    par_res
+  )
   Design$new(param_set, res, remove_dupl = TRUE) # user wants no dupls, remove
 }

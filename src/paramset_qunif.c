@@ -7,6 +7,8 @@
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
+#include "core_state.h"
+#include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -26,10 +28,21 @@ enum param_column {
 };
 
 enum qunif_column_root {
-  QUNIF_ROOT_CLASSES = 0,
-  QUNIF_ROOT_NAMES,
-  QUNIF_ROOT_COLUMNS,
-  QUNIF_ROOT_COUNT = (int) QUNIF_ROOT_COLUMNS + (int) PARAM_COLUMN_COUNT
+  QUNIF_ROOT_COLUMNS = 0,
+  QUNIF_ROOT_COUNT = PARAM_COLUMN_COUNT
+};
+
+enum qunif_input_root {
+  QUNIF_INPUT_NAMES = 0,
+  QUNIF_INPUT_VALUES,
+  QUNIF_INPUT_SOURCE,
+  QUNIF_INPUT_ROOT_COUNT
+};
+
+enum qunif_operation_root {
+  QUNIF_OPERATION_CORE = 0,
+  QUNIF_OPERATION_STATE,
+  QUNIF_OPERATION_ROOT_COUNT
 };
 
 typedef enum {
@@ -75,24 +88,7 @@ typedef struct {
   R_xlen_t columns;
   SEXP column_names;
   SEXP values;
-} matrix_info_t;
-
-static const char *const param_column_names[PARAM_COLUMN_COUNT] = {
-  "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-  "levels", "special_vals", "default", "storage_type"
-};
-
-static const SEXPTYPE param_column_types[PARAM_COLUMN_COUNT] = {
-  STRSXP, STRSXP, STRSXP, VECSXP, REALSXP, REALSXP, REALSXP, VECSXP,
-  VECSXP, VECSXP, STRSXP
-};
-
-static inline void periodic_interrupt(R_xlen_t iteration) {
-  if (iteration != 0 &&
-      iteration % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
-    R_CheckUserInterrupt();
-  }
-}
+} qunif_input_t;
 
 static inline void account_work(R_xlen_t *work_since_interrupt) {
   ++*work_since_interrupt;
@@ -104,6 +100,19 @@ static inline void account_work(R_xlen_t *work_since_interrupt) {
 
 static int exact_string(SEXP string, const char *expected) {
   return string != NA_STRING && strcmp(CHAR(string), expected) == 0;
+}
+
+static char *copy_utf8_string(SEXP string) {
+  const size_t size = strlen(Rf_translateCharUTF8(string));
+  if (size >= (size_t) R_XLEN_T_MAX) {
+    Rf_error("Unable to copy a canonical string");
+  }
+  char *copy = paradox_temporary_alloc(
+    (R_xlen_t) size + 1,
+    sizeof(*copy)
+  );
+  memcpy(copy, Rf_translateCharUTF8(string), size + 1U);
+  return copy;
 }
 
 static int strings_equal(SEXP left, SEXP right) {
@@ -124,17 +133,12 @@ static int strings_equal(SEXP left, SEXP right) {
   PROTECT(left);
   PROTECT(right);
   const void *vmax = vmaxget();
-  const char *left_text = Rf_translateCharUTF8(left);
+  const char *left_text = copy_utf8_string(left);
   const char *right_text = Rf_translateCharUTF8(right);
   const int equal = strcmp(left_text, right_text) == 0;
   vmaxset(vmax);
   UNPROTECT(2);
   return equal;
-}
-
-static int numeric_column(SEXP column, R_xlen_t size) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(column);
-  return (type == REALSXP || type == INTSXP) && XLENGTH(column) == size;
 }
 
 static R_xlen_t qunif_column_root(enum param_column column) {
@@ -151,24 +155,17 @@ static double numeric_at(SEXP column, R_xlen_t index) {
 
 static int load_param_columns(SEXP params, param_columns_t *columns,
     SEXP roots) {
-  if (TYPEOF(params) != VECSXP || ALTREP(params) ||
-      XLENGTH(params) != PARAM_COLUMN_COUNT) {
-    return FALSE;
-  }
-
-  SEXP classes = PROTECT(Rf_getAttrib(params, R_ClassSymbol));
-  SET_VECTOR_ELT(roots, QUNIF_ROOT_CLASSES, classes);
-  UNPROTECT(1);
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
-      XLENGTH(classes) != 2) {
-    return FALSE;
-  }
-
-  SEXP names = PROTECT(Rf_getAttrib(params, R_NamesSymbol));
-  SET_VECTOR_ELT(roots, QUNIF_ROOT_NAMES, names);
-  UNPROTECT(1);
-  if (TYPEOF(names) != STRSXP || ALTREP(names) ||
-      XLENGTH(names) != PARAM_COLUMN_COUNT) {
+  paradox_domain_params_t checked;
+  R_xlen_t unused_row = 0;
+  R_xlen_t work_since_interrupt = 0;
+  if (!paradox_domain_validate_params(
+      params,
+      R_NilValue,
+      TRUE,
+      &checked,
+      &unused_row,
+      &work_since_interrupt
+    )) {
     return FALSE;
   }
 
@@ -186,31 +183,7 @@ static int load_param_columns(SEXP params, param_columns_t *columns,
     roots,
     qunif_column_root(PARAM_ID)
   );
-  if (TYPEOF(columns->ids) != STRSXP || ALTREP(columns->ids)) {
-    return FALSE;
-  }
-  columns->size = XLENGTH(columns->ids);
-  if (!exact_string(STRING_ELT(classes, 0), "data.table") ||
-      !exact_string(STRING_ELT(classes, 1), "data.frame")) {
-    return FALSE;
-  }
-  for (R_xlen_t column = 0; column < PARAM_COLUMN_COUNT; ++column) {
-    if (!exact_string(STRING_ELT(names, column), param_column_names[column])) {
-      return FALSE;
-    }
-    SEXP value = VECTOR_ELT(
-      roots,
-      qunif_column_root((enum param_column) column)
-    );
-    const int is_numeric = column == PARAM_LOWER || column == PARAM_UPPER ||
-      column == PARAM_TOLERANCE;
-    if (ALTREP(value) || (is_numeric
-          ? !numeric_column(value, columns->size)
-          : (SEXPTYPE) TYPEOF(value) != param_column_types[column] ||
-            XLENGTH(value) != columns->size)) {
-      return FALSE;
-    }
-  }
+  columns->size = checked.row_count;
 
   columns->classes = VECTOR_ELT(
     roots,
@@ -241,15 +214,6 @@ static int load_param_columns(SEXP params, param_columns_t *columns,
     qunif_column_root(PARAM_STORAGE_TYPE)
   );
 
-  for (R_xlen_t row = 0; row < columns->size; ++row) {
-    periodic_interrupt(row);
-    if (STRING_ELT(columns->ids, row) == NA_STRING ||
-        STRING_ELT(columns->classes, row) == NA_STRING ||
-        STRING_ELT(columns->grouping, row) == NA_STRING ||
-        STRING_ELT(columns->storage_types, row) == NA_STRING) {
-      return FALSE;
-    }
-  }
   return TRUE;
 }
 
@@ -347,80 +311,250 @@ static int find_id(const id_map_t *map, SEXP id, R_xlen_t *row,
   return FALSE;
 }
 
-static int load_matrix_info(SEXP x, matrix_info_t *info, SEXP roots) {
-  if (Rf_isObject(x) || (TYPEOF(x) != REALSXP && TYPEOF(x) != INTSXP)) {
-    return FALSE;
+static void require_unit_interval(double unit) {
+  if (ISNAN(unit)) {
+    Rf_error("Values in `x` must not be missing or NaN");
+  }
+  if (!R_FINITE(unit)) {
+    Rf_error("Values in `x` must be finite");
+  }
+  if (unit < 0.0 || unit > 1.0) {
+    Rf_error("Values in `x` must be between zero and one");
+  }
+}
+
+static int ordinary_character_metadata(SEXP value, int allow_altrep) {
+  return TYPEOF(value) == STRSXP && (allow_altrep || !ALTREP(value)) &&
+    !Rf_isS4(value) && !Rf_isObject(value) &&
+    paradox_api_has_no_attributes(value);
+}
+
+static void snapshot_input_names(SEXP source_names, R_xlen_t columns,
+    int allow_altrep, SEXP roots, R_xlen_t *work_since_interrupt) {
+  PROTECT(source_names);
+  if (!ordinary_character_metadata(source_names, allow_altrep) ||
+      XLENGTH(source_names) != columns) {
+    UNPROTECT(1);
+    Rf_error("`x` must have one column name for every column");
+  }
+
+  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, columns));
+  for (R_xlen_t column = 0; column < columns; ++column) {
+    account_work(work_since_interrupt);
+    SEXP name = STRING_ELT(source_names, column);
+    if (name == NA_STRING) {
+      UNPROTECT(2);
+      Rf_error("Column names of `x` must not be missing");
+    }
+    SET_STRING_ELT(stable_names, column, name);
+  }
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_NAMES, stable_names);
+  UNPROTECT(2);
+}
+
+static R_xlen_t checked_input_size(R_xlen_t rows, R_xlen_t columns) {
+  if (rows < 0 || columns <= 0 ||
+      (rows != 0 && columns > R_XLEN_T_MAX / rows)) {
+    Rf_error("`x` dimensions are too large");
+  }
+  return rows * columns;
+}
+
+static void snapshot_matrix_input(SEXP x, qunif_input_t *info, SEXP roots,
+    R_xlen_t *work_since_interrupt) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(x);
+  if ((type != REALSXP && type != INTSXP) || Rf_isS4(x) ||
+      Rf_isObject(x)) {
+    Rf_error("`x` must be a numeric matrix or data.frame");
   }
 
   SEXP dimensions = PROTECT(ALTREP(x)
     ? paradox_stored_attribute(x, R_DimSymbol)
     : Rf_getAttrib(x, R_DimSymbol));
-  if (TYPEOF(dimensions) != INTSXP || XLENGTH(dimensions) != 2) {
+  if (TYPEOF(dimensions) != INTSXP || ALTREP(dimensions) ||
+      Rf_isS4(dimensions) || Rf_isObject(dimensions) ||
+      !paradox_api_has_no_attributes(dimensions) ||
+      XLENGTH(dimensions) != 2) {
     UNPROTECT(1);
-    return FALSE;
+    Rf_error("`x` must be a numeric matrix or data.frame");
   }
   const int row_count = INTEGER_ELT(dimensions, 0);
   const int column_count = INTEGER_ELT(dimensions, 1);
   if (row_count < 0 || column_count <= 0) {
     UNPROTECT(1);
-    return FALSE;
+    Rf_error("`x` must have at least one column");
   }
   info->rows = (R_xlen_t) row_count;
   info->columns = (R_xlen_t) column_count;
-  if (info->rows != 0 &&
-      info->columns > R_XLEN_T_MAX / info->rows) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  const R_xlen_t size = info->rows * info->columns;
+  const R_xlen_t size = checked_input_size(info->rows, info->columns);
   if (XLENGTH(x) != size) {
     UNPROTECT(1);
-    return FALSE;
+    Rf_error("`x` has inconsistent matrix dimensions");
   }
 
   SEXP dimension_names = PROTECT(ALTREP(x)
     ? paradox_stored_attribute(x, R_DimNamesSymbol)
     : Rf_getAttrib(x, R_DimNamesSymbol));
-  if (TYPEOF(dimension_names) != VECSXP || XLENGTH(dimension_names) != 2) {
+  static const char *const names_only[] = {"names"};
+  if (TYPEOF(dimension_names) != VECSXP || ALTREP(dimension_names) ||
+      Rf_isS4(dimension_names) || Rf_isObject(dimension_names) ||
+      !paradox_api_has_only_attributes(dimension_names, names_only, 1) ||
+      XLENGTH(dimension_names) != 2) {
     UNPROTECT(2);
-    return FALSE;
+    Rf_error("`x` must have one column name for every column");
+  }
+  SEXP dimension_labels = PROTECT(Rf_getAttrib(
+    dimension_names,
+    R_NamesSymbol
+  ));
+  if (dimension_labels != R_NilValue &&
+      (!ordinary_character_metadata(dimension_labels, FALSE) ||
+        XLENGTH(dimension_labels) != 2)) {
+    UNPROTECT(3);
+    Rf_error("`x` has invalid matrix dimnames metadata");
   }
   SEXP source_names = PROTECT(VECTOR_ELT(dimension_names, 1));
-  if (TYPEOF(source_names) != STRSXP ||
-      XLENGTH(source_names) != info->columns) {
-    UNPROTECT(3);
-    return FALSE;
-  }
-
-  R_xlen_t work_since_interrupt = 0;
-  SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, info->columns));
-  for (R_xlen_t column = 0; column < info->columns; ++column) {
-    account_work(&work_since_interrupt);
-    SEXP name = STRING_ELT(source_names, column);
-    if (name == NA_STRING) {
-      UNPROTECT(4);
-      return FALSE;
-    }
-    SET_STRING_ELT(stable_names, column, name);
-  }
-  SET_VECTOR_ELT(roots, 0, stable_names);
-  UNPROTECT(1);
+  snapshot_input_names(
+    source_names,
+    info->columns,
+    TRUE,
+    roots,
+    work_since_interrupt
+  );
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, x);
 
   SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
   for (R_xlen_t index = 0; index < size; ++index) {
-    account_work(&work_since_interrupt);
+    account_work(work_since_interrupt);
     const double unit = numeric_at(x, index);
-    if (!R_FINITE(unit) || unit < 0.0 || unit > 1.0) {
-      UNPROTECT(4);
-      return FALSE;
-    }
+    require_unit_interval(unit);
     SET_REAL_ELT(stable_values, index, unit);
   }
-  SET_VECTOR_ELT(roots, 1, stable_values);
-  info->column_names = VECTOR_ELT(roots, 0);
-  info->values = VECTOR_ELT(roots, 1);
-  UNPROTECT(4);
-  return TRUE;
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_VALUES, stable_values);
+  info->column_names = VECTOR_ELT(roots, QUNIF_INPUT_NAMES);
+  info->values = VECTOR_ELT(roots, QUNIF_INPUT_VALUES);
+  UNPROTECT(5);
+}
+
+static int ordinary_frame_shell(SEXP x) {
+  if (TYPEOF(x) != VECSXP || ALTREP(x) || Rf_isS4(x)) return FALSE;
+  SEXP classes = PROTECT(Rf_getAttrib(x, R_ClassSymbol));
+  const R_xlen_t count = ordinary_character_metadata(classes, FALSE)
+    ? XLENGTH(classes)
+    : 0;
+  const int data_frame = count == 1 && paradox_domain_string_is(
+    STRING_ELT(classes, 0),
+    "data.frame"
+  );
+  const int data_table = count == 2 && paradox_domain_string_is(
+      STRING_ELT(classes, 0),
+      "data.table"
+    ) && paradox_domain_string_is(
+      STRING_ELT(classes, 1),
+      "data.frame"
+    );
+  static const char *const frame_attributes[] = {
+    "names", "row.names", "class"
+  };
+  static const char *const table_attributes[] = {
+    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
+  };
+  int valid = (data_frame && paradox_api_has_only_attributes(
+      x,
+      frame_attributes,
+      3
+    )) || (data_table && paradox_api_has_only_attributes(
+      x,
+      table_attributes,
+      6
+    ));
+  UNPROTECT(1);
+  if (valid) {
+    SEXP names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+    valid = ordinary_character_metadata(names, FALSE) &&
+      XLENGTH(names) == XLENGTH(x);
+    UNPROTECT(1);
+  }
+  return valid;
+}
+
+static void snapshot_frame_input(SEXP x, qunif_input_t *info, SEXP roots,
+    R_xlen_t *work_since_interrupt) {
+  if (!ordinary_frame_shell(x)) {
+    Rf_error("`x` must be a numeric matrix or data.frame");
+  }
+  info->columns = XLENGTH(x);
+  if (info->columns <= 0) {
+    Rf_error("`x` must have at least one column");
+  }
+
+  /* Own every observed column before invoking an ALTREP Length/Elt method.
+   * A callback may replace a data.frame column, but this operation must finish
+   * from the single input generation selected at entry. */
+  SEXP source_columns = PROTECT(Rf_allocVector(VECSXP, info->columns));
+  for (R_xlen_t column = 0; column < info->columns; ++column) {
+    account_work(work_since_interrupt);
+    SEXP source = PROTECT(VECTOR_ELT(x, column));
+    const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+    if ((type != REALSXP && type != INTSXP) || Rf_isObject(source)) {
+      UNPROTECT(2);
+      Rf_error("Every column of `x` must be an unclassed numeric vector");
+    }
+    SET_VECTOR_ELT(source_columns, column, source);
+    UNPROTECT(1);
+  }
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_SOURCE, source_columns);
+
+  info->rows = XLENGTH(VECTOR_ELT(source_columns, 0));
+  if (info->rows > INT_MAX) {
+    UNPROTECT(1);
+    Rf_error("`x` has too many rows for a data.frame result");
+  }
+  for (R_xlen_t column = 1; column < info->columns; ++column) {
+    account_work(work_since_interrupt);
+    if (XLENGTH(VECTOR_ELT(source_columns, column)) != info->rows) {
+      UNPROTECT(1);
+      Rf_error("Columns of `x` must have equal lengths");
+    }
+  }
+  const R_xlen_t size = checked_input_size(info->rows, info->columns);
+
+  SEXP source_names = PROTECT(Rf_getAttrib(x, R_NamesSymbol));
+  snapshot_input_names(
+    source_names,
+    info->columns,
+    FALSE,
+    roots,
+    work_since_interrupt
+  );
+
+  SEXP stable_values = PROTECT(Rf_allocVector(REALSXP, size));
+  for (R_xlen_t column = 0; column < info->columns; ++column) {
+    SEXP source = VECTOR_ELT(source_columns, column);
+    for (R_xlen_t row = 0; row < info->rows; ++row) {
+      account_work(work_since_interrupt);
+      const double unit = numeric_at(source, row);
+      require_unit_interval(unit);
+      SET_REAL_ELT(
+        stable_values,
+        column * info->rows + row,
+        unit
+      );
+    }
+  }
+  SET_VECTOR_ELT(roots, QUNIF_INPUT_VALUES, stable_values);
+  info->column_names = VECTOR_ELT(roots, QUNIF_INPUT_NAMES);
+  info->values = VECTOR_ELT(roots, QUNIF_INPUT_VALUES);
+  UNPROTECT(3);
+}
+
+static void snapshot_qunif_input(SEXP x, qunif_input_t *info, SEXP roots) {
+  R_xlen_t work_since_interrupt = 0;
+  if (ordinary_frame_shell(x)) {
+    snapshot_frame_input(x, info, roots, &work_since_interrupt);
+  } else {
+    snapshot_matrix_input(x, info, roots, &work_since_interrupt);
+  }
 }
 
 static SEXP snapshot_factor_levels(SEXP levels,
@@ -429,9 +563,6 @@ static SEXP snapshot_factor_levels(SEXP levels,
     return R_NilValue;
   }
   const R_xlen_t size = XLENGTH(levels);
-  if (size == 0) {
-    return R_NilValue;
-  }
   SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
   for (R_xlen_t level = 0; level < size; ++level) {
     account_work(work_since_interrupt);
@@ -554,13 +685,10 @@ static SEXP set_table_attributes(SEXP table, SEXP names, R_xlen_t rows) {
 
 static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
     R_xlen_t rows, const qunif_spec_t *spec,
-    R_xlen_t *work_since_interrupt) {
+    int *warn_integer_range, R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < rows; ++row) {
     account_work(work_since_interrupt);
     const double unit = numeric_at(x, input_offset + row);
-    if (!R_FINITE(unit) || unit < 0.0 || unit > 1.0) {
-      return FALSE;
-    }
     switch (spec->kind) {
     case QUNIF_KIND_DBL:
       REAL(output)[row] = paradox_qunif_double_value(
@@ -576,7 +704,8 @@ static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
             spec->upper,
             &INTEGER(output)[row]
           )) {
-        return FALSE;
+        INTEGER(output)[row] = NA_INTEGER;
+        *warn_integer_range = TRUE;
       }
       break;
     case QUNIF_KIND_FCT: {
@@ -604,7 +733,6 @@ static int fill_column(SEXP output, SEXP x, R_xlen_t input_offset,
   return TRUE;
 }
 
-#if R_VERSION >= R_Version(4, 6, 0)
 static int grid_resolution_at(SEXP resolutions, R_xlen_t index,
     int *result) {
   if (TYPEOF(resolutions) == INTSXP) {
@@ -624,20 +752,17 @@ static int grid_resolution_at(SEXP resolutions, R_xlen_t index,
   *result = (int) value;
   return TRUE;
 }
-#endif
 
-static int snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
+static void snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
     int *counts) {
-#if R_VERSION >= R_Version(4, 6, 0)
-  if (R_getAttribCount(resolutions) != 1 ||
-      !R_hasAttrib(resolutions, R_NamesSymbol)) {
-    return FALSE;
+  if (!paradox_api_has_single_attribute(resolutions, "names")) {
+    Rf_error("`resolutions` must have exactly one `names` attribute");
   }
   SEXP names = Rf_getAttrib(resolutions, R_NamesSymbol);
   if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isObject(names) ||
       XLENGTH(names) != XLENGTH(resolutions) ||
-      R_getAttribCount(names) != 0) {
-    return FALSE;
+      !paradox_api_has_no_attributes(names)) {
+    Rf_error("`resolutions` must have ordinary character names");
   }
 
   /* Everything above and below this loop is allocation-free. Once copied,
@@ -647,23 +772,20 @@ static int snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
   for (R_xlen_t index = 0; index < XLENGTH(resolutions); ++index) {
     int count;
     SEXP name = STRING_ELT(names, index);
-    if (name == NA_STRING ||
-        !grid_resolution_at(resolutions, index, &count) || count == 0) {
-      return FALSE;
+    if (name == NA_STRING) {
+      Rf_error("`resolutions` names must not be missing");
+    }
+    if (!grid_resolution_at(resolutions, index, &count)) {
+      Rf_error(
+        "`resolutions` must contain non-negative whole numbers no greater than INT_MAX"
+      );
     }
     counts[index] = count;
     SET_STRING_ELT(stable_names, index, name);
   }
-  return TRUE;
-#else
-  (void) resolutions;
-  (void) stable_names;
-  (void) counts;
-  return FALSE;
-#endif
 }
 
-static int load_grid_specs(const param_columns_t *columns,
+static void load_grid_specs(const param_columns_t *columns,
     const id_map_t *id_map, SEXP resolution_names,
     qunif_spec_t *specs, const int *counts, R_xlen_t *strides,
     unsigned char *selected, SEXP spec_roots, R_xlen_t *rows,
@@ -683,7 +805,13 @@ static int load_grid_specs(const param_columns_t *columns,
           name,
           &param_row,
           work_since_interrupt
-        ) || selected[param_row] || !load_spec(
+        )) {
+      Rf_error("`resolutions` names must match ParamSet IDs");
+    }
+    if (selected[param_row]) {
+      Rf_error("`resolutions` names must be unique");
+    }
+    if (!load_spec(
           columns,
           param_row,
           &specs[column],
@@ -691,12 +819,20 @@ static int load_grid_specs(const param_columns_t *columns,
           column,
           work_since_interrupt
         )) {
-      return FALSE;
+      if (exact_string(
+          STRING_ELT(columns->classes, param_row),
+          "ParamUty"
+        )) {
+        Rf_error("Grid generation is undefined for ParamUty");
+      }
+      Rf_error("Corrupt ParamSet grid quantile state");
     }
     if ((specs[column].kind == QUNIF_KIND_FCT &&
           (R_xlen_t) count != XLENGTH(specs[column].levels)) ||
         (specs[column].kind == QUNIF_KIND_LGL && count != 2)) {
-      return FALSE;
+      Rf_error(
+        "Categorical grid resolution must equal the number of levels"
+      );
     }
     selected[param_row] = 1;
   }
@@ -706,13 +842,16 @@ static int load_grid_specs(const param_columns_t *columns,
     const R_xlen_t column = remaining - 1;
     account_work(work_since_interrupt);
     strides[column] = total;
+    if (counts[column] == 0) {
+      total = 0;
+      continue;
+    }
     if (total > (R_xlen_t) INT_MAX / (R_xlen_t) counts[column]) {
-      return FALSE;
+      Rf_error("Grid product exceeds the maximum data.frame row count");
     }
     total *= (R_xlen_t) counts[column];
   }
   *rows = total;
-  return TRUE;
 }
 
 static double grid_unit_value(R_xlen_t level, int resolution) {
@@ -727,7 +866,7 @@ static double grid_unit_value(R_xlen_t level, int resolution) {
 
 static int fill_grid_column(SEXP output, R_xlen_t rows, int resolution,
     R_xlen_t stride, const qunif_spec_t *spec,
-    R_xlen_t *work_since_interrupt) {
+    int *warn_integer_range, R_xlen_t *work_since_interrupt) {
   if (rows != 0 && (resolution <= 0 || stride <= 0)) {
     return FALSE;
   }
@@ -751,7 +890,8 @@ static int fill_grid_column(SEXP output, R_xlen_t rows, int resolution,
             spec->upper,
             &INTEGER(output)[row]
           )) {
-        return FALSE;
+        INTEGER(output)[row] = NA_INTEGER;
+        *warn_integer_range = TRUE;
       }
       break;
     case QUNIF_KIND_FCT: {
@@ -775,32 +915,70 @@ static int fill_grid_column(SEXP output, R_xlen_t rows, int resolution,
   return TRUE;
 }
 
-SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
+SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
+    SEXP x) {
+  /* Materialize callback-capable input before selecting the ParamSet capsule.
+   * A reentrant ALTREP callback sees and may replace current state; this outer
+   * operation then consistently uses the post-materialization generation. */
+  qunif_input_t input;
+  SEXP input_roots = PROTECT(Rf_allocVector(
+    VECSXP,
+    QUNIF_INPUT_ROOT_COUNT
+  ));
+  snapshot_qunif_input(x, &input, input_roots);
+
+  if (!paradox_domain_owns_private_environment(self, private_environment)) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+  SEXP operation_roots = PROTECT(Rf_allocVector(
+    VECSXP,
+    QUNIF_OPERATION_ROOT_COUNT
+  ));
+  SEXP core = paradox_core_from_private(private_environment);
+  if (core == R_UnboundValue) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet quantile state: missing core capsule");
+  }
+  const paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind == PARADOX_CORE_SHADOW) {
+    core = paradox_core_refresh_shadow(self, private_environment);
+  } else if (kind != PARADOX_CORE_BASE &&
+      kind != PARADOX_CORE_COLLECTION) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet quantile state: unknown core kind");
+  }
+  if (!paradox_core_has_exact_schema(core)) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet quantile state: invalid core schema");
+  }
+  SET_VECTOR_ELT(operation_roots, QUNIF_OPERATION_CORE, core);
+  SEXP state = paradox_core_payload(core);
+  if (state == R_UnboundValue) {
+    UNPROTECT(2);
+    Rf_error("Corrupt ParamSet quantile state: invalid core payload");
+  }
+  SET_VECTOR_ELT(operation_roots, QUNIF_OPERATION_STATE, state);
+  SEXP params = VECTOR_ELT(state, PARADOX_CORE_PARAMS);
+
   param_columns_t columns;
-  matrix_info_t matrix;
   SEXP column_roots = PROTECT(Rf_allocVector(VECSXP, QUNIF_ROOT_COUNT));
   if (!load_param_columns(params, &columns, column_roots)) {
-    UNPROTECT(1);
-    return R_NilValue;
-  }
-
-  SEXP matrix_roots = PROTECT(Rf_allocVector(VECSXP, 2));
-  if (!load_matrix_info(x, &matrix, matrix_roots)) {
-    UNPROTECT(2);
-    return R_NilValue;
+    UNPROTECT(3);
+    Rf_error("Corrupt ParamSet quantile state: invalid parameter schema");
   }
 
   id_map_t id_map;
   if (!initialize_id_map(columns.ids, &id_map)) {
-    UNPROTECT(2);
-    return R_NilValue;
+    UNPROTECT(3);
+    Rf_error("Corrupt ParamSet quantile state: duplicate parameter IDs");
   }
 
   qunif_spec_t *specs = paradox_temporary_alloc(
-    matrix.columns,
+    input.columns,
     sizeof(*specs)
   );
-  SEXP spec_roots = PROTECT(Rf_allocVector(VECSXP, matrix.columns));
+  SEXP spec_roots = PROTECT(Rf_allocVector(VECSXP, input.columns));
   unsigned char *selected = paradox_temporary_alloc(
     columns.size == 0 ? 1 : columns.size,
     sizeof(*selected)
@@ -810,16 +988,23 @@ SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
     account_work(&work_since_interrupt);
     selected[row] = 0;
   }
-  for (R_xlen_t column = 0; column < matrix.columns; ++column) {
+  for (R_xlen_t column = 0; column < input.columns; ++column) {
     account_work(&work_since_interrupt);
     R_xlen_t param_row;
     if (!find_id(
           &id_map,
-          STRING_ELT(matrix.column_names, column),
+          STRING_ELT(input.column_names, column),
           &param_row,
           &work_since_interrupt
-        ) || selected[param_row] ||
-        !load_spec(
+        )) {
+      UNPROTECT(4);
+      Rf_error("Column names of `x` must be a subset of ParamSet IDs");
+    }
+    if (selected[param_row]) {
+      UNPROTECT(4);
+      Rf_error("Column names of `x` must be unique");
+    }
+    if (!load_spec(
           &columns,
           param_row,
           &specs[column],
@@ -827,78 +1012,98 @@ SEXP paradox_param_set_qunif_builtin(SEXP params, SEXP x) {
           column,
           &work_since_interrupt
         )) {
-      UNPROTECT(3);
-      return R_NilValue;
+      if (exact_string(
+          STRING_ELT(columns.classes, param_row),
+          "ParamUty"
+        )) {
+        UNPROTECT(4);
+        Rf_error("ParamSet$qunif() is undefined for ParamUty");
+      }
+      UNPROTECT(4);
+      Rf_error("Corrupt ParamSet quantile state for selected parameter");
     }
     selected[param_row] = 1;
   }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, matrix.columns));
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, input.columns));
   SEXP result_names = PROTECT(copy_column_names(
-    matrix.column_names,
+    input.column_names,
     &work_since_interrupt
   ));
-  for (R_xlen_t column = 0; column < matrix.columns; ++column) {
+  int warn_integer_range = FALSE;
+  for (R_xlen_t column = 0; column < input.columns; ++column) {
     account_work(&work_since_interrupt);
+    if (input.rows != 0 && specs[column].kind == QUNIF_KIND_FCT &&
+        XLENGTH(specs[column].levels) == 0) {
+      UNPROTECT(6);
+      Rf_error("Cannot map quantiles for a factor parameter with no levels");
+    }
     SEXP output = PROTECT(Rf_allocVector(
       output_type(specs[column].kind),
-      matrix.rows
+      input.rows
     ));
     SET_VECTOR_ELT(result, column, output);
     if (!fill_column(
           output,
-          matrix.values,
-          column * matrix.rows,
-          matrix.rows,
+          input.values,
+          column * input.rows,
+          input.rows,
           &specs[column],
+          &warn_integer_range,
           &work_since_interrupt
         )) {
-      UNPROTECT(6);
-      return R_NilValue;
+      UNPROTECT(7);
+      Rf_error("Corrupt ParamSet quantile mapping state");
     }
     UNPROTECT(1);
+  }
+  if (warn_integer_range) {
+    Rf_warning("NAs introduced by coercion to integer range");
   }
   SEXP prepared = PROTECT(set_table_attributes(
     result,
     result_names,
-    matrix.rows
+    input.rows
   ));
-  UNPROTECT(6);
+  UNPROTECT(7);
   return prepared;
 }
 
 SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
   const SEXPTYPE resolution_type = (SEXPTYPE) TYPEOF(resolutions);
   if ((resolution_type != INTSXP && resolution_type != REALSXP) ||
-      ALTREP(resolutions) || Rf_isObject(resolutions) ||
-      !paradox_api_has_single_attribute(resolutions, "names")) {
-    return R_NilValue;
+      ALTREP(resolutions) || Rf_isObject(resolutions)) {
+    Rf_error("`resolutions` must be an ordinary named numeric vector");
   }
 
   param_columns_t columns;
   SEXP column_roots = PROTECT(Rf_allocVector(VECSXP, QUNIF_ROOT_COUNT));
-  if (!load_param_columns(params, &columns, column_roots) ||
-      columns.size == 0 || XLENGTH(resolutions) != columns.size) {
+  if (!load_param_columns(params, &columns, column_roots)) {
     UNPROTECT(1);
-    return R_NilValue;
+    Rf_error("Corrupt ParamSet grid state: invalid parameter schema");
   }
-
-  SEXP resolution_names = PROTECT(Rf_getAttrib(
-    resolutions,
-    R_NamesSymbol
-  ));
-  if (TYPEOF(resolution_names) != STRSXP || ALTREP(resolution_names) ||
-      Rf_isObject(resolution_names) ||
-      XLENGTH(resolution_names) != columns.size ||
-      !paradox_api_has_no_attributes(resolution_names)) {
-    UNPROTECT(2);
-    return R_NilValue;
+  if (columns.size == 0) {
+    if (XLENGTH(resolutions) != 0) {
+      UNPROTECT(1);
+      Rf_error("`resolutions` must contain one value per parameter");
+    }
+    SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, 0));
+    int unused_count = 0;
+    snapshot_grid_resolutions(resolutions, stable_names, &unused_count);
+    SEXP result = PROTECT(Rf_allocVector(VECSXP, 0));
+    SEXP prepared = PROTECT(set_table_attributes(result, stable_names, 0));
+    UNPROTECT(4);
+    return prepared;
+  }
+  if (XLENGTH(resolutions) != columns.size) {
+    UNPROTECT(1);
+    Rf_error("`resolutions` must contain one value per parameter");
   }
 
   id_map_t id_map;
   if (!initialize_id_map(columns.ids, &id_map)) {
-    UNPROTECT(2);
-    return R_NilValue;
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet grid state: duplicate parameter IDs");
   }
 
   qunif_spec_t *specs = paradox_temporary_alloc(
@@ -921,31 +1126,30 @@ SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
   ));
   R_xlen_t rows;
   R_xlen_t work_since_interrupt = 0;
-  if (!snapshot_grid_resolutions(
-        resolutions,
-        stable_resolution_names,
-        counts
-      ) || !load_grid_specs(
-        &columns,
-        &id_map,
-        stable_resolution_names,
-        specs,
-        counts,
-        strides,
-        selected,
-        spec_roots,
-        &rows,
-        &work_since_interrupt
-      )) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
+  snapshot_grid_resolutions(
+    resolutions,
+    stable_resolution_names,
+    counts
+  );
+  load_grid_specs(
+    &columns,
+    &id_map,
+    stable_resolution_names,
+    specs,
+    counts,
+    strides,
+    selected,
+    spec_roots,
+    &rows,
+    &work_since_interrupt
+  );
 
   SEXP result = PROTECT(Rf_allocVector(VECSXP, columns.size));
   SEXP result_names = PROTECT(copy_column_names(
     stable_resolution_names,
     &work_since_interrupt
   ));
+  int warn_integer_range = FALSE;
   for (R_xlen_t column = 0; column < columns.size; ++column) {
     account_work(&work_since_interrupt);
     SEXP output = PROTECT(Rf_allocVector(
@@ -959,15 +1163,20 @@ SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
           counts[column],
           strides[column],
           &specs[column],
+          &warn_integer_range,
           &work_since_interrupt
         )) {
-      UNPROTECT(7);
-      return R_NilValue;
+      UNPROTECT(6);
+      Rf_error("Corrupt ParamSet grid mapping state");
     }
     UNPROTECT(1);
   }
 
+  if (warn_integer_range) {
+    Rf_warning("NAs introduced by coercion to integer range");
+  }
+
   SEXP prepared = PROTECT(set_table_attributes(result, result_names, rows));
-  UNPROTECT(7);
+  UNPROTECT(6);
   return prepared;
 }

@@ -53,7 +53,6 @@ SOURCE_TINY_TEX_MANIFEST="$SOURCE/environment/tinytex-linux-x86_64.tsv"
 SOURCE_PROBE_MANIFEST="$SOURCE/environment/native-routine-coverage.tsv"
 SOURCE_PROBE_RUNNER="$SOURCE/scripts/environment/run-native-probes.R"
 SOURCE_PROBE_VERIFIER="$SOURCE/scripts/environment/verify-native-probes.R"
-SOURCE_FUNCTIONAL_BASELINE="$SOURCE/environment/native-functional-baseline.tsv"
 SOURCE_FUNCTIONAL_RUNNER="$SOURCE/scripts/environment/run-native-tests.R"
 SOURCE_FUNCTIONAL_WORKER="$SOURCE/scripts/environment/run-native-test-worker.R"
 SOURCE_FUNCTIONAL_WORKER_GROUP="$SOURCE/scripts/environment/run-native-test-worker-group"
@@ -67,7 +66,6 @@ TRUSTED_SNAPSHOT_HELPER="$TRUSTED_HELPER_DIRECTORY/copy-check-snapshot.R"
 TRUSTED_PROBE_MANIFEST="$ROOT/environment/native-routine-coverage.tsv"
 TRUSTED_PROBE_RUNNER="$TRUSTED_HELPER_DIRECTORY/run-native-probes.R"
 TRUSTED_PROBE_VERIFIER="$TRUSTED_HELPER_DIRECTORY/verify-native-probes.R"
-TRUSTED_FUNCTIONAL_BASELINE="$ROOT/environment/native-functional-baseline.tsv"
 TRUSTED_FUNCTIONAL_RUNNER="$TRUSTED_HELPER_DIRECTORY/run-native-tests.R"
 TRUSTED_FUNCTIONAL_WORKER="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker.R"
 TRUSTED_FUNCTIONAL_WORKER_GROUP="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker-group"
@@ -85,7 +83,7 @@ for path in "$RUN_METADATA" "$RESULT_METADATA" "$COMPLETION_METADATA" \
     "$TOOL_VERSIONS" "$TOOLCHAIN_EXPLICIT" "$TINY_TEX_RECEIPT" "$COMMANDS" \
     "$SOURCE_TOOLCHAIN_LOCK" "$SOURCE_TINY_TEX_MANIFEST" \
     "$SOURCE_PROBE_MANIFEST" "$SOURCE_PROBE_RUNNER" \
-    "$SOURCE_PROBE_VERIFIER" "$SOURCE_FUNCTIONAL_BASELINE" \
+    "$SOURCE_PROBE_VERIFIER" \
     "$SOURCE_FUNCTIONAL_RUNNER" "$SOURCE_FUNCTIONAL_WORKER" \
     "$SOURCE_FUNCTIONAL_WORKER_GROUP" \
     "$SOURCE_FUNCTIONAL_VERIFIER" "$SOURCE_RESOURCE_JOBS_HELPER"; do
@@ -101,7 +99,7 @@ done
 for path in "$TRUSTED_HARNESS" "$TRUSTED_TREE_RECEIPT_HELPER" \
     "$TRUSTED_SNAPSHOT_HELPER" "$TRUSTED_PROBE_MANIFEST" \
     "$TRUSTED_PROBE_RUNNER" "$TRUSTED_PROBE_VERIFIER" \
-    "$TRUSTED_FUNCTIONAL_BASELINE" "$TRUSTED_FUNCTIONAL_RUNNER" \
+    "$TRUSTED_FUNCTIONAL_RUNNER" \
     "$TRUSTED_FUNCTIONAL_WORKER" "$TRUSTED_FUNCTIONAL_WORKER_GROUP" \
     "$TRUSTED_FUNCTIONAL_VERIFIER" \
     "$TRUSTED_RESOURCE_JOBS_HELPER"; do
@@ -364,8 +362,6 @@ cmp -s "$SOURCE_PROBE_RUNNER" "$TRUSTED_PROBE_RUNNER" ||
   fail "retained native-probe runner differs from the trusted current runner"
 cmp -s "$SOURCE_PROBE_VERIFIER" "$TRUSTED_PROBE_VERIFIER" ||
   fail "retained native-probe verifier differs from the trusted current verifier"
-cmp -s "$SOURCE_FUNCTIONAL_BASELINE" "$TRUSTED_FUNCTIONAL_BASELINE" ||
-  fail "retained functional baseline differs from the trusted current baseline"
 cmp -s "$SOURCE_FUNCTIONAL_RUNNER" "$TRUSTED_FUNCTIONAL_RUNNER" ||
   fail "retained functional test runner differs from the trusted current runner"
 cmp -s "$SOURCE_FUNCTIONAL_WORKER" "$TRUSTED_FUNCTIONAL_WORKER" ||
@@ -571,7 +567,6 @@ env R_LIBS_USER="$ROOT/.local/R/library" R_LIBS="$ROOT/.local/R/library" \
   "$LOCAL_RSCRIPT" --vanilla "$TRUSTED_FUNCTIONAL_VERIFIER" \
   "--source=$SOURCE" "--ledger=$functional_ledger" \
   "--selection=$strict_gcc_test_scope" \
-  "--baseline=$SOURCE_FUNCTIONAL_BASELINE" \
   "--expected-dso-sha256=$(sha256 \
     "$MODES/strict-gcc/library/paradox/libs/paradox.so")" \
   "--expected-requested-jobs=$FUNCTIONAL_RESOURCE_JOBS" >/dev/null
@@ -609,7 +604,6 @@ verify_probe_mode() {
     "$LOCAL_RSCRIPT" --vanilla "$TRUSTED_FUNCTIONAL_VERIFIER" \
     "--source=$SOURCE" "--ledger=$analyzer_ledger" \
     --selection=analyzer \
-    "--baseline=$SOURCE_FUNCTIONAL_BASELINE" \
     "--expected-dso-sha256=$(sha256 "$dso")" >/dev/null
 }
 
@@ -638,9 +632,21 @@ analyzer_reports=("$MODES/analyzer-clang/artifacts/reports/"*.plist)
 shopt -u nullglob
 [[ ${#analyzer_reports[@]} -gt 0 ]] || fail "Clang analyzer retained no reports"
 require_nonempty_mode_file "$MODES/cppcheck/logs/cppcheck.log"
-for evidence in registration dynamic-symbols program-headers dynamic-section; do
+for evidence in registration undefined-symbols dynamic-symbols program-headers \
+    dynamic-section; do
   require_nonempty_mode_file "$MODES/symbols/logs/$evidence.log"
 done
+binding_symbol_scope=$(awk '
+  NF {
+    symbol = $NF
+    sub(/@.*/, "", symbol)
+    if (symbol == "Rf_findVarInFrame") legacy += 1
+    if (symbol == "R_GetBindingType") current += 1
+  }
+  END { printf "%d:%d", legacy + 0, current + 0 }
+' "$MODES/symbols/logs/undefined-symbols.log")
+[[ "$binding_symbol_scope" == 0:1 ]] ||
+  fail "current-R symbol evidence retained the legacy binding API or omitted R_GetBindingType"
 if [[ "${run_fields[asan]}" == true ]]; then
   verify_dso_mode asan-clang
   verify_probe_mode asan-clang

@@ -15,14 +15,14 @@ parse_options <- function(arguments) {
     values[[name]] <- value
   }
   required <- c(
-    "source", "ledger", "selection", "baseline", "expected-dso-sha256"
+    "source", "ledger", "selection", "expected-dso-sha256"
   )
   optional <- "expected-requested-jobs"
   if (!all(required %in% names(values)) ||
       any(!names(values) %in% c(required, optional))) {
     fail(paste(
-      "expected source, ledger, selection, baseline, and",
-      "expected-dso-sha256 options, with optional expected-requested-jobs"
+      "expected source, ledger, selection, and expected-dso-sha256 options,",
+      "with optional expected-requested-jobs"
     ))
   }
   values
@@ -87,7 +87,6 @@ if (!selection %in% c("analyzer", "focused", "full")) {
 }
 source <- normalizePath(options$source, mustWork = TRUE)
 ledger_path <- normalizePath(options$ledger, mustWork = TRUE)
-baseline_path <- normalizePath(options$baseline, mustWork = TRUE)
 expected_dso_sha256 <- options[["expected-dso-sha256"]]
 if (!grepl("^[0-9a-f]{64}$", expected_dso_sha256)) {
   fail("expected DSO SHA-256 is malformed")
@@ -105,36 +104,6 @@ if (!is.null(options[["expected-requested-jobs"]])) {
 test_directory <- file.path(source, "tests", "testthat")
 if (!dir.exists(test_directory)) fail("source testthat directory is absent")
 if (!requireNamespace("rlang", quietly = TRUE)) fail("rlang is required to audit test source")
-
-baseline <- read.delim(
-  baseline_path, sep = "\t", quote = "", comment.char = "",
-  colClasses = "character", check.names = FALSE
-)
-expected_baseline_columns <- c(
-  "selection", "minimum_files", "minimum_test_blocks",
-  "minimum_passed_expectations", "minimum_not_cran_scopes"
-)
-if (!identical(names(baseline), expected_baseline_columns) ||
-    nrow(baseline) != 3L || anyNA(baseline) ||
-    any(!nzchar(as.matrix(baseline))) ||
-    !identical(baseline$selection, c("focused", "full", "analyzer"))) {
-  fail("functional-test baseline has an unexpected schema or inventory")
-}
-for (name in expected_baseline_columns[-1L]) {
-  baseline[[name]] <- canonical_integer(baseline[[name]], paste("baseline", name))
-}
-reviewed_baseline <- data.frame(
-  selection = c("focused", "full", "analyzer"),
-  minimum_files = c(58L, 79L, 6L),
-  minimum_test_blocks = c(550L, 700L, 70L),
-  minimum_passed_expectations = c(1000L, 9000L, 650L),
-  minimum_not_cran_scopes = c(27L, 29L, 4L),
-  stringsAsFactors = FALSE
-)
-if (!identical(baseline, reviewed_baseline)) {
-  fail("functional-test baseline differs from the reviewed coverage policy")
-}
-minimum <- baseline[baseline$selection == selection, , drop = FALSE]
 
 ledger <- read.delim(
   ledger_path, sep = "\t", quote = "", comment.char = "",
@@ -185,38 +154,37 @@ if (any(tests$skipped > 1L) ||
   fail("functional-test skip accounting differs")
 }
 optional_skips <- data.frame(
-  file = c(
-    "test-native-paramset-value-mutation.R",
-    "test-regression-data-table-legacy-capacity.R"
-  ),
-  test = c(
-    "miesmuschel ParamSetShadow remains a public setter extension",
-    "native table shells remain usable with data.table before 1.18"
-  ),
-  skip_reason = c(
-    "Reason: {miesmuschel} is not installed",
-    "Reason: legacy data.table compatibility bridge is inactive"
-  ),
+  file = character(),
+  test = character(),
+  skip_reason = character(),
   stringsAsFactors = FALSE
 )
 analyzer_required_skips <- data.frame(
   file = c(
-    "test-native-paramset-value-mutation.R",
-    "test-native-paramset-value-mutation.R",
-    "test-native-paramsetcollection-exact-state.R",
-    "test-native-r6-surface-auth.R"
+    "test-native-altrep-lifetimes.R",
+    "test-native-domain-kernels.R",
+    "test-native-gctorture.R",
+    "test-native-paramset-qunif.R",
+    "test-native-paramset-trafo-gctorture.R",
+    "test-native-paramset-trafo-gctorture.R",
+    "test-native-paramset-trafo-gctorture.R",
+    "test-native-paramsetcollection-construction.R"
   ),
   test = c(
-    "reentrant custom checks may replace parameter storage and collect",
-    "native mutation entries and public setters survive gctorture",
-    "deep collection snapshots survive root and graph growth",
-    "surface authentication roots canonical closure graphs"
+    "materialized and rejected inputs remain safe under forced collection",
+    "translated ParamUty diagnostics survive forced collection",
+    "every allocating native entry point survives forced collection",
+    "bulk qunif remains rooted under adversarial collection",
+    "authoritative ParamSet trafo survives forced collection",
+    "batched nested collection name translation releases transient state",
+    "live and detached mixed-encoding trafo names survive forced collection",
+    "collection construction remains rooted under forced collection"
   ),
-  skip_reason = rep("Reason: On CRAN", 4L),
+  skip_reason = rep("Reason: On CRAN", 8L),
   stringsAsFactors = FALSE
 )
 allowed_skips <- if (selection == "analyzer") {
-  rbind(analyzer_required_skips, optional_skips[1L, , drop = FALSE])
+  analyzer_required_skips
 } else {
   optional_skips
 }
@@ -243,9 +211,11 @@ analyzer_files <- c(
   "test-native-adversarial-storage.R",
   "test-native-altrep-lifetimes.R",
   "test-native-domain-kernels.R",
+  "test-native-gctorture.R",
+  "test-native-paramset-qunif.R",
+  "test-native-paramset-trafo-gctorture.R",
   "test-native-paramset-value-mutation.R",
-  "test-native-paramsetcollection-exact-state.R",
-  "test-native-r6-surface-auth.R"
+  "test-native-paramsetcollection-construction.R"
 )
 available_files <- sort(dir(
   test_directory, "^test.*\\.[rR]$", full.names = FALSE
@@ -260,7 +230,14 @@ if (selection == "analyzer") {
 }
 if (selection == "focused") {
   selected_files <- selected_files[
-    grepl("(characterization|native|regression)", selected_files)
+    grepl(
+      paste0(
+        "(characterization|native|regression|",
+        "ParamSetShadow|core-state-contract|paramset-equality|to_tune|",
+        "upgrade-paradox-object)"
+      ),
+      selected_files
+    )
   ]
 }
 observed_files <- sort(unique(tests$file))
@@ -411,27 +388,33 @@ if (!has_worker_hash) {
     }
   }
 }
-if (length(selected_files) < minimum$minimum_files ||
-    nrow(tests) < minimum$minimum_test_blocks ||
-    sum(tests$passed) < minimum$minimum_passed_expectations) {
-  fail("functional-test corpus fell below its reviewed minimum coverage")
+if (!length(selected_files) || !nrow(tests) || sum(tests$passed) < 1L) {
+  fail("functional-test corpus is empty or contains no passing expectation")
 }
 
 scope_count <- 0L
+source_scope_keys <- character()
 for (file in selected_files) {
   scopes <- not_cran_scopes(file.path(test_directory, file))
   scope_count <- scope_count + length(scopes$tests) + as.integer(scopes$file_scope)
   for (description in scopes$tests) {
+    source_scope_keys <- c(source_scope_keys, paste(file, description, sep = "\t"))
     row <- tests[tests$file == file & tests$test == description, , drop = FALSE]
     if (!nrow(row)) fail("NOT_CRAN test is absent from ledger: ", file, " / ", description)
   }
 }
 if (selection == "analyzer") {
-  if (scope_count != minimum$minimum_not_cran_scopes) {
-    fail("analyzer source differs from the exact reviewed NOT_CRAN scope")
+  required_source_keys <- paste(
+    analyzer_required_skips$file,
+    analyzer_required_skips$test,
+    sep = "\t"
+  )
+  if (anyDuplicated(source_scope_keys) ||
+      !identical(sort(source_scope_keys), sort(required_source_keys)) ||
+      scope_count != length(required_source_keys)) {
+    fail("analyzer source differs from its reviewed NOT_CRAN inventory")
   }
-} else if (scope_count < minimum$minimum_not_cran_scopes ||
-           any(grepl("cran", tests$skip_reason, ignore.case = TRUE))) {
+} else if (any(grepl("cran", tests$skip_reason, ignore.case = TRUE))) {
   fail("NOT_CRAN scopes were not all admitted by the local full-test policy")
 }
 

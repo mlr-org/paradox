@@ -96,16 +96,62 @@ local({
   expect_malformed(duplicate_value, "Duplicate value fixture")
 })
 
+case_audit_path <- NULL
 if (length(args) == 2L &&
-    identical(harness$origins[["cases"]], "candidate-snapshot")) local({
+    identical(harness$origins[["cases"]], "candidate-snapshot")) {
+  case_audit_path <- harness$paths[["cases"]]
+} else if (length(args) == 1L) {
+  sibling_cases <- file.path(
+    dirname(normalizePath(args[[1L]], mustWork = TRUE)),
+    "cases.R"
+  )
+  if (file.exists(sibling_cases)) case_audit_path <- sibling_cases
+}
+
+if (!is.null(case_audit_path)) local({
   # Keep the few deliberate NSE/delayed bindings explicit; every other global
   # must resolve from the minimal case environment or baseenv().
   if (!requireNamespace("codetools", quietly = TRUE)) {
     stop("The authenticated minimal-parent audit requires codetools", call. = FALSE)
   }
   case_environment <- new.env(parent = baseenv())
-  sys.source(harness$paths[["cases"]], envir = case_environment)
+  sys.source(case_audit_path, envir = case_environment)
   cases <- case_environment$paradox_differential_cases
+  required_contract_cases <- c(
+    "representation_inputs",
+    "closed_extension_boundary",
+    "additive_paramset_subclass",
+    "tune_token_search_space",
+    "tune_token_closed_shape",
+    "semantic_equality",
+    "collection_detachment",
+    "paramset_shadow"
+  )
+  missing_contract_cases <- setdiff(required_contract_cases, names(cases))
+  if (length(missing_contract_cases)) {
+    stop(
+      paste0(
+        "Default differential cases omit contract-reset observations: ",
+        paste(missing_contract_cases, collapse = ", ")
+      ),
+      call. = FALSE
+    )
+  }
+  case_source <- readLines(
+    case_audit_path,
+    warn = FALSE,
+    encoding = "UTF-8"
+  )
+  private_state_pattern <- paste0(
+    "\\$\\.__enclos_env__|private\\$\\.",
+    "(params|values|tags|deps|trafos|core|sets|translation)"
+  )
+  if (any(grepl(private_state_pattern, case_source, perl = TRUE))) {
+    stop(
+      "Default differential cases must project public state, not Paradox private fields",
+      call. = FALSE
+    )
+  }
   functions <- list(
     `.helper:diff_case` = case_environment$diff_case,
     `.helper:observe_call` = case_environment$observe_call,
@@ -135,7 +181,11 @@ if (length(args) == 2L &&
     }
   }
   expected_unresolved <- c(
+    "additive_paramset_subclass\tvariable\tprivate",
+    "additive_paramset_subclass\tvariable\tself",
+    "additive_paramset_subclass\tvariable\tsuper",
     "diagnostics\tvariable\tabsent",
+    "diagnostics\tvariable\ton",
     "domain_lazy_arguments\tvariable\tinvalid_dependency",
     "validation\tfunction\t:=",
     "validation\tvariable\tcount"

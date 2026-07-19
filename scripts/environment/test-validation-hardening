@@ -1009,13 +1009,15 @@ expect_failure "${CANDIDATE_AUTH_ENV[@]}" "$CANDIDATE_GIT_AUTHENTICATOR" \
   "$CANDIDATE_FIXTURE" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
   "$CANDIDATE_TREE" "$CANDIDATE_SOURCE_FIXTURE" >/dev/null
 
-# Raw-token policy sees identifiers in inactive branches but ignores comments,
-# strings, and the documented APIs whose names contain ATTRIB.
+# Raw-token policy sees identifiers in inactive branches but ignores comments
+# and strings. It admits raw ATTRIB/FORMALS because Writing R Extensions
+# publishes them as backports, as well as documented APIs containing ATTRIB.
 TOKEN_OK="$TEST_ROOT/public api tokens ok"
 mkdir -p "$TOKEN_OK/src"
 printf '%s\n' \
   '/* ATTRIB BODY Rf_findVarInFrame3 */' \
   'const char *tokens = "FORMALS R_NamespaceRegistry";' \
+  'ATTRIB(value); FORMALS(value);' \
   'SHALLOW_DUPLICATE_ATTRIB DUPLICATE_ATTRIB ANY_ATTRIB CLEAR_ATTRIB' \
   'R_ClosureBody R_ClosureFormals R_ClosureEnv R_ParentEnv Rf_getAttrib' \
   'DATAPTR_RO STRING_PTR_RO R_ExternalPtrTag Rf_isObject' \
@@ -1024,6 +1026,46 @@ printf '%s\n' \
   "$TEST_ROOT/public-api-allowed.txt" >/dev/null
 grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
   fail "public API token auditor did not pass allowed identifiers"
+
+# R 4.3--4.5 have one reviewed non-forcing binding exception. The raw-token
+# auditor admits it only at the centralized compatibility facade and only when
+# an exact one-row ledger declares the occurrence.
+TOKEN_EXCEPTION="$TEST_ROOT/reviewed legacy binding token"
+mkdir -p "$TOKEN_EXCEPTION/src" "$TOKEN_EXCEPTION/environment"
+printf '%s\n' 'Rf_findVarInFrame(environment, symbol);' \
+  > "$TOKEN_EXCEPTION/src/r_api_compat.c"
+printf '%s\n' \
+  $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
+  $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
+  > "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv"
+"$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION" \
+  "$TEST_ROOT/public-api-exception.txt" >/dev/null
+grep -qx \
+  'reviewed_legacy_binding=Rf_findVarInFrame:src/r_api_compat.c:1' \
+  "$TEST_ROOT/public-api-exception.txt" ||
+  fail "public API token auditor did not ledger its reviewed exception"
+
+TOKEN_EXCEPTION_BAD_POLICY="$TEST_ROOT/legacy binding CRAN allowlist claim"
+cp -a "$TOKEN_EXCEPTION" "$TOKEN_EXCEPTION_BAD_POLICY"
+sed -i 's/declared-exported-pre-4.6-only/declared-exported-cran-allowlisted/' \
+  "$TOKEN_EXCEPTION_BAD_POLICY/environment/r-api-exceptions.tsv"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION_BAD_POLICY" \
+  "$TEST_ROOT/public-api-bad-exception-policy.txt"
+grep -qx 'legacy_exception_ledger=content-mismatch' \
+  "$TEST_ROOT/public-api-bad-exception-policy.txt" ||
+  fail "public API token auditor accepted a purported CRAN allowlist"
+
+TOKEN_EXCEPTION_BAD="$TEST_ROOT/unreviewed legacy binding token"
+mkdir -p "$TOKEN_EXCEPTION_BAD/src" "$TOKEN_EXCEPTION_BAD/environment"
+cp "$TOKEN_EXCEPTION/src/r_api_compat.c" \
+  "$TOKEN_EXCEPTION_BAD/src/unreviewed.c"
+cp "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv" \
+  "$TOKEN_EXCEPTION_BAD/environment/r-api-exceptions.tsv"
+expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION_BAD" \
+  "$TEST_ROOT/public-api-unreviewed-exception.txt"
+grep -q '^unreviewed_legacy_binding_file=src/unreviewed.c:1$' \
+  "$TEST_ROOT/public-api-unreviewed-exception.txt" ||
+  fail "public API token auditor accepted an exception outside its facade"
 
 TOKEN_BAD="$TEST_ROOT/public api tokens bad"
 mkdir -p "$TOKEN_BAD/src"
@@ -1139,7 +1181,7 @@ grep -Fq "hashhash '%:%:'" "$TEST_ROOT/public-api-forbidden.txt" ||
 TOKEN_LINK="$TEST_ROOT/public api token symlink"
 mkdir -p "$TOKEN_LINK/src"
 printf '%s\n' 'int ordinary;' > "$TOKEN_LINK/src/ordinary.c"
-printf '%s\n' '#if 0' 'ATTRIB(value);' '#endif' \
+printf '%s\n' '#if 0' 'BODY(value);' '#endif' \
   > "$TEST_ROOT/escaping-forbidden.c"
 ln -s ../../escaping-forbidden.c "$TOKEN_LINK/src/linked.c"
 expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_LINK" \
@@ -1202,10 +1244,12 @@ fixture_test_file() {
     1) printf '%s\n' test-native-adversarial-storage.R ;;
     2) printf '%s\n' test-native-altrep-lifetimes.R ;;
     3) printf '%s\n' test-native-domain-kernels.R ;;
-    4) printf '%s\n' test-native-paramset-value-mutation.R ;;
-    5) printf '%s\n' test-native-paramsetcollection-exact-state.R ;;
-    6) printf '%s\n' test-native-r6-surface-auth.R ;;
-    [7-9]|[1-4][0-9]|5[0-8])
+    4) printf '%s\n' test-native-gctorture.R ;;
+    5) printf '%s\n' test-native-paramset-qunif.R ;;
+    6) printf '%s\n' test-native-paramset-trafo-gctorture.R ;;
+    7) printf '%s\n' test-native-paramset-value-mutation.R ;;
+    8) printf '%s\n' test-native-paramsetcollection-construction.R ;;
+    9|1[0-2])
       printf 'test-native-fixture-%03d.R\n' "$1"
       ;;
     *) printf 'test-fixture-%03d.R\n' "$1" ;;
@@ -1216,7 +1260,6 @@ write_source_manifest() {
   local manifest="$RUN_DIRECTORY/metadata/source-manifest.tsv"
   printf '"path"\t"kind"\t"sha256_or_target"\t"size"\t"mode"\n' > "$manifest"
   for relative in environment/native-routine-coverage.tsv \
-      environment/native-functional-baseline.tsv \
       environment/tinytex-linux-x86_64.tsv \
       environment/toolchain-linux-64.lock \
       scripts/environment/resource-jobs \
@@ -1360,26 +1403,28 @@ write_fixture_resource_evidence() {
 }
 
 write_functional_ledger_fixture() {
-  local file_count block_count selected_count index file description ledger
+  local file_count block_count selected_count total_file_count index file
+  local description ledger
   local scoped_index analyzer_ledger analyzer_file analyzer_index
   local analyzer_expectations analyzer_passed fixture_dso_sha workers
   local worker_file worker_counts worker_task worker_sha
   fixture_dso_sha=$(printf '%s\n' dso | sha256sum | cut -d ' ' -f 1)
+  total_file_count=14
   if [[ "$FIXTURE_TESTS" == full ]]; then
-    selected_count=79
-    block_count=700
+    selected_count=$total_file_count
+    block_count=28
   else
-    selected_count=58
-    block_count=550
+    selected_count=12
+    block_count=24
   fi
   mkdir -p "$RUN_DIRECTORY/source/tests/testthat"
-  for index in $(seq 1 79); do
+  for index in $(seq 1 "$total_file_count"); do
     file=$(fixture_test_file "$index")
     description=$(printf 'fixture test %03d' "$index")
-    if [[ $index -ge 7 && $index -le 29 ]]; then
+    if [[ $index -ge 9 && $index -le 12 ]]; then
       printf 'test_that("%s", {\n  skip_on_cran()\n  expect_true(TRUE)\n})\n' \
         "$description" > "$RUN_DIRECTORY/source/tests/testthat/$file"
-    elif [[ "$FIXTURE_TESTS" == full && ( $index -eq 59 || $index -eq 60 ) ]]; then
+    elif [[ "$FIXTURE_TESTS" == full && ( $index -eq 13 || $index -eq 14 ) ]]; then
       printf 'skip_on_cran()\ntest_that("%s", expect_true(TRUE))\n' \
         "$description" > "$RUN_DIRECTORY/source/tests/testthat/$file"
     else
@@ -1392,25 +1437,41 @@ write_functional_ledger_fixture() {
     test-native-adversarial-storage.R
     test-native-altrep-lifetimes.R
     test-native-domain-kernels.R
+    test-native-gctorture.R
+    test-native-paramset-qunif.R
+    test-native-paramset-trafo-gctorture.R
     test-native-paramset-value-mutation.R
-    test-native-paramsetcollection-exact-state.R
-    test-native-r6-surface-auth.R
+    test-native-paramsetcollection-construction.R
   )
   for analyzer_file in "${analyzer_files[@]}"; do
     : > "$RUN_DIRECTORY/source/tests/testthat/$analyzer_file"
   done
   printf '%s\n' \
-    'test_that("reentrant custom checks may replace parameter storage and collect", { skip_on_cran(); expect_true(TRUE) })' \
-    'test_that("native mutation entries and public setters survive gctorture", { skip_on_cran(); expect_true(TRUE) })' \
-    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-value-mutation.R"
+    'test_that("materialized and rejected inputs remain safe under forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-altrep-lifetimes.R"
   printf '%s\n' \
-    'test_that("deep collection snapshots survive root and graph growth", { skip_on_cran(); expect_true(TRUE) })' \
-    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramsetcollection-exact-state.R"
+    'test_that("translated ParamUty diagnostics survive forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-domain-kernels.R"
   printf '%s\n' \
-    'test_that("surface authentication roots canonical closure graphs", { skip_on_cran(); expect_true(TRUE) })' \
-    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-r6-surface-auth.R"
-  for analyzer_index in $(seq 1 66); do
-    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 6 ))]}
+    'test_that("every allocating native entry point survives forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-gctorture.R"
+  printf '%s\n' \
+    'test_that("bulk qunif remains rooted under adversarial collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-qunif.R"
+  printf '%s\n' \
+    'test_that("authoritative ParamSet trafo survives forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-trafo-gctorture.R"
+  printf '%s\n' \
+    'test_that("batched nested collection name translation releases transient state", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-trafo-gctorture.R"
+  printf '%s\n' \
+    'test_that("live and detached mixed-encoding trafo names survive forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramset-trafo-gctorture.R"
+  printf '%s\n' \
+    'test_that("collection construction remains rooted under forced collection", { skip_on_cran(); expect_true(TRUE) })' \
+    >> "$RUN_DIRECTORY/source/tests/testthat/test-native-paramsetcollection-construction.R"
+  for analyzer_index in $(seq 1 8); do
+    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 8 ))]}
     printf 'test_that("analyzer passing block %03d", expect_true(TRUE))\n' \
       "$analyzer_index" \
       >> "$RUN_DIRECTORY/source/tests/testthat/$analyzer_file"
@@ -1422,23 +1483,35 @@ write_functional_ledger_fixture() {
     > "$ledger"
   for index in $(seq 1 "$block_count"); do
     if [[ $index -eq 1 ]]; then
-      file=test-native-paramset-value-mutation.R
-      description='reentrant custom checks may replace parameter storage and collect'
+      file=test-native-altrep-lifetimes.R
+      description='materialized and rejected inputs remain safe under forced collection'
     elif [[ $index -eq 2 ]]; then
-      file=test-native-paramset-value-mutation.R
-      description='native mutation entries and public setters survive gctorture'
+      file=test-native-domain-kernels.R
+      description='translated ParamUty diagnostics survive forced collection'
     elif [[ $index -eq 3 ]]; then
-      file=test-native-paramsetcollection-exact-state.R
-      description='deep collection snapshots survive root and graph growth'
+      file=test-native-gctorture.R
+      description='every allocating native entry point survives forced collection'
     elif [[ $index -eq 4 ]]; then
-      file=test-native-r6-surface-auth.R
-      description='surface authentication roots canonical closure graphs'
-    elif [[ $index -le 27 ]]; then
-      scoped_index=$((index + 2))
+      file=test-native-paramset-qunif.R
+      description='bulk qunif remains rooted under adversarial collection'
+    elif [[ $index -eq 5 ]]; then
+      file=test-native-paramset-trafo-gctorture.R
+      description='authoritative ParamSet trafo survives forced collection'
+    elif [[ $index -eq 6 ]]; then
+      file=test-native-paramset-trafo-gctorture.R
+      description='batched nested collection name translation releases transient state'
+    elif [[ $index -eq 7 ]]; then
+      file=test-native-paramset-trafo-gctorture.R
+      description='live and detached mixed-encoding trafo names survive forced collection'
+    elif [[ $index -eq 8 ]]; then
+      file=test-native-paramsetcollection-construction.R
+      description='collection construction remains rooted under forced collection'
+    elif [[ $index -le 12 ]]; then
+      scoped_index=$index
       file=$(fixture_test_file "$scoped_index")
       description=$(printf 'fixture test %03d' "$scoped_index")
     else
-      file_count=$(( (index - 26) % selected_count + 1 ))
+      file_count=$(( (index - 12) % selected_count + 1 ))
       file=$(fixture_test_file "$file_count")
       description=$(printf 'synthetic ledger block %03d' "$index")
     fi
@@ -1490,24 +1563,32 @@ write_functional_ledger_fixture() {
     $'kind\tschema\tselection\tnot_cran\tdso_sha256\tfile\tcontext\ttest\texpectations\tpassed\tfailed\tskipped\terrors\twarnings\tskip_reason\tdetail' \
     > "$analyzer_ledger"
   printf 'test\t1\tanalyzer\tFALSE\t%s\t%s\tfixture\t%s\t1\t0\t0\t1\t0\t0\tReason: On CRAN\t-\n' \
-    "$fixture_dso_sha" test-native-paramset-value-mutation.R \
-    'reentrant custom checks may replace parameter storage and collect' \
-    "$fixture_dso_sha" test-native-paramset-value-mutation.R \
-    'native mutation entries and public setters survive gctorture' \
-    "$fixture_dso_sha" test-native-paramsetcollection-exact-state.R \
-    'deep collection snapshots survive root and graph growth' \
-    "$fixture_dso_sha" test-native-r6-surface-auth.R \
-    'surface authentication roots canonical closure graphs' \
+    "$fixture_dso_sha" test-native-altrep-lifetimes.R \
+    'materialized and rejected inputs remain safe under forced collection' \
+    "$fixture_dso_sha" test-native-domain-kernels.R \
+    'translated ParamUty diagnostics survive forced collection' \
+    "$fixture_dso_sha" test-native-gctorture.R \
+    'every allocating native entry point survives forced collection' \
+    "$fixture_dso_sha" test-native-paramset-qunif.R \
+    'bulk qunif remains rooted under adversarial collection' \
+    "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
+    'authoritative ParamSet trafo survives forced collection' \
+    "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
+    'batched nested collection name translation releases transient state' \
+    "$fixture_dso_sha" test-native-paramset-trafo-gctorture.R \
+    'live and detached mixed-encoding trafo names survive forced collection' \
+    "$fixture_dso_sha" test-native-paramsetcollection-construction.R \
+    'collection construction remains rooted under forced collection' \
     >> "$analyzer_ledger"
-  for analyzer_index in $(seq 1 66); do
-    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 6 ))]}
+  for analyzer_index in $(seq 1 8); do
+    analyzer_file=${analyzer_files[$(( (analyzer_index - 1) % 8 ))]}
     description=$(printf 'analyzer passing block %03d' "$analyzer_index")
     printf 'test\t1\tanalyzer\tFALSE\t%s\t%s\tfixture\t%s\t10\t10\t0\t0\t0\t0\t-\t-\n' \
       "$fixture_dso_sha" "$analyzer_file" "$description" >> "$analyzer_ledger"
   done
-  analyzer_expectations=$((4 + 66 * 10))
-  analyzer_passed=$((66 * 10))
-  printf 'summary\t1\tanalyzer\tFALSE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t4\t0\t0\t-\tfiles=6;test_blocks=70;requested_jobs=1;effective_jobs=1;scheduler_backend=serial\n' \
+  analyzer_expectations=$((8 + 8 * 10))
+  analyzer_passed=$((8 * 10))
+  printf 'summary\t1\tanalyzer\tFALSE\t%s\t-\t-\tcomplete\t%d\t%d\t0\t8\t0\t0\t-\tfiles=8;test_blocks=16;requested_jobs=1;effective_jobs=1;scheduler_backend=serial\n' \
     "$fixture_dso_sha" "$analyzer_expectations" "$analyzer_passed" \
     >> "$analyzer_ledger"
   printf '%s\n' analyzer-tests-ok \
@@ -1551,8 +1632,6 @@ build_valid_native_fixture() {
     "$RUN_DIRECTORY/source/environment/tinytex-linux-x86_64.tsv"
   cp "$ROOT/environment/native-routine-coverage.tsv" \
     "$RUN_DIRECTORY/source/environment/native-routine-coverage.tsv"
-  cp "$ROOT/environment/native-functional-baseline.tsv" \
-    "$RUN_DIRECTORY/source/environment/native-functional-baseline.tsv"
   cp "$ROOT/scripts/environment/run-native-probes.R" \
     "$RUN_DIRECTORY/source/scripts/environment/run-native-probes.R"
   cp "$ROOT/scripts/environment/run-native-tests.R" \
@@ -1626,8 +1705,10 @@ build_valid_native_fixture() {
         hazard_finalize_names_alias; do
       printf 'hazard\t%s\tpass\trounds=1\n' "$hazard"
     done
-    printf 'summary\tcomplete\tpass\trecords_before_summary=134;failures=0\n'
   } > "$probe_result"
+  probe_records_before_summary=$(( $(wc -l < "$probe_result") - 1 ))
+  printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+    "$probe_records_before_summary" >> "$probe_result"
   if [[ "$FIXTURE_TESTS" == full ]]; then
     for checked_profile in check-as-cran check-depends-only; do
       printf '%s\n' "$checked_profile-ok" \
@@ -1656,6 +1737,8 @@ build_valid_native_fixture() {
   for evidence in registration dynamic-symbols program-headers dynamic-section; do
     printf '%s\n' "$evidence-ok" > "$RUN_DIRECTORY/modes/symbols/logs/$evidence.log"
   done
+  printf '%s\n' '                 U R_GetBindingType' \
+    > "$RUN_DIRECTORY/modes/symbols/logs/undefined-symbols.log"
   write_fixture_resource_evidence
   {
     printf 'mode\tstatus\tevidence\tsha256\n'
@@ -1800,6 +1883,13 @@ build_valid_native_fixture
 rm -rf "$RUN_DIRECTORY/modes/symbols"
 expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 build_valid_native_fixture
+printf '%s\n' '                 U Rf_findVarInFrame' \
+  >> "$RUN_DIRECTORY/modes/symbols/logs/undefined-symbols.log"
+"$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
+  "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
+write_completion
+expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
+build_valid_native_fixture
 printf '%s\n' 'schema=1' >> "$RUN_DIRECTORY/metadata/completion.txt"
 expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 build_valid_native_fixture
@@ -1827,8 +1917,12 @@ expect_failure "$SOURCE_VALIDATOR" "$ROOT" "$RUN_ID" "$RUN_DIRECTORY"
 build_valid_native_fixture
 sed -i '/^hazard\thazard_callback_reentry_rooting\t/d' \
   "$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
-sed -i 's/records_before_summary=134/records_before_summary=133/' \
-  "$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+probe_result="$RUN_DIRECTORY/modes/strict-clang/artifacts/native-probes.tsv"
+probe_records_before_summary=$(( $(wc -l < "$probe_result") - 2 ))
+head -n -1 "$probe_result" > "$probe_result.new"
+printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+  "$probe_records_before_summary" >> "$probe_result.new"
+mv "$probe_result.new" "$probe_result"
 "$RSCRIPT" --vanilla "$TREE_HELPER" create "$RUN_DIRECTORY/modes" \
   "$RUN_DIRECTORY/metadata/modes-tree.tsv" >/dev/null
 write_completion
@@ -1913,7 +2007,7 @@ build_valid_native_fixture
 analyzer_ledger="$RUN_DIRECTORY/modes/strict-clang/artifacts/native-tests-analyzer.tsv"
 awk -F '\t' 'BEGIN { OFS = "\t" }
   $1 == "test" &&
-    $8 == "reentrant custom checks may replace parameter storage and collect" {
+    $8 == "materialized and rejected inputs remain safe under forced collection" {
       next
     }
   $1 == "summary" { $9 = $9 - 1; $12 = $12 - 1 }
@@ -2292,7 +2386,7 @@ mkdir -p "$PROBE_FIXTURE"
 printf '%s\n' 'fixture dso' > "$PROBE_FIXTURE/paradox.so"
 probe_dso_sha=$(sha256sum "$PROBE_FIXTURE/paradox.so" | cut -d ' ' -f 1)
 write_memory_probe_fixture() {
-  local mode=$1 result=$2 records=134
+  local mode=$1 result=$2 records
   {
     printf 'kind\tid\tstatus\tdetail\n'
     printf 'meta\tschema\tpass\t1\n'
@@ -2320,11 +2414,11 @@ write_memory_probe_fixture() {
     done
     if [[ "$mode" == gct ]]; then
       printf 'gct\ttransition\tpass\tprevious=0;active=10;restored=0\n'
-      records=135
     fi
-    printf 'summary\tcomplete\tpass\trecords_before_summary=%s;failures=0\n' \
-      "$records"
   } > "$result"
+  records=$(( $(wc -l < "$result") - 1 ))
+  printf 'summary\tcomplete\tpass\trecords_before_summary=%s;failures=0\n' \
+    "$records" >> "$result"
 }
 write_memory_probe_fixture gct "$PROBE_FIXTURE/gct.tsv"
 write_memory_probe_fixture valgrind "$PROBE_FIXTURE/valgrind.tsv"
@@ -2334,11 +2428,16 @@ write_memory_probe_fixture valgrind "$PROBE_FIXTURE/valgrind.tsv"
 "$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
   "$PROBE_MANIFEST" "$PROBE_FIXTURE/valgrind.tsv" valgrind \
   "$PROBE_FIXTURE/paradox.so" >/dev/null
-awk -F '\t' 'BEGIN { OFS = "\t" }
+awk -F '\t' '
   $1 == "gct" && $2 == "transition" { next }
-  $1 == "summary" { sub("records_before_summary=135", "records_before_summary=134", $4) }
+  $1 == "summary" { next }
   { print }
 ' "$PROBE_FIXTURE/gct.tsv" > "$PROBE_FIXTURE/gct-no-transition.tsv"
+probe_records_before_summary=$((
+  $(wc -l < "$PROBE_FIXTURE/gct-no-transition.tsv") - 1
+))
+printf 'summary\tcomplete\tpass\trecords_before_summary=%d;failures=0\n' \
+  "$probe_records_before_summary" >> "$PROBE_FIXTURE/gct-no-transition.tsv"
 expect_failure "$EVIDENCE_HELPER" native-probes "$RSCRIPT" "$PROBE_VERIFIER" \
   "$PROBE_MANIFEST" "$PROBE_FIXTURE/gct-no-transition.tsv" gct \
   "$PROBE_FIXTURE/paradox.so"
@@ -2380,7 +2479,6 @@ for required_pattern in \
     'RETAINED_NATIVE_PROBE_RUNNER' \
     'RETAINED_NATIVE_TEST_RUNNER' \
     'RETAINED_NATIVE_TEST_VERIFIER' \
-    'RETAINED_NATIVE_TEST_BASELINE' \
     '--mode=gct' \
     '--mode=valgrind' \
     'valgrind-analyzer' \
@@ -2403,7 +2501,6 @@ for required_pattern in \
     'native_probe_verifier_sha256=' \
     'native_test_runner_sha256=' \
     'native_test_verifier_sha256=' \
-    'native_test_baseline_sha256=' \
     'ordinary_input_metadata_ledger_sha256=' \
     'source_archive_sha256=' \
     'sealed source run has no unique paradox source archive' \

@@ -152,6 +152,13 @@ test_that("generate_design_lhs with zero rows", {
   ps = th_paramset_full()
   d = generate_design_lhs(ps, n = 0)
   expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
+
+  empty_factor = generate_design_lhs(
+    paradox::ps(choice = p_fct(character())),
+    n = 0
+  )
+  expect_data_table(empty_factor$data, nrows = 0, ncols = 1)
+  expect_identical(empty_factor$data$choice, character())
 })
 
 test_that("generate_design_grid with zero rows", {
@@ -196,5 +203,11 @@ test_that("generate_design_sobol with zero rows", {
   ps = th_paramset_full()
   d = generate_design_sobol(ps, n = 0)
   expect_data_table(d$data, any.missing = FALSE, nrows = 0, ncols = ps$length)
-})
 
+  empty_factor = generate_design_sobol(
+    paradox::ps(choice = p_fct(character())),
+    n = 0
+  )
+  expect_data_table(empty_factor$data, nrows = 0, ncols = 1)
+  expect_identical(empty_factor$data$choice, character())
+})

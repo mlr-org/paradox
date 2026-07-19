@@ -52,7 +52,6 @@ TRUSTED_PROBE_RUNNER="$TRUSTED_DIRECTORY/run-native-probes.R"
 TRUSTED_PROBE_VERIFIER="$TRUSTED_DIRECTORY/verify-native-probes.R"
 TRUSTED_TEST_RUNNER="$TRUSTED_DIRECTORY/run-native-tests.R"
 TRUSTED_TEST_VERIFIER="$TRUSTED_DIRECTORY/verify-native-test-ledger.R"
-TRUSTED_TEST_BASELINE="$ROOT/environment/native-functional-baseline.tsv"
 TRUSTED_DEBUG_SYMBOL_HELPER="$ROOT/scripts/bootstrap-valgrind-debug-symbols"
 TRUSTED_RESOURCE_JOBS="$TRUSTED_DIRECTORY/resource-jobs"
 TRUSTED_BOUNDED_RCHK_PREPARER="$ROOT/scripts/prepare-bounded-rchk-bcheck"
@@ -71,7 +70,7 @@ for trusted_input in "$TRUSTED_MEMORY_CHECK" "$TRUSTED_COPY_SNAPSHOT" \
     "$TRUSTED_TREE_RECEIPT" "$TRUSTED_MEMORY_EVIDENCE" \
     "$TRUSTED_PROBE_RUNNER" "$TRUSTED_PROBE_VERIFIER" \
     "$TRUSTED_TEST_RUNNER" "$TRUSTED_TEST_VERIFIER" \
-    "$TRUSTED_TEST_BASELINE" "$TRUSTED_DEBUG_SYMBOL_HELPER" \
+    "$TRUSTED_DEBUG_SYMBOL_HELPER" \
     "$TRUSTED_RESOURCE_JOBS" "$TRUSTED_BOUNDED_RCHK_PREPARER" \
     "$TRUSTED_BOUNDED_RCHK_BUILD_DRIVER" "$TRUSTED_BOUNDED_RCHK_CONFIG" \
     "$TRUSTED_BOUNDED_RCHK_COMMAND" "$TRUSTED_BOUNDED_RCHK_ENVIRONMENT" \
@@ -250,7 +249,7 @@ require_order completion_order harness schema run_id source_run \
   run_metadata_sha256 memory_check_sha256 harness_bundle_sha256 \
   memory_evidence_helper_sha256 native_probe_runner_sha256 \
   native_probe_verifier_sha256 native_test_runner_sha256 \
-  native_test_verifier_sha256 native_test_baseline_sha256 \
+  native_test_verifier_sha256 \
   tree_receipt_helper_sha256 source_manifest_sha256 \
   source_tree_receipt_sha256 modes_tree_receipt_sha256 \
   source_proof_pre_sha256 source_proof_post_sha256 \
@@ -297,7 +296,7 @@ declare -a harness_names=(
   memory-check copy-check-snapshot.R validate-native-source-run
   valgrind-receipts tree-receipt.R validate-memory-evidence
   run-native-probes.R verify-native-probes.R run-native-tests.R
-  verify-native-test-ledger.R native-functional-baseline.tsv
+  verify-native-test-ledger.R
   bootstrap-valgrind-debug-symbols resource-jobs
   prepare-bounded-rchk-bcheck build-bounded-rchk-bcheck
   rchk-bounded-bcheck.tsv rchk-bounded-bcheck-command.tsv
@@ -314,7 +313,6 @@ declare -A trusted_harness=(
   [verify-native-probes.R]="$TRUSTED_PROBE_VERIFIER"
   [run-native-tests.R]="$TRUSTED_TEST_RUNNER"
   [verify-native-test-ledger.R]="$TRUSTED_TEST_VERIFIER"
-  [native-functional-baseline.tsv]="$TRUSTED_TEST_BASELINE"
   [bootstrap-valgrind-debug-symbols]="$TRUSTED_DEBUG_SYMBOL_HELPER"
   [resource-jobs]="$TRUSTED_RESOURCE_JOBS"
   [prepare-bounded-rchk-bcheck]="$TRUSTED_BOUNDED_RCHK_PREPARER"
@@ -364,7 +362,6 @@ declare -A bound_files=(
   [native_probe_verifier_sha256]="$METADATA/verify-native-probes.R"
   [native_test_runner_sha256]="$METADATA/run-native-tests.R"
   [native_test_verifier_sha256]="$METADATA/verify-native-test-ledger.R"
-  [native_test_baseline_sha256]="$METADATA/native-functional-baseline.tsv"
   [tree_receipt_helper_sha256]="$METADATA/tree-receipt.R"
   [source_manifest_sha256]="$SOURCE_MANIFEST"
   [source_tree_receipt_sha256]="$SOURCE_TREE_RECEIPT"
@@ -391,7 +388,6 @@ for relative in \
     scripts/environment/verify-native-probes.R \
     scripts/environment/run-native-tests.R \
     scripts/environment/verify-native-test-ledger.R \
-    environment/native-functional-baseline.tsv \
     environment/native-routine-coverage.tsv; do
   require_regular "$SOURCE/$relative"
 done
@@ -403,8 +399,6 @@ cmp -s "$SOURCE/scripts/environment/run-native-tests.R" "$TRUSTED_TEST_RUNNER" |
   fail "frozen source test runner differs from trusted current policy"
 cmp -s "$SOURCE/scripts/environment/verify-native-test-ledger.R" "$TRUSTED_TEST_VERIFIER" ||
   fail "frozen source test verifier differs from trusted current policy"
-cmp -s "$SOURCE/environment/native-functional-baseline.tsv" "$TRUSTED_TEST_BASELINE" ||
-  fail "frozen source test baseline differs from trusted current policy"
 cmp -s "$SOURCE/environment/native-routine-coverage.tsv" "$TRUSTED_PROBE_MANIFEST" ||
   fail "frozen source probe inventory differs from trusted current policy"
 
@@ -585,6 +579,16 @@ require_exact_lines() {
   done
 }
 
+validate_serial_resource_report() {
+  local path=$1 expected_profile=$2 validation_output
+  validation_output=$("$TRUSTED_RESOURCE_JOBS" "$expected_profile" \
+    --verify-report "$path") ||
+    fail "retained $expected_profile resource admission is malformed or unsafe"
+  [[ "$validation_output" == \
+      "resource_report_verified=$expected_profile" ]] ||
+    fail "retained $expected_profile resource validation output differs"
+}
+
 verify_dso_receipt() {
   local mode=$1 dso="$MODES/$1/library/paradox/libs/paradox.so"
   local receipt="$MODES/$1/artifacts/paradox.so.sha256" hash
@@ -696,14 +700,16 @@ if [[ "${run_fields[valgrind]}" == true ]]; then
     'leak_detail=definite,indirect,possible; full summary retained' \
     'read_var_info=false (avoids non-actionable DWARF parser warnings)' \
     'child_silent_after_fork=true (rejects header-only fork-child logs)' \
+    'resource_admission=serial valgrind profile with 16384 MiB working-set allowance and at least 16384 MiB host reserve' \
     "extra_debuginfo_path=$ROOT/.local/debug/libc6-dbg-2.31-0ubuntu9.18"
+  validate_serial_resource_report \
+    "$MODES/valgrind/artifacts/resource-jobs.tsv" valgrind
   valgrind_dso_sha=$(verify_dso_receipt valgrind)
   verify_probe_ledger valgrind "$valgrind_dso_sha"
   VALGRIND_LEDGER="$MODES/valgrind/artifacts/native-tests-analyzer.tsv"
   require_bounded_regular "$VALGRIND_LEDGER" 67108864
   run_trusted_r "$TRUSTED_TEST_VERIFIER" \
     "--source=$SOURCE" "--ledger=$VALGRIND_LEDGER" --selection=analyzer \
-    "--baseline=$TRUSTED_TEST_BASELINE" \
     "--expected-dso-sha256=$valgrind_dso_sha" \
     > "$SCRATCH/valgrind-analyzer-ledger.log"
 
@@ -849,33 +855,7 @@ if [[ "${run_fields[rchk]}" == true ]]; then
     "bcheck=$RCHK_CACHE_ENTRY/payload/bin/bcheck"
 
   RCHK_RESOURCE_REPORT="$RCHK_DIRECTORY/artifacts/resource-jobs.tsv"
-  require_bounded_regular "$RCHK_RESOURCE_REPORT" 1048576
-  awk -F '\t' '
-    function positive(value) { return value ~ /^[1-9][0-9]*$/ }
-    BEGIN {
-      count = split("field schema profile platform online_cpus affinity_cpus cgroup_cpu_limit cpu_limit cpu_reserve cpu_per_job cpu_jobs memory_source memory_available_mib cgroup_memory_available_mib memory_reserve_mib memory_mib_per_job memory_jobs profile_max_jobs operator_max_jobs jobs", keys, " ")
-    }
-    {
-      if (NF != 2 || NR > count || $1 != keys[NR]) exit 1
-      value[$1] = $2
-    }
-    END {
-      available = value["memory_available_mib"] + 0
-      required = value["memory_reserve_mib"] + 20480
-      if (NR != count || value["field"] != "value" ||
-          value["schema"] != "1" || value["profile"] != "rchk" ||
-          value["cpu_per_job"] != "1" ||
-          value["memory_mib_per_job"] != "20480" ||
-          value["profile_max_jobs"] != "1" ||
-          value["operator_max_jobs"] != "none" || value["jobs"] != "1" ||
-          !positive(value["memory_available_mib"]) ||
-          !positive(value["memory_reserve_mib"]) ||
-          value["memory_reserve_mib"] + 0 < 16384 ||
-          !positive(value["memory_jobs"]) ||
-          available < required) exit 1
-    }
-  ' "$RCHK_RESOURCE_REPORT" ||
-    fail "retained rchk resource admission is malformed or unsafe"
+  validate_serial_resource_report "$RCHK_RESOURCE_REPORT" rchk
 
   mkdir "$SCRATCH/rchk"
   env -i "HOME=$SCRATCH/rchk" "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \

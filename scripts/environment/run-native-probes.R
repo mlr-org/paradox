@@ -134,6 +134,9 @@ main <- function() {
   symbol <- function(name) calls[[name]]
   namespace <- asNamespace("paradox")
   private_of <- function(object) object$.__enclos_env__$private
+  state_of <- function(object) {
+    .Call(symbol("param_set_core_state"), private_of(object))
+  }
   bind_null <- function(environment, names) {
     for (name in names) assign(name, NULL, envir = environment)
     environment
@@ -162,35 +165,121 @@ main <- function() {
     bind_null(frame, c("class", "tags", "any_tags"))
   }
   subset_private <- function() {
-    list2env(list(.params = NULL, .tags = NULL, .trafos = NULL, .deps = NULL,
-      .values = NULL, .extra_trafo = NULL), parent = emptyenv())
+    list2env(list(.core = NULL), parent = emptyenv())
   }
   probes <- list(
+    direct_param_set_core_new = function() {
+      set <- ps(x = p_int(init = 1L))
+      result <- .Call(symbol("param_set_core_new"), 1L, state_of(set))
+      check(typeof(result) == "externalptr" &&
+        identical(.Call(symbol("param_set_core_kind"), result), 1L),
+        "BASE capsule construction differs")
+    },
+    direct_param_set_core_state = function() {
+      set <- ps(x = p_int(init = 1L))
+      result <- .Call(symbol("param_set_core_state"), private_of(set))
+      check(identical(names(result), c(
+        ".params", ".values", ".tags", ".deps", ".trafos",
+        ".extra_trafo", ".constraint", ".sets", ".translation", ".postfix"
+      )) && identical(result$.values, list(x = 1L)),
+      "capsule payload recovery differs")
+    },
+    direct_param_set_core_replace = function() {
+      set <- ps(x = p_int())
+      private <- private_of(set)
+      before_address <- data.table::address(private$.core)
+      result <- .Call(
+        symbol("param_set_core_replace"),
+        private,
+        list(.values = list(x = 2L))
+      )
+      check(typeof(result) == "externalptr" &&
+        identical(
+          data.table::address(result),
+          data.table::address(private$.core)
+        ) &&
+        !identical(data.table::address(result), before_address) &&
+        identical(state_of(set)$.values, list(x = 2L)),
+        "atomic capsule replacement differs")
+    },
+    direct_param_set_core_kind = function() {
+      set <- ps(x = p_int())
+      check(identical(
+        .Call(symbol("param_set_core_kind"), private_of(set)),
+        1L
+      ), "BASE capsule kind differs")
+    },
+    direct_param_set_shadow_core_new = function() {
+      origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      private <- private_of(shadow)
+      result <- .Call(
+        symbol("param_set_shadow_core_new"),
+        private$.core,
+        origin
+      )
+      check(typeof(result) == "externalptr" && identical(
+        .Call(symbol("param_set_core_kind"), result),
+        3L
+      ), "authoritative Shadow capsule construction differs")
+    },
+    direct_param_set_shadow_construct = function() {
+      origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
+      result <- .Call(
+        symbol("param_set_shadow_construct"),
+        origin,
+        "hidden"
+      )
+      state <- .Call(symbol("param_set_core_state"), result)
+      check(typeof(result) == "externalptr" && identical(state$.params$id, "x"),
+        "native Shadow schema construction differs")
+    },
+    direct_param_set_shadow_refresh = function() {
+      origin <- ps(hidden = p_int(), x = p_dbl(0, 1))
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      origin$values <- list(hidden = 1L, x = 0.5)
+      result <- .Call(
+        symbol("param_set_shadow_refresh"),
+        shadow,
+        private_of(shadow)
+      )
+      check(typeof(result) == "externalptr" &&
+        identical(state_of(shadow)$.values, list(x = 0.5)),
+        "authoritative Shadow refresh differs")
+    },
+    direct_param_set_shadow_constraint = function() {
+      origin <- ps(hidden = p_int(), x = p_int())
+      origin$values <- list(hidden = 1L)
+      origin$constraint <- function(x) x$hidden < x$x
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      plan <- get("plan", environment(shadow$constraint))
+      check(isTRUE(.Call(
+        symbol("param_set_shadow_constraint"), plan, list(x = 2L)
+      )), "native Shadow constraint adapter differs")
+    },
     direct_design_transpose = function() {
       result <- .Call(symbol("design_transpose"), list(x = c(1L, 2L), y = c(3, 4)), FALSE)
       check(identical(result, list(list(x = 1L, y = 3), list(x = 2L, y = 4))),
         "transpose result differs")
     },
-    direct_design_transpose_logscale_builtin = function() {
-      set <- ps(x = p_dbl(1, 10, logscale = TRUE))
-      result <- .Call(symbol("design_transpose_logscale_builtin"),
-        list(list(x = 0)), set)
-      check(identical(result, list(list(x = 1))),
-        "logscale transpose result differs")
+    direct_design_transpose_trafos = function() {
+      set <- ps(x = p_dbl(trafo = function(value) value * 2))
+      result <- .Call(
+        symbol("design_transpose_trafos"),
+        list(list(x = 0.25)),
+        set
+      )
+      check(identical(result, list(list(x = 0.5))),
+        "Design transformation result differs")
     },
-    direct_design_dependency_runtime = function() {
-      result <- .Call(symbol("design_dependency_runtime"),
-        getNamespaceVersion("mlr3misc")[[1L]])
-      check(isTRUE(result), "canonical dependency runtime was rejected")
-    },
-    direct_design_dependency_plan_builtin = function() {
+    direct_design_dependency_plan = function() {
       set <- ps(parent = p_lgl(), child = p_int(0L, 9L))
       set$add_dep("child", "parent", CondEqual(TRUE))
       data <- data.table::data.table(
         parent = c(TRUE, FALSE),
         child = c(1L, 2L)
       )
-      result <- .Call(symbol("design_dependency_plan_builtin"), data, set)
+      result <- .Call(symbol("design_dependency_plan"), data, set)
       check(identical(result, list(
         rows = list(2L), columns = "child", values = list(NA_integer_)
       )), "dependency plan differs")
@@ -203,72 +292,23 @@ main <- function() {
       check(data.table:::selfrefok(result, verbose = FALSE) == 1L, "finalized shell has invalid selfref")
     },
     direct_domain_check_builtin = function() {
-      check(isTRUE(.Call(symbol("domain_check_builtin"), p_int(0L, 2L), list(1L))), "domain check failed")
+      check(isTRUE(.Call(
+        symbol("domain_check_builtin"), p_int(0L, 2L), list(1L), FALSE
+      )), "domain check failed")
+    },
+    direct_domain_property_builtin = function() {
+      result <- .Call(symbol("domain_property_builtin"), p_int(0L, 2L), 0L)
+      check(identical(result, 3), "domain property differs")
     },
     direct_domain_construct = function() {
       result <- .Call(symbol("domain_construct"), "ParamDbl", "ParamDbl", NULL,
         0, 1, 0, NULL, list(), get("NO_DEF", namespace), character(), NULL,
-        "numeric", FALSE, NULL)
+        "numeric", FALSE, NULL, 1L, FALSE, "x", NULL)
       check(identical(names(result), get("domain_names", namespace)) &&
         identical(result$cls, "ParamDbl") && identical(result$grouping, "ParamDbl") &&
         identical(result$lower, 0) && identical(result$upper, 1) &&
         identical(result$storage_type, "numeric") && identical(result$.init_given, FALSE),
         "domain constructor result differs")
-    },
-    direct_domain_construct_frame = function() {
-      constructor <- function(cls = "ParamLgl", grouping = "ParamLgl", cargo = list(),
-          lower = NA_real_, upper = NA_real_, tolerance = NA_real_,
-          levels = c(TRUE, FALSE), special_vals = list(),
-          default = stop("default promise forced", call. = FALSE), tags = character(),
-          trafo = NULL, depends_expr = stop("depends promise forced", call. = FALSE),
-          storage_type = stop("storage promise forced", call. = FALSE),
-          init = stop("init promise forced", call. = FALSE)) {
-        .Call(symbol("domain_construct_frame"), environment())
-      }
-      result <- constructor()
-      check(length(result) == 2L && identical(result[[2L]], "logical") &&
-        identical(result[[1L]]$cls, "ParamLgl") &&
-        identical(result[[1L]]$storage_type, "logical") &&
-        identical(result[[1L]]$.init_given, FALSE),
-        "frame constructor result differs")
-    },
-    direct_domain_builtin_runtime = function() {
-      constructors <- list(
-        p_dbl = get("p_dbl", namespace),
-        p_int = get("p_int", namespace),
-        p_fct = get("p_fct", namespace),
-        p_lgl = get("p_lgl", namespace)
-      )
-      result <- .Call(symbol("domain_builtin_runtime"), constructors,
-        get("NO_DEF", namespace), base::sort)
-      check(isTRUE(result), "canonical Domain runtime was rejected")
-    },
-    direct_domain_construct_builtin = function() {
-      p_dbl <- get("p_dbl", namespace, inherits = FALSE)
-      caller <- new.env(parent = baseenv())
-      assign("p_dbl", p_dbl, envir = caller)
-      result <- eval(quote(p_dbl(0, 1)), envir = caller)
-      check(inherits(result, "ParamDbl") && identical(result$lower, 0) &&
-        identical(result$upper, 1) &&
-        identical(attr(result, "repr", exact = TRUE),
-          quote(p_dbl(lower = 0, upper = 1))),
-        "direct built-in Domain differs")
-    },
-    direct_domain_fct_grouping = function() {
-      result <- .Call(symbol("domain_fct_grouping"), c('a"b', "c\\d"))
-      check(identical(result, '"a\\"b","c\\\\d"'),
-        "factor grouping escape result differs")
-    },
-    direct_domain_numeric_bounds_admit = function() {
-      constructor <- function(
-          tolerance = 0, lower = -1, upper = 1, logscale = FALSE) {
-        .Call(
-          symbol("domain_numeric_bounds_admit"),
-          environment(),
-          FALSE
-        )
-      }
-      check(isTRUE(constructor()), "numeric bounds admission declined")
     },
     direct_domain_uty_check_result = function() {
       check(isTRUE(.Call(symbol("domain_uty_check_result"), "diagnostic")) &&
@@ -282,57 +322,11 @@ main <- function() {
         is.null(.Call(symbol("domain_simple_repr_id"), quote(paradox::p_dbl()))),
         "simple Domain representation admission differs")
     },
-    direct_ps_builtin_runtime = function() {
-      constructors <- list(
-        p_dbl = get("p_dbl", namespace),
-        p_int = get("p_int", namespace),
-        p_fct = get("p_fct", namespace),
-        p_lgl = get("p_lgl", namespace)
-      )
-      result <- .Call(symbol("ps_builtin_runtime"), constructors,
-        get("NO_DEF", namespace))
-      check(isTRUE(result), "canonical ps runtime was rejected")
-    },
-    direct_ps_builtin_domains = function() {
-      result <- .Call(symbol("ps_builtin_domains"),
-        quote(list(x = p_int(0L, 2L))), environment())
-      check(identical(names(result), "x") && inherits(result[[1L]], "ParamInt") &&
-        identical(result[[1L]]$id, "x") &&
-        identical(result[[1L]]$lower, 0L) &&
-        identical(result[[1L]]$upper, 2L), "native ps Domain list differs")
-    },
     direct_domain_qunif_builtin = function() {
       check(identical(.Call(symbol("domain_qunif_builtin"), p_dbl(0, 10), c(0, .5, 1)), c(0, 5, 10)), "domain qunif differs")
     },
     direct_domain_sanitize_builtin = function() {
       check(identical(.Call(symbol("domain_sanitize_builtin"), p_dbl(0, 1, tolerance = .1), list(-.05, 1.05)), list(0, 1)), "domain sanitize differs")
-    },
-    direct_param_set_index_layout = function() {
-      params_probe <- data.table::data.table(
-        id = c("z", "a", "m"),
-        cls = rep("ParamDbl", 3L),
-        grouping = rep("ParamDbl", 3L)
-      )
-      data.table::setindexv(params_probe, c("id", "cls", "grouping"))
-      identity_probe <- data.table::data.table(
-        id = c("a", "m", "z"),
-        cls = rep("ParamDbl", 3L),
-        grouping = rep("ParamDbl", 3L)
-      )
-      data.table::setindexv(identity_probe, c("id", "cls", "grouping"))
-      tags_probe <- data.table::data.table(tag = c("a", "B", "", "_", "b", "A", "a"))
-      data.table::setindexv(tags_probe, "tag")
-      empty_probe <- data.table::data.table(tag = character())
-      data.table::setindexv(empty_probe, "tag")
-      result <- .Call(
-        symbol("param_set_index_layout"),
-        getNamespaceVersion("data.table")[[1L]],
-        attr(params_probe, "index", exact = TRUE),
-        attr(tags_probe, "index", exact = TRUE),
-        attr(identity_probe, "index", exact = TRUE),
-        attr(empty_probe, "index", exact = TRUE)
-      )
-      check(isTRUE(result), "reviewed data.table index layout was rejected")
     },
     direct_param_set_construct = function() {
       result <- .Call(symbol("param_set_construct"), list(x = p_int(0L, 2L), y = p_lgl()))
@@ -343,6 +337,18 @@ main <- function() {
       result <- .Call(symbol("param_set_collection_construct"), list(owner = child), TRUE, TRUE, FALSE)
       check(identical(result$params$id, "owner.x"), "collection construction differs")
     },
+    direct_param_set_collection_add = function() {
+      collection <- psc(left = ps(x = p_int()))
+      child <- ps(y = p_lgl())
+      result <- .Call(
+        symbol("param_set_collection_add"),
+        private_of(collection), collection, child, "right", TRUE, TRUE
+      )
+      check(identical(result, collection) &&
+        identical(collection$ids(), c("left.x", "right.y")) &&
+        identical(collection$sets[[2L]], child),
+        "collection add replacement differs")
+    },
     direct_param_set_collection_detach_plan = function() {
       child <- ps(x = p_int(), y = p_lgl())
       child$constraint <- function(x) TRUE
@@ -352,54 +358,171 @@ main <- function() {
       check(identical(result$translation$id, "owner.x") &&
         identical(result$translation$original_id, "x") &&
         identical(result$constraint_indices, 1L) &&
-        identical(names(result$constraint_sets), "owner"),
+        length(result$constraint_sets) == 1L &&
+        is.function(result$constraint_sets[[1L]]$constraint),
         "collection detachment plan differs")
     },
-    direct_param_set_collection_check_builtin = function() {
-      collection <- psc(owner = ps(x = p_int(0L, 2L)))
-      result <- .Call(symbol("param_set_collection_check_builtin"),
-        private_of(collection), collection, list(owner.x = 1L), FALSE, TRUE)
-      check(isTRUE(result), "collection scalar check failed")
+    direct_param_set_collection_has_callback = function() {
+      child <- ps(x = p_int())
+      child$extra_trafo <- function(x) x
+      collection <- psc(owner = child)
+      check(isTRUE(.Call(
+        symbol("param_set_collection_has_callback"),
+        private_of(collection), collection, 0L
+      )) && identical(.Call(
+        symbol("param_set_collection_has_callback"),
+        private_of(collection), collection, 1L
+      ), FALSE), "collection callback feature selection differs")
+    },
+    direct_param_set_collection_extra_trafo = function() {
+      child <- ps(x = p_int(), y = p_int())
+      child$extra_trafo <- function(x) list(x = x$x + 1L)
+      collection <- psc(owner = child)
+      result <- .Call(
+        symbol("param_set_collection_extra_trafo"),
+        private_of(collection), collection,
+        list(unknown = 9L, owner.x = 1L, owner.y = 2L)
+      )
+      check(identical(result, list(unknown = 9L, owner.x = 2L)),
+        "live collection aggregate transformation differs")
+    },
+    direct_param_set_collection_constraint = function() {
+      child <- ps(x = p_int())
+      child$constraint <- function(x) x$x < 2L
+      collection <- psc(owner = child)
+      check(isTRUE(.Call(
+        symbol("param_set_collection_constraint"),
+        private_of(collection), collection, list(owner.x = 1L)
+      )) && identical(.Call(
+        symbol("param_set_collection_constraint"),
+        private_of(collection), collection, list(owner.x = 2L)
+      ), FALSE), "live collection constraint evaluation differs")
+    },
+    direct_param_set_collection_detached_extra_trafo = function() {
+      child <- ps(x = p_int(), y = p_int())
+      child$extra_trafo <- function(x) list(x = x$x + 1L)
+      collection <- psc(owner = child)
+      detached <- collection$subset(collection$ids(),
+        allow_dangling_dependencies = TRUE)
+      plan <- get("plan", environment(detached$extra_trafo))
+      result <- .Call(
+        symbol("param_set_collection_detached_extra_trafo"),
+        plan, list(unknown = 9L, owner.x = 1L, owner.y = 2L)
+      )
+      check(identical(result, list(unknown = 9L, owner.x = 2L)),
+        "detached collection aggregate transformation differs")
+    },
+    direct_param_set_collection_detached_constraint = function() {
+      child <- ps(x = p_int())
+      child$constraint <- function(x) x$x < 2L
+      collection <- psc(owner = child)
+      detached <- collection$subset("owner.x",
+        allow_dangling_dependencies = TRUE)
+      plan <- get("plan", environment(detached$constraint))
+      check(isTRUE(.Call(
+        symbol("param_set_collection_detached_constraint"),
+        plan, list(owner.x = 1L)
+      )) && identical(.Call(
+        symbol("param_set_collection_detached_constraint"),
+        plan, list(owner.x = 2L)
+      ), FALSE), "detached collection constraint evaluation differs")
+    },
+    direct_param_set_collection_owner_subset_state = function() {
+      child <- ps(x = p_int(), y = p_int())
+      token <- .Call(
+        symbol("param_set_collection_owner_subset_state"),
+        function(x, param_set) x, child, "x"
+      )
+      owner <- ParamSet$new(token)
+      check(identical(owner$ids(), "x") &&
+        identical(class(owner), c("ParamSet", "R6")),
+        "package-owned collection callback owner subset differs")
     },
     direct_param_set_check_builtin = function() {
       set <- ps(x = p_int(0L, 2L))
-      result <- .Call(symbol("param_set_check_builtin"), private_of(set)$.params, list(x = 1), TRUE)
+      result <- .Call(
+        symbol("param_set_check_builtin"),
+        private_of(set), set, list(x = 1), TRUE, TRUE, "none", TRUE
+      )
       check(isTRUE(result) && identical(attr(result, "sanitized"), list(x = 1L)), "ParamSet scalar check differs")
+    },
+    direct_tune_token_snapshot_list = function() {
+      token <- to_tune(
+        lower = c(lower_name = 0),
+        upper = c(upper_name = 1),
+        logscale = c(scale_name = FALSE)
+      )
+      set <- ps(x = p_dbl(0, 1))
+      result <- .Call(
+        symbol("tune_token_snapshot_list"),
+        private_of(set),
+        set,
+        list(x = token)
+      )
+      check(identical(names(result), c("tokens", "targets")) &&
+        identical(names(result$tokens), "x") &&
+        identical(class(result$tokens$x), c("RangeTuneToken", "TuneToken")) &&
+        is.null(names(result$tokens$x$content$lower)) &&
+        is.null(names(result$tokens$x$content$upper)) &&
+        is.null(names(result$tokens$x$content$logscale)),
+        "closed TuneToken structural snapshot differs")
+    },
+    direct_param_set_check_dependencies_builtin = function() {
+      set <- ps(on = p_lgl(), x = p_int(depends = on == TRUE))
+      accepted <- .Call(
+        symbol("param_set_check_dependencies_builtin"),
+        private_of(set), set, list(on = TRUE, x = 1L)
+      )
+      rejected <- .Call(
+        symbol("param_set_check_dependencies_builtin"),
+        private_of(set), set, list(on = FALSE, x = 1L)
+      )
+      check(isTRUE(accepted) && is.character(rejected) &&
+        length(rejected) == 1L,
+        "ParamSet dependency-only check differs")
+    },
+    direct_param_set_test_constraint_builtin = function() {
+      set <- ps(x = p_int(0L, 2L))
+      set$constraint <- function(x) x$x < 2L
+      accepted <- .Call(
+        symbol("param_set_test_constraint_builtin"),
+        private_of(set), set, list(x = 1L), TRUE
+      )
+      rejected <- .Call(
+        symbol("param_set_test_constraint_builtin"),
+        private_of(set), set, list(x = 2L), TRUE
+      )
+      check(isTRUE(accepted) && identical(rejected, FALSE),
+        "ParamSet scalar constraint-only check differs")
+    },
+    direct_param_set_test_constraint_dt_builtin = function() {
+      set <- ps(x = p_int(0L, 2L))
+      set$constraint <- function(x) x$x < 2L
+      result <- .Call(
+        symbol("param_set_test_constraint_dt_builtin"),
+        private_of(set), set, plain_table(list(x = c(1L, 2L))), TRUE
+      )
+      check(identical(result, c(TRUE, FALSE)),
+        "ParamSet tabular constraint-only check differs")
     },
     direct_param_set_check_dt_builtin = function() {
       set <- ps(x = p_int(0L, 2L))
-      check(isTRUE(.Call(symbol("param_set_check_dt_builtin"), private_of(set)$.params,
-        data.frame(x = c(0L, 2L)))), "ParamSet table check differs")
+      check(isTRUE(.Call(
+        symbol("param_set_check_dt_builtin"),
+        private_of(set), set, data.frame(x = c(0L, 2L)), TRUE, "all", TRUE
+      )), "ParamSet table check differs")
     },
-    direct_param_set_check_dt_plan_builtin = function() {
-      set <- ps(x = p_int(0L, 2L), y = p_lgl())
-      result <- .Call(symbol("param_set_check_dt_plan_builtin"),
-        private_of(set)$.params,
-        data.frame(x = c(0L, 2L), y = c(TRUE, FALSE)))
-      check(identical(result, 3L), "ParamSet table plan differs")
-    },
-    direct_param_set_check_dt_complete_builtin = function() {
-      set <- ps(x = p_int(0L, 2L), y = p_lgl())
-      check(isTRUE(.Call(symbol("param_set_check_dt_complete_builtin"),
-        private_of(set)$.params, data.frame(x = c(0L, 2L)))),
-        "ParamSet complete-cell table check differs")
-    },
-    direct_param_set_check_dt_all_builtin = function() {
-      set <- ps(x = p_int(0L, 2L), y = p_lgl())
-      check(isTRUE(.Call(symbol("param_set_check_dt_all_builtin"),
-        private_of(set)$.params,
-        data.frame(x = c(0L, 2L), y = c(TRUE, FALSE)))),
-        "ParamSet complete all-parameter table check differs")
-    },
-    direct_param_set_surface_auth = function() {
-      set <- ps(x = p_int())
-      observed <- vapply(1:4, function(surface) .Call(symbol("param_set_surface_auth"), set, as.integer(surface)), logical(1L))
-      check(all(observed), "one or more canonical ParamSet surfaces were rejected")
+    direct_condition_test_builtin = function() {
+      result <- .Call(
+        symbol("condition_test_builtin"), CondAnyOf(1:2), 1:3
+      )
+      check(identical(result, c(TRUE, TRUE, FALSE)),
+        "closed built-in Condition vector comparison differs")
     },
     direct_param_set_ids = function() {
       set <- ps(x = p_int(tags = c("red", "fast")), y = p_dbl(tags = "red"))
-      private <- private_of(set)
-      result <- .Call(symbol("param_set_ids"), private$.params, private$.tags, NULL, c("red", "fast"), NULL)
+      state <- state_of(set)
+      result <- .Call(symbol("param_set_ids"), state$.params, state$.tags, NULL, c("red", "fast"), NULL)
       check(identical(result, "x"), "ParamSet ids filter differs")
     },
     direct_param_set_ids_lazy = function() {
@@ -417,8 +540,6 @@ main <- function() {
     direct_param_set_store_values = function() {
       set <- ps(a = p_int(), b = p_int())
       private <- private_of(set)
-      check(identical(.row_names_info(private$.params, 0L), c(NA_integer_, -2L)),
-        "ParamSet probe lacks compact row names")
       result <- .Call(symbol("param_set_store_values"), private, set, list(b = 2L, a = 1L))
       check(identical(result, list(a = 1L, b = 2L)), "stored values differ")
     },
@@ -427,56 +548,107 @@ main <- function() {
       result <- .Call(symbol("param_set_assign_values_checked"), private_of(set), set, list(x = 1))
       check(identical(result, list(x = 1L)), "checked assignment differs")
     },
-    direct_param_set_collection_store_plan = function() {
-      child <- ps(x = p_int())
-      collection <- ParamSetCollection$new(list(owner = child))
-      private <- private_of(collection)
-      result <- .Call(symbol("param_set_collection_store_plan"), private, collection,
-        private$.sets, list(owner.x = 1L))
-      check(identical(result[[1L]], 1L) && identical(result[[2L]][[1L]], list(x = 1L)), "collection store plan differs")
+    direct_param_set_set_tags = function() {
+      set <- ps(x = p_int(), y = p_lgl())
+      result <- .Call(
+        symbol("param_set_set_tags"), private_of(set), set,
+        list(y = "switch", x = "numeric")
+      )
+      check(identical(result, list(y = "switch", x = "numeric")) &&
+        identical(set$tags, list(x = "numeric", y = "switch")),
+        "tag replacement differs")
+    },
+    direct_param_set_get_tags = function() {
+      set <- ps(x = p_int(tags = c("numeric", "required")), y = p_lgl())
+      result <- .Call(symbol("param_set_get_tags"), private_of(set), set)
+      check(identical(result,
+        list(x = c("numeric", "required"), y = character())),
+        "tag projection differs")
+    },
+    direct_param_set_dependency_table_snapshot = function() {
+      condition <- CondAnyOf(1:2)
+      input <- data.frame(id = "child", on = "parent",
+        cond = I(list(condition)))
+      result <- .Call(symbol("param_set_dependency_table_snapshot"), input)
+      condition$rhs[[1L]] <- 9L
+      check(identical(class(result), "data.frame") &&
+        identical(result$cond[[1L]]$rhs, 1:2),
+        "dependency table snapshot differs")
+    },
+    direct_param_set_dependencies = function() {
+      set <- ps(parent = p_lgl(), child = p_int(depends = parent == TRUE))
+      result <- .Call(symbol("param_set_dependencies"), private_of(set), set)
+      check(identical(result$id, "child") && identical(result$on, "parent"),
+        "dependency projection differs")
+    },
+    direct_param_set_set_dependencies = function() {
+      set <- ps(parent = p_int(0L, 2L), child = p_lgl())
+      input <- data.frame(id = "child", on = "parent",
+        cond = I(list(CondEqual(1L))))
+      result <- .Call(
+        symbol("param_set_set_dependencies"), private_of(set), set, input
+      )
+      check(identical(result, input) && identical(set$deps$on, "parent"),
+        "dependency replacement differs")
+    },
+    direct_param_set_add_dependency = function() {
+      set <- ps(parent = p_int(0L, 2L), child = p_lgl())
+      result <- .Call(
+        symbol("param_set_add_dependency"), private_of(set), set,
+        "child", "parent", CondEqual(1L), FALSE
+      )
+      check(identical(result, set) && identical(set$deps$id, "child"),
+        "dependency append differs")
+    },
+    direct_param_set_set_callback = function() {
+      set <- ps(x = p_int())
+      callback <- function(x) FALSE
+      result <- .Call(
+        symbol("param_set_set_callback"), private_of(set), set,
+        callback, 1L
+      )
+      check(identical(result, callback) && identical(set$constraint, callback),
+        "callback replacement differs")
     },
     direct_param_set_property = function() {
       set <- ps(x = p_int(0L, 2L))
-      result <- .Call(symbol("param_set_property"), private_of(set)$.params, 0L)
-      check(length(result) == 2L && identical(result[[1L]], c(x = 3)) &&
-        identical(result[[2L]], TRUE), "property result differs")
+      result <- .Call(symbol("param_set_property"), state_of(set)$.params, 0L)
+      check(identical(result, c(x = 3)), "property vector differs")
     },
     direct_param_set_qunif_builtin = function() {
       set <- ps(x = p_int(0L, 10L), y = p_dbl(0, 1))
+      private <- private_of(set)
       units <- matrix(c(.5, .25), nrow = 1L, dimnames = list(NULL, c("x", "y")))
-      result <- .Call(symbol("param_set_qunif_builtin"), private_of(set)$.params, units)
+      result <- .Call(
+        symbol("param_set_qunif_builtin"), private, set, units
+      )
       check(identical(result$x, 5L) && identical(result$y, .25), "ParamSet qunif differs")
+      malformed <- tryCatch(
+        .Call(
+          symbol("param_set_qunif_builtin"),
+          private,
+          set,
+          matrix(NA_real_, nrow = 1L, dimnames = list(NULL, "x"))
+        ),
+        error = identity
+      )
+      check(
+        inherits(malformed, "error") &&
+          grepl("must not be missing", conditionMessage(malformed), fixed = TRUE),
+        "malformed ParamSet qunif input did not error deterministically"
+      )
     },
     direct_sampler_unif_sample_builtin = function() {
-      imports <- parent.env(namespace)
-      providers <- list(
-        runif = asNamespace("stats"),
-        data.table = asNamespace("data.table"),
-        setnames = asNamespace("data.table"),
-        map_dtc = asNamespace("mlr3misc")
-      )
-      for (name in names(providers)) {
-        invisible(get(name, imports, inherits = FALSE))
-        invisible(get(name, providers[[name]], inherits = FALSE))
-      }
-      caller <- new.env(parent = baseenv())
-      for (name in c("ps", "p_int", "p_dbl", "p_fct", "p_lgl")) {
-        assign(name, get(name, namespace, inherits = FALSE), envir = caller)
-      }
-      set <- eval(quote(ps(
+      set <- ps(
         x = p_int(0L, 10L),
         y = p_dbl(0, 1),
         z = p_fct(c("left", "right")),
         flag = p_lgl()
-      )), envir = caller)
-      sampler <- SamplerUnif$new(set)
-      sampler$sample(0L)
+      )
       set.seed(1729L)
       result <- .Call(
         symbol("sampler_unif_sample_builtin"),
-        sampler,
-        sampler$param_set,
-        sampler$samplers,
+        set,
         3L
       )
       seed_after <- serialize(.Random.seed, NULL, version = 2L)
@@ -499,7 +671,7 @@ main <- function() {
       set <- ps(x = p_int(0L, 2L), y = p_dbl(0, 1))
       result <- .Call(
         symbol("generate_design_grid_builtin"),
-        private_of(set)$.params,
+        state_of(set)$.params,
         c(y = 3, x = 3)
       )
       check(
@@ -509,12 +681,27 @@ main <- function() {
           data.table:::selfrefok(result, verbose = FALSE) == 1L,
         "one-shot grid differs"
       )
+      overflow <- tryCatch(
+        .Call(
+          symbol("generate_design_grid_builtin"),
+          state_of(set)$.params,
+          c(y = 50000, x = 50000)
+        ),
+        error = identity
+      )
+      check(
+        inherits(overflow, "error") &&
+          grepl("Grid product exceeds", conditionMessage(overflow), fixed = TRUE),
+        "overflowing native grid did not error before allocation"
+      )
     },
-    direct_param_set_trafo_plan = function() {
+    direct_param_set_trafo = function() {
       set <- ps(x = p_dbl(0, 1, trafo = function(value) value * 2))
-      result <- .Call(symbol("param_set_trafo_plan"), list(x = .25), private_of(set)$.trafos)
-      check(identical(result[[1L]], "x") && identical(result[[3L]][[1L]], .25) &&
-        identical(result[[2L]][[1L]](result[[3L]][[1L]]), .5), "trafo plan differs")
+      result <- .Call(
+        symbol("param_set_trafo"),
+        private_of(set), set, list(x = 0.25), set
+      )
+      check(identical(result, list(x = 0.5)), "ParamSet trafo differs")
     },
     direct_param_set_get_domain = function() {
       set <- ps(x = p_int())
@@ -546,101 +733,39 @@ main <- function() {
     direct_param_set_collection_values = function() {
       collection <- ParamSetCollection$new(list(owner = ps(x = p_int(init = 1L))))
       private <- private_of(collection)
-      check(identical(.row_names_info(private$.params, 0L), c(NA_integer_, -1L)),
-        "ParamSetCollection probe lacks compact row names")
       result <- .Call(symbol("param_set_collection_values"), private, collection)
       check(identical(result, list(owner.x = 1L)), "collection values differ")
     },
     direct_param_set_subset_state = function() {
       set <- ps(x = p_int(), y = p_lgl())
-      result <- .Call(symbol("param_set_subset_state"), private_of(set), set, "y", FALSE)
-      check(identical(result$missing_parents, character()) &&
-        typeof(result$state) == "externalptr", "subset transaction differs")
-    },
-    direct_param_set_subspace_state = function() {
-      set <- ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
-      values <- set$values
-      result <- .Call(symbol("param_set_subspace_state"), private_of(set),
-        set, "x", NA, values)
-      check(identical(result$missing_parents, character()) &&
-        typeof(result$state) == "externalptr", "subspace transaction differs")
+      result <- .Call(
+        symbol("param_set_subset_state"),
+        private_of(set), set, "y", FALSE, TRUE,
+        set$constraint, set$extra_trafo
+      )
+      check(typeof(result) == "externalptr", "subset capsule transaction differs")
     },
     direct_param_set_subspace_states = function() {
       set <- ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
-      values <- set$values
       result <- .Call(symbol("param_set_subspace_states"), private_of(set),
-        set, c("x", "y"), values)
+        set, c("x", "y"), set$extra_trafo)
       check(identical(names(result), c("x", "y")) &&
-        all(vapply(result, function(plan) {
-          identical(plan$missing_parents, character()) &&
-            typeof(plan$state) == "externalptr"
-        }, logical(1L))), "bulk subspace transactions differ")
+        all(vapply(result, function(core) {
+          typeof(core) == "externalptr"
+        }, logical(1L))), "bulk subspace capsule transactions differ")
     },
     direct_param_set_adopt_subset_state = function() {
       set <- ps(x = p_int(), y = p_lgl())
-      plan <- .Call(symbol("param_set_subset_state"), private_of(set), set, "y", FALSE)
+      plan <- .Call(
+        symbol("param_set_subset_state"),
+        private_of(set), set, "y", FALSE, TRUE,
+        set$constraint, set$extra_trafo
+      )
       target <- subset_private()
-      check(isTRUE(.Call(symbol("param_set_adopt_subset_state"), target, plan$state)), "subset adoption failed")
-      check(identical(target$.params$id, "y"), "adopted subset differs")
-    },
-    direct_param_set_bulk_shell_register = function() {
-      generator <- get("ParamSet", namespace, inherits = FALSE)
-      check(isTRUE(.Call(symbol("param_set_bulk_generator_auth"), generator)),
-        "load-time ParamSet shell registration was not successful")
-      result <- .Call(symbol("param_set_bulk_shell_register"),
-        generator$new(), generator)
-      check(identical(result, FALSE),
-        "repeated ParamSet shell registration was not rejected")
-    },
-    direct_param_set_bulk_generator_auth = function() {
-      generator <- get("ParamSet", namespace, inherits = FALSE)
-      check(isTRUE(.Call(symbol("param_set_bulk_generator_auth"), generator)),
-        "canonical ParamSet generator was rejected")
-    },
-    direct_param_set_bulk_shells = function() {
-      set <- ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
-      values <- set$values
-      plans <- .Call(symbol("param_set_subspace_states"), private_of(set),
-        set, c("x", "y"), values)
-      result <- .Call(symbol("param_set_bulk_shells"),
-        get("ParamSet", namespace, inherits = FALSE), plans)
-      check(identical(names(result), c("x", "y")) &&
-        all(vapply(result, inherits, logical(1L), "ParamSet")) &&
-        identical(result[[1L]]$ids(), "x") &&
-        identical(result[[2L]]$ids(), "y"),
-        "bulk ParamSet shells differ")
-    },
-    direct_sampler_1d_unif_bulk_register = function() {
-      generators <- get("sampler_1d_unif_generators", namespace,
-        inherits = FALSE)()
-      check(isTRUE(.Call(symbol("sampler_1d_unif_bulk_auth"), generators)),
-        "load-time Sampler1DUnif shell registration was not successful")
-      prototype <- Sampler1DUnif$new(ps(probe = p_lgl()))
-      result <- .Call(symbol("sampler_1d_unif_bulk_register"),
-        prototype, generators)
-      check(identical(result, FALSE),
-        "repeated Sampler1DUnif shell registration was not rejected")
-    },
-    direct_sampler_1d_unif_bulk_auth = function() {
-      generators <- get("sampler_1d_unif_generators", namespace,
-        inherits = FALSE)()
-      check(isTRUE(.Call(symbol("sampler_1d_unif_bulk_auth"), generators)),
-        "canonical Sampler1DUnif generators were rejected")
-    },
-    direct_sampler_1d_unif_bulk_shells = function() {
-      set <- ps(x = p_int(0L, 2L, init = 1L), y = p_lgl(init = TRUE))
-      values <- set$values
-      plans <- .Call(symbol("param_set_subspace_states"), private_of(set),
-        set, c("x", "y"), values)
-      generators <- get("sampler_1d_unif_generators", namespace,
-        inherits = FALSE)()
-      result <- .Call(symbol("sampler_1d_unif_bulk_shells"),
-        get("ParamSet", namespace, inherits = FALSE), generators, plans, values)
-      check(identical(names(result), c("x", "y")) &&
-        all(vapply(result, inherits, logical(1L), "Sampler1DUnif")) &&
-        identical(result[[1L]]$param$ids(), "x") &&
-        identical(result[[2L]]$param$ids(), "y"),
-        "bulk Sampler1DUnif shells differ")
+      check(isTRUE(.Call(symbol("param_set_adopt_subset_state"), target, plan)),
+        "subset adoption failed")
+      adopted <- .Call(symbol("param_set_core_state"), target)
+      check(identical(adopted$.params$id, "y"), "adopted subset differs")
     },
     direct_test_checked_affixed_size = function() {
       check(identical(.Call(symbol("test_checked_affixed_size"), 0L, 0L), 1L), "affix boundary result differs")
@@ -666,6 +791,18 @@ main <- function() {
       table <- list(x = 1L)
       pointer <- .Call(symbol("test_gc_column_mutator"), table, 0L, 2L)
       check(typeof(pointer) == "externalptr", "GC mutator did not return an external pointer")
+    },
+    direct_test_tune_token_gc_mutation_snapshot = function() {
+      token <- to_tune(0, 1)
+      result <- .Call(
+        symbol("test_tune_token_gc_mutation_snapshot"),
+        token,
+        0L,
+        0.25
+      )
+      observed <- result$content$lower
+      check(inherits(result, "RangeTuneToken") && identical(observed, 0.25),
+        "TuneToken GC-mutation snapshot fixture differs")
     }
   )
 
@@ -692,7 +829,12 @@ main <- function() {
         invisible(.Call(symbol("domain_qunif_builtin"), p_int(0L, 2L), .5))
         invisible(gc())
       }, callback_after = 0L)
-      check(isTRUE(.Call(symbol("domain_check_builtin"), domain, list(value))), "callback-rooted domain check differs")
+      result <- .Call(
+        symbol("domain_check_builtin"), domain, list(value), FALSE
+      )
+      check(is.character(result) && length(result) == 1L &&
+        !is.na(result) && grepl("within the Domain bounds", result, fixed = TRUE),
+        "callback-rooted Domain snapshot differs")
       check(identical(callbacks, 1L), "callback-rooting count differs")
     },
     hazard_finalizer_column_mutation = function() {

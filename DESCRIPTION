@@ -51,7 +51,7 @@ BugReports: https://github.com/mlr-org/paradox/issues
 Imports:
     backports,
     checkmate,
-    data.table,
+    data.table (>= 1.18.4),
     mlr3misc (>= 0.9.4),
     R6
 Suggests:
@@ -70,7 +70,6 @@ Config/testthat/parallel: false
 NeedsCompilation: yes
 SystemRequirements: USE_C17
 Roxygen: list(markdown = TRUE, r6 = TRUE)
-RoxygenNote: 7.3.3
 VignetteBuilder: knitr, rmarkdown
 Collate:
     'Condition.R'
@@ -84,12 +83,14 @@ Collate:
     'ParamLgl.R'
     'ParamSet.R'
     'ParamSetCollection.R'
+    'ParamSetShadow.R'
     'ParamUty.R'
     'Sampler.R'
     'Sampler1D.R'
     'SamplerHierarchical.R'
     'SamplerJointIndep.R'
     'SamplerUnif.R'
+    'all_equal.R'
     'asserts.R'
     'config_space.R'
     'default_values.R'
@@ -103,4 +104,6 @@ Collate:
     'ps_union.R'
     'reexports.R'
     'to_tune.R'
+    'upgrade_paradox_object.R'
     'zzz.R'
+Config/roxygen2/version: 8.0.0

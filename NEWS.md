@@ -1,379 +1,303 @@
 # paradox 2.0.0
 
-## Native core
+This is a major native rewrite focused on speed, memory safety, and a simpler
+maintainable extension boundary. Ordinary documented Paradox use remains
+compatible; code that mutates private R6 state or registers new Domain/
+Condition implementations must migrate.
+The stricter structural-container boundary is deliberately part of this major
+release: supporting exotic ALTREP/S4 shells or parallel fallback admission has
+no known maintained use and would preserve complexity and multi-observation
+hazards that Paradox 2 is intended to remove.
 
-* Fixed two native garbage-collector lifetime gaps when R expands compact
-  data-frame row names into fresh ALTREP vectors during `ParamSet` value
-  storage and `ParamSetCollection` value aggregation. The expanded row names
-  are now rooted across subsequent allocating operations.
-* Native data.table facades now allocate a minimal column-pointer shell through
-  the exported `alloc.col()` interface when used with data.table versions older
-  than 1.18. This fixes shallow subsetting and update joins on supported R 4.3
-  installations without copying columns or changing the fast path for current
-  data.table releases.
-* The retained pre-R-4.6 Domain reconstruction path now returns independently
-  owned names and a valid data.table self-reference with the same observable
-  attribute order as the native facade. Its registered finalizer owns the
-  outer table shell and names before normalization, so aliases are not changed,
-  and the fallback preserves Latin-1 and other marked ID encodings.
-* `Design$transpose()` now builds ordinary row configurations in registered C
-  code. Classed or otherwise dispatch-sensitive columns retain the historical R
-  path, while common numeric, integer, logical, character, and list-column
-  designs avoid the generic transpose/filter pipeline. Callback-capable ALTREP
-  containers, names, and columns are declined before native observation and
-  are handled solely by that R path. Exact base `ParamSet`s
-  without an `extra_trafo` also apply their canonical individual parameter
-  transformations without rebuilding and joining a data.table for every row;
-  callback order, errors, side effects, and scalar, `NULL`, or vector-valued
-  results retain the established behavior. The generated public transformation
-  wrapper is authenticated without forcing delayed replacements and is
-  rechecked between rows, while callback calls and frames remain identical to
-  `ParamSet$trafo()`.
-  Exact package-generated numeric log-scale transformations have a second,
-  callback-free batch path. It authenticates the complete base `ParamSet`
-  surface and the canonical `exp` or bounded integer transformation before
-  allocating output, then transforms all rows in one native pass. Custom
-  transformations, altered closures, subclasses, and any mutable or malformed
-  state retain the established callback path.
-* Construction of the five built-in `Domain` types now takes a conservative
-  registered C fast path. R still captures constructor expressions and
-  dependency language objects, while unsupported or malformed inputs retain
-  the historical validation path and diagnostics. Opaque `default` and `init`
-  promises are retained at their historical forcing points, after earlier
-  argument and dependency-expression failures. ParamSet subclasses retain the
-  R constructor path because overridden `add_dep()` methods can observe the
-  transient Domain-shaped parameter table during initialization. Common ASCII
-  `p_fct()` levels now use one native escape-and-collapse pass after R performs
-  its locale- and dispatch-sensitive sort; unusual encodings and object shapes
-  retain the original R helpers. Its overwhelmingly common exact `NULL`
-  aggregation argument also skips the general checkmate function assertion;
-  non-`NULL` values retain the original check, diagnostics, and forcing order.
-  Common `p_uty()` callbacks still execute once in their historical R frame,
-  but valid logical or diagnostic-string results now bypass the general
-  checkmate assertion stack; unusual result objects and invalid diagnostics
-  retain the original checks and errors.
-  On R 4.5 and newer, exact unqualified built-in representations that fit on
-  one 80-byte line also receive their unchanged printable IDs from a
-  fail-closed native encoder. It accepts only known named formals containing
-  plain `NULL`, scalar logical or integer values, small integral doubles under
-  the ordinary `scipen` setting, infinities, or short printable-ASCII character
-  vectors. The live call is rendered twice around the result allocation and
-  both byte streams must agree. Older R releases, qualification, attributes,
-  objects, long or multiline output, and every unsupported value retain
-  `deparse1()`.
-* On R 4.6 and newer, exact unqualified standalone `p_dbl()`, `p_int()`, and
-  `p_lgl()` calls enter a registered C constructor immediately. The native
-  lane authenticates the package closure, caller binding, delayed formal
-  expressions, namespace state, and forced values before committing an
-  ordinary compatible Domain table. Fractional doubles are admitted only when
-  R's full-precision character form either contains all significant digits or
-  parses back to the identical double; formatting options and the private
-  representation snapshot are rechecked around allocations. Unsupported
-  calls retain their memoized promises and execute the established R path
-  once. Standalone `p_fct()` deliberately retains its mature R constructor:
-  representative factor calls often have multiline printable IDs, and the
-  attempted direct admission did not improve that workload. Its
-  escape-and-collapse grouping operation remains native C.
-* Built-in Domain validation, sanitization, and quantile mapping now use
-  native kernels for canonical inputs. Unknown Domain classes and uncommon R
-  object shapes continue through the established S3 methods. New Domain
-  classes remain extensible through S3; replacing paradox's own methods for a
-  built-in `Param*` class is not an extension boundary and may be bypassed by
-  the native kernel. Scalar validation admits only attribute-free built-in
-  metadata and entirely empty `special_vals` rows. Classed bounds, grouping,
-  nested factor levels, and nonempty or callback-capable special values retain
-  the R path, including its coercion, S3 dispatch, and observable errors.
-* Began the Paradox 2 native rewrite. Built-in `ParamSet` static properties are
-  now computed by registered C17 routines without dispatching through
-  data.table; unknown third-party Domain classes retain an R/S3 fallback.
-* `ParamSet$ids()` filtering now runs in registered native code, preserves
-  parameter order, validates `class`, `tags`, and `any_tags` promises in their
-  historical sequence, and avoids checkmate and data.table on this frequent
-  path.
-* Exact base `ParamSet` and `ParamSetCollection` `$get_values()` calls now use
-  one native operation after forcing `type` and `check_required` in their
-  established order. Values and dependencies retain their separate snapshots.
-  Exact `CondEqual` and `CondAnyOf` tables with plain scalar operands are
-  matched and evaluated as one callback-free native plan after authenticating
-  the live generic and method definitions; numeric coercion, supported string
-  encodings, sequential removals, missing values, and TuneTokens retain their
-  R semantics. Parent values are revalidated at the final fallback boundary
-  and rooted independently before scalar matching, so an allocating finalizer
-  cannot replace an admitted value with malformed or callback-capable state.
-  Custom, subclassed, altered, or callback-capable conditions
-  continue row by row with live S3 dispatch. Required filtering retains its
-  historical priority, and final class/tag promises remain late and
-  sequential. Callback reentry, in-place dependency mutation, and R
-  copy-on-write detachment of the local values shell are preserved. Subclasses,
-  custom Domains, changed wrappers, unsupported encodings, and malformed state
-  fall back before callbacks. Custom Condition methods receive the same values,
-  dispatch, order, and error/side-effect priority, but callback-language
-  introspection (`substitute()`, `sys.call()`, and `parent.frame()`) sees the
-  native generic call rather than the former R loop frame; subclasses retain
-  that uncommon introspective behavior.
-* Public value mutation now uses registered native routines for plain-list
-  merging, authenticated validated assignment and parameter-ordered storage on
-  exact base `ParamSet`s, and child-distribution planning for exact
-  `ParamSetCollection`s. Insert/replace `NULL` rules, ordering, explicit empty
-  shapes, sanitization, atomic validation failure, and public child-subclass
-  dispatch remain compatible. Replaced, reparented, active, delayed, custom,
-  or malformed state conservatively executes the established R path before
-  callbacks.
-* Construction of `ParamSet`s from canonical built-in Domains now assembles
-  the permanent parameter, tag, transformation, requirement, and initial-value
-  state in C. On reviewed data.table runtimes, an exact load-time layout probe
-  also lets C install the composite parameter and tag secondary indices it has
-  already ordered, avoiding two repeated data.table sorts. The first probe
-  seals that capability for the lifetime of the loaded DSO; later direct calls
-  cannot enable a rejected layout. Non-ASCII metadata,
-  unknown layouts, and custom Domain classes retain data.table's established
-  construction path.
-* `ps()` now recognizes a deliberately small literal grammar of exact,
-  unqualified `p_dbl()`, `p_int()`, `p_fct()`, and `p_lgl()` calls and creates
-  their anonymous intermediate Domain rows in one registered C pass. The
-  resulting rows still enter the ordinary `ParamSet$new()`/R6 constructor.
-  Constructor overrides, active or delayed bindings, nonliteral expressions,
-  rich features, invalid values, and unsupported encodings decline before any
-  user argument is evaluated and execute the historical path exactly once.
-* Construction of exact base `ParamSetCollection`s now assembles the parameter,
-  tag, transformation, and name-translation tables in one registered C pass.
-  Parameter order, prefix/postfix naming, duplicate tags, opaque leaves, child
-  references, and live child state retain their established behavior. Custom
-  classes, unsupported encodings, active or delayed private stores, malformed
-  state, and duplicate translated IDs retain the complete historical R path
-  and diagnostics.
-* Common scalar `ParamSet$check()` and column-oriented `ParamSet$check_dt()`
-  calls now validate canonical built-in values in one native pass. Special
-  values, TuneTokens, callbacks, dependencies, constraints, and diagnostic
-  failures deliberately fall back to the compatible R implementation.
-  Exact `ParamSetCollection`s now use the same scalar kernel before the
-  inherited R implementation materializes IDs or groups rows through
-  data.table. Strict checks first authenticate an acyclic graph of exact base
-  children with empty dependency tables and no leaf constraints; non-strict
-  checks intentionally ignore those features as before. Parameter and input
-  columns are independently snapshotted, and the complete live graph,
-  generated R6 surface, and snapshots are rechecked after the allocating
-  kernel. Utility payloads, extensions, special values, invalid values, and
-  any callback-capable or malformed state decline without observation and
-  retain the established R result, diagnostic, and callback order.
-  The first column pass records cell and parameter completeness, so ordinary
-  `presence = "none"` or `"all"` calls no longer rescan a complete table;
-  missing cells are also accepted directly for presence-free checks. The
-  authenticated shortcut admits only default or explicit literal optional
-  arguments. Computed arguments stay on the row path, so their errors and side
-  effects can still change the state observed by later rows.
-* `ParamSet$qunif()` now maps canonical built-in matrix slices in one native
-  column-wise pass. It preserves requested column order and logical, integer,
-  double, and character storage, including zero-row results. Data frames retain
-  their established validation and matrix normalization; selected custom or
-  utility Domains and unsupported storage shapes retain grouped S3 dispatch.
-* On R 4.6 and newer, `generate_design_grid()` can assemble an exact base
-  `ParamSet` grid in one native allocation-and-fill pass. Resolution and
-  parameter order, `seq()` endpoint and interior-point bytes, typed columns,
-  data.table metadata, and the subsequent `Design` behavior are unchanged.
-  Zero-length axes retain the sequential R mapping path because mapping another
-  axis can still warn before the empty cross join. Older R versions,
-  extensions, replaced methods, unsupported bounds, and malformed state also
-  fall back without partial output.
-* `Design$new()` now plans canonical built-in dependency masks in registered C
-  and then applies them through the established ordered `data.table::set()`
-  calls. Fixed values still precede dependencies, duplicate removal still
-  follows them, typed missing values and by-reference updates are unchanged,
-  and empty masks still make an observable `set()` call. The planner admits
-  only exact base `ParamSet`s, reviewed `mlr3misc` topology versions, canonical
-  built-in conditions and dispatch, ordinary unaliased columns, and stable
-  callback-free state. It snapshots every mapping-defining string before later
-  allocations, revalidates state and dispatch at the allocation-free commit
-  boundary, and bounds sparse bit-mask and row-plan memory. Subclasses, custom
-  conditions, altered S3/R6 methods, unusual encodings, aliases into dependency
-  metadata, large plans, and malformed state retain the sequential R path.
-* `ParamSet$get_domain()` and `$domains` now reconstruct canonical built-in
-  Domain views directly from ordinary private state. Collection callbacks keep
-  their historical order and are isolated from native snapshots so legitimate
-  child extensions cannot invalidate cached R objects during allocation.
-  Callback-capable requested IDs are left entirely to the R fallback, and a
-  collection callback is never replayed after a later state-corruption error.
-* Exact base `ParamSetCollection$domains` calls now preflight the complete
-  nested object graph without callbacks, snapshot all permanent rows, and read
-  live values once before live dependencies once. Shared-child DAGs, nested
-  prefix/postfix names, all dependency rows, explicit `NULL` values, output
-  ownership, and post-callback tags and transformations remain compatible.
-  Subclasses, replaced generated R6 wrappers, custom Domains, and malformed
-  graphs fall back before callbacks; cycles and callback-corrupted state raise
-  deterministic errors without replaying side effects.
-* Exact base `ParamSetCollection$values` calls now preflight the complete
-  nested graph without invoking child bindings and assemble the result in one
-  registered C pass. Prefix and postfix names, nested collections, named empty
-  results, current leaf values, explicit `NULL`, sibling DAG reuse, and shallow
-  sharing of opaque leaves retain their established behavior, while every
-  result and names shell is independently owned. Subclasses (including
-  `ParamSetShadow`), replaced or reparented R6 wrappers, delayed/custom
-  bindings, unsupported encodings, custom Domains, and malformed state fall
-  back before callbacks; a cycle on the current path raises a deterministic
-  error. Root storage grows from authenticated child counts, and identically
-  ordered parameter/translation IDs avoid allocating a general match result.
-* Exact base `ParamSetCollection$deps` calls now preflight the complete nested
-  graph and aggregate dependency rows in one registered C pass. Depth-first
-  row order, collection-local rows, nested prefix/postfix translation,
-  duplicates, dangling strings, higher-layer coincidental remapping, shared
-  sibling DAGs, output ownership, and Condition duplication remain compatible.
-  Subclasses, custom Domains, replaced generated methods, promises, malformed
-  state, and non-ASCII or bytes-encoded names retain the established R path
-  before callbacks; cycles raise a deterministic error instead of entering the
-  recursive fallback.
-* Exact base `ParamSet` `$params` calls now construct the complete enriched
-  table—including tags, transformations, dependencies, and explicit `NULL`
-  initial values—in one registered C pass. Returned tables own their shells and
-  metadata while retaining the historical shallow sharing of opaque leaves.
-* Exact base `ParamSetCollection` `$params` calls now preflight the complete
-  nested collection graph and construct static snapshot columns in native C,
-  then read live dependencies and values once in their established order.
-  Prefix/postfix translation, nested and empty collections, duplicate
-  dependency last-match behavior, clone/serialization semantics, output
-  ownership, and temporary data.table updates remain compatible; extensions
-  and malformed graphs retain the R path before callbacks. Generated R6
-  bindings (including the inherited tags binding and superclass proxy) are
-  verified before admission, dangling callback-produced dependency rows retain
-  data.table join behavior, and a callback-invalidated snapshot is never
-  silently retried through R with its side effects repeated.
-* `ParamSet$subset()` now slices canonical state and transfers it through an
-  authenticated, single-use native plan. The same transfer now admits exact,
-  callback-free `ParamSetCollection` graphs by taking authenticated native
-  dependency and value snapshots; collection subsets and `$flatten()` avoid
-  rebuilding their tables through data.table. Ordering, duplicate requests,
-  prefix/postfix and nested IDs, dependencies, values, tags, transformations,
-  detached callbacks, and nested leaf sharing retain their established
-  behavior. Exact graphs with no constraints, extra transformations, or
-  internal-tuning cargo also skip the formerly unconditional R traversal.
-  Generated constraint and transformation bindings are authenticated before
-  private feature discovery; replacements, extensions, and malformed state
-  fall back as a unit. Callback-bearing results retain compact named carrier
-  lists containing only the translation and child callback state, rather than
-  cloned `ParamSet` objects; callback calls, order, names, errors, and the full
-  four-column translation remain unchanged.
-* Exact base `ParamSet$subspaces()` now reuses the authenticated single-use
-  subset-state transfer for each one-dimensional result. A whole-request
-  preflight rejects ALTREP and unsupported IDs before scalarization; order,
-  names, duplicate IDs, independent tables, fixed values, tags,
-  transformations, and `extra_trafo` remain unchanged, while every child
-  deliberately receives the historical empty dependency and constraint
-  state. `SamplerUnif$new()` can pass those fresh state capabilities directly
-  to `Sampler1DUnif`, avoiding the redundant child `ParamSet` deep clone for
-  ordinary atomic values. Environment/R6 special values retain the deep-clone
-  boundary, and altered methods, bindings, subclasses, malformed state, and
-  old R runtimes retain the complete R construction path. Singleton state
-  tokens carry the load-time-authenticated native secondary-index
-  representation, avoiding a redundant data.table sort during each child
-  adoption. On R 4.6 and newer,
-  one native transaction now constructs the complete batch of canonical
-  non-hashed R6 shells directly from an unexposed load-time prototype. It
-  authenticates the live generator's complete binding inventory, types,
-  locks, parent, attributes, and owned list snapshots both before and after
-  allocation, and never calls a live altered `$new` speculatively. Every plan
-  is also bound to the single `$values` snapshot taken before IDs are observed;
-  allocation-time replacement makes the whole plan fall back while public
-  subspaces and `SamplerUnif` reuse the original snapshot. The common exact
-  `SamplerUnif` case has a narrower combined factory: one all-or-nothing native
-  call constructs each complete `Sampler1DUnif` / `Sampler1D` / `Sampler` graph
-  around its fresh ParamSet without invoking live R6 constructors. It
-  authenticates all participating generators, R6 capsule helpers, and namespace
-  targets before and after allocation; altered surfaces or special environment
-  values decline the entire batch without consuming a state token. This is a
-  package-private specialized graph copier, not a general R6 clone API. The
-  retained benchmark corpus covers plain and dependency-bearing 64-parameter
-  subspaces, construction, allocation, and the validate-once planner; final
-  release numbers are taken only from the frozen candidate so intermediate
-  factory and planner stages are not compared as though they were one build.
-* `generate_design_random()` now reduces canonical built-in `ParamSet` and
-  `ParamSetCollection` generation to one deep clone, one column-major uniform
-  draw, one native bulk quantile mapping, and one `Design` construction. Values,
-  RNG state, validation order, dependencies, and fixed parameters retain
-  `SamplerUnif` behavior; subclasses, custom Domains, and zero-dimensional
-  spaces retain the complete sampler path. Exact generated sampling methods
-  and active bindings are authenticated recursively before admission;
-  replaced, reparented, or delayed wrappers fail closed without being forced.
-* Repeated `SamplerUnif$sample()` calls on exact, nonempty built-in base
-  `ParamSet`s now draw and quantile-map every dimension in one registered C
-  pass. The native table enters the unchanged outer `Design` constructor, so
-  dependencies and the retained `param_set` identity keep their public
-  behavior. Child order, detached bounds, methods, active bindings, fixed
-  values, and dependency state are authenticated before any random number is
-  consumed; collections, fixed values, extensions, altered child graphs, old
-  R runtimes, and callback-capable RNG bindings retain the hierarchical path.
-  All seven built-in uniform RNG kinds preserve the exact column-major values
-  and final `.Random.seed`. The retained optimizer-loop benchmark covers both
-  one-row latency and 128-row throughput plus allocated bytes; its release
-  result is recorded from the frozen candidate.
-* Native routines use forced symbol registration, the strict R headers, long
-  vector lengths, defensive canonical-storage checks, and interruptible loops.
-  Native data.table-shaped results install a valid public object-level
-  self-reference without calling data.table code, so immediate `set()` and
-  `:=` use remains safe and warning-free.
-* Paradox 2 requires R 4.3 or newer so source builds can select C17 portably on
-  CRAN's Unix and Windows toolchains.
-* Version-dependent R access is centralized behind a documented public-C-API
-  facade. R 4.3--4.5 delegate fast paths requiring exact, non-forcing binding
-  classification to the established R implementation; R 4.6 uses the public
-  binding API. A raw-token release gate prevents legacy R internals from
-  re-entering shipped C, including through inactive compatibility branches.
-* The literal `ps()` native constructor is partitioned into bounded planning,
-  decoding, and row-construction helpers without changing its public admission
-  or fallback transaction. This eliminated its package-local bcheck state-budget
-  exhaustion; the historical prefreeze review completed 854 functions and
-  41,293 states. Release rchk analysis uses an authenticated source-pinned
-  800,000-state bcheck under an exact 20-GiB address-space limit, requires an
-  empty maacheck report and exact 61-function fficheck registration report, and
-  accepts bcheck model limitations only through an exact source-bound
-  report/block/rationale policy.
-* Discretionary performance work is frozen for 2.0.0. Correctness, compatibility,
-  memory, documentation, and final benchmark evidence are produced from one
-  frozen Git candidate; byte-affecting authenticated caches are reused rather
-  than rebuilding tools or consumer installations for report-only changes.
+## Native state and execution
 
-## Compatibility and correctness
+* `ParamSet`, `ParamSetCollection`, and the new exported `ParamSetShadow` keep
+  their serializable R6 public shells while using an opaque versioned native
+  capsule. The three node kinds are base sets, collections, and live shadows.
+  Shared collection graphs are supported and cycles are rejected. The public
+  `assert_values` flag remains the sole stateful shell policy outside the
+  capsule and selects checked versus unchecked native value storage.
+* Performance-sensitive constructors, checks, value access/mutation, Domain
+  operations, collection traversal, designs, and samplers enter registered
+  portable C17 operations directly. Current objects have one semantic engine;
+  operations are not retried through a second R/checkmate/data.table/S3 path.
+* Checked assignment of a ParamSet-bearing `ObjectTuneToken` now accepts only an
+  exact nonempty bounded BASE `ParamSet` capsule, not a collection, shadow, or
+  additive subclass, and executes no candidate callback during admission.
+  It retains a rooted candidate-generation receipt through all callback and
+  allocation work and performs one final allocation-free reauthentication
+  immediately before commit. A callback/finalizer mutation therefore wins and
+  the outer assignment errors without storing anything.
+  Deterministic `$search_space()` construction is the sole boundary that runs
+  its transformation and checks one-dimensional target compatibility. Thus a
+  structurally valid but output-incompatible candidate errors when the search
+  space is requested rather than during assignment; corrupt candidates still
+  fail atomically before storage. Before that conversion invokes R, the native
+  boundary replaces each live candidate with a sealed, single-use BASE subset
+  capability, so conversion never calls or rereads the original shell.
+* TuneTokens now have one closed package-defined representation and native
+  exact-shape boundary. Supported tokens have the exact Full, Range, Object,
+  Internal-Full, and Internal-Range forms produced by `to_tune()`, each with
+  exactly `{content, call}` and its built-in class/content shape. Hand-built or
+  copied tokens that are structurally indistinguishable are not authenticated
+  by creator provenance; callers should still use `to_tune()` because the
+  representation is not an API. Subclasses, extra/reordered fields, classes or
+  attributes, S4 structure, malformed calls/content, and recursively attached
+  metadata fail before traversal.
+  Scalar names introduced by ordinary indexing are representation-only and are
+  normalized away. TuneToken internals remain non-API; callers should use
+  `to_tune()`.
+  Object Domain content must be bounded and able to produce a value, so an
+  unbounded `p_uty()` or zero-level `p_fct()` Domain is rejected as a tuning
+  range. Zero-level factors remain valid for the typed empty operations below.
+  Other bounded typed Domains can still retain admitted opaque leaves, and
+  the exact BASE-ParamSet form can construct an opaque target value.
+* Operations force documented arguments once, materialize stable semantic
+  ALTREP vectors once at native admission, snapshot their state/callbacks, and
+  execute callbacks exactly once. A callback's mutation of Paradox state does
+  not replace the schema, dependencies, or callbacks already selected for the
+  remaining rows; ordinary external callback side effects still occur in row
+  order. Base compact sequences such as `1:n` remain supported. A
+  state-changing custom ALTREP observed earlier by R-side language or
+  representation capture has no exact value/printed-representation
+  compatibility guarantee; it is rejected
+  or consumed from the one native snapshot without replay. Typed Dbl/Int/Fct/
+  Lgl Domain special-value leaves are deliberately narrower and reject ALTREP
+  before observation. Interpreted outer list/table/Domain/Condition/token/
+  capsule shells, ParamSet `params` lists, transformation list shells, Domain
+  cargo/interpreted cargo entries, rows, dimnames, class/name vectors, and other
+  list metadata must be ordinary non-ALTREP and non-S4 structure. Documented
+  ordinary data.frame/data.table inputs remain supported, and their semantic
+  atomic columns may be stable ALTREP. Direct checked and unchecked `$values <-`
+  reject an outer ALTREP before observing it. The Paradox-1 clear-values
+  spellings—`NULL`, an ordinary attribute-free zero-length atomic/expression
+  vector, or an accepted empty list container—are canonicalized to a named
+  native `list()`. The sole outer-list exception is
+  `set_values(.values=)`, which snapshots its supplied shell once before
+  interpreting it.
+  The outer `special_vals` list is structural for every Domain kind and follows
+  the ordinary non-ALTREP/non-S4 rule; only its leaves follow the typed or
+  opaque ParamUty policies below.
+* Base `extra_trafo` callbacks retain unnamed list results, including the
+  one-dimensional form used by `to_tune(ParamSet)`. Collection child callbacks
+  require names so their output can be translated into the collection namespace.
+  Transformation input and result shells are ordinary non-ALTREP/non-S4 lists;
+  admitted semantic atomic leaves and documented data-frame columns may still
+  be stable ALTREP.
+* Live collection callbacks and the detached callbacks produced by subset,
+  flatten, or a Shadow over a collection now use one registered native
+  evaluator family with shared semantic helpers. Their thin R closures contain
+  no duplicate callback selection, translation, merge, or
+  constraint-validation engine and do not dispatch through overridden child
+  ParamSet methods. Retained/untransformed inputs remain in input order,
+  followed by changed child outputs in callback-plan order; omitted child
+  outputs are removed.
+* `ParamSet$check_dependencies()` now enters the same native graph/point/
+  dependency kernel as `$check()`. It accepts an ordinary uniquely named base
+  list, skips TuneToken dependency edges, diagnoses unknown IDs even when no
+  dependency rows exist, and returns the first diagnostic instead of building
+  and newline-collapsing every error through data.table and `pmap()`.
+* `condition_test()` now enters the closed built-in Condition comparator
+  directly. It supports `NULL` and plain logical, integer, double, or character
+  vectors, preserves names, and materializes stable ALTREP inputs once.
+  Classed, dimensional, or otherwise attributed operands now fail explicitly
+  instead of selecting `Ops`/`%in%` S3 behavior. Built-in Condition RHS values
+  use the same four unclassed types without missing values; they are rooted and
+  materialized once when a dependency or direct comparison admits them.
+* `ParamSet$test_constraint()` and `$test_constraint_dt()` now share the native
+  check graph, point admission, and constraint kernel. With value assertion
+  enabled, the table method validates every row before invoking any constraint
+  callback, then calls the operation's snapshotted constraints once per row;
+  reentrant mutation affects only later public operations. ParamUty custom
+  checks may still run during the preceding Domain-value validation phase.
+* Tag access/replacement, dependency snapshot/access/replacement/append, and
+  BASE constraint/extra-transformation callback replacement are native capsule
+  operations. Dependency RHS feasibility uses the shared check kernel;
+  callback reentry is generation-checked, and Shadow dependency append routes
+  to the origin only when both endpoints remain visible.
+* `ParamSetCollection$add()` now validates the complete current and proposed
+  child graphs—including Shadow origin edges—in one native transaction. It
+  rejects existing/proposed cycles, corruption, collisions, and reentrant
+  graph changes before atomically installing the replacement generation.
+* Exactly two narrow cold R semantic-orchestration families remain, neither as a
+  fallback. Internal-tuning aggregation, disabling, internal search-space
+  conversion, and post-flatten cargo rebinding form the first because
+  their documented payload is lexical R callbacks. They capture required
+  cargo/translation/Domain/owner-value state before callbacks and commit only
+  through native mutation; they are not fallback engines.
+  Exact-TuneToken `$search_space()` conversion is the second: it consumes one
+  rooted native token/target-Domain snapshot whose live BASE candidates have
+  already become sealed one-use capabilities, switches only over the package's
+  built-in token kinds, and owns callback-dependent one-dimensional output
+  compatibility without another native/R conversion path.
+* A BASE-origin Shadow constraint uses an exact two-field callback/hidden-value
+  plan and a thin native evaluator. Hidden and visible values are merged
+  manually without `c.*` dispatch, opaque leaves retain identity, the callback
+  runs once, and its result must be one non-missing logical value.
+* Internal tables are canonical base data.frames. data.table >= 1.18.4 is used
+  only for independently owned outward-facing facades; returned tables remain
+  safe to mutate with normal data.table operations without changing the
+  ParamSet. Documented ordinary data.frame/data.table operation inputs remain
+  accepted, but table shells and structural dim/dimnames/list metadata must be
+  ordinary non-ALTREP/non-S4; admitted semantic atomic columns may be stable
+  ALTREP.
+* Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
+  serializable mapping closures directly instead of compiling a fresh
+  `crate()` closure for every Domain instance.
+* Constructor final-state checking, ParamSet construction, and ObjectTuneToken
+  Domain admission now share one canonical native built-in Domain-row owner.
+  Malformed kind/storage, cargo, grouping, bounds, levels, default, tags,
+  requirements, initialization, and special-value/transformation combinations
+  therefore reject consistently without duplicate token-specific rules.
+  Structural Domain, Condition, TuneToken, and ParamSet metadata now rejects
+  ALTREP and S4 explicitly. A typed S4 special leaf is an opaque identity token:
+  it, and a typed S4 default/init, matches only the pointer-identical admitted
+  special value. ParamUty values/defaults/initial values/special leaves remain
+  opaque and may be S4; Paradox-1 special membership is preserved exactly with
+  base `identical()` and performs no S3/S4 dispatch. Malformed exact-token or Domain
+  structure raises a hard boundary error, while an ordinary infeasible value
+  retains the normal character check diagnostic.
+* The wrapper used for a user-supplied `to_tune(ParamSet)` transformation now
+  performs its single-list-result check and output naming directly, avoiding
+  checkmate/mlr3misc dispatch on every callback execution.
+* Live Shadow state validation uses a temporary native ID index instead of
+  repeatedly scanning all origin IDs. It keeps the encoding-correct slow case
+  and complete corrupt-state validation while making ordinary reads and writes
+  substantially faster.
+* Collection validation compares equal-encoding UTF-8/Latin-1 strings and
+  native ASCII IDs without repeated transcoding. Mixed encodings and non-ASCII
+  native strings keep the translating path, and every read still performs the
+  complete corrupt-state validation.
+* A final measured hot-path pass skips empty constructor value transactions,
+  reuses already resolved BASE rows while translating admitted collection
+  values, and removes a redundant R-side Shadow dependency refresh. Paired
+  forward/reverse development measurements improved small construction by
+  about 4--7%, bulk construction by 8--12%, rich collection reads by 5%, and
+  nested reads by about 18%; plain reads remained within timer noise.
+* Static ParamSet properties return directly from the closed native kind
+  switch; the former allocation of a compatibility mask and grouped S3 replay
+  path have been removed.
+* `SamplerUnif` and `generate_design_random()` now share one capsule-driven
+  uniform engine for base sets, collections, and live shadows. The inherited
+  `$samplers` list remains descriptive; replacing/reordering it is an error,
+  and custom executable child samplers belong in `SamplerHierarchical`.
+* The package now requires R >= 4.3 and a C17 compiler. Linux, Windows x86-64,
+  and Apple-silicon macOS are supported without architecture-specific code.
 
-* Preserve the established R6 classes, public bindings, serializable ordinary-R
-  state, data.table-shaped views, clone/reference behavior, and the private
-  layouts used by important mlr3 ecosystem consumers.
-* Invalid `NULL` numeric Domain bounds now decline native admission before any
-  attribute or length query, preserving the established checkmate diagnostic
-  instead of exposing an internal R C-API error.
-* Package unload now releases every process-global native root used by the
-  built-in Domain, literal `ps()`, bulk ParamSet-shell, and combined sampler
-  factories. Both `R_init_paradox` and `R_unload_paradox` are exported on
-  Windows, and isolated unload/collection/reload cycles verify construction
-  across fresh DSO lifetimes.
-* Empty settings now honor `presence = "all"` and `presence = "required"`.
-* Double Domains with one-sided or fixed infinite bounds now apply tolerance
-  coherently. Zero tolerance and fixed `-Inf`/`Inf` points no longer create
-  `NaN` comparison bounds; Domain, scalar ParamSet, and tabular checks agree and
-  accept the represented infinite endpoint.
-* `domain_qunif()` now rejects input lengths that cannot be distributed over
-  the supplied Domain rows.
-* Child transformations in a `ParamSetCollection` run exactly once and receive
-  the supported callback signature. Child constraints receive only their
-  unprefixed child values, and strict collection checks no longer skip those
-  live child constraints. The inherited `$has_constraint` flag now reports
-  those live child constraints as well.
-* Value assignment through a `ParamSetCollection` now dispatches through the
-  public value binding of child subclasses. This fixes silent no-op assignments
-  to miesmuschel `ParamSetShadow` children while retaining the private fast path
-  for exact base `ParamSet` and `ParamSetCollection` objects.
-* ParamSet-based TuneToken plausibility checks are deterministic and restore the
-  caller's exact random-number state, including an initially absent
-  `.Random.seed`.
-* Grouped double-parameter sanitization now clamps every value against its own
-  bounds without recycling warnings.
-* `ParamSet$ids(tags = character())` now returns `character(0)` rather than
-  `NULL`; overlapping `any_tags` matches no longer duplicate IDs or reorder
-  them.
-* `ParamSet$subset()` now supports arbitrarily repeated requested IDs even when
-  those parameters have multiple tags; the former data.table join could abort
-  with an unrelated Cartesian-product limit.
-* Empty dependency tables are now owned by each `ParamSet` and
-  `ParamSetCollection` instance. Optional data.table indexes can no longer
-  leak through the shared R6 class default and make equality or tests depend
-  on the order in which unrelated parameter sets were used.
+## Public model and migration
+
+* Ordinary non-ALTREP named configuration lists may retain an outer S3 class
+  when assigned through `$values`; Paradox ignores and removes that container
+  class instead of using it for dispatch. Checked and unchecked direct
+  assignment reject an outer ALTREP before observation and canonicalize an
+  accepted empty shell to native `list()`. This keeps ordinary classed controls
+  interoperable without reopening the removed S3 extension engine. Explicit
+  `$search_space(values=)` has the same ordinary-or-representation-only-S3
+  named-list boundary and selects tokens natively without `[` dispatch;
+  ALTREP, S4/list-like, or otherwise attributed containers reject. Only
+  `set_values(.values=)` has the documented one-snapshot outer-list ALTREP
+  boundary.
+* Names attached to scalar Domain bounds, tolerances, tags, and constructor
+  flags by ordinary R indexing are treated as representation metadata and
+  removed from the canonical Domain row.
+* `all.equal()` now compares a detached ParamSet-family semantic graph: class,
+  validation mode, params, values, tags, dependencies, BASE callbacks,
+  COLLECTION children, complete SHADOW origins, and canonical shared-node
+  topology. Independently built equivalent DAGs compare equal, while a shared
+  node and two duplicated nodes differ. In particular, comparing two
+  `ParamSetCollection`s no longer evaluates an inherited BASE active binding
+  and errors on the COLLECTION capsule.
+  Equality of a larger third-party R6 object graph remains that package's
+  responsibility; downstream fidelity tests should project documented public
+  state instead of recursively comparing Paradox private environments.
+* `ParamSetShadow$new(set, shadowed)` is now provided by Paradox. It exposes a
+  fixed visible schema with live origin values, dependencies, constraints, and
+  transformations. Visible assignments write through while preserving hidden
+  values, and dependencies crossing the shadow boundary are rejected. A direct
+  Shadow origin is rejected; combine hidden IDs over its BASE/COLLECTION origin.
+  Construction enters C directly and keeps no duplicate visible/hidden schema
+  in R6 private fields.
+* Third-party subclasses of the ParamSet family may call `super$initialize()`
+  and add nonconflicting behavior. Overriding ParamSet core methods/active
+  bindings, replacing generated wrappers, or reading/writing private capsule
+  state is no longer supported. The documented Sampler subclass API remains.
+  miesmuschel can use the official shadow class; bbotk uses the public
+  collection `$sets` accessor and retains additive `Codomain` inheritance.
+  This additive support does not extend to ParamSet content inside an
+  `ObjectTuneToken`, which is BASE-only. A shell alias retaining the exact
+  genuine BASE private/core linkage may be indistinguishable and pass safely;
+  native token operations use the core and never invoke alias methods.
+* Domain execution is closed over `ParamDbl`, `ParamInt`, `ParamFct`,
+  `ParamLgl`, and `ParamUty`. `p_uty(custom_check=)` remains the supported
+  general validation escape hatch. Registering third-party `domain_*` S3
+  methods is no longer an extension contract.
+* Numeric Domain bounds and logscale normalization now enter the row
+  constructor once. Empty Domain operations and zero-dimensional grids also
+  enter their native engines instead of taking R-side special cases.
+* Dependency Conditions are closed over `CondEqual` and `CondAnyOf`. Their
+  exported constructors, `$new()` adapters, list/class shape, mutable `rhs`,
+  formatting, and serialization remain. Unknown Condition classes are rejected
+  when a dependency is added instead of being dispatched later.
+* Current Paradox 2 objects serialize normally. Objects serialized by Paradox
+  1.x must be passed explicitly to `upgrade_paradox_object()` after loading.
+  The upgrader does not mutate or execute the legacy object, preserves valid
+  shared graphs and callbacks, and rejects cycles, malformed private state,
+  unknown extensions, and core-overriding subclasses. Downstream packages own
+  migration of their legacy third-party subclasses.
+* Common validation messages remain informative and stable where downstream
+  code relies on them, but exact checkmate wording, implementation call frames,
+  side-effecting promise quirks, generated-closure layout, and exotic ALTREP
+  multi-observation behavior are not compatibility promises.
+
+## Correctness fixes
+
+* Converting a Domain's current `to_tune()` value into a search space no longer
+  copies that TuneToken back as a fixed design value. Exact native clones now
+  preserve ordinary fixed values without making a FullTuneToken's two fields
+  a length-two assignment to every generated row.
+* Empty settings honor `presence = "all"` and `"required"`.
+* `domain_qunif()` rejects incompatible input dimensions.
+* Collection child transformations run exactly once and child constraints
+  receive the correct unprefixed values; strict checks consult live child
+  constraints.
+* Collection assignment reaches live child state, including a shadow's origin.
+* ParamSet quantile and grid kernels now consume canonical plain capsule tables
+  on every supported R release, including R 4.3/4.5. Zero-axis grids retain a
+  typed empty result; this includes zero-level factor Domains, whose empty
+  quantile maps and categorical/mixed grids retain `character(0)` columns.
+  Zero-row uniform sampling does the same. A nonempty quantile map or
+  positive-row uniform sample against a zero-level factor errors informatively
+  before consuming RNG state.
+  Out-of-range infinite integer mappings warn once and produce `NA_integer_`
+  inside the native engine.
+* Deep cloning now preserves shared COLLECTION/SHADOW graph identity and
+  rebuilds Shadow constraint adapters from the cloned origin; it no longer
+  independently clones the same node once per incoming edge.
+* Callback-dependent TuneToken search-space plausibility sampling is
+  deterministic and restores caller RNG kind/state. Native exact-token
+  admission itself does not sample or execute candidate callbacks, and Domain
+  candidates use the shared canonical built-in row owner rather than a
+  reclassified internal table row.
+* `ids(tags = character())` returns `character(0)` and overlapping `any_tags`
+  matches are deduplicated in parameter order.
+* Grouped numeric sanitization uses each parameter's own bounds, and
+  one-sided/fixed infinite domains avoid accidental `NaN` results.
+* Repeated subset IDs no longer depend on data.table join-size heuristics.
+* `ParamSet$set_values(.insert=)` now requires exactly `TRUE` or `FALSE`
+  instead of relying on R's length/coercion quirks, and value-list merge
+  validation is performed once in native code without redundant checkmate
+  scans.
+* Checked value assignment is now one graph-wide transaction across base
+  sets, collections, and shadows. Shared ultimate targets are updated once
+  with deterministic last-owner semantics; validation or callback failure
+  leaves every target unchanged; and a nested callback assignment wins while
+  the outer assignment raises before committing anything. Hidden Shadow
+  values remain intact.
+* Empty dependency state is object-local and cannot be contaminated through a
+  shared mutable table.
+* Malformed/corrupt capsules, tables, graphs, callbacks, and direct native
+  inputs produce deterministic errors rather than fallback replay or unsafe
+  memory access.
 
 # paradox 1.0.1-9000
 

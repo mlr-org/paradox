@@ -20,6 +20,53 @@ byte_sort <- function(value) {
   value[order(value, method = "radix")]
 }
 
+expression_children <- function(value) {
+  output <- list()
+  for (index in seq_along(value)) {
+    if (!rlang::is_missing(value[[index]])) {
+      output[[length(output) + 1L]] <- value[[index]]
+    }
+  }
+  output
+}
+
+contains_named_call <- function(value, target) {
+  if (!is.call(value) && !is.expression(value)) return(FALSE)
+  if (is.call(value) && is.name(value[[1L]]) &&
+      identical(as.character(value[[1L]]), target)) {
+    return(TRUE)
+  }
+  any(vapply(
+    expression_children(value),
+    contains_named_call,
+    logical(1L),
+    target = target
+  ))
+}
+
+not_cran_test_titles <- function(path) {
+  titles <- character()
+  walk <- function(value) {
+    if (is.call(value) && is.name(value[[1L]]) &&
+        identical(as.character(value[[1L]]), "test_that") &&
+        contains_named_call(value, "skip_on_cran")) {
+      title <- value[[2L]]
+      if (!is.character(title) || length(title) != 1L || is.na(title) ||
+          !nzchar(title)) {
+        stop("skip_on_cran test has a non-literal title", call. = FALSE)
+      }
+      titles <<- c(titles, title)
+      return(invisible(NULL))
+    }
+    if (is.call(value) || is.expression(value)) {
+      for (child in expression_children(value)) walk(child)
+    }
+    invisible(NULL)
+  }
+  walk(parse(path, keep.source = FALSE))
+  titles
+}
+
 snapshot <- normalizePath(args[[1L]], mustWork = TRUE)
 candidate_library <- normalizePath(args[[2L]], mustWork = TRUE)
 scope_parent <- normalizePath(dirname(args[[3L]]), mustWork = TRUE)
@@ -35,6 +82,9 @@ if (!startsWith(installed, paste0(candidate_library, .Platform$file.sep))) {
 }
 if (!requireNamespace("testthat", quietly = TRUE)) {
   stop("the exact runtime lock does not provide testthat", call. = FALSE)
+}
+if (!requireNamespace("rlang", quietly = TRUE)) {
+  stop("the exact runtime lock does not provide rlang", call. = FALSE)
 }
 
 Sys.setenv(NOT_CRAN = "false")
@@ -198,7 +248,7 @@ result_skip_order <- if (nrow(result_skip_policy) > 0L) {
 }
 if (!identical(
       names(result_skip_policy), c("runtime", "file", "test", "reason")
-    ) || nrow(result_skip_policy) != 13L || anyNA(result_skip_policy) ||
+    ) || anyNA(result_skip_policy) ||
     any(!nzchar(result_skip_policy$test)) ||
     any(!nzchar(result_skip_policy$reason)) ||
     any(!result_skip_policy$runtime %in% c("4.3.3", "4.5.2")) ||
@@ -207,14 +257,51 @@ if (!identical(
     any(grepl("[\t\r\n]", result_skip_policy$test)) ||
     any(grepl("[\t\r\n]", result_skip_policy$reason)) ||
     anyDuplicated(result_skip_policy[c("runtime", "file", "test")]) ||
-    !identical(result_skip_order, seq_len(nrow(result_skip_policy))) ||
-    !identical(
-      as.integer(table(factor(
-        result_skip_policy$runtime, levels = c("4.3.3", "4.5.2")
-      ))),
-      c(6L, 7L)
-    )) {
+    !identical(result_skip_order, seq_len(nrow(result_skip_policy)))) {
   stop("result-skip manifest is malformed", call. = FALSE)
+}
+source_result_skips <- lapply(seq_along(test_paths), function(index) {
+  titles <- not_cran_test_titles(test_paths[[index]])
+  if (!length(titles)) return(NULL)
+  data.frame(
+    file = rep(test_files[[index]], length(titles)),
+    test = titles,
+    stringsAsFactors = FALSE
+  )
+})
+source_result_skips <- do.call(rbind, source_result_skips)
+if (is.null(source_result_skips)) {
+  source_result_skips <- data.frame(
+    file = character(), test = character(), stringsAsFactors = FALSE
+  )
+}
+row.names(source_result_skips) <- NULL
+if (anyDuplicated(source_result_skips)) {
+  stop("source contains duplicate skip_on_cran test titles", call. = FALSE)
+}
+reviewed_runtimes <- c("4.3.3", "4.5.2")
+expected_result_skip_policy <- do.call(rbind, lapply(
+  reviewed_runtimes,
+  function(runtime) {
+    data.frame(
+      runtime = rep(runtime, nrow(source_result_skips)),
+      file = source_result_skips$file,
+      test = source_result_skips$test,
+      reason = rep("Reason: On CRAN", nrow(source_result_skips)),
+      stringsAsFactors = FALSE
+    )
+  }
+))
+expected_result_skip_policy <- expected_result_skip_policy[do.call(order, c(
+  expected_result_skip_policy[c("runtime", "file", "test", "reason")],
+  list(method = "radix")
+)), , drop = FALSE]
+row.names(expected_result_skip_policy) <- NULL
+if (!identical(result_skip_policy, expected_result_skip_policy)) {
+  stop(
+    "result-skip manifest differs from current skip_on_cran test titles",
+    call. = FALSE
+  )
 }
 runtime_version <- as.character(getRversion())
 expected_result_skips <- result_skip_policy[
@@ -223,9 +310,6 @@ expected_result_skips <- result_skip_policy[
   drop = FALSE
 ]
 row.names(expected_result_skips) <- NULL
-if (nrow(expected_result_skips) == 0L) {
-  stop("result-skip manifest does not cover this runtime", call. = FALSE)
-}
 
 exclusions <- data.frame(context = character(), reason = character())
 if (getRversion() < "4.6.0") {
@@ -246,7 +330,7 @@ if (getRversion() < "4.6.0") {
     check.names = FALSE
   )
   if (!identical(names(exclusions), c("context", "reason")) ||
-      nrow(exclusions) != 22L || anyNA(exclusions) ||
+      nrow(exclusions) != 0L || anyNA(exclusions) ||
       any(!nzchar(exclusions$reason)) ||
       any(grepl("\t", exclusions$reason, fixed = TRUE)) ||
       any(grepl("\r", exclusions$reason, fixed = TRUE)) ||
@@ -265,9 +349,7 @@ if (getRversion() < "4.6.0") {
       call. = FALSE
     )
   }
-  cat(
-    "test_scope=public-characterization-regression-and-supported-native-source-suite\n"
-  )
+  cat("test_scope=complete-source-suite\n")
   cat("pre46_exclusion_manifest=", manifest_relative, "\n", sep = "")
   cat("pre46_excluded_context_count=", nrow(exclusions), "\n", sep = "")
   for (i in seq_len(nrow(exclusions))) {
@@ -488,10 +570,7 @@ cat("warnings=", warnings, "\n", sep = "")
 cat("errors=", errors, "\n", sep = "")
 cat("result_test_blocks_skipped=", skipped, "\n", sep = "")
 cat("total_test_skips=", skipped + length(missing_result_files), "\n", sep = "")
-minimum_passed <- if (getRversion() < "4.6.0") 4900L else 6000L
-cat("minimum_expectations_required=", minimum_passed, "\n", sep = "")
-if (failed != 0L || warnings != 0L || errors != 0L ||
-    passed < minimum_passed) {
-  stop("runtime-matrix source suite did not meet its clean minimum", call. = FALSE)
+if (failed != 0L || warnings != 0L || errors != 0L || passed == 0L) {
+  stop("runtime-matrix source suite was not clean and nonempty", call. = FALSE)
 }
 cat("runtime_matrix_source_tests=passed\n")

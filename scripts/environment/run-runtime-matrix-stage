@@ -17,6 +17,8 @@ ROOT=$1
 RUN_ROOT=$2
 VERSION=$3
 case "$VERSION" in 4.3.3|4.5.2) ;; *) fail "unsupported runtime version" ;; esac
+DATATABLE_VERSION=1.18.4
+DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
 [[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" &&
   "$(cd "$ROOT" && pwd -P)" == "$ROOT" ]] || fail "ROOT is not canonical"
 [[ "$RUN_ROOT" == "$ROOT/.local/checks/"*/runtime-matrix &&
@@ -66,14 +68,17 @@ audit_symbols() {
     fail "expected R API symbol is absent on R $version: $symbol"
   printf 'required_symbol=%s\n' "$symbol" >> "$log"
   if [[ "$version" == 4.3.3 ]]; then
-    required=()
+    required=(ATTRIB FORMALS Rf_findVarInFrame)
     forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
-      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
-    branch=pre-4.5-evaluated-public-fallback
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
+      R_mapAttrib)
+    branch=pre-4.5-documented-public-backports
   else
-    required=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx)
-    forbidden=(R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib)
-    branch=4.5-direct-closure-and-evaluated-binding
+    required=(ATTRIB R_ClosureFormals Rf_findVarInFrame)
+    forbidden=(R_ClosureExpr R_ClosureEnv R_ParentEnv R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
+      R_mapAttrib)
+    branch=4.5-direct-public-accessors
   fi
   for symbol in "${required[@]}"; do
     rg -q "[[:space:]]${symbol}$" "$symbols" ||
@@ -127,6 +132,26 @@ mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
   "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
   "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
+
+# R 4.3 has no authenticated conda-forge build of the minimum supported
+# data.table release. Install the cached, SHA-pinned CRAN source into this
+# isolated stage before paradox; no other dependency is rebuilt here.
+if [[ "$VERSION" == 4.3.3 ]]; then
+  data_table_archive="$STAGE_INPUTS/data.table_${DATATABLE_VERSION}.tar.gz"
+  [[ -f "$data_table_archive" && ! -L "$data_table_archive" ]] ||
+    fail "prepared data.table source overlay is absent"
+  [[ "$(sha256_file "$data_table_archive")" == "$DATATABLE_SHA256" ]] ||
+    fail "prepared data.table source overlay failed authentication"
+  R CMD INSTALL --preclean --clean --no-multiarch \
+    --library="$STAGE_LIBRARY" "$data_table_archive" \
+    > "$STAGE_LOGS/data.table-install.log" 2>&1
+fi
+observed_data_table=$(Rscript --vanilla -e \
+  'cat(as.character(packageVersion("data.table")))')
+[[ "$observed_data_table" == "$DATATABLE_VERSION" ]] ||
+  fail "runtime resolved data.table $observed_data_table, expected $DATATABLE_VERSION"
+printf 'version\tsha256\n%s\t%s\n' "$DATATABLE_VERSION" "$DATATABLE_SHA256" \
+  > "$STAGE_LOGS/data.table-version.tsv"
 
 cd "$STAGE_BUILD"
 R CMD build --no-build-vignettes --no-manual "$STAGE_SOURCE" \

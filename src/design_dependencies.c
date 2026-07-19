@@ -6,1140 +6,432 @@
 #include "paradox.h"
 
 #include "builtin_condition.h"
+#include "core_state.h"
+#include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+
+/* Build the complete dependency mask for one public Design$data snapshot.
+ * Freeze the package-owned capsule graph and every Design column once,
+ * validate the closed Condition objects, walk one stable topological order,
+ * and return the outward mutation plan. Invalid current state errors; there is
+ * no alternate execution engine. */
+
+#define DESIGN_DEPENDENCY_MASK_LIMIT_BYTES \
+  ((size_t) 128U * (size_t) 1024U * (size_t) 1024U)
 
 typedef struct {
   R_xlen_t child;
   R_xlen_t parent;
   paradox_builtin_condition_kind_t kind;
-  SEXP condition;
   SEXP rhs;
-} design_dependency_edge_t;
+} dependency_edge_t;
 
 typedef struct {
-  SEXP data;
-  SEXP param_set;
-  SEXP enclosure;
-  SEXP private_environment;
   SEXP params;
   SEXP dependencies;
-  SEXP param_ids;
-  SEXP storage_types;
-  SEXP dependency_ids;
-  SEXP dependency_on;
-  SEXP conditions;
-  SEXP data_names;
   SEXP columns;
-  SEXP condition_roots;
-  SEXP rhs_roots;
-  SEXP stable_param_ids;
-  SEXP stable_storage_types;
-  SEXP stable_dependency_ids;
-  SEXP stable_dependency_on;
-  SEXP stable_data_names;
+  SEXP data_names;
+  paradox_domain_params_t params_data;
+  paradox_domain_dependencies_t dependencies_data;
   R_xlen_t parameter_count;
   R_xlen_t dependency_count;
   R_xlen_t row_count;
-  R_xlen_t *param_columns;
-  R_xlen_t *mask_columns;
-  R_xlen_t mask_column_count;
-  size_t mask_byte_count;
+  R_xlen_t *column_by_parameter;
+  dependency_edge_t *edges;
   R_xlen_t *topological_order;
-  R_xlen_t *edge_order;
-  design_dependency_edge_t *edges;
-} design_dependency_state_t;
+  R_xlen_t *incoming_count;
+  R_xlen_t *incoming_start;
+  R_xlen_t *incoming_edges;
+} dependency_snapshot_t;
 
-#define DESIGN_DEPENDENCY_MASK_LIMIT_BYTES \
-  ((size_t) 64U * (size_t) 1024U * (size_t) 1024U)
-#define DESIGN_DEPENDENCY_PLAN_INDEX_LIMIT \
-  ((R_xlen_t) 8 * (R_xlen_t) 1024 * (R_xlen_t) 1024)
-#define DESIGN_DEPENDENCY_PLAN_EDGE_LIMIT ((R_xlen_t) 65536)
-
-enum design_dependency_topology_state {
-  DESIGN_DEPENDENCY_TOPOLOGY_UNCONFIGURED = 0,
-  DESIGN_DEPENDENCY_TOPOLOGY_DISABLED,
-  DESIGN_DEPENDENCY_TOPOLOGY_ENABLED
-};
-
-static enum design_dependency_topology_state topology_state =
-  DESIGN_DEPENDENCY_TOPOLOGY_UNCONFIGURED;
-
-enum design_dependency_root_slot {
-  DESIGN_DEPENDENCY_ROOT_DATA = 0,
-  DESIGN_DEPENDENCY_ROOT_PARAM_SET,
-  DESIGN_DEPENDENCY_ROOT_ENCLOSURE,
-  DESIGN_DEPENDENCY_ROOT_PRIVATE,
-  DESIGN_DEPENDENCY_ROOT_PARAMS,
-  DESIGN_DEPENDENCY_ROOT_DEPENDENCIES,
-  DESIGN_DEPENDENCY_ROOT_PARAM_IDS,
-  DESIGN_DEPENDENCY_ROOT_STORAGE_TYPES,
-  DESIGN_DEPENDENCY_ROOT_DEPENDENCY_IDS,
-  DESIGN_DEPENDENCY_ROOT_DEPENDENCY_ON,
-  DESIGN_DEPENDENCY_ROOT_CONDITIONS,
-  DESIGN_DEPENDENCY_ROOT_DATA_NAMES,
-  DESIGN_DEPENDENCY_ROOT_COLUMNS,
-  DESIGN_DEPENDENCY_ROOT_CONDITION_OBJECTS,
-  DESIGN_DEPENDENCY_ROOT_RHS,
-  DESIGN_DEPENDENCY_ROOT_STABLE_PARAM_IDS,
-  DESIGN_DEPENDENCY_ROOT_STABLE_STORAGE_TYPES,
-  DESIGN_DEPENDENCY_ROOT_STABLE_DEPENDENCY_IDS,
-  DESIGN_DEPENDENCY_ROOT_STABLE_DEPENDENCY_ON,
-  DESIGN_DEPENDENCY_ROOT_STABLE_DATA_NAMES,
-  DESIGN_DEPENDENCY_ROOT_OUTPUT,
-  DESIGN_DEPENDENCY_ROOT_OUTPUT_ROWS,
-  DESIGN_DEPENDENCY_ROOT_OUTPUT_COLUMNS,
-  DESIGN_DEPENDENCY_ROOT_OUTPUT_VALUES,
-  DESIGN_DEPENDENCY_ROOT_COUNT
-};
-
-static int supported_id(SEXP value) {
-  return value != NA_STRING && Rf_getCharCE(value) != CE_BYTES;
-}
-
-static int strings_equal_without_translation(SEXP left, SEXP right) {
+static int strings_equal(SEXP left, SEXP right) {
   return left == right || (left != NA_STRING && right != NA_STRING &&
-    Rf_getCharCE(left) == Rf_getCharCE(right) &&
-    strcmp(CHAR(left), CHAR(right)) == 0);
+    paradox_domain_strings_equal(left, right));
 }
 
-static R_xlen_t find_id(SEXP ids, SEXP target,
+static R_xlen_t find_string(SEXP values, SEXP sought,
     R_xlen_t *work_since_interrupt) {
-  const R_xlen_t size = XLENGTH(ids);
-  for (R_xlen_t index = 0; index < size; ++index) {
+  const R_xlen_t count = XLENGTH(values);
+  for (R_xlen_t index = 0; index < count; ++index) {
     paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal_without_translation(STRING_ELT(ids, index), target)) {
+    if (strings_equal(STRING_ELT(values, index), sought)) {
       return index;
     }
   }
   return R_XLEN_T_MAX;
 }
 
-static int exact_storage(SEXP cls, SEXP storage, SEXPTYPE *type) {
-  if (paradox_domain_string_is(cls, "ParamDbl") &&
-      paradox_domain_string_is(storage, "numeric")) {
-    *type = REALSXP;
-    return TRUE;
+static SEXP snapshot_string_vector(SEXP source,
+    const char *description, R_xlen_t *work_since_interrupt) {
+  if (TYPEOF(source) != STRSXP || ALTREP(source) || Rf_isS4(source) ||
+      Rf_isObject(source) || !paradox_api_has_no_attributes(source)) {
+    Rf_error("%s must be a character vector", description);
   }
-  if (paradox_domain_string_is(cls, "ParamInt") &&
-      paradox_domain_string_is(storage, "integer")) {
-    *type = INTSXP;
-    return TRUE;
-  }
-  if (paradox_domain_string_is(cls, "ParamFct") &&
-      paradox_domain_string_is(storage, "character")) {
-    *type = STRSXP;
-    return TRUE;
-  }
-  if (paradox_domain_string_is(cls, "ParamLgl") &&
-      paradox_domain_string_is(storage, "logical")) {
-    *type = LGLSXP;
-    return TRUE;
-  }
-  return FALSE;
-}
-
-static int exact_data_table_shell(SEXP data, SEXP *names,
-    R_xlen_t *work_since_interrupt) {
-  static const char *const classes[] = {"data.table", "data.frame"};
-  static const char *const attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  if (TYPEOF(data) != VECSXP || ALTREP(data) ||
-      !paradox_api_has_only_attributes(data, attributes, 6)) {
-    return FALSE;
-  }
-  SEXP candidate_names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
-  SEXP candidate_classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
-  const int exact = TYPEOF(candidate_names) == STRSXP &&
-    !ALTREP(candidate_names) && !Rf_isObject(candidate_names) &&
-    XLENGTH(candidate_names) == XLENGTH(data) &&
-    paradox_api_has_no_attributes(candidate_names) &&
-    paradox_domain_exact_string_vector(
-      candidate_classes,
-      classes,
-      2,
-      work_since_interrupt
-    ) && paradox_api_has_no_attributes(candidate_classes) &&
-    Rf_any_duplicated(candidate_names, FALSE) == 0;
-  if (exact) {
-    for (R_xlen_t column = 0; column < XLENGTH(data); ++column) {
-      paradox_domain_account_work(work_since_interrupt);
-      if (!supported_id(STRING_ELT(candidate_names, column))) {
-        UNPROTECT(2);
-        return FALSE;
-      }
-    }
-    *names = candidate_names;
-  }
-  UNPROTECT(2);
-  return exact;
-}
-
-static int aliases_table_attribute(SEXP value, SEXP table);
-
-static int aliases_table_storage(SEXP value, SEXP table) {
-  if (value == table) {
-    return TRUE;
-  }
-  for (R_xlen_t column = 0; column < XLENGTH(table); ++column) {
-    if (value == VECTOR_ELT(table, column)) {
-      return TRUE;
-    }
-  }
-  return aliases_table_attribute(value, table);
-}
-
-static int aliases_table_attribute(SEXP value, SEXP table) {
-  static const char *const attributes[] = {
-    "names", "class", ".internal.selfref", "sorted", "index"
-  };
-  for (size_t index = 0;
-       index < sizeof(attributes) / sizeof(attributes[0]);
-       ++index) {
-    if (value == Rf_getAttrib(table, Rf_install(attributes[index]))) {
-      return TRUE;
-    }
-  }
-  return FALSE;
-}
-
-static int aliases_condition_storage(SEXP value, SEXP condition) {
-  return value == condition || value == VECTOR_ELT(condition, 0) ||
-    value == VECTOR_ELT(condition, 1) ||
-    value == Rf_getAttrib(condition, R_NamesSymbol) ||
-    value == Rf_getAttrib(condition, R_ClassSymbol);
-}
-
-static SEXP snapshot_strings(SEXP source,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t size = XLENGTH(source);
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, size));
-  for (R_xlen_t index = 0; index < size; ++index) {
+  const R_xlen_t count = XLENGTH(source);
+  SEXP result = PROTECT(Rf_allocVector(STRSXP, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
     paradox_domain_account_work(work_since_interrupt);
-    SET_STRING_ELT(result, index, STRING_ELT(source, index));
+    SEXP value = STRING_ELT(source, index);
+    if (value == NA_STRING || Rf_getCharCE(value) == CE_BYTES) {
+      UNPROTECT(1);
+      Rf_error("%s contains an unsupported name", description);
+    }
+    SET_STRING_ELT(result, index, value);
   }
   UNPROTECT(1);
   return result;
 }
 
-static int planning_strings_match(const design_dependency_state_t *state) {
-  if (TYPEOF(state->param_ids) != STRSXP ||
-      XLENGTH(state->param_ids) != state->parameter_count ||
-      TYPEOF(state->storage_types) != STRSXP ||
-      XLENGTH(state->storage_types) != state->parameter_count ||
-      TYPEOF(state->data_names) != STRSXP ||
-      XLENGTH(state->data_names) != state->parameter_count ||
-      TYPEOF(state->dependency_ids) != STRSXP ||
-      XLENGTH(state->dependency_ids) != state->dependency_count ||
-      TYPEOF(state->dependency_on) != STRSXP ||
-      XLENGTH(state->dependency_on) != state->dependency_count) {
+static int ordinary_design_shell(SEXP data) {
+  static const char *const names_only[] = {"names"};
+  if (TYPEOF(data) != VECSXP || ALTREP(data) || Rf_isS4(data)) {
     return FALSE;
   }
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
-    if (STRING_ELT(state->param_ids, parameter) != STRING_ELT(
-        state->stable_param_ids,
-        parameter
-      ) || STRING_ELT(state->storage_types, parameter) != STRING_ELT(
-        state->stable_storage_types,
-        parameter
-      ) || STRING_ELT(state->data_names, parameter) != STRING_ELT(
-        state->stable_data_names,
-        parameter
-      )) {
-      return FALSE;
-    }
+  int valid_shell = FALSE;
+  if (!Rf_isObject(data)) {
+    valid_shell = paradox_api_has_only_attributes(data, names_only, 1);
+  } else {
+    SEXP classes = PROTECT(Rf_getAttrib(data, R_ClassSymbol));
+    const int ordinary_classes = TYPEOF(classes) == STRSXP &&
+      !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
+      paradox_api_has_no_attributes(classes);
+    const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
+    const int data_frame = count == 1 && paradox_domain_string_is(
+      STRING_ELT(classes, 0),
+      "data.frame"
+    );
+    const int data_table = count == 2 && paradox_domain_string_is(
+        STRING_ELT(classes, 0),
+        "data.table"
+      ) && paradox_domain_string_is(
+        STRING_ELT(classes, 1),
+        "data.frame"
+      );
+    static const char *const frame_attributes[] = {
+      "names", "row.names", "class"
+    };
+    static const char *const table_attributes[] = {
+      "names", "row.names", "class", ".internal.selfref", "sorted", "index"
+    };
+    valid_shell = (data_frame && paradox_api_has_only_attributes(
+      data,
+      frame_attributes,
+      3
+    )) || (data_table && paradox_api_has_only_attributes(
+      data,
+      table_attributes,
+      6
+    ));
+    UNPROTECT(1);
   }
-  for (R_xlen_t edge = 0; edge < state->dependency_count; ++edge) {
-    if (STRING_ELT(state->dependency_ids, edge) != STRING_ELT(
-        state->stable_dependency_ids,
-        edge
-      ) || STRING_ELT(state->dependency_on, edge) != STRING_ELT(
-        state->stable_dependency_on,
-        edge
-      )) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-/* Copy every string that defines column/edge mappings before allocating their
- * workspaces. A GC finalizer may mutate user-visible character vectors during
- * any later R allocation; mappings are built only from these private snapshots
- * and the live vectors must still match them at the final fallback boundary. */
-static int snapshot_planning_strings(design_dependency_state_t *state,
-    SEXP roots, R_xlen_t *work_since_interrupt) {
-  state->stable_param_ids = PROTECT(snapshot_strings(
-    state->param_ids,
-    work_since_interrupt
-  ));
-  state->stable_storage_types = PROTECT(snapshot_strings(
-    state->storage_types,
-    work_since_interrupt
-  ));
-  state->stable_dependency_ids = PROTECT(snapshot_strings(
-    state->dependency_ids,
-    work_since_interrupt
-  ));
-  state->stable_dependency_on = PROTECT(snapshot_strings(
-    state->dependency_on,
-    work_since_interrupt
-  ));
-  state->stable_data_names = PROTECT(snapshot_strings(
-    state->data_names,
-    work_since_interrupt
-  ));
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STABLE_PARAM_IDS,
-    state->stable_param_ids
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STABLE_STORAGE_TYPES,
-    state->stable_storage_types
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STABLE_DEPENDENCY_IDS,
-    state->stable_dependency_ids
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STABLE_DEPENDENCY_ON,
-    state->stable_dependency_on
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STABLE_DATA_NAMES,
-    state->stable_data_names
-  );
-  UNPROTECT(5);
-  return planning_strings_match(state);
-}
-
-static int canonical_import(SEXP namespace_environment,
-    const char *package, const char *name) {
-  SEXP imports = PROTECT(paradox_api_parent_environment(
-    namespace_environment
-  ));
-  SEXP package_namespace = PROTECT(
-    paradox_api_registered_namespace(package)
-  );
-  SEXP symbol = Rf_install(name);
-  if (TYPEOF(imports) != ENVSXP || TYPEOF(package_namespace) != ENVSXP ||
-      !R_existsVarInFrame(imports, symbol) ||
-      R_BindingIsActive(symbol, imports) ||
-      !R_BindingIsLocked(symbol, imports) ||
-      !R_existsVarInFrame(package_namespace, symbol) ||
-      R_BindingIsActive(symbol, package_namespace) ||
-      !R_BindingIsLocked(symbol, package_namespace)) {
-    UNPROTECT(2);
-    return FALSE;
-  }
-  SEXP imported = PROTECT(paradox_api_stable_local_value(imports, symbol));
-  SEXP original = PROTECT(paradox_api_stable_local_value(
-    package_namespace,
-    symbol
-  ));
-  const int exact = imported == original && TYPEOF(imported) == CLOSXP &&
-    paradox_api_closure_environment(imported) == package_namespace;
-  UNPROTECT(4);
-  return exact;
-}
-
-static int exact_missing_formal(SEXP formal, const char *name) {
-  return TYPEOF(formal) == LISTSXP && TAG(formal) == Rf_install(name) &&
-    CAR(formal) == R_MissingArg;
-}
-
-static int exact_unary_symbol_call(SEXP call, const char *function,
-    const char *argument) {
-  return TYPEOF(call) == LANGSXP && CAR(call) == Rf_install(function) &&
-    TYPEOF(CDR(call)) == LISTSXP && TAG(CDR(call)) == R_NilValue &&
-    CAR(CDR(call)) == Rf_install(argument) &&
-    CDR(CDR(call)) == R_NilValue;
-}
-
-static int exact_as_type_body(SEXP body) {
-  if (TYPEOF(body) != LANGSXP || CAR(body) != Rf_install("{") ||
-      TYPEOF(CDR(body)) != LISTSXP || CDR(CDR(body)) != R_NilValue) {
-    return FALSE;
-  }
-  SEXP expression = CAR(CDR(body));
-  if (TYPEOF(expression) != LANGSXP ||
-      CAR(expression) != Rf_install("switch")) {
-    return FALSE;
-  }
-  SEXP argument = CDR(expression);
-  if (TYPEOF(argument) != LISTSXP || TAG(argument) != R_NilValue ||
-      CAR(argument) != Rf_install("type")) {
-    return FALSE;
-  }
-  argument = CDR(argument);
-
-  static const char *const storage_types[] = {
-    "logical", "integer", "numeric", "character", "list"
-  };
-  static const char *const conversions[] = {
-    "as.logical", "as.integer", "as.numeric", "as.character", "as.list"
-  };
-  for (size_t index = 0;
-       index < sizeof(storage_types) / sizeof(storage_types[0]);
-       ++index) {
-    if (TYPEOF(argument) != LISTSXP ||
-        TAG(argument) != Rf_install(storage_types[index]) ||
-        !exact_unary_symbol_call(
-          CAR(argument),
-          conversions[index],
-          "x"
-        )) {
-      return FALSE;
-    }
-    argument = CDR(argument);
-  }
-
-  if (TYPEOF(argument) != LISTSXP || TAG(argument) != R_NilValue ||
-      CDR(argument) != R_NilValue) {
-    return FALSE;
-  }
-  SEXP error_call = CAR(argument);
-  if (TYPEOF(error_call) != LANGSXP ||
-      CAR(error_call) != Rf_install("stopf")) {
-    return FALSE;
-  }
-  SEXP error_argument = CDR(error_call);
-  if (TYPEOF(error_argument) != LISTSXP ||
-      TAG(error_argument) != R_NilValue) {
-    return FALSE;
-  }
-  SEXP format = CAR(error_argument);
-  if (TYPEOF(format) != STRSXP || ALTREP(format) || XLENGTH(format) != 1 ||
-      !paradox_api_has_no_attributes(format) || !paradox_domain_string_is(
-        STRING_ELT(format, 0),
-        "Invalid storage type '%s'"
-      )) {
-    return FALSE;
-  }
-  error_argument = CDR(error_argument);
-  return TYPEOF(error_argument) == LISTSXP &&
-    TAG(error_argument) == R_NilValue &&
-    CAR(error_argument) == Rf_install("type") &&
-    CDR(error_argument) == R_NilValue;
-}
-
-static int canonical_as_type(SEXP namespace_environment) {
-  SEXP symbol = Rf_install("as_type");
-  if (!R_existsVarInFrame(namespace_environment, symbol) ||
-      R_BindingIsActive(symbol, namespace_environment) ||
-      !R_BindingIsLocked(symbol, namespace_environment)) {
-    return FALSE;
-  }
-  SEXP function = PROTECT(paradox_api_stable_local_value(
-    namespace_environment,
-    symbol
-  ));
-  SEXP formals = function == R_UnboundValue || TYPEOF(function) != CLOSXP
-    ? R_NilValue
-    : paradox_api_closure_formals(function);
-  SEXP body = function == R_UnboundValue || TYPEOF(function) != CLOSXP
-    ? R_NilValue
-    : paradox_api_closure_expression(function);
-  const int exact = TYPEOF(function) == CLOSXP &&
-    paradox_api_closure_environment(function) == namespace_environment &&
-    exact_missing_formal(formals, "x") &&
-    exact_missing_formal(CDR(formals), "type") &&
-    CDR(CDR(formals)) == R_NilValue && exact_as_type_body(body);
+  if (!valid_shell) return FALSE;
+  SEXP names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  const int valid_names = names == R_NilValue
+    ? XLENGTH(data) == 0
+    : TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
+      !Rf_isObject(names) && paradox_api_has_no_attributes(names) &&
+      XLENGTH(names) == XLENGTH(data);
   UNPROTECT(1);
-  return exact;
+  return valid_names;
 }
 
-static int canonical_execution_surface(SEXP param_set,
-    SEXP namespace_environment) {
-  return paradox_param_set_design_dependencies_auth(param_set) &&
-    canonical_import(namespace_environment, "mlr3misc", "topo_sort") &&
-    canonical_import(namespace_environment, "mlr3misc", "seq_row") &&
-    canonical_as_type(namespace_environment) &&
-    canonical_import(namespace_environment, "data.table", "set") &&
-    paradox_builtin_condition_dispatch_is_canonical(namespace_environment);
+static int ordinary_optional_classes(SEXP source) {
+  SEXP classes = PROTECT(Rf_getAttrib(source, R_ClassSymbol));
+  const int valid = classes == R_NilValue ||
+    (TYPEOF(classes) == STRSXP && !ALTREP(classes) &&
+      !Rf_isS4(classes) && !Rf_isObject(classes) &&
+      paradox_api_has_no_attributes(classes) && XLENGTH(classes) != 0);
+  UNPROTECT(1);
+  return valid;
 }
 
-static int load_private_state(design_dependency_state_t *state,
-    SEXP roots) {
-  state->enclosure = paradox_domain_local_value(
-    state->param_set,
-    ".__enclos_env__"
-  );
-  if (state->enclosure == R_UnboundValue) {
-    return FALSE;
-  }
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_ENCLOSURE,
-    state->enclosure
-  );
-  state->private_environment = paradox_domain_local_value(
-    state->enclosure,
-    "private"
-  );
-  if (state->private_environment == R_UnboundValue) {
-    return FALSE;
-  }
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_PRIVATE,
-    state->private_environment
-  );
-  state->params = paradox_domain_local_value(
-    state->private_environment,
-    ".params"
-  );
-  state->dependencies = paradox_domain_local_value(
-    state->private_environment,
-    ".deps"
-  );
-  if (state->params == R_UnboundValue ||
-      state->dependencies == R_UnboundValue) {
-    return FALSE;
-  }
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_PARAMS, state->params);
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_DEPENDENCIES,
-    state->dependencies
-  );
-  return TRUE;
-}
-
-static int load_param_state(design_dependency_state_t *state, SEXP roots,
+static SEXP snapshot_factor_levels(SEXP source,
     R_xlen_t *work_since_interrupt) {
-  paradox_domain_params_t params;
+  SEXP levels = PROTECT(Rf_getAttrib(source, R_LevelsSymbol));
+  if (TYPEOF(levels) != STRSXP) {
+    UNPROTECT(1);
+    Rf_error("A factor Design column has invalid levels");
+  }
+  SEXP result = PROTECT(snapshot_string_vector(
+    levels,
+    "Factor levels",
+    work_since_interrupt
+  ));
+  if (Rf_any_duplicated(result, FALSE) != 0) {
+    UNPROTECT(2);
+    Rf_error("A factor Design column has duplicate levels");
+  }
+  UNPROTECT(2);
+  return result;
+}
+
+static SEXP snapshot_column(SEXP source,
+    R_xlen_t *work_since_interrupt) {
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(source);
+  if (type != LGLSXP && type != INTSXP && type != REALSXP &&
+      type != STRSXP && type != VECSXP) {
+    Rf_error("Design columns must be logical, integer, numeric, character, factor, or list vectors");
+  }
+  if (Rf_isS4(source) || !ordinary_optional_classes(source)) {
+    Rf_error("Design columns must have ordinary class metadata");
+  }
+
+  const R_xlen_t count = XLENGTH(source);
+  SEXP result = PROTECT(Rf_allocVector(type, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    paradox_domain_account_work(work_since_interrupt);
+    switch (type) {
+    case LGLSXP:
+      SET_LOGICAL_ELT(result, index, LOGICAL_ELT(source, index));
+      break;
+    case INTSXP:
+      SET_INTEGER_ELT(result, index, INTEGER_ELT(source, index));
+      break;
+    case REALSXP:
+      SET_REAL_ELT(result, index, REAL_ELT(source, index));
+      break;
+    case STRSXP:
+      SET_STRING_ELT(result, index, STRING_ELT(source, index));
+      break;
+    case VECSXP:
+      /* List-column elements are opaque values, not recursively copied. */
+      SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
+      break;
+    default:
+      UNPROTECT(1);
+      Rf_error("Internal error: unsupported Design column type");
+    }
+  }
+
+  if (Rf_inherits(source, "factor")) {
+    if (type != INTSXP) {
+      UNPROTECT(1);
+      Rf_error("A factor Design column has invalid storage");
+    }
+    SEXP levels = PROTECT(snapshot_factor_levels(
+      source,
+      work_since_interrupt
+    ));
+    SEXP classes = PROTECT(Rf_allocVector(STRSXP, 1));
+    SET_STRING_ELT(classes, 0, Rf_mkChar("factor"));
+    Rf_setAttrib(result, R_LevelsSymbol, levels);
+    Rf_setAttrib(result, R_ClassSymbol, classes);
+    for (R_xlen_t index = 0; index < count; ++index) {
+      const int code = INTEGER_ELT(result, index);
+      if (code != NA_INTEGER &&
+          (code <= 0 || (R_xlen_t) code > XLENGTH(levels))) {
+        UNPROTECT(3);
+        Rf_error("A factor Design column contains an invalid level code");
+      }
+    }
+    UNPROTECT(2);
+  }
+  UNPROTECT(1);
+  return result;
+}
+
+static SEXP private_environment(SEXP param_set) {
+  SEXP private = paradox_domain_private_environment(param_set);
+  if (private == R_UnboundValue) {
+    Rf_error("Corrupt ParamSet shell in Design dependency operation");
+  }
+  return private;
+}
+
+static void load_param_state(SEXP param_set, SEXP private,
+    SEXP *graph_roots, PROTECT_INDEX graph_roots_index,
+    dependency_snapshot_t *snapshot, SEXP roots,
+    R_xlen_t *work_since_interrupt) {
+  SEXP core = PROTECT(paradox_core_from_private(private));
+  if (core == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet state in Design dependency operation");
+  }
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind == PARADOX_CORE_SHADOW) {
+    core = paradox_core_refresh_shadow(param_set, private);
+    kind = paradox_core_kind(core);
+  }
+
+  if (kind == PARADOX_CORE_COLLECTION) {
+    paradox_collection_graph_t graph;
+    paradox_collection_graph_build(
+      private,
+      param_set,
+      &graph,
+      graph_roots,
+      graph_roots_index,
+      work_since_interrupt
+    );
+    snapshot->params = graph.nodes[0].params.table;
+    snapshot->dependencies = PROTECT(
+      paradox_collection_dependencies_from_graph(
+        &graph,
+        work_since_interrupt
+      )
+    );
+    SET_VECTOR_ELT(roots, 0, snapshot->params);
+    SET_VECTOR_ELT(roots, 1, snapshot->dependencies);
+    UNPROTECT(2);
+  } else if (kind == PARADOX_CORE_BASE || kind == PARADOX_CORE_SHADOW) {
+    SEXP payload = paradox_core_payload(core);
+    if (payload == R_UnboundValue) {
+      UNPROTECT(1);
+      Rf_error("Corrupt ParamSet capsule in Design dependency operation");
+    }
+    snapshot->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+    snapshot->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+    SET_VECTOR_ELT(roots, 0, snapshot->params);
+    SET_VECTOR_ELT(roots, 1, snapshot->dependencies);
+    UNPROTECT(1);
+  } else {
+    UNPROTECT(1);
+    Rf_error("Unknown ParamSet node kind in Design dependency operation");
+  }
+
   R_xlen_t unused_row = 0;
   if (!paradox_domain_validate_params(
-      state->params,
+      snapshot->params,
       R_NilValue,
       TRUE,
-      &params,
+      &snapshot->params_data,
       &unused_row,
       work_since_interrupt
+    ) || !paradox_domain_validate_dependencies(
+      snapshot->dependencies,
+      &snapshot->dependencies_data,
+      work_since_interrupt
     )) {
-    return FALSE;
+    Rf_error("Corrupt ParamSet parameter or dependency capsule");
   }
-  state->parameter_count = params.row_count;
-  state->param_ids = params.ids;
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_PARAM_IDS,
-    state->param_ids
-  );
-  SEXP classes = PROTECT(params.classes);
-  state->storage_types = PROTECT(VECTOR_ELT(
-    state->params,
-    PARADOX_DOMAIN_STORAGE_TYPE
-  ));
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_STORAGE_TYPES,
-    state->storage_types
-  );
-  if (TYPEOF(state->storage_types) != STRSXP ||
-      ALTREP(state->storage_types) ||
-      XLENGTH(state->storage_types) != state->parameter_count ||
-      !paradox_api_has_no_attributes(state->storage_types)) {
-    UNPROTECT(2);
-    return FALSE;
-  }
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
-    paradox_domain_account_work(work_since_interrupt);
-    SEXPTYPE type;
-    if (!supported_id(STRING_ELT(state->param_ids, parameter)) ||
-        !exact_storage(
-          STRING_ELT(classes, parameter),
-          STRING_ELT(state->storage_types, parameter),
-          &type
-        )) {
-      UNPROTECT(2);
-      return FALSE;
-    }
-  }
-  UNPROTECT(2);
-  return TRUE;
+  snapshot->parameter_count = snapshot->params_data.row_count;
+  snapshot->dependency_count = snapshot->dependencies_data.row_count;
 }
 
-static int load_dependency_state(design_dependency_state_t *state,
+static void snapshot_design_data(SEXP data, dependency_snapshot_t *snapshot,
     SEXP roots, R_xlen_t *work_since_interrupt) {
-  paradox_domain_dependencies_t dependencies;
-  if (!paradox_domain_validate_dependencies(
-      state->dependencies,
-      &dependencies,
-      work_since_interrupt
-    ) || dependencies.row_count == 0 ||
-      dependencies.row_count > DESIGN_DEPENDENCY_PLAN_EDGE_LIMIT) {
-    return FALSE;
+  if (!ordinary_design_shell(data)) {
+    Rf_error("Design$data must be a list-like data frame");
   }
-  state->dependency_count = dependencies.row_count;
-  state->dependency_ids = dependencies.ids;
-  state->dependency_on = dependencies.on;
-  state->conditions = dependencies.conditions;
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_DEPENDENCY_IDS,
-    state->dependency_ids
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_DEPENDENCY_ON,
-    state->dependency_on
-  );
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_CONDITIONS,
-    state->conditions
-  );
-  return TRUE;
-}
+  const R_xlen_t column_count = XLENGTH(data);
+  if (column_count != snapshot->parameter_count) {
+    Rf_error("Design$data must have one column for every parameter");
+  }
 
-static int load_data_state(design_dependency_state_t *state, SEXP roots,
-    R_xlen_t *work_since_interrupt) {
-  if (!exact_data_table_shell(
-      state->data,
-      &state->data_names,
-      work_since_interrupt
-    ) || XLENGTH(state->data) != state->parameter_count) {
-    return FALSE;
-  }
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_DATA_NAMES,
-    state->data_names
-  );
-  state->row_count = state->parameter_count == 0
-    ? 0
-    : XLENGTH(VECTOR_ELT(state->data, 0));
-  if (state->row_count > INT_MAX || !snapshot_planning_strings(
-      state,
-      roots,
-      work_since_interrupt
-    )) {
-    return FALSE;
-  }
-  state->columns = PROTECT(Rf_allocVector(
-    VECSXP,
-    state->parameter_count
+  SEXP source_names = PROTECT(Rf_getAttrib(data, R_NamesSymbol));
+  snapshot->data_names = PROTECT(snapshot_string_vector(
+    source_names,
+    "Design column names",
+    work_since_interrupt
   ));
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_COLUMNS, state->columns);
-  UNPROTECT(1);
-  state->param_columns = paradox_temporary_alloc(
-    state->parameter_count,
-    sizeof(*state->param_columns)
-  );
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
+  if (XLENGTH(snapshot->data_names) != column_count ||
+      Rf_any_duplicated(snapshot->data_names, FALSE) != 0) {
+    UNPROTECT(2);
+    Rf_error("Design$data must have unique column names");
+  }
+  snapshot->columns = PROTECT(Rf_allocVector(VECSXP, column_count));
+  SET_VECTOR_ELT(roots, 2, snapshot->data_names);
+  SET_VECTOR_ELT(roots, 3, snapshot->columns);
+
+  snapshot->row_count = 0;
+  for (R_xlen_t column = 0; column < column_count; ++column) {
     paradox_domain_account_work(work_since_interrupt);
-    R_xlen_t column = find_id(
-      state->stable_data_names,
-      STRING_ELT(state->stable_param_ids, parameter),
+    SEXP source = PROTECT(VECTOR_ELT(data, column));
+    SEXP frozen = PROTECT(snapshot_column(source, work_since_interrupt));
+    const R_xlen_t rows = XLENGTH(frozen);
+    if (column != 0 && rows != snapshot->row_count) {
+      UNPROTECT(5);
+      Rf_error("Design$data columns have inconsistent lengths");
+    }
+    if (column == 0) {
+      snapshot->row_count = rows;
+    }
+    SET_VECTOR_ELT(snapshot->columns, column, frozen);
+    UNPROTECT(2);
+  }
+  UNPROTECT(3);
+
+  if (snapshot->row_count > INT_MAX) {
+    Rf_error("Design dependency result exceeds data.frame row limits");
+  }
+  snapshot->column_by_parameter = paradox_temporary_alloc(
+    snapshot->parameter_count,
+    sizeof(*snapshot->column_by_parameter)
+  );
+  for (R_xlen_t parameter = 0;
+      parameter < snapshot->parameter_count;
+      ++parameter) {
+    R_xlen_t column = find_string(
+      snapshot->data_names,
+      STRING_ELT(snapshot->params_data.ids, parameter),
       work_since_interrupt
     );
-    SEXPTYPE expected_type;
-    if (column == R_XLEN_T_MAX || !exact_storage(
-        STRING_ELT(VECTOR_ELT(state->params, PARADOX_DOMAIN_CLS), parameter),
-        STRING_ELT(state->stable_storage_types, parameter),
-        &expected_type
-      )) {
-      return FALSE;
+    if (column == R_XLEN_T_MAX) {
+      Rf_error("Design$data column names do not match the ParamSet");
     }
-    SEXP value = PROTECT(VECTOR_ELT(state->data, column));
-    if ((SEXPTYPE) TYPEOF(value) != expected_type || ALTREP(value) ||
-        Rf_isObject(value) || XLENGTH(value) != state->row_count ||
-        !paradox_api_has_no_attributes(value) ||
-        aliases_table_attribute(value, state->data) ||
-        aliases_table_storage(value, state->params) ||
-        aliases_table_storage(value, state->dependencies)) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    for (R_xlen_t prior = 0; prior < parameter; ++prior) {
-      if (value == VECTOR_ELT(state->columns, prior)) {
-        UNPROTECT(1);
-        return FALSE;
-      }
-    }
-    SET_VECTOR_ELT(state->columns, parameter, value);
-    state->param_columns[parameter] = column;
-    UNPROTECT(1);
+    snapshot->column_by_parameter[parameter] = column;
   }
-  return TRUE;
 }
 
-static int plan_edges(design_dependency_state_t *state, SEXP roots,
-    R_xlen_t *work_since_interrupt) {
-  state->edges = paradox_temporary_alloc(
-    state->dependency_count,
-    sizeof(*state->edges)
-  );
-  state->condition_roots = PROTECT(Rf_allocVector(
-    VECSXP,
-    state->dependency_count
-  ));
-  state->rhs_roots = PROTECT(Rf_allocVector(
-    VECSXP,
-    state->dependency_count
-  ));
-  SET_VECTOR_ELT(
-    roots,
-    DESIGN_DEPENDENCY_ROOT_CONDITION_OBJECTS,
-    state->condition_roots
-  );
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_RHS, state->rhs_roots);
-  UNPROTECT(2);
+static int numeric_type(SEXPTYPE type) {
+  return type == LGLSXP || type == INTSXP || type == REALSXP;
+}
 
-  for (R_xlen_t edge = 0; edge < state->dependency_count; ++edge) {
+static int factor_column(SEXP column) {
+  return TYPEOF(column) == INTSXP && Rf_inherits(column, "factor");
+}
+
+static int rhs_matches_string(SEXP value, SEXP rhs,
+    R_xlen_t *work_since_interrupt) {
+  if (value == NA_STRING) {
+    return FALSE;
+  }
+  const R_xlen_t count = XLENGTH(rhs);
+  for (R_xlen_t index = 0; index < count; ++index) {
     paradox_domain_account_work(work_since_interrupt);
-    SEXP id = STRING_ELT(state->stable_dependency_ids, edge);
-    SEXP on = STRING_ELT(state->stable_dependency_on, edge);
-    if (!supported_id(id) || !supported_id(on)) {
+    if (strings_equal(value, STRING_ELT(rhs, index))) {
+      return TRUE;
+    }
+  }
+  return FALSE;
+}
+
+static int condition_matches(const dependency_edge_t *edge, SEXP column,
+    R_xlen_t row, R_xlen_t *work_since_interrupt) {
+  if (factor_column(column)) {
+    if (TYPEOF(edge->rhs) != STRSXP) {
+      Rf_error("A factor dependency parent requires a character condition");
+    }
+    const int code = INTEGER_ELT(column, row);
+    if (code == NA_INTEGER) {
       return FALSE;
     }
-    state->edges[edge].child = find_id(
-      state->stable_param_ids,
-      id,
+    SEXP levels = Rf_getAttrib(column, R_LevelsSymbol);
+    return rhs_matches_string(
+      STRING_ELT(levels, (R_xlen_t) code - 1),
+      edge->rhs,
       work_since_interrupt
     );
-    state->edges[edge].parent = find_id(
-      state->stable_param_ids,
-      on,
-      work_since_interrupt
-    );
-    if (state->edges[edge].child == R_XLEN_T_MAX ||
-        state->edges[edge].parent == R_XLEN_T_MAX) {
-      return FALSE;
-    }
-    state->edges[edge].condition = PROTECT(VECTOR_ELT(
-      state->conditions,
-      edge
-    ));
-    SET_VECTOR_ELT(
-      state->condition_roots,
-      edge,
-      state->edges[edge].condition
-    );
-    if (!paradox_builtin_condition_exact(
-        state->edges[edge].condition,
-        &state->edges[edge].kind,
-        &state->edges[edge].rhs,
-        work_since_interrupt
-      )) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    SET_VECTOR_ELT(state->rhs_roots, edge, state->edges[edge].rhs);
-    SEXP parent = VECTOR_ELT(
-      state->columns,
-      state->edges[edge].parent
-    );
-    if (!paradox_builtin_condition_column_supported(
-        parent,
-        state->edges[edge].rhs,
-        work_since_interrupt
-      )) {
-      UNPROTECT(1);
-      return FALSE;
-    }
-    for (R_xlen_t column = 0;
-         column < state->parameter_count;
-         ++column) {
-      if (aliases_condition_storage(
-          VECTOR_ELT(state->columns, column),
-          state->edges[edge].condition
-        )) {
-        UNPROTECT(1);
-        return FALSE;
-      }
-    }
-    UNPROTECT(1);
-  }
-  return TRUE;
-}
-
-/* Only parameters that are parents can be observed after an earlier edge has
- * made them inactive. Indexing those columns, rather than every parameter,
- * keeps sparse dependency graphs sparse. The row states themselves are bits
- * so a large but reasonable design does not multiply its memory footprint by
- * the full parameter count. */
-static void build_mask_layout(design_dependency_state_t *state) {
-  state->mask_columns = paradox_temporary_alloc(
-    state->parameter_count,
-    sizeof(*state->mask_columns)
-  );
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
-    state->mask_columns[parameter] = R_XLEN_T_MAX;
-  }
-  state->mask_column_count = 0;
-  for (R_xlen_t edge = 0; edge < state->dependency_count; ++edge) {
-    const R_xlen_t parent = state->edges[edge].parent;
-    if (state->mask_columns[parent] == R_XLEN_T_MAX) {
-      state->mask_columns[parent] = state->mask_column_count++;
-    }
-  }
-}
-
-static int build_topological_order(design_dependency_state_t *state,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t parameters = state->parameter_count;
-  const R_xlen_t dependencies = state->dependency_count;
-  state->topological_order = paradox_temporary_alloc(
-    parameters,
-    sizeof(*state->topological_order)
-  );
-  state->edge_order = paradox_temporary_alloc(
-    dependencies,
-    sizeof(*state->edge_order)
-  );
-  R_xlen_t *base_order = paradox_temporary_alloc(
-    parameters,
-    sizeof(*base_order)
-  );
-  R_xlen_t *parent_counts = paradox_temporary_alloc(
-    parameters,
-    sizeof(*parent_counts)
-  );
-  unsigned char *seen = paradox_temporary_alloc(parameters, sizeof(*seen));
-  unsigned char *processed = paradox_temporary_alloc(
-    parameters,
-    sizeof(*processed)
-  );
-  unsigned char *ready = paradox_temporary_alloc(parameters, sizeof(*ready));
-  memset(seen, 0, (size_t) parameters);
-  memset(processed, 0, (size_t) parameters);
-  memset(parent_counts, 0, (size_t) parameters * sizeof(*parent_counts));
-
-  R_xlen_t base_size = 0;
-  for (R_xlen_t edge = 0; edge < dependencies; ++edge) {
-    paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t child = state->edges[edge].child;
-    ++parent_counts[child];
-    if (!seen[child]) {
-      seen[child] = 1;
-      base_order[base_size++] = child;
-    }
-  }
-  for (R_xlen_t parameter = 0; parameter < parameters; ++parameter) {
-    if (!seen[parameter]) {
-      base_order[base_size++] = parameter;
-    }
-  }
-  if (base_size != parameters) {
-    return FALSE;
   }
 
-  /* R's order() is stable here. An insertion sort preserves the graph's
-   * first-occurrence order for equal original parent-list lengths. */
-  for (R_xlen_t index = 1; index < parameters; ++index) {
-    R_xlen_t value = base_order[index];
-    R_xlen_t prior = index;
-    while (prior > 0 &&
-        parent_counts[base_order[prior - 1]] > parent_counts[value]) {
-      base_order[prior] = base_order[prior - 1];
-      --prior;
-    }
-    base_order[prior] = value;
+  const SEXPTYPE column_type = (SEXPTYPE) TYPEOF(column);
+  const SEXPTYPE rhs_type = (SEXPTYPE) TYPEOF(edge->rhs);
+  if (!((numeric_type(column_type) && numeric_type(rhs_type)) ||
+        (column_type == STRSXP && rhs_type == STRSXP))) {
+    Rf_error("A Design dependency condition is incompatible with its parent column");
   }
-
-  R_xlen_t topological_size = 0;
-  while (topological_size < parameters) {
-    memset(ready, 0, (size_t) parameters);
-    R_xlen_t ready_count = 0;
-    for (R_xlen_t position = 0; position < parameters; ++position) {
-      const R_xlen_t parameter = base_order[position];
-      if (processed[parameter]) {
-        continue;
-      }
-      int all_parents_processed = TRUE;
-      for (R_xlen_t edge = 0; edge < dependencies; ++edge) {
-        if (state->edges[edge].child == parameter &&
-            !processed[state->edges[edge].parent]) {
-          all_parents_processed = FALSE;
-          break;
-        }
-      }
-      if (all_parents_processed) {
-        ready[parameter] = 1;
-        ++ready_count;
-      }
-    }
-    if (ready_count == 0) {
-      return FALSE;
-    }
-    for (R_xlen_t position = 0; position < parameters; ++position) {
-      const R_xlen_t parameter = base_order[position];
-      if (ready[parameter]) {
-        processed[parameter] = 1;
-        state->topological_order[topological_size++] = parameter;
-      }
-    }
-  }
-
-  R_xlen_t edge_size = 0;
-  for (R_xlen_t position = 0; position < parameters; ++position) {
-    const R_xlen_t parameter = state->topological_order[position];
-    for (R_xlen_t edge = 0; edge < dependencies; ++edge) {
-      if (state->edges[edge].child == parameter) {
-        state->edge_order[edge_size++] = edge;
-      }
-    }
-  }
-  return edge_size == dependencies;
-}
-
-static int current_state_matches(const design_dependency_state_t *state) {
-  if (TYPEOF(state->data) != VECSXP ||
-      XLENGTH(state->data) != state->parameter_count ||
-      TYPEOF(state->params) != VECSXP ||
-      XLENGTH(state->params) <= PARADOX_DOMAIN_STORAGE_TYPE ||
-      TYPEOF(state->dependencies) != VECSXP ||
-      XLENGTH(state->dependencies) != 3 ||
-      TYPEOF(state->param_ids) != STRSXP ||
-      XLENGTH(state->param_ids) != state->parameter_count ||
-      TYPEOF(state->storage_types) != STRSXP ||
-      XLENGTH(state->storage_types) != state->parameter_count ||
-      TYPEOF(state->dependency_ids) != STRSXP ||
-      XLENGTH(state->dependency_ids) != state->dependency_count ||
-      TYPEOF(state->dependency_on) != STRSXP ||
-      XLENGTH(state->dependency_on) != state->dependency_count ||
-      TYPEOF(state->conditions) != VECSXP ||
-      XLENGTH(state->conditions) != state->dependency_count ||
-      TYPEOF(state->data_names) != STRSXP ||
-      XLENGTH(state->data_names) != state->parameter_count ||
-      paradox_domain_local_value(state->param_set, ".__enclos_env__") !=
-      state->enclosure || paradox_domain_local_value(
-        state->enclosure,
-        "private"
-      ) != state->private_environment || paradox_domain_local_value(
-        state->private_environment,
-        ".params"
-      ) != state->params || paradox_domain_local_value(
-        state->private_environment,
-        ".deps"
-      ) != state->dependencies || Rf_getAttrib(state->data, R_NamesSymbol) !=
-      state->data_names || VECTOR_ELT(
-        state->params,
-        PARADOX_DOMAIN_ID
-      ) != state->param_ids || VECTOR_ELT(
-        state->params,
-        PARADOX_DOMAIN_STORAGE_TYPE
-      ) != state->storage_types || VECTOR_ELT(state->dependencies, 0) !=
-      state->dependency_ids || VECTOR_ELT(state->dependencies, 1) !=
-      state->dependency_on || VECTOR_ELT(state->dependencies, 2) !=
-      state->conditions) {
-    return FALSE;
-  }
-  if (!planning_strings_match(state)) {
-    return FALSE;
-  }
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
-    if (VECTOR_ELT(
-        state->data,
-        state->param_columns[parameter]
-      ) != VECTOR_ELT(state->columns, parameter)) {
-      return FALSE;
-    }
-  }
-  for (R_xlen_t edge = 0; edge < state->dependency_count; ++edge) {
-    if (VECTOR_ELT(state->conditions, edge) !=
-        state->edges[edge].condition) {
-      return FALSE;
-    }
-  }
-  return TRUE;
-}
-
-static int exact_table_surface(SEXP table,
-    const char *const *expected_names, R_xlen_t column_count,
-    R_xlen_t *work_since_interrupt) {
-  static const char *const classes[] = {"data.table", "data.frame"};
-  static const char *const attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  if (TYPEOF(table) != VECSXP || ALTREP(table) ||
-      XLENGTH(table) != column_count || !paradox_api_has_only_attributes(
-        table,
-        attributes,
-        6
-      )) {
-    return FALSE;
-  }
-  SEXP names = Rf_getAttrib(table, R_NamesSymbol);
-  SEXP observed_classes = Rf_getAttrib(table, R_ClassSymbol);
-  return paradox_api_has_no_attributes(names) &&
-    paradox_api_has_no_attributes(observed_classes) &&
-    paradox_domain_exact_string_vector(
-      names,
-      expected_names,
-      column_count,
-      work_since_interrupt
-    ) && paradox_domain_exact_string_vector(
-      observed_classes,
-      classes,
-      2,
-      work_since_interrupt
-    );
-}
-
-/* Final, allocation-free execution validation. It runs after the last
- * allocation-capable surface authentication so neither a GC finalizer that
- * changes data/conditions nor one that changes S3/R6 dispatch can open a gap
- * between admission and the second simulation. */
-static int current_execution_objects_are_exact(
-    const design_dependency_state_t *state,
-    R_xlen_t *work_since_interrupt) {
-  static const char *const parameter_names[] = {
-    "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-    "levels", "special_vals", "default", "storage_type"
-  };
-  static const char *const dependency_names[] = {"id", "on", "cond"};
-  static const char *const table_classes[] = {"data.table", "data.frame"};
-  static const char *const table_attributes[] = {
-    "names", "row.names", "class", ".internal.selfref", "sorted", "index"
-  };
-  SEXP data_classes = Rf_getAttrib(state->data, R_ClassSymbol);
-  if (!paradox_api_has_only_attributes(state->data, table_attributes, 6) ||
-      !paradox_api_has_no_attributes(data_classes) ||
-      !paradox_domain_exact_string_vector(
-        data_classes,
-        table_classes,
-        2,
-        work_since_interrupt
-      ) || !exact_table_surface(
-        state->params,
-        parameter_names,
-        PARADOX_DOMAIN_TAGS,
-        work_since_interrupt
-      ) || !exact_table_surface(
-        state->dependencies,
-        dependency_names,
-        3,
-        work_since_interrupt
-      )) {
-    return FALSE;
-  }
-
-  SEXP classes = VECTOR_ELT(state->params, PARADOX_DOMAIN_CLS);
-  if (TYPEOF(classes) != STRSXP || ALTREP(classes) ||
-      XLENGTH(classes) != state->parameter_count ||
-      !paradox_api_has_no_attributes(classes)) {
-    return FALSE;
-  }
-  for (R_xlen_t parameter = 0;
-       parameter < state->parameter_count;
-       ++parameter) {
-    SEXPTYPE expected_type;
-    SEXP column = VECTOR_ELT(state->columns, parameter);
-    if (!exact_storage(
-        STRING_ELT(classes, parameter),
-        STRING_ELT(state->stable_storage_types, parameter),
-        &expected_type
-      ) || (SEXPTYPE) TYPEOF(column) != expected_type || ALTREP(column) ||
-        Rf_isObject(column) || XLENGTH(column) != state->row_count ||
-        !paradox_api_has_no_attributes(column) ||
-        aliases_table_attribute(column, state->data) ||
-        aliases_table_storage(column, state->params) ||
-        aliases_table_storage(column, state->dependencies) || VECTOR_ELT(
-          state->data,
-          state->param_columns[parameter]
-        ) != column) {
-      return FALSE;
-    }
-    for (R_xlen_t prior = 0; prior < parameter; ++prior) {
-      if (column == VECTOR_ELT(state->columns, prior)) {
-        return FALSE;
-      }
-    }
-  }
-
-  for (R_xlen_t edge = 0; edge < state->dependency_count; ++edge) {
-    paradox_builtin_condition_kind_t kind;
-    SEXP rhs;
-    SEXP condition = VECTOR_ELT(state->conditions, edge);
-    SEXP parent = VECTOR_ELT(state->columns, state->edges[edge].parent);
-    if (condition != state->edges[edge].condition ||
-        !paradox_builtin_condition_exact(
-          condition,
-          &kind,
-          &rhs,
-          work_since_interrupt
-        ) || kind != state->edges[edge].kind ||
-        rhs != state->edges[edge].rhs ||
-        !paradox_builtin_condition_column_supported(
-          parent,
-          rhs,
-          work_since_interrupt
-        )) {
-      return FALSE;
-    }
-    for (R_xlen_t column = 0;
-         column < state->parameter_count;
-         ++column) {
-      if (aliases_condition_storage(
-          VECTOR_ELT(state->columns, column),
-          condition
-        )) {
-        return FALSE;
-      }
-    }
-  }
-  return TRUE;
-}
-
-static int current_shapes_are_exact(const design_dependency_state_t *state,
-    R_xlen_t *work_since_interrupt) {
-  SEXP names;
-  paradox_domain_params_t params;
-  paradox_domain_dependencies_t dependencies;
-  R_xlen_t unused_row = 0;
-  if (!exact_data_table_shell(
-      state->data,
-      &names,
-      work_since_interrupt
-    ) || names != state->data_names || !paradox_domain_validate_params(
-      state->params,
-      R_NilValue,
-      TRUE,
-      &params,
-      &unused_row,
-      work_since_interrupt
-    ) || params.ids != state->param_ids ||
-      params.row_count != state->parameter_count ||
-      !paradox_domain_validate_dependencies(
-        state->dependencies,
-        &dependencies,
-        work_since_interrupt
-      ) || dependencies.ids != state->dependency_ids ||
-      dependencies.on != state->dependency_on ||
-      dependencies.conditions != state->conditions ||
-      dependencies.row_count != state->dependency_count) {
-    return FALSE;
-  }
-
-  return current_execution_objects_are_exact(
-    state,
+  return paradox_builtin_condition_element_matches(
+    column,
+    row,
+    edge->rhs,
     work_since_interrupt
   );
 }
 
 static int value_is_missing(SEXP column, R_xlen_t row) {
-  switch ((SEXPTYPE) TYPEOF(column)) {
+  switch (TYPEOF(column)) {
   case LGLSXP:
     return LOGICAL_ELT(column, row) == NA_LOGICAL;
   case INTSXP:
@@ -1149,79 +441,148 @@ static int value_is_missing(SEXP column, R_xlen_t row) {
   case STRSXP:
     return STRING_ELT(column, row) == NA_STRING;
   default:
-    return TRUE;
-  }
-}
-
-static int inactive_bit(const design_dependency_state_t *state,
-    const unsigned char *inactive, R_xlen_t parameter, R_xlen_t row) {
-  const R_xlen_t slot = state->mask_columns[parameter];
-  if (slot == R_XLEN_T_MAX) {
     return FALSE;
   }
-  const size_t bit = (size_t) slot * (size_t) state->row_count +
-    (size_t) row;
-  return (inactive[bit >> 3] & (unsigned char) (1U << (bit & 7U))) != 0;
 }
 
-static void set_inactive_bit(const design_dependency_state_t *state,
-    unsigned char *inactive, R_xlen_t parameter, R_xlen_t row) {
-  const R_xlen_t slot = state->mask_columns[parameter];
-  if (slot == R_XLEN_T_MAX) {
-    return;
-  }
-  const size_t bit = (size_t) slot * (size_t) state->row_count +
-    (size_t) row;
-  inactive[bit >> 3] |= (unsigned char) (1U << (bit & 7U));
-}
-
-static int simulate_dependencies(const design_dependency_state_t *state,
-    unsigned char *inactive, R_xlen_t *counts, SEXP output_rows,
-    const R_xlen_t *expected_counts,
+static void build_edge_plan(dependency_snapshot_t *snapshot,
     R_xlen_t *work_since_interrupt) {
-  if (state->mask_byte_count != 0) {
-    memset(inactive, 0, state->mask_byte_count);
+  const R_xlen_t parameter_count = snapshot->parameter_count;
+  const R_xlen_t dependency_count = snapshot->dependency_count;
+  snapshot->edges = paradox_temporary_alloc(
+    dependency_count,
+    sizeof(*snapshot->edges)
+  );
+  snapshot->incoming_count = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*snapshot->incoming_count)
+  );
+  R_xlen_t *indegree = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*indegree)
+  );
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    snapshot->incoming_count[parameter] = 0;
+    indegree[parameter] = 0;
   }
 
-  for (R_xlen_t position = 0;
-       position < state->dependency_count;
-       ++position) {
-    const R_xlen_t edge_index = state->edge_order[position];
-    const design_dependency_edge_t *edge = &state->edges[edge_index];
-    SEXP parent = VECTOR_ELT(state->columns, edge->parent);
-    R_xlen_t count = 0;
-    SEXP rows = output_rows == R_NilValue
-      ? R_NilValue
-      : VECTOR_ELT(output_rows, position);
-    for (R_xlen_t row = 0; row < state->row_count; ++row) {
-      paradox_domain_account_work(work_since_interrupt);
-      const int parent_inactive =
-        inactive_bit(state, inactive, edge->parent, row) ||
-        value_is_missing(parent, row);
-      const int satisfied = paradox_builtin_condition_element_matches(
-        parent,
-        row,
-        edge->rhs,
+  for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
+    paradox_domain_account_work(work_since_interrupt);
+    const R_xlen_t child = find_string(
+      snapshot->params_data.ids,
+      STRING_ELT(snapshot->dependencies_data.ids, edge),
+      work_since_interrupt
+    );
+    const R_xlen_t parent = find_string(
+      snapshot->params_data.ids,
+      STRING_ELT(snapshot->dependencies_data.on, edge),
+      work_since_interrupt
+    );
+    if (child == R_XLEN_T_MAX || parent == R_XLEN_T_MAX) {
+      Rf_error("Design dependencies refer to an unknown parameter");
+    }
+    paradox_builtin_condition_kind_t kind;
+    SEXP rhs = R_NilValue;
+    if (!paradox_builtin_condition_exact(
+        VECTOR_ELT(snapshot->dependencies_data.conditions, edge),
+        &kind,
+        &rhs,
         work_since_interrupt
-      );
-      if (parent_inactive || !satisfied) {
-        set_inactive_bit(state, inactive, edge->child, row);
-        if (rows != R_NilValue) {
-          if (count >= XLENGTH(rows)) {
-            return FALSE;
-          }
-          INTEGER(rows)[count] = (int) row + 1;
-        }
-        ++count;
+      )) {
+      Rf_error("Corrupt dependency Condition in ParamSet capsule");
+    }
+    snapshot->edges[edge] = (dependency_edge_t) {
+      child, parent, kind, rhs
+    };
+    ++snapshot->incoming_count[child];
+    ++indegree[child];
+  }
+
+  if (parameter_count == R_XLEN_T_MAX) {
+    Rf_error("ParamSet dependency graph is too large");
+  }
+  snapshot->incoming_start = paradox_temporary_alloc(
+    parameter_count + 1,
+    sizeof(*snapshot->incoming_start)
+  );
+  snapshot->incoming_edges = paradox_temporary_alloc(
+    dependency_count,
+    sizeof(*snapshot->incoming_edges)
+  );
+  snapshot->incoming_start[0] = 0;
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    if (snapshot->incoming_count[parameter] >
+        R_XLEN_T_MAX - snapshot->incoming_start[parameter]) {
+      Rf_error("ParamSet dependency graph is too large");
+    }
+    snapshot->incoming_start[parameter + 1] =
+      snapshot->incoming_start[parameter] +
+      snapshot->incoming_count[parameter];
+  }
+  if (snapshot->incoming_start[parameter_count] != dependency_count) {
+    Rf_error("Corrupt ParamSet dependency graph counts");
+  }
+  R_xlen_t *incoming_cursor = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*incoming_cursor)
+  );
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    incoming_cursor[parameter] = snapshot->incoming_start[parameter];
+  }
+  for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
+    const R_xlen_t child = snapshot->edges[edge].child;
+    snapshot->incoming_edges[incoming_cursor[child]] = edge;
+    ++incoming_cursor[child];
+  }
+
+  snapshot->topological_order = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*snapshot->topological_order)
+  );
+  int *emitted = paradox_temporary_alloc(parameter_count, sizeof(*emitted));
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    emitted[parameter] = FALSE;
+  }
+  for (R_xlen_t output = 0; output < parameter_count; ++output) {
+    R_xlen_t selected = R_XLEN_T_MAX;
+    for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+      paradox_domain_account_work(work_since_interrupt);
+      if (!emitted[parameter] && indegree[parameter] == 0) {
+        selected = parameter;
+        break;
       }
     }
-    if ((expected_counts != NULL && count != expected_counts[position]) ||
-        (rows != R_NilValue && count != XLENGTH(rows))) {
-      return FALSE;
+    if (selected == R_XLEN_T_MAX) {
+      Rf_error("ParamSet dependency graph contains a cycle");
     }
-    counts[position] = count;
+    emitted[selected] = TRUE;
+    snapshot->topological_order[output] = selected;
+    for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
+      if (snapshot->edges[edge].parent == selected) {
+        if (indegree[snapshot->edges[edge].child] == 0) {
+          Rf_error("Corrupt ParamSet dependency topology");
+        }
+        --indegree[snapshot->edges[edge].child];
+      }
+    }
   }
-  return TRUE;
+}
+
+static size_t mask_offset(const dependency_snapshot_t *snapshot,
+    R_xlen_t parameter, R_xlen_t row) {
+  return (size_t) parameter * (size_t) snapshot->row_count + (size_t) row;
+}
+
+static int mask_get(const dependency_snapshot_t *snapshot,
+    const unsigned char *mask, R_xlen_t parameter, R_xlen_t row) {
+  const size_t bit = mask_offset(snapshot, parameter, row);
+  return (mask[bit >> 3] & (unsigned char) (1U << (bit & 7U))) != 0;
+}
+
+static void mask_set(const dependency_snapshot_t *snapshot,
+    unsigned char *mask, R_xlen_t parameter, R_xlen_t row) {
+  const size_t bit = mask_offset(snapshot, parameter, row);
+  mask[bit >> 3] |= (unsigned char) (1U << (bit & 7U));
 }
 
 static SEXP typed_missing(SEXP storage) {
@@ -1234,204 +595,187 @@ static SEXP typed_missing(SEXP storage) {
   if (paradox_domain_string_is(storage, "character")) {
     return Rf_ScalarString(NA_STRING);
   }
-  if (paradox_domain_string_is(storage, "logical")) {
+  if (paradox_domain_string_is(storage, "logical") ||
+      paradox_domain_string_is(storage, "list")) {
     return Rf_ScalarLogical(NA_LOGICAL);
   }
+  Rf_error("Corrupt ParamSet storage type in Design dependency operation");
   return R_NilValue;
 }
 
-static int allocate_output(design_dependency_state_t *state, SEXP roots,
-    const R_xlen_t *counts, SEXP *output) {
-  static const char *const output_names[] = {"rows", "columns", "values"};
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, 3));
-  SEXP rows = PROTECT(Rf_allocVector(VECSXP, state->dependency_count));
-  SEXP columns = PROTECT(Rf_allocVector(STRSXP, state->dependency_count));
-  SEXP values = PROTECT(Rf_allocVector(VECSXP, state->dependency_count));
-  for (R_xlen_t index = 0; index < 3; ++index) {
-    SET_STRING_ELT(names, index, Rf_mkChar(output_names[index]));
+static SEXP build_output(dependency_snapshot_t *snapshot,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t parameter_count = snapshot->parameter_count;
+  const R_xlen_t row_count = snapshot->row_count;
+  if (parameter_count != 0 && row_count > R_XLEN_T_MAX / parameter_count) {
+    Rf_error("Design dependency mask is too large");
   }
-  Rf_setAttrib(result, R_NamesSymbol, names);
+  const R_xlen_t bit_count = parameter_count * row_count;
+  if ((uint64_t) bit_count > (uint64_t) SIZE_MAX - 7U) {
+    Rf_error("Design dependency mask is too large");
+  }
+  const size_t byte_count = ((size_t) bit_count + 7U) >> 3;
+  if (byte_count > DESIGN_DEPENDENCY_MASK_LIMIT_BYTES ||
+      byte_count > (size_t) R_XLEN_T_MAX) {
+    Rf_error("Design dependency mask exceeds the supported memory limit");
+  }
+  unsigned char *inactive = paradox_temporary_alloc(
+    (R_xlen_t) byte_count,
+    sizeof(*inactive)
+  );
+  if (byte_count != 0) {
+    memset(inactive, 0, byte_count);
+  }
+
+  R_xlen_t patch_count = 0;
+  R_xlen_t *inactive_counts = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*inactive_counts)
+  );
+  for (R_xlen_t position = 0; position < parameter_count; ++position) {
+    const R_xlen_t child = snapshot->topological_order[position];
+    inactive_counts[child] = 0;
+    if (snapshot->incoming_count[child] == 0) {
+      continue;
+    }
+    ++patch_count;
+    for (R_xlen_t row = 0; row < row_count; ++row) {
+      int child_inactive = FALSE;
+      for (R_xlen_t incoming = snapshot->incoming_start[child];
+          incoming < snapshot->incoming_start[child + 1] && !child_inactive;
+          ++incoming) {
+        const dependency_edge_t *dependency = &snapshot->edges[
+          snapshot->incoming_edges[incoming]
+        ];
+        SEXP parent_column = VECTOR_ELT(
+          snapshot->columns,
+          snapshot->column_by_parameter[dependency->parent]
+        );
+        child_inactive = mask_get(
+          snapshot,
+          inactive,
+          dependency->parent,
+          row
+        ) || value_is_missing(parent_column, row) || !condition_matches(
+          dependency,
+          parent_column,
+          row,
+          work_since_interrupt
+        );
+      }
+      if (child_inactive) {
+        mask_set(snapshot, inactive, child, row);
+        ++inactive_counts[child];
+      }
+    }
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
+  SEXP result_names = PROTECT(Rf_allocVector(STRSXP, 3));
+  SEXP rows = PROTECT(Rf_allocVector(VECSXP, patch_count));
+  SEXP columns = PROTECT(Rf_allocVector(STRSXP, patch_count));
+  SEXP values = PROTECT(Rf_allocVector(VECSXP, patch_count));
+  SET_STRING_ELT(result_names, 0, Rf_mkChar("rows"));
+  SET_STRING_ELT(result_names, 1, Rf_mkChar("columns"));
+  SET_STRING_ELT(result_names, 2, Rf_mkChar("values"));
+  Rf_setAttrib(result, R_NamesSymbol, result_names);
   SET_VECTOR_ELT(result, 0, rows);
   SET_VECTOR_ELT(result, 1, columns);
   SET_VECTOR_ELT(result, 2, values);
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_OUTPUT, result);
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_OUTPUT_ROWS, rows);
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_OUTPUT_COLUMNS, columns);
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_OUTPUT_VALUES, values);
 
-  for (R_xlen_t position = 0;
-       position < state->dependency_count;
-       ++position) {
-    const R_xlen_t edge_index = state->edge_order[position];
-    const R_xlen_t child = state->edges[edge_index].child;
-    SEXP edge_rows = PROTECT(Rf_allocVector(INTSXP, counts[position]));
+  R_xlen_t output = 0;
+  for (R_xlen_t position = 0; position < parameter_count; ++position) {
+    const R_xlen_t child = snapshot->topological_order[position];
+    if (snapshot->incoming_count[child] == 0) {
+      continue;
+    }
+    SEXP indices = PROTECT(Rf_allocVector(
+      INTSXP,
+      inactive_counts[child]
+    ));
+    R_xlen_t index = 0;
+    for (R_xlen_t row = 0; row < row_count; ++row) {
+      if (mask_get(snapshot, inactive, child, row)) {
+        SET_INTEGER_ELT(indices, index, (int) row + 1);
+        ++index;
+      }
+    }
     SEXP missing = PROTECT(typed_missing(STRING_ELT(
-      state->stable_storage_types,
+      VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_STORAGE_TYPE),
       child
     )));
-    if (missing == R_NilValue) {
-      UNPROTECT(7);
-      return FALSE;
-    }
-    SET_VECTOR_ELT(rows, position, edge_rows);
+    SET_VECTOR_ELT(rows, output, indices);
     SET_STRING_ELT(
       columns,
-      position,
-      STRING_ELT(state->stable_param_ids, child)
+      output,
+      STRING_ELT(snapshot->params_data.ids, child)
     );
-    SET_VECTOR_ELT(values, position, missing);
+    SET_VECTOR_ELT(values, output, missing);
+    ++output;
     UNPROTECT(2);
   }
-  *output = result;
+  if (output != patch_count) {
+    UNPROTECT(5);
+    Rf_error("Internal error: incomplete Design dependency plan");
+  }
   UNPROTECT(5);
-  return TRUE;
+  return result;
 }
 
-SEXP paradox_design_dependency_runtime(SEXP mlr3misc_version) {
-  if (topology_state == DESIGN_DEPENDENCY_TOPOLOGY_UNCONFIGURED) {
-    /* The native planner clones topo_sort()'s stable layer/tie semantics.
-     * Seal the lane to source versions reviewed with this implementation;
-     * unknown older or future implementations retain the complete R path. */
-    const int reviewed = TYPEOF(mlr3misc_version) == STRSXP &&
-      !ALTREP(mlr3misc_version) && XLENGTH(mlr3misc_version) == 1 &&
-      paradox_api_has_no_attributes(mlr3misc_version) &&
-      (paradox_domain_string_is(
-          STRING_ELT(mlr3misc_version, 0),
-          "0.18.0"
-        ) || paradox_domain_string_is(
-          STRING_ELT(mlr3misc_version, 0),
-          "0.22.0"
-        ));
-    topology_state = reviewed
-      ? DESIGN_DEPENDENCY_TOPOLOGY_ENABLED
-      : DESIGN_DEPENDENCY_TOPOLOGY_DISABLED;
-  }
-  return Rf_ScalarLogical(
-    topology_state == DESIGN_DEPENDENCY_TOPOLOGY_ENABLED
-  );
+static SEXP empty_output(void) {
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 3));
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, 3));
+  SET_STRING_ELT(names, 0, Rf_mkChar("rows"));
+  SET_STRING_ELT(names, 1, Rf_mkChar("columns"));
+  SET_STRING_ELT(names, 2, Rf_mkChar("values"));
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  SET_VECTOR_ELT(result, 0, Rf_allocVector(VECSXP, 0));
+  SET_VECTOR_ELT(result, 1, Rf_allocVector(STRSXP, 0));
+  SET_VECTOR_ELT(result, 2, Rf_allocVector(VECSXP, 0));
+  UNPROTECT(2);
+  return result;
 }
 
-SEXP paradox_design_dependency_plan_builtin(SEXP data, SEXP param_set) {
-  if (topology_state != DESIGN_DEPENDENCY_TOPOLOGY_ENABLED) {
-    return R_NilValue;
-  }
+SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
   PROTECT(data);
   PROTECT(param_set);
-  SEXP roots = PROTECT(Rf_allocVector(
-    VECSXP,
-    DESIGN_DEPENDENCY_ROOT_COUNT
-  ));
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_DATA, data);
-  SET_VECTOR_ELT(roots, DESIGN_DEPENDENCY_ROOT_PARAM_SET, param_set);
-
-  SEXP namespace_environment = PROTECT(
-    paradox_api_registered_namespace("paradox")
-  );
-  if (TYPEOF(namespace_environment) != ENVSXP ||
-      !canonical_execution_surface(param_set, namespace_environment)) {
-    UNPROTECT(4);
-    return R_NilValue;
+  if (!ordinary_design_shell(data)) {
+    UNPROTECT(2);
+    Rf_error("Design$data must be a list-like data frame");
   }
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, 4));
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  SEXP private = PROTECT(private_environment(param_set));
 
-  design_dependency_state_t state = {
-    .data = data,
-    .param_set = param_set
-  };
+  dependency_snapshot_t snapshot = {0};
   R_xlen_t work_since_interrupt = 0;
-  if (!load_private_state(&state, roots) ||
-      !load_param_state(&state, roots, &work_since_interrupt) ||
-      !load_dependency_state(&state, roots, &work_since_interrupt) ||
-      !load_data_state(&state, roots, &work_since_interrupt) ||
-      !plan_edges(&state, roots, &work_since_interrupt)) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  build_mask_layout(&state);
-  if (!build_topological_order(&state, &work_since_interrupt)) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-
-  if (state.mask_column_count != 0 &&
-      (state.row_count > R_XLEN_T_MAX / state.mask_column_count ||
-       (uint64_t) state.row_count >
-         SIZE_MAX / (uint64_t) state.mask_column_count)) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  const size_t mask_bits = (size_t) state.mask_column_count *
-    (size_t) state.row_count;
-  if (mask_bits > SIZE_MAX - 7U) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  state.mask_byte_count = (mask_bits + 7U) >> 3;
-  if (state.mask_byte_count > DESIGN_DEPENDENCY_MASK_LIMIT_BYTES ||
-      state.mask_byte_count > (size_t) R_XLEN_T_MAX) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  unsigned char *inactive = paradox_temporary_alloc(
-    (R_xlen_t) state.mask_byte_count,
-    sizeof(*inactive)
+  load_param_state(
+    param_set,
+    private,
+    &graph_roots,
+    graph_roots_index,
+    &snapshot,
+    roots,
+    &work_since_interrupt
   );
-  R_xlen_t *counts = paradox_temporary_alloc(
-    state.dependency_count,
-    sizeof(*counts)
+  if (snapshot.dependency_count == 0) {
+    SEXP result = PROTECT(empty_output());
+    UNPROTECT(6);
+    return result;
+  }
+  snapshot_design_data(
+    data,
+    &snapshot,
+    roots,
+    &work_since_interrupt
   );
-  if (!simulate_dependencies(
-      &state,
-      inactive,
-      counts,
-      R_NilValue,
-      NULL,
-      &work_since_interrupt
-    )) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  R_xlen_t plan_index_count = 0;
-  for (R_xlen_t edge = 0; edge < state.dependency_count; ++edge) {
-    if (counts[edge] >
-        DESIGN_DEPENDENCY_PLAN_INDEX_LIMIT - plan_index_count) {
-      UNPROTECT(4);
-      return R_NilValue;
-    }
-    plan_index_count += counts[edge];
-  }
-  R_xlen_t *final_counts = paradox_temporary_alloc(
-    state.dependency_count,
-    sizeof(*final_counts)
-  );
-
-  SEXP output;
-  if (!allocate_output(&state, roots, counts, &output) ||
-      !current_shapes_are_exact(&state, &work_since_interrupt) ||
-      !canonical_execution_surface(param_set, namespace_environment) ||
-      !current_shapes_are_exact(&state, &work_since_interrupt) ||
-      !canonical_execution_surface(param_set, namespace_environment) ||
-      !current_state_matches(&state) ||
-      !current_execution_objects_are_exact(
-        &state,
-        &work_since_interrupt
-      )) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-
-  SEXP output_rows = VECTOR_ELT(output, 0);
-  if (!simulate_dependencies(
-      &state,
-      inactive,
-      final_counts,
-      output_rows,
-      counts,
-      &work_since_interrupt
-    )) {
-    UNPROTECT(4);
-    return R_NilValue;
-  }
-  UNPROTECT(4);
-  return output;
+  build_edge_plan(&snapshot, &work_since_interrupt);
+  SEXP result = PROTECT(build_output(
+    &snapshot,
+    &work_since_interrupt
+  ));
+  UNPROTECT(6);
+  return result;
 }

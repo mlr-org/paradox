@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-# Reject legacy R internals even when they occur in inactive preprocessor
+# Reject unsupported R internals even when they occur in inactive preprocessor
 # branches. Clang's raw lexer distinguishes identifiers from comments and
-# string literals without preprocessing the source.
+# string literals without preprocessing the source. ATTRIB and FORMALS are
+# intentionally allowed: Writing R Extensions publishes them as the documented
+# backports for newer attribute/closure inspection APIs.
 
 set -euo pipefail
 
@@ -41,9 +43,9 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-TOKENS_PATTERN='ATTRIB|BODY|CLOENV|ENCLOS|FORMALS|NO_ATTRIB'
-TOKENS_PATTERN+='|R_NamespaceRegistry|Rf_findVar|Rf_findVarInFrame'
-TOKENS_PATTERN+='|Rf_findVarInFrame3|SET_ATTRIB|SET_BODY|SET_CLOENV'
+TOKENS_PATTERN='BODY|CLOENV|ENCLOS|NO_ATTRIB'
+TOKENS_PATTERN+='|R_NamespaceRegistry|Rf_findVar|Rf_findVarInFrame3'
+TOKENS_PATTERN+='|SET_ATTRIB|SET_BODY|SET_CLOENV'
 TOKENS_PATTERN+='|SET_ENCLOS|SET_FORMALS|findVar|findVarInFrame'
 TOKENS_PATTERN+='|findVarInFrame3'
 TOKENS_PATTERN+='|ENVFLAGS|SET_ENVFLAGS|FRAME|SET_FRAME|HASHTAB|SET_HASHTAB'
@@ -64,6 +66,9 @@ REPORT_TEMP="$WORK/report"
 } > "$REPORT_TEMP"
 
 failed=false
+LEGACY_BINDING_SYMBOL=Rf_findVarInFrame
+LEGACY_BINDING_SOURCE=src/r_api_compat.c
+LEGACY_BINDING_COUNT=0
 for source_file in "${SOURCE_FILES[@]}"; do
   token_file="$WORK/tokens"
   if ! "$CLANG" -Xclang -dump-raw-tokens -fsyntax-only "$source_file" \
@@ -86,7 +91,52 @@ for source_file in "${SOURCE_FILES[@]}"; do
       failed=true
     fi
   fi
+  legacy_count=$(LC_ALL=C grep -Ec \
+    "^raw_identifier '$LEGACY_BINDING_SYMBOL'([[:space:]]|$)" \
+    "$token_file" || true)
+  if ((legacy_count != 0)); then
+    relative_source=${source_file#"$SOURCE/"}
+    if [[ "$relative_source" != "$LEGACY_BINDING_SOURCE" ]]; then
+      printf 'unreviewed_legacy_binding_file=%s:%s\n' \
+        "$relative_source" "$legacy_count" >> "$REPORT_TEMP"
+      failed=true
+    fi
+    LEGACY_BINDING_COUNT=$((LEGACY_BINDING_COUNT + legacy_count))
+  fi
 done
+
+EXCEPTION_LEDGER="$SOURCE/environment/r-api-exceptions.tsv"
+if ((LEGACY_BINDING_COUNT != 0)) || [[ -e "$EXCEPTION_LEDGER" ]]; then
+  [[ -f "$EXCEPTION_LEDGER" && ! -L "$EXCEPTION_LEDGER" ]] || {
+    printf 'legacy_exception_ledger=missing-or-unsafe\n' >> "$REPORT_TEMP"
+    failed=true
+  }
+  if [[ -f "$EXCEPTION_LEDGER" && ! -L "$EXCEPTION_LEDGER" ]]; then
+    mapfile -t exception_lines < "$EXCEPTION_LEDGER"
+    expected_header=$'symbol\tsource\tcount\tversions\tpolicy\trationale'
+    if ((${#exception_lines[@]} != 2)) ||
+        [[ "${exception_lines[0]:-}" != "$expected_header" ]]; then
+      printf 'legacy_exception_ledger=malformed\n' >> "$REPORT_TEMP"
+      failed=true
+    else
+      IFS=$'\t' read -r exception_symbol exception_source \
+        exception_count exception_versions exception_policy \
+        exception_rationale exception_extra <<< "${exception_lines[1]}"
+      if [[ "$exception_symbol" != "$LEGACY_BINDING_SYMBOL" ||
+            "$exception_source" != "$LEGACY_BINDING_SOURCE" ||
+            "$exception_count" != "$LEGACY_BINDING_COUNT" ||
+            "$exception_versions" != 'R-4.3.x--R-4.5.x' ||
+            "$exception_policy" != 'declared-exported-pre-4.6-only' ||
+            -n "${exception_extra:-}" || -z "$exception_rationale" ]]; then
+        printf 'legacy_exception_ledger=content-mismatch\n' >> "$REPORT_TEMP"
+        failed=true
+      fi
+    fi
+  fi
+fi
+printf 'reviewed_legacy_binding=%s:%s:%s\n' \
+  "$LEGACY_BINDING_SYMBOL" "$LEGACY_BINDING_SOURCE" \
+  "$LEGACY_BINDING_COUNT" >> "$REPORT_TEMP"
 
 if "$failed"; then
   printf 'result=failed\n' >> "$REPORT_TEMP"
@@ -97,4 +147,5 @@ fi
 
 printf 'result=passed\n' >> "$REPORT_TEMP"
 mv "$REPORT_TEMP" "$REPORT"
-printf 'public R C API token audit passed: %s files\n' "${#SOURCE_FILES[@]}"
+printf 'R C API token audit passed: %s files, %s reviewed legacy binding\n' \
+  "${#SOURCE_FILES[@]}" "$LEGACY_BINDING_COUNT"
