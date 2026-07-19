@@ -426,6 +426,12 @@ scripts/bootstrap-runtime-matrix --verify
 . scripts/activate                        # return to R 4.6.1
 ```
 
+`scripts/test-runtime-matrix` validates the reviewed result-skip manifest
+against the exact extracted candidate's current `skip_on_cran` test titles
+before resource admission or any runtime build/install worker starts. Keep
+that source-derived preflight shared with the old-runtime test runner so a
+stale policy fails cheaply instead of after two package installations.
+
 Reference R source, Writing R Extensions, R Internals, data.table source, and
 the analyzer sources are populated by `scripts/fetch-reference-sources`.
 Consult those pinned local sources rather than remembered C-API behavior.
@@ -573,6 +579,10 @@ Keep diagnostic probes bounded as well: do not use recursive
 `.Internal(inspect())` on R6/capsule graphs, because environments and shared
 edges can produce unbounded traversal and output. Inspect exact attributes,
 classes, payload fields, and identities explicitly instead.
+In fail-closed Bash validators that enable `pipefail`, do not pipe a long
+captured string from `printf` into `grep -q`: `grep` may exit after its match
+and turn the producer's `SIGPIPE` into a nondeterministic false failure. Match
+the captured value through a here-string or a regular retained file instead.
 
 Use `scripts/environment/resource-jobs` before parallel work. Parallelize
 independent test files, consumers, and runtime stages at the outer level while

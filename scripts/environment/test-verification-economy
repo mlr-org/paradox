@@ -599,7 +599,7 @@ for completion_binding in \
     'compiler_waves_sha256=' \
     'compiler_identity_helper_sha256=' \
     'compiler_identity_sha256='; do
-  printf '%s\n' "$api_completion_body" | grep -Fq "$completion_binding" ||
+  grep -Fq "$completion_binding" <<< "$api_completion_body" ||
     fail "API completion lacks evidence binding: $completion_binding"
 done
 grep -Fq '"$RETAINED_COMPILER_IDENTITY_HELPER" verify' "$API_GATE" ||
@@ -612,7 +612,7 @@ for timeout_binding in \
     'header_cache_lock_timeout_seconds=' \
     'header_cache_command_timeout_seconds=' \
     'header_cache_task_timeout_seconds='; do
-  printf '%s\n' "$api_completion_body" | grep -Fq "$timeout_binding" ||
+  grep -Fq "$timeout_binding" <<< "$api_completion_body" ||
     fail "API completion lacks timeout binding: $timeout_binding"
 done
 
@@ -704,7 +704,7 @@ fi
 grep -Fq -- '--setsid "$SETSID"' "$API_GATE" ||
   fail "API caller does not pass its retained setsid to compiler waves"
 for completion_binding in 'setsid_sha256=' 'setsid_identity_sha256='; do
-  printf '%s\n' "$api_completion_body" | grep -Fq "$completion_binding" ||
+  grep -Fq "$completion_binding" <<< "$api_completion_body" ||
     fail "API completion omits setsid provenance: $completion_binding"
 done
 

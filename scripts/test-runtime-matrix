@@ -108,6 +108,7 @@ trusted_inputs=(
   scripts/environment/runtime-matrix-git
   scripts/environment/runtime-matrix-inventory.R
   scripts/environment/runtime-matrix-probe.R
+  scripts/environment/runtime-matrix-skip-policy.R
   scripts/environment/run-runtime-matrix-tests.R
   scripts/environment/resource-jobs
   scripts/environment/run-runtime-matrix-stage
@@ -225,6 +226,14 @@ for version in "${versions[@]}"; do
     printf 'scheduling\tresource-jobs light-test; at most two outer stages; all nested parallelism fixed to one\n'
   } > "$inputs/commands.tsv"
 done
+
+# Validate source-derived skip policy from one authenticated extracted candidate
+# before resource admission or either build/install worker can start.  Both
+# runtime stages use the same exact Git archive bytes.
+preflight_source="$run_root/R-${versions[0]}/artifacts/source"
+Rscript --vanilla \
+  "$preflight_source/scripts/environment/runtime-matrix-skip-policy.R" \
+  "$preflight_source"
 
 resource_report="$run_root/metadata/resource-jobs.tsv"
 task_list="$run_root/metadata/stage-tasks.tsv"

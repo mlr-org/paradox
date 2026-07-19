@@ -133,7 +133,7 @@ if rg -q 'pre-4.5-evaluated-public-fallback|authenticated-r-fallback' \
   echo "Runtime verification retains the deleted R-evaluation shim contract" >&2
   exit 1
 fi
-rg -Fq 'required=(ATTRIB FORMALS)' \
+rg -Fq 'required=(ATTRIB FORMALS Rf_findVarInFrame)' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'branch=pre-4.5-documented-public-backports' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
@@ -144,6 +144,7 @@ if command -v Rscript >/dev/null 2>&1; then
   Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
     "$ROOT/scripts/environment/runtime-matrix-inventory.R" \
     "$ROOT/scripts/environment/runtime-matrix-probe.R" \
+    "$ROOT/scripts/environment/runtime-matrix-skip-policy.R" \
     "$ROOT/scripts/environment/run-runtime-matrix-tests.R"
   Rscript --vanilla - "$ROOT" <<'RSCRIPT'
 root <- commandArgs(trailingOnly = TRUE)[[1L]]
@@ -184,77 +185,81 @@ for (i in seq_len(nrow(whole_policy))) {
   )
 }
 
-stopifnot(requireNamespace("rlang", quietly = TRUE))
-expression_children <- function(value) {
-  output <- list()
-  for (index in seq_along(value)) {
-    if (!rlang::is_missing(value[[index]])) {
-      output[[length(output) + 1L]] <- value[[index]]
-    }
-  }
-  output
-}
-contains_named_call <- function(value, target) {
-  if (!is.call(value) && !is.expression(value)) return(FALSE)
-  if (is.call(value) && is.name(value[[1L]]) &&
-      identical(as.character(value[[1L]]), target)) return(TRUE)
-  any(vapply(
-    expression_children(value), contains_named_call, logical(1L),
-    target = target
-  ))
-}
-not_cran_titles <- function(path) {
-  output <- character()
-  walk <- function(value) {
-    if (is.call(value) && is.name(value[[1L]]) &&
-        identical(as.character(value[[1L]]), "test_that") &&
-        contains_named_call(value, "skip_on_cran")) {
-      stopifnot(
-        is.character(value[[2L]]), length(value[[2L]]) == 1L,
-        !is.na(value[[2L]]), nzchar(value[[2L]])
-      )
-      output <<- c(output, value[[2L]])
-      return(invisible(NULL))
-    }
-    if (is.call(value) || is.expression(value)) {
-      for (child in expression_children(value)) walk(child)
-    }
-    invisible(NULL)
-  }
-  walk(parse(path, keep.source = FALSE))
-  output
-}
-test_directory <- file.path(root, "tests", "testthat")
-test_files <- dir(test_directory, "^test.*\\.[rR]$")
-source_rows <- do.call(rbind, lapply(test_files, function(file) {
-  titles <- not_cran_titles(file.path(test_directory, file))
-  if (!length(titles)) return(NULL)
-  data.frame(file = file, test = titles, stringsAsFactors = FALSE)
-}))
-if (is.null(source_rows)) {
-  source_rows <- data.frame(file = character(), test = character())
-}
-expected <- do.call(rbind, lapply(c("4.3.3", "4.5.2"), function(runtime) {
-  data.frame(
-    runtime = rep(runtime, nrow(source_rows)),
-    file = source_rows$file,
-    test = source_rows$test,
-    reason = rep("Reason: On CRAN", nrow(source_rows)),
+policy_environment <- new.env(parent = globalenv())
+sys.source(
+  file.path(root, "scripts", "environment", "runtime-matrix-skip-policy.R"),
+  envir = policy_environment
+)
+invisible(policy_environment$runtime_matrix_validate_result_skip_policy(root))
+
+local({
+  temporary_parent <- file.path(root, ".local", "tmp")
+  dir.create(temporary_parent, recursive = TRUE, showWarnings = FALSE)
+  fixture <- tempfile("runtime-skip-policy.", tmpdir = temporary_parent)
+  dir.create(file.path(fixture, "tests", "testthat"), recursive = TRUE)
+  dir.create(file.path(fixture, "environment"), recursive = TRUE)
+  on.exit(unlink(fixture, recursive = TRUE, force = TRUE), add = TRUE)
+  writeLines(c(
+    'test_that("fixture result skip", {',
+    '  skip_on_cran()',
+    '  expect_true(TRUE)',
+    '})'
+  ), file.path(fixture, "tests", "testthat", "test-fixture.R"))
+  manifest_path <- file.path(
+    fixture, "environment", "runtime-matrix-result-skips.tsv"
+  )
+  valid <- data.frame(
+    runtime = c("4.3.3", "4.5.2"),
+    file = rep("test-fixture.R", 2L),
+    test = rep("fixture result skip", 2L),
+    reason = rep("Reason: On CRAN", 2L),
     stringsAsFactors = FALSE
   )
-}))
-expected <- expected[do.call(order, c(
-  expected[c("runtime", "file", "test", "reason")], list(method = "radix")
-)), , drop = FALSE]
-row.names(expected) <- NULL
-result_policy <- read.delim(
-  file.path(root, "environment", "runtime-matrix-result-skips.tsv"),
-  quote = "", comment.char = "", colClasses = "character",
-  check.names = FALSE
-)
-stopifnot(identical(result_policy, expected))
+  write_policy <- function(value) {
+    write.table(
+      value, manifest_path, sep = "\t", quote = FALSE,
+      row.names = FALSE, col.names = TRUE
+    )
+  }
+  expect_policy_error <- function(value, pattern) {
+    write_policy(value)
+    error <- tryCatch(
+      policy_environment$runtime_matrix_validate_result_skip_policy(fixture),
+      error = identity
+    )
+    stopifnot(inherits(error, "error"), grepl(pattern, conditionMessage(error)))
+  }
+  write_policy(valid)
+  invisible(
+    policy_environment$runtime_matrix_validate_result_skip_policy(fixture)
+  )
+  expect_policy_error(
+    valid[-1L, , drop = FALSE],
+    "differs from current skip_on_cran test titles"
+  )
+  tampered <- valid
+  tampered$reason[[1L]] <- "Reason: Tampered"
+  expect_policy_error(
+    tampered,
+    "differs from current skip_on_cran test titles"
+  )
+})
 RSCRIPT
 fi
+
+preflight_line=$(rg -n \
+  'preflight_source/scripts/environment/runtime-matrix-skip-policy[.]R' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+resource_line=$(rg -n '^resource_report=' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+worker_line=$(rg -n '^"[$]WAVE_RUNNER" ' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+[[ "$preflight_line" =~ ^[0-9]+$ && "$resource_line" =~ ^[0-9]+$ &&
+  "$worker_line" =~ ^[0-9]+$ && "$preflight_line" -lt "$resource_line" &&
+  "$resource_line" -lt "$worker_line" ]] || {
+  echo "Runtime skip-policy preflight does not precede stage work" >&2
+  exit 1
+}
 
 mkdir -p "$ROOT/.local/tmp"
 fixture=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-receipt.XXXXXX")

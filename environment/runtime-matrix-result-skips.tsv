@@ -2,18 +2,32 @@ runtime	file	test	reason
 4.3.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
 4.3.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
 4.3.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
-4.3.3	test-native-altrep-lifetimes.R	materialized inputs remain rooted under forced collection	Reason: On CRAN
+4.3.3	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 4.3.3	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
+4.3.3	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
+4.3.3	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
 4.3.3	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
+4.3.3	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
+4.3.3	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
 4.3.3	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
 4.3.3	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
+4.3.3	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
+4.3.3	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
 4.3.3	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
+4.3.3	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
 4.5.2	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
 4.5.2	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
 4.5.2	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
-4.5.2	test-native-altrep-lifetimes.R	materialized inputs remain rooted under forced collection	Reason: On CRAN
+4.5.2	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
 4.5.2	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
+4.5.2	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
+4.5.2	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
 4.5.2	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
+4.5.2	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
+4.5.2	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
 4.5.2	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
 4.5.2	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
+4.5.2	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
+4.5.2	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
 4.5.2	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
+4.5.2	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN

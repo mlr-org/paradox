@@ -1964,7 +1964,7 @@ static SEXP snapshot_tune_tokens_from_values(SEXP values) {
   for (R_xlen_t index = 0; index < size; ++index) {
     const int is_token = Rf_inherits(
       VECTOR_ELT(values, index), "TuneToken"
-    );
+    ) != FALSE;
     selected[index] = is_token ? 1U : 0U;
     token_count += selected[index] != 0;
   }

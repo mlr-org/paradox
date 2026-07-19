@@ -239,6 +239,7 @@ verify_trusted_inputs() {
     scripts/environment/runtime-matrix-git
     scripts/environment/runtime-matrix-inventory.R
     scripts/environment/runtime-matrix-probe.R
+    scripts/environment/runtime-matrix-skip-policy.R
     scripts/environment/run-runtime-matrix-tests.R
     scripts/environment/resource-jobs
     scripts/environment/run-runtime-matrix-stage

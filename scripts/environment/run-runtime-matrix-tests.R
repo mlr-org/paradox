@@ -20,53 +20,6 @@ byte_sort <- function(value) {
   value[order(value, method = "radix")]
 }
 
-expression_children <- function(value) {
-  output <- list()
-  for (index in seq_along(value)) {
-    if (!rlang::is_missing(value[[index]])) {
-      output[[length(output) + 1L]] <- value[[index]]
-    }
-  }
-  output
-}
-
-contains_named_call <- function(value, target) {
-  if (!is.call(value) && !is.expression(value)) return(FALSE)
-  if (is.call(value) && is.name(value[[1L]]) &&
-      identical(as.character(value[[1L]]), target)) {
-    return(TRUE)
-  }
-  any(vapply(
-    expression_children(value),
-    contains_named_call,
-    logical(1L),
-    target = target
-  ))
-}
-
-not_cran_test_titles <- function(path) {
-  titles <- character()
-  walk <- function(value) {
-    if (is.call(value) && is.name(value[[1L]]) &&
-        identical(as.character(value[[1L]]), "test_that") &&
-        contains_named_call(value, "skip_on_cran")) {
-      title <- value[[2L]]
-      if (!is.character(title) || length(title) != 1L || is.na(title) ||
-          !nzchar(title)) {
-        stop("skip_on_cran test has a non-literal title", call. = FALSE)
-      }
-      titles <<- c(titles, title)
-      return(invisible(NULL))
-    }
-    if (is.call(value) || is.expression(value)) {
-      for (child in expression_children(value)) walk(child)
-    }
-    invisible(NULL)
-  }
-  walk(parse(path, keep.source = FALSE))
-  titles
-}
-
 snapshot <- normalizePath(args[[1L]], mustWork = TRUE)
 candidate_library <- normalizePath(args[[2L]], mustWork = TRUE)
 scope_parent <- normalizePath(dirname(args[[3L]]), mustWork = TRUE)
@@ -86,6 +39,14 @@ if (!requireNamespace("testthat", quietly = TRUE)) {
 if (!requireNamespace("rlang", quietly = TRUE)) {
   stop("the exact runtime lock does not provide rlang", call. = FALSE)
 }
+skip_policy_helper <- file.path(
+  snapshot, "scripts", "environment", "runtime-matrix-skip-policy.R"
+)
+if (!file.exists(skip_policy_helper) || dir.exists(skip_policy_helper) ||
+    is_symbolic(skip_policy_helper)) {
+  stop("runtime skip-policy validator is absent or symbolic", call. = FALSE)
+}
+source(skip_policy_helper, local = TRUE)
 
 Sys.setenv(NOT_CRAN = "false")
 options(
@@ -225,84 +186,9 @@ for (i in seq_len(nrow(whole_skips))) {
 result_skip_relative <- file.path(
   "environment", "runtime-matrix-result-skips.tsv"
 )
-result_skip_path <- file.path(snapshot, result_skip_relative)
-if (!file.exists(result_skip_path) || dir.exists(result_skip_path) ||
-    is_symbolic(result_skip_path)) {
-  stop("result-skip manifest is absent or symbolic", call. = FALSE)
-}
-result_skip_policy <- read.delim(
-  result_skip_path,
-  header = TRUE,
-  quote = "",
-  comment.char = "",
-  colClasses = "character",
-  check.names = FALSE
+result_skip_policy <- runtime_matrix_validate_result_skip_policy(
+  snapshot, test_files = test_files, test_paths = test_paths
 )
-result_skip_order <- if (nrow(result_skip_policy) > 0L) {
-  do.call(order, c(
-    result_skip_policy[c("runtime", "file", "test", "reason")],
-    list(method = "radix")
-  ))
-} else {
-  integer()
-}
-if (!identical(
-      names(result_skip_policy), c("runtime", "file", "test", "reason")
-    ) || anyNA(result_skip_policy) ||
-    any(!nzchar(result_skip_policy$test)) ||
-    any(!nzchar(result_skip_policy$reason)) ||
-    any(!result_skip_policy$runtime %in% c("4.3.3", "4.5.2")) ||
-    any(!grepl("^test[-_][A-Za-z0-9_-]+[.]R$", result_skip_policy$file)) ||
-    any(!result_skip_policy$file %in% test_files) ||
-    any(grepl("[\t\r\n]", result_skip_policy$test)) ||
-    any(grepl("[\t\r\n]", result_skip_policy$reason)) ||
-    anyDuplicated(result_skip_policy[c("runtime", "file", "test")]) ||
-    !identical(result_skip_order, seq_len(nrow(result_skip_policy)))) {
-  stop("result-skip manifest is malformed", call. = FALSE)
-}
-source_result_skips <- lapply(seq_along(test_paths), function(index) {
-  titles <- not_cran_test_titles(test_paths[[index]])
-  if (!length(titles)) return(NULL)
-  data.frame(
-    file = rep(test_files[[index]], length(titles)),
-    test = titles,
-    stringsAsFactors = FALSE
-  )
-})
-source_result_skips <- do.call(rbind, source_result_skips)
-if (is.null(source_result_skips)) {
-  source_result_skips <- data.frame(
-    file = character(), test = character(), stringsAsFactors = FALSE
-  )
-}
-row.names(source_result_skips) <- NULL
-if (anyDuplicated(source_result_skips)) {
-  stop("source contains duplicate skip_on_cran test titles", call. = FALSE)
-}
-reviewed_runtimes <- c("4.3.3", "4.5.2")
-expected_result_skip_policy <- do.call(rbind, lapply(
-  reviewed_runtimes,
-  function(runtime) {
-    data.frame(
-      runtime = rep(runtime, nrow(source_result_skips)),
-      file = source_result_skips$file,
-      test = source_result_skips$test,
-      reason = rep("Reason: On CRAN", nrow(source_result_skips)),
-      stringsAsFactors = FALSE
-    )
-  }
-))
-expected_result_skip_policy <- expected_result_skip_policy[do.call(order, c(
-  expected_result_skip_policy[c("runtime", "file", "test", "reason")],
-  list(method = "radix")
-)), , drop = FALSE]
-row.names(expected_result_skip_policy) <- NULL
-if (!identical(result_skip_policy, expected_result_skip_policy)) {
-  stop(
-    "result-skip manifest differs from current skip_on_cran test titles",
-    call. = FALSE
-  )
-}
 runtime_version <- as.character(getRversion())
 expected_result_skips <- result_skip_policy[
   result_skip_policy$runtime == runtime_version,
