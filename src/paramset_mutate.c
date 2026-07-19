@@ -251,8 +251,7 @@ static void require_feasible_rhs(SEXP private_environment, SEXP self,
 }
 
 static SEXP snapshot_dependencies(SEXP input,
-    const paradox_domain_params_t *params, SEXP private_environment,
-    SEXP self, SEXP expected_core, int validate_feasibility,
+    const paradox_domain_params_t *params,
     R_xlen_t *work_since_interrupt) {
   static const SEXPTYPE types[] = {STRSXP, STRSXP, VECSXP};
   if (TYPEOF(input) != VECSXP || ALTREP(input)) {
@@ -341,21 +340,6 @@ static SEXP snapshot_dependencies(SEXP input,
     SET_VECTOR_ELT(result_conditions, row, condition);
     UNPROTECT(1);
   }
-  if (validate_feasibility && params != NULL) {
-    for (R_xlen_t row = 0; row < rows; ++row) {
-      SEXP parent = STRING_ELT(result_on, row);
-      if (find_id(params->ids, parent, work_since_interrupt) != R_XLEN_T_MAX) {
-        require_feasible_rhs(
-          private_environment,
-          self,
-          expected_core,
-          parent,
-          VECTOR_ELT(result_conditions, row),
-          work_since_interrupt
-        );
-      }
-    }
-  }
   UNPROTECT(5);
   return result;
 }
@@ -365,10 +349,6 @@ SEXP paradox_param_set_dependency_table_snapshot(SEXP dependencies) {
   return snapshot_dependencies(
     dependencies,
     NULL,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    FALSE,
     &work_since_interrupt
   );
 }
@@ -389,10 +369,6 @@ SEXP paradox_param_set_dependencies(SEXP private_environment, SEXP self) {
   return snapshot_dependencies(
     VECTOR_ELT(state, PARADOX_CORE_DEPS),
     NULL,
-    R_NilValue,
-    R_NilValue,
-    R_NilValue,
-    FALSE,
     &work_since_interrupt
   );
 }
@@ -601,10 +577,6 @@ SEXP paradox_param_set_set_dependencies(SEXP private_environment, SEXP self,
   SEXP stable = PROTECT(snapshot_dependencies(
     dependencies,
     &params,
-    private_environment,
-    self,
-    core,
-    TRUE,
     &work_since_interrupt
   ));
   (void) replace_one(private_environment, core, ".deps", stable);

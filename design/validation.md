@@ -129,11 +129,18 @@ families.
   store and remains stable across clone, serialization, and equality;
 - dependencies, constraints, individual/extra transformations, aggregation,
   internal tuning, and ParamUty custom checks;
-- native tag and dependency projection/replacement/append own detached state,
-  snapshot Conditions, validate feasible RHS values, reject malformed tables,
-  route visible Shadow dependency append, and detect mutation during callbacks;
-  native BASE callback setters retain established formal admission and atomic
-  replacement;
+- native tag and dependency projection/replacement/append own detached state
+  and snapshot exact Conditions. Bulk dependency replacement rejects malformed
+  tables, invalid children, and self-edges, preserves dangling parents and
+  infeasible predicates without callbacks, and covers graph copying after
+  parent-Domain narrowing. `$add_dep()` separately validates feasible RHS
+  values, routes visible Shadow dependency append, and detects mutation during
+  callbacks; native BASE callback setters retain established formal admission
+  and atomic replacement;
+- `$has_deps` returns exact false/true results for BASE, live SHADOW, and
+  COLLECTION nodes through its registered reader; malformed or bytes-encoded
+  dependency state and collection cycles fail closed, and the direct-routine
+  probe plus forced-gctorture suite cover the allocating graph/refresh paths;
 - aggregation, disabling, and conversion internal-tuning operations capture
   cargo/translation/Domain/owner-value state before callbacks and commit only
   through native mutation; flattened `cargo` closures are rebound to detached
@@ -206,7 +213,11 @@ families.
   shared/nested graphs, callbacks, both pinned `mbo_config` fixtures, and
   rejected legacy extensions;
 - constructor representation, Design, sampler, subset/flatten/union, and
-  ordinary edge diagnostics.
+  ordinary edge diagnostics. Subset coverage pins the compatible
+  `keep_trafo = TRUE` default and verifies independent transformation stripping
+  for BASE, COLLECTION, and SHADOW at both the public and registered-native
+  boundaries, rejects classed/attributed controls before S3 dispatch, and
+  exercises the stripped transaction under forced GC.
 
 Every consumer-discovered failure adds the smallest internal regression that
 would have caught it before the downstream fix is accepted.
@@ -298,9 +309,10 @@ and common consumer call patterns.
 
 Run in increasing cost:
 
-1. focused bbotk additive-subclass/public-sets bridge;
+1. focused bbotk additive-subclass/public-sets and native owner-root bridge;
 2. focused miesmuschel official-Shadow bridge;
-3. mlr3mbo and other priority-zero consumer tests;
+3. focused mlr3mbo public transform-stripping subset bridge and the small
+   dual-version diagnostic adaptations;
 4. priority-one CRAN/Bioconductor reverse dependencies and maintained mlr-org
    repositories;
 5. active book/gallery/website/cheatsheets and serialized configurations.
@@ -310,6 +322,37 @@ candidate installation. Content-addressed consumer package installations are
 reused; independent rows run in admitted outer waves. Mine all failures before
 changing source. Very old repositories that neither import nor call current
 Paradox are recorded but not made blockers.
+
+The seven reviewed bridge packages are installed once per candidate, in the
+fixed dependency order bbotk, mlr3, miesmuschel, mlr3pipelines, mlr3fselect,
+mlr3mbo, and celecx, by
+`compat/install-downstream-bridges --candidate-source "$candidate_source"`.
+Construction consumes the authenticated candidate and priority-one dependency
+libraries, verifies the organization review ledger once, archives each exact
+Git object, and atomically publishes a read-only candidate-specific overlay at
+`.local/compat/runs/$PARADOX_CANDIDATE_RUN_ID/library-downstream-bridges` plus
+sealed evidence. That evidence binds candidate provenance and content,
+dependency content, all bridge/review inputs, archive hashes, installed
+versions and content, the installer, repository-evidence verifier, and resource
+scheduler. Its schema-2 completion receipt is invalid for another candidate
+even when package versions happen to match. One candidate-run owner serializes
+construction. The library and evidence use atomic no-clobber directory
+publication, and failure cleanup is allowed to remove a published path only
+while both owner identity and its recorded filesystem device/inode still
+match. A concurrently installed replacement is therefore never repaired or
+deleted by a losing process.
+
+Repository-corpus, documentation, and benchmark gates put that exact overlay
+first in their extra-library path and call the helper's `--verify` mode before
+loading packages or beginning retained work. Verification is read-only and
+replays the sealed inputs, exact seven Git archives, package inventory/content,
+and read-only modes; it never rebuilds or repairs the overlay. A caller may
+skip duplicate candidate/dependency tree hashing with
+`--protected-content-preverified` only after authenticating those exact trees
+itself. `scripts/environment/test-downstream-bridge-installer` cheaply pins the
+installer order, provenance agreement, entrypoint hooks, and release recipe;
+shell syntax and shellcheck accompany it. Candidate evidence still requires
+one real construction followed by verification.
 
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the
@@ -332,7 +375,10 @@ After package and focused consumers are green, run:
 `scripts/memory-check` consumes the exact source/archive from a passed native
 run and does not rebuild examples, vignettes, or the full functional corpus in
 each analyzer mode. Analyzer-specific probes cover every registered routine and
-reviewed hazard. Valgrind/rchk are serial memory-heavy stages and run only after
+reviewed hazard. Its retained source-run validator authenticates root-dependent
+fixture/Git helpers against the active repository copies rather than resolving
+them from the validator's relocated evidence directory. Valgrind/rchk are
+serial memory-heavy stages and run only after
 the resource helper admits one process and retains its exact report. Valgrind
 requires a 16-GiB working-set allowance plus at least a 16-GiB host reserve;
 rchk requires its enforced 20-GiB analyzer address-space allowance plus at

@@ -92,6 +92,14 @@ hazards that Paradox 2 is intended to remove.
   ParamSet methods. Retained/untransformed inputs remain in input order,
   followed by changed child outputs in callback-plan order; omitted child
   outputs are removed.
+* `ParamSet$subset()` now has an additive final `keep_trafo = TRUE` argument,
+  also supported by collections and shadows. `keep_trafo = FALSE` removes both
+  per-parameter transformations and `extra_trafo` in the native subset
+  transaction while preserving the independently selected constraint. This is
+  the supported way for consumers such as mlr3mbo to derive an untransformed
+  search space without mutating private Domain tables. Subset control flags are
+  unclassed, attribute-free logical scalars; collection callback detachment no
+  longer reinterprets them through R's generic `!`.
 * `ParamSet$check_dependencies()` now enters the same native graph/point/
   dependency kernel as `$check()`. It accepts an ordinary uniquely named base
   list, skips TuneToken dependency edges, diagnoses unknown IDs even when no
@@ -112,9 +120,17 @@ hazards that Paradox 2 is intended to remove.
   checks may still run during the preceding Domain-value validation phase.
 * Tag access/replacement, dependency snapshot/access/replacement/append, and
   BASE constraint/extra-transformation callback replacement are native capsule
-  operations. Dependency RHS feasibility uses the shared check kernel;
-  callback reentry is generation-checked, and Shadow dependency append routes
-  to the origin only when both endpoints remain visible.
+  operations. Bulk dependency assignment is a callback-free structural
+  snapshot and preserves predicates made partially or wholly infeasible by
+  parent-Domain narrowing. `$add_dep()` remains the stricter authoring API: RHS
+  feasibility uses the shared check kernel, callback reentry is
+  generation-checked, and Shadow append routes to the origin only when both
+  endpoints remain visible.
+* `$has_deps` is now a native scalar read. BASE and live SHADOW nodes validate
+  their canonical dependency state directly; COLLECTION nodes retain complete
+  graph admission and use its subtree count. The flag no longer constructs a
+  detached dependency table or data.table facade solely to test whether it is
+  empty.
 * `ParamSetCollection$add()` now validates the complete current and proposed
   child graphs—including Shadow origin edges—in one native transaction. It
   rejects existing/proposed cycles, corruption, collisions, and reentrant
@@ -244,10 +260,12 @@ hazards that Paradox 2 is intended to remove.
   shared graphs and callbacks, and rejects cycles, malformed private state,
   unknown extensions, and core-overriding subclasses. Downstream packages own
   migration of their legacy third-party subclasses.
-* Common validation messages remain informative and stable where downstream
-  code relies on them, but exact checkmate wording, implementation call frames,
+* Documented Paradox validation messages and deliberately maintained
+  package-owned fragments remain informative and stable. Exact checkmate-era
+  wording asserted only by downstream tests is not a compatibility promise and
+  may use a Paradox-major-gated expectation. Implementation call frames,
   side-effecting promise quirks, generated-closure layout, and exotic ALTREP
-  multi-observation behavior are not compatibility promises.
+  multi-observation behavior are likewise not compatibility promises.
 
 ## Correctness fixes
 

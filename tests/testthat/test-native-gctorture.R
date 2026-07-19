@@ -23,6 +23,7 @@ test_that("every allocating native entry point survives forced collection", {
       "param_set_params",
       "param_set_collection_params",
       "param_set_collection_deps",
+      "param_set_has_dependencies",
       "param_set_core_state",
       "param_set_subset_state",
       "param_set_adopt_subset_state"
@@ -42,6 +43,8 @@ test_that("every allocating native entry point survives forced collection", {
   private = parameter_set$.__enclos_env__$private
   collection = ParamSetCollection$new(list(inner = parameter_set))
   collection_private = collection$.__enclos_env__$private
+  shadow = ParamSetShadow$new(parameter_set, "double")
+  shadow_private = shadow$.__enclos_env__$private
   state = private$.state()
   params = state$.params
   tags = state$.tags
@@ -69,6 +72,11 @@ test_that("every allocating native entry point survives forced collection", {
   subset_private$.core = NULL
   collection_subset_private = new.env(parent = emptyenv())
   collection_subset_private$.core = NULL
+  trafo_parameter_set = ps(x = p_dbl(trafo = exp))
+  trafo_parameter_set$extra_trafo = function(x, param_set) x
+  trafo_private = trafo_parameter_set$.__enclos_env__$private
+  stripped_subset_private = new.env(parent = emptyenv())
+  stripped_subset_private$.core = NULL
   sampler = SamplerUnif$new(ParamSet$new(domains))
   sampler$sample(0L)
 
@@ -207,6 +215,21 @@ test_that("every allocating native entry point survives forced collection", {
     collection_private,
     collection
   )
+  base_has_dependencies = .Call(
+    symbols$C_param_set_has_dependencies,
+    private,
+    parameter_set
+  )
+  collection_has_dependencies = .Call(
+    symbols$C_param_set_has_dependencies,
+    collection_private,
+    collection
+  )
+  shadow_has_dependencies = .Call(
+    symbols$C_param_set_has_dependencies,
+    shadow_private,
+    shadow
+  )
   subset_token = .Call(
     symbols$C_param_set_subset_state,
     private,
@@ -215,7 +238,8 @@ test_that("every allocating native entry point survives forced collection", {
     FALSE,
     TRUE,
     parameter_set$constraint,
-    parameter_set$extra_trafo
+    parameter_set$extra_trafo,
+    TRUE
   )
   adopted_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
@@ -235,12 +259,29 @@ test_that("every allocating native entry point survives forced collection", {
     FALSE,
     TRUE,
     collection$constraint,
-    collection$extra_trafo
+    collection$extra_trafo,
+    TRUE
   )
   adopted_collection_subset_token = .Call(
     symbols$C_param_set_adopt_subset_state,
     collection_subset_private,
     collection_subset_token
+  )
+  stripped_subset_token = .Call(
+    symbols$C_param_set_subset_state,
+    trafo_private,
+    trafo_parameter_set,
+    "x",
+    FALSE,
+    TRUE,
+    trafo_parameter_set$constraint,
+    trafo_parameter_set$extra_trafo,
+    FALSE
+  )
+  adopted_stripped_subset_token = .Call(
+    symbols$C_param_set_adopt_subset_state,
+    stripped_subset_private,
+    stripped_subset_token
   )
   transposed = .Call(symbols$C_design_transpose, transpose_values, TRUE)
 
@@ -323,6 +364,9 @@ test_that("every allocating native entry point survives forced collection", {
     data.table:::selfrefok(recovered_collection_deps, FALSE),
     1L
   )
+  expect_identical(base_has_dependencies, TRUE)
+  expect_identical(collection_has_dependencies, TRUE)
+  expect_identical(shadow_has_dependencies, TRUE)
   expect_true(adopted_subset_token)
   expect_identical(
     .Call(symbols$C_param_set_core_state, subset_private)$.params$id,
@@ -337,5 +381,12 @@ test_that("every allocating native entry point survives forced collection", {
     )$.params$id,
     c("inner.factor", "inner.double")
   )
+  expect_true(adopted_stripped_subset_token)
+  stripped_state = .Call(
+    symbols$C_param_set_core_state,
+    stripped_subset_private
+  )
+  expect_identical(nrow(stripped_state$.trafos), 0L)
+  expect_null(stripped_state$.extra_trafo)
   expect_identical(transposed[[1L]]$double, -0.5)
 })

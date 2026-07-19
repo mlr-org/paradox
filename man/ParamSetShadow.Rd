@@ -175,7 +175,8 @@ would cross its fixed visible boundary.}
     \preformatted{ParamSetShadow$subset(
   ids,
   allow_dangling_dependencies = FALSE,
-  keep_constraint = TRUE
+  keep_constraint = TRUE,
+  keep_trafo = TRUE
 )}
     \if{html}{\out{</div>}}
   }
@@ -188,6 +189,10 @@ Whether to allow subsets that cut across parameter dependencies.
 Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their \code{"on"} will not be present).}
       \item{\code{keep_constraint}}{(\code{logical(1)})\cr
 Whether to keep the \verb{$constraint} function.}
+      \item{\code{keep_trafo}}{(\code{logical(1)})\cr
+Whether to keep per-parameter transformations and the \verb{$extra_trafo}
+function. All three subset control flags must be unclassed,
+attribute-free, non-missing logical scalars.}
     }
     \if{html}{\out{</div>}}
   }

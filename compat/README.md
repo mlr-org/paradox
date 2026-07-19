@@ -10,22 +10,22 @@ Priority 0 and 1 packages form the release gate; priority 2 packages are broad
 compatibility probes; priority 3 packages are optional consumers whose relevant
 tests are retained when their full stacks are impractical.
 
-## Local downstream bridges
+## Local downstream branches
 
-The Paradox-2 migrations for miesmuschel and bbotk are prepared and have passed
-development-candidate tests in the repository-local worktrees recorded in
-[`design/release-2.0.0.md`](../design/release-2.0.0.md). Release compatibility
-must retest those exact branch heads against the exact frozen candidate:
-miesmuschel selects/re-exports Paradox's
-official `ParamSetShadow` on version 2 while retaining its Paradox-1 bridge,
-and its fidelity tests compare operator public state instead of opaque R6
-environments. bbotk uses public collection state while retaining additive
-`Codomain` inheritance and version-gates expected native diagnostics. mlr3mbo
-currently needs no source patch.
+The Paradox-2 migrations and dual-version test adaptations are prepared in the
+repository-local worktrees recorded in
+[`design/release-2.0.0.md`](../design/release-2.0.0.md). They include the
+official miesmuschel `ParamSetShadow` bridge, bbotk public-state and native
+owner-root repairs, mlr3mbo's public transform-stripping subset call, and small
+diagnostic-test adaptations in affected maintained packages, together with the
+independent mlr3pipelines clone-ownership repair that Paradox 2 exposed. Release
+compatibility must retest every exact branch head against the exact frozen
+candidate; focused development tests are not release evidence.
 
-The executable [`github-snapshot.tsv`](github-snapshot.tsv) pins the exact two
-bridge heads and branch names. The organization census remains a review of the
-upstream sources from which those branches started;
+The executable [`github-snapshot.tsv`](github-snapshot.tsv) pins every exact
+reviewed downstream head and branch selected for the consumer run. The
+organization census remains a review of the upstream sources from which those
+branches started;
 [`github-bridge-provenance.tsv`](github-bridge-provenance.tsv) binds each
 upstream commit/tree/date/branch to its bridge commit/tree/date/branch.
 `compat/verify-mlr-org-review` authenticates both endpoints, requires the base
@@ -229,6 +229,14 @@ case "$candidate_content" in
 esac
 test "${#candidate_content}" -eq 64
 export PARADOX_CANDIDATE_CONTENT_SHA256="$candidate_content"
+
+# Build each reviewed bridge head once from its immutable Git object. The
+# candidate, dependency endpoint, exact install order, installed package bytes,
+# and resource decision are sealed beside the read-only overlay.
+compat/install-downstream-bridges --candidate-source "$candidate_source"
+compat/install-downstream-bridges --candidate-source "$candidate_source" --verify
+bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
+test -d "$bridge_library"
 ```
 
 `compat/install-candidate` accepts candidate-library, dependency-library, and
@@ -261,6 +269,17 @@ hash, current installer, and a freshly reproduced source archive.
 Never reuse `.local/compat/R/library-candidate` or another development library
 for release evidence. The candidate path must be new and run-specific, and no
 development command may install into it while a gate or benchmark is running.
+The downstream bridge overlay follows the same rule. It is built once in the
+candidate run by `compat/install-downstream-bridges`, in the fixed dependency
+order bbotk, mlr3, miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, and
+celecx. Its read-only verifier reauthenticates the candidate and dependency
+receipts, priority-one dependency preparation, reviewed Git objects, sealed
+package ledger, complete installed-library fingerprint, evidence verifier, and
+resource-scheduler bytes without loading a bridge package. One run-local owner
+serializes construction; atomic no-clobber publication and owner plus
+device/inode-gated cleanup prevent a losing process from deleting a raced
+replacement. Repository, documentation, and release-benchmark entrypoints fail
+unless this exact schema-2 overlay verifies.
 
 ## Source-package reverse-dependency gate
 
@@ -415,7 +434,6 @@ explicitly present in the child library path, in that order after the candidate
 library:
 
 ```sh
-bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
 mlr3verse_library="$PARADOX_ROOT/.local/compat/R/library-mlr3verse-core"
 test -d "$bridge_library"
 test -d "$mlr3verse_library"
@@ -654,12 +672,11 @@ copies with the exact
 repository-local R, Quarto 1.9.38, and TinyTeX. It authenticates the ordinary
 toolchain's installed package set byte for byte against the explicit lock,
 retains a complete toolchain-tree receipt, and fingerprints R's base library.
-The package set and base library are checked before and after every command;
-the complete toolchain tree is checked again at completion. The harness also
-fingerprints the candidate library, dependency library, and every explicit
-extra library before and after every command. It reauthenticates Quarto's
-archive/installed-tree receipt and the pinned, read-only TinyTeX
-archive/complete-tree receipt before and after each workload. TeX
+The candidate, dependency, extra, package-set, base-library, Quarto, TinyTeX,
+and complete-toolchain content is authenticated at the full pre-workload and
+post-workload boundaries. Between individual workloads the harness checks the
+retained small-input hashes and filesystem metadata that would reveal mutation;
+it deliberately does not reacquire every protected tree for every command. TeX
 configuration, caches, and generated fonts live only inside that retained run.
 Each workload starts through an empty environment with explicit local tool and
 library paths plus run-local home, temporary, and cache directories. No
@@ -687,20 +704,21 @@ Performance evidence uses the already authenticated candidate and the baseline
 installation inside the successful, sealed full differential run. The release
 wrapper has no workload selector: it always runs every registered workload and
 both focused ParamSetCollection consumer processes. Select a new output and
-the library that directly provides miesmuschel:
+the exact bridge overlay that directly provides the reviewed miesmuschel and
+mlr3pipelines builds:
 
 ```sh
 benchmark_output="$PARADOX_ROOT/.local/benchmarks/$run_id-release"
 differential_run="$PARADOX_ROOT/.local/compat/differential/runs/DIFFERENTIAL_RUN"
-mies_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
+bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
 test ! -e "$benchmark_output"
-test -d "$mies_library"
+test -d "$bridge_library"
 
 benchmarks/release \
   --baseline-evidence "$differential_run" \
   --candidate-library "$candidate_library" \
   --dependency-library "$dependency_library" \
-  --mies-library "$mies_library" \
+  --mies-library "$bridge_library" \
   --output "$benchmark_output" \
   --params 64 \
   --rows 128 \
@@ -712,7 +730,8 @@ The wrapper reauthenticates the frozen Git ref, candidate installation,
 differential evidence, complete dependency-library contents, workload
 inventory, reviewed regression-policy inputs, and helper bytes before and after
 measurement. It retains raw samples, allocations, summaries, consumer
-comparisons, command environments, provenance, and one decision row for every
+comparisons, command environments, candidate/differential and downstream-bridge
+provenance, and one decision row for every
 registered workload and focused consumer operation. Missing policy coverage or
 any material regression leaves the stage failed and unsealed. The completion
 metadata binds the policy hashes and reports pass/marginal/fail counts and the

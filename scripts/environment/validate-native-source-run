@@ -76,9 +76,13 @@ TRUSTED_FUNCTIONAL_WORKER="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker.R"
 TRUSTED_FUNCTIONAL_WORKER_GROUP="$TRUSTED_HELPER_DIRECTORY/run-native-test-worker-group"
 TRUSTED_FUNCTIONAL_VERIFIER="$TRUSTED_HELPER_DIRECTORY/verify-native-test-ledger.R"
 TRUSTED_RESOURCE_JOBS_HELPER="$TRUSTED_HELPER_DIRECTORY/resource-jobs"
-TRUSTED_MBO_CONFIG_HELPER="$TRUSTED_HELPER_DIRECTORY/mbo-config-fixtures"
-TRUSTED_RUNTIME_GIT_HELPER="$TRUSTED_HELPER_DIRECTORY/runtime-matrix-git"
-TRUSTED_RUNTIME_RECEIPT_HELPER="$TRUSTED_HELPER_DIRECTORY/runtime-matrix-prefix-receipt"
+# These helpers derive the authenticated repository-local toolchain from their
+# scripts/environment location. Authenticate and execute the active-root copies
+# against the immutable source-run copies; a relocated validator must not make
+# their owner root point into its retained metadata directory.
+TRUSTED_MBO_CONFIG_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
+TRUSTED_RUNTIME_GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
+TRUSTED_RUNTIME_RECEIPT_HELPER="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
 
 for path in "$METADATA" "$SOURCE" "$MODES"; do
   [[ -d "$path" && ! -L "$path" ]] ||

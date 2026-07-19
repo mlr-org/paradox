@@ -12,7 +12,8 @@ native_subset_symbols = function() {
 }
 
 native_subset_token = function(param_set, ids,
-    allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
+    allow_dangling_dependencies = FALSE, keep_constraint = TRUE,
+    keep_trafo = TRUE) {
   symbols = native_subset_symbols()
   .Call(
     symbols$C_param_set_subset_state,
@@ -22,7 +23,8 @@ native_subset_token = function(param_set, ids,
     allow_dangling_dependencies,
     keep_constraint,
     param_set$constraint,
-    param_set$extra_trafo
+    param_set$extra_trafo,
+    keep_trafo
   )
 }
 
@@ -43,7 +45,7 @@ native_subset_rich_set = function() {
 
 test_that("subset capsule routines are the complete registered surface", {
   symbols = native_subset_symbols()
-  expect_identical(symbols$C_param_set_subset_state$numParameters, 7L)
+  expect_identical(symbols$C_param_set_subset_state$numParameters, 8L)
   expect_identical(symbols$C_param_set_subspace_states$numParameters, 4L)
   expect_identical(symbols$C_param_set_adopt_subset_state$numParameters, 2L)
   expect_false(getLoadedDLLs()[["paradox"]][["dynamicLookup"]])
@@ -65,6 +67,24 @@ test_that("subset capsule routines are the complete registered surface", {
     envir = namespace,
     inherits = FALSE
   )))
+})
+
+test_that("keep_trafo is an additive final argument with a compatible default", {
+  expect_identical(formals(ParamSet$public_methods$subset)$keep_trafo, TRUE)
+  expect_identical(
+    formals(ParamSetCollection$public_methods$subset)$keep_trafo,
+    TRUE
+  )
+  expect_identical(
+    formals(ParamSetShadow$public_methods$subset)$keep_trafo,
+    TRUE
+  )
+  for (generator in list(ParamSet, ParamSetCollection, ParamSetShadow)) {
+    expect_identical(
+      tail(names(formals(generator$public_methods$subset)), 1L),
+      "keep_trafo"
+    )
+  }
 })
 
 test_that("subset slices one canonical snapshot in requested order", {
@@ -136,6 +156,8 @@ test_that("subset dependency and option contracts are explicit", {
   expect_error(param_set$subset("absent"), "unknown parameter 'absent'")
   expect_error(param_set$subset(NA_character_), "must not contain missing")
   expect_error(param_set$subset("a", keep_constraint = NA), "keep_constraint")
+  expect_error(param_set$subset("a", keep_trafo = NA), "keep_trafo")
+  expect_error(param_set$subset("a", keep_trafo = 1), "keep_trafo")
   expect_error(
     param_set$subset("a", allow_dangling_dependencies = NA),
     "allow_dangling_dependencies"
@@ -145,6 +167,63 @@ test_that("subset dependency and option contracts are explicit", {
   expect_true(empty$is_empty)
   expect_identical(empty$values, named_list())
   expect_equal(nrow(empty$deps), 0L)
+})
+
+test_that("subset flags cannot dispatch or carry semantic attributes", {
+  dispatched = 0L
+  `!.hostile_subset_flag` = function(x) {
+    dispatched <<- dispatched + 1L
+    stop("hostile subset dispatch")
+  }
+  hostile = structure(TRUE, class = "hostile_subset_flag")
+  named = structure(TRUE, names = "flag")
+  base = ps(x = p_dbl(trafo = exp), y = p_lgl())
+  child = ps(x = p_dbl(trafo = exp), y = p_lgl())
+  child$extra_trafo = function(x, param_set) x
+  collection = ParamSetCollection$new(list(owner = child))
+
+  for (set in list(base, collection)) {
+    expect_error(set$subset(set$ids(), keep_trafo = hostile), "keep_trafo")
+    expect_error(
+      set$subset(set$ids(), keep_constraint = hostile),
+      "keep_constraint"
+    )
+    expect_error(
+      set$subset(set$ids(), allow_dangling_dependencies = hostile),
+      "allow_dangling_dependencies"
+    )
+    expect_error(set$subset(set$ids(), keep_trafo = named), "keep_trafo")
+  }
+  expect_identical(dispatched, 0L)
+})
+
+test_that("subset can discard all transformation authority independently", {
+  param_set = native_subset_rich_set()
+  default = param_set$subset(c("z", "a"))
+  explicit = param_set$subset(c("z", "a"), keep_trafo = TRUE)
+  stripped = param_set$subset(c("z", "a"), keep_trafo = FALSE)
+
+  expect_equal(default, explicit)
+  expect_true(default$has_trafo_param[["z"]])
+  expect_identical(default$extra_trafo, param_set$extra_trafo)
+  expect_identical(stripped$has_trafo_param, c(z = FALSE, a = FALSE))
+  expect_null(stripped$get_domain("z")$trafo)
+  expect_null(stripped$extra_trafo)
+  expect_identical(stripped$constraint, param_set$constraint)
+
+  state = .Call(
+    get("C_param_set_core_state", envir = asNamespace("paradox")),
+    stripped$.__enclos_env__$private
+  )
+  expect_identical(state$.trafos$id, character())
+  expect_null(state$.extra_trafo)
+
+  unconstrained = param_set$subset(
+    c("z", "a"), keep_constraint = FALSE, keep_trafo = FALSE
+  )
+  expect_null(unconstrained$constraint)
+  expect_null(unconstrained$extra_trafo)
+  expect_false(unconstrained$has_trafo_param[["z"]])
 })
 
 test_that("unknown subset IDs preserve text and reject bytes", {
@@ -292,4 +371,46 @@ test_that("collections and shadows subset through the same BASE engine", {
   expect_identical(shadow_subset$values, list(flag = TRUE, x = 2L))
   expect_identical(shadow_subset$deps$id, "x")
   expect_identical(names(shadow$subspaces(c("x", "x"))), c("x", "x"))
+})
+
+test_that("collection and shadow subsets honor keep_trafo without losing constraints", {
+  child = ps(
+    x = p_dbl(0, 1, trafo = exp),
+    flag = p_lgl()
+  )
+  child$extra_trafo = function(x, param_set) x
+  child$constraint = function(x) TRUE
+  collection = ParamSetCollection$new(list(owner = child))
+
+  collection_subset = collection$subset(
+    collection$ids(),
+    keep_trafo = FALSE
+  )
+  expect_true(is.function(collection_subset$constraint))
+  expect_null(collection_subset$extra_trafo)
+  expect_true(all(!collection_subset$has_trafo_param))
+  expect_null(collection_subset$get_domain("owner.x")$trafo)
+
+  collection_callback_free = collection$subset(
+    collection$ids(),
+    keep_constraint = FALSE,
+    keep_trafo = FALSE
+  )
+  expect_null(collection_callback_free$constraint)
+  expect_null(collection_callback_free$extra_trafo)
+  expect_true(all(!collection_callback_free$has_trafo_param))
+
+  origin = ps(
+    hidden = p_int(),
+    x = p_dbl(0, 1, trafo = exp)
+  )
+  origin$extra_trafo = function(x, param_set) x
+  origin$constraint = function(x) TRUE
+  shadow = ParamSetShadow$new(origin, "hidden")
+  shadow_subset = shadow$subset("x", keep_trafo = FALSE)
+
+  expect_true(is.function(shadow_subset$constraint))
+  expect_null(shadow_subset$extra_trafo)
+  expect_false(shadow_subset$has_trafo_param[["x"]])
+  expect_null(shadow_subset$get_domain("x")$trafo)
 })

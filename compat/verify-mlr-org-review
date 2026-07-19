@@ -24,9 +24,9 @@ usage() {
 Usage: compat/verify-mlr-org-review [--fetch]
 
 Verify all 91 exact sources, source-archive receipts, scan-scope receipts, and
-match counts in compat/mlr-org-review.tsv. The two reviewed Paradox-2 bridge
-heads are authenticated through github-snapshot.tsv and their exact upstream
-census bases through github-bridge-provenance.tsv. The default is offline and
+match counts in compat/mlr-org-review.tsv. Reviewed Paradox-2 downstream heads
+are authenticated through github-snapshot.tsv and their exact upstream census
+bases through github-bridge-provenance.tsv. The default is offline and
 changes nothing. --fetch creates only absent org-scan checkouts; it never
 fetches, resets, cleans, or otherwise changes an existing checkout. Populate
 the consumer corpus first with compat/fetch-github-repositories.
@@ -147,15 +147,22 @@ validate_bridge_provenance() {
   /usr/bin/awk -F '\t' '
     BEGIN {
       expected = "repository\torigin\tupstream_commit\tupstream_tree\tupstream_commit_date\tupstream_branch\tbridge_commit\tbridge_tree\tbridge_commit_date\tbridge_branch\trationale"
-      names[1] = "bbotk"
-      names[2] = "miesmuschel"
+      required["bbotk"] = 1
+      required["celecx"] = 1
+      required["miesmuschel"] = 1
+      required["mlr3"] = 1
+      required["mlr3fselect"] = 1
+      required["mlr3mbo"] = 1
+      required["mlr3pipelines"] = 1
     }
     NR == 1 {
       if ($0 != expected) exit 1
       next
     }
     {
-      if (NF != 11 || $1 != names[NR - 1] || seen[$1]++ ||
+      key = tolower($1)
+      if (NF != 11 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+          seen[$1]++ || (rows && key <= previous) ||
           $2 != "https://github.com/mlr-org/" $1 ".git" ||
           $3 !~ /^[0-9a-f]+$/ || length($3) != 40 ||
           $4 !~ /^[0-9a-f]+$/ || length($4) != 40 ||
@@ -164,9 +171,13 @@ validate_bridge_provenance() {
           $8 !~ /^[0-9a-f]+$/ || length($8) != 40 ||
           $9 !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T/ ||
           $10 == "" || $11 == "" || $3 == $7) exit 1
+      previous = key
       rows += 1
     }
-    END { if (rows != 2) exit 1 }
+    END {
+      if (rows != 7) exit 1
+      for (repository in required) if (!seen[repository]) exit 1
+    }
   ' "$BRIDGE_PROVENANCE" || fail "bridge provenance schema or identity is invalid"
 }
 
@@ -397,6 +408,10 @@ while IFS=$'\t' read -r repository origin commit tree commit_date archived \
       corpus_git -C "$checkout" merge-base --is-ancestor \
         "$commit" "$expected_head_commit" ||
         fail "$repository reviewed upstream base is not an ancestor of its bridge"
+      [[ $(corpus_git -C "$checkout" rev-parse --verify \
+        "refs/heads/${bridge_upstream_branch[$repository]}^{commit}") == \
+        "$commit" ]] ||
+        fail "$repository reviewed upstream branch does not name its exact base"
     fi
     observed_archive_sha=$(corpus_git -C "$checkout" archive --format=tar "$commit" | \
       sha256sum | /usr/bin/awk '{print $1}')
@@ -440,4 +455,4 @@ done <"$LEDGER"
 [[ $rows -eq 91 && $consumer_rows -eq 43 && $scan_rows -eq 48 &&
    $bridge_rows -eq ${#bridge_repositories[@]} ]] ||
   fail "verified source partition or bridge coverage is incomplete"
-printf '%s\n' "verified 91 mlr-org repositories (43 consumer sources, including 2 reviewed bridges; 48 census sources)"
+printf '%s\n' "verified 91 mlr-org repositories (43 consumer sources, including ${#bridge_repositories[@]} reviewed downstream heads; 48 census sources)"

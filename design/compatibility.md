@@ -42,7 +42,15 @@ Subject to the explicit legacy-object upgrade step, preserve:
   SHADOW graphs, rather than private R6 environment traversal. Canonical node
   references preserve shared-vs-duplicated DAG topology while allowing
   independently built equivalent graphs to compare equal;
-- common validation diagnostics and consumer-relied-on message fragments;
+- documented Paradox validation diagnostics and deliberately maintained
+  package-owned message fragments. Exact checkmate-era wording in downstream
+  tests is not a compatibility contract and may require a Paradox-major-gated
+  expectation when the native diagnostic is clearer;
+- the historical distinction between callback-free structural `$deps <-`
+  replacement and feasibility-checking `$add_dep()`. Copying dependencies after
+  narrowing a parent Domain may leave a partially or wholly impossible
+  predicate; that predicate is preserved and its child is inactive rather than
+  making the copy fail;
 - public data.table-shaped results with documented columns/types/order and
   safe `set()`/`:=` use on detached results;
 - collection prefix/postfix spelling, nested order, shared-child DAGs,
@@ -75,7 +83,7 @@ now native.
 
 | Former behavior | Paradox 2 decision | Consequence |
 |---|---|---|
-| Downstream reads/writes `.params`, `.values`, `.deps`, `.trafos`, `.sets`, or generated R6 internals | Private state is opaque; use public accessors/setters | Dark-matter scripts using internals must migrate. bbotk has a one-line `$sets` bridge; miesmuschel uses the official shadow node. |
+| Downstream reads/writes `.params`, `.values`, `.deps`, `.trafos`, `.sets`, reconstructed Domain `.trafo`, or generated R6 internals | Private state is opaque; use public accessors/setters and `$subset(..., keep_trafo = FALSE)` for an untransformed detached search space | Dark-matter scripts using internals must migrate. bbotk uses public `$sets`, miesmuschel uses the official shadow node, and mlr3mbo uses the transform-stripping subset API. Malformed Domains created by deleting private columns remain rejected. |
 | A subclass overrides a core ParamSet method/active binding | Only additive inheritance is supported | Additive `Codomain` remains viable. A new semantic node belongs in Paradox. Modified shells are not authenticated/emulated. |
 | Third-party `domain_*` S3 methods add a parameter kind | Domain system is closed over five kinds | Use `ParamUty(custom_check=)` for opaque values or propose a maintained Paradox kind implemented across all operations. |
 | Third-party Condition S3 dispatch | Conditions are closed over CondEqual/CondAnyOf | Unknown conditions are rejected at dependency admission. ConfigSpace/celecx retain built-in function names and shapes. |
@@ -158,15 +166,21 @@ bbotk changes the private `private$.sets` access to public `$sets`. Its
 `Codomain` tests must demonstrate that calling `super$initialize()` and adding
 nonconflicting behavior remains supported. If it chooses to support serialized
 Paradox-1 Codomains, bbotk reconstructs that additive shell around explicitly
-upgraded base state.
+upgraded base state. Native code that retains pointers into detached public
+`$data` or `$deps` facades must root the complete returned owner objects for the
+pointer lifetime; Paradox does not preserve a hidden private alias as a GC root.
 
 ### Other maintained packages
 
-mlr3mbo currently requires no source patch. ConfigSpace, celecx, bbotk, mlr3,
-mlr3tuning, mlr3pipelines, the active book/gallery/website, and priority CRAN
-reverse dependencies are tested against the closed built-in names and ordinary
-public behavior. An old repository that no longer imports/uses Paradox is not a
-release blocker merely because it exists in the organization census.
+mlr3mbo uses `$subset(..., keep_trafo = FALSE)` on Paradox 2 rather than
+mutating detached/private Domain transformation state. ConfigSpace, celecx,
+bbotk, mlr3, mlr3fselect, mlr3tuning, mlr3pipelines, the active
+book/gallery/website, and priority CRAN reverse dependencies are tested against
+the closed built-in names and ordinary public behavior. Downstream tests may
+gate exact legacy/native diagnostic fragments by Paradox major version; that
+does not create a runtime compatibility branch. An old repository that no
+longer imports/uses Paradox is not a release blocker merely because it exists
+in the organization census.
 
 Dual-version downstream branches should be available before Paradox 2 is
 submitted. Agents prepare and locally test branches, but repository policy
@@ -222,7 +236,9 @@ Release acceptance is based on:
 
 1. direct contract tests for the preserved/broken boundaries above;
 2. an upstream Paradox-1 differential with every intentional delta reviewed;
-3. the exact bbotk and miesmuschel bridge revisions;
+3. every exact reviewed downstream revision, including the bbotk,
+   miesmuschel, and mlr3mbo runtime migrations plus dual-version test
+   adaptations;
 4. maintained priority-zero/one reverse dependencies and mlr-org repositories;
 5. active documentation and serialized workload migration;
 6. no-crash adversarial tests for unsupported subclasses, corrupt capsules,

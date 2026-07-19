@@ -755,6 +755,37 @@ extra_libraries <- unique(vapply(
   character(1L),
   label = "extra documentation library"
 ))
+bridge_installer <- file.path(root, "compat", "install-downstream-bridges")
+bridge_library <- file.path(
+  root, ".local", "compat", "runs", candidate_run_id,
+  "library-downstream-bridges"
+)
+bridge_evidence <- file.path(
+  root, ".local", "compat", "runs", candidate_run_id, "downstream-bridges"
+)
+if (!length(extra_libraries) || !identical(extra_libraries[[1L]], bridge_library)) {
+  fail(
+    "the candidate-specific downstream bridge library must be the first extra library: ",
+    bridge_library
+  )
+}
+bridge_verification <- processx::run(
+  bridge_installer,
+  c(
+    "--verify", "--protected-content-preverified",
+    "--candidate-source", candidate_source
+  ),
+  stdout = "|", stderr_to_stdout = TRUE, error_on_status = FALSE,
+  cleanup_tree = TRUE, timeout = 600
+)
+if (!identical(bridge_verification$status, 0L) ||
+    !grepl("downstream_bridge_evidence=passed", bridge_verification$stdout,
+      fixed = TRUE)) {
+  fail(
+    "candidate-specific downstream bridge verification failed: ",
+    bridge_verification$stdout
+  )
+}
 for (path in c(candidate_library, dependency_library, extra_libraries)) {
   require_plain_directory(path, "protected documentation library")
 }
@@ -844,6 +875,11 @@ metadata_inputs <- c(
   evidence_verifier_script, compat_system_evidence_script, workload_scripts,
   provenance_file, provenance_seal,
   file.path(root, "compat", "install-candidate"), git_authenticator_script,
+  bridge_installer,
+  file.path(bridge_evidence, "metadata", "completion.tsv"),
+  file.path(bridge_evidence, "metadata", "packages.tsv"),
+  file.path(bridge_evidence, "metadata", "evidence-manifest.tsv"),
+  file.path(bridge_evidence, "metadata", "completion.seal"),
   toolchain_lock,
   tinytex_manifest, tinytex_tree_helper,
   file.path(root, "environment", "quarto-linux-x86_64.tsv"),

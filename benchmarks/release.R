@@ -13,8 +13,8 @@ release_usage <- function() {
     "  --baseline-evidence PATH  Passed, sealed full differential run\n",
     "  --candidate-library PATH  Run-specific compat/install-candidate library\n",
     "  --dependency-library PATH Read-only dependency library; repeatable\n",
-    "                            (the first must provide mlr3pipelines)\n",
-    "  --mies-library PATH       Read-only library providing miesmuschel\n",
+    "                            (the first is the candidate receipt endpoint)\n",
+    "  --mies-library PATH       Candidate-specific reviewed bridge overlay\n",
     "  --output PATH             Absent output below .local/benchmarks\n\n",
     "Additional options:\n",
     "  --protected-library PATH  Additional read-only library reachable by workers;\n",
@@ -482,8 +482,8 @@ release_dependency_libraries <- vapply(
   label = "dependency library",
   USE.NAMES = FALSE
 )
-release_mies_library <- release_require_local_directory(
-  release_arguments$mies_library, "miesmuschel library"
+release_bridge_library <- release_require_local_directory(
+  release_arguments$mies_library, "downstream bridge library"
 )
 release_extra_libraries <- vapply(
   release_arguments$protected_libraries,
@@ -512,7 +512,40 @@ if (!identical(release_candidate_library, release_expected_candidate_library)) {
     "PARADOX_CANDIDATE_RUN_ID: ", release_expected_candidate_library
   )
 }
-
+release_bridge_installer <- file.path(
+  release_root, "compat", "install-downstream-bridges"
+)
+release_expected_bridge_library <- file.path(
+  release_root, ".local", "compat", "runs", release_candidate_run_id,
+  "library-downstream-bridges"
+)
+if (!identical(release_bridge_library, release_expected_bridge_library)) {
+  release_fail(
+    "--mies-library must be the candidate-specific downstream bridge library: ",
+    release_expected_bridge_library
+  )
+}
+release_bridge_evidence <- release_require_local_directory(
+  file.path(
+    release_root, ".local", "compat", "runs", release_candidate_run_id,
+    "downstream-bridges"
+  ),
+  "downstream bridge evidence"
+)
+release_bridge_evidence_inputs <- c(
+  downstream_bridge_completion = file.path(
+    release_bridge_evidence, "metadata", "completion.tsv"
+  ),
+  downstream_bridge_packages = file.path(
+    release_bridge_evidence, "metadata", "packages.tsv"
+  ),
+  downstream_bridge_evidence_manifest = file.path(
+    release_bridge_evidence, "metadata", "evidence-manifest.tsv"
+  ),
+  downstream_bridge_completion_seal = file.path(
+    release_bridge_evidence, "metadata", "completion.seal"
+  )
+)
 release_baseline_library <- file.path(release_baseline_evidence, "library-baseline")
 if (!dir.exists(release_baseline_library) ||
     release_is_symbolic(release_baseline_library)) {
@@ -532,13 +565,15 @@ release_library_paths <- c(
   release_baseline_library,
   release_candidate_library,
   release_dependency_libraries,
-  release_mies_library,
+  release_bridge_library,
   release_extra_libraries,
   release_ordinary_library,
   release_base_library
 )
 if (anyDuplicated(release_library_paths)) {
-  release_fail("baseline, candidate, dependency, mies, and protected libraries must be distinct")
+  release_fail(
+    "baseline, candidate, dependency, bridge, and protected libraries must be distinct"
+  )
 }
 if (length(release_library_paths) > 1L) {
   nested <- vapply(seq_along(release_library_paths), function(index) {
@@ -774,11 +809,12 @@ if (!identical(
   release_fail("library-baseline version differs from its sealed differential capture")
 }
 release_mies_package <- release_direct_package(
-  "miesmuschel", release_mies_library, "the required miesmuschel library"
+  "miesmuschel", release_bridge_library,
+  "the reviewed downstream bridge library"
 )
 release_pipeline_package <- release_direct_package(
-  "mlr3pipelines", release_dependency_libraries[[1L]],
-  "the first dependency library"
+  "mlr3pipelines", release_bridge_library,
+  "the reviewed downstream bridge library"
 )
 
 release_candidate_provenance <- file.path(
@@ -941,7 +977,7 @@ release_candidate <- release_authenticate_candidate()
 release_library_roles <- c(
   "baseline", "candidate",
   sprintf("dependency-%d", seq_along(release_dependency_libraries)),
-  "miesmuschel",
+  "downstream-bridges",
   sprintf("protected-%d", seq_along(release_extra_libraries)),
   "ordinary-project", "r-base-library"
 )
@@ -956,6 +992,29 @@ release_fingerprint_libraries <- function() {
   )
 }
 release_library_before <- release_fingerprint_libraries()
+release_bridge_verification <- release_run_capture(
+  release_bridge_installer,
+  c(
+    "--verify", "--protected-content-preverified",
+    "--candidate-source", release_root
+  ),
+  "verifying the candidate-specific downstream bridge overlay"
+)
+if (!any(grepl(
+    "downstream_bridge_evidence=passed", release_bridge_verification,
+    fixed = TRUE
+  ))) {
+  release_fail("downstream bridge verifier returned no success receipt")
+}
+invisible(lapply(
+  release_bridge_evidence_inputs,
+  release_require_regular_file,
+  label = "downstream bridge provenance input"
+))
+release_bridge_evidence_sha256 <- setNames(
+  unname(tools::sha256sum(release_bridge_evidence_inputs)),
+  names(release_bridge_evidence_inputs)
+)
 
 release_helper_inputs <- c(
   release = file.path(release_root, "benchmarks", "release"),
@@ -977,14 +1036,15 @@ release_helper_inputs <- c(
   evidence = release_evidence_script,
   evidence_verifier = release_evidence_verifier,
   candidate_installer = release_installer,
-  candidate_git_authenticator = release_git_authenticator
+  candidate_git_authenticator = release_git_authenticator,
+  bridge_installer = release_bridge_installer
 )
 release_helper_target_names <- c(
   "release", "release.R", "run", "run.R", "worker.R", "workloads.R",
   "regression-policy.R", "regression-policy.tsv",
   "paramsetcollection-consumers.R", "fingerprint.R", "repository-evidence.R",
   "verify-repository-evidence.R", "install-candidate",
-  "authenticate-candidate-git"
+  "authenticate-candidate-git", "install-downstream-bridges"
 )
 if (length(release_helper_target_names) != length(release_helper_inputs) ||
     anyDuplicated(release_helper_target_names)) {
@@ -1047,10 +1107,10 @@ release_policy_manifest_sha256 <- unname(
 unlink(release_policy_manifest_file)
 
 release_support_libraries <- c(
-  # The reviewed dual-version bridge must win over any CRAN miesmuschel copy
-  # retained in the shared dependency closure. Both paired workers receive
-  # this exact order through --dependency-library and R_LIBS(_USER).
-  release_mies_library, release_dependency_libraries,
+  # The reviewed dual-version packages must win over any dependency copies.
+  # Both paired workers receive this exact order through --dependency-library
+  # and R_LIBS(_USER).
+  release_bridge_library, release_dependency_libraries,
   release_extra_libraries, release_ordinary_library
 )
 release_paired_output <- file.path(release_output, "paired")
@@ -1083,7 +1143,7 @@ release_paired_arguments <- c(
 release_focus_arguments <- function(label, library, output, samples_output) {
   c(
     "--vanilla", release_helper_inputs[["focused_consumer"]], label, library,
-    output, release_mies_library, release_dependency_libraries[[1L]],
+    output, release_bridge_library, release_dependency_libraries[[1L]],
     samples_output
   )
 }
@@ -1250,7 +1310,8 @@ release_provenance_sources <- c(
   differential_seal = release_differential_files$seal,
   candidate_provenance = release_candidate_provenance,
   candidate_provenance_seal = release_candidate_provenance_seal,
-  candidate_content = release_candidate_sentinel
+  candidate_content = release_candidate_sentinel,
+  release_bridge_evidence_inputs
 )
 release_provenance_targets <- file.path(
   release_output, "provenance",
@@ -1261,9 +1322,18 @@ release_provenance_targets <- file.path(
     "differential-evidence-manifest.tsv", "differential-completion.seal",
     ".paradox-candidate-provenance.tsv",
     ".paradox-candidate-provenance.sha256",
-    ".paradox-candidate-content-sha256"
+    ".paradox-candidate-content-sha256",
+    "downstream-bridges-completion.tsv",
+    "downstream-bridges-packages.tsv",
+    "downstream-bridges-evidence-manifest.tsv",
+    "downstream-bridges-completion.seal"
   )
 )
+if (length(release_provenance_sources) != length(release_provenance_targets) ||
+    anyDuplicated(names(release_provenance_sources)) ||
+    anyDuplicated(release_provenance_targets)) {
+  release_fail("benchmark provenance input and retained-target inventories differ")
+}
 if (!all(file.copy(
     release_provenance_sources, release_provenance_targets,
     overwrite = FALSE, copy.mode = TRUE, copy.date = TRUE
@@ -1294,9 +1364,11 @@ release_write_tsv(data.frame(
   version = c(
     release_baseline_version,
     release_candidate$package_version,
-    as.character(utils::packageVersion("miesmuschel", lib.loc = release_mies_library)),
     as.character(utils::packageVersion(
-      "mlr3pipelines", lib.loc = release_dependency_libraries[[1L]]
+      "miesmuschel", lib.loc = release_bridge_library
+    )),
+    as.character(utils::packageVersion(
+      "mlr3pipelines", lib.loc = release_bridge_library
     ))
   ),
   package_path = c(
@@ -1780,6 +1852,22 @@ release_completion <- c(
   paste0("candidate_commit=", release_candidate_commit),
   paste0("candidate_tree=", release_candidate_tree),
   paste0("candidate_content_sha256=", release_candidate_content),
+  paste0(
+    "downstream_bridge_completion_sha256=",
+    release_bridge_evidence_sha256[["downstream_bridge_completion"]]
+  ),
+  paste0(
+    "downstream_bridge_packages_sha256=",
+    release_bridge_evidence_sha256[["downstream_bridge_packages"]]
+  ),
+  paste0(
+    "downstream_bridge_evidence_manifest_sha256=",
+    release_bridge_evidence_sha256[["downstream_bridge_evidence_manifest"]]
+  ),
+  paste0(
+    "downstream_bridge_completion_seal_sha256=",
+    release_bridge_evidence_sha256[["downstream_bridge_completion_seal"]]
+  ),
   paste0(
     "baseline_evidence_manifest_sha256=",
     release_differential$verified$manifest_sha256

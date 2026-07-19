@@ -634,7 +634,9 @@ int paradox_domain_validate_dependencies(SEXP dependencies,
     paradox_builtin_condition_kind_t kind;
     SEXP rhs = R_NilValue;
     if (STRING_ELT(ids, row) == NA_STRING ||
+        Rf_getCharCE(STRING_ELT(ids, row)) == CE_BYTES ||
         STRING_ELT(on, row) == NA_STRING ||
+        Rf_getCharCE(STRING_ELT(on, row)) == CE_BYTES ||
         !paradox_builtin_condition_exact(
           condition,
           &kind,

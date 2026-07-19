@@ -48,9 +48,13 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 The returned table and its \code{\link{Condition}} elements are detached. Mutating
 them does not mutate package state. Settable on a base \code{\link{ParamSet}} if you
-want to remove dependencies or perform other changes; read-only and derived
-from children on a \code{\link{ParamSetCollection}}. The facade and Condition shells
-have ordinary non-ALTREP/non-S4 structural metadata.}
+want to remove dependencies, copy a graph after narrowing Domains, or perform
+other bulk changes. Assignment validates the table and Conditions but does
+not require their right-hand sides to be feasible; an impossible predicate
+simply leaves its child inactive. Use \verb{$add_dep()} for feasibility-checked
+interactive authoring. This field is read-only and derived from children on
+a \code{\link{ParamSetCollection}}. The facade and Condition shells have ordinary
+non-ALTREP/non-S4 structural metadata.}
 
     \item{\code{extra_trafo}}{(\verb{function(x, param_set)})\cr
 Transformation function. Settable on a base \code{\link{ParamSet}}; read-only and
@@ -189,7 +193,8 @@ Whether to add tags of the form \code{"param_<param_id>"} to each parameter with
     \preformatted{ParamSetCollection$subset(
   ids,
   allow_dangling_dependencies = FALSE,
-  keep_constraint = TRUE
+  keep_constraint = TRUE,
+  keep_trafo = TRUE
 )}
     \if{html}{\out{</div>}}
   }
@@ -202,6 +207,10 @@ Whether to allow subsets that cut across parameter dependencies.
 Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their \code{"on"} will not be present).}
       \item{\code{keep_constraint}}{(\code{logical(1)})\cr
 Whether to keep the \verb{$constraint} function.}
+      \item{\code{keep_trafo}}{(\code{logical(1)})\cr
+Whether to keep per-parameter transformations and the \verb{$extra_trafo}
+function. All three subset control flags must be unclassed,
+attribute-free, non-missing logical scalars.}
     }
     \if{html}{\out{</div>}}
   }

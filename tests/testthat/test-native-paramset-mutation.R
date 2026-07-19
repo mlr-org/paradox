@@ -8,6 +8,7 @@ test_that("ParamSet mutators have fixed registered native interfaces", {
     param_set_get_tags = 2L,
     param_set_dependency_table_snapshot = 1L,
     param_set_dependencies = 2L,
+    param_set_has_dependencies = 2L,
     param_set_set_dependencies = 3L,
     param_set_add_dependency = 6L,
     param_set_set_callback = 4L
@@ -17,6 +18,93 @@ test_that("ParamSet mutators have fixed registered native interfaces", {
     expect_s3_class(symbol, "NativeSymbolInfo")
     expect_identical(symbol$numParameters, expected[[name]])
   }
+})
+
+test_that("has_deps is one native scalar read across every ParamSet kind", {
+  symbol = mutation2_symbol("param_set_has_dependencies")
+  base = ps(parent = p_int(0L, 2L), child = p_lgl())
+  expect_identical(.Call(symbol, base$.__enclos_env__$private, base), FALSE)
+  expect_identical(base$has_deps, FALSE)
+
+  collection = ParamSetCollection$new(list(left = base, right = base))
+  expect_identical(collection$has_deps, FALSE)
+
+  origin = ps(
+    hidden = p_int(),
+    parent = p_int(0L, 2L),
+    child = p_lgl()
+  )
+  shadow = ParamSetShadow$new(origin, "hidden")
+  expect_identical(shadow$has_deps, FALSE)
+
+  collection_origin = ParamSetCollection$new(list(owner = origin))
+  collection_shadow = ParamSetShadow$new(collection_origin, character())
+  expect_identical(collection_shadow$has_deps, FALSE)
+
+  base$add_dep("child", "parent", CondEqual(1L))
+  origin$add_dep("child", "parent", CondEqual(1L))
+  expect_identical(base$has_deps, TRUE)
+  expect_identical(collection$has_deps, TRUE)
+  expect_identical(shadow$has_deps, TRUE)
+  expect_identical(collection_shadow$has_deps, TRUE)
+})
+
+test_that("has_deps fails closed on malformed dependency graphs", {
+  forge_dependencies = function(set, replacement) {
+    .Call(
+      paradox:::C_param_set_core_replace,
+      set$.__enclos_env__$private,
+      setNames(list(replacement), ".deps")
+    )
+    invisible(set)
+  }
+
+  base = ps(parent = p_int(), child = p_lgl())
+  forge_dependencies(base, list(id = "child"))
+  expect_error(base$has_deps, "Corrupt ParamSet dependency capsule")
+
+  bytes_base = ps(parent = p_int(), child = p_lgl())
+  bytes_base$add_dep("child", "parent", CondEqual(1L))
+  bytes_dependencies = paradox:::param_set_core_state(
+    bytes_base$.__enclos_env__$private
+  )$.deps
+  bytes_id = rawToChar(as.raw(255L))
+  Encoding(bytes_id) = "bytes"
+  expect_identical(Encoding(bytes_id), "bytes")
+  bytes_dependencies$id[[1L]] = bytes_id
+  forge_dependencies(bytes_base, bytes_dependencies)
+  expect_error(bytes_base$has_deps, "Corrupt ParamSet dependency capsule")
+
+  origin = ps(
+    hidden = p_int(),
+    parent = p_int(),
+    child = p_lgl()
+  )
+  shadow = ParamSetShadow$new(origin, "hidden")
+  forge_dependencies(origin, list(id = "child"))
+  expect_error(shadow$has_deps, "Corrupt ParamSetShadow|Corrupt ParamSet")
+
+  child = ps(parent = p_int(), child = p_lgl())
+  collection = ParamSetCollection$new(list(owner = child))
+  forge_dependencies(child, list(id = "child"))
+  expect_error(collection$has_deps, "Corrupt ParamSetCollection")
+
+  bytes_child = ps(parent = p_int(), child = p_lgl())
+  bytes_child$add_dep("child", "parent", CondEqual(1L))
+  bytes_collection = ParamSetCollection$new(list(owner = bytes_child))
+  bytes_dependencies = paradox:::param_set_core_state(
+    bytes_child$.__enclos_env__$private
+  )$.deps
+  bytes_dependencies$id[[1L]] = bytes_id
+  forge_dependencies(bytes_child, bytes_dependencies)
+  expect_error(bytes_collection$has_deps, "Corrupt ParamSetCollection")
+
+  cycle = ParamSetCollection$new(list())
+  paradox:::param_set_core_replace(
+    cycle$.__enclos_env__$private,
+    sets = list(self = cycle)
+  )
+  expect_error(cycle$has_deps, "cycle", ignore.case = TRUE)
 })
 
 test_that("tags are admitted once and stored as an owned canonical table", {
@@ -54,7 +142,7 @@ test_that("tags are admitted once and stored as an owned canonical table", {
   )
 })
 
-test_that("dependency setters share one native admission and snapshot engine", {
+test_that("dependency setters snapshot structure while add_dep checks feasibility", {
   set = ps(parent = p_int(0L, 2L), child = p_lgl())
   condition = CondAnyOf(c(1L, 2L))
   set$deps = data.frame(
@@ -86,12 +174,28 @@ test_that("dependency setters share one native admission and snapshot engine", {
     },
     "child is not a parameter"
   )
+  set$deps = data.frame(
+    id = "child",
+    on = "parent",
+    cond = I(list(CondAnyOf(c(1L, 9L))))
+  )
+  expect_identical(set$deps$cond[[1L]]$rhs, c(1L, 9L))
+  expect_true(set$test(list(parent = 1L, child = TRUE)))
+  expect_false(set$test(list(parent = 0L, child = TRUE)))
+
+  # A graph restricted to a narrower parent Domain may legitimately make an
+  # existing predicate constantly false.  Bulk assignment preserves that
+  # graph exactly; the interactive authoring operation still catches typos.
+  set$deps = data.frame(
+    id = "child", on = "parent", cond = I(list(CondEqual(9L)))
+  )
+  expect_identical(set$deps$cond[[1L]]$rhs, 9L)
+  expect_true(set$test(list(parent = 0L)))
+  expect_false(set$test(list(parent = 0L, child = TRUE)))
+
+  set$deps = data.table::data.table()
   expect_error(
-    {
-      set$deps = data.frame(
-        id = "child", on = "parent", cond = I(list(CondEqual(9L)))
-      )
-    },
+    set$add_dep("child", "parent", CondEqual(9L)),
     "infeasible values"
   )
   expect_error(
@@ -149,6 +253,35 @@ test_that("dependency admission materializes Condition RHS values once", {
   expect_identical(callbacks, 1L)
 })
 
+test_that("dependency materialization cannot overwrite a nested mutation", {
+  callbacks = 0L
+  set = ps(parent = p_int(0L, 2L), child = p_lgl())
+  condition = CondAnyOf(c(1L, 2L))
+  condition[[1L]] = native_stateful_altrep(
+    c(1L, 2L),
+    c(1L, 2L),
+    callback = function() {
+      callbacks <<- callbacks + 1L
+      set$tags = list(parent = "nested", child = character())
+      invisible(gc())
+    },
+    callback_after = 0L
+  )
+  dependencies = data.frame(
+    id = "child",
+    on = "parent",
+    cond = I(list(condition)),
+    stringsAsFactors = FALSE
+  )
+
+  expect_error({
+    set$deps = dependencies
+  }, "changed while")
+  expect_identical(callbacks, 1L)
+  expect_identical(set$tags, list(parent = "nested", child = character()))
+  expect_identical(nrow(set$deps), 0L)
+})
+
 test_that("dependency admission rejects duplicate AnyOf snapshots", {
   duplicated = CondAnyOf(c(1L, 2L))
   duplicated[[1L]] = c(1L, 1L)
@@ -182,7 +315,7 @@ test_that("dependency callback reentry cannot overwrite a newer generation", {
   expect_identical(set$values, list(parent = "allowed"))
 })
 
-test_that("dependency snapshots stay rooted through feasibility callbacks", {
+test_that("dependency assignment is callback-free and add_dep roots callbacks", {
   checks = 0L
   set = ps(
     parent = p_uty(custom_check = function(x) {
@@ -205,10 +338,16 @@ test_that("dependency snapshots stay rooted through feasibility callbacks", {
 
   set$deps = dependencies
 
-  expect_identical(checks, 2L)
+  expect_identical(checks, 0L)
   expect_identical(set$deps$id, c("first", "second"))
   expect_identical(set$deps$cond[[1L]]$rhs, "one")
   expect_identical(set$deps$cond[[2L]]$rhs, "two")
+
+  set$deps = data.table::data.table()
+  set$add_dep("first", "parent", CondEqual("one"))
+  set$add_dep("second", "parent", CondEqual("two"))
+  expect_identical(checks, 2L)
+  expect_identical(set$deps$id, c("first", "second"))
 })
 
 test_that("callback setters are native and keep established formal admission", {

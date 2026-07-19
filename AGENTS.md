@@ -277,16 +277,41 @@ semantic vectors remain supported at their stated positions.
   to require a data.table.
 - Public tag get/set, dependency snapshot/get/set/add, and BASE constraint/
   extra-transformation callback replacement enter registered native mutators.
-  They build owned canonical replacements, validate closed Conditions and
-  feasible dependency RHS values in the same check kernel, detect callback
-  reentry by capsule generation, and swap only after validation. SHADOW
-  `$add_dep()` routes through the same native mutator and rejects any edge that
-  leaves its visible schema. Do not restore R/checkmate/data.table mutation
-  planners for these fields.
+  The public `$has_deps` flag is a separate registered scalar reader: BASE and
+  SHADOW validate the selected canonical dependency table, SHADOW refreshes
+  from its live origin once, and COLLECTION performs the same complete graph
+  admission as `$deps` before reading the root subtree count. It must never
+  construct a detached dependency/data.table facade merely to answer the flag,
+  cache graph validity, or use a weaker collection admission mode.
+  Dependency projection and bulk `$deps <-` build one owned canonical structural
+  snapshot: exact built-in Conditions, valid child IDs, no self-edges, and the
+  established allowance for dangling parents. Bulk assignment deliberately
+  preserves partially or wholly infeasible predicates and runs no Domain/custom
+  check callback. This is required when a consumer copies a dependency graph
+  after narrowing a parent Domain: a predicate that became impossible simply
+  makes its child permanently inactive. `$add_dep()` is the authoring boundary;
+  it additionally checks RHS feasibility in the shared check kernel, detects
+  callback reentry by capsule generation, and swaps only after validation.
+  SHADOW `$add_dep()` routes through that same strict native append and rejects
+  any edge that leaves its visible schema. Do not merge bulk assignment and
+  append back into one feasibility mode, or restore R/checkmate/data.table
+  mutation planners for these fields.
 - Names attached by ordinary R subsetting/arithmetic to scalar Domain
   constructor arguments are representation-only and are discarded from the
   owned native snapshot. Classes and other attributes remain fail-closed.
   Named scalar bounds are common R behavior, not a third-party Domain kind.
+- `$subset(..., keep_trafo = FALSE)` is the public way to derive an
+  untransformed search space. The final additive argument defaults to `TRUE`
+  for BASE, COLLECTION, and SHADOW. `FALSE` makes the single native subset
+  transaction omit every selected per-parameter transformation and the
+  `extra_trafo` callback while independently preserving the constraint. Do not
+  restore downstream mutation of Domain `.trafo`/ParamSet `.trafos`, permissive
+  admission of malformed Domains, or a second R reconstruction path for this
+  operation. Its three control flags are exact attribute-free, non-missing
+  logical scalars. COLLECTION callback detachment follows the callbacks retained
+  in the admitted BASE result and must never reinterpret the original flags in
+  R or invoke `!`/S3 dispatch. mlr3mbo's Paradox-2 bridge must use this public
+  boundary.
 - `all.equal()` on the ParamSet family compares a detached semantic view.
   Never delegate equality to `all.equal.environment()`: evaluating inherited
   R6 active bindings can select the wrong parent reader for a COLLECTION, and
@@ -553,8 +578,15 @@ library.
   already resolved BASE parameter row in its operation-local plan rather than
   searching the same ID again during upward translation. The inherited native
   Shadow dependency reader owns refresh; its R binding must not refresh a
-  second time. These measured shortcuts remove redundant work without caching
-  graph validity or weakening admission.
+  second time. `$has_deps` reads the validated native dependency count directly
+  instead of projecting and wrapping `$deps`; its retained 64-parameter
+  BASE/COLLECTION/SHADOW probe moved from 498.575 to 156.065 microseconds
+  (3.195x) without a weaker graph path. The one-evaluation allocation profile
+  remained exactly 12,688 bytes in 14 records on both sides, so record this as
+  a latency improvement, not an allocation improvement. The exact libraries,
+  fingerprints, 50-iteration/three-warmup method, and raw evidence path are in
+  `benchmarks/README.md`. These measured shortcuts remove redundant work
+  without caching graph validity or weakening admission.
 - Keep unavoidable package-owned callback wrappers thin. In particular,
   `to_tune(ParamSet)` may call the supplied transformation and perform its
   one-list-result/name boundary directly; it must not add checkmate or
@@ -623,6 +655,11 @@ independent test files, consumers, and runtime stages at the outer level while
 keeping nested make/testthat/BLAS/OpenMP pools at one. Honor the reported
 memory-aware ceiling. Never multiply every layer by the CPU count, and retain
 enough RAM that the controlling Codex process cannot be OOM-killed.
+`PARADOX_API_JOBS` and `PARADOX_BRIDGE_COMPILE_JOBS` are lowering-only release
+knobs for the R-API matrix and downstream bridge compilation respectively; the
+resource scheduler remains the upper bound. On this 32-CPU, no-swap host use 4
+compile jobs and at most 2 independent R/test consumers unless a fresh resource
+report requires less.
 `scripts/memory-check` performs this admission itself for its serial heavy
 modes: Valgrind receives one 16-GiB working-set allowance while at least 16 GiB
 remains reserved for the host, and rchk receives its one 20-GiB analyzer
@@ -630,6 +667,11 @@ allowance with the same minimum reserve. The reports are release evidence;
 do not bypass or hand-edit them. Do not impose an address-space limit on
 Valgrind merely to mirror rchk: Valgrind's shadow mappings make virtual address
 space a poor resident-memory/OOM estimate.
+The retained `validate-native-source-run` authenticates the source-run copies
+of the `mbo_config` and runtime-matrix Git/receipt helpers against their active
+repository-root copies before executing them; do not resolve those
+root-dependent helpers relative to a relocated validator. The memory harness
+receipt hashes both native test workers as well as the runner and verifier.
 
 Caching policy:
 
@@ -651,6 +693,37 @@ Caching policy:
   profile and candidate bytes;
 - a failed broad run is mined for the complete failure set and logs before a
   rerun; rerun affected rows first, then one final broad confirmation.
+
+Candidate downstream bridges are one build-once release artifact, not setup
+performed independently by each consumer gate. After the candidate and the
+priority-one dependency library have been authenticated, run
+`compat/install-downstream-bridges --candidate-source "$candidate_source"`
+once. It installs the exact reviewed heads, in the fixed order bbotk, mlr3,
+miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, and celecx, into
+`.local/compat/runs/$PARADOX_CANDIDATE_RUN_ID/library-downstream-bridges` and
+publishes it only after complete verification. The final overlay is read-only;
+its sealed evidence binds the candidate ref/commit/tree/content and provenance,
+dependency-library content, reviewed ledgers and verifier, installer, exact Git
+archives, installed versions, and installed package content. Completion schema
+2 also binds the repository-evidence verifier and resource scheduler used by
+the build. Construction is serialized by one candidate-run owner. The library
+and its sealed evidence are published as separate atomic, no-clobber directory
+renames; failed cleanup may remove only paths still matching both that owner
+and the recorded filesystem device/inode. It must never delete or repair a
+raced replacement. An existing or partial destination is never rebuilt in
+place: use the helper's `--verify` mode, or use a new candidate run after
+removing a failed unpublished stage.
+
+The repository, documentation, and release-benchmark entrypoints must require
+that exact overlay as their first extra library and invoke the read-only
+verifier before loading a bridge package or doing retained work. They must not
+silently install, repair, or substitute bridge packages. An entrypoint may use
+`--protected-content-preverified` only after it has itself authenticated the
+exact candidate and dependency-library content in the same operation.
+Whenever this contract, helper, or its hooks change, run `bash -n`, `shellcheck`,
+and `scripts/environment/test-downstream-bridge-installer`; the latter is the
+cheap structural self-test and is not a substitute for constructing and
+verifying the overlay once for the frozen candidate.
 
 ## Test contract
 
@@ -736,17 +809,20 @@ or submit PRs manually.
 
 Current PR-ready local branches are:
 
-- `.local/compat/github/miesmuschel`, branch
-  `codex/paradox-paramsetshadow-bridge`, commits `68686ef`, `f0e4736`,
-  `cf64981`, `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`,
-  `2ca3030`, and `d9d5c01`: load-time version-gated bridge/re-export of
-  Paradox's `ParamSetShadow` plus the completed public-state/test and
-  version-gated native-diagnostic adaptation;
-- `.local/compat/github/bbotk`, branch
-  `codex/public-paramsetcollection-sets`, commits `0909e60` and `94e4c22`: one
-  private `.sets` read changed to public `$sets`, with version-gated native
-  diagnostic expectations;
-- `.local/compat/github/mlr3mbo` currently needs no source patch.
+- bbotk `codex/public-paramsetcollection-sets` at `6cae955`: public collection
+  state, dual-version diagnostics, and rooted detached native search-space
+  snapshots;
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `d9d5c01`: the
+  dual-version official `ParamSetShadow` bridge and public-state tests;
+- mlr3mbo `codex/paradox2-transformless-subset` at `569c184`: public
+  transformation-free subset construction on Paradox 2;
+- celecx `codex/paradox2-diagnostics` at `cef7a4f`, mlr3
+  `codex/paradox2-diagnostics` at `35e30a9`, and mlr3fselect
+  `codex/paradox2-diagnostics` at `ae8e1d1`: small dual-version test-diagnostic
+  adaptations with unchanged runtime behavior;
+- mlr3pipelines `codex/paradox-diagnostic-compat` at `1c4bc6e`: exact-error
+  decoupling plus an independently required GraphLearner deep-clone ownership
+  fix and mutation-isolation regression.
 
 Before handoff, rebase only if the user requests it, test each exact branch
 against the exact frozen candidate, record the commands/results, and provide
@@ -754,7 +830,7 @@ the explicit `git -C ... push <remote> <branch>` commands plus PR title/body
 text for the user. Never push, open a remote PR, publish a tag, or alter remote
 state yourself. The
 reviewed exact heads, proposed titles/bodies, and manual commands live in
-`compat/downstream-pr-handoff.md`; update that file if either branch changes.
+`compat/downstream-pr-handoff.md`; update that file if any branch changes.
 
 The maintained priority consumers include bbotk, miesmuschel, mlr3mbo,
 ConfigSpace, celecx, mlr3, mlr3tuning, mlr3pipelines, and active mlr-org book,
@@ -775,8 +851,8 @@ Run release gates against one clean immutable full ref, broadly in this order:
 2. actual R 4.3.3, 4.5.2, and development R plus pinned-header compilation and
    exact `environment/r-api-exceptions.tsv`/raw-token/version-gated DSO audit;
 3. upstream differential with reviewed intentional Paradox-2 deltas;
-4. bbotk/miesmuschel focused bridges, then priority-zero/one reverse and GitHub
-   consumers and documentation workloads;
+4. all exact reviewed downstream bridge heads, then priority-zero/one reverse
+   and GitHub consumers and documentation workloads;
 5. GCT, instrumented-R Valgrind, bounded rchk, adversarial corruption, and
    direct coverage of every registered routine/hazard family;
 6. examples, vignettes, manuals, pkgdown/book/gallery/website and legacy
@@ -802,12 +878,12 @@ workflow to pin and check out the immutable candidate and to reduce the matrix;
 it must retain both completion layers.
 
 Profile representative constructor, `check`/`check_dt`/`check_dependencies`,
-values, domains/params/dependencies, subset/collection, live Shadow constraint
-and read/write paths, design, and sampler workloads. Optimize only measured hot
-paths, retain portable scalar code unless a portable architecture-neutral
-improvement is proven, and rerun affected correctness tests after every
-optimization. Freeze performance changes before the final memory/portability
-matrix.
+`has_deps`, values, domains/params/dependencies, subset/collection, live Shadow
+constraint and read/write paths, design, and sampler workloads. Optimize only
+measured hot paths, retain portable scalar code unless a portable
+architecture-neutral improvement is proven, and rerun affected correctness
+tests after every optimization. Freeze performance changes before the final
+memory/portability matrix.
 
 The Paradox-1 comparison has two narrowly ledgered integrity-read budgets. Only
 `shadow_values_live` uses `integrity-shadow-read` (3.25 median/3.50 q75), and
@@ -823,11 +899,17 @@ evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
 Paradox 2 is the authenticated baseline.
 
-## Historical candidate
+## Historical candidates
 
-The rejected compatibility-first candidate ref was
-`refs/paradox-release/candidate-20260717T083921Z` at commit
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`. Its old release evidence remains
-below ignored `.local/` paths and in Git history. It was once green under its
-different contract, but it is not a baseline for current source completeness,
-compatibility policy, routine inventory, test counts, or release readiness.
+The rejected compatibility-first candidate ref
+`refs/paradox-release/candidate-20260717T083921Z` at
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa` was once green under a different
+contract. The superseded contract-first candidate
+`refs/paradox-release/candidate-20260719T104709Z` at
+`5e40d2ba9b9ce3a75615b90420fb9bc298c19ecf` and its stale portability companion
+`refs/paradox-release/portability-harness-268ccff` at
+`268ccff27ee68bfea71c6370b0616a9c969a94cf` predate the final subset,
+dependency, downstream, and `$has_deps` work. Their evidence remains below
+ignored `.local/` paths and in Git history, but none is a baseline for current
+source completeness, compatibility policy, routine inventory, test counts, or
+release readiness.

@@ -541,6 +541,45 @@ if (anyDuplicated(c(candidate_library, extra_libraries, dependency_library))) {
   stop("candidate, extra, and dependency libraries must be distinct",
     call. = FALSE)
 }
+bridge_installer <- file.path(root, "compat", "install-downstream-bridges")
+bridge_library <- file.path(
+  root, ".local", "compat", "runs", run_id, "library-downstream-bridges"
+)
+bridge_evidence <- file.path(
+  root, ".local", "compat", "runs", run_id, "downstream-bridges"
+)
+if (!length(extra_libraries) || !identical(extra_libraries[[1L]], bridge_library)) {
+  stop(
+    "the candidate-specific downstream bridge library must be the first extra library: ",
+    bridge_library,
+    call. = FALSE
+  )
+}
+bridge_inputs <- c(
+  "install-downstream-bridges" = bridge_installer,
+  "downstream-bridges-completion.tsv" = file.path(
+    bridge_evidence, "metadata", "completion.tsv"
+  ),
+  "downstream-bridges-packages.tsv" = file.path(
+    bridge_evidence, "metadata", "packages.tsv"
+  ),
+  "downstream-bridges-evidence-manifest.tsv" = file.path(
+    bridge_evidence, "metadata", "evidence-manifest.tsv"
+  ),
+  "downstream-bridges-completion.seal" = file.path(
+    bridge_evidence, "metadata", "completion.seal"
+  )
+)
+bridge_inputs <- vapply(seq_along(bridge_inputs), function(index) {
+  repository_runner_require_file(
+    bridge_inputs[[index]], paste0("downstream bridge input ", names(bridge_inputs)[[index]])
+  )
+}, character(1L))
+names(bridge_inputs) <- c(
+  "install-downstream-bridges", "downstream-bridges-completion.tsv",
+  "downstream-bridges-packages.tsv", "downstream-bridges-evidence-manifest.tsv",
+  "downstream-bridges-completion.seal"
+)
 
 compat_environment <- compat_system_child_environment()
 compat_active <- nzchar(Sys.getenv("PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT",
@@ -600,6 +639,7 @@ tool_files <- c(
   "dependency-completion.tsv" = file.path(dependency_metadata,
     "completion.tsv"),
   "dependency-result.tsv" = dependency_result_path,
+  bridge_inputs,
   compat_tool_files
 )
 config <- list(
@@ -644,6 +684,24 @@ if (options$plan_only) {
   utils::write.table(plan, stdout(), quote = FALSE, sep = "\t",
     row.names = FALSE)
   quit(save = "no", status = 0L, runLast = FALSE)
+}
+
+# This hook precedes the repository stage's first protected-library content
+# boundary, so the bridge verifier performs its own candidate/dependency check.
+bridge_verification <- processx::run(
+  bridge_installer,
+  c("--verify", "--candidate-source", candidate_source),
+  stdout = "|", stderr_to_stdout = TRUE, error_on_status = FALSE,
+  cleanup_tree = TRUE, timeout = 600
+)
+if (!identical(bridge_verification$status, 0L) ||
+    !grepl("downstream_bridge_evidence=passed", bridge_verification$stdout,
+      fixed = TRUE)) {
+  stop(
+    "candidate-specific downstream bridge verification failed: ",
+    bridge_verification$stdout,
+    call. = FALSE
+  )
 }
 
 if (options$verify) {

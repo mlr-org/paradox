@@ -75,9 +75,17 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   constraint snapshot once per row; ParamUty custom checks may run during
   Domain admission, and reentrant mutation affects only later public operations.
 - Tag access/mutation, dependency snapshot/access/mutation/append, and BASE
-  callback replacement are native capsule operations. Dependency feasibility
-  uses the shared check kernel and generation-checks callback reentry; Shadow
-  append routes natively only within the fixed visible schema.
+  callback replacement are native capsule operations. Bulk dependency
+  replacement is a callback-free structural snapshot and preserves predicates
+  made infeasible by parent-Domain narrowing. `$add_dep()` remains the strict
+  authoring operation: dependency feasibility uses the shared check kernel and
+  generation-checks callback reentry; Shadow append routes natively only within
+  the fixed visible schema.
+- `$has_deps` is one registered scalar reader. BASE validates its canonical
+  dependency table, SHADOW performs one live refresh before validating its
+  table, and COLLECTION admits the complete graph before reading the root
+  subtree count. It never constructs a detached dependency/data.table facade
+  or uses a cached or reduced-integrity graph path.
 - A BASE-origin Shadow constraint closure contains exactly a callback and
   hidden-values plan. Its native evaluator performs the hidden-first merge
   without S3 dispatch, preserves leaf identity, calls once, and admits one
@@ -110,6 +118,14 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   owner/mapping plans and contain no parallel callback selection/translation
   engine. Retained/untransformed inputs remain in input order, followed by
   changed child outputs in callback-plan order; omissions remove owned inputs.
+- `ParamSet$subset()` has one additive final `keep_trafo = TRUE` argument,
+  shared by COLLECTION and SHADOW. Setting it to `FALSE` strips both selected
+  per-parameter transformations and `extra_trafo` in the native subset
+  transaction while leaving `keep_constraint` independent. This public API
+  replaces mlr3mbo's private Domain-table mutation; malformed Domains are not
+  admitted for compatibility. Subset flags are exact attribute-free logical
+  scalars, and COLLECTION callback detachment follows the admitted result
+  without applying R generics to the original controls.
 - Exactly two narrow cold R semantic-orchestration families remain, and neither
   is a fallback. The first contains the three internal-tuning operations—
   aggregation, disabling, and internal search-space conversion—as single R
@@ -221,10 +237,12 @@ not a local compatibility workaround.
 - [x] NEWS/DESCRIPTION/NAMESPACE begin the 2.0.0 contract reset;
 - [x] all tests that assert superseded private/sentinel/S3 behavior are removed
   or rewritten, with preserved ordinary behavior still covered;
-- [x] complete capsule, graph, callback/reentry, structural-versus-semantic
+- [ ] complete capsule, graph, callback/reentry, structural-versus-semantic
   ALTREP/S4, direct-assignment versus `set_values(.values=)`, ordinary table/
   semantic-column, data.table facade, corruption, serialization, exact-
-  TuneToken/receipt/capability, and upgrade contract suite passes;
+  TuneToken/receipt/capability, and upgrade contract suite passes on the final
+  frozen candidate (the prior suite and current affected development tests are
+  green);
 - [ ] package reference documentation, vignettes, migration guide, website,
   and downstream bridge docs describe the final behavior consistently;
 - [x] routine/analyzer/runtime ledgers discover current files dynamically and
@@ -234,14 +252,13 @@ not a local compatibility workaround.
 
 ### Downstream coordination
 
-- [x] local bbotk bridge commits `0909e60` and `94e4c22` on
-  `codex/public-paramsetcollection-sets`;
-- [x] local miesmuschel bridge commits `68686ef`, `f0e4736`, `cf64981`,
-  `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`, `2ca3030`, and
-  `d9d5c01` on `codex/paradox-paramsetshadow-bridge`;
-- [x] mlr3mbo reviewed with no current source patch required;
-- [ ] both bridge branches retested against the exact frozen candidate and
-  updated for any final API adjustment;
+- [x] local bbotk bridge `6cae955` and miesmuschel bridge `d9d5c01` are
+  prepared on their recorded branches;
+- [x] mlr3mbo `569c184`, celecx `cef7a4f`, mlr3 `35e30a9`, mlr3fselect
+  `ae8e1d1`, and mlr3pipelines `1c4bc6e` are prepared on their recorded
+  branches;
+- [ ] all seven bridge heads are authenticated and retested against the exact
+  frozen candidate;
 - [ ] other priority packages and active documentation tested against exact
   reviewed revisions;
 - [ ] user has manually pushed branches and opened the required PRs (agents
@@ -249,28 +266,32 @@ not a local compatibility workaround.
 
 ### Performance and correctness
 
-The checked-in `environment/rchk-bcheck-policy/` now binds the reviewed
-pre-freeze source seal and its replacement bounded-analyzer reports. Bcheck
-analyzed 769 functions and 27,845 states, with 76 exact Function blocks, 195 UP
+The checked-in `environment/rchk-bcheck-policy/` binds the refreshed reviewed
+pre-freeze source seal and its bounded-analyzer reports. Bcheck
+analyzed 770 functions and 27,856 states, with 77 exact Function blocks, 196 UP
 diagnostics, and 13 PB diagnostics; its report SHA-256 is
-`44969344c11bbe7b0c033615fa5663e5a45bce825e5887cde0a0ae9e0e3805e3`.
+`dbb6687723b2e23fa813f814b54f7e0e48db1227210af5409275ceab79be77ee`.
 Maacheck is byte-empty (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`),
-and fficheck reports 68 registered routines and one checked registration call
-(`4f927fb55903a10502ddac1a867a7a826640ca99f8de684368a49c173a6b04bc`).
+and that source's fficheck reports 69 registered routines and one checked
+registration call
+(`456d9e66d48216c75ba828d755263e012ccf5e5d14b8bc78037a5b237cd26ef6`).
 The generated policy, block table, and rationale table SHA-256 values are
-`127a734e1fd98ff1d3d501581dff54f410f57d11ba4e7664d74342c67f60a67f`,
-`038d289fdd9847092de867d72567624b93a6a10aaf282220dd8accb7fe3a8056`,
+`b4656bdd8ae0395065fec587a83c5aa76b818f5a444aa4012c8807f0fcb56f30`,
+`d39128eabef44b8c0386369f66a0adfa76961629c92b7b687aa8e1c7779a3c9e`,
 and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 The first pre-freeze report exposed a real `snapshot_dependencies()` root-
 lifetime defect across callback-capable feasibility validation. The result and
 its columns now remain protected through that validation, a successful
 allocating-callback regression covers the commit path, and the superseded raw
-run was discarded before generating this policy. This is current pre-freeze
-evidence, not completion of the final frozen-candidate memory gate: that gate
-must still run on the exact candidate bytes and match or deliberately
-regenerate the policy if its report changes.
+run was discarded before generating its policy. The refreshed policy includes
+the registered `$has_deps` reader; its one address-taken graph-root diagnostic
+is reviewed as `ADDRESS_TAKEN_MODEL`. This remains pre-freeze evidence only:
+the final frozen-candidate memory gate must rerun on the exact candidate bytes
+and deliberately regenerate the policy if its authenticated report changes.
 
-- [x] affected and then complete unit tests pass from one stable candidate
+- [x] directly affected development tests pass from stable cached
+  installations;
+- [ ] the complete unit suite passes from the new frozen candidate
   installation;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
@@ -338,10 +359,12 @@ benchmark evidence:
   with identical 2,200-byte allocation. It added a routine and duplicated
   reader surface for no material gain. Evidence remains under
   `.local/benchmarks/fused-shadow-values-ab-20260719`;
-- the final low-hanging pass retained three compact changes: skip an empty value
+- the final low-hanging pass retained four compact changes: skip an empty value
   transaction when a ParamSet has no initial values, reuse the already resolved
   BASE row while translating admitted collection values, and let the inherited
-  native Shadow dependency reader own refresh. Forward/reverse paired evidence
+  native Shadow dependency reader own refresh. It also replaces the
+  `$has_deps` dependency-table/data.table projection with the registered scalar
+  reader described above. Forward/reverse paired evidence for the first three
   is retained in `.local/benchmarks/final-hotpath-ab-20260719` and
   `.local/benchmarks/final-hotpath-ab-reverse-20260719`. Small construction was
   4.3--6.5% faster with 880 fewer allocated bytes; 64-parameter bulk
@@ -349,7 +372,11 @@ benchmark evidence:
   reads were 4.6--5.8% faster and nested reads 18.1--18.8% faster. Plain reads
   remained within 1% timing noise. Collection reads used 192 additional
   operation-local bytes. The production delta was 21 source lines and 320 DSO
-  bytes, with no persistent cache or weaker validation mode;
+  bytes, with no persistent cache or weaker validation mode. The separate
+  `$has_deps` A/B evidence is retained under
+  `.local/benchmarks/has-deps-scalar-ab-final-20260719`: 50 evaluations after
+  three warmups moved the median from 498.575 to 156.065 microseconds (3.195x),
+  with the same 12,688 bytes in 14 `Rprofmem` records on each side;
 - the paired release policy now records the unavoidable major-version integrity
   cost rather than treating it as an ordinary hot-path regression. Only
   `shadow_values_live` receives the finite `integrity-shadow-read` median/q75
@@ -391,8 +418,12 @@ push and create PRs manually.
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
 | miesmuschel | `.local/compat/github/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | `68686ef`, `f0e4736`, `cf64981`, `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`, `2ca3030`, `d9d5c01` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals, and retain version-gated expectations for the two Shadow dependency diagnostics. |
-| bbotk | `.local/compat/github/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22` | Replace one private collection `.sets` read with public `$sets` and accept version-gated native diagnostics. |
-| mlr3mbo | `.local/compat/github/mlr3mbo` | `main` | none | No identified source migration. |
+| bbotk | `.local/compat/github/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Replace one private collection `.sets` read, accept version-gated native diagnostics, and root detached public search-space snapshots for their complete native pointer lifetime. |
+| mlr3mbo | `.local/compat/github/mlr3mbo` | `codex/paradox2-transformless-subset` | `569c184` | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths. |
+| celecx | `.local/compat/github/celecx` | `codex/paradox2-diagnostics` | `cef7a4f` | Version-gate Paradox validation fragments in tests; runtime behavior is unchanged. |
+| mlr3 | `.local/compat/github/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | Version-gate two numeric-Domain diagnostic assertions. |
+| mlr3fselect | `.local/compat/github/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | Version-gate one feature-fraction diagnostic assertion. |
+| mlr3pipelines | `.local/compat/github/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Decouple PICV tests from exact Paradox-1 wording and fix GraphLearner state deep-clone ownership with an explicit mutation-isolation regression. |
 
 As a development diagnostic, the final miesmuschel public-state equality commit
 passed its dictionary (693 expectations) and shortform (20 expectations) files
@@ -477,8 +508,8 @@ For the exact candidate ref, retain and verify:
    compilation, and the exact R-API-exception ledger/raw-token/version-gated DSO
    audit, including the authenticated R-4.3 data.table 1.18.4 overlay;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
-4. exact bbotk and miesmuschel bridge heads, then priority-zero/one reverse
-   dependencies and maintained mlr-org repositories;
+4. every exact head in `compat/github-bridge-provenance.tsv`, then
+   priority-zero/one reverse dependencies and maintained mlr-org repositories;
 5. GCT, instrumented-R Valgrind, bounded rchk, direct routine/hazard probes,
    and adversarial corrupt-capsule/graph/ALTREP cases, treating hostile
    state-changing custom ALTREP as a safety/no-replay gate rather than an exact
@@ -502,13 +533,18 @@ mandatory evidence rows name that exact source, downstream migration paths are
 available, and the benchmark review finds no release-relevant low-hanging
 regression.
 
-## Historical rejected candidate
+## Historical rejected candidates
 
 The compatibility-first candidate at
 `refs/paradox-release/candidate-20260717T083921Z`, commit
-`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, and its portability companion are
-historical only. Their extensive hashes and logs remain in Git history and
-ignored local evidence directories. They once satisfied a different contract
-that preserved private surfaces and dual engines. They authorize no conclusion
-about the current capsule implementation and must not be copied into the
-pending fields above.
+`2f40e3e567c6d4fa568384622cb4e2d81c3fb2fa`, once satisfied a different
+contract that preserved private surfaces and dual engines. The later
+contract-first development candidate at
+`refs/paradox-release/candidate-20260719T104709Z`, commit
+`5e40d2ba9b9ce3a75615b90420fb9bc298c19ecf`, and its direct-child portability
+companion `refs/paradox-release/portability-harness-268ccff` at
+`268ccff27ee68bfea71c6370b0616a9c969a94cf` predate the final public-subset,
+bulk-dependency, downstream-bridge, and `$has_deps` changes. All of these refs,
+hashes, logs, and artifacts are historical only. They authorize no conclusion
+about current package bytes and must not be copied into the pending fields
+above.

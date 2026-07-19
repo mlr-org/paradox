@@ -1,0 +1,597 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+SELF=$SELF_DIRECTORY/$(basename "${BASH_SOURCE[0]}")
+[[ -f $SELF && ! -L $SELF ]] || {
+  printf '%s\n' "install-downstream-bridges: installer is absent or symbolic" >&2
+  exit 2
+}
+ROOT=$(cd "$SELF_DIRECTORY/.." && pwd -P)
+VERIFY=false
+PROTECTED_CONTENT_PREVERIFIED=false
+CANDIDATE_SOURCE=$ROOT
+INSTALL_ORDER=(bbotk mlr3 miesmuschel mlr3pipelines mlr3fselect mlr3mbo celecx)
+
+usage() {
+  cat <<'EOF'
+Usage: compat/install-downstream-bridges [--candidate-source PATH] [--verify]
+       [--protected-content-preverified]
+
+Install the seven exact reviewed downstream bridge commits into the immutable
+candidate-specific overlay, or verify an existing overlay without loading it.
+Candidate identity is supplied by the five PARADOX_CANDIDATE_* variables.
+The final option is verify-only and avoids rehashing candidate/dependency trees
+when a release entrypoint has already authenticated those exact contents.
+EOF
+}
+
+fail() {
+  printf '%s\n' "install-downstream-bridges: $*" >&2
+  exit 2
+}
+
+# GNU mv reports success when --no-clobber skips an existing destination.  The
+# source-side postcondition is therefore part of the operation: a successful
+# publication must consume exactly the private source directory, and -T must
+# keep a raced destination from turning the source into a nested child.
+publish_directory_no_clobber() {
+  local source=$1 destination=$2 source_mode
+  [[ -d $source && ! -L $source &&
+     ! -e $destination && ! -L $destination ]] || return 1
+  source_mode=$(stat -c '%a' "$source") || return 1
+  [[ $source_mode =~ ^[0-7]{3,4}$ ]] || return 1
+  chmod u+w "$source" || return 1
+  if ! mv -T --no-clobber -- "$source" "$destination"; then
+    chmod "$source_mode" "$source" 2>/dev/null || true
+    return 1
+  fi
+  if [[ -e $source || -L $source || ! -d $destination || -L $destination ]]; then
+    chmod "$source_mode" "$source" 2>/dev/null || true
+    return 1
+  fi
+  chmod "$source_mode" "$destination" || return 1
+}
+
+directory_identity() {
+  [[ -d $1 && ! -L $1 ]] || return 1
+  stat -c '%d:%i' "$1"
+}
+
+validate_package_evidence_shape() {
+  local table=$1 order
+  order=$(IFS=,; printf '%s' "${INSTALL_ORDER[*]}")
+  awk -F '\t' -v order="$order" '
+    BEGIN {
+      count = split(order, expected, ",")
+      header = "position\trepository\tcommit\ttree\tarchive_sha256\tversion\tcontent_sha256"
+    }
+    NR == 1 {
+      if ($0 != header) bad = 1
+      next
+    }
+    {
+      position = NR - 1
+      if (NF != 7 || $1 != position || $2 != expected[position] ||
+          seen_position[$1]++ || seen_repository[$2]++) bad = 1
+    }
+    END {
+      if (NR != count + 1 || bad) exit 1
+      for (position = 1; position <= count; ++position) {
+        if (seen_position[position] != 1 ||
+            seen_repository[expected[position]] != 1) exit 1
+      }
+    }
+  ' "$table"
+}
+
+while (($#)); do
+  case "$1" in
+    --candidate-source)
+      [[ $# -ge 2 ]] || fail "--candidate-source requires a path"
+      CANDIDATE_SOURCE=$2
+      shift 2
+      ;;
+    --verify)
+      VERIFY=true
+      shift
+      ;;
+    --protected-content-preverified)
+      PROTECTED_CONTENT_PREVERIFIED=true
+      shift
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+[[ $PROTECTED_CONTENT_PREVERIFIED == false || $VERIFY == true ]] ||
+  fail "--protected-content-preverified is valid only with --verify"
+
+[[ ${PARADOX_ACTIVE_ROOT:-} == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+R=$ROOT/.local/toolchain/bin/R
+RSCRIPT=$ROOT/.local/toolchain/bin/Rscript
+GIT=$ROOT/.local/toolchain/bin/git
+[[ $(command -v R) == "$R" && $(command -v Rscript) == "$RSCRIPT" &&
+   $(command -v git) == "$GIT" ]] || fail "the exact local R and Git must be active"
+
+RUN_ID=${PARADOX_CANDIDATE_RUN_ID:-}
+CANDIDATE_REF=${PARADOX_CANDIDATE_REF:-}
+CANDIDATE_COMMIT=${PARADOX_CANDIDATE_COMMIT:-}
+CANDIDATE_TREE=${PARADOX_CANDIDATE_TREE:-}
+CANDIDATE_CONTENT=${PARADOX_CANDIDATE_CONTENT_SHA256:-}
+[[ $RUN_ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ &&
+   $RUN_ID != . && $RUN_ID != .. ]] || fail "invalid candidate run ID"
+[[ $CANDIDATE_REF == refs/* ]] || fail "invalid candidate ref"
+[[ $CANDIDATE_COMMIT =~ ^[0-9a-f]{40}$ && $CANDIDATE_TREE =~ ^[0-9a-f]{40}$ &&
+   $CANDIDATE_CONTENT =~ ^[0-9a-f]{64}$ ]] || fail "invalid candidate identity"
+
+RUN=$ROOT/.local/compat/runs/$RUN_ID
+CANDIDATE_LIBRARY=$RUN/library-candidate
+DEPENDENCY_LIBRARY=$ROOT/.local/compat/R/library-dependencies
+BRIDGE_LIBRARY=$RUN/library-downstream-bridges
+EVIDENCE=$RUN/downstream-bridges
+DEPENDENCY_EVIDENCE=$RUN/repository-dependencies-priority-1
+PROVENANCE=$CANDIDATE_LIBRARY/.paradox-candidate-provenance.tsv
+PROVENANCE_SEAL=$CANDIDATE_LIBRARY/.paradox-candidate-provenance.sha256
+SENTINEL=$CANDIDATE_LIBRARY/.paradox-candidate-content-sha256
+AUTHENTICATOR=$ROOT/compat/authenticate-candidate-git
+REVIEW_VERIFIER=$ROOT/compat/verify-mlr-org-review
+FINGERPRINT=$ROOT/compat/fingerprint.R
+EVIDENCE_HELPER=$ROOT/compat/repository-evidence.R
+EVIDENCE_VERIFIER=$ROOT/compat/verify-repository-evidence.R
+RESOURCE_JOBS=$ROOT/scripts/environment/resource-jobs
+BRIDGE_PROVENANCE=$ROOT/compat/github-bridge-provenance.tsv
+SNAPSHOT=$ROOT/compat/github-snapshot.tsv
+REVIEW=$ROOT/compat/mlr-org-review.tsv
+
+for directory in "$RUN" "$CANDIDATE_LIBRARY" "$DEPENDENCY_LIBRARY"; do
+  [[ -d $directory && ! -L $directory ]] || fail "required directory is absent or symbolic: $directory"
+done
+for file in "$PROVENANCE" "$PROVENANCE_SEAL" "$SENTINEL" "$AUTHENTICATOR" \
+    "$REVIEW_VERIFIER" "$FINGERPRINT" "$EVIDENCE_HELPER" "$EVIDENCE_VERIFIER" \
+    "$RESOURCE_JOBS" "$BRIDGE_PROVENANCE" "$SNAPSHOT" "$REVIEW"; do
+  [[ -f $file && ! -L $file ]] || fail "required input is absent or symbolic: $file"
+done
+
+CANDIDATE_SOURCE=$(cd "$CANDIDATE_SOURCE" && pwd -P)
+if [[ $CANDIDATE_SOURCE == "$ROOT" ]]; then
+  "$AUTHENTICATOR" "$ROOT" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+    "$CANDIDATE_TREE" >/dev/null
+else
+  "$AUTHENTICATOR" "$ROOT" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" \
+    "$CANDIDATE_TREE" "$CANDIDATE_SOURCE" >/dev/null
+fi
+for relative in compat/install-downstream-bridges \
+    compat/github-bridge-provenance.tsv compat/github-snapshot.tsv \
+    compat/mlr-org-review.tsv compat/verify-mlr-org-review \
+    compat/fingerprint.R compat/repository-evidence.R \
+    compat/verify-repository-evidence.R \
+    scripts/environment/resource-jobs; do
+  cmp -s "$ROOT/$relative" "$CANDIDATE_SOURCE/$relative" ||
+    fail "active release input differs from the candidate: $relative"
+done
+
+receipt_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" 'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' "$PROVENANCE"
+}
+
+EXPECTED_KEYS=$'schema\ncandidate_run_id\ncandidate_ref\ncandidate_commit\ncandidate_tree\ncandidate_version\ncandidate_library\ndependency_library\ndependency_library_content_sha256\nsource_archive_sha256\ncandidate_content_sha256\ninstaller_sha256\ngit_authenticator_sha256'
+[[ $(tail -n +2 "$PROVENANCE" | cut -f1) == "$EXPECTED_KEYS" ]] ||
+  fail "candidate provenance has an unexpected schema"
+[[ $(cat "$PROVENANCE_SEAL") == "$(sha256sum "$PROVENANCE" | cut -d ' ' -f 1)  .paradox-candidate-provenance.tsv" ]] ||
+  fail "candidate provenance seal is invalid"
+[[ $(tr -d '\r\n' <"$SENTINEL") == "$CANDIDATE_CONTENT" &&
+   $(receipt_value schema) == 2 && $(receipt_value candidate_run_id) == "$RUN_ID" &&
+   $(receipt_value candidate_ref) == "$CANDIDATE_REF" &&
+   $(receipt_value candidate_commit) == "$CANDIDATE_COMMIT" &&
+   $(receipt_value candidate_tree) == "$CANDIDATE_TREE" &&
+   $(receipt_value candidate_library) == "$CANDIDATE_LIBRARY" &&
+   $(receipt_value dependency_library) == "$DEPENDENCY_LIBRARY" &&
+   $(receipt_value candidate_content_sha256) == "$CANDIDATE_CONTENT" &&
+   $(receipt_value installer_sha256) == "$(sha256sum "$ROOT/compat/install-candidate" | cut -d ' ' -f 1)" &&
+   $(receipt_value git_authenticator_sha256) == "$(sha256sum "$AUTHENTICATOR" | cut -d ' ' -f 1)" ]] ||
+  fail "candidate provenance differs from the declared candidate"
+
+tree_fingerprint() {
+  R_LIBS="$ROOT/.local/R/library" R_LIBS_USER="$ROOT/.local/R/library" \
+    "$RSCRIPT" --vanilla -e \
+    'a=commandArgs(TRUE); sys.source(a[[2L]], envir=environment()); cat(compat_tree_content_sha256(a[[1L]]))' \
+    "$1" "$FINGERPRINT"
+}
+
+trusted_input_path() {
+  case "$1" in
+    install-downstream-bridges) printf '%s\n' "$SELF" ;;
+    github-bridge-provenance.tsv) printf '%s\n' "$BRIDGE_PROVENANCE" ;;
+    github-snapshot.tsv) printf '%s\n' "$SNAPSHOT" ;;
+    mlr-org-review.tsv) printf '%s\n' "$REVIEW" ;;
+    verify-mlr-org-review) printf '%s\n' "$REVIEW_VERIFIER" ;;
+    fingerprint.R) printf '%s\n' "$FINGERPRINT" ;;
+    repository-evidence.R) printf '%s\n' "$EVIDENCE_HELPER" ;;
+    verify-repository-evidence.R) printf '%s\n' "$EVIDENCE_VERIFIER" ;;
+    resource-jobs) printf '%s\n' "$RESOURCE_JOBS" ;;
+    *) fail "unknown retained bridge input: $1" ;;
+  esac
+}
+
+CANDIDATE_PACKAGE_CONTENT=$CANDIDATE_CONTENT
+DEPENDENCY_CONTENT=$(receipt_value dependency_library_content_sha256)
+if [[ $PROTECTED_CONTENT_PREVERIFIED == false ]]; then
+  CANDIDATE_PACKAGE_CONTENT=$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")
+  DEPENDENCY_CONTENT=$(tree_fingerprint "$DEPENDENCY_LIBRARY")
+fi
+[[ $CANDIDATE_PACKAGE_CONTENT == "$CANDIDATE_CONTENT" &&
+   $DEPENDENCY_CONTENT == "$(receipt_value dependency_library_content_sha256)" ]] ||
+  fail "candidate or dependency library differs from its receipt"
+
+[[ -d $DEPENDENCY_EVIDENCE && ! -L $DEPENDENCY_EVIDENCE ]] ||
+  fail "the run has no priority-one dependency preparation evidence"
+"$RSCRIPT" --vanilla "$EVIDENCE_VERIFIER" "$DEPENDENCY_EVIDENCE" >/dev/null
+DEPENDENCY_COMPLETION=$DEPENDENCY_EVIDENCE/metadata/completion.tsv
+DEPENDENCY_COMPLETION_KEYS=$'schema\nstage_kind\nrun_id\nmax_priority\nfinished_utc\nstatus\nresult_rows\nfailed_rows\nresult_sha256\ncheckout_postflight_sha256\nfallback_checkout_postflight_sha256\ndependency_library_content_after'
+[[ $(tail -n +2 "$DEPENDENCY_COMPLETION" | cut -f1) == \
+   "$DEPENDENCY_COMPLETION_KEYS" ]] ||
+  fail "priority-one dependency preparation has an unexpected schema"
+dependency_completion_value() {
+  local key=$1
+  awk -F '\t' -v key="$key" \
+    'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' \
+    "$DEPENDENCY_COMPLETION"
+}
+[[ $(dependency_completion_value schema) == 3 &&
+   $(dependency_completion_value stage_kind) == repository_dependencies &&
+   $(dependency_completion_value run_id) == "$RUN_ID" &&
+   $(dependency_completion_value max_priority) == 1 &&
+   $(dependency_completion_value status) == passed &&
+   $(dependency_completion_value failed_rows) == 0 &&
+   $(dependency_completion_value dependency_library_content_after) == \
+     "$DEPENDENCY_CONTENT" ]] ||
+  fail "priority-one dependency preparation belongs to a different run, scope, or endpoint"
+
+declare -A BRIDGE_ORIGIN BRIDGE_COMMIT BRIDGE_TREE
+while IFS=$'\t' read -r repository origin _ _ _ _ commit tree _ _ _; do
+  [[ $repository == repository ]] && continue
+  BRIDGE_ORIGIN[$repository]=$origin
+  BRIDGE_COMMIT[$repository]=$commit
+  BRIDGE_TREE[$repository]=$tree
+done <"$BRIDGE_PROVENANCE"
+[[ ${#BRIDGE_COMMIT[@]} -eq 7 ]] || fail "bridge provenance must contain seven rows"
+for repository in "${INSTALL_ORDER[@]}"; do
+  [[ -n ${BRIDGE_COMMIT[$repository]:-} && -n ${BRIDGE_TREE[$repository]:-} ]] ||
+    fail "missing bridge provenance for $repository"
+  checkout=$ROOT/.local/compat/github/$repository
+  [[ -d $checkout && ! -L $checkout &&
+     $("$GIT" --no-replace-objects -C "$checkout" remote get-url origin) == \
+       "${BRIDGE_ORIGIN[$repository]}" &&
+     $("$GIT" --no-replace-objects -C "$checkout" rev-parse \
+       "${BRIDGE_COMMIT[$repository]}^{commit}") == "${BRIDGE_COMMIT[$repository]}" &&
+     $("$GIT" --no-replace-objects -C "$checkout" rev-parse \
+       "${BRIDGE_COMMIT[$repository]}^{tree}") == "${BRIDGE_TREE[$repository]}" ]] ||
+    fail "reviewed Git object is absent or differs for $repository"
+done
+
+verify_overlay() {
+  [[ -d $BRIDGE_LIBRARY && ! -L $BRIDGE_LIBRARY &&
+     -d $EVIDENCE && ! -L $EVIDENCE ]] || fail "bridge overlay or evidence is absent"
+  "$RSCRIPT" --vanilla "$EVIDENCE_VERIFIER" "$EVIDENCE" >/dev/null
+  local completion=$EVIDENCE/metadata/completion.tsv
+  completion_value() {
+    awk -F '\t' -v key="$1" 'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' "$completion"
+  }
+  [[ $(tail -n +2 "$completion" | cut -f1) == $'schema\nstatus\ncandidate_run_id\ncandidate_ref\ncandidate_commit\ncandidate_tree\ncandidate_content_sha256\ncandidate_provenance_sha256\ndependency_library_content_sha256\nbridge_library_content_sha256\nbridge_provenance_sha256\ngithub_snapshot_sha256\nreview_verifier_sha256\nevidence_verifier_sha256\nresource_jobs_sha256\ninstaller_sha256' &&
+     $(completion_value schema) == 2 && $(completion_value status) == passed &&
+     $(completion_value candidate_run_id) == "$RUN_ID" &&
+     $(completion_value candidate_ref) == "$CANDIDATE_REF" &&
+     $(completion_value candidate_commit) == "$CANDIDATE_COMMIT" &&
+     $(completion_value candidate_tree) == "$CANDIDATE_TREE" &&
+     $(completion_value candidate_provenance_sha256) == "$(sha256sum "$PROVENANCE" | cut -d ' ' -f 1)" &&
+     $(completion_value bridge_provenance_sha256) == "$(sha256sum "$BRIDGE_PROVENANCE" | cut -d ' ' -f 1)" &&
+     $(completion_value github_snapshot_sha256) == "$(sha256sum "$SNAPSHOT" | cut -d ' ' -f 1)" &&
+     $(completion_value review_verifier_sha256) == "$(sha256sum "$REVIEW_VERIFIER" | cut -d ' ' -f 1)" &&
+     $(completion_value evidence_verifier_sha256) == "$(sha256sum "$EVIDENCE_VERIFIER" | cut -d ' ' -f 1)" &&
+     $(completion_value resource_jobs_sha256) == "$(sha256sum "$RESOURCE_JOBS" | cut -d ' ' -f 1)" &&
+     $(completion_value installer_sha256) == "$(sha256sum "$SELF" | cut -d ' ' -f 1)" ]] ||
+    fail "bridge completion evidence differs from the trusted release inputs"
+  for input in install-downstream-bridges github-bridge-provenance.tsv \
+      github-snapshot.tsv mlr-org-review.tsv fingerprint.R \
+      verify-mlr-org-review repository-evidence.R \
+      verify-repository-evidence.R resource-jobs; do
+    cmp -s "$EVIDENCE/inputs/$input" "$(trusted_input_path "$input")" ||
+      fail "retained bridge input differs: $input"
+  done
+  local expected observed repository row commit tree archive_sha256
+  local observed_archive_sha256 version content package_count
+  expected=$(printf '%s\n' "${INSTALL_ORDER[@]}" | LC_ALL=C sort)
+  observed=$(find "$BRIDGE_LIBRARY" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' | LC_ALL=C sort)
+  [[ $observed == "$expected" && -z $(find "$BRIDGE_LIBRARY" -mindepth 1 -maxdepth 1 ! -type d -print -quit) ]] ||
+    fail "bridge library has an unexpected top-level inventory"
+  [[ -z $(find "$BRIDGE_LIBRARY" -perm /222 -print -quit) ]] ||
+    fail "bridge library is not read-only"
+  [[ $(tree_fingerprint "$BRIDGE_LIBRARY") == "$(completion_value bridge_library_content_sha256)" ]] ||
+    fail "bridge library content differs from its evidence"
+  [[ $CANDIDATE_CONTENT == "$(completion_value candidate_content_sha256)" &&
+     $DEPENDENCY_CONTENT == "$(completion_value dependency_library_content_sha256)" ]] ||
+    fail "bridge evidence belongs to different protected libraries"
+  validate_package_evidence_shape "$EVIDENCE/metadata/packages.tsv" ||
+    fail "bridge package evidence is incomplete, duplicated, or out of order"
+  package_count=0
+  {
+    IFS= read -r _
+    while IFS=$'\t' read -r row repository commit tree archive_sha256 version content; do
+    package_count=$((package_count + 1))
+    [[ $row =~ ^[1-7]$ && ${INSTALL_ORDER[$((row - 1))]} == "$repository" &&
+       $row == "$package_count" &&
+       ${BRIDGE_COMMIT[$repository]} == "$commit" && ${BRIDGE_TREE[$repository]} == "$tree" ]] ||
+      fail "bridge package evidence has an unexpected order or identity"
+    [[ $archive_sha256 =~ ^[0-9a-f]{64}$ ]] ||
+      fail "bridge package archive receipt is malformed: $repository"
+    observed_archive_sha256=$(
+      GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null \
+        GIT_CONFIG_SYSTEM=/dev/null GIT_CONFIG_NOSYSTEM=1 \
+        GIT_NO_REPLACE_OBJECTS=1 \
+        "$GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+        -c tar.umask=0002 -C "$ROOT/.local/compat/github/$repository" \
+        archive --format=tar "$commit" | sha256sum | cut -d ' ' -f 1
+    )
+    [[ $observed_archive_sha256 == "$archive_sha256" ]] ||
+      fail "bridge package archive differs from its evidence: $repository"
+    [[ -d $BRIDGE_LIBRARY/$repository && ! -L $BRIDGE_LIBRARY/$repository ]] ||
+      fail "installed bridge package is absent: $repository"
+    [[ $(awk -F ': *' '$1=="Version" {print $2; exit}' "$BRIDGE_LIBRARY/$repository/DESCRIPTION") == "$version" &&
+       $(tree_fingerprint "$BRIDGE_LIBRARY/$repository") == "$content" ]] ||
+      fail "installed bridge package differs from its evidence: $repository"
+    done
+  } <"$EVIDENCE/metadata/packages.tsv"
+  [[ $package_count -eq ${#INSTALL_ORDER[@]} ]] ||
+    fail "bridge package evidence does not contain seven rows"
+  printf '%s\n' "downstream_bridge_evidence=passed" \
+    "downstream_bridge_library=$BRIDGE_LIBRARY"
+}
+
+if [[ $VERIFY == true ]]; then
+  verify_overlay
+  exit 0
+fi
+
+[[ ! -e $BRIDGE_LIBRARY && ! -L $BRIDGE_LIBRARY &&
+   ! -e $EVIDENCE && ! -L $EVIDENCE ]] ||
+  fail "bridge overlay already exists; use --verify or choose a new candidate run"
+
+OWNER=$RUN/.downstream-bridges-install-owner
+OWNER_STAGING=
+OWNER_STAGING_ID=
+OWNER_ID=
+OWNER_TOKEN=
+OWNER_RECORD=
+BUILD=
+BUILD_ID=
+EVIDENCE_BUILD=
+EVIDENCE_BUILD_ID=
+PUBLISHED_LIBRARY_ID=
+PUBLISHED_EVIDENCE_ID=
+INSTALL_COMPLETE=false
+
+ownership_matches() {
+  [[ -n $OWNER_ID && -n $OWNER_RECORD &&
+     -d $OWNER && ! -L $OWNER &&
+     $(directory_identity "$OWNER") == "$OWNER_ID" &&
+     -f $OWNER/owner.tsv && ! -L $OWNER/owner.tsv &&
+     $(cat "$OWNER/owner.tsv") == "$OWNER_RECORD" ]]
+}
+
+remove_private_directory() {
+  local path=$1 identity=$2
+  [[ -n $path && -n $identity ]] || return 0
+  case "$path" in
+    "$RUN"/.downstream-bridges-owner-new.*|\
+    "$RUN"/.downstream-bridges-owner-retired-*|\
+    "$RUN"/.downstream-bridges-build.*|\
+    "$RUN"/.downstream-bridges-evidence.*) ;;
+    *) return 1 ;;
+  esac
+  [[ ! -e $path && ! -L $path ]] && return 0
+  [[ -d $path && ! -L $path &&
+     $(directory_identity "$path") == "$identity" ]] || return 1
+  chmod -R u+w "$path" && rm -rf -- "$path"
+}
+
+remove_owned_publication() {
+  local path=$1 identity=$2
+  [[ $path == "$BRIDGE_LIBRARY" || $path == "$EVIDENCE" ]] || return 1
+  [[ -n $identity && -d $path && ! -L $path &&
+     $(directory_identity "$path") == "$identity" ]] || return 1
+  chmod -R u+w "$path" && rm -rf -- "$path"
+}
+
+release_ownership() {
+  local retirement retirement_id
+  ownership_matches || return 1
+  retirement=$RUN/.downstream-bridges-owner-retired-$OWNER_TOKEN
+  [[ ! -e $retirement && ! -L $retirement ]] || return 1
+  mv -T --no-clobber -- "$OWNER" "$retirement" || return 1
+  [[ ! -e $OWNER && ! -L $OWNER && -d $retirement && ! -L $retirement &&
+     $(directory_identity "$retirement") == "$OWNER_ID" ]] || return 1
+  retirement_id=$(directory_identity "$retirement") || return 1
+  remove_private_directory "$retirement" "$retirement_id" || {
+    # The canonical ownership name is already free.  A complete private
+    # retirement is safe to leave behind rather than removing an unknown path.
+    return 1
+  }
+  OWNER_ID=
+}
+
+cleanup() {
+  local status=$?
+  set +e
+  if [[ $INSTALL_COMPLETE != true ]] && ownership_matches; then
+    # The publication identity is recorded before mv. A pending signal may run
+    # this trap after mv returns but before the caller confirms its postcondition;
+    # identity-gated removal therefore owns the asynchronous publication window.
+    if [[ -n $PUBLISHED_EVIDENCE_ID ]]; then
+      remove_owned_publication "$EVIDENCE" "$PUBLISHED_EVIDENCE_ID"
+    fi
+    if [[ -n $PUBLISHED_LIBRARY_ID ]]; then
+      remove_owned_publication "$BRIDGE_LIBRARY" "$PUBLISHED_LIBRARY_ID"
+    fi
+  fi
+  remove_private_directory "$EVIDENCE_BUILD" "$EVIDENCE_BUILD_ID"
+  remove_private_directory "$BUILD" "$BUILD_ID"
+  remove_private_directory "$OWNER_STAGING" "$OWNER_STAGING_ID"
+  ownership_matches && release_ownership
+  trap - EXIT
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+OWNER_STAGING=$(mktemp -d "$RUN/.downstream-bridges-owner-new.XXXXXX")
+OWNER_STAGING_ID=$(directory_identity "$OWNER_STAGING")
+OWNER_ID=$OWNER_STAGING_ID
+OWNER_TOKEN=${OWNER_STAGING##*.}
+OWNER_RECORD=$(printf '%s\n' \
+  $'field\tvalue' \
+  $'schema\t1' \
+  "owner_token\t$OWNER_TOKEN" \
+  "pid\t$$" \
+  "candidate_run_id\t$RUN_ID" \
+  "candidate_commit\t$CANDIDATE_COMMIT")
+printf '%s\n' "$OWNER_RECORD" >"$OWNER_STAGING/owner.tsv"
+chmod 0600 "$OWNER_STAGING/owner.tsv"
+publish_directory_no_clobber "$OWNER_STAGING" "$OWNER" ||
+  fail "another process owns downstream bridge construction for this run"
+ownership_matches || fail "downstream bridge construction ownership changed"
+[[ ! -e $BRIDGE_LIBRARY && ! -L $BRIDGE_LIBRARY &&
+   ! -e $EVIDENCE && ! -L $EVIDENCE ]] ||
+  fail "bridge overlay was published while construction ownership was acquired"
+
+# This organization-wide census is useful once, at construction. Read-only
+# release consumers replay only the sealed seven-package evidence and exact
+# seven Git objects above.
+"$REVIEW_VERIFIER" >/dev/null
+
+BUILD=$(mktemp -d "$RUN/.downstream-bridges-build.XXXXXX")
+BUILD_ID=$(directory_identity "$BUILD")
+EVIDENCE_BUILD=$(mktemp -d "$RUN/.downstream-bridges-evidence.XXXXXX")
+EVIDENCE_BUILD_ID=$(directory_identity "$EVIDENCE_BUILD")
+mkdir "$BUILD/library" "$BUILD/sources" "$BUILD/archives" "$BUILD/home" \
+  "$BUILD/tmp" "$BUILD/cache" "$EVIDENCE_BUILD/logs" "$EVIDENCE_BUILD/metadata" \
+  "$EVIDENCE_BUILD/inputs"
+
+cp "$SELF" "$BRIDGE_PROVENANCE" "$SNAPSHOT" "$REVIEW" "$REVIEW_VERIFIER" \
+  "$FINGERPRINT" "$EVIDENCE_HELPER" "$EVIDENCE_VERIFIER" \
+  "$RESOURCE_JOBS" "$EVIDENCE_BUILD/inputs/"
+"$RESOURCE_JOBS" compile --report >"$EVIDENCE_BUILD/metadata/resource-jobs.tsv"
+COMPILE_JOBS=$(awk -F '\t' '$1=="jobs" {print $2}' "$EVIDENCE_BUILD/metadata/resource-jobs.tsv")
+if [[ -n ${PARADOX_BRIDGE_COMPILE_JOBS:-} ]]; then
+  [[ $PARADOX_BRIDGE_COMPILE_JOBS =~ ^[1-9][0-9]{0,8}$ ]] ||
+    fail "PARADOX_BRIDGE_COMPILE_JOBS must be a positive integer"
+  "$RESOURCE_JOBS" compile --max-jobs "$PARADOX_BRIDGE_COMPILE_JOBS" --report \
+    >"$EVIDENCE_BUILD/metadata/resource-jobs.tsv"
+  COMPILE_JOBS=$(awk -F '\t' '$1=="jobs" {print $2}' "$EVIDENCE_BUILD/metadata/resource-jobs.tsv")
+fi
+
+printf 'position\trepository\tcommit\ttree\tarchive_sha256\tversion\tcontent_sha256\n' \
+  >"$EVIDENCE_BUILD/metadata/packages.tsv"
+printf 'position\trepository\tcommand\n' >"$EVIDENCE_BUILD/metadata/commands.tsv"
+
+position=0
+for repository in "${INSTALL_ORDER[@]}"; do
+  position=$((position + 1))
+  checkout=$ROOT/.local/compat/github/$repository
+  commit=${BRIDGE_COMMIT[$repository]}
+  tree=${BRIDGE_TREE[$repository]}
+  archive=$BUILD/archives/$repository.tar
+  source=$BUILD/sources/$repository
+  mkdir "$source" "$BUILD/home/$repository" "$BUILD/tmp/$repository" "$BUILD/cache/$repository"
+  GIT_ATTR_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    "$GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+    -c tar.umask=0002 -C "$checkout" archive --format=tar -o "$archive" "$commit"
+  [[ $("$GIT" --no-replace-objects -C "$checkout" rev-parse "$commit^{tree}") == "$tree" ]] ||
+    fail "bridge tree changed for $repository"
+  tar -xf "$archive" -C "$source"
+  archive_sha256=$(sha256sum "$archive" | cut -d ' ' -f 1)
+  [[ $(awk -F ': *' '$1=="Package" {print $2; exit}' "$source/DESCRIPTION") == "$repository" ]] ||
+    fail "bridge source package name differs for $repository"
+  printf '%s\t%s\t%s\n' "$position" "$repository" \
+    "R CMD INSTALL --preclean --clean --no-multiarch --with-keep.source" \
+    >>"$EVIDENCE_BUILD/metadata/commands.tsv"
+  env -i HOME="$BUILD/home/$repository" USER="${USER:-paradox}" LOGNAME="${LOGNAME:-paradox}" \
+    PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+    R_LIBS="$CANDIDATE_LIBRARY:$BUILD/library:$DEPENDENCY_LIBRARY" \
+    R_LIBS_USER="$CANDIDATE_LIBRARY:$BUILD/library:$DEPENDENCY_LIBRARY" R_LIBS_SITE= \
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_HISTFILE=/dev/null \
+    R_MAKEVARS_USER="$ROOT/environment/Makevars" R_TESTS= NOT_CRAN=true \
+    TMPDIR="$BUILD/tmp/$repository" XDG_CACHE_HOME="$BUILD/cache/$repository" \
+    MAKEFLAGS="-j$COMPILE_JOBS" OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+    MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 BLIS_NUM_THREADS=1 \
+    "$R" CMD INSTALL --preclean --clean --no-multiarch --with-keep.source \
+    --library="$BUILD/library" "$source" \
+    >"$EVIDENCE_BUILD/logs/$repository.log" 2>&1 || {
+      tail -n 80 "$EVIDENCE_BUILD/logs/$repository.log" >&2
+      fail "bridge installation failed for $repository"
+    }
+  version=$(awk -F ': *' '$1=="Version" {print $2; exit}' "$BUILD/library/$repository/DESCRIPTION")
+  content=$(tree_fingerprint "$BUILD/library/$repository")
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$position" "$repository" "$commit" \
+    "$tree" "$archive_sha256" "$version" "$content" \
+    >>"$EVIDENCE_BUILD/metadata/packages.tsv"
+done
+
+[[ $(tree_fingerprint "$CANDIDATE_LIBRARY/paradox") == "$CANDIDATE_CONTENT" &&
+   $(tree_fingerprint "$DEPENDENCY_LIBRARY") == "$DEPENDENCY_CONTENT" ]] ||
+  fail "a protected library changed during bridge installation"
+/usr/bin/chmod -R a-w "$BUILD/library"
+BRIDGE_CONTENT=$(tree_fingerprint "$BUILD/library")
+{
+  printf 'field\tvalue\n'
+  printf 'schema\t2\n'
+  printf 'status\tpassed\n'
+  printf 'candidate_run_id\t%s\n' "$RUN_ID"
+  printf 'candidate_ref\t%s\n' "$CANDIDATE_REF"
+  printf 'candidate_commit\t%s\n' "$CANDIDATE_COMMIT"
+  printf 'candidate_tree\t%s\n' "$CANDIDATE_TREE"
+  printf 'candidate_content_sha256\t%s\n' "$CANDIDATE_CONTENT"
+  printf 'candidate_provenance_sha256\t%s\n' "$(sha256sum "$PROVENANCE" | cut -d ' ' -f 1)"
+  printf 'dependency_library_content_sha256\t%s\n' "$DEPENDENCY_CONTENT"
+  printf 'bridge_library_content_sha256\t%s\n' "$BRIDGE_CONTENT"
+  printf 'bridge_provenance_sha256\t%s\n' "$(sha256sum "$BRIDGE_PROVENANCE" | cut -d ' ' -f 1)"
+  printf 'github_snapshot_sha256\t%s\n' "$(sha256sum "$SNAPSHOT" | cut -d ' ' -f 1)"
+  printf 'review_verifier_sha256\t%s\n' "$(sha256sum "$REVIEW_VERIFIER" | cut -d ' ' -f 1)"
+  printf 'evidence_verifier_sha256\t%s\n' "$(sha256sum "$EVIDENCE_VERIFIER" | cut -d ' ' -f 1)"
+  printf 'resource_jobs_sha256\t%s\n' "$(sha256sum "$RESOURCE_JOBS" | cut -d ' ' -f 1)"
+  printf 'installer_sha256\t%s\n' "$(sha256sum "$SELF" | cut -d ' ' -f 1)"
+} >"$EVIDENCE_BUILD/metadata/completion.tsv"
+
+"$RSCRIPT" --vanilla - "$EVIDENCE_HELPER" "$EVIDENCE_BUILD" <<'RSCRIPT'
+args <- commandArgs(TRUE)
+sys.source(args[[1L]], envir = environment())
+repository_seal_evidence(args[[2L]])
+RSCRIPT
+PUBLISHED_LIBRARY_ID=$(directory_identity "$BUILD/library")
+if ! publish_directory_no_clobber "$BUILD/library" "$BRIDGE_LIBRARY"; then
+  fail "bridge library publication raced or could not restore its exact mode"
+fi
+[[ $(directory_identity "$BRIDGE_LIBRARY") == "$PUBLISHED_LIBRARY_ID" ]] ||
+  fail "published bridge library identity changed"
+PUBLISHED_EVIDENCE_ID=$(directory_identity "$EVIDENCE_BUILD")
+if ! publish_directory_no_clobber "$EVIDENCE_BUILD" "$EVIDENCE"; then
+  fail "bridge evidence publication raced or could not restore its exact mode"
+fi
+[[ $(directory_identity "$EVIDENCE") == "$PUBLISHED_EVIDENCE_ID" ]] ||
+  fail "published bridge evidence identity changed"
+verify_overlay
+release_ownership || fail "could not release downstream bridge construction ownership"
+INSTALL_COMPLETE=true
+remove_private_directory "$BUILD" "$BUILD_ID" ||
+  fail "could not remove the private downstream bridge build"
+BUILD=
+BUILD_ID=
+trap - EXIT

@@ -45,6 +45,7 @@ param_set_set_tags	3	production	production-dynamic	direct_param_set_set_tags	Dir
 param_set_get_tags	2	production	production-dynamic	direct_param_set_get_tags	Direct ordered detached tag-list projection from canonical capsule state
 param_set_dependency_table_snapshot	1	production	production-dynamic	direct_param_set_dependency_table_snapshot	Direct immutable closed-Condition dependency-table snapshot
 param_set_dependencies	2	production	production-dynamic	direct_param_set_dependencies	Direct detached BASE or SHADOW dependency snapshot
+param_set_has_dependencies	2	production	production-dynamic	direct_param_set_has_dependencies	Direct scalar dependency-presence read across validated BASE, COLLECTION, and live SHADOW capsule state
 param_set_set_dependencies	3	production	production-dynamic	direct_param_set_set_dependencies	Direct validated atomic BASE dependency-table replacement
 param_set_add_dependency	6	production	production-dynamic	direct_param_set_add_dependency	Direct validated dependency append including native Shadow origin routing
 param_set_set_callback	4	production	production-dynamic	direct_param_set_set_callback	Direct BASE constraint or extra-transformation callback replacement
@@ -59,7 +60,7 @@ param_set_params	2	production	production-dynamic	direct_param_set_params	Direct 
 param_set_collection_params	2	production	production-dynamic	direct_param_set_collection_params	Direct collection parameter table recovery
 param_set_collection_deps	2	production	production-dynamic	direct_param_set_collection_deps	Direct collection dependency table recovery
 param_set_collection_values	2	production	production-dynamic	direct_param_set_collection_values	Direct collection values flattening
-param_set_subset_state	7	production	production-dynamic	direct_param_set_subset_state	Direct subset capsule transaction with constraint and transformation snapshots
+param_set_subset_state	8	production	production-dynamic	direct_param_set_subset_state	Direct subset capsule transaction with independently retained or stripped constraint and transformation snapshots
 param_set_subspace_states	4	production	production-dynamic	direct_param_set_subspace_states	Direct atomic multi-subspace capsule planning
 param_set_adopt_subset_state	2	production	production-dynamic	direct_param_set_adopt_subset_state	Direct single-use subset capsule adoption
 test_checked_affixed_size	2	fixture	fixture-dynamic	direct_test_checked_affixed_size	Internal arithmetic-boundary fixture is called dynamically

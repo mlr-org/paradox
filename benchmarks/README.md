@@ -27,12 +27,36 @@ the two real migration endpoints rather than a benchmark-only proxy.
 The scalar validation group separately times complete `$check()` and the
 `check_dependencies` dependency-only workload, so removing the latter's former
 R-side dependency walk remains visible without conflating it with Domain
-validation. `condition_equal_vector` isolates the vector comparison used by
-dependency masking in `Design`, including its public native admission cost. A
-separate `test_constraint_dt` workload times an already-admitted
-batch and a tiny real callback. It therefore exposes row-adapter and callback
-snapshot overhead instead of hiding the native batch evaluator behind repeated
-Domain validation.
+validation. `has_deps_flags` measures the common dependency-presence gate over
+BASE, COLLECTION, and live SHADOW nodes without conflating it with detached
+dependency-table construction. `condition_equal_vector` isolates the vector
+comparison used by dependency masking in `Design`, including its public native
+admission cost. A separate `test_constraint_dt` workload times an
+already-admitted batch and a tiny real callback. It therefore exposes
+row-adapter and callback snapshot overhead instead of hiding the native batch
+evaluator behind repeated Domain validation.
+
+The retained focused `$has_deps` comparison is
+`.local/benchmarks/has-deps-scalar-ab-final-20260719`. It used R 4.6.1,
+single-threaded BLAS/OpenMP settings, separate fresh baseline and candidate R
+processes, 64 parameters, 16 rows, seed 20260713, three untimed warmups, and 50
+timed evaluations of the complete three-node expression. The exact libraries
+were `.local/final-rc-focus-20260719` and
+`.local/tmp/has-deps-focused-20260719/library`; their installation-manifest
+MD5 fingerprints were `e2c1bd70d424230108c9a85ff73b49b2` and
+`6f395ff7002b4c73066bc81d6f3698f4`. The corresponding native DSO SHA-256
+values were `6311d2b661e50e61e6b85fb8c27b7f8c71fa33c6c13ab435c7e9b268044bf0f4`
+and `96ac522fca06e4060944f79da0925dafad90a03a520ba5e69caa36962ab53e7f`.
+For the candidate, the ordered SHA-256 manifest of `R/ParamSet.R`,
+`src/paramset_collection_deps.c`, `src/paramset_domain_common.c`, `src/init.c`,
+`src/paradox.h`, and `benchmarks/workloads.R` hashes to
+`98e80aa6cf275cbb9a35905509483154fa9c1674cee51fb1214358f5b6eab62c`.
+The median moved from 498.575 to 156.065 microseconds (3.195x), with no timed
+GCs. The one-evaluation `Rprofmem` profile reported 12,688 bytes in 14 records
+on both sides, so this evidence demonstrates a latency win, not an allocation
+reduction. `metadata.json`, the raw samples, and both allocation traces retain
+the complete audit trail.
+
 The value group separates the default dependency-aware `$get_values()` call,
 the callback-free `remove_dependencies = FALSE` case, and the ubiquitous
 `tags = "train"` filter. It also measures default filtered getters on rich and
@@ -137,8 +161,7 @@ The five `PARADOX_CANDIDATE_*` variables written for the immutable candidate
 workflow must still be exported: `RUN_ID`, `REF`, `COMMIT`, `TREE`, and
 `CONTENT_SHA256`. `--dependency-library` is repeatable and the first occurrence
 must be the canonical dependency library and content recorded when the
-candidate was installed, as well as provide `mlr3pipelines` for the focused
-worker. Use repeatable
+candidate was installed. Use repeatable
 `--protected-library` arguments for any additional read-only libraries reachable
 by package loading. The focused legacy worker also names `.local/R/library`
 directly; the release gate therefore protects and fingerprints that library
@@ -147,9 +170,13 @@ ordinary project, and repository-local R base libraries are fingerprinted
 before and after the gate. All user-supplied library roots must be distinct,
 disjoint, plain directories below this repository's `.local/` tree.
 The `--mies-library` must be the exact bridge library produced for the same
-candidate run, not a mutable diagnostic installation; where other overlay
-libraries are supplied, keep this bridge ahead of mlr3verse or documentation
-extras in the effective library order.
+candidate run, not a mutable diagnostic installation. The option name is
+retained for command-line compatibility, but that overlay supplies both the
+reviewed miesmuschel and mlr3pipelines builds to the focused worker. The sealed
+benchmark evidence retains and hashes the overlay's completion, package,
+manifest, and seal records. Where other overlay libraries are supplied, keep
+this bridge ahead of mlr3verse or documentation extras in the effective library
+order.
 
 `--plan-only` performs the same provenance, Git, evidence, candidate, library,
 workload-inventory, and regression-policy authentication and prints the exact

@@ -73,7 +73,7 @@ library_roles <- function(dependencies, protected) {
   eval(role_bindings[[1L]], envir = fixture)
   fixture$release_library_roles
 }
-fixed_roles <- c("baseline", "candidate", "miesmuschel")
+fixed_roles <- c("baseline", "candidate", "downstream-bridges")
 suffix_roles <- c("ordinary-project", "r-base-library")
 role_fixtures <- list(
   list(
@@ -154,28 +154,44 @@ if (length(support_bindings) != 1L) {
     call. = FALSE)
 }
 support_fixture <- list2env(list(
-  release_mies_library = "exact-miesmuschel-bridge",
+  release_bridge_library = "exact-downstream-bridge",
   release_dependency_libraries = c(
-    "dependency-with-stale-miesmuschel", "dependency-two"
+    "dependency-with-stale-bridges", "dependency-two"
   ),
   release_extra_libraries = "protected",
   release_ordinary_library = "ordinary"
 ), parent = baseenv())
 eval(support_bindings[[1L]], envir = support_fixture)
 expected_support_order <- c(
-  "exact-miesmuschel-bridge", "dependency-with-stale-miesmuschel",
+  "exact-downstream-bridge", "dependency-with-stale-bridges",
   "dependency-two", "protected", "ordinary"
 )
 if (!identical(
     support_fixture$release_support_libraries, expected_support_order
   )) {
-  stop("the exact miesmuschel bridge does not precede stale dependency copies",
+  stop("the exact downstream bridge does not precede stale dependency copies",
+    call. = FALSE)
+}
+
+pipeline_bindings <- Filter(
+  function(expression) is_library_binding(
+    expression, quote(release_pipeline_package)
+  ),
+  as.list(tree)
+)
+if (length(pipeline_bindings) != 1L ||
+    !identical(pipeline_bindings[[1L]][[3L]][[1L]],
+      quote(release_direct_package)) ||
+    !identical(pipeline_bindings[[1L]][[3L]][[2L]], "mlr3pipelines") ||
+    !identical(pipeline_bindings[[1L]][[3L]][[3L]],
+      quote(release_bridge_library))) {
+  stop("release benchmark does not attest reviewed mlr3pipelines from the bridge",
     call. = FALSE)
 }
 
 cat(
   paste(
     "PASS: release paths reject controls, library roles match optional paths,",
-    "and the exact miesmuschel bridge has package-loading precedence\n"
+    "and both reviewed bridge packages have package-loading precedence\n"
   )
 )

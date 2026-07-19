@@ -35,11 +35,11 @@ jobs:
           - {os: ubuntu-latest,   arch: x86_64, r: 'release'}
           - {os: ubuntu-latest,   arch: x86_64, r: 'release', depends_only: true}
           # Compile against the declared minimum R API as well as current R.
-          # The authenticated local old-runtime gate exercises the reviewed
-          # 57-file public-behavior scope. This row independently checks that
-          # the distributable package builds, installs, and checks against the
-          # declared minimum API without rerunning the 22 R-4.6-only admission
-          # implementation contexts.
+          # The authenticated local old-runtime gate exercises the dynamically
+          # inventoried public-behavior scope. This row independently checks
+          # that the distributable package builds, installs, and checks against
+          # the declared minimum API without rerunning implementation-only
+          # admission contexts for newer R versions.
           - {os: ubuntu-latest,   arch: x86_64, r: '4.3', depends_only: true, no_tests: true}
 
     steps:

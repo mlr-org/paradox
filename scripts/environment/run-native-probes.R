@@ -581,6 +581,44 @@ main <- function() {
       check(identical(result$id, "child") && identical(result$on, "parent"),
         "dependency projection differs")
     },
+    direct_param_set_has_dependencies = function() {
+      child <- ps(parent = p_lgl(), child = p_int())
+      collection <- ParamSetCollection$new(list(owner = child))
+      shadow <- ParamSetShadow$new(child, character())
+      before <- c(
+        base = .Call(
+          symbol("param_set_has_dependencies"), private_of(child), child
+        ),
+        collection = .Call(
+          symbol("param_set_has_dependencies"),
+          private_of(collection), collection
+        ),
+        shadow = .Call(
+          symbol("param_set_has_dependencies"), private_of(shadow), shadow
+        )
+      )
+      child$add_dep("child", "parent", CondEqual(TRUE))
+      after <- c(
+        base = .Call(
+          symbol("param_set_has_dependencies"), private_of(child), child
+        ),
+        collection = .Call(
+          symbol("param_set_has_dependencies"),
+          private_of(collection), collection
+        ),
+        shadow = .Call(
+          symbol("param_set_has_dependencies"), private_of(shadow), shadow
+        )
+      )
+      check(
+        identical(before, c(
+          base = FALSE, collection = FALSE, shadow = FALSE
+        )) && identical(after, c(
+          base = TRUE, collection = TRUE, shadow = TRUE
+        )),
+        "scalar dependency presence differs"
+      )
+    },
     direct_param_set_set_dependencies = function() {
       set <- ps(parent = p_int(0L, 2L), child = p_lgl())
       input <- data.frame(id = "child", on = "parent",
@@ -737,13 +775,18 @@ main <- function() {
       check(identical(result, list(owner.x = 1L)), "collection values differ")
     },
     direct_param_set_subset_state = function() {
-      set <- ps(x = p_int(), y = p_lgl())
-      result <- .Call(
+      set <- ps(x = p_int(), y = p_dbl(trafo = exp))
+      set$extra_trafo <- function(x, param_set) x
+      token <- .Call(
         symbol("param_set_subset_state"),
         private_of(set), set, "y", FALSE, TRUE,
-        set$constraint, set$extra_trafo
+        set$constraint, set$extra_trafo, FALSE
       )
-      check(typeof(result) == "externalptr", "subset capsule transaction differs")
+      target <- subset_private()
+      adopted <- .Call(symbol("param_set_adopt_subset_state"), target, token)
+      result <- .Call(symbol("param_set_core_state"), target)
+      check(isTRUE(adopted) && nrow(result$.trafos) == 0L &&
+        is.null(result$.extra_trafo), "stripped subset capsule transaction differs")
     },
     direct_param_set_subspace_states = function() {
       set <- ps(x = p_int(init = 1L), y = p_lgl(init = TRUE))
@@ -759,7 +802,7 @@ main <- function() {
       plan <- .Call(
         symbol("param_set_subset_state"),
         private_of(set), set, "y", FALSE, TRUE,
-        set$constraint, set$extra_trafo
+        set$constraint, set$extra_trafo, TRUE
       )
       target <- subset_private()
       check(isTRUE(.Call(symbol("param_set_adopt_subset_state"), target, plan)),

@@ -2,14 +2,14 @@ args <- commandArgs(trailingOnly = TRUE)
 if (length(args) < 5L || length(args) > 6L) {
   stop(paste(
     "usage: paramsetcollection-consumers.R LABEL PARADOX_LIBRARY OUTPUT_CSV",
-    "MIES_LIBRARY DEPENDENCY_LIBRARY [SAMPLES_CSV]"
+    "BRIDGE_LIBRARY DEPENDENCY_LIBRARY [SAMPLES_CSV]"
   ), call. = FALSE)
 }
 
 label <- args[[1L]]
 paradox_library <- normalizePath(args[[2L]], mustWork = TRUE)
 output <- args[[3L]]
-mies_library <- normalizePath(args[[4L]], mustWork = TRUE)
+bridge_library <- normalizePath(args[[4L]], mustWork = TRUE)
 dependency_library <- normalizePath(args[[5L]], mustWork = TRUE)
 samples_output <- if (length(args) >= 6L) {
   args[[6L]]
@@ -24,17 +24,17 @@ if (identical(normalizePath(dirname(output), mustWork = TRUE),
 ordinary_library <- normalizePath(".local/R/library", mustWork = TRUE)
 .libPaths(unique(c(
   paradox_library,
-  mies_library,
+  bridge_library,
   dependency_library,
   ordinary_library,
   .libPaths()
 )))
 
 suppressPackageStartupMessages(library(paradox, lib.loc = paradox_library))
-suppressPackageStartupMessages(library(miesmuschel, lib.loc = mies_library))
+suppressPackageStartupMessages(library(miesmuschel, lib.loc = bridge_library))
 suppressPackageStartupMessages(library(
   mlr3pipelines,
-  lib.loc = dependency_library
+  lib.loc = bridge_library
 ))
 suppressPackageStartupMessages(library(bench))
 
@@ -43,6 +43,15 @@ if (!identical(
     normalizePath(file.path(paradox_library, "paradox"))
   )) {
   stop("loaded the wrong paradox installation", call. = FALSE)
+}
+for (package in c("miesmuschel", "mlr3pipelines")) {
+  if (!identical(
+      normalizePath(find.package(package)),
+      normalizePath(file.path(bridge_library, package))
+    )) {
+    stop("loaded the wrong reviewed bridge installation for ", package,
+      call. = FALSE)
+  }
 }
 
 objects <- list(

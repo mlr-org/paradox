@@ -1,7 +1,7 @@
 # Downstream Paradox 2 pull-request handoff
 
 Agentic processes must not push these branches or open remote pull requests.
-The two repository-local branches below are the complete reviewed migrations.
+The seven repository-local branches below are the complete reviewed migrations.
 Before publication, the release gate must test these exact heads against the
 frozen Paradox candidate and `compat/verify-mlr-org-review` must authenticate
 their clean trees.
@@ -9,10 +9,10 @@ their clean trees.
 ## bbotk
 
 - base: `905901b45d4dd9445efc0ffa49e663ab5ae534cb`
-- head: `94e4c223bce08022dbe269c79e709dd24b90714f`
+- head: `6cae9559cfa2133b02b19e9762211aa49ec4c1c7`
 - branch: `codex/public-paramsetcollection-sets`
 - target branch: `main`
-- proposed title: `Use public ParamSetCollection state with Paradox 2`
+- proposed title: `Use Paradox 2 public ParamSet state safely`
 
 Proposed body:
 
@@ -21,6 +21,13 @@ Proposed body:
 > add a regression for that public contract. Keep the same tests useful with
 > Paradox 1 and 2 by selecting the expected validation diagnostic by installed
 > Paradox major version; no runtime behavior is version-branched.
+>
+> The public Paradox 2 `$data` and `$deps` accessors deliberately return
+> detached snapshots. Root those two owner objects for the complete native
+> local-search lifetime instead of retaining unrooted pointers into their
+> columns and Conditions. The added forced-allocation regression covers the
+> lifetime boundary. This also fixes a latent C ownership bug with no API
+> change on either Paradox version.
 
 After the exact-head release test passes, publish it manually with:
 
@@ -56,4 +63,126 @@ After the exact-head release test passes, publish it manually with:
 
 ```sh
 git -C /home/mewse/paradox_neo/.local/compat/github/miesmuschel push --set-upstream origin codex/paradox-paramsetshadow-bridge
+```
+
+## mlr3mbo
+
+- base: `beea4afca5d0c4a49b733fe9c3307f677862bd3f`
+- head: `569c1844413554d06951e79525a0e9a35a93cdbd`
+- branch: `codex/paradox2-transformless-subset`
+- target branch: `main`
+- proposed title: `Use the public transform-free subset API on Paradox 2`
+
+Proposed body:
+
+> Paradox 2 deliberately makes detached Domain internals non-authoritative and
+> provides `ParamSet$subset(..., keep_trafo = FALSE)` for constructing a
+> transformation-free acquisition domain. Use that public API on Paradox 2
+> instead of deleting the private `.trafo` column returned by `$domains`.
+> Retain both historical implementations for Paradox 1, so the package remains
+> dual-version compatible. Extend the existing acquisition-domain regression to
+> verify that producing the detached domain does not remove transformations
+> from the source search space.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3mbo-paradox2 push --set-upstream origin codex/paradox2-transformless-subset
+```
+
+## celecx
+
+- base: `8fc8a8dbaf15e72010b0e721a2167c5db9984810`
+- head: `cef7a4f4532393d725012e1a566d5cd4157b82cd`
+- branch: `codex/paradox2-diagnostics`
+- target branch: `master`
+- proposed title: `Accept Paradox 2 validation diagnostics in tests`
+
+Proposed body:
+
+> Keep celecx runtime behavior unchanged while making its diagnostic
+> expectations work with both supported Paradox generations. Paradox 1 retains
+> the exact checkmate-era fragments; Paradox 2 expectations select its native
+> Domain-bound, initial-value, and dependency-cycle diagnostics. This is a
+> test-only bridge. Together with mlr3mbo's public transform-free subset change,
+> the affected acquisition, grid, bootstrap, and quantile tests pass without
+> relying on mutable Domain internals.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/celecx-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+```
+
+## mlr3
+
+- base: `f70c001d526213d80059744b81fcbc420bb83017`
+- head: `35e30a91e305936e57328b65e15b60f3ab00eef3`
+- branch: `codex/paradox2-diagnostics`
+- target branch: `main`
+- proposed title: `Accept Paradox 2 numeric Domain diagnostics in tests`
+
+Proposed body:
+
+> Preserve the existing Paradox 1 assertions for invalid pinball and RQR
+> `alpha` values while selecting Paradox 2's native numeric Domain-bound
+> fragment on that major version. This changes test expectations only; measure
+> construction and scoring behavior are unchanged.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+```
+
+## mlr3fselect
+
+- base: `cd12d7717f31701edc6ebcf7f2cbe1168cae1ecb`
+- head: `ae8e1d163bc7d8a2dd9f12e61d704e5b0d8430d7`
+- branch: `codex/paradox2-diagnostics`
+- target branch: `main`
+- proposed title: `Accept the Paradox 2 feature-fraction diagnostic in tests`
+
+Proposed body:
+
+> Select Paradox 2's native numeric Domain-bound fragment for the invalid RFE
+> `feature_fraction` test while preserving the exact Paradox 1 expectation.
+> The package-owned `subset_sizes` checkmate assertions remain unchanged because
+> they are not Paradox diagnostics and already pass on both versions. This is a
+> one-file, test-only compatibility change with no feature-selection runtime
+> branch.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3fselect-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+```
+
+## mlr3pipelines
+
+- base: `daebff3cc15257cdecde898fd3f0ceff5f320c53`
+- head: `1c4bc6e52005d40d61fdba27b047f09fd6a6d29a`
+- branch: `codex/paradox-diagnostic-compat`
+- target branch: `master`
+- proposed title: `Fix GraphLearner state deep cloning across Paradox versions`
+
+Proposed body:
+
+> Deep-clone mutable R6 values stored in `GraphLearner$state$param_vals` so a
+> cloned learner cannot mutate the original learner through shared proxy
+> content. The previous test happened to pass with Paradox 1 because its
+> traversal encountered an alias through private ParamSet storage first;
+> Paradox 2's detached capsule layout exposed the existing ownership bug. Add
+> an explicit identity and mutation-isolation regression that catches it under
+> both Paradox versions.
+>
+> Keep the two PICV invalid-value assertions while removing their dependency on
+> exact Paradox 1/checkmate wording. Focused PICV and Proxy tests pass with both
+> Paradox 1.0.1 and the Paradox 2 candidate; runtime validation behavior is not
+> version-branched.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/github/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat
 ```

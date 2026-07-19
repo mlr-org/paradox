@@ -62,8 +62,9 @@ enum source_root {
 };
 
 static int scalar_flag(SEXP value, const char *name) {
-  if (TYPEOF(value) != LGLSXP || ALTREP(value) || XLENGTH(value) != 1) {
-    Rf_error("`%s` must be one non-missing logical value", name);
+  if (TYPEOF(value) != LGLSXP || ALTREP(value) || XLENGTH(value) != 1 ||
+      !paradox_api_has_no_attributes(value)) {
+    Rf_error("`%s` must be one unclassed non-missing logical value", name);
   }
   const int result = LOGICAL_ELT(value, 0);
   if (result == NA_LOGICAL) {
@@ -539,7 +540,7 @@ static SEXP new_subset_token(SEXP params, SEXP values, SEXP tags, SEXP deps,
 
 static SEXP build_token(const subset_source_t *source,
     const R_xlen_t *parameters, R_xlen_t parameter_count,
-    int include_dependencies, int allow_dangling,
+    int include_dependencies, int allow_dangling, int include_trafos,
     SEXP constraint, SEXP extra_trafo) {
   R_xlen_t tag_count = 0;
   R_xlen_t trafo_count = 0;
@@ -550,12 +551,14 @@ static SEXP build_token(const subset_source_t *source,
     parameter_count,
     &tag_count
   );
-  R_xlen_t *trafo_rows = selected_group_rows(
-    &source->trafo_groups,
-    parameters,
-    parameter_count,
-    &trafo_count
-  );
+  R_xlen_t *trafo_rows = include_trafos
+    ? selected_group_rows(
+      &source->trafo_groups,
+      parameters,
+      parameter_count,
+      &trafo_count
+    )
+    : paradox_temporary_alloc(0, sizeof(*trafo_rows));
   R_xlen_t *dependency_rows = include_dependencies
     ? selected_group_rows(
       &source->dependency_groups,
@@ -652,12 +655,14 @@ static R_xlen_t *requested_parameters(const subset_source_t *source,
 
 SEXP paradox_param_set_subset_state(SEXP private_environment, SEXP self,
     SEXP requested_ids, SEXP allow_dangling_dependencies,
-    SEXP keep_constraint, SEXP constraint, SEXP extra_trafo) {
+    SEXP keep_constraint, SEXP constraint, SEXP extra_trafo,
+    SEXP keep_trafo) {
   const int allow_dangling = scalar_flag(
     allow_dangling_dependencies,
     "allow_dangling_dependencies"
   );
   const int keep = scalar_flag(keep_constraint, "keep_constraint");
+  const int keep_transformations = scalar_flag(keep_trafo, "keep_trafo");
   require_callback(extra_trafo, "extra_trafo");
   if (keep) {
     require_callback(constraint, "constraint");
@@ -678,8 +683,9 @@ SEXP paradox_param_set_subset_state(SEXP private_environment, SEXP self,
     XLENGTH(ids),
     TRUE,
     allow_dangling,
+    keep_transformations,
     keep ? constraint : R_NilValue,
-    extra_trafo
+    keep_transformations ? extra_trafo : R_NilValue
   ));
   UNPROTECT(3);
   return token;
@@ -703,6 +709,7 @@ SEXP paradox_param_set_subspace_states(SEXP private_environment, SEXP self,
       &parameters[request],
       1,
       FALSE,
+      TRUE,
       TRUE,
       R_NilValue,
       extra_trafo
@@ -779,6 +786,7 @@ SEXP paradox_param_set_base_snapshot_state(SEXP private_environment,
     &source,
     parameters,
     source.params.row_count,
+    TRUE,
     TRUE,
     TRUE,
     VECTOR_ELT(state, PARADOX_CORE_CONSTRAINT),

@@ -1,15 +1,15 @@
 repository	url	relation	priority	action	notes
-bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	Exact local Paradox-2 bridge using public collection sets while retaining additive Codomain inheritance.
+bbotk	https://github.com/mlr-org/bbotk.git	Depends	0	clone	Exact local dual-version bridge using public collection sets and rooting detached native search-space snapshots while retaining additive Codomain inheritance.
 mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	Depends	0	clone	Core tuning gate.
 miesmuschel	https://github.com/mlr-org/miesmuschel.git	Depends	0	clone	Exact local dual-version bridge selecting Paradox's official ParamSetShadow for Paradox 2.
-celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Active GitHub-only consumer.
+celecx	https://github.com/mlr-org/celecx.git	Depends	1	clone	Exact local test-only bridge for Paradox-2 native diagnostics; active GitHub-only consumer.
 smashy	https://github.com/mlr-org/smashy.git	Depends	3	clone	Experimental consumer pinned to an obsolete paradox development branch; retained as source characterization only.
-mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Core framework gate.
-mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Broad ParamSet and collection use.
+mlr3	https://github.com/mlr-org/mlr3.git	Imports	0	clone	Exact local test-only bridge for Paradox-2 numeric diagnostics; core framework gate.
+mlr3pipelines	https://github.com/mlr-org/mlr3pipelines.git	Imports	0	clone	Exact local bridge decoupling a legacy diagnostic and fixing GraphLearner deep-clone ownership; broad ParamSet and collection use.
 mlr3learners	https://github.com/mlr-org/mlr3learners.git	Imports	0	clone	Broad learner integration gate.
-mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Core feature-selection gate.
+mlr3fselect	https://github.com/mlr-org/mlr3fselect.git	Imports	0	clone	Exact local test-only bridge for the Paradox-2 feature-fraction diagnostic; core feature-selection gate.
 mlr3hyperband	https://github.com/mlr-org/mlr3hyperband.git	Imports	0	clone	Core tuning extension gate.
-mlr3mbo	https://github.com/mlr-org/mlr3mbo.git	Imports	0	clone	Design-generation and optimization gate.
+mlr3mbo	https://github.com/mlr-org/mlr3mbo.git	Imports	0	clone	Exact local dual-version bridge using public transformation-free subsets on Paradox 2; design-generation and optimization gate.
 mlr3tuningspaces	https://github.com/mlr-org/mlr3tuningspaces.git	Imports	0	clone	Large catalog of real parameter spaces.
 mlr3verse	https://github.com/mlr-org/mlr3verse.git	Imports	0	clone	Meta-package installation gate.
 mlr3cluster	https://github.com/mlr-org/mlr3cluster.git	Imports	1	clone	Active extension.

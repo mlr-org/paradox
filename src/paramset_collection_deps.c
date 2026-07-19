@@ -152,6 +152,69 @@ static SEXP public_dependency_facade(SEXP table) {
   return result;
 }
 
+SEXP paradox_param_set_has_dependencies(SEXP private_environment, SEXP self) {
+  R_xlen_t work_since_interrupt = 0;
+  if (!paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("ParamSet method called with a foreign private environment");
+  }
+
+  PROTECT_INDEX core_index;
+  SEXP core;
+  PROTECT_WITH_INDEX(
+    core = paradox_core_from_private(private_environment),
+    &core_index
+  );
+  if (core == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet state: missing versioned core capsule");
+  }
+
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind == PARADOX_CORE_COLLECTION) {
+    PROTECT_INDEX roots_index;
+    SEXP roots;
+    PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
+    paradox_collection_graph_t graph;
+    paradox_collection_graph_build(
+      private_environment,
+      self,
+      &graph,
+      &roots,
+      roots_index,
+      &work_since_interrupt
+    );
+    const int result = graph.nodes[0].subtree_dependencies != 0;
+    UNPROTECT(2);
+    return Rf_ScalarLogical(result);
+  }
+
+  if (kind == PARADOX_CORE_SHADOW) {
+    REPROTECT(
+      core = paradox_core_refresh_shadow(self, private_environment),
+      core_index
+    );
+    kind = paradox_core_kind(core);
+  }
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet dependency capsule kind");
+  }
+
+  SEXP state = R_ExternalPtrProtected(core);
+  paradox_domain_dependencies_t dependencies;
+  if (!paradox_domain_validate_dependencies(
+      VECTOR_ELT(state, PARADOX_CORE_DEPS),
+      &dependencies,
+      &work_since_interrupt
+    )) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet dependency capsule");
+  }
+  const int result = dependencies.row_count != 0;
+  UNPROTECT(1);
+  return Rf_ScalarLogical(result);
+}
+
 SEXP paradox_param_set_collection_deps(SEXP private_environment, SEXP self) {
   R_xlen_t work_since_interrupt = 0;
   PROTECT_INDEX roots_index;

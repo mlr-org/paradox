@@ -298,7 +298,7 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 expected_documentation_sha256 <-
-  "ebc713a061bf1576fa5a5ca9818575bb0bce826a3425be672620c7c7921803ec"
+  "b094e74c6bceb86c8d92cde81df965279b2e48c762df28a4b7f102183e66e2e5"
 if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
   stop("documentation timeout source snapshot changed", call. = FALSE)
 }
@@ -397,8 +397,12 @@ audit_timeout_ast <- function(tree, production = FALSE) {
     stop("timeout AST audit: ", ..., call. = FALSE)
   }
   records <- timeout_records(tree)
-  if (length(records) != 2L) {
-    reject("expected two named timeout records, found ", length(records))
+  expected_record_count <- if (isTRUE(production)) 3L else 2L
+  if (length(records) != expected_record_count) {
+    reject(
+      "expected ", expected_record_count,
+      " named timeout records, found ", length(records)
+    )
   }
   if (any(lengths(lapply(records, `[[`, "positions")) != 1L)) {
     reject("the named timeout must occupy exactly one numeric call position")
@@ -410,13 +414,40 @@ audit_timeout_ast <- function(tree, production = FALSE) {
   is_default <- vapply(records, function(record) {
     is.call(record$node) && identical(record$node[[1L]], quote(list))
   }, logical(1L))
-  if (sum(is_direct) != 1L || sum(is_default) != 1L) {
-    reject("expected one direct processx::run timeout and one list default")
+  expected_direct_count <- if (isTRUE(production)) 2L else 1L
+  if (sum(is_direct) != expected_direct_count || sum(is_default) != 1L) {
+    reject(
+      "expected ", expected_direct_count,
+      " direct processx::run timeout(s) and one list default"
+    )
   }
-  direct <- records[[which(is_direct)]]
-  direct_argument <- unname(as.list(direct$node)[direct$positions])
-  if (!identical(direct_argument, list(quote(timeout_seconds)))) {
-    reject("the direct timeout argument is not the exact seconds symbol")
+  direct_indices <- which(is_direct)
+  direct_arguments <- lapply(records[direct_indices], function(record) {
+    unname(as.list(record$node)[record$positions])
+  })
+  retained_index <- which(vapply(
+    direct_arguments,
+    identical,
+    logical(1L),
+    list(quote(timeout_seconds))
+  ))
+  bridge_index <- which(vapply(
+    direct_arguments,
+    identical,
+    logical(1L),
+    list(600)
+  ))
+  expected_bridge_count <- if (isTRUE(production)) 1L else 0L
+  if (length(retained_index) != 1L ||
+      length(bridge_index) != expected_bridge_count) {
+    reject("direct timeouts have an unexpected retained/bridge shape")
+  }
+  direct <- records[[direct_indices[[retained_index]]]]
+  if (isTRUE(production)) {
+    bridge <- records[[direct_indices[[bridge_index]]]]
+    if (!contains_symbol(bridge$node, quote(bridge_installer))) {
+      reject("the fixed verifier timeout does not belong to the bridge verifier")
+    }
   }
   default <- records[[which(is_default)]]
   default_argument <- unname(as.list(default$node)[default$positions])

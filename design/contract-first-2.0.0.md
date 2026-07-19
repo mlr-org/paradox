@@ -74,6 +74,18 @@ schema; that does not preserve an equivalent readable or writable legacy
 representation. Public accessors continue to return compatible values and
 tables.
 
+Consumers needing a detached search space without transformations call
+`$subset(..., keep_trafo = FALSE)`. The additive final argument defaults to
+`TRUE`; `FALSE` removes both selected per-parameter transformations and the
+extra transformation callback in the one native subset transaction, without
+changing the independently controlled constraint. It applies uniformly to
+BASE, COLLECTION, and SHADOW. Direct mutation of a reconstructed Domain's
+`.trafo` field, or acceptance of the malformed Domain produced by such a
+mutation, is not a compatibility requirement. All three subset control flags
+are exact attribute-free, non-missing logical scalars. COLLECTION callback
+detachment follows the callbacks retained by the admitted BASE result and does
+not reinterpret the original controls through an R generic.
+
 The one stateful shell-policy exception is the documented public
 `assert_values` field. It determines whether `$values<-` enters the checked or
 unchecked native value-store operation; it is not parameter, value, callback,
@@ -570,13 +582,27 @@ boundary. There is no R scalar or per-row constraint implementation.
 Tag projection/replacement, dependency-table snapshot/projection/replacement,
 dependency append, and BASE constraint/extra-transformation callback
 replacement are registered native mutation boundaries. They validate and own
-the complete replacement before swapping a capsule. Dependency mutation uses
-the same closed Condition admission and check kernel for feasible RHS values;
-if that validation callback changes the target capsule, the nested mutation
-wins and the outer mutation errors without overwriting it. `SHADOW$add_dep()`
-routes to the same native append only after proving both endpoints remain in
-the fixed visible schema. These operations have no R/checkmate/data.table
-mutation planner.
+the complete replacement before swapping a capsule. Dependency-table snapshot
+and bulk `$deps <-` are callback-free structural operations: they admit only
+exact closed Conditions, require valid child IDs and reject self-edges, but
+retain the established dangling-parent behavior and do not require Condition
+RHS values to remain feasible. Thus copying a dependency graph after narrowing
+a parent Domain preserves its exact predicate; a wholly impossible predicate
+means that its child is always inactive. `$add_dep()` is deliberately stricter:
+the shared check kernel verifies RHS feasibility and, if that validation
+callback changes the target capsule, the nested mutation wins and the outer
+append errors without overwriting it. `SHADOW$add_dep()` routes to this strict
+native append only after proving both endpoints remain in the fixed visible
+schema. These operations have no R/checkmate/data.table mutation planner and no
+shared feasibility/fallback mode.
+
+`$has_deps` is a registered scalar reader, not an alias for
+`nrow(self$deps)`. A BASE validates its canonical dependency table directly. A
+SHADOW performs its one authoritative live refresh and validates that selected
+table. A COLLECTION admits the complete capsule graph, including corruption
+and cycle checks, and reads only the root subtree dependency count. The reader
+does not construct detached dependency columns or a data.table facade, cache
+graph validity, or select a reduced-integrity collection path.
 
 ## Operation snapshot and callback contract
 
@@ -812,19 +838,33 @@ The coordinated downstream transition happens in this order:
    without a core override. If bbotk elects to support serialized Paradox-1
    Codomains, its bridge reconstructs the current additive Codomain around
    explicitly upgraded base state; the generic Paradox upgrader does not infer
-   third-party constructor state.
-3. miesmuschel publishes a dual-version bridge. With Paradox 2 it selects and
+   third-party constructor state. Its native local-search code also roots the
+   detached public `$data` and `$deps` snapshots for the entire lifetime of
+   every stored column/Condition pointer; Paradox 2 no longer leaves a private
+   alias that accidentally keeps those facades alive.
+3. mlr3mbo uses the public
+   `$subset(..., keep_trafo = FALSE)` boundary on Paradox 2 instead of mutating
+   detached/private Domain transformation storage. Its Paradox-1 paths remain
+   unchanged.
+4. miesmuschel publishes a dual-version bridge. With Paradox 2 it selects and
    re-exports Paradox's `ParamSetShadow` generator; with Paradox 1.x it retains
    its legacy class. Its tests exercise `$origin`, visible-value write-through,
    hidden-value preservation, live dependencies/constraint/transformations,
    and cross-boundary rejection on both branches.
-4. celecx, ConfigSpace, and bbotk verify the retained closed Condition function
-   names and built-in object shapes. ConfigSpace rejects an unknown condition
-   explicitly rather than interpreting it as `CondAnyOf`.
-5. Dual-compatible downstream releases or reviewed candidate branches are
+5. celecx, mlr3, and mlr3fselect keep their runtime behavior unchanged while
+   version-gating tests that asserted exact checkmate-era diagnostic fragments;
+   mlr3pipelines instead retains error assertions without pinning either
+   implementation's wording. mlr3pipelines additionally owns a real
+   GraphLearner deep-clone repair where an R6 value in `state$param_vals` was
+   shared; the former ParamSet private layout merely masked that alias in its
+   test helper.
+   ConfigSpace and bbotk verify retained closed Condition function names and
+   built-in shapes; ConfigSpace rejects an unknown condition explicitly rather
+   than interpreting it as `CondAnyOf`.
+6. Dual-compatible downstream releases or reviewed candidate branches are
    available before Paradox 2 is submitted. The Paradox release gate tests
    those exact bridge revisions, then tests the wider priority-zero/one corpus.
-6. Only after the downstream bridges and Paradox 2 are public may downstream
+7. Only after the downstream bridges and Paradox 2 are public may downstream
    packages remove their Paradox-1 compatibility branches on their own release
    schedules.
 
@@ -880,7 +920,10 @@ The package suite must contain contract tests for:
 - current serialization plus explicit upgrades of pinned Paradox-1 fixtures,
   `mbo_config`, nested collections, callbacks, shared graphs, and rejected
   extensions;
-- the bbotk and miesmuschel bridge contracts.
+- every exact reviewed downstream bridge contract recorded in
+  `compat/github-bridge-provenance.tsv`, including public Shadow/subset use,
+  detached-snapshot ownership, diagnostic-only adaptations, and independent
+  downstream bug fixes.
 
 During implementation, stop at the first failing layer: parse/static harness
 checks, directly affected tests, one strict compiler build, then the complete
@@ -927,14 +970,18 @@ matrix.
 ## Implementation choices that are not public contracts
 
 Profiling is closed for the 2.0.0 implementation. The retained low-risk wins
-skip empty constructor storage, reuse resolved collection rows, and remove a
-duplicate Shadow dependency refresh. A sparse search-target projection moved a
-maintained end-to-end workload by only about 2%, and a bulk-dependency
-constructor transaction improved representative xgboost construction by only
-about 6--7% despite a larger requirement-heavy microbenchmark gain. Both
-experiments are rejected for this release because their extra semantic and
-validation surface is not low-hanging; neither is an omitted compatibility
-break or unfinished public contract.
+skip empty constructor storage, reuse resolved collection rows, remove a
+duplicate Shadow dependency refresh, and answer `$has_deps` from validated
+native counts without projecting `$deps`. The retained 64-parameter
+BASE/COLLECTION/SHADOW probe moved from 498.575 to 156.065 microseconds
+(3.195x); its one-evaluation allocation profile remained 12,688 bytes in 14
+records, so this is a latency win rather than an allocation claim. A sparse
+search-target projection moved a maintained end-to-end workload by only about
+2%, and a bulk-dependency constructor transaction improved representative
+xgboost construction by only about 6--7% despite a larger requirement-heavy
+microbenchmark gain. Both experiments are rejected for this release because
+their extra semantic and validation surface is not low-hanging; neither is an
+omitted compatibility break or unfinished public contract.
 
 The final paired policy does not pretend that Paradox 1 performed Paradox 2's
 new integrity work. It assigns finite contract-reset budgets only to the direct

@@ -15,6 +15,7 @@ paired	ids_any_tags	-	hot	common-id-filter
 paired	static_properties	-	standard	metadata-query
 paired	check_scalar	-	hot	common-validation-path
 paired	check_dependencies	-	hot	common-dependency-validation-path
+paired	has_deps_flags	-	hot	common-dependency-presence-gate
 paired	condition_equal_vector	-	hot	common-vectorized-dependency-condition-path
 paired	test_constraint_dt	-	hot	common-batch-constraint-path
 paired	sanitize_scalar	-	hot	common-sanitization-path

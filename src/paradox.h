@@ -148,6 +148,10 @@ attribute_hidden SEXP paradox_param_set_dependencies(
   SEXP private_environment,
   SEXP self
 );
+attribute_hidden SEXP paradox_param_set_has_dependencies(
+  SEXP private_environment,
+  SEXP self
+);
 attribute_hidden SEXP paradox_param_set_set_dependencies(
   SEXP private_environment,
   SEXP self,
@@ -319,7 +323,8 @@ attribute_hidden SEXP paradox_param_set_subset_state(
   SEXP allow_dangling_dependencies,
   SEXP keep_constraint,
   SEXP constraint,
-  SEXP extra_trafo
+  SEXP extra_trafo,
+  SEXP keep_trafo
 );
 attribute_hidden SEXP paradox_param_set_subspace_states(
   SEXP private_environment,

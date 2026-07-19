@@ -342,6 +342,8 @@ sha256sum "$RUN_DIRECTORY/metadata/memory-check" \
   "$RUN_DIRECTORY/metadata/run-native-probes.R" \
   "$RUN_DIRECTORY/metadata/verify-native-probes.R" \
   "$RUN_DIRECTORY/metadata/run-native-tests.R" \
+  "$RUN_DIRECTORY/metadata/run-native-test-worker.R" \
+  "$RUN_DIRECTORY/metadata/run-native-test-worker-group" \
   "$RUN_DIRECTORY/metadata/verify-native-test-ledger.R" \
   "$RUN_DIRECTORY/metadata/bootstrap-valgrind-debug-symbols" \
   "$RUN_DIRECTORY/metadata/resource-jobs" \

@@ -20,6 +20,7 @@ benchmark_workload_names <- function() {
     "static_properties",
     "check_scalar",
     "check_dependencies",
+    "has_deps_flags",
     "condition_equal_vector",
     "test_constraint_dt",
     "sanitize_scalar",
@@ -675,6 +676,21 @@ benchmark_make_workloads <- function(inputs) {
       validate = function(result) {
         stopifnot(isTRUE(result), is.null(attributes(result)))
         "TRUE"
+      }
+    ),
+    has_deps_flags = list(
+      expression = quote(c(
+        base = inputs$params_space$has_deps,
+        collection = inputs$rich_collection$has_deps,
+        shadow = inputs$shadow_read$has_deps
+      )),
+      validate = function(result) {
+        stopifnot(identical(result, c(
+          base = TRUE,
+          collection = TRUE,
+          shadow = FALSE
+        )))
+        paste(as.integer(result), collapse = "")
       }
     ),
     condition_equal_vector = list(

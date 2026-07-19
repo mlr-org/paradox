@@ -1665,7 +1665,8 @@ SEXP paradox_param_set_collection_owner_subset_state(SEXP callback,
     true_flag,
     false_flag,
     R_NilValue,
-    R_NilValue
+    R_NilValue,
+    true_flag
   ));
   UNPROTECT(7);
   return token;

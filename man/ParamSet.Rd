@@ -150,9 +150,13 @@ Lists all (direct) dependency parents of a param, through parameter IDs.
 Internally created by a call to \code{add_dep}.
 The returned table and its \code{\link{Condition}} elements are detached. Mutating
 them does not mutate package state. Settable on a base \code{\link{ParamSet}} if you
-want to remove dependencies or perform other changes; read-only and derived
-from children on a \code{\link{ParamSetCollection}}. The facade and Condition shells
-have ordinary non-ALTREP/non-S4 structural metadata.}
+want to remove dependencies, copy a graph after narrowing Domains, or perform
+other bulk changes. Assignment validates the table and Conditions but does
+not require their right-hand sides to be feasible; an impossible predicate
+simply leaves its child inactive. Use \verb{$add_dep()} for feasibility-checked
+interactive authoring. This field is read-only and derived from children on
+a \code{\link{ParamSetCollection}}. The facade and Condition shells have ordinary
+non-ALTREP/non-S4 structural metadata.}
 
     \item{\code{length}}{(\code{integer(1)})\cr Number of contained parameters.}
 
@@ -881,7 +885,8 @@ storage, which native admission materializes once.
     \preformatted{ParamSet$subset(
   ids,
   allow_dangling_dependencies = FALSE,
-  keep_constraint = TRUE
+  keep_constraint = TRUE,
+  keep_trafo = TRUE
 )}
     \if{html}{\out{</div>}}
   }
@@ -894,6 +899,10 @@ Whether to allow subsets that cut across parameter dependencies.
 Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their \code{"on"} will not be present).}
       \item{\code{keep_constraint}}{(\code{logical(1)})\cr
 Whether to keep the \verb{$constraint} function.}
+      \item{\code{keep_trafo}}{(\code{logical(1)})\cr
+Whether to keep per-parameter transformations and the \verb{$extra_trafo}
+function. All three subset control flags must be unclassed,
+attribute-free, non-missing logical scalars.}
     }
     \if{html}{\out{</div>}}
   }
@@ -970,7 +979,9 @@ though the representation is not an API.}
 \if{html}{\out{<a id="method-ParamSet-add_dep"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-add_dep}{}}}
 \subsection{\code{ParamSet$add_dep()}}{
-  Adds a dependency to this set, so that param \code{id} now depends on param \code{on}.
+  Adds a dependency to this set, so that param \code{id} now depends on param
+\code{on}. Unlike bulk \verb{$deps} assignment, this authoring method requires the
+Condition right-hand side to be feasible in the parent Domain.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$add_dep(id, on, cond, allow_dangling_dependencies = FALSE)}

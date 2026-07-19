@@ -94,11 +94,12 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     #' @description
     #' Creates a detached ParamSet subset of the synchronized view.
     subset = function(ids, allow_dangling_dependencies = FALSE,
-      keep_constraint = TRUE) {
+      keep_constraint = TRUE, keep_trafo = TRUE) {
       super$subset(
         ids,
         allow_dangling_dependencies = allow_dangling_dependencies,
-        keep_constraint = keep_constraint
+        keep_constraint = keep_constraint,
+        keep_trafo = keep_trafo
       )
     },
 

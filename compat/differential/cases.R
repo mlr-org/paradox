@@ -819,6 +819,41 @@ paradox_differential_cases <- list(
     seed = 202L
   ),
 
+  dependency_copy_narrowing = diff_case(
+    "Bulk dependency copies preserve predicates after parent Domain narrowing",
+    function() {
+      wide <- paradox::ps(
+        parent = paradox::p_int(0L, 2L),
+        child = paradox::p_lgl()
+      )
+      wide$add_dep("child", "parent", paradox::CondAnyOf(c(1L, 2L)))
+
+      impossible <- paradox::ps(
+        parent = paradox::p_int(0L, 0L),
+        child = paradox::p_lgl()
+      )
+      impossible$deps <- wide$deps
+
+      partial <- paradox::ps(
+        parent = paradox::p_int(0L, 1L),
+        child = paradox::p_lgl()
+      )
+      partial$deps <- wide$deps
+
+      list(
+        impossible_rhs = impossible$deps$cond[[1L]]$rhs,
+        impossible_without_child = impossible$test(list(parent = 0L)),
+        impossible_with_child = impossible$test(list(
+          parent = 0L, child = TRUE
+        )),
+        partial_rhs = partial$deps$cond[[1L]]$rhs,
+        partial_active = partial$test(list(parent = 1L, child = TRUE)),
+        partial_inactive = partial$test(list(parent = 0L, child = TRUE))
+      )
+    },
+    seed = 203L
+  ),
+
   transformations = diff_case(
     "Individual, implicit categorical, extra transformations, and closure capture",
     function() {

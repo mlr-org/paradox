@@ -153,15 +153,26 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
     #'   Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their `"on"` will not be present).
     #' @param keep_constraint (`logical(1)`)\cr
     #'   Whether to keep the `$constraint` function.
+    #' @param keep_trafo (`logical(1)`)\cr
+    #'   Whether to keep per-parameter transformations and the `$extra_trafo`
+    #'   function. All three subset control flags must be unclassed,
+    #'   attribute-free, non-missing logical scalars.
     #' @return `ParamSet`.
-    subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
+    subset = function(ids, allow_dangling_dependencies = FALSE,
+      keep_constraint = TRUE, keep_trafo = TRUE) {
       # need to take care of extra_trafo and constraint.
-      result = super$subset(ids, allow_dangling_dependencies = allow_dangling_dependencies, keep_constraint = keep_constraint)
+      result = super$subset(
+        ids,
+        allow_dangling_dependencies = allow_dangling_dependencies,
+        keep_constraint = keep_constraint,
+        keep_trafo = keep_trafo
+      )
 
       # Callback-free subsets need no graph detachment plan. A retained
       # callback is snapshotted once by the capsule graph planner below.
-      if ((!keep_constraint || is.null(result$constraint)) &&
-          is.null(result$extra_trafo)) {
+      detach_constraint = !is.null(result$constraint)
+      detach_trafo = !is.null(result$extra_trafo)
+      if (!detach_constraint && !detach_trafo) {
         return(result)
       }
 
@@ -171,18 +182,20 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         self,
         ids
       )
-      if (keep_constraint) {
+      if (detach_constraint) {
         result$constraint = param_set_collection_constraint_factory(
           detached$translation,
           detached$constraint_indices,
           detached$constraint_sets
         )
       }
-      result$extra_trafo = param_set_collection_extra_trafo_factory(
-        detached$translation,
-        detached$trafo_indices,
-        detached$trafo_sets
-      )
+      if (detach_trafo) {
+        result$extra_trafo = param_set_collection_extra_trafo_factory(
+          detached$translation,
+          detached$trafo_indices,
+          detached$trafo_sets
+        )
+      }
       result
     },
 

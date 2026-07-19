@@ -124,6 +124,20 @@ calls neither function and supplies no semantic admission, mutation engine,
 private C API, capacity contract, or data.table-version bridge. No other
 unexported data.table lookup is authorized.
 
+Native subset assembly is also the sole owner of transformation removal.
+`$subset(..., keep_trafo = TRUE)` retains the selected per-parameter
+transformation rows and `extra_trafo` callback by default. With `FALSE`, the
+same transaction constructs an empty canonical transformation table and a
+`NULL` extra callback, while `keep_constraint` remains independent. BASE,
+COLLECTION, and SHADOW enter this boundary and return a detached BASE result;
+there is no Domain-table mutation or R-side Domain reconstruction alternative.
+The three subset control flags are exact attribute-free non-missing logical
+scalars. COLLECTION's cold callback-detachment wrapper follows the callbacks
+actually retained in the admitted BASE result; it does not apply `!` or any
+other generic to the original flag objects.
+This is the supported replacement for mlr3mbo's former mutation of private
+Domain `.trafo` storage.
+
 `all.equal.ParamSet()` is intentionally ordinary S3 comparison glue over these
 detached native projections. Each node record contains class and
 `assert_values`, params, values, tags, dependencies, and BASE callbacks;
@@ -424,12 +438,25 @@ constraint selection without an R row loop or a second constraint engine.
 
 The tag, dependency, and BASE callback mutators are collected in
 `src/paramset_mutate.c`. Tag get/set and dependency snapshot/get/set/add own
-their canonical detached/replacement objects. Dependency feasibility invokes
-the shared check kernel and then verifies that callback reentry did not replace
-the target generation. SHADOW dependency append first proves both IDs remain
-visible and routes to the origin through the same native entry. Constraint and
-extra-transformation setters admit their callback shape and atomically replace
-the selected BASE field. R wrappers do not plan these mutations.
+their canonical detached/replacement objects. Dependency snapshot and bulk
+replacement share one callback-free structural admission routine. It validates
+the table, child IDs, self-edges, and exact closed Conditions, but preserves RHS
+predicates even when a narrowed parent Domain makes some or all of them
+infeasible. Dependency append is the separate authoring operation: it invokes
+the shared check kernel for RHS feasibility and then verifies that callback
+reentry did not replace the target generation. SHADOW dependency append first
+proves both IDs remain visible and routes to the origin through that strict
+native entry. Constraint and extra-transformation setters admit their callback
+shape and atomically replace the selected BASE field. R wrappers do not plan
+these mutations.
+
+Dependency presence is deliberately not implemented as `nrow(self$deps)`. The
+registered scalar reader in `src/paramset_collection_deps.c` validates the
+selected canonical BASE dependency table, performs authoritative SHADOW
+refresh before validating its table, or admits the complete COLLECTION graph
+and reads the root `subtree_dependencies` count. It emits no detached columns
+or data.table facade. The COLLECTION branch is the existing graph admission,
+not a cached or reduced-integrity reader mode.
 
 ## Operation transaction
 
@@ -569,13 +596,21 @@ overhead, not an isolation or compatibility requirement. The returned closures
 remain ordinary serializable R functions and documented user callbacks retain
 identity.
 
-Three final measured hot-path changes remove redundant work while retaining the
+Four final measured hot-path changes remove redundant work while retaining the
 same validation boundary. A ParamSet constructor with no initial values skips an
 empty value-store transaction. Complete collection-value admission retains the
 already resolved BASE parameter row and translates that validated offset upward
 instead of looking up the ID again. The inherited native Shadow dependency
-reader owns refresh, so the R binding does not request a second refresh. These
-are operation-local shortcuts, not persistent validation caches.
+reader owns refresh, so the R binding does not request a second refresh.
+Finally, `$has_deps` reads validated native dependency counts instead of
+materializing `$deps`; the retained 64-parameter BASE/COLLECTION/SHADOW probe
+moved from 498.575 to 156.065 microseconds (3.195x). Its one-evaluation
+`Rprofmem` result was exactly 12,688 bytes in 14 records on both sides, so this
+is a measured latency win rather than a claimed allocation reduction. The
+exact 50-iteration, three-warmup methodology and package/source fingerprints
+are retained in `benchmarks/README.md` and
+`.local/benchmarks/has-deps-scalar-ab-final-20260719`. These are
+operation-local shortcuts, not persistent validation caches.
 
 A proposed sparse-target search-space projection was also measured and rejected.
 Search-space construction is cold, and the maintained end-to-end workload moved

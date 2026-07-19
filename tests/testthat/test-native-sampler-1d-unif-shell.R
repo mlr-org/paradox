@@ -46,7 +46,8 @@ test_that("Sampler1DUnif never consumes a ParamSet subset capability", {
     FALSE,
     TRUE,
     param$constraint,
-    param$extra_trafo
+    param$extra_trafo,
+    TRUE
   )
 
   expect_error(Sampler1DUnif$new(token), "R6")

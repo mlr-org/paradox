@@ -934,8 +934,13 @@ ParamSet = R6Class("ParamSet",
     #'   Dependencies that point to dropped parameters are kept (but will be "dangling", i.e. their `"on"` will not be present).
     #' @param keep_constraint (`logical(1)`)\cr
     #'   Whether to keep the `$constraint` function.
+    #' @param keep_trafo (`logical(1)`)\cr
+    #'   Whether to keep per-parameter transformations and the `$extra_trafo`
+    #'   function. All three subset control flags must be unclassed,
+    #'   attribute-free, non-missing logical scalars.
     #' @return `ParamSet`.
-    subset = function(ids, allow_dangling_dependencies = FALSE, keep_constraint = TRUE) {
+    subset = function(ids, allow_dangling_dependencies = FALSE,
+      keep_constraint = TRUE, keep_trafo = TRUE) {
       token = .Call(
         C_param_set_subset_state,
         private,
@@ -944,7 +949,8 @@ ParamSet = R6Class("ParamSet",
         allow_dangling_dependencies,
         keep_constraint,
         self$constraint,
-        self$extra_trafo
+        self$extra_trafo,
+        keep_trafo
       )
       ParamSet$new(token)
     },
@@ -987,7 +993,9 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' Adds a dependency to this set, so that param `id` now depends on param `on`.
+    #' Adds a dependency to this set, so that param `id` now depends on param
+    #' `on`. Unlike bulk `$deps` assignment, this authoring method requires the
+    #' Condition right-hand side to be feasible in the parent Domain.
     #'
     #' @param id (`character(1)`).
     #' @param on (`character(1)`).
@@ -1159,7 +1167,9 @@ ParamSet = R6Class("ParamSet",
     #' @field has_extra_trafo (`logical(1)`)\cr Whether `extra_trafo` is set.
     has_extra_trafo = function() !is.null(self$extra_trafo),
     #' @field has_deps (`logical(1)`)\cr Whether the parameter dependencies are present
-    has_deps = function() nrow(self$deps) > 0L,
+    has_deps = function() {
+      .Call(C_param_set_has_dependencies, private, self)
+    },
     #' @field has_constraint (`logical(1)`)\cr Whether parameter constraint is set.
     has_constraint = function() {
       if (inherits(self, "ParamSetCollection")) {
