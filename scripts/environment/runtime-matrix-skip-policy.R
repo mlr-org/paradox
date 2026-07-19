@@ -52,6 +52,64 @@ runtime_matrix_not_cran_test_titles <- function(path) {
   titles
 }
 
+runtime_matrix_validate_pre46_exclusion_policy <- function(
+    snapshot, test_files = NULL, test_contexts = NULL) {
+  snapshot <- normalizePath(snapshot, mustWork = TRUE)
+  test_directory <- file.path(snapshot, "tests", "testthat")
+  if (is.null(test_files)) {
+    test_files <- dir(
+      test_directory,
+      pattern = "^test.*\\.[rR]$",
+      full.names = FALSE
+    )
+  }
+  if (is.null(test_contexts)) {
+    test_contexts <- sub(
+      "[.][Rr]$", "", sub("^test[-_]", "", test_files)
+    )
+  }
+  test_paths <- file.path(test_directory, test_files)
+  valid_tests <- length(test_files) > 0L &&
+    length(test_contexts) == length(test_files) &&
+    all(file.exists(test_paths)) && !any(dir.exists(test_paths)) &&
+    !any(runtime_matrix_skip_policy_is_symbolic(test_paths)) &&
+    !anyDuplicated(test_files) && !anyDuplicated(test_contexts)
+  if (!valid_tests) {
+    stop("testthat source discovery is empty, symbolic, or ambiguous",
+      call. = FALSE)
+  }
+
+  manifest_path <- file.path(
+    snapshot, "environment", "runtime-matrix-pre46-exclusions.tsv"
+  )
+  if (!file.exists(manifest_path) || dir.exists(manifest_path) ||
+      runtime_matrix_skip_policy_is_symbolic(manifest_path)) {
+    stop("pre-R-4.6 exclusion manifest is absent or symbolic", call. = FALSE)
+  }
+  exclusions <- read.delim(
+    manifest_path,
+    header = TRUE,
+    quote = "",
+    comment.char = "",
+    colClasses = "character",
+    check.names = FALSE
+  )
+  if (!identical(names(exclusions), c("context", "reason")) ||
+      nrow(exclusions) != 0L || anyNA(exclusions) ||
+      any(!nzchar(exclusions$reason)) ||
+      any(grepl("[\t\r\n]", exclusions$reason)) ||
+      any(!grepl("^native-[a-z0-9][a-z0-9-]*$", exclusions$context)) ||
+      anyDuplicated(exclusions$context)) {
+    stop("pre-R-4.6 exclusion manifest is malformed", call. = FALSE)
+  }
+
+  # The reviewed Paradox-2 policy is deliberately header-only. Do not derive
+  # candidate file names with paste0() here: on supported R releases,
+  # paste0("test-", character(), ".R") is "test-.R" and makes the valid empty
+  # policy look stale.
+  exclusions
+}
+
 runtime_matrix_validate_result_skip_policy <- function(
     snapshot, test_files = NULL, test_paths = NULL) {
   if (!requireNamespace("rlang", quietly = TRUE)) {
@@ -165,8 +223,10 @@ runtime_matrix_skip_policy_main <- function(args = commandArgs(TRUE)) {
       call. = FALSE
     )
   }
+  exclusions <- runtime_matrix_validate_pre46_exclusion_policy(args[[1L]])
   policy <- runtime_matrix_validate_result_skip_policy(args[[1L]])
   cat("runtime_matrix_skip_policy_preflight=passed\n")
+  cat("reviewed_pre46_exclusion_row_count=", nrow(exclusions), "\n", sep = "")
   cat("reviewed_result_skip_row_count=", nrow(policy), "\n", sep = "")
 }
 

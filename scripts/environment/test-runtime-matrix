@@ -190,6 +190,9 @@ sys.source(
   file.path(root, "scripts", "environment", "runtime-matrix-skip-policy.R"),
   envir = policy_environment
 )
+invisible(
+  policy_environment$runtime_matrix_validate_pre46_exclusion_policy(root)
+)
 invisible(policy_environment$runtime_matrix_validate_result_skip_policy(root))
 
 local({
@@ -207,6 +210,9 @@ local({
   ), file.path(fixture, "tests", "testthat", "test-fixture.R"))
   manifest_path <- file.path(
     fixture, "environment", "runtime-matrix-result-skips.tsv"
+  )
+  exclusion_path <- file.path(
+    fixture, "environment", "runtime-matrix-pre46-exclusions.tsv"
   )
   valid <- data.frame(
     runtime = c("4.3.3", "4.5.2"),
@@ -230,9 +236,36 @@ local({
     stopifnot(inherits(error, "error"), grepl(pattern, conditionMessage(error)))
   }
   write_policy(valid)
+  writeLines("context\treason", exclusion_path)
+  exclusions <-
+    policy_environment$runtime_matrix_validate_pre46_exclusion_policy(fixture)
+  stopifnot(
+    identical(names(exclusions), c("context", "reason")),
+    nrow(exclusions) == 0L
+  )
   invisible(
     policy_environment$runtime_matrix_validate_result_skip_policy(fixture)
   )
+  preflight <- capture.output(
+    policy_environment$runtime_matrix_skip_policy_main(fixture)
+  )
+  stopifnot(
+    "runtime_matrix_skip_policy_preflight=passed" %in% preflight,
+    "reviewed_pre46_exclusion_row_count=0" %in% preflight
+  )
+  writeLines(c(
+    "context\treason",
+    "native-fixture\tobsolete exclusion"
+  ), exclusion_path)
+  exclusion_error <- tryCatch(
+    policy_environment$runtime_matrix_validate_pre46_exclusion_policy(fixture),
+    error = identity
+  )
+  stopifnot(
+    inherits(exclusion_error, "error"),
+    grepl("exclusion manifest is malformed", conditionMessage(exclusion_error))
+  )
+  writeLines("context\treason", exclusion_path)
   expect_policy_error(
     valid[-1L, , drop = FALSE],
     "differs from current skip_on_cran test titles"

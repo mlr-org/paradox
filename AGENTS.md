@@ -426,11 +426,14 @@ scripts/bootstrap-runtime-matrix --verify
 . scripts/activate                        # return to R 4.6.1
 ```
 
-`scripts/test-runtime-matrix` validates the reviewed result-skip manifest
-against the exact extracted candidate's current `skip_on_cran` test titles
-before resource admission or any runtime build/install worker starts. Keep
-that source-derived preflight shared with the old-runtime test runner so a
-stale policy fails cheaply instead of after two package installations.
+`scripts/test-runtime-matrix` validates both the deliberately empty pre-R-4.6
+exclusion policy and the reviewed result-skip manifest against the exact
+extracted candidate's current `skip_on_cran` test titles before resource
+admission or any runtime build/install worker starts. Keep that source-derived
+preflight shared with the old-runtime test runner so a malformed or stale
+policy fails cheaply instead of after two package installations. In
+particular, validate the header-only exclusion manifest as zero rows; do not
+construct a synthetic file name from its empty `context` column.
 
 Reference R source, Writing R Extensions, R Internals, data.table source, and
 the analyzer sources are populated by `scripts/fetch-reference-sources`.

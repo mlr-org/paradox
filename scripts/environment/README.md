@@ -348,7 +348,10 @@ audits undefined DSO symbols against that release's allowed accessor set. Both
 old interpreters stage the complete discovered public, characterization,
 regression, and native source suite. The header-only
 `environment/runtime-matrix-pre46-exclusions.tsv` authenticates that there are
-no remaining pre-R-4.6 implementation exclusions. R 4.3 uses the ATTRIB and
+no remaining pre-R-4.6 implementation exclusions. The coordinator validates
+that zero-row contract from the exact extracted candidate before admitting
+either build/install worker, and the old-runtime runner reuses the same
+validator. R 4.3 uses the ATTRIB and
 FORMALS backports documented in Writing R Extensions rather than evaluating R
 inspection shims. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited

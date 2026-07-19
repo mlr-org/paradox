@@ -202,39 +202,9 @@ if (getRversion() < "4.6.0") {
   manifest_relative <- file.path(
     "environment", "runtime-matrix-pre46-exclusions.tsv"
   )
-  manifest_path <- file.path(snapshot, manifest_relative)
-  if (!file.exists(manifest_path) || dir.exists(manifest_path) ||
-      is_symbolic(manifest_path)) {
-    stop("pre-R-4.6 exclusion manifest is absent or symbolic", call. = FALSE)
-  }
-  exclusions <- read.delim(
-    manifest_path,
-    header = TRUE,
-    quote = "",
-    comment.char = "",
-    colClasses = "character",
-    check.names = FALSE
+  exclusions <- runtime_matrix_validate_pre46_exclusion_policy(
+    snapshot, test_files = test_files, test_contexts = test_contexts
   )
-  if (!identical(names(exclusions), c("context", "reason")) ||
-      nrow(exclusions) != 0L || anyNA(exclusions) ||
-      any(!nzchar(exclusions$reason)) ||
-      any(grepl("\t", exclusions$reason, fixed = TRUE)) ||
-      any(grepl("\r", exclusions$reason, fixed = TRUE)) ||
-      any(grepl("\n", exclusions$reason, fixed = TRUE)) ||
-      any(!grepl("^native-[a-z0-9][a-z0-9-]*$", exclusions$context)) ||
-      anyDuplicated(exclusions$context) ||
-      !identical(exclusions$context, byte_sort(exclusions$context))) {
-    stop("pre-R-4.6 exclusion manifest is malformed", call. = FALSE)
-  }
-  excluded_files <- paste0("test-", exclusions$context, ".R")
-  excluded_positions <- match(excluded_files, test_files)
-  if (anyNA(excluded_positions) ||
-      !identical(test_contexts[excluded_positions], exclusions$context)) {
-    stop(
-      "pre-R-4.6 exclusion manifest contains an unknown or stale test",
-      call. = FALSE
-    )
-  }
   cat("test_scope=complete-source-suite\n")
   cat("pre46_exclusion_manifest=", manifest_relative, "\n", sep = "")
   cat("pre46_excluded_context_count=", nrow(exclusions), "\n", sep = "")
