@@ -40,7 +40,7 @@ git -C /home/mewse/paradox_neo/.local/compat/github/bbotk push --set-upstream or
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `6255050a4d1d1a3555ca70707e4f1588c86006be`
+- head: `d4c7f79750cd15c8174415fb0ba059c597f4f055`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`

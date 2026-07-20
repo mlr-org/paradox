@@ -1154,3 +1154,16 @@ reserve `evidence-manifest.tsv` and `completion.seal` solely for the enclosing
 stage. The completed-but-unsealed directory is diagnostic only. This is a
 validation-only repair, so construct the final named overlay under the new
 tooling identity and rerun documentation without changing candidate bytes.
+
+The first Paradox-1 release-refresh execution found one miesmuschel-only test
+failure in both direct tests and `R CMD check`: three deep `expect_equal()`
+assertions compared R6 ParamSets through private data.table secondary-index
+caches. The public state and all 3,041 other expectations passed, and the same
+objects differed only by `index` attributes. Miesmuschel head `d4c7f797` uses
+semantic equivalence for those three assertions; focused 216-expectation runs
+pass on both Paradox majors. This changes only downstream tests, not
+miesmuschel production or Paradox candidate bytes. Rebuild the named overlays
+to bind the final reviewed head, rerun the affected miesmuschel rows on both
+axes, and transfer the already sealed non-miesmuschel, documentation, and
+benchmark conclusions with this exact test-only diff rather than repeating
+unaffected workloads.
