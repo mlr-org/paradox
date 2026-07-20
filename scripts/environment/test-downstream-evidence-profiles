@@ -150,6 +150,9 @@ grep -Fq 'profile$suffix' "$ROOT/compat/test-repositories-resumable.R" ||
 grep -Fq 'profile$profile_suffix' \
   "$ROOT/compat/install-repository-test-dependencies.R" ||
   fail "dependency evidence is not explicitly profile-only and axis-neutral"
+grep -Fq 'label = "dependency run schema probe"' \
+  "$ROOT/compat/test-repositories-resumable.R" ||
+  fail "dependency run schema probe is not passed as a named label"
 grep -Fq 'one or more downstream R CMD checks failed' \
   "$ROOT/compat/check-downstream-profile" ||
   fail "full-check verifier does not fail closed on failed rows"

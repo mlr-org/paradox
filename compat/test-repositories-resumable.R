@@ -472,7 +472,7 @@ dependency_metadata <- repository_runner_require_directory(file.path(
   dependency_stage, "metadata"), "dependency evidence metadata")
 dependency_run_path <- file.path(dependency_metadata, "run.tsv")
 dependency_probe <- repository_runner_read_tsv(
-  dependency_run_path, c("field", "value"), "dependency run schema probe"
+  dependency_run_path, c("field", "value"), label = "dependency run schema probe"
 )
 dependency_schema_index <- match("schema", dependency_probe$field)
 if (is.na(dependency_schema_index)) {
