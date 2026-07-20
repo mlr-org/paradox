@@ -369,6 +369,33 @@ installer order, provenance agreement, entrypoint hooks, and release recipe;
 shell syntax and shellcheck accompany it. Candidate evidence still requires
 one real construction followed by verification.
 
+After a package candidate is frozen, a downstream-only head refresh uses a
+named profile in `compat/downstream-evidence-profiles.tsv`; it never edits the
+default manifest or overwrites its overlay/evidence. The profile binds its
+repository manifest, executable snapshot, complete bridge provenance,
+primary-checkout namespace, dependency-input snapshot, and install order. The
+dependency receipt is profile-specific but axis-neutral and run-local; it
+prepares only the unchanged external dependency closure. Overlay,
+repository-test, full-check, lock, and completion identities include both
+profile and axis. Non-default profiles authenticate one clean
+committed tooling tree, require every profile input to be tracked, and, on the
+`paradox2` axis, prove that this commit changes none of the frozen package
+source, tests, help, or package-facing documentation. Each axis pins one exact
+candidate ref/commit/tree/version tuple, and `paradox1` uses a separate
+run-local candidate receipt for released Paradox 1.0.1, so P1 observations
+cannot be presented as Paradox-2 candidate evidence.
+
+The `release-refresh-20260720` profile installs its complete eight-package
+dependency order but executes repository rows only for miesmuschel, mlr3mbo,
+celecx, and mlr3fda. This retains exact reviewed
+bbotk/mlr3/mlr3pipelines/mlr3fselect runtime support without rerunning their
+repository suites. Both axes retain profile/axis registries and selected input
+hashes, reject path, symlink, head, tree, and ancestry mismatches before work,
+and publish profile-specific overlays with the same no-clobber protocol. Use
+one outer worker for this focused release confirmation. Run the sealed exact-
+head `R CMD check` harness in addition to repository suites so Rd links and
+other package-level checks are retained evidence.
+
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the
 user publishes the exact reviewed commits.

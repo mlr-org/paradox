@@ -33,6 +33,24 @@ to be an ancestor of the bridge, and performs the census scan against the base
 bytes. The ordinary dependency and repository runners execute only the bridge
 heads selected by the snapshot.
 
+The frozen release candidate also has one downstream-only refresh profile,
+`release-refresh-20260720`, declared in
+[`downstream-evidence-profiles.tsv`](downstream-evidence-profiles.tsv). Its
+separate snapshot/provenance files bind the exact refreshed miesmuschel,
+mlr3mbo, celecx, and mlr3fda heads while retaining four unchanged support
+bridges in the install overlay. Named profiles select a separate authenticated
+primary-checkout namespace. Their dependency receipt is profile-specific,
+axis-neutral, and run-local because it prepares only the unchanged external
+dependency closure; refreshed mlr3mbo is supplied by the ordered bridge
+overlay. The refresh dependency manifest is deliberately limited to the eight
+overlay packages rather than replaying unrelated consumers. The
+`paradox2`/`paradox1` axis registry pins exact candidate
+ref/commit/tree/version tuples and creates distinct overlay, lock,
+repository-test, full-check, and completion paths. These paths never overwrite
+or relabel default full-corpus evidence. A non-default profile is post-freeze
+validation tooling: it must be one clean tracked commit, and its Paradox-2 path
+proves that package bytes still equal the frozen candidate.
+
 Agents may commit and test these local branches but must not push them or open
 remote PRs. The final handoff gives the user exact manual push commands and PR
 text after the branches pass against the frozen candidate. The reviewed titles,
@@ -280,6 +298,48 @@ serializes construction; atomic no-clobber publication and owner plus
 device/inode-gated cleanup prevent a losing process from deleting a raced
 replacement. Repository, documentation, and release-benchmark entrypoints fail
 unless this exact schema-2 overlay verifies.
+
+For a named downstream-only refresh, choose a new candidate-bound run, prepare
+the profile dependency receipt before installing the candidate, and pass the
+same profile and axis to every later command:
+
+Before the run, populate the profile's `checkout_namespace` as standalone
+primary Git checkouts at the exact snapshot heads. Do not switch the default
+`.local/compat/github` corpus: that corpus remains the dependency-input and
+historical-default source. The bridge installer audits each profile checkout's
+origin, primary `.git` store, dangerous config, graft/alternate/attribute
+inputs, hidden index flags, clean branch/HEAD/date/tree, and declared ancestry
+before producing any archive.
+
+```sh
+profile=release-refresh-20260720
+axis=paradox2                    # use a separate run and paradox1 for P1
+Rscript compat/install-repository-test-dependencies.R \
+  "$PARADOX_ROOT" 1 "$dependency_library" --run-id "$run_id" \
+  --evidence-profile "$profile"
+# install-candidate exactly as above, then export its content sentinel
+compat/install-downstream-bridges --candidate-source "$candidate_source" \
+  --evidence-profile "$profile" --paradox-axis "$axis"
+bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges-$profile-$axis"
+export PARADOX_CONSUMER_EXTRA_LIBS="$bridge_library:$mlr3verse_library"
+Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
+  "$candidate_library" "$dependency_library" --run-id "$run_id" \
+  --candidate-source "$candidate_source" --evidence-profile "$profile" \
+  --paradox-axis "$axis" \
+  --repositories miesmuschel,mlr3mbo,celecx,mlr3fda --jobs 1
+compat/check-downstream-profile --candidate-source "$candidate_source" \
+  --evidence-profile "$profile" --paradox-axis "$axis" \
+  --repositories miesmuschel,mlr3mbo,celecx,mlr3fda
+```
+
+The P1 run uses an exact Paradox-1 Git ref with the unchanged candidate
+installer, so its normal receipt still binds source, archive, installed bytes,
+dependency endpoint, and run-local library. Profile/axis metadata in the
+overlay and repository stage states explicitly that the subject is Paradox 1;
+the independent clean tooling commit supplies only the post-freeze harness and
+review manifests. The dependency stage can be shared only within that one run;
+the actual P1 and P2 release evidence uses distinct run IDs. Never reuse the
+Paradox-2 candidate library for that axis.
 
 ## Source-package reverse-dependency gate
 

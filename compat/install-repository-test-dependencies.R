@@ -1,11 +1,14 @@
 usage <- paste(
   "usage: install-repository-test-dependencies.R",
-  "[ROOT [MAX_PRIORITY [LIBRARY]]] --run-id ID"
+  "[ROOT [MAX_PRIORITY [LIBRARY]]] --run-id ID",
+  "[--evidence-profile NAME]"
 )
 
 args <- commandArgs(trailingOnly = TRUE)
 positionals <- character()
 run_id <- NULL
+evidence_profile <- "default"
+profile_seen <- FALSE
 index <- 1L
 while (index <= length(args)) {
   argument <- args[[index]]
@@ -16,6 +19,18 @@ while (index <= length(args)) {
   } else if (startsWith(argument, "--run-id=")) {
     if (!is.null(run_id)) stop(usage, call. = FALSE)
     run_id <- substring(argument, nchar("--run-id=") + 1L)
+    index <- index + 1L
+  } else if (identical(argument, "--evidence-profile")) {
+    if (profile_seen || index == length(args)) stop(usage, call. = FALSE)
+    evidence_profile <- args[[index + 1L]]
+    profile_seen <- TRUE
+    index <- index + 2L
+  } else if (startsWith(argument, "--evidence-profile=")) {
+    if (profile_seen) stop(usage, call. = FALSE)
+    evidence_profile <- substring(
+      argument, nchar("--evidence-profile=") + 1L
+    )
+    profile_seen <- TRUE
     index <- index + 1L
   } else if (startsWith(argument, "--")) {
     stop(usage, call. = FALSE)
@@ -29,6 +44,12 @@ if (length(run_id) != 1L ||
     !grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$", run_id) ||
     run_id %in% c(".", "..")) {
   stop("--run-id must be a safe name of at most 128 characters", call. = FALSE)
+}
+if (length(evidence_profile) != 1L || is.na(evidence_profile) ||
+    !grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", evidence_profile) ||
+    evidence_profile %in% c(".", "..")) {
+  stop("--evidence-profile must be one safe name of at most 64 characters",
+    call. = FALSE)
 }
 
 root <- if (length(positionals) >= 1L) {
@@ -99,6 +120,17 @@ plain_child_directory <- function(parent, name, label, create, must_be_new = FAL
   path
 }
 
+profile_helper_path <- file.path(
+  root, "compat", "downstream-evidence-profile.R"
+)
+if (!file.exists(profile_helper_path) || dir.exists(profile_helper_path) ||
+    is_symbolic(profile_helper_path)) {
+  stop("downstream evidence profile helper is absent or symbolic",
+    call. = FALSE)
+}
+sys.source(profile_helper_path, envir = environment(), keep.source = FALSE)
+profile <- downstream_evidence_profile(root, evidence_profile)
+
 local_root <- require_plain_directory(
   file.path(root, ".local"),
   "repository-local state root"
@@ -109,7 +141,9 @@ runs_root <- plain_child_directory(compat_root, "runs", "retained compatibility 
 run_directory <- plain_child_directory(
   runs_root, run_id, "run directory", TRUE, must_be_new = TRUE
 )
-stage_name <- sprintf("repository-dependencies-priority-%d", max_priority)
+stage_name <- sprintf(
+  "repository-dependencies-priority-%d%s", max_priority, profile$profile_suffix
+)
 stage_directory <- plain_child_directory(
   run_directory,
   stage_name,
@@ -151,8 +185,11 @@ write_tsv <- function(value, path) {
 }
 
 started_utc <- format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC")
-manifest_path <- file.path(root, "compat", "github-repositories.tsv")
-snapshot_path <- file.path(root, "compat", "github-snapshot.tsv")
+profile_registry_path <- profile$registry
+axis_registry_path <- profile$axis_registry
+manifest_path <- profile$dependency_repository_manifest
+snapshot_path <- profile$dependency_snapshot
+consumer_root <- profile$dependency_consumer_root
 harness_path <- file.path(root, "compat", "install-repository-test-dependencies.R")
 fingerprint_path <- file.path(root, "compat", "fingerprint.R")
 evidence_helper_path <- file.path(root, "compat", "repository-evidence.R")
@@ -259,7 +296,7 @@ if (any(!grepl(object_hash_pattern, selected_snapshot$commit))) {
 }
 
 repository_checkout_state <- function(repository, expected_commit, expected_origin) {
-  checkout <- file.path(root, ".local", "compat", "github", repository)
+  checkout <- file.path(consumer_root, repository)
   if (!file.exists(file.path(checkout, ".git"))) {
     stop("Git checkout is missing for ", repository, call. = FALSE)
   }
@@ -336,7 +373,7 @@ fallback_provider_rows <- list()
 local_packages <- list()
 for (index in seq_len(nrow(clone_manifest))) {
   repository <- clone_manifest$repository[[index]]
-  checkout <- file.path(root, ".local", "compat", "github", repository)
+  checkout <- file.path(consumer_root, repository)
   description <- file.path(checkout, "DESCRIPTION")
   if (!file.exists(description)) next
   if (dir.exists(description) || is_symbolic(description)) {
@@ -415,7 +452,9 @@ write_tsv(fallback_checkout_preflight, fallback_checkout_preflight_path)
 
 copied <- file.copy(
   c(
-    manifest_path, snapshot_path, harness_path, fingerprint_path,
+    profile_registry_path, axis_registry_path, profile_helper_path, manifest_path,
+    snapshot_path,
+    harness_path, fingerprint_path,
     evidence_helper_path, evidence_verifier_path, compat_system_evidence_path
   ),
   metadata_directory,
@@ -426,19 +465,26 @@ if (!all(copied)) stop("could not retain dependency evidence inputs", call. = FA
 compat_system_evidence <- compat_system_capture_evidence(root, metadata_directory)
 run_metadata <- data.frame(
   field = c(
-    "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
+    "schema", "stage_kind", "run_id", "evidence_profile", "started_utc",
+    "root", "max_priority",
     "dependency_library", "dependency_library_content_before", "r",
-    "r_version", "github_manifest_sha256", "github_snapshot_sha256",
+    "r_version", "profile_registry_sha256", "axis_registry_sha256",
+    "profile_helper_sha256",
+    "github_manifest_sha256", "github_snapshot_sha256",
     "harness_sha256", "fingerprint_sha256", "evidence_helper_sha256",
     "evidence_verifier_sha256", "checkout_preflight_sha256",
     "fallback_checkout_preflight_sha256", "result_ledger"
   ),
   value = c(
-    "3", "repository_dependencies", run_id, started_utc, root,
+    "4", "repository_dependencies", run_id, evidence_profile, started_utc, root,
     as.character(max_priority), library,
     dependency_content_before,
     normalizePath(file.path(R.home(), "bin", "R"), winslash = "/", mustWork = TRUE),
-    as.character(getRversion()), unname(tools::sha256sum(manifest_path)),
+    as.character(getRversion()),
+    unname(tools::sha256sum(profile_registry_path)),
+    unname(tools::sha256sum(axis_registry_path)),
+    unname(tools::sha256sum(profile_helper_path)),
+    unname(tools::sha256sum(manifest_path)),
     unname(tools::sha256sum(snapshot_path)), unname(tools::sha256sum(harness_path)),
     unname(tools::sha256sum(fingerprint_path)),
     unname(tools::sha256sum(evidence_helper_path)),
@@ -552,7 +598,7 @@ empty_results <- function() {
 results <- vector("list", nrow(selected))
 for (i in seq_len(nrow(selected))) {
   repository <- selected$repository[[i]]
-  checkout <- file.path(root, ".local", "compat", "github", repository)
+  checkout <- file.path(consumer_root, repository)
   message("Installing development dependencies for ", repository)
 
   started <- Sys.time()
@@ -638,13 +684,15 @@ compat_system_verify_evidence(
 )
 completion <- data.frame(
   field = c(
-    "schema", "stage_kind", "run_id", "max_priority", "finished_utc", "status",
+    "schema", "stage_kind", "run_id", "evidence_profile", "max_priority",
+    "finished_utc", "status",
     "result_rows", "failed_rows", "result_sha256",
     "checkout_postflight_sha256", "fallback_checkout_postflight_sha256",
     "dependency_library_content_after"
   ),
   value = c(
-    "3", "repository_dependencies", run_id, as.character(max_priority),
+    "4", "repository_dependencies", run_id, evidence_profile,
+    as.character(max_priority),
     format(Sys.time(), "%Y-%m-%dT%H:%M:%SZ", tz = "UTC"),
     if (any(results$status == "failed") || checkout_postflight_failed ||
         fallback_checkout_postflight_failed) "failed" else "passed",

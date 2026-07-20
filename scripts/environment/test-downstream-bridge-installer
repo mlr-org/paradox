@@ -19,7 +19,11 @@ bash -n "$INSTALLER"
   fail "installer help does not describe its complete interface"
 
 expected='bbotk mlr3 miesmuschel mlr3pipelines mlr3fselect mlr3mbo celecx'
-observed=$(sed -n 's/^INSTALL_ORDER=(\(.*\))$/\1/p' "$INSTALLER")
+observed=$(
+  "$ROOT/.local/toolchain/bin/Rscript" --vanilla \
+    "$ROOT/compat/resolve-downstream-evidence-profile.R" "$ROOT" default paradox2 |
+    awk -F '\t' '$1 == "install_order" { gsub(",", " ", $2); print $2 }'
+)
 [[ $observed == "$expected" ]] || fail "installer order differs from the reviewed order"
 
 awk -F '\t' '
@@ -52,9 +56,9 @@ grep -Fq '"$CANDIDATE_TREE" "$CANDIDATE_SOURCE" >/dev/null' \
   fail "detached candidate source is not authenticated in five-argument mode"
 
 candidate_binding=$(awk '
-  /^for relative in compat\/install-downstream-bridges / { inside = 1 }
+  /^[[:space:]]*for relative in compat\/install-downstream-bridges / { inside = 1 }
   inside { print }
-  inside && /^done$/ { exit }
+  inside && /^[[:space:]]*done$/ { exit }
 ' "$INSTALLER")
 for retained in \
     compat/verify-repository-evidence.R \
@@ -67,7 +71,7 @@ for field in evidence_verifier_sha256 resource_jobs_sha256; do
     fail "bridge completion does not write and verify helper hash: $field"
 done
 for dependency_binding in \
-    '$(dependency_completion_value schema) == 3' \
+    '$(dependency_completion_value schema) == "$DEPENDENCY_SCHEMA"' \
     '$(dependency_completion_value stage_kind) == repository_dependencies' \
     '$(dependency_completion_value run_id) == "$RUN_ID"' \
     '$(dependency_completion_value max_priority) == 1' \

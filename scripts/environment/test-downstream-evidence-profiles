@@ -1,0 +1,173 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+R=$ROOT/.local/toolchain/bin/Rscript
+RESOLVER=$ROOT/compat/resolve-downstream-evidence-profile.R
+PROFILE=release-refresh-20260720
+
+fail() {
+  printf '%s\n' "test-downstream-evidence-profiles: $*" >&2
+  exit 1
+}
+
+[[ -x $R && -f $RESOLVER && ! -L $RESOLVER ]] ||
+  fail "profile test inputs are absent or symbolic"
+
+resolve() {
+  "$R" --vanilla "$RESOLVER" "$@"
+}
+
+profile_output=$(resolve "$ROOT" "$PROFILE" paradox2)
+legacy_output=$(resolve "$ROOT" "$PROFILE" paradox1)
+value() {
+  local input=$1 key=$2
+  awk -F '\t' -v key="$key" '$1 == key { if (seen++) exit 2; print $2 }' \
+    <<<"$input"
+}
+[[ $(value "$profile_output" suffix) == -release-refresh-20260720-paradox2 &&
+   $(value "$profile_output" axis) == paradox2 &&
+   $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
+   $(value "$legacy_output" version_major) == 1 &&
+   $(value "$profile_output" candidate_commit) == \
+     e3741ab1d3cb8a5f3e7f357af6b7ab90c6e50fb7 &&
+   $(value "$legacy_output" candidate_commit) == \
+     cdcc8e616afe243cd7c54e15713c86f818a52626 &&
+   $(value "$profile_output" checkout_namespace) == \
+     github-release-refresh-20260720 &&
+   $(value "$profile_output" dependency_checkout_namespace) == github ]] ||
+  fail "profile/axis identities do not produce distinct exact suffixes"
+[[ $(value "$profile_output" install_order) == \
+   bbotk,mlr3,miesmuschel,mlr3pipelines,mlr3fselect,mlr3mbo,celecx,mlr3fda ]] ||
+  fail "refreshed install order is incomplete"
+[[ $(value "$profile_output" snapshot_sha256) == \
+   $(sha256sum "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv" | awk '{print $1}') &&
+   $(value "$profile_output" bridge_provenance_sha256) == \
+   $(sha256sum "$ROOT/compat/github-bridge-provenance.release-refresh-20260720.tsv" | awk '{print $1}') ]] ||
+  fail "resolved profile hashes do not bind exact manifest content"
+"$R" --vanilla - "$ROOT" "$PROFILE" <<'RSCRIPT'
+arguments <- commandArgs(TRUE)
+sys.source(file.path(arguments[[1L]], "compat", "downstream-evidence-profile.R"),
+  envir = environment())
+profile <- downstream_evidence_profile(arguments[[1L]], arguments[[2L]],
+  "paradox2")
+downstream_evidence_assert_candidate(profile, profile$candidate_ref,
+  profile$candidate_commit, profile$candidate_tree, profile$candidate_version)
+rejected <- inherits(try(downstream_evidence_assert_candidate(profile,
+  profile$candidate_ref, sub("^.", "0", profile$candidate_commit),
+  profile$candidate_tree, profile$candidate_version), silent = TRUE), "try-error")
+if (!rejected) stop("candidate substitution was accepted", call. = FALSE)
+RSCRIPT
+
+for binding in \
+    $'miesmuschel\t6255050a4d1d1a3555ca70707e4f1588c86006be' \
+    $'mlr3mbo\t1a1c0abe95f59cd314f1fbc19c596cb6ac15f067' \
+    $'celecx\ta2975550c14f824c6abc86db9db32e982908c3ea' \
+    $'mlr3fda\t035da5bb8d1c2ae22f04898718355e9653c382b2'; do
+  repository=${binding%%$'\t'*}
+  commit=${binding#*$'\t'}
+  [[ $(awk -F '\t' -v repository="$repository" \
+    '$1 == repository { print $4 }' \
+    "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv") == "$commit" ]] ||
+    fail "refreshed snapshot does not bind $repository to $commit"
+done
+
+fixture=$(mktemp -d "$ROOT/.local/tmp/downstream-profile.XXXXXX")
+cleanup() {
+  chmod -R u+w "$fixture" 2>/dev/null || true
+  rm -rf -- "$fixture"
+}
+trap cleanup EXIT
+mkdir "$fixture/compat"
+for input in \
+    downstream-evidence-profile.R downstream-evidence-profiles.tsv \
+    paradox-evidence-axes.tsv github-repositories.tsv \
+    github-repositories.release-refresh-dependencies.tsv github-snapshot.tsv \
+    github-bridge-provenance.tsv \
+    github-snapshot.release-refresh-20260720.tsv \
+    github-bridge-provenance.release-refresh-20260720.tsv; do
+  cp "$ROOT/compat/$input" "$fixture/compat/$input"
+done
+
+expect_reject() {
+  local label=$1
+  shift
+  if "$@" >/dev/null 2>&1; then
+    fail "$label was accepted"
+  fi
+}
+expect_reject "unknown profile" resolve "$fixture" absent paradox2
+expect_reject "unknown axis" resolve "$fixture" "$PROFILE" absent
+
+cp "$fixture/compat/downstream-evidence-profiles.tsv" "$fixture/registry.good"
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $4="../escape.tsv" } { print }' \
+  "$fixture/registry.good" >"$fixture/compat/downstream-evidence-profiles.tsv"
+expect_reject "profile path escape" resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/registry.good" "$fixture/compat/downstream-evidence-profiles.tsv"
+
+snapshot=$fixture/compat/github-snapshot.release-refresh-20260720.tsv
+mv "$snapshot" "$snapshot.real"
+ln -s "$(basename "$snapshot.real")" "$snapshot"
+expect_reject "symbolic profile snapshot" resolve "$fixture" "$PROFILE" paradox2
+rm "$snapshot"
+mv "$snapshot.real" "$snapshot"
+
+cp "$snapshot" "$fixture/snapshot.good"
+awk -F '\t' 'BEGIN { OFS="\t" } $1 == "mlr3fda" { $4=sprintf("%040d", 0) } { print }' \
+  "$fixture/snapshot.good" >"$snapshot"
+expect_reject "snapshot/provenance head mismatch" \
+  resolve "$fixture" "$PROFILE" paradox2
+cp "$fixture/snapshot.good" "$snapshot"
+
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $9=$9 ",mlr3fda" } { print }' \
+  "$fixture/registry.good" >"$fixture/compat/downstream-evidence-profiles.tsv"
+expect_reject "duplicate install-order head" resolve "$fixture" "$PROFILE" paradox2
+
+cp "$fixture/registry.good" "$fixture/compat/downstream-evidence-profiles.tsv"
+cp "$fixture/compat/paradox-evidence-axes.tsv" "$fixture/axes.good"
+awk -F '\t' 'BEGIN { OFS="\t" } NR == 3 { $5=sprintf("%040d", 0) } { print }' \
+  "$fixture/axes.good" >"$fixture/compat/paradox-evidence-axes.tsv"
+tampered_axis=$(resolve "$fixture" "$PROFILE" paradox1)
+[[ $(value "$tampered_axis" candidate_commit) == $(printf '%040d' 0) ]] ||
+  fail "axis candidate substitution was not explicit in resolver output"
+cp "$fixture/axes.good" "$fixture/compat/paradox-evidence-axes.tsv"
+
+for script in \
+    compat/install-downstream-bridges \
+    compat/install-repository-test-dependencies.R \
+    compat/test-repositories-resumable.R compat/check-downstream-profile; do
+  grep -Fq 'evidence_profile' "$ROOT/$script" ||
+    fail "$script does not retain the named evidence profile"
+done
+grep -Fq 'active evidence tooling is not one clean commit' \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "bridge installer does not authenticate the post-freeze tooling commit"
+grep -Fq 'post-freeze tooling changes a package-facing path' \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not protect frozen package bytes"
+grep -Fq 'profile$suffix' "$ROOT/compat/test-repositories-resumable.R" ||
+  fail "repository stage does not use a profile/axis-specific identity"
+grep -Fq 'profile$profile_suffix' \
+  "$ROOT/compat/install-repository-test-dependencies.R" ||
+  fail "dependency evidence is not explicitly profile-only and axis-neutral"
+grep -Fq 'one or more downstream R CMD checks failed' \
+  "$ROOT/compat/check-downstream-profile" ||
+  fail "full-check verifier does not fail closed on failed rows"
+for binding in \
+    'CONSUMER_ROOT=$(profile_value consumer_root)' \
+    '.git/info/grafts' '.git/info/attributes' \
+    '.git/objects/info/alternates' 'replacement refs' \
+    'profile checkout hides index state' \
+    'status --porcelain=v1 --untracked-files=all' \
+    'branch --show-current' 'show -s --format=%cI'; do
+  grep -Fq "$binding" "$ROOT/compat/install-downstream-bridges" ||
+    fail "bridge profile Git authentication omits: $binding"
+done
+for binding in \
+    'expected_keys=' 'retained_names=(' 'protected_content_sha256' \
+    'result_sha256' 'PUBLISHED_EVIDENCE_ID' 'directory_identity'; do
+  grep -Fq "$binding" "$ROOT/compat/check-downstream-profile" ||
+    fail "full-check immutability verifier omits: $binding"
+done
+
+printf '%s\n' 'downstream evidence profile fixtures: PASS'

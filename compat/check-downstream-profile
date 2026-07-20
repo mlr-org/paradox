@@ -1,0 +1,611 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SELF_DIRECTORY=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)
+SELF=$SELF_DIRECTORY/$(basename "${BASH_SOURCE[0]}")
+ROOT=$(cd "$SELF_DIRECTORY/.." && pwd -P)
+PROFILE=default
+AXIS=paradox2
+REPOSITORIES=
+CANDIDATE_SOURCE=${PARADOX_CANDIDATE_SOURCE:-$ROOT}
+VERIFY=false
+
+usage() {
+  cat <<'EOF'
+Usage: compat/check-downstream-profile --repositories NAME[,NAME...] \
+       [--candidate-source PATH] [--evidence-profile NAME] \
+       [--paradox-axis paradox2|paradox1] [--verify]
+
+Run serial full R CMD checks for exact heads in one authenticated downstream
+profile. The immutable check stage is separate from repository-test evidence.
+EOF
+}
+
+fail() {
+  printf '%s\n' "check-downstream-profile: $*" >&2
+  exit 2
+}
+
+directory_identity() {
+  [[ -d $1 && ! -L $1 ]] || return 1
+  stat -c '%d:%i' "$1"
+}
+
+publish_directory_no_clobber() {
+  local source=$1 destination=$2 source_mode
+  [[ -d $source && ! -L $source &&
+     ! -e $destination && ! -L $destination ]] || return 1
+  source_mode=$(stat -c '%a' "$source") || return 1
+  [[ $source_mode =~ ^[0-7]{3,4}$ ]] || return 1
+  chmod u+w "$source" || return 1
+  if ! mv -T --no-clobber -- "$source" "$destination"; then
+    chmod "$source_mode" "$source" 2>/dev/null || true
+    return 1
+  fi
+  if [[ -e $source || -L $source || ! -d $destination || -L $destination ]]; then
+    chmod "$source_mode" "$source" 2>/dev/null || true
+    return 1
+  fi
+  chmod "$source_mode" "$destination"
+}
+
+declare -A SEEN_OPTION=()
+while (($#)); do
+  case "$1" in
+    --candidate-source|--evidence-profile|--paradox-axis|--repositories)
+      key=${1#--}
+      [[ $# -ge 2 && ! -v "SEEN_OPTION[$key]" ]] ||
+        fail "$1 requires one value and may occur once"
+      SEEN_OPTION[$key]=1
+      case "$1" in
+        --candidate-source) CANDIDATE_SOURCE=$2 ;;
+        --evidence-profile) PROFILE=$2 ;;
+        --paradox-axis) AXIS=$2 ;;
+        --repositories) REPOSITORIES=$2 ;;
+      esac
+      shift 2
+      ;;
+    --candidate-source=*|--evidence-profile=*|--paradox-axis=*|--repositories=*)
+      key=${1%%=*}
+      key=${key#--}
+      [[ ! -v "SEEN_OPTION[$key]" ]] || fail "--$key may occur once"
+      SEEN_OPTION[$key]=1
+      value=${1#*=}
+      case "$key" in
+        candidate-source) CANDIDATE_SOURCE=$value ;;
+        evidence-profile) PROFILE=$value ;;
+        paradox-axis) AXIS=$value ;;
+        repositories) REPOSITORIES=$value ;;
+      esac
+      shift
+      ;;
+    --verify) [[ $VERIFY == false ]] || fail "--verify may occur once"; VERIFY=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+
+[[ -f $SELF && ! -L $SELF && -n $REPOSITORIES &&
+   $PROFILE =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ &&
+   ( $AXIS == paradox2 || $AXIS == paradox1 ) ]] || fail "unsafe check selection"
+IFS=, read -r -a SELECTED <<<"$REPOSITORIES"
+[[ ${#SELECTED[@]} -gt 0 ]] || fail "repository selection is empty"
+declare -A SELECTED_SET=()
+for repository in "${SELECTED[@]}"; do
+  [[ $repository =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ &&
+     ! -v "SELECTED_SET[$repository]" ]] ||
+    fail "repository selection is unsafe or duplicated"
+  SELECTED_SET[$repository]=1
+done
+[[ $(IFS=,; printf '%s' "${SELECTED[*]}") == "$REPOSITORIES" ]] ||
+  fail "repository selection is not canonical"
+
+[[ ${PARADOX_ACTIVE_ROOT:-} == "$ROOT" ]] ||
+  fail "activate the repository-local environment first: . scripts/activate"
+R=$ROOT/.local/toolchain/bin/R
+RSCRIPT=$ROOT/.local/toolchain/bin/Rscript
+GIT=$ROOT/.local/toolchain/bin/git
+[[ $(command -v R) == "$R" && $(command -v Rscript) == "$RSCRIPT" &&
+   $(command -v git) == "$GIT" ]] || fail "exact local R and Git are not active"
+
+RUN_ID=${PARADOX_CANDIDATE_RUN_ID:-}
+[[ $RUN_ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] ||
+  fail "candidate run ID is unsafe"
+RUN=$ROOT/.local/compat/runs/$RUN_ID
+PROFILE_OUTPUT=$("$RSCRIPT" --vanilla \
+  "$ROOT/compat/resolve-downstream-evidence-profile.R" "$ROOT" "$PROFILE" "$AXIS") ||
+  fail "could not resolve downstream evidence profile"
+profile_value() {
+  awk -F '\t' -v key="$1" 'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' \
+    <<<"$PROFILE_OUTPUT"
+}
+SUFFIX=$(profile_value suffix)
+[[ $SUFFIX == - ]] && SUFFIX=
+SNAPSHOT=$(profile_value snapshot)
+REPOSITORY_MANIFEST=$(profile_value repository_manifest)
+BRIDGE_PROVENANCE=$(profile_value bridge_provenance)
+CONSUMER_ROOT=$(profile_value consumer_root)
+EXPECTED_CANDIDATE_REF=$(profile_value candidate_ref)
+EXPECTED_CANDIDATE_COMMIT=$(profile_value candidate_commit)
+EXPECTED_CANDIDATE_TREE=$(profile_value candidate_tree)
+EXPECTED_CANDIDATE_VERSION=$(profile_value candidate_version)
+INSTALL_ORDER=$(profile_value install_order)
+for repository in "${SELECTED[@]}"; do
+  [[ ",$INSTALL_ORDER," == *",$repository,"* ]] ||
+    fail "repository is not installable in the selected profile: $repository"
+done
+
+CANDIDATE_SOURCE=$(cd "$CANDIDATE_SOURCE" && pwd -P)
+CANDIDATE_LIBRARY=$RUN/library-candidate
+DEPENDENCY_LIBRARY=$ROOT/.local/compat/R/library-dependencies
+BRIDGE_LIBRARY=$RUN/library-downstream-bridges$SUFFIX
+BRIDGE_EVIDENCE=$RUN/downstream-bridges$SUFFIX
+STAGE=$RUN/repository-checks$SUFFIX
+PROVENANCE=$CANDIDATE_LIBRARY/.paradox-candidate-provenance.tsv
+PROVENANCE_SEAL=$CANDIDATE_LIBRARY/.paradox-candidate-provenance.sha256
+SENTINEL=$CANDIDATE_LIBRARY/.paradox-candidate-content-sha256
+FINGERPRINT=$ROOT/compat/fingerprint.R
+EVIDENCE_HELPER=$ROOT/compat/repository-evidence.R
+EVIDENCE_VERIFIER=$ROOT/compat/verify-repository-evidence.R
+BRIDGE_INSTALLER=$ROOT/compat/install-downstream-bridges
+for directory in "$RUN" "$CANDIDATE_LIBRARY" "$DEPENDENCY_LIBRARY" \
+    "$BRIDGE_LIBRARY" "$BRIDGE_EVIDENCE" "$CONSUMER_ROOT"; do
+  [[ -d $directory && ! -L $directory ]] || fail "required directory is unsafe: $directory"
+done
+for file in "$PROVENANCE" "$PROVENANCE_SEAL" "$SENTINEL" "$SNAPSHOT" \
+    "$REPOSITORY_MANIFEST" "$BRIDGE_PROVENANCE" \
+    "$FINGERPRINT" "$EVIDENCE_HELPER" "$EVIDENCE_VERIFIER" "$BRIDGE_INSTALLER"; do
+  [[ -f $file && ! -L $file ]] || fail "required file is unsafe: $file"
+done
+
+"$BRIDGE_INSTALLER" --verify --candidate-source "$CANDIDATE_SOURCE" \
+  --evidence-profile "$PROFILE" --paradox-axis "$AXIS" >/dev/null
+
+tree_fingerprint() {
+  R_LIBS="$ROOT/.local/R/library" R_LIBS_USER="$ROOT/.local/R/library" \
+    "$RSCRIPT" --vanilla -e \
+    'a=commandArgs(TRUE); sys.source(a[[2L]], envir=environment()); cat(compat_tree_content_sha256(a[[1L]]))' \
+    "$1" "$FINGERPRINT"
+}
+receipt_value() {
+  awk -F '\t' -v key="$1" 'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' \
+    "$PROVENANCE"
+}
+CANDIDATE_CONTENT=$(tr -d '\r\n' <"$SENTINEL")
+[[ $(receipt_value candidate_run_id) == "$RUN_ID" &&
+   $(receipt_value candidate_ref) == "$EXPECTED_CANDIDATE_REF" &&
+   $(receipt_value candidate_commit) == "$EXPECTED_CANDIDATE_COMMIT" &&
+   $(receipt_value candidate_tree) == "$EXPECTED_CANDIDATE_TREE" &&
+   $(receipt_value candidate_version) == "$EXPECTED_CANDIDATE_VERSION" &&
+   $(receipt_value candidate_library) == "$CANDIDATE_LIBRARY" &&
+   $(receipt_value dependency_library) == "$DEPENDENCY_LIBRARY" &&
+   $(receipt_value candidate_content_sha256) == "$CANDIDATE_CONTENT" &&
+   $(cat "$PROVENANCE_SEAL") == \
+     "$(sha256sum "$PROVENANCE" | awk '{print $1}')  .paradox-candidate-provenance.tsv" ]] ||
+  fail "candidate receipt differs from the check subject"
+
+declare -A SNAPSHOT_COMMIT SNAPSHOT_DATE SNAPSHOT_BRANCH SNAPSHOT_ORIGIN
+while IFS=$'\t' read -r repository origin _ commit date branch; do
+  [[ $repository == repository ]] && continue
+  SNAPSHOT_ORIGIN[$repository]=$origin
+  SNAPSHOT_COMMIT[$repository]=$commit
+  SNAPSHOT_DATE[$repository]=$date
+  SNAPSHOT_BRANCH[$repository]=$branch
+done <"$SNAPSHOT"
+
+git_value() {
+  local checkout=$1
+  shift
+  env -u GIT_DIR -u GIT_WORK_TREE -u GIT_INDEX_FILE -u GIT_COMMON_DIR \
+    -u GIT_OBJECT_DIRECTORY -u GIT_ALTERNATE_OBJECT_DIRECTORIES \
+    -u GIT_NAMESPACE -u GIT_REPLACE_REF_BASE -u GIT_QUARANTINE_PATH \
+    -u GIT_SHALLOW_FILE -u GIT_EXEC_PATH -u GIT_TEMPLATE_DIR \
+    -u GIT_CONFIG -u GIT_CONFIG_GLOBAL \
+    -u GIT_CONFIG_SYSTEM -u GIT_CONFIG_COUNT -u GIT_CONFIG_PARAMETERS \
+    GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null \
+    GIT_CONFIG_NOSYSTEM=1 GIT_ATTR_NOSYSTEM=1 GIT_NO_REPLACE_OBJECTS=1 \
+    GIT_NO_LAZY_FETCH=1 GIT_OPTIONAL_LOCKS=0 LC_ALL=C TZ=UTC \
+    "$GIT" --no-replace-objects -c core.attributesFile=/dev/null \
+      -c core.hooksPath=/dev/null -c core.fsmonitor=false \
+      -c core.untrackedCache=false -c tar.umask=0022 -C "$checkout" "$@"
+}
+
+authenticate_checkout() {
+  local repository=$1 checkout commit tree branch commit_date
+  checkout=$CONSUMER_ROOT/$repository
+  commit=${SNAPSHOT_COMMIT[$repository]:-}
+  [[ -n $commit && -d $checkout && ! -L $checkout && -d $checkout/.git &&
+     ! -L $checkout/.git &&
+     $(git_value "$checkout" rev-parse --show-toplevel) == "$checkout" &&
+     $(git_value "$checkout" remote get-url origin) == "${SNAPSHOT_ORIGIN[$repository]}" &&
+     $(git_value "$checkout" rev-parse --verify 'HEAD^{commit}') == "$commit" &&
+     -z $(git_value "$checkout" status --porcelain=v1 --untracked-files=all) ]] ||
+    fail "checkout is not the exact clean profile head: $repository"
+  tree=$(git_value "$checkout" rev-parse --verify "$commit^{tree}")
+  branch=$(git_value "$checkout" branch --show-current)
+  commit_date=$(git_value "$checkout" show -s --format=%cI "$commit")
+  [[ $tree =~ ^[0-9a-f]{40}$ &&
+     $branch == "${SNAPSHOT_BRANCH[$repository]}" &&
+     $commit_date == "${SNAPSHOT_DATE[$repository]}" ]] ||
+    fail "checkout tree, branch, or date differs from the profile: $repository"
+  printf '%s\t%s\t%s\t%s\t%s\n' "$repository" "$commit" "$tree" \
+    "$commit_date" "$branch"
+}
+
+verify_stage() {
+  [[ -d $STAGE && ! -L $STAGE ]] || fail "check evidence is absent"
+  "$RSCRIPT" --vanilla "$EVIDENCE_VERIFIER" "$STAGE" >/dev/null
+  local completion=$STAGE/metadata/completion.tsv bridge_completion
+  local selected_current protected_current expected_keys tooling_commit tooling_tree
+  expected_keys=$'schema\nstage_kind\nstatus\ncandidate_run_id\nevidence_profile\nparadox_axis\nrepositories\ncandidate_ref\ncandidate_commit\ncandidate_tree\ncandidate_version\ncandidate_content_sha256\ntooling_commit\ntooling_tree\nprofile_registry_sha256\naxis_registry_sha256\nrepository_manifest_sha256\nsnapshot_sha256\nbridge_provenance_sha256\ncandidate_provenance_sha256\nbridge_completion_sha256\nprotected_content_sha256\nresult_sha256\nrows\nfailed_rows\nharness_sha256\ncompleted_utc'
+  [[ $(tail -n +2 "$completion" | cut -f1) == "$expected_keys" ]] ||
+    fail "check completion has an unexpected schema"
+  selected_current=$(awk -F '\t' '$1 == "repositories" { print $2 }' "$completion")
+  tooling_commit=$(git_value "$ROOT" rev-parse --verify 'HEAD^{commit}')
+  tooling_tree=$(git_value "$ROOT" rev-parse --verify "$tooling_commit^{tree}")
+  [[ -z $(git_value "$ROOT" status --porcelain=v1 --untracked-files=all) ]] ||
+    fail "check tooling worktree is dirty"
+  bridge_completion=$BRIDGE_EVIDENCE/metadata/completion.tsv
+  protected_current=$(printf '%s\n%s\n%s\n' \
+    "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
+    "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
+    "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+  [[ $(head -n 1 "$STAGE/results.tsv") == \
+       $'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256' &&
+     $(head -n 1 "$STAGE/metadata/selection.tsv") == \
+       $'repository\tcommit\ttree\tcommit_date\tbranch\tarchive_sha256' ]] ||
+    fail "check result or selection table has an unexpected schema"
+  awk -F '\t' 'NR == 1 { next }
+    NF != 7 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+      $2 !~ /^[0-9a-f]{40}$/ || $3 !~ /^[0-9a-f]{40}$/ ||
+      ($4 != "passed" && $4 != "failed") || $5 !~ /^[0-9]+$/ ||
+      $6 !~ /^[0-9]+$/ || $7 !~ /^[0-9a-f]{64}$/ || seen[$1]++ { exit 1 }
+    ($4 == "passed") != ($5 == "0") { exit 1 }
+  ' "$STAGE/results.tsv" || fail "check result rows are malformed"
+  awk -F '\t' 'NR == 1 { next }
+    NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+      $2 !~ /^[0-9a-f]{40}$/ || $3 !~ /^[0-9a-f]{40}$/ ||
+      $6 !~ /^[0-9a-f]{64}$/ || seen[$1]++ { exit 1 }
+  ' "$STAGE/metadata/selection.tsv" || fail "check selection rows are malformed"
+  local result_rows failed_rows expected_status
+  result_rows=$(awk 'END { print NR - 1 }' "$STAGE/results.tsv")
+  failed_rows=$(awk -F '\t' 'NR > 1 && $4 == "failed" { ++failed } END { print failed + 0 }' \
+    "$STAGE/results.tsv")
+  expected_status=passed
+  [[ $failed_rows -eq 0 ]] || expected_status=completed_with_failures
+  [[ $(awk -F '\t' '$1 == "schema" { print $2 }' "$completion") == 1 &&
+     $(awk -F '\t' '$1 == "stage_kind" { print $2 }' "$completion") == downstream_profile_checks &&
+     $(awk -F '\t' '$1 == "status" { print $2 }' "$completion") == "$expected_status" &&
+     $(awk -F '\t' '$1 == "candidate_run_id" { print $2 }' "$completion") == "$RUN_ID" &&
+     $(awk -F '\t' '$1 == "evidence_profile" { print $2 }' "$completion") == "$PROFILE" &&
+     $(awk -F '\t' '$1 == "paradox_axis" { print $2 }' "$completion") == "$AXIS" &&
+     $selected_current == "$REPOSITORIES" &&
+     $(awk -F '\t' '$1 == "candidate_ref" { print $2 }' "$completion") == "$(receipt_value candidate_ref)" &&
+     $(awk -F '\t' '$1 == "candidate_commit" { print $2 }' "$completion") == "$(receipt_value candidate_commit)" &&
+     $(awk -F '\t' '$1 == "candidate_tree" { print $2 }' "$completion") == "$(receipt_value candidate_tree)" &&
+     $(awk -F '\t' '$1 == "candidate_version" { print $2 }' "$completion") == "$(receipt_value candidate_version)" &&
+     $(awk -F '\t' '$1 == "candidate_content_sha256" { print $2 }' "$completion") == "$CANDIDATE_CONTENT" &&
+     $(awk -F '\t' '$1 == "tooling_commit" { print $2 }' "$completion") == "$tooling_commit" &&
+     $(awk -F '\t' '$1 == "tooling_tree" { print $2 }' "$completion") == "$tooling_tree" &&
+     $(awk -F '\t' '$1 == "profile_registry_sha256" { print $2 }' "$completion") == "$(profile_value profile_registry_sha256)" &&
+     $(awk -F '\t' '$1 == "axis_registry_sha256" { print $2 }' "$completion") == "$(profile_value axis_registry_sha256)" &&
+     $(awk -F '\t' '$1 == "repository_manifest_sha256" { print $2 }' "$completion") == "$(profile_value repository_manifest_sha256)" &&
+     $(awk -F '\t' '$1 == "snapshot_sha256" { print $2 }' "$completion") == "$(profile_value snapshot_sha256)" &&
+     $(awk -F '\t' '$1 == "bridge_provenance_sha256" { print $2 }' "$completion") == "$(profile_value bridge_provenance_sha256)" &&
+     $(awk -F '\t' '$1 == "candidate_provenance_sha256" { print $2 }' "$completion") == "$(sha256sum "$PROVENANCE" | awk '{print $1}')" &&
+     $(awk -F '\t' '$1 == "bridge_completion_sha256" { print $2 }' "$completion") == "$(sha256sum "$bridge_completion" | awk '{print $1}')" &&
+     $(awk -F '\t' '$1 == "protected_content_sha256" { print $2 }' "$completion") == "$(printf '%s' "$protected_current" | sha256sum | awk '{print $1}')" &&
+     $(awk -F '\t' '$1 == "result_sha256" { print $2 }' "$completion") == "$(sha256sum "$STAGE/results.tsv" | awk '{print $1}')" &&
+     $(awk -F '\t' '$1 == "rows" { print $2 }' "$completion") == "$result_rows" &&
+     $(awk -F '\t' '$1 == "failed_rows" { print $2 }' "$completion") == "$failed_rows" &&
+     $(awk -F '\t' '$1 == "harness_sha256" { print $2 }' "$completion") == "$(sha256sum "$SELF" | awk '{print $1}')" &&
+     $(tree_fingerprint "$CANDIDATE_LIBRARY/paradox") == "$CANDIDATE_CONTENT" &&
+     $(tree_fingerprint "$DEPENDENCY_LIBRARY") == \
+       "$(receipt_value dependency_library_content_sha256)" ]] ||
+    fail "check completion differs from its selected subject"
+  local repository position result_line selection_line identity archive_sha256
+  local -a retained_names retained_sources
+  retained_names=(
+    check-downstream-profile downstream-evidence-profile.R
+    resolve-downstream-evidence-profile.R downstream-evidence-profiles.tsv
+    paradox-evidence-axes.tsv github-repositories.tsv github-snapshot.tsv
+    github-bridge-provenance.tsv fingerprint.R repository-evidence.R
+    verify-repository-evidence.R downstream-bridges-completion.tsv
+    downstream-bridges-packages.tsv downstream-bridges-completion.seal
+    downstream-bridges-evidence-manifest.tsv candidate-provenance.tsv
+    candidate-provenance.sha256 candidate-content-sha256
+  )
+  retained_sources=(
+    "$SELF" "$ROOT/compat/downstream-evidence-profile.R"
+    "$ROOT/compat/resolve-downstream-evidence-profile.R"
+    "$ROOT/compat/downstream-evidence-profiles.tsv"
+    "$ROOT/compat/paradox-evidence-axes.tsv" "$REPOSITORY_MANIFEST" "$SNAPSHOT"
+    "$BRIDGE_PROVENANCE" "$FINGERPRINT" "$EVIDENCE_HELPER"
+    "$EVIDENCE_VERIFIER" "$bridge_completion"
+    "$BRIDGE_EVIDENCE/metadata/packages.tsv"
+    "$BRIDGE_EVIDENCE/metadata/completion.seal"
+    "$BRIDGE_EVIDENCE/metadata/evidence-manifest.tsv" "$PROVENANCE"
+    "$PROVENANCE_SEAL" "$SENTINEL"
+  )
+  for ((position = 0; position < ${#retained_names[@]}; ++position)); do
+    cmp -s "$STAGE/inputs/${retained_names[$position]}" \
+      "${retained_sources[$position]}" ||
+      fail "retained check input differs: ${retained_names[$position]}"
+  done
+  [[ $result_rows -eq ${#SELECTED[@]} ]] ||
+    fail "check result count differs from the selection"
+  for ((position = 0; position < ${#SELECTED[@]}; ++position)); do
+    repository=${SELECTED[$position]}
+    identity=$(authenticate_checkout "$repository")
+    result_line=$(sed -n "$((position + 2))p" "$STAGE/results.tsv")
+    selection_line=$(sed -n "$((position + 2))p" \
+      "$STAGE/metadata/selection.tsv")
+    IFS=$'\t' read -r _ _ _ _ _ archive_sha256 <<<"$selection_line"
+    [[ $selection_line == "$identity"$'\t'"$archive_sha256" &&
+       $result_line == "$repository"$'\t'"${SNAPSHOT_COMMIT[$repository]}"$'\t'"$(git_value "$CONSUMER_ROOT/$repository" rev-parse --verify "${SNAPSHOT_COMMIT[$repository]}^{tree}")"$'\t'* &&
+       $(git_value "$CONSUMER_ROOT/$repository" archive --format=tar \
+         "${SNAPSHOT_COMMIT[$repository]}" | sha256sum | awk '{print $1}') == "$archive_sha256" ]] ||
+      fail "check row differs from its exact selected Git object: $repository"
+    IFS=$'\t' read -r _ _ _ row_status _ _ log_sha256 <<<"$result_line"
+    [[ -f $STAGE/logs/$repository.log && ! -L $STAGE/logs/$repository.log &&
+       $(sha256sum "$STAGE/logs/$repository.log" | awk '{print $1}') == "$log_sha256" ]] ||
+      fail "check log differs from its row: $repository"
+    if [[ $row_status == passed ]]; then
+      [[ -d $STAGE/checks/$repository.Rcheck &&
+         ! -L $STAGE/checks/$repository.Rcheck ]] ||
+        fail "passed check lacks its retained Rcheck directory: $repository"
+    fi
+  done
+  [[ $failed_rows -eq 0 ]] || fail "one or more downstream R CMD checks failed"
+  printf '%s\n' "downstream_profile_check_evidence=passed" \
+    "downstream_profile_check_stage=$STAGE"
+}
+
+if [[ $VERIFY == true ]]; then
+  verify_stage
+  exit 0
+fi
+[[ ! -e $STAGE && ! -L $STAGE ]] || fail "check stage already exists; use --verify"
+
+PRIVATE_PREFIX=$RUN/.repository-checks$SUFFIX
+OWNER=$PRIVATE_PREFIX-owner
+OWNER_STAGING=
+OWNER_STAGING_ID=
+OWNER_ID=
+OWNER_TOKEN=
+OWNER_RECORD=
+BUILD=
+BUILD_ID=
+EVIDENCE=
+EVIDENCE_ID=
+PUBLISHED_EVIDENCE_ID=
+COMPLETE=false
+
+ownership_matches() {
+  [[ -n $OWNER_ID && -n $OWNER_RECORD && -d $OWNER && ! -L $OWNER &&
+     $(directory_identity "$OWNER") == "$OWNER_ID" &&
+     -f $OWNER/owner.tsv && ! -L $OWNER/owner.tsv &&
+     $(cat "$OWNER/owner.tsv") == "$OWNER_RECORD" ]]
+}
+
+remove_private_directory() {
+  local path=$1 identity=$2
+  [[ -n $path && -n $identity ]] || return 0
+  case "$path" in
+    "$PRIVATE_PREFIX"-owner-new.*|"$PRIVATE_PREFIX"-owner-retired-*|\
+    "$PRIVATE_PREFIX"-build.*|"$PRIVATE_PREFIX"-evidence.*) ;;
+    *) return 1 ;;
+  esac
+  [[ ! -e $path && ! -L $path ]] && return 0
+  [[ -d $path && ! -L $path &&
+     $(directory_identity "$path") == "$identity" ]] || return 1
+  chmod -R u+w "$path" && rm -rf -- "$path"
+}
+
+release_ownership() {
+  local retirement retirement_id
+  ownership_matches || return 1
+  retirement=$PRIVATE_PREFIX-owner-retired-$OWNER_TOKEN
+  [[ ! -e $retirement && ! -L $retirement ]] || return 1
+  mv -T --no-clobber -- "$OWNER" "$retirement" || return 1
+  [[ ! -e $OWNER && ! -L $OWNER && -d $retirement && ! -L $retirement &&
+     $(directory_identity "$retirement") == "$OWNER_ID" ]] || return 1
+  retirement_id=$(directory_identity "$retirement") || return 1
+  remove_private_directory "$retirement" "$retirement_id" || return 1
+  OWNER_ID=
+}
+
+cleanup() {
+  local status=$?
+  set +e
+  if [[ $COMPLETE != true && -n $PUBLISHED_EVIDENCE_ID &&
+     -d $STAGE && ! -L $STAGE &&
+     $(directory_identity "$STAGE") == "$PUBLISHED_EVIDENCE_ID" ]] &&
+     ownership_matches; then
+    chmod -R u+w "$STAGE" && rm -rf -- "$STAGE"
+  fi
+  remove_private_directory "$EVIDENCE" "$EVIDENCE_ID"
+  remove_private_directory "$BUILD" "$BUILD_ID"
+  remove_private_directory "$OWNER_STAGING" "$OWNER_STAGING_ID"
+  ownership_matches && release_ownership
+  trap - EXIT
+  exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+OWNER_STAGING=$(mktemp -d "$PRIVATE_PREFIX-owner-new.XXXXXX")
+OWNER_STAGING_ID=$(directory_identity "$OWNER_STAGING")
+OWNER_ID=$OWNER_STAGING_ID
+OWNER_TOKEN=${OWNER_STAGING##*.}
+OWNER_RECORD=$(printf '%s\n' \
+  $'field\tvalue' $'schema\t1' "owner_token\t$OWNER_TOKEN" "pid\t$$" \
+  "candidate_run_id\t$RUN_ID" "evidence_profile\t$PROFILE" \
+  "paradox_axis\t$AXIS")
+printf '%s\n' "$OWNER_RECORD" >"$OWNER_STAGING/owner.tsv"
+chmod 0600 "$OWNER_STAGING/owner.tsv"
+publish_directory_no_clobber "$OWNER_STAGING" "$OWNER" ||
+  fail "another process owns downstream checks for this run and profile"
+ownership_matches || fail "downstream check ownership changed"
+
+BUILD=$(mktemp -d "$PRIVATE_PREFIX-build.XXXXXX")
+BUILD_ID=$(directory_identity "$BUILD")
+EVIDENCE=$(mktemp -d "$PRIVATE_PREFIX-evidence.XXXXXX")
+EVIDENCE_ID=$(directory_identity "$EVIDENCE")
+mkdir "$EVIDENCE/inputs" "$EVIDENCE/logs" "$EVIDENCE/metadata" \
+  "$EVIDENCE/checks"
+cp "$SELF" "$EVIDENCE/inputs/check-downstream-profile"
+cp "$ROOT/compat/downstream-evidence-profile.R" \
+  "$EVIDENCE/inputs/downstream-evidence-profile.R"
+cp "$ROOT/compat/resolve-downstream-evidence-profile.R" \
+  "$EVIDENCE/inputs/resolve-downstream-evidence-profile.R"
+cp "$ROOT/compat/downstream-evidence-profiles.tsv" \
+  "$EVIDENCE/inputs/downstream-evidence-profiles.tsv"
+cp "$ROOT/compat/paradox-evidence-axes.tsv" \
+  "$EVIDENCE/inputs/paradox-evidence-axes.tsv"
+cp "$REPOSITORY_MANIFEST" "$EVIDENCE/inputs/github-repositories.tsv"
+cp "$SNAPSHOT" "$EVIDENCE/inputs/github-snapshot.tsv"
+cp "$BRIDGE_PROVENANCE" "$EVIDENCE/inputs/github-bridge-provenance.tsv"
+cp "$ROOT/compat/fingerprint.R" "$EVIDENCE/inputs/fingerprint.R"
+cp "$EVIDENCE_HELPER" "$EVIDENCE/inputs/repository-evidence.R"
+cp "$EVIDENCE_VERIFIER" "$EVIDENCE/inputs/verify-repository-evidence.R"
+cp "$BRIDGE_EVIDENCE/metadata/completion.tsv" \
+  "$EVIDENCE/inputs/downstream-bridges-completion.tsv"
+cp "$BRIDGE_EVIDENCE/metadata/packages.tsv" \
+  "$EVIDENCE/inputs/downstream-bridges-packages.tsv"
+cp "$BRIDGE_EVIDENCE/metadata/completion.seal" \
+  "$EVIDENCE/inputs/downstream-bridges-completion.seal"
+cp "$BRIDGE_EVIDENCE/metadata/evidence-manifest.tsv" \
+  "$EVIDENCE/inputs/downstream-bridges-evidence-manifest.tsv"
+cp "$PROVENANCE" "$EVIDENCE/inputs/candidate-provenance.tsv"
+cp "$PROVENANCE_SEAL" "$EVIDENCE/inputs/candidate-provenance.sha256"
+cp "$SENTINEL" "$EVIDENCE/inputs/candidate-content-sha256"
+
+EXTRA_TEXT=${PARADOX_CONSUMER_EXTRA_LIBS:-}
+IFS=: read -r -a EXTRA_LIBRARIES <<<"$EXTRA_TEXT"
+[[ ${#EXTRA_LIBRARIES[@]} -gt 0 && ${EXTRA_LIBRARIES[0]} == "$BRIDGE_LIBRARY" ]] ||
+  fail "candidate-specific profile bridge must be the first extra library"
+for library in "${EXTRA_LIBRARIES[@]}"; do
+  [[ -d $library && ! -L $library ]] || fail "extra library is unsafe: $library"
+done
+ALL_LIBRARIES=("$CANDIDATE_LIBRARY" "${EXTRA_LIBRARIES[@]}" "$DEPENDENCY_LIBRARY")
+LIBRARIES=$(IFS=:; printf '%s' "${ALL_LIBRARIES[*]}")
+
+TOOLING_COMMIT=$(git_value "$ROOT" rev-parse --verify 'HEAD^{commit}')
+TOOLING_TREE=$(git_value "$ROOT" rev-parse --verify "$TOOLING_COMMIT^{tree}")
+[[ -z $(git_value "$ROOT" status --porcelain=v1 --untracked-files=all) ]] ||
+  fail "check tooling worktree is dirty"
+PROTECTED_BEFORE=$(printf '%s\n%s\n%s\n' \
+  "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
+  "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
+  "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+
+printf 'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256\n' \
+  >"$EVIDENCE/results.tsv"
+printf 'repository\tcommit\ttree\tcommit_date\tbranch\tarchive_sha256\n' \
+  >"$EVIDENCE/metadata/selection.tsv"
+failed=0
+for repository in "${SELECTED[@]}"; do
+  identity=$(authenticate_checkout "$repository")
+  IFS=$'\t' read -r _ commit tree _ _ <<<"$identity"
+  row=$BUILD/$repository
+  mkdir "$row" "$row/source" "$row/home" "$row/tmp" "$row/cache"
+  git_value "$CONSUMER_ROOT/$repository" archive --format=tar \
+    -o "$row/source.tar" "$commit"
+  archive_sha256=$(sha256sum "$row/source.tar" | awk '{print $1}')
+  printf '%s\t%s\n' "$identity" "$archive_sha256" \
+    >>"$EVIDENCE/metadata/selection.tsv"
+  tar -xf "$row/source.tar" -C "$row/source"
+  started=$(date +%s)
+  set +e
+  (
+    cd "$row"
+    env -i HOME="$row/home" USER="${USER:-paradox}" LOGNAME="${LOGNAME:-paradox}" \
+      PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
+      R_LIBS="$LIBRARIES" R_LIBS_USER="$LIBRARIES" R_LIBS_SITE= \
+      R_ENVIRON=/dev/null R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null \
+      R_PROFILE_USER=/dev/null R_TESTS= NOT_CRAN=true \
+      _R_CHECK_FORCE_SUGGESTS_=false _R_CHECK_CRAN_INCOMING_=false \
+      R_MAKEVARS_USER="$ROOT/environment/Makevars" TMPDIR="$row/tmp" \
+      XDG_CACHE_HOME="$row/cache" MAKEFLAGS=-j1 OMP_NUM_THREADS=1 \
+      OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+      BLIS_NUM_THREADS=1 \
+      "$R" CMD check --no-manual --no-build-vignettes "$row/source"
+  ) >"$EVIDENCE/logs/$repository.log" 2>&1
+  status=$?
+  set -e
+  elapsed=$(($(date +%s) - started))
+  result=passed
+  if [[ $status -ne 0 ]]; then result=failed; failed=$((failed + 1)); fi
+  check_directory=$(find "$row" -mindepth 1 -maxdepth 1 -type d \
+    -name '*.Rcheck' -print -quit)
+  if [[ -n $check_directory ]]; then
+    mv "$check_directory" "$EVIDENCE/checks/$repository.Rcheck"
+  fi
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$repository" "$commit" "$tree" \
+    "$result" "$status" "$elapsed" \
+    "$(sha256sum "$EVIDENCE/logs/$repository.log" | awk '{print $1}')" \
+    >>"$EVIDENCE/results.tsv"
+done
+
+PROTECTED_AFTER=$(printf '%s\n%s\n%s\n' \
+  "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
+  "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
+  "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+[[ $PROTECTED_BEFORE == "$PROTECTED_AFTER" ]] ||
+  fail "protected libraries changed during downstream checks"
+
+{
+  printf 'field\tvalue\n'
+  printf 'schema\t1\n'
+  printf 'stage_kind\tdownstream_profile_checks\n'
+  printf 'status\t%s\n' "$([[ $failed -eq 0 ]] && printf passed || printf completed_with_failures)"
+  printf 'candidate_run_id\t%s\n' "$RUN_ID"
+  printf 'evidence_profile\t%s\n' "$PROFILE"
+  printf 'paradox_axis\t%s\n' "$AXIS"
+  printf 'repositories\t%s\n' "$REPOSITORIES"
+  printf 'candidate_ref\t%s\n' "$(receipt_value candidate_ref)"
+  printf 'candidate_commit\t%s\n' "$(receipt_value candidate_commit)"
+  printf 'candidate_tree\t%s\n' "$(receipt_value candidate_tree)"
+  printf 'candidate_version\t%s\n' "$(receipt_value candidate_version)"
+  printf 'candidate_content_sha256\t%s\n' "$CANDIDATE_CONTENT"
+  printf 'tooling_commit\t%s\n' "$TOOLING_COMMIT"
+  printf 'tooling_tree\t%s\n' "$TOOLING_TREE"
+  printf 'profile_registry_sha256\t%s\n' "$(profile_value profile_registry_sha256)"
+  printf 'axis_registry_sha256\t%s\n' "$(profile_value axis_registry_sha256)"
+  printf 'repository_manifest_sha256\t%s\n' "$(profile_value repository_manifest_sha256)"
+  printf 'snapshot_sha256\t%s\n' "$(profile_value snapshot_sha256)"
+  printf 'bridge_provenance_sha256\t%s\n' "$(profile_value bridge_provenance_sha256)"
+  printf 'candidate_provenance_sha256\t%s\n' "$(sha256sum "$PROVENANCE" | awk '{print $1}')"
+  printf 'bridge_completion_sha256\t%s\n' \
+    "$(sha256sum "$BRIDGE_EVIDENCE/metadata/completion.tsv" | awk '{print $1}')"
+  printf 'protected_content_sha256\t%s\n' "$(printf '%s' "$PROTECTED_AFTER" | sha256sum | awk '{print $1}')"
+  printf 'result_sha256\t%s\n' "$(sha256sum "$EVIDENCE/results.tsv" | awk '{print $1}')"
+  printf 'rows\t%s\n' "${#SELECTED[@]}"
+  printf 'failed_rows\t%s\n' "$failed"
+  printf 'harness_sha256\t%s\n' "$(sha256sum "$SELF" | awk '{print $1}')"
+  printf 'completed_utc\t%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+} >"$EVIDENCE/metadata/completion.tsv"
+
+"$RSCRIPT" --vanilla - "$EVIDENCE_HELPER" "$EVIDENCE" <<'RSCRIPT'
+args <- commandArgs(TRUE)
+sys.source(args[[1L]], envir = environment())
+repository_seal_evidence(args[[2L]])
+RSCRIPT
+chmod -R a-w "$EVIDENCE"
+PUBLISHED_EVIDENCE_ID=$(directory_identity "$EVIDENCE")
+publish_directory_no_clobber "$EVIDENCE" "$STAGE" ||
+  fail "check evidence publication raced"
+[[ $(directory_identity "$STAGE") == "$PUBLISHED_EVIDENCE_ID" ]] ||
+  fail "published check evidence identity changed"
+release_ownership || fail "could not release downstream check ownership"
+COMPLETE=true
+remove_private_directory "$BUILD" "$BUILD_ID" ||
+  fail "could not remove the private downstream check build"
+BUILD=
+BUILD_ID=
+trap - EXIT
+verify_stage
+[[ $failed -eq 0 ]] || exit 1

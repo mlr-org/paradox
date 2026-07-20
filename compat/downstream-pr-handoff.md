@@ -1,7 +1,7 @@
 # Downstream Paradox 2 pull-request handoff
 
 Agentic processes must not push these branches or open remote pull requests.
-The seven repository-local branches below are the complete reviewed migrations.
+The eight repository-local branches below are the complete reviewed migrations.
 Before publication, the release gate must test these exact heads against the
 frozen Paradox candidate and `compat/verify-mlr-org-review` must authenticate
 their clean trees.
@@ -38,7 +38,7 @@ git -C /home/mewse/paradox_neo/.local/compat/github/bbotk push --set-upstream or
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `d9d5c01ab069839abf4f82521826ac61e31191de`
+- head: `6255050a4d1d1a3555ca70707e4f1588c86006be`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`
@@ -57,7 +57,8 @@ Proposed body:
 > Keep dependency-error expectations useful on both major versions by selecting
 > the official Paradox 2 diagnostic only when that implementation is active.
 > This is intentionally a dual-version bridge; existing Paradox 1 installations
-> continue to construct the legacy class.
+> continue to construct the legacy class. Keep the class documentation link
+> valid when the package is checked with either Paradox major version.
 
 After the exact-head release test passes, publish it manually with:
 
@@ -67,8 +68,9 @@ git -C /home/mewse/paradox_neo/.local/compat/github/miesmuschel push --set-upstr
 
 ## mlr3mbo
 
-- base: `beea4afca5d0c4a49b733fe9c3307f677862bd3f`
-- head: `569c1844413554d06951e79525a0e9a35a93cdbd`
+- base: `d1ce6189b637dd552fac95d56c53a39503bae889`
+- runtime change: `a8a988a64b66e651043b75f63dfdfb4604185e3f`
+- head: `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067`
 - branch: `codex/paradox2-transformless-subset`
 - target branch: `main`
 - proposed title: `Use the public transform-free subset API on Paradox 2`
@@ -82,7 +84,7 @@ Proposed body:
 > Retain both historical implementations for Paradox 1, so the package remains
 > dual-version compatible. Extend the existing acquisition-domain regression to
 > verify that producing the detached domain does not remove transformations
-> from the source search space.
+> from the source search space, and record the migration in NEWS.
 
 After the exact-head release test passes, publish it manually with:
 
@@ -93,7 +95,7 @@ git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3mbo-par
 ## celecx
 
 - base: `8fc8a8dbaf15e72010b0e721a2167c5db9984810`
-- head: `cef7a4f4532393d725012e1a566d5cd4157b82cd`
+- head: `a2975550c14f824c6abc86db9db32e982908c3ea`
 - branch: `codex/paradox2-diagnostics`
 - target branch: `master`
 - proposed title: `Accept Paradox 2 validation diagnostics in tests`
@@ -106,7 +108,8 @@ Proposed body:
 > Domain-bound, initial-value, and dependency-cycle diagnostics. This is a
 > test-only bridge. Together with mlr3mbo's public transform-free subset change,
 > the affected acquisition, grid, bootstrap, and quantile tests pass without
-> relying on mutable Domain internals.
+> relying on mutable Domain internals. Require the compatible mlr3mbo
+> development version so CRAN mlr3mbo 1.1.1 cannot select the unsupported path.
 
 After the exact-head release test passes, publish it manually with:
 
@@ -185,4 +188,26 @@ After the exact-head release test passes, publish it manually with:
 
 ```sh
 git -C /home/mewse/paradox_neo/.local/compat/github/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat
+```
+
+## mlr3fda
+
+- base: `5e6204d0d3a3c21325a71eda4402c30b31209eef`
+- head: `035da5bb8d1c2ae22f04898718355e9653c382b2`
+- branch: `paradox2-snapshots`
+- target branch: `main`
+- proposed title: `Support Paradox 2 diagnostics in FDA snapshots`
+
+Proposed body:
+
+> Keep the existing Paradox 1 wavelet-pipeline error snapshots byte-for-byte
+> unchanged and select a Paradox-2 snapshot variant only when that major is
+> installed. This is a test-only dual-version adaptation; pipeline construction
+> and FDA behavior are unchanged. The Paradox-1 gate executes the legacy
+> snapshots, while the Paradox-2 gate covers the new native diagnostics.
+
+After the exact-head release test passes, publish it manually with:
+
+```sh
+git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3fda-paradox2 push --set-upstream origin paradox2-snapshots
 ```

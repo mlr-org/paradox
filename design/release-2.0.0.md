@@ -445,13 +445,14 @@ push and create PRs manually.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | `68686ef`, `f0e4736`, `cf64981`, `98e3e47`, `f27d8fb`, `d31f613`, `a9fbf37`, `ca665a6`, `2ca3030`, `d9d5c01` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals, and retain version-gated expectations for the two Shadow dependency diagnostics. |
+| miesmuschel | `.local/compat/github/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `6255050a4d1d1a3555ca70707e4f1588c86006be` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals, retain version-gated dependency diagnostics, and keep its Rd links valid on both majors. |
 | bbotk | `.local/compat/github/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Replace one private collection `.sets` read, accept version-gated native diagnostics, and root detached public search-space snapshots for their complete native pointer lifetime. |
-| mlr3mbo | `.local/compat/github/mlr3mbo` | `codex/paradox2-transformless-subset` | `569c184` | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths. |
-| celecx | `.local/compat/github/celecx` | `codex/paradox2-diagnostics` | `cef7a4f` | Version-gate Paradox validation fragments in tests; runtime behavior is unchanged. |
+| mlr3mbo | `.local/compat/downstream-pr-worktrees/mlr3mbo-paradox2` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
+| celecx | `.local/compat/downstream-pr-worktrees/celecx-paradox2` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Version-gate Paradox validation fragments and require the compatible mlr3mbo development bridge; other runtime behavior is unchanged. |
 | mlr3 | `.local/compat/github/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | Version-gate two numeric-Domain diagnostic assertions. |
 | mlr3fselect | `.local/compat/github/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | Version-gate one feature-fraction diagnostic assertion. |
 | mlr3pipelines | `.local/compat/github/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Decouple PICV tests from exact Paradox-1 wording and fix GraphLearner state deep-clone ownership with an explicit mutation-isolation regression. |
+| mlr3fda | `.local/compat/downstream-pr-worktrees/mlr3fda-paradox2` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Select Paradox-2 diagnostic snapshots without replacing the legacy Paradox-1 snapshots. |
 
 As a development diagnostic, the final miesmuschel public-state equality commit
 passed its dictionary (693 expectations) and shortform (20 expectations) files
@@ -460,7 +461,16 @@ the bridge shape, not a substitute for retesting the exact branch head against
 the exact frozen candidate.
 
 The final handoff must include exact push commands and PR title/body text only
-after retesting these heads against the exact frozen candidate.
+after retesting these heads against the exact frozen candidate. The named
+`release-refresh-20260720` evidence profile is the immutable authority for the
+four refreshed heads above; it does not rewrite or relabel the earlier
+full-corpus candidate evidence. It uses a separate primary-checkout namespace,
+an axis-neutral run-local receipt for the unchanged external dependency
+closure, and axis-specific overlay/test/check stages. The axis registry pins
+the frozen Paradox 2 candidate and released Paradox 1.0.1 by exact
+ref/commit/tree/version. Both axes require sealed exact-head `R CMD check`
+results as well as the focused repository suites; this is what validates the
+miesmuschel Rd-link repair.
 
 ## Development evidence policy
 
@@ -536,8 +546,10 @@ For the exact candidate ref, retain and verify:
    compilation, and the exact R-API-exception ledger/raw-token/version-gated DSO
    audit, including the authenticated R-4.3 data.table 1.18.4 overlay;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
-4. every exact head in `compat/github-bridge-provenance.tsv`, then
-   priority-zero/one reverse dependencies and maintained mlr-org repositories;
+4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
+   superseding heads in the `release-refresh-20260720` profile against both
+   Paradox majors, then priority-zero/one reverse dependencies and maintained
+   mlr-org repositories;
 5. GCT, instrumented-R Valgrind, bounded rchk, direct routine/hazard probes,
    and adversarial corrupt-capsule/graph/ALTREP cases, treating hostile
    state-changing custom ALTREP as a safety/no-replay gate rather than an exact

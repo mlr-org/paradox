@@ -8,7 +8,8 @@ usage <- paste(
   "[ROOT [MAX_PRIORITY [CANDIDATE_LIBRARY [DEPENDENCY_LIBRARY]]]]",
   "--run-id ID [--plan-only|--verify]",
   "[--candidate-source PATH] [--candidate-origin URL]",
-  "[--repositories NAME[,NAME...]] [--timeout-seconds N] [--jobs N]"
+  "[--repositories NAME[,NAME...]] [--timeout-seconds N] [--jobs N]",
+  "[--evidence-profile NAME] [--paradox-axis paradox2|paradox1]"
 )
 
 positionals <- character()
@@ -16,7 +17,8 @@ seen_value_options <- character()
 options <- list(
   run_id = NULL, plan_only = FALSE, verify = FALSE,
   candidate_source = NULL, candidate_origin = NULL,
-  repositories = NULL, timeout_seconds = 3600, jobs = NULL
+  repositories = NULL, timeout_seconds = 3600, jobs = NULL,
+  evidence_profile = "default", paradox_axis = "paradox2"
 )
 take_value <- function(argument, name, index) {
   prefix <- paste0("--", name, "=")
@@ -36,7 +38,8 @@ while (index <= length(arguments)) {
   argument <- arguments[[index]]
   matched <- FALSE
   for (name in c("run-id", "candidate-source", "candidate-origin",
-      "repositories", "timeout-seconds", "jobs")) {
+      "repositories", "timeout-seconds", "jobs", "evidence-profile",
+      "paradox-axis")) {
     parsed <- take_value(argument, name, index)
     if (!is.null(parsed)) {
       key <- gsub("-", "_", name, fixed = TRUE)
@@ -105,6 +108,17 @@ if (!is.null(operator_jobs) && (!grepl("^[1-9][0-9]*$", operator_jobs) ||
     !identical(as.character(as.integer(operator_jobs)), operator_jobs))) {
   stop("--jobs must be one canonical positive integer", call. = FALSE)
 }
+evidence_profile <- options$evidence_profile
+if (length(evidence_profile) != 1L || is.na(evidence_profile) ||
+    !grepl("^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$", evidence_profile) ||
+    evidence_profile %in% c(".", "..")) {
+  stop("--evidence-profile must be one safe name of at most 64 characters",
+    call. = FALSE)
+}
+paradox_axis <- options$paradox_axis
+if (!paradox_axis %in% c("paradox2", "paradox1")) {
+  stop("--paradox-axis must be paradox2 or paradox1", call. = FALSE)
+}
 
 if (!identical(Sys.getenv("PARADOX_ACTIVE_ROOT", unset = ""), root)) {
   stop("activate the repository-local environment first: . scripts/activate",
@@ -149,7 +163,8 @@ source_paths <- c(
   fingerprint = file.path(root, "compat", "fingerprint.R"),
   evidence = file.path(root, "compat", "repository-evidence.R"),
   compat_system = file.path(root, "compat", "compat-system-evidence.R"),
-  resource_jobs = file.path(root, "scripts", "environment", "resource-jobs")
+  resource_jobs = file.path(root, "scripts", "environment", "resource-jobs"),
+  profile = file.path(root, "compat", "downstream-evidence-profile.R")
 )
 for (path in source_paths) {
   if (!file.exists(path) || dir.exists(path) || nzchar(Sys.readlink(path))) {
@@ -162,6 +177,9 @@ sys.source(source_paths[["fingerprint"]], envir = environment(), keep.source = F
 sys.source(source_paths[["evidence"]], envir = environment(), keep.source = FALSE)
 sys.source(source_paths[["compat_system"]], envir = environment(),
   keep.source = FALSE)
+sys.source(source_paths[["profile"]], envir = environment(), keep.source = FALSE)
+
+profile <- downstream_evidence_profile(root, evidence_profile, paradox_axis)
 
 repository_runner_assert_git_environment()
 
@@ -210,6 +228,12 @@ if (length(candidate_version) != 1L || is.na(candidate_version) ||
     !nzchar(candidate_version) || grepl("[\r\n\t]", candidate_version)) {
   stop("installed candidate version is malformed", call. = FALSE)
 }
+candidate_major <- strsplit(candidate_version, ".", fixed = TRUE)[[1L]][[1L]]
+if (!identical(candidate_major, profile$version_major)) {
+  stop("installed paradox version does not match --paradox-axis", call. = FALSE)
+}
+downstream_evidence_assert_candidate(profile, candidate_ref, candidate_commit,
+  candidate_tree, candidate_version)
 
 candidate_entries <- sort(list.files(candidate_library, all.files = TRUE,
   no.. = TRUE), method = "radix")
@@ -316,14 +340,23 @@ if (!identical(repository_runner_sha256(installer_archive),
     call. = FALSE)
 }
 
-manifest_path <- file.path(root, "compat", "github-repositories.tsv")
-snapshot_path <- file.path(root, "compat", "github-snapshot.tsv")
+profile_registry_path <- profile$registry
+manifest_path <- profile$repository_manifest
+snapshot_path <- profile$snapshot
+dependency_manifest_path <- profile$dependency_repository_manifest
+dependency_snapshot_path <- profile$dependency_snapshot
 manifest <- repository_runner_read_tsv(manifest_path,
   c("repository", "url", "relation", "priority", "action", "notes"),
   label = "GitHub repository manifest")
 snapshot <- repository_runner_read_tsv(snapshot_path,
   c("repository", "url", "priority", "commit", "commit_date", "branch"),
   label = "GitHub repository snapshot")
+dependency_manifest <- repository_runner_read_tsv(dependency_manifest_path,
+  c("repository", "url", "relation", "priority", "action", "notes"),
+  label = "dependency GitHub repository manifest")
+dependency_snapshot_all <- repository_runner_read_tsv(dependency_snapshot_path,
+  c("repository", "url", "priority", "commit", "commit_date", "branch"),
+  label = "dependency GitHub repository snapshot")
 if (anyDuplicated(manifest$repository) || anyDuplicated(snapshot$repository)) {
   stop("GitHub manifests contain duplicate repositories", call. = FALSE)
 }
@@ -340,7 +373,26 @@ snapshot$priority <- snapshot_priority
 selected <- manifest[manifest$action == "clone" &
   manifest$relation %in% c("Depends", "Imports", "Suggests") &
   manifest$priority <= max_priority, , drop = FALSE]
-dependency_selected <- selected
+dependency_priority <- suppressWarnings(as.integer(dependency_manifest$priority))
+dependency_snapshot_priority <- suppressWarnings(as.integer(
+  dependency_snapshot_all$priority))
+if (anyDuplicated(dependency_manifest$repository) ||
+    anyDuplicated(dependency_snapshot_all$repository) ||
+    anyNA(dependency_priority) || anyNA(dependency_snapshot_priority) ||
+    !identical(as.character(dependency_priority), dependency_manifest$priority) ||
+    !identical(as.character(dependency_snapshot_priority),
+      dependency_snapshot_all$priority) ||
+    any(dependency_priority < 0L) || any(dependency_snapshot_priority < 0L)) {
+  stop("dependency GitHub manifest contains malformed priorities",
+    call. = FALSE)
+}
+dependency_manifest$priority <- dependency_priority
+dependency_snapshot_all$priority <- dependency_snapshot_priority
+dependency_selected <- dependency_manifest[
+  dependency_manifest$action == "clone" &
+    dependency_manifest$relation %in% c("Depends", "Imports", "Suggests") &
+    dependency_manifest$priority <= max_priority, , drop = FALSE
+]
 if (!is.null(options$repositories)) {
   requested <- strsplit(options$repositories, ",", fixed = TRUE)[[1L]]
   if (!length(requested) || any(!grepl(
@@ -370,19 +422,19 @@ if (!identical(selected$repository, selected_snapshot$repository) ||
     call. = FALSE)
 }
 dependency_snapshot_index <- match(dependency_selected$repository,
-  snapshot$repository)
+  dependency_snapshot_all$repository)
 if (anyNA(dependency_snapshot_index)) {
   stop("dependency-scope repositories are absent from the pinned snapshot",
     call. = FALSE)
 }
-dependency_snapshot <- snapshot[dependency_snapshot_index, , drop = FALSE]
+dependency_snapshot <- dependency_snapshot_all[dependency_snapshot_index, , drop = FALSE]
 if (!identical(dependency_selected$repository, dependency_snapshot$repository) ||
     !identical(dependency_selected$url, dependency_snapshot$url) ||
     !identical(dependency_selected$priority, dependency_snapshot$priority)) {
   stop("dependency scope disagrees with the reviewed snapshot", call. = FALSE)
 }
 
-consumer_root <- normalizePath(file.path(root, ".local", "compat", "github"),
+consumer_root <- normalizePath(profile$consumer_root,
   winslash = "/", mustWork = TRUE)
 selection_rows <- lapply(seq_len(nrow(selected)), function(row_index) {
   checkout <- repository_runner_require_directory(file.path(consumer_root,
@@ -409,7 +461,8 @@ for (row_index in seq_len(nrow(selection))) {
 # declared terminal content hash feeds the candidate receipt and the start
 # boundary below; plan mode never recomputes the live dependency tree.
 dependency_stage <- normalizePath(file.path(run_directory, sprintf(
-  "repository-dependencies-priority-%d", max_priority)), winslash = "/",
+  "repository-dependencies-priority-%d%s", max_priority,
+  profile$profile_suffix)), winslash = "/",
   mustWork = TRUE)
 if (!identical(dirname(dependency_stage), run_directory)) {
   stop("dependency evidence escaped the candidate run directory", call. = FALSE)
@@ -417,19 +470,52 @@ if (!identical(dirname(dependency_stage), run_directory)) {
 dependency_evidence <- repository_verify_evidence(dependency_stage)
 dependency_metadata <- repository_runner_require_directory(file.path(
   dependency_stage, "metadata"), "dependency evidence metadata")
-dependency_run_fields <- c(
-  "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
-  "dependency_library", "dependency_library_content_before", "r",
-  "r_version", "github_manifest_sha256", "github_snapshot_sha256",
-  "harness_sha256", "fingerprint_sha256", "evidence_helper_sha256",
-  "evidence_verifier_sha256", "checkout_preflight_sha256",
-  "fallback_checkout_preflight_sha256", "result_ledger"
+dependency_run_path <- file.path(dependency_metadata, "run.tsv")
+dependency_probe <- repository_runner_read_tsv(
+  dependency_run_path, c("field", "value"), "dependency run schema probe"
 )
-dependency_completion_fields <- c(
-  "schema", "stage_kind", "run_id", "max_priority", "finished_utc", "status",
-  "result_rows", "failed_rows", "result_sha256", "checkout_postflight_sha256",
-  "fallback_checkout_postflight_sha256", "dependency_library_content_after"
-)
+dependency_schema_index <- match("schema", dependency_probe$field)
+if (is.na(dependency_schema_index)) {
+  stop("dependency run metadata omits its schema", call. = FALSE)
+}
+dependency_schema <- dependency_probe$value[[dependency_schema_index]]
+legacy_dependency <- identical(dependency_schema, "3") &&
+  identical(evidence_profile, "default")
+if (!legacy_dependency && !identical(dependency_schema, "4")) {
+  stop("dependency evidence uses an unsupported profile schema", call. = FALSE)
+}
+if (legacy_dependency) {
+  dependency_run_fields <- c(
+    "schema", "stage_kind", "run_id", "started_utc", "root", "max_priority",
+    "dependency_library", "dependency_library_content_before", "r",
+    "r_version", "github_manifest_sha256", "github_snapshot_sha256",
+    "harness_sha256", "fingerprint_sha256", "evidence_helper_sha256",
+    "evidence_verifier_sha256", "checkout_preflight_sha256",
+    "fallback_checkout_preflight_sha256", "result_ledger"
+  )
+  dependency_completion_fields <- c(
+    "schema", "stage_kind", "run_id", "max_priority", "finished_utc", "status",
+    "result_rows", "failed_rows", "result_sha256", "checkout_postflight_sha256",
+    "fallback_checkout_postflight_sha256", "dependency_library_content_after"
+  )
+} else {
+  dependency_run_fields <- c(
+    "schema", "stage_kind", "run_id", "evidence_profile", "started_utc",
+    "root", "max_priority", "dependency_library",
+    "dependency_library_content_before", "r", "r_version",
+    "profile_registry_sha256", "axis_registry_sha256", "profile_helper_sha256",
+    "github_manifest_sha256", "github_snapshot_sha256", "harness_sha256",
+    "fingerprint_sha256", "evidence_helper_sha256", "evidence_verifier_sha256",
+    "checkout_preflight_sha256", "fallback_checkout_preflight_sha256",
+    "result_ledger"
+  )
+  dependency_completion_fields <- c(
+    "schema", "stage_kind", "run_id", "evidence_profile", "max_priority",
+    "finished_utc", "status", "result_rows", "failed_rows", "result_sha256",
+    "checkout_postflight_sha256", "fallback_checkout_postflight_sha256",
+    "dependency_library_content_after"
+  )
+}
 dependency_run <- repository_runner_read_map(file.path(dependency_metadata,
   "run.tsv"), dependency_run_fields, "dependency run metadata")
 dependency_completion <- repository_runner_read_map(file.path(
@@ -446,28 +532,47 @@ dependency_harness <- file.path(root, "compat",
 evidence_verifier <- file.path(root, "compat",
   "verify-repository-evidence.R")
 expected_dependency_run <- c(
-  schema = "3", stage_kind = "repository_dependencies", run_id = run_id,
+  schema = dependency_schema, stage_kind = "repository_dependencies", run_id = run_id,
   root = root, max_priority = as.character(max_priority),
   dependency_library = dependency_library,
   r = normalizePath(file.path(R.home(), "bin", "R"), winslash = "/",
     mustWork = TRUE),
   r_version = as.character(getRversion()),
-  github_manifest_sha256 = repository_runner_sha256(manifest_path),
-  github_snapshot_sha256 = repository_runner_sha256(snapshot_path),
+  github_manifest_sha256 = repository_runner_sha256(dependency_manifest_path),
+  github_snapshot_sha256 = repository_runner_sha256(dependency_snapshot_path),
   harness_sha256 = repository_runner_sha256(dependency_harness),
   fingerprint_sha256 = repository_runner_sha256(source_paths[["fingerprint"]]),
   evidence_helper_sha256 = repository_runner_sha256(source_paths[["evidence"]]),
   evidence_verifier_sha256 = repository_runner_sha256(evidence_verifier),
   result_ledger = dependency_result_path
 )
+if (!legacy_dependency) {
+  expected_dependency_run <- append(
+    expected_dependency_run,
+    c(evidence_profile = evidence_profile), after = 3L
+  )
+  profile_fields <- c(
+    profile_registry_sha256 = repository_runner_sha256(profile_registry_path),
+    axis_registry_sha256 = repository_runner_sha256(profile$axis_registry),
+    profile_helper_sha256 = repository_runner_sha256(source_paths[["profile"]])
+  )
+  expected_dependency_run <- append(expected_dependency_run, profile_fields,
+    after = match("r_version", names(expected_dependency_run)))
+}
 expected_dependency_completion <- c(
-  schema = "3", stage_kind = "repository_dependencies", run_id = run_id,
+  schema = dependency_schema, stage_kind = "repository_dependencies", run_id = run_id,
   max_priority = as.character(max_priority), status = "passed",
   result_rows = as.character(nrow(dependency_selected)), failed_rows = "0",
   result_sha256 = repository_runner_sha256(dependency_result_path),
   dependency_library_content_after =
     candidate_provenance[["dependency_library_content_sha256"]]
 )
+if (!legacy_dependency) {
+  expected_dependency_completion <- append(
+    expected_dependency_completion,
+    c(evidence_profile = evidence_profile), after = 3L
+  )
+}
 dependency_checkout_files <- c(
   checkout_preflight_sha256 = file.path(dependency_metadata,
     "checkout-preflight.tsv"),
@@ -490,14 +595,19 @@ names(dependency_checkout_files) <- c(
 dependency_checkout_hashes <- repository_runner_sha256(
   dependency_checkout_files)
 names(dependency_checkout_hashes) <- names(dependency_checkout_files)
-dependency_copied_inputs <- c(
-  "github-repositories.tsv" = manifest_path,
-  "github-snapshot.tsv" = snapshot_path,
-  "install-repository-test-dependencies.R" = dependency_harness,
-  "fingerprint.R" = source_paths[["fingerprint"]],
-  "repository-evidence.R" = source_paths[["evidence"]],
-  "verify-repository-evidence.R" = evidence_verifier
-)
+dependency_copied_inputs <- if (legacy_dependency) {
+  c(dependency_manifest_path, dependency_snapshot_path, dependency_harness,
+    source_paths[["fingerprint"]], source_paths[["evidence"]], evidence_verifier)
+} else {
+  c(profile_registry_path, profile$axis_registry, source_paths[["profile"]],
+    dependency_manifest_path, dependency_snapshot_path,
+    dependency_harness, source_paths[["fingerprint"]], source_paths[["evidence"]],
+    evidence_verifier)
+}
+names(dependency_copied_inputs) <- basename(dependency_copied_inputs)
+if (anyDuplicated(names(dependency_copied_inputs))) {
+  stop("dependency evidence input basenames collide", call. = FALSE)
+}
 copied_dependency_paths <- file.path(dependency_metadata,
   names(dependency_copied_inputs))
 copied_dependency_paths <- vapply(seq_along(copied_dependency_paths),
@@ -543,10 +653,12 @@ if (anyDuplicated(c(candidate_library, extra_libraries, dependency_library))) {
 }
 bridge_installer <- file.path(root, "compat", "install-downstream-bridges")
 bridge_library <- file.path(
-  root, ".local", "compat", "runs", run_id, "library-downstream-bridges"
+  root, ".local", "compat", "runs", run_id,
+  paste0("library-downstream-bridges", profile$suffix)
 )
 bridge_evidence <- file.path(
-  root, ".local", "compat", "runs", run_id, "downstream-bridges"
+  root, ".local", "compat", "runs", run_id,
+  paste0("downstream-bridges", profile$suffix)
 )
 if (!length(extra_libraries) || !identical(extra_libraries[[1L]], bridge_library)) {
   stop(
@@ -581,7 +693,11 @@ names(bridge_inputs) <- c(
   "downstream-bridges-completion.seal"
 )
 
-compat_environment <- compat_system_child_environment()
+compat_environment <- c(
+  compat_system_child_environment(),
+  PARADOX_EVIDENCE_PROFILE = evidence_profile,
+  PARADOX_EVIDENCE_AXIS = paradox_axis
+)
 compat_active <- nzchar(Sys.getenv("PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT",
   unset = ""))
 compat_tool_files <- character()
@@ -610,8 +726,8 @@ if (compat_active) {
   names(compat_tool_files) <- names(compat_inputs)
 }
 
-stage <- file.path(run_directory, sprintf("repository-tests-priority-%d",
-  max_priority))
+stage <- file.path(run_directory, sprintf("repository-tests-priority-%d%s",
+  max_priority, profile$suffix))
 tool_files <- c(
   "repository-runner.R" = source_paths[["runner"]],
   "repository-test-child.R" = source_paths[["child"]],
@@ -625,6 +741,9 @@ tool_files <- c(
   "verify-repository-evidence.R" = evidence_verifier,
   "compat-system-evidence.R" = source_paths[["compat_system"]],
   "resource-jobs" = source_paths[["resource_jobs"]],
+  "downstream-evidence-profile.R" = source_paths[["profile"]],
+  "downstream-evidence-profiles.tsv" = profile_registry_path,
+  "paradox-evidence-axes.tsv" = profile$axis_registry,
   "github-repositories.tsv" = manifest_path,
   "github-snapshot.tsv" = snapshot_path,
   "install-repository-test-dependencies.R" = dependency_harness,
@@ -665,7 +784,8 @@ config <- repository_runner_assert_config(config)
 if (options$plan_only) {
   resource_plan <- repository_runner_resource_decision(config, operator_jobs)
   plan <- data.frame(
-    run_id = run_id, stage = stage, stage_exists = dir.exists(stage),
+    run_id = run_id, evidence_profile = evidence_profile,
+    paradox_axis = paradox_axis, stage = stage, stage_exists = dir.exists(stage),
     position = selection$position, repository = selection$repository,
     priority = selection$priority, origin = selection$origin,
     commit = selection$commit, tree = selection$tree,
@@ -690,7 +810,8 @@ if (options$plan_only) {
 # boundary, so the bridge verifier performs its own candidate/dependency check.
 bridge_verification <- processx::run(
   bridge_installer,
-  c("--verify", "--candidate-source", candidate_source),
+  c("--verify", "--candidate-source", candidate_source,
+    "--evidence-profile", evidence_profile, "--paradox-axis", paradox_axis),
   stdout = "|", stderr_to_stdout = TRUE, error_on_status = FALSE,
   cleanup_tree = TRUE, timeout = 600
 )

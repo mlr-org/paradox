@@ -16,6 +16,26 @@ different bytes only. Git history retains the former long design narratives;
 do not copy their R6-surface authentication, S3 fallback, sentinel replay, or
 pre-data.table-1.18 decisions back into current source.
 
+Post-freeze downstream-only validation is the one narrow exception to keeping
+all release tooling byte-identical to the package candidate. It uses a named,
+tracked profile from `compat/downstream-evidence-profiles.tsv` and one clean
+infrastructure commit whose diff against the candidate is empty for package
+source, tests, help, and package-facing documentation. The dependency receipt
+is deliberately profile-specific and axis-neutral: it prepares only the
+unchanged external dependency closure and is isolated by the candidate run ID.
+Overlay, lock, repository-test, full-check, and completion identities include
+both the profile and the exact `paradox2`/`paradox1` axis. Each axis registry
+row pins the complete candidate ref/commit/tree/version tuple, not merely its
+major version. Never edit/relabel the default evidence, pass an arbitrary
+manifest path, or run Paradox-1 compatibility in a Paradox-2 candidate stage.
+The active release refresh is
+`release-refresh-20260720`; only miesmuschel, mlr3mbo, celecx, and mlr3fda
+repository rows are rerun, with one worker, while the overlay retains all
+eight reviewed support packages in dependency order. Its refreshed heads live
+in a separate authenticated primary-checkout namespace; dependency preparation
+continues to use the unchanged default heads, because refreshed mlr3mbo is a
+bridge package in the ordered overlay rather than a shared-library dependency.
+
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
 ALTREP/S4 shells or parallel R/native admission would preserve no known
