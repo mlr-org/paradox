@@ -1103,6 +1103,11 @@ repository_runner_assert_config <- function(config) {
        any(!nzchar(config$base_environment)))) {
     repository_runner_fail("base child environment must be one named vector")
   }
+  if (any(!c("PATH", "R_MAKEVARS_USER") %in% names(config$base_environment))) {
+    repository_runner_fail(
+      "base child environment must retain the activated build toolchain"
+    )
+  }
   stage_parent <- normalizePath(dirname(config$stage), winslash = "/",
     mustWork = TRUE)
   repository_runner_safe_name(basename(config$stage), "repository stage name")
@@ -1473,6 +1478,50 @@ repository_runner_nested_parallel_environment <- function() c(
   R_FUTURE_AVAILABLECORES_FALLBACK = "1"
 )
 
+repository_runner_base_child_environment <- function(root,
+                                                     compat_environment = character()) {
+  root <- repository_runner_require_directory(root, "repository root")
+  required <- c("PATH", "R_MAKEVARS_USER")
+  current <- Sys.getenv(required, unset = NA_character_)
+  names(current) <- required
+  if (anyNA(current) || any(!nzchar(current))) {
+    repository_runner_fail("activated environment lacks PATH or R_MAKEVARS_USER")
+  }
+
+  path_entries <- strsplit(current[["PATH"]], .Platform$path.sep,
+    fixed = TRUE)[[1L]]
+  expected_bin <- repository_runner_require_directory(file.path(root, ".local",
+    "toolchain", "bin"), "repository-local toolchain bin")
+  normalized_entries <- vapply(path_entries, function(entry) {
+    if (nzchar(entry) && dir.exists(entry)) {
+      normalizePath(entry, winslash = "/", mustWork = TRUE)
+    } else ""
+  }, character(1L))
+  if (!expected_bin %in% normalized_entries) {
+    repository_runner_fail("repository-local toolchain is absent from child PATH")
+  }
+
+  if (length(compat_environment)) {
+    if (is.null(names(compat_environment)) || anyDuplicated(names(compat_environment)) ||
+        any(!required %in% names(compat_environment)) ||
+        !identical(unname(compat_environment[required]), unname(current))) {
+      repository_runner_fail(
+        "compatibility-system child build environment differs from activation"
+      )
+    }
+    return(compat_environment)
+  }
+
+  expected_makevars <- repository_runner_require_file(file.path(root,
+    "environment", "Makevars"), "repository-local Makevars")
+  current_makevars <- normalizePath(current[["R_MAKEVARS_USER"]],
+    winslash = "/", mustWork = TRUE)
+  if (!identical(current_makevars, expected_makevars)) {
+    repository_runner_fail("inactive child must use repository-local Makevars")
+  }
+  current
+}
+
 repository_runner_child_parallel_environment <- function(repository = NULL) {
   if (!is.null(repository)) {
     repository <- repository_runner_safe_name(repository, "consumer repository")
@@ -1501,6 +1550,7 @@ repository_runner_child_parallel_environment <- function(repository = NULL) {
 repository_runner_environment_receipt_names <- function() c(
   "LC_ALL", "LANG", "LANGUAGE", "TZ", "NOT_CRAN", "TESTTHAT_PARALLEL",
   "TESTTHAT_CPUS", "MAKEFLAGS", names(repository_runner_child_parallel_environment()),
+  "PATH", "R_MAKEVARS_USER",
   "R_LIBS", "R_LIBS_USER",
   "PARADOX_ROW_STATE_ROOT", "HOME", "TMPDIR", "XDG_CACHE_HOME",
   "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_RUNTIME_DIR",
@@ -1661,7 +1711,10 @@ repository_runner_validate_environment_receipt <- function(receipt, attempt,
   constants <- c(LC_ALL = "C.UTF-8", LANG = "C.UTF-8", LANGUAGE = "C",
     TZ = "UTC", NOT_CRAN = "true", TESTTHAT_PARALLEL = "false",
     TESTTHAT_CPUS = "1", MAKEFLAGS = "-j1",
-    repository_runner_child_parallel_environment(repository), R_LIBS = libraries,
+    repository_runner_child_parallel_environment(repository),
+    PATH = context$config$base_environment[["PATH"]],
+    R_MAKEVARS_USER = context$config$base_environment[["R_MAKEVARS_USER"]],
+    R_LIBS = libraries,
     R_LIBS_USER = libraries, PYTHONDONTWRITEBYTECODE = "1", PYTHONNOUSERSITE = "1",
     PIP_CONFIG_FILE = "/dev/null", PIP_DISABLE_PIP_VERSION_CHECK = "1",
     RETICULATE_AUTOCONFIGURE = "FALSE",

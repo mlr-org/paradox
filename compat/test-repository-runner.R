@@ -217,7 +217,8 @@ config <- list(
   dependency_library = dependency_library,
   dependency_content_sha256 = dependency_content,
   extra_libraries = extra_library, git = git, rscript = rscript,
-  tool_files = tool_files, base_environment = character()
+  tool_files = tool_files,
+  base_environment = repository_runner_base_child_environment(root)
 )
 
 fingerprint_calls <- new.env(parent = emptyenv())
@@ -410,6 +411,10 @@ write_file(file.path(child_checkout, "tests", "testthat", "test-counts.R"), c(
   "  testthat::expect_identical(Sys.getenv(\"LANGUAGE\"), \"C\")",
   "  testthat::expect_identical(Sys.getenv(\"TZ\"), \"UTC\")",
   "  testthat::expect_identical(nchar(capture.output(cat(\"\\U2208\")), type = \"chars\"), 1L)",
+  "  cc <- system2(file.path(R.home(\"bin\"), \"R\"), c(\"CMD\", \"config\", \"CC\"), stdout = TRUE)",
+  "  cc <- strsplit(cc[[1L]], \"[[:space:]]+\")[[1L]][[1L]]",
+  "  testthat::expect_true(nzchar(Sys.which(cc)))",
+  "  testthat::expect_true(file.exists(Sys.getenv(\"R_MAKEVARS_USER\")))",
   "})"
 ))
 development_library <- normalizePath(file.path(root, ".local", "R", "library"),
@@ -434,9 +439,9 @@ child_counts <- repository_runner_validate_counts(child_counts_path, "testthat",
   child_process$status, child_process$timed_out)
 if (!identical(child_process$status, 1L) ||
     !identical(child_counts[["availability"]], "complete_testthat") ||
-    !identical(child_counts[["expectations"]], "16") ||
+    !identical(child_counts[["expectations"]], "18") ||
     !identical(child_counts[["failed"]], "2") ||
-    !identical(child_counts[["passed"]], "14")) {
+    !identical(child_counts[["passed"]], "16")) {
   stop("external child did not retain complete multi-failure counts",
     call. = FALSE)
 }

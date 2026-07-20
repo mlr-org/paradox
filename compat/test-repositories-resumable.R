@@ -694,7 +694,8 @@ names(bridge_inputs) <- c(
 )
 
 compat_environment <- c(
-  compat_system_child_environment(),
+  repository_runner_base_child_environment(root,
+    compat_system_child_environment()),
   PARADOX_EVIDENCE_PROFILE = evidence_profile,
   PARADOX_EVIDENCE_AXIS = paradox_axis
 )
