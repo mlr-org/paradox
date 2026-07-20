@@ -70,6 +70,13 @@ if (!"candidate_source" %in% all.names(
   )) {
   fail("documentation candidate authentication omits the detached source")
 }
+expected_consumer_root <- quote(require_plain_local_library_argument(
+  file.path(root, ".local", "compat", "github"),
+  "documentation checkout root"
+))
+if (!identical(binding("documentation_consumer_root"), expected_consumer_root)) {
+  fail("documentation checkout root is not canonicalized through every component")
+}
 locale_environment <- eval(
   function_binding("documentation_locale_environment")
 )()

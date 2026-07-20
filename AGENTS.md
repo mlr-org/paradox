@@ -1092,3 +1092,29 @@ runtime runs were stopped; none of this candidate's package-byte evidence
 transfers. Tests that require a top-level ALTREP must use the registered native
 fixture, while the base wrapper remains realistic conditional coverage when a
 runtime selects that optimization.
+
+Candidate `refs/paradox-release/candidate-20260719T202524Z`, commit
+`e3741ab1d3cb8a5f3e7f357af6b7ab90c6e50fb7`, passed its exact native, R-API,
+and runtime gates, then failed the maintained repository sweep in
+mlr3fselect. `mlr3::BenchmarkResult$aggregate()` produces the ordinary
+additive class vector `c("bmr_aggregate", "data.table", "data.frame")`, which
+data.table preserves through a narrow subset before bbotk calls
+`ParamSet$assert_dt()`. The exact-class classifier rejected that
+non-dispatching representation even though Paradox 1 accepted it. The
+replacement contract admits well-formed additive leading classes without
+dispatching them, and canonicalizes them only while taking an already-required
+ALTREP snapshot. All evidence bound to `e3741ab` is superseded.
+
+Candidate `refs/paradox-release/candidate-20260720T022410Z`, commit
+`a4617ca769ff5373a7da16c7ce333e36c68fd9b2`, fixed that public-table boundary
+and passed its exact R-API, native, runtime, differential, focused downstream,
+and bounded performance gates. Gctorture and all four Valgrind diagnostic
+inventories were also clean. Its combined memory run remained unsealed because
+the source-bound rchk policy still named the pre-classifier bcheck/fficheck
+hashes and 69-routine count. The actual bounded report retained the same 77
+reviewed Function blocks, 196 UP diagnostics, and 13 PB diagnostics, while the
+classifier's three diagnostic registrations raised the routine count to 72.
+The refreshed policy binds that exact 782-function/28,140-state report. The
+next candidate incorporates the policy and final validation tooling without
+changing any package-facing file; do not promote the partial `a4617ca` memory
+directory or its earlier tooling-bound overlays as final evidence.

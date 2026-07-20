@@ -295,17 +295,17 @@ not a local compatibility workaround.
 ### Performance and correctness
 
 The checked-in `environment/rchk-bcheck-policy/` binds the refreshed reviewed
-pre-freeze source seal and its bounded-analyzer reports. Bcheck
-analyzed 770 functions and 27,856 states, with 77 exact Function blocks, 196 UP
+public-table candidate source and its bounded-analyzer reports. Bcheck
+analyzed 782 functions and 28,140 states, with 77 exact Function blocks, 196 UP
 diagnostics, and 13 PB diagnostics; its report SHA-256 is
-`dbb6687723b2e23fa813f814b54f7e0e48db1227210af5409275ceab79be77ee`.
+`4a405e12807da7ee5347a6ad610530fc41b0f5331bd65221285399fcc2e12655`.
 Maacheck is byte-empty (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`),
-and that source's fficheck reports 69 registered routines and one checked
+and that source's fficheck reports 72 registered routines and one checked
 registration call
-(`456d9e66d48216c75ba828d755263e012ccf5e5d14b8bc78037a5b237cd26ef6`).
+(`92364873a511f8bd20e0f64854db8ed749d20b9e5d5d6acb730dcb3a045da39f`).
 The generated policy, block table, and rationale table SHA-256 values are
-`b4656bdd8ae0395065fec587a83c5aa76b818f5a444aa4012c8807f0fcb56f30`,
-`d39128eabef44b8c0386369f66a0adfa76961629c92b7b687aa8e1c7779a3c9e`,
+`d4b4c38a683b4e6f5110bf83d41eb4a0909a2d42fbea1b25723ed0d4265a46c1`,
+`a9b33fb5d53180fc1e1d688cc0b7c5a549d03d901ba199d78ae6a35927132d4b`,
 and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 The first pre-freeze report exposed a real `snapshot_dependencies()` root-
 lifetime defect across callback-capable feasibility validation. The result and
@@ -313,9 +313,12 @@ its columns now remain protected through that validation, a successful
 allocating-callback regression covers the commit path, and the superseded raw
 run was discarded before generating its policy. The refreshed policy includes
 the registered `$has_deps` reader; its one address-taken graph-root diagnostic
-is reviewed as `ADDRESS_TAKEN_MODEL`. This remains pre-freeze evidence only:
-the final frozen-candidate memory gate must rerun on the exact candidate bytes
-and deliberately regenerate the policy if its authenticated report changes.
+is reviewed as `ADDRESS_TAKEN_MODEL`. The public-table classifier added three
+registered diagnostic routines and shifted only analyzer-generated helper
+suffixes and line locations; the reviewed UP/PB block inventory and rationale
+assignments are unchanged. The final frozen-candidate memory gate must still
+rerun on the exact candidate bytes and deliberately regenerate the policy if
+its authenticated report changes.
 
 - [x] directly affected development tests pass from stable cached
   installations;
@@ -660,3 +663,17 @@ replacement contract admits well-formed additive leading classes, drops them
 from an already-required ALTREP snapshot while avoiding any prefix-only copy of
 ordinary input, and retains the strict table attribute/cache boundary.
 All evidence bound to `e3741ab` is superseded and requires a fresh candidate.
+
+Candidate `refs/paradox-release/candidate-20260720T022410Z`, commit
+`a4617ca769ff5373a7da16c7ce333e36c68fd9b2`, fixed that public-table boundary
+and passed its exact R-API, native, runtime, differential, focused downstream,
+and bounded-performance gates. Gctorture and every retained Valgrind diagnostic
+inventory were clean. Its combined memory run remained unsealed because the
+source-bound rchk policy still named the pre-classifier report hashes and
+69-routine count. The actual bounded report preserved the reviewed 77 Function
+blocks, 196 UP diagnostics, and 13 PB diagnostics; the classifier's three
+diagnostic registrations raised the routine count to 72. The replacement
+candidate incorporates that exact refreshed policy and final validation
+tooling without changing package-facing files. Neither the partial memory
+directory nor the earlier tooling-bound overlays for `a4617ca` are final
+release evidence.

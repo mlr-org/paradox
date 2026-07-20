@@ -107,6 +107,10 @@ if (is.null(candidate_source_argument) ||
 candidate_source <- require_plain_local_library_argument(
   candidate_source_argument, "detached candidate source"
 )
+documentation_consumer_root <- require_plain_local_library_argument(
+  file.path(root, ".local", "compat", "github"),
+  "documentation checkout root"
+)
 scope <- as.character(options$scope)
 if (!scope %in% c("all", "essential", "full")) {
   fail("--scope must be all, essential, or full")
@@ -1164,7 +1168,7 @@ for (repository in input_repositories) {
       !identical(relation$relation, expected_relations[[repository]])) {
     fail("documentation manifest has a non-unique or disabled row for ", repository)
   }
-  checkout <- file.path(root, ".local", "compat", "github", repository)
+  checkout <- file.path(documentation_consumer_root, repository)
   if (!dir.exists(checkout) || nzchar(Sys.readlink(checkout))) {
     fail("documentation checkout is absent or symbolic: ", checkout)
   }
