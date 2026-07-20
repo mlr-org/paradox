@@ -185,9 +185,9 @@ expect_reject "non-final R CMD check status" \
   check_status_is_release_clean "$fixture/check-trailing.log"
 
 full_check_harness=$ROOT/compat/check-downstream-profile
-grep -Fq '"$R" CMD build --no-manual --no-build-vignettes "$row/source"' \
+grep -Fq '"$R" CMD build --no-manual "$row/source"' \
   "$full_check_harness" ||
-  fail "full-check harness does not build the exact archived source"
+  fail "full-check harness does not build vignettes into the exact archived source"
 grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$package_tarball"' \
   "$full_check_harness" ||
   fail "full-check harness does not check the built package tarball"
@@ -229,7 +229,7 @@ authors_environment=(
 (
   cd "$authors_build"
   env -i "${authors_environment[@]}" \
-    "$R_CMD" CMD build --no-manual --no-build-vignettes "$authors_package"
+    "$R_CMD" CMD build --no-manual "$authors_package"
 ) >"$fixture/authors-build.log" 2>&1 ||
   { sed -n '1,160p' "$fixture/authors-build.log" >&2
     fail "Authors@R-only fixture could not be built"

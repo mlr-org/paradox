@@ -1132,3 +1132,14 @@ commit changes only the Paradox evidence-axis registry, its exact fixture, and
 this ledger; all candidate execution must continue to authenticate the managed
 detached `10c6a0e` source rather than the validation worktree. Evidence bound
 to earlier candidate commits or tooling identities remains historical.
+
+The first full-check stage under tooling `3f02899` correctly built source
+tarballs before checking them, but incorrectly passed `--no-build-vignettes`
+to `R CMD build`. Three changed heads passed; celecx's source contains a
+vignette and therefore produced two missing-`inst/doc` warnings even though its
+tests and vignette code passed. Full-check subjects now use ordinary serial
+`R CMD build --no-manual` so built vignettes are present, followed by
+`R CMD check --no-manual --no-build-vignettes` to inspect rather than rebuild
+them. The sealed failed stage remains diagnostic; because named overlays bind
+the validation-tooling commit/tree, construct a fresh run and overlay after
+this harness-only repair rather than relabeling the earlier overlay.

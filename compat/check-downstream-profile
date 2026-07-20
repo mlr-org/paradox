@@ -625,7 +625,7 @@ for repository in "${SELECTED[@]}"; do
   (
     cd "$row/package-output"
     env -i "${row_environment[@]}" \
-      "$R" CMD build --no-manual --no-build-vignettes "$row/source"
+      "$R" CMD build --no-manual "$row/source"
   ) >"$build_log" 2>&1
   build_status=$?
   set -e
