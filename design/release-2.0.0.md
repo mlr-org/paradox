@@ -470,7 +470,10 @@ closure, and axis-specific overlay/test/check stages. The axis registry pins
 the frozen Paradox 2 candidate and released Paradox 1.0.1 by exact
 ref/commit/tree/version. Both axes require sealed exact-head `R CMD check`
 results as well as the focused repository suites; this is what validates the
-miesmuschel Rd-link repair.
+miesmuschel Rd-link repair. A check is green only when its retained final
+status has no ERROR or WARNING, independently of the R process exit status.
+The check receipt binds the candidate, bridge, `mlr3verse`, any other configured
+extra library, and dependency library by ordered content fingerprints.
 
 ## Development evidence policy
 

@@ -731,6 +731,10 @@ runtimes, documentation, and benchmarks in the inner loop. A changing source
 invalidates those expensive results, and repeating them has low information
 value. Do not build from the live root while another worker is compiling there;
 copy package sources (excluding `.o`/`.so`) to a stable stage first.
+At the release boundary, do not infer full-check success from process status:
+the retained final `Status:` line must contain neither ERROR nor WARNING.
+Receipts for downstream checks must fingerprint every library on the actual
+search path, including bridge and `mlr3verse` extra libraries, in order.
 Keep diagnostic probes bounded as well: do not use recursive
 `.Internal(inspect())` on R6/capsule graphs, because environments and shared
 edges can produce unbounded traversal and output. Inspect exact attributes,

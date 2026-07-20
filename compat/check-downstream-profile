@@ -167,6 +167,17 @@ tree_fingerprint() {
     'a=commandArgs(TRUE); sys.source(a[[2L]], envir=environment()); cat(compat_tree_content_sha256(a[[1L]]))' \
     "$1" "$FINGERPRINT"
 }
+check_status_is_release_clean() {
+  local check_log=$1
+  [[ -f $check_log && ! -L $check_log ]] || return 1
+  awk '
+    /^Status: / { ++statuses; status = $0 }
+    NF { final = $0 }
+    END {
+      if (statuses != 1 || status != final || status ~ /(ERROR|WARNING)/) exit 1
+    }
+  ' "$check_log"
+}
 receipt_value() {
   awk -F '\t' -v key="$1" 'NR > 1 && $1 == key { if (seen++) exit 2; print $2 }' \
     "$PROVENANCE"
@@ -183,6 +194,34 @@ CANDIDATE_CONTENT=$(tr -d '\r\n' <"$SENTINEL")
    $(cat "$PROVENANCE_SEAL") == \
      "$(sha256sum "$PROVENANCE" | awk '{print $1}')  .paradox-candidate-provenance.tsv" ]] ||
   fail "candidate receipt differs from the check subject"
+
+EXTRA_TEXT=${PARADOX_CONSUMER_EXTRA_LIBS:-}
+IFS=: read -r -a EXTRA_LIBRARIES <<<"$EXTRA_TEXT"
+[[ ${#EXTRA_LIBRARIES[@]} -gt 0 && ${EXTRA_LIBRARIES[0]} == "$BRIDGE_LIBRARY" ]] ||
+  fail "candidate-specific profile bridge must be the first extra library"
+declare -A SEEN_LIBRARY=()
+for library in "$CANDIDATE_LIBRARY" "${EXTRA_LIBRARIES[@]}" "$DEPENDENCY_LIBRARY"; do
+  [[ -n $library && $library != *$'\t'* && $library != *$'\n'* &&
+     -d $library && ! -L $library &&
+     $(cd "$library" && pwd -P) == "$library" &&
+     ! -v "SEEN_LIBRARY[$library]" ]] ||
+    fail "candidate, extra, and dependency libraries must be distinct canonical directories"
+  SEEN_LIBRARY[$library]=1
+done
+library_inputs() {
+  local position=0 library
+  printf 'position\trole\tpath\tcontent_sha256\n'
+  printf '%s\tcandidate\t%s\t%s\n' "$position" \
+    "$CANDIDATE_LIBRARY" "$(tree_fingerprint "$CANDIDATE_LIBRARY")"
+  position=$((position + 1))
+  for library in "${EXTRA_LIBRARIES[@]}"; do
+    printf '%s\textra\t%s\t%s\n' "$position" "$library" \
+      "$(tree_fingerprint "$library")"
+    position=$((position + 1))
+  done
+  printf '%s\tdependency\t%s\t%s\n' "$position" "$DEPENDENCY_LIBRARY" \
+    "$(tree_fingerprint "$DEPENDENCY_LIBRARY")"
+}
 
 declare -A SNAPSHOT_COMMIT SNAPSHOT_DATE SNAPSHOT_BRANCH SNAPSHOT_ORIGIN
 while IFS=$'\t' read -r repository origin _ commit date branch; do
@@ -237,7 +276,7 @@ verify_stage() {
   "$RSCRIPT" --vanilla "$EVIDENCE_VERIFIER" "$STAGE" >/dev/null
   local completion=$STAGE/metadata/completion.tsv bridge_completion
   local selected_current protected_current expected_keys tooling_commit tooling_tree
-  expected_keys=$'schema\nstage_kind\nstatus\ncandidate_run_id\nevidence_profile\nparadox_axis\nrepositories\ncandidate_ref\ncandidate_commit\ncandidate_tree\ncandidate_version\ncandidate_content_sha256\ntooling_commit\ntooling_tree\nprofile_registry_sha256\naxis_registry_sha256\nrepository_manifest_sha256\nsnapshot_sha256\nbridge_provenance_sha256\ncandidate_provenance_sha256\nbridge_completion_sha256\nprotected_content_sha256\nresult_sha256\nrows\nfailed_rows\nharness_sha256\ncompleted_utc'
+  expected_keys=$'schema\nstage_kind\nstatus\ncandidate_run_id\nevidence_profile\nparadox_axis\nrepositories\ncandidate_ref\ncandidate_commit\ncandidate_tree\ncandidate_version\ncandidate_content_sha256\ntooling_commit\ntooling_tree\nprofile_registry_sha256\naxis_registry_sha256\nrepository_manifest_sha256\nsnapshot_sha256\nbridge_provenance_sha256\ncandidate_provenance_sha256\nbridge_completion_sha256\nlibrary_inputs_sha256\nprotected_content_sha256\nresult_sha256\nrows\nfailed_rows\nharness_sha256\ncompleted_utc'
   [[ $(tail -n +2 "$completion" | cut -f1) == "$expected_keys" ]] ||
     fail "check completion has an unexpected schema"
   selected_current=$(awk -F '\t' '$1 == "repositories" { print $2 }' "$completion")
@@ -246,10 +285,11 @@ verify_stage() {
   [[ -z $(git_value "$ROOT" status --porcelain=v1 --untracked-files=all) ]] ||
     fail "check tooling worktree is dirty"
   bridge_completion=$BRIDGE_EVIDENCE/metadata/completion.tsv
-  protected_current=$(printf '%s\n%s\n%s\n' \
-    "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
-    "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
-    "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+  protected_current=$(library_inputs)
+  [[ -f $STAGE/metadata/library-inputs.tsv &&
+     ! -L $STAGE/metadata/library-inputs.tsv &&
+     $(cat "$STAGE/metadata/library-inputs.tsv") == "$protected_current" ]] ||
+    fail "check library inputs changed"
   [[ $(head -n 1 "$STAGE/results.tsv") == \
        $'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256' &&
      $(head -n 1 "$STAGE/metadata/selection.tsv") == \
@@ -260,7 +300,7 @@ verify_stage() {
       $2 !~ /^[0-9a-f]{40}$/ || $3 !~ /^[0-9a-f]{40}$/ ||
       ($4 != "passed" && $4 != "failed") || $5 !~ /^[0-9]+$/ ||
       $6 !~ /^[0-9]+$/ || $7 !~ /^[0-9a-f]{64}$/ || seen[$1]++ { exit 1 }
-    ($4 == "passed") != ($5 == "0") { exit 1 }
+    $4 == "passed" && $5 != "0" { exit 1 }
   ' "$STAGE/results.tsv" || fail "check result rows are malformed"
   awk -F '\t' 'NR == 1 { next }
     NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
@@ -273,7 +313,7 @@ verify_stage() {
     "$STAGE/results.tsv")
   expected_status=passed
   [[ $failed_rows -eq 0 ]] || expected_status=completed_with_failures
-  [[ $(awk -F '\t' '$1 == "schema" { print $2 }' "$completion") == 1 &&
+  [[ $(awk -F '\t' '$1 == "schema" { print $2 }' "$completion") == 2 &&
      $(awk -F '\t' '$1 == "stage_kind" { print $2 }' "$completion") == downstream_profile_checks &&
      $(awk -F '\t' '$1 == "status" { print $2 }' "$completion") == "$expected_status" &&
      $(awk -F '\t' '$1 == "candidate_run_id" { print $2 }' "$completion") == "$RUN_ID" &&
@@ -294,6 +334,7 @@ verify_stage() {
      $(awk -F '\t' '$1 == "bridge_provenance_sha256" { print $2 }' "$completion") == "$(profile_value bridge_provenance_sha256)" &&
      $(awk -F '\t' '$1 == "candidate_provenance_sha256" { print $2 }' "$completion") == "$(sha256sum "$PROVENANCE" | awk '{print $1}')" &&
      $(awk -F '\t' '$1 == "bridge_completion_sha256" { print $2 }' "$completion") == "$(sha256sum "$bridge_completion" | awk '{print $1}')" &&
+     $(awk -F '\t' '$1 == "library_inputs_sha256" { print $2 }' "$completion") == "$(sha256sum "$STAGE/metadata/library-inputs.tsv" | awk '{print $1}')" &&
      $(awk -F '\t' '$1 == "protected_content_sha256" { print $2 }' "$completion") == "$(printf '%s' "$protected_current" | sha256sum | awk '{print $1}')" &&
      $(awk -F '\t' '$1 == "result_sha256" { print $2 }' "$completion") == "$(sha256sum "$STAGE/results.tsv" | awk '{print $1}')" &&
      $(awk -F '\t' '$1 == "rows" { print $2 }' "$completion") == "$result_rows" &&
@@ -304,6 +345,7 @@ verify_stage() {
        "$(receipt_value dependency_library_content_sha256)" ]] ||
     fail "check completion differs from its selected subject"
   local repository position result_line selection_line identity archive_sha256
+  local row_status row_exit expected_row_status log_sha256
   local -a retained_names retained_sources
   retained_names=(
     check-downstream-profile downstream-evidence-profile.R
@@ -346,15 +388,17 @@ verify_stage() {
        $(git_value "$CONSUMER_ROOT/$repository" archive --format=tar \
          "${SNAPSHOT_COMMIT[$repository]}" | sha256sum | awk '{print $1}') == "$archive_sha256" ]] ||
       fail "check row differs from its exact selected Git object: $repository"
-    IFS=$'\t' read -r _ _ _ row_status _ _ log_sha256 <<<"$result_line"
+    IFS=$'\t' read -r _ _ _ row_status row_exit _ log_sha256 <<<"$result_line"
     [[ -f $STAGE/logs/$repository.log && ! -L $STAGE/logs/$repository.log &&
        $(sha256sum "$STAGE/logs/$repository.log" | awk '{print $1}') == "$log_sha256" ]] ||
       fail "check log differs from its row: $repository"
-    if [[ $row_status == passed ]]; then
-      [[ -d $STAGE/checks/$repository.Rcheck &&
-         ! -L $STAGE/checks/$repository.Rcheck ]] ||
-        fail "passed check lacks its retained Rcheck directory: $repository"
+    expected_row_status=failed
+    if [[ $row_exit == 0 ]] && check_status_is_release_clean \
+        "$STAGE/checks/$repository.Rcheck/00check.log"; then
+      expected_row_status=passed
     fi
+    [[ $row_status == "$expected_row_status" ]] ||
+      fail "check row does not reflect its exit and final Status line: $repository"
   done
   [[ $failed_rows -eq 0 ]] || fail "one or more downstream R CMD checks failed"
   printf '%s\n' "downstream_profile_check_evidence=passed" \
@@ -483,13 +527,6 @@ cp "$PROVENANCE" "$EVIDENCE/inputs/candidate-provenance.tsv"
 cp "$PROVENANCE_SEAL" "$EVIDENCE/inputs/candidate-provenance.sha256"
 cp "$SENTINEL" "$EVIDENCE/inputs/candidate-content-sha256"
 
-EXTRA_TEXT=${PARADOX_CONSUMER_EXTRA_LIBS:-}
-IFS=: read -r -a EXTRA_LIBRARIES <<<"$EXTRA_TEXT"
-[[ ${#EXTRA_LIBRARIES[@]} -gt 0 && ${EXTRA_LIBRARIES[0]} == "$BRIDGE_LIBRARY" ]] ||
-  fail "candidate-specific profile bridge must be the first extra library"
-for library in "${EXTRA_LIBRARIES[@]}"; do
-  [[ -d $library && ! -L $library ]] || fail "extra library is unsafe: $library"
-done
 ALL_LIBRARIES=("$CANDIDATE_LIBRARY" "${EXTRA_LIBRARIES[@]}" "$DEPENDENCY_LIBRARY")
 LIBRARIES=$(IFS=:; printf '%s' "${ALL_LIBRARIES[*]}")
 
@@ -497,10 +534,8 @@ TOOLING_COMMIT=$(git_value "$ROOT" rev-parse --verify 'HEAD^{commit}')
 TOOLING_TREE=$(git_value "$ROOT" rev-parse --verify "$TOOLING_COMMIT^{tree}")
 [[ -z $(git_value "$ROOT" status --porcelain=v1 --untracked-files=all) ]] ||
   fail "check tooling worktree is dirty"
-PROTECTED_BEFORE=$(printf '%s\n%s\n%s\n' \
-  "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
-  "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
-  "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+PROTECTED_BEFORE=$(library_inputs)
+printf '%s\n' "$PROTECTED_BEFORE" >"$EVIDENCE/metadata/library-inputs.tsv"
 
 printf 'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256\n' \
   >"$EVIDENCE/results.tsv"
@@ -537,10 +572,15 @@ for repository in "${SELECTED[@]}"; do
   status=$?
   set -e
   elapsed=$(($(date +%s) - started))
-  result=passed
-  if [[ $status -ne 0 ]]; then result=failed; failed=$((failed + 1)); fi
   check_directory=$(find "$row" -mindepth 1 -maxdepth 1 -type d \
     -name '*.Rcheck' -print -quit)
+  result=failed
+  if [[ $status -eq 0 && -n $check_directory ]] &&
+      check_status_is_release_clean "$check_directory/00check.log"; then
+    result=passed
+  else
+    failed=$((failed + 1))
+  fi
   if [[ -n $check_directory ]]; then
     mv "$check_directory" "$EVIDENCE/checks/$repository.Rcheck"
   fi
@@ -550,16 +590,13 @@ for repository in "${SELECTED[@]}"; do
     >>"$EVIDENCE/results.tsv"
 done
 
-PROTECTED_AFTER=$(printf '%s\n%s\n%s\n' \
-  "$(tree_fingerprint "$CANDIDATE_LIBRARY/paradox")" \
-  "$(tree_fingerprint "$BRIDGE_LIBRARY")" \
-  "$(tree_fingerprint "$DEPENDENCY_LIBRARY")")
+PROTECTED_AFTER=$(library_inputs)
 [[ $PROTECTED_BEFORE == "$PROTECTED_AFTER" ]] ||
   fail "protected libraries changed during downstream checks"
 
 {
   printf 'field\tvalue\n'
-  printf 'schema\t1\n'
+  printf 'schema\t2\n'
   printf 'stage_kind\tdownstream_profile_checks\n'
   printf 'status\t%s\n' "$([[ $failed -eq 0 ]] && printf passed || printf completed_with_failures)"
   printf 'candidate_run_id\t%s\n' "$RUN_ID"
@@ -581,6 +618,8 @@ PROTECTED_AFTER=$(printf '%s\n%s\n%s\n' \
   printf 'candidate_provenance_sha256\t%s\n' "$(sha256sum "$PROVENANCE" | awk '{print $1}')"
   printf 'bridge_completion_sha256\t%s\n' \
     "$(sha256sum "$BRIDGE_EVIDENCE/metadata/completion.tsv" | awk '{print $1}')"
+  printf 'library_inputs_sha256\t%s\n' \
+    "$(sha256sum "$EVIDENCE/metadata/library-inputs.tsv" | awk '{print $1}')"
   printf 'protected_content_sha256\t%s\n' "$(printf '%s' "$PROTECTED_AFTER" | sha256sum | awk '{print $1}')"
   printf 'result_sha256\t%s\n' "$(sha256sum "$EVIDENCE/results.tsv" | awk '{print $1}')"
   printf 'rows\t%s\n' "${#SELECTED[@]}"

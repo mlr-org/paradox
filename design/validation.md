@@ -395,7 +395,10 @@ hashes, reject path, symlink, head, tree, and ancestry mismatches before work,
 and publish profile-specific overlays with the same no-clobber protocol. Use
 one outer worker for this focused release confirmation. Run the sealed exact-
 head `R CMD check` harness in addition to repository suites so Rd links and
-other package-level checks are retained evidence.
+other package-level checks are retained evidence. That harness classifies the
+retained final check status rather than trusting the process exit alone, so a
+WARNING cannot be sealed as a pass, and binds every configured extra-library
+input by ordered path and content hash.
 
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the

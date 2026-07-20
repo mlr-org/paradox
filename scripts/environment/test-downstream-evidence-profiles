@@ -153,6 +153,23 @@ grep -Fq 'profile$profile_suffix' \
 grep -Fq 'one or more downstream R CMD checks failed' \
   "$ROOT/compat/check-downstream-profile" ||
   fail "full-check verifier does not fail closed on failed rows"
+status_helper=$(sed -n '/^check_status_is_release_clean()/,/^}/p' \
+  "$ROOT/compat/check-downstream-profile")
+[[ -n $status_helper ]] || fail "full-check status classifier is absent"
+eval "$status_helper"
+printf '%s\n' '* checking examples ... OK' 'Status: OK' >"$fixture/check-clean.log"
+printf '%s\n' '* checking examples ... WARNING' 'Status: 1 WARNING' \
+  >"$fixture/check-warning.log"
+printf '%s\n' '* checking examples ... NOTE' 'Status: 1 NOTE' >"$fixture/check-note.log"
+printf '%s\n' 'Status: OK' 'unexpected trailing output' >"$fixture/check-trailing.log"
+check_status_is_release_clean "$fixture/check-clean.log" ||
+  fail "clean R CMD check status was rejected"
+check_status_is_release_clean "$fixture/check-note.log" ||
+  fail "NOTE-only R CMD check status was rejected"
+expect_reject "R CMD check WARNING status" \
+  check_status_is_release_clean "$fixture/check-warning.log"
+expect_reject "non-final R CMD check status" \
+  check_status_is_release_clean "$fixture/check-trailing.log"
 for binding in \
     'CONSUMER_ROOT=$(profile_value consumer_root)' \
     '.git/info/grafts' '.git/info/attributes' \
@@ -165,7 +182,8 @@ for binding in \
     fail "bridge profile Git authentication omits: $binding"
 done
 for binding in \
-    'expected_keys=' 'retained_names=(' 'protected_content_sha256' \
+    'expected_keys=' 'retained_names=(' 'library_inputs_sha256' \
+    'PROTECTED_BEFORE=$(library_inputs)' 'protected_content_sha256' \
     'result_sha256' 'PUBLISHED_EVIDENCE_ID' 'directory_identity'; do
   grep -Fq "$binding" "$ROOT/compat/check-downstream-profile" ||
     fail "full-check immutability verifier omits: $binding"
