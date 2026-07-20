@@ -188,16 +188,38 @@ grep -Fqx replacement "$BRIDGE_LIBRARY/sentinel" ||
 
 for entrypoint in \
     compat/test-repositories-resumable.R \
-    compat/test-documentation \
-    benchmarks/release.R; do
+    compat/test-documentation; do
   grep -Fq 'install-downstream-bridges' "$ROOT/$entrypoint" ||
     fail "release entrypoint does not authenticate the bridge overlay: $entrypoint"
   grep -Fq 'downstream_bridge_evidence=passed' "$ROOT/$entrypoint" ||
     fail "release entrypoint does not require the verifier receipt: $entrypoint"
 done
+for option in '--candidate-source' '--evidence-profile' '--paradox-axis'; do
+  grep -Fq -- "$option" "$ROOT/compat/test-documentation" ||
+    fail "documentation gate omits profile-aware bridge option: $option"
+done
+grep -Fq 'downstream_profile$suffix' "$ROOT/compat/test-documentation" ||
+  fail "documentation gate does not derive the profile/axis bridge path"
+grep -Fq 'paste0("downstream_bridge_library=", bridge_library)' \
+  "$ROOT/compat/test-documentation" ||
+  fail "documentation gate does not require the exact bridge-library receipt"
 
 BENCHMARK_RELEASE=$ROOT/benchmarks/release.R
 FOCUSED_CONSUMER=$ROOT/benchmarks/paramsetcollection-consumers.R
+grep -Fq '"downstream_bridge_evidence=passed",' \
+  "$BENCHMARK_RELEASE" ||
+  fail "release benchmark does not require the exact verifier receipt"
+grep -Fq 'paste0("downstream_bridge_library=", release_bridge_library)' \
+  "$BENCHMARK_RELEASE" ||
+  fail "release benchmark does not require the exact bridge-library receipt"
+for option in \
+    '--candidate-source' '--evidence-profile' '--paradox-axis'; do
+  grep -Fq -- "$option" "$BENCHMARK_RELEASE" ||
+    fail "release benchmark omits profile-aware bridge option: $option"
+done
+if grep -Fq -- '--mies-library' "$BENCHMARK_RELEASE"; then
+  fail "release benchmark retains a caller-selected unsuffixed bridge option"
+fi
 grep -Fq '"mlr3pipelines", release_bridge_library,' "$BENCHMARK_RELEASE" ||
   fail "release benchmark does not select reviewed mlr3pipelines from the bridge overlay"
 if grep -Fq '"mlr3pipelines", release_dependency_libraries[[1L]]' \

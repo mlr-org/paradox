@@ -159,8 +159,11 @@ benchmarks/run \
 
 `benchmarks/run` remains the convenient development driver. Final release
 evidence is instead produced by `benchmarks/release`, which has no workload
-selection option and fails unless the repository is clean at the exported
-candidate commit. It derives `library-baseline` from a sealed, passing,
+selection option and fails unless the validation repository is one clean,
+committed tooling tree. That tree need not equal the frozen package candidate:
+the candidate is selected by an exact profile/axis registry row and authenticated
+through its managed detached source worktree. The gate derives
+`library-baseline` from a sealed, passing,
 full-inventory differential run, authenticates the candidate installed by the
 current `compat/install-candidate`, requires that differential evidence to bind
 the exact current `.local/R/library` content and fingerprint helper, runs every
@@ -172,9 +175,11 @@ per installation:
 
 benchmarks/release \
   --baseline-evidence .local/compat/differential/runs/DIFFERENTIAL_RUN \
+  --candidate-source .local/compat/candidate-snapshots/CANDIDATE_COMMIT \
   --candidate-library .local/compat/runs/CANDIDATE_RUN/library-candidate \
   --dependency-library .local/compat/R/library-dependencies \
-  --mies-library .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  --evidence-profile release-refresh-20260720 \
+  --paradox-axis paradox2 \
   --output .local/benchmarks/release-YYYYMMDDTHHMMSSZ
 ```
 
@@ -184,20 +189,32 @@ workflow must still be exported: `RUN_ID`, `REF`, `COMMIT`, `TREE`, and
 must be the canonical dependency library and content recorded when the
 candidate was installed. Use repeatable
 `--protected-library` arguments for any additional read-only libraries reachable
-by package loading. The focused legacy worker also names `.local/R/library`
+by package loading. `--candidate-source` must be the clean detached linked
+worktree at `.local/compat/candidate-snapshots/<candidate-commit>`; candidate
+differential helpers and the reproduced source archive are read from that exact
+tree. The focused legacy worker also names `.local/R/library`
 directly; the release gate therefore protects and fingerprints that library
 automatically. All baseline, candidate, dependency, miesmuschel, additional,
 ordinary project, and repository-local R base libraries are fingerprinted
 before and after the gate. All user-supplied library roots must be distinct,
 disjoint, plain directories below this repository's `.local/` tree.
-The `--mies-library` must be the exact bridge library produced for the same
-candidate run, not a mutable diagnostic installation. The option name is
-retained for command-line compatibility, but that overlay supplies both the
-reviewed miesmuschel and mlr3pipelines builds to the focused worker. The sealed
-benchmark evidence retains and hashes the overlay's completion, package,
-manifest, and seal records. Where other overlay libraries are supplied, keep
-this bridge ahead of mlr3verse or documentation extras in the effective library
-order.
+The named evidence profile and axis derive the exact suffixed bridge library and
+evidence paths; there is no caller-selected `--mies-library` seam. The profile
+overlay supplies both the reviewed miesmuschel and mlr3pipelines builds to the
+focused worker and remains ahead of mlr3verse or documentation extras in the
+effective library order. Freeze the final validation-tooling commit first, then
+construct one fresh named profile overlay with that exact commit and reuse it
+read-only for documentation, full checks, and this benchmark. Normal verification
+requires the overlay completion and retained inputs to match the current tooling.
+It does not rebuild or substitute the default unsuffixed overlay.
+
+The sealed benchmark records the current tooling commit, tree, and clean status
+separately from the candidate ref/commit/tree. It retains the profile and axis
+registries, the selected manifests, and the overlay's completion, package,
+manifest, and seal records. This separation is required after freezing: the
+registry row that names a candidate hash cannot already be part of that same
+candidate commit, while the overlay is built only after the validation tooling
+identity is final.
 
 `--plan-only` performs the same provenance, Git, evidence, candidate, library,
 workload-inventory, and regression-policy authentication and prints the exact

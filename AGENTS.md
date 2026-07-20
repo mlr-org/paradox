@@ -35,6 +35,15 @@ eight reviewed support packages in dependency order. Its refreshed heads live
 in a separate authenticated primary-checkout namespace; dependency preparation
 continues to use the unchanged default heads, because refreshed mlr3mbo is a
 bridge package in the ordered overlay rather than a shared-library dependency.
+The sealed release benchmark is part of that post-freeze validation tooling,
+not part of the package candidate. It must take the managed detached candidate
+worktree plus explicit profile and axis, derive the suffixed overlay/evidence,
+and record the separate candidate ref/commit/tree and current clean tooling
+commit/tree/status identities. Freeze the final validation-tooling commit first,
+construct one fresh named overlay with that exact tooling, and reuse it read-only
+for documentation, full checks, and the benchmark. Never require tooling
+`HEAD == candidate`, accept a caller-selected bridge path, or rebuild the default
+unsuffixed overlay merely to run the final benchmark.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -814,6 +823,15 @@ verifier before loading a bridge package or doing retained work. They must not
 silently install, repair, or substitute bridge packages. An entrypoint may use
 `--protected-content-preverified` only after it has itself authenticated the
 exact candidate and dependency-library content in the same operation.
+The release benchmark additionally requires a named profile and the exact
+`.local/compat/candidate-snapshots/<commit>` detached worktree. Final validation
+tooling must be frozen before one fresh named profile overlay is built. The
+normal verifier requires the overlay completion's tooling commit/tree and every
+retained input to match that exact current tooling, so the same sealed overlay
+can then be reused read-only for documentation, full checks, and the benchmark.
+There is no older-tooling replay or migration mode. Post-freeze infrastructure
+paths may include `benchmarks/`, but package source, package tests, help, and
+package-facing documentation remain forbidden changes.
 Whenever this contract, helper, or its hooks change, run `bash -n`, `shellcheck`,
 and `scripts/environment/test-downstream-bridge-installer`; the latter is the
 cheap structural self-test and is not a substitute for constructing and

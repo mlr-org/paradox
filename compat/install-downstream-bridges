@@ -26,8 +26,8 @@ Usage: compat/install-downstream-bridges [--candidate-source PATH] [--verify]
 Install one named exact reviewed downstream bridge set into its immutable
 candidate-specific overlay, or verify an existing overlay without loading it.
 Candidate identity is supplied by the five PARADOX_CANDIDATE_* variables.
-The final option is verify-only and avoids rehashing candidate/dependency trees
-when a release entrypoint has already authenticated those exact contents.
+The protected-content option is verify-only and avoids rehashing candidate/
+dependency trees when an entrypoint already authenticated those exact contents.
 EOF
 }
 
@@ -317,13 +317,16 @@ else
       "$relative" >/dev/null 2>&1 || fail "profile input is not tracked: $relative"
   done
   if [[ $PARADOX_AXIS == paradox2 ]]; then
+    changed_paths=$(profile_git "$ROOT" diff --no-renames --name-only \
+      "$CANDIDATE_COMMIT" "$TOOLING_COMMIT") ||
+      fail "could not compare post-freeze tooling with the candidate"
     while IFS= read -r changed_path; do
+      [[ -n $changed_path ]] || continue
       case "$changed_path" in
-        AGENTS.md|compat/*|design/*|environment/*|scripts/*) ;;
+        AGENTS.md|benchmarks/*|compat/*|design/*|environment/*|scripts/*) ;;
         *) fail "post-freeze tooling changes a package-facing path: $changed_path" ;;
       esac
-    done < <(profile_git "$ROOT" diff --name-only \
-      "$CANDIDATE_COMMIT" "$TOOLING_COMMIT")
+    done <<<"$changed_paths"
   fi
 fi
 

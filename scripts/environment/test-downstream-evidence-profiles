@@ -135,7 +135,8 @@ cp "$fixture/axes.good" "$fixture/compat/paradox-evidence-axes.tsv"
 for script in \
     compat/install-downstream-bridges \
     compat/install-repository-test-dependencies.R \
-    compat/test-repositories-resumable.R compat/check-downstream-profile; do
+    compat/test-repositories-resumable.R compat/check-downstream-profile \
+    compat/test-documentation; do
   grep -Fq 'evidence_profile' "$ROOT/$script" ||
     fail "$script does not retain the named evidence profile"
 done
@@ -145,6 +146,14 @@ grep -Fq 'active evidence tooling is not one clean commit' \
 grep -Fq 'post-freeze tooling changes a package-facing path' \
   "$ROOT/compat/install-downstream-bridges" ||
   fail "Paradox-2 profile does not protect frozen package bytes"
+grep -Fq 'benchmarks/*' "$ROOT/compat/install-downstream-bridges" ||
+  fail "Paradox-2 profile does not admit post-freeze benchmark tooling"
+grep -Fq "completion_value tooling_commit) == \"\$TOOLING_COMMIT\"" \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "profile overlay is not bound to the exact active tooling commit"
+grep -Fq "completion_value tooling_tree) == \"\$TOOLING_TREE\"" \
+  "$ROOT/compat/install-downstream-bridges" ||
+  fail "profile overlay is not bound to the exact active tooling tree"
 grep -Fq 'profile$suffix' "$ROOT/compat/test-repositories-resumable.R" ||
   fail "repository stage does not use a profile/axis-specific identity"
 grep -Fq 'profile$profile_suffix' \

@@ -400,6 +400,22 @@ retained final check status rather than trusting the process exit alone, so a
 WARNING cannot be sealed as a pass, and binds every configured extra-library
 input by ordered path and content hash.
 
+The final benchmark deliberately does not require validation-tooling
+`HEAD` to equal the candidate commit. Such a requirement is circular: the
+post-freeze axis row cannot name its own commit hash. Instead,
+`benchmarks/release` requires the managed detached candidate source plus an
+explicit non-default profile and axis. The candidate source authenticates the
+source archive and candidate-owned differential helpers. The current primary
+checkout authenticates the benchmark driver and validation helpers as one clean
+recorded tooling commit/tree/status. The profile derives, rather than accepts as
+an argument, the suffixed bridge library and evidence path.
+
+The final validation-tooling commit is frozen before constructing one fresh
+named overlay. Its completion commit/tree and every retained input must match
+the exact current tooling under the normal verifier. Documentation, full checks,
+and the benchmark reuse that sealed overlay read-only; they neither replay an
+older tooling generation nor construct or accept the default unsuffixed overlay.
+
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the
 user publishes the exact reviewed commits.

@@ -189,9 +189,81 @@ if (length(pipeline_bindings) != 1L ||
     call. = FALSE)
 }
 
+binding_for <- function(symbol) {
+  bindings <- Filter(
+    function(expression) is_library_binding(expression, symbol),
+    as.list(tree)
+  )
+  if (length(bindings) != 1L) {
+    stop("release binding has an unexpected shape: ", symbol, call. = FALSE)
+  }
+  bindings[[1L]]
+}
+
+expected_bridge <- binding_for(quote(release_expected_bridge_library))
+if (!all(c("release_candidate_run_id", "release_profile", "suffix") %in%
+    all.names(expected_bridge[[3L]], functions = TRUE, unique = TRUE))) {
+  stop("release bridge path is not derived from the run/profile/axis suffix",
+    call. = FALSE)
+}
+if ("mies_library" %in% all.names(tree, functions = TRUE, unique = TRUE)) {
+  stop("release benchmark retains the caller-selected unsuffixed bridge seam",
+    call. = FALSE)
+}
+
+tooling_authenticator <- binding_for(quote(release_require_tooling_files))
+tooling_names <- all.names(tooling_authenticator[[3L]], functions = TRUE,
+  unique = TRUE)
+if (!"release_tooling_commit" %in% tooling_names ||
+    "release_candidate_commit" %in% tooling_names) {
+  stop("validation helpers are not authenticated against the tooling commit",
+    call. = FALSE)
+}
+candidate_authenticator <- binding_for(quote(release_require_candidate_files))
+candidate_names <- all.names(candidate_authenticator[[3L]], functions = TRUE,
+  unique = TRUE)
+if (!all(c("release_candidate_source", "release_candidate_commit") %in%
+    candidate_names)) {
+  stop("candidate differential helpers are not bound to the frozen source",
+    call. = FALSE)
+}
+
+bridge_verification <- binding_for(quote(release_bridge_verification))
+bridge_text <- paste(deparse(bridge_verification[[3L]], width.cutoff = 500L),
+  collapse = "\n")
+for (required in c(
+    "--candidate-source", "--evidence-profile", "--paradox-axis"
+  )) {
+  if (!grepl(required, bridge_text, fixed = TRUE)) {
+    stop("bridge verifier invocation omits ", required, call. = FALSE)
+  }
+}
+
+source_text <- paste(readLines(release_script, warn = FALSE), collapse = "\n")
+if (grepl("identical(head, release_candidate_commit)", source_text,
+    fixed = TRUE) || !grepl(
+    "list(commit = head, tree = tree, status = \"clean\")", source_text,
+    fixed = TRUE
+  )) {
+  stop("validation root authentication still aliases tooling to the candidate",
+    call. = FALSE)
+}
+for (required in c(
+    "candidate-snapshots", "tooling_commit=", "tooling_tree=",
+    "tooling_status=", "candidate_source_status=clean",
+    "evidence_profile=", "paradox_axis=",
+    "paired_metadata$repository$head, release_tooling_commit"
+  )) {
+  if (!grepl(required, source_text, fixed = TRUE)) {
+    stop("release evidence omits validation identity binding: ", required,
+      call. = FALSE)
+  }
+}
+
 cat(
   paste(
     "PASS: release paths reject controls, library roles match optional paths,",
-    "and both reviewed bridge packages have package-loading precedence\n"
+    "profile bridges have precedence, and candidate/tooling identities are",
+    "separate and sealed\n"
   )
 )

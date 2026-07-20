@@ -505,24 +505,32 @@ that exact authenticated installation, never development component objects.
 
 ## Candidate freeze record
 
-The immutable package candidate is committed only after all implementation,
-test, documentation, and downstream-bridge work is staged and the primary
-checkout is clean. A commit cannot contain its own commit, tree, or archive
-identity without a circular mutation. Therefore the candidate intentionally
-ships this table as pending. After every local and remote gate has completed, a
-separate evidence-ledger commit is created as a direct child of the candidate;
-its only changed path is this file, and it populates the table and release
-decision. The package/release tag continues to point to the candidate, never to
-the evidence-ledger or portability-harness commit.
+The immutable package candidate is committed after package implementation,
+tests, help, and package-facing documentation converge and the primary checkout
+is clean. A commit cannot contain its own commit, tree, or archive identity
+without a circular mutation. Therefore the candidate intentionally ships this
+table and the axis registry as pending. The package/release tag continues to
+point to the candidate, never to validation infrastructure, the final evidence
+ledger, or a portability harness.
 
-The two allowed direct-child records are siblings: the evidence ledger changes
-only `design/release-2.0.0.md`, while the portability harness changes only
-`.github/workflows/r-cmd-check.yml`. Every package/source-dependent result names
-the candidate. Creating the evidence ledger reopens only repository hygiene and
-ledger cross-checks; creating or correcting the portability harness reopens only
-its structural tests, `actionlint`, and the two real-platform portability rows.
-Any other post-freeze change requires a new candidate and new source-bound
-evidence.
+Post-freeze validation infrastructure may populate exact candidate/profile rows
+and repair validation-only drivers in `AGENTS.md`, `benchmarks/`, `compat/`,
+`design/`, `environment/`, and `scripts/`. Each such commit must remain clean
+and prove that its diff from the candidate changes no package source, package
+tests, help, or package-facing documentation. Source-bound results still name
+the managed detached candidate, while each validation result separately records
+the tooling commit/tree/status that produced it. Freeze the final validation-
+tooling commit first, construct one fresh named downstream overlay with that
+exact tooling identity, and reuse it read-only for documentation, full checks,
+and the benchmark. This is the non-circular model for the
+`release-refresh-20260720` profile, not authority to mutate candidate bytes,
+replay older tooling evidence, or relabel evidence.
+
+After every local and remote gate has completed, the final evidence-ledger
+commit changes only this file and populates the table and release decision. A
+portability companion changes only `.github/workflows/r-cmd-check.yml`. Creating
+either reopens only its own structural and ledger checks. Any package-facing
+post-freeze change requires a new candidate and new source-bound evidence.
 
 | Field | Value |
 |---|---|

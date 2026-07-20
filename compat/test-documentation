@@ -23,6 +23,8 @@ usage <- function(status = 0L) {
     "  --candidate-library PATH    immutable candidate library",
     "  --candidate-source PATH     clean detached candidate worktree",
     "  --dependency-library PATH   consumer dependency library",
+    "  --evidence-profile NAME     exact named downstream evidence profile",
+    "  --paradox-axis NAME         exact Paradox evidence axis",
     "  --extra-library PATH        additional local library; repeatable",
     "  --run-id ID                 new retained run identifier",
     "  --scope all|essential|full  workload scope (default: all)",
@@ -35,8 +37,8 @@ usage <- function(status = 0L) {
 args <- commandArgs(trailingOnly = TRUE)
 options <- list(
   root = getwd(), candidate_library = NULL, candidate_source = NULL,
-  dependency_library = NULL, extra_library = character(), run_id = NULL,
-  scope = "all", timeout = 7200
+  dependency_library = NULL, evidence_profile = NULL, paradox_axis = NULL,
+  extra_library = character(), run_id = NULL, scope = "all", timeout = 7200
 )
 i <- 1L
 while (i <= length(args)) {
@@ -187,6 +189,9 @@ evidence_verifier_script <- file.path(root, "compat", "verify-repository-evidenc
 git_authenticator_script <- file.path(
   root, "compat", "authenticate-candidate-git"
 )
+downstream_profile_script <- file.path(
+  root, "compat", "downstream-evidence-profile.R"
+)
 compat_system_evidence_script <- file.path(
   root, "compat", "compat-system-evidence.R"
 )
@@ -200,7 +205,7 @@ workload_scripts <- c(
 for (path in c(
   fingerprint_script, harness_script, evidence_helper_script,
   evidence_verifier_script, git_authenticator_script,
-  compat_system_evidence_script, workload_scripts
+  downstream_profile_script, compat_system_evidence_script, workload_scripts
 )) {
   if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
     fail("documentation harness input is absent, not a regular file, or symbolic: ", path)
@@ -208,9 +213,19 @@ for (path in c(
 }
 source(fingerprint_script, local = TRUE)
 source(evidence_helper_script, local = TRUE)
+source(downstream_profile_script, local = TRUE)
 source(compat_system_evidence_script, local = TRUE)
 if (file.access(git_authenticator_script, mode = 1L) != 0L) {
   fail("candidate Git authenticator is not executable")
+}
+if (is.null(options$evidence_profile) || is.null(options$paradox_axis)) {
+  fail("--evidence-profile and --paradox-axis are required")
+}
+downstream_profile <- downstream_evidence_profile(
+  root, options$evidence_profile, options$paradox_axis
+)
+if (identical(downstream_profile$profile, "default")) {
+  fail("documentation release evidence requires a named downstream profile")
 }
 
 documentation_write_tsv <- function(value, path) {
@@ -596,6 +611,10 @@ if (!startsWith(candidate_ref, "refs/") ||
     !grepl("^[0-9a-f]{64}$", declared_content)) {
   fail("candidate commit, tree, and content provenance must be declared and well formed")
 }
+downstream_evidence_assert_candidate(
+  downstream_profile, candidate_ref, candidate_commit, candidate_tree,
+  candidate_version
+)
 expected_candidate_source <- file.path(
   root, ".local", "compat", "candidate-snapshots", candidate_commit
 )
@@ -758,10 +777,25 @@ extra_libraries <- unique(vapply(
 bridge_installer <- file.path(root, "compat", "install-downstream-bridges")
 bridge_library <- file.path(
   root, ".local", "compat", "runs", candidate_run_id,
-  "library-downstream-bridges"
+  paste0("library-downstream-bridges", downstream_profile$suffix)
 )
 bridge_evidence <- file.path(
-  root, ".local", "compat", "runs", candidate_run_id, "downstream-bridges"
+  root, ".local", "compat", "runs", candidate_run_id,
+  paste0("downstream-bridges", downstream_profile$suffix)
+)
+bridge_evidence_inputs <- c(
+  downstream_bridge_completion = file.path(
+    bridge_evidence, "metadata", "completion.tsv"
+  ),
+  downstream_bridge_packages = file.path(
+    bridge_evidence, "metadata", "packages.tsv"
+  ),
+  downstream_bridge_evidence_manifest = file.path(
+    bridge_evidence, "metadata", "evidence-manifest.tsv"
+  ),
+  downstream_bridge_completion_seal = file.path(
+    bridge_evidence, "metadata", "completion.seal"
+  )
 )
 if (!length(extra_libraries) || !identical(extra_libraries[[1L]], bridge_library)) {
   fail(
@@ -773,18 +807,58 @@ bridge_verification <- processx::run(
   bridge_installer,
   c(
     "--verify", "--protected-content-preverified",
-    "--candidate-source", candidate_source
+    "--candidate-source", candidate_source,
+    "--evidence-profile", downstream_profile$profile,
+    "--paradox-axis", downstream_profile$axis
   ),
   stdout = "|", stderr_to_stdout = TRUE, error_on_status = FALSE,
   cleanup_tree = TRUE, timeout = 600
 )
-if (!identical(bridge_verification$status, 0L) ||
-    !grepl("downstream_bridge_evidence=passed", bridge_verification$stdout,
-      fixed = TRUE)) {
+bridge_receipt <- strsplit(
+  bridge_verification$stdout, "\n", fixed = TRUE
+)[[1L]]
+bridge_receipt <- bridge_receipt[nzchar(bridge_receipt)]
+if (!identical(bridge_verification$status, 0L) || !identical(
+    bridge_receipt,
+    c(
+      "downstream_bridge_evidence=passed",
+      paste0("downstream_bridge_library=", bridge_library)
+    )
+  )) {
   fail(
     "candidate-specific downstream bridge verification failed: ",
     bridge_verification$stdout
   )
+}
+bridge_completion <- utils::read.delim(
+  bridge_evidence_inputs[["downstream_bridge_completion"]],
+  sep = "\t", quote = "", comment.char = "", colClasses = "character",
+  stringsAsFactors = FALSE, check.names = FALSE
+)
+bridge_completion_required <- c(
+  "schema", "evidence_profile", "paradox_axis", "tooling_commit",
+  "tooling_tree", "candidate_commit"
+)
+if (!identical(names(bridge_completion), c("field", "value")) ||
+    anyNA(bridge_completion) || any(!nzchar(bridge_completion$field)) ||
+    anyDuplicated(bridge_completion$field) ||
+    !all(bridge_completion_required %in% bridge_completion$field)) {
+  fail("downstream bridge completion has an unexpected shape")
+}
+bridge_completion <- setNames(bridge_completion$value, bridge_completion$field)
+if (!identical(bridge_completion[["schema"]], "3") ||
+    !identical(
+      bridge_completion[["evidence_profile"]], downstream_profile$profile
+    ) || !identical(
+      bridge_completion[["paradox_axis"]], downstream_profile$axis
+    ) || !identical(
+      bridge_completion[["candidate_commit"]], candidate_commit
+    ) || !grepl(
+      "^[0-9a-f]{40}$", bridge_completion[["tooling_commit"]]
+    ) || !grepl(
+      "^[0-9a-f]{40}$", bridge_completion[["tooling_tree"]]
+    )) {
+  fail("downstream bridge completion identity is malformed or mismatched")
 }
 for (path in c(candidate_library, dependency_library, extra_libraries)) {
   require_plain_directory(path, "protected documentation library")
@@ -868,18 +942,21 @@ if (!dir.create(
   fail("could not create documentation boundary evidence directory")
 }
 
-metadata_inputs <- c(
+metadata_inputs <- unique(c(
   file.path(root, "compat", "github-snapshot.tsv"),
   file.path(root, "compat", "github-repositories.tsv"),
   fingerprint_script, harness_script, evidence_helper_script,
-  evidence_verifier_script, compat_system_evidence_script, workload_scripts,
+  evidence_verifier_script, downstream_profile_script,
+  downstream_profile$registry, downstream_profile$axis_registry,
+  downstream_profile$repository_manifest, downstream_profile$snapshot,
+  downstream_profile$bridge_provenance,
+  downstream_profile$dependency_repository_manifest,
+  downstream_profile$dependency_snapshot,
+  compat_system_evidence_script, workload_scripts,
   provenance_file, provenance_seal,
   file.path(root, "compat", "install-candidate"), git_authenticator_script,
   bridge_installer,
-  file.path(bridge_evidence, "metadata", "completion.tsv"),
-  file.path(bridge_evidence, "metadata", "packages.tsv"),
-  file.path(bridge_evidence, "metadata", "evidence-manifest.tsv"),
-  file.path(bridge_evidence, "metadata", "completion.seal"),
+  bridge_evidence_inputs,
   toolchain_lock,
   tinytex_manifest, tinytex_tree_helper,
   file.path(root, "environment", "quarto-linux-x86_64.tsv"),
@@ -887,7 +964,7 @@ metadata_inputs <- c(
   file.path(root, ".local", "receipts", "quarto", "1.9.38", c(
     "inputs.tsv", "installed-tree.tsv", "seal.sha256"
   ))
-)
+))
 for (path in metadata_inputs) {
   if (!file.exists(path) || dir.exists(path) || is_symbolic(path)) {
     fail("documentation metadata input is absent, not a regular file, or symbolic: ", path)
@@ -2070,7 +2147,12 @@ if (any(!startsWith(retained_boundary_paths, paste0(run_directory, "/"))) ||
 }
 metadata <- data.frame(
   key = c(
-    "schema", "run_id", "scope", "status", "required_failures",
+    "schema", "run_id", "scope", "status", "evidence_profile",
+    "paradox_axis", "stage_suffix", "downstream_bridge_tooling_commit",
+    "downstream_bridge_tooling_tree",
+    paste0("downstream_", names(downstream_profile$hashes)),
+    paste0(names(bridge_evidence_inputs), "_sha256"),
+    "required_failures",
     "full_content_boundaries", "full_boundary_pre_sha256",
     "full_boundary_post_sha256", "protected_metadata_pre_sha256",
     "protected_metadata_post_sha256", "protected_root_count",
@@ -2105,7 +2187,14 @@ metadata <- data.frame(
     "quarto_version", "r", "r_version", "timeout_seconds", "completed_utc"
   ),
   value = c(
-    "8", run_id, scope, overall_status, required_failures,
+    "9", run_id, scope, overall_status, downstream_profile$profile,
+    downstream_profile$axis, downstream_profile$suffix,
+    bridge_completion[["tooling_commit"]], bridge_completion[["tooling_tree"]],
+    unname(downstream_profile$hashes),
+    unname(vapply(
+      bridge_evidence_inputs, metadata_input_hash, character(1L)
+    )),
+    required_failures,
     "2", full_boundary_pre_sha256, full_boundary_post$sha256,
     protected_metadata_pre_sha256,
     full_boundary_post$protected_metadata_sha256,

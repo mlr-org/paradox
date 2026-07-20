@@ -11,10 +11,12 @@ release_usage <- function() {
     "  benchmarks/release [options]\n\n",
     "Required options:\n",
     "  --baseline-evidence PATH  Passed, sealed full differential run\n",
+    "  --candidate-source PATH    Managed detached frozen-candidate worktree\n",
     "  --candidate-library PATH  Run-specific compat/install-candidate library\n",
     "  --dependency-library PATH Read-only dependency library; repeatable\n",
     "                            (the first is the candidate receipt endpoint)\n",
-    "  --mies-library PATH       Candidate-specific reviewed bridge overlay\n",
+    "  --evidence-profile NAME   Exact named downstream evidence profile\n",
+    "  --paradox-axis NAME       Exact Paradox evidence axis\n",
     "  --output PATH             Absent output below .local/benchmarks\n\n",
     "Additional options:\n",
     "  --protected-library PATH  Additional read-only library reachable by workers;\n",
@@ -120,9 +122,11 @@ release_integer <- function(value, option, minimum) {
 release_parse_arguments <- function(arguments) {
   result <- list(
     baseline_evidence = NULL,
+    candidate_source = NULL,
     candidate_library = NULL,
     dependency_libraries = character(),
-    mies_library = NULL,
+    evidence_profile = NULL,
+    paradox_axis = NULL,
     protected_libraries = character(),
     output = NULL,
     n_params = 64L,
@@ -134,9 +138,10 @@ release_parse_arguments <- function(arguments) {
     help = FALSE
   )
   value_options <- c(
-    "--baseline-evidence", "--candidate-library", "--dependency-library",
-    "--mies-library", "--protected-library", "--output", "--params",
-    "--rows", "--iterations", "--warmups", "--seed"
+    "--baseline-evidence", "--candidate-source", "--candidate-library",
+    "--dependency-library", "--evidence-profile", "--paradox-axis",
+    "--protected-library", "--output", "--params", "--rows",
+    "--iterations", "--warmups", "--seed"
   )
   singleton_seen <- character()
   index <- 1L
@@ -162,9 +167,9 @@ release_parse_arguments <- function(arguments) {
       index <- taken$next_index
       value <- taken$value
       if (option %in% c(
-          "--baseline-evidence", "--candidate-library", "--mies-library",
-          "--output", "--params", "--rows", "--iterations", "--warmups",
-          "--seed"
+          "--baseline-evidence", "--candidate-source", "--candidate-library",
+          "--evidence-profile", "--paradox-axis", "--output", "--params",
+          "--rows", "--iterations", "--warmups", "--seed"
         )) {
         if (option %in% singleton_seen) {
           release_fail(option, " may be supplied only once")
@@ -172,11 +177,13 @@ release_parse_arguments <- function(arguments) {
         singleton_seen <- c(singleton_seen, option)
       }
       if (identical(option, "--baseline-evidence")) result$baseline_evidence <- value
+      if (identical(option, "--candidate-source")) result$candidate_source <- value
       if (identical(option, "--candidate-library")) result$candidate_library <- value
       if (identical(option, "--dependency-library")) {
         result$dependency_libraries <- c(result$dependency_libraries, value)
       }
-      if (identical(option, "--mies-library")) result$mies_library <- value
+      if (identical(option, "--evidence-profile")) result$evidence_profile <- value
+      if (identical(option, "--paradox-axis")) result$paradox_axis <- value
       if (identical(option, "--protected-library")) {
         result$protected_libraries <- c(result$protected_libraries, value)
       }
@@ -209,7 +216,8 @@ if (release_arguments$help) {
   quit(save = "no", status = 0L)
 }
 for (field in c(
-  "baseline_evidence", "candidate_library", "mies_library", "output"
+  "baseline_evidence", "candidate_source", "candidate_library",
+  "evidence_profile", "paradox_axis", "output"
 )) {
   if (is.null(release_arguments[[field]])) {
     release_fail("missing required option --", gsub("_", "-", field))
@@ -288,12 +296,12 @@ release_expected_git <- file.path(release_root, ".local", "toolchain", "bin", "g
 if (!identical(release_git, release_expected_git)) {
   release_fail("git is not the exact activated repository-local executable")
 }
-release_git_environment <- Sys.getenv()
-release_git_environment_names <- names(release_git_environment)
+release_observed_environment <- Sys.getenv()
+release_git_environment_names <- names(release_observed_environment)
 release_unsafe_git_environment <- startsWith(
   release_git_environment_names, "GIT_"
 ) & !release_git_environment_names %in% "GIT_PAGER" &
-  nzchar(unname(release_git_environment))
+  nzchar(unname(release_observed_environment))
 if (any(release_unsafe_git_environment)) {
   release_fail(
     "release benchmarking rejects repository-altering Git environment: ",
@@ -325,30 +333,48 @@ release_run_capture <- function(command, arguments, label, environment = charact
   output
 }
 
+release_safe_git_environment <- c(
+  "GIT_ATTR_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+  "GIT_CONFIG_SYSTEM=/dev/null", "GIT_CONFIG_NOSYSTEM=1",
+  "GIT_NO_REPLACE_OBJECTS=1", "GIT_NO_LAZY_FETCH=1",
+  "GIT_OPTIONAL_LOCKS=0", "LC_ALL=C", "TZ=UTC"
+)
+release_git_capture <- function(arguments, label) {
+  release_run_capture(
+    release_git,
+    c(
+      "--no-replace-objects", "-c", "core.attributesFile=/dev/null",
+      "-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false",
+      "-c", "core.untrackedCache=false", arguments
+    ),
+    label, environment = release_safe_git_environment
+  )
+}
+
 release_git_one <- function(arguments, label) {
-  output <- release_run_capture(release_git, arguments, label)
+  output <- release_git_capture(arguments, label)
   if (length(output) != 1L || !nzchar(output[[1L]])) {
     release_fail(label, " returned an unexpected result")
   }
   output[[1L]]
 }
 
-release_require_committed_files <- function(paths, label) {
+release_require_commit_files <- function(paths, label, source, commit, identity) {
   for (path in unname(paths)) {
     release_require_regular_file(path, label)
     path <- normalizePath(path, winslash = "/", mustWork = TRUE)
-    if (!startsWith(path, paste0(release_root, "/"))) {
-      release_fail(label, " escaped the repository: ", path)
+    if (!startsWith(path, paste0(source, "/"))) {
+      release_fail(label, " escaped the ", identity, ": ", path)
     }
-    relative <- substring(path, nchar(release_root, type = "chars") + 2L)
+    relative <- substring(path, nchar(source, type = "chars") + 2L)
     blob <- tempfile("paradox-release-git-blob-")
     error <- tempfile("paradox-release-git-error-")
     on.exit(unlink(c(blob, error)), add = TRUE)
     status <- suppressWarnings(system2(
       release_git,
       args = vapply(c(
-        "--no-replace-objects", "-C", release_root, "cat-file", "blob",
-        paste0(release_candidate_commit, ":", relative)
+        "--no-replace-objects", "-C", source, "cat-file", "blob",
+        paste0(commit, ":", relative)
       ), shQuote, character(1L)),
       env = c(
         "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_SYSTEM=/dev/null",
@@ -368,13 +394,27 @@ release_require_committed_files <- function(paths, label) {
         ""
       }
       release_fail(
-        label, " differs from the exported candidate commit: ", relative,
+        label, " differs from the ", identity, " commit: ", relative,
         if (nzchar(detail)) paste0(": ", detail) else ""
       )
     }
     unlink(c(blob, error))
   }
   invisible(paths)
+}
+
+release_require_tooling_files <- function(paths, label) {
+  release_require_commit_files(
+    paths, label, release_root, release_tooling_commit,
+    "authenticated tooling"
+  )
+}
+
+release_require_candidate_files <- function(paths, label) {
+  release_require_commit_files(
+    paths, label, release_candidate_source, release_candidate_commit,
+    "frozen candidate"
+  )
 }
 
 release_candidate_run_id <- Sys.getenv("PARADOX_CANDIDATE_RUN_ID", unset = "")
@@ -397,8 +437,8 @@ if (!startsWith(release_candidate_ref, "refs/") ||
     !grepl("^[0-9a-f]{64}$", release_candidate_content)) {
   release_fail("candidate ref, commit, tree, or content environment is malformed")
 }
-invisible(release_run_capture(
-  release_git, c("check-ref-format", release_candidate_ref),
+invisible(release_git_capture(
+  c("check-ref-format", release_candidate_ref),
   "validating the candidate ref"
 ))
 
@@ -422,8 +462,7 @@ release_authenticate_root <- function() {
       )) {
     release_fail("release benchmarking requires the repository's plain primary Git directory")
   }
-  replacements <- release_run_capture(
-    release_git,
+  replacements <- release_git_capture(
     c(
       "-C", release_root, "for-each-ref", "--format=%(refname)",
       "refs/replace"
@@ -431,9 +470,36 @@ release_authenticate_root <- function() {
     "checking Git replacement refs"
   )
   grafts <- file.path(expected_git_directory, "info", "grafts")
-  if (length(replacements) ||
-      (file.exists(grafts) && isTRUE(file.info(grafts)$size > 0))) {
-    release_fail("Git replacement refs and grafts are forbidden for release evidence")
+  forbidden <- c(
+    grafts,
+    file.path(expected_git_directory, "info", "attributes"),
+    file.path(expected_git_directory, "objects", "info", "alternates"),
+    file.path(expected_git_directory, "objects", "info", "http-alternates")
+  )
+  if (length(replacements) || any(file.exists(forbidden)) ||
+      any(vapply(forbidden, release_is_symbolic, logical(1L)))) {
+    release_fail(
+      "Git replacement refs, grafts, info attributes, and alternates are forbidden"
+    )
+  }
+  local_config_names <- release_git_capture(
+    c("-C", release_root, "config", "--local", "--name-only", "--list"),
+    "auditing repository-local Git configuration"
+  )
+  dangerous_config <- paste0(
+    "^(include[.]|includeif[.]|core[.]attributesfile$|",
+    "core[.]hookspath$|core[.]worktree$|extensions[.]worktreeconfig$|",
+    "extensions[.]partialclone$|remote[.].*[.]promisor$)"
+  )
+  if (any(grepl(dangerous_config, tolower(local_config_names)))) {
+    release_fail("repository-local Git configuration redirects authenticated inputs")
+  }
+  flags <- release_git_capture(
+    c("-C", release_root, "ls-files", "-v"),
+    "checking tooling index flags"
+  )
+  if (any(grepl("^[a-zS]", flags))) {
+    release_fail("validation tooling hides tracked state with an index flag")
   }
   head <- release_git_one(
     c("-C", release_root, "rev-parse", "HEAD^{commit}"),
@@ -451,27 +517,68 @@ release_authenticate_root <- function() {
     c("-C", release_root, "rev-parse", paste0(release_candidate_commit, "^{commit}")),
     "resolving candidate commit"
   )
-  status <- release_run_capture(
-    release_git,
+  commit_tree <- release_git_one(
+    c("-C", release_root, "rev-parse", paste0(release_candidate_commit, "^{tree}")),
+    "resolving candidate commit tree"
+  )
+  status <- release_git_capture(
     c("-C", release_root, "status", "--porcelain=v1", "--untracked-files=all"),
     "checking repository cleanliness"
   )
-  if (!identical(head, release_candidate_commit) ||
+  if (!grepl("^[0-9a-f]{40}$", head) ||
+      !grepl("^[0-9a-f]{40}$", tree) ||
       !identical(commit, release_candidate_commit) ||
       !identical(ref_commit, release_candidate_commit) ||
-      !identical(tree, release_candidate_tree) || length(status)) {
+      !identical(commit_tree, release_candidate_tree) || length(status)) {
     release_fail(
-      "release benchmarking requires a clean repository whose HEAD, ref, commit, ",
-      "and tree exactly match the exported candidate"
+      "release benchmarking requires clean committed validation tooling and an ",
+      "exactly resolvable candidate ref, commit, and tree"
     )
   }
-  list(head = head, tree = tree)
+  list(commit = head, tree = tree, status = "clean")
 }
 
 release_root_state <- release_authenticate_root()
+release_tooling_commit <- release_root_state$commit
+release_tooling_tree <- release_root_state$tree
+release_profile_helper <- file.path(
+  release_root, "compat", "downstream-evidence-profile.R"
+)
+release_require_tooling_files(
+  release_profile_helper, "downstream profile helper"
+)
+release_profile_environment <- new.env(parent = baseenv())
+sys.source(release_profile_helper, envir = release_profile_environment)
+release_profile <- release_profile_environment$downstream_evidence_profile(
+  release_root, release_arguments$evidence_profile, release_arguments$paradox_axis
+)
+if (identical(release_profile$profile, "default")) {
+  release_fail(
+    "the sealed benchmark requires a named downstream evidence profile; ",
+    "the default overlay is not post-freeze release evidence"
+  )
+}
+if (!identical(release_candidate_ref, release_profile$candidate_ref) ||
+    !identical(release_candidate_commit, release_profile$candidate_commit) ||
+    !identical(release_candidate_tree, release_profile$candidate_tree)) {
+  release_fail("exported candidate identity differs from the selected profile/axis")
+}
 release_baseline_evidence <- release_require_local_directory(
   release_arguments$baseline_evidence, "differential baseline evidence"
 )
+release_candidate_source <- release_require_local_directory(
+  release_arguments$candidate_source, "detached candidate source"
+)
+release_expected_candidate_source <- file.path(
+  release_root, ".local", "compat", "candidate-snapshots",
+  release_candidate_commit
+)
+if (!identical(release_candidate_source, release_expected_candidate_source)) {
+  release_fail(
+    "--candidate-source must be the managed frozen worktree: ",
+    release_expected_candidate_source
+  )
+}
 release_candidate_library <- release_require_local_directory(
   release_arguments$candidate_library, "candidate library"
 )
@@ -481,9 +588,6 @@ release_dependency_libraries <- vapply(
   character(1L),
   label = "dependency library",
   USE.NAMES = FALSE
-)
-release_bridge_library <- release_require_local_directory(
-  release_arguments$mies_library, "downstream bridge library"
 )
 release_extra_libraries <- vapply(
   release_arguments$protected_libraries,
@@ -517,18 +621,16 @@ release_bridge_installer <- file.path(
 )
 release_expected_bridge_library <- file.path(
   release_root, ".local", "compat", "runs", release_candidate_run_id,
-  "library-downstream-bridges"
+  paste0("library-downstream-bridges", release_profile$suffix)
 )
-if (!identical(release_bridge_library, release_expected_bridge_library)) {
-  release_fail(
-    "--mies-library must be the candidate-specific downstream bridge library: ",
-    release_expected_bridge_library
-  )
-}
+release_bridge_library <- release_require_local_directory(
+  release_expected_bridge_library,
+  "profile/axis-specific downstream bridge library"
+)
 release_bridge_evidence <- release_require_local_directory(
   file.path(
     release_root, ".local", "compat", "runs", release_candidate_run_id,
-    "downstream-bridges"
+    paste0("downstream-bridges", release_profile$suffix)
   ),
   "downstream bridge evidence"
 )
@@ -599,7 +701,7 @@ for (path in c(
 )) {
   release_require_regular_file(path, "release helper")
 }
-release_require_committed_files(c(
+release_require_tooling_files(c(
   release_fingerprint_script, release_evidence_script,
   release_evidence_verifier, release_installer, release_git_authenticator
 ), "release helper")
@@ -609,7 +711,7 @@ release_authenticate_candidate_git <- function() {
     release_git_authenticator,
     c(
       release_root, release_candidate_ref, release_candidate_commit,
-      release_candidate_tree
+      release_candidate_tree, release_candidate_source
     ),
     "authenticating candidate Git state"
   )
@@ -658,6 +760,12 @@ release_differential_files <- list(
     release_baseline_evidence, "metadata", "fingerprint.R"
   )
 )
+release_candidate_fingerprint_script <- file.path(
+  release_candidate_source, "compat", "fingerprint.R"
+)
+release_require_candidate_files(
+  release_candidate_fingerprint_script, "candidate fingerprint helper"
+)
 
 release_authenticate_differential <- function() {
   verified <- release_evidence_environment$repository_verify_evidence(
@@ -690,7 +798,7 @@ release_authenticate_differential <- function() {
       ) ||
       !identical(
         completion[["fingerprint_helper_sha256"]],
-        unname(tools::sha256sum(release_fingerprint_script))
+        unname(tools::sha256sum(release_candidate_fingerprint_script))
       ) ||
       !grepl("^[0-9a-f]{40}$", completion[["baseline_commit"]]) ||
       !identical(
@@ -722,24 +830,30 @@ release_authenticate_differential <- function() {
       any(!grepl("^[0-9a-f]{64}$", harness$sha256))) {
     release_fail("differential evidence does not use the complete default frozen harness")
   }
-  current_harness <- file.path(release_root, "compat", "differential", expected_files)
-  invisible(lapply(
-    current_harness, release_require_regular_file,
-    label = "current differential harness"
-  ))
-  release_require_committed_files(
-    current_harness, "current differential harness"
+  candidate_harness <- file.path(
+    release_candidate_source, "compat", "differential", expected_files
   )
-  current_harness_sha <- unname(tools::sha256sum(current_harness))
-  if (!identical(current_harness_sha, harness$sha256)) {
+  invisible(lapply(
+    candidate_harness, release_require_regular_file,
+    label = "candidate differential harness"
+  ))
+  release_require_candidate_files(
+    candidate_harness, "candidate differential harness"
+  )
+  candidate_harness_sha <- unname(tools::sha256sum(candidate_harness))
+  if (!identical(candidate_harness_sha, harness$sha256)) {
     release_fail("differential evidence harness differs from the frozen candidate harness")
   }
   retained_helpers <- file.path(
     release_baseline_evidence, "metadata",
     c("repository-evidence.R", "verify-repository-evidence.R", "fingerprint.R")
   )
-  current_helpers <- c(
-    release_evidence_script, release_evidence_verifier, release_fingerprint_script
+  candidate_helpers <- file.path(
+    release_candidate_source, "compat",
+    c("repository-evidence.R", "verify-repository-evidence.R", "fingerprint.R")
+  )
+  release_require_candidate_files(
+    candidate_helpers, "candidate differential evidence helper"
   )
   invisible(lapply(
     retained_helpers, release_require_regular_file,
@@ -747,7 +861,7 @@ release_authenticate_differential <- function() {
   ))
   if (!identical(
       unname(tools::sha256sum(retained_helpers)),
-      unname(tools::sha256sum(current_helpers))
+      unname(tools::sha256sum(candidate_helpers))
     ) || !identical(
       unname(tools::sha256sum(release_differential_files$fingerprint_helper)),
       completion[["fingerprint_helper_sha256"]]
@@ -917,20 +1031,24 @@ release_authenticate_candidate <- function() {
     "paradox", lib.loc = release_candidate_library
   ))
   if (!identical(package_content, release_candidate_content) ||
-      !identical(package_version, values[["candidate_version"]])) {
+      !identical(package_version, values[["candidate_version"]]) ||
+      !identical(package_version, release_profile$candidate_version)) {
     release_fail("installed candidate package content or version differs from provenance")
   }
 
   resolved_commit <- release_git_one(
-    c("-C", release_root, "rev-parse", paste0(release_candidate_commit, "^{commit}")),
+    c("-C", release_candidate_source, "rev-parse",
+      paste0(release_candidate_commit, "^{commit}")),
     "reproducing candidate commit"
   )
   resolved_tree <- release_git_one(
-    c("-C", release_root, "rev-parse", paste0(release_candidate_commit, "^{tree}")),
+    c("-C", release_candidate_source, "rev-parse",
+      paste0(release_candidate_commit, "^{tree}")),
     "reproducing candidate tree"
   )
   resolved_ref <- release_git_one(
-    c("-C", release_root, "rev-parse", paste0(release_candidate_ref, "^{commit}")),
+    c("-C", release_candidate_source, "rev-parse",
+      paste0(release_candidate_ref, "^{commit}")),
     "reproducing candidate ref"
   )
   if (!identical(resolved_commit, release_candidate_commit) ||
@@ -948,7 +1066,7 @@ release_authenticate_candidate <- function() {
     c(
       "--no-replace-objects", "-c", "core.attributesFile=/dev/null",
       "-c", "tar.umask=0002",
-      "-C", release_root, "archive",
+      "-C", release_candidate_source, "archive",
       "--format=tar", "-o", archive, release_candidate_commit
     ),
     "reproducing the candidate source archive",
@@ -996,15 +1114,20 @@ release_bridge_verification <- release_run_capture(
   release_bridge_installer,
   c(
     "--verify", "--protected-content-preverified",
-    "--candidate-source", release_root
+    "--candidate-source", release_candidate_source,
+    "--evidence-profile", release_profile$profile,
+    "--paradox-axis", release_profile$axis
   ),
   "verifying the candidate-specific downstream bridge overlay"
 )
-if (!any(grepl(
-    "downstream_bridge_evidence=passed", release_bridge_verification,
-    fixed = TRUE
-  ))) {
-  release_fail("downstream bridge verifier returned no success receipt")
+if (!identical(
+    release_bridge_verification,
+    c(
+      "downstream_bridge_evidence=passed",
+      paste0("downstream_bridge_library=", release_bridge_library)
+    )
+  )) {
+  release_fail("downstream bridge verifier returned unexpected output")
 }
 invisible(lapply(
   release_bridge_evidence_inputs,
@@ -1015,7 +1138,6 @@ release_bridge_evidence_sha256 <- setNames(
   unname(tools::sha256sum(release_bridge_evidence_inputs)),
   names(release_bridge_evidence_inputs)
 )
-
 release_helper_inputs <- c(
   release = file.path(release_root, "benchmarks", "release"),
   release_R = release_script,
@@ -1037,14 +1159,31 @@ release_helper_inputs <- c(
   evidence_verifier = release_evidence_verifier,
   candidate_installer = release_installer,
   candidate_git_authenticator = release_git_authenticator,
-  bridge_installer = release_bridge_installer
+  bridge_installer = release_bridge_installer,
+  downstream_profile = release_profile_helper,
+  downstream_profile_resolver = file.path(
+    release_root, "compat", "resolve-downstream-evidence-profile.R"
+  ),
+  downstream_profile_registry = release_profile$registry,
+  paradox_axis_registry = release_profile$axis_registry,
+  downstream_repository_manifest = release_profile$repository_manifest,
+  downstream_snapshot = release_profile$snapshot,
+  downstream_bridge_provenance = release_profile$bridge_provenance,
+  downstream_dependency_manifest = release_profile$dependency_repository_manifest,
+  downstream_dependency_snapshot = release_profile$dependency_snapshot
 )
 release_helper_target_names <- c(
   "release", "release.R", "run", "run.R", "worker.R", "workloads.R",
   "regression-policy.R", "regression-policy.tsv",
   "paramsetcollection-consumers.R", "fingerprint.R", "repository-evidence.R",
   "verify-repository-evidence.R", "install-candidate",
-  "authenticate-candidate-git", "install-downstream-bridges"
+  "authenticate-candidate-git", "install-downstream-bridges",
+  "downstream-evidence-profile.R", "resolve-downstream-evidence-profile.R",
+  "downstream-evidence-profiles.tsv", "paradox-evidence-axes.tsv",
+  "profile-github-repositories.tsv", "profile-github-snapshot.tsv",
+  "profile-github-bridge-provenance.tsv",
+  "profile-dependency-github-repositories.tsv",
+  "profile-dependency-github-snapshot.tsv"
 )
 if (length(release_helper_target_names) != length(release_helper_inputs) ||
     anyDuplicated(release_helper_target_names)) {
@@ -1056,7 +1195,7 @@ invisible(lapply(
   release_helper_inputs, release_require_regular_file,
   label = "benchmark release helper"
 ))
-release_require_committed_files(
+release_require_tooling_files(
   release_helper_inputs, "benchmark release helper"
 )
 release_helper_sha256 <- unname(tools::sha256sum(release_helper_inputs))
@@ -1187,6 +1326,12 @@ release_planned_commands <- list(
 if (release_arguments$plan_only) {
   cat("Release benchmark inputs authenticated; no output was written.\n")
   cat("output=", release_output, "\n", sep = "")
+  cat("tooling_commit=", release_tooling_commit, "\n", sep = "")
+  cat("tooling_tree=", release_tooling_tree, "\n", sep = "")
+  cat("tooling_status=", release_root_state$status, "\n", sep = "")
+  cat("candidate_source=", release_candidate_source, "\n", sep = "")
+  cat("evidence_profile=", release_profile$profile, "\n", sep = "")
+  cat("paradox_axis=", release_profile$axis, "\n", sep = "")
   cat("baseline_evidence_manifest_sha256=",
       release_differential$verified$manifest_sha256, "\n", sep = "")
   cat("candidate_content_sha256=", release_candidate_content, "\n", sep = "")
@@ -1247,7 +1392,36 @@ release_log_line <- function(text) {
   cat(line, "\n", sep = "", file = release_log, append = TRUE)
 }
 release_started <- format(Sys.time(), tz = "UTC", usetz = TRUE)
-release_log_line("authenticated frozen release inputs")
+release_write_tsv(data.frame(
+  field = c("schema", "tooling_commit", "tooling_tree", "tooling_status"),
+  value = c(
+    "1", release_tooling_commit, release_tooling_tree, release_root_state$status
+  ),
+  stringsAsFactors = FALSE
+), file.path(release_output, "metadata", "tooling.tsv"))
+release_write_tsv(data.frame(
+  field = c(
+    "schema", "candidate_source", "candidate_ref", "candidate_commit",
+    "candidate_tree", "candidate_status"
+  ),
+  value = c(
+    "1", release_candidate_source, release_candidate_ref,
+    release_candidate_commit, release_candidate_tree, "clean"
+  ),
+  stringsAsFactors = FALSE
+), file.path(release_output, "metadata", "candidate-source.tsv"))
+release_write_tsv(data.frame(
+  field = c(
+    "schema", "evidence_profile", "paradox_axis", "stage_suffix",
+    names(release_profile$hashes)
+  ),
+  value = c(
+    "1", release_profile$profile, release_profile$axis,
+    release_profile$suffix, unname(release_profile$hashes)
+  ),
+  stringsAsFactors = FALSE
+), file.path(release_output, "metadata", "downstream-profile.tsv"))
+release_log_line("authenticated clean validation tooling and frozen release inputs")
 
 release_helper_targets <- file.path(
   release_output, "helpers", release_helper_target_names
@@ -1566,7 +1740,7 @@ if (all(!is.na(release_status) & release_status == 0L)) {
         !identical(
           paired_metadata$arguments$candidate_ref, release_candidate_commit
         ) ||
-        !identical(paired_metadata$repository$head, release_candidate_commit) ||
+        !identical(paired_metadata$repository$head, release_tooling_commit) ||
         !identical(paired_metadata$repository$dirty, FALSE) ||
         !identical(
           as.integer(paired_metadata$arguments$n_params),
@@ -1796,7 +1970,10 @@ release_post_error <- tryCatch({
   if (!identical(release_library_after, release_library_before)) {
     release_fail("a protected benchmark library changed during the release gate")
   }
-  invisible(release_authenticate_root())
+  release_root_after <- release_authenticate_root()
+  if (!identical(release_root_after, release_root_state)) {
+    release_fail("validation tooling commit, tree, or status changed during the gate")
+  }
   invisible(release_authenticate_differential())
   invisible(release_authenticate_candidate())
   if (!identical(
@@ -1845,13 +2022,28 @@ release_regression_status <- if (is.na(release_regression_summary$fail_count)) {
 }
 release_completion <- c(
   "harness=benchmark-release",
-  "schema=2",
+  "schema=3",
   paste0("status=", if (release_pass) "pass" else "fail"),
+  paste0("tooling_commit=", release_tooling_commit),
+  paste0("tooling_tree=", release_tooling_tree),
+  paste0("tooling_status=", release_root_state$status),
+  paste0("evidence_profile=", release_profile$profile),
+  paste0("paradox_axis=", release_profile$axis),
+  paste0("candidate_source=", release_candidate_source),
+  "candidate_source_status=clean",
   paste0("candidate_run_id=", release_candidate_run_id),
   paste0("candidate_ref=", release_candidate_ref),
   paste0("candidate_commit=", release_candidate_commit),
   paste0("candidate_tree=", release_candidate_tree),
   paste0("candidate_content_sha256=", release_candidate_content),
+  paste0(
+    "profile_registry_sha256=",
+    release_profile$hashes[["profile_registry_sha256"]]
+  ),
+  paste0(
+    "axis_registry_sha256=",
+    release_profile$hashes[["axis_registry_sha256"]]
+  ),
   paste0(
     "downstream_bridge_completion_sha256=",
     release_bridge_evidence_sha256[["downstream_bridge_completion"]]

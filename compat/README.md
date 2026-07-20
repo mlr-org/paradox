@@ -278,8 +278,10 @@ replacement refs, grafts, alternate object stores, external archive
 attributes, hidden index flags, filesystem-monitor/untracked-cache shortcuts,
 and inherited repository-altering `GIT_*` variables. Unrelated work in the
 primary checkout is allowed after the candidate is frozen. The differential
-and benchmark drivers are the exceptions: they snapshot the primary checkout
-and therefore require its exact clean `HEAD` to identify the candidate. Every
+driver remains an exception when it snapshots the primary checkout. The sealed
+benchmark instead requires a clean committed validation-tooling checkout and a
+separate exact managed candidate worktree; it records both identities rather
+than requiring tooling `HEAD` to equal the candidate. Every
 compatibility and documentation release gate authenticates
 the receipt against the full ref, commit, tree, installed version, content
 hash, current installer, and a freshly reproduced source archive.
@@ -297,7 +299,8 @@ resource-scheduler bytes without loading a bridge package. One run-local owner
 serializes construction; atomic no-clobber publication and owner plus
 device/inode-gated cleanup prevent a losing process from deleting a raced
 replacement. Repository, documentation, and release-benchmark entrypoints fail
-unless this exact schema-2 overlay verifies.
+unless their exact overlay verifies. The active named refresh uses schema 3 and
+a profile/axis suffix; schema 2 describes only the historical default overlay.
 
 For a named downstream-only refresh, choose a new candidate-bound run, prepare
 the profile dependency receipt before installing the candidate, and pass the
@@ -708,6 +711,8 @@ Rscript compat/test-documentation \
   --candidate-library "$candidate_library" \
   --candidate-source "$candidate_source" \
   --dependency-library "$dependency_library" \
+  --evidence-profile "$profile" \
+  --paradox-axis "$axis" \
   --extra-library "$bridge_library" \
   --extra-library "$mlr3verse_library" \
   --extra-library "$documentation_extra_library" \
@@ -778,22 +783,23 @@ It is a harness self-test, not a substitute for `compat/test-documentation`.
 Performance evidence uses the already authenticated candidate and the baseline
 installation inside the successful, sealed full differential run. The release
 wrapper has no workload selector: it always runs every registered workload and
-both focused ParamSetCollection consumer processes. Select a new output and
-the exact bridge overlay that directly provides the reviewed miesmuschel and
-mlr3pipelines builds:
+both focused ParamSetCollection consumer processes. Select a new output and the
+same named profile/axis whose suffixed overlay directly provides the reviewed
+miesmuschel and mlr3pipelines builds:
 
 ```sh
 benchmark_output="$PARADOX_ROOT/.local/benchmarks/$run_id-release"
 differential_run="$PARADOX_ROOT/.local/compat/differential/runs/DIFFERENTIAL_RUN"
-bridge_library="$PARADOX_ROOT/.local/compat/runs/$run_id/library-downstream-bridges"
 test ! -e "$benchmark_output"
-test -d "$bridge_library"
+test -d "$candidate_source"
 
 benchmarks/release \
   --baseline-evidence "$differential_run" \
+  --candidate-source "$candidate_source" \
   --candidate-library "$candidate_library" \
   --dependency-library "$dependency_library" \
-  --mies-library "$bridge_library" \
+  --evidence-profile "$profile" \
+  --paradox-axis paradox2 \
   --output "$benchmark_output" \
   --params 64 \
   --rows 128 \
@@ -801,12 +807,20 @@ benchmarks/release \
   --iterations 100
 ```
 
-The wrapper reauthenticates the frozen Git ref, candidate installation,
-differential evidence, complete dependency-library contents, workload
-inventory, reviewed regression-policy inputs, and helper bytes before and after
-measurement. It retains raw samples, allocations, summaries, consumer
-comparisons, command environments, candidate/differential and downstream-bridge
-provenance, and one decision row for every
+The wrapper reauthenticates the managed detached candidate source, frozen Git
+ref, candidate installation, differential evidence, complete dependency-library
+contents, exact profile/axis overlay, workload inventory, reviewed
+regression-policy inputs, and helper bytes before and after measurement. The
+validation checkout is separately required to be clean at one recorded tooling
+commit; it no longer pretends that the post-freeze registry and benchmark driver
+can belong to the candidate they name. Freeze that tooling commit first, build
+one fresh named profile overlay with the exact same tooling identity, and reuse
+it read-only for documentation, full checks, and the benchmark. The normal
+verifier requires the completion and retained inputs to match current tooling;
+the default unsuffixed overlay is neither selected nor rebuilt. The wrapper
+retains raw samples, allocations, summaries, consumer
+comparisons, command environments, candidate/differential, profile, tooling, and
+downstream-bridge provenance, and one decision row for every
 registered workload and focused consumer operation. Missing policy coverage or
 any material regression leaves the stage failed and unsealed. The completion
 metadata binds the policy hashes and reports pass/marginal/fail counts and the

@@ -298,7 +298,7 @@ done
 "$RSCRIPT" --vanilla - "$ROOT/compat/test-documentation" <<'RSCRIPT'
 path <- commandArgs(TRUE)[[1L]]
 expected_documentation_sha256 <-
-  "b094e74c6bceb86c8d92cde81df965279b2e48c762df28a4b7f102183e66e2e5"
+  "7f7c1525b2ad6d9366becec29f46cd890e51f7854e67f150593998bb00c6f881"
 if (!identical(unname(tools::sha256sum(path)), expected_documentation_sha256)) {
   stop("documentation timeout source snapshot changed", call. = FALSE)
 }
