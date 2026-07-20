@@ -11,15 +11,19 @@ intentional compatibility boundary is
 [`design/compatibility.md`](design/compatibility.md), and the active release
 ledger is [`design/release-2.0.0.md`](design/release-2.0.0.md).
 
-Old candidate commits, refs, logs, and artifacts are historical evidence for
-different bytes only. Git history retains the former long design narratives;
-do not copy their R6-surface authentication, S3 fallback, sentinel replay, or
-pre-data.table-1.18 decisions back into current source.
+Old candidate commits, refs, logs, and artifacts are historical evidence unless
+a retained, sealed equivalence proof establishes that the exact package payload
+relevant to a gate is unchanged. Git history retains the former long design
+narratives; do not copy their R6-surface authentication, S3 fallback, sentinel
+replay, or pre-data.table-1.18 decisions back into current source. The sole
+release evidence transfer currently admitted is the independently replayed
+`a4617ca` to `10c6a0e` package-payload proof recorded below; it is byte-identity
+reuse, not behavioral inference across different package implementations.
 
 Post-freeze downstream-only validation is the one narrow exception to keeping
 all release tooling byte-identical to the package candidate. It uses a named,
-tracked profile from `compat/downstream-evidence-profiles.tsv` and one clean
-infrastructure commit whose diff against the candidate is empty for package
+tracked profile from `compat/downstream-evidence-profiles.tsv` and clean
+infrastructure commits whose diffs against the candidate are empty for package
 source, tests, help, and package-facing documentation. The dependency receipt
 is deliberately profile-specific and axis-neutral: it prepares only the
 unchanged external dependency closure and is isolated by the candidate run ID.
@@ -39,11 +43,16 @@ The sealed release benchmark is part of that post-freeze validation tooling,
 not part of the package candidate. It must take the managed detached candidate
 worktree plus explicit profile and axis, derive the suffixed overlay/evidence,
 and record the separate candidate ref/commit/tree and current clean tooling
-commit/tree/status identities. Freeze the final validation-tooling commit first,
-construct one fresh named overlay with that exact tooling, and reuse it read-only
-for documentation, full checks, and the benchmark. Never require tooling
-`HEAD == candidate`, accept a caller-selected bridge path, or rebuild the default
-unsuffixed overlay merely to run the final benchmark.
+commit/tree/status identities. Ordinarily freeze the final validation-tooling
+commit first, construct one fresh named overlay with that exact tooling, and
+reuse it read-only. The reviewed release exception is explicit: documentation
+and benchmark execution used `bf64490`; `9e87556` changes only the selected
+miesmuschel test head and corresponding profile ledgers, so fresh final overlays
+and the affected miesmuschel rows were rebuilt on both axes while the unchanged
+documentation/benchmark conclusions retain their original identities. Never
+require tooling `HEAD == candidate`, accept a caller-selected bridge path,
+relabel older execution, or rebuild the default unsuffixed overlay merely to run
+the final benchmark.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -792,13 +801,23 @@ Caching policy:
   headers, generated registration inputs, `NAMESPACE`, `DESCRIPTION`, compiler,
   flags, and platform) is byte-identical; reinstall the R/help databases and
   verify the loaded DSO hash. Record that identity check with the diagnostic;
-- a frozen release candidate always receives a clean full source build. DSO
-  component reuse is development evidence only and never satisfies a release,
-  check, runtime, memory, downstream, or benchmark row;
+- every frozen distributable payload receives a clean full source build in each
+  executed profile. DSO component reuse is development evidence only and never
+  satisfies a release, check, runtime, memory, downstream, or benchmark row;
+  reuse across refs is conclusion transfer from a clean donor execution after
+  sealed complete-payload identity, never reuse of development objects;
 - each distinct frozen R/compiler/instrumentation profile builds/installs the
-  candidate once from clean source, then shares that immutable installation
-  across its tests and any gates that explicitly authenticate the identical
-  profile and candidate bytes;
+  distributable payload once from clean source, then shares that immutable
+  installation across its tests and any gates that explicitly authenticate the
+  identical profile and package bytes;
+- a later ref may reuse a completed package-facing gate only when a sealed,
+  independently replayed equivalence stage proves all changed Git paths are
+  excluded by the exact `.Rbuildignore`, both clean `R CMD build` payloads have
+  the same complete file inventory, and every payload byte is identical after
+  removing only R's generated `Packaged:` record. The ledger must name both
+  commits/trees, the normalized manifest, and each transferred gate. This does
+  not transfer source-tree tooling, policy, documentation, downstream-profile,
+  benchmark, memory, or portability conclusions whose own inputs changed;
 - a failed broad run is mined for the complete failure set and logs before a
   rerun; rerun affected rows first, then one final broad confirmation.
 
@@ -834,12 +853,14 @@ silently install, repair, or substitute bridge packages. An entrypoint may use
 `--protected-content-preverified` only after it has itself authenticated the
 exact candidate and dependency-library content in the same operation.
 The release benchmark additionally requires a named profile and the exact
-`.local/compat/candidate-snapshots/<commit>` detached worktree. Final validation
-tooling must be frozen before one fresh named profile overlay is built. The
-normal verifier requires the overlay completion's tooling commit/tree and every
-retained input to match that exact current tooling, so the same sealed overlay
-can then be reused read-only for documentation, full checks, and the benchmark.
-There is no older-tooling replay or migration mode. Post-freeze infrastructure
+`.local/compat/candidate-snapshots/<commit>` detached worktree. A stage's normal
+verifier requires its overlay completion's tooling commit/tree and every
+retained input to match that exact stage tooling. Reuse one sealed overlay when
+those inputs remain identical. If a later reviewed downstream commit changes
+tests only, build a new exact overlay and rerun that package's affected rows;
+retain other conclusions only with an explicit production-byte/test-only delta
+record such as the final `bf64490` to `9e87556` composition. There is no
+arbitrary older-tooling replay or migration mode. Post-freeze infrastructure
 paths may include `benchmarks/`, but package source, package tests, help, and
 package-facing documentation remain forbidden changes.
 Whenever this contract, helper, or its hooks change, run `bash -n`, `shellcheck`,
@@ -946,9 +967,10 @@ Current PR-ready local branches are:
 - bbotk `codex/public-paramsetcollection-sets` at `6cae955`: public collection
   state, dual-version diagnostics, and rooted detached native search-space
   snapshots;
-- miesmuschel `codex/paradox-paramsetshadow-bridge` at `6255050`: the
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `d4c7f79`: the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
-  dual-major documentation link;
+  dual-major documentation link, with deep test comparisons made independent
+  of data.table secondary-index caches;
 - mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
   transformation-free subset construction on Paradox 2 plus release notes;
 - celecx `codex/paradox2-diagnostics` at `a297555`, mlr3
@@ -961,13 +983,11 @@ Current PR-ready local branches are:
 - mlr3fda `paradox2-snapshots` at `035da5b`: Paradox-2 diagnostic snapshots
   selected without changing the Paradox-1 snapshot baseline.
 
-Before handoff, rebase only if the user requests it, test each exact branch
-against the exact frozen candidate, record the commands/results, and provide
-the explicit `git -C ... push <remote> <branch>` commands plus PR title/body
-text for the user. Never push, open a remote PR, publish a tag, or alter remote
-state yourself. The
-reviewed exact heads, proposed titles/bodies, and manual commands live in
-`compat/downstream-pr-handoff.md`; update that file if any branch changes.
+Exact-head dual-axis retesting and the handoff record are complete. Rebase only
+if the user requests it. Never push, open a remote PR, publish a tag, or alter
+remote state yourself. The reviewed exact heads, proposed titles/bodies, and
+manual commands live in `compat/downstream-pr-handoff.md`; update that file if
+any branch changes. Only user publication remains.
 
 The maintained priority consumers include bbotk, miesmuschel, mlr3mbo,
 ConfigSpace, celecx, mlr3, mlr3tuning, mlr3pipelines, and active mlr-org book,
@@ -1131,7 +1151,24 @@ The replacement is frozen at
 commit changes only the Paradox evidence-axis registry, its exact fixture, and
 this ledger; all candidate execution must continue to authenticate the managed
 detached `10c6a0e` source rather than the validation worktree. Evidence bound
-to earlier candidate commits or tooling identities remains historical.
+to earlier candidate commits or tooling identities remains historical except
+for the exact, explicitly scoped byte-identity proof below.
+
+The sealed equivalence stage
+`.local/checks/package-equivalence-a461-10c6` is the narrow exception. It
+authenticates 486 tracked files per ref, 467 identical blobs, and 19 changed
+paths, all excluded by the candidate's exact `.Rbuildignore`. Clean builds have
+217 payload files each; the only raw difference is R's generated `Packaged:`
+line in `DESCRIPTION`. Their normalized manifest is
+`e6e767b8fa3cd1a9273d62039c208d7c3ae1aea0b12d7446560297d4750dcc3e`
+and the retained evidence manifest is
+`e558864a318a465edf058013f743c6ae386b34bcd7894037a02c66938a986fb3`.
+Consequently the exact `a4617ca` R-API, full native/sanitizer/test/check, R 4.3.3
+and 4.5.2 runtime, and focused-consumer conclusions apply to the identical
+installed/package-facing `10c6a0e` payload. This does not promote the unsealed
+`a4617ca` memory directory or any older validation-tooling overlay. Exact
+`10c6a0e` source-static, memory, differential, documentation, downstream, and
+benchmark stages were retained separately.
 
 The first full-check stage under tooling `3f02899` correctly built source
 tarballs before checking them, but incorrectly passed `--no-build-vignettes`
@@ -1140,9 +1177,9 @@ vignette and therefore produced two missing-`inst/doc` warnings even though its
 tests and vignette code passed. Full-check subjects now use ordinary serial
 `R CMD build --no-manual` so built vignettes are present, followed by
 `R CMD check --no-manual --no-build-vignettes` to inspect rather than rebuild
-them. The sealed failed stage remains diagnostic; because named overlays bind
-the validation-tooling commit/tree, construct a fresh run and overlay after
-this harness-only repair rather than relabeling the earlier overlay.
+them. The sealed failed stage remains diagnostic. A fresh run and overlay after
+this harness-only repair passed all four selected source-package checks; no
+earlier result was relabeled.
 
 The first all-scope documentation execution under tooling `4d4b637` completed
 all 17 workloads with every mandatory row passing, but its process correctly
@@ -1151,9 +1188,10 @@ retained the downstream overlay's own manifest and seal under those reserved
 basenames before trying to create the documentation stage's manifest and seal.
 Retain those four overlay inputs under explicit `downstream-bridge-*` names;
 reserve `evidence-manifest.tsv` and `completion.seal` solely for the enclosing
-stage. The completed-but-unsealed directory is diagnostic only. This is a
-validation-only repair, so construct the final named overlay under the new
-tooling identity and rerun documentation without changing candidate bytes.
+stage. The completed-but-unsealed directory is diagnostic only. The final
+documentation stage under tooling `bf64490` was rebuilt and sealed without
+changing candidate bytes; all 17 workloads completed and all mandatory rows
+passed.
 
 The first Paradox-1 release-refresh execution found one miesmuschel-only test
 failure in both direct tests and `R CMD check`: three deep `expect_equal()`
@@ -1162,8 +1200,33 @@ caches. The public state and all 3,041 other expectations passed, and the same
 objects differed only by `index` attributes. Miesmuschel head `d4c7f797` uses
 semantic equivalence for those three assertions; focused 216-expectation runs
 pass on both Paradox majors. This changes only downstream tests, not
-miesmuschel production or Paradox candidate bytes. Rebuild the named overlays
-to bind the final reviewed head, rerun the affected miesmuschel rows on both
-axes, and transfer the already sealed non-miesmuschel, documentation, and
-benchmark conclusions with this exact test-only diff rather than repeating
-unaffected workloads.
+miesmuschel production or Paradox candidate bytes. The named overlays were
+rebuilt to bind the final reviewed head, the affected miesmuschel rows were
+rerun on both axes, and the sealed non-miesmuschel, documentation, and benchmark
+conclusions retain their original identities with this exact test-only scope.
+
+That affected-row confirmation is complete. The final Paradox-2 overlay/test/
+check evidence is under
+`.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r8`; the final
+Paradox-1 evidence is under
+`.local/compat/runs/release-final-20260720-v1.0.1-paradox1-r2`. Miesmuschel
+`d4c7f79750cd15c8174415fb0ba059c597f4f055` passes its full repository suite
+and source-package check on both axes. The three other refreshed heads already
+passed on each axis, and the final miesmuschel delta changes only three test
+comparison calls, so their sealed conclusions transfer without rerunning them.
+The final documentation stage has 17 completed workloads with every mandatory
+row green; the release benchmark has 72 passes, five bounded marginal reviews,
+and no failure. Gctorture, Valgrind, bounded rchk, exact differential, strict
+static source checks, and their independent evidence replays are green for the
+frozen candidate.
+
+The final portability candidate tag is `paradox-2.0.0-ci-10c6a0e`. Its
+direct-child harness is
+`paradox-2.0.0-ci-10c6a0e-harness-cc06c18` at
+`cc06c182949af09ce80e335ddbfc63a8078692e6`; it changes only
+`.github/workflows/r-cmd-check.yml`, whose SHA-256 is
+`e6bf11775a59c783a5cbd164ea729a9877a6752edfc96adc0491723b7bf05bfc`.
+The local regression/adversarial fixture, `actionlint`, ancestry/diff checks,
+and offline evidence-verifier fixture pass. The user must publish those two
+tags and dispatch the workflow; Windows x86-64 and macOS ARM64 remain open until
+that remote run and its retained artifacts pass independent verification.

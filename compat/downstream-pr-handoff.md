@@ -2,11 +2,21 @@
 
 Agentic processes must not push these branches or open remote pull requests.
 The eight repository-local branches below are the complete reviewed migrations.
-Before publication, the named release-refresh gate must test and run full
-checks for these exact heads against both pinned Paradox axes. Its profile
+The named release-refresh gate has tested and run full checks for these exact
+heads against both pinned Paradox axes. Its profile
 installer authenticates their isolated primary Git stores; the default
 `compat/verify-mlr-org-review` census remains historical evidence for their
 recorded upstream bases rather than an authenticator for refreshed heads.
+
+The exact-head dual-axis tests and source-package checks are complete. Publish
+and merge the dual-version bridge PRs before Paradox 2. Land and release
+mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally requires that
+bridge. The remaining PRs are independent apart from their shared Paradox-2
+release boundary. Seven reviewed remote branches already exist; miesmuschel's
+final test-only commit is the sole local branch still ahead of its remote at
+the time of this handoff. After each push, the `gh pr create --web` command
+below opens the exact comparison; copy the immediately preceding proposed body
+into the form.
 
 ## bbotk
 
@@ -31,10 +41,11 @@ Proposed body:
 > lifetime boundary. This also fixes a latent C ownership bug with no API
 > change on either Paradox version.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/github/bbotk push --set-upstream origin codex/public-paramsetcollection-sets
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/bbotk push --set-upstream origin codex/public-paramsetcollection-sets
+gh pr create --web --repo mlr-org/bbotk --base main --head codex/public-paramsetcollection-sets --title 'Use Paradox 2 public ParamSet state safely'
 ```
 
 ## miesmuschel
@@ -62,10 +73,11 @@ Proposed body:
 > continue to construct the legacy class. Keep the class documentation link
 > valid when the package is checked with either Paradox major version.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/github/miesmuschel push --set-upstream origin codex/paradox-paramsetshadow-bridge
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/miesmuschel push --set-upstream origin codex/paradox-paramsetshadow-bridge
+gh pr create --web --repo mlr-org/miesmuschel --base master --head codex/paradox-paramsetshadow-bridge --title "Use Paradox's ParamSetShadow on Paradox 2"
 ```
 
 ## mlr3mbo
@@ -88,10 +100,11 @@ Proposed body:
 > verify that producing the detached domain does not remove transformations
 > from the source search space, and record the migration in NEWS.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3mbo-paradox2 push --set-upstream origin codex/paradox2-transformless-subset
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3mbo push --set-upstream origin codex/paradox2-transformless-subset
+gh pr create --web --repo mlr-org/mlr3mbo --base main --head codex/paradox2-transformless-subset --title 'Use the public transform-free subset API on Paradox 2'
 ```
 
 ## celecx
@@ -113,10 +126,11 @@ Proposed body:
 > relying on mutable Domain internals. Require the compatible mlr3mbo
 > development version so CRAN mlr3mbo 1.1.1 cannot select the unsupported path.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/celecx-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/celecx push --set-upstream origin codex/paradox2-diagnostics
+gh pr create --web --repo mlr-org/celecx --base master --head codex/paradox2-diagnostics --title 'Accept Paradox 2 validation diagnostics in tests'
 ```
 
 ## mlr3
@@ -134,10 +148,11 @@ Proposed body:
 > fragment on that major version. This changes test expectations only; measure
 > construction and scoring behavior are unchanged.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3 push --set-upstream origin codex/paradox2-diagnostics
+gh pr create --web --repo mlr-org/mlr3 --base main --head codex/paradox2-diagnostics --title 'Accept Paradox 2 numeric Domain diagnostics in tests'
 ```
 
 ## mlr3fselect
@@ -157,10 +172,11 @@ Proposed body:
 > one-file, test-only compatibility change with no feature-selection runtime
 > branch.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3fselect-paradox2 push --set-upstream origin codex/paradox2-diagnostics
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3fselect push --set-upstream origin codex/paradox2-diagnostics
+gh pr create --web --repo mlr-org/mlr3fselect --base main --head codex/paradox2-diagnostics --title 'Accept the Paradox 2 feature-fraction diagnostic in tests'
 ```
 
 ## mlr3pipelines
@@ -186,10 +202,11 @@ Proposed body:
 > Paradox 1.0.1 and the Paradox 2 candidate; runtime validation behavior is not
 > version-branched.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/github/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3pipelines push --set-upstream origin codex/paradox-diagnostic-compat
+gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/paradox-diagnostic-compat --title 'Fix GraphLearner state deep cloning across Paradox versions'
 ```
 
 ## mlr3fda
@@ -208,8 +225,9 @@ Proposed body:
 > and FDA behavior are unchanged. The Paradox-1 gate executes the legacy
 > snapshots, while the Paradox-2 gate covers the new native diagnostics.
 
-After the exact-head release test passes, publish it manually with:
+Publish it manually with:
 
 ```sh
-git -C /home/mewse/paradox_neo/.local/compat/downstream-pr-worktrees/mlr3fda-paradox2 push --set-upstream origin paradox2-snapshots
+git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3fda push --set-upstream origin paradox2-snapshots
+gh pr create --web --repo mlr-org/mlr3fda --base main --head paradox2-snapshots --title 'Support Paradox 2 diagnostics in FDA snapshots'
 ```

@@ -747,7 +747,9 @@ Do not add any of the following:
   helpers parallel to the registered native engine;
 - direct downstream access to `.core` or its protected payload;
 - unmanaged state reachable only through an external-pointer address;
-- package-byte evidence carried from the superseded candidate.
+- package-facing conclusions carried from a semantically different payload, or
+  from an earlier ref without the sealed byte-equivalence proof required by the
+  validation and release ledgers.
 
 ## Implementation convergence rule
 

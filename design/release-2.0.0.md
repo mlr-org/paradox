@@ -2,11 +2,12 @@
 
 ## Status
 
-**Not release-ready.** The contract-first source rewrite is in implementation
-convergence. No package-byte-dependent result from the superseded
-compatibility-first candidate is accepted for this source. This ledger changes
-to release-ready only after one clean immutable ref satisfies every mandatory
-gate below.
+**Local release evidence converged; external handoff pending.** The frozen
+contract-first candidate and its local correctness, compatibility,
+documentation, memory, and performance gates are complete. The decision remains
+pending until the exact Windows x86-64/macOS ARM64 portability run is retained
+and verified and the user publishes the prepared downstream branches/PRs. No
+conclusion from a semantically different package payload is accepted.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -264,15 +265,17 @@ not a local compatibility workaround.
 - [x] NEWS/DESCRIPTION/NAMESPACE begin the 2.0.0 contract reset;
 - [x] all tests that assert superseded private/sentinel/S3 behavior are removed
   or rewritten, with preserved ordinary behavior still covered;
-- [ ] complete capsule, graph, callback/reentry, structural-versus-semantic
+- [x] complete capsule, graph, callback/reentry, structural-versus-semantic
   ALTREP/S4, direct-assignment versus `set_values(.values=)`, shared public-
   table classifier/row-name/cache/name-reentry, semantic-column, data.table
   facade, zero-column Design, corruption, serialization, exact-
   TuneToken/receipt/capability, and upgrade contract suite passes on the final
-  frozen candidate (the prior suite and current affected development tests are
-  green);
-- [ ] package reference documentation, vignettes, migration guide, website,
-  and downstream bridge docs describe the final behavior consistently;
+  frozen candidate payload, authenticated through the sealed `a4617ca` to
+  `10c6a0e` package-payload equivalence proof and exact-candidate static/memory
+  stages;
+- [x] package reference documentation, vignettes, migration guide, website,
+  and downstream bridge docs describe the final behavior consistently; the
+  final 17-workload documentation stage has every mandatory row green;
 - [x] routine/analyzer/runtime ledgers discover current files dynamically and
   contain no historical hard-coded test counts; the final old-R run stages the
   reviewed `mbo_config` Git-object bundle before worker admission and executes
@@ -280,15 +283,16 @@ not a local compatibility workaround.
 
 ### Downstream coordination
 
-- [x] local bbotk bridge `6cae955` and miesmuschel bridge `6255050` are
+- [x] local bbotk bridge `6cae955` and miesmuschel bridge `d4c7f79` are
   prepared on their recorded branches;
 - [x] mlr3mbo `1a1c0ab`, celecx `a297555`, mlr3 `35e30a9`, mlr3fselect
   `ae8e1d1`, mlr3pipelines `1c4bc6e`, and mlr3fda `035da5b` are prepared on
   their recorded branches;
-- [ ] all eight profile bridge heads are authenticated and the four refreshed
+- [x] all eight profile bridge heads are authenticated and the four refreshed
   heads are retested and fully checked against both exact Paradox axes;
-- [ ] other priority packages and active documentation tested against exact
-  reviewed revisions;
+- [x] the retained priority consumer corpus and active documentation are tested
+  against their exact reviewed revisions; the later final miesmuschel delta is
+  test-only and its affected rows were rerun on both axes;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
 
@@ -316,24 +320,26 @@ the registered `$has_deps` reader; its one address-taken graph-root diagnostic
 is reviewed as `ADDRESS_TAKEN_MODEL`. The public-table classifier added three
 registered diagnostic routines and shifted only analyzer-generated helper
 suffixes and line locations; the reviewed UP/PB block inventory and rationale
-assignments are unchanged. The final frozen-candidate memory gate must still
-rerun on the exact candidate bytes and deliberately regenerate the policy if
-its authenticated report changes.
+assignments are unchanged. The exact frozen-candidate memory gate retained the
+same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
 - [x] directly affected development tests pass from stable cached
   installations;
-- [ ] the complete unit suite passes from the new frozen candidate
-  installation;
+- [x] the complete unit suite passes for the frozen candidate package payload;
+  the donor execution and target payload identity remain separately recorded;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
-- [x] measured hot-path changes are implemented and revalidated in affected
-  development tests; the sealed release benchmark remains pending below;
-- [ ] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
+- [x] measured hot-path changes are implemented and revalidated; the sealed
+  release benchmark has 72 passes, five bounded marginal reviews, and no
+  failure;
+- [x] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
   and R-API/exception-ledger checks are clean;
-- [ ] R 4.3.3, 4.5.2, development R, Windows x86-64, and real macOS ARM64 are
-  clean for the same source;
-- [ ] priority consumer, documentation, differential, and benchmark gates are
-  accepted with retained source-bound evidence.
+- [x] R 4.3.3, 4.5.2, and development-R local execution are clean for the
+  identical package payload;
+- [ ] Windows x86-64 and real macOS ARM64 are clean for the exact frozen
+  candidate and independently retained;
+- [x] priority consumer, documentation, differential, and benchmark gates are
+  accepted with retained evidence and explicit transfer scope.
 
 Current profiling diagnostics are implementation guidance, not release
 benchmark evidence:
@@ -345,8 +351,8 @@ benchmark evidence:
   corrupt-state validation;
 - the direct base checks in the `to_tune(ParamSet)` callback wrapper measured
   4.47 microseconds versus 24.31 microseconds for the former
-  checkmate/mlr3misc layers in the focused probe. The final paired gate must
-  still validate representative end-to-end workloads on the frozen candidate;
+  checkmate/mlr3misc layers in the focused probe. The final paired gate confirms
+  the representative end-to-end workloads on the frozen candidate payload;
 - an earlier isolated `check_dependencies()` and BASE-Shadow constraint-plan
   stage compiled with the complete strict C17 warning set under GCC 14 and
   Clang 22 without a diagnostic. Its immutable GCC installation (DSO SHA-256
@@ -419,8 +425,8 @@ benchmark evidence:
   retained pre-optimization 3.365/3.591 stage. Filtered getters, domains,
   dependencies, params, mutation, and every real consumer row keep their strict
   ordinary tiers; the integrity rows also retain the `hot` allocation budget.
-  These diagnostics justify the authenticated policy but do not replace the
-  pending sealed benchmark;
+  The sealed release benchmark subsequently accepted all timing rows and
+  retained five allocation/integrity rows for bounded marginal review;
 - a sparse-target `$search_space()` facade experiment was rejected. The
   conversion is cold and the representative maintained end-to-end workload
   moved only about 2%, which did not justify an additional projection path and
@@ -435,11 +441,10 @@ benchmark evidence:
   low-hanging enough to reopen the implementation. The existing low-risk wins
   remain; this internal optimization can be reconsidered later without another
   compatibility/API break and is not included in any claimed speedup above;
-- none of the staged DSOs above is current combined evidence. The implementation
-  has since converged, but release conclusions remain pending until the candidate
-  table below names the immutable source and each applicable retained gate is
-  recorded against it. These staged diagnostics do not replace any candidate
-  compiler, suite, benchmark, or analyzer gate.
+- none of the staged DSOs above is current combined evidence. The candidate
+  table and retained-evidence record below name the immutable source and the
+  applicable release gates; those final rows, not the development diagnostics,
+  support the local release conclusion.
 
 ## Current local downstream branches
 
@@ -448,23 +453,24 @@ push and create PRs manually.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals or data.table index caches, retain version-gated dependency diagnostics, and keep its Rd links valid on both majors. |
-| bbotk | `.local/compat/github/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Replace one private collection `.sets` read, accept version-gated native diagnostics, and root detached public search-space snapshots for their complete native pointer lifetime. |
-| mlr3mbo | `.local/compat/downstream-pr-worktrees/mlr3mbo-paradox2` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
-| celecx | `.local/compat/downstream-pr-worktrees/celecx-paradox2` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Version-gate Paradox validation fragments and require the compatible mlr3mbo development bridge; other runtime behavior is unchanged. |
-| mlr3 | `.local/compat/github/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | Version-gate two numeric-Domain diagnostic assertions. |
-| mlr3fselect | `.local/compat/github/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | Version-gate one feature-fraction diagnostic assertion. |
-| mlr3pipelines | `.local/compat/github/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Decouple PICV tests from exact Paradox-1 wording and fix GraphLearner state deep-clone ownership with an explicit mutation-isolation regression. |
-| mlr3fda | `.local/compat/downstream-pr-worktrees/mlr3fda-paradox2` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Select Paradox-2 diagnostic snapshots without replacing the legacy Paradox-1 snapshots. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals or data.table index caches, retain version-gated dependency diagnostics, and keep its Rd links valid on both majors. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Replace one private collection `.sets` read, accept version-gated native diagnostics, and root detached public search-space snapshots for their complete native pointer lifetime. |
+| mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
+| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Version-gate Paradox validation fragments and require the compatible mlr3mbo development bridge; other runtime behavior is unchanged. |
+| mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | Version-gate two numeric-Domain diagnostic assertions. |
+| mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | Version-gate one feature-fraction diagnostic assertion. |
+| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Decouple PICV tests from exact Paradox-1 wording and fix GraphLearner state deep-clone ownership with an explicit mutation-isolation regression. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Select Paradox-2 diagnostic snapshots without replacing the legacy Paradox-1 snapshots. |
 
-As a development diagnostic, the final miesmuschel public-state equality commit
-passed its dictionary (693 expectations) and shortform (20 expectations) files
-against both development candidate C and legacy Paradox. This is evidence for
-the bridge shape, not a substitute for retesting the exact branch head against
-the exact frozen candidate.
+The final miesmuschel head passes its complete repository suite and source-
+package check against both exact Paradox axes. Its last commit changes only
+three deep test comparisons to ignore data.table cache attributes; no production
+source changed. The final Paradox-2 affected-row evidence is retained under
+`.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r8`, and Paradox-1
+under `.local/compat/runs/release-final-20260720-v1.0.1-paradox1-r2`.
 
-The final handoff must include exact push commands and PR title/body text only
-after retesting these heads against the exact frozen candidate. The named
+The handoff in `compat/downstream-pr-handoff.md` contains exact push commands
+and PR title/body text for every retested head. The named
 `release-refresh-20260720` evidence profile is the immutable authority for the
 four refreshed heads above; it does not rewrite or relabel the earlier
 full-corpus candidate evidence. It uses a separate primary-checkout namespace,
@@ -496,25 +502,37 @@ Authenticated toolchain, package-download, dependency-library, consumer-install,
 reference-source, header, analyzer-runtime, and container caches remain valid
 when their byte-affecting inputs match. A candidate DSO, package installation,
 memory report, differential, consumer result, documentation result, or
-benchmark is not transferable across source changes.
+benchmark is not transferable across a changed distributable payload.
+
+A completed package-facing row may be reused across refs only through a sealed,
+independently replayed proof that every Git change is excluded by the exact
+`.Rbuildignore` and that clean builds have the same complete payload inventory
+and bytes after removing only R's generated `Packaged:` record. The donor run
+keeps its original identity; the target ledger names the proof and transfer
+scope. Tooling/policy/docs/profile/benchmark/portability inputs are not covered
+by package-payload identity. A downstream test-only change reopens that
+package's affected rows, not consumers whose head and production source remain
+unchanged.
 
 For an R/docs-only inner-loop change, a development DSO may be reused only
 after recording byte identity of every native build input plus compiler/profile,
 `NAMESPACE`, and `DESCRIPTION`, reinstalling the R/help databases, and verifying
 the loaded DSO hash. This exception is diagnostic-only. The final immutable
-candidate receives one clean full source build per distinct
+distributable payload receives one clean full source build per executed
 R/compiler/instrumentation profile; compatible evidence families may share
-that exact authenticated installation, never development component objects.
+that exact authenticated installation, and a sealed identical-payload ref may
+inherit the donor conclusion, never development component objects.
 
 ## Candidate freeze record
 
 The immutable package candidate is committed after package implementation,
 tests, help, and package-facing documentation converge and the primary checkout
 is clean. A commit cannot contain its own commit, tree, or archive identity
-without a circular mutation. Therefore the candidate intentionally ships this
-table and the axis registry as pending. The package/release tag continues to
-point to the candidate, never to validation infrastructure, the final evidence
-ledger, or a portability harness.
+without a circular mutation. Therefore the candidate's own copy of this table
+and the axis registry is necessarily pending. This post-freeze ledger records
+the resolved identity below. The package/release tag continues to point to the
+candidate, never to validation infrastructure, the final evidence ledger, or a
+portability harness.
 
 Post-freeze validation infrastructure may populate exact candidate/profile rows
 and repair validation-only drivers in `AGENTS.md`, `benchmarks/`, `compat/`,
@@ -522,30 +540,48 @@ and repair validation-only drivers in `AGENTS.md`, `benchmarks/`, `compat/`,
 and prove that its diff from the candidate changes no package source, package
 tests, help, or package-facing documentation. Source-bound results still name
 the managed detached candidate, while each validation result separately records
-the tooling commit/tree/status that produced it. Freeze the final validation-
-tooling commit first, construct one fresh named downstream overlay with that
-exact tooling identity, and reuse it read-only for documentation, full checks,
-and the benchmark. This is the non-circular model for the
-`release-refresh-20260720` profile, not authority to mutate candidate bytes,
-replay older tooling evidence, or relabel evidence.
+the tooling commit/tree/status that produced it. Ordinarily freeze one final
+validation-tooling commit and reuse its named overlay read-only. The recorded
+release composition is narrower and explicit: documentation and benchmark used
+`bf64490`; `9e87556` changes only the final miesmuschel test head/profile ledgers,
+so new final overlays and the affected miesmuschel rows were built on both axes
+while unaffected conclusions retain their original identities. This is the
+non-circular model for the `release-refresh-20260720` profile, not authority to
+mutate candidate bytes, replay arbitrary older tooling evidence, or relabel
+execution.
 
-After every local and remote gate has completed, the final evidence-ledger
-commit changes only this file and populates the table and release decision. A
-portability companion changes only `.github/workflows/r-cmd-check.yml`. Creating
-either reopens only its own structural and ledger checks. Any package-facing
-post-freeze change requires a new candidate and new source-bound evidence.
+After the remote gate and publication handoff complete, the final evidence-
+ledger commit changes only this file and changes the decision from pending to
+accepted. The portability companion changes only
+`.github/workflows/r-cmd-check.yml`. Creating either reopens only its own
+structural and ledger checks. Any package-facing post-freeze change requires a
+new candidate and new source-bound evidence.
 
 | Field | Value |
 |---|---|
-| Full candidate ref | pending |
-| Commit | pending |
-| Tree | pending |
-| Source archive SHA-256 | pending |
+| Full candidate ref | `refs/paradox-release/candidate-20260720T053518Z` |
+| Commit | `10c6a0e65910206c8face91dac6c3dd1115e0bed` |
+| Tree | `a205205194f0bc62114106504853721f678fa340` |
+| Detached source | `.local/compat/candidate-snapshots/10c6a0e65910206c8face91dac6c3dd1115e0bed` |
+| Clean `R CMD build --no-manual` archive SHA-256 | `917ea2a497f9e80ce4cf1d10c081cea8914d36eb7deb647c036dca49994ad558` |
+| Deterministic Git archive SHA-256 | `0a712fa5c5f572ca2f2968fda211973fe0bede45b80a7fcee0848af863b1d7ca` |
+| Normalized 217-file package-payload manifest | `e6e767b8fa3cd1a9273d62039c208d7c3ae1aea0b12d7446560297d4750dcc3e` |
 | Version | 2.0.0 |
-| Source file count | pending |
-| Routine inventory hash | pending |
-| Test inventory hash | pending |
-| Downstream bridge commits | pending final retest |
+| Tracked source files | 486 |
+| Routine inventory | 72 rows; `environment/native-routine-coverage.tsv` SHA-256 `bc7a9b382e62372954b9e197906d30733e37147b5f09c82ebf371b63cf30fa4c` |
+| Test inventory | 84 `tests/testthat/test*.R` files; exact `mode/content-SHA-256/path` slice SHA-256 `8c7118167fe1e82e6c756661bf5a3a13d3795093e4c11a9982f3da9392551ebf` |
+| Final downstream-profile tooling | commit `9e875567ef0462e659906dd6aa0acfdc8fba3044`, tree `107ce3e060932000701d872024494971878675f8` |
+| Downstream bridge manifest | `compat/github-bridge-provenance.release-refresh-20260720.tsv`, SHA-256 `79596dc32d9030e4b86bfc13310bad277fe9070577a2ff703b295262378e9e5f` |
+| Portability companion | `paradox-2.0.0-ci-10c6a0e-harness-cc06c18`, commit `cc06c182949af09ce80e335ddbfc63a8078692e6` (remote evidence pending) |
+
+The eight exact bridge heads are bbotk `6cae9559cfa2133b02b19e9762211aa49ec4c1c7`,
+mlr3 `35e30a91e305936e57328b65e15b60f3ab00eef3`, miesmuschel
+`d4c7f79750cd15c8174415fb0ba059c597f4f055`, mlr3pipelines
+`1c4bc6e52005d40d61fdba27b047f09fd6a6d29a`, mlr3fselect
+`ae8e1d163bc7d8a2dd9f12e61d704e5b0d8430d7`, mlr3mbo
+`1a1c0abe95f59cd314f1fbc19c596cb6ac15f067`, celecx
+`a2975550c14f824c6abc86db9db32e982908c3ea`, and mlr3fda
+`035da5bb8d1c2ae22f04898718355e9653c382b2`.
 
 No annotated tag or remote branch is created by an agent. The user performs
 all remote writes after reviewing this record.
@@ -576,18 +612,38 @@ For the exact candidate ref, retain and verify:
    call patterns, with raw distributions and regression thresholds reviewed.
 
 Every accepted row receives a unique run ID, exact source ref/commit/tree,
-commands, versions, logs, manifests, and completion seal. Verifier-only changes
-never relabel old execution as a new package run.
+commands, versions, logs, manifests, and completion seal. A transferred row
+retains its donor execution identity and additionally names the target and exact
+equivalence proof; verifier-only changes never relabel old execution as a new
+package run.
+
+### Retained local release evidence
+
+| Gate | Retained evidence and result |
+|---|---|
+| Package-payload equivalence | `.local/checks/package-equivalence-a461-10c6`; evidence manifest `e558864a318a465edf058013f743c6ae386b34bcd7894037a02c66938a986fb3`, completion `71de496c80ef836b3f3a8ce32a59883adf7c847b41eaa39dc05dc31dd8262a65`, normalized payload `e6e767b8fa3cd1a9273d62039c208d7c3ae1aea0b12d7446560297d4750dcc3e` |
+| Exact candidate static/native source | `.local/checks/release-final-20260720T053518Z-10c6a0e-native-static`; completion `b42b77a87c210f5e2318bb0b25ec03abc16d220c5a99ab674c12ce2cfcde3b05` |
+| Full native, sanitizer, tests, and package check | donor `.local/checks/release-final-20260720T022410Z-a4617ca-native`; completion `2b873adcc505de6e9cd7a4f08a61806bcff83417d1afc9cb901f972eeb95356f`; transferred only through the package-payload proof above |
+| R API/header matrix | donor `.local/checks/release-final-20260720T022410Z-a4617ca-r-api`; completion `17e068591a3c7b59766ee5c41a55bd81c64830546097b8411a444334b1762725`; transferred only through the package-payload proof |
+| R 4.3.3 and 4.5.2 runtimes | donor `.local/checks/release-final-20260720T022410Z-a4617ca-runtime`; top seal `2f396214bf4e3d53751b6306ac99531a71ee1e0e77fc4b7b3366f36dd546b235`; 84 files and 5,720 expectations on each runtime; transferred only through the package-payload proof |
+| Exact candidate memory/adversarial | `.local/checks/release-final-20260720T053518Z-10c6a0e-memory`; completion `3220ee02820baf7e4ba9dfe90dacd79132f044bf088d045e4d8fb70036003d15`; Gctorture, Valgrind, and bounded rchk pass |
+| Exact differential | `.local/compat/differential/runs/20260720T072548Z-375776`; manifest `460869a0511691eb4684dbb7bcc5a5a437b6e4477d95932892cbb808df27a9fd`, seal `1c485dfcad2e92a760e910a9ca805c5af98a2b55478689ff487284d07fe245c4`; maintained baseline `06091b5b64a78807d332ec95c5cdc1aaac5899b9`, 26 cases, 23 reviewed differences, zero unexpected |
+| Exact payload priority consumers | donor `.local/compat/runs/release-final-20260720T022410Z-a4617ca-r3/repository-tests-priority-1-release-refresh-20260720-paradox2`; seven of seven passed, manifest/seal `e5dbb7ed0bf760c2082189aa9428500db05eeba787fd11ba99afaa03165db383` / `4adc9a9f1d0afd7ad515ccc939143ecf173f6fb3f4218f05ac72cf0d9a9860fa`; transferred through the package-payload proof, with final changed-profile rows below |
+| Paradox-2 downstream profile | final r8 overlay manifest/seal `32f337eff8e2fe01c6e2575f5a45d631dad1ca3afb8b2c81d037ccb51a4f49be` / `d91de3224009f270ea69fadee13e7a2fdd19e4fc3c4eb2bf26ffc83a8b840fb7`; final miesmuschel suite `b781723ef6935fe2491dba02483c45eb8eb5d4eb34330ccd7d11044de3ffe34a` and check `6b93a0b7de555673aa5489c454a5ce62d267653a747f999e9eb4539b80716d3f`; unchanged three-head full-check manifest/seal from r6 `d1004b19ccdd5ef0ff9198b1b3ef1491aeaefc75c73e99ed19c166e34fd66ae4` / `a47586f5f4837fdd0c8a6583a72b86d54a52d1ab683afd39e6866f7ab51ea446` |
+| Paradox-1 downstream profile | final r2 overlay manifest/seal `e48b62a5eb7bf16439cf9bb270965d26c1a8450cd622072a6f85d1124d1982d8` / `2885e9e01b71cc9d2d1276837dfe0fe4ff309b2a8a8269c70bf9dc8903be20ce`; final miesmuschel suite `f6c36c961fe1ebeeafda59b1c99ebc60f857a9f5e0ea06799e17ca65e427f991` and check `8cf57abb41df4743bc14520acbedcd8c9c04cefa6984250e1bde54a8c42209a5`; unchanged mlr3mbo/celecx/mlr3fda passed rows remain in the sealed r1 completed-with-failures stage |
+| Documentation | `.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r7-documentation/documentation`; manifest `142079a9a64525c3efbad3ce4f5b04a966581173c00a7ccbffe57109ea947dbe`, seal `ad3dfab8db699c66e7d013f00dca88f41d72fce5859180cc767d1f1d363046f2`; all 17 workloads completed and all mandatory rows pass |
+| Release benchmark | `.local/benchmarks/release-final-20260720T053518Z-10c6a0e-r7-release`; manifest `ee70b0bc9ca2b66710e56642c3641a1deb02816dba208e6851957b58ce8d938e`, seal `be525645f72ac8fa43f3f4064a0d00ba4ae1b69b8826441ca913e104b66a70e3`; 72 pass, five bounded marginal reviews, zero failures |
+| Windows/macOS portability | local harness fixtures pass; exact remote run for candidate tag `paradox-2.0.0-ci-10c6a0e` remains pending |
 
 ## Release decision
 
-The release decision is `pending`. It becomes `accepted` only when every box in
-the convergence checklist is complete, the candidate table is immutable, all
-mandatory evidence rows name that exact source, downstream migration paths are
-available, and the benchmark review finds no release-relevant low-hanging
-regression.
+The release decision is `pending`. All local gates and the benchmark review are
+accepted. Only two items remain: independent verification of the exact remote
+Windows x86-64/macOS ARM64 portability run, and confirmation that the user has
+published/opened the prepared downstream branches and PRs. The final ledger-only
+commit may change the decision to `accepted` after those facts are recorded.
 
-## Historical rejected candidates
+## Historical rejected or superseded refs
 
 The compatibility-first candidate at
 `refs/paradox-release/candidate-20260717T083921Z`, commit
@@ -600,7 +656,7 @@ companion `refs/paradox-release/portability-harness-268ccff` at
 `268ccff27ee68bfea71c6370b0616a9c969a94cf` predate the final public-subset,
 bulk-dependency, downstream-bridge, and `$has_deps` changes. All of these refs,
 hashes, logs, and artifacts are historical only. They authorize no conclusion
-about current package bytes and must not be copied into the pending fields
+about current package bytes and must not be copied into the candidate fields
 above.
 
 The still later candidate
@@ -674,6 +730,13 @@ source-bound rchk policy still named the pre-classifier report hashes and
 blocks, 196 UP diagnostics, and 13 PB diagnostics; the classifier's three
 diagnostic registrations raised the routine count to 72. The replacement
 candidate incorporates that exact refreshed policy and final validation
-tooling without changing package-facing files. Neither the partial memory
-directory nor the earlier tooling-bound overlays for `a4617ca` are final
-release evidence.
+tooling without changing package-facing files. The independently replayed
+`.local/checks/package-equivalence-a461-10c6` proof establishes that all 19
+changed Git paths are `.Rbuildignore`-excluded and that both clean builds have
+the same 217-file package payload after removing only R's generated `Packaged:`
+record. Thus its completed R-API, full native/sanitizer/test/check, runtime, and
+focused-consumer conclusions transfer to the identical `10c6a0e` package
+payload while retaining their donor identity. Neither the partial `a4617ca`
+memory directory nor its earlier tooling-bound overlays transfer; exact
+`10c6a0e` static, memory, differential, documentation, downstream, and benchmark
+evidence is retained separately above.

@@ -414,11 +414,17 @@ checkout authenticates the benchmark driver and validation helpers as one clean
 recorded tooling commit/tree/status. The profile derives, rather than accepts as
 an argument, the suffixed bridge library and evidence path.
 
-The final validation-tooling commit is frozen before constructing one fresh
-named overlay. Its completion commit/tree and every retained input must match
-the exact current tooling under the normal verifier. Documentation, full checks,
-and the benchmark reuse that sealed overlay read-only; they neither replay an
-older tooling generation nor construct or accept the default unsuffixed overlay.
+Ordinarily one final validation-tooling commit is frozen before constructing a
+fresh named overlay, and documentation, full checks, and the benchmark reuse it
+read-only. The final release has one reviewed narrow composition: documentation
+and benchmark execution used tooling `bf64490`; tooling `9e87556` changed only
+the selected miesmuschel head and related test/profile ledgers, and that
+downstream commit changes only three test assertions. Fresh final overlays and
+the affected miesmuschel suite/check rows were therefore rebuilt on both axes,
+while documentation, benchmark, and unchanged consumer conclusions retain their
+original identities and explicit test-only transfer rationale. There is still
+no arbitrary older-tooling replay, default unsuffixed-overlay substitution, or
+result relabeling.
 
 Remote write access is unavailable to agents. Successful local branches are
 handed to the user with manual push/PR commands; CI is accepted only after the
@@ -472,9 +478,12 @@ Portability requirements are detailed in [`portability-ci.md`](portability-ci.md
 
 ## Benchmark gate
 
-Benchmark only after correctness freezes. Use paired baseline/candidate runs on
-an otherwise idle host with raw distributions, warmup, stable CPU/memory
-conditions, and representative downstream workloads. Include constructors,
+Benchmark only after package bytes and behavior freeze. It may execute while a
+slow independent exact-memory or remote portability stage is still running,
+but its release conclusion is accepted only after those correctness gates pass.
+Use paired baseline/candidate runs on an otherwise idle host with raw
+distributions, warmup, stable CPU/memory conditions, and representative
+downstream workloads. Include constructors,
 `check`/`check_dt`/`check_dependencies`, values, params/domains/dependencies,
 subset, collections, live Shadow constraints and read/write paths, Design, and
 samplers.
@@ -502,10 +511,25 @@ authenticated baseline.
 
 Each release stage records a unique run ID and exact ref/commit/tree, and seals
 its complete required artifacts. Verifiers are read-only and may reuse
-authenticated inputs, but cannot transform evidence for one DSO/source into
-evidence for another. A later source change reopens only the gates it can
-affect; before the first contract-first candidate, the complete matrix is
-necessarily fresh.
+authenticated inputs, but cannot transform evidence for one semantic package
+payload or DSO into evidence for another. A later source change reopens only the
+gates it can affect; before the first contract-first candidate, the complete
+matrix is necessarily fresh.
+
+A ref-only or release-tooling change is different from a package change. A
+completed package-facing gate may be reused only when a retained, sealed, and
+independently replayed equivalence stage proves that every changed Git path is
+excluded by the exact candidate `.Rbuildignore`, clean builds have the same
+complete payload inventory, and every built payload byte agrees after removing
+only R's generated `Packaged:` record. The release ledger must identify both
+commits and trees, the normalized manifest, and the affected gate families.
+Source-tree tooling, analyzer policy, documentation/profile inputs, benchmark
+drivers, and portability harnesses remain independently bound and are rerun
+whenever their own bytes change. Likewise, after a downstream head changes only
+tests, rerun that package's affected rows and transfer other consumers only
+after proving their heads and production bytes unchanged. This narrow identity
+rule avoids expensive zero-information rebuilds without accepting behavioral
+similarity as release evidence.
 
 The active accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no

@@ -930,10 +930,13 @@ restore private-layout compatibility to the Paradox contract.
 
 ## Verification policy for the replacement candidate
 
-All correctness claims attached to the superseded candidate are historical.
-The replacement requires fresh source-bound evidence. Development validation
-must maximize information per wall time and avoid repeating full gates while
-the contract is still moving.
+Correctness claims attached to a semantically different superseded package
+payload are historical. The replacement requires fresh source-bound evidence,
+except where the release ledger retains an independently replayed proof that two
+refs build the same complete package payload and explicitly scopes reuse to
+inputs unaffected by their tooling-only diff. Development validation must
+maximize information per wall time and avoid repeating full gates while the
+contract is still moving.
 
 The package suite must contain contract tests for:
 
@@ -1002,7 +1005,8 @@ consumer corpus, memory suite, documentation suite, or benchmark as an inner
 loop.
 
 Once one clean Git ref implements the complete contract, validate in this
-order:
+dependency/acceptance order; independent long stages may overlap after their
+prerequisites and candidate bytes are frozen:
 
 1. strict GCC and Clang C17 builds, registered-routine/export audit, static
    analyzers, and the complete package suite;
@@ -1017,8 +1021,9 @@ order:
 6. package checks, examples, vignettes, manuals, legacy upgrade workloads, and
    the active book/website documentation;
 7. Windows x86-64 and real Apple-silicon ARM64 CI against the exact candidate;
-8. representative paired benchmarks, alone on an idle host, after every
-   correctness gate is green.
+8. representative paired benchmarks, alone on an idle host, after behavior and
+   bytes freeze; accept their release conclusion only after every correctness
+   gate is green.
 
 Use `scripts/environment/resource-jobs` for parallel admission and retain its
 report. Reuse authenticated dependency, toolchain, compiler-header, and
@@ -1028,7 +1033,9 @@ R/compiler/instrumentation profile, and share that immutable installation among
 tests or gates that authenticate the identical profile and package bytes. Do
 not carry forward a development DSO or any package installation, differential
 result, memory report, documentation result, or benchmark whose key includes
-superseded package bytes.
+different superseded package bytes. Refs with a sealed identical built payload
+follow the narrow evidence-reuse rule in the validation and release ledgers;
+donor execution identities are never rewritten.
 
 After the replacement benchmark establishes that the single engine has no
 release-relevant regression, performance work freezes again. Further source
