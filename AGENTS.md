@@ -1118,3 +1118,12 @@ The refreshed policy binds that exact 782-function/28,140-state report. The
 next candidate incorporates the policy and final validation tooling without
 changing any package-facing file; do not promote the partial `a4617ca` memory
 directory or its earlier tooling-bound overlays as final evidence.
+
+The replacement is frozen at
+`refs/paradox-release/candidate-20260720T053518Z`, commit
+`10c6a0e65910206c8face91dac6c3dd1115e0bed`, tree
+`a205205194f0bc62114106504853721f678fa340`. The immediate child validation
+commit changes only the Paradox evidence-axis registry, its exact fixture, and
+this ledger; all candidate execution must continue to authenticate the managed
+detached `10c6a0e` source rather than the validation worktree. Evidence bound
+to earlier candidate commits or tooling identities remains historical.
