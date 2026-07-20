@@ -30,7 +30,7 @@ value() {
    $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
    $(value "$legacy_output" version_major) == 1 &&
    $(value "$profile_output" candidate_commit) == \
-     e3741ab1d3cb8a5f3e7f357af6b7ab90c6e50fb7 &&
+     a4617ca769ff5373a7da16c7ce333e36c68fd9b2 &&
    $(value "$legacy_output" candidate_commit) == \
      cdcc8e616afe243cd7c54e15713c86f818a52626 &&
    $(value "$profile_output" checkout_namespace) == \
