@@ -1488,25 +1488,54 @@ repository_runner_base_child_environment <- function(root,
     repository_runner_fail("activated environment lacks PATH or R_MAKEVARS_USER")
   }
 
-  path_entries <- strsplit(current[["PATH"]], .Platform$path.sep,
-    fixed = TRUE)[[1L]]
   expected_bin <- repository_runner_require_directory(file.path(root, ".local",
     "toolchain", "bin"), "repository-local toolchain bin")
-  normalized_entries <- vapply(path_entries, function(entry) {
-    if (nzchar(entry) && dir.exists(entry)) {
-      normalizePath(entry, winslash = "/", mustWork = TRUE)
-    } else ""
-  }, character(1L))
-  if (!expected_bin %in% normalized_entries) {
-    repository_runner_fail("repository-local toolchain is absent from child PATH")
+  path_contains_toolchain <- function(path) {
+    if (length(path) != 1L || is.na(path) || !nzchar(path)) return(FALSE)
+    path_entries <- strsplit(path, .Platform$path.sep, fixed = TRUE)[[1L]]
+    normalized_entries <- vapply(path_entries, function(entry) {
+      if (nzchar(entry) && dir.exists(entry)) {
+        normalizePath(entry, winslash = "/", mustWork = TRUE)
+      } else ""
+    }, character(1L))
+    expected_bin %in% normalized_entries
+  }
+  if (!path_contains_toolchain(current[["PATH"]])) {
+    repository_runner_fail(
+      "repository-local toolchain is absent from activated PATH"
+    )
   }
 
   if (length(compat_environment)) {
-    if (is.null(names(compat_environment)) || anyDuplicated(names(compat_environment)) ||
+    if (is.null(names(compat_environment)) || anyNA(names(compat_environment)) ||
+        any(!nzchar(names(compat_environment))) ||
+        anyDuplicated(names(compat_environment)) ||
         any(!required %in% names(compat_environment)) ||
-        !identical(unname(compat_environment[required]), unname(current))) {
+        anyNA(compat_environment[required]) ||
+        any(!nzchar(compat_environment[required]))) {
       repository_runner_fail(
-        "compatibility-system child build environment differs from activation"
+        "compatibility-system child build environment is malformed"
+      )
+    }
+    declared_child_path <- Sys.getenv(
+      "PARADOX_COMPAT_SYSTEM_CHILD_PATH", unset = NA_character_
+    )
+    if (length(declared_child_path) != 1L || is.na(declared_child_path) ||
+        !nzchar(declared_child_path) ||
+        !identical(compat_environment[["PATH"]], declared_child_path)) {
+      repository_runner_fail(
+        "compatibility-system child PATH differs from its declared value"
+      )
+    }
+    if (!path_contains_toolchain(compat_environment[["PATH"]])) {
+      repository_runner_fail(
+        "repository-local toolchain is absent from compatibility-system child PATH"
+      )
+    }
+    if (!identical(compat_environment[["R_MAKEVARS_USER"]],
+        current[["R_MAKEVARS_USER"]])) {
+      repository_runner_fail(
+        "compatibility-system child Makevars differs from activation"
       )
     }
     return(compat_environment)

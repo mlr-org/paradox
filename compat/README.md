@@ -633,12 +633,14 @@ required for consumer-created subprocesses such as mlr3's mirai learner
 encapsulation daemons. Source-checkout testthat files run serially so every
 file retains pkgload's development-help shim. Default nested `parallel` and
 `future` plans are also forced sequential inside each bounded outer worker.
-The sealed base child environment also carries the activated repository-local
-`PATH` and `R_MAKEVARS_USER`. This is required because an explicit `processx`
-environment replaces, rather than augments, the parent environment on Unix;
-without those two entries a source-checkout test that invokes `pkgload` cannot
-find the compiler selected by the local R toolchain when the optional
-compatibility-system overlay is inactive.
+The sealed base child environment also carries the repository-local build
+`PATH` and activated `R_MAKEVARS_USER`. When the compatibility-system overlay
+is active, its declared restricted child `PATH` is used; the interactive
+activation `PATH` may retain additional host entries. Both paths are validated
+to contain the local toolchain. This is required because an explicit
+`processx` environment replaces, rather than augments, the parent environment
+on Unix; without these entries a source-checkout test that invokes `pkgload`
+cannot find the selected compiler.
 The receipt-bound `mlr3` row advertises its allotted two logical CPUs because
 its tests assert that worker contract; it still starts from a sequential
 future plan. Other consumer tests may explicitly install their own reviewed

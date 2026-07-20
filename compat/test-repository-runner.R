@@ -57,6 +57,82 @@ expect_error <- function(expression, pattern = NULL) {
   invisible(value)
 }
 
+# The activated interactive PATH may legitimately retain additional host
+# entries, while compatibility children receive the deliberately restricted
+# path declared by activate-compat-system. Both paths must independently retain
+# the repository-local toolchain, and the child must retain activated Makevars.
+environment_names <- c(
+  "PATH", "R_MAKEVARS_USER", "PARADOX_COMPAT_SYSTEM_CHILD_PATH"
+)
+environment_before <- Sys.getenv(environment_names, unset = NA_character_)
+names(environment_before) <- environment_names
+restore_environment <- function() {
+  present <- !is.na(environment_before)
+  if (any(present)) {
+    do.call(Sys.setenv, as.list(environment_before[present]))
+  }
+  if (any(!present)) Sys.unsetenv(environment_names[!present])
+}
+on.exit(restore_environment(), add = TRUE)
+toolchain_bin <- normalizePath(file.path(root, ".local", "toolchain", "bin"),
+  winslash = "/", mustWork = TRUE)
+extra_bin <- file.path(scratch, "activation-extra-bin")
+dir.create(extra_bin)
+restricted_child_path <- paste(c(toolchain_bin, "/usr/bin", "/bin"),
+  collapse = .Platform$path.sep)
+activation_fixture_path <- paste(c(toolchain_bin, extra_bin, "/usr/bin", "/bin"),
+  collapse = .Platform$path.sep)
+activated_makevars <- environment_before[["R_MAKEVARS_USER"]]
+if (is.na(activated_makevars) || !nzchar(activated_makevars)) {
+  stop("repository-runner fixture lacks activated Makevars", call. = FALSE)
+}
+Sys.setenv(
+  PATH = activation_fixture_path,
+  R_MAKEVARS_USER = activated_makevars,
+  PARADOX_COMPAT_SYSTEM_CHILD_PATH = restricted_child_path
+)
+compat_child <- c(
+  PATH = restricted_child_path,
+  R_MAKEVARS_USER = activated_makevars,
+  PARADOX_COMPAT_FIXTURE = "restricted-child"
+)
+if (!identical(
+    repository_runner_base_child_environment(root, compat_child),
+    compat_child
+  )) {
+  stop("restricted compatibility child environment was not preserved",
+    call. = FALSE)
+}
+tampered_child_path <- compat_child
+tampered_child_path[["PATH"]] <- activation_fixture_path
+expect_error(
+  repository_runner_base_child_environment(root, tampered_child_path),
+  "compatibility-system child PATH differs from its declared value"
+)
+Sys.setenv(PARADOX_COMPAT_SYSTEM_CHILD_PATH = paste(c("/usr/bin", "/bin"),
+  collapse = .Platform$path.sep))
+tampered_child_path[["PATH"]] <- Sys.getenv(
+  "PARADOX_COMPAT_SYSTEM_CHILD_PATH"
+)
+expect_error(
+  repository_runner_base_child_environment(root, tampered_child_path),
+  "repository-local toolchain is absent from compatibility-system child PATH"
+)
+Sys.setenv(PARADOX_COMPAT_SYSTEM_CHILD_PATH = restricted_child_path)
+tampered_makevars <- compat_child
+tampered_makevars[["R_MAKEVARS_USER"]] <- "/dev/null"
+expect_error(
+  repository_runner_base_child_environment(root, tampered_makevars),
+  "compatibility-system child Makevars differs from activation"
+)
+Sys.setenv(PATH = paste(c(extra_bin, "/usr/bin", "/bin"),
+  collapse = .Platform$path.sep))
+expect_error(
+  repository_runner_base_child_environment(root, compat_child),
+  "repository-local toolchain is absent from activated PATH"
+)
+restore_environment()
+
 # Exercise the shared shell authenticator against a detached source while the
 # real primary checkout contains the caller's unrelated worktree changes.
 auth_commit <- git_run(root, c("rev-parse", "--verify", "HEAD^{commit}"))
