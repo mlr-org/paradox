@@ -16,8 +16,10 @@ Usage: compat/check-downstream-profile --repositories NAME[,NAME...] \
        [--candidate-source PATH] [--evidence-profile NAME] \
        [--paradox-axis paradox2|paradox1] [--verify]
 
-Run serial full R CMD checks for exact heads in one authenticated downstream
-profile. The immutable check stage is separate from repository-test evidence.
+Build and serially check exact heads in one authenticated downstream profile.
+Each immutable check subject is the package tarball produced by R CMD build,
+not the raw source directory. The stage is separate from repository-test
+evidence.
 EOF
 }
 
@@ -300,16 +302,22 @@ verify_stage() {
      $(cat "$STAGE/metadata/library-inputs.tsv") == "$protected_current" ]] ||
     fail "check library inputs changed"
   [[ $(head -n 1 "$STAGE/results.tsv") == \
-       $'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256' &&
+       $'repository\tcommit\ttree\tstatus\tbuild_exit_status\tcheck_exit_status\telapsed_seconds\tbuild_log_sha256\tcheck_log_sha256\tpackage_path\tpackage_sha256' &&
      $(head -n 1 "$STAGE/metadata/selection.tsv") == \
        $'repository\tcommit\ttree\tcommit_date\tbranch\tarchive_sha256' ]] ||
     fail "check result or selection table has an unexpected schema"
   awk -F '\t' 'NR == 1 { next }
-    NF != 7 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
+    NF != 11 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
       $2 !~ /^[0-9a-f]{40}$/ || $3 !~ /^[0-9a-f]{40}$/ ||
       ($4 != "passed" && $4 != "failed") || $5 !~ /^[0-9]+$/ ||
-      $6 !~ /^[0-9]+$/ || $7 !~ /^[0-9a-f]{64}$/ || seen[$1]++ { exit 1 }
-    $4 == "passed" && $5 != "0" { exit 1 }
+      $6 !~ /^(-|[0-9]+)$/ || $7 !~ /^[0-9]+$/ ||
+      $8 !~ /^[0-9a-f]{64}$/ || $9 !~ /^(-|[0-9a-f]{64})$/ ||
+      $10 !~ /^(-|packages\/[A-Za-z0-9][A-Za-z0-9._-]*\/[A-Za-z][A-Za-z0-9.]*_[A-Za-z0-9.+~-]+\.tar\.gz)$/ ||
+      $11 !~ /^(-|[0-9a-f]{64})$/ || seen[$1]++ { exit 1 }
+    ($6 == "-") != ($9 == "-") || ($10 == "-") != ($11 == "-") ||
+      ($10 == "-") != ($6 == "-") { exit 1 }
+    $5 != "0" && $10 != "-" { exit 1 }
+    $4 == "passed" && ($5 != "0" || $6 != "0" || $10 == "-") { exit 1 }
   ' "$STAGE/results.tsv" || fail "check result rows are malformed"
   awk -F '\t' 'NR == 1 { next }
     NF != 6 || $1 !~ /^[A-Za-z0-9][A-Za-z0-9._-]*$/ ||
@@ -322,7 +330,7 @@ verify_stage() {
     "$STAGE/results.tsv")
   expected_status=passed
   [[ $failed_rows -eq 0 ]] || expected_status=completed_with_failures
-  [[ $(awk -F '\t' '$1 == "schema" { print $2 }' "$completion") == 2 &&
+  [[ $(awk -F '\t' '$1 == "schema" { print $2 }' "$completion") == 3 &&
      $(awk -F '\t' '$1 == "stage_kind" { print $2 }' "$completion") == downstream_profile_checks &&
      $(awk -F '\t' '$1 == "status" { print $2 }' "$completion") == "$expected_status" &&
      $(awk -F '\t' '$1 == "candidate_run_id" { print $2 }' "$completion") == "$RUN_ID" &&
@@ -354,7 +362,9 @@ verify_stage() {
        "$(receipt_value dependency_library_content_sha256)" ]] ||
     fail "check completion differs from its selected subject"
   local repository position result_line selection_line identity archive_sha256
-  local row_status row_exit expected_row_status log_sha256
+  local row_status build_exit check_exit expected_row_status elapsed_seconds
+  local build_log_sha256 check_log_sha256 package_path package_sha256
+  local package_file package_name expected_check_logs expected_packages
   local -a retained_names retained_sources
   retained_names=(
     check-downstream-profile downstream-evidence-profile.R
@@ -397,18 +407,51 @@ verify_stage() {
        $(git_value "$CONSUMER_ROOT/$repository" archive --format=tar \
          "${SNAPSHOT_COMMIT[$repository]}" | sha256sum | awk '{print $1}') == "$archive_sha256" ]] ||
       fail "check row differs from its exact selected Git object: $repository"
-    IFS=$'\t' read -r _ _ _ row_status row_exit _ log_sha256 <<<"$result_line"
-    [[ -f $STAGE/logs/$repository.log && ! -L $STAGE/logs/$repository.log &&
-       $(sha256sum "$STAGE/logs/$repository.log" | awk '{print $1}') == "$log_sha256" ]] ||
-      fail "check log differs from its row: $repository"
+    IFS=$'\t' read -r _ _ _ row_status build_exit check_exit elapsed_seconds \
+      build_log_sha256 check_log_sha256 package_path package_sha256 \
+      <<<"$result_line"
+    [[ $elapsed_seconds =~ ^[0-9]+$ &&
+       -f $STAGE/logs/$repository.build.log &&
+       ! -L $STAGE/logs/$repository.build.log &&
+       $(sha256sum "$STAGE/logs/$repository.build.log" | awk '{print $1}') == \
+         "$build_log_sha256" ]] ||
+      fail "build log differs from its row: $repository"
     expected_row_status=failed
-    if [[ $row_exit == 0 ]] && check_status_is_release_clean \
-        "$STAGE/checks/$repository.Rcheck/00check.log"; then
-      expected_row_status=passed
+    if [[ $package_path == - ]]; then
+      [[ $package_sha256 == - && $check_exit == - && $check_log_sha256 == - ]] ||
+        fail "failed build row retains inconsistent check/package fields: $repository"
+    else
+      package_name=${package_path#packages/"$repository"/}
+      [[ $package_path == "packages/$repository/$package_name" &&
+         $package_name =~ ^[A-Za-z][A-Za-z0-9.]*_[A-Za-z0-9.+~-]+\.tar\.gz$ ]] ||
+        fail "built package path is unsafe or belongs to another row: $repository"
+      package_file=$STAGE/$package_path
+      [[ $build_exit == 0 && -f $package_file && ! -L $package_file &&
+         $(sha256sum "$package_file" | awk '{print $1}') == "$package_sha256" &&
+         $check_exit =~ ^[0-9]+$ &&
+         -f $STAGE/logs/$repository.check.log &&
+         ! -L $STAGE/logs/$repository.check.log &&
+         $(sha256sum "$STAGE/logs/$repository.check.log" | awk '{print $1}') == \
+           "$check_log_sha256" ]] ||
+        fail "built package or check log differs from its row: $repository"
+      if [[ $check_exit == 0 ]] && check_status_is_release_clean \
+          "$STAGE/checks/$repository.Rcheck/00check.log"; then
+        expected_row_status=passed
+      fi
     fi
     [[ $row_status == "$expected_row_status" ]] ||
-      fail "check row does not reflect its exit and final Status line: $repository"
+      fail "check row does not reflect its build/check exits and final Status line: $repository"
   done
+  expected_check_logs=$(awk -F '\t' 'NR > 1 && $10 != "-" { ++n } END { print n + 0 }' \
+    "$STAGE/results.tsv")
+  expected_packages=$expected_check_logs
+  [[ $(find "$STAGE/logs" -mindepth 1 -maxdepth 1 -type f \
+       -name '*.build.log' | wc -l) -eq $result_rows &&
+     $(find "$STAGE/logs" -mindepth 1 -maxdepth 1 -type f \
+       -name '*.check.log' | wc -l) -eq $expected_check_logs &&
+     $(find "$STAGE/packages" -mindepth 2 -maxdepth 2 -type f \
+       -name '*.tar.gz' | wc -l) -eq $expected_packages ]] ||
+    fail "retained build/check logs or package tarballs differ from result rows"
   [[ $failed_rows -eq 0 ]] || fail "one or more downstream R CMD checks failed"
   printf '%s\n' "downstream_profile_check_evidence=passed" \
     "downstream_profile_check_stage=$STAGE"
@@ -508,7 +551,7 @@ BUILD_ID=$(directory_identity "$BUILD")
 EVIDENCE=$(mktemp -d "$PRIVATE_PREFIX-evidence.XXXXXX")
 EVIDENCE_ID=$(directory_identity "$EVIDENCE")
 mkdir "$EVIDENCE/inputs" "$EVIDENCE/logs" "$EVIDENCE/metadata" \
-  "$EVIDENCE/checks"
+  "$EVIDENCE/packages" "$EVIDENCE/checks"
 cp "$SELF" "$EVIDENCE/inputs/check-downstream-profile"
 cp "$ROOT/compat/downstream-evidence-profile.R" \
   "$EVIDENCE/inputs/downstream-evidence-profile.R"
@@ -546,7 +589,7 @@ TOOLING_TREE=$(git_value "$ROOT" rev-parse --verify "$TOOLING_COMMIT^{tree}")
 PROTECTED_BEFORE=$(library_inputs)
 printf '%s\n' "$PROTECTED_BEFORE" >"$EVIDENCE/metadata/library-inputs.tsv"
 
-printf 'repository\tcommit\ttree\tstatus\texit_status\telapsed_seconds\tlog_sha256\n' \
+printf 'repository\tcommit\ttree\tstatus\tbuild_exit_status\tcheck_exit_status\telapsed_seconds\tbuild_log_sha256\tcheck_log_sha256\tpackage_path\tpackage_sha256\n' \
   >"$EVIDENCE/results.tsv"
 printf 'repository\tcommit\ttree\tcommit_date\tbranch\tarchive_sha256\n' \
   >"$EVIDENCE/metadata/selection.tsv"
@@ -555,7 +598,8 @@ for repository in "${SELECTED[@]}"; do
   identity=$(authenticate_checkout "$repository")
   IFS=$'\t' read -r _ commit tree _ _ <<<"$identity"
   row=$BUILD/$repository
-  mkdir "$row" "$row/source" "$row/home" "$row/tmp" "$row/cache"
+  mkdir "$row" "$row/source" "$row/home" "$row/tmp" "$row/cache" \
+    "$row/package-output" "$row/check"
   git_value "$CONSUMER_ROOT/$repository" archive --format=tar \
     -o "$row/source.tar" "$commit"
   archive_sha256=$(sha256sum "$row/source.tar" | awk '{print $1}')
@@ -563,28 +607,86 @@ for repository in "${SELECTED[@]}"; do
     >>"$EVIDENCE/metadata/selection.tsv"
   tar -xf "$row/source.tar" -C "$row/source"
   started=$(date +%s)
+  build_log=$EVIDENCE/logs/$repository.build.log
+  check_log=$EVIDENCE/logs/$repository.check.log
+  row_environment=(
+    HOME="$row/home" USER="${USER:-paradox}" LOGNAME="${LOGNAME:-paradox}"
+    PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}"
+    R_LIBS="$LIBRARIES" R_LIBS_USER="$LIBRARIES" R_LIBS_SITE=
+    R_ENVIRON=/dev/null R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null
+    R_PROFILE_USER=/dev/null R_TESTS= NOT_CRAN=true
+    _R_CHECK_FORCE_SUGGESTS_=false _R_CHECK_CRAN_INCOMING_=false
+    R_MAKEVARS_USER="$ROOT/environment/Makevars" TMPDIR="$row/tmp"
+    XDG_CACHE_HOME="$row/cache" MAKEFLAGS=-j1 OMP_NUM_THREADS=1
+    OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
+    BLIS_NUM_THREADS=1
+  )
   set +e
   (
-    cd "$row"
-    env -i HOME="$row/home" USER="${USER:-paradox}" LOGNAME="${LOGNAME:-paradox}" \
-      PATH="$PATH" LD_LIBRARY_PATH="${LD_LIBRARY_PATH:-}" \
-      R_LIBS="$LIBRARIES" R_LIBS_USER="$LIBRARIES" R_LIBS_SITE= \
-      R_ENVIRON=/dev/null R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null \
-      R_PROFILE_USER=/dev/null R_TESTS= NOT_CRAN=true \
-      _R_CHECK_FORCE_SUGGESTS_=false _R_CHECK_CRAN_INCOMING_=false \
-      R_MAKEVARS_USER="$ROOT/environment/Makevars" TMPDIR="$row/tmp" \
-      XDG_CACHE_HOME="$row/cache" MAKEFLAGS=-j1 OMP_NUM_THREADS=1 \
-      OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
-      BLIS_NUM_THREADS=1 \
-      "$R" CMD check --no-manual --no-build-vignettes "$row/source"
-  ) >"$EVIDENCE/logs/$repository.log" 2>&1
-  status=$?
+    cd "$row/package-output"
+    env -i "${row_environment[@]}" \
+      "$R" CMD build --no-manual --no-build-vignettes "$row/source"
+  ) >"$build_log" 2>&1
+  build_status=$?
   set -e
+  package_relative=-
+  package_sha256=-
+  package_tarball=
+  built_packages=()
+  if [[ $build_status -eq 0 ]]; then
+    shopt -s nullglob
+    built_packages=("$row/package-output"/*.tar.gz)
+    shopt -u nullglob
+    if [[ ${#built_packages[@]} -eq 1 && -f ${built_packages[0]} &&
+       ! -L ${built_packages[0]} ]]; then
+      package_name=${built_packages[0]##*/}
+      if [[ $package_name =~ ^[A-Za-z][A-Za-z0-9.]*_[A-Za-z0-9.+~-]+\.tar\.gz$ ]]; then
+        mkdir "$EVIDENCE/packages/$repository"
+        package_relative=packages/$repository/$package_name
+        package_tarball=$EVIDENCE/$package_relative
+        mv -- "${built_packages[0]}" "$package_tarball"
+        package_sha256=$(sha256sum "$package_tarball" | awk '{print $1}')
+      fi
+    fi
+  fi
+  if [[ $package_relative == - ]]; then
+    printf '%s\n' \
+      "check-downstream-profile: R CMD build did not produce exactly one safe package tarball" \
+      >>"$build_log"
+  fi
+  check_status=-
+  check_log_sha256=-
+  check_directory=
+  if [[ $package_relative != - ]]; then
+    set +e
+    (
+      cd "$row/check"
+      env -i "${row_environment[@]}" \
+        "$R" CMD check --no-manual --no-build-vignettes "$package_tarball"
+    ) >"$check_log" 2>&1
+    check_status=$?
+    set -e
+    [[ $(sha256sum "$package_tarball" | awk '{print $1}') == \
+       "$package_sha256" ]] ||
+      fail "built package changed while it was checked: $repository"
+    check_log_sha256=$(sha256sum "$check_log" | awk '{print $1}')
+    shopt -s nullglob
+    check_directories=("$row/check"/*.Rcheck)
+    shopt -u nullglob
+    if [[ ${#check_directories[@]} -eq 1 &&
+       -d ${check_directories[0]} && ! -L ${check_directories[0]} ]]; then
+      check_directory=${check_directories[0]}
+    else
+      printf '%s\n' \
+        "check-downstream-profile: R CMD check did not produce exactly one check directory" \
+        >>"$check_log"
+      check_log_sha256=$(sha256sum "$check_log" | awk '{print $1}')
+    fi
+  fi
   elapsed=$(($(date +%s) - started))
-  check_directory=$(find "$row" -mindepth 1 -maxdepth 1 -type d \
-    -name '*.Rcheck' -print -quit)
   result=failed
-  if [[ $status -eq 0 && -n $check_directory ]] &&
+  if [[ $build_status -eq 0 && $check_status == 0 &&
+      $package_relative != - && -n $check_directory ]] &&
       check_status_is_release_clean "$check_directory/00check.log"; then
     result=passed
   else
@@ -593,9 +695,11 @@ for repository in "${SELECTED[@]}"; do
   if [[ -n $check_directory ]]; then
     mv "$check_directory" "$EVIDENCE/checks/$repository.Rcheck"
   fi
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$repository" "$commit" "$tree" \
-    "$result" "$status" "$elapsed" \
-    "$(sha256sum "$EVIDENCE/logs/$repository.log" | awk '{print $1}')" \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$repository" "$commit" "$tree" "$result" "$build_status" \
+    "$check_status" "$elapsed" \
+    "$(sha256sum "$build_log" | awk '{print $1}')" "$check_log_sha256" \
+    "$package_relative" "$package_sha256" \
     >>"$EVIDENCE/results.tsv"
 done
 
@@ -605,7 +709,7 @@ PROTECTED_AFTER=$(library_inputs)
 
 {
   printf 'field\tvalue\n'
-  printf 'schema\t2\n'
+  printf 'schema\t3\n'
   printf 'stage_kind\tdownstream_profile_checks\n'
   printf 'status\t%s\n' "$([[ $failed -eq 0 ]] && printf passed || printf completed_with_failures)"
   printf 'candidate_run_id\t%s\n' "$RUN_ID"

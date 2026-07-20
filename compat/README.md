@@ -340,7 +340,12 @@ for the candidate package, every configured extra library (including the
 bridge and `mlr3verse` libraries), and the dependency library. A retained
 `00check.log` with an `ERROR` or `WARNING` is a failed row even if that R
 version returns process status zero; NOTE-only checks remain separately visible
-and are accepted by this focused harness.
+and are accepted by this focused harness. Each exact Git archive is first
+processed by repository-local `R CMD build`; the retained build log and package
+tarball hash are authenticated before that tarball, rather than the raw source
+directory, is passed to `R CMD check`. Besides matching CRAN's source-package
+boundary, this ensures that `Authors@R`-only metadata is expanded before R 4.6
+validates the package.
 
 The P1 run uses an exact Paradox-1 Git ref with the unchanged candidate
 installer, so its normal receipt still binds source, archive, installed bytes,

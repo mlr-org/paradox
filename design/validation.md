@@ -395,10 +395,14 @@ hashes, reject path, symlink, head, tree, and ancestry mismatches before work,
 and publish profile-specific overlays with the same no-clobber protocol. Use
 one outer worker for this focused release confirmation. Run the sealed exact-
 head `R CMD check` harness in addition to repository suites so Rd links and
-other package-level checks are retained evidence. That harness classifies the
-retained final check status rather than trusting the process exit alone, so a
-WARNING cannot be sealed as a pass, and binds every configured extra-library
-input by ordered path and content hash.
+other package-level checks are retained evidence. For each authenticated Git
+archive, that harness first runs `R CMD build`, retains and hashes its build
+log and resulting package tarball, and checks that tarball rather than the raw
+source directory. This makes build-time `Authors@R` expansion part of the
+authenticated boundary required by R 4.6. The harness separately binds the
+check exit/log, classifies the retained final check status rather than trusting
+the process exit alone, so a WARNING cannot be sealed as a pass, and binds
+every configured extra-library input by ordered path and content hash.
 
 The final benchmark deliberately does not require validation-tooling
 `HEAD` to equal the candidate commit. Such a requirement is circular: the

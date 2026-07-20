@@ -742,6 +742,11 @@ value. Do not build from the live root while another worker is compiling there;
 copy package sources (excluding `.o`/`.so`) to a stable stage first.
 At the release boundary, do not infer full-check success from process status:
 the retained final `Status:` line must contain neither ERROR nor WARNING.
+For an exact downstream head, first run repository-local `R CMD build` on its
+authenticated Git archive and check the resulting retained package tarball,
+never the raw source directory. The evidence must bind the build exit/log and
+tarball path/hash separately from the check exit/log; this also preserves R's
+required `Authors@R` metadata expansion before R 4.6 package checks.
 Receipts for downstream checks must fingerprint every library on the actual
 search path, including bridge and `mlr3verse` extra libraries, in order.
 Keep diagnostic probes bounded as well: do not use recursive

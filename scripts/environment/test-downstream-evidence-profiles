@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 R=$ROOT/.local/toolchain/bin/Rscript
+R_CMD=$ROOT/.local/toolchain/bin/R
 RESOLVER=$ROOT/compat/resolve-downstream-evidence-profile.R
 PROFILE=release-refresh-20260720
 
@@ -11,7 +12,7 @@ fail() {
   exit 1
 }
 
-[[ -x $R && -f $RESOLVER && ! -L $RESOLVER ]] ||
+[[ -x $R && -x $R_CMD && -f $RESOLVER && ! -L $RESOLVER ]] ||
   fail "profile test inputs are absent or symbolic"
 
 resolve() {
@@ -182,6 +183,85 @@ expect_reject "R CMD check WARNING status" \
   check_status_is_release_clean "$fixture/check-warning.log"
 expect_reject "non-final R CMD check status" \
   check_status_is_release_clean "$fixture/check-trailing.log"
+
+full_check_harness=$ROOT/compat/check-downstream-profile
+grep -Fq '"$R" CMD build --no-manual --no-build-vignettes "$row/source"' \
+  "$full_check_harness" ||
+  fail "full-check harness does not build the exact archived source"
+grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$package_tarball"' \
+  "$full_check_harness" ||
+  fail "full-check harness does not check the built package tarball"
+if grep -Fq '"$R" CMD check --no-manual --no-build-vignettes "$row/source"' \
+    "$full_check_harness"; then
+  fail "full-check harness still checks a raw source directory"
+fi
+
+authors_package=$fixture/authorsonlyfixture
+authors_build=$fixture/authors-build
+authors_check=$fixture/authors-check
+mkdir -p "$authors_package/R" "$authors_package/man" "$authors_build" \
+  "$authors_check" "$fixture/authors-home" "$fixture/authors-tmp"
+printf '%s\n' \
+  'Package: authorsonlyfixture' \
+  'Type: Package' \
+  'Title: Authors at R Build Boundary Fixture' \
+  'Version: 0.0.1' \
+  'Authors@R: person("Ada", "Lovelace", email = "ada@example.org", role = c("aut", "cre"))' \
+  'Description: Verifies that full downstream checks consume a package tarball built from an Authors at R only source.' \
+  'License: GPL-3' \
+  'Encoding: UTF-8' >"$authors_package/DESCRIPTION"
+printf '%s\n' 'export(answer)' >"$authors_package/NAMESPACE"
+printf '%s\n' 'answer <- function() 42L' >"$authors_package/R/answer.R"
+printf '%s\n' \
+  '\name{answer}' \
+  '\alias{answer}' \
+  '\title{Return the fixture answer}' \
+  '\usage{answer()}' \
+  '\value{The integer 42.}' \
+  '\description{Returns the fixture answer.}' >"$authors_package/man/answer.Rd"
+authors_environment=(
+  HOME="$fixture/authors-home" USER=paradox LOGNAME=paradox PATH="$PATH"
+  R_LIBS= R_LIBS_USER= R_LIBS_SITE= R_ENVIRON=/dev/null
+  R_ENVIRON_USER=/dev/null R_PROFILE=/dev/null R_PROFILE_USER=/dev/null
+  R_TESTS= NOT_CRAN=true _R_CHECK_FORCE_SUGGESTS_=false
+  _R_CHECK_CRAN_INCOMING_=false TMPDIR="$fixture/authors-tmp" MAKEFLAGS=-j1
+)
+(
+  cd "$authors_build"
+  env -i "${authors_environment[@]}" \
+    "$R_CMD" CMD build --no-manual --no-build-vignettes "$authors_package"
+) >"$fixture/authors-build.log" 2>&1 ||
+  { sed -n '1,160p' "$fixture/authors-build.log" >&2
+    fail "Authors@R-only fixture could not be built"
+  }
+shopt -s nullglob
+authors_tarballs=("$authors_build"/*.tar.gz)
+shopt -u nullglob
+[[ ${#authors_tarballs[@]} -eq 1 && -f ${authors_tarballs[0]} &&
+   ! -L ${authors_tarballs[0]} ]] ||
+  fail "Authors@R-only fixture did not produce one package tarball"
+authors_description=$(tar -xOf "${authors_tarballs[0]}" \
+  authorsonlyfixture/DESCRIPTION) ||
+  fail "Authors@R-only built DESCRIPTION is absent"
+if grep -Eq '^(Author|Maintainer):' "$authors_package/DESCRIPTION"; then
+  fail "Authors@R-only source fixture unexpectedly has expanded metadata"
+fi
+if ! grep -Eq '^Author:' <<<"$authors_description" ||
+    ! grep -Eq '^Maintainer:' <<<"$authors_description"; then
+  fail "R CMD build did not expand Authors@R metadata in the package tarball"
+fi
+(
+  cd "$authors_check"
+  env -i "${authors_environment[@]}" \
+    "$R_CMD" CMD check --no-manual --no-build-vignettes "${authors_tarballs[0]}"
+) >"$fixture/authors-check.log" 2>&1 ||
+  { sed -n '1,160p' "$fixture/authors-check.log" >&2
+    fail "built Authors@R-only fixture did not complete R CMD check"
+  }
+check_status_is_release_clean \
+  "$authors_check/authorsonlyfixture.Rcheck/00check.log" ||
+  fail "built Authors@R-only fixture did not have a release-clean check status"
+
 date_helper=$(sed -n '/^canonical_git_date()/,/^}/p' \
   "$ROOT/compat/install-downstream-bridges")
 [[ -n $date_helper ]] || fail "Git date canonicalizer is absent"
@@ -205,7 +285,9 @@ done
 for binding in \
     'expected_keys=' 'retained_names=(' 'library_inputs_sha256' \
     'PROTECTED_BEFORE=$(library_inputs)' 'protected_content_sha256' \
-    'result_sha256' 'PUBLISHED_EVIDENCE_ID' 'directory_identity'; do
+    'result_sha256' 'PUBLISHED_EVIDENCE_ID' 'directory_identity' \
+    'build_exit_status' 'package_sha256' '$repository.build.log' \
+    'CMD check --no-manual --no-build-vignettes "$package_tarball"'; do
   grep -Fq "$binding" "$ROOT/compat/check-downstream-profile" ||
     fail "full-check immutability verifier omits: $binding"
 done
