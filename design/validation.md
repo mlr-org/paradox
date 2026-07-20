@@ -338,7 +338,8 @@ reused; independent rows run in admitted outer waves. Mine all failures before
 changing source. Very old repositories that neither import nor call current
 Paradox are recorded but not made blockers.
 
-The seven reviewed bridge packages are installed once per candidate, in the
+The default pre-refresh schema-2 evidence installs seven reviewed bridge
+packages once per candidate, in the
 fixed dependency order bbotk, mlr3, miesmuschel, mlr3pipelines, mlr3fselect,
 mlr3mbo, and celecx, by
 `compat/install-downstream-bridges --candidate-source "$candidate_source"`.
@@ -360,7 +361,7 @@ deleted by a losing process.
 Repository-corpus, documentation, and benchmark gates put that exact overlay
 first in their extra-library path and call the helper's `--verify` mode before
 loading packages or beginning retained work. Verification is read-only and
-replays the sealed inputs, exact seven Git archives, package inventory/content,
+replays the sealed inputs, its exact seven Git archives, package inventory/content,
 and read-only modes; it never rebuilds or repairs the overlay. A caller may
 skip duplicate candidate/dependency tree hashing with
 `--protected-content-preverified` only after authenticating those exact trees

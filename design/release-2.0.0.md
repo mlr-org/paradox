@@ -280,13 +280,13 @@ not a local compatibility workaround.
 
 ### Downstream coordination
 
-- [x] local bbotk bridge `6cae955` and miesmuschel bridge `d9d5c01` are
+- [x] local bbotk bridge `6cae955` and miesmuschel bridge `6255050` are
   prepared on their recorded branches;
-- [x] mlr3mbo `569c184`, celecx `cef7a4f`, mlr3 `35e30a9`, mlr3fselect
-  `ae8e1d1`, and mlr3pipelines `1c4bc6e` are prepared on their recorded
-  branches;
-- [ ] all seven bridge heads are authenticated and retested against the exact
-  frozen candidate;
+- [x] mlr3mbo `1a1c0ab`, celecx `a297555`, mlr3 `35e30a9`, mlr3fselect
+  `ae8e1d1`, mlr3pipelines `1c4bc6e`, and mlr3fda `035da5b` are prepared on
+  their recorded branches;
+- [ ] all eight profile bridge heads are authenticated and the four refreshed
+  heads are retested and fully checked against both exact Paradox axes;
 - [ ] other priority packages and active documentation tested against exact
   reviewed revisions;
 - [ ] user has manually pushed branches and opened the required PRs (agents

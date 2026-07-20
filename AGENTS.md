@@ -914,17 +914,20 @@ Current PR-ready local branches are:
 - bbotk `codex/public-paramsetcollection-sets` at `6cae955`: public collection
   state, dual-version diagnostics, and rooted detached native search-space
   snapshots;
-- miesmuschel `codex/paradox-paramsetshadow-bridge` at `d9d5c01`: the
-  dual-version official `ParamSetShadow` bridge and public-state tests;
-- mlr3mbo `codex/paradox2-transformless-subset` at `569c184`: public
-  transformation-free subset construction on Paradox 2;
-- celecx `codex/paradox2-diagnostics` at `cef7a4f`, mlr3
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `6255050`: the
+  dual-version official `ParamSetShadow` bridge, public-state tests, and
+  dual-major documentation link;
+- mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
+  transformation-free subset construction on Paradox 2 plus release notes;
+- celecx `codex/paradox2-diagnostics` at `a297555`, mlr3
   `codex/paradox2-diagnostics` at `35e30a9`, and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1`: small dual-version test-diagnostic
   adaptations with unchanged runtime behavior;
 - mlr3pipelines `codex/paradox-diagnostic-compat` at `1c4bc6e`: exact-error
   decoupling plus an independently required GraphLearner deep-clone ownership
-  fix and mutation-isolation regression.
+  fix and mutation-isolation regression;
+- mlr3fda `paradox2-snapshots` at `035da5b`: Paradox-2 diagnostic snapshots
+  selected without changing the Paradox-1 snapshot baseline.
 
 Before handoff, rebase only if the user requests it, test each exact branch
 against the exact frozen candidate, record the commands/results, and provide

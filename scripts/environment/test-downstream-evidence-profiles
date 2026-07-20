@@ -159,6 +159,7 @@ for binding in \
     '.git/objects/info/alternates' 'replacement refs' \
     'profile checkout hides index state' \
     'status --porcelain=v1 --untracked-files=all' \
+    'BRIDGE_BASE_BRANCH' 'BRIDGE_BASE_DATE' \
     'branch --show-current' 'show -s --format=%cI'; do
   grep -Fq "$binding" "$ROOT/compat/install-downstream-bridges" ||
     fail "bridge profile Git authentication omits: $binding"

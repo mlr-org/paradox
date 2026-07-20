@@ -2,9 +2,11 @@
 
 Agentic processes must not push these branches or open remote pull requests.
 The eight repository-local branches below are the complete reviewed migrations.
-Before publication, the release gate must test these exact heads against the
-frozen Paradox candidate and `compat/verify-mlr-org-review` must authenticate
-their clean trees.
+Before publication, the named release-refresh gate must test and run full
+checks for these exact heads against both pinned Paradox axes. Its profile
+installer authenticates their isolated primary Git stores; the default
+`compat/verify-mlr-org-review` census remains historical evidence for their
+recorded upstream bases rather than an authenticator for refreshed heads.
 
 ## bbotk
 

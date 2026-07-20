@@ -416,13 +416,15 @@ dependency_completion_value() {
   fail "priority-one dependency preparation belongs to a different run, scope, or endpoint"
 
 declare -A BRIDGE_ORIGIN BRIDGE_BASE BRIDGE_BASE_TREE BRIDGE_COMMIT BRIDGE_TREE
-declare -A BRIDGE_COMMIT_DATE BRIDGE_BRANCH
-while IFS=$'\t' read -r repository origin base base_tree _ _ commit tree \
+declare -A BRIDGE_BASE_DATE BRIDGE_BASE_BRANCH BRIDGE_COMMIT_DATE BRIDGE_BRANCH
+while IFS=$'\t' read -r repository origin base base_tree base_date base_branch commit tree \
     commit_date branch _; do
   [[ $repository == repository ]] && continue
   BRIDGE_ORIGIN[$repository]=$origin
   BRIDGE_BASE[$repository]=$base
   BRIDGE_BASE_TREE[$repository]=$base_tree
+  BRIDGE_BASE_DATE[$repository]=$base_date
+  BRIDGE_BASE_BRANCH[$repository]=$base_branch
   BRIDGE_COMMIT[$repository]=$commit
   BRIDGE_TREE[$repository]=$tree
   BRIDGE_COMMIT_DATE[$repository]=$commit_date
@@ -459,6 +461,12 @@ for repository in "${INSTALL_ORDER[@]}"; do
   flags=$(profile_git "$checkout" ls-files -v | cut -c1 | LC_ALL=C sort -u)
   [[ -z $(grep -E '^[a-zS]$' <<<"$flags") ]] ||
     fail "profile checkout hides index state: $repository"
+  profile_git "$checkout" check-ref-format --branch \
+    "${BRIDGE_BASE_BRANCH[$repository]}" >/dev/null ||
+    fail "reviewed base branch name is invalid: $repository"
+  profile_git "$checkout" check-ref-format --branch \
+    "${BRIDGE_BRANCH[$repository]}" >/dev/null ||
+    fail "reviewed bridge branch name is invalid: $repository"
   [[ $(profile_git "$checkout" remote get-url origin) == \
        "${BRIDGE_ORIGIN[$repository]}" &&
      $(profile_git "$checkout" rev-parse --verify 'HEAD^{commit}') == \
@@ -471,6 +479,11 @@ for repository in "${INSTALL_ORDER[@]}"; do
        "${BRIDGE_BASE[$repository]}^{commit}") == "${BRIDGE_BASE[$repository]}" &&
      $(profile_git "$checkout" rev-parse --verify \
        "${BRIDGE_BASE[$repository]}^{tree}") == "${BRIDGE_BASE_TREE[$repository]}" &&
+     $(profile_git "$checkout" rev-parse --verify \
+       "refs/heads/${BRIDGE_BASE_BRANCH[$repository]}^{commit}") == \
+       "${BRIDGE_BASE[$repository]}" &&
+     $(profile_git "$checkout" show -s --format=%cI \
+       "${BRIDGE_BASE[$repository]}") == "${BRIDGE_BASE_DATE[$repository]}" &&
      $(profile_git "$checkout" branch --show-current) == "${BRIDGE_BRANCH[$repository]}" &&
      $(profile_git "$checkout" show -s --format=%cI \
        "${BRIDGE_COMMIT[$repository]}") == "${BRIDGE_COMMIT_DATE[$repository]}" &&
