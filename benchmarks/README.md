@@ -369,13 +369,17 @@ compact ratios. The allocation profile is deliberately separate from the timed
 distribution, because allocation instrumentation itself changes timings.
 
 For the three retained consumer constructors used by the collection migration,
-run the dedicated worker once for each immutable package installation:
+run the dedicated worker once for each immutable package installation. For
+release evidence, `BRIDGE_LIBRARY` is the verified named-profile overlay (for
+example
+`.local/compat/runs/CANDIDATE_RUN/library-downstream-bridges-release-refresh-20260720-paradox2`),
+not the historical unsuffixed default overlay:
 
 ```sh
 Rscript benchmarks/paramsetcollection-consumers.R \
   candidate .local/compat/runs/CANDIDATE_RUN/library-candidate \
   consumer-candidate.csv \
-  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  "$BRIDGE_LIBRARY" \
   .local/compat/R/library-dependencies
 ```
 
@@ -396,11 +400,11 @@ candidate, then compare the emitted CSV files:
 ```sh
 Rscript benchmarks/paramsetcollection-construction.R \
   baseline .local/checks/psc-constructor/baseline-library baseline.csv \
-  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  "$BRIDGE_LIBRARY" \
   .local/compat/R/library-dependencies
 Rscript benchmarks/paramsetcollection-construction.R \
   candidate .local/checks/psc-constructor/candidate-library candidate.csv \
-  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  "$BRIDGE_LIBRARY" \
   .local/compat/R/library-dependencies
 ```
 
@@ -416,10 +420,10 @@ workload verifies the stored values before and after timing:
 ```sh
 Rscript benchmarks/value-mutation.R \
   baseline .local/checks/value-mutation/baseline-library baseline.csv \
-  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  "$BRIDGE_LIBRARY" \
   .local/compat/R/library-dependencies
 Rscript benchmarks/value-mutation.R \
   candidate .local/checks/value-mutation/candidate-library candidate.csv \
-  .local/compat/runs/CANDIDATE_RUN/library-downstream-bridges \
+  "$BRIDGE_LIBRARY" \
   .local/compat/R/library-dependencies
 ```

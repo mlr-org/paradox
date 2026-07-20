@@ -805,16 +805,21 @@ Caching policy:
 Candidate downstream bridges are one build-once release artifact, not setup
 performed independently by each consumer gate. After the candidate and the
 priority-one dependency library have been authenticated, run
-`compat/install-downstream-bridges --candidate-source "$candidate_source"`
-once. It installs the exact reviewed heads, in the fixed order bbotk, mlr3,
-miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, and celecx, into
-`.local/compat/runs/$PARADOX_CANDIDATE_RUN_ID/library-downstream-bridges` and
-publishes it only after complete verification. The final overlay is read-only;
+`compat/install-downstream-bridges --candidate-source "$candidate_source"
+--evidence-profile release-refresh-20260720 --paradox-axis paradox2` once. It
+installs the exact reviewed heads, in the fixed order bbotk, mlr3, miesmuschel,
+mlr3pipelines, mlr3fselect, mlr3mbo, celecx, and mlr3fda, into the suffixed
+`.local/compat/runs/$PARADOX_CANDIDATE_RUN_ID/library-downstream-bridges-release-refresh-20260720-paradox2`
+and publishes it only after complete verification. The final overlay is
+read-only;
 its sealed evidence binds the candidate ref/commit/tree/content and provenance,
 dependency-library content, reviewed ledgers and verifier, installer, exact Git
 archives, installed versions, and installed package content. Completion schema
-2 also binds the repository-evidence verifier and resource scheduler used by
-the build. Construction is serialized by one candidate-run owner. The library
+3 additionally binds the named profile and axis, validation-tooling commit and
+tree, profile/axis registries and resolver, repository-evidence verifier, and
+resource scheduler used by the build. Schema 2 and the unsuffixed seven-package
+overlay describe only the historical default profile. Construction is
+serialized by one candidate-run owner. The library
 and its sealed evidence are published as separate atomic, no-clobber directory
 renames; failed cleanup may remove only paths still matching both that owner
 and the recorded filesystem device/inode. It must never delete or repair a
