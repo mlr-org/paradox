@@ -249,6 +249,14 @@ git_value() {
       -c core.untrackedCache=false -c tar.umask=0022 -C "$checkout" "$@"
 }
 
+canonical_git_date() {
+  local value=$1
+  case "$value" in
+    *Z) printf '%s+00:00\n' "${value%Z}" ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
 authenticate_checkout() {
   local repository=$1 checkout commit tree branch commit_date
   checkout=$CONSUMER_ROOT/$repository
@@ -262,7 +270,8 @@ authenticate_checkout() {
     fail "checkout is not the exact clean profile head: $repository"
   tree=$(git_value "$checkout" rev-parse --verify "$commit^{tree}")
   branch=$(git_value "$checkout" branch --show-current)
-  commit_date=$(git_value "$checkout" show -s --format=%cI "$commit")
+  commit_date=$(canonical_git_date \
+    "$(git_value "$checkout" show -s --format=%cI "$commit")")
   [[ $tree =~ ^[0-9a-f]{40}$ &&
      $branch == "${SNAPSHOT_BRANCH[$repository]}" &&
      $commit_date == "${SNAPSHOT_DATE[$repository]}" ]] ||

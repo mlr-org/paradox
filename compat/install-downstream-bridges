@@ -171,6 +171,16 @@ profile_git() {
       -c core.untrackedCache=false -c tar.umask=0022 -C "$checkout" "$@"
 }
 
+# Git 2.55 spells the UTC offset in strict ISO dates as Z, while older Git
+# emitted the equivalent +00:00 retained in the reviewed ledger.
+canonical_git_date() {
+  local value=$1
+  case "$value" in
+    *Z) printf '%s+00:00\n' "${value%Z}" ;;
+    *) printf '%s\n' "$value" ;;
+  esac
+}
+
 PROFILE_HELPER=$ROOT/compat/downstream-evidence-profile.R
 PROFILE_RESOLVER=$ROOT/compat/resolve-downstream-evidence-profile.R
 PROFILE_REGISTRY=$ROOT/compat/downstream-evidence-profiles.tsv
@@ -482,11 +492,11 @@ for repository in "${INSTALL_ORDER[@]}"; do
      $(profile_git "$checkout" rev-parse --verify \
        "refs/heads/${BRIDGE_BASE_BRANCH[$repository]}^{commit}") == \
        "${BRIDGE_BASE[$repository]}" &&
-     $(profile_git "$checkout" show -s --format=%cI \
-       "${BRIDGE_BASE[$repository]}") == "${BRIDGE_BASE_DATE[$repository]}" &&
+     $(canonical_git_date "$(profile_git "$checkout" show -s --format=%cI \
+       "${BRIDGE_BASE[$repository]}")") == "${BRIDGE_BASE_DATE[$repository]}" &&
      $(profile_git "$checkout" branch --show-current) == "${BRIDGE_BRANCH[$repository]}" &&
-     $(profile_git "$checkout" show -s --format=%cI \
-       "${BRIDGE_COMMIT[$repository]}") == "${BRIDGE_COMMIT_DATE[$repository]}" &&
+     $(canonical_git_date "$(profile_git "$checkout" show -s --format=%cI \
+       "${BRIDGE_COMMIT[$repository]}")") == "${BRIDGE_COMMIT_DATE[$repository]}" &&
      -z $(profile_git "$checkout" status --porcelain=v1 --untracked-files=all) ]] ||
     fail "reviewed Git checkout or object differs for $repository"
   profile_git "$checkout" merge-base --is-ancestor \

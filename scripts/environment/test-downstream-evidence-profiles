@@ -170,6 +170,15 @@ expect_reject "R CMD check WARNING status" \
   check_status_is_release_clean "$fixture/check-warning.log"
 expect_reject "non-final R CMD check status" \
   check_status_is_release_clean "$fixture/check-trailing.log"
+date_helper=$(sed -n '/^canonical_git_date()/,/^}/p' \
+  "$ROOT/compat/install-downstream-bridges")
+[[ -n $date_helper ]] || fail "Git date canonicalizer is absent"
+eval "$date_helper"
+[[ $(canonical_git_date 2025-03-19T17:33:36Z) == \
+     2025-03-19T17:33:36+00:00 &&
+   $(canonical_git_date 2026-07-19T23:24:07+02:00) == \
+     2026-07-19T23:24:07+02:00 ]] ||
+  fail "Git UTC date spelling is not narrowly canonicalized"
 for binding in \
     'CONSUMER_ROOT=$(profile_value consumer_root)' \
     '.git/info/grafts' '.git/info/attributes' \
