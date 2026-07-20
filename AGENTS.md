@@ -1143,3 +1143,14 @@ tests and vignette code passed. Full-check subjects now use ordinary serial
 them. The sealed failed stage remains diagnostic; because named overlays bind
 the validation-tooling commit/tree, construct a fresh run and overlay after
 this harness-only repair rather than relabeling the earlier overlay.
+
+The first all-scope documentation execution under tooling `4d4b637` completed
+all 17 workloads with every mandatory row passing, but its process correctly
+failed instead of overwriting `metadata/evidence-manifest.tsv`. The harness had
+retained the downstream overlay's own manifest and seal under those reserved
+basenames before trying to create the documentation stage's manifest and seal.
+Retain those four overlay inputs under explicit `downstream-bridge-*` names;
+reserve `evidence-manifest.tsv` and `completion.seal` solely for the enclosing
+stage. The completed-but-unsealed directory is diagnostic only. This is a
+validation-only repair, so construct the final named overlay under the new
+tooling identity and rerun documentation without changing candidate bytes.

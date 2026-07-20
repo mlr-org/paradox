@@ -77,6 +77,22 @@ expected_consumer_root <- quote(require_plain_local_library_argument(
 if (!identical(binding("documentation_consumer_root"), expected_consumer_root)) {
   fail("documentation checkout root is not canonicalized through every component")
 }
+expected_bridge_retained_names <- c(
+  downstream_bridge_completion = "downstream-bridge-completion.tsv",
+  downstream_bridge_packages = "downstream-bridge-packages.tsv",
+  downstream_bridge_evidence_manifest =
+    "downstream-bridge-evidence-manifest.tsv",
+  downstream_bridge_completion_seal =
+    "downstream-bridge-completion.seal"
+)
+if (!identical(
+    eval(binding("bridge_evidence_retained_names")),
+    expected_bridge_retained_names
+  ) || any(expected_bridge_retained_names %in% c(
+    "evidence-manifest.tsv", "completion.seal"
+  ))) {
+  fail("documentation bridge inputs can collide with stage seal outputs")
+}
 locale_environment <- eval(
   function_binding("documentation_locale_environment")
 )()

@@ -801,6 +801,14 @@ bridge_evidence_inputs <- c(
     bridge_evidence, "metadata", "completion.seal"
   )
 )
+bridge_evidence_retained_names <- c(
+  downstream_bridge_completion = "downstream-bridge-completion.tsv",
+  downstream_bridge_packages = "downstream-bridge-packages.tsv",
+  downstream_bridge_evidence_manifest =
+    "downstream-bridge-evidence-manifest.tsv",
+  downstream_bridge_completion_seal =
+    "downstream-bridge-completion.seal"
+)
 if (!length(extra_libraries) || !identical(extra_libraries[[1L]], bridge_library)) {
   fail(
     "the candidate-specific downstream bridge library must be the first extra library: ",
@@ -974,7 +982,24 @@ for (path in metadata_inputs) {
     fail("documentation metadata input is absent, not a regular file, or symbolic: ", path)
   }
 }
-if (anyDuplicated(basename(metadata_inputs))) {
+retained_metadata_names <- basename(metadata_inputs)
+bridge_input_positions <- match(
+  unname(bridge_evidence_inputs), metadata_inputs
+)
+if (anyNA(bridge_input_positions) ||
+    !identical(
+      names(bridge_evidence_retained_names), names(bridge_evidence_inputs)
+    )) {
+  fail("documentation bridge evidence retention mapping is incomplete")
+}
+retained_metadata_names[bridge_input_positions] <- unname(
+  bridge_evidence_retained_names[names(bridge_evidence_inputs)]
+)
+if (anyDuplicated(retained_metadata_names) ||
+    any(retained_metadata_names %in% c(
+      repository_evidence_manifest_relative,
+      repository_evidence_seal_relative
+    ))) {
   fail("documentation metadata inputs have colliding retained names")
 }
 metadata_input_sha256 <- setNames(
@@ -984,14 +1009,14 @@ metadata_input_sha256 <- setNames(
 metadata_input_hash <- function(path) unname(metadata_input_sha256[[path]])
 if (!all(file.copy(
     metadata_inputs,
-    file.path(run_directory, "metadata"),
+    file.path(run_directory, "metadata", retained_metadata_names),
     copy.mode = TRUE,
     copy.date = TRUE
   ))) {
   fail("could not retain documentation harness inputs")
 }
 retained_metadata_inputs <- file.path(
-  run_directory, "metadata", basename(metadata_inputs)
+  run_directory, "metadata", retained_metadata_names
 )
 retained_metadata_sha256 <- vapply(
   retained_metadata_inputs,
