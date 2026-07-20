@@ -101,14 +101,21 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   internal table/row/Domain/Condition/token/capsule shells, Domain cargo/
   interpreted cargo entries, dimnames, class/name vectors, and other list
   metadata remain ordinary non-ALTREP/non-S4. The six public-table ingresses
-  use one exact-class/allowed-attribute classifier. Names/classes and admitted
-  data.table cache carriers are ordinary; caches are discarded. Raw row names
+  use one suffix-aware, allowed-attribute classifier. An ordinary well-formed
+  class vector may have leading additive classes before its terminal
+  `"data.frame"` or `c("data.table", "data.frame")` suffix. Those leading
+  classes never dispatch. The classifier does not copy or materialize an
+  ordinary shell merely to remove the prefix, and semantic snapshots ignore it;
+  an already-required ALTREP snapshot installs the canonical suffix. Malformed,
+  reversed, non-suffix,
+  reserved-label, and duplicate class vectors reject. Names/classes and
+  admitted data.table cache carriers are ordinary; caches are discarded. Raw row names
   are attribute-free, nonobject, non-S4 integer/character vectors: ordinary
   compact `+/-n` forms decode to their count, while stable row-name ALTREP pays
   one Length and no Elt. Row-consuming operations compare this count with their
   columns; direct `trafo` and a no-edge Design dependency plan do not add
   column observations for an unused dimension. A zero-column data.frame may
-  omit names and retains its row count in Design transpose. Exact top-level
+  omit names and retains its row count in Design transpose. Admitted top-level
   VECSXP ALTREP snapshots own names/class before callback-capable observation,
   use one Length/one Elt per column, and may retain stable semantic ALTREP
   columns. Base R's lazy attribute-copy duplicate is the common motivating
@@ -125,7 +132,7 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   compatibility; collection child results require complete unique names for
   namespace translation. Transformation results and non-table inputs have
   ordinary non-ALTREP/non-S4 shells. A documented data-frame input may use the
-  exact top-level ALTREP table boundary above, while admitted atomic leaves and
+  suffix-classified top-level ALTREP table boundary above, while admitted atomic leaves and
   columns may be stable ALTREP. Both use the single native transformation engine.
 - The unreachable namespace-level R `transpose()` implementation and unused
   `col_to_nl()`/`rbindlist_proto()` table helpers are deleted. Known consumers
@@ -616,3 +623,17 @@ native ALTREP fixture and retains the base wrapper as conditional realistic
 coverage. Expanding production copying to ordinary tables was rejected as an
 unnecessary hot-path cost. The partial native/runtime results and completed
 API/package/bridge evidence are all superseded.
+
+Candidate `refs/paradox-release/candidate-20260719T202524Z`, commit
+`e3741ab1d3cb8a5f3e7f357af6b7ab90c6e50fb7`, passed its exact-byte native,
+R-API, and runtime gates, then failed the maintained repository sweep in
+mlr3fselect. `mlr3::BenchmarkResult$aggregate()` produces
+the ordinary additive class vector
+`c("bmr_aggregate", "data.table", "data.frame")`, and data.table 1.18.4
+deliberately preserves that class through a narrow `with = FALSE` subset before
+bbotk calls `ParamSet$assert_dt()`. The exact-class classifier rejected this
+non-dispatching representation even though Paradox 1 accepted it. The
+replacement contract admits well-formed additive leading classes, drops them
+from an already-required ALTREP snapshot while avoiding any prefix-only copy of
+ordinary input, and retains the strict table attribute/cache boundary.
+All evidence bound to `e3741ab` is superseded and requires a fresh candidate.

@@ -614,7 +614,7 @@ Each public operation is one transaction with these phases:
 2. Ordinary arguments are forced and validated once in their documented
    left-to-right order. Interpreted outer shells are required to be ordinary
    non-ALTREP/non-S4 and are rejected before semantic observation, except for
-   the exact public-table and `set_values(.values=)` one-snapshot boundaries
+   the documented public-table and exact `set_values(.values=)` one-snapshot boundaries
    specified below. At native admission, supported ALTREP atomic semantic
    inputs are materialized once into independently rooted ordinary snapshots
    during this phase. Those snapshots, not previously captured representation
@@ -666,7 +666,7 @@ the state seen by later rows of one native operation.
 
 A transformation result and every non-table transformation input must have an
 ordinary non-ALTREP, non-S4 outer list shell. A documented data-frame input may
-also use the exact top-level ALTREP table boundary, which is materialized once
+also use the suffix-classified top-level ALTREP table boundary, which is materialized once
 before the same structural validation. Admitted semantic atomic leaves and
 data-frame columns may be stable ALTREP and are materialized once. A base
 `ParamSet` extra transformation may
@@ -709,11 +709,20 @@ dimnames, and other list metadata are interpreted structure and must be
 ordinary non-ALTREP and non-S4 objects. The six documented public-table
 ingresses—`check_dt`, `test_constraint_dt`, `qunif`, data-frame `trafo` input,
 `Design$transpose()`, and Design dependency planning—share one native
-classifier. It accepts only exact `"data.frame"` or
-`c("data.table", "data.frame")` classes and the allowed attributes for that
-class. Names and classes are ordinary, attribute-free character vectors. An
-empty `structure(list(), class = "data.frame", row.names = ...)` may omit its
-names attribute, preserving the base-compatible zero-column spelling.
+classifier. It recognizes an ordinary well-formed class vector whose terminal
+suffix is `"data.frame"` or `c("data.table", "data.frame")`, then applies the
+attributes allowed for that recognized table kind. Leading additive classes
+are representation-only: native admission never dispatches through them. The
+classifier does not copy or materialize an ordinary shell merely to remove the
+prefix, and semantic snapshots ignore it. When a top-level ALTREP shell already
+requires materialization, that owned snapshot drops the prefix and installs the
+canonical suffix. Every class
+label is non-missing, non-empty, non-bytes, and unique. The reserved labels
+`"data.table"` and `"data.frame"` may occur only in the recognized terminal
+suffix; reversed, duplicated, and non-suffix reserved-label forms reject.
+Names and classes are ordinary, attribute-free character vectors. An empty
+`structure(list(), class = "data.frame", row.names = ...)` may omit its names
+attribute, preserving the base-compatible zero-column spelling.
 
 A data.table's optional `.internal.selfref` is an attribute-free, non-S4,
 nonobject external pointer; `sorted` is an attribute-free ordinary character
@@ -738,7 +747,9 @@ therefore retains its declared rows: `Design$transpose()` produces one empty
 configuration per row, whereas an unclassed empty list still represents zero
 rows.
 
-An admitted exact-class top-level VECSXP ALTREP is materialized once. Native
+An admitted suffix-classified top-level VECSXP ALTREP is materialized once. Its
+owned snapshot installs only the canonical recognized class suffix; an ordinary
+admitted shell is not copied merely to remove inert leading classes. Native
 admission owns names and classes before a callback-capable row-name Length or
 top-shell Length/Elt observation, calls top-shell Length once and Elt once per
 column, preserves column identities, canonicalizes row names from the captured
@@ -945,9 +956,12 @@ The package suite must contain contract tests for:
 - ordinary non-ALTREP/non-S4 structural admission across Domains, Conditions,
   TuneTokens, ParamSet candidates/constructor lists, value/search containers,
   transformation input/results, Domain cargo, internal table shells, dimnames,
-  and list metadata, plus the shared exact public-table classifier at all six
-  ingresses. Public-table coverage includes one-shot top-shell ALTREP
-  materialization, allowed/discarded data.table cache carriers, ordinary and
+  and list metadata, plus the shared strict public-table classifier at all six
+  ingresses. Public-table coverage includes canonical and additive terminal
+  class suffixes, no prefix-induced ordinary-shell copy, ALTREP-snapshot class
+  canonicalization without dispatch, rejection of
+  malformed/reversed/non-suffix/reserved/duplicate class vectors, one-shot
+  top-shell ALTREP materialization, allowed/discarded data.table cache carriers, ordinary and
   compact row-name forms, stable integer/character ALTREP row names with one
   Length and no Elt, missing/S4/attributed/mismatched row-name rejection,
   mutable shared-name reentry, and zero-column data.frame row counts;
@@ -967,7 +981,8 @@ The package suite must contain contract tests for:
   an accepted empty list container), while only `set_values(.values=)`
   exercises the structural one-snapshot exception;
 - detached data.table 1.18.4+ facades, documented data.frame/data.table inputs
-  including exact-class top-level ALTREP shells and base R's lazy duplicate,
+  including suffix-classified top-level ALTREP shells, additive presentation
+  classes, and base R's lazy duplicate,
   stable semantic ALTREP columns, row-consuming versus non-row-consuming count
   checks, canonical ordinary package metadata, and the absence of internal
   data.table state;

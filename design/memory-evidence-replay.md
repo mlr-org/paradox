@@ -33,7 +33,9 @@ hostile custom-ALTREP rejection/admission safety, public table construction,
 ordinary non-ALTREP/non-S4 structural rejection for configuration/search/trafo
 and ParamSet-`params` lists, Domain/Condition/token/capsule/internal-table
 shells, cargo, dimnames, and list metadata, the shared six-ingress public-table
-classifier, cache-carrier disposal, row-name form/count admission (including
+classifier, no prefix-induced ordinary-shell copy, ALTREP-snapshot
+canonicalization, and malformed class-vector
+rejection, cache-carrier disposal, row-name form/count admission (including
 one-Length/no-Elt stable ALTREP), one-shot normalization of base R's stable
 public-table lazy wrapper, ownership of names before hostile Elt reentry,
 zero-column data.frame row preservation, direct checked/unchecked assignment
@@ -92,7 +94,8 @@ structural ALTREP/S4 rejection (including every outer `special_vals` list),
 typed-special ALTREP rejection, typed S4 special
 pointer identity, opaque ParamUty S4 leaves and base-`identical()` special
 membership without dispatch in supported Domain/value operations, documented
-data.frame/data.table inputs with exact-class top-level ALTREP shells, ordinary
+data.frame/data.table inputs with suffix-classified top-level ALTREP shells,
+ordinary additive presentation classes, malformed class vectors, ordinary
 discarded cache carriers, hostile shared-name mutation, malformed/mismatched
 and stable ALTREP row names, zero-column table counts, and stable semantic
 ALTREP columns, exact

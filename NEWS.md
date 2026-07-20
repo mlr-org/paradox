@@ -68,15 +68,24 @@ hazards that Paradox 2 is intended to remove.
   transformation inputs and all transformation result shells, Domain cargo/
   interpreted cargo entries, rows, dimnames, class/name vectors, and other list
   metadata must be ordinary non-ALTREP and non-S4 structure. The six documented
-  public data.frame/data.table ingresses now share one exact classifier. Table
-  names/classes and accepted data.table cache carriers are ordinary, and cache
-  attributes are ignored rather than interpreted. Raw row names must be
+  public data.frame/data.table ingresses now share one strict structural
+  classifier. A well-formed ordinary class vector may have additive leading
+  classes before a terminal `"data.frame"` or
+  `c("data.table", "data.frame")` suffix. Native admission treats those
+  leading classes as representation only and never dispatches through them.
+  The classifier does not copy or materialize an ordinary shell merely to
+  remove the prefix, and native semantic snapshots ignore it; an
+  already-required ALTREP shell snapshot installs only the canonical suffix.
+  Malformed, reversed, non-suffix,
+  reserved-label, and duplicate class vectors reject. Table names/classes and
+  accepted data.table cache carriers are ordinary, and cache attributes are
+  ignored rather than interpreted. Raw row names must be
   attribute-free, nonobject, non-S4 integer or character vectors; compact
   positive/negative counts are decoded, and stable row-name ALTREP is observed
   once for length without reading labels. Row-consuming operations compare the
   count with their columns. Direct transformation and dependency planning with
   no edges avoid extra column observations for a dimension they do not use.
-  The narrow top-shell exception materializes an exact-class,
+  The narrow top-shell exception materializes a suffix-classified,
   allowed-attribute VECSXP ALTREP once after owning names/classes; base R's lazy
   attribute-copy duplicate is the common motivating case. Semantic atomic
   columns may be stable ALTREP. Zero-column data.frames may omit names and keep
@@ -172,7 +181,7 @@ hazards that Paradox 2 is intended to remove.
   only for independently owned outward-facing facades; returned tables remain
   safe to mutate with normal data.table operations without changing the
   ParamSet. Documented data.frame/data.table operation inputs use the shared
-  exact classifier and snapshot an allowed top-level VECSXP ALTREP once.
+  suffix-aware classifier and snapshot an allowed top-level VECSXP ALTREP once.
   Package-owned table/facade metadata remains canonical ordinary structure;
   admitted semantic atomic columns may be stable ALTREP.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small

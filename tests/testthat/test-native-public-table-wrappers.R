@@ -21,6 +21,162 @@ public_table_fixture = function(as_data_table = FALSE) {
   if (as_data_table) data.table::as.data.table(table) else table
 }
 
+expect_additive_public_table_ingresses = function(table, data_table) {
+  param_set = ps(x = p_dbl(0, 1))
+  param_set$constraint = function(x) TRUE
+
+  expect_identical(param_set$check_dt(table, presence = "all"), TRUE)
+  if (data_table) {
+    expect_identical(
+      param_set$test_constraint_dt(table, assert_value = FALSE),
+      rep(TRUE, nrow(table))
+    )
+  } else {
+    expect_error(
+      param_set$test_constraint_dt(table, assert_value = FALSE),
+      "Must be a data.table",
+      fixed = TRUE
+    )
+  }
+  expect_identical(param_set$qunif(table)$x, table$x)
+  expect_identical(param_set$trafo(table), list(x = table$x))
+  expect_identical(
+    .Call(public_table_native_symbol("design_transpose"), table, FALSE),
+    lapply(table$x, function(x) list(x = x))
+  )
+  expect_identical(
+    .Call(
+      public_table_native_symbol("design_dependency_plan"),
+      table,
+      param_set
+    ),
+    list(rows = list(), columns = character(), values = list())
+  )
+}
+
+test_that("additive data.table classes are inert across every table ingress", {
+  aggregated = data.table::data.table(
+    group = c("first", "second"),
+    x = c(0.25, 0.75)
+  )[, .(x = mean(x)), by = group]
+  data.table::setattr(
+    aggregated,
+    "class",
+    c("bmr_aggregate", class(aggregated))
+  )
+  selected = aggregated[, c("group", "x"), with = FALSE]
+  expect_identical(
+    class(selected),
+    c("bmr_aggregate", "data.table", "data.frame")
+  )
+  data.table::set(selected, j = "runtime", value = c(1, 2))
+  narrowed = selected[, "x", with = FALSE]
+  expect_identical(
+    class(narrowed),
+    c("bmr_aggregate", "data.table", "data.frame")
+  )
+
+  expect_additive_public_table_ingresses(narrowed, data_table = TRUE)
+
+  # The materializer does not copy an ordinary table merely to discard its
+  # prefix. Native semantic snapshots ignore it and do not mutate the caller.
+  original_address = data.table::address(narrowed)
+  normalized = .Call(
+    public_table_native_symbol("test_materialize_public_table_shell"),
+    narrowed
+  )
+  expect_identical(data.table::address(normalized), original_address)
+  expect_identical(class(normalized), class(narrowed))
+
+  # An admitted top-level ALTREP shell already requires one spine snapshot;
+  # that snapshot drops the inert prefix and keeps column identity.
+  wrapped = native_stateful_altrep(
+    narrowed,
+    narrowed,
+    callback = function() invisible(gc()),
+    callback_after = 0L
+  )
+  previous = gctorture(TRUE)
+  on.exit(gctorture(previous), add = TRUE)
+  materialized = .Call(
+    public_table_native_symbol("test_materialize_public_table_shell"),
+    wrapped
+  )
+  gctorture(previous)
+  expect_identical(class(materialized), c("data.table", "data.frame"))
+  expect_identical(
+    data.table::address(materialized$x),
+    data.table::address(narrowed$x)
+  )
+})
+
+test_that("additive data.frame classes remain frames, not data.tables", {
+  frame = public_table_fixture()
+  frame = frame["x"]
+  attr(frame, "class") = c("grouped_frame", "data.frame")
+  expect_additive_public_table_ingresses(frame, data_table = FALSE)
+
+  normalized = .Call(
+    public_table_native_symbol("test_materialize_public_table_shell"),
+    frame
+  )
+  expect_identical(data.table::address(normalized), data.table::address(frame))
+  expect_identical(class(normalized), c("grouped_frame", "data.frame"))
+})
+
+test_that("malformed or ambiguous public table class vectors reject", {
+  param_set = ps(x = p_dbl(0, 1))
+  bytes_label = rawToChar(as.raw(0xe9))
+  Encoding(bytes_label) = "bytes"
+  malformed_classes = list(
+    reversed = c("data.frame", "data.table"),
+    reserved_non_suffix = c("data.table", "grouped_frame", "data.frame"),
+    non_suffix = c("grouped_frame", "data.frame", "result"),
+    duplicate = c("grouped_frame", "grouped_frame", "data.frame"),
+    missing = c(NA_character_, "data.frame"),
+    empty = c("", "data.frame"),
+    bytes = c(bytes_label, "data.frame")
+  )
+
+  for (classes in malformed_classes) {
+    frame = public_table_fixture()["x"]
+    attr(frame, "class") = classes
+    expect_identical(
+      param_set$check_dt(frame),
+      "Must be a data.frame or data.table."
+    )
+    expect_error(
+      param_set$test_constraint_dt(frame, assert_value = FALSE),
+      "Must be a data.table",
+      fixed = TRUE
+    )
+    expect_error(
+      .Call(public_table_native_symbol("design_transpose"), frame, FALSE),
+      "list-like data frame",
+      fixed = TRUE
+    )
+    expect_error(
+      param_set$qunif(frame),
+      "numeric matrix or data.frame",
+      fixed = TRUE
+    )
+    expect_error(
+      param_set$trafo(frame),
+      "ordinary named list",
+      fixed = TRUE
+    )
+    expect_error(
+      .Call(
+        public_table_native_symbol("design_dependency_plan"),
+        frame,
+        param_set
+      ),
+      "list-like data frame",
+      fixed = TRUE
+    )
+  }
+})
+
 expect_public_row_names_rejected = function(row_names, remove = FALSE) {
   param_set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
   param_set$constraint = function(x) TRUE

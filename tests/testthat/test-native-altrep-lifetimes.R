@@ -549,7 +549,7 @@ test_that("public tables snapshot ALTREP shells while other shells reject", {
   expect_identical(result_callbacks, 0L)
 })
 
-test_that("trafo result and public structural shells reject S4 or custom classes", {
+test_that("structural shells reject S4 while table prefixes stay inert", {
   plain = ps(x = p_dbl(), .extra_trafo = identity)
   tabular = data.table::data.table(x = 1)
   data.table::setindexv(tabular, "x")
@@ -641,7 +641,7 @@ test_that("trafo result and public structural shells reject S4 or custom classes
     data.frame(x = 0.5),
     class = c("custom", "data.frame")
   )
-  expect_error(plain$trafo(subclass), "ordinary named list")
+  expect_identical(plain$trafo(subclass), list(x = 0.5))
   expect_identical(.Call(
     altrep2_symbol("param_set_check_dt_builtin"),
     altrep2_private(param_set),
@@ -650,21 +650,24 @@ test_that("trafo result and public structural shells reject S4 or custom classes
     TRUE,
     "none",
     TRUE
-  ), "Must be a data.frame or data.table.")
-  expect_error(.Call(
+  ), TRUE)
+  expect_identical(.Call(
     altrep2_symbol("param_set_qunif_builtin"),
     altrep2_private(param_set),
     param_set,
     subclass
-  ), "numeric matrix or data.frame", fixed = TRUE)
-  expect_error(
+  )$x, 0.5)
+  expect_identical(
     .Call(altrep2_symbol("design_transpose"), subclass, FALSE),
-    "list-like data frame",
-    fixed = TRUE
+    list(list(x = 0.5))
+  )
+  expect_identical(
+    .Call(altrep2_symbol("design_dependency_plan"), subclass, param_set),
+    list(rows = list(), columns = character(), values = list())
   )
   expect_error(
-    .Call(altrep2_symbol("design_dependency_plan"), subclass, param_set),
-    "list-like data frame",
+    param_set$test_constraint_dt(subclass),
+    "Must be a data.table",
     fixed = TRUE
   )
 

@@ -101,18 +101,27 @@ entry, row, dimnames, class/name vector, and other list metadata object is
 ordinary non-ALTREP and non-S4, except for the top-level shell of a documented
 public table input. One shared classifier serves `check_dt`,
 `test_constraint_dt`, `qunif`, data-frame `trafo`, Design transpose, and Design
-dependency planning. It admits only exact data.frame/data.table classes and
-their allowed attributes. Names/classes and data.table cache carriers are
-ordinary structure; ignored `.internal.selfref`, `sorted`, and `index` carriers
-are discarded. Raw row names are attribute-free, nonobject, non-S4 integer or
+dependency planning. It recognizes a well-formed ordinary class vector ending
+in `"data.frame"` or `c("data.table", "data.frame")` and then enforces the
+attributes allowed for that kind. Leading additive classes are presentation
+metadata only: they never select dispatch. The classifier does not copy or
+materialize an ordinary shell merely to remove the prefix, and semantic
+snapshots ignore it; the already-required snapshot of an ALTREP shell installs
+only the canonical suffix. Class labels are
+non-missing, non-empty, non-bytes, unique,
+and may not place the reserved data.frame/data.table labels outside their
+terminal suffix. Names/classes and data.table cache carriers are ordinary
+structure; ignored `.internal.selfref`, `sorted`, and `index` carriers are
+discarded. Raw row names are attribute-free, nonobject, non-S4 integer or
 character vectors. Ordinary compact positive/negative counts are decoded, and
 a stable integer/character ALTREP row-name vector contributes one Length and no
 Elt because its labels are ignored.
 
-An exact admitted top-level VECSXP ALTREP is copied with one Length and one Elt
+An admitted suffix-classified top-level VECSXP ALTREP is copied with one Length and one Elt
 per column while retaining column identities. Names and classes are owned
 before callback-capable row-name or top-shell observation, and the owned shell
-gets canonical row names from the captured count. Row-consuming operations
+gets the canonical recognized class suffix and canonical row names from the
+captured count. Ordinary additive-class shells are not copied. Row-consuming operations
 compare this count with admitted column lengths; direct `trafo` and a no-edge
 Design dependency plan do not observe columns merely to compare an unused
 dimension. A zero-column data.frame may omit names and retains its row count,
@@ -359,7 +368,7 @@ callback's closure body.
 
 The unified transformation engine requires ordinary non-ALTREP/non-S4 result
 and non-table input list shells and snapshots each callback result once. A
-documented data-frame input may use the exact top-level ALTREP table boundary,
+documented data-frame input may use the suffix-classified top-level ALTREP table boundary,
 which is materialized once before the same validation; admitted atomic leaves
 or columns may be stable ALTREP. A BASE extra transformation accepts
 either an unnamed
@@ -450,8 +459,10 @@ rather than constructing and collapsing an R list of every dependency error.
 `ParamSet$test_constraint()` and `$test_constraint_dt()` are registered native
 boundaries over the same graph plan, point initializer, and constraint kernel.
 The table operation enters the shared public-table classifier/materializer,
-then requires the exact data.table class. Names, class, and cache carriers are
-strict ordinary structure; row names use the shared count-only rule. Its
+then requires the data.table terminal suffix; any valid leading additive
+classes remain representation-only and are ignored during semantic work.
+Names, class, and cache carriers are strict ordinary structure; row names use
+the shared count-only rule. Its
 admitted semantic atomic columns may be stable ALTREP. When value assertion is enabled,
 it admits every row before executing any constraint callback; a
 ParamUty custom check may run as part of that preceding Domain-value admission.
@@ -488,7 +499,7 @@ Every operation follows the same lifecycle:
 1. the R wrapper captures language-level inputs and outward representation
    metadata that C cannot capture directly; this is not semantic admission;
 2. public arguments are forced left-to-right; interpreted outer shells reject
-   ALTREP/S4 before semantic observation except at the exact public-table and
+   ALTREP/S4 before semantic observation except at the documented public-table and
    `set_values(.values=)` one-snapshot boundaries, while supported ALTREP
    atomic semantic vectors are materialized once at native admission; that
    native materialized state, not captured representation text, is semantic
@@ -534,8 +545,10 @@ search-space and transformation list shells, ParamSet `params` lists, Domain/
 Condition/TuneToken/capsule shells, Domain cargo/interpreted cargo entries,
 internal table/row shells, dimnames, class/name vectors, and list metadata must
 be ordinary non-ALTREP/non-S4 objects. The six documented public-table
-ingresses use the single classifier and ownership sequence above: exact-class
-top-shell ALTREP is copied once, names/classes are owned before callback-capable
+ingresses use the single classifier and ownership sequence above: a
+suffix-classified top-shell ALTREP is copied once, additive presentation
+classes are canonicalized in that snapshot without dispatch, while ordinary
+shell prefixes are ignored without copying; names/classes are owned before callback-capable
 observation, data.table cache carriers are checked then ignored, and row names
 use the narrow count-only integer/character rule. Admitted atomic columns may
 be stable ALTREP. Direct
@@ -728,7 +741,7 @@ Do not add any of the following:
   semantic admission/kernel (prior R-side representation capture is explicitly
   non-semantic and covered by the hostile-custom-ALTREP boundary above);
 - materialization or observation of an interpreted ALTREP/S4 shell, except for
-  the exact one-snapshot `set_values(.values=)` boundary and the exact-class,
+  the exact one-snapshot `set_values(.values=)` boundary and the suffix-classified,
   allowed-attribute public-table boundary;
 - a namespace-level R implementation of Design transpose or dormant table
   helpers parallel to the registered native engine;

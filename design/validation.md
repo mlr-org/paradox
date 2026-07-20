@@ -206,18 +206,21 @@ families.
   table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted
   cargo entries, dimnames, class/name vectors, and list metadata reject
   ALTREP/S4, except for the explicit one-snapshot `set_values(.values=)` merge
-  boundary and one-shot normalization of an exact-class, allowed-attribute
+  boundary and one-shot normalization of a suffix-classified, allowed-attribute
   top-level VECSXP ALTREP at a documented public-table ingress;
 - detached public data.table facades with valid self-reference and no capsule
   aliasing; no internal data.table state; documented data.frame/data.table
-  inputs use one classifier at all six ingresses. Tests cover exact classes and
+  inputs use one classifier at all six ingresses. Tests cover canonical and
+  additive terminal class suffixes, no prefix-induced ordinary-shell copy,
+  ALTREP-snapshot canonicalization without dispatch,
+  malformed/reversed/non-suffix/reserved/duplicate class vectors, allowed
   attribute sets, ordinary/discarded data.table cache carriers, absent/S4/
   object/attributed/mismatched row names, compact positive/negative counts,
   stable integer/character ALTREP row names with one Length/no Elt, and shared
   mutable names under top-shell Elt reentry. They also distinguish row-consuming
   count checks from direct trafo/no-edge dependency planning, preserve unnamed
   zero-column data.frames, and prove Design transpose emits one empty
-  configuration per declared row. Exact top-level ALTREP shells are covered by
+  configuration per declared row. Suffix-classified top-level ALTREP shells are covered by
   a cross-version native fixture, with base R's lazy duplicate covered on
   runtimes that select that optimization; stable admitted semantic columns
   remain covered;

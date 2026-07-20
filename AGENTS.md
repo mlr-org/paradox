@@ -129,8 +129,8 @@ semantic vectors remain supported at their stated positions.
   ParamSet constructor `params` lists, non-table transformation inputs and all
   transformation result list shells, Domain cargo containers and interpreted
   cargo entries, class/name vectors, row containers, dimnames and other list
-  metadata. A narrow documented public-table ingress may first materialize an
-  exact-class, allowed-attribute top-level VECSXP ALTREP shell once; base R's
+  metadata. A narrow documented public-table ingress may first materialize a
+  suffix-classified, allowed-attribute top-level VECSXP ALTREP shell once; base R's
   lazy attribute-only duplicate is the common motivating case. Public-table
   names/classes and ignored data.table cache carriers remain strict ordinary
   structure, while row names have the count-only integer/character exception
@@ -356,10 +356,19 @@ semantic vectors remain supported at their stated positions.
   entries, internal table shells, rows, dimnames, class/name vectors, and other
   list metadata. One shared native classifier governs the six public-table
   ingresses: `check_dt`, `test_constraint_dt`, `qunif`, data-frame `trafo`
-  input, `Design$transpose()`, and Design dependency planning. It admits only
-  exact `"data.frame"` or `c("data.table", "data.frame")` classes and the
-  attributes allowed for that class. Names and classes are ordinary,
-  attribute-free character vectors; the historical zero-column
+  input, `Design$transpose()`, and Design dependency planning. A well-formed
+  class vector ends in `"data.frame"` or in
+  `c("data.table", "data.frame")`; ordinary leading additive classes are
+  representation-only. Native admission never dispatches on those leading
+  classes. The classifier does not copy or materialize an ordinary shell merely
+  to remove the prefix, and semantic readers ignore it; an ALTREP shell's
+  already-required materialized snapshot drops it and installs the canonical
+  suffix. Every class
+  label is non-missing, non-empty, non-bytes, and unique. The reserved labels
+  `"data.table"` and `"data.frame"` may occur only in the recognized terminal
+  suffix, so reversed, duplicated, or non-suffix uses reject. The remaining
+  attributes must be those allowed for the recognized table kind. Names and
+  classes are ordinary, attribute-free character vectors; the historical zero-column
   `structure(list(), class = "data.frame", row.names = ...)` spelling may omit
   names. A data.table's optional `.internal.selfref` is an attribute-free,
   non-S4, nonobject external pointer; `sorted` is an attribute-free ordinary
@@ -380,7 +389,10 @@ semantic vectors remain supported at their stated positions.
   one empty configuration for each row, while an unclassed empty list still
   represents zero rows.
 
-  An exact admitted top-level VECSXP ALTREP shell is materialized once. Native
+  An admitted suffix-classified top-level VECSXP ALTREP shell is materialized
+  once. That owned snapshot installs only the canonical recognized class
+  suffix; ordinary admitted shells are not copied merely to remove an inert
+  prefix. Native
   admission owns names and classes before any callback-capable row-name Length
   or top-shell Length/Elt observation, calls top-shell Length once and Elt once
   per column, preserves column identities, canonicalizes captured row names by
@@ -846,16 +858,20 @@ The package suite must directly cover, before downstream packages are used:
   replay or Paradox-caused crash/memory corruption; interpreted ParamSet
   `params`, non-table trafo input/result, Domain cargo, internal table,
   dimnames, and list metadata shells reject ALTREP/S4 before semantic
-  observation, while the six documented public-table ingresses share one exact
-  classifier. Coverage includes allowed data.table cache-carrier shapes and
-  cache disposal, missing/S4/attributed/mismatched row names, compact positive
-  and negative counts, stable integer/character ALTREP row names with one
-  Length and no Elt, shared mutable names under top-shell Elt reentry, and
+  observation, while the six documented public-table ingresses share one
+  strict classifier. Coverage includes canonical and additive class suffixes,
+  no prefix-induced ordinary-shell copy, ALTREP-snapshot canonicalization
+  without S3 dispatch, malformed/reversed/non-suffix/reserved/
+  duplicate class rejection, allowed data.table cache-carrier shapes and cache
+  disposal, missing/S4/attributed/mismatched row names, compact positive and
+  negative counts, stable integer/character ALTREP row names with one Length
+  and no Elt, shared mutable names under top-shell Elt reentry, and
   row-consuming versus non-row-consuming dimension checks. The public-table
   top shell is materialized once and admitted atomic leaves and columns remain
   supported;
 - detached data.table facades, documented data.frame/data.table input including
-  exact-class top-level ALTREP shells and base R's lazy duplicate, stable
+  suffix-classified top-level ALTREP shells, additive presentation classes,
+  and base R's lazy duplicate, stable
   semantic ALTREP columns, and public mutation isolation;
 - detached ParamSet-family equality covers complete state and distinguishes
   shared from duplicated DAG topology without traversing private R6 bindings;
@@ -987,7 +1003,7 @@ correctly rejected it before candidate timing: R 4.6 had represented the
 benchmark's ordinary wide data.frame as a top-level base `wrap_list` ALTREP,
 and `check_dt()` rejected that common representation. Its unsealed benchmark
 is defect evidence, not a performance result. The replacement design
-materializes exact public-table ALTREP shells once at the six documented
+materializes admitted public-table ALTREP shells once at the six documented
 ingresses and does not weaken general structural admission.
 
 The replacement candidate

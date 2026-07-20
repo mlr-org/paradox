@@ -131,9 +131,11 @@ typedef enum {
   PARADOX_PUBLIC_DATA_TABLE
 } paradox_public_table_kind_t;
 
-/* Classify an exact-class, allowed-attribute public data.frame/data.table.
- * The top-level VECSXP may be ALTREP; interpreted metadata must satisfy the
- * shared public-table contract. */
+/* Classify an allowed-attribute public data.frame/data.table. Its ordinary
+ * class vector may have unique, non-reserved representation labels before the
+ * canonical "data.frame" or c("data.table", "data.frame") suffix. The
+ * top-level VECSXP may be ALTREP; interpreted metadata must satisfy the shared
+ * public-table contract. */
 attribute_hidden paradox_public_table_kind_t paradox_public_table_kind(
   SEXP table
 );
@@ -147,11 +149,13 @@ attribute_hidden int paradox_public_table_row_count(
   R_xlen_t *row_count
 );
 
-/* Materialize an exact public data.frame/data.table ALTREP top-level shell
- * once. Interpreted names/class metadata is copied before callback-capable
- * Length/Elt observations, row labels are normalized to their captured count,
- * ignored data.table cache attributes are dropped, and column identities are
- * retained. Unrecognized inputs are returned unchanged so operation-specific
+/* Normalize an admitted ALTREP public data.frame/data.table shell once.
+ * Interpreted names metadata and a canonical class suffix are owned before
+ * callback-capable Length/Elt observations, row labels are normalized to their
+ * captured count, ignored data.table cache attributes are dropped, and column
+ * identities are retained. Ordinary shells are not copied merely to remove
+ * leading representation labels; every native semantic snapshot ignores
+ * them. Unrecognized inputs are returned unchanged so operation-specific
  * validators remain authoritative. The result is unprotected and must be
  * rooted immediately by the caller. */
 attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);

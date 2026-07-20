@@ -4,11 +4,17 @@
 #' A lightweight wrapper around a [ParamSet] and a [data.table::data.table()], where the
 #' latter is a design of configurations produced from the former - e.g.,
 #' by calling a [generate_design_grid()] or by sampling.
-#' Design operations use Paradox's shared exact data-frame/data-table boundary.
-#' Names, classes, and accepted data.table cache carriers are ordinary
-#' structure. Raw row names are attribute-free, nonobject, non-S4 integer or
+#' Design operations use Paradox's shared structural data-frame/data-table
+#' boundary. A well-formed ordinary class vector ends in `"data.frame"` or
+#' `c("data.table", "data.frame")`; leading additive classes are
+#' representation-only and never dispatch. The classifier does not copy or
+#' materialize an ordinary shell merely to remove the prefix, and native
+#' semantic snapshots ignore it; an already-required ALTREP snapshot installs
+#' only the canonical suffix. Malformed class vectors
+#' reject. Names and accepted data.table cache
+#' carriers are ordinary structure. Raw row names are attribute-free, nonobject, non-S4 integer or
 #' character vectors; compact counts and stable ALTREP lengths are supported,
-#' but row labels are not interpreted. An exact allowed top-level VECSXP ALTREP
+#' but row labels are not interpreted. An admitted top-level VECSXP ALTREP
 #' shell is materialized once after names/classes are owned; semantic atomic
 #' columns may likewise be stable ALTREP. Package-created tables retain
 #' canonical ordinary metadata.
@@ -20,7 +26,7 @@ Design = R6Class("Design",
     param_set = NULL,
 
     #' @field data ([data.table::data.table()])\cr
-    #' Stored data.table shell. The shared exact public-table boundary and its
+    #' Stored data.table shell. The shared suffix-aware public-table boundary and its
     #' count-only row-name rules apply. An allowed top-level VECSXP ALTREP is
     #' accepted once, and semantic atomic columns may be stable ALTREP.
     data = NULL,
@@ -30,7 +36,7 @@ Design = R6Class("Design",
     #'
     #' @param param_set ([ParamSet]).
     #' @param data ([data.table::data.table()])\cr
-    #'   Stored `data`. The shared exact public-table boundary and its count-only
+    #'   Stored `data`. The shared suffix-aware public-table boundary and its count-only
     #'   row-name rules apply. An allowed top-level VECSXP ALTREP is accepted
     #'   once, and admitted semantic atomic columns may be stable ALTREP.
     #' @param remove_dupl (`logical(1)`)\cr

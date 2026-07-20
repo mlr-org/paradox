@@ -19,6 +19,76 @@ static int public_table_class_name(SEXP value, const char *expected) {
     strcmp(CHAR(value), expected) == 0;
 }
 
+static paradox_public_table_kind_t public_table_class_kind(SEXP classes) {
+  if (TYPEOF(classes) != STRSXP || ALTREP(classes) || Rf_isS4(classes) ||
+      Rf_isObject(classes) || !paradox_api_has_no_attributes(classes)) {
+    return PARADOX_PUBLIC_TABLE_NONE;
+  }
+
+  const R_xlen_t count = XLENGTH(classes);
+  if (count == 0) return PARADOX_PUBLIC_TABLE_NONE;
+
+  /* Keep the two overwhelmingly common exact spellings on a fixed, minimal
+   * path. Prefix validation below is paid only by additive subclasses. */
+  if (count == 1 && public_table_class_name(
+      STRING_ELT(classes, 0), "data.frame")) {
+    return PARADOX_PUBLIC_DATA_FRAME;
+  }
+  if (count == 2 && public_table_class_name(
+      STRING_ELT(classes, 0), "data.table") &&
+      public_table_class_name(STRING_ELT(classes, 1), "data.frame")) {
+    return PARADOX_PUBLIC_DATA_TABLE;
+  }
+
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP label = STRING_ELT(classes, index);
+    if (label == NA_STRING || Rf_getCharCE(label) == CE_BYTES ||
+        CHAR(label)[0] == '\0') {
+      return PARADOX_PUBLIC_TABLE_NONE;
+    }
+  }
+  const int data_frame = public_table_class_name(
+    STRING_ELT(classes, count - 1),
+    "data.frame"
+  );
+  if (!data_frame) return PARADOX_PUBLIC_TABLE_NONE;
+
+  const int data_table = count >= 2 && public_table_class_name(
+    STRING_ELT(classes, count - 2),
+    "data.table"
+  );
+  const R_xlen_t prefix_count = count - (data_table ? 2 : 1);
+  for (R_xlen_t index = 0; index < prefix_count; ++index) {
+    SEXP label = STRING_ELT(classes, index);
+    if (public_table_class_name(label, "data.frame") ||
+        public_table_class_name(label, "data.table")) {
+      return PARADOX_PUBLIC_TABLE_NONE;
+    }
+    /* Leading labels are normally one element long (for example
+     * bmr_aggregate). Keep their uniqueness check allocation-free rather than
+     * paying Rf_any_duplicated()'s hash table on every public-table ingress. */
+    for (R_xlen_t previous = 0; previous < index; ++previous) {
+      if (strcmp(CHAR(label), CHAR(STRING_ELT(classes, previous))) == 0) {
+        return PARADOX_PUBLIC_TABLE_NONE;
+      }
+    }
+  }
+  return data_table
+    ? PARADOX_PUBLIC_DATA_TABLE
+    : PARADOX_PUBLIC_DATA_FRAME;
+}
+
+static SEXP canonical_public_table_class(paradox_public_table_kind_t kind) {
+  const R_xlen_t count = kind == PARADOX_PUBLIC_DATA_TABLE ? 2 : 1;
+  SEXP classes = PROTECT(Rf_allocVector(STRSXP, count));
+  if (kind == PARADOX_PUBLIC_DATA_TABLE) {
+    SET_STRING_ELT(classes, 0, Rf_mkChar("data.table"));
+  }
+  SET_STRING_ELT(classes, count - 1, Rf_mkChar("data.frame"));
+  UNPROTECT(1);
+  return classes;
+}
+
 static int ordinary_ignored_data_table_metadata(SEXP table) {
   SEXP self_reference = PROTECT(paradox_api_raw_attribute(
     table,
@@ -62,9 +132,6 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
     table,
     R_NamesSymbol
   ));
-  const int ordinary_classes = TYPEOF(classes) == STRSXP &&
-    !ALTREP(classes) && !Rf_isS4(classes) && !Rf_isObject(classes) &&
-    paradox_api_has_no_attributes(classes);
   /* Base structure(list(), class = "data.frame", row.names = ...) is a
    * long-standing valid zero-column spelling with no names attribute. The
    * operation-level length check admits that case only when the shell is
@@ -72,31 +139,22 @@ paradox_public_table_kind_t paradox_public_table_kind(SEXP table) {
   const int ordinary_names = names == R_NilValue ||
     (TYPEOF(names) == STRSXP && !ALTREP(names) && !Rf_isS4(names) &&
       !Rf_isObject(names) && paradox_api_has_no_attributes(names));
-  const R_xlen_t count = ordinary_classes ? XLENGTH(classes) : 0;
-  const int data_frame = count == 1 && public_table_class_name(
-    STRING_ELT(classes, 0),
-    "data.frame"
-  );
-  const int data_table = count == 2 && public_table_class_name(
-      STRING_ELT(classes, 0),
-      "data.table"
-    ) && public_table_class_name(
-      STRING_ELT(classes, 1),
-      "data.frame"
-    );
+  const paradox_public_table_kind_t kind = public_table_class_kind(classes);
   static const char *const frame_attributes[] = {
     "names", "row.names", "class"
   };
   static const char *const table_attributes[] = {
     "names", "row.names", "class", ".internal.selfref", "sorted", "index"
   };
-  const int recognized_frame = ordinary_names && data_frame &&
+  const int recognized_frame = ordinary_names &&
+    kind == PARADOX_PUBLIC_DATA_FRAME &&
     paradox_api_has_only_attributes(
       table,
       frame_attributes,
       3
     );
-  const int recognized_table = ordinary_names && data_table &&
+  const int recognized_table = ordinary_names &&
+    kind == PARADOX_PUBLIC_DATA_TABLE &&
     paradox_api_has_only_attributes(table, table_attributes, 6) &&
     ordinary_ignored_data_table_metadata(table);
   UNPROTECT(2);
@@ -158,22 +216,22 @@ SEXP paradox_test_public_row_names_count(SEXP row_names) {
 }
 
 SEXP paradox_materialize_public_table_shell(SEXP table) {
-  if (TYPEOF(table) != VECSXP || !ALTREP(table) || Rf_isS4(table) ||
-      paradox_public_table_kind(table) == PARADOX_PUBLIC_TABLE_NONE) {
+  if (TYPEOF(table) != VECSXP || !ALTREP(table) || Rf_isS4(table)) {
     return table;
   }
+  const paradox_public_table_kind_t kind = paradox_public_table_kind(table);
+  if (kind == PARADOX_PUBLIC_TABLE_NONE) return table;
 
-  /* Select and own interpreted metadata before any callback-capable Length or
-   * Elt observation. SHALLOW_DUPLICATE_ATTRIB is insufficient here: an Elt
-   * callback can mutate a shared names vector in place. */
+  /* Select and own interpreted metadata, including a canonical class suffix,
+   * before any callback-capable Length or Elt observation. Ordinary admitted
+   * shells are not copied merely to remove inert leading labels: every caller
+   * remains in C and its semantic snapshot ignores them.
+   * SHALLOW_DUPLICATE_ATTRIB is insufficient for ALTREP: an Elt callback can
+   * mutate a shared names vector in place. */
   PROTECT(table);
   SEXP source_names = PROTECT(paradox_api_raw_attribute(
     table,
     R_NamesSymbol
-  ));
-  SEXP source_classes = PROTECT(paradox_api_raw_attribute(
-    table,
-    R_ClassSymbol
   ));
   SEXP source_row_names = PROTECT(paradox_api_raw_attribute(
     table,
@@ -184,18 +242,18 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
       ALTREP(source_names) || Rf_isS4(source_names) ||
       Rf_isObject(source_names) ||
       !paradox_api_has_no_attributes(source_names))) {
-    UNPROTECT(4);
+    UNPROTECT(3);
     return table;
   }
   const R_xlen_t name_count = names_absent ? 0 : XLENGTH(source_names);
   SEXP stable_names = PROTECT(names_absent
     ? Rf_allocVector(STRSXP, 0)
     : Rf_duplicate(source_names));
-  SEXP stable_classes = PROTECT(Rf_duplicate(source_classes));
+  SEXP stable_classes = PROTECT(canonical_public_table_class(kind));
 
   R_xlen_t rows = 0;
   if (!public_row_names_count(source_row_names, &rows) || rows > INT_MAX) {
-    UNPROTECT(6);
+    UNPROTECT(5);
     return table;
   }
 
@@ -204,7 +262,7 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
    * column. Metadata values above already belong to the selected generation. */
   const R_xlen_t count = XLENGTH(table);
   if (name_count != count) {
-    UNPROTECT(6);
+    UNPROTECT(5);
     return table;
   }
   SEXP result = PROTECT(Rf_allocVector(VECSXP, count));
@@ -228,7 +286,7 @@ SEXP paradox_materialize_public_table_shell(SEXP table) {
     SET_VECTOR_ELT(result, column, value);
     UNPROTECT(1);
   }
-  UNPROTECT(8);
+  UNPROTECT(7);
   return result;
 }
 

@@ -26,10 +26,17 @@ from the ParamSet family is additive only: Paradox core methods, active
 bindings, and private capsule state may not be replaced.
 Interpreted outer list and internal table shells and their structural
 metadata are ordinary non-ALTREP/non-S4 objects. Documented public table
-inputs share one exact data-frame/data-table classifier. Their names/classes
-and accepted data.table cache carriers are ordinary; raw row names are
+inputs share one structural classifier. A well-formed ordinary class vector
+ends in \code{"data.frame"} or \code{c("data.table", "data.frame")}; leading additive
+classes are representation-only and are never dispatched. The classifier
+does not copy or materialize an ordinary shell merely to remove the prefix,
+and native semantic snapshots ignore it; an already-required ALTREP snapshot
+installs only the canonical suffix.
+Malformed, reversed, non-suffix, reserved-label, and
+duplicate class vectors are rejected. Names/classes and accepted data.table
+cache carriers are ordinary; raw row names are
 attribute-free, nonobject, non-S4 integer or character vectors whose count,
-not labels, is used. An exact allowed top-level VECSXP ALTREP shell is
+not labels, is used. An admitted top-level VECSXP ALTREP shell is
 materialized once after names/classes are owned. Stable ALTREP is supported
 for admitted semantic atomic values and table columns, with the documented
 \code{set_values(.values=)} list-shell exception described below.
@@ -363,7 +370,7 @@ Named parameter values.}
 Named list with parameter values. Names must not already appear in
 \code{...}. This is the sole public general-list ALTREP exception: native
 code snapshots the supplied shell once before interpreting its names
-and elements. The separate exact-class public-table boundary does not
+and elements. The separate public-table boundary does not
 admit general lists. S4 shells remain unsupported. Direct \verb{$values <-}
 assignment does not share this exception.}
       \item{\code{.insert}}{(\code{logical(1)})\cr
@@ -389,7 +396,7 @@ replace all values. Default is TRUE.}
     \describe{
       \item{\code{x}}{(named \code{list()} | \code{data.frame})\cr
 The value(s) to be transformed. A non-table outer list remains ordinary
-non-ALTREP/non-S4. A data.frame uses the shared exact public-table
+non-ALTREP/non-S4. A data.frame uses the shared suffix-aware public-table
 boundary: row-name structure is validated, but its row count is not
 compared with columns because transformation treats columns as named
 parameter values rather than rows. An allowed top-level VECSXP ALTREP
@@ -525,7 +532,7 @@ If \code{x} does not satisfy these, an error will be thrown, given that \code{as
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{x}}{(\code{data.table})\cr
-The values to test. The shared exact public-table boundary applies;
+The values to test. The shared suffix-aware public-table boundary applies;
 raw row names supply the row count and must agree with every column.
 An allowed top-level VECSXP ALTREP and admitted stable atomic columns
 are each materialized once.}
@@ -731,8 +738,9 @@ have fewer columns as there are params in the set.
     \if{html}{\out{<div class="arguments">}}
     \describe{
       \item{\code{xdt}}{(\link[data.table:data.table]{data.table::data.table} | \code{data.frame()}).
-The shared exact public-table boundary applies. Names/classes and
-accepted data.table cache carriers are ordinary; raw integer/character
+The shared suffix-aware public-table boundary applies. Leading
+additive classes are representation-only and never dispatch.
+Names/classes and accepted data.table cache carriers are ordinary; raw integer/character
 row names supply the row count and must agree with every column. An
 allowed top-level VECSXP ALTREP and admitted stable atomic columns are
 each materialized once.}
@@ -854,7 +862,7 @@ feasible intervals of individual parameters.
       \item{\code{x}}{(\code{matrix} | \code{data.frame} | \code{data.table})\cr
 Values to map. Columns must be unclassed integer or double vectors.
 Column names must be unique and a subset of the parameter IDs.
-Data frames/data.tables use the shared exact public-table boundary;
+Data frames/data.tables use the shared suffix-aware public-table boundary;
 raw row names supply the row count and must agree with every column.
 An allowed top-level VECSXP ALTREP is materialized once. A matrix or
 admitted atomic column may have stable ALTREP semantic storage, which

@@ -164,7 +164,10 @@ workflow's top-level green mark alone.
   snapshot, typed-special ALTREP/pointer-S4 and ParamUty base-`identical()`
   boundaries, exact BASE Object-token receipts and sealed search capabilities,
   ordinary non-ALTREP/non-S4 structural shell rejection, documented tables with
-  one shared exact classifier, exact-class top-level ALTREP shells, owned names
+  one shared strict suffix classifier, no prefix-induced ordinary-shell copy,
+  ALTREP-snapshot canonicalization without dispatch, malformed
+  class-vector rejection, suffix-classified top-level
+  ALTREP shells, owned names
   under reentry, strict cache carriers, count-only ordinary/stable-ALTREP row
   names, zero-column Design semantics, semantic ALTREP columns, data.table
   facades, and package check;
