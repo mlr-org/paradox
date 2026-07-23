@@ -810,6 +810,25 @@ main <- function() {
       adopted <- .Call(symbol("param_set_core_state"), target)
       check(identical(adopted$.params$id, "y"), "adopted subset differs")
     },
+    direct_upgrade_graph_discover = function() {
+      candidate <- new.env(parent = emptyenv())
+      class(candidate) <- c("ParamSet", "R6")
+      host <- new.env(parent = emptyenv())
+      host$candidate <- candidate
+      host$alias <- candidate
+      host$self <- host
+      result <- .Call(symbol("upgrade_graph_discover"), host)
+      boundary <- .Call(symbol("upgrade_graph_discover"), .GlobalEnv)
+      check(
+        identical(names(result), c("objects", "paths")) &&
+          length(result$objects) == 1L &&
+          identical(result$objects[[1L]], candidate) &&
+          length(result$paths) == 1L &&
+          is.character(result$paths) &&
+          identical(boundary, list(objects = list(), paths = character())),
+        "identity-aware graph discovery or global boundary differs"
+      )
+    },
     direct_test_checked_affixed_size = function() {
       check(identical(.Call(symbol("test_checked_affixed_size"), 0L, 0L), 1L), "affix boundary result differs")
     },

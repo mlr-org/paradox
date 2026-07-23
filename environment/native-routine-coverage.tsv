@@ -63,6 +63,7 @@ param_set_collection_values	2	production	production-dynamic	direct_param_set_col
 param_set_subset_state	8	production	production-dynamic	direct_param_set_subset_state	Direct subset capsule transaction with independently retained or stripped constraint and transformation snapshots
 param_set_subspace_states	4	production	production-dynamic	direct_param_set_subspace_states	Direct atomic multi-subspace capsule planning
 param_set_adopt_subset_state	2	production	production-dynamic	direct_param_set_adopt_subset_state	Direct single-use subset capsule adoption
+upgrade_graph_discover	1	production	production-dynamic	direct_upgrade_graph_discover	Direct iterative identity-deduplicated discovery of a ParamSet-family shell without entering the global environment boundary
 test_checked_affixed_size	2	fixture	fixture-dynamic	direct_test_checked_affixed_size	Internal arithmetic-boundary fixture is called dynamically
 test_stateful_altrep	6	fixture	fixture-dynamic	direct_test_stateful_altrep,hazard_altrep_snapshot_reentry,hazard_callback_reentry_rooting	Internal ALTREP constructor drives direct and callback hazards
 test_stateful_altrep_rearm	2	fixture	fixture-dynamic	direct_test_stateful_altrep_rearm	Internal ALTREP rearm operation is called dynamically
