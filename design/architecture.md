@@ -34,6 +34,19 @@ documented result or raises an error. It never returns a private sentinel that
 causes R to repeat the operation through checkmate, data.table, S3 dispatch, or
 a second R implementation.
 
+Ordinary built-in values enter one package-owned C classifier shared by Domain
+and ParamSet scalar/table operations. That classifier records the specific
+failure category—missingness, type/shape, integerish, lower/upper bound, or
+factor membership—while it performs the canonical admission. The accepted hot
+path constructs no diagnostic. Only a failed classification enters the shared
+native formatter, which emits informative checkmate-style categories and
+established message fragments without calling checkmate or R. This is one
+classifier/formatter pair, not a semantic engine plus a presentation fallback.
+On an already-invalid type path, the classifier first recognizes an ordinary
+scalar missing value even when its storage mode differs from the Domain's; this
+preserves the more useful legacy `May not be NA`/factor-`NA` diagnosis without
+adding work or duplicate reads to accepted typed values.
+
 ## R6 shell and capsule
 
 `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` keep their public R6
@@ -703,14 +716,16 @@ on capsule authority.
 
 ## Error and ownership policy
 
-Common public failures retain useful stable Paradox message fragments; exact
-checkmate wording, internal implementation frames, and behavior after private
-corruption are not contracts. Corrupt current state receives a deterministic
-`Corrupt ... capsule/state/graph` error before unsafe access. Direct native
-calls with malformed objects are adversarial test inputs and must never crash.
-Malformed exact-token or Domain structure is likewise a hard public-boundary
-error; the returned check diagnostic is reserved for ordinary structurally
-admitted value infeasibility.
+Common built-in value failures retain informative checkmate-style categories
+and established Paradox/checkmate message fragments through the shared native
+failure formatter. Byte-identical wording for every checkmate edge case,
+`conditionCall()`, internal implementation frames, exotic unsupported object
+semantics, and behavior after private corruption are not contracts. Corrupt
+current state receives a deterministic `Corrupt ... capsule/state/graph` error
+before unsafe access. Direct native calls with malformed objects are
+adversarial test inputs and must never crash. Malformed exact-token or Domain
+structure is likewise a hard public-boundary error; the returned check
+diagnostic is reserved for ordinary structurally admitted value infeasibility.
 
 Every allocating or callback-capable boundary has explicit protection. Long
 loops poll interrupts without holding unrooted objects or raw pointers. Output

@@ -11,6 +11,7 @@
 #include <R_ext/Memory.h>
 #include <R_ext/Utils.h>
 
+#include "builtin_value.h"
 #include "builtin_condition.h"
 #include "core_state.h"
 #include "domain_admission.h"
@@ -208,41 +209,9 @@ static SEXP format_public_number(double value) {
   return check_message("%g", value);
 }
 
-static SEXP diagnostic_charsxp(SEXP string) {
-  if (TYPEOF(string) != CHARSXP || string == NA_STRING) {
-    Rf_error("Internal error: invalid ParamSet diagnostic fragment");
-  }
-  if (Rf_getCharCE(string) != CE_BYTES) return string;
-
-  static const char hex[] = "0123456789abcdef";
-  const unsigned char *source = (const unsigned char *) CHAR(string);
-  const size_t source_size = strlen((const char *) source);
-  if (source_size > (size_t) INT_MAX / 4U) {
-    Rf_error("ParamSet diagnostic fragment exceeds R's string limit");
-  }
-  char *output = paradox_temporary_alloc(
-    (R_xlen_t) (source_size * 4U) + 1,
-    sizeof(*output)
-  );
-  size_t output_size = 0;
-  for (size_t index = 0; index < source_size; ++index) {
-    const unsigned char byte = source[index];
-    if (byte >= 0x20U && byte <= 0x7eU && byte != (unsigned char) '\\') {
-      output[output_size++] = (char) byte;
-    } else {
-      output[output_size++] = '\\';
-      output[output_size++] = 'x';
-      output[output_size++] = hex[byte >> 4U];
-      output[output_size++] = hex[byte & 0x0fU];
-    }
-  }
-  output[output_size] = '\0';
-  return Rf_mkCharLenCE(output, (int) output_size, CE_UTF8);
-}
-
 static SEXP utf8_message_1(const char *prefix, SEXP first,
     const char *suffix) {
-  SEXP safe_first = PROTECT(diagnostic_charsxp(first));
+  SEXP safe_first = PROTECT(paradox_diagnostic_charsxp(first));
   paradox_utf8_piece_t pieces[] = {
     paradox_utf8_ascii_piece(prefix),
     paradox_utf8_charsxp_piece(safe_first),
@@ -255,8 +224,8 @@ static SEXP utf8_message_1(const char *prefix, SEXP first,
 
 static SEXP utf8_message_2(const char *prefix, SEXP first,
     const char *middle, SEXP second, const char *suffix) {
-  SEXP safe_first = PROTECT(diagnostic_charsxp(first));
-  SEXP safe_second = PROTECT(diagnostic_charsxp(second));
+  SEXP safe_first = PROTECT(paradox_diagnostic_charsxp(first));
+  SEXP safe_second = PROTECT(paradox_diagnostic_charsxp(second));
   paradox_utf8_piece_t pieces[] = {
     paradox_utf8_ascii_piece(prefix),
     paradox_utf8_charsxp_piece(safe_first),
@@ -272,9 +241,9 @@ static SEXP utf8_message_2(const char *prefix, SEXP first,
 static SEXP utf8_message_3(const char *prefix, SEXP first,
     const char *middle_1, SEXP second, const char *middle_2, SEXP third,
     const char *suffix) {
-  SEXP safe_first = PROTECT(diagnostic_charsxp(first));
-  SEXP safe_second = PROTECT(diagnostic_charsxp(second));
-  SEXP safe_third = PROTECT(diagnostic_charsxp(third));
+  SEXP safe_first = PROTECT(paradox_diagnostic_charsxp(first));
+  SEXP safe_second = PROTECT(paradox_diagnostic_charsxp(second));
+  SEXP safe_third = PROTECT(paradox_diagnostic_charsxp(third));
   paradox_utf8_piece_t pieces[] = {
     paradox_utf8_ascii_piece(prefix),
     paradox_utf8_charsxp_piece(safe_first),
@@ -292,10 +261,10 @@ static SEXP utf8_message_3(const char *prefix, SEXP first,
 static SEXP utf8_message_4(const char *prefix, SEXP first,
     const char *middle_1, SEXP second, const char *middle_2, SEXP third,
     const char *middle_3, SEXP fourth, const char *suffix) {
-  SEXP safe_first = PROTECT(diagnostic_charsxp(first));
-  SEXP safe_second = PROTECT(diagnostic_charsxp(second));
-  SEXP safe_third = PROTECT(diagnostic_charsxp(third));
-  SEXP safe_fourth = PROTECT(diagnostic_charsxp(fourth));
+  SEXP safe_first = PROTECT(paradox_diagnostic_charsxp(first));
+  SEXP safe_second = PROTECT(paradox_diagnostic_charsxp(second));
+  SEXP safe_third = PROTECT(paradox_diagnostic_charsxp(third));
+  SEXP safe_fourth = PROTECT(paradox_diagnostic_charsxp(fourth));
   paradox_utf8_piece_t pieces[] = {
     paradox_utf8_ascii_piece(prefix),
     paradox_utf8_charsxp_piece(safe_first),
@@ -2190,48 +2159,44 @@ static int scalar_number(SEXP value, double *result) {
   return FALSE;
 }
 
-static int value_is_special(const value_spec_t *spec, SEXP value,
-    R_xlen_t *work_since_interrupt) {
-  paradox_builtin_domain_kind_t kind;
-  switch (spec->kind) {
-  case VALUE_DBL: kind = PARADOX_BUILTIN_DOMAIN_DBL; break;
-  case VALUE_INT: kind = PARADOX_BUILTIN_DOMAIN_INT; break;
-  case VALUE_FCT: kind = PARADOX_BUILTIN_DOMAIN_FCT; break;
-  case VALUE_LGL: kind = PARADOX_BUILTIN_DOMAIN_LGL; break;
-  case VALUE_UTY: kind = PARADOX_BUILTIN_DOMAIN_UTY; break;
+static paradox_builtin_domain_kind_t builtin_value_kind(value_kind_t kind) {
+  switch (kind) {
+  case VALUE_DBL: return PARADOX_BUILTIN_DOMAIN_DBL;
+  case VALUE_INT: return PARADOX_BUILTIN_DOMAIN_INT;
+  case VALUE_FCT: return PARADOX_BUILTIN_DOMAIN_FCT;
+  case VALUE_LGL: return PARADOX_BUILTIN_DOMAIN_LGL;
+  case VALUE_UTY: return PARADOX_BUILTIN_DOMAIN_UTY;
   default:
     Rf_error("Internal error: unknown ParamSet Domain kind");
   }
-  return paradox_builtin_special_values_contain(
-    kind,
-    spec->special_values,
-    value,
-    work_since_interrupt
-  );
+  return PARADOX_BUILTIN_DOMAIN_UNKNOWN;
 }
 
-static int factor_value(SEXP value, SEXP levels,
-    R_xlen_t *work_since_interrupt) {
-  if (TYPEOF(value) != STRSXP || Rf_isS4(value) || Rf_isObject(value) ||
-      ALTREP(value) ||
-      XLENGTH(value) != 1 || STRING_ELT(value, 0) == NA_STRING) {
-    return FALSE;
-  }
-  SEXP selected = STRING_ELT(value, 0);
-  for (R_xlen_t level = 0; level < XLENGTH(levels); ++level) {
-    account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(selected, STRING_ELT(levels, level))) {
-      return TRUE;
-    }
-  }
-  return FALSE;
+static paradox_builtin_value_spec_t builtin_value_spec(
+    const value_spec_t *spec) {
+  const paradox_builtin_value_spec_t result = {
+    builtin_value_kind(spec->kind),
+    spec->lower,
+    spec->upper,
+    spec->tolerance,
+    spec->levels,
+    spec->special_values
+  };
+  return result;
 }
 
 static SEXP validate_ordinary_value(const value_spec_t *spec, SEXP value,
     int sanitize, SEXP *replacement,
     R_xlen_t *work_since_interrupt) {
   *replacement = value;
-  if (value_is_special(spec, value, work_since_interrupt)) return R_NilValue;
+  const paradox_builtin_value_spec_t builtin = builtin_value_spec(spec);
+  const paradox_builtin_value_result_t checked = paradox_builtin_value_check(
+    &builtin,
+    value,
+    TRUE,
+    work_since_interrupt
+  );
+  if (checked.special) return R_NilValue;
 
   if (spec->kind == VALUE_UTY) {
     if (spec->custom_check == R_NilValue) return R_NilValue;
@@ -2257,77 +2222,22 @@ static SEXP validate_ordinary_value(const value_spec_t *spec, SEXP value,
     UNPROTECT(3);
     return result;
   }
-
-  if (spec->kind == VALUE_LGL) {
-    if (TYPEOF(value) == LGLSXP && !Rf_isS4(value) &&
-        !Rf_isObject(value) && !ALTREP(value) &&
-        XLENGTH(value) == 1 && LOGICAL_ELT(value, 0) != NA_LOGICAL) {
-      return R_NilValue;
-    }
-    return utf8_message_1(
-      "", spec->id, ": expected one non-missing logical value"
+  if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+    return paradox_builtin_value_diagnostic(
+      spec->id,
+      &builtin,
+      value,
+      &checked
     );
   }
-  if (spec->kind == VALUE_FCT) {
-    if (factor_value(value, spec->levels, work_since_interrupt)) {
-      return R_NilValue;
-    }
-    return utf8_message_1(
-      "", spec->id,
-      ": expected one non-missing character value from the Domain levels"
-    );
+  if (sanitize && spec->kind == VALUE_DBL) {
+    double clamped = checked.number;
+    if (clamped < spec->lower) clamped = spec->lower;
+    if (clamped > spec->upper) clamped = spec->upper;
+    *replacement = Rf_ScalarReal(clamped);
+  } else if (sanitize && spec->kind == VALUE_INT) {
+    *replacement = Rf_ScalarInteger((int) checked.canonical_number);
   }
-
-  double number;
-  if (!scalar_number(value, &number)) {
-    return utf8_message_1(
-      "", spec->id,
-      spec->kind == VALUE_DBL
-        ? ": expected one non-missing numeric value within the Domain bounds"
-        : ": expected one finite integer-valued numeric within the Domain bounds"
-    );
-  }
-  if (spec->kind == VALUE_DBL) {
-    const double accepted_lower = paradox_accepted_lower(
-      spec->lower, spec->tolerance
-    );
-    const double accepted_upper = paradox_accepted_upper(
-      spec->upper, spec->tolerance
-    );
-    if (ISNAN(accepted_lower) || ISNAN(accepted_upper) ||
-        number < accepted_lower || number > accepted_upper) {
-      return utf8_message_1(
-        "", spec->id,
-        ": expected one non-missing numeric value within the Domain bounds"
-      );
-    }
-    if (sanitize) {
-      double clamped = number;
-      if (clamped < spec->lower) clamped = spec->lower;
-      if (clamped > spec->upper) clamped = spec->upper;
-      *replacement = Rf_ScalarReal(clamped);
-    }
-    return R_NilValue;
-  }
-
-  if (!R_FINITE(number)) {
-    return utf8_message_1(
-      "", spec->id,
-      ": expected one finite integer-valued numeric within the Domain bounds"
-    );
-  }
-  const double rounded = nearbyint(number);
-  if (!paradox_within_integer_tolerance(
-      number, rounded, spec->tolerance
-    ) ||
-      rounded < spec->lower || rounded > spec->upper ||
-      rounded <= (double) INT_MIN || rounded > (double) INT_MAX) {
-    return utf8_message_1(
-      "", spec->id,
-      ": expected one finite integer-valued numeric within the Domain bounds"
-    );
-  }
-  if (sanitize) *replacement = Rf_ScalarInteger((int) rounded);
   return R_NilValue;
 }
 

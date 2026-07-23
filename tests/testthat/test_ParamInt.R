@@ -52,7 +52,11 @@ test_that("assigning integer value results in int", {
   p = ParamSet_legacy$new(list(ParamInt$new("x")))
   p$values$x = 0
   expect_equal(typeof(p$values$x), "integer")
-  expect_error({p$values$x = 1e-2}, "expected one finite integer-valued numeric within the Domain bounds")
+  expect_error(
+    {p$values$x = 1e-2},
+    "Must be of type 'single integerish value', not 'double'",
+    fixed = TRUE
+  )
 
 })
 
@@ -73,13 +77,29 @@ test_that("integer params are not corrected to the wrong value", {
   expect_identical(param_set$values$a, 100L)
   param_set$values$a = 100.6
   expect_identical(param_set$values$a, 101L)
-  expect_error({param_set$values$a = 100.41}, "expected one finite integer-valued numeric within the Domain bounds")
-  expect_error({param_set$values$a = 100.59}, "expected one finite integer-valued numeric within the Domain bounds")
+  expect_error(
+    {param_set$values$a = 100.41},
+    "Must be of type 'single integerish value', not 'double'",
+    fixed = TRUE
+  )
+  expect_error(
+    {param_set$values$a = 100.59},
+    "Must be of type 'single integerish value', not 'double'",
+    fixed = TRUE
+  )
 
   param_set$values$a = -100.4
   expect_identical(param_set$values$a, -100L)
   param_set$values$a = -100.6
   expect_identical(param_set$values$a, -101L)
-  expect_error({param_set$values$a = -100.41}, "expected one finite integer-valued numeric within the Domain bounds")
-  expect_error({param_set$values$a = -100.59}, "expected one finite integer-valued numeric within the Domain bounds")
+  expect_error(
+    {param_set$values$a = -100.41},
+    "Must be of type 'single integerish value', not 'double'",
+    fixed = TRUE
+  )
+  expect_error(
+    {param_set$values$a = -100.59},
+    "Must be of type 'single integerish value', not 'double'",
+    fixed = TRUE
+  )
 })

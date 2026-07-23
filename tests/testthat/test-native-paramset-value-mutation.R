@@ -288,7 +288,7 @@ test_that("checked value diagnostics preserve non-native string encodings", {
   expect_s3_class(error, "error")
   expect_identical(
     enc2utf8(conditionMessage(error)),
-    "payload: gr\u00fcndlich rejected"
+    "Assertion on 'xs' failed: payload: gr\u00fcndlich rejected."
   )
   expect_identical(param_set$values, setNames(list(), character()))
 })
@@ -315,7 +315,7 @@ test_that("checked diagnostics transcode unknown IDs, token calls, and dependenc
   expect_s3_class(error, "error")
   expect_identical(
     enc2utf8(conditionMessage(error)),
-    "Parameter 'm\u00fcssing' not available."
+    "Assertion on 'xs' failed: Parameter 'm\u00fcssing' not available.."
   )
   bytes_id = utf8[[1L]]
   Encoding(bytes_id) = "bytes"

@@ -19,7 +19,10 @@ test_that("check and assert work", {
   p$assert(list(x = 1))
   expect_error(p$assert(list(x = 3)), "Assertion .* failed")
   expect_true(p$check(list(x = 1)))
-  expect_string(p$check(list(x = 3)), fixed = "expected one non-missing numeric value within the Domain bounds")
+  expect_string(
+    p$check(list(x = 3)),
+    fixed = "x: Element 1 is not <= 2"
+  )
   expect_true(p$test(list(x = 1)))
   expect_false(p$test(list(x = 3)))
 })

@@ -287,12 +287,15 @@ hazards that Paradox 2 is intended to remove.
   shared graphs and callbacks, and rejects cycles, malformed private state,
   unknown extensions, and core-overriding subclasses. Downstream packages own
   migration of their legacy third-party subclasses.
-* Documented Paradox validation messages and deliberately maintained
-  package-owned fragments remain informative and stable. Exact checkmate-era
-  wording asserted only by downstream tests is not a compatibility promise and
-  may use a Paradox-major-gated expectation. Implementation call frames,
-  side-effecting promise quirks, generated-closure layout, and exotic ALTREP
-  multi-observation behavior are likewise not compatibility promises.
+* Built-in Domain and ParamSet value failures now use one package-owned C
+  classifier and failure-only formatter. Missingness, type/shape, integerish,
+  bounds, and factor-membership errors retain informative checkmate-style
+  categories and established message fragments without calling checkmate or
+  repeating validation in R. Scalar missing values retain the useful
+  missingness diagnosis even if their storage mode differs from the Domain.
+  Byte-identical reproduction of every checkmate quirk, `conditionCall()`,
+  implementation frame, side-effecting promise behavior, or unsupported
+  exotic-object semantics is not promised.
 
 ## Correctness fixes
 
@@ -302,6 +305,9 @@ hazards that Paradox 2 is intended to remove.
   a length-two assignment to every generated row.
 * Empty settings honor `presence = "all"` and `"required"`.
 * `domain_qunif()` rejects incompatible input dimensions.
+* Unbounded integer Domains reject integer-valued doubles outside R's integer
+  storage range instead of accepting them and later coercing them to
+  `NA_integer_`.
 * Collection child transformations run exactly once and child constraints
   receive the correct unprefixed values; strict checks consult live child
   constraints.

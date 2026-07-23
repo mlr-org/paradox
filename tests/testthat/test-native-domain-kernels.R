@@ -69,11 +69,31 @@ test_that("built-in Domain checks are authoritative", {
   expect_true(domain_check(p_lgl(), list(FALSE)))
   expect_true(domain_check(p_uty(), list(list(payload = 1))))
 
-  expect_match(domain_check(p_dbl(0, 1), list(TRUE)), "expected one")
-  expect_match(domain_check(p_dbl(0, 1), list(NA_real_)), "expected one")
-  expect_match(domain_check(p_int(0, 2), list(0.5)), "integer-valued")
-  expect_match(domain_check(p_fct(c("a", "b")), list("c")), "Domain levels")
-  expect_match(domain_check(p_lgl(), list(NA)), "non-missing logical")
+  expect_match(
+    domain_check(p_dbl(0, 1), list(TRUE)),
+    "Must be of type 'number', not 'logical'",
+    fixed = TRUE
+  )
+  expect_match(
+    domain_check(p_dbl(0, 1), list(NA_real_)),
+    "May not be NA",
+    fixed = TRUE
+  )
+  expect_match(
+    domain_check(p_int(0, 2), list(0.5)),
+    "single integerish value",
+    fixed = TRUE
+  )
+  expect_match(
+    domain_check(p_fct(c("a", "b")), list("c")),
+    "Must be element of set {'a','b'}, but is 'c'",
+    fixed = TRUE
+  )
+  expect_match(
+    domain_check(p_lgl(), list(NA)),
+    "May not be NA",
+    fixed = TRUE
+  )
   expect_error(domain_check(p_dbl(), 1), "ordinary list")
   expect_error(domain_check(p_dbl(), list(1), internal = 1), "TRUE or FALSE")
 
@@ -82,7 +102,8 @@ test_that("built-in Domain checks are authoritative", {
   expect_true(domain_check(special, list(NULL)))
   expect_match(
     domain_check(special, list("automatic"), internal = TRUE),
-    "expected one"
+    "Must be of type 'number', not 'character'",
+    fixed = TRUE
   )
 })
 

@@ -472,12 +472,16 @@ preserves:
   references;
 - the intentional bug fixes recorded in the historical compatibility document.
 
-Common validation failures retain stable, documented package messages or
-consumer-relied-on fragments. Exact checkmate text, internal error priority that
-depends on a side-effecting promise, implementation call frames, and behavior
-after private corruption are not outward compatibility requirements. Every
-intentional differential from Paradox 1 receives a NEWS entry and a focused
-regression test.
+Ordinary built-in validation failures are classified once in C and retain
+informative checkmate-style categories and established consumer-relied-on
+fragments for missingness, type/shape, integerish values, bounds, and factor
+membership. The diagnostic formatter runs only after native admission fails;
+successful checks neither construct messages nor enter R or checkmate.
+Byte-identical reproduction of every checkmate quirk, internal error priority
+that depends on a side-effecting promise, `conditionCall()`, implementation
+frames, and unsupported exotic-object behavior is not an outward requirement.
+Every intentional differential from Paradox 1 receives a NEWS entry and a
+focused regression test.
 
 ## One native semantic engine
 
@@ -487,6 +491,12 @@ only work that intrinsically requires R language semantics—such as capturing
 native operation. There is no parallel R/checkmate/data.table/S3 execution
 engine whose result, callback order, and diagnostics must be authenticated and
 reproduced.
+
+Standalone Domain checks and ParamSet scalar/table checks share the same
+package-owned built-in value classifier and failure-only formatter. The
+classifier is semantic authority; the formatter reports its recorded category
+and values. Neither native validation path calls checkmate, revalidates in R,
+nor maintains a second copy of the admission rules for presentation.
 
 The same native operations consume `BASE`, `COLLECTION`, and `SHADOW` payloads.
 Node-specific planning is an internal switch inside the engine, not a public
@@ -656,13 +666,14 @@ non-forcing ordinary-binding lookup and identity; it cannot execute candidate
 code. A finalizer or callback that changed a candidate at any intervening
 allocation point is therefore detected without replay or partial commit.
 
-Warnings and errors from callbacks propagate once and in callback order. The
-package preserves stable documented validation diagnostics and message
-fragments relied on by maintained consumers, but it does not promise exact
-checkmate wording, `conditionCall()`, stack shape, local variable names, or the
-results of `substitute()`, `sys.call()`, and `parent.frame()` inside an
-implementation frame. Side-effecting promises are not a mechanism for changing
-the state seen by later rows of one native operation.
+Warnings and errors from callbacks propagate once and in callback order.
+Ordinary built-in value failures preserve informative checkmate-style
+categories and established message fragments through the native formatter.
+The package does not promise byte-identical wording for every checkmate quirk,
+`conditionCall()`, stack shape, local variable names, or the results of
+`substitute()`, `sys.call()`, and `parent.frame()` inside an implementation
+frame. Side-effecting promises are not a mechanism for changing the state seen
+by later rows of one native operation.
 
 A transformation result and every non-table transformation input must have an
 ordinary non-ALTREP, non-S4 outer list shell. A documented data-frame input may
@@ -908,13 +919,15 @@ The coordinated downstream transition happens in this order:
    its legacy class. Its tests exercise `$origin`, visible-value write-through,
    hidden-value preservation, live dependencies/constraint/transformations,
    and cross-boundary rejection on both branches.
-5. celecx, mlr3, and mlr3fselect keep their runtime behavior unchanged while
-   version-gating tests that asserted exact checkmate-era diagnostic fragments;
-   mlr3pipelines instead retains error assertions without pinning either
-   implementation's wording. mlr3pipelines additionally owns a real
-   GraphLearner deep-clone repair where an R6 value in `state$param_vals` was
-   shared; the former ParamSet private layout merely masked that alias in its
-   test helper.
+5. celecx, mlr3, and mlr3fselect keep their runtime behavior unchanged.
+   Diagnostic-only version gates introduced for the early generic Paradox-2
+   messages are removed where the centralized native formatter restores the
+   established ordinary-value fragments. celecx retains its independent
+   cycle/dependency bridge. mlr3pipelines may avoid pinning internal call shape,
+   and additionally owns a real GraphLearner deep-clone repair where an R6 value
+   in `state$param_vals` was shared; the former ParamSet private layout merely
+   masked that alias in its test helper. mlr3fda may retain snapshot variants
+   for call-frame differences, which are not part of the diagnostic contract.
    ConfigSpace and bbotk verify retained closed Condition function names and
    built-in shapes; ConfigSpace rejects an unknown condition explicitly rather
    than interpreting it as `CondAnyOf`.

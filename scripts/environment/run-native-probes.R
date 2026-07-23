@@ -938,8 +938,12 @@ main <- function() {
       result <- .Call(
         symbol("domain_check_builtin"), domain, list(value), FALSE
       )
+      # The callback changes the live bounds to [100, 200]. With tolerance
+      # 0.1, the re-admitted snapshot therefore has accepted lower bound 90.
+      # Assert that substantive snapshot result without depending on the
+      # Domain's immutable representation label.
       check(is.character(result) && length(result) == 1L &&
-        !is.na(result) && grepl("within the Domain bounds", result, fixed = TRUE),
+        !is.na(result) && grepl("Element 1 is not >= 90", result, fixed = TRUE),
         "callback-rooted Domain snapshot differs")
       check(identical(callbacks, 1L), "callback-rooting count differs")
     },

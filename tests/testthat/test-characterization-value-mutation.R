@@ -40,7 +40,7 @@ test_that("direct assignment sanitizes only after validation and is atomic", {
   events$seen = list()
   expect_error(
     { param_set$values = list(count = 3L, ratio = 2) },
-    "ratio: expected one non-missing numeric value within the Domain bounds",
+    "ratio: Element 1 is not <= 1.1",
     fixed = TRUE
   )
   expect_identical(events$seen, list())
@@ -211,7 +211,7 @@ test_that("collection validation failures do not touch any child", {
 
   expect_error(
     { collection$values = list(left.a = 2L, right.b = 9L) },
-    "right.b: expected one finite integer-valued numeric within the Domain bounds",
+    "right.b: Element 1 is not <= 2.5",
     fixed = TRUE
   )
   expect_identical(left$values, list(a = 1L))

@@ -100,7 +100,11 @@ test_that("ParamSet$check", {
   expect_true(ps$check(list(th_param_dbl = 5, th_param_int = 5)))
   expect_character(ps$check(list(th_param_dbl = 5, new_param = 5)), fixed = "not available")
   expect_character(ps$check(list(th_param_dbl = 5, th_param_intx = 5)), fixed = "not available")
-  expect_match(ps$check(list(th_param_dbl = 5, th_param_int = 15)), "expected one finite integer-valued numeric within the Domain bounds")
+  expect_match(
+    ps$check(list(th_param_dbl = 5, th_param_int = 15)),
+    "Element 1 is not <= 10.5",
+    fixed = TRUE
+  )
   expect_true(ps$check(list(th_param_dbl = 5)))
   expect_true(ps$check(list(th_param_int = 5)))
 
@@ -343,9 +347,15 @@ test_that("ParamSet$check_dt", {
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 1))
   expect_true(ps$check_dt(xdt))
   xdt = data.table(th_param_dbl = c(20, 20), th_param_int = c(1, 1))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_dbl: expected one non-missing numeric value within the Domain bounds")
+  expect_character(
+    ps$check_dt(xdt),
+    fixed = "th_param_dbl: Element 1 is not <= 10"
+  )
   xdt = data.table(th_param_dbl = c(1, 1), th_param_int = c(1, 20))
-  expect_character(ps$check_dt(xdt), fixed = "th_param_int: expected one finite integer-valued numeric within the Domain bounds")
+  expect_character(
+    ps$check_dt(xdt),
+    fixed = "th_param_int: Element 1 is not <= 10.5"
+  )
   xdt = data.table(th_param_dbl = c(1, 1), new_param = c(1, 20))
   expect_character(ps$check_dt(xdt), fixed = "not available")
   ps = ps_replicate(ParamLgl$new("x"), 2)
@@ -549,7 +559,8 @@ test_that("set_values allows to unset parameters by setting them to NULL", {
   # rejected normally for a non-nullable parameter and commits nothing.
   expect_error(
     param_set$set_values(.values = list(a = NULL), .insert = FALSE),
-    "expected one finite integer-valued numeric within the Domain bounds"
+    "Must be of type 'single integerish value', not 'NULL'",
+    fixed = TRUE
   )
   expect_identical(param_set$values, list(a = 1L))
   param_set = ps(a = p_int(special_vals = list(NULL)))

@@ -206,9 +206,12 @@ test_that("BASE checking validates and sanitizes all built-in kinds", {
     list(factor = "fast", double = -10, logical = FALSE, integer = 10L)
   )
 
-  expect_match(param_set$check(list(double = 11)), "double:.*bounds")
-  expect_match(param_set$check(list(integer = 1.5)), "integer:.*integer")
-  expect_match(param_set$check(list(factor = "absent")), "factor:.*levels")
+  expect_match(param_set$check(list(double = 11)), "double:.*not <=")
+  expect_match(param_set$check(list(integer = 1.5)), "integer:.*integerish")
+  expect_match(
+    param_set$check(list(factor = "absent")),
+    "factor:.*element of set"
+  )
   expect_match(param_set$check(list(logical = 1)), "logical:.*logical")
   expect_match(param_set$check(list(unknown = 1)), "not available")
   expect_match(param_set$check(list(double = NA_real_)), "double:")
@@ -290,9 +293,9 @@ test_that("built-in checks reject structural S4 while retaining opaque leaves", 
   special = asS4(0.5)
   numeric = ps(value = p_dbl(0, 1, special_vals = list(special)))
   expect_identical(numeric$check(list(value = special)), TRUE)
-  expect_match(
+  expect_identical(
     numeric$check(list(value = asS4(0.75))),
-    "value:.*numeric"
+    "value: Must be of type 'number', not 'double'"
   )
 
   opaque = asS4(list(payload = 1L))
@@ -495,7 +498,7 @@ test_that("check_dt uses the scalar row kernel and snapshots its columns", {
     stringsAsFactors = FALSE
   )
   # Row-major behavior reports the first row before inspecting a later row.
-  expect_match(param_set$check_dt(bad), "factor:.*levels")
+  expect_match(param_set$check_dt(bad), "factor:.*element of set")
 
   expect_true(param_set$check_dt(data.frame()))
   expect_true(param_set$check_dt(data.frame(unknown = numeric())))

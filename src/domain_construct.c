@@ -713,123 +713,28 @@ const char *paradox_domain_field_name(paradox_domain_field_t field) {
   return "unknown";
 }
 
-int paradox_builtin_special_values_contain(
-    paradox_builtin_domain_kind_t kind, SEXP special_values, SEXP value,
-    R_xlen_t *work_since_interrupt) {
-  if (kind == PARADOX_BUILTIN_DOMAIN_UNKNOWN) {
-    Rf_error("Internal error: unknown built-in Domain kind");
-  }
-  PROTECT(special_values);
-  PROTECT(value);
-  for (R_xlen_t index = 0; index < XLENGTH(special_values); ++index) {
-    paradox_domain_account_work(work_since_interrupt);
-    SEXP special = VECTOR_ELT(special_values, index);
-    const int exact = special == value;
-    const int compare_structurally =
-      kind == PARADOX_BUILTIN_DOMAIN_UTY ||
-      (!Rf_isS4(special) && !Rf_isS4(value));
-    if (exact || (compare_structurally && R_compute_identical(
-        special, value, IDENT_USE_CLOENV
-      ))) {
-      UNPROTECT(2);
-      return TRUE;
-    }
-  }
-  UNPROTECT(2);
-  return FALSE;
-}
-
-static int numeric_leaf(SEXP value, double *number) {
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
-  if ((type != REALSXP && type != INTSXP) || Rf_isS4(value) ||
-      Rf_isObject(value) || ALTREP(value) || XLENGTH(value) != 1) {
-    return FALSE;
-  }
-  if (type == REALSXP) {
-    *number = REAL_ELT(value, 0);
-    return !ISNAN(*number);
-  }
-  if (type == INTSXP) {
-    const int integer = INTEGER_ELT(value, 0);
-    if (integer == NA_INTEGER) return FALSE;
-    *number = (double) integer;
-    return TRUE;
-  }
-  return FALSE;
-}
-
-static int builtin_leaf_is_feasible(domain_kind_t kind, SEXP value,
+static paradox_builtin_value_spec_t admitted_value_spec(domain_kind_t kind,
     SEXP lower, SEXP upper, SEXP tolerance, SEXP levels,
-    SEXP special_values, R_xlen_t *work_since_interrupt) {
-  /* ParamUty leaves are opaque at structural admission.  Feasibility and its
-   * optional callback belong to the runtime check boundary, not construction
-   * of the canonical Domain row. */
-  if (kind == DOMAIN_KIND_UTY) {
-    return TRUE;
-  }
-  if (paradox_builtin_special_values_contain(
-      public_domain_kind(kind),
-      special_values,
-      value,
-      work_since_interrupt
-    )) {
-    return TRUE;
-  }
+    SEXP special_values) {
+  double lower_value = NA_REAL;
+  double upper_value = NA_REAL;
+  double tolerance_value = NA_REAL;
   if (kind == DOMAIN_KIND_DBL || kind == DOMAIN_KIND_INT) {
-    double number;
-    double lower_value;
-    double upper_value;
-    double tolerance_value;
-    if (!numeric_leaf(value, &number) ||
-        !plain_scalar_number_value(lower, &lower_value) ||
+    if (!plain_scalar_number_value(lower, &lower_value) ||
         !plain_scalar_number_value(upper, &upper_value) ||
         !plain_scalar_number_value(tolerance, &tolerance_value)) {
-      return FALSE;
+      Rf_error("Internal error: invalid admitted numeric Domain");
     }
-    if (kind == DOMAIN_KIND_DBL) {
-      const double accepted_lower = paradox_accepted_lower(
-        lower_value,
-        tolerance_value
-      );
-      const double accepted_upper = paradox_accepted_upper(
-        upper_value,
-        tolerance_value
-      );
-      return !ISNAN(accepted_lower) && !ISNAN(accepted_upper) &&
-        number >= accepted_lower && number <= accepted_upper;
-    }
-    const double rounded = nearbyint(number);
-    return R_FINITE(number) && paradox_within_integer_tolerance(
-      number,
-      rounded,
-      tolerance_value
-    ) && rounded >= lower_value && rounded <= upper_value &&
-      rounded > (double) INT_MIN && rounded <= (double) INT_MAX;
   }
-  if (kind == DOMAIN_KIND_FCT) {
-    if (Rf_isS4(value) || Rf_isObject(value) || ALTREP(value) ||
-        TYPEOF(value) != STRSXP ||
-        XLENGTH(value) != 1 || STRING_ELT(value, 0) == NA_STRING) {
-      return FALSE;
-    }
-    SEXP selected = STRING_ELT(value, 0);
-    for (R_xlen_t index = 0; index < XLENGTH(levels); ++index) {
-      paradox_domain_account_work(work_since_interrupt);
-      if (paradox_domain_strings_equal(
-          selected,
-          STRING_ELT(levels, index)
-        )) {
-        return TRUE;
-      }
-    }
-    return FALSE;
-  }
-  if (kind == DOMAIN_KIND_LGL) {
-    return !Rf_isS4(value) && !Rf_isObject(value) && !ALTREP(value) &&
-      TYPEOF(value) == LGLSXP && XLENGTH(value) == 1 &&
-      LOGICAL_ELT(value, 0) != NA_LOGICAL;
-  }
-  return FALSE;
+  const paradox_builtin_value_spec_t result = {
+    public_domain_kind(kind),
+    lower_value,
+    upper_value,
+    tolerance_value,
+    levels,
+    special_values
+  };
+  return result;
 }
 
 int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
@@ -837,6 +742,7 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     SEXP special_values, SEXP default_value, SEXP storage, SEXP tags,
     SEXP trafo, SEXP requirements, SEXP init_given, SEXP init_value,
     paradox_builtin_domain_kind_t *kind, paradox_domain_field_t *failure,
+    paradox_builtin_value_result_t *value_failure,
     R_xlen_t *work_since_interrupt) {
 #define REJECT_DOMAIN_FIELD(field_) do { \
   *failure = (field_); \
@@ -844,6 +750,16 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
 } while (0)
   *kind = PARADOX_BUILTIN_DOMAIN_UNKNOWN;
   *failure = PARADOX_DOMAIN_FIELD_NONE;
+  if (value_failure != NULL) {
+    const paradox_builtin_value_result_t valid = {
+      PARADOX_BUILTIN_VALUE_OK,
+      NA_REAL,
+      NA_REAL,
+      NA_REAL,
+      FALSE
+    };
+    *value_failure = valid;
+  }
   if (id != R_NilValue &&
       (!scalar_string(id) || CHAR(STRING_ELT(id, 0))[0] == '\0')) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_ID);
@@ -900,19 +816,19 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_SPECIAL_VALUES);
   }
 
+  double admitted_lower = NA_REAL;
+  double admitted_upper = NA_REAL;
+  double admitted_tolerance = NA_REAL;
   if (private_kind == DOMAIN_KIND_DBL || private_kind == DOMAIN_KIND_INT) {
-    double lower_value;
-    double upper_value;
-    double tolerance_value;
-    if (!plain_scalar_number_value(lower, &lower_value) ||
-        !plain_scalar_number_value(upper, &upper_value) ||
-        !plain_scalar_number_value(tolerance, &tolerance_value) ||
-        lower_value > upper_value || !R_FINITE(tolerance_value) ||
-        tolerance_value < 0.0 ||
+    if (!plain_scalar_number_value(lower, &admitted_lower) ||
+        !plain_scalar_number_value(upper, &admitted_upper) ||
+        !plain_scalar_number_value(tolerance, &admitted_tolerance) ||
+        admitted_lower > admitted_upper || !R_FINITE(admitted_tolerance) ||
+        admitted_tolerance < 0.0 ||
         (private_kind == DOMAIN_KIND_INT &&
-          (!plain_integer_bound(lower_value) ||
-            !plain_integer_bound(upper_value) ||
-            tolerance_value > 0.5))) {
+          (!plain_integer_bound(admitted_lower) ||
+            !plain_integer_bound(admitted_upper) ||
+            admitted_tolerance > 0.5))) {
       REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_BOUNDS);
     }
     if (levels != R_NilValue) {
@@ -948,17 +864,26 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
   if (marker == 0 && has_tag(tags, "required")) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_REQUIRED_DEFAULT);
   }
-  if (marker == 0 && !builtin_leaf_is_feasible(
-      private_kind,
-      default_value,
-      lower,
-      upper,
-      tolerance,
-      levels,
-      special_values,
-      work_since_interrupt
-    )) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_DEFAULT_VALUE);
+  const paradox_builtin_value_spec_t value_spec = {
+    public_domain_kind(private_kind),
+    admitted_lower,
+    admitted_upper,
+    admitted_tolerance,
+    levels,
+    special_values
+  };
+  if (marker == 0) {
+    const paradox_builtin_value_result_t checked =
+      paradox_builtin_value_check(
+        &value_spec,
+        default_value,
+        private_kind != DOMAIN_KIND_UTY,
+        work_since_interrupt
+      );
+    if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+      if (value_failure != NULL) *value_failure = checked;
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_DEFAULT_VALUE);
+    }
   }
   if (!canonical_requirements(requirements, work_since_interrupt)) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_REQUIREMENTS);
@@ -975,17 +900,18 @@ int paradox_admit_builtin_domain_row(SEXP id, SEXP cls, SEXP grouping,
   if (LOGICAL_ELT(init_given, 0) == TRUE && trafo != R_NilValue) {
     REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_INIT_TRAFO);
   }
-  if (LOGICAL_ELT(init_given, 0) == TRUE && !builtin_leaf_is_feasible(
-      private_kind,
-      init_value,
-      lower,
-      upper,
-      tolerance,
-      levels,
-      special_values,
-      work_since_interrupt
-    )) {
-    REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_INIT_VALUE);
+  if (LOGICAL_ELT(init_given, 0) == TRUE) {
+    const paradox_builtin_value_result_t checked =
+      paradox_builtin_value_check(
+        &value_spec,
+        init_value,
+        private_kind != DOMAIN_KIND_UTY,
+        work_since_interrupt
+      );
+    if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+      if (value_failure != NULL) *value_failure = checked;
+      REJECT_DOMAIN_FIELD(PARADOX_DOMAIN_FIELD_INIT_VALUE);
+    }
   }
   return TRUE;
 #undef REJECT_DOMAIN_FIELD
@@ -1493,6 +1419,7 @@ SEXP paradox_domain_construct(
 
   paradox_builtin_domain_kind_t admitted_kind;
   paradox_domain_field_t failed_field;
+  paradox_builtin_value_result_t value_failure;
   R_xlen_t admission_work = 0;
   if (!paradox_admit_builtin_domain_row(
       id,
@@ -1513,6 +1440,7 @@ SEXP paradox_domain_construct(
       init_value,
       &admitted_kind,
       &failed_field,
+      &value_failure,
       &admission_work
     )) {
     if (failed_field == PARADOX_DOMAIN_FIELD_REQUIRED_DEFAULT) {
@@ -1522,6 +1450,29 @@ SEXP paradox_domain_construct(
     if (failed_field == PARADOX_DOMAIN_FIELD_INIT_TRAFO) {
       UNPROTECT(1);
       Rf_error("Initial value and trafo can not both be given at the same time.");
+    }
+    if ((failed_field == PARADOX_DOMAIN_FIELD_DEFAULT_VALUE ||
+        failed_field == PARADOX_DOMAIN_FIELD_INIT_VALUE) &&
+        scalar_string(id) &&
+        value_failure.failure != PARADOX_BUILTIN_VALUE_OK) {
+      const paradox_builtin_value_spec_t value_spec = admitted_value_spec(
+        kind,
+        lower,
+        upper,
+        tolerance,
+        levels,
+        special_vals
+      );
+      SEXP failed_value = failed_field == PARADOX_DOMAIN_FIELD_DEFAULT_VALUE
+        ? default_value
+        : init_value;
+      SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
+        STRING_ELT(id, 0),
+        &value_spec,
+        failed_value,
+        &value_failure
+      ));
+      paradox_assertion_error("param", diagnostic);
     }
     UNPROTECT(1);
     Rf_error(

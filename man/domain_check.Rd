@@ -44,9 +44,15 @@ before the call, if present.
 
 Domain operations use a closed native implementation for \code{\link[=p_dbl]{p_dbl()}},
 \code{\link[=p_int]{p_int()}}, \code{\link[=p_fct]{p_fct()}}, \code{\link[=p_lgl]{p_lgl()}}, and \code{\link[=p_uty]{p_uty()}}. They do not perform
-S3 dispatch. Invalid values receive a stable native diagnostic; malformed or
-unknown Domain objects raise an error. The diagnostic text is deliberately
-not an exact \code{checkmate} compatibility contract.
+S3 dispatch. Ordinary invalid built-in values receive an informative native
+diagnostic that distinguishes missingness, type/shape, integerish, bounds,
+and factor membership using established checkmate-style message fragments.
+Scalar missing values keep that missingness diagnosis even when their
+storage mode would otherwise be incompatible with the Domain.
+This formatting happens only after native validation fails; it does not call
+checkmate or repeat the check in R. Exact \code{conditionCall()} and every
+checkmate edge-case wording are not compatibility contracts. Malformed or
+unknown Domain objects raise an error.
 A Domain's own table shell and structural metadata are ordinary
 non-ALTREP/non-S4.
 A value-list shell is likewise structural; admitted semantic atomic leaves

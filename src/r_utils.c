@@ -757,6 +757,38 @@ SEXP paradox_utf8_message(const paradox_utf8_piece_t *pieces,
   return result;
 }
 
+SEXP paradox_diagnostic_charsxp(SEXP string) {
+  if (TYPEOF(string) != CHARSXP || string == NA_STRING) {
+    Rf_error("Internal error: invalid diagnostic string fragment");
+  }
+  if (Rf_getCharCE(string) != CE_BYTES) return string;
+
+  static const char hex[] = "0123456789abcdef";
+  const unsigned char *source = (const unsigned char *) CHAR(string);
+  const size_t source_size = strlen((const char *) source);
+  if (source_size > (size_t) INT_MAX / 4U) {
+    Rf_error("Diagnostic string fragment exceeds R's string limit");
+  }
+  char *output = paradox_temporary_alloc(
+    (R_xlen_t) (source_size * 4U) + 1,
+    sizeof(*output)
+  );
+  size_t output_size = 0;
+  for (size_t index = 0; index < source_size; ++index) {
+    const unsigned char byte = source[index];
+    if (byte >= 0x20U && byte <= 0x7eU && byte != (unsigned char) '\\') {
+      output[output_size++] = (char) byte;
+    } else {
+      output[output_size++] = '\\';
+      output[output_size++] = 'x';
+      output[output_size++] = hex[byte >> 4U];
+      output[output_size++] = hex[byte & 0x0fU];
+    }
+  }
+  output[output_size] = '\0';
+  return Rf_mkCharLenCE(output, (int) output_size, CE_UTF8);
+}
+
 NORET void paradox_error_from_scalar_string(SEXP message) {
   PROTECT(message);
   if (TYPEOF(message) != STRSXP || ALTREP(message) ||
@@ -778,6 +810,27 @@ NORET void paradox_error_from_scalar_string(SEXP message) {
   memcpy(owned, Rf_translateChar(string), size + 1U);
   UNPROTECT(2);
   Rf_error("%s", owned);
+}
+
+NORET void paradox_assertion_error(const char *variable, SEXP diagnostic) {
+  if (variable == NULL || strchr(variable, '\'') != NULL ||
+      TYPEOF(diagnostic) != STRSXP || ALTREP(diagnostic) ||
+      XLENGTH(diagnostic) != 1 ||
+      STRING_ELT(diagnostic, 0) == NA_STRING) {
+    Rf_error("Internal error: invalid assertion diagnostic");
+  }
+  SEXP text = PROTECT(paradox_diagnostic_charsxp(
+    STRING_ELT(diagnostic, 0)
+  ));
+  paradox_utf8_piece_t pieces[] = {
+    paradox_utf8_ascii_piece("Assertion on '"),
+    paradox_utf8_ascii_piece(variable),
+    paradox_utf8_ascii_piece("' failed: "),
+    paradox_utf8_charsxp_piece(text),
+    paradox_utf8_ascii_piece(".")
+  };
+  SEXP message = PROTECT(paradox_utf8_message(pieces, 5));
+  paradox_error_from_scalar_string(message);
 }
 
 SEXP paradox_snapshot_semantic_vector(SEXP value) {

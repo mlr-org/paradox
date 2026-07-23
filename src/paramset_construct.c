@@ -482,6 +482,7 @@ static SEXP snapshot_domain(SEXP domain,
       VECTOR_ELT(VECTOR_ELT(snapshot, DOMAIN_INIT), 0),
       &admitted_kind,
       failed_field,
+      NULL,
       &work_since_interrupt
     )) {
     UNPROTECT(2);

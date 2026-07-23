@@ -53,7 +53,7 @@ test_that("$check() works on TuneToken", {
   expect_equal(pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = TRUE)), TRUE)
   expect_identical(
     pars$check(list(x = 1, xub = 1, y = 1, uty = 1, uty1 = 1, fct = "x", lgl = 1)),
-    "lgl: expected one non-missing logical value"
+    "lgl: Must be of type 'logical flag', not 'double'"
   )
 
 

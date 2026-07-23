@@ -19,6 +19,20 @@ replay, or pre-data.table-1.18 decisions back into current source. The sole
 release evidence transfer currently admitted is the independently replayed
 `a4617ca` to `10c6a0e` package-payload proof recorded below; it is byte-identity
 reuse, not behavioral inference across different package implementations.
+The active informative-diagnostic source change intentionally differs from that
+payload, so the proof no longer establishes a current release candidate. Treat
+all `10c6a0e` package, downstream, memory, and performance conclusions as
+historical until a new exact payload is frozen and gated. During this change,
+use focused compiler, diagnostic, differential, and affected-consumer checks;
+do not rerun the complete release suite after each edit.
+The current focused diagnostic install has DSO SHA-256
+`2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`.
+Its 68-case Paradox-1 message differential is byte-identical under
+`.local/checks/informative-diagnostics-final-differential-20260723/`, and its
+strict GCC/Clang builds plus direct/allocation/callback probes pass under
+`.local/checks/informative-diagnostics-final-native-r2-20260723/`. These are
+bounded change evidence, not a substitute for the next exact full release
+candidate gate.
 
 Post-freeze downstream-only validation is the one narrow exception to keeping
 all release tooling byte-identical to the package candidate. It uses a named,
@@ -189,6 +203,21 @@ semantic vectors remain supported at their stated positions.
   wrappers may capture R language constructs and call documented callbacks,
   but there is no complete R/checkmate/data.table/S3 fallback, no `NULL`
   sentinel replay, and no second implementation used to authenticate the first.
+  Ordinary built-in value admission uses one package-owned C classifier shared
+  by standalone Domain checks and ParamSet scalar/table checks. It distinguishes
+  missingness, type/shape, integerish, bounds, and factor-level failures on the
+  native hot path. Accepted values do not pay for message construction; one
+  native failure-only formatter produces informative, checkmate-style
+  diagnostics. Do not call or link to checkmate from that native validation
+  engine, rebuild its checks in R, or add a second formatter. Compatibility
+  gives scalar missingness priority over an otherwise irrelevant storage-mode
+  mismatch, as the useful checkmate diagnostics did; that extra classification
+  is entered only on the already-invalid type path, not on accepted typed
+  values. Compatibility targets the established useful categories and message
+  fragments, not
+  byte-identical reproduction of every checkmate quirk, `conditionCall()`,
+  implementation frame, or exotic classed/ALTREP object behavior outside the
+  structural contract.
   There are exactly two narrow cold R semantic-orchestration families. The
   first is internal tuning.
   `$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
@@ -962,32 +991,41 @@ Remote writes by an agentic process are forbidden. Agents may edit, test, and
 commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
-Current PR-ready local branches are:
+The previously PR-ready local heads below predate the centralized informative
+native diagnostic contract. Their structural/runtime fixes remain relevant,
+but diagnostic-only adaptations must be pruned after the restored messages are
+confirmed against each affected consumer:
 
 - bbotk `codex/public-paramsetcollection-sets` at `6cae955`: public collection
-  state, dual-version diagnostics, and rooted detached native search-space
-  snapshots;
+  state and rooted detached native search-space snapshots remain; diagnostic-
+  only commit `94e4c22` is expected to become redundant;
 - miesmuschel `codex/paradox-paramsetshadow-bridge` at `d4c7f79`: the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
   dual-major documentation link, with deep test comparisons made independent
-  of data.table secondary-index caches;
+  of data.table secondary-index caches. Its structural bridge remains; any
+  diagnostic gates are reviewed separately after the native message matrix;
 - mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
   transformation-free subset construction on Paradox 2 plus release notes;
 - celecx `codex/paradox2-diagnostics` at `a297555`, mlr3
   `codex/paradox2-diagnostics` at `35e30a9`, and mlr3fselect
-  `codex/paradox2-diagnostics` at `ae8e1d1`: small dual-version test-diagnostic
-  adaptations with unchanged runtime behavior;
+  `codex/paradox2-diagnostics` at `ae8e1d1`: the mlr3 and mlr3fselect changes
+  are expected to be wholly redundant; celecx should retain its independent
+  cycle/dependency bridge while dropping only obsolete diagnostic gates;
 - mlr3pipelines `codex/paradox-diagnostic-compat` at `1c4bc6e`: exact-error
   decoupling plus an independently required GraphLearner deep-clone ownership
-  fix and mutation-isolation regression;
+  fix and mutation-isolation regression. Retain the clone fix; the diagnostic
+  hunk may be dropped if it no longer adds value;
 - mlr3fda `paradox2-snapshots` at `035da5b`: Paradox-2 diagnostic snapshots
-  selected without changing the Paradox-1 snapshot baseline.
+  selected without changing the Paradox-1 snapshot baseline. Snapshot call
+  shape can still differ because internal frames and `conditionCall()` are not
+  compatibility targets.
 
-Exact-head dual-axis retesting and the handoff record are complete. Rebase only
-if the user requests it. Never push, open a remote PR, publish a tag, or alter
-remote state yourself. The reviewed exact heads, proposed titles/bodies, and
-manual commands live in `compat/downstream-pr-handoff.md`; update that file if
-any branch changes. Only user publication remains.
+Exact-head dual-axis testing of those historical heads is complete, but it is
+not evidence for their future pruned revisions or for Paradox package source
+after the diagnostic change. Update `compat/downstream-pr-handoff.md`, the
+profile ledgers, and focused affected-consumer evidence after any local branch
+change. Never push, open a remote PR, publish a tag, or alter remote state
+yourself; the user performs every remote write.
 
 The maintained priority consumers include bbotk, miesmuschel, mlr3mbo,
 ConfigSpace, celecx, mlr3, mlr3tuning, mlr3pipelines, and active mlr-org book,

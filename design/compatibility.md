@@ -47,10 +47,13 @@ Subject to the explicit legacy-object upgrade step, preserve:
   SHADOW graphs, rather than private R6 environment traversal. Canonical node
   references preserve shared-vs-duplicated DAG topology while allowing
   independently built equivalent graphs to compare equal;
-- documented Paradox validation diagnostics and deliberately maintained
-  package-owned message fragments. Exact checkmate-era wording in downstream
-  tests is not a compatibility contract and may require a Paradox-major-gated
-  expectation when the native diagnostic is clearer;
+- informative built-in value diagnostics from one package-owned native
+  classifier/formatter. Missingness, type/shape, integerish, bounds, and factor
+  membership retain their established checkmate-style categories and useful
+  message fragments. An ordinary scalar missing value keeps the missingness
+  diagnosis even when its storage mode would otherwise be incompatible.
+  Byte-identical reproduction of every checkmate quirk, `conditionCall()`, or
+  unsupported exotic-object behavior is not required;
 - the historical distinction between callback-free structural `$deps <-`
   replacement and feasibility-checking `$add_dep()`. Copying dependencies after
   narrowing a parent Domain may leave a partially or wholly impossible
@@ -95,7 +98,7 @@ now native.
 | A subclassed TuneToken, extra token metadata, or S3 method participates in conversion | TuneTokens have one package-defined exact `{content, call}` shape and five exact built-in class vectors; native admission precedes closed `$search_space()` switching | Use `to_tune()`. Extra/reordered fields, classes, attributes, S4 structure, malformed calls/content, and recursive metadata reject before traversal. Structurally indistinguishable manual copies are not creator-authenticated, but the representation remains non-API. |
 | A forged ObjectTuneToken Domain is interpreted by a token-specific partial validator | Constructor, ParamSet, and token paths share the sole canonical built-in Domain-row admission owner; token content must additionally be a bounded, value-producing tuning Domain, and malformed structure raises a hard boundary error | Ordinary package-built bounded Domains remain compatible; unbounded `ParamUty` and zero-level `ParamFct` remain invalid as Domain tuning ranges. A zero-level factor is still canonical for typed empty operations. Malformed cargo, kind/storage, grouping, bounds, levels, defaults, tags, requirements, initialization, and special-value/transformation combinations do not become ordinary check diagnostics. |
 | Direct `condition_test()` can inherit class/dimension behavior from `Ops` or `%in%` | One closed native comparator accepts `NULL` or plain logical/integer/double/character vectors with names only | Ordinary internal and direct vector comparison remains. Factors, dates, arrays, and other classed/attributed operands must be converted explicitly; they cannot install another Condition engine. Stable ALTREP operands are materialized once. |
-| Native fast path returns a sentinel and R/checkmate/data.table repeats the operation | One native semantic engine | No callback replay or duplicate logic. Diagnostics may differ from exact checkmate text. |
+| Native fast path returns a sentinel and R/checkmate/data.table repeats the operation | One native semantic engine plus one shared C value-failure classifier/formatter | No callback replay or duplicate validation. Successful admission does not format messages; ordinary failures retain informative checkmate-style categories/fragments without a runtime checkmate call. Byte identity for every quirk or call frame is not promised. |
 | `check_dependencies()` traverses a data.table with `pmap()` and concatenates every failing edge | One strict native dependency-only operation returns the first diagnostic | Ordinary uniquely named base-list calls and TuneToken edge skipping remain. Classed/attributed list containers and code matching a newline-collapsed multi-error string must adapt. Unknown IDs are checked even when there are zero dependency rows. |
 | Constraint-only table checks validate and invoke callbacks through an R row loop | One native two-phase graph/point/constraint operation | With value assertion enabled, all rows validate before any constraint callback; ParamUty custom checks may run during that validation phase. Constraints then run once per row from the operation snapshot. Reentrant mutation affects the next operation, not later rows. The input remains data.table-only. |
 | `$check()`/checked assignment runs a ParamSet `ObjectTuneToken` transformation to prove target compatibility | Native admission accepts only an exact nonempty bounded BASE ParamSet capsule without callbacks; COLLECTION, SHADOW, and additive subclasses reject. `$search_space()` alone evaluates one-dimensional output compatibility | Valid BASE candidates for numeric, categorical, logical, and utility targets remain storable. A structurally valid but output-incompatible candidate now errors when its search space is requested, not during assignment. Corrupt candidates still fail before commit. |
@@ -182,11 +185,14 @@ mlr3mbo uses `$subset(..., keep_trafo = FALSE)` on Paradox 2 rather than
 mutating detached/private Domain transformation state. ConfigSpace, celecx,
 bbotk, mlr3, mlr3fselect, mlr3tuning, mlr3pipelines, the active
 book/gallery/website, and priority CRAN reverse dependencies are tested against
-the closed built-in names and ordinary public behavior. Downstream tests may
-gate exact legacy/native diagnostic fragments by Paradox major version; that
-does not create a runtime compatibility branch. An old repository that no
-longer imports/uses Paradox is not a release blocker merely because it exists
-in the organization census.
+the closed built-in names and ordinary public behavior. Downstream tests that
+only gated ordinary missing/type/length/bounds/levels diagnostics because the
+early Paradox-2 messages were less informative should be returned to their
+pre-gate assertions where the native compatibility matrix now matches. Tests
+may still avoid pinning internal call frames or `conditionCall()`, and genuine
+behavioral bridges remain. None of this creates a runtime compatibility branch.
+An old repository that no longer imports/uses Paradox is not a release blocker
+merely because it exists in the organization census.
 
 Dual-version downstream branches should be available before Paradox 2 is
 submitted. Agents prepare and locally test branches, but repository policy

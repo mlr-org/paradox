@@ -2,12 +2,16 @@
 
 ## Status
 
-**Local release evidence converged; external handoff pending.** The frozen
-contract-first candidate and its local correctness, compatibility,
-documentation, memory, and performance gates are complete. The decision remains
-pending until the exact Windows x86-64/macOS ARM64 portability run is retained
-and verified and the user publishes the prepared downstream branches/PRs. No
-conclusion from a semantically different package payload is accepted.
+**Package source reopened for the informative native diagnostic contract.**
+The former frozen candidate and its local correctness, compatibility,
+documentation, memory, and performance gates remain historical evidence only.
+They do not transfer to the changed package payload. During this focused source
+change, run strict compilation, the diagnostic matrix, targeted differentials,
+and affected consumers; defer the complete release suite until the package is
+refrozen. The release decision also remains pending on exact Windows
+x86-64/macOS ARM64 portability evidence and user publication of the final
+downstream branches/PRs. No conclusion from a semantically different package
+payload is accepted.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -69,6 +73,14 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   replacements atomically without a second R or child-store pass. ParamSet
   Object-token inputs add rooted generation receipts and one final allocation-
   free candidate reauthentication immediately before commit.
+- Standalone Domain checks and ParamSet scalar/table checks share one
+  package-owned C value classifier and failure-only formatter. Ordinary
+  missingness, type/shape, integerish, bounds, and factor-membership failures
+  use informative checkmate-style categories and established fragments.
+  Successful validation does not construct diagnostics; the native validation
+  path neither calls checkmate nor repeats validation in R. Byte-identical
+  reproduction of every checkmate quirk, `conditionCall()`, or unsupported
+  exotic-object behavior is outside the contract.
 - `check_dependencies()` reuses the native check graph/point/dependency kernel,
   accepts only an ordinary uniquely named base list, validates unknown IDs even
   without dependency rows, skips TuneToken edges, and returns the first
@@ -240,6 +252,9 @@ not a local compatibility workaround.
   are confirmed against the converged install;
 - [x] unified BASE/COLLECTION/SHADOW `check` and `check_dt` implementation is
   integrated at source level;
+- [x] standalone Domain and ParamSet scalar/table built-in admission use one C
+  classifier and failure-only informative formatter, with no R/checkmate
+  duplicate;
 - [x] live and detached collection transformation/constraint factories use one
   registered native evaluator family, including subset, flatten, and
   Shadow-origin paths, with their final deterministic merge-order fix rechecked
@@ -265,6 +280,9 @@ not a local compatibility workaround.
 - [x] NEWS/DESCRIPTION/NAMESPACE begin the 2.0.0 contract reset;
 - [x] all tests that assert superseded private/sentinel/S3 behavior are removed
   or rewritten, with preserved ordinary behavior still covered;
+- [x] the exact focused ordinary-value matrix covers missingness, type/length,
+  integerish, lower/upper bounds, factor membership/type mismatch, checked
+  assignment, and Domain/ParamSet scalar/table message parity;
 - [x] complete capsule, graph, callback/reentry, structural-versus-semantic
   ALTREP/S4, direct-assignment versus `set_values(.values=)`, shared public-
   table classifier/row-name/cache/name-reentry, semantic-column, data.table
@@ -290,6 +308,9 @@ not a local compatibility workaround.
   their recorded branches;
 - [x] all eight profile bridge heads are authenticated and the four refreshed
   heads are retested and fully checked against both exact Paradox axes;
+- [ ] diagnostic-only downstream changes are pruned, independent runtime fixes
+  are retained, and the resulting affected heads receive focused dual-axis
+  retesting before a new handoff is issued;
 - [x] the retained priority consumer corpus and active documentation are tested
   against their exact reviewed revisions; the later final miesmuschel delta is
   test-only and its affected rows were rerun on both axes;
@@ -446,31 +467,57 @@ benchmark evidence:
   applicable release gates; those final rows, not the development diagnostics,
   support the local release conclusion.
 
+### Informative-diagnostic focused evidence
+
+The reopened source has bounded evidence appropriate to this change; it is not
+yet a replacement for the complete release matrix:
+
+- the ordinary GCC 14 development install has DSO SHA-256
+  `2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`;
+- 68 ordinary Domain, ParamSet, constructor, and checked-assignment diagnostics
+  are byte-identical to Paradox 1.0.1.9000, including cross-storage scalar
+  missing values. Both retained TSVs have SHA-256
+  `1d466842f042b60769a65d49aea54e95f4ff17f8cc8b592e1a7ded42343e3307`
+  under
+  `.local/checks/informative-diagnostics-final-differential-20260723/`;
+- the affected package tests, exact constructor/assignment assertions, and a
+  bounded `gctorture2(10, 1, 0)` formatter/admission loop pass. Strict GCC 14
+  and Clang 22 C17 warning-as-error builds, the bounded analyzer corpus, all
+  registered direct probes, and all four callback/allocation hazards pass under
+  `.local/checks/informative-diagnostics-final-native-r2-20260723/`;
+- a CPU-pinned randomized comparison against frozen `10c6a0e` found no material
+  accepted-path regression. Raw current/baseline ratios were 0.988 for mixed
+  `$check()`, 1.008/1.044/0.962/0.998 for double/integer/factor/logical
+  `domain_check()`, and 1.056/1.040 for `p_dbl()`/`p_int()` construction, while
+  the process-local control itself was 1.073x slower.
+
 ## Current local downstream branches
 
-These are local PR preparation only. Repository policy requires the user to
-push and create PRs manually.
+These are the locally prepared pre-restoration heads. Repository policy
+requires the user to push and create PRs manually. Do not publish these exact
+diagnostic adaptations until the pruning review below is complete.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Select/re-export official ParamSetShadow at load time on Paradox 2, complete the public-state adaptation, construct the legacy generator on Paradox 1, compare operators without opaque R6 internals or data.table index caches, retain version-gated dependency diagnostics, and keep its Rd links valid on both majors. |
-| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Replace one private collection `.sets` read, accept version-gated native diagnostics, and root detached public search-space snapshots for their complete native pointer lifetime. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Retain the official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, and dual-major Rd links. Reassess only its diagnostic gates after the native message matrix. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Retain the public `.sets` migration and detached-snapshot rooting. Diagnostic-only commit `94e4c22` is expected to become redundant and should be removed after focused confirmation. |
 | mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
-| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Version-gate Paradox validation fragments and require the compatible mlr3mbo development bridge; other runtime behavior is unchanged. |
-| mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | Version-gate two numeric-Domain diagnostic assertions. |
-| mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | Version-gate one feature-fraction diagnostic assertion. |
-| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Decouple PICV tests from exact Paradox-1 wording and fix GraphLearner state deep-clone ownership with an explicit mutation-isolation regression. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Select Paradox-2 diagnostic snapshots without replacing the legacy Paradox-1 snapshots. |
+| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Drop obsolete numeric-diagnostic gates after confirmation, but retain the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
+| mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | This numeric-diagnostic-only commit is expected to be redundant once the restored fragments are confirmed. |
+| mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | This feature-fraction diagnostic-only commit is expected to be redundant once the restored fragment is confirmed. |
+| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Retain the independently required GraphLearner deep-clone ownership fix and mutation-isolation regression; the exact-error decoupling may be pruned if it no longer adds value. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Snapshot variants may remain for internal call/`conditionCall()` differences, which the restored message-content contract does not cover. |
 
-The final miesmuschel head passes its complete repository suite and source-
+The pre-restoration miesmuschel head passed its complete repository suite and source-
 package check against both exact Paradox axes. Its last commit changes only
 three deep test comparisons to ignore data.table cache attributes; no production
 source changed. The final Paradox-2 affected-row evidence is retained under
 `.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r8`, and Paradox-1
 under `.local/compat/runs/release-final-20260720-v1.0.1-paradox1-r2`.
 
-The handoff in `compat/downstream-pr-handoff.md` contains exact push commands
-and PR title/body text for every retested head. The named
+The existing handoff in `compat/downstream-pr-handoff.md` describes those
+historical retested heads. It must be regenerated after diagnostic pruning;
+its current push commands are not the final release instruction. The named
 `release-refresh-20260720` evidence profile is the immutable authority for the
 four refreshed heads above; it does not rewrite or relabel the earlier
 full-corpus candidate evidence. It uses a separate primary-checkout namespace,

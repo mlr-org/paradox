@@ -1731,7 +1731,7 @@ static SEXP validate_transaction_values(SEXP private_environment, SEXP self,
   PROTECT(*receipts_result);
   if (TYPEOF(checked) == STRSXP && XLENGTH(checked) == 1 &&
       STRING_ELT(checked, 0) != NA_STRING) {
-    paradox_error_from_scalar_string(checked);
+    paradox_assertion_error("xs", checked);
   }
   if (TYPEOF(checked) != LGLSXP || XLENGTH(checked) != 1 ||
       LOGICAL_ELT(checked, 0) != TRUE) {

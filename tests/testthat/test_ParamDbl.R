@@ -69,5 +69,9 @@ test_that("tolerance for setting values", {
   p = ParamSet_legacy$new(list(ParamDbl$new("x", lower = 0, upper = 1)))
   p$values$x = -1e-8
   expect_equal(p$values$x, 0)
-  expect_error({p$values$x = -1e-6}, "expected one non-missing numeric value within the Domain bounds")
+  expect_error(
+    {p$values$x = -1e-6},
+    "x: Element 1 is not >= -1.49012e-08",
+    fixed = TRUE
+  )
 })

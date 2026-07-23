@@ -667,7 +667,7 @@ static int *snapshot_special_hits(SEXP param, SEXP values,
   return hits;
 }
 
-static R_xlen_t check_numeric_domain(SEXP param, SEXP values,
+static SEXP check_numeric_domain(SEXP param, SEXP values,
     const domain_info_t *info, const int *skip) {
   SEXP lower_sexp = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "lower"
@@ -696,49 +696,46 @@ static R_xlen_t check_numeric_domain(SEXP param, SEXP values,
     if (skip[row]) {
       continue;
     }
-    double value;
     SEXP element = PROTECT(VECTOR_ELT(values, row));
-    const int supported = numeric_scalar(element, &value, FALSE);
-    UNPROTECT(1);
-    if (!supported ||
-        ISNAN(value)) {
-      UNPROTECT(3);
-      return row;
-    }
-
     const double row_lower = bounds.lower[row];
     const double row_upper = bounds.upper[row];
     const double row_tolerance = bounds.tolerance[row];
-    if (info->kind == DOMAIN_KIND_DBL) {
-      const double accepted_lower = paradox_accepted_lower(
-        row_lower,
-        row_tolerance
+    const paradox_builtin_value_spec_t spec = {
+      builtin_domain_kind(info->kind),
+      row_lower,
+      row_upper,
+      row_tolerance,
+      R_NilValue,
+      R_NilValue
+    };
+    R_xlen_t work_since_interrupt = 0;
+    const paradox_builtin_value_result_t checked =
+      paradox_builtin_value_check(
+        &spec,
+        element,
+        FALSE,
+        &work_since_interrupt
       );
-      const double accepted_upper = paradox_accepted_upper(
-        row_upper,
-        row_tolerance
-      );
-      if (ISNAN(accepted_lower) || ISNAN(accepted_upper) ||
-          value < accepted_lower || value > accepted_upper) {
-        UNPROTECT(3);
-        return row;
-      }
-    } else {
-      const double rounded = nearbyint(value);
-      if (!R_FINITE(value) || !paradox_within_integer_tolerance(
-          value, rounded, row_tolerance
-        ) ||
-          rounded < row_lower || rounded > row_upper) {
-        UNPROTECT(3);
-        return row;
-      }
+    if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+      SEXP ids = PROTECT(paradox_get_named_column_checked(
+        param, "Domain storage", "Domain", "id"
+      ));
+      SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
+        STRING_ELT(ids, row),
+        &spec,
+        element,
+        &checked
+      ));
+      UNPROTECT(6);
+      return diagnostic;
     }
+    UNPROTECT(1);
   }
   UNPROTECT(3);
-  return R_XLEN_T_MAX;
+  return R_NilValue;
 }
 
-static R_xlen_t check_factor_domain(SEXP param, SEXP values,
+static SEXP check_factor_domain(SEXP param, SEXP values,
     const domain_info_t *info, const int *skip) {
   SEXP levels = PROTECT(paradox_get_named_column_checked(
     param, "Domain storage", "Domain", "levels"
@@ -764,17 +761,10 @@ static R_xlen_t check_factor_domain(SEXP param, SEXP values,
     if (ALTREP(choices) || !paradox_api_has_no_attributes(choices)) {
       Rf_error("Corrupt Domain storage: factor levels must be ordinary");
     }
-    if (Rf_isS4(value) || Rf_isObject(value) || TYPEOF(value) != STRSXP ||
-        XLENGTH(value) != 1) {
-      UNPROTECT(3);
-      return row;
-    }
-    SEXP selected = STRING_ELT(value, 0);
-    if (selected == NA_STRING) {
-      UNPROTECT(3);
-      return row;
-    }
-    int found = FALSE;
+    /* Validate the complete mutable public level vector before semantic
+     * membership. A match cannot return early while a later level could still
+     * make the outward Domain structurally corrupt. Canonical ParamSet state
+     * needs no corresponding structural pass. */
     const R_xlen_t n_choices = XLENGTH(choices);
     for (R_xlen_t choice = 0; choice < n_choices; ++choice) {
       account_work(&work_since_interrupt);
@@ -782,36 +772,81 @@ static R_xlen_t check_factor_domain(SEXP param, SEXP values,
       if (candidate == NA_STRING) {
         Rf_error("Corrupt Domain storage: `levels` may not contain missing values");
       }
-      if (strings_equal(selected, candidate)) {
-        found = TRUE;
-      }
     }
-    if (!found) {
-      UNPROTECT(3);
-      return row;
+    const paradox_builtin_value_spec_t spec = {
+      PARADOX_BUILTIN_DOMAIN_FCT,
+      NA_REAL,
+      NA_REAL,
+      NA_REAL,
+      choices,
+      R_NilValue
+    };
+    const paradox_builtin_value_result_t checked =
+      paradox_builtin_value_check(
+        &spec,
+        value,
+        FALSE,
+        &work_since_interrupt
+      );
+    if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+      SEXP ids = PROTECT(paradox_get_named_column_checked(
+        param, "Domain storage", "Domain", "id"
+      ));
+      SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
+        STRING_ELT(ids, row),
+        &spec,
+        value,
+        &checked
+      ));
+      UNPROTECT(5);
+      return diagnostic;
     }
     UNPROTECT(2);
   }
   UNPROTECT(1);
-  return R_XLEN_T_MAX;
+  return R_NilValue;
 }
 
-static R_xlen_t check_logical_domain(SEXP values, const domain_info_t *info,
-    const int *skip) {
+static SEXP check_logical_domain(SEXP param, SEXP values,
+    const domain_info_t *info, const int *skip) {
   for (R_xlen_t row = 0; row < info->size; ++row) {
     periodic_interrupt(row);
     if (skip[row]) {
       continue;
     }
     SEXP value = PROTECT(VECTOR_ELT(values, row));
-    if (Rf_isS4(value) || Rf_isObject(value) || TYPEOF(value) != LGLSXP ||
-      XLENGTH(value) != 1 || LOGICAL_ELT(value, 0) == NA_LOGICAL) {
-      UNPROTECT(1);
-      return row;
+    const paradox_builtin_value_spec_t spec = {
+      PARADOX_BUILTIN_DOMAIN_LGL,
+      NA_REAL,
+      NA_REAL,
+      NA_REAL,
+      R_NilValue,
+      R_NilValue
+    };
+    R_xlen_t work_since_interrupt = 0;
+    const paradox_builtin_value_result_t checked =
+      paradox_builtin_value_check(
+        &spec,
+        value,
+        FALSE,
+        &work_since_interrupt
+      );
+    if (checked.failure != PARADOX_BUILTIN_VALUE_OK) {
+      SEXP ids = PROTECT(paradox_get_named_column_checked(
+        param, "Domain storage", "Domain", "id"
+      ));
+      SEXP diagnostic = PROTECT(paradox_builtin_value_diagnostic(
+        STRING_ELT(ids, row),
+        &spec,
+        value,
+        &checked
+      ));
+      UNPROTECT(3);
+      return diagnostic;
     }
     UNPROTECT(1);
   }
-  return R_XLEN_T_MAX;
+  return R_NilValue;
 }
 
 static SEXP named_list_element(SEXP values, const char *target) {
@@ -966,44 +1001,48 @@ SEXP paradox_domain_check_builtin(SEXP param, SEXP values, SEXP internal) {
     validate_logical_levels(param, &info);
   }
 
-  R_xlen_t failed = R_XLEN_T_MAX;
-  const char *reason = "value is invalid";
+  SEXP diagnostic = R_NilValue;
+  int diagnostic_protected = FALSE;
   switch (info.kind) {
   case DOMAIN_KIND_EMPTY:
     break;
   case DOMAIN_KIND_DBL:
   case DOMAIN_KIND_INT:
-    failed = check_numeric_domain(param, stable_values, &info, skip);
-    reason = info.kind == DOMAIN_KIND_DBL
-      ? "expected one non-missing numeric value within the Domain bounds"
-      : "expected one finite integer-valued numeric within the Domain bounds";
+    diagnostic = PROTECT(check_numeric_domain(
+      param, stable_values, &info, skip
+    ));
+    diagnostic_protected = TRUE;
     break;
   case DOMAIN_KIND_FCT:
-    failed = check_factor_domain(param, stable_values, &info, skip);
-    reason = "expected one non-missing character value from the Domain levels";
+    diagnostic = PROTECT(check_factor_domain(
+      param, stable_values, &info, skip
+    ));
+    diagnostic_protected = TRUE;
     break;
   case DOMAIN_KIND_LGL:
-    failed = check_logical_domain(stable_values, &info, skip);
-    reason = "expected one non-missing logical value";
+    diagnostic = PROTECT(check_logical_domain(
+      param, stable_values, &info, skip
+    ));
+    diagnostic_protected = TRUE;
     break;
   case DOMAIN_KIND_UTY:
     break;
   case DOMAIN_KIND_UNKNOWN:
     break;
   }
-  if (failed == R_XLEN_T_MAX) {
+  if (diagnostic == R_NilValue) {
+    if (diagnostic_protected) {
+      UNPROTECT(1);
+    }
     UNPROTECT(1);
     return Rf_ScalarLogical(TRUE);
   }
-  SEXP ids = PROTECT(paradox_get_named_column_checked(
-    param, "Domain storage", "Domain", "id"
-  ));
-  SEXP result = PROTECT(check_failure_literal(
-    STRING_ELT(ids, failed),
-    reason
-  ));
-  UNPROTECT(3);
-  return result;
+  if (!diagnostic_protected) {
+    UNPROTECT(1);
+    Rf_error("Internal error: unrooted Domain diagnostic");
+  }
+  UNPROTECT(2);
+  return diagnostic;
 }
 
 static SEXP numeric_vector_as_list(SEXP values) {

@@ -2,28 +2,7 @@
 #define PARADOX_DOMAIN_ADMISSION_H
 
 #include "paradox.h"
-
-typedef enum {
-  PARADOX_BUILTIN_DOMAIN_UNKNOWN = 0,
-  PARADOX_BUILTIN_DOMAIN_DBL,
-  PARADOX_BUILTIN_DOMAIN_INT,
-  PARADOX_BUILTIN_DOMAIN_FCT,
-  PARADOX_BUILTIN_DOMAIN_LGL,
-  PARADOX_BUILTIN_DOMAIN_UTY
-} paradox_builtin_domain_kind_t;
-
-/* Test whether one admitted special-value list contains `value`.  Built-in
- * typed Domains retain legacy structural identity for ordinary leaves, but an
- * S4 leaf is special only by exact pointer identity.  ParamUty treats every
- * leaf as opaque and therefore retains structural identity for S4 values too.
- * Both inputs remain rooted across identity comparison and long scans poll for
- * interrupts through the operation-local work counter. */
-attribute_hidden int paradox_builtin_special_values_contain(
-  paradox_builtin_domain_kind_t kind,
-  SEXP special_values,
-  SEXP value,
-  R_xlen_t *work_since_interrupt
-);
+#include "builtin_value.h"
 
 typedef enum {
   PARADOX_DOMAIN_FIELD_NONE = 0,
@@ -70,6 +49,7 @@ attribute_hidden int paradox_admit_builtin_domain_row(
   SEXP init_value,
   paradox_builtin_domain_kind_t *kind,
   paradox_domain_field_t *failure,
+  paradox_builtin_value_result_t *value_failure,
   R_xlen_t *work_since_interrupt
 );
 

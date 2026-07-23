@@ -114,9 +114,23 @@ attribute_hidden SEXP paradox_utf8_message(
   R_xlen_t piece_count
 );
 
+/* Convert one semantic CHARSXP into a diagnostic-safe UTF-8 fragment. Native,
+ * UTF-8, and Latin-1 strings retain their text; bytes-marked strings are
+ * rendered as deterministic `\xHH` escapes instead of being passed through an
+ * invalid UTF-8 translation. */
+attribute_hidden SEXP paradox_diagnostic_charsxp(SEXP string);
+
 /* Rf_error() consumes text in the current locale.  Translate and own the
  * bytes before entering its allocating formatter. */
 attribute_hidden NORET void paradox_error_from_scalar_string(SEXP message);
+
+/* Raise the checkmate-style assertion wrapper used by public assert methods
+ * and checked value assignment. `diagnostic` must be one non-missing string
+ * and is treated as already formatted semantic text. */
+attribute_hidden NORET void paradox_assertion_error(
+  const char *variable,
+  SEXP diagnostic
+);
 
 /* Return an independently owned, ordinary copy of an atomic or list vector.
  * Only the names attribute is semantic at this boundary; it is itself copied
