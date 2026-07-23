@@ -55,7 +55,9 @@ serialization, and supported clone behavior. Each package-created object owns
 one private `.core` binding. It is necessarily replaceable by package mutation
 transactions, but downstream replacement is unsupported. Core logic ignores
 generated wrapper bodies, method registries, closure environments, and legacy
-private fields.
+private fields during ordinary current operations. The cold legacy migration
+boundary described below may inspect authenticated historical shell/enclosure
+structure solely to replace it.
 
 `.core` is a NULL-address `EXTPTRSXP`. It has no unmanaged memory and no
 finalizer. Its tag is exactly one of:
@@ -98,6 +100,75 @@ Mutations shallow-copy the payload, replace changed ordinary children, create a
 new capsule shell, and swap `.core` only after validation. An operation retains
 the capsule selected at entry, so reentrant code observes a precise old or new
 generation instead of partially mutated private tables.
+
+## Serialized shell targets and migration
+
+Paradox owns its leanification scheme because namespace target names are part
+of the serialized R6 compatibility surface. Current ParamSet-family stubs call
+versioned `.__paradox2_<Class>__<member>` targets directly. Their hot path has
+no option lookup, legacy test, or migration dispatch. Unversioned targets
+emitted by Paradox 1, and unversioned Shadow targets emitted by pre-release
+Paradox 2, are installed separately as cold gateways. A gateway first forwards
+an authenticated capsule-backed shell directly; this is how a pre-release
+Paradox-2 Shadow replays without an owner registry. A shell without a current
+core either reports the default migration error or, when
+`options(paradox.legacy_object_action = "upgrade")` is set, invokes the
+identity-preserving upgrader, reacquires the transplanted `private`/`super`
+enclosure, and forwards once to the versioned target. Paradox does not call
+`mlr3misc::leanify_package()` because that would collapse historical and
+current target authority back into one name.
+
+The migration implementation has three layers:
+
+1. `src/upgrade_graph.[ch]` performs read-only iterative graph discovery with
+   an explicit work stack, a pointer-identity seen table that also roots every
+   visited node, and periodic interrupt checks. It traverses ordinary
+   container/language/attribute/S4/environment/closure/bytecode and promise-
+   binding edges. Active bindings contribute their functions but are not
+   invoked; unforced binding/`...` promises contribute expression and
+   evaluation environment but are not forced. R 4.3--4.5 also inspect a
+   detached `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as
+   opaque. Search-path, global, package, namespace, imports, base, and empty
+   environments stop traversal. Generic external-pointer and weak-reference
+   internals are opaque; an authenticated Paradox core contributes its
+   protected payload.
+2. `R/upgrade_paradox_object.R` authenticates discovered ParamSet-family
+   candidates, memoizes one offside current replacement per legacy identity,
+   resolves collection/Shadow/registered-owner dependencies in post-order, and
+   validates all semantic and shell-transplant plans before mutation. The pure
+   `upgrade_paradox_object()` entry remains non-mutating and separately owns
+   standalone Domain/Condition normalization.
+3. Commit rebases prepared child/origin edges to the original shell identities
+   and transplants each legacy shell in post-order. It replaces every R6
+   enclosure slice, `self`/`private`/`super` linkage, generated method/active
+   binding, capsule, and public `assert_values` policy; exact class identity is
+   a precondition rather than a mutable field. `.__enclos_env__` is replaced
+   last and is the completion marker. Completed nodes are independently valid;
+   an interrupted binding wave retains the old authoritative enclosure and
+   admits authenticated original/refreshed methods and a temporarily unlocked
+   method on retry. Preflight errors mutate nothing, and an idempotent retry
+   finishes a catastrophic allocation failure.
+
+`R/upgrade_registry.R` is data-driven owner integration, not serialized
+dispatch. One exact direct-owner class vector maps to an authenticated current
+namespace and namespace-local inspector/rebuilder *names*. Inspectors return
+migration-specific dependencies: additive handlers return an empty named list
+and receive the prepared BASE shell, while replacement handlers return exactly
+one dependency named `origin` and must rebuild the exact registered class as a
+current `ParamSetShadow`. Replacement handlers may declare old-only retired
+active fields. Registered owner classes with public or private R6 finalizers
+are rejected because their finalizer registration cannot be moved safely
+between environment identities. Unknown/overlapping/malformed registrations
+fail closed. There is no S3 dispatch, superclass search, or stored serialized
+hook function.
+
+The registry cannot intercept a historical leanified stub whose target lives
+in the owner package namespace. An owner that emitted such targets must reserve
+every historical owner-local target as a cold default-error/opt-in-upgrade
+gateway and replay against the transplanted enclosure. This applies to
+bbotk's Codomain targets as well as miesmuschel's Shadow targets; otherwise an
+owner-only operation such as `$clone()` could execute the legacy private
+layout before an inherited Paradox gateway is reached.
 
 ## Canonical state
 
@@ -592,25 +663,28 @@ sandboxed by Paradox and is outside this guarantee.
   BASE callback replacement;
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
   planners and kernels over capsule state;
+- `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
+  for the recursive legacy migration boundary;
 - `src/r_utils.c` and `src/r_api_compat.c`: small R-API ownership and version
   adapters, never alternate semantics. Raw stored-attribute selection uses
   `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
   4.3--4.5; older supported R releases also use the documented public `FORMALS`
   backport for newer closure inspection. These adapters never evaluate
-  `formals()`, `attributes()`, or another R/data.table helper. The sole
-  non-public compatibility exception is also
-  centralized here: for R < 4.6, one declared/exported
-  `Rf_findVarInFrame` call supplies the non-forcing ordinary-binding lookup and
-  rejects `PROMSXP`; R >= 4.6 uses the documented experimental API
-  `R_GetBindingType`. The former is required because R 4.3--4.5 has no public
-  non-forcing classifier and an
-  R-level `substitute()` workaround would make simultaneous generation/receipt
-  scans unsound.
-  It is ledgered in
-  `environment/r-api-exceptions.tsv`, raw-token-audited to one occurrence/path,
-  and pinned-header/runtime tested. It is not CRAN-allowlisted for the supported
-  pre-4.6 build path: those DSOs require the symbol, while the current-R DSO audit
-  requires its absence. No other internal R API is permitted;
+  `formals()`, `attributes()`, or another R/data.table helper. The exact
+  non-public compatibility entries are centralized here. R < 4.6 uses one
+  declared/exported `Rf_findVarInFrame` call to obtain the stored binding cell
+  and the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` when
+  that cell is a `PROMSXP`.
+  R >= 4.6 uses only the documented experimental binding/delayed-binding/dots
+  APIs. Strict headers hide all three detached-promise accessors; none is
+  declared locally or present in the current DSO, and a detached `PROMSXP`
+  reached outside those public binding boundaries is opaque. The older branch
+  is required
+  because R-level `substitute()` would force or make simultaneous receipt and
+  graph scans unsound. Every exceptional symbol/version/path is ledgered in
+  `environment/r-api-exceptions.tsv` and raw-token, DSO, pinned-header, and
+  runtime tested. None is CRAN-allowlisted or permission for another internal
+  API;
 - `src/init.c`: fixed-arity registration with dynamic lookup disabled;
 - `R/ParamSet*.R`, `R/Domain*.R`, `R/Condition.R`: public shells, language
   capture, fixed native-entry callback factories, and documented cold graph
@@ -619,8 +693,17 @@ sandboxed by Paradox and is outside this guarantee.
   search-space conversion over an already admitted native snapshot;
 - `R/all_equal.R`: cold detached-view equality glue, with no capsule/private
   environment interpretation;
-- `R/upgrade_paradox_object.R`: explicit nonexecuting conversion of accepted
-  legacy graphs.
+- `R/leanify_paradox.R`: versioned current R6 targets and cold historical
+  first-use gateways;
+- `R/upgrade_registry.R`: exact authenticated owner-package migration registry;
+- `R/upgrade_paradox_object.R`: pure single-object conversion plus prepared
+  identity-preserving graph migration and shell transplant.
+
+Legacy migration is a one-way schema/shell lifecycle tool, not a third cold
+current-operation semantic family. Its R layer authenticates historical private
+state, calls current constructors/native validators, and transplants the
+prepared R6 lifecycle surface. Once migrated, every operation uses the same
+current capsule engines; there is no R fallback path.
 
 The first narrow cold R semantic-orchestration family is internal tuning for
 `$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
@@ -750,8 +833,9 @@ Do not add any of the following:
 - generated-surface creator-provenance authentication for an exact BASE
   ObjectTuneToken shell; safe genuine-private/core aliases must remain harmless
   because no alias method is invoked;
-- any internal R API beyond the single R < 4.6 `Rf_findVarInFrame` compatibility
-  call ledgered in `environment/r-api-exceptions.tsv`;
+- any internal R API beyond the exact non-forcing stored-binding/promise
+  compatibility entries ledgered by symbol, version, count, and source in
+  `environment/r-api-exceptions.tsv`;
 - permanent semantic ALTREP vectors or repeated observation inside one native
   semantic admission/kernel (prior R-side representation capture is explicitly
   non-semantic and covered by the hostile-custom-ALTREP boundary above);

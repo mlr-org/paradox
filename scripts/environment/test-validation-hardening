@@ -1059,16 +1059,25 @@ printf '%s\n' \
 grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
   fail "public API token auditor did not pass allowed identifiers"
 
-# R 4.3--4.5 have one reviewed non-forcing binding exception. The raw-token
-# auditor admits it only at the centralized compatibility facade and only when
-# an exact one-row ledger declares the occurrence.
+# R 4.3--4.5 have one reviewed non-forcing binding exception. Detached promise
+# inspection additionally uses three exact header-declared accessors on those
+# old runtimes. Strict R >= 4.6 builds use the public binding/dots APIs and
+# compile none of the detached-promise accessors. The raw-token auditor admits
+# every exceptional occurrence only at the centralized compatibility facade
+# and with the exact versioned ledger.
 TOKEN_EXCEPTION="$TEST_ROOT/reviewed legacy binding token"
 mkdir -p "$TOKEN_EXCEPTION/src" "$TOKEN_EXCEPTION/environment"
-printf '%s\n' 'Rf_findVarInFrame(environment, symbol);' \
+printf '%s\n' \
+  'Rf_findVarInFrame(environment, symbol);' \
+  'R_PromiseExpr(promise); PRENV(promise);' \
+  'PRVALUE(promise);' \
   > "$TOKEN_EXCEPTION/src/r_api_compat.c"
 printf '%s\n' \
   $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
   $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
+  $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'PRENV\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'PRVALUE\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
   > "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv"
 "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION" \
   "$TEST_ROOT/public-api-exception.txt" >/dev/null
@@ -1076,6 +1085,12 @@ grep -qx \
   'reviewed_legacy_binding=Rf_findVarInFrame:src/r_api_compat.c:1' \
   "$TEST_ROOT/public-api-exception.txt" ||
   fail "public API token auditor did not ledger its reviewed exception"
+for promise_symbol in R_PromiseExpr PRENV PRVALUE; do
+  grep -qx \
+    "reviewed_promise_accessor=$promise_symbol:src/r_api_compat.c:1" \
+    "$TEST_ROOT/public-api-exception.txt" ||
+    fail "public API token auditor did not ledger $promise_symbol"
+done
 
 TOKEN_EXCEPTION_BAD_POLICY="$TEST_ROOT/legacy binding CRAN allowlist claim"
 cp -a "$TOKEN_EXCEPTION" "$TOKEN_EXCEPTION_BAD_POLICY"

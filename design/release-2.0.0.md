@@ -2,13 +2,15 @@
 
 ## Status
 
-**Package source reopened for the informative native diagnostic contract.**
+**Package source reopened for the informative native diagnostic and legacy
+object-graph migration contracts.**
 The former frozen candidate and its local correctness, compatibility,
 documentation, memory, and performance gates remain historical evidence only.
 They do not transfer to the changed package payload. During this focused source
-change, run strict compilation, the diagnostic matrix, targeted differentials,
-and affected consumers; defer the complete release suite until the package is
-refrozen. The release decision also remains pending on exact Windows
+change, run strict compilation, the diagnostic matrix, migration fixtures and
+adversarial graph tests, targeted differentials, and affected consumers; defer
+the complete release suite until the package is refrozen. The release decision
+also remains pending on exact Windows
 x86-64/macOS ARM64 portability evidence and user publication of the final
 downstream branches/PRs. No conclusion from a semantically different package
 payload is accepted.
@@ -21,21 +23,22 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 ## Decisions frozen for the first public release
 
 - Version is 2.0.0; R >= 4.3; portable C17; data.table >= 1.18.4.
-- R C API use is public except for one centralized R < 4.6 compatibility call.
+- R C API use is public except for the exact centralized non-forcing
+  stored-binding/promise compatibility entries described below.
   Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the established
   `ATTRIB` traversal on R 4.3--4.5 without evaluating R or data.table code. The
-  sole exception is separate from that adapter: `src/r_api_compat.c`
-  declares/calls exported `Rf_findVarInFrame`, rejects
-  `PROMSXP`, and R >= 4.6 instead uses the documented experimental API
-  `R_GetBindingType`. R 4.3--4.5 has no public non-forcing binding classifier,
-  so an R-level `substitute()`
-  workaround is unsound for the simultaneous generation/receipt scan. The exact
-  exception is ledgered in `environment/r-api-exceptions.tsv`, raw-token-audited
-  to one occurrence and path, and pinned-header/runtime tested. It is not
-  CRAN-allowlisted for the supported pre-4.6 build path: those runtime DSOs must
-  contain the symbol and
-  every R >= 4.6 DSO audit must prove it absent. No broader internal-API
-  permission exists.
+  compatibility facade uses exported `Rf_findVarInFrame` on R 4.3--4.5 to
+  retrieve a stored frame cell and inspects any returned `PROMSXP` through
+  the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
+  R >= 4.6 instead uses only its experimental binding/delayed-binding/dots APIs;
+  strict headers hide all three detached-promise accessors, the current DSO
+  excludes them, and a `PROMSXP` reached outside a binding/dots cell is opaque.
+  An R-level `substitute()` workaround is
+  forcing/unsound for simultaneous receipt and recursive object-graph scans.
+  Each exceptional symbol, version, source count/path, and rationale must be
+  recorded in `environment/r-api-exceptions.tsv` and pass raw-token, DSO,
+  pinned-header, and real-runtime audits before freeze. None is a CRAN allowlist
+  or broader internal-API permission.
 - One opaque v1 capsule and BASE/COLLECTION/SHADOW node graph are the current
   state model.
 - The public `assert_values` flag is the sole stateful R-shell policy outside
@@ -107,8 +110,27 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   without S3 dispatch, preserves leaf identity, calls once, and admits one
   non-missing logical result; collection origins stay on the collection native
   evaluator family.
-- Current objects serialize normally; old objects use explicit
-  `upgrade_paradox_object()`.
+- Current objects serialize normally. `upgrade_paradox_object()` remains the
+  pure single-object converter, including standalone Domain/Condition
+  normalization. `upgrade_paradox_object_graph()` iteratively discovers a
+  containing graph and transplants admitted legacy ParamSet-family shells in
+  place after complete preflight. It traverses ordinary containers,
+  attributes/S4 slots, local environments, closure/bytecode structure, active
+  binding functions, and promises without forcing or invoking serialized
+  behavior; global/search/package/namespace infrastructure and generic
+  external-pointer/weak-reference internals are boundaries, while authenticated
+  Paradox core payloads remain traversable. Commit is post-order and monotonic,
+  with `.__enclos_env__` as each shell's last completion point. A catastrophic
+  partial binding wave retains the old authoritative enclosure and remains
+  authenticated for retry; completed nodes are valid current objects.
+- Current R6 stubs call versioned namespace targets directly. Historical
+  unversioned targets are cold first-use gateways: default error, or silent
+  migration when `options(paradox.legacy_object_action = "upgrade")` is set.
+  The exact owner registry supports bbotk's additive legacy `Codomain` and
+  miesmuschel's single-origin current-Shadow replacement/retired fields without
+  S3 dispatch or serialized hook functions. Additive dependencies are empty,
+  replacement dependencies are exactly `origin`, and owner R6 finalizers are
+  rejected; unknown subclasses fail closed.
 - Stable/base ALTREP support is materialize-once in admitted semantic atomic
   positions. Configuration/search-space/trafo and ParamSet-`params` lists,
   internal table/row/Domain/Condition/token/capsule shells, Domain cargo/
@@ -177,7 +199,10 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   conversion: it consumes one rooted native snapshot, switches only over the
   package's built-in token kinds, and solely owns callback-dependent
   one-dimensional output compatibility and outward search-space construction.
-  It has no S3 extension or competing native/R conversion path.
+  It has no S3 extension or competing native/R conversion path. One-way legacy
+  migration is outside this current-operation count: it authenticates a
+  retired schema and orchestrates current native construction/validation plus
+  R6 shell transplant, never an alternate current semantic engine.
 - Ordinary non-ALTREP S3-classed named value-list containers are admitted with
   the outer class discarded; scalar Domain argument names are likewise
   representation-only. Direct checked/unchecked assignment rejects an outer
@@ -230,7 +255,11 @@ not a local compatibility workaround.
   enter registered native operations with no S3 or R row-evaluation engine;
 - [x] native collection-add and tag/dependency/callback mutation planners
   replace the remaining R/checkmate/data.table canonical mutation paths;
-- [x] explicit legacy upgrader with CRAN-1.0.1 and `mbo_config` fixtures;
+- [x] pure single-object legacy upgrader with CRAN-1.0.1 and `mbo_config`
+  fixtures in the historical candidate;
+- [x] recursive identity-preserving graph upgrader, versioned current targets,
+  cold first-use gateways, and exact owner registry are complete and pass their
+  focused source/fixture/adversarial checks on the reopened payload;
 - [x] complete live Shadow synchronization, clone/serialization/DAG behavior,
   and all graph-reader coverage confirmed after converged install;
 - [x] value, tag, dependency, callback, and collection-add mutators use
@@ -283,42 +312,63 @@ not a local compatibility workaround.
 - [x] the exact focused ordinary-value matrix covers missingness, type/length,
   integerish, lower/upper bounds, factor membership/type mismatch, checked
   assignment, and Domain/ParamSet scalar/table message parity;
-- [x] complete capsule, graph, callback/reentry, structural-versus-semantic
+- [x] the historical candidate's complete capsule, graph, callback/reentry,
+  structural-versus-semantic
   ALTREP/S4, direct-assignment versus `set_values(.values=)`, shared public-
   table classifier/row-name/cache/name-reentry, semantic-column, data.table
   facade, zero-column Design, corruption, serialization, exact-
-  TuneToken/receipt/capability, and upgrade contract suite passes on the final
+  TuneToken/receipt/capability, and upgrade contract suite passes on the former
   frozen candidate payload, authenticated through the sealed `a4617ca` to
   `10c6a0e` package-payload equivalence proof and exact-candidate static/memory
-  stages;
-- [x] package reference documentation, vignettes, migration guide, website,
-  and downstream bridge docs describe the final behavior consistently; the
-  final 17-workload documentation stage has every mandatory row green;
-- [x] routine/analyzer/runtime ledgers discover current files dynamically and
-  contain no historical hard-coded test counts; the final old-R run stages the
-  reviewed `mbo_config` Git-object bundle before worker admission and executes
-  its upgrade test without an environment skip.
+  stages; this does not validate the reopened migration payload;
+- [x] recursive migration tests cover identity, sharing/cycles, attributes/S4,
+  environments/closures/bytecode, active-binding non-invocation, promise
+  non-forcing, traversal boundaries, current-core payloads, full-preflight
+  failure, monotonic retry, first-use modes, exact owner bridges/retired fields,
+  authentic Paradox-1/downstream fixtures, and hostile malformed state;
+- [ ] package reference documentation, vignettes, migration guide, website,
+  and downstream bridge docs describe the new migration behavior consistently
+  and the documentation stage is rerun on the refrozen payload; the previous
+  17-workload green stage remains historical only;
+- [x] historical routine/analyzer/runtime ledgers dynamically discovered their
+  candidate files and contained no hard-coded test counts; the final old-R run
+  staged the reviewed `mbo_config` Git-object bundle before worker admission and
+  executed its upgrade test without an environment skip;
+- [ ] registration, R-API-exception, symbol-audit, analyzer, and runtime ledgers
+  are regenerated and verified for the new graph routine and non-forcing
+  promise inspection before refreeze.
 
 ### Downstream coordination
 
-- [x] local bbotk bridge `4d49750` and miesmuschel bridge `d4c7f79` are
-  prepared on their recorded branches;
+- [x] local bbotk bridge `4d49750` and miesmuschel bridge `d4c7f79` form the
+  recorded pre-migration baseline;
+- [x] bbotk adds the exact additive legacy-Codomain owner registration and
+  miesmuschel adds the exact legacy-Shadow replacement registration, retired
+  `params_unid`/`set_id` behavior, and any required owner-local cold gateways;
+  both receive focused explicit/first-use migration tests on both Paradox axes;
+- [x] the tested post-migration bridge trees are committed as bbotk `29f1806`
+  and miesmuschel `7cca4ed`;
 - [x] mlr3mbo `1a1c0ab`, celecx `6da5102`, mlr3pipelines `c85b2f4`, and
   mlr3fda `8f5a3df` are prepared on their recorded branches; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
-- [x] all eight profile bridge heads are authenticated and the four refreshed
-  heads are retested and fully checked against both exact Paradox axes;
-- [x] diagnostic-only downstream changes are pruned, independent runtime fixes
-  are retained, and the resulting affected heads receive focused dual-axis
-  retesting before a new handoff is issued;
-- [x] the retained priority consumer corpus and active documentation are tested
-  against their exact reviewed revisions; the later final miesmuschel delta is
-  test-only and its affected rows were rerun on both axes;
+- [ ] all eight profile heads are authenticated against the refrozen candidate;
+  the four selected profile repositories are then fully checked on both exact
+  Paradox axes;
+- [x] diagnostic-only downstream changes remain pruned and the current
+  committed bbotk/miesmuschel owner bridges pass focused tests plus authentic
+  default/opt-in migration fixtures against the reopened Paradox-2 payload;
+- [ ] the priority consumer corpus and active documentation are rerun against
+  the exact refrozen payload and reviewed bridge heads; all 2,022-per-axis and
+  documentation conclusions retained below belong to the superseded payload;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
 
 ### Performance and correctness
+
+The results and hashes in this subsection bind the superseded pre-migration
+payload. They remain useful engineering evidence but do not close a release
+gate for the reopened source.
 
 The checked-in `environment/rchk-bcheck-policy/` binds the refreshed reviewed
 public-table candidate source and its bounded-analyzer reports. Bcheck
@@ -347,25 +397,35 @@ same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
 - [x] directly affected development tests pass from stable cached
   installations;
-- [x] the complete unit suite passes for the frozen candidate package payload;
-  the donor execution and target payload identity remain separately recorded;
+- [ ] the complete unit suite and package check pass for a newly frozen
+  migration payload; the former donor execution and payload-identity proof are
+  historical only;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
-- [x] measured hot-path changes are implemented and revalidated; the sealed
-  release benchmark has 72 passes, five bounded marginal reviews, and no
-  failure;
-- [x] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
-  and R-API/exception-ledger checks are clean;
-- [x] R 4.3.3, 4.5.2, and development-R local execution are clean for the
-  identical package payload;
+- [x] measured hot-path changes remain intact under the bounded refreshed
+  comparison recorded below;
+- [ ] a new sealed release benchmark passes after refreeze;
+- [ ] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
+  and R-API/exception-ledger checks are sealed for the new payload;
+- [ ] R 4.3.3, 4.5.2, and development-R local execution are sealed for the new
+  payload;
 - [ ] Windows x86-64 and real macOS ARM64 are clean for the exact frozen
   candidate and independently retained;
-- [x] priority consumer, documentation, differential, and benchmark gates are
-  accepted with retained evidence and explicit transfer scope.
+- [ ] priority consumer, documentation, differential, and benchmark gates are
+  rerun and accepted for the new payload.
 
 Current profiling diagnostics are implementation guidance, not release
 benchmark evidence:
 
+- the bounded migration-payload comparison in
+  `.local/benchmarks/migration-hotpaths-20260724/` ran 200 samples after 10
+  warmups for eight representative paths. Seven improved by 4--24% and all
+  eight retained identical allocation counts. The sole `ids()` shift was under
+  3 microseconds, its R and C implementations are byte-identical to the
+  superseded candidate, and a current/current process comparison showed 7.2%
+  variance, so no destabilizing source change was made. Authentic legacy graph
+  scaling under `.local/benchmarks/migration-scaling-20260724/` is flat through
+  128 aliases and linear at roughly 18--20 ms per distinct shell;
 - the operation-local SHADOW ID index is retained in
   `.local/benchmarks/dev-shadow-pointer-index-ab-20260718`; its A/B medians
   improved construction by 1.39x, live values by 7.72x (293 to 38 microseconds),
@@ -468,10 +528,11 @@ benchmark evidence:
   applicable release gates; those final rows, not the development diagnostics,
   support the local release conclusion.
 
-### Informative-diagnostic focused evidence
+### Historical informative-diagnostic focused evidence
 
-The reopened source has bounded evidence appropriate to this change; it is not
-yet a replacement for the complete release matrix:
+The informative-diagnostic source before the object-graph migration had bounded
+evidence appropriate to that change. It is historical for the current payload
+and is not a replacement for the complete release matrix:
 
 - the ordinary GCC 14 development install has DSO SHA-256
   `2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`;
@@ -499,34 +560,40 @@ yet a replacement for the complete release matrix:
 
 ## Current local downstream branches
 
-These are the final locally prepared dispositions after restoring informative
-native diagnostics and pruning redundant downstream adaptations. Repository
-policy requires the user to push retained branches and create, update, or close
-PRs manually. The obsolete mlr3 and mlr3fselect branches are evidence only and
-must not be published as replacements.
+These are the exact pre-migration handoff heads after restoring informative
+native diagnostics and pruning redundant downstream adaptations. They are a
+baseline, not the final disposition for the reopened payload: bbotk and
+miesmuschel still require the owner-registry bridge commits described below,
+and mlr3fda may require only the snapshot update caused by versioned current
+targets. Record new exact heads here only after their focused checks complete.
+Repository policy requires the user to push retained branches and create,
+update, or close PRs manually. The obsolete mlr3 and mlr3fselect branches are
+evidence only and must not be published as replacements.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Retain the official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, and dual-major Rd links. Its separate official-Shadow graph-boundary diagnostic remains intentional. |
-| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `4d497506ef2a03a97024002bb3c10d906583fada` | Retain only the public `.sets` migration and detached-snapshot rooting; the follow-up removes temporary diagnostic gates. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | baseline head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Retain the official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, and dual-major Rd links; add the exact replacement registration, retired `params_unid`/`set_id` contract, and any owner-local cold gateways needed by historical overrides. Its separate official-Shadow graph-boundary diagnostic remains intentional. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | baseline head `4d497506ef2a03a97024002bb3c10d906583fada` | Retain only the public `.sets` migration and detached-snapshot rooting; add the exact additive legacy-Codomain inspector/rebuilder registration without private state access. |
 | mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
 | celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `6da5102ca948b8182aae13575c48a932812b05c6` | Retain only the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
 | mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
 | mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | head `c85b2f4165e056934f892c5db37391869cd40e38` | Retain only the GraphLearner deep-clone ownership fix and mutation-isolation regression. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `8f5a3dfa297ad236812cda57fab02de75fec375a` | Preserve byte-identical Paradox-1 messages; the Paradox-2 variant now differs only in its internal assignment call header. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | baseline head `8f5a3dfa297ad236812cda57fab02de75fec375a` | Preserve byte-identical Paradox-1 messages; refresh only the Paradox-2 internal call header if the versioned current target changes that snapshot. |
 
-The unchanged miesmuschel head passed its complete repository suite and source-
-package check against both exact Paradox axes. Its last commit changes only
+For the historical pre-migration payload, the unchanged miesmuschel head passed
+its complete repository suite and source-package check against both exact
+Paradox axes. Its last commit changes only
 three deep test comparisons to ignore data.table cache attributes; no production
 source changed. The final Paradox-2 affected-row evidence is retained under
 `.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r8`, and Paradox-1
 under `.local/compat/runs/release-final-20260720-v1.0.1-paradox1-r2`.
 
-The regenerated handoff in `compat/downstream-pr-handoff.md` records the final
-retained heads, manual push/PR text, and the two redundant PRs to close. The
+The existing handoff in `compat/downstream-pr-handoff.md` records the
+pre-migration retained heads, manual push/PR text, and the two redundant PRs to
+close. It must be regenerated after the owner bridges are finalized. The
 same focused 2,022 expectations pass with zero failures, errors, warnings, or
-skips on both Paradox axes under
+skips on both historical Paradox axes under
 `.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
 and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
 The named `release-refresh-20260720` evidence profile remains the immutable
@@ -584,9 +651,13 @@ R/compiler/instrumentation profile; compatible evidence families may share
 that exact authenticated installation, and a sealed identical-payload ref may
 inherit the donor conclusion, never development component objects.
 
-## Candidate freeze record
+## Historical candidate freeze record (superseded payload)
 
-The immutable package candidate is committed after package implementation,
+The active migration payload has no frozen candidate identity yet. The table
+below records the superseded `10c6a0e` payload only and authorizes no current
+release conclusion.
+
+An immutable package candidate is committed after package implementation,
 tests, help, and package-facing documentation converge and the primary checkout
 is clean. A commit cannot contain its own commit, tree, or archive identity
 without a circular mutation. Therefore the candidate's own copy of this table
@@ -655,7 +726,8 @@ For the exact candidate ref, retain and verify:
    ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
 2. real R 4.3.3 and 4.5.2 runtime stages plus development R, pinned-header
    compilation, and the exact R-API-exception ledger/raw-token/version-gated DSO
-   audit, including the authenticated R-4.3 data.table 1.18.4 overlay;
+   audit for both stored-binding and non-forcing promise inspection, including
+   the authenticated R-4.3 data.table 1.18.4 overlay;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
 4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
    superseding heads in the `release-refresh-20260720` profile against both
@@ -666,7 +738,8 @@ For the exact candidate ref, retain and verify:
    state-changing custom ALTREP as a safety/no-replay gate rather than an exact
    representation-equivalence gate;
 6. package manuals/vignettes, active book/gallery/website/cheatsheets, and
-   legacy serialized configuration upgrades;
+   pure/recursive/default/opt-in/owner-bridge legacy serialized configuration
+   upgrades;
 7. GitHub Windows x86-64 and macOS Apple-silicon ARM64 checks whose failure
    status is correctly propagated and whose exact source provenance is retained;
 8. representative paired benchmarks on an idle host, including downstream
@@ -678,7 +751,7 @@ retains its donor execution identity and additionally names the target and exact
 equivalence proof; verifier-only changes never relabel old execution as a new
 package run.
 
-### Retained local release evidence
+### Historical retained local release evidence (superseded payload)
 
 | Gate | Retained evidence and result |
 |---|---|
@@ -698,11 +771,13 @@ package run.
 
 ## Release decision
 
-The release decision is `pending`. All local gates and the benchmark review are
-accepted. Only two items remain: independent verification of the exact remote
-Windows x86-64/macOS ARM64 portability run, and confirmation that the user has
-published/opened the prepared downstream branches and PRs. The final ledger-only
-commit may change the decision to `accepted` after those facts are recorded.
+The release decision is `pending`. The object-graph migration source change
+invalidated the former package-byte release evidence. The new payload must be
+refrozen and receive the complete unit/check, memory, runtime, differential,
+documentation, consumer, and benchmark gates. Independent exact-candidate
+Windows x86-64/macOS ARM64 evidence and user publication of the prepared
+downstream branches/PRs also remain required. No row in the historical table
+above changes this decision.
 
 ## Historical rejected or superseded refs
 

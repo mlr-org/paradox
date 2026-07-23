@@ -99,11 +99,13 @@ Collate:
     'generate_design_random.R'
     'generate_design_sobol.R'
     'helper.R'
+    'leanify_paradox.R'
     'ps.R'
     'ps_replicate.R'
     'ps_union.R'
     'reexports.R'
     'to_tune.R'
     'upgrade_paradox_object.R'
+    'upgrade_registry.R'
     'zzz.R'
 Config/roxygen2/version: 8.0.0

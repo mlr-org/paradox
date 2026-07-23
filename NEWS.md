@@ -281,12 +281,43 @@ hazards that Paradox 2 is intended to remove.
   exported constructors, `$new()` adapters, list/class shape, mutable `rhs`,
   formatting, and serialization remain. Unknown Condition classes are rejected
   when a dependency is added instead of being dispatched later.
-* Current Paradox 2 objects serialize normally. Objects serialized by Paradox
-  1.x must be passed explicitly to `upgrade_paradox_object()` after loading.
-  The upgrader does not mutate or execute the legacy object, preserves valid
-  shared graphs and callbacks, and rejects cycles, malformed private state,
-  unknown extensions, and core-overriding subclasses. Downstream packages own
-  migration of their legacy third-party subclasses.
+* Current Paradox 2 objects serialize normally.
+  `upgrade_paradox_object()` remains the pure, non-mutating converter for one
+  explicitly supplied built-in ParamSet-family, Domain, or Condition object.
+  The new `upgrade_paradox_object_graph()` instead searches a containing object
+  graph and upgrades every admitted legacy ParamSet-family R6 shell in place,
+  preserving the shell and shared-node identities, each shell's public
+  `assert_values` policy, and returning the original root invisibly. Its
+  iterative native crawler follows ordinary containers,
+  attributes/S4 slots, environments, closures and bytecode expressions, active
+  binding functions, and promises without forcing them. It does not enter the
+  global/search/package/namespace environment infrastructure, invoke an active
+  binding or serialized method, or inspect generic external-pointer or weak
+  reference internals. Authenticated Paradox core payloads remain traversable.
+  Migration performs a full semantic and shell-shape preflight, then commits
+  valid nodes in post-order, replacing each `.__enclos_env__` last. A
+  catastrophic allocation failure inside a binding wave retains the old
+  completion marker and remains retryable; already committed nodes are valid.
+* New Paradox 2 R6 objects call versioned namespace targets directly.
+  Historical unversioned ParamSet-family leanification targets are cold
+  compatibility gateways. An authenticated capsule-backed shell, including a
+  pre-release Paradox-2 Shadow, forwards directly. A shell without a current
+  core reports the legacy object by default and directs users to
+  `upgrade_paradox_object_graph()`. Setting
+  `options(paradox.legacy_object_action = "upgrade")` enables silent
+  identity-preserving first-use migration before the requested operation
+  continues.
+* Owner packages can use `register_paradox_object_upgrader()` for one exact
+  direct `c(<owner class>, "ParamSet", "R6")` legacy class. The registry stores
+  authenticated namespace-local inspector/rebuilder names, not serialized
+  callbacks, and performs neither S3 dispatch nor superclass search. It
+  supports an additive bridge for bbotk's legacy `Codomain` and a replacement
+  bridge from miesmuschel's legacy Shadow to Paradox's `ParamSetShadow`,
+  including explicit errors for its retired `params_unid` and `set_id`
+  bindings. Additive inspectors have no extra dependencies; replacements have
+  exactly one `origin` and must produce a current Shadow. Owner classes with R6
+  finalizers are rejected because their registrations cannot be transplanted
+  safely. Unknown subclasses still fail closed.
 * Built-in Domain and ParamSet value failures now use one package-owned C
   classifier and failure-only formatter. Missingness, type/shape, integerish,
   bounds, and factor-membership errors retain informative checkmate-style

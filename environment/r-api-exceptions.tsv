@@ -1,2 +1,5 @@
 symbol	source	count	versions	policy	rationale
 Rf_findVarInFrame	src/r_api_compat.c	1	R-4.3.x--R-4.5.x	declared-exported-pre-4.6-only	Only available non-forcing frame-binding lookup before public R_GetBindingType in R 4.6; centralized and excluded from all R >= 4.6 builds
+R_PromiseExpr	src/r_api_compat.c	1	R-4.3.x--R-4.5.x	detached-promise-snapshot-pre-4.6-only	Required to discover the expression of a detached promise without evaluation on old supported runtimes; excluded from strict R >= 4.6 builds, which use public binding APIs and treat other detached promises as opaque
+PRENV	src/r_api_compat.c	1	R-4.3.x--R-4.5.x	detached-promise-snapshot-pre-4.6-only	Required to discover the evaluation environment of an unforced detached promise without evaluation on old supported runtimes; excluded from strict R >= 4.6 builds
+PRVALUE	src/r_api_compat.c	1	R-4.3.x--R-4.5.x	detached-promise-snapshot-pre-4.6-only	Required to distinguish and discover an already forced detached promise value without forcing on old supported runtimes; excluded from strict R >= 4.6 builds

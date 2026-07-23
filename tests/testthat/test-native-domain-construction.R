@@ -290,12 +290,12 @@ test_that("typed Domain constructors reject S4 structure but retain exact specia
 
   expect_error(
     p_dbl(0, 1, default = asS4(0.5)),
-    "default value",
+    "Must be of type 'number', not 'double'",
     fixed = TRUE
   )
   expect_error(
     p_int(0L, 2L, init = asS4(1L)),
-    "initial value",
+    "Must be of type 'single integerish value', not 'integer'",
     fixed = TRUE
   )
 

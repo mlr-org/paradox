@@ -147,8 +147,14 @@ if rg -q 'pre-4.5-evaluated-public-fallback|authenticated-r-fallback' \
   echo "Runtime verification retains the deleted R-evaluation shim contract" >&2
   exit 1
 fi
-rg -Fq 'required=(ATTRIB FORMALS Rf_findVarInFrame)' \
-  "$ROOT/scripts/environment/run-runtime-matrix-stage"
+for symbol_policy in \
+    "$ROOT/scripts/environment/run-runtime-matrix-stage" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; do
+  rg -Fq 'required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame' \
+    "$symbol_policy"
+  rg -Fq 'required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv' \
+    "$symbol_policy"
+done
 rg -Fq 'branch=pre-4.5-documented-public-backports' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'public_api_compatibility_policy=documented-versioned-accessors' \

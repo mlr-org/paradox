@@ -24,11 +24,13 @@ The upgrader accepts package-owned \code{ParamSet}, \code{ParamSetCollection}, b
 \code{Domain}, and built-in \code{Condition} objects. It preserves callbacks and shared
 collection children without calling legacy methods or active bindings. The
 input is never mutated. Cycles, malformed private state, replaced core R6
-methods, custom Domain or Condition classes, and legacy third-party R6
-subclasses are rejected with a path-specific error. A current capsule-backed
-additive subclass is validated and returned unchanged. Legacy miesmuschel
-shadows must be reconstructed by miesmuschel around an explicitly upgraded
-origin.
+methods, custom Domain or Condition classes, and unregistered legacy
+third-party R6 subclasses are rejected with a path-specific error. A current
+capsule-backed additive subclass is validated and returned unchanged.
+Direct owner subclasses covered by an exact
+\code{\link[=register_paradox_object_upgrader]{register_paradox_object_upgrader()}} bridge can also be rebuilt without
+mutating the input; the recursive graph API uses the same bridge while
+preserving the original shell identity.
 }
 \examples{
 current = ps(x = p_dbl(0, 1))
@@ -39,3 +41,8 @@ current = upgrade_paradox_object(legacy)
 # Only operate on `current`.
 }
 }
+\seealso{
+Other legacy migration:
+\code{\link[=upgrade_paradox_object_graph]{upgrade_paradox_object_graph()}}
+}
+\concept{legacy migration}

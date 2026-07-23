@@ -666,17 +666,23 @@ for evidence in registration undefined-symbols dynamic-symbols program-headers \
     dynamic-section; do
   require_nonempty_mode_file "$MODES/symbols/logs/$evidence.log"
 done
-binding_symbol_scope=$(awk '
+inspected_symbol_scope=$(awk '
   NF {
     symbol = $NF
     sub(/@.*/, "", symbol)
     if (symbol == "Rf_findVarInFrame") legacy += 1
     if (symbol == "R_GetBindingType") current += 1
+    if (symbol == "R_PromiseExpr") expression += 1
+    if (symbol == "PRENV") environment += 1
+    if (symbol == "PRVALUE") value += 1
   }
-  END { printf "%d:%d", legacy + 0, current + 0 }
+  END {
+    printf "%d:%d:%d:%d:%d",
+      legacy + 0, current + 0, expression + 0, environment + 0, value + 0
+  }
 ' "$MODES/symbols/logs/undefined-symbols.log")
-[[ "$binding_symbol_scope" == 0:1 ]] ||
-  fail "current-R symbol evidence retained the legacy binding API or omitted R_GetBindingType"
+[[ "$inspected_symbol_scope" == 0:1:0:0:0 ]] ||
+  fail "current-R symbol evidence has the wrong binding/detached-promise API inventory"
 if [[ "${run_fields[asan]}" == true ]]; then
   verify_dso_mode asan-clang
   verify_probe_mode asan-clang

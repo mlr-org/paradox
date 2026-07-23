@@ -11,7 +11,7 @@ reviewable impact summary for maintainers and downstream authors.
 
 ## Preserved ordinary behavior
 
-Subject to the explicit legacy-object upgrade step, preserve:
+Subject to the legacy-object migration boundary described below, preserve:
 
 - exported constructors, functions, R6 generators, S3 methods unrelated to the
   closed Domain/Condition engines, and normal argument meanings;
@@ -109,11 +109,11 @@ now native.
 | Strange ALTREP behavior is preserved by declining to R | Stable/base ALTREP is materialized once in admitted semantic atomic positions. Interpreted configuration/search-space/trafo and ParamSet-`params` lists, internal table/row/Domain/Condition/token/capsule shells, Domain cargo/interpreted cargo entries, dimnames, class/name vectors, and other list metadata remain ordinary non-ALTREP/non-S4 structure. Direct checked/unchecked `$values <-` rejects an outer ALTREP before observation; `set_values(.values=)` alone snapshots an outer list. A state-changing custom ALTREP across prior R-side representation capture is unsupported. | Compact sequences such as `1:n` work where atomic vector semantics are documented. General ALTREP structural shells still reject. Typed Domain special leaves reject ALTREP; an admitted typed S4 special matches only by pointer identity. ParamUty leaves remain opaque, with Paradox-1 special membership implemented by base `identical()` (including S4) and no dispatch. Native materialized state is semantic authority, and Paradox never replays or itself causes a crash or memory corruption. |
 | Each public table operation recognizes metadata independently, dispatches through a table subclass, or trusts row labels/cache payload | All six ingresses share one strict structural classifier. A well-formed ordinary class vector ends in `"data.frame"` or `c("data.table", "data.frame")`; leading additive classes are representation-only and never dispatched. The classifier does not copy or materialize an ordinary shell merely to remove the prefix, and semantic snapshots ignore it; an already-required ALTREP snapshot installs only the canonical suffix. Missing/empty/bytes/duplicate labels and reversed, non-suffix, or repeated reserved labels reject. Names/classes and allowed data.table cache carriers are ordinary; caches are discarded. Raw integer/character row names are count-only: ordinary compact `+/-n` is decoded and stable ALTREP pays one Length/no Elt. An admitted top-shell ALTREP owns names/class before callback-capable observation and copies one Length/one Elt per column. | Canonical and additively classed tables such as mlr3's `bmr_aggregate`, base lazy duplicates, and zero-column data.frames remain supported without reopening S3 semantics or adding a prefix-only ordinary-shell copy. Missing, S4, object, attributed, or row-count-mismatched metadata rejects on row-consuming paths. Direct `trafo` and a no-edge Design dependency plan validate row-name structure without extra column observations. `Design$transpose()` returns one empty configuration per row of a zero-column data.frame; an empty unclassed list remains zero rows. Package tables/facades remain canonical ordinary objects. |
 | Internal state is a data.table and old versions receive spare-capacity repair | Internal tables are base data.frames; data.table >= 1.18.4 is outward-only | Users need the new minimum. Returned facades remain usable; private capacity/index layout is gone. |
-| Old serialized objects execute through their legacy private layout | `upgrade_paradox_object()` is explicit | Callers loading Paradox-1 RDS state must upgrade before use. Unknown third-party subclasses require an owner-package bridge. |
+| Old serialized objects execute through their legacy private layout | `upgrade_paradox_object()` is the pure single-object converter; `upgrade_paradox_object_graph()` recursively transplants nested ParamSet-family shells by identity. Historical method targets are cold error/opt-in-upgrade gateways, never current hot paths. | Callers can upgrade a containing R6/container graph without locating every nested ParamSet. First use errors by default; `options(paradox.legacy_object_action = "upgrade")` opts into silent migration. Standalone Domain/Condition normalization remains pure. Unknown subclasses fail unless their exact owner class has an authenticated registry bridge. That bridge is deliberately limited to additive BASE state with no extra dependency or a single-origin current Shadow replacement; owner R6 finalizers cannot be transplanted safely and are rejected. |
 | Exact implementation frames and side-effecting promise/fallback priority are reproduced | Documented force/callback order and messages are preserved, internal frames are not | `substitute()`, `sys.call()`, `parent.frame()`, closure-body introspection, and mutation during private admission are not compatibility targets. |
 | An outer S3 class on a named value or explicit search-space list can influence generic dispatch | An ordinary non-ALTREP list may carry representation-only names/class; the class is discarded. Direct checked/unchecked assignment rejects an outer ALTREP before any observation and canonicalizes the Paradox-1 empty spellings (`NULL`, an ordinary attribute-free zero-length atomic/expression vector, or an accepted empty list container) natively. | Classed controls keep working for assignment and `$search_space(values=)`, but the class cannot replace Paradox value/token semantics. S4/list-like, ALTREP-shell, and other attributed containers reject. Only `set_values(.values=)` has the one-snapshot shell exception. |
 | S4 bits on Domain/Condition/token structure or typed defaults happen to pass ordinary S3/type checks | All interpreted shells/metadata are explicitly non-ALTREP/non-S4, including the outer `special_vals` list for every kind. A typed S4 special/default/init is admitted or matched only by pointer identity. ParamUty value/default/init/special leaves remain opaque, including S4, while special membership alone uses base `identical()` without dispatch. | Ordinary built-in objects are unchanged. Code using ALTREP/S4 as structural metadata must migrate; explicit opaque ParamUty and typed-special identity use remains. Condition structure never treats S4 as opaque. |
-| R releases older than 4.3 | Minimum R is 4.3 | The implementation uses one reviewed portable C17/API baseline. R 4.3--4.5 needs the sole ledgered `Rf_findVarInFrame` compatibility call for non-forcing receipt/generation scans; this pre-4.6 path is not CRAN-allowlisted. R >= 4.6 uses the documented experimental API `R_GetBindingType`. This narrow implementation exception changes no user API or semantics. |
+| R releases older than 4.3 | Minimum R is 4.3 | The implementation uses one reviewed portable C17/API baseline. Non-forcing receipt and object-graph scans use exact versioned compatibility entries: R 4.3--4.5 obtains stored cells through ledgered `Rf_findVarInFrame` and may inspect a returned promise through ledgered `R_PromiseExpr`/`PRENV`/`PRVALUE`; R >= 4.6 uses only experimental public binding/dots APIs and treats a detached non-binding `PROMSXP` as opaque. The current strict-header DSO contains none of the four old symbols. Every exceptional entry is ledgered and audited; none is a general CRAN allowlist. |
 
 These changes happen in the first public Paradox 2 release, not in later
 staggered breaks. Delaying them would make users pay the migration cost twice
@@ -159,9 +159,14 @@ test origin identity, fixed visible schema, live values/dependencies/
 constraint/transformations, visible write-through, hidden-value preservation,
 cross-boundary rejection, collection nesting, clone, and serialization.
 
-Legacy serialized miesmuschel shadows are reconstructed by miesmuschel from
-their owner-known origin/hidden-ID state. The generic Paradox upgrader does not
-interpret arbitrary third-party subclass internals.
+Miesmuschel registers its exact legacy
+`c("ParamSetShadow", "ParamSet", "R6")` owner class with Paradox 2. Its inert
+inspector returns the authenticated origin/hidden-ID dependency state; its
+current rebuilder constructs Paradox's package-owned Shadow. The recursive
+upgrader then transplants that current surface into the old shell identity and
+installs precise retired-field errors for `params_unid` and `set_id`. This
+narrow exact-class bridge does not make arbitrary third-party subclass
+internals interpretable.
 
 Miesmuschel's constructor/dictionary fidelity tests compare operator class,
 public representation, and public ParamSet values rather than recursively
@@ -173,9 +178,11 @@ binding layout into a downstream equality contract.
 
 bbotk changes the private `private$.sets` access to public `$sets`. Its
 `Codomain` tests must demonstrate that calling `super$initialize()` and adding
-nonconflicting behavior remains supported. If it chooses to support serialized
-Paradox-1 Codomains, bbotk reconstructs that additive shell around explicitly
-upgraded base state. Native code that retains pointers into detached public
+nonconflicting behavior remains supported. It registers the exact legacy
+`c("Codomain", "ParamSet", "R6")` class with an inert inspector and current
+additive rebuilder; Paradox authenticates and injects the prepared BASE state
+before the old shell identity is transplanted. Native code that retains
+pointers into detached public
 `$data` or `$deps` facades must root the complete returned owner objects for the
 pointer lifetime; Paradox does not preserve a hidden private alias as a GC root.
 

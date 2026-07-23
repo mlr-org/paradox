@@ -136,12 +136,83 @@ SEXP paradox_api_raw_attribute(SEXP value, SEXP symbol) {
 #endif
 }
 
+#if R_VERSION >= R_Version(4, 6, 0)
+typedef struct {
+  paradox_api_attribute_callback_t callback;
+  void *data;
+  R_xlen_t count;
+} attribute_map_state_t;
+
+static SEXP map_stored_attribute(SEXP tag, SEXP value, void *data) {
+  attribute_map_state_t *state = data;
+  if (state->callback != NULL) {
+    state->callback(tag, value, state->data);
+  }
+  ++state->count;
+  return NULL;
+}
+#endif
+
+R_xlen_t paradox_api_stored_attribute_count(SEXP value) {
+#if R_VERSION >= R_Version(4, 6, 0)
+  attribute_map_state_t state = {NULL, NULL, 0};
+  (void) R_mapAttrib(value, map_stored_attribute, &state);
+  return state.count;
+#else
+  R_xlen_t count = 0;
+  for (SEXP attributes = ATTRIB(value);
+      attributes != R_NilValue;
+      attributes = CDR(attributes)) {
+    if (TYPEOF(attributes) != LISTSXP) {
+      Rf_error("Internal error: malformed attribute pairlist");
+    }
+    if (count == R_XLEN_T_MAX) {
+      Rf_error("Internal error: too many stored attributes");
+    }
+    ++count;
+  }
+  return count;
+#endif
+}
+
+void paradox_api_map_stored_attributes(
+    SEXP value,
+    paradox_api_attribute_callback_t callback,
+    void *data) {
+  if (callback == NULL) {
+    Rf_error("Internal error: missing attribute callback");
+  }
+#if R_VERSION >= R_Version(4, 6, 0)
+  attribute_map_state_t state = {callback, data, 0};
+  (void) R_mapAttrib(value, map_stored_attribute, &state);
+#else
+  for (SEXP attributes = ATTRIB(value);
+      attributes != R_NilValue;
+      attributes = CDR(attributes)) {
+    if (TYPEOF(attributes) != LISTSXP) {
+      Rf_error("Internal error: malformed attribute pairlist");
+    }
+    callback(TAG(attributes), CAR(attributes), data);
+  }
+#endif
+}
+
 static int plain_binding_boundary(SEXP environment, SEXP symbol) {
   return TYPEOF(environment) == ENVSXP && !Rf_isS4(environment) &&
     TYPEOF(symbol) == SYMSXP &&
     R_existsVarInFrame(environment, symbol) &&
     !R_BindingIsActive(symbol, environment);
 }
+
+#if R_VERSION < R_Version(4, 6, 0)
+SEXP paradox_api_stored_binding_snapshot(
+    SEXP environment, SEXP symbol) {
+  if (!plain_binding_boundary(environment, symbol)) {
+    return R_UnboundValue;
+  }
+  return Rf_findVarInFrame(environment, symbol);
+}
+#endif
 
 SEXP paradox_api_plain_binding_snapshot(SEXP environment, SEXP symbol) {
   if (!plain_binding_boundary(environment, symbol)) {
@@ -153,7 +224,7 @@ SEXP paradox_api_plain_binding_snapshot(SEXP environment, SEXP symbol) {
   }
   return Rf_eval(symbol, environment);
 #else
-  SEXP result = Rf_findVarInFrame(environment, symbol);
+  SEXP result = paradox_api_stored_binding_snapshot(environment, symbol);
   return result == R_UnboundValue || TYPEOF(result) == PROMSXP
     ? R_UnboundValue
     : result;
@@ -163,3 +234,16 @@ SEXP paradox_api_plain_binding_snapshot(SEXP environment, SEXP symbol) {
 SEXP paradox_api_plain_binding_scan(SEXP environment, SEXP symbol) {
   return paradox_api_plain_binding_snapshot(environment, symbol);
 }
+
+#if R_VERSION < R_Version(4, 6, 0)
+void paradox_api_promise_snapshot(
+    SEXP promise, paradox_api_promise_snapshot_t *snapshot) {
+  if (TYPEOF(promise) != PROMSXP || snapshot == NULL) {
+    Rf_error("Internal error: invalid promise snapshot request");
+  }
+  snapshot->expression = R_PromiseExpr(promise);
+  snapshot->environment = PRENV(promise);
+  snapshot->value = PRVALUE(promise);
+  snapshot->forced = snapshot->value != R_UnboundValue;
+}
+#endif

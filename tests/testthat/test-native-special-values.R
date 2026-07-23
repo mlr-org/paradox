@@ -40,12 +40,12 @@ test_that("typed special values retain ordinary equality but make S4 exact", {
   expect_false(domain_test(exact, list(s4_equal)))
   expect_error(
     p_dbl(0, 1, special_vals = list(s4_default), default = s4_equal),
-    "default value",
+    "Must be of type 'number', not 'double'",
     fixed = TRUE
   )
   expect_error(
     p_dbl(0, 1, special_vals = list(s4_default), init = s4_equal),
-    "initial value",
+    "Must be of type 'number', not 'double'",
     fixed = TRUE
   )
 

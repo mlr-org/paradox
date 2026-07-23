@@ -2,6 +2,7 @@
 #include "r_utils.h"
 #include "core_state.h"
 #include "paramset_shadow.h"
+#include "upgrade_graph.h"
 #include <R_ext/Rdynload.h>
 #include <R_ext/Visibility.h>
 
@@ -116,6 +117,7 @@ static const R_CallMethodDef call_methods[] = {
   {"param_set_subset_state", (DL_FUNC) &paradox_param_set_subset_state, 8},
   {"param_set_subspace_states", (DL_FUNC) &paradox_param_set_subspace_states, 4},
   {"param_set_adopt_subset_state", (DL_FUNC) &paradox_param_set_adopt_subset_state, 2},
+  {"upgrade_graph_discover", (DL_FUNC) &paradox_upgrade_graph_discover, 1},
   {"test_checked_affixed_size",
     (DL_FUNC) &paradox_test_checked_affixed_size, 2},
   {"test_stateful_altrep", (DL_FUNC) &paradox_test_stateful_altrep, 6},

@@ -109,15 +109,135 @@ legacy_collection_from_current = function(current, children) {
   result
 }
 
-copy_legacy_private_environment = function(x) {
+transplantable_legacy_base_from_current = function(current) {
+  state = paradox:::param_set_core_state(mlr3misc::get_private(current))
+  result = current$clone(deep = TRUE)
+  private = copy_legacy_private_environment(result, omit = ".core")
+  private$.params = as_legacy_table(state$.params)
+  private$.values = state$.values
+  private$.tags = as_legacy_table(state$.tags)
+  private$.deps = as_legacy_table(state$.deps)
+  private$.trafos = as_legacy_table(state$.trafos)
+  private$.extra_trafo = state$.extra_trafo
+  private$.constraint = state$.constraint
+  result
+}
+
+transplantable_legacy_collection_from_current = function(current, children) {
+  state = paradox:::param_set_core_state(mlr3misc::get_private(current))
+  result = current$clone(deep = FALSE)
+  private = copy_legacy_private_environment(result, omit = ".core")
+  private$.params = as_legacy_table(state$.params)
+  private$.values = structure(list(), names = character())
+  private$.tags = as_legacy_table(state$.tags)
+  private$.deps = as_legacy_table(state$.deps)
+  private$.trafos = as_legacy_table(state$.trafos)
+  private$.extra_trafo = NULL
+  private$.constraint = NULL
+  private$.sets = children
+  private$.translation = as_legacy_table(state$.translation)
+  private$.postfix = state$.postfix
+  result
+}
+
+copy_legacy_private_environment = function(x, omit = character()) {
   enclosing = x$.__enclos_env__
   source = mlr3misc::get_private(x)
   result = new.env(parent = parent.env(source))
-  names = ls(source, all.names = TRUE)
+  names = setdiff(ls(source, all.names = TRUE), omit)
   for (name in names) {
     assign(name, get(name, envir = source, inherits = FALSE), envir = result)
   }
-  enclosing$private = result
+  repeat {
+    enclosing$private = result
+    super = get0("super", envir = enclosing, inherits = FALSE)
+    if (!is.environment(super) ||
+        !exists(".__enclos_env__", envir = super, inherits = FALSE)) {
+      break
+    }
+    enclosing = get(
+      ".__enclos_env__",
+      envir = super,
+      inherits = FALSE
+    )
+  }
+  result
+}
+
+with_replacement_owner_upgrader = function(code) {
+  namespace = asNamespace("paradox")
+  registry = get(
+    ".paradox_object_upgrader_registry",
+    envir = namespace,
+    inherits = FALSE
+  )
+  legacy_class = c("ParamSetShadow", "ParamSet", "R6")
+  key = paradox:::.paradox_registry_class_key(legacy_class)
+  had_entry = exists(key, envir = registry, inherits = FALSE)
+  old_entry = get0(key, envir = registry, inherits = FALSE)
+  on.exit({
+    if (had_entry) {
+      assign(key, old_entry, envir = registry)
+    } else if (exists(key, envir = registry, inherits = FALSE)) {
+      rm(list = key, envir = registry)
+    }
+  }, add = TRUE)
+
+  entry = list(
+    owner_package = "paradox",
+    legacy_class = legacy_class,
+    migration_kind = "replacement",
+    inspector = ".upgrade_paradox_node_info",
+    rebuilder = ".upgrade_paradox_build_owner",
+    retired_bindings = character(),
+    .owner_namespace = namespace
+  )
+  paradox:::.paradox_validate_object_upgrader_entry(entry, key)
+  assign(key, entry, envir = registry)
+
+  resolver_name = ".paradox_object_upgrader_resolve"
+  old_resolver = get(resolver_name, envir = namespace, inherits = FALSE)
+  resolver_was_locked = bindingIsLocked(resolver_name, namespace)
+  if (resolver_was_locked) unlockBinding(resolver_name, namespace)
+  on.exit({
+    if (bindingIsLocked(resolver_name, namespace)) {
+      unlockBinding(resolver_name, namespace)
+    }
+    assign(resolver_name, old_resolver, envir = namespace)
+    if (resolver_was_locked) lockBinding(resolver_name, namespace)
+  }, add = TRUE)
+  assign(
+    resolver_name,
+    function(entry, which) {
+      if (identical(which, "inspector")) {
+        return(function(x) {
+          private = mlr3misc::get_private(x)
+          list(
+            state = list(shadowed = private$.shadowed),
+            dependencies = list(origin = private$.set)
+          )
+        })
+      }
+      function(base, state, dependencies) {
+        paradox::ParamSetShadow$new(
+          dependencies$origin,
+          state$shadowed
+        )
+      }
+    },
+    envir = namespace
+  )
+  if (resolver_was_locked) lockBinding(resolver_name, namespace)
+  force(code)
+}
+
+replacement_owner_legacy = function() {
+  origin = ps(visible = p_dbl(0, 1), hidden = p_lgl())
+  result = ParamSetShadow$new(origin, "hidden")
+  private = copy_legacy_private_environment(result, omit = ".core")
+  private$.set = origin
+  private$.shadowed = "hidden"
+  result$assert_values = FALSE
   result
 }
 
@@ -150,6 +270,26 @@ test_that("current capsule-backed objects upgrade idempotently", {
     ),
     3L
   )
+})
+
+test_that("replacement owners preserve assert_values in pure and graph migration", {
+  with_replacement_owner_upgrader({
+    pure_legacy = replacement_owner_legacy()
+    pure_origin = mlr3misc::get_private(pure_legacy)$.set
+    pure = upgrade_paradox_object(pure_legacy)
+    expect_false(pure$assert_values)
+    expect_false(pure_legacy$assert_values)
+    expect_identical(pure$origin, pure_origin)
+
+    graph_legacy = replacement_owner_legacy()
+    graph_origin = mlr3misc::get_private(graph_legacy)$.set
+    host = list(owner = graph_legacy, alias = graph_legacy)
+    expect_identical(upgrade_paradox_object_graph(host), host)
+    expect_identical(host$owner, graph_legacy)
+    expect_identical(host$alias, graph_legacy)
+    expect_false(graph_legacy$assert_values)
+    expect_identical(graph_legacy$origin, graph_origin)
+  })
 })
 
 test_that("built-in Domain and Condition objects are normalized", {
@@ -300,6 +440,82 @@ test_that("legacy collection sharing is preserved and cycles are rejected", {
     upgrade_paradox_object(legacy),
     "x\\$sets\\[\\[1\\]\\].*cycle reaches active node at x"
   )
+})
+
+test_that("recursive migration transplants shared legacy collections in place", {
+  child = ps(x = p_int(0, 4, init = 2L), enabled = p_lgl(init = TRUE))
+  child$values = list(x = 3L, enabled = TRUE)
+  current = ParamSetCollection$new(list(left = child, right = child))
+  legacy_child = transplantable_legacy_base_from_current(child)
+  legacy = transplantable_legacy_collection_from_current(
+    current,
+    list(left = legacy_child, right = legacy_child)
+  )
+  collection_alias = legacy
+  child_alias = legacy_child
+  host = list(collection = legacy, child = legacy_child)
+
+  expect_identical(upgrade_paradox_object_graph(host), host)
+  expect_identical(host$collection, collection_alias)
+  expect_identical(host$child, child_alias)
+  expect_identical(legacy$sets[[1L]], child_alias)
+  expect_identical(legacy$sets[[2L]], child_alias)
+  expect_identical(
+    legacy$values,
+    list(
+      left.x = 3L,
+      left.enabled = TRUE,
+      right.x = 3L,
+      right.enabled = TRUE
+    )
+  )
+
+  clone = legacy$clone(deep = TRUE)
+  expect_false(identical(clone, legacy))
+  expect_identical(clone$values, legacy$values)
+  restored = unserialize(serialize(legacy, NULL))
+  expect_identical(restored$values, legacy$values)
+})
+
+test_that("a partially refreshed shell remains discoverable and retryable", {
+  legacy = transplantable_legacy_base_from_current(
+    ps(x = p_dbl(0, 1))
+  )
+  old_enclosure = legacy$.__enclos_env__
+  session = paradox:::.upgrade_paradox_prepare_session(list(legacy), "x")
+  index = session$commit_order[[1L]]
+  plan = paradox:::.upgrade_paradox_transplant_plan(
+    legacy,
+    session$prepared[[index]],
+    "x"
+  )
+
+  # Model a catastrophic allocation failure between two public binding
+  # replacements. The refreshed closure already points at a canonical current
+  # private capsule, but the legacy shell's enclosure is still the authoritative
+  # completion marker.
+  for (enclosing in plan$enclosures) {
+    assign("self", legacy, envir = enclosing)
+  }
+  position = match("ids", plan$current_names)
+  paradox:::.upgrade_paradox_replace_binding(
+    legacy,
+    "ids",
+    plan$current_values[[position]],
+    plan$current_shape$active[[position]],
+    plan$current_shape$locked[[position]]
+  )
+  # Also model failure after replacement but before the lock bit is restored.
+  unlockBinding("ids", legacy)
+  expect_false(bindingIsLocked("ids", legacy))
+  expect_identical(legacy$.__enclos_env__, old_enclosure)
+
+  discovery = .Call(paradox:::C_upgrade_graph_discover, legacy)
+  expect_identical(discovery$objects, list(legacy))
+  expect_identical(upgrade_paradox_object_graph(legacy), legacy)
+  expect_identical(legacy$ids(), "x")
+  expect_true(bindingIsLocked("ids", legacy))
+  expect_false(identical(legacy$.__enclos_env__, old_enclosure))
 })
 
 test_that("legacy extensions, replacements, and malformed state fail closed", {

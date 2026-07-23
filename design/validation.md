@@ -89,6 +89,61 @@ families.
   shared-versus-duplicated topology, plus active-path cycle rejection;
 - atomic replacement, detached old snapshots, and reentrant generation conflict.
 
+### Legacy object-graph migration
+
+- `upgrade_paradox_object()` remains non-mutating, returns a newly built
+  canonical ParamSet/Collection graph, preserves shared children/callback
+  identity, accepts current objects idempotently, normalizes standalone built-in
+  Domain/Condition objects, and rejects malformed or unknown inputs without
+  executing legacy methods;
+- `upgrade_paradox_object_graph()` returns the exact root invisibly and
+  transplants every admitted nested legacy ParamSet-family environment without
+  changing its identity. Tests cover aliases from multiple R6/private
+  enclosures, ordinary lists/pairlists/calls/expressions, attributes and S4
+  slots, closure environments/formals/bodies/bytecode, and legacy shells
+  reachable from authenticated current-core protected payloads;
+- pointer memoization terminates on cycles in the *containing* graph and visits
+  shared objects once, while a semantic cycle in a ParamSet/Collection/Shadow
+  dependency graph remains a path-specific rejection;
+- environment tests cover nested local/crate-style frames and enclosing
+  parents, while `.GlobalEnv`, attached search environments including
+  Autoloads, package/namespace/import environments, base, and empty remain hard
+  boundaries. A boundary object that itself is the root is left unchanged;
+- active-binding functions are traversed but never invoked. Delayed binding
+  promises are inspected without forcing and expose only expression/evaluation
+  environment; forced binding promises expose stored expression/value.
+  Ordinary delayed/forced/missing `...` cells receive the same coverage.
+  R 4.3--4.5 also inspect detached `PROMSXP` structure; strict R >= 4.6 treats
+  one outside a binding/dots cell as opaque. Tests record side effects and
+  cover both supported pre-4.6 and development-R API branches;
+- attributes of generic weak references and external pointers remain normal
+  edges, but their internal referents/protected/tag/address slots are opaque.
+  Only an authenticated Paradox core contributes its protected payload;
+- all discovery, legacy/current authentication, owner inspection, offside
+  rebuilding, dependency-plan validation, and shell-shape checks fail before
+  mutation. A simulated interrupted binding wave, including the
+  lock-restoration edge, verifies post-order monotonicity:
+  `.__enclos_env__` changes last, already transplanted nodes are independently
+  valid, an incomplete shell remains authenticated by its old enclosure, and
+  an idempotent retry completes the graph;
+- newly serialized shells call versioned targets directly and never consult the
+  legacy option. A historical target forwards an authenticated current core
+  directly; otherwise it defaults to an informative error, while `"upgrade"`
+  silently migrates and resumes the requested operation. Invalid option values,
+  retired/unknown target names, old argument-form combinations, and
+  pre-release capsule-backed Paradox-2 Shadow stubs fail or forward as
+  specified;
+- the owner registry admits only an exact direct-owner class from the owner
+  package's current namespace, resolves namespace-local hook names rather than
+  serialized functions, requires an empty dependency list for additive
+  rebuilding and exactly one `origin` plus a current Shadow result for
+  replacement rebuilding, and rejects duplicate/overlapping/stale
+  registrations, altered owner methods, undeclared fields, R6 finalizers,
+  malformed inspection/rebuild results, deeper class vectors, and S3 fallback.
+  Authentic bbotk legacy Codomain and miesmuschel legacy Shadow fixtures
+  exercise additive and replacement migrations respectively;
+  `params_unid`/`set_id` become precise retired-field errors.
+
 ### Closed semantics
 
 - all five Domain kinds and every operation on each supported kind; constructor,
@@ -224,9 +279,11 @@ families.
   a cross-version native fixture, with base R's lazy duplicate covered on
   runtimes that select that optimization; stable admitted semantic columns
   remain covered;
-- current serialization and explicit upgrade of CRAN Paradox 1.0.1,
-  shared/nested graphs, callbacks, both pinned `mbo_config` fixtures, and
-  rejected legacy extensions;
+- current serialization, pure single-object conversion, and recursive
+  identity-preserving upgrade of CRAN Paradox 1.0.1, shared/nested graphs,
+  callbacks, both pinned `mbo_config` fixtures, authentic mlr3/gallery
+  containing-object snapshots, registered bbotk/miesmuschel extensions, and
+  rejected unknown legacy extensions;
 - constructor representation, Design, sampler, subset/flatten/union, and
   ordinary edge diagnostics. Subset coverage pins the compatible
   `keep_trafo = TRUE` default and verifies independent transformation stripping
@@ -261,16 +318,16 @@ The frozen candidate must pass:
 - ASan and UBSan direct hazard/probe coverage;
 - pinned R-header compilation against every supported source version;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;
-- exact authentication of `environment/r-api-exceptions.tsv`: the sole
-  exception is one declared/exported `Rf_findVarInFrame` occurrence/path in
-  `src/r_api_compat.c` for R < 4.6, with `PROMSXP` rejected; R >= 4.6 must use
-  the documented experimental API `R_GetBindingType`. Raw-token counts and
-  pinned-header compilation are verified; the R 4.3--4.5 runtime DSOs must
-  contain the legacy symbol, while
-  the current-R DSO audit must prove it absent for R >= 4.6. The symbol is not
-  CRAN-allowlisted for the supported pre-4.6 build path. No public non-forcing
-  classifier exists on R 4.3--4.5, and a forcing R-level `substitute()`
-  workaround is not accepted as an alternative.
+- exact authentication of `environment/r-api-exceptions.tsv`: every
+  non-forcing stored-binding/promise symbol has its precise source, count,
+  version range, and rationale. R 4.3--4.5 must contain the one
+  `Rf_findVarInFrame` call plus the ledgered header-declared/exported
+  `R_PromiseExpr`, `PRENV`, and `PRVALUE`; R >= 4.6 must exclude all four and
+  use its experimental binding/delayed-binding/dots APIs. Raw-token,
+  pinned-header, and DSO inventories verify both branches.
+  None of these
+  entries is CRAN-allowlisted, and a forcing R-level `substitute()` workaround
+  is not accepted.
 
 Primary drivers are `scripts/native-check` and
 `scripts/check-r-api-compatibility`. Use their current `--help`; their retained
@@ -317,15 +374,20 @@ only where the compatibility document permits it. Every difference is one of:
 Do not maintain a general whitelist based on hashes from the old candidate.
 The differential inventory must include constructors, domains, checks,
 values/dependencies/transformations, collections, Design, samplers,
-serialization/upgrades, exact package-built and forged/subclassed TuneTokens,
-and common consumer call patterns.
+serialization/pure and recursive upgrades, first-use gateways, exact
+package-built and forged/subclassed TuneTokens, and common consumer call
+patterns.
 
 ## Downstream validation
 
 Run in increasing cost:
 
-1. focused bbotk additive-subclass/public-sets and native owner-root bridge;
-2. focused miesmuschel official-Shadow bridge;
+1. focused bbotk additive-subclass/public-sets/native owner-root behavior plus
+   exact legacy-Codomain registration, explicit graph upgrade, first-use
+   upgrade, and identity preservation;
+2. focused miesmuschel official-Shadow bridge plus exact legacy replacement,
+   origin dependency migration, retired fields, owner-local historical
+   gateways, and identity preservation;
 3. focused mlr3mbo public transform-stripping subset bridge and the small
    dual-version diagnostic adaptations;
 4. priority-one CRAN/Bioconductor reverse dependencies and maintained mlr-org
@@ -442,7 +504,12 @@ After package and focused consumers are green, run:
 - corrupt capsule, malformed graph, callback reentry, long-vector arithmetic,
   semantic ALTREP allocation/finalizer, structural ALTREP/S4 rejection,
   pointer/opaque special membership, interrupt, and serialization fuzz-style
-  tests.
+  tests;
+- migration-crawler cycles, deep graphs without C recursion, non-forcing
+  promises, active-binding non-invocation, search/package boundaries, malformed
+  attributes/pairlists, generic external pointers/weak references, current-core
+  protected payloads, owner-hook failures, and injected post-order partial
+  commits followed by retry.
 
 `scripts/memory-check` consumes the exact source/archive from a passed native
 run and does not rebuild examples, vignettes, or the full functional corpus in
@@ -467,7 +534,8 @@ status alone is insufficient.
 For the exact candidate run clean package checks with Suggested packages and a
 depends-only configuration, examples, vignettes, manuals, and migration docs.
 Then exercise the active pkgdown/book/gallery/website/cheatsheet workloads and
-both serialized `mbo_config` upgrades.
+both serialized `mbo_config` upgrades, including the recursive containing-object
+path and each exact owner bridge.
 
 Windows release x86-64 and real macOS Apple-silicon ARM64 CI must check the
 exact candidate source. Each workflow step and its final completion check must

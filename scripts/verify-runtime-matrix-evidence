@@ -223,16 +223,17 @@ verify_runtime_symbol_scope() {
   done
 
   if [[ "$version" == 4.3.3 ]]; then
-    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame)
-    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv
-      R_getVarEx R_GetBindingType R_getRegisteredNamespace R_getAttribCount
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
+      R_GetBindingType R_getRegisteredNamespace R_getAttribCount
       R_hasAttrib R_mapAttrib)
     branch=pre-4.5-documented-public-backports
   else
-    required=(Rf_eval ATTRIB R_ClosureFormals Rf_findVarInFrame)
-    forbidden=(R_ClosureExpr R_ClosureEnv R_ParentEnv R_getVarEx
-      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
-      R_mapAttrib)
+    required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv
+      R_ParentEnv Rf_findVarInFrame R_PromiseExpr PRENV PRVALUE)
+    forbidden=(R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib)
     branch=4.5-direct-public-accessors
   fi
 

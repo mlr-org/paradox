@@ -5,15 +5,27 @@ close them. Six repository-local branches remain useful migrations. The mlr3
 and mlr3fselect diagnostic-only PRs are now wholly redundant and should be
 closed without replacement.
 
-The retained runtime changes previously passed the complete named
-release-refresh gate on both pinned Paradox axes. After Paradox restored
-informative native diagnostics, the pruned working trees passed the same
-focused matrix on both Paradox 1.0.1.9000 and the final Paradox 2 development
-DSO: 2,022/2,022 expectations per axis, with zero failures, errors, warnings,
-or skips. Evidence is retained under
+Before the serialized-object migration work reopened Paradox and the two
+affected bridge packages, the retained runtime changes passed the complete
+named release-refresh gate on both pinned Paradox axes. The pruned working
+trees then passed 2,022/2,022 focused expectations per axis, with zero
+failures, errors, warnings, or skips. That pre-migration evidence is retained
+under
 `.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
 and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
-The follow-up commits below contain exactly those tested cleanup trees.
+
+The current bbotk and miesmuschel trees additionally implement the exact
+serialized-owner bridges required by Paradox 2. Against a fresh Paradox 2.0.0
+installation, bbotk's focused upgrader suite passed 8/8 and miesmuschel's
+ParamSetShadow suite passed 62/62. Authentic Paradox-1 Codomain and Shadow
+fixtures passed default diagnostics, opt-in replay for every historical target,
+explicit recursive migration, cloning, and RDS round-trips. Tightened additive,
+replacement, retired-binding, and canonical-Shadow contracts also passed.
+Evidence is retained under
+`.local/checks/downstream-upgrader-latest-20260724/`, with the final
+`assert_values = FALSE` fixture replay under
+`.local/tmp/assert-values-final.XDyV3e/`. The exact commits below contain those
+tested source trees.
 
 Publish and merge the dual-version bridge PRs before Paradox 2. Land and
 release mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally
@@ -26,7 +38,7 @@ proposed body into the form when creating one.
 ## bbotk
 
 - base: `905901b45d4dd9445efc0ffa49e663ab5ae534cb`
-- head: `4d497506ef2a03a97024002bb3c10d906583fada`
+- head: `29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0`
 - branch: `codex/public-paramsetcollection-sets`
 - target branch: `main`
 - proposed title: `Use Paradox 2 public ParamSet state safely`
@@ -43,6 +55,13 @@ Proposed body:
 > columns and Conditions. The added forced-allocation regression covers the
 > lifetime boundary. This also fixes a latent C ownership bug with no API
 > change on either Paradox version.
+>
+> Register the exact legacy `Codomain` class as Paradox 2's maintained additive
+> owner migration. Preserve all eight historical leanified Codomain targets as
+> cold gateways: they give an actionable recursive-upgrade error by default,
+> or migrate the shell in place and replay the requested operation when the
+> user explicitly enables first-use upgrading. Current objects bypass this
+> migration path.
 
 Publish it manually with:
 
@@ -54,7 +73,7 @@ gh pr create --web --repo mlr-org/bbotk --base main --head codex/public-paramset
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `d4c7f79750cd15c8174415fb0ba059c597f4f055`
+- head: `7cca4ede39b4dce36dc7e96a21e19303516a5134`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`
@@ -75,6 +94,13 @@ Proposed body:
 > This is intentionally a dual-version bridge; existing Paradox 1 installations
 > continue to construct the legacy class. Keep the class documentation link
 > valid when the package is checked with either Paradox major version.
+>
+> On Paradox 2, register the exact legacy miesmuschel Shadow as a replacement
+> owner migration with its single `origin` dependency. Preserve every
+> historical leanified target as a cold default-error/opt-in-replay gateway,
+> migrate to Paradox's canonical current Shadow capsule without changing the
+> serialized shell identity, and give explicit retired-API diagnostics for the
+> former `params_unid` and `set_id` fields.
 
 Publish it manually with:
 

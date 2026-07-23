@@ -69,6 +69,13 @@ failed=false
 LEGACY_BINDING_SYMBOL=Rf_findVarInFrame
 LEGACY_BINDING_SOURCE=src/r_api_compat.c
 LEGACY_BINDING_COUNT=0
+PROMISE_SOURCE=src/r_api_compat.c
+PROMISE_SYMBOLS=(R_PromiseExpr PRENV PRVALUE)
+declare -A PROMISE_COUNTS=(
+  [R_PromiseExpr]=0
+  [PRENV]=0
+  [PRVALUE]=0
+)
 for source_file in "${SOURCE_FILES[@]}"; do
   token_file="$WORK/tokens"
   if ! "$CLANG" -Xclang -dump-raw-tokens -fsyntax-only "$source_file" \
@@ -78,24 +85,41 @@ for source_file in "${SOURCE_FILES[@]}"; do
     failed=true
     continue
   fi
-  if LC_ALL=C grep -E "$LINE_PATTERN" "$token_file" > "$WORK/hits"; then
+  relative_source=${source_file#"$SOURCE/"}
+  LC_ALL=C grep -E "$LINE_PATTERN" "$token_file" > "$WORK/all-hits" || {
+    matcher_status=$?
+    if ((matcher_status != 1)); then
+      printf 'matcher_error=%s:%s\n' \
+        "$relative_source" "$matcher_status" >> "$REPORT_TEMP"
+      failed=true
+    fi
+    : > "$WORK/all-hits"
+  }
+  if [[ "$relative_source" == "$PROMISE_SOURCE" ]]; then
+    LC_ALL=C grep -Ev \
+      "^raw_identifier '(R_PromiseExpr|PRENV|PRVALUE)'([[:space:]]|$)" \
+      "$WORK/all-hits" > "$WORK/hits" || {
+      filter_status=$?
+      ((filter_status == 1)) || {
+        printf 'matcher_error=%s:%s\n' \
+          "$relative_source" "$filter_status" >> "$REPORT_TEMP"
+        failed=true
+      }
+      : > "$WORK/hits"
+    }
+  else
+    cp "$WORK/all-hits" "$WORK/hits"
+  fi
+  if [[ -s "$WORK/hits" ]]; then
     printf 'forbidden_file=%s\n' "${source_file#"$SOURCE/"}" \
       >> "$REPORT_TEMP"
     cat "$WORK/hits" >> "$REPORT_TEMP"
     failed=true
-  else
-    matcher_status=$?
-    if ((matcher_status != 1)); then
-      printf 'matcher_error=%s:%s\n' \
-        "${source_file#"$SOURCE/"}" "$matcher_status" >> "$REPORT_TEMP"
-      failed=true
-    fi
   fi
   legacy_count=$(LC_ALL=C grep -Ec \
     "^raw_identifier '$LEGACY_BINDING_SYMBOL'([[:space:]]|$)" \
     "$token_file" || true)
   if ((legacy_count != 0)); then
-    relative_source=${source_file#"$SOURCE/"}
     if [[ "$relative_source" != "$LEGACY_BINDING_SOURCE" ]]; then
       printf 'unreviewed_legacy_binding_file=%s:%s\n' \
         "$relative_source" "$legacy_count" >> "$REPORT_TEMP"
@@ -103,10 +127,28 @@ for source_file in "${SOURCE_FILES[@]}"; do
     fi
     LEGACY_BINDING_COUNT=$((LEGACY_BINDING_COUNT + legacy_count))
   fi
+  for promise_symbol in "${PROMISE_SYMBOLS[@]}"; do
+    promise_count=$(LC_ALL=C grep -Ec \
+      "^raw_identifier '$promise_symbol'([[:space:]]|$)" \
+      "$token_file" || true)
+    if ((promise_count != 0)); then
+      if [[ "$relative_source" != "$PROMISE_SOURCE" ]]; then
+        printf 'unreviewed_promise_accessor_file=%s:%s:%s\n' \
+          "$relative_source" "$promise_symbol" "$promise_count" \
+          >> "$REPORT_TEMP"
+        failed=true
+      fi
+      PROMISE_COUNTS[$promise_symbol]=$((PROMISE_COUNTS[$promise_symbol] + promise_count))
+    fi
+  done
 done
 
 EXCEPTION_LEDGER="$SOURCE/environment/r-api-exceptions.tsv"
-if ((LEGACY_BINDING_COUNT != 0)) || [[ -e "$EXCEPTION_LEDGER" ]]; then
+if ((LEGACY_BINDING_COUNT != 0 ||
+    PROMISE_COUNTS[R_PromiseExpr] != 0 ||
+    PROMISE_COUNTS[PRENV] != 0 ||
+    PROMISE_COUNTS[PRVALUE] != 0)) ||
+    [[ -e "$EXCEPTION_LEDGER" ]]; then
   [[ -f "$EXCEPTION_LEDGER" && ! -L "$EXCEPTION_LEDGER" ]] || {
     printf 'legacy_exception_ledger=missing-or-unsafe\n' >> "$REPORT_TEMP"
     failed=true
@@ -114,29 +156,52 @@ if ((LEGACY_BINDING_COUNT != 0)) || [[ -e "$EXCEPTION_LEDGER" ]]; then
   if [[ -f "$EXCEPTION_LEDGER" && ! -L "$EXCEPTION_LEDGER" ]]; then
     mapfile -t exception_lines < "$EXCEPTION_LEDGER"
     expected_header=$'symbol\tsource\tcount\tversions\tpolicy\trationale'
-    if ((${#exception_lines[@]} != 2)) ||
+    if ((${#exception_lines[@]} != 5)) ||
         [[ "${exception_lines[0]:-}" != "$expected_header" ]]; then
       printf 'legacy_exception_ledger=malformed\n' >> "$REPORT_TEMP"
       failed=true
     else
-      IFS=$'\t' read -r exception_symbol exception_source \
-        exception_count exception_versions exception_policy \
-        exception_rationale exception_extra <<< "${exception_lines[1]}"
-      if [[ "$exception_symbol" != "$LEGACY_BINDING_SYMBOL" ||
-            "$exception_source" != "$LEGACY_BINDING_SOURCE" ||
-            "$exception_count" != "$LEGACY_BINDING_COUNT" ||
-            "$exception_versions" != 'R-4.3.x--R-4.5.x' ||
-            "$exception_policy" != 'declared-exported-pre-4.6-only' ||
-            -n "${exception_extra:-}" || -z "$exception_rationale" ]]; then
-        printf 'legacy_exception_ledger=content-mismatch\n' >> "$REPORT_TEMP"
-        failed=true
-      fi
+      for ledger_index in 1 2 3 4; do
+        IFS=$'\t' read -r exception_symbol exception_source \
+          exception_count exception_versions exception_policy \
+          exception_rationale exception_extra \
+          <<< "${exception_lines[$ledger_index]}"
+        if ((ledger_index == 1)); then
+          expected_symbol=$LEGACY_BINDING_SYMBOL
+          expected_source=$LEGACY_BINDING_SOURCE
+          expected_count=$LEGACY_BINDING_COUNT
+          expected_versions='R-4.3.x--R-4.5.x'
+          expected_policy='declared-exported-pre-4.6-only'
+        else
+          expected_symbol=${PROMISE_SYMBOLS[$((ledger_index - 2))]}
+          expected_source=$PROMISE_SOURCE
+          expected_count=${PROMISE_COUNTS[$expected_symbol]}
+          expected_versions='R-4.3.x--R-4.5.x'
+          expected_policy='detached-promise-snapshot-pre-4.6-only'
+        fi
+        if [[ "$exception_symbol" != "$expected_symbol" ||
+              "$exception_source" != "$expected_source" ||
+              "$exception_count" != "$expected_count" ||
+              "$exception_versions" != "$expected_versions" ||
+              "$exception_policy" != "$expected_policy" ||
+              -n "${exception_extra:-}" || -z "$exception_rationale" ]]; then
+          printf 'legacy_exception_ledger=content-mismatch\n' \
+            >> "$REPORT_TEMP"
+          failed=true
+          break
+        fi
+      done
     fi
   fi
 fi
 printf 'reviewed_legacy_binding=%s:%s:%s\n' \
   "$LEGACY_BINDING_SYMBOL" "$LEGACY_BINDING_SOURCE" \
   "$LEGACY_BINDING_COUNT" >> "$REPORT_TEMP"
+for promise_symbol in "${PROMISE_SYMBOLS[@]}"; do
+  printf 'reviewed_promise_accessor=%s:%s:%s\n' \
+    "$promise_symbol" "$PROMISE_SOURCE" \
+    "${PROMISE_COUNTS[$promise_symbol]}" >> "$REPORT_TEMP"
+done
 
 if "$failed"; then
   printf 'result=failed\n' >> "$REPORT_TEMP"
@@ -147,5 +212,6 @@ fi
 
 printf 'result=passed\n' >> "$REPORT_TEMP"
 mv "$REPORT_TEMP" "$REPORT"
-printf 'R C API token audit passed: %s files, %s reviewed legacy binding\n' \
-  "${#SOURCE_FILES[@]}" "$LEGACY_BINDING_COUNT"
+printf 'R C API token audit passed: %s files, %s binding and %s promise tokens reviewed\n' \
+  "${#SOURCE_FILES[@]}" "$LEGACY_BINDING_COUNT" \
+  "$((PROMISE_COUNTS[R_PromiseExpr] + PROMISE_COUNTS[PRENV] + PROMISE_COUNTS[PRVALUE]))"

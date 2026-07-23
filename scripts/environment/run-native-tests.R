@@ -226,7 +226,7 @@ filter <- switch(selection,
   focused = paste0(
     "(characterization|native|regression|",
     "ParamSetShadow|core-state-contract|paramset-equality|to_tune|",
-    "upgrade-paradox-object)"
+    "upgrade-paradox-object|upgrade-registry)"
   ),
   NULL
 )

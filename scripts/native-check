@@ -1421,17 +1421,23 @@ if [ "$MODE_SYMBOLS" = true ]; then
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \
     "$NM" -D --undefined-only "$STRICT_GCC_DLL"
-  binding_symbol_scope=$(awk '
+  inspected_symbol_scope=$(awk '
     NF {
       symbol = $NF
       sub(/@.*/, "", symbol)
       if (symbol == "Rf_findVarInFrame") legacy += 1
       if (symbol == "R_GetBindingType") current += 1
+      if (symbol == "R_PromiseExpr") expression += 1
+      if (symbol == "PRENV") environment += 1
+      if (symbol == "PRVALUE") value += 1
     }
-    END { printf "%d:%d", legacy + 0, current + 0 }
+    END {
+      printf "%d:%d:%d:%d:%d",
+        legacy + 0, current + 0, expression + 0, environment + 0, value + 0
+    }
   ' "$MODE_DIRECTORY/logs/undefined-symbols.log")
-  [ "$binding_symbol_scope" = 0:1 ] ||
-    fail "the current-R DLL retained the legacy binding API or omitted R_GetBindingType"
+  [ "$inspected_symbol_scope" = 0:1:0:0:0 ] ||
+    fail "the current-R DLL has the wrong binding/detached-promise API inventory"
   run_logged "$MODE_DIRECTORY/logs/dynamic-symbols.log" \
     env -i "PATH=$LOCAL_PATH" "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \

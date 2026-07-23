@@ -60,20 +60,49 @@ print(ps3) # is a "clone" of the old ps1 with 'a' == 1
 
 ### Migrating serialized Paradox 1 objects
 
-Paradox 2 does not execute the old private R6 layout implicitly. Upgrade a
-legacy object explicitly after reading it, and operate only on the returned
-current object:
+Paradox 2 can migrate a legacy parameter set even when it is hidden inside a
+larger R6 object, closure, attribute, or ordinary container. The recursive
+upgrader preserves the identities of both the containing object and every
+legacy ParamSet-family R6 shell:
 
 ```{r, eval=FALSE}
-legacy = readRDS("legacy-paradox-object.rds")
+model = readRDS("legacy-model.rds")
+upgrade_paradox_object_graph(model)
+# `model` and its nested ParamSets are now current objects.
+```
+
+The crawler remembers visited objects, so shared references and cycles in the
+containing graph are safe. It searches ordinary containers, attributes,
+environments, and closure state without invoking active bindings, serialized
+methods, or forcing promises. It deliberately stops at the global environment
+and package/namespace/search-path infrastructure.
+
+`upgrade_paradox_object()` remains useful when the file contains one Paradox
+object directly. It is a pure converter: it does not mutate the input, and it
+also handles standalone built-in Domain and Condition objects.
+
+```{r, eval=FALSE}
+legacy = readRDS("legacy-param-set.rds")
 current = upgrade_paradox_object(legacy)
-# Only operate on `current`.
+```
+
+Calling an unmigrated legacy ParamSet method reports an error with the recursive
+upgrade command by default. Applications that deliberately want transparent
+first-use migration can opt in:
+
+```{r, eval=FALSE}
+options(paradox.legacy_object_action = "upgrade")
+model = readRDS("legacy-model.rds")
+model$train()  # A reached legacy ParamSet is silently upgraded before use.
 ```
 
 Private ParamSet state is now opaque, ParamSet-family inheritance is additive
 only, and Domain/Condition kinds are closed. Package code needing a live view
-should use the Paradox-owned `ParamSetShadow`; owners of unsupported legacy
-subclasses must reconstruct their current public object around upgraded state.
+should use the Paradox-owned `ParamSetShadow`. The maintained bbotk Codomain
+and miesmuschel legacy Shadow bridges are registered by their owner packages;
+load the package that owns such an object before upgrading it so its `.onLoad()`
+hook can register the exact bridge. An unknown legacy subclass still fails
+closed rather than executing serialized extension code.
 
 ### Defining a Parameter Space
 

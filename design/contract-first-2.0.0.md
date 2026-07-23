@@ -439,7 +439,7 @@ the value-result protocol and supplies no fallback path.
 ## Preserved outward compatibility
 
 The contract reset changes extension and mutation mechanisms, not the ordinary
-Paradox user model. Subject to the explicit legacy upgrade step, Paradox 2
+Paradox user model. Subject to the legacy migration boundary, Paradox 2
 preserves:
 
 - exported constructor/function names and normal argument meanings, including
@@ -507,19 +507,25 @@ restarts the operation through a second implementation.
 Native code may evaluate documented user callbacks through R. It may also use
 ordinary R helpers for genuine language capture or error construction. It must
 not call checkmate or data.table to implement a hot semantic operation. It uses
-public R C APIs available from R 4.3 onward except for exactly one centralized
-compatibility call: for R < 4.6, `src/r_api_compat.c` declares and calls the
-exported `Rf_findVarInFrame`, then rejects `PROMSXP`; R >= 4.6 selects the
-documented experimental API `R_GetBindingType`. Supported R 4.3--4.5 has no
-public non-forcing binding classifier, and an R-level `substitute()` workaround
-would force or otherwise make the simultaneous generation/receipt scan unsound.
-The older-runtime call is
-ledgered in `environment/r-api-exceptions.tsv`, raw-token-audited to one source
-occurrence/path, and pinned-header/runtime tested. It is not CRAN-allowlisted
-for the supported pre-4.6 build path: R 4.3--4.5 runtime DSOs must contain the
-symbol, and the
-current-R symbol audit must prove that every R >= 4.6 DSO excludes it. This
-exception authorizes no other internal R API or alternate semantic path.
+public R C APIs available from R 4.3 onward except for the exact centralized
+non-forcing binding/promise-inspection compatibility entries in
+`src/r_api_compat.c`. R 4.3--4.5 uses the declared/exported
+`Rf_findVarInFrame` to retrieve a stored frame cell; unlike the old ordinary-
+binding-only helper, recursive migration may then inspect a returned `PROMSXP`
+through the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`
+without forcing it.
+R >= 4.6 uses only the documented experimental binding classifier and delayed/
+forced-binding/dots accessors. Strict headers hide all three detached-promise
+accessors, so none is locally declared or present in the current DSO and a
+`PROMSXP` reached outside one of those public binding boundaries is opaque. An
+R-level `substitute()` workaround would force or make
+receipt scans and recursive graph discovery unsound.
+
+Every exceptional symbol, version range, source occurrence, and rationale is
+listed exactly in `environment/r-api-exceptions.tsv` and must pass raw-token,
+DSO, pinned-header, and real-runtime audits before freeze. These entries are not
+a CRAN allowlist and authorize neither another internal API nor an alternate
+semantic path.
 
 Exactly two narrow cold semantic-orchestration families are allowed to use R;
 each has one implementation and neither is a fallback. The first is internal
@@ -557,7 +563,11 @@ validation, installation, generation checks, and Shadow signature rebuilding
 remain native. It is therefore not another semantic exception: internal tuning
 and exact-token search-space conversion are the complete cold R *semantic*
 orchestration boundary, while clone and detached equality are shell/presentation
-glue with no independent admission or mutation contract.
+glue with no independent admission or mutation contract. The one-way legacy
+migration utility is likewise outside this current-operation count. It
+authenticates a retired private schema and orchestrates current constructors/
+native validation plus R6 shell transplant; it is never an alternate
+implementation or fallback for a current capsule operation.
 
 Cold outward glue need not invent a native duplicate. In particular,
 `all.equal.ParamSet()` compares ordinary detached views produced by the native
@@ -852,17 +862,18 @@ The pre-1.18 `alloc.col()` compatibility bridge and its version-dependent path
 are removed. Shipped C may study data.table's public object behavior but may not
 include or copy its private APIs.
 
-## Serialization and explicit legacy upgrade
+## Serialization and legacy object-graph migration
 
 Current-schema objects use ordinary `serialize()`/`unserialize()` and
 `saveRDS()`/`readRDS()` behavior. Serialization includes the versioned payload
 and graph, and round trips preserve node kind, public behavior, callbacks,
 reference topology, and explicit named `NULL` values.
 
-Objects serialized by Paradox 1.x or the superseded compatibility-first 2.0.0
-implementation are not executed implicitly as current objects. The first
-public 2.0.0 release provides one explicit exported upgrader,
-`upgrade_paradox_object(x)`, with this contract:
+The first public 2.0.0 release has two deliberately different explicit
+migration boundaries for objects serialized by Paradox 1.x or the superseded
+compatibility-first 2.0.0 implementation.
+
+`upgrade_paradox_object(x)` remains the pure single-object converter:
 
 - Current-schema objects are accepted idempotently.
 - Canonical legacy built-in Domain and Condition objects are normalized to their
@@ -875,38 +886,129 @@ public 2.0.0 release provides one explicit exported upgrader,
   postfix rules, and callback closures are preserved when they can be mapped to
   the closed current model.
 - Unknown Domain or Condition classes, replaced core methods, malformed private
-  state, and legacy third-party R6 subclasses fail with a path-specific
-  diagnostic. A downstream package that owns a legacy subclass is responsible
-  for reconstructing its current additive shell around upgraded Paradox state.
+  state, and legacy third-party R6 subclasses not covered by an exact
+  registered owner bridge fail with a path-specific diagnostic.
 - The upgrader never executes a legacy operation merely to discover its state.
 
+`upgrade_paradox_object_graph(x)` is the identity-preserving recursive
+migration boundary for a containing object:
+
+- It returns `x` invisibly. Every admitted legacy ParamSet-family R6
+  environment is transplanted in place, so references held by an enclosing R6
+  object, closure, attribute, collection edge, or another alias remain valid.
+  The public `assert_values` policy is preserved for built-in, additive-owner,
+  and replacement-owner shells.
+  Standalone Domain/Condition normalization remains in the pure converter; the
+  graph crawler does not replace arbitrary immutable leaves inside containers.
+- Native discovery is iterative, pointer-memoized, interruptible, and visits
+  each reachable object at most once. It follows list/vector elements,
+  pairlists, calls and expressions; all attributes including S4 slots;
+  environment bindings and enclosing parents; active-binding functions without
+  invoking the binding; closure environments, formals, bodies and bytecode
+  expressions; and forced or unforced binding/`...` promise structure without
+  forcing an unforced promise. A forced binding promise contributes its stored
+  value and expression; an unforced one contributes its expression and
+  evaluation environment. R 4.3--4.5 additionally inspect a detached
+  `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as opaque.
+- `.GlobalEnv`, every attached search-path environment (including Autoloads),
+  package and namespace environments, imports environments, base, and the empty
+  environment are traversal boundaries. Thus a closure made by `crate()` or a
+  local R6 private enclosure is searched, but reaching package/global
+  infrastructure cannot expand the migration to the whole session.
+- Weak-reference internals and generic external-pointer address/tag/protected
+  slots are opaque. Attributes remain ordinary graph edges. The one protected
+  slot exception is an authenticated Paradox `.core`, whose ordinary-R payload
+  is traversed so a legacy shell hidden in a current v2 capsule value or callback
+  closure is not missed.
+- Discovery is followed by complete legacy/current authentication, owner-hook
+  inspection, semantic preparation, offside construction, dependency-plan
+  validation, and shell-shape auditing before the first transplant. No
+  serialized method, active binding, or user callback is executed to inspect
+  legacy state.
+- Commit is post-order and monotonic. Each completed shell has current
+  enclosures, `self`/`private`/`super` links, methods/active bindings, capsule,
+  class, and `assert_values` state and is independently valid. An ordinary
+  semantic, bridge, or shape failure is preflight-only and leaves the graph
+  untouched. A catastrophic allocation failure or interrupt during commit may
+  leave a prefix of valid current nodes; retrying the idempotent operation
+  recognizes those nodes and completes the remainder.
+
+Current R6 methods never pay a migration dispatch. Paradox's package-local
+leanifier stores their bodies under versioned `.__paradox2_*` namespace names,
+and newly constructed shells call those names directly. Historical
+`.__ParamSet*`/`.__ParamSetCollection*` targets, plus unversioned
+`.__ParamSetShadow*` targets emitted by pre-release Paradox 2, are cold
+gateways. An authenticated capsule-backed shell, including the actual
+pre-release Shadow payload, forwards directly without consulting the legacy
+option or requiring an owner registry. Otherwise the default
+`getOption("paradox.legacy_object_action", "error")` produces a precise error
+that names `upgrade_paradox_object_graph()`. With
+`options(paradox.legacy_object_action = "upgrade")`, the gateway silently
+upgrades the reached shell graph by identity, resolves the new enclosure, and
+continues the originally requested operation. No direct
+`mlr3misc::leanify_package()` target is current authority.
+
+Legacy third-party ParamSet subclasses are admitted only through
+`register_paradox_object_upgrader()`. Registration is exact and narrow:
+
+- the full class vector is exactly
+  `c(<one owner class>, "ParamSet", "R6")`; there is no S3 dispatch,
+  superclass search, partial match, or arbitrary subclass chain;
+- registration must originate in that owner package's currently loaded
+  namespace and records only the owner name, exact class, `"additive"` or
+  `"replacement"` migration kind, namespace-local inspector/rebuilder names,
+  and replacement-only retired public bindings;
+- hooks are resolved anew from that authenticated namespace. Paradox never
+  stores or executes an inspector/rebuilder function recovered from serialized
+  bytes;
+- Paradox authenticates the common R6 shell and package provenance; the
+  inspector authenticates any owner-specific state it reads. An additive
+  inspector returns an empty named dependency list; its rebuilder receives the
+  authenticated prepared BASE object and cannot retire bindings. A replacement
+  inspector returns exactly one ParamSet-family dependency named `origin`; its
+  rebuilder must construct the exact registered class around a canonical
+  current `ParamSetShadow` capsule and can retire explicitly declared old-only
+  active fields;
+- public or private R6 finalizers are outside the owner-migration contract:
+  their registration belongs to one environment identity and transplanting
+  temporary/current enclosures could cause premature or repeated cleanup;
+- undeclared owner fields, an unknown exact class, altered owner methods, a
+  stale/unloaded registering namespace, malformed hook results, and conflicts
+  fail closed during preflight.
+
+bbotk's legacy `Codomain` is the maintained additive registry case.
+miesmuschel registers its exact legacy Shadow as a replacement by Paradox's
+package-owned `ParamSetShadow`; `params_unid` and `set_id` are explicitly
+retired rather than retained as parallel state. Unknown third-party subclasses
+remain unsupported.
+
 Historical `mbo_config` RDS files are mandatory upgrade fixtures. Old objects
-may be inspected or passed to the upgrader after `readRDS()`, but direct
-operation without explicit upgrade is outside the Paradox 2 contract. Package
-documentation must show the upgrade step rather than implying transparent lazy
-migration. Release harnesses obtain these bytes from the exact commit/tree
+may be passed to either appropriate upgrader after `readRDS()`. Direct first use
+errors by default; transparent first-use migration is available only through
+the explicit option above. Package documentation must show recursive upgrade
+for containing objects and explain the opt-in policy. Release harnesses obtain
+these bytes from the exact commit/tree
 jointly selected by the reviewed repository ledgers, stage one read-only
 receipted bundle, and must execute rather than environment-skip the fixture
 test; a mutable checkout path is not release provenance.
-
-Legacy miesmuschel shadows are bridged by miesmuschel, which can reconstruct the
-new package-owned `SHADOW` from their public origin and hidden-ID information;
-Paradox does not authenticate arbitrary third-party R6 internals in its generic
-upgrader.
 
 ## Downstream bridge order
 
 The coordinated downstream transition happens in this order:
 
-1. Paradox implements and exports the package-owned `ParamSetShadow`, the
-   capsule nodes, the explicit upgrader, and the closed functions while still
+1. Paradox implements and exports the package-owned `ParamSetShadow`, capsule
+   nodes, pure and recursive upgraders, exact owner registry, versioned current
+   lean targets/cold historical gateways, and closed functions while still
    carrying version `2.0.0` as an unreleased candidate.
 2. bbotk changes its one private `ParamSetCollection$.sets` read to the public
    `$sets` accessor and verifies that additive `Codomain` inheritance works
-   without a core override. If bbotk elects to support serialized Paradox-1
-   Codomains, its bridge reconstructs the current additive Codomain around
-   explicitly upgraded base state; the generic Paradox upgrader does not infer
-   third-party constructor state. Its native local-search code also roots the
+   without a core override. bbotk registers the exact legacy
+   `c("Codomain", "ParamSet", "R6")` class with an inert inspector and current
+   additive rebuilder; Paradox injects the authenticated prepared BASE state.
+   It also reserves every historical owner-local `.__Codomain__*` lean target
+   as a cold default-error/opt-in-upgrade gateway, including `$clone()`, which
+   otherwise need not reach an inherited Paradox method.
+   Its native local-search code also roots the
    detached public `$data` and `$deps` snapshots for the entire lifetime of
    every stored column/Condition pointer; Paradox 2 no longer leaves a private
    alias that accidentally keeps those facades alive.
@@ -915,10 +1017,14 @@ The coordinated downstream transition happens in this order:
    detached/private Domain transformation storage. Its Paradox-1 paths remain
    unchanged.
 4. miesmuschel publishes a dual-version bridge. With Paradox 2 it selects and
-   re-exports Paradox's `ParamSetShadow` generator; with Paradox 1.x it retains
-   its legacy class. Its tests exercise `$origin`, visible-value write-through,
-   hidden-value preservation, live dependencies/constraint/transformations,
-   and cross-boundary rejection on both branches.
+   re-exports Paradox's `ParamSetShadow` generator, registers its exact legacy
+   class as a replacement migration, and supplies owner-local cold gateways if
+   a historical override reaches an owner namespace target before an inherited
+   Paradox gateway. With Paradox 1.x it retains its legacy class. Its tests
+   exercise migration by identity, retired `params_unid`/`set_id` errors,
+   `$origin`, visible-value write-through, hidden-value preservation, live
+   dependencies/constraint/transformations, and cross-boundary rejection on
+   both branches.
 5. celecx, mlr3, and mlr3fselect keep their runtime behavior unchanged.
    Diagnostic-only version gates introduced for the early generic Paradox-2
    messages are removed where the centralized native formatter restores the
@@ -1002,9 +1108,11 @@ The package suite must contain contract tests for:
   stable semantic ALTREP columns, row-consuming versus non-row-consuming count
   checks, canonical ordinary package metadata, and the absence of internal
   data.table state;
-- current serialization plus explicit upgrades of pinned Paradox-1 fixtures,
-  `mbo_config`, nested collections, callbacks, shared graphs, and rejected
-  extensions;
+- current serialization, pure upgrades, and identity-preserving recursive
+  upgrades of pinned Paradox-1 fixtures, `mbo_config`, nested/shared/cyclic
+  containing graphs, callbacks/closures/attributes/environments/promises,
+  current-core payloads, traversal boundaries, default/opt-in gateways, exact
+  owner bridges, retired fields, and rejected extensions;
 - every exact reviewed downstream bridge contract recorded in
   `compat/github-bridge-provenance.tsv`, including public Shadow/subset use,
   detached-snapshot ownership, diagnostic-only adaptations, and independent
@@ -1024,15 +1132,17 @@ prerequisites and candidate bytes are frozen:
 1. strict GCC and Clang C17 builds, registered-routine/export audit, static
    analyzers, and the complete package suite;
 2. R 4.3.3, R 4.5.2, and development-R execution plus the pinned-header API
-   matrix and exact `environment/r-api-exceptions.tsv` audit;
+   matrix and exact stored-binding/promise
+   `environment/r-api-exceptions.tsv` audit;
 3. a new normalized upstream differential whose intentional deltas describe
    this contract reset rather than the superseded seven-delta policy;
 4. focused bridge rows, then all priority-zero/one GitHub and CRAN/Bioconductor
    consumers;
 5. GCT, Valgrind, bounded rchk, ASan, and UBSan using direct coverage of every
    registered routine and allocation/callback hazard;
-6. package checks, examples, vignettes, manuals, legacy upgrade workloads, and
-   the active book/website documentation;
+6. package checks, examples, vignettes, manuals, pure/recursive/first-use/
+   owner-bridge legacy upgrade workloads, and the active book/website
+   documentation;
 7. Windows x86-64 and real Apple-silicon ARM64 CI against the exact candidate;
 8. representative paired benchmarks, alone on an idle host, after behavior and
    bytes freeze; accept their release conclusion only after every correctness

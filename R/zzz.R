@@ -22,4 +22,4 @@ utils::globalVariables(c("J", "id", "original_id", "owner_ps_index", ".tags", "t
   })
 } # nocov end
 
-leanify_package()
+.paradox_leanify_package()

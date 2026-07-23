@@ -51,7 +51,7 @@ sha256_file() {
 }
 
 audit_symbols() {
-  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol branch
+  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol count branch
   local -a required forbidden
   configured_nm=$(R CMD config NM)
   [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" &&
@@ -70,30 +70,43 @@ audit_symbols() {
     printf 'nm=%s\n' "$nm_tool"
     printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
   } > "$log"
-  symbol=Rf_eval
-  rg -q "[[:space:]]${symbol}$" "$symbols" ||
-    fail "expected R API symbol is absent on R $version: $symbol"
-  printf 'required_symbol=%s\n' "$symbol" >> "$log"
   if [[ "$version" == 4.3.3 ]]; then
-    required=(ATTRIB FORMALS Rf_findVarInFrame)
-    forbidden=(R_ClosureExpr R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
       R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
       R_mapAttrib)
     branch=pre-4.5-documented-public-backports
   else
-    required=(ATTRIB R_ClosureFormals Rf_findVarInFrame)
-    forbidden=(R_ClosureExpr R_ClosureEnv R_ParentEnv R_getVarEx
-      R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
-      R_mapAttrib)
+    required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv
+      R_ParentEnv Rf_findVarInFrame R_PromiseExpr PRENV PRVALUE)
+    forbidden=(R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib)
     branch=4.5-direct-public-accessors
   fi
   for symbol in "${required[@]}"; do
-    rg -q "[[:space:]]${symbol}$" "$symbols" ||
-      fail "expected R API symbol is absent on R $version: $symbol"
+    count=$(awk -v expected="$symbol" '
+      NF {
+        observed = $NF
+        sub(/@.*/, "", observed)
+        if (observed == expected) count += 1
+      }
+      END { print count + 0 }
+    ' "$symbols")
+    [[ "$count" == 1 ]] ||
+      fail "expected R API symbol is not unique on R $version: $symbol"
     printf 'required_symbol=%s\n' "$symbol" >> "$log"
   done
   for symbol in "${forbidden[@]}"; do
-    if rg -q "[[:space:]]${symbol}$" "$symbols"; then
+    count=$(awk -v expected="$symbol" '
+      NF {
+        observed = $NF
+        sub(/@.*/, "", observed)
+        if (observed == expected) count += 1
+      }
+      END { print count + 0 }
+    ' "$symbols")
+    if [[ "$count" != 0 ]]; then
       fail "too-new R API symbol leaked into the R $version package DSO: $symbol"
     fi
     printf 'forbidden_symbol_absent=%s\n' "$symbol" >> "$log"
