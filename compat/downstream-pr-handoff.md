@@ -1,27 +1,32 @@
 # Downstream Paradox 2 pull-request handoff
 
-Agentic processes must not push these branches or open remote pull requests.
-The eight repository-local branches below are the complete reviewed migrations.
-The named release-refresh gate has tested and run full checks for these exact
-heads against both pinned Paradox axes. Its profile
-installer authenticates their isolated primary Git stores; the default
-`compat/verify-mlr-org-review` census remains historical evidence for their
-recorded upstream bases rather than an authenticator for refreshed heads.
+Agentic processes must not push these branches, update remote pull requests, or
+close them. Six repository-local branches remain useful migrations. The mlr3
+and mlr3fselect diagnostic-only PRs are now wholly redundant and should be
+closed without replacement.
 
-The exact-head dual-axis tests and source-package checks are complete. Publish
-and merge the dual-version bridge PRs before Paradox 2. Land and release
-mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally requires that
-bridge. The remaining PRs are independent apart from their shared Paradox-2
-release boundary. Seven reviewed remote branches already exist; miesmuschel's
-final test-only commit is the sole local branch still ahead of its remote at
-the time of this handoff. After each push, the `gh pr create --web` command
-below opens the exact comparison; copy the immediately preceding proposed body
-into the form.
+The retained runtime changes previously passed the complete named
+release-refresh gate on both pinned Paradox axes. After Paradox restored
+informative native diagnostics, the pruned working trees passed the same
+focused matrix on both Paradox 1.0.1.9000 and the final Paradox 2 development
+DSO: 2,022/2,022 expectations per axis, with zero failures, errors, warnings,
+or skips. Evidence is retained under
+`.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
+and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
+The follow-up commits below contain exactly those tested cleanup trees.
+
+Publish and merge the dual-version bridge PRs before Paradox 2. Land and
+release mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally
+requires that bridge. The other retained PRs are independent apart from their
+shared Paradox-2 boundary. After each push, the `gh pr create --web` command
+below opens the exact comparison when a PR is not already open; otherwise push
+the recorded branch and update the existing PR. Copy the immediately preceding
+proposed body into the form when creating one.
 
 ## bbotk
 
 - base: `905901b45d4dd9445efc0ffa49e663ab5ae534cb`
-- head: `6cae9559cfa2133b02b19e9762211aa49ec4c1c7`
+- head: `4d497506ef2a03a97024002bb3c10d906583fada`
 - branch: `codex/public-paramsetcollection-sets`
 - target branch: `main`
 - proposed title: `Use Paradox 2 public ParamSet state safely`
@@ -30,9 +35,7 @@ Proposed body:
 
 > Paradox 2 makes the private layout of `ParamSetCollection` opaque. Read the
 > optimizer-chain child values through the existing public `$sets` binding and
-> add a regression for that public contract. Keep the same tests useful with
-> Paradox 1 and 2 by selecting the expected validation diagnostic by installed
-> Paradox major version; no runtime behavior is version-branched.
+> add a regression for that public contract.
 >
 > The public Paradox 2 `$data` and `$deps` accessors deliberately return
 > detached snapshots. Root those two owner objects for the complete native
@@ -110,79 +113,40 @@ gh pr create --web --repo mlr-org/mlr3mbo --base main --head codex/paradox2-tran
 ## celecx
 
 - base: `8fc8a8dbaf15e72010b0e721a2167c5db9984810`
-- head: `a2975550c14f824c6abc86db9db32e982908c3ea`
+- head: `6da5102ca948b8182aae13575c48a932812b05c6`
 - branch: `codex/paradox2-diagnostics`
 - target branch: `master`
-- proposed title: `Accept Paradox 2 validation diagnostics in tests`
+- proposed title: `Use the Paradox 2 mlr3mbo bridge`
 
 Proposed body:
 
-> Keep celecx runtime behavior unchanged while making its diagnostic
-> expectations work with both supported Paradox generations. Paradox 1 retains
-> the exact checkmate-era fragments; Paradox 2 expectations select its native
-> Domain-bound, initial-value, and dependency-cycle diagnostics. This is a
-> test-only bridge. Together with mlr3mbo's public transform-free subset change,
-> the affected acquisition, grid, bootstrap, and quantile tests pass without
-> relying on mutable Domain internals. Require the compatible mlr3mbo
-> development version so CRAN mlr3mbo 1.1.1 cannot select the unsupported path.
+> Require the compatible mlr3mbo development bridge so CRAN mlr3mbo 1.1.1
+> cannot select its unsupported private-Domain path on Paradox 2. Keep the
+> design-grid comparison meaningful on both Paradox generations: Paradox 2's
+> native dependency planner and celecx reject the same cycle at different
+> boundaries, so assert each package-owned cycle diagnostic instead of
+> requiring the two implementation messages to be identical. Ordinary value
+> diagnostics remain on their original precise assertions.
 
 Publish it manually with:
 
 ```sh
 git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/celecx push --set-upstream origin codex/paradox2-diagnostics
-gh pr create --web --repo mlr-org/celecx --base master --head codex/paradox2-diagnostics --title 'Accept Paradox 2 validation diagnostics in tests'
+gh pr create --web --repo mlr-org/celecx --base master --head codex/paradox2-diagnostics --title 'Use the Paradox 2 mlr3mbo bridge'
 ```
 
-## mlr3
+## Redundant diagnostic-only PRs
 
-- base: `f70c001d526213d80059744b81fcbc420bb83017`
-- head: `35e30a91e305936e57328b65e15b60f3ab00eef3`
-- branch: `codex/paradox2-diagnostics`
-- target branch: `main`
-- proposed title: `Accept Paradox 2 numeric Domain diagnostics in tests`
-
-Proposed body:
-
-> Preserve the existing Paradox 1 assertions for invalid pinball and RQR
-> `alpha` values while selecting Paradox 2's native numeric Domain-bound
-> fragment on that major version. This changes test expectations only; measure
-> construction and scoring behavior are unchanged.
-
-Publish it manually with:
-
-```sh
-git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3 push --set-upstream origin codex/paradox2-diagnostics
-gh pr create --web --repo mlr-org/mlr3 --base main --head codex/paradox2-diagnostics --title 'Accept Paradox 2 numeric Domain diagnostics in tests'
-```
-
-## mlr3fselect
-
-- base: `cd12d7717f31701edc6ebcf7f2cbe1168cae1ecb`
-- head: `ae8e1d163bc7d8a2dd9f12e61d704e5b0d8430d7`
-- branch: `codex/paradox2-diagnostics`
-- target branch: `main`
-- proposed title: `Accept the Paradox 2 feature-fraction diagnostic in tests`
-
-Proposed body:
-
-> Select Paradox 2's native numeric Domain-bound fragment for the invalid RFE
-> `feature_fraction` test while preserving the exact Paradox 1 expectation.
-> The package-owned `subset_sizes` checkmate assertions remain unchanged because
-> they are not Paradox diagnostics and already pass on both versions. This is a
-> one-file, test-only compatibility change with no feature-selection runtime
-> branch.
-
-Publish it manually with:
-
-```sh
-git -C /home/mewse/paradox_neo/.local/compat/github-release-refresh-20260720/mlr3fselect push --set-upstream origin codex/paradox2-diagnostics
-gh pr create --web --repo mlr-org/mlr3fselect --base main --head codex/paradox2-diagnostics --title 'Accept the Paradox 2 feature-fraction diagnostic in tests'
-```
+Close the mlr3 branch `codex/paradox2-diagnostics` at `35e30a9` and the
+mlr3fselect branch `codex/paradox2-diagnostics` at `ae8e1d1` if their PRs are
+open. After removing their temporary diagnostic gates, each effective tree is
+byte-identical to its target base (`f70c001` and `cd12d77`, respectively).
+There is therefore no commit to publish and no replacement PR to create.
 
 ## mlr3pipelines
 
 - base: `daebff3cc15257cdecde898fd3f0ceff5f320c53`
-- head: `1c4bc6e52005d40d61fdba27b047f09fd6a6d29a`
+- head: `c85b2f4165e056934f892c5db37391869cd40e38`
 - branch: `codex/paradox-diagnostic-compat`
 - target branch: `master`
 - proposed title: `Fix GraphLearner state deep cloning across Paradox versions`
@@ -196,11 +160,6 @@ Proposed body:
 > Paradox 2's detached capsule layout exposed the existing ownership bug. Add
 > an explicit identity and mutation-isolation regression that catches it under
 > both Paradox versions.
->
-> Keep the two PICV invalid-value assertions while removing their dependency on
-> exact Paradox 1/checkmate wording. Focused PICV and Proxy tests pass with both
-> Paradox 1.0.1 and the Paradox 2 candidate; runtime validation behavior is not
-> version-branched.
 
 Publish it manually with:
 
@@ -212,7 +171,7 @@ gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/parad
 ## mlr3fda
 
 - base: `5e6204d0d3a3c21325a71eda4402c30b31209eef`
-- head: `035da5bb8d1c2ae22f04898718355e9653c382b2`
+- head: `8f5a3dfa297ad236812cda57fab02de75fec375a`
 - branch: `paradox2-snapshots`
 - target branch: `main`
 - proposed title: `Support Paradox 2 diagnostics in FDA snapshots`
@@ -221,9 +180,11 @@ Proposed body:
 
 > Keep the existing Paradox 1 wavelet-pipeline error snapshots byte-for-byte
 > unchanged and select a Paradox-2 snapshot variant only when that major is
-> installed. This is a test-only dual-version adaptation; pipeline construction
-> and FDA behavior are unchanged. The Paradox-1 gate executes the legacy
-> snapshots, while the Paradox-2 gate covers the new native diagnostics.
+> installed. The informative diagnostic content and punctuation are now the
+> same on both axes; the variant remains necessary only because Paradox 2's
+> native assignment reports the internal `.__ParamSet__values()` call header
+> instead of Paradox 1's `self$assert()` header. Pipeline construction and FDA
+> behavior are unchanged.
 
 Publish it manually with:
 

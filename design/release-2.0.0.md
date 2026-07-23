@@ -301,14 +301,15 @@ not a local compatibility workaround.
 
 ### Downstream coordination
 
-- [x] local bbotk bridge `6cae955` and miesmuschel bridge `d4c7f79` are
+- [x] local bbotk bridge `4d49750` and miesmuschel bridge `d4c7f79` are
   prepared on their recorded branches;
-- [x] mlr3mbo `1a1c0ab`, celecx `a297555`, mlr3 `35e30a9`, mlr3fselect
-  `ae8e1d1`, mlr3pipelines `1c4bc6e`, and mlr3fda `035da5b` are prepared on
-  their recorded branches;
+- [x] mlr3mbo `1a1c0ab`, celecx `6da5102`, mlr3pipelines `c85b2f4`, and
+  mlr3fda `8f5a3df` are prepared on their recorded branches; the mlr3
+  `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
+  closure without replacement;
 - [x] all eight profile bridge heads are authenticated and the four refreshed
   heads are retested and fully checked against both exact Paradox axes;
-- [ ] diagnostic-only downstream changes are pruned, independent runtime fixes
+- [x] diagnostic-only downstream changes are pruned, independent runtime fixes
   are retained, and the resulting affected heads receive focused dual-axis
   retesting before a new handoff is issued;
 - [x] the retained priority consumer corpus and active documentation are tested
@@ -489,38 +490,51 @@ yet a replacement for the complete release matrix:
   accepted-path regression. Raw current/baseline ratios were 0.988 for mixed
   `$check()`, 1.008/1.044/0.962/0.998 for double/integer/factor/logical
   `domain_check()`, and 1.056/1.040 for `p_dbl()`/`p_int()` construction, while
-  the process-local control itself was 1.073x slower.
+  the process-local control itself was 1.073x slower;
+- the same focused six-consumer matrix passes 2,022/2,022 expectations with
+  zero failures, errors, warnings, or skips on each of Paradox 1.0.1.9000 and
+  the final Paradox 2 development DSO. Evidence is retained under
+  `.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
+  and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
 
 ## Current local downstream branches
 
-These are the locally prepared pre-restoration heads. Repository policy
-requires the user to push and create PRs manually. Do not publish these exact
-diagnostic adaptations until the pruning review below is complete.
+These are the final locally prepared dispositions after restoring informative
+native diagnostics and pruning redundant downstream adaptations. Repository
+policy requires the user to push retained branches and create, update, or close
+PRs manually. The obsolete mlr3 and mlr3fselect branches are evidence only and
+must not be published as replacements.
 
 | Package | Worktree | Branch | Commits | Intent |
 |---|---|---|---|---|
-| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Retain the official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, and dual-major Rd links. Reassess only its diagnostic gates after the native message matrix. |
-| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | `0909e60`, `94e4c22`, `6cae955` | Retain the public `.sets` migration and detached-snapshot rooting. Diagnostic-only commit `94e4c22` is expected to become redundant and should be removed after focused confirmation. |
+| miesmuschel | `.local/compat/github-release-refresh-20260720/miesmuschel` | `codex/paradox-paramsetshadow-bridge` | head `d4c7f79750cd15c8174415fb0ba059c597f4f055` | Retain the official ParamSetShadow/public-state bridge, Paradox-1 construction, cache-independent comparisons, and dual-major Rd links. Its separate official-Shadow graph-boundary diagnostic remains intentional. |
+| bbotk | `.local/compat/github-release-refresh-20260720/bbotk` | `codex/public-paramsetcollection-sets` | head `4d497506ef2a03a97024002bb3c10d906583fada` | Retain only the public `.sets` migration and detached-snapshot rooting; the follow-up removes temporary diagnostic gates. |
 | mlr3mbo | `.local/compat/github-release-refresh-20260720/mlr3mbo` | `codex/paradox2-transformless-subset` | head `1a1c0abe95f59cd314f1fbc19c596cb6ac15f067` (base `d1ce6189b637dd552fac95d56c53a39503bae889`, runtime change `a8a988a64b66e651043b75f63dfdfb4604185e3f`) | Use public `subset(..., keep_trafo = FALSE)` on Paradox 2 while retaining Paradox-1 paths and document the migration. |
-| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `a2975550c14f824c6abc86db9db32e982908c3ea` | Drop obsolete numeric-diagnostic gates after confirmation, but retain the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
-| mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | `35e30a9` | This numeric-diagnostic-only commit is expected to be redundant once the restored fragments are confirmed. |
-| mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | `ae8e1d1` | This feature-fraction diagnostic-only commit is expected to be redundant once the restored fragment is confirmed. |
-| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | `1c4bc6e` | Retain the independently required GraphLearner deep-clone ownership fix and mutation-isolation regression; the exact-error decoupling may be pruned if it no longer adds value. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `035da5bb8d1c2ae22f04898718355e9653c382b2` | Snapshot variants may remain for internal call/`conditionCall()` differences, which the restored message-content contract does not cover. |
+| celecx | `.local/compat/github-release-refresh-20260720/celecx` | `codex/paradox2-diagnostics` | head `6da5102ca948b8182aae13575c48a932812b05c6` | Retain only the independent cycle/dependency adaptation and compatible mlr3mbo bridge requirement. |
+| mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
+| mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
+| mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | head `c85b2f4165e056934f892c5db37391869cd40e38` | Retain only the GraphLearner deep-clone ownership fix and mutation-isolation regression. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `8f5a3dfa297ad236812cda57fab02de75fec375a` | Preserve byte-identical Paradox-1 messages; the Paradox-2 variant now differs only in its internal assignment call header. |
 
-The pre-restoration miesmuschel head passed its complete repository suite and source-
+The unchanged miesmuschel head passed its complete repository suite and source-
 package check against both exact Paradox axes. Its last commit changes only
 three deep test comparisons to ignore data.table cache attributes; no production
 source changed. The final Paradox-2 affected-row evidence is retained under
 `.local/compat/runs/release-final-20260720T053518Z-10c6a0e-r8`, and Paradox-1
 under `.local/compat/runs/release-final-20260720-v1.0.1-paradox1-r2`.
 
-The existing handoff in `compat/downstream-pr-handoff.md` describes those
-historical retested heads. It must be regenerated after diagnostic pruning;
-its current push commands are not the final release instruction. The named
-`release-refresh-20260720` evidence profile is the immutable authority for the
-four refreshed heads above; it does not rewrite or relabel the earlier
-full-corpus candidate evidence. It uses a separate primary-checkout namespace,
+The regenerated handoff in `compat/downstream-pr-handoff.md` records the final
+retained heads, manual push/PR text, and the two redundant PRs to close. The
+same focused 2,022 expectations pass with zero failures, errors, warnings, or
+skips on both Paradox axes under
+`.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
+and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
+The named `release-refresh-20260720` evidence profile remains the immutable
+authority for the substantive pre-cleanup bridge/runtime changes; the two
+focused diagnostic runs authenticate the tested cleanup diffs later recorded
+as the four follow-up commits. Neither rewrites nor relabels the earlier
+full-corpus candidate evidence. The profile uses a separate primary-checkout
+namespace,
 an axis-neutral run-local receipt for the unchanged external dependency
 closure, and axis-specific overlay/test/check stages. The axis registry pins
 the frozen Paradox 2 candidate and released Paradox 1.0.1 by exact

@@ -991,41 +991,40 @@ Remote writes by an agentic process are forbidden. Agents may edit, test, and
 commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
-The previously PR-ready local heads below predate the centralized informative
-native diagnostic contract. Their structural/runtime fixes remain relevant,
-but diagnostic-only adaptations must be pruned after the restored messages are
-confirmed against each affected consumer:
+The final locally prepared downstream disposition is:
 
-- bbotk `codex/public-paramsetcollection-sets` at `6cae955`: public collection
-  state and rooted detached native search-space snapshots remain; diagnostic-
-  only commit `94e4c22` is expected to become redundant;
+- bbotk `codex/public-paramsetcollection-sets` at `4d49750`: public collection
+  state and rooted detached native search-space snapshots remain; temporary
+  diagnostic gates have been removed;
 - miesmuschel `codex/paradox-paramsetshadow-bridge` at `d4c7f79`: the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
   dual-major documentation link, with deep test comparisons made independent
-  of data.table secondary-index caches. Its structural bridge remains; any
-  diagnostic gates are reviewed separately after the native message matrix;
+  of data.table secondary-index caches. Its Shadow dependency diagnostic gate
+  remains because it covers the intentionally different official Shadow graph
+  boundary, not ordinary built-in value admission;
 - mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
   transformation-free subset construction on Paradox 2 plus release notes;
-- celecx `codex/paradox2-diagnostics` at `a297555`, mlr3
-  `codex/paradox2-diagnostics` at `35e30a9`, and mlr3fselect
-  `codex/paradox2-diagnostics` at `ae8e1d1`: the mlr3 and mlr3fselect changes
-  are expected to be wholly redundant; celecx should retain its independent
-  cycle/dependency bridge while dropping only obsolete diagnostic gates;
-- mlr3pipelines `codex/paradox-diagnostic-compat` at `1c4bc6e`: exact-error
-  decoupling plus an independently required GraphLearner deep-clone ownership
-  fix and mutation-isolation regression. Retain the clone fix; the diagnostic
-  hunk may be dropped if it no longer adds value;
-- mlr3fda `paradox2-snapshots` at `035da5b`: Paradox-2 diagnostic snapshots
-  selected without changing the Paradox-1 snapshot baseline. Snapshot call
-  shape can still differ because internal frames and `conditionCall()` are not
-  compatibility targets.
+- celecx `codex/paradox2-diagnostics` at `6da5102`: only the independent
+  cycle/dependency bridge and compatible mlr3mbo requirement remain;
+- mlr3pipelines `codex/paradox-diagnostic-compat` at `c85b2f4`: only the
+  GraphLearner deep-clone ownership fix and mutation-isolation regression
+  remain;
+- mlr3fda `paradox2-snapshots` at `8f5a3df`: the Paradox-1 snapshot stays
+  byte-identical and the Paradox-2 variant differs only in the internal
+  assignment call header;
+- mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
+  `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
+  PRs without replacement; there is no cleanup commit to publish.
 
-Exact-head dual-axis testing of those historical heads is complete, but it is
-not evidence for their future pruned revisions or for Paradox package source
-after the diagnostic change. Update `compat/downstream-pr-handoff.md`, the
-profile ledgers, and focused affected-consumer evidence after any local branch
-change. Never push, open a remote PR, publish a tag, or alter remote state
-yourself; the user performs every remote write.
+The six affected consumer selections pass the same 2,022 expectations with
+zero failures, errors, warnings, or skips on both Paradox 1.0.1.9000 and the
+focused Paradox 2 DSO. Evidence is retained under
+`.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
+and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
+The follow-up commit changes only record the already tested cleanup trees.
+Never push, open or close a remote PR, publish a tag, or otherwise alter remote
+state yourself; the user performs every remote write. Exact commands and PR
+text live in `compat/downstream-pr-handoff.md`.
 
 The maintained priority consumers include bbotk, miesmuschel, mlr3mbo,
 ConfigSpace, celecx, mlr3, mlr3tuning, mlr3pipelines, and active mlr-org book,
