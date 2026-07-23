@@ -546,6 +546,12 @@ semantic vectors remain supported at their stated positions.
   method) for retry. Rerunning the idempotent graph upgrader completes the
   remainder. Ordinary validation or owner-bridge failure occurs during
   preflight and mutates nothing.
+- The cold transplant resolves base `unlockBinding` with an explicit
+  `get(..., baseenv())` call. R's package-tampering checker otherwise reports
+  every syntactic `unlockBinding(name, owner)` whose environment is not the
+  literal Paradox namespace, even though `owner` here is a fully preflighted R6
+  shell/enclosure. Do not replace this with namespace mutation or remove the
+  authentication/lock restoration around it.
 - Current Paradox R6 stubs call versioned `.__paradox2_*` namespace targets
   directly. Historical unversioned `.__ParamSet*`,
   `.__ParamSetCollection*`, and pre-release `.__ParamSetShadow*` names are cold

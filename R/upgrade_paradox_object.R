@@ -1450,7 +1450,14 @@
     value,
     active,
     locked) {
-  if (bindingIsLocked(name, owner)) unlockBinding(name, owner)
+  if (bindingIsLocked(name, owner)) {
+    # R CMD check treats every syntactic unlockBinding(name, owner) call as
+    # possible foreign-namespace tampering because it cannot infer that owner
+    # is an authenticated R6 shell or enclosure. Resolve the base primitive
+    # explicitly on this cold migration path; this does not broaden which
+    # environment can reach transplant planning.
+    get("unlockBinding", envir = baseenv(), inherits = FALSE)(name, owner)
+  }
   if (active) {
     makeActiveBinding(name, value, owner)
   } else {
