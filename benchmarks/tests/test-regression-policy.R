@@ -146,6 +146,26 @@ if (!identical(reviewed_policy$case[integrity_rows], expected_integrity_cases) |
     any(reviewed_policy$scope == "consumer" & integrity_rows)) {
   fail("integrity-read tiers are not confined to the reviewed synthetic rows")
 }
+consumer_policy <- reviewed_policy[
+  reviewed_policy$scope == "consumer", , drop = FALSE
+]
+consumer_values <- consumer_policy$operation == "values"
+expected_consumer_cases <- c(
+  "mies_mutator_maybe", "mies_optimizer", "mlr3pipelines_graph"
+)
+if (!identical(consumer_policy$case[consumer_values], expected_consumer_cases) ||
+    any(consumer_policy$tier[consumer_values] != "standard") ||
+    any(
+      consumer_policy$rationale[consumer_values] !=
+        "integrity-validated-live-collection-value-read"
+    ) ||
+    any(consumer_policy$tier[!consumer_values] != "hot") ||
+    !identical(
+      consumer_policy$operation[!consumer_values],
+      rep(c("params", "get_values_unchecked"), length(expected_consumer_cases))
+    )) {
+  fail("consumer value-read tier exception differs from the reviewed boundary")
+}
 integrity_spec <- benchmark_regression_policy_spec()$tiers
 shadow_tier <- integrity_spec[
   integrity_spec$tier == "integrity-shadow-read", , drop = FALSE

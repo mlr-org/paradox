@@ -260,9 +260,12 @@ the same host:
 | `integrity-shadow-read` | 3.25 | 3.50 | 0.80 | 1.25 | 16 KiB |
 | `integrity-collection-read` | 2.75 | 3.00 | 0.80 | 1.25 | 16 KiB |
 
-Common constructors, ID/value/domain access, validation, design generation,
-mutation, and maintained consumer paths use the stricter `hot` tier. Structural
-stress, nested graph traversal, and callback-bearing cases use `standard`.
+Common constructors, direct ID/value/domain access, validation, design
+generation, mutation, and maintained consumer hot paths use the stricter `hot`
+tier. Structural stress, nested graph traversal, callback-bearing cases, and
+the retained consumers' integrity-validated live collection `$values` reads use
+`standard`. The same consumers' direct `$params` and
+`$get_values(check_required = FALSE)` paths remain `hot`.
 The two integrity tiers are deliberately narrower than a generic compatibility
 waiver. They apply only to `shadow_values_live` and the three synthetic direct
 `collection_values_*` rows. A live Shadow read validates its origin generation,
@@ -277,9 +280,13 @@ review, and still reject a materially slower implementation.
 They cover the measured optimized ratios with reviewable headroom and would
 reject the retained pre-optimization nested collection stage. Shadow
 construction, constraints, domains, and writes remain `hot` or `standard` as
-listed; filtered getters and every real miesmuschel/mlr3pipelines consumer row
-remain `hot`. Thus a synthetic safety boundary cannot hide an end-to-end
-consumer regression. These are portable same-host relative budgets: the policy
+listed. The three real miesmuschel/mlr3pipelines structural `$values` reads use
+the existing `standard` ceiling because they repeatedly expose the same
+integrity-validated nested collection traversal; their `$params` and unchecked
+filtered getters, and every other retained consumer operation, remain `hot`.
+Thus a synthetic safety boundary cannot hide an end-to-end consumer regression,
+while the structural read is still held to a finite ordinary tier rather than a
+bespoke waiver. These are portable same-host relative budgets: the policy
 assumes no processor model, instruction set, or absolute nanosecond target.
 The exception is timing-only; both integrity tiers retain the strict `hot`
 allocation ratio and minimum-byte thresholds.
