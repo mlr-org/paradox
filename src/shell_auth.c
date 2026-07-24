@@ -86,7 +86,9 @@ paradox_core_kind_t paradox_param_set_class_kind_raw(
 }
 
 SEXP paradox_param_set_class_kind(SEXP self) {
-  return Rf_ScalarInteger((int) paradox_param_set_class_kind_raw(self, NULL));
+  const paradox_core_kind_t kind =
+    paradox_param_set_class_kind_raw(self, NULL);
+  return Rf_ScalarInteger((int) kind);
 }
 
 enum gateway_context_field {
