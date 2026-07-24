@@ -539,19 +539,19 @@ static void schedule_promise_edges(
     schedule_node(
       walker,
       snapshot.value,
-      literal_path(path, ".value")
+      literal_path(path, ".promise.value")
     );
   } else {
     schedule_node(
       walker,
       snapshot.environment,
-      literal_path(path, ".environment")
+      literal_path(path, ".promise.environment")
     );
   }
   schedule_node(
     walker,
     snapshot.expression,
-    literal_path(path, ".expression")
+    literal_path(path, ".promise.expression")
   );
   UNPROTECT(3);
 }
