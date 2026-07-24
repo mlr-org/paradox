@@ -438,6 +438,41 @@ main <- function() {
         identical(class(owner), c("ParamSet", "R6")),
         "package-owned collection callback owner subset differs")
     },
+    direct_param_set_validate_current_graph = function() {
+      origin <- ps(hidden = p_int(), visible = p_dbl())
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      private <- private_of(shadow)
+      before <- data.table::address(private$.core)
+      origin$values <- list(hidden = 1L, visible = 0.5)
+      result <- .Call(
+        symbol("param_set_validate_current_graph"),
+        private,
+        shadow,
+        private$.core
+      )
+      check(
+        isTRUE(result) &&
+          identical(data.table::address(private$.core), before),
+        "current graph validation refreshed a stale Shadow"
+      )
+    },
+    direct_param_set_validate_current_roots = function() {
+      first <- ps(x = p_int())
+      origin <- ps(hidden = p_int(), visible = p_dbl())
+      shadow <- ParamSetShadow$new(origin, "hidden")
+      private <- private_of(shadow)
+      before <- data.table::address(private$.core)
+      origin$values <- list(hidden = 1L, visible = 0.5)
+      result <- .Call(
+        symbol("param_set_validate_current_roots"),
+        list(first, shadow)
+      )
+      check(
+        isTRUE(result) &&
+          identical(data.table::address(private$.core), before),
+        "joint current-root validation mutated a stale Shadow"
+      )
+    },
     direct_param_set_check_builtin = function() {
       set <- ps(x = p_int(0L, 2L))
       result <- .Call(
@@ -853,6 +888,282 @@ main <- function() {
           "identity-aware graph discovery, self-returning ALTREP duplicate,",
           "or global boundary differs"
         )
+      )
+    },
+    direct_plain_binding_snapshot = function() {
+      parent <- new.env(parent = emptyenv())
+      assign("inherited", TRUE, envir = parent)
+      frame <- new.env(parent = parent)
+      value <- new.env(parent = emptyenv())
+      assign("value", value, envir = frame)
+      assign("null", NULL, envir = frame)
+      language_value <- quote(a + b)
+      symbol_value <- as.name("x")
+      assign("language", language_value, envir = frame)
+      assign("symbol", symbol_value, envir = frame)
+      state <- new.env(parent = emptyenv())
+      state$forced <- FALSE
+      delayedAssign(
+        "delayed",
+        {
+          state$forced <- TRUE
+          value
+        },
+        eval.env = environment(),
+        assign.env = frame
+      )
+      delayedAssign(
+        "delayed_language",
+        a + b,
+        eval.env = baseenv(),
+        assign.env = frame
+      )
+      delayedAssign(
+        "delayed_symbol",
+        x,
+        eval.env = baseenv(),
+        assign.env = frame
+      )
+      forced_environment <- list2env(
+        list(value = language_value),
+        parent = baseenv()
+      )
+      delayedAssign(
+        "forced_promise",
+        value,
+        eval.env = forced_environment,
+        assign.env = frame
+      )
+      forced_value <- get(
+        "forced_promise",
+        envir = frame,
+        inherits = FALSE
+      )
+      active_reads <- 0L
+      makeActiveBinding("active", function(value) {
+        if (!missing(value)) stop("probe binding is read-only")
+        active_reads <<- active_reads + 1L
+        TRUE
+      }, frame)
+      observed_value <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "value"
+      )
+      observed_null <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "null"
+      )
+      observed_language <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "language"
+      )
+      observed_symbol <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "symbol"
+      )
+      observed_absent <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "absent"
+      )
+      observed_inherited <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "inherited"
+      )
+      observed_active <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "active"
+      )
+      observed_delayed <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "delayed"
+      )
+      observed_delayed_language <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "delayed_language"
+      )
+      observed_delayed_symbol <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "delayed_symbol"
+      )
+      observed_forced_promise <- .Call(
+        symbol("plain_binding_snapshot"),
+        frame,
+        "forced_promise"
+      )
+      check(
+        identical(observed_value, list(ok = TRUE, value = value)) &&
+          identical(observed_null, list(ok = TRUE, value = NULL)) &&
+          identical(
+            observed_language,
+            list(ok = TRUE, value = language_value)
+          ) &&
+          identical(observed_symbol, list(ok = TRUE, value = symbol_value)) &&
+          identical(observed_absent, list(ok = FALSE, value = NULL)) &&
+          identical(observed_inherited, list(ok = FALSE, value = NULL)) &&
+          identical(observed_active, list(ok = FALSE, value = NULL)) &&
+          identical(observed_delayed, list(ok = FALSE, value = NULL)) &&
+          identical(
+            observed_delayed_language,
+            list(ok = FALSE, value = NULL)
+          ) &&
+          identical(
+            observed_delayed_symbol,
+            list(ok = FALSE, value = NULL)
+          ) &&
+          identical(
+            observed_forced_promise,
+            list(ok = FALSE, value = NULL)
+          ) &&
+          identical(forced_value, language_value) &&
+          !state$forced &&
+          identical(active_reads, 0L),
+        "plain frame binding snapshot differs or forced a delayed binding"
+      )
+    },
+    direct_gateway_context_snapshot = function() {
+      base <- ps(x = p_dbl())
+      collection <- ParamSetCollection$new(list(owner = base))
+      shadow <- ParamSetShadow$new(base, character())
+      shells <- list(base, collection, shadow)
+      contexts <- lapply(
+        seq_along(shells),
+        function(index) .Call(
+          symbol("gateway_context_snapshot"),
+          shells[[index]],
+          as.integer(index)
+        )
+      )
+      AdditiveCollectionRoot <- R6::R6Class(
+        "ProbeGatewayCollectionRoot",
+        inherit = ParamSetCollection
+      )
+      AdditiveCollectionLeaf <- R6::R6Class(
+        "ProbeGatewayCollectionLeaf",
+        inherit = AdditiveCollectionRoot
+      )
+      additive <- AdditiveCollectionLeaf$new(list(owner = base))
+      additive_family <- .Call(
+        symbol("gateway_context_snapshot"),
+        additive,
+        2L
+      )
+      additive_base <- .Call(
+        symbol("gateway_context_snapshot"),
+        additive,
+        1L
+      )
+      check(
+        all(mapply(function(context, self) {
+          isTRUE(context$ok) &&
+            identical(context$enclosure$self, self) &&
+            is.environment(context$private) &&
+            typeof(context$core) == "externalptr"
+        }, contexts, shells, SIMPLIFY = TRUE, USE.NAMES = FALSE)) &&
+          is.null(contexts[[1L]]$super) &&
+          is.environment(contexts[[2L]]$super) &&
+          is.environment(contexts[[3L]]$super) &&
+          isTRUE(additive_family$ok) &&
+          is.environment(additive_family$super) &&
+          isTRUE(additive_base$ok) &&
+          is.null(additive_base$super) &&
+          !identical(
+            additive_family$enclosure,
+            additive_base$enclosure
+          ),
+        "authenticated gateway context snapshot differs"
+      )
+    },
+    direct_param_set_class_kind = function() {
+      base <- ps(x = p_dbl())
+      collection <- ParamSetCollection$new(list(owner = base))
+      shadow <- ParamSetShadow$new(base, character())
+      AdditiveShadowRoot <- R6::R6Class(
+        "ProbeClassifierShadowRoot",
+        inherit = ParamSetShadow
+      )
+      AdditiveShadowLeaf <- R6::R6Class(
+        "ProbeClassifierShadowLeaf",
+        inherit = AdditiveShadowRoot
+      )
+      additive_shadow <- AdditiveShadowLeaf$new(base, character())
+      hybrid <- ParamSetCollection$new(list(owner = base))
+      class(hybrid) <- c(
+        "ParamSetShadow", "ParamSetCollection", "ParamSet", "R6"
+      )
+      check(
+        identical(
+          vapply(
+            list(base, collection, shadow),
+            function(self) .Call(symbol("param_set_class_kind"), self),
+            integer(1L)
+          ),
+          1:3
+        ) &&
+          identical(
+            .Call(
+              symbol("param_set_class_kind"),
+              additive_shadow
+            ),
+            3L
+          ) &&
+          identical(
+            .Call(symbol("param_set_class_kind"), hybrid),
+            0L
+          ) &&
+          identical(
+            .Call(
+              symbol("param_set_class_kind"),
+              structure(new.env(parent = emptyenv()), class = "ParamSet")
+            ),
+            0L
+          ),
+        "ordinary ParamSet-family class classification differs"
+      )
+    },
+    direct_param_set_assert_values_exact = function() {
+      callbacks <- 0L
+      hostile <- stateful(
+        TRUE,
+        TRUE,
+        callback = function() callbacks <<- callbacks + 1L,
+        callback_after = c(0L, 0L)
+      )
+      check(
+        isTRUE(.Call(
+          symbol("param_set_assert_values_exact"),
+          TRUE
+        )) &&
+          isTRUE(.Call(
+            symbol("param_set_assert_values_exact"),
+            FALSE
+          )) &&
+          identical(
+            .Call(symbol("param_set_assert_values_exact"), NA),
+            FALSE
+          ) &&
+          identical(
+            .Call(
+              symbol("param_set_assert_values_exact"),
+              c(TRUE, FALSE)
+            ),
+            FALSE
+          ) &&
+          identical(
+            .Call(symbol("param_set_assert_values_exact"), hostile),
+            FALSE
+          ) &&
+          identical(callbacks, 0L),
+        "exact assert_values admission differs or observed ALTREP"
       )
     },
     direct_test_checked_affixed_size = function() {

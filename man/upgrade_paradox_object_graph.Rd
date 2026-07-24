@@ -25,7 +25,9 @@ function returns \code{x} invisibly; it does not replace the containing objects.
 Discovery is iterative and identity-aware. It inspects ordinary environment
 bindings, active-binding functions (never their values), closures and safe
 enclosing environments, unforced binding and \code{...} promises without forcing
-them, language objects, S4 attributes, and ordinary containers. R 4.3--4.5
+them, language objects, S4 attributes, and ordinary containers. A native
+direct-binding classifier distinguishes realized language/symbol values from
+delayed promises without evaluating either. R 4.3--4.5
 can also inspect a detached promise; strict R 4.6 and newer expose no safe
 API for that edge, so a promise reached outside a binding or \code{...} cell is
 opaque. It does not enter
@@ -36,12 +38,29 @@ authenticated current Paradox capsule is traversed so a legacy object stored
 as an opaque parameter value is not missed.
 
 All discovered nodes and registered owner migrations are semantically
-inspected and rebuilt before the first legacy shell changes. Commit is
-post-order and identity-preserving. The enclosure swap is each shell's final
+inspected and rebuilt before the first legacy shell changes. Already-current
+ParamSet-family shells are also validated during this preflight, although
+they need no transplant. Current Shadows are checked against an authoritative
+live preview without installing that preview. Every prepared/current root is
+then validated jointly before the first transplant. Commit is post-order and
+identity-preserving: after a child is current, its prepared parent is rebased
+to the original child identity. All already-current identity roots plus that
+newly rebased prepared root are jointly validated before the parent changes;
+unrebased parents remain offside templates until their own turn. After each
+transplant, the current identity roots are jointly validated again with the
+transplanted original added. The enclosure swap is each shell's final
 completion point. If an allocation failure interrupts an individual binding
-wave, the old enclosure remains authoritative and the mixed shell stays
-authenticated for retry; completed nodes are valid current objects. Calling
-the function again completes the remainder.
+wave, the old enclosure remains
+authoritative and the mixed shell stays authenticated for retry; completed
+nodes are valid current objects. Calling the function again completes the
+remainder.
+
+Ordinary inspection, rebuilding, and package-callback failures happen before
+mutation. Pending finalizers from unrelated user objects are not suspended by
+R's interrupt guard. If such a finalizer mutates a selected Paradox root
+during the binding wave, the post-transplant joint validation detects the
+change and errors, but a completed transplant is not rolled back and retry is
+not promised for the externally corrupted graph.
 
 The default first use of an unupgraded Paradox 1 method gives an actionable
 error. Set \code{options(paradox.legacy_object_action = "upgrade")} to invoke

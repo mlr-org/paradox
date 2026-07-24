@@ -294,15 +294,39 @@ hazards that Paradox 2 is intended to remove.
   global/search/package/namespace environment infrastructure, invoke an active
   binding or serialized method, or inspect generic external-pointer or weak
   reference internals. Authenticated Paradox core payloads remain traversable.
-  Migration performs a full semantic and shell-shape preflight, then commits
-  valid nodes in post-order, replacing each `.__enclos_env__` last. A
+  A native direct-binding classifier distinguishes realized language/symbol
+  values from delayed promises without using `substitute()` or evaluating
+  either. Migration performs a full semantic and shell-shape preflight,
+  including a joint native validation of every prepared/current root before
+  the first transplant, then commits valid nodes in post-order. Current Shadow
+  preflight builds its authoritative live projection without installing it and
+  keeps the selected source core separate from that semantic preview. After a
+  child transplant, its prepared parent is rebased to the original child
+  identity. All already-current identity roots plus that newly rebased parent
+  are jointly revalidated before its transplant; unrebased parents remain
+  offside templates until their own turn. The current identity-root set is
+  jointly checked again after each transplanted original joins it. Each
+  `.__enclos_env__` is replaced last. A
   catastrophic allocation failure inside a binding wave retains the old
   completion marker and remains retryable; already committed nodes are valid.
+  Already-current shells are semantically validated in the same preflight, so
+  corrupt current state cannot permit a legacy sibling to change first.
+  Pending finalizers from unrelated user objects are outside the atomic
+  transplant contract: if one mutates a selected root inside the R binding
+  wave, the post-transplant barrier detects it and errors, but does not roll
+  back a completed transplant or promise retry of the externally corrupted
+  graph.
 * New Paradox 2 R6 objects call versioned namespace targets directly.
   Historical unversioned ParamSet-family leanification targets are cold
-  compatibility gateways. An authenticated capsule-backed shell, including a
-  pre-release Paradox-2 Shadow, forwards directly. A shell without a current
-  core reports the legacy object by default and directs users to
+  compatibility gateways. Current shell authentication accepts an ordinary
+  unique additive class chain ending in the appropriate
+  BASE/COLLECTION/SHADOW `ParamSet`/`R6` family suffix; it requires an exact
+  `assert_values` flag and canonical matching core. The gateway selects the
+  superclass enclosure that defines the historical target and replays one
+  rooted native context. It never evaluates the old stub's serialized
+  `private`/`super` promises or rereads a guessed top slice. A shell without an
+  authenticated current context reports the legacy object by default and
+  directs users to
   `upgrade_paradox_object_graph()`. Setting
   `options(paradox.legacy_object_action = "upgrade")` enables silent
   identity-preserving first-use migration before the requested operation
@@ -317,7 +341,10 @@ hazards that Paradox 2 is intended to remove.
   bindings. Additive inspectors have no extra dependencies; replacements have
   exactly one `origin` and must produce a current Shadow. Owner classes with R6
   finalizers are rejected because their registrations cannot be transplanted
-  safely. Unknown subclasses still fail closed.
+  safely. Unknown subclasses still fail closed. Legacy method provenance is
+  authenticated by exact loaded namespace identity rather than spoofable
+  namespace metadata, and the cold migration/gateway layer uses the same
+  native non-forcing binding classifier as the graph crawler.
 * Built-in Domain and ParamSet value failures now use one package-owned C
   classifier and failure-only formatter. Missingness, type/shape, integerish,
   bounds, and factor-membership errors retain informative checkmate-style

@@ -28,6 +28,8 @@ param_set_collection_constraint	3	production	production-dynamic	direct_param_set
 param_set_collection_detached_extra_trafo	2	production	production-dynamic	direct_param_set_collection_detached_extra_trafo	Direct detached aggregate-replacement transformation from an ordinary immutable plan
 param_set_collection_detached_constraint	2	production	production-dynamic	direct_param_set_collection_detached_constraint	Direct detached constraint evaluation from an ordinary immutable plan
 param_set_collection_owner_subset_state	3	production	production-dynamic	direct_param_set_collection_owner_subset_state	Direct package-owned two-argument callback-owner subset capability without public subset dispatch
+param_set_validate_current_graph	3	production	production-dynamic	direct_param_set_validate_current_graph	Direct generation-consistent read-only complete current capsule-graph validation by previewing rather than installing stale ParamSetShadow generations
+param_set_validate_current_roots	1	production	production-dynamic	direct_param_set_validate_current_roots	Joint generation-consistent read-only validation and final receipt scan for every prepared/current migration-session root
 param_set_check_builtin	7	production	production-dynamic	direct_param_set_check_builtin	Direct unified scalar validation and sanitization against a BASE capsule
 tune_token_snapshot_list	3	production	production-dynamic	direct_tune_token_snapshot_list	Direct closed selection/admission of TuneTokens from a complete ordinary values list plus one detached target-Domain snapshot, without candidate callback execution or later target-graph rereads
 param_set_check_dependencies_builtin	3	production	production-dynamic	direct_param_set_check_dependencies_builtin	Direct dependency-only validation through the shared graph snapshot and point kernel
@@ -64,6 +66,10 @@ param_set_subset_state	8	production	production-dynamic	direct_param_set_subset_s
 param_set_subspace_states	4	production	production-dynamic	direct_param_set_subspace_states	Direct atomic multi-subspace capsule planning
 param_set_adopt_subset_state	2	production	production-dynamic	direct_param_set_adopt_subset_state	Direct single-use subset capsule adoption
 upgrade_graph_discover	1	production	production-dynamic	direct_upgrade_graph_discover	Direct iterative identity-deduplicated discovery of a ParamSet-family shell through ordinary and legally self-duplicating ALTREP carriers without entering the global environment boundary
+plain_binding_snapshot	2	production	production-dynamic	direct_plain_binding_snapshot	Direct non-forcing distinction between an ordinary realized frame binding and absent, inherited, active, or delayed bindings
+gateway_context_snapshot	2	production	production-dynamic	direct_gateway_context_snapshot	Direct allocation-safe authenticated current shell and defining-family enclosure/private/super/core context snapshot with a final generation scan
+param_set_class_kind	1	production	production-dynamic	direct_param_set_class_kind	Direct inert exact ordinary ParamSet-family R6 class classification without ALTREP observation or inheritance dispatch
+param_set_assert_values_exact	1	production	production-dynamic	direct_param_set_assert_values_exact	Direct inert exact logical scalar admission for legacy and current public assert_values policy without S3 or ALTREP observation
 test_checked_affixed_size	2	fixture	fixture-dynamic	direct_test_checked_affixed_size	Internal arithmetic-boundary fixture is called dynamically
 test_stateful_altrep	6	fixture	fixture-dynamic	direct_test_stateful_altrep,hazard_altrep_snapshot_reentry,hazard_callback_reentry_rooting	Internal ALTREP constructor drives direct and callback hazards
 test_stateful_altrep_rearm	2	fixture	fixture-dynamic	direct_test_stateful_altrep_rearm	Internal ALTREP rearm operation is called dynamically

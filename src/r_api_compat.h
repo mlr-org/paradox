@@ -45,6 +45,10 @@ attribute_hidden SEXP paradox_api_plain_binding_snapshot(
   SEXP environment,
   SEXP symbol
 );
+attribute_hidden int paradox_api_frame_has_binding(
+  SEXP environment,
+  SEXP symbol
+);
 
 /* Allocation-free second-scan spelling. Keeping it distinct documents the
  * simultaneous generation barrier even though both versioned implementations

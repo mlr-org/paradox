@@ -16,7 +16,12 @@ typedef struct {
 typedef struct {
   SEXP self;
   SEXP private_environment;
+  /* `core` is the operation-local semantic generation. During a read-only
+   * migration preflight it may be an offside authoritative SHADOW preview.
+   * `source_core` is the exact generation selected from the live private
+   * binding and is therefore the generation used by mutation receipts. */
   SEXP core;
+  SEXP source_core;
   SEXP state;
   paradox_core_kind_t kind;
   paradox_domain_params_t params;
@@ -48,9 +53,21 @@ typedef struct {
 } paradox_collection_graph_t;
 
 /* The caller owns one PROTECT_WITH_INDEX slot for `roots`. Every selected
- * capsule is retained there, so a callback that replaces a live SHADOW core
- * cannot change the snapshot used by the enclosing operation. */
+ * source capsule and every operation-local capsule preview is retained there,
+ * so a callback that replaces a live SHADOW core cannot change either the
+ * receipt or the semantic snapshot used by the enclosing operation. */
 attribute_hidden void paradox_collection_graph_build(
+  SEXP private_environment,
+  SEXP self,
+  paradox_collection_graph_t *graph,
+  SEXP *roots,
+  PROTECT_INDEX roots_index,
+  R_xlen_t *work_since_interrupt
+);
+
+/* Migration preflight uses the same complete graph admission while previewing
+ * stale SHADOW children offside instead of installing their refreshed cores. */
+attribute_hidden void paradox_collection_graph_build_readonly(
   SEXP private_environment,
   SEXP self,
   paradox_collection_graph_t *graph,
@@ -80,6 +97,14 @@ attribute_hidden SEXP paradox_collection_values_from_graph(
 attribute_hidden SEXP paradox_collection_dependencies_from_graph(
   const paradox_collection_graph_t *graph,
   R_xlen_t *work_since_interrupt
+);
+
+/* Construct the callback-detachment plan from the exact admitted graph.
+ * In particular, migration preflight can consume offside SHADOW previews
+ * without traversing live shells again or committing a nested refresh. */
+attribute_hidden SEXP paradox_param_set_collection_detach_plan_from_graph(
+  const paradox_collection_graph_t *graph,
+  SEXP requested
 );
 
 #endif

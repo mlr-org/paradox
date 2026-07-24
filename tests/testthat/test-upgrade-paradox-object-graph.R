@@ -65,6 +65,210 @@ test_that("pre-release Shadow gateways directly replay current capsules", {
   expect_identical(clone$origin, shadow$origin)
 })
 
+test_that("legacy gateways reject borrowed current enclosures inertly", {
+  current = ps(x = p_dbl())
+  current_context = paradox:::.paradox_gateway_current_context(current)
+  expect_identical(
+    names(current_context),
+    c(
+      "ok", "enclosure", "private", "super", "core", "class",
+      "assert_values"
+    )
+  )
+  expect_true(current_context$ok)
+  expect_identical(current_context$enclosure$self, current)
+  expect_identical(
+    current_context$private,
+    current$.__enclos_env__$private
+  )
+  expect_identical(current_context$core, current_context$private$.core)
+  expect_identical(current_context$class, class(current))
+  expect_identical(current_context$assert_values, TRUE)
+  expect_null(current_context$super)
+
+  borrowed = new.env(parent = emptyenv())
+  class(borrowed) = class(current)
+  borrowed$.__enclos_env__ = current$.__enclos_env__
+
+  mismatched = new.env(parent = emptyenv())
+  class(mismatched) = c("ParamSetCollection", "ParamSet", "R6")
+  mismatched_enclosure = new.env(parent = emptyenv())
+  mismatched_enclosure$self = mismatched
+  mismatched_enclosure$private = current$.__enclos_env__$private
+  mismatched$.__enclos_env__ = mismatched_enclosure
+
+  collection = ParamSetCollection$new(list(owner = current))
+  class(collection) = c(
+    "ParamSetShadow", "ParamSetCollection", "ParamSet", "R6"
+  )
+  shadow = ParamSetShadow$new(current, character())
+  class(shadow) = c(
+    "ParamSetCollection", "ParamSetShadow", "ParamSet", "R6"
+  )
+
+  expect_false(paradox:::.paradox_gateway_current_core(borrowed))
+  expect_false(paradox:::.paradox_gateway_current_core(mismatched))
+  expect_false(paradox:::.paradox_gateway_current_core(collection))
+  expect_false(paradox:::.paradox_gateway_current_core(shadow))
+
+  missing_r6 = ps(x = p_dbl())
+  class(missing_r6) = "ParamSet"
+  expect_false(paradox:::.paradox_gateway_current_core(missing_r6))
+
+  AdditiveBaseRoot = R6::R6Class("GatewayBaseRoot", inherit = ParamSet)
+  AdditiveBaseLeaf = R6::R6Class(
+    "GatewayBaseLeaf",
+    inherit = AdditiveBaseRoot
+  )
+  AdditiveCollectionRoot = R6::R6Class(
+    "GatewayCollectionRoot",
+    inherit = ParamSetCollection
+  )
+  AdditiveCollectionLeaf = R6::R6Class(
+    "GatewayCollectionLeaf",
+    inherit = AdditiveCollectionRoot
+  )
+  AdditiveShadowRoot = R6::R6Class(
+    "GatewayShadowRoot",
+    inherit = ParamSetShadow
+  )
+  AdditiveShadowLeaf = R6::R6Class(
+    "GatewayShadowLeaf",
+    inherit = AdditiveShadowRoot
+  )
+  additive_base = AdditiveBaseLeaf$new(list(x = p_dbl()))
+  additive_collection = AdditiveCollectionLeaf$new(
+    list(owner = ps(x = p_dbl()))
+  )
+  additive_shadow = AdditiveShadowLeaf$new(
+    ps(x = p_dbl()),
+    character()
+  )
+  expect_true(paradox:::.paradox_gateway_current_core(additive_base))
+  expect_true(paradox:::.paradox_gateway_current_core(additive_collection))
+  expect_true(paradox:::.paradox_gateway_current_core(additive_shadow))
+  expect_true(
+    paradox:::.paradox_gateway_current_context(
+      additive_collection,
+      1L
+    )$ok
+  )
+  expect_true(
+    paradox:::.paradox_gateway_current_context(additive_shadow, 1L)$ok
+  )
+  collection_flatten_gateway = get(
+    ".__ParamSetCollection__flatten",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  flattened = collection_flatten_gateway(
+    self = additive_collection,
+    private = stop("additive collection private promise was forced"),
+    super = stop("additive collection super promise was forced")
+  )
+  expect_s3_class(flattened, "ParamSet")
+  expect_identical(flattened$ids(), additive_collection$ids())
+
+  shadow_params_gateway = get(
+    ".__ParamSetShadow__params",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  expect_equal(
+    shadow_params_gateway(
+      self = additive_shadow,
+      private = stop("additive Shadow private promise was forced"),
+      super = stop("additive Shadow super promise was forced")
+    ),
+    additive_shadow$params
+  )
+
+  malformed_policy = ps(x = p_dbl())
+  malformed_policy$assert_values = NA
+  expect_false(paradox:::.paradox_gateway_current_core(malformed_policy))
+  expect_error(
+    upgrade_paradox_object_graph(malformed_policy),
+    "assert_values",
+    fixed = TRUE
+  )
+
+  noncanonical = ps(x = p_dbl())
+  noncanonical_private = noncanonical$.__enclos_env__$private
+  noncanonical_core = noncanonical_private$.core
+  attr(noncanonical_core, "forged") = TRUE
+  noncanonical_private$.core = noncanonical_core
+  expect_false(paradox:::.paradox_gateway_current_core(noncanonical))
+  expect_error(
+    upgrade_paradox_object_graph(noncanonical),
+    "noncanonical versioned core capsule",
+    fixed = TRUE
+  )
+
+  class_observations = new.env(parent = emptyenv())
+  class_observations$count = 0L
+  hostile_class = native_stateful_altrep(
+    c("ParamSet", "R6"),
+    c("ParamSet", "R6"),
+    callback = function() {
+      class_observations$count = class_observations$count + 1L
+    },
+    callback_after = c(0L, 0L)
+  )
+  hostile = ps(x = p_dbl())
+  attr(hostile, "class") = hostile_class
+  native_stateful_altrep_rearm(
+    attr(hostile, "class", exact = TRUE),
+    c(0L, 0L)
+  )
+  observations_before = class_observations$count
+  expect_false(paradox:::.paradox_gateway_current_core(hostile))
+  expect_identical(class_observations$count, observations_before)
+
+  delayed_forced = FALSE
+  delayed = new.env(parent = emptyenv())
+  class(delayed) = class(current)
+  delayed_enclosure = new.env(parent = emptyenv())
+  delayed_enclosure$self = delayed
+  delayedAssign(
+    "private",
+    {
+      delayed_forced = TRUE
+      current$.__enclos_env__$private
+    },
+    assign.env = delayed_enclosure
+  )
+  delayed$.__enclos_env__ = delayed_enclosure
+  expect_false(paradox:::.paradox_gateway_current_core(delayed))
+  expect_false(delayed_forced)
+
+  gateway = get(
+    ".__ParamSet__ids",
+    envir = asNamespace("paradox"),
+    inherits = FALSE
+  )
+  old = options(paradox.legacy_object_action = NULL)
+  on.exit(options(old), add = TRUE)
+  private_forced = FALSE
+  super_forced = FALSE
+  expect_error(
+    gateway(
+      self = borrowed,
+      private = {
+        private_forced = TRUE
+        stop("borrowed private promise was forced")
+      },
+      super = {
+        super_forced = TRUE
+        stop("borrowed super promise was forced")
+      }
+    ),
+    "upgrade_paradox_object_graph",
+    fixed = TRUE
+  )
+  expect_false(private_forced)
+  expect_false(super_forced)
+})
+
 test_that("the serialized ParamSet-family target ledger is complete", {
   namespace = asNamespace("paradox")
   ledgers = list(
@@ -192,6 +396,7 @@ test_that("native graph discovery is iterative, identity-aware, and inert", {
     ordinary_dots,
     closure_parent,
     attributed,
+    current,
     protected
   )
   expect_true(same_environment_set(discovery$objects, expected))
@@ -245,13 +450,66 @@ test_that("graph discovery balances a self-duplicating ALTREP root", {
   expect_identical(discovery$paths, "x[[1]]")
 })
 
-test_that("current ParamSet payloads expose nested legacy candidates only", {
+test_that("current ParamSet payloads expose current and nested candidates", {
   nested = graph_candidate("opaque-current-value")
   current = ps(payload = p_uty())
   current$values = list(payload = nested)
   discovery = discover_upgrade_candidates(current)
-  expect_identical(discovery$objects, list(nested))
-  expect_true(grepl("\\.protected", discovery$paths[[1L]]))
+  expect_true(same_environment_set(discovery$objects, list(current, nested)))
+  nested_position = which(vapply(
+    discovery$objects,
+    identical,
+    logical(1L),
+    y = nested
+  ))
+  expect_length(nested_position, 1L)
+  expect_true(grepl("\\.protected", discovery$paths[[nested_position]]))
+})
+
+test_that("current graph preflight does not refresh stale Shadows", {
+  origin = ps(hidden = p_int(), visible = p_dbl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  private = mlr3misc::get_private(shadow)
+  origin$values = list(hidden = 1L, visible = 0.5)
+  before = serialize(private$.core, NULL)
+
+  expect_identical(upgrade_paradox_object_graph(shadow), shadow)
+  expect_identical(serialize(private$.core, NULL), before)
+
+  corrupt = ps(x = p_dbl())
+  paradox:::param_set_core_replace(
+    mlr3misc::get_private(corrupt),
+    values = list(unknown = 1)
+  )
+  expect_error(
+    upgrade_paradox_object_graph(list(shadow = shadow, corrupt = corrupt)),
+    "corrupt current state capsule"
+  )
+  expect_identical(serialize(private$.core, NULL), before)
+
+  nested_origin = ps(x = p_dbl())
+  nested = ParamSetShadow$new(nested_origin, character())
+  collection = ParamSetCollection$new(list(nested = nested))
+  outer = ParamSetShadow$new(collection, character())
+  nested_origin$values = list(x = 0.25)
+  nested_private = mlr3misc::get_private(nested)
+  outer_private = mlr3misc::get_private(outer)
+  nested_before = serialize(nested_private$.core, NULL)
+  outer_before = serialize(outer_private$.core, NULL)
+  expect_identical(upgrade_paradox_object_graph(outer), outer)
+  expect_identical(serialize(nested_private$.core, NULL), nested_before)
+  expect_identical(serialize(outer_private$.core, NULL), outer_before)
+
+  malformed_child = ps(x = p_dbl())
+  malformed_collection = ParamSetCollection$new(
+    list(child = malformed_child)
+  )
+  class(malformed_child) = "ParamSet"
+  expect_error(
+    upgrade_paradox_object_graph(malformed_collection),
+    "invalid ParamSet-family R6 class",
+    fixed = TRUE
+  )
 })
 
 test_that("recursive graph upgrade is an identity-preserving no-op for current graphs", {

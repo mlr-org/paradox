@@ -518,8 +518,14 @@ R >= 4.6 uses only the documented experimental binding classifier and delayed/
 forced-binding/dots accessors. Strict headers hide all three detached-promise
 accessors, so none is locally declared or present in the current DSO and a
 `PROMSXP` reached outside one of those public binding boundaries is opaque. An
-R-level `substitute()` workaround would force or make
-receipt scans and recursive graph discovery unsound.
+R-level `substitute()` is non-forcing but returns a promise expression rather
+than a binding-kind/generation receipt; it cannot distinguish that expression
+from a realized language/symbol value and therefore makes receipt scans and
+recursive graph discovery unsound.
+The registered direct-binding projection preserves the API classification:
+realized language objects and symbols are returned as values, while delayed
+promises carrying language/symbol expressions remain promises and are never
+evaluated. Expression or R storage type is not a substitute for binding kind.
 
 Every exceptional symbol, version range, source occurrence, and rationale is
 listed exactly in `environment/r-api-exceptions.tsv` and must pass raw-token,
@@ -910,6 +916,11 @@ migration boundary for a containing object:
   value and expression; an unforced one contributes its expression and
   evaluation environment. R 4.3--4.5 additionally inspect a detached
   `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as opaque.
+  Direct bindings are classified by the native binding API, never by evaluating
+  or inspecting a substituted R expression. A realized `LANGSXP` or `SYMSXP`
+  is therefore a value, while a delayed promise whose expression is a language
+  object or symbol remains a promise; both are traversed according to their
+  actual binding kind without forcing.
 - `.GlobalEnv`, every attached search-path environment (including Autoloads),
   package and namespace environments, imports environments, base, and the empty
   environment are traversal boundaries. Thus a closure made by `crate()` or a
@@ -922,16 +933,51 @@ migration boundary for a containing object:
   closure is not missed.
 - Discovery is followed by complete legacy/current authentication, owner-hook
   inspection, semantic preparation, offside construction, dependency-plan
-  validation, and shell-shape auditing before the first transplant. No
+  validation, and shell-shape auditing. Current ParamSet-family authentication
+  has one native inert owner: its class is an ordinary, attribute-free,
+  non-ALTREP vector of unique nonempty labels ending in
+  `c("ParamSet", "R6")`; an immediately preceding
+  `"ParamSetCollection"` or `"ParamSetShadow"` selects that family, and
+  earlier nonreserved labels are additive R6 subclass layers. With no family
+  marker the shell is BASE. The family must agree with a canonical package core
+  (including exact Shadow metadata), and the shell's `assert_values` binding
+  must be an exact attribute-free, non-missing `logical(1)`.
+  No
   serialized method, active binding, or user callback is executed to inspect
-  legacy state.
-- Commit is post-order and monotonic. Each completed shell has current
+  legacy state. Current ParamSet-family shells are discovery candidates too:
+  their complete capsule graphs and capsule-kind/class agreement are validated
+  in preflight, although they are omitted from the commit order. Thus corrupt
+  current state anywhere in the selected graph cannot be hidden behind a
+  shallow external-pointer/carrier check or allow a valid legacy sibling to
+  mutate first.
+- A current Shadow is validated against its authoritative live origin without
+  mutating the selected shell: native code retains the selected private
+  `.core` as the source-generation receipt, separately builds the semantic
+  preview core, and derives collection callback detachment from the already
+  admitted graph rather than rereading child shells. After offside preparation
+  and transplant planning, every prepared/current root is admitted by one
+  native all-roots operation and all selected generations pass one
+  allocation-free receipt scan before the first transplant.
+- Commit is post-order and monotonic. A child is transplanted first; only then
+  is its prepared parent's child/origin edge rebased to the identity-preserved
+  original shell. A rebase may allocate or invoke a registered replacement
+  factory, so all already-current identity roots plus that newly rebased
+  prepared root are jointly validated immediately before the parent is
+  transplanted. An unrebased parent remains an offside template until its own
+  turn. The transplanted original then joins the current identity-root set,
+  which is jointly validated again. Each completed shell has current
   enclosures, `self`/`private`/`super` links, methods/active bindings, capsule,
   class, and `assert_values` state and is independently valid. An ordinary
   semantic, bridge, or shape failure is preflight-only and leaves the graph
   untouched. A catastrophic allocation failure or interrupt during commit may
   leave a prefix of valid current nodes; retrying the idempotent operation
-  recognizes those nodes and completes the remainder.
+  recognizes those nodes and completes the remainder. This does not promise
+  rollback across a pending finalizer from an unrelated user object:
+  `suspendInterrupts()` does not suppress finalizer execution at R evaluator
+  safe points. If such a finalizer deliberately mutates a selected root inside
+  the R-level binding wave, the post-transplant joint scan detects and errors,
+  but a completed transplant stays completed and the externally corrupted
+  graph is not promised to be retryable.
 
 Current R6 methods never pay a migration dispatch. Paradox's package-local
 leanifier stores their bodies under versioned `.__paradox2_*` namespace names,
@@ -940,7 +986,14 @@ and newly constructed shells call those names directly. Historical
 `.__ParamSetShadow*` targets emitted by pre-release Paradox 2, are cold
 gateways. An authenticated capsule-backed shell, including the actual
 pre-release Shadow payload, forwards directly without consulting the legacy
-option or requiring an owner registry. Otherwise the default
+option or requiring an owner registry. The native gateway applies the same
+ordinary additive family-suffix classifier, requires the exact `assert_values`
+binding and canonical matching core, follows the authenticated superclass chain
+to the enclosure that defines the requested historical family target, and
+returns one rooted context receipt. It never evaluates the serialized stub's
+still-lazy `private` or `super` arguments, forwards a guessed top enclosure
+slice, or rereads the shell in R after authentication. A shell cannot borrow
+another current object's enclosure. Otherwise the default
 `getOption("paradox.legacy_object_action", "error")` produces a precise error
 that names `upgrade_paradox_object_graph()`. With
 `options(paradox.legacy_object_action = "upgrade")`, the gateway silently
@@ -975,6 +1028,13 @@ Legacy third-party ParamSet subclasses are admitted only through
 - undeclared owner fields, an unknown exact class, altered owner methods, a
   stale/unloaded registering namespace, malformed hook results, and conflicts
   fail closed during preflight.
+
+Package provenance is identity-based, not label-based. A built-in legacy
+method enclosure must be parented by the exact current Paradox namespace. An
+owner bridge must be parented first by the exact namespace incarnation retained
+in its registry entry and then by that same exact Paradox namespace.
+`isNamespace()` and `environmentName()` alone are insufficient because an
+ordinary environment can reproduce their descriptive metadata.
 
 bbotk's legacy `Codomain` is the maintained additive registry case.
 miesmuschel registers its exact legacy Shadow as a replacement by Paradox's

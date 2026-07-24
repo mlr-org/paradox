@@ -22,6 +22,13 @@ attribute_hidden SEXP paradox_shadow_refresh_authoritative(
   SEXP private_environment
 );
 
+/* Build and validate the generation an ordinary refresh would select, but do
+ * not install it. Used by all-roots-before-commit migration preflight. */
+attribute_hidden SEXP paradox_shadow_preview_authoritative(
+  SEXP self,
+  SEXP private_environment
+);
+
 /* Resolve the one capsule-owned edge without consulting a parallel private
  * field.  Returns R_UnboundValue for malformed or non-SHADOW cores. */
 attribute_hidden SEXP paradox_shadow_origin_from_core(SEXP core);

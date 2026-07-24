@@ -1,10 +1,12 @@
 #include <limits.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 
 #include "paradox.h"
 
 #include "core_state.h"
+#include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
@@ -199,6 +201,77 @@ static R_xlen_t find_node(const detach_graph_t *graph, SEXP self) {
     }
   }
   return R_XLEN_T_MAX;
+}
+
+static void import_admitted_graph(detach_graph_t *graph,
+    const paradox_collection_graph_t *source, SEXP *roots,
+    PROTECT_INDEX roots_index) {
+  if (source == NULL || source->count == 0 ||
+      (size_t) source->count > SIZE_MAX / sizeof(*graph->nodes)) {
+    Rf_error("Corrupt admitted ParamSetCollection graph");
+  }
+  graph->capacity = source->count;
+  graph->nodes = paradox_temporary_alloc(
+    graph->capacity,
+    sizeof(*graph->nodes)
+  );
+  graph->count = 0;
+
+  for (R_xlen_t index = 0; index < source->count; ++index) {
+    const paradox_collection_graph_node_t *selected =
+      &source->nodes[index];
+    const R_xlen_t existing = find_node(graph, selected->self);
+    if (existing != R_XLEN_T_MAX) {
+      const detach_node_t *retained = &graph->nodes[existing];
+      if (retained->private_environment != selected->private_environment ||
+          retained->core != selected->core ||
+          retained->payload != selected->state ||
+          retained->kind != selected->kind) {
+        Rf_error("Corrupt shared ParamSetCollection graph snapshot");
+      }
+      continue;
+    }
+
+    SEXP constraint = VECTOR_ELT(
+      selected->state,
+      PARADOX_CORE_CONSTRAINT
+    );
+    SEXP trafo = VECTOR_ELT(
+      selected->state,
+      PARADOX_CORE_EXTRA_TRAFO
+    );
+    if ((constraint != R_NilValue && !Rf_isFunction(constraint)) ||
+        (trafo != R_NilValue && !Rf_isFunction(trafo)) ||
+        (selected->kind == PARADOX_CORE_COLLECTION &&
+         (constraint != R_NilValue || trafo != R_NilValue))) {
+      Rf_error("Corrupt ParamSet callback capsule");
+    }
+
+    append_root(roots, roots_index, selected->self);
+    append_root(roots, roots_index, selected->private_environment);
+    append_root(roots, roots_index, selected->core);
+    if (selected->source_core != selected->core) {
+      append_root(roots, roots_index, selected->source_core);
+    }
+    detach_node_t *node = &graph->nodes[graph->count++];
+    *node = (detach_node_t) {
+      .self = selected->self,
+      .private_environment = selected->private_environment,
+      .core = selected->core,
+      .payload = selected->state,
+      .kind = selected->kind,
+      .params = selected->params,
+      .sets = selected->sets,
+      .set_names = selected->set_names,
+      .translation = selected->translation.table,
+      .translation_ids = selected->translation.ids,
+      .translation_original_ids = selected->translation.original_ids,
+      .translation_owners = selected->translation.owner_indices,
+      .translation_owner_names = selected->translation.owner_names,
+      .translation_rows = selected->translation.row_count,
+      .postfix = selected->postfix
+    };
+  }
 }
 
 static R_xlen_t add_node(detach_graph_t *graph, SEXP self,
@@ -690,8 +763,9 @@ static SEXP allocate_carriers(R_xlen_t size, const char *field,
   return result;
 }
 
-SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
-    SEXP self, SEXP requested) {
+static SEXP collection_detach_plan(SEXP private_environment,
+    SEXP self, SEXP requested,
+    const paradox_collection_graph_t *admitted_graph) {
   R_xlen_t work = 0;
   PROTECT_INDEX roots_index;
   SEXP roots;
@@ -699,14 +773,23 @@ SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
   SEXP requested_snapshot = PROTECT(materialize_requested(requested));
 
   detach_graph_t graph;
-  build_graph(
-    &graph,
-    self,
-    private_environment,
-    &roots,
-    roots_index,
-    &work
-  );
+  if (admitted_graph == NULL) {
+    build_graph(
+      &graph,
+      self,
+      private_environment,
+      &roots,
+      roots_index,
+      &work
+    );
+  } else {
+    import_admitted_graph(
+      &graph,
+      admitted_graph,
+      &roots,
+      roots_index
+    );
+  }
   if (graph.nodes[0].kind != PARADOX_CORE_COLLECTION) {
     UNPROTECT(2);
     Rf_error("Detachment requires a ParamSetCollection capsule");
@@ -975,4 +1058,24 @@ SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
 
   UNPROTECT(10);
   return plan;
+}
+
+SEXP paradox_param_set_collection_detach_plan(SEXP private_environment,
+    SEXP self, SEXP requested) {
+  return collection_detach_plan(
+    private_environment,
+    self,
+    requested,
+    NULL
+  );
+}
+
+SEXP paradox_param_set_collection_detach_plan_from_graph(
+    const paradox_collection_graph_t *graph, SEXP requested) {
+  return collection_detach_plan(
+    R_NilValue,
+    R_NilValue,
+    requested,
+    graph
+  );
 }

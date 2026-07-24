@@ -73,6 +73,17 @@ as_legacy_table = function(x) {
   data.table::as.data.table(lapply(x, identity))
 }
 
+make_delayed_literal_binding = function(owner, name, value) {
+  call = as.call(list(
+    as.name("delayedAssign"),
+    name,
+    value,
+    baseenv(),
+    owner
+  ))
+  eval(call, envir = baseenv())
+}
+
 legacy_base_from_current = function(current) {
   state = paradox:::param_set_core_state(mlr3misc::get_private(current))
   result = legacy_upgrader_generator("base")$new()
@@ -289,6 +300,32 @@ test_that("replacement owners preserve assert_values in pure and graph migration
     expect_identical(host$alias, graph_legacy)
     expect_false(graph_legacy$assert_values)
     expect_identical(graph_legacy$origin, graph_origin)
+  })
+})
+
+test_that("legacy package provenance requires exact namespace identity", {
+  namespace_spec = new.env(parent = emptyenv())
+  namespace_spec$spec = "paradox"
+  fake_namespace = new.env(parent = emptyenv())
+  fake_namespace$.__NAMESPACE__. = namespace_spec
+  expect_true(isNamespace(fake_namespace))
+  expect_identical(environmentName(fake_namespace), "paradox")
+  expect_false(identical(fake_namespace, asNamespace("paradox")))
+
+  legacy = legacy_base_from_current(ps(x = p_dbl()))
+  parent.env(legacy$.__enclos_env__) = fake_namespace
+  expect_error(
+    upgrade_paradox_object(legacy),
+    "legacy methods do not originate in paradox"
+  )
+
+  with_replacement_owner_upgrader({
+    owner = replacement_owner_legacy()
+    parent.env(owner$.__enclos_env__) = fake_namespace
+    expect_error(
+      upgrade_paradox_object(owner),
+      "legacy owner methods do not have authenticated package provenance"
+    )
   })
 })
 
@@ -519,6 +556,27 @@ test_that("a partially refreshed shell remains discoverable and retryable", {
 })
 
 test_that("legacy extensions, replacements, and malformed state fail closed", {
+  hostile_flag_dispatches = 0L
+  length.paradox_hostile_flag = function(x) {
+    hostile_flag_dispatches <<- hostile_flag_dispatches + 1L
+    1L
+  }
+  is.na.paradox_hostile_flag = function(x) {
+    hostile_flag_dispatches <<- hostile_flag_dispatches + 1L
+    FALSE
+  }
+  hostile_flag = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  hostile_flag$assert_values = structure(
+    TRUE,
+    class = "paradox_hostile_flag"
+  )
+  expect_error(
+    upgrade_paradox_object(hostile_flag),
+    "`assert_values` is malformed",
+    fixed = TRUE
+  )
+  expect_identical(hostile_flag_dispatches, 0L)
+
   legacy = legacy_base_from_current(ps(x = p_dbl()))
   unlockBinding("ids", legacy)
   legacy$ids = function(...) "replacement"
@@ -585,6 +643,29 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
   )
   expect_identical(observed, 0L)
 
+  literal_values = list(
+    logical = TRUE,
+    null = NULL,
+    environment = new.env(parent = emptyenv()),
+    closure = function() NULL,
+    externalptr = new("externalptr")
+  )
+  for (index in seq_along(literal_values)) {
+    literal_state = legacy_base_from_current(ps(x = p_dbl()))
+    literal_private = copy_legacy_private_environment(literal_state)
+    rm(".values", envir = literal_private)
+    make_delayed_literal_binding(
+      literal_private,
+      ".values",
+      literal_values[[index]]
+    )
+    expect_error(
+      upgrade_paradox_object(literal_state),
+      "binding `\\.values` is delayed or malformed",
+      info = names(literal_values)[[index]]
+    )
+  }
+
   corrupt = ps(x = p_dbl())
   corrupt_private = mlr3misc::get_private(corrupt)
   corrupt_private$.core = list(forged = TRUE)
@@ -602,6 +683,181 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
     upgrade_paradox_object(forged),
     "corrupt current state capsule"
   )
+
+  expect_error(
+    upgrade_paradox_object_graph(forged),
+    "corrupt current state capsule"
+  )
+
+  wrong_kind = ps(x = p_dbl())
+  class(wrong_kind) = c("ParamSetCollection", "ParamSet", "R6")
+  expect_error(
+    upgrade_paradox_object_graph(wrong_kind),
+    "state capsule kind disagrees with shell class"
+  )
+
+  hybrid_collection = ParamSetCollection$new(list(ps(x = p_dbl())))
+  class(hybrid_collection) = c(
+    "ParamSetShadow", "ParamSetCollection", "ParamSet", "R6"
+  )
+  expect_error(
+    upgrade_paradox_object_graph(hybrid_collection),
+    "expected a well-formed ordinary ParamSet-family R6 class suffix"
+  )
+
+  hybrid_shadow = ParamSetShadow$new(ps(x = p_dbl()), character())
+  class(hybrid_shadow) = c(
+    "ParamSetCollection", "ParamSetShadow", "ParamSet", "R6"
+  )
+  expect_error(
+    upgrade_paradox_object_graph(hybrid_shadow),
+    "expected a well-formed ordinary ParamSet-family R6 class suffix"
+  )
+})
+
+test_that("joint commit validation protects earlier preflighted roots", {
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  old_enclosure = legacy$.__enclos_env__
+  before = serialize(legacy, NULL)
+  current = ps(x = p_dbl())
+  session = paradox:::.upgrade_paradox_prepare_session(
+    list(legacy, current),
+    c("legacy", "current")
+  )
+
+  paradox:::param_set_core_replace(
+    mlr3misc::get_private(current),
+    values = list(unknown = 1)
+  )
+  expect_error(
+    paradox:::.upgrade_paradox_commit_session(session),
+    "joint validation",
+    fixed = TRUE
+  )
+  expect_identical(serialize(legacy, NULL), before)
+  expect_identical(legacy$.__enclos_env__, old_enclosure)
+})
+
+test_that("per-rebase joint validation protects unrelated live roots", {
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  old_enclosure = legacy$.__enclos_env__
+  before = serialize(legacy, NULL)
+  current = ps(x = p_dbl())
+  session = paradox:::.upgrade_paradox_prepare_session(
+    list(legacy, current),
+    c("legacy", "current")
+  )
+
+  namespace = asNamespace("paradox")
+  binding = ".upgrade_paradox_rebase_prepared"
+  original = get(binding, envir = namespace, inherits = FALSE)
+  was_locked = bindingIsLocked(binding, namespace)
+  if (was_locked) unlockBinding(binding, namespace)
+  on.exit({
+    if (bindingIsLocked(binding, namespace)) {
+      unlockBinding(binding, namespace)
+    }
+    assign(binding, original, envir = namespace)
+    if (was_locked) lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(
+    binding,
+    function(...) {
+      paradox:::param_set_core_replace(
+        mlr3misc::get_private(current),
+        values = list(unknown = 1)
+      )
+      original(...)
+    },
+    envir = namespace
+  )
+  if (was_locked) lockBinding(binding, namespace)
+
+  expect_error(
+    paradox:::.upgrade_paradox_commit_session(session),
+    "joint validation",
+    fixed = TRUE
+  )
+  expect_identical(serialize(legacy, NULL), before)
+  expect_identical(legacy$.__enclos_env__, old_enclosure)
+})
+
+test_that("post-transplant validation detects external mutation without rollback", {
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  old_enclosure = legacy$.__enclos_env__
+  current = ps(x = p_dbl())
+  session = paradox:::.upgrade_paradox_prepare_session(
+    list(legacy, current),
+    c("legacy", "current")
+  )
+
+  namespace = asNamespace("paradox")
+  binding = ".upgrade_paradox_transplant"
+  original = get(binding, envir = namespace, inherits = FALSE)
+  was_locked = bindingIsLocked(binding, namespace)
+  if (was_locked) unlockBinding(binding, namespace)
+  on.exit({
+    if (bindingIsLocked(binding, namespace)) {
+      unlockBinding(binding, namespace)
+    }
+    assign(binding, original, envir = namespace)
+    if (was_locked) lockBinding(binding, namespace)
+  }, add = TRUE)
+  assign(
+    binding,
+    function(plan) {
+      result = original(plan)
+      paradox:::param_set_core_replace(
+        mlr3misc::get_private(current),
+        values = list(unknown = 1)
+      )
+      result
+    },
+    envir = namespace
+  )
+  if (was_locked) lockBinding(binding, namespace)
+
+  expect_error(
+    paradox:::.upgrade_paradox_commit_session(session),
+    "joint validation",
+    fixed = TRUE
+  )
+  expect_false(identical(legacy$.__enclos_env__, old_enclosure))
+  expect_identical(
+    .Call(
+      paradox:::C_param_set_core_kind,
+      mlr3misc::get_private(legacy)
+    ),
+    1L
+  )
+})
+
+test_that("corrupt current roots abort graph preflight before legacy mutation", {
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
+  old_enclosure = legacy$.__enclos_env__
+  before = serialize(legacy, NULL)
+
+  origin = ps(hidden = p_lgl(), visible = p_int(), flag = p_lgl())
+  shadow = ParamSetShadow$new(origin, "hidden")
+  origin$add_dep("hidden", "flag", CondEqual(TRUE))
+  expect_error(
+    upgrade_paradox_object_graph(list(legacy = legacy, shadow = shadow)),
+    "reach across shadow bounds"
+  )
+  expect_identical(serialize(legacy, NULL), before)
+  expect_identical(legacy$.__enclos_env__, old_enclosure)
+
+  corrupt = ps(x = p_dbl())
+  paradox:::param_set_core_replace(
+    mlr3misc::get_private(corrupt),
+    values = list(unknown = 1)
+  )
+  expect_error(
+    upgrade_paradox_object_graph(list(legacy = legacy, corrupt = corrupt)),
+    "corrupt current state capsule"
+  )
+  expect_identical(serialize(legacy, NULL), before)
+  expect_identical(legacy$.__enclos_env__, old_enclosure)
 })
 
 test_that("pinned mbo_config search spaces are explicit upgrade fixtures", {

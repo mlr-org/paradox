@@ -401,31 +401,6 @@ static int candidate_kind(
   return has_param_set && has_r6 && count != 0;
 }
 
-static int current_param_set_shell(SEXP shell) {
-  SEXP enclosure = PROTECT(paradox_api_plain_binding_snapshot(
-    shell,
-    Rf_install(".__enclos_env__")
-  ));
-  if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure)) {
-    UNPROTECT(1);
-    return FALSE;
-  }
-  SEXP self = PROTECT(paradox_api_plain_binding_snapshot(
-    enclosure,
-    Rf_install("self")
-  ));
-  SEXP private_environment = PROTECT(paradox_api_plain_binding_snapshot(
-    enclosure,
-    Rf_install("private")
-  ));
-  const int current = self == shell &&
-    TYPEOF(private_environment) == ENVSXP &&
-    !Rf_isS4(private_environment) &&
-    paradox_core_from_private(private_environment) != R_UnboundValue;
-  UNPROTECT(3);
-  return current;
-}
-
 static void grow_boundaries(paradox_upgrade_boundaries_t *boundaries) {
   const size_t capacity = checked_double_capacity(boundaries->capacity);
   SEXP *items = temporary_size_alloc(capacity, sizeof(*items));
@@ -719,7 +694,14 @@ static void schedule_environment(
     const paradox_upgrade_path_t *path) {
   if (environment_boundary(walker, environment)) return;
 
-  if (candidate_kind(environment) && !current_param_set_shell(environment)) {
+  /*
+   * Current shells are candidates as well as legacy shells.  R preflight
+   * distinguishes them and performs the complete callback-free capsule graph
+   * validation before any legacy shell is changed.  A shallow carrier/schema
+   * check here would otherwise let a semantically corrupt current capsule hide
+   * inside a mixed graph and violate the all-roots-before-commit guarantee.
+   */
+  if (candidate_kind(environment)) {
     append_candidate(
       &walker->candidates,
       environment,
@@ -755,6 +737,7 @@ static void schedule_environment(
 
 typedef struct {
   paradox_upgrade_attribute_t *items;
+  SEXP roots;
   R_xlen_t count;
   R_xlen_t capacity;
 } paradox_upgrade_attribute_map_t;
@@ -764,8 +747,10 @@ static void record_attribute(SEXP tag, SEXP value, void *data) {
   if (map->count >= map->capacity) {
     Rf_error("Internal error: attribute count changed during inspection");
   }
-  map->items[map->count++] =
+  map->items[map->count] =
     (paradox_upgrade_attribute_t) {tag, value};
+  SET_VECTOR_ELT(map->roots, map->count, value);
+  ++map->count;
 }
 
 static void schedule_attributes(
@@ -778,9 +763,11 @@ static void schedule_attributes(
     count,
     sizeof(*attributes)
   );
-  paradox_upgrade_attribute_map_t map = {attributes, 0, count};
+  SEXP roots = PROTECT(Rf_allocVector(VECSXP, count));
+  paradox_upgrade_attribute_map_t map = {attributes, roots, 0, count};
   paradox_api_map_stored_attributes(node, record_attribute, &map);
   if (map.count != count) {
+    UNPROTECT(1);
     Rf_error("Internal error: attribute count changed during inspection");
   }
 
@@ -797,6 +784,7 @@ static void schedule_attributes(
         : indexed_path(path, "@attributes[[", index - 1, "]]");
     schedule_node(walker, attribute.value, attribute_path);
   }
+  UNPROTECT(1);
 }
 
 static void schedule_vector(
@@ -811,11 +799,19 @@ static void schedule_vector(
   }
   const R_xlen_t count = XLENGTH(source);
   for (R_xlen_t index = count; index > 0; --index) {
+    SEXP child = PROTECT(VECTOR_ELT(source, index - 1));
+    const paradox_upgrade_path_t *child_path = indexed_path(
+      path,
+      "[[",
+      index - 1,
+      "]]"
+    );
     schedule_node(
       walker,
-      VECTOR_ELT(source, index - 1),
-      indexed_path(path, "[[", index - 1, "]]")
+      child,
+      child_path
     );
+    UNPROTECT(1);
   }
   UNPROTECT(1);
 }
@@ -857,9 +853,16 @@ static void schedule_pairlist(
     paradox_upgrade_walker_t *walker,
     SEXP cell,
     const paradox_upgrade_path_t *path) {
-  schedule_node(walker, CDR(cell), literal_path(path, ".cdr"));
-  schedule_node(walker, TAG(cell), literal_path(path, ".tag"));
-  schedule_node(walker, CAR(cell), literal_path(path, ".car"));
+  SEXP cdr = PROTECT(CDR(cell));
+  SEXP tag = PROTECT(TAG(cell));
+  SEXP car = PROTECT(CAR(cell));
+  const paradox_upgrade_path_t *cdr_path = literal_path(path, ".cdr");
+  schedule_node(walker, cdr, cdr_path);
+  const paradox_upgrade_path_t *tag_path = literal_path(path, ".tag");
+  schedule_node(walker, tag, tag_path);
+  const paradox_upgrade_path_t *car_path = literal_path(path, ".car");
+  schedule_node(walker, car, car_path);
+  UNPROTECT(3);
 }
 
 static void inspect_node(

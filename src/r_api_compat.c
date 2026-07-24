@@ -197,10 +197,14 @@ void paradox_api_map_stored_attributes(
 #endif
 }
 
-static int plain_binding_boundary(SEXP environment, SEXP symbol) {
+int paradox_api_frame_has_binding(SEXP environment, SEXP symbol) {
   return TYPEOF(environment) == ENVSXP && !Rf_isS4(environment) &&
     TYPEOF(symbol) == SYMSXP &&
-    R_existsVarInFrame(environment, symbol) &&
+    R_existsVarInFrame(environment, symbol);
+}
+
+static int plain_binding_boundary(SEXP environment, SEXP symbol) {
+  return paradox_api_frame_has_binding(environment, symbol) &&
     !R_BindingIsActive(symbol, environment);
 }
 
@@ -218,17 +222,25 @@ SEXP paradox_api_plain_binding_snapshot(SEXP environment, SEXP symbol) {
   if (!plain_binding_boundary(environment, symbol)) {
     return R_UnboundValue;
   }
+  SEXP result;
 #if R_VERSION >= R_Version(4, 6, 0)
   if (R_GetBindingType(symbol, environment) != R_BindingTypeValue) {
     return R_UnboundValue;
   }
-  return Rf_eval(symbol, environment);
+  /*
+   * Binding kind is already known to be a direct value. R_getVar() retrieves
+   * it without entering the evaluator (and therefore without evaluator
+   * interrupt/finalizer checkpoints during a supposedly allocation-free
+   * generation scan).
+   */
+  result = R_getVar(symbol, environment, FALSE);
 #else
-  SEXP result = paradox_api_stored_binding_snapshot(environment, symbol);
-  return result == R_UnboundValue || TYPEOF(result) == PROMSXP
+  result = paradox_api_stored_binding_snapshot(environment, symbol);
+#endif
+  return result == R_UnboundValue || result == R_MissingArg ||
+      TYPEOF(result) == PROMSXP
     ? R_UnboundValue
     : result;
-#endif
 }
 
 SEXP paradox_api_plain_binding_scan(SEXP environment, SEXP symbol) {

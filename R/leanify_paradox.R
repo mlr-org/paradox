@@ -113,31 +113,16 @@
   "subspaces", "tags"
 )
 
-.paradox_gateway_current_core = function(self) {
-  inert_binding = function(owner, name) {
-    if (!is.environment(owner) ||
-        !exists(name, envir = owner, inherits = FALSE) ||
-        bindingIsActive(name, owner)) {
-      return(NULL)
-    }
-    value = eval(call("substitute", as.name(name), owner), envir = baseenv())
-    if (is.language(value) || is.symbol(value)) NULL else value
-  }
+.paradox_plain_binding_snapshot = function(owner, name) {
+  .Call(C_plain_binding_snapshot, owner, name)
+}
 
-  if (!is.environment(self) ||
-      !exists(".__enclos_env__", envir = self, inherits = FALSE) ||
-      bindingIsActive(".__enclos_env__", self)) {
-    return(FALSE)
-  }
-  enclosure = inert_binding(self, ".__enclos_env__")
-  private = inert_binding(enclosure, "private")
-  core = inert_binding(private, ".core")
-  if (!is.environment(enclosure) || !is.environment(private) ||
-      is.null(core)) return(FALSE)
-  isTRUE(tryCatch({
-    kind = .Call(C_param_set_core_kind, core)
-    kind %in% 1:3
-  }, error = function(...) FALSE))
+.paradox_gateway_current_context = function(self, expected_kind = 0L) {
+  .Call(C_gateway_context_snapshot, self, expected_kind)
+}
+
+.paradox_gateway_current_core = function(self) {
+  isTRUE(.paradox_gateway_current_context(self)$ok)
 }
 
 .paradox_legacy_action = function() {
@@ -182,38 +167,35 @@
   )
 }
 
-.paradox_make_legacy_gateway = function(old_name, current_name, namespace) {
+.paradox_make_legacy_gateway = function(
+    old_name,
+    current_name,
+    namespace,
+    gateway_kind) {
   force(old_name)
   force(current_name)
   force(namespace)
+  force(gateway_kind)
   function(self, private, super, ...) {
-    current_core = .paradox_gateway_current_core(self)
-    if (!current_core) {
+    context = .paradox_gateway_current_context(self, gateway_kind)
+    if (!isTRUE(context$ok)) {
       if (!identical(.paradox_legacy_action(), "upgrade")) {
         .paradox_legacy_use_error(old_name)
       }
       # This hook performs an identity-preserving graph migration and rewires
-      # every R6 enclosure slice.  In particular, the still-lazy `private` and
-      # `super` promises below resolve against the refreshed enclosure.
-      .paradox_upgrade_legacy_first_use(self)
+      # every R6 enclosure slice, then returns one authenticated current
+      # context snapshot. The still-lazy legacy `private` and `super` promises
+      # are never evaluated.
+      context = .paradox_upgrade_legacy_first_use(self, gateway_kind)
     }
 
     # Never forward the `private` and `super` promises supplied by the old
     # currently executing stub.  An identity-preserving migration replaces the
     # shell's enclosure slices; the detached old slice is intentionally left
-    # inert.  Resolve the current context from the canonical shell instead.
-    current_enclosure = get(
-      ".__enclos_env__",
-      envir = self,
-      inherits = FALSE
-    )
-    private = get("private", envir = current_enclosure, inherits = FALSE)
-    super = get0(
-      "super",
-      envir = current_enclosure,
-      inherits = FALSE,
-      ifnotfound = NULL
-    )
+    # inert. Replay the values rooted by the allocation-safe native context
+    # snapshot instead of rereading the shell after authentication.
+    private = context$private
+    super = context$super
 
     if (is.null(current_name)) {
       .paradox_retired_target_error(old_name)
@@ -227,14 +209,20 @@
     classname,
     members,
     targets,
-    namespace) {
+    namespace,
+    gateway_kind) {
   for (member in members) {
     old_name = .paradox_old_target_name(classname, member)
     current_name = unname(targets[old_name])
     if (!length(current_name) || is.na(current_name)) current_name = NULL
     assign(
       old_name,
-      .paradox_make_legacy_gateway(old_name, current_name, namespace),
+      .paradox_make_legacy_gateway(
+        old_name,
+        current_name,
+        namespace,
+        gateway_kind
+      ),
       envir = namespace
     )
   }
@@ -279,19 +267,22 @@
     "ParamSet",
     .paradox_legacy_paramset_members,
     targets,
-    namespace
+    namespace,
+    1L
   )
   .paradox_install_paramset_gateways(
     "ParamSetCollection",
     .paradox_legacy_collection_members,
     targets,
-    namespace
+    namespace,
+    2L
   )
   .paradox_install_paramset_gateways(
     "ParamSetShadow",
     .paradox_prerelease_shadow_members,
     targets,
-    namespace
+    namespace,
+    3L
   )
   invisible(NULL)
 }

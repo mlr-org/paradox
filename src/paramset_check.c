@@ -16,8 +16,10 @@
 #include "core_state.h"
 #include "domain_admission.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "shell_auth.h"
 
 /*
  * ParamSet checking is deliberately one engine.  The R6 object is only the
@@ -88,7 +90,11 @@ typedef struct {
 
 enum node_root_slot {
   NODE_ROOT_SELF = 0,
+  NODE_ROOT_CLASS,
+  NODE_ROOT_ENCLOSURE,
   NODE_ROOT_PRIVATE,
+  NODE_ROOT_ASSERT_VALUES,
+  NODE_ROOT_SELECTED_CORE,
   NODE_ROOT_CORE,
   NODE_ROOT_STATE,
   NODE_ROOT_PARAMS,
@@ -108,7 +114,11 @@ enum node_root_slot {
 typedef struct {
   SEXP roots;
   SEXP self;
+  SEXP classes;
+  SEXP enclosure;
   SEXP private_environment;
+  SEXP assert_values;
+  SEXP selected_core;
   SEXP state;
   SEXP params;
   SEXP values;
@@ -442,6 +452,21 @@ static SEXP append_node_roots(SEXP *root_plan,
   *root_plan = expanded;
   UNPROTECT(4);
   return roots;
+}
+
+static SEXP check_enclosure_symbol = NULL;
+static SEXP check_self_symbol = NULL;
+static SEXP check_private_symbol = NULL;
+static SEXP check_core_symbol = NULL;
+static SEXP check_assert_values_symbol = NULL;
+
+static void initialize_check_binding_symbols(void) {
+  if (check_enclosure_symbol != NULL) return;
+  check_enclosure_symbol = Rf_install(".__enclos_env__");
+  check_self_symbol = Rf_install("self");
+  check_private_symbol = Rf_install("private");
+  check_core_symbol = Rf_install(".core");
+  check_assert_values_symbol = Rf_install("assert_values");
 }
 
 static void initialize_graph(check_graph_t *graph) {
@@ -850,12 +875,15 @@ static void initialize_node(SEXP self, SEXP private_environment,
     R_xlen_t parent, R_xlen_t child_position, int semantic,
     check_graph_t *graph,
     check_node_t *node, SEXP *root_plan, PROTECT_INDEX root_plan_index,
-    R_xlen_t *work_since_interrupt, SEXP selected_core) {
+    R_xlen_t *work_since_interrupt, SEXP selected_core,
+    int refresh_shadows) {
   node->roots = append_node_roots(
     root_plan, root_plan_index, self, private_environment
   );
   node->self = self;
   node->private_environment = private_environment;
+  node->classes = R_NilValue;
+  node->assert_values = R_NilValue;
   node->parent = parent;
   node->child_position = child_position;
   node->next_child = 0;
@@ -865,15 +893,63 @@ static void initialize_node(SEXP self, SEXP private_environment,
   if (TYPEOF(self) != ENVSXP || TYPEOF(private_environment) != ENVSXP) {
     Rf_error("Corrupt ParamSet graph: node shell is not an environment");
   }
-  SEXP core = selected_core;
-  if (core == R_NilValue) {
-    if (!paradox_domain_owns_private_environment(self, private_environment)) {
-      Rf_error("Corrupt ParamSet shell ownership");
+  SEXP classes = R_NilValue;
+  paradox_core_kind_t class_kind = 0;
+  if (!refresh_shadows) {
+    class_kind = paradox_param_set_class_kind_raw(self, &classes);
+    if (class_kind == 0) {
+      Rf_error("Corrupt ParamSet graph: invalid ParamSet-family R6 class");
     }
-    core = paradox_core_from_private(private_environment);
+    node->classes = classes;
+    SET_VECTOR_ELT(node->roots, NODE_ROOT_CLASS, classes);
   }
-  if (core == R_UnboundValue) {
+
+  SEXP enclosure = paradox_api_plain_binding_snapshot(
+    self,
+    check_enclosure_symbol
+  );
+  if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure)) {
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+  node->enclosure = enclosure;
+  SET_VECTOR_ELT(node->roots, NODE_ROOT_ENCLOSURE, enclosure);
+
+  SEXP owned_self = paradox_api_plain_binding_snapshot(
+    enclosure,
+    check_self_symbol
+  );
+  SEXP owned_private = paradox_api_plain_binding_snapshot(
+    enclosure,
+    check_private_symbol
+  );
+  if (owned_self != self || owned_private != private_environment) {
+    Rf_error("Corrupt ParamSet shell ownership");
+  }
+
+  if (!refresh_shadows) {
+    SEXP assert_values = paradox_api_plain_binding_snapshot(
+      self,
+      check_assert_values_symbol
+    );
+    if (!paradox_param_set_assert_values_is_exact(assert_values)) {
+      Rf_error("Corrupt ParamSet shell: invalid assert_values policy");
+    }
+    node->assert_values = assert_values;
+    SET_VECTOR_ELT(node->roots, NODE_ROOT_ASSERT_VALUES, assert_values);
+  }
+
+  SEXP bound_core = paradox_api_plain_binding_snapshot(
+    private_environment,
+    check_core_symbol
+  );
+  SEXP core = selected_core == R_NilValue ? bound_core : selected_core;
+  if (core == R_UnboundValue || bound_core != core) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
+  }
+  node->selected_core = core;
+  SET_VECTOR_ELT(node->roots, NODE_ROOT_SELECTED_CORE, core);
+  if (!paradox_core_is_canonical(core)) {
+    Rf_error("Corrupt ParamSet state: noncanonical core capsule");
   }
   node->kind = paradox_core_kind(core);
   if (node->kind != PARADOX_CORE_BASE &&
@@ -881,11 +957,31 @@ static void initialize_node(SEXP self, SEXP private_environment,
       node->kind != PARADOX_CORE_SHADOW) {
     Rf_error("Corrupt ParamSet state: unknown core node kind");
   }
+  if (!refresh_shadows && node->kind != class_kind) {
+    Rf_error("Corrupt ParamSet state: capsule kind disagrees with shell class");
+  }
+  if (node->kind == PARADOX_CORE_SHADOW &&
+      !paradox_shadow_metadata_is_exact(core)) {
+    Rf_error("Corrupt ParamSetShadow native snapshot metadata");
+  }
   if (node->kind == PARADOX_CORE_SHADOW) {
-    /* A shadow's schema is immutable but its effective values, dependencies,
-     * and constraint are a package-owned live view.  Refresh exactly once at
-     * this operation boundary, before snapshotting or invoking user code. */
-    core = paradox_core_refresh_shadow(self, private_environment);
+    if (refresh_shadows) {
+      /* A shadow's schema is immutable but its effective values, dependencies,
+       * and constraint are a package-owned live view. Refresh exactly once at
+       * an ordinary operation boundary, before snapshotting or invoking user
+       * code. */
+      core = paradox_core_refresh_shadow(self, private_environment);
+    } else {
+      /* Migration needs the same authoritative live projection, including
+       * cross-shadow dependency checks, but cannot mutate any current shell
+       * before every candidate has passed preflight. */
+      core = paradox_shadow_preview_authoritative(self, private_environment);
+    }
+    if (!paradox_core_is_canonical(core) ||
+        paradox_core_kind(core) != PARADOX_CORE_SHADOW ||
+        !paradox_shadow_metadata_is_exact(core)) {
+      Rf_error("Corrupt ParamSetShadow refreshed core capsule");
+    }
   }
   SET_VECTOR_ELT(node->roots, NODE_ROOT_CORE, core);
   node->state = paradox_core_payload(core);
@@ -991,13 +1087,15 @@ static void initialize_node(SEXP self, SEXP private_environment,
 }
 
 static void build_graph(SEXP private_environment, SEXP self,
-    check_graph_t *graph, SEXP *root_plan, PROTECT_INDEX root_plan_index) {
+    check_graph_t *graph, SEXP *root_plan, PROTECT_INDEX root_plan_index,
+    int refresh_shadows, SEXP selected_root_core) {
+  initialize_check_binding_symbols();
   initialize_graph(graph);
   R_xlen_t work_since_interrupt = 0;
   initialize_node(
     self, private_environment, R_XLEN_T_MAX, R_XLEN_T_MAX, TRUE, graph,
     &graph->nodes[0], root_plan, root_plan_index, &work_since_interrupt,
-    R_NilValue
+    selected_root_core, refresh_shadows
   );
   graph->count = 1;
   graph->path[0] = 0;
@@ -1034,7 +1132,7 @@ static void build_graph(SEXP private_environment, SEXP self,
         node->kind == PARADOX_CORE_COLLECTION ? node->semantic : FALSE,
         graph,
         &graph->nodes[child_index], root_plan, root_plan_index,
-        &work_since_interrupt, R_NilValue
+        &work_since_interrupt, R_NilValue, refresh_shadows
       );
       UNPROTECT(2);
       ++graph->nodes[node_index].next_child;
@@ -1045,6 +1143,37 @@ static void build_graph(SEXP private_environment, SEXP self,
     }
     --depth;
   }
+}
+
+static int graph_receipts_are_current(const check_graph_t *graph) {
+  for (R_xlen_t index = 0; index < graph->count; ++index) {
+    const check_node_t *node = &graph->nodes[index];
+    if (node->classes == R_NilValue ||
+        Rf_getAttrib(node->self, R_ClassSymbol) != node->classes ||
+        paradox_param_set_class_kind_raw(node->self, NULL) != node->kind) {
+      return FALSE;
+    }
+    SEXP enclosure = paradox_api_plain_binding_scan(
+      node->self,
+      check_enclosure_symbol
+    );
+    if (enclosure != node->enclosure ||
+        paradox_api_plain_binding_scan(enclosure, check_self_symbol) !=
+          node->self ||
+        paradox_api_plain_binding_scan(enclosure, check_private_symbol) !=
+          node->private_environment ||
+        paradox_api_plain_binding_scan(
+          node->self,
+          check_assert_values_symbol
+        ) != node->assert_values ||
+        paradox_api_plain_binding_scan(
+          node->private_environment,
+          check_core_symbol
+        ) != node->selected_core) {
+      return FALSE;
+    }
+  }
+  return TRUE;
 }
 
 static value_spec_t load_spec(SEXP params, R_xlen_t row) {
@@ -1089,7 +1218,8 @@ static void initialize_check_plan(check_plan_t *plan) {
 static void build_check_plan(SEXP private_environment, SEXP self,
     check_plan_t *plan, SEXP *root_plan, PROTECT_INDEX root_plan_index) {
   build_graph(
-    private_environment, self, &plan->graph, root_plan, root_plan_index
+    private_environment, self, &plan->graph, root_plan, root_plan_index, TRUE,
+    R_NilValue
   );
   initialize_check_plan(plan);
 }
@@ -1102,6 +1232,7 @@ static void build_check_plan(SEXP private_environment, SEXP self,
 static void build_exact_base_check_plan(SEXP private_environment, SEXP self,
     SEXP selected_core, check_plan_t *plan, SEXP *root_plan,
     PROTECT_INDEX root_plan_index) {
+  initialize_check_binding_symbols();
   initialize_graph(&plan->graph);
   R_xlen_t work_since_interrupt = 0;
   initialize_node(
@@ -1115,7 +1246,8 @@ static void build_exact_base_check_plan(SEXP private_environment, SEXP self,
     root_plan,
     root_plan_index,
     &work_since_interrupt,
-    selected_core
+    selected_core,
+    TRUE
   );
   plan->graph.count = 1;
   plan->graph.path[0] = 0;
@@ -3163,6 +3295,110 @@ static SEXP table_point(SEXP table, R_xlen_t row) {
   Rf_setAttrib(values, R_NamesSymbol, names);
   UNPROTECT(2);
   return values;
+}
+
+SEXP paradox_param_set_validate_current_graph(
+    SEXP private_environment, SEXP self, SEXP selected_core) {
+  /*
+   * Migration preflight must validate current nodes without refreshing a
+   * stale SHADOW into its private environment. The stored SHADOW generation
+   * and metadata are valid current state; ordinary operations may refresh it
+   * later. This read-only plan still admits the complete capsule graph and all
+   * canonical tables, callbacks, translations, and edges.
+   */
+  SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
+  PROTECT_INDEX root_plan_index;
+  SEXP root_plan;
+  PROTECT_WITH_INDEX(root_plan = R_NilValue, &root_plan_index);
+  check_plan_t plan;
+  build_graph(
+    private_environment,
+    self,
+    &plan.graph,
+    &root_plan,
+    root_plan_index,
+    FALSE,
+    selected_core
+  );
+  initialize_check_plan(&plan);
+  if (!graph_receipts_are_current(&plan.graph)) {
+    UNPROTECT(2);
+    Rf_error("ParamSet capsule graph changed during read-only validation");
+  }
+  UNPROTECT(2);
+  return result;
+}
+
+SEXP paradox_param_set_validate_current_roots(SEXP selves) {
+  /*
+   * This is the migration session's final all-roots barrier. Every selected
+   * shell generation remains in one shared protected root plan until all
+   * graphs have been admitted; only then do allocation-free receipt scans
+   * certify the complete set simultaneously.
+   */
+  if (TYPEOF(selves) != VECSXP || ALTREP(selves) || Rf_isS4(selves)) {
+    Rf_error("Current ParamSet roots must be an ordinary list");
+  }
+  initialize_check_binding_symbols();
+  SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
+  PROTECT_INDEX root_plan_index;
+  SEXP root_plan;
+  PROTECT_WITH_INDEX(root_plan = R_NilValue, &root_plan_index);
+  const R_xlen_t count = XLENGTH(selves);
+  check_plan_t *plans = paradox_temporary_alloc(
+    count == 0 ? 1 : count,
+    sizeof(*plans)
+  );
+
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP self = VECTOR_ELT(selves, index);
+    if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
+      UNPROTECT(2);
+      Rf_error("Current ParamSet root is not an ordinary environment");
+    }
+    SEXP enclosure = PROTECT(paradox_api_plain_binding_snapshot(
+      self,
+      check_enclosure_symbol
+    ));
+    SEXP private_environment = PROTECT(
+      TYPEOF(enclosure) == ENVSXP && !Rf_isS4(enclosure)
+        ? paradox_api_plain_binding_snapshot(
+            enclosure,
+            check_private_symbol
+          )
+        : R_UnboundValue
+    );
+    SEXP selected_core = PROTECT(
+      TYPEOF(private_environment) == ENVSXP &&
+        !Rf_isS4(private_environment)
+        ? paradox_api_plain_binding_snapshot(
+            private_environment,
+            check_core_symbol
+          )
+        : R_UnboundValue
+    );
+    build_graph(
+      private_environment,
+      self,
+      &plans[index].graph,
+      &root_plan,
+      root_plan_index,
+      FALSE,
+      selected_core
+    );
+    initialize_check_plan(&plans[index]);
+    UNPROTECT(3);
+  }
+  for (R_xlen_t index = 0; index < count; ++index) {
+    if (!graph_receipts_are_current(&plans[index].graph)) {
+      UNPROTECT(2);
+      Rf_error(
+        "ParamSet roots changed during joint read-only validation"
+      );
+    }
+  }
+  UNPROTECT(2);
+  return result;
 }
 
 SEXP paradox_param_set_check_builtin_with_receipts(

@@ -572,13 +572,24 @@ static int graph_is_current(const paradox_collection_graph_t *graph) {
       paradox_domain_private_environment(node->self)
     );
     const int current = private_environment == node->private_environment &&
-      paradox_core_from_private(private_environment) == node->core;
+      paradox_core_from_private(private_environment) == node->source_core;
     UNPROTECT(1);
     if (!current) {
       return FALSE;
     }
   }
   return TRUE;
+}
+
+static int base_is_current(SEXP origin, SEXP origin_private,
+    SEXP origin_core) {
+  SEXP selected_private = PROTECT(
+    paradox_domain_private_environment(origin)
+  );
+  const int current = selected_private == origin_private &&
+    paradox_core_from_private(selected_private) == origin_core;
+  UNPROTECT(1);
+  return current;
 }
 
 static SEXP split_values(const paradox_domain_values_t *source,
@@ -1129,9 +1140,8 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
     Rf_error("Corrupt ParamSetShadow COLLECTION dynamic snapshot");
   }
 
-  SEXP plan = PROTECT(paradox_param_set_collection_detach_plan(
-    origin_private,
-    origin,
+  SEXP plan = PROTECT(paradox_param_set_collection_detach_plan_from_graph(
+    graph,
     R_NilValue
   ));
   if (!graph_is_current(graph)) {
@@ -1359,8 +1369,8 @@ SEXP paradox_param_set_shadow_core_new(SEXP template_core, SEXP origin) {
   return result;
 }
 
-SEXP paradox_shadow_refresh_authoritative(SEXP self,
-    SEXP private_environment) {
+static SEXP shadow_refresh_authoritative(SEXP self,
+    SEXP private_environment, int commit) {
   PROTECT(self);
   PROTECT(private_environment);
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
@@ -1407,6 +1417,11 @@ SEXP paradox_shadow_refresh_authoritative(SEXP self,
   SEXP replacement;
   if (kind == PARADOX_CORE_BASE) {
     if (signature_matches_base(signature, origin, origin_core)) {
+      if (!base_is_current(origin, origin_private, origin_core) ||
+          paradox_core_from_private(private_environment) != current_core) {
+        UNPROTECT(7);
+        Rf_error("ParamSetShadow origin changed during native refresh");
+      }
       UNPROTECT(7);
       return current_core;
     }
@@ -1419,21 +1434,41 @@ SEXP paradox_shadow_refresh_authoritative(SEXP self,
       replacement_signature,
       &work_since_interrupt
     ));
+    if (!base_is_current(origin, origin_private, origin_core)) {
+      UNPROTECT(10);
+      Rf_error("ParamSetShadow origin changed during native refresh");
+    }
   } else if (kind == PARADOX_CORE_COLLECTION) {
     paradox_core_validate_graph_path(self);
     PROTECT_INDEX roots_index;
     SEXP roots;
     PROTECT_WITH_INDEX(roots = R_NilValue, &roots_index);
     paradox_collection_graph_t graph;
-    paradox_collection_graph_build(
-      origin_private,
-      origin,
-      &graph,
-      &roots,
-      roots_index,
-      &work_since_interrupt
-    );
+    if (commit) {
+      paradox_collection_graph_build(
+        origin_private,
+        origin,
+        &graph,
+        &roots,
+        roots_index,
+        &work_since_interrupt
+      );
+    } else {
+      paradox_collection_graph_build_readonly(
+        origin_private,
+        origin,
+        &graph,
+        &roots,
+        roots_index,
+        &work_since_interrupt
+      );
+    }
     if (signature_matches_graph(signature, &graph)) {
+      if (!graph_is_current(&graph) ||
+          paradox_core_from_private(private_environment) != current_core) {
+        UNPROTECT(8);
+        Rf_error("ParamSetShadow origin graph changed during refresh");
+      }
       UNPROTECT(8);
       return current_core;
     }
@@ -1448,6 +1483,10 @@ SEXP paradox_shadow_refresh_authoritative(SEXP self,
       &graph,
       &work_since_interrupt
     ));
+    if (!graph_is_current(&graph)) {
+      UNPROTECT(11);
+      Rf_error("ParamSetShadow origin graph changed during refresh");
+    }
   } else if (kind == PARADOX_CORE_SHADOW) {
     UNPROTECT(7);
     Rf_error("A ParamSetShadow cannot directly wrap another ParamSetShadow");
@@ -1460,7 +1499,19 @@ SEXP paradox_shadow_refresh_authoritative(SEXP self,
     UNPROTECT(kind == PARADOX_CORE_BASE ? 10 : 11);
     Rf_error("ParamSetShadow capsule changed during native refresh");
   }
-  Rf_defineVar(Rf_install(".core"), replacement, private_environment);
+  if (commit) {
+    Rf_defineVar(Rf_install(".core"), replacement, private_environment);
+  }
   UNPROTECT(kind == PARADOX_CORE_BASE ? 10 : 11);
   return replacement;
+}
+
+SEXP paradox_shadow_refresh_authoritative(SEXP self,
+    SEXP private_environment) {
+  return shadow_refresh_authoritative(self, private_environment, TRUE);
+}
+
+SEXP paradox_shadow_preview_authoritative(SEXP self,
+    SEXP private_environment) {
+  return shadow_refresh_authoritative(self, private_environment, FALSE);
 }

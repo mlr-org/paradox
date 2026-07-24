@@ -215,6 +215,12 @@ attribute_hidden SEXP paradox_param_set_check_builtin(
   SEXP presence,
   SEXP allow_token
 );
+attribute_hidden SEXP paradox_param_set_validate_current_graph(
+  SEXP private_environment,
+  SEXP self,
+  SEXP selected_core
+);
+attribute_hidden SEXP paradox_param_set_validate_current_roots(SEXP selves);
 /* Internal checked-assignment entry: the semantic result is identical to the
  * registered operation, while successful live ObjectTuneToken admissions are
  * returned as rooted shell/private/core generation receipts. */
@@ -340,6 +346,16 @@ attribute_hidden SEXP paradox_param_set_adopt_subset_state(
   SEXP private_environment,
   SEXP token
 );
+attribute_hidden SEXP paradox_plain_binding_snapshot(
+  SEXP environment,
+  SEXP name
+);
+attribute_hidden SEXP paradox_gateway_context_snapshot(
+  SEXP self,
+  SEXP expected_kind
+);
+attribute_hidden SEXP paradox_param_set_class_kind(SEXP self);
+attribute_hidden SEXP paradox_param_set_assert_values_exact(SEXP value);
 attribute_hidden SEXP paradox_design_transpose(SEXP data, SEXP filter_na);
 attribute_hidden SEXP paradox_design_transpose_trafos(
   SEXP rows,

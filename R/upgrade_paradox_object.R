@@ -25,20 +25,30 @@
     .upgrade_paradox_abort(path, "binding `%s` must not be active", name)
   }
 
-  # Unlike get(), substitute() does not force a delayed binding.  Canonical
-  # serialized R6 instances contain realized ordinary bindings.  A language
-  # object here is consequently a delayed or reconstructed binding, not one of
-  # the admitted legacy payload values.
-  value = eval(call("substitute", as.name(name), owner), envir = baseenv())
-  if (is.language(value) || is.symbol(value)) {
+  snapshot = .paradox_plain_binding_snapshot(owner, name)
+  if (!isTRUE(snapshot$ok)) {
     .upgrade_paradox_abort(path, "binding `%s` is delayed or malformed", name)
+  }
+  snapshot$value
+}
+
+.upgrade_paradox_assert_values = function(value, path) {
+  if (!identical(.Call(C_param_set_assert_values_exact, value), TRUE)) {
+    .upgrade_paradox_abort(path, "`assert_values` is malformed")
   }
   value
 }
 
 .upgrade_paradox_shell = function(x, path) {
-  if (!is.environment(x) || !inherits(x, "ParamSet")) {
+  if (!is.environment(x)) {
     .upgrade_paradox_abort(path, "expected a ParamSet R6 object")
+  }
+  class_kind = .Call(C_param_set_class_kind, x)
+  if (!(class_kind %in% 1:3)) {
+    .upgrade_paradox_abort(
+      path,
+      "expected a well-formed ordinary ParamSet-family R6 class suffix"
+    )
   }
   if (!exists(".__enclos_env__", envir = x, inherits = FALSE) ||
       bindingIsActive(".__enclos_env__", x)) {
@@ -53,29 +63,34 @@
   if (!is.environment(private) || !identical(self, x)) {
     .upgrade_paradox_abort(path, "malformed R6 self/private relationship")
   }
-  list(enclosing = enclosing, private = private)
+  list(enclosing = enclosing, private = private, class_kind = class_kind)
 }
 
-# Keep current-schema admission behind one helper. The empty, non-strict native
-# check walks BASE, COLLECTION, and SHADOW graphs without running constraints,
-# utility checks, or transformations. It validates all ten capsule fields,
-# callback shapes, child translations, sharing, and active-path cycles. This is
-# deliberately separate from legacy reconstruction: current-state admission
-# and legacy conversion have different contracts and neither is a fallback for
-# the other.
-.upgrade_paradox_validate_current_graph = function(x, path) {
-  shell = .upgrade_paradox_shell(x, path)
-  empty_values = structure(list(), names = character())
+# Keep current-schema admission behind one helper. The read-only native
+# validator walks BASE, COLLECTION, and SHADOW graphs without refreshing a
+# stale Shadow or running constraints, utility checks, or transformations. It
+# validates all ten capsule fields, callback shapes, child translations,
+# sharing, and active-path cycles. This is deliberately separate from legacy
+# reconstruction: current-state admission and legacy conversion have different
+# contracts and neither is a fallback for the other.
+.upgrade_paradox_validate_current_graph = function(
+    x,
+    path,
+    selected_core = NULL,
+    selected_private = NULL
+) {
+  if (is.null(selected_private)) {
+    selected_private = .upgrade_paradox_shell(x, path)$private
+  }
+  if (is.null(selected_core)) {
+    selected_core = .upgrade_paradox_binding(selected_private, ".core", path)
+  }
   result = tryCatch(
     .Call(
-      C_param_set_check_builtin,
-      shell$private,
+      C_param_set_validate_current_graph,
+      selected_private,
       x,
-      empty_values,
-      FALSE,
-      FALSE,
-      "none",
-      TRUE
+      selected_core
     ),
     error = function(error) {
       .upgrade_paradox_abort(
@@ -87,6 +102,31 @@
   )
   if (!identical(result, TRUE)) {
     .upgrade_paradox_abort(path, "corrupt current state capsule")
+  }
+  invisible(NULL)
+}
+
+.upgrade_paradox_validate_current_roots = function(roots) {
+  result = tryCatch(
+    .Call(C_param_set_validate_current_roots, roots),
+    error = function(error) {
+      stop(
+        sprintf(
+          paste0(
+            "Cannot commit Paradox migration: prepared/current roots failed ",
+            "joint validation (%s)"
+          ),
+          conditionMessage(error)
+        ),
+        call. = FALSE
+      )
+    }
+  )
+  if (!identical(result, TRUE)) {
+    stop(
+      "Cannot commit Paradox migration: joint current-root validation failed",
+      call. = FALSE
+    )
   }
   invisible(NULL)
 }
@@ -105,19 +145,10 @@
       )
     }
   )
-  class_ok = switch(
-    as.character(kind),
-    `1` = inherits(x, "ParamSet") &&
-      !inherits(x, "ParamSetCollection") &&
-      !inherits(x, "ParamSetShadow"),
-    `2` = inherits(x, "ParamSetCollection"),
-    `3` = inherits(x, "ParamSetShadow"),
-    FALSE
-  )
-  if (!isTRUE(class_ok)) {
+  if (!identical(kind, shell$class_kind)) {
     .upgrade_paradox_abort(path, "state capsule kind disagrees with shell class")
   }
-  .upgrade_paradox_validate_current_graph(x, path)
+  .upgrade_paradox_validate_current_graph(x, path, core, private)
   x
 }
 
@@ -143,7 +174,7 @@
 
   enclosing = shell$enclosing
   namespace = parent.env(enclosing)
-  if (!isNamespace(namespace) || !identical(environmentName(namespace), "paradox")) {
+  if (!identical(namespace, asNamespace("paradox"))) {
     .upgrade_paradox_abort(path, "legacy methods do not originate in paradox")
   }
   method_enclosures = list(enclosing)
@@ -200,9 +231,7 @@
 
     value = .upgrade_paradox_binding(x, name, path)
     if (identical(name, "assert_values")) {
-      if (!is.logical(value) || length(value) != 1L || is.na(value)) {
-        .upgrade_paradox_abort(path, "`assert_values` is malformed")
-      }
+      .upgrade_paradox_assert_values(value, path)
     } else if (!owns_method(value)) {
       .upgrade_paradox_abort(path, "core method `%s` was replaced", name)
     }
@@ -262,11 +291,7 @@
       bindingIsActive(name, owner)) {
     return(list(ok = FALSE))
   }
-  value = eval(call("substitute", as.name(name), owner), envir = baseenv())
-  if (is.language(value) || is.symbol(value)) {
-    return(list(ok = FALSE))
-  }
-  list(ok = TRUE, value = value)
+  .paradox_plain_binding_snapshot(owner, name)
 }
 
 # A non-interruptible transplant replaces the public bindings before it swaps
@@ -745,10 +770,8 @@
   }
   owner_namespace = parent.env(enclosures[[1L]])
   paradox_namespace = parent.env(enclosures[[2L]])
-  if (!isNamespace(owner_namespace) ||
-      !identical(environmentName(owner_namespace), entry$owner_package) ||
-      !isNamespace(paradox_namespace) ||
-      !identical(environmentName(paradox_namespace), "paradox")) {
+  if (!identical(owner_namespace, entry$.owner_namespace) ||
+      !identical(paradox_namespace, asNamespace("paradox"))) {
     .upgrade_paradox_abort(
       path,
       "legacy owner methods do not have authenticated package provenance"
@@ -785,9 +808,7 @@
     }
     value = .upgrade_paradox_binding(x, name, path)
     if (identical(name, "assert_values")) {
-      if (!is.logical(value) || length(value) != 1L || is.na(value)) {
-        .upgrade_paradox_abort(path, "`assert_values` is malformed")
-      }
+      .upgrade_paradox_assert_values(value, path)
     } else if (!owns_method(value)) {
       .upgrade_paradox_abort(path, "owner method `%s` was replaced", name)
     }
@@ -1632,10 +1653,33 @@
     )
   }
 
-  # Commit is monotonic and post-order. All semantic work and every shell
-  # shape audit above completed before this point. If an allocation failure or
-  # interrupt occurs, every already-committed shell is independently valid and
-  # retrying the graph upgrade completes the remaining nodes.
+  # Select and validate all roots together before the first original shell
+  # changes. Prepared parent graphs still point to their prepared current
+  # children here; a parent can point to the identity-preserved original only
+  # after post-order commit has upgraded that child.
+  .upgrade_paradox_validate_current_roots(session$prepared)
+  current_indices = which(vapply(
+    session$infos,
+    function(info) identical(info$kind, "current"),
+    logical(1L)
+  ))
+  committed_roots = session$nodes[current_indices]
+
+  # Commit is monotonic and post-order. Repoint each offside parent capsule only
+  # after its original children are current. A rebase can allocate, and a
+  # replacement-owner rebase may execute package code, so validate *every*
+  # already-current identity root plus the newly rebased prepared root jointly
+  # before the corresponding transplant. An older prepared child loses shell
+  # ownership when its enclosure is transplanted, so unrebased offside parents
+  # that still point to it are templates, not live roots; they are readmitted
+  # when their own turn rebases every dependency to an original. Once
+  # transplanted, add the identity-preserved original to the committed roots and
+  # repeat the joint validation. This closes the package-callback/rebase window
+  # and proves that a successful return leaves the complete identity graph
+  # current. R's `suspendInterrupts()` does not suppress pending finalizers: a
+  # hostile external finalizer that mutates a selected root inside the R binding
+  # wave is detected by the post-transplant barrier, but that completed
+  # transplant is not rolled back.
   for (position in seq_along(session$commit_order)) {
     index = session$commit_order[[position]]
     info = session$infos[[index]]
@@ -1654,13 +1698,16 @@
       originals,
       session$paths[[index]]
     )
+    .upgrade_paradox_validate_current_roots(c(
+      committed_roots,
+      list(session$prepared[[index]])
+    ))
     base::suspendInterrupts(
       .upgrade_paradox_transplant(plans[[position]])
     )
-    .upgrade_paradox_validate_current_graph(
-      session$nodes[[index]],
-      session$paths[[index]]
-    )
+    committed_roots[[length(committed_roots) + 1L]] =
+      session$nodes[[index]]
+    .upgrade_paradox_validate_current_roots(committed_roots)
   }
   invisible(NULL)
 }
@@ -1676,7 +1723,9 @@
 #' Discovery is iterative and identity-aware. It inspects ordinary environment
 #' bindings, active-binding functions (never their values), closures and safe
 #' enclosing environments, unforced binding and `...` promises without forcing
-#' them, language objects, S4 attributes, and ordinary containers. R 4.3--4.5
+#' them, language objects, S4 attributes, and ordinary containers. A native
+#' direct-binding classifier distinguishes realized language/symbol values from
+#' delayed promises without evaluating either. R 4.3--4.5
 #' can also inspect a detached promise; strict R 4.6 and newer expose no safe
 #' API for that edge, so a promise reached outside a binding or `...` cell is
 #' opaque. It does not enter
@@ -1687,12 +1736,29 @@
 #' as an opaque parameter value is not missed.
 #'
 #' All discovered nodes and registered owner migrations are semantically
-#' inspected and rebuilt before the first legacy shell changes. Commit is
-#' post-order and identity-preserving. The enclosure swap is each shell's final
+#' inspected and rebuilt before the first legacy shell changes. Already-current
+#' ParamSet-family shells are also validated during this preflight, although
+#' they need no transplant. Current Shadows are checked against an authoritative
+#' live preview without installing that preview. Every prepared/current root is
+#' then validated jointly before the first transplant. Commit is post-order and
+#' identity-preserving: after a child is current, its prepared parent is rebased
+#' to the original child identity. All already-current identity roots plus that
+#' newly rebased prepared root are jointly validated before the parent changes;
+#' unrebased parents remain offside templates until their own turn. After each
+#' transplant, the current identity roots are jointly validated again with the
+#' transplanted original added. The enclosure swap is each shell's final
 #' completion point. If an allocation failure interrupts an individual binding
-#' wave, the old enclosure remains authoritative and the mixed shell stays
-#' authenticated for retry; completed nodes are valid current objects. Calling
-#' the function again completes the remainder.
+#' wave, the old enclosure remains
+#' authoritative and the mixed shell stays authenticated for retry; completed
+#' nodes are valid current objects. Calling the function again completes the
+#' remainder.
+#'
+#' Ordinary inspection, rebuilding, and package-callback failures happen before
+#' mutation. Pending finalizers from unrelated user objects are not suspended by
+#' R's interrupt guard. If such a finalizer mutates a selected Paradox root
+#' during the binding wave, the post-transplant joint validation detects the
+#' change and errors, but a completed transplant is not rolled back and retry is
+#' not promised for the externally corrupted graph.
 #'
 #' The default first use of an unupgraded Paradox 1 method gives an actionable
 #' error. Set `options(paradox.legacy_object_action = "upgrade")` to invoke
@@ -1741,15 +1807,16 @@ upgrade_paradox_object_graph = function(x) {
   invisible(x)
 }
 
-.paradox_upgrade_legacy_first_use = function(self) {
+.paradox_upgrade_legacy_first_use = function(self, expected_kind) {
   upgrade_paradox_object_graph(self)
-  if (!.paradox_gateway_current_core(self)) {
+  context = .paradox_gateway_current_context(self, expected_kind)
+  if (!isTRUE(context$ok)) {
     stop(
       "Legacy Paradox first-use migration did not produce a current ParamSet shell.",
       call. = FALSE
     )
   }
-  invisible(self)
+  context
 }
 
 #' Upgrade a serialized Paradox object explicitly

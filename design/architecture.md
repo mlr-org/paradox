@@ -110,11 +110,18 @@ no option lookup, legacy test, or migration dispatch. Unversioned targets
 emitted by Paradox 1, and unversioned Shadow targets emitted by pre-release
 Paradox 2, are installed separately as cold gateways. A gateway first forwards
 an authenticated capsule-backed shell directly; this is how a pre-release
-Paradox-2 Shadow replays without an owner registry. A shell without a current
-core either reports the default migration error or, when
+Paradox-2 Shadow replays without an owner registry. Authentication is one
+native context snapshot: the ordinary additive R6 class suffix selects the
+BASE/COLLECTION/SHADOW family, the exact `assert_values` binding and canonical
+matching core are retained, and the superclass chain is followed to the
+enclosure that defines the requested historical family target. The gateway
+ignores the serialized stub's still-lazy `private` and `super` promises and
+replays the rooted native context without a later R reread or top-slice guess.
+A shell without a current context either reports the default migration error
+or, when
 `options(paradox.legacy_object_action = "upgrade")` is set, invokes the
-identity-preserving upgrader, reacquires the transplanted `private`/`super`
-enclosure, and forwards once to the versioned target. Paradox does not call
+identity-preserving upgrader, receives the authenticated transplanted context,
+and forwards once to the versioned target. Paradox does not call
 `mlr3misc::leanify_package()` because that would collapse historical and
 current target authority back into one name.
 
@@ -128,18 +135,39 @@ The migration implementation has three layers:
    invoked; unforced binding/`...` promises contribute expression and
    evaluation environment but are not forced. R 4.3--4.5 also inspect a
    detached `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as
-   opaque. Search-path, global, package, namespace, imports, base, and empty
+   opaque. The native direct-binding classifier distinguishes a realized
+   language object or symbol from a delayed promise whose expression has that
+   type; it never infers binding kind from expression shape. Search-path,
+   global, package, namespace, imports, base, and empty
    environments stop traversal. Generic external-pointer and weak-reference
    internals are opaque; an authenticated Paradox core contributes its
    protected payload.
 2. `R/upgrade_paradox_object.R` authenticates discovered ParamSet-family
    candidates, memoizes one offside current replacement per legacy identity,
    resolves collection/Shadow/registered-owner dependencies in post-order, and
-   validates all semantic and shell-transplant plans before mutation. The pure
+   validates all semantic and shell-transplant plans before mutation. Current
+   shell authentication uses one native ordinary class-suffix classifier:
+   unique nonreserved additive labels may precede BASE
+   `c("ParamSet", "R6")`, COLLECTION
+   `c("ParamSetCollection", "ParamSet", "R6")`, or SHADOW
+   `c("ParamSetShadow", "ParamSet", "R6")`; the selected family must match a
+   canonical core, and `assert_values` is an exact non-missing logical scalar.
+   Read-only Shadow admission builds the authoritative live semantic core
+   without installing it, retains the private binding's source core as a
+   distinct generation receipt, and derives callback detachment from the same
+   admitted collection graph. Finally, all prepared/current roots are admitted
+   together and allocation-free receipt-scanned before the first transplant.
+   The pure
    `upgrade_paradox_object()` entry remains non-mutating and separately owns
    standalone Domain/Condition normalization.
-3. Commit rebases prepared child/origin edges to the original shell identities
-   and transplants each legacy shell in post-order. It replaces every R6
+3. Commit transplants each legacy shell in post-order. Once a dependency child
+   is current, the prepared parent child/origin edge is rebased to that
+   identity-preserved original shell. Since rebasing can allocate or invoke a
+   registered replacement factory, all already-current identity roots plus
+   that newly rebased prepared root are jointly receipt-scanned immediately
+   before the parent transplant. Unrebased parents remain offside templates
+   until their own turn. The current identity-root set is scanned again after
+   the transplanted original joins it. It replaces every R6
    enclosure slice, `self`/`private`/`super` linkage, generated method/active
    binding, capsule, and public `assert_values` policy; exact class identity is
    a precondition rather than a mutable field. `.__enclos_env__` is replaced
@@ -147,7 +175,12 @@ The migration implementation has three layers:
    an interrupted binding wave retains the old authoritative enclosure and
    admits authenticated original/refreshed methods and a temporarily unlocked
    method on retry. Preflight errors mutate nothing, and an idempotent retry
-   finishes a catastrophic allocation failure.
+   finishes a catastrophic allocation failure. R's `suspendInterrupts()` does
+   not suppress pending finalizers from unrelated user objects. If one
+   deliberately mutates a selected root inside the R-level binding wave, the
+   post-transplant joint scan detects it after the fact; a completed transplant
+   is not rolled back and retry is not promised for that externally corrupted
+   graph.
    The cold lock transition resolves base `unlockBinding` explicitly rather
    than using a syntactic call, solely because R's package-tampering checker
    cannot infer that the planned environment is an authenticated R6
@@ -669,6 +702,14 @@ sandboxed by Paradox and is outside this guarantee.
   planners and kernels over capsule state;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
   for the recursive legacy migration boundary;
+- `src/binding_snapshot.c`: the registered cold R-facing projection of the
+  centralized non-forcing ordinary-frame binding classifier. It distinguishes
+  realized values—including language objects and symbols—from absent,
+  inherited, active, and delayed bindings without evaluating a binding;
+- `src/shell_auth.[ch]`: the shared inert ParamSet-family class/`assert_values`
+  classifier and allocation-safe historical-gateway context snapshot. It owns
+  additive family-suffix recognition, canonical core agreement, defining-family
+  enclosure selection, and the final binding receipt scan;
 - `src/r_utils.c` and `src/r_api_compat.c`: small R-API ownership and version
   adapters, never alternate semantics. Raw stored-attribute selection uses
   `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
@@ -684,8 +725,13 @@ sandboxed by Paradox and is outside this guarantee.
   declared locally or present in the current DSO, and a detached `PROMSXP`
   reached outside those public binding boundaries is opaque. The older branch
   is required
-  because R-level `substitute()` would force or make simultaneous receipt and
-  graph scans unsound. Every exceptional symbol/version/path is ledgered in
+  because R-level `substitute()`, while non-forcing, returns a promise
+  expression rather than a binding-kind/generation receipt and therefore makes
+  simultaneous receipt and graph scans unsound. Expression shape is not a substitute for binding
+  classification: realized language objects/symbols and delayed literals such
+  as `TRUE`, `NULL`, language objects, symbols, environments, closures, and
+  external pointers are deliberately covered by the runtime matrix. Every
+  exceptional symbol/version/path is ledgered in
   `environment/r-api-exceptions.tsv` and raw-token, DSO, pinned-header, and
   runtime tested. None is CRAN-allowlisted or permission for another internal
   API;

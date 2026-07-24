@@ -8,6 +8,7 @@
 #include "core_state.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
+#include "paramset_shadow.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 
@@ -530,22 +531,30 @@ static void initialize_graph(paradox_collection_graph_t *graph) {
 }
 
 static int initialize_new_node(SEXP self, SEXP private_environment,
-    SEXP selected_core, R_xlen_t parent, R_xlen_t parent_child,
+    SEXP operation_core, SEXP source_core, R_xlen_t parent,
+    R_xlen_t parent_child,
     paradox_collection_graph_node_t *node, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
-  if (!paradox_core_is_valid(selected_core)) {
+  if (!paradox_core_is_valid(operation_core) ||
+      !paradox_core_is_valid(source_core)) {
     return FALSE;
   }
-  PROTECT(selected_core);
-  retain_root(selected_core, roots, roots_index);
+  PROTECT(operation_core);
+  retain_root(operation_core, roots, roots_index);
+  if (source_core != operation_core) {
+    PROTECT(source_core);
+    retain_root(source_core, roots, roots_index);
+    UNPROTECT(1);
+  }
   UNPROTECT(1);
 
-  SEXP state = paradox_core_payload(selected_core);
-  const paradox_core_kind_t kind = paradox_core_kind(selected_core);
+  SEXP state = paradox_core_payload(operation_core);
+  const paradox_core_kind_t kind = paradox_core_kind(operation_core);
   *node = (paradox_collection_graph_node_t) {
     .self = self,
     .private_environment = private_environment,
-    .core = selected_core,
+    .core = operation_core,
+    .source_core = source_core,
     .state = state,
     .kind = kind,
     .value_param_rows = NULL,
@@ -631,6 +640,7 @@ void paradox_collection_validate_single_node(SEXP private_environment,
         self,
         private_environment,
         core,
+        core,
         R_XLEN_T_MAX,
         R_XLEN_T_MAX,
         &node,
@@ -645,7 +655,8 @@ void paradox_collection_validate_single_node(SEXP private_environment,
 }
 
 static int initialize_node(SEXP self, SEXP private_environment,
-    SEXP selected_core, R_xlen_t parent, R_xlen_t parent_child,
+    SEXP operation_core, SEXP source_core, R_xlen_t parent,
+    R_xlen_t parent_child,
     paradox_collection_graph_t *graph,
     paradox_collection_graph_node_t *node, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
@@ -665,7 +676,8 @@ static int initialize_node(SEXP self, SEXP private_environment,
   return initialize_new_node(
     self,
     private_environment,
-    selected_core,
+    operation_core,
+    source_core,
     parent,
     parent_child,
     node,
@@ -721,9 +733,10 @@ static int validate_edge(paradox_collection_graph_node_t *parent,
   return TRUE;
 }
 
-void paradox_collection_graph_build(SEXP private_environment, SEXP self,
+static void collection_graph_build(SEXP private_environment, SEXP self,
     paradox_collection_graph_t *graph, SEXP *roots,
-    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
+    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt,
+    int commit_shadow_refreshes) {
   if (TYPEOF(private_environment) != ENVSXP || TYPEOF(self) != ENVSXP) {
     Rf_error("Corrupt ParamSetCollection shell");
   }
@@ -748,6 +761,7 @@ void paradox_collection_graph_build(SEXP private_environment, SEXP self,
   if (!initialize_new_node(
       self,
       private_environment,
+      root_core,
       root_core,
       R_XLEN_T_MAX,
       R_XLEN_T_MAX,
@@ -793,22 +807,41 @@ void paradox_collection_graph_build(SEXP private_environment, SEXP self,
         }
       }
       SEXP child_private = R_UnboundValue;
-      SEXP child_core = R_UnboundValue;
+      SEXP child_source_core = R_UnboundValue;
+      SEXP child_operation_core = R_UnboundValue;
       if (!reused) {
         child_private = PROTECT(paradox_domain_private_environment(child_self));
         if (child_private == R_UnboundValue) {
           UNPROTECT(2);
           Rf_error("Corrupt ParamSetCollection child shell");
         }
-        child_core = PROTECT(paradox_core_from_private(child_private));
-        if (paradox_core_kind(child_core) == PARADOX_CORE_SHADOW) {
-          child_core = paradox_core_refresh_shadow(child_self, child_private);
+        child_source_core = PROTECT(paradox_core_from_private(child_private));
+        PROTECT_INDEX operation_core_index;
+        PROTECT_WITH_INDEX(
+          child_operation_core = child_source_core,
+          &operation_core_index
+        );
+        if (paradox_core_kind(child_source_core) == PARADOX_CORE_SHADOW) {
+          SEXP authoritative_core = commit_shadow_refreshes
+            ? paradox_core_refresh_shadow(child_self, child_private)
+            : paradox_shadow_preview_authoritative(child_self, child_private);
+          REPROTECT(
+            child_operation_core = authoritative_core,
+            operation_core_index
+          );
+          if (commit_shadow_refreshes) {
+            /* A committed refresh deliberately changed the selected binding:
+             * its replacement is now both the source receipt and the semantic
+             * generation. A read-only preview must retain the old source. */
+            child_source_core = child_operation_core;
+          }
         }
       }
       const int valid = initialize_node(
           child_self,
           child_private,
-          child_core,
+          child_operation_core,
+          child_source_core,
           node_index,
           child_position,
           graph,
@@ -823,7 +856,7 @@ void paradox_collection_graph_build(SEXP private_environment, SEXP self,
           work_since_interrupt
         );
       if (!reused) {
-        UNPROTECT(2);
+        UNPROTECT(3);
       }
       UNPROTECT(1);
       if (!valid) {
@@ -854,6 +887,35 @@ void paradox_collection_graph_build(SEXP private_environment, SEXP self,
   if (graph->nodes[0].subtree_dependencies > INT_MAX) {
     Rf_error("ParamSetCollection dependency result exceeds data.frame limits");
   }
+}
+
+void paradox_collection_graph_build(SEXP private_environment, SEXP self,
+    paradox_collection_graph_t *graph, SEXP *roots,
+    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
+  collection_graph_build(
+    private_environment,
+    self,
+    graph,
+    roots,
+    roots_index,
+    work_since_interrupt,
+    TRUE
+  );
+}
+
+void paradox_collection_graph_build_readonly(
+    SEXP private_environment, SEXP self,
+    paradox_collection_graph_t *graph, SEXP *roots,
+    PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
+  collection_graph_build(
+    private_environment,
+    self,
+    graph,
+    roots,
+    roots_index,
+    work_since_interrupt,
+    FALSE
+  );
 }
 
 /* Value admission has already resolved each stored name to one local

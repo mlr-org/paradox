@@ -113,6 +113,9 @@ families.
   promises are inspected without forcing and expose only expression/evaluation
   environment; forced binding promises expose stored expression/value.
   Ordinary delayed/forced/missing `...` cells receive the same coverage.
+  Realized direct language objects and symbols are distinguished from delayed
+  promises carrying language/symbol expressions by the native classifier;
+  neither path uses `substitute()` or evaluates the binding.
   R 4.3--4.5 also inspect detached `PROMSXP` structure; strict R >= 4.6 treats
   one outside a binding/dots cell as opaque. Tests record side effects and
   cover both supported pre-4.6 and development-R API branches;
@@ -121,8 +124,27 @@ families.
   Only an authenticated Paradox core contributes its protected payload;
 - all discovery, legacy/current authentication, owner inspection, offside
   rebuilding, dependency-plan validation, and shell-shape checks fail before
-  mutation. A simulated interrupted binding wave, including the
+  mutation. Current-shell cases cover ordinary additive BASE/COLLECTION/SHADOW
+  suffix chains, malformed/reserved/duplicate/hybrid class vectors, exact
+  `assert_values`, canonical core agreement, and descendants with corrupt
+  classes. A stale Shadow preflight must compute authoritative live semantics
+  without installing a refresh, retain distinct source/semantic core receipts,
+  and detach collection callbacks from the admitted graph. Tests mutate an
+  earlier root after its initial preflight and require the initial joint
+  all-prepared-roots barrier to abort before the first transplant. A second
+  fault-injection mutates an unrelated current root during rebase and requires
+  the per-rebase live-root barrier to reject before the corresponding
+  transplant. A third injection mutates an unrelated current root immediately
+  after a transplant and requires the post-transplant barrier to detect it
+  while retaining the completed transplant, documenting the explicit
+  no-rollback boundary for hostile external finalizers.
+  A simulated interrupted binding wave, including the
   lock-restoration edge, verifies post-order monotonicity:
+  a parent is identity-rebased only after each original child has been
+  transplanted. The already-current identity roots plus that newly rebased
+  prepared root are jointly validated before the parent changes; unrebased
+  parents remain offside templates until their turn, and the current identity
+  roots are jointly validated again after the original joins them;
   `.__enclos_env__` changes last, already transplanted nodes are independently
   valid, an incomplete shell remains authenticated by its old enclosure, and
   an idempotent retry completes the graph;
@@ -132,7 +154,9 @@ families.
   silently migrates and resumes the requested operation. Invalid option values,
   retired/unknown target names, old argument-form combinations, and
   pre-release capsule-backed Paradox-2 Shadow stubs fail or forward as
-  specified;
+  specified. Gateway tests cover additive family chains, defining-family
+  enclosure selection, exact `assert_values`/canonical-core rejection, and
+  prove that serialized `private`/`super` promises are ignored and unforced;
 - the owner registry admits only an exact direct-owner class from the owner
   package's current namespace, resolves namespace-local hook names rather than
   serialized functions, requires an empty dependency list for additive
@@ -326,8 +350,12 @@ The frozen candidate must pass:
   use its experimental binding/delayed-binding/dots APIs. Raw-token,
   pinned-header, and DSO inventories verify both branches.
   None of these
-  entries is CRAN-allowlisted, and a forcing R-level `substitute()` workaround
-  is not accepted.
+  entries is CRAN-allowlisted. An R-level `substitute()` workaround is not
+  accepted because its promise expression is not an unambiguous binding-kind
+  or generation receipt. The registered plain-binding probe must additionally prove
+  that realized and delayed literal values of identical apparent R type,
+  including language objects and symbols, are distinguished without evaluation
+  on every supported runtime.
 
 Primary drivers are `scripts/native-check` and
 `scripts/check-r-api-compatibility`. Use their current `--help`; their retained

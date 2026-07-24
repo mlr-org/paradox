@@ -38,6 +38,9 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   excludes them, and a `PROMSXP` reached outside a binding/dots cell is opaque.
   An R-level `substitute()` workaround is
   forcing/unsound for simultaneous receipt and recursive object-graph scans.
+  The native direct-binding projection distinguishes realized language/symbol
+  values from delayed promises carrying the same expression types without
+  evaluating either.
   Each exceptional symbol, version, source count/path, and rationale must be
   recorded in `environment/r-api-exceptions.tsv` and pass raw-token, DSO,
   pinned-header, and real-runtime audits before freeze. None is a CRAN allowlist
@@ -123,17 +126,42 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   behavior; global/search/package/namespace infrastructure and generic
   external-pointer/weak-reference internals are boundaries, while authenticated
   Paradox core payloads remain traversable. Commit is post-order and monotonic,
-  with `.__enclos_env__` as each shell's last completion point. A catastrophic
+  with `.__enclos_env__` as each shell's last completion point. Direct native
+  binding classification distinguishes realized language/symbol values from
+  promises without forcing either. Current shell admission uses one ordinary
+  additive BASE/COLLECTION/SHADOW suffix classifier, exact `assert_values`, and
+  canonical-core agreement. Read-only Shadow preflight retains separate
+  source-generation and authoritative semantic-preview cores and constructs
+  callback detachment from the admitted graph. Every prepared/current root is
+  jointly validated before the first transplant; after each child transplant,
+  its prepared parent is identity-rebased. All already-current identity roots
+  plus that newly rebased prepared root are jointly validated before the
+  parent changes; unrebased parents remain offside templates until their turn.
+  The current identity-root set is checked again after the transplanted
+  original joins it. A catastrophic
   partial binding wave retains the old authoritative enclosure and remains
-  authenticated for retry; completed nodes are valid current objects.
+  authenticated for retry; completed nodes are valid current objects. Current
+  shells are preflight candidates as well as traversal carriers, so a corrupt
+  current capsule anywhere in the selected graph aborts before any legacy
+  mutation. Pending finalizers from unrelated user objects are explicitly
+  outside this atomicity promise: the post-transplant barrier detects a
+  selected-root mutation inside the R binding wave, but does not roll back a
+  completed transplant or promise retry of the externally corrupted graph.
 - Current R6 stubs call versioned namespace targets directly. Historical
   unversioned targets are cold first-use gateways: default error, or silent
   migration when `options(paradox.legacy_object_action = "upgrade")` is set.
+  Direct forwarding uses one native rooted context: it selects the
+  defining-family enclosure through the authenticated additive superclass
+  chain, requires exact `assert_values` and a canonical matching core, and
+  ignores the serialized stub's `private`/`super` promises rather than
+  replaying or rereading a top enclosure slice.
   The exact owner registry supports bbotk's additive legacy `Codomain` and
   miesmuschel's single-origin current-Shadow replacement/retired fields without
   S3 dispatch or serialized hook functions. Additive dependencies are empty,
   replacement dependencies are exactly `origin`, and owner R6 finalizers are
   rejected; unknown subclasses fail closed.
+  Built-in and owner method provenance is checked against the exact currently
+  loaded namespace environments; namespace names alone are not authority.
 - Stable/base ALTREP support is materialize-once in admitted semantic atomic
   positions. Configuration/search-space/trafo and ParamSet-`params` lists,
   internal table/row/Domain/Condition/token/capsule shells, Domain cargo/

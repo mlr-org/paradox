@@ -358,6 +358,9 @@ SEXP paradox_param_set_core_state(SEXP owner) {
 }
 
 SEXP paradox_param_set_core_kind(SEXP owner) {
+  if (TYPEOF(owner) == EXTPTRSXP && !paradox_core_is_canonical(owner)) {
+    Rf_error("Corrupt ParamSet state: noncanonical versioned core capsule");
+  }
   SEXP core = core_from_owner(owner);
   if (core == R_UnboundValue) {
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");

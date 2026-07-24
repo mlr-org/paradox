@@ -72,9 +72,16 @@ conversions.
 The only exceptions to the public-API rule are the exact versioned entries
 needed to inspect a stored environment binding or already reached promise
 without forcing it. R 4.3--4.5 has no public non-forcing classifier for one
-binding. The public R-level `substitute()` workaround is forcing/unsound for
-simultaneous generation/TuneToken receipt scans and recursive object-graph
-migration.
+binding. The public R-level `substitute()` workaround is non-forcing but
+insufficient for simultaneous generation/TuneToken receipt scans and recursive
+object-graph migration: it returns a promise expression, not an unambiguous
+binding-kind/generation receipt.
+The runtime matrix therefore exercises the registered native plain-binding
+classifier with realized and delayed literal logical, NULL, language, symbol,
+environment, closure, and external-pointer values. In particular, a realized
+language object or symbol must remain a direct value while a promise carrying
+an expression of the same type remains delayed; expression/type shape must
+never stand in for a binding-type query.
 The pinned R 4.5 Writing R Extensions manual explicitly says that detailed
 delayed-binding information is unavailable in the API. The R 4.6 manual labels
 `R_GetBindingType` experimental and continues to classify

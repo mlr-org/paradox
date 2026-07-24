@@ -560,14 +560,51 @@ semantic vectors remain supported at their stated positions.
   forcing an unforced promise. R 4.3--4.5 additionally inspect a detached
   `PROMSXP`; under strict R >= 4.6 headers such a promise outside a binding/dots
   cell is opaque. It never invokes an active binding or a serialized method.
+  Direct environment bindings are classified natively rather than inferred
+  from an R expression: a realized language object or symbol remains a realized
+  value, while a delayed promise with the same apparent expression is identified
+  as a promise and never evaluated.
   `.GlobalEnv`, namespaces, package/import environments, attached search-path
   infrastructure, Autoloads, base, and the empty environment are hard
   boundaries. Generic external-pointer internals and weak references are
   opaque; the protected ordinary-R payload of an authenticated Paradox `.core`
   is the sole external-pointer exception.
-- A graph migration performs complete discovery, authentication, semantic
-  preparation, replacement construction, and shell-shape auditing before the
-  first transplant. Commit is post-order, identity-preserving, and monotonic:
+- Current ParamSet-family shell admission has one native inert classifier.
+  The class attribute must be an ordinary, attribute-free, non-ALTREP character
+  vector with unique nonempty labels and the terminal suffix
+  `c("ParamSet", "R6")`. An immediately preceding
+  `"ParamSetCollection"` or `"ParamSetShadow"` selects that family; any earlier
+  nonreserved labels are additive R6 subclass layers. With no family marker the
+  shell is BASE. The selected family must agree with a canonical package-owned
+  core, every Shadow must have exact snapshot metadata, and `assert_values`
+  must be an exact attribute-free non-missing `logical(1)`. This current-shell
+  classifier is deliberately broader than the exact one-owner legacy registry
+  key below; neither invokes S3 or a shell method.
+- A graph migration performs complete discovery, authentication, offside
+  semantic preparation, replacement construction, and shell-shape auditing.
+  It then validates every prepared/current root together in one native
+  read-only barrier before the first transplant; all selected generations stay
+  rooted until the complete set has passed an allocation-free receipt scan.
+  Discovery reports current as well as legacy
+  ParamSet-family shells: every current capsule graph is semantically
+  validated during that same preflight, even when the current shell itself
+  needs no transplant. A corrupt current capsule hidden beside a valid legacy
+  shell therefore aborts before the legacy shell changes; a shallow carrier
+  check is not a sufficient migration boundary. Current Shadow validation is
+  authoritative but read-only: it builds the live semantic generation without
+  installing it, retains the selected private `.core` as a separate source
+  receipt, and derives collection callback detachment from that same admitted
+  graph rather than rereading live shells.
+  Commit is post-order, identity-preserving, and monotonic. Once a child has
+  been transplanted, its prepared parent's child/origin edge is rebased to the
+  identity-preserved original shell. Because rebasing can allocate or execute a
+  registered replacement-owner factory, every rebase is followed immediately
+  by a joint validation of all already-current identity roots plus that newly
+  rebased prepared root, ending in an allocation-free receipt scan. Unrebased
+  parents are offside templates rather than live shells after their prepared
+  child's enclosure has moved; each re-enters the barrier when its own
+  dependencies are rebased. After each transplant, the identity-preserved
+  original joins the current-root set and that set is jointly validated again:
   each shell swaps `.__enclos_env__` only after every other binding and
   enclosure link is ready. A completed node is a valid current object; a
   catastrophic allocation failure inside a binding wave leaves the old
@@ -575,7 +612,12 @@ semantic vectors remain supported at their stated positions.
   already-refreshed package-owned methods (including an interrupted unlocked
   method) for retry. Rerunning the idempotent graph upgrader completes the
   remainder. Ordinary validation or owner-bridge failure occurs during
-  preflight and mutates nothing.
+  preflight and mutates nothing. This atomicity statement does not cover a
+  pending finalizer from an unrelated user object that deliberately mutates a
+  selected root inside the R-level binding wave: `suspendInterrupts()` does not
+  suppress such finalizers. The post-transplant joint barrier detects that
+  mutation and errors, but a completed transplant is not rolled back and the
+  externally corrupted graph is not promised to be retryable.
 - The cold transplant resolves base `unlockBinding` with an explicit
   `get(..., baseenv())` call. R's package-tampering checker otherwise reports
   every syntactic `unlockBinding(name, owner)` whose environment is not the
@@ -585,9 +627,16 @@ semantic vectors remain supported at their stated positions.
 - Current Paradox R6 stubs call versioned `.__paradox2_*` namespace targets
   directly. Historical unversioned `.__ParamSet*`,
   `.__ParamSetCollection*`, and pre-release `.__ParamSetShadow*` names are cold
-  first-use gateways only. An authenticated capsule-backed shell forwards
-  directly; in particular, the actual pre-release Paradox-2 Shadow needs no
-  owner registry. A shell without a current core defaults to a precise error
+  first-use gateways only. One native context snapshot applies the same
+  ordinary suffix classifier, requires the exact public `assert_values` policy
+  and a canonical matching core, follows the authenticated additive superclass
+  chain to the enclosure that defines the requested BASE/COLLECTION/SHADOW
+  target, and roots the resulting enclosure/private/super/core receipt. It does
+  not evaluate the serialized stub's `private` or `super` promises, replay a
+  guessed top enclosure slice, or reread the shell in R after authentication.
+  Borrowing another current object's enclosure is not authentication. In
+  particular, the actual pre-release Paradox-2 Shadow needs no owner registry.
+  A shell without an authenticated current context defaults to a precise error
   directing the caller to `upgrade_paradox_object_graph()`. Setting
   `options(paradox.legacy_object_action = "upgrade")` opts into silent
   identity-preserving first-use migration and then resumes the requested
@@ -615,6 +664,12 @@ semantic vectors remain supported at their stated positions.
   from the transplanted enclosure. In particular, bbotk must cover all
   `.__Codomain__*` targets, including `$clone()`, and miesmuschel must cover
   all historical Shadow overrides.
+- Built-in legacy method enclosures must have the exact currently loaded
+  Paradox namespace as their parent. Registered owner enclosures must likewise
+  have the exact namespace incarnation retained by the registry, followed by
+  the exact current Paradox namespace. `isNamespace()` plus
+  `environmentName()` is descriptive metadata and is not authentication: an
+  ordinary environment can spoof both.
 - Shipped C is portable C17 and otherwise uses public R C APIs available in
   R >= 4.3. The centralized compatibility exceptions in
   `src/r_api_compat.c` exist solely for non-forcing stored-binding/promise
@@ -624,12 +679,23 @@ semantic vectors remain supported at their stated positions.
   `PRENV`, and `PRVALUE`. R >= 4.6 uses only the documented experimental
   binding/dots APIs: strict headers hide all three detached-promise accessors,
   the current DSO must contain none of them, and a structurally reached
-  non-binding `PROMSXP` is opaque. An R-level
-  `substitute()` workaround is forcing/unsound for receipt scans and recursive
-  graph discovery. Every such symbol/version/source occurrence must be listed
+  non-binding `PROMSXP` is opaque. An R-level `substitute()` workaround is
+  insufficient for receipt scans and recursive graph discovery: although
+  non-forcing, it returns a promise expression and cannot distinguish that
+  expression from a realized language/symbol value or provide a stable
+  binding-generation receipt. Every such symbol/version/source occurrence must be listed
   exactly in `environment/r-api-exceptions.tsv`, raw-token and DSO audited, and
   tested against pinned headers and real runtimes before freeze. None is a
   CRAN allowlist or permission for another internal API or semantic path.
+  `src/binding_snapshot.c` exposes the same centralized classifier to the cold
+  R migration/gateway code as one registered native call: it returns an exact
+  realized ordinary frame value, or a negative result for absent, inherited,
+  active, or delayed bindings, without evaluation. Do not recreate a
+  `substitute()`-based classifier in R; realized language objects and symbols
+  as well as literal promises whose expressions are `TRUE`, `NULL`, a language
+  object, a symbol, an environment, a closure, or an external pointer prove why
+  expression/type shape cannot distinguish a delayed binding from a realized
+  value.
   Treat R API predicates as predicates rather than assuming a stable
   integer typedef: when storing their result, normalize it with an explicit
   comparison such as `predicate(...) != FALSE`. The pinned old-header compiler
