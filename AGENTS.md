@@ -1118,7 +1118,7 @@ profile rerun against the active frozen Paradox payload remains a release gate:
   state and rooted detached native search-space snapshots remain, with the
   authenticated exact-class additive `Codomain` inspector/rebuilder
   registration without restoring private ParamSet state access;
-- miesmuschel `codex/paradox-paramsetshadow-bridge` at `7cca4ed`: extends the
+- miesmuschel `codex/paradox-paramsetshadow-bridge` at `2734db0`: extends the
   dual-version official `ParamSetShadow` bridge, public-state tests, and
   dual-major documentation link with the exact-class replacement
   inspector/rebuilder registration for serialized Paradox-1 Shadows and any
@@ -1126,7 +1126,10 @@ profile rerun against the active frozen Paradox payload remains a release gate:
   `params_unid` and `set_id`; deep comparisons remain independent of data.table
   secondary-index caches. Its Shadow dependency diagnostic gate remains
   because it covers the intentionally different official Shadow graph
-  boundary, not ordinary built-in value admission;
+  boundary, not ordinary built-in value admission. The unavoidable load-time
+  namespace rebinding is restricted to the exported generator and eleven
+  historical package-owned leanification targets; relocking is registered
+  before the first unlock, and this bridge exception is not a public API;
 - mlr3mbo `codex/paradox2-transformless-subset` at `1a1c0ab`: public
   transformation-free subset construction on Paradox 2 plus release notes;
 - celecx `codex/paradox2-diagnostics` at `6da5102`: only the independent

@@ -73,7 +73,7 @@ gh pr create --web --repo mlr-org/bbotk --base main --head codex/public-paramset
 ## miesmuschel
 
 - base: `7aaca22d2fc61d8d86291b681a8ecbde21f649c5`
-- head: `7cca4ede39b4dce36dc7e96a21e19303516a5134`
+- head: `2734db0d896745926dbe0c14c2ede272affa9495`
 - branch: `codex/paradox-paramsetshadow-bridge`
 - target branch: `master`
 - proposed title: `Use Paradox's ParamSetShadow on Paradox 2`
@@ -101,6 +101,13 @@ Proposed body:
 > migrate to Paradox's canonical current Shadow capsule without changing the
 > serialized shell identity, and give explicit retired-API diagnostics for the
 > former `params_unid` and `set_id` fields.
+>
+> Keep the load-time namespace rebinding deliberately narrow: only the exported
+> generator and the eleven package-owned historical leanification targets may
+> be unlocked, and cleanup is registered before the first target changes so an
+> exceptional partial operation cannot leave those bindings mutable. Dynamic
+> lookup avoids a misleading static unsafe-call NOTE; it does not make the
+> rebinding mechanism part of the public API.
 
 Publish it manually with:
 

@@ -351,7 +351,9 @@ not a local compatibility workaround.
   `params_unid`/`set_id` behavior, and any required owner-local cold gateways;
   both receive focused explicit/first-use migration tests on both Paradox axes;
 - [x] the tested post-migration bridge trees are committed as bbotk `29f1806`
-  and miesmuschel `7cca4ed`;
+  and miesmuschel `2734db0`; the latter keeps its unavoidable dual-version
+  namespace rebinding allowlisted and registers relocking before the first
+  historical target is changed;
 - [x] mlr3mbo `1a1c0ab`, celecx `6da5102`, mlr3pipelines `c85b2f4`, and
   mlr3fda `8f5a3df` are prepared on their recorded branches; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for

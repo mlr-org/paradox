@@ -1,7 +1,7 @@
 repository	url	priority	commit	commit_date	branch
 bbotk	https://github.com/mlr-org/bbotk.git	0	29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0	2026-07-24T01:18:13+02:00	codex/public-paramsetcollection-sets
 mlr3tuning	https://github.com/mlr-org/mlr3tuning.git	0	b34b50947d45c2fa1d70a3eb1c7c520190a7b26e	2026-07-02T17:45:16+02:00	main
-miesmuschel	https://github.com/mlr-org/miesmuschel.git	0	7cca4ede39b4dce36dc7e96a21e19303516a5134	2026-07-24T01:18:14+02:00	codex/paradox-paramsetshadow-bridge
+miesmuschel	https://github.com/mlr-org/miesmuschel.git	0	2734db0d896745926dbe0c14c2ede272affa9495	2026-07-24T06:43:29+02:00	codex/paradox-paramsetshadow-bridge
 celecx	https://github.com/mlr-org/celecx.git	1	6da5102ca948b8182aae13575c48a932812b05c6	2026-07-23T15:31:56+02:00	codex/paradox2-diagnostics
 smashy	https://github.com/mlr-org/smashy.git	3	fab093584d647ff203f98fa5c9d41f540f65bb8b	2024-06-24T19:50:46+02:00	master
 mlr3	https://github.com/mlr-org/mlr3.git	0	f70c001d526213d80059744b81fcbc420bb83017	2026-07-02T11:33:25+02:00	main
