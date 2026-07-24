@@ -206,18 +206,24 @@ static R_xlen_t find_node(const detach_graph_t *graph, SEXP self) {
 static void import_admitted_graph(detach_graph_t *graph,
     const paradox_collection_graph_t *source, SEXP *roots,
     PROTECT_INDEX roots_index) {
-  if (source == NULL || source->count == 0 ||
-      (size_t) source->count > SIZE_MAX / sizeof(*graph->nodes)) {
+  if (source == NULL) {
+    Rf_error("Corrupt admitted ParamSetCollection graph");
+    /* `Rf_error()` does not return; keep static analyzers on that path. */
+    return;
+  }
+  const R_xlen_t count = source->count;
+  if (count == 0 ||
+      (size_t) count > SIZE_MAX / sizeof(*graph->nodes)) {
     Rf_error("Corrupt admitted ParamSetCollection graph");
   }
-  graph->capacity = source->count;
+  graph->capacity = count;
   graph->nodes = paradox_temporary_alloc(
     graph->capacity,
     sizeof(*graph->nodes)
   );
   graph->count = 0;
 
-  for (R_xlen_t index = 0; index < source->count; ++index) {
+  for (R_xlen_t index = 0; index < count; ++index) {
     const paradox_collection_graph_node_t *selected =
       &source->nodes[index];
     const R_xlen_t existing = find_node(graph, selected->self);
