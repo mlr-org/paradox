@@ -190,6 +190,7 @@ BOUNDED_RCHK_CONFIG="$ROOT/environment/rchk-bounded-bcheck.tsv"
 BOUNDED_RCHK_COMMAND="$ROOT/environment/rchk-bounded-bcheck-command.tsv"
 BOUNDED_RCHK_ENVIRONMENT="$ROOT/environment/rchk-bounded-bcheck-environment.tsv"
 BOUNDED_RCHK_TOOL_IDENTITY="$ROOT/environment/rchk-bounded-bcheck-tool-identity.tsv"
+TRUSTED_RCHK_POLICY_DIRECTORY="$ROOT/environment/rchk-bcheck-policy"
 DEBUG_SYMBOL_HELPER="$ROOT/scripts/bootstrap-valgrind-debug-symbols"
 LOCAL_USER=$(/usr/bin/id -un)
 VALGRIND_STATE_LOCK="$ROOT/.local/r-valgrind/locks/state.lock"
@@ -476,6 +477,22 @@ run_in_directory_logged() {
   fi
 }
 
+verify_rchk_policy_preflight() {
+  policy_stage=$1
+  policy_log="$RUN_DIRECTORY/metadata/rchk-policy-$policy_stage.log"
+  run_logged "$policy_log" env -i \
+    "HOME=$RUN_DIRECTORY/metadata/home" \
+    "USER=$LOCAL_USER" "LOGNAME=$LOCAL_USER" \
+    "PATH=/usr/bin:/bin" "LC_ALL=C.UTF-8" "TZ=UTC" \
+    "$RETAINED_MEMORY_EVIDENCE_HELPER" rchk-policy-directory \
+    "$TRUSTED_RCHK_POLICY_DIRECTORY" \
+    "$SOURCE_DIRECTORY/environment/rchk-bcheck-policy"
+  [ "$(cat "$policy_log")" = \
+      "rchk_policy_directory=matched
+rchk_policy_files=3" ] ||
+    fail "rchk policy preflight returned malformed evidence during $policy_stage"
+}
+
 resource_report_value() {
   awk -F '\t' -v target="$2" '
     $1 == target {
@@ -733,6 +750,12 @@ for origin_name in run.txt result.txt native-check tree-receipt.R \
     "$RUN_DIRECTORY/metadata/origin-$origin_name" ||
     fail "source-run $origin_name changed while its snapshot was copied"
 done
+if [ "$MODE_RCHK" = true ]; then
+  # This runs before any selected mode creates its mode directory. The retained
+  # validator remains the sole parser; this boundary only proves that its
+  # source-bound policy bytes are the exact trusted current policy bytes.
+  verify_rchk_policy_preflight source
+fi
 if [ ! -f "$SOURCE_DIRECTORY/environment/toolchain-linux-64.lock" ] ||
     ! cmp -s "$TOOLCHAIN_LOCK" \
       "$SOURCE_DIRECTORY/environment/toolchain-linux-64.lock"; then
@@ -1906,6 +1929,7 @@ RCHK_DRIVER
 }
 
 if [ "$MODE_RCHK" = true ]; then
+  verify_rchk_policy_preflight pre-rchk
   verify_ordinary_input_receipt_seal pre-rchk
   verify_ordinary_input_metadata pre-rchk
   AUXILIARY_IMAGES="$SOURCE_DIRECTORY/environment/auxiliary-images.tsv"
@@ -2216,6 +2240,7 @@ EOF
     fail "Podman tree receipt changed during rchk"
   cmp -s "$PODMAN_RECEIPT_SHA" "$MODE_ARTIFACTS/podman-5.8.2.sha256" ||
     fail "Podman receipt hash list changed during rchk"
+  verify_rchk_policy_preflight post-rchk
   verify_ordinary_input_receipt_seal post-rchk
   verify_ordinary_input_metadata post-rchk
 fi

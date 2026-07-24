@@ -18,6 +18,7 @@ Usage:
   validate-memory-evidence metadata-fingerprint ROOT OUTPUT
   validate-memory-evidence native-probes RSCRIPT VERIFIER MANIFEST RESULT MODE DSO
   validate-memory-evidence valgrind LOG_DIRECTORY STEM DIAGNOSTIC_REPORT
+  validate-memory-evidence rchk-policy-directory TRUSTED_DIRECTORY SOURCE_DIRECTORY
   validate-memory-evidence rchk REPORT_DIRECTORY RCHK_LOG ARTIFACT_DIRECTORY POLICY_DIRECTORY
   validate-memory-evidence rchk-policy-generate REPORT_DIRECTORY IDENTITY ASSIGNMENTS CATALOG OUTPUT_DIRECTORY
 EOF
@@ -233,6 +234,36 @@ canonical_nonnegative_integer() {
 
 require_regular_file() {
   [[ -f "$1" && ! -L "$1" ]] || fail "$2 is missing or symbolic"
+}
+
+validate_rchk_policy_directory_identity() {
+  [[ $# -eq 2 ]] ||
+    fail "rchk-policy-directory requires TRUSTED_DIRECTORY SOURCE_DIRECTORY"
+  local trusted=$1 source=$2 directory label inventory policy_file
+  local expected_inventory=$'blocks.tsv\npolicy.tsv\nrationales.tsv'
+  for label in trusted source; do
+    if [[ "$label" == trusted ]]; then
+      directory=$trusted
+    else
+      directory=$source
+    fi
+    [[ -d "$directory" && ! -L "$directory" ]] ||
+      fail "$label rchk policy directory is absent, non-directory, or symbolic"
+    inventory=$(find "$directory" -mindepth 1 -maxdepth 1 \
+      -printf '%f\n' | LC_ALL=C sort)
+    [[ "$inventory" == "$expected_inventory" ]] ||
+      fail "$label rchk policy directory has an unexpected inventory"
+    for policy_file in blocks.tsv policy.tsv rationales.tsv; do
+      require_regular_file "$directory/$policy_file" \
+        "$label rchk policy $policy_file"
+    done
+  done
+  for policy_file in blocks.tsv policy.tsv rationales.tsv; do
+    cmp -s "$trusted/$policy_file" "$source/$policy_file" ||
+      fail "source rchk policy differs from trusted current $policy_file"
+  done
+  printf 'rchk_policy_directory=matched\n'
+  printf 'rchk_policy_files=3\n'
 }
 
 read_rchk_identity() {
@@ -759,6 +790,7 @@ case "$COMMAND" in
   metadata-fingerprint) write_metadata_fingerprint "$@" ;;
   native-probes) validate_native_probes "$@" ;;
   valgrind) validate_valgrind "$@" ;;
+  rchk-policy-directory) validate_rchk_policy_directory_identity "$@" ;;
   rchk) validate_rchk "$@" ;;
   rchk-policy-generate) generate_rchk_policy "$@" ;;
   -h|--help|help) usage ;;

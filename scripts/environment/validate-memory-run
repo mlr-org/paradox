@@ -62,6 +62,7 @@ TRUSTED_BOUNDED_RCHK_CONFIG="$ROOT/environment/rchk-bounded-bcheck.tsv"
 TRUSTED_BOUNDED_RCHK_COMMAND="$ROOT/environment/rchk-bounded-bcheck-command.tsv"
 TRUSTED_BOUNDED_RCHK_ENVIRONMENT="$ROOT/environment/rchk-bounded-bcheck-environment.tsv"
 TRUSTED_BOUNDED_RCHK_TOOL_IDENTITY="$ROOT/environment/rchk-bounded-bcheck-tool-identity.tsv"
+TRUSTED_RCHK_POLICY_DIRECTORY="$ROOT/environment/rchk-bcheck-policy"
 TRUSTED_SOURCE_BINDER="$TRUSTED_DIRECTORY/verify-memory-source-bindings.R"
 TRUSTED_PROBE_MANIFEST="$ROOT/environment/native-routine-coverage.tsv"
 RSCRIPT="$ROOT/.local/toolchain/bin/Rscript"
@@ -812,6 +813,13 @@ fi
 if [[ "${run_fields[rchk]}" == true ]]; then
   RCHK_DIRECTORY="$MODES/rchk"
   RCHK_REPORTS="$RCHK_DIRECTORY/artifacts/reports"
+  "$TRUSTED_MEMORY_EVIDENCE" rchk-policy-directory \
+    "$TRUSTED_RCHK_POLICY_DIRECTORY" \
+    "$SOURCE/environment/rchk-bcheck-policy" \
+    > "$SCRATCH/rchk-policy-directory.log"
+  require_exact_lines "$SCRATCH/rchk-policy-directory.log" \
+    'rchk_policy_directory=matched' \
+    'rchk_policy_files=3'
   require_exact_lines "$RCHK_DIRECTORY/artifacts/scope.txt" \
     'mode=rchk' \
     "$(sed -n 's/^reference=/image=/p' "$RCHK_DIRECTORY/artifacts/image.txt")" \

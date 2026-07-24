@@ -2291,6 +2291,49 @@ RCHK_SEMANTIC_SHA256=$(awk -F '\t' \
 [[ "$RCHK_SEMANTIC_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
   fail "rchk policy generator retained no semantic bcheck identity"
 
+# The memory harness performs only an exact current/source directory identity
+# check before launch; semantic parsing remains owned by the validator above.
+RCHK_POLICY_PREFLIGHT="$TEST_ROOT/rchk-policy-preflight"
+mkdir "$RCHK_POLICY_PREFLIGHT"
+cp -a "$RCHK_POLICY" "$RCHK_POLICY_PREFLIGHT/trusted"
+cp -a "$RCHK_POLICY" "$RCHK_POLICY_PREFLIGHT/source"
+"$EVIDENCE_HELPER" rchk-policy-directory \
+  "$RCHK_POLICY_PREFLIGHT/trusted" "$RCHK_POLICY_PREFLIGHT/source" \
+  > "$RCHK_POLICY_PREFLIGHT/matched.log"
+[[ "$(cat "$RCHK_POLICY_PREFLIGHT/matched.log")" == \
+    $'rchk_policy_directory=matched\nrchk_policy_files=3' ]] ||
+  fail "matching rchk policy directories returned malformed evidence"
+
+cp -a "$RCHK_POLICY" "$RCHK_POLICY_PREFLIGHT/stale"
+chmod u+w "$RCHK_POLICY_PREFLIGHT/stale/policy.tsv"
+sed -i 's/^schema\t2$/schema\t1/' \
+  "$RCHK_POLICY_PREFLIGHT/stale/policy.tsv"
+RCHK_MODE_MARKER="$RCHK_POLICY_PREFLIGHT/mode-launched"
+if "$EVIDENCE_HELPER" rchk-policy-directory \
+    "$RCHK_POLICY_PREFLIGHT/trusted" "$RCHK_POLICY_PREFLIGHT/stale" \
+    > "$RCHK_POLICY_PREFLIGHT/stale.stdout" \
+    2> "$RCHK_POLICY_PREFLIGHT/stale.stderr"; then
+  printf 'launched\n' > "$RCHK_MODE_MARKER"
+  fail "stale source policy passed its pre-launch identity check"
+fi
+[[ ! -e "$RCHK_MODE_MARKER" ]] ||
+  fail "stale source policy launched mode work before failing"
+grep -Fq 'source rchk policy differs from trusted current policy.tsv' \
+  "$RCHK_POLICY_PREFLIGHT/stale.stderr" ||
+  fail "stale source policy returned the wrong fail-fast diagnostic"
+
+cp -a "$RCHK_POLICY" "$RCHK_POLICY_PREFLIGHT/extra"
+printf 'unexpected\n' > "$RCHK_POLICY_PREFLIGHT/extra/extra.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk-policy-directory \
+  "$RCHK_POLICY_PREFLIGHT/trusted" "$RCHK_POLICY_PREFLIGHT/extra"
+
+cp -a "$RCHK_POLICY" "$RCHK_POLICY_PREFLIGHT/symbolic"
+rm "$RCHK_POLICY_PREFLIGHT/symbolic/rationales.tsv"
+ln -s "$RCHK_POLICY_PREFLIGHT/trusted/rationales.tsv" \
+  "$RCHK_POLICY_PREFLIGHT/symbolic/rationales.tsv"
+expect_failure "$EVIDENCE_HELPER" rchk-policy-directory \
+  "$RCHK_POLICY_PREFLIGHT/trusted" "$RCHK_POLICY_PREFLIGHT/symbolic"
+
 prepare_rchk_case() {
   local label=$1
   RCHK_CASE="$TEST_ROOT/rchk-case-$label"
@@ -2626,6 +2669,8 @@ for required_pattern in \
     'valgrind-analyzer' \
     '--selection=analyzer' \
     'source-run-proof-at-use.txt' \
+    'rchk-policy-directory' \
+    'verify_rchk_policy_preflight source' \
     'probes-verification-final.log' \
     'PYTHONDONTWRITEBYTECODE=1' \
     'PYTHONPYCACHEPREFIX=' \
@@ -2650,6 +2695,28 @@ for required_pattern in \
   grep -Fq -- "$required_pattern" "$MEMORY_HARNESS" ||
     fail "memory harness lacks targeted evidence policy: $required_pattern"
 done
+memory_policy_source_line=$(grep -n \
+  '^  verify_rchk_policy_preflight source$' "$MEMORY_HARNESS" | cut -d: -f1)
+memory_policy_pre_rchk_line=$(grep -n \
+  '^  verify_rchk_policy_preflight pre-rchk$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+memory_gct_launch_line=$(grep -n \
+  '^  MODE_DIRECTORY="\$RUN_DIRECTORY/modes/gct"$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+memory_valgrind_launch_line=$(grep -n \
+  '^  MODE_DIRECTORY="\$RUN_DIRECTORY/modes/valgrind"$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+memory_rchk_launch_line=$(grep -n \
+  '^  MODE_DIRECTORY="\$RUN_DIRECTORY/modes/rchk"$' \
+  "$MEMORY_HARNESS" | cut -d: -f1)
+[[ -n "$memory_policy_source_line" && -n "$memory_policy_pre_rchk_line" &&
+    -n "$memory_gct_launch_line" && -n "$memory_valgrind_launch_line" &&
+    -n "$memory_rchk_launch_line" &&
+    "$memory_policy_source_line" -lt "$memory_gct_launch_line" &&
+    "$memory_policy_source_line" -lt "$memory_valgrind_launch_line" &&
+    "$memory_policy_source_line" -lt "$memory_rchk_launch_line" &&
+    "$memory_policy_pre_rchk_line" -lt "$memory_rchk_launch_line" ]] ||
+  fail "stale rchk policy can reach a selected mode launch boundary"
 for obsolete_pattern in \
     'CMD check --use-gct' \
     'CMD check --use-valgrind' \

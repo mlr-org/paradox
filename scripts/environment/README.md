@@ -282,9 +282,12 @@ the raw reports in its tool-status receipt. Any semantic diagnostic drift or
 package-local `ERROR:` is fatal; this is not a wildcard suppression. maacheck
 must be byte-empty, and fficheck must report `R_init_paradox`, the exact
 dynamically discovered registered routine inventory, and exactly one
-registration call. Regenerate all function/state/semantic-report inventories
-from the frozen candidate; only the authenticated bounded-analyzer executable
-cache may be reused without recompilation.
+registration call. Before any selected memory mode starts, an rchk-enabled run
+requires the frozen source's exact three ordinary policy files to be
+byte-identical to the trusted current policy directory; replay enforces the
+same boundary. Regenerate all function/state/semantic-report inventories from
+the frozen candidate; only the authenticated bounded-analyzer executable cache
+may be reused without recompilation.
 
 The Valgrind branch of `scripts/memory-check` separates fast sealed
 receipt/runtime validation from expensive content traversal. Its ordinary
