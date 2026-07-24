@@ -36,15 +36,18 @@ heads selected by the snapshot.
 The frozen release candidate also has one downstream-only refresh profile,
 `release-refresh-20260720`, declared in
 [`downstream-evidence-profiles.tsv`](downstream-evidence-profiles.tsv). Its
-separate snapshot/provenance files bind the exact refreshed miesmuschel,
-mlr3mbo, celecx, and mlr3fda heads while retaining four unchanged support
-bridges in the install overlay. Named profiles select a separate authenticated
-primary-checkout namespace. Their dependency receipt is profile-specific,
-axis-neutral, and run-local because it prepares only the unchanged external
-dependency closure; refreshed mlr3mbo is supplied by the ordered bridge
-overlay. The refresh dependency manifest is deliberately limited to the eight
-overlay packages rather than replaying unrelated consumers. The
-`paradox2`/`paradox1` axis registry pins exact candidate
+separate snapshot/provenance files bind all eight exact reviewed heads. The
+repository stage runs the complete priority-zero/one corpus once; the
+additional exact source-package checks select bbotk, miesmuschel, mlr3mbo,
+celecx, and mlr3fda. The reviewed mlr3, mlr3pipelines, and mlr3fselect heads
+remain authenticated support packages in the ordered install overlay and are
+covered by the broad repository stage. Named profiles select a separate
+authenticated primary-checkout namespace. Their dependency receipt is
+profile-specific, axis-neutral, and run-local because it prepares only the
+unchanged external dependency closure; refreshed mlr3mbo is supplied by the
+ordered bridge overlay. The refresh dependency manifest is deliberately
+limited to the eight overlay packages rather than replaying unrelated
+consumers. The `paradox2`/`paradox1` axis registry pins exact candidate
 ref/commit/tree/version tuples and creates distinct overlay, lock,
 repository-test, full-check, and completion paths. These paths never overwrite
 or relabel default full-corpus evidence. A non-default profile is post-freeze
@@ -292,15 +295,16 @@ development command may install into it while a gate or benchmark is running.
 The downstream bridge overlay follows the same rule. It is built once in the
 candidate run by `compat/install-downstream-bridges`, in the fixed dependency
 order bbotk, mlr3, miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, and
-celecx. Its read-only verifier reauthenticates the candidate and dependency
-receipts, priority-one dependency preparation, reviewed Git objects, sealed
-package ledger, complete installed-library fingerprint, evidence verifier, and
-resource-scheduler bytes without loading a bridge package. One run-local owner
-serializes construction; atomic no-clobber publication and owner plus
-device/inode-gated cleanup prevent a losing process from deleting a raced
-replacement. Repository, documentation, and release-benchmark entrypoints fail
-unless their exact overlay verifies. The active named refresh uses schema 3 and
-a profile/axis suffix; schema 2 describes only the historical default overlay.
+celecx, and mlr3fda. Its read-only verifier reauthenticates the candidate and
+dependency receipts, priority-one dependency preparation, reviewed Git
+objects, sealed package ledger, complete installed-library fingerprint,
+evidence verifier, and resource-scheduler bytes without loading a bridge
+package. One run-local owner serializes construction; atomic no-clobber
+publication and owner plus device/inode-gated cleanup prevent a losing process
+from deleting a raced replacement. Repository, documentation, and
+release-benchmark entrypoints fail unless their exact overlay verifies. The
+active named refresh uses schema 3 and a profile/axis suffix; schema 2
+describes only the historical default overlay.
 
 For a named downstream-only refresh, choose a new candidate-bound run, prepare
 the profile dependency receipt before installing the candidate, and pass the
@@ -316,7 +320,7 @@ before producing any archive.
 
 ```sh
 profile=release-refresh-20260720
-axis=paradox2                    # use a separate run and paradox1 for P1
+axis=paradox2                    # broad current-candidate gate
 Rscript compat/install-repository-test-dependencies.R \
   "$PARADOX_ROOT" 1 "$dependency_library" --run-id "$run_id" \
   --evidence-profile "$profile"
@@ -328,12 +332,19 @@ export PARADOX_CONSUMER_EXTRA_LIBS="$bridge_library:$mlr3verse_library"
 Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
   "$candidate_library" "$dependency_library" --run-id "$run_id" \
   --candidate-source "$candidate_source" --evidence-profile "$profile" \
-  --paradox-axis "$axis" \
-  --repositories miesmuschel,mlr3mbo,celecx,mlr3fda --jobs 1
+  --paradox-axis "$axis" --jobs 1
 compat/check-downstream-profile --candidate-source "$candidate_source" \
   --evidence-profile "$profile" --paradox-axis "$axis" \
-  --repositories miesmuschel,mlr3mbo,celecx,mlr3fda
+  --repositories bbotk,miesmuschel,mlr3mbo,celecx,mlr3fda
 ```
+
+Use a distinct run/library/overlay with `axis=paradox1` for the released
+Paradox-1 compatibility axis. On that axis, add
+`--repositories bbotk,miesmuschel,mlr3mbo,celecx,mlr3fda` to the
+`test-repositories.R` command and retain the same five-package
+`check-downstream-profile` selection. Do not repeat the complete consumer
+corpus, reverse-dependency, documentation, differential, or benchmark gates on
+Paradox 1.
 
 The full-check stage records and reauthenticates an ordered content manifest
 for the candidate package, every configured extra library (including the

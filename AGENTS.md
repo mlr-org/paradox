@@ -19,23 +19,51 @@ replay, or pre-data.table-1.18 decisions back into current source. The sole
 release evidence transfer currently admitted is the independently replayed
 `a4617ca` to `10c6a0e` package-payload proof recorded below; it is byte-identity
 reuse, not behavioral inference across different package implementations.
-The active informative-diagnostic and legacy object-graph migration source
-changes intentionally differ from that payload, so the proof no longer
-establishes a current release candidate. Treat all `10c6a0e` package,
-downstream, memory, and performance conclusions as historical until a new exact
-payload is frozen and gated. During these changes, use focused compiler,
-diagnostic, migration-fixture, differential, and affected-consumer checks; do
-not rerun the complete release suite after each edit.
-The most recent focused diagnostic install, which predates the object-graph
-migration source change, has DSO SHA-256
+The informative-diagnostic and legacy object-graph migration source changes
+intentionally differ from that payload, so the proof does not establish
+anything about the active package bytes. The replacement package payload is
+now frozen at
+`refs/paradox-release/candidate-20260724T011004Z`, commit
+`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
+`7913a390ca85beba03dcc954af18efcb7a35ecfe`. Treat all `10c6a0e` package,
+downstream, memory, and performance conclusions as historical. Any further
+package-source, package-test, help, or package-facing documentation change
+requires another candidate; post-freeze release-policy and evidence-ledger
+changes must prove that those package-facing paths are unchanged.
+
+The exact frozen source has a refreshed bounded-rchk discovery under
+`.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk`.
+Bcheck analyzed 845 functions and 28,745 states and retained the same 77
+reviewed blocks, 196 UP diagnostics, and 13 PB diagnostics; its report SHA-256
+is `a6b6f1dee7808424b82cfa3e9e587a71b6da99613cf7bbfdd94b921d083e82fa`.
+Maacheck is byte-empty
+(`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`);
+fficheck records 73 functions and one registration call, with report SHA-256
+`daac4796cfc39fc04d0b92c4654431699dc9505a735360eb9d98b449d9f788d7`.
+The refreshed policy, observed inventory, block table, and unchanged rationale
+table have SHA-256
+`07201bb186edff37ba4f8b719bcef2ca04db02e32e53764d8cda51606447ad2e`,
+`a2400bfc9b1743203f8273b2e7856f6279d8069a8d3030d5177d0be1895e7075`,
+`1ba2e2f2cdb272928332f2e3e41bc5f0c74675936409fad0ff9b137f3bf76bff`,
+and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+The preceding discovery exposed a real protection imbalance in
+`schedule_vector()`: an ALTREP `Duplicate` method may legally return its input,
+but pointer equality was incorrectly used to decide whether to release the
+second protection. One indexed root plus `REPROTECT` fixes the imbalance, and
+the frozen candidate includes a self-returning ALTREP-list regression that
+captures R's direct stack-imbalance diagnostic. `schedule_vector` is absent
+from the refreshed report. This discovery and policy refresh are exact
+source-bound analyzer evidence, not a substitute for the still-pending sealed
+GCT/Valgrind/rchk memory gate or the other final release gates.
+The retained focused diagnostic install from before the object-graph migration
+source change has DSO SHA-256
 `2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`.
 Its 68-case Paradox-1 message differential is byte-identical under
 `.local/checks/informative-diagnostics-final-differential-20260723/`, and its
 strict GCC/Clang builds plus direct/allocation/callback probes pass under
 `.local/checks/informative-diagnostics-final-native-r2-20260723/`. These are
-historical bounded diagnostic-change evidence, not evidence for the current
-migration payload or a substitute for the next exact full release candidate
-gate.
+historical bounded diagnostic-change evidence, not evidence for the active
+frozen migration payload or a substitute for its final release gates.
 
 Post-freeze downstream-only validation is the one narrow exception to keeping
 all release tooling byte-identical to the package candidate. It uses a named,
@@ -49,11 +77,13 @@ both the profile and the exact `paradox2`/`paradox1` axis. Each axis registry
 row pins the complete candidate ref/commit/tree/version tuple, not merely its
 major version. Never edit/relabel the default evidence, pass an arbitrary
 manifest path, or run Paradox-1 compatibility in a Paradox-2 candidate stage.
-The active release refresh is
-`release-refresh-20260720`; only miesmuschel, mlr3mbo, celecx, and mlr3fda
-repository rows are rerun, with one worker, while the overlay retains all
-eight reviewed support packages in dependency order. Its refreshed heads live
-in a separate authenticated primary-checkout namespace; dependency preparation
+The active release refresh is `release-refresh-20260720`. Its final repository
+stage runs the complete priority-zero/one corpus once with one worker. The
+additional exact source-package check stage covers bbotk, miesmuschel, mlr3mbo,
+celecx, and mlr3fda: the first two own serialized-object bridges, and the last
+three retain reviewed Paradox-2 adaptations. The overlay retains all eight
+reviewed support packages in dependency order. Its refreshed heads live in a
+separate authenticated primary-checkout namespace; dependency preparation
 continues to use the unchanged default heads, because refreshed mlr3mbo is a
 bridge package in the ordered overlay rather than a shared-library dependency.
 The sealed release benchmark is part of that post-freeze validation tooling,
@@ -1082,7 +1112,7 @@ or submit PRs manually.
 
 The bbotk and miesmuschel heads below are the committed post-migration handoff;
 the remaining heads retain their previously reviewed bridge changes. A full
-profile rerun against the refrozen Paradox payload remains a release gate:
+profile rerun against the active frozen Paradox payload remains a release gate:
 
 - bbotk `codex/public-paramsetcollection-sets` at `29f1806`: public collection
   state and rooted detached native search-space snapshots remain, with the
@@ -1119,7 +1149,7 @@ retained under
 `.local/checks/informative-diagnostics-downstream-paradox1-focused-20260723T131726Z/`
 and `.local/checks/informative-diagnostics-downstream-final-20260723T130129Z/`.
 Those historical follow-up commits record only the then-tested cleanup trees.
-The reopened migration payload has separate focused evidence under
+The then-reopened migration payload has separate focused evidence under
 `.local/checks/downstream-upgrader-latest-20260724/`: bbotk's exact Codomain
 upgrader tests pass 8/8, miesmuschel's Shadow suite passes 62/62, and authentic
 Paradox-1 fixtures pass every historical default/opt-in target plus explicit
@@ -1196,6 +1226,29 @@ Never widen a global tier or add another integrity row without retained profile
 evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
 Paradox 2 is the authenticated baseline.
+
+## Active frozen candidate
+
+The current package candidate is
+`refs/paradox-release/candidate-20260724T011004Z`, commit
+`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
+`7913a390ca85beba03dcc954af18efcb7a35ecfe`. It contains the informative native
+diagnostics, recursive legacy object-graph migration, the indexed-root
+`schedule_vector()` repair, and the self-returning ALTREP duplicate regression.
+`AGENTS.md`, `design/`, and `environment/` are excluded from the package build,
+so the post-freeze rchk-policy and release-ledger refresh does not alter that
+package payload. Do not infer this for any other path: authenticate the exact
+diff before transferring a package-byte-bound result.
+
+The exact candidate's discovery2 bcheck/maacheck/fficheck reports and refreshed
+policy are recorded in the Authority section above. The release decision
+remains pending. Required final work still includes the complete package suite
+and `R CMD check`, strict compilers and sanitizers, the complete R-API and
+R 4.3.3/4.5.2/development runtime gates, the sealed combined
+GCT/Valgrind/rchk/adversarial gate, normalized differential, both downstream
+axes and maintained consumers, documentation workloads, the idle-host release
+benchmark, exact Windows x86-64 and Apple-silicon macOS evidence, and the
+user-performed downstream PR/publication handoff.
 
 ## Historical candidates
 

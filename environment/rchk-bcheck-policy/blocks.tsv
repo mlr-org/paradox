@@ -7,13 +7,13 @@ ordinal	function	up_count	pb_count	rationale_id
 6	build_edge_plan	1	0	ADDRESS_TAKEN_MODEL
 7	checked_core	3	0	BORROWED_OWNER_ROOT
 8	collection_child_sources	8	0	BORROWED_OWNER_ROOT
-9	condition_matches.438	1	0	ADDRESS_TAKEN_MODEL
+9	condition_matches.463	1	0	ADDRESS_TAKEN_MODEL
 10	exact_base_receipt_unchanged	3	0	BORROWED_OWNER_ROOT
 11	exact_detached_callback_owner	6	0	BORROWED_OWNER_ROOT
 12	exact_metadata_signature	2	0	BORROWED_OWNER_ROOT
 13	exact_named_plain_list	1	0	BORROWED_OWNER_ROOT
 14	exact_requirement_condition	1	0	ADDRESS_TAKEN_MODEL
-15	exact_sets.599	1	0	BORROWED_OWNER_ROOT
+15	exact_sets.625	1	0	BORROWED_OWNER_ROOT
 16	exact_shadow_constraint_plan	2	0	BORROWED_OWNER_ROOT
 17	initialize_child	3	0	BORROWED_OWNER_ROOT
 18	initialize_new_node	4	0	PROTECTED_ROOT_CARRIER
@@ -21,8 +21,8 @@ ordinal	function	up_count	pb_count	rationale_id
 20	load_base_param_state	1	0	BORROWED_OWNER_ROOT
 21	load_param_state	3	0	BORROWED_OWNER_ROOT
 22	load_snapshot	5	0	BORROWED_OWNER_ROOT
-23	load_snapshot.1233	4	0	BORROWED_OWNER_ROOT
-24	load_snapshot.840	6	0	PROTECTED_ROOT_CARRIER
+23	load_snapshot.1259	4	0	BORROWED_OWNER_ROOT
+24	load_snapshot.866	6	0	PROTECTED_ROOT_CARRIER
 25	load_source	2	0	BORROWED_OWNER_ROOT
 26	local_input_for_names	6	0	BORROWED_OWNER_ROOT
 27	named_value	2	0	BORROWED_OWNER_ROOT

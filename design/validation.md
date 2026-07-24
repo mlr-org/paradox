@@ -449,22 +449,27 @@ run-local candidate receipt for released Paradox 1.0.1, so P1 observations
 cannot be presented as Paradox-2 candidate evidence.
 
 The `release-refresh-20260720` profile installs its complete eight-package
-dependency order but executes repository rows only for miesmuschel, mlr3mbo,
-celecx, and mlr3fda. This retains exact reviewed
-bbotk/mlr3/mlr3pipelines/mlr3fselect runtime support without rerunning their
-repository suites. Both axes retain profile/axis registries and selected input
-hashes, reject path, symlink, head, tree, and ancestry mismatches before work,
-and publish profile-specific overlays with the same no-clobber protocol. Use
-one outer worker for this focused release confirmation. Run the sealed exact-
-head `R CMD check` harness in addition to repository suites so Rd links and
-other package-level checks are retained evidence. For each authenticated Git
-archive, that harness first runs `R CMD build`, retains and hashes its build
-log and resulting package tarball, and checks that tarball rather than the raw
-source directory. This makes build-time `Authors@R` expansion part of the
-authenticated boundary required by R 4.6. The harness separately binds the
-check exit/log, classifies the retained final check status rather than trusting
-the process exit alone, so a WARNING cannot be sealed as a pass, and binds
-every configured extra-library input by ordered path and content hash.
+dependency order. Its final broad repository stage executes the complete
+priority-zero/one corpus once. The additional exact source-package check stage
+selects bbotk, miesmuschel, mlr3mbo, celecx, and mlr3fda: bbotk and
+miesmuschel own serialized-object bridges, while the other three retain
+reviewed Paradox-2 adaptations. The overlay still authenticates the exact
+reviewed mlr3, mlr3pipelines, and mlr3fselect heads, and their behavior is
+covered by the broad repository stage without rebuilding a second
+source-package check corpus. Both axes retain profile/axis registries and
+selected input hashes, reject path, symlink, head, tree, and ancestry
+mismatches before work, and publish profile-specific overlays with the same
+no-clobber protocol. Use one outer worker for this focused release
+confirmation. Run the sealed exact-head `R CMD check` harness in addition to
+repository suites so Rd links and other package-level checks are retained
+evidence. For each authenticated Git archive, that harness first runs `R CMD
+build`, retains and hashes its build log and resulting package tarball, and
+checks that tarball rather than the raw source directory. This makes build-time
+`Authors@R` expansion part of the authenticated boundary required by R 4.6.
+The harness separately binds the check exit/log, classifies the retained final
+check status rather than trusting the process exit alone, so a WARNING cannot
+be sealed as a pass, and binds every configured extra-library input by ordered
+path and content hash.
 
 The final benchmark deliberately does not require validation-tooling
 `HEAD` to equal the candidate commit. Such a requirement is circular: the

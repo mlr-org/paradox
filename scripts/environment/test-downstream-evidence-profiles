@@ -31,7 +31,7 @@ value() {
    $(value "$legacy_output" suffix) == -release-refresh-20260720-paradox1 &&
    $(value "$legacy_output" version_major) == 1 &&
    $(value "$profile_output" candidate_commit) == \
-     10c6a0e65910206c8face91dac6c3dd1115e0bed &&
+     348539ad141e1b75d424d7f92e3acd50c4549dec &&
    $(value "$legacy_output" candidate_commit) == \
      cdcc8e616afe243cd7c54e15713c86f818a52626 &&
    $(value "$profile_output" checkout_namespace) == \
@@ -61,16 +61,20 @@ if (!rejected) stop("candidate substitution was accepted", call. = FALSE)
 RSCRIPT
 
 for binding in \
-    $'miesmuschel\td4c7f79750cd15c8174415fb0ba059c597f4f055' \
+    $'bbotk\t29f18061b03fe1d31bfd2d1955e3fe6be5cec0c0' \
+    $'mlr3\tf70c001d526213d80059744b81fcbc420bb83017' \
+    $'miesmuschel\t7cca4ede39b4dce36dc7e96a21e19303516a5134' \
+    $'mlr3pipelines\tc85b2f4165e056934f892c5db37391869cd40e38' \
+    $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
     $'mlr3mbo\t1a1c0abe95f59cd314f1fbc19c596cb6ac15f067' \
-    $'celecx\ta2975550c14f824c6abc86db9db32e982908c3ea' \
-    $'mlr3fda\t035da5bb8d1c2ae22f04898718355e9653c382b2'; do
+    $'celecx\t6da5102ca948b8182aae13575c48a932812b05c6' \
+    $'mlr3fda\t8f5a3dfa297ad236812cda57fab02de75fec375a'; do
   repository=${binding%%$'\t'*}
   commit=${binding#*$'\t'}
   [[ $(awk -F '\t' -v repository="$repository" \
     '$1 == repository { print $4 }' \
     "$ROOT/compat/github-snapshot.release-refresh-20260720.tsv") == "$commit" ]] ||
-    fail "refreshed snapshot does not bind $repository to $commit"
+    fail "refreshed snapshot does not bind reviewed $repository to $commit"
 done
 
 fixture=$(mktemp -d "$ROOT/.local/tmp/downstream-profile.XXXXXX")

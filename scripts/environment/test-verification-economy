@@ -565,7 +565,7 @@ for inventory_check in \
     'elif [[ "$state" == present ]]; then' \
     'authenticated_symlink_chain' \
     '"$identity_state" =~ ^(supported|unsupported)$'; do
-  printf '%s\n' "$api_tool_inventory_body" | grep -Fq -- "$inventory_check" ||
+  grep -Fq -- "$inventory_check" <<<"$api_tool_inventory_body" ||
     fail "API parent incompletely validates configure-tool inventory: $inventory_check"
 done
 [[ $(grep -Fc '"$RETAINED_TREE_RECEIPT_HELPER" verify \' "$API_GATE") -eq 6 ]] ||

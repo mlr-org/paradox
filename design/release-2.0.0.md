@@ -2,18 +2,21 @@
 
 ## Status
 
-**Package source reopened for the informative native diagnostic and legacy
-object-graph migration contracts.**
-The former frozen candidate and its local correctness, compatibility,
-documentation, memory, and performance gates remain historical evidence only.
-They do not transfer to the changed package payload. During this focused source
-change, run strict compilation, the diagnostic matrix, migration fixtures and
-adversarial graph tests, targeted differentials, and affected consumers; defer
-the complete release suite until the package is refrozen. The release decision
-also remains pending on exact Windows
-x86-64/macOS ARM64 portability evidence and user publication of the final
-downstream branches/PRs. No conclusion from a semantically different package
-payload is accepted.
+**Package payload frozen; final release validation pending.**
+The active candidate is
+`refs/paradox-release/candidate-20260724T011004Z`, commit
+`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
+`7913a390ca85beba03dcc954af18efcb7a35ecfe`. It includes the informative native
+diagnostics, recursive legacy object-graph migration, and the focused
+self-returning ALTREP duplicate regression. The former frozen candidate and
+its local correctness, compatibility, documentation, memory, and performance
+gates remain historical evidence only; they do not transfer to this changed
+package payload. The release decision remains pending on the complete
+exact-candidate local gates, both downstream axes and maintained consumers,
+documentation and benchmark stages, exact Windows x86-64/macOS ARM64
+portability evidence, and user publication of the final downstream
+branches/PRs. No conclusion from a semantically different package payload is
+accepted.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -259,7 +262,7 @@ not a local compatibility workaround.
   fixtures in the historical candidate;
 - [x] recursive identity-preserving graph upgrader, versioned current targets,
   cold first-use gateways, and exact owner registry are complete and pass their
-  focused source/fixture/adversarial checks on the reopened payload;
+  focused source/fixture/adversarial checks on the now-frozen payload;
 - [x] complete live Shadow synchronization, clone/serialization/DAG behavior,
   and all graph-reader coverage confirmed after converged install;
 - [x] value, tag, dependency, callback, and collection-add mutators use
@@ -320,7 +323,7 @@ not a local compatibility workaround.
   TuneToken/receipt/capability, and upgrade contract suite passes on the former
   frozen candidate payload, authenticated through the sealed `a4617ca` to
   `10c6a0e` package-payload equivalence proof and exact-candidate static/memory
-  stages; this does not validate the reopened migration payload;
+  stages; this does not validate the active migration payload;
 - [x] recursive migration tests cover identity, sharing/cycles, attributes/S4,
   environments/closures/bytecode, active-binding non-invocation, promise
   non-forcing, traversal boundaries, current-core payloads, full-preflight
@@ -328,15 +331,16 @@ not a local compatibility workaround.
   authentic Paradox-1/downstream fixtures, and hostile malformed state;
 - [ ] package reference documentation, vignettes, migration guide, website,
   and downstream bridge docs describe the new migration behavior consistently
-  and the documentation stage is rerun on the refrozen payload; the previous
-  17-workload green stage remains historical only;
+  and the documentation stage is rerun on the active frozen payload; the
+  previous 17-workload green stage remains historical only;
 - [x] historical routine/analyzer/runtime ledgers dynamically discovered their
   candidate files and contained no hard-coded test counts; the final old-R run
   staged the reviewed `mbo_config` Git-object bundle before worker admission and
   executed its upgrade test without an environment skip;
-- [ ] registration, R-API-exception, symbol-audit, analyzer, and runtime ledgers
-  are regenerated and verified for the new graph routine and non-forcing
-  promise inspection before refreeze.
+- [x] the registered-routine inventory and bounded-rchk policy are regenerated
+  for the frozen graph routine; the exact discovery2 report is reviewed below;
+- [ ] R-API-exception, remaining symbol-audit, and runtime ledgers are verified
+  for non-forcing promise inspection in the final exact-candidate gates.
 
 ### Downstream coordination
 
@@ -352,26 +356,59 @@ not a local compatibility workaround.
   mlr3fda `8f5a3df` are prepared on their recorded branches; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
-- [ ] all eight profile heads are authenticated against the refrozen candidate;
-  the four selected profile repositories are then fully checked on both exact
-  Paradox axes;
+- [ ] all eight profile heads are authenticated against the active candidate;
+  the complete priority-zero/one repository corpus is run once, and bbotk,
+  miesmuschel, mlr3mbo, celecx, and mlr3fda receive exact source-package checks
+  on both Paradox axes;
 - [x] diagnostic-only downstream changes remain pruned and the current
   committed bbotk/miesmuschel owner bridges pass focused tests plus authentic
-  default/opt-in migration fixtures against the reopened Paradox-2 payload;
+  default/opt-in migration fixtures against the then-reopened Paradox-2
+  development payload;
 - [ ] the priority consumer corpus and active documentation are rerun against
-  the exact refrozen payload and reviewed bridge heads; all 2,022-per-axis and
+  the exact frozen payload and reviewed bridge heads; all 2,022-per-axis and
   documentation conclusions retained below belong to the superseded payload;
 - [ ] user has manually pushed branches and opened the required PRs (agents
   have no remote-write authorization).
 
 ### Performance and correctness
 
-The results and hashes in this subsection bind the superseded pre-migration
-payload. They remain useful engineering evidence but do not close a release
-gate for the reopened source.
+The exact frozen candidate has a source-bound bounded-rchk discovery under
+`.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk`.
+Bcheck analyzed 845 functions and 28,745 states, with 77 reviewed Function
+blocks, 196 UP diagnostics, and 13 PB diagnostics; its report SHA-256 is
+`a6b6f1dee7808424b82cfa3e9e587a71b6da99613cf7bbfdd94b921d083e82fa`.
+Maacheck is byte-empty
+(`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
+Fficheck reports 73 registered functions and one checked registration call;
+its report SHA-256 is
+`daac4796cfc39fc04d0b92c4654431699dc9505a735360eb9d98b449d9f788d7`.
+The analyzer-identity, refreshed policy, observed inventory, block-table, and
+unchanged rationale-table SHA-256 values are
+`356e2e277a3ef8441fbf464c3c927a9f9f088db839f60b5b16231f30d2889028`,
+`07201bb186edff37ba4f8b719bcef2ca04db02e32e53764d8cda51606447ad2e`,
+`a2400bfc9b1743203f8273b2e7856f6279d8069a8d3030d5177d0be1895e7075`,
+`1ba2e2f2cdb272928332f2e3e41bc5f0c74675936409fad0ff9b137f3bf76bff`,
+and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 
-The checked-in `environment/rchk-bcheck-policy/` binds the refreshed reviewed
-public-table candidate source and its bounded-analyzer reports. Bcheck
+The preceding discovery exposed a real protection imbalance in
+`schedule_vector()`. R explicitly permits an ALTREP `Duplicate` method to
+return its input, but the former implementation protected both the input and
+duplicate result and then used pointer inequality to decide whether to release
+the second protection. The replacement keeps one indexed root and uses
+`REPROTECT`; the candidate also contains a test-only ALTREP list whose
+`Duplicate` method returns itself and a graph-discovery regression that captures
+R's direct stack-imbalance diagnostic. `schedule_vector`'s former one-UP/two-PB
+block is absent from discovery2. The remaining 77 blocks and rationale
+assignments are the exact reviewed inventory, subject only to generated helper
+suffix and source-line shifts. This refresh admits the current rchk policy; it
+does not by itself seal the combined GCT/Valgrind/rchk memory gate.
+
+The following historical results and hashes bind the superseded pre-migration
+payload. They remain useful engineering evidence but do not close a release
+gate for the active candidate.
+
+The historical candidate's rchk policy bound the refreshed reviewed
+public-table source and its bounded-analyzer reports. Bcheck
 analyzed 782 functions and 28,140 states, with 77 exact Function blocks, 196 UP
 diagnostics, and 13 PB diagnostics; its report SHA-256 is
 `4a405e12807da7ee5347a6ad610530fc41b0f5331bd65221285399fcc2e12655`.
@@ -397,22 +434,24 @@ same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
 - [x] directly affected development tests pass from stable cached
   installations;
-- [ ] the complete unit suite and package check pass for a newly frozen
+- [ ] the complete unit suite and package check pass for the active frozen
   migration payload; the former donor execution and payload-identity proof are
   historical only;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
 - [x] measured hot-path changes remain intact under the bounded refreshed
   comparison recorded below;
-- [ ] a new sealed release benchmark passes after refreeze;
+- [ ] a new sealed release benchmark passes for the active candidate;
 - [ ] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
-  and R-API/exception-ledger checks are sealed for the new payload;
-- [ ] R 4.3.3, 4.5.2, and development-R local execution are sealed for the new
-  payload;
+  and R-API/exception-ledger checks are sealed for the active payload; the
+  bounded-rchk discovery above refreshes policy but is not the combined memory
+  completion;
+- [ ] R 4.3.3, 4.5.2, and development-R local execution are sealed for the
+  active payload;
 - [ ] Windows x86-64 and real macOS ARM64 are clean for the exact frozen
   candidate and independently retained;
 - [ ] priority consumer, documentation, differential, and benchmark gates are
-  rerun and accepted for the new payload.
+  rerun and accepted for the active payload.
 
 Current profiling diagnostics are implementation guidance, not release
 benchmark evidence:
@@ -651,11 +690,32 @@ R/compiler/instrumentation profile; compatible evidence families may share
 that exact authenticated installation, and a sealed identical-payload ref may
 inherit the donor conclusion, never development component objects.
 
+## Active candidate freeze record
+
+The active immutable package candidate is:
+
+| Field | Value |
+|---|---|
+| Full candidate ref | `refs/paradox-release/candidate-20260724T011004Z` |
+| Commit | `348539ad141e1b75d424d7f92e3acd50c4549dec` |
+| Tree | `7913a390ca85beba03dcc954af18efcb7a35ecfe` |
+| Version | 2.0.0 |
+| Exact bounded-rchk discovery | `.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk` |
+
+This ref freezes package source, package tests, help, and package-facing
+documentation. The post-freeze rchk-policy and release-ledger refresh changes
+only `.Rbuildignore`-excluded validation/documentation paths and must retain a
+clean package-facing diff against the candidate. Archive, package-payload,
+combined-memory, runtime, differential, downstream, documentation, benchmark,
+and portability identities are intentionally not filled from the historical
+candidate: each remains a pending exact-candidate gate until its own retained
+evidence is complete.
+
 ## Historical candidate freeze record (superseded payload)
 
-The active migration payload has no frozen candidate identity yet. The table
-below records the superseded `10c6a0e` payload only and authorizes no current
-release conclusion.
+The table below records the superseded `10c6a0e` payload only. It does not
+describe the active candidate above and authorizes no current release
+conclusion.
 
 An immutable package candidate is committed after package implementation,
 tests, help, and package-facing documentation converge and the primary checkout
@@ -771,13 +831,13 @@ package run.
 
 ## Release decision
 
-The release decision is `pending`. The object-graph migration source change
-invalidated the former package-byte release evidence. The new payload must be
-refrozen and receive the complete unit/check, memory, runtime, differential,
-documentation, consumer, and benchmark gates. Independent exact-candidate
-Windows x86-64/macOS ARM64 evidence and user publication of the prepared
-downstream branches/PRs also remain required. No row in the historical table
-above changes this decision.
+The release decision is `pending`. The object-graph migration payload is frozen
+at the active candidate identity above, and its source-bound rchk policy is
+refreshed, but the complete unit/check, combined memory, runtime, differential,
+documentation, consumer, and benchmark gates remain open. Independent
+exact-candidate Windows x86-64/macOS ARM64 evidence and user publication of the
+prepared downstream branches/PRs also remain required. No row in the historical
+table above changes this decision.
 
 ## Historical rejected or superseded refs
 
