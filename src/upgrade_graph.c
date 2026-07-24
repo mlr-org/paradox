@@ -194,8 +194,13 @@ static paradox_upgrade_path_t *named_path(
 }
 
 static SEXP render_path(const paradox_upgrade_path_t *path) {
-  if (path == NULL || path->total_size > (size_t) R_XLEN_T_MAX) {
+  if (path == NULL) {
     Rf_error("Object graph path is too large to report");
+    return R_NilValue;
+  }
+  if (path->total_size > (size_t) R_XLEN_T_MAX) {
+    Rf_error("Object graph path is too large to report");
+    return R_NilValue;
   }
   char *buffer = temporary_size_alloc(path->total_size + 1, sizeof(*buffer));
   size_t cursor = path->total_size;

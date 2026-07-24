@@ -507,9 +507,14 @@ static SEXP factor_diagnostic(SEXP id,
 SEXP paradox_builtin_value_diagnostic(SEXP id,
     const paradox_builtin_value_spec_t *spec, SEXP value,
     const paradox_builtin_value_result_t *result) {
-  if (TYPEOF(id) != CHARSXP || id == NA_STRING || spec == NULL ||
-      result == NULL || result->failure == PARADOX_BUILTIN_VALUE_OK) {
+  if (spec == NULL || result == NULL) {
     Rf_error("Internal error: invalid built-in value diagnostic");
+    return R_NilValue;
+  }
+  if (TYPEOF(id) != CHARSXP || id == NA_STRING ||
+      result->failure == PARADOX_BUILTIN_VALUE_OK) {
+    Rf_error("Internal error: invalid built-in value diagnostic");
+    return R_NilValue;
   }
 
   if (spec->kind == PARADOX_BUILTIN_DOMAIN_FCT) {
