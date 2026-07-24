@@ -11,98 +11,96 @@ intentional compatibility boundary is
 [`design/compatibility.md`](design/compatibility.md), and the active release
 ledger is [`design/release-2.0.0.md`](design/release-2.0.0.md).
 
-Old candidate commits, refs, logs, and artifacts are historical evidence unless
-a retained, sealed equivalence proof establishes that the exact package payload
-relevant to a gate is unchanged. Git history retains the former long design
-narratives; do not copy their R6-surface authentication, S3 fallback, sentinel
-replay, or pre-data.table-1.18 decisions back into current source. The sole
-release evidence transfer currently admitted is the independently replayed
-`a4617ca` to `10c6a0e` package-payload proof recorded below; it is byte-identity
-reuse, not behavioral inference across different package implementations.
-The informative-diagnostic and legacy object-graph migration source changes
-intentionally differ from that payload, so the proof does not establish
-anything about the active package bytes. The replacement package payload is
-now frozen at
+Old candidate commits, refs, logs, and artifacts are historical unless a
+retained sealed proof transfers an explicitly bounded conclusion. Git history
+retains the former long design narratives; do not copy their R6-surface
+authentication, S3 fallback, sentinel replay, or pre-data.table-1.18 decisions
+back into current source. The independently replayed `a4617ca` to `10c6a0e`
+package-payload proof is one historical transfer for that superseded payload;
+it establishes nothing about the active implementation.
+
+The active package-facing source is frozen at
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
-`81e6f901266754b97a0906f88a472bf04795f13c`. Treat all `10c6a0e` package,
-downstream, memory, and performance conclusions as historical. Any further
-package-source, package-test, help, or package-facing documentation change
-requires another candidate; post-freeze release-policy and evidence-ledger
-changes must prove that those package-facing paths are unchanged.
+`81e6f901266754b97a0906f88a472bf04795f13c`, with authenticated candidate
+content SHA-256
+`ced2390bc756b01805e7bdcf32fdb4a6ff2c1bd010dd3d576194d939e491f644`.
+Any package source, package test, help, or package-facing documentation change
+requires a new candidate. Post-freeze release-policy, validation, and ledger
+commits must prove that those paths are unchanged; call that relationship
+*package-facing-source identical*, not package-identical, unless a separate
+sealed complete-payload byte proof exists.
 
-The exact frozen package source has a refreshed bounded-rchk discovery under
-`.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk`.
-Bcheck analyzed 870 functions and 30,245 states and retained 80 exact reviewed
-blocks, 238 UP diagnostics, and 13 PB diagnostics; its report SHA-256 is
+The original source-bound bcheck discovery under
+`.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk`
+analyzed 870 functions and 30,245 states and produced raw report SHA-256
 `02b08085ea0fadc906fb8e8fdd3f5211a6eb2a7eb08e922205e69f4d25361072`.
-Maacheck is byte-empty
+The final combined memory run under validation tooling
+`a05cd51a5570c4a674b6c80d6cd38c7898223635` reproduced the same reviewed
+semantics—80 blocks, 238 UP diagnostics, and 13 PB diagnostics—with final raw
+report SHA-256
+`0226275247eb16736ab317dfb3e1c7f836ee006fb59683276998632aa120cd9d`
+and ordering-insensitive semantic SHA-256
+`f3dc5caccc4508f9f9263d8d912455820dfba428cb00f7d0454e1734adf6da18`.
+The two raw reports are not byte-identical. Maacheck is byte-empty
 (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`);
-fficheck records 79 functions and one registration call, with report SHA-256
-`565392164712e15df4bbdd0b34fb852b35eeab380f612c0983f2ccab69c31370`.
-The refreshed policy, block table, and unchanged rationale table have SHA-256
-`0ef5d687efbc34b1eff9eddeab21110a50e3c55b5c7dfec107f07e9dd8fa8c6f`,
+fficheck records 79 functions and one registration call
+(`565392164712e15df4bbdd0b34fb852b35eeab380f612c0983f2ccab69c31370`).
+The final policy, block table, and rationale table SHA-256 values are
+`e6010f58c58dfb8e952ee0e515a1a2352decd143e01bda50af7c800b4aa0470d`,
 `50445fd2be3da7cbeb05f689377802deac7597ee2eeed8acc34f683989e3a71d`,
 and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
-The policy and corrected exact eight-file Valgrind scope live in the
-package-identical validation child
-`refs/paradox-release/validation-20260724T120434Z`, commit
-`3597d415a4e162120f5f05e986695909c11151df`; its four changed paths are all
-excluded by `.Rbuildignore`.
-The preceding discovery exposed a real protection imbalance in
-`schedule_vector()`: an ALTREP `Duplicate` method may legally return its input,
-but pointer equality was incorrectly used to decide whether to release the
-second protection. One indexed root plus `REPROTECT` fixes the imbalance, and
-the frozen candidate includes a self-returning ALTREP-list regression that
-captures R's direct stack-imbalance diagnostic. `schedule_vector` is absent
-from the refreshed report. This discovery and policy refresh are exact
-source-bound analyzer evidence. The retained combined GCT/Valgrind/rchk
-completion, rather than discovery alone, owns the release memory conclusion.
-The retained focused diagnostic install from before the object-graph migration
-source change has DSO SHA-256
-`2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`.
-Its 68-case Paradox-1 message differential is byte-identical under
-`.local/checks/informative-diagnostics-final-differential-20260723/`, and its
-strict GCC/Clang builds plus direct/allocation/callback probes pass under
-`.local/checks/informative-diagnostics-final-native-r2-20260723/`. These are
-historical bounded diagnostic-change evidence, not evidence for the active
-frozen migration payload or a substitute for its final release gates.
+The `a05cd51` tooling tree
+`c58b6bea97d66e23b542a34864479e28c5e5e02f` is package-facing-source
+identical to the candidate. Its retained GCT/Valgrind/rchk completion is
+`a07df9509c78976d6d8a31a9b4f3415787f512e73bf85a2311d6ced672e9b226`;
+that combined completion, not discovery alone, owns the memory conclusion.
 
-Post-freeze downstream-only validation is the one narrow exception to keeping
-all release tooling byte-identical to the package candidate. It uses a named,
-tracked profile from `compat/downstream-evidence-profiles.tsv` and clean
-infrastructure commits whose diffs against the candidate are empty for package
-source, tests, help, and package-facing documentation. The dependency receipt
-is deliberately profile-specific and axis-neutral: it prepares only the
-unchanged external dependency closure and is isolated by the candidate run ID.
-Overlay, lock, repository-test, full-check, and completion identities include
-both the profile and the exact `paradox2`/`paradox1` axis. Each axis registry
-row pins the complete candidate ref/commit/tree/version tuple, not merely its
-major version. Never edit/relabel the default evidence, pass an arbitrary
-manifest path, or run Paradox-1 compatibility in a Paradox-2 candidate stage.
-The active release refresh is `release-refresh-20260720`. Its final repository
-stage runs the complete priority-zero/one corpus once with one worker. The
-additional exact source-package check stage covers bbotk, miesmuschel, mlr3mbo,
-celecx, and mlr3fda: the first two own serialized-object bridges, and the last
-three retain reviewed Paradox-2 adaptations. The overlay retains all eight
-reviewed support packages in dependency order. Its refreshed heads live in a
-separate authenticated primary-checkout namespace; dependency preparation
-continues to use the unchanged default heads, because refreshed mlr3mbo is a
-bridge package in the ordered overlay rather than a shared-library dependency.
-The sealed release benchmark is part of that post-freeze validation tooling,
-not part of the package candidate. It must take the managed detached candidate
-worktree plus explicit profile and axis, derive the suffixed overlay/evidence,
-and record the separate candidate ref/commit/tree and current clean tooling
-commit/tree/status identities. Ordinarily freeze the final validation-tooling
-commit first, construct one fresh named overlay with that exact tooling, and
-reuse it read-only. The reviewed release exception is explicit: documentation
-and benchmark execution used `bf64490`; `9e87556` changes only the selected
-miesmuschel test head and corresponding profile ledgers, so fresh final overlays
-and the affected miesmuschel rows were rebuilt on both axes while the unchanged
-documentation/benchmark conclusions retain their original identities. Never
-require tooling `HEAD == candidate`, accept a caller-selected bridge path,
-relabel older execution, or rebuild the default unsuffixed overlay merely to run
-the final benchmark.
+The discovery exposed a real protection imbalance in `schedule_vector()`: an
+ALTREP `Duplicate` method may legally return its input, but pointer equality was
+incorrectly used to decide whether to release the second protection. One
+indexed root plus `REPROTECT` fixes the imbalance, and the candidate includes a
+self-returning ALTREP-list regression that captures R's direct stack-imbalance
+diagnostic. `schedule_vector` is absent from the final reviewed report.
+
+Post-freeze validation uses the named `release-refresh-20260720` profile and
+explicit `paradox2`/`paradox1` axes. Candidate, tooling, overlay, dependency,
+repository, documentation, and benchmark identities remain separate and must
+never be relabeled. The final benchmark/documentation tooling is
+`fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
+`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`; its diff from the candidate
+contains no package-facing path. The sealed 77-row release benchmark passes
+with 73 pass, four bounded marginal reviews, and zero failures; completion,
+manifest, and seal SHA-256 values are
+`5d615637bd6448bb95b8ba798cc8f7e23d40a78e1a63a4e3988eb436914109a0`,
+`a16d403c20ed8ab80233a877e81ec146b4a5c128fdf0a765be440993eb325499`,
+and `d7a4bbefdba3e1d0a800b2e6bdae6e10ddde22b612cf05bebc5d019eba198fc7`.
+Its policy has exactly seven integrity rows: `shadow_values_live`, the three
+synthetic `collection_values_{plain,rich,nested}` rows, and the three real
+miesmuschel/mlr3pipelines consumer `$values` rows. Consumer `$params`,
+`get_values_unchecked`, and all other consumer operations retain their ordinary
+`hot` tier.
+
+The broad repository corpus used `jobs = 2` in 14 admitted waves and has 20 of
+28 exact repositories green; the eight retained non-green rows are reviewed
+non-Paradox upstream, optional-runtime, environmental-dependency, or bounded-
+timeout exclusions. The final exact Paradox-2 source-package check independently
+builds and checks bbotk, miesmuschel, mlr3mbo, celecx, and mlr3fda; all five
+finish with `Status: OK`. All mandatory documentation rows pass; advisory
+`mlr3book` full-render and legacy `mlr3gallery` dependency rows are excluded and
+do not weaken the focused Paradox documentation conclusion. All local release
+gates are complete.
+
+The direct-child portability companion is
+`refs/paradox-release/portability-harness-5305ead`, commit
+`5305eaddbc9c2159fe194e6be10388c17b4c506a`, tree
+`e1fe00ddad08af89566e3df12460bc47d3e98292`. It changes only
+`.github/workflows/r-cmd-check.yml` (SHA-256
+`14c4c8d1cc8d8e07aea1829d1203f6217464ae9c6b94efc1050bf192638196e3`)
+and is package-facing-source identical to the candidate. The only remaining
+release gates are retained hosted Windows x86-64/macOS ARM64 results and the
+user-performed downstream branch/PR publication handoff; agents must not
+perform either remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
 release, not a migration shim to relax later. Supporting exotic structural
@@ -1070,7 +1068,8 @@ retained input to match that exact stage tooling. Reuse one sealed overlay when
 those inputs remain identical. If a later reviewed downstream commit changes
 tests only, build a new exact overlay and rerun that package's affected rows;
 retain other conclusions only with an explicit production-byte/test-only delta
-record such as the final `bf64490` to `9e87556` composition. There is no
+record. The `bf64490` to `9e87556` composition belongs only to the superseded
+`10c6a0e` release history and is not active release evidence. There is no
 arbitrary older-tooling replay or migration mode. Post-freeze infrastructure
 paths may include `benchmarks/`, but package source, package tests, help, and
 package-facing documentation remain forbidden changes.
@@ -1180,8 +1179,9 @@ commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
 The bbotk and miesmuschel heads below are the committed post-migration handoff;
-the remaining heads retain their previously reviewed bridge changes. A full
-profile rerun against the active frozen Paradox payload remains a release gate:
+the remaining heads retain their previously reviewed bridge changes. Their
+active local profile validation is complete; only the user-performed remote
+publication handoff remains:
 
 - bbotk `codex/public-paramsetcollection-sets` at `29f1806`: public collection
   state and rooted detached native search-space snapshots remain, with the
@@ -1212,6 +1212,28 @@ profile rerun against the active frozen Paradox payload remains a release gate:
 - mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
   PRs without replacement; there is no cleanup commit to publish.
+
+The final exact Paradox-2 source-package check is
+`.local/compat/runs/migration-release-final-p2-8797f11-fc92edd-bench-r1/repository-checks-release-refresh-20260720-paradox2`.
+It has five rows, zero failures, and five final `Status: OK` results. Its
+completion is independently verified; its completion TSV, results, manifest,
+and seal-file SHA-256 values are
+`a43064cd48b78fd433b4a4995a2da9cfad422da7b3b66f53391de05fbd289179`,
+`f443e9ace27450057e4c8fcb6f9d93da85d595028abfff133272cc32f11a364c`,
+`aa6d0ad380f0453db8c87888bdd5b7d18d54bc2698d21b9a4e67ce1040bcd731`,
+and `7de4719e3fa0016fb05d804aa240dea34a0e5de76763c7f1d5d885e2e581acf1`.
+The active Paradox-1 five-package conclusion is an explicit composition. The
+`migration-release-final-p1-cdcc8e6-221c95e-r2` stage passed the exact final
+bbotk, mlr3mbo, and celecx heads plus mlr3fda base `8f5a3df`; final mlr3fda
+`c1cdad5` differs from that base only in four Paradox-2 snapshot headers, so it
+does not alter the selected Paradox-1 tests or runtime source. The final
+miesmuschel row passed in
+`migration-release-final-p1-cdcc8e6-2771f5d-r3`. The r2 donor stage as a whole
+is `completed_with_failures` because it exercised the superseded miesmuschel
+head; never describe that whole stage or the mlr3fda final head as an exact
+five-head Paradox-1 check. The broad active Paradox-2 corpus used two workers
+over 14 waves: 20 of 28 exact repositories pass, and the remaining eight are
+reviewed non-Paradox or environmental exclusions.
 
 Before the legacy object-graph migration reopened package and downstream
 source, the six affected consumer selections passed the same 2,022
@@ -1285,15 +1307,16 @@ architecture-neutral improvement is proven, and rerun affected correctness
 tests after every optimization. Freeze performance changes before the final
 memory/portability matrix.
 
-The Paradox-1 comparison has two narrowly ledgered integrity-read budgets. Only
-`shadow_values_live` uses `integrity-shadow-read` (3.25 median/3.50 q75), and
-only `collection_values_{plain,rich,nested}` use
-`integrity-collection-read` (2.75/3.00). These synthetic direct reads perform
+The Paradox-1 comparison has exactly seven narrowly ledgered integrity-read
+rows. `shadow_values_live` uses `integrity-shadow-read` (3.25 median/3.50 q75).
+The three synthetic `collection_values_{plain,rich,nested}` rows and the real
+`$values` rows for `mies_mutator_maybe`, `mies_optimizer`, and
+`mlr3pipelines_graph` use `integrity-collection-read` (2.75/3.00). They perform
 generation/signature or complete capsule-DAG admission that the cached legacy
-surface did not. The exception is timing-only: both keep the `hot` 1.25 ratio
-and 16-KiB minimum allocation thresholds. All filtered getters,
-mutation/constraint/domain paths, and real miesmuschel/mlr3pipelines consumer
-rows keep their `hot`/`standard` tiers.
+surface did not. The exception is timing-only: both tiers keep the `hot` 1.25
+ratio and 16-KiB minimum allocation thresholds. Consumer `$params`,
+`get_values_unchecked`, filtered getters, mutation/constraint/domain paths, and
+all other real consumer operations keep their ordinary `hot`/`standard` tiers.
 Never widen a global tier or add another integrity row without retained profile
 evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
@@ -1304,24 +1327,29 @@ Paradox 2 is the authenticated baseline.
 The current package candidate is
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
-`81e6f901266754b97a0906f88a472bf04795f13c`. It contains the informative native
-diagnostics, recursive legacy object-graph migration, authenticated native
-gateway contexts and generation barriers, the indexed-root `schedule_vector()`
-repair, and the self-returning ALTREP duplicate regression.
+`81e6f901266754b97a0906f88a472bf04795f13c`, candidate content SHA-256
+`ced2390bc756b01805e7bdcf32fdb4a6ff2c1bd010dd3d576194d939e491f644`.
+It contains the informative native diagnostics, recursive legacy object-graph
+migration, authenticated native gateway contexts and generation barriers, the
+indexed-root `schedule_vector()` repair, and the self-returning ALTREP duplicate
+regression.
 `AGENTS.md`, `design/`, and `environment/` are excluded from the package build,
-so the post-freeze rchk-policy and release-ledger refresh does not alter that
-package payload. Do not infer this for any other path: authenticate the exact
-diff before transferring a package-byte-bound result.
+and the exact candidate-to-`fc92edd` diff contains no package-facing source, so
+the post-freeze validation and release-ledger work does not alter that frozen
+source. This is package-facing-source identity, not an unproved complete
+package-payload byte identity. Do not infer it for any other path: authenticate
+the exact diff before transferring a source-bound result.
 
 The exact candidate's bcheck/maacheck/fficheck reports and refreshed policy are
 recorded in the Authority section above. The complete package suite, CRAN-style
 and depends-only checks, strict compilers, analyzers, sanitizers, R API/header
-matrix, and real R 4.3.3/4.5.2 runtime matrix are green. Required final work is
-the retained combined GCT/Valgrind/rchk completion, normalized differential,
-the exact Paradox-2 serialization-owner downstream checks, idle-host bounded
-benchmark, exact Windows x86-64 and Apple-silicon macOS evidence, and the
-user-performed downstream PR/publication handoff. Current Paradox-1 bbotk and
-miesmuschel owner rows are already retained against the unchanged 1.0.1 axis.
+matrix, real R 4.3.3/4.5.2 runtime matrix, retained combined memory run,
+normalized differential, both downstream axes, 20-of-28 scoped broad corpus,
+mandatory documentation, five-package exact Paradox-2 source check, and sealed
+77-row benchmark are green or accepted under their recorded reviewed exclusion
+policies. All local gates are complete. The only remaining work is exact hosted
+Windows x86-64 and Apple-silicon macOS evidence plus the user-performed
+downstream branch/PR, tag, and workflow publication handoff.
 
 ## Historical candidates
 

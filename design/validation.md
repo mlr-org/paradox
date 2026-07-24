@@ -428,10 +428,9 @@ reused; independent rows run in admitted outer waves. Mine all failures before
 changing source. Very old repositories that neither import nor call current
 Paradox are recorded but not made blockers.
 
-The default pre-refresh schema-2 evidence installs seven reviewed bridge
-packages once per candidate, in the
-fixed dependency order bbotk, mlr3, miesmuschel, mlr3pipelines, mlr3fselect,
-mlr3mbo, and celecx, by
+The historical default pre-refresh schema-2 evidence installed seven reviewed
+bridge packages once per candidate, in the fixed dependency order bbotk, mlr3,
+miesmuschel, mlr3pipelines, mlr3fselect, mlr3mbo, and celecx, by
 `compat/install-downstream-bridges --candidate-source "$candidate_source"`.
 Construction consumes the authenticated candidate and priority-one dependency
 libraries, verifies the organization review ledger once, archives each exact
@@ -458,7 +457,9 @@ skip duplicate candidate/dependency tree hashing with
 itself. `scripts/environment/test-downstream-bridge-installer` cheaply pins the
 installer order, provenance agreement, entrypoint hooks, and release recipe;
 shell syntax and shellcheck accompany it. Candidate evidence still requires
-one real construction followed by verification.
+one real construction followed by verification. This seven-package unsuffixed
+overlay is historical infrastructure, not the active
+`release-refresh-20260720` release overlay.
 
 After a package candidate is frozen, a downstream-only head refresh uses a
 named profile in `compat/downstream-evidence-profiles.tsv`; it never edits the
@@ -478,13 +479,17 @@ cannot be presented as Paradox-2 candidate evidence.
 
 The `release-refresh-20260720` profile installs its complete eight-package
 dependency order. Its final broad repository stage executes the complete
-priority-zero/one corpus once. The additional exact source-package check stage
-selects bbotk, miesmuschel, mlr3mbo, celecx, and mlr3fda: bbotk and
-miesmuschel own serialized-object bridges, while the other three retain
-reviewed Paradox-2 adaptations. The overlay still authenticates the exact
-reviewed mlr3, mlr3pipelines, and mlr3fselect heads, and their behavior is
-covered by the broad repository stage without rebuilding a second
-source-package check corpus. Both axes retain profile/axis registries and
+priority-zero/one corpus once with `jobs = 2`; the active retained execution
+used 14 admitted waves and completed 20 of 28 exact repositories, with eight
+reviewed non-Paradox/environmental exclusions. The additional exact
+source-package check stage selects bbotk, miesmuschel, mlr3mbo, celecx, and
+mlr3fda: bbotk and miesmuschel own serialized-object bridges, while the other
+three retain reviewed Paradox-2 adaptations. The final exact Paradox-2 stage is
+independently verified with five green rows and five final `Status: OK`
+results. The overlay still authenticates the exact reviewed mlr3,
+mlr3pipelines, and mlr3fselect heads, and their behavior is covered by the broad
+repository stage without rebuilding a second source-package check corpus. Both
+axes retain profile/axis registries and
 selected input hashes, reject path, symlink, head, tree, and ancestry
 mismatches before work, and publish profile-specific overlays with the same
 no-clobber protocol. Use one outer worker for this focused release
@@ -511,14 +516,13 @@ an argument, the suffixed bridge library and evidence path.
 
 Ordinarily one final validation-tooling commit is frozen before constructing a
 fresh named overlay, and documentation, full checks, and the benchmark reuse it
-read-only. The final release has one reviewed narrow composition: documentation
-and benchmark execution used tooling `bf64490`; tooling `9e87556` changed only
-the selected miesmuschel head and related test/profile ledgers, and that
-downstream commit changes only three test assertions. Fresh final overlays and
-the affected miesmuschel suite/check rows were therefore rebuilt on both axes,
-while documentation, benchmark, and unchanged consumer conclusions retain their
-original identities and explicit test-only transfer rationale. There is still
-no arbitrary older-tooling replay, default unsuffixed-overlay substitution, or
+read-only. The active release follows that model with tooling
+`fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree
+`05cc4e5213c5ee73d0bc764c3d102c15e4c57141`, for the final documentation,
+broad-corpus, Paradox-2 source-check, and benchmark stages. The earlier
+`bf64490` to `9e87556` test-only composition belongs only to the superseded
+`10c6a0e` release history. Do not cite it as active evidence. There is still no
+arbitrary older-tooling replay, default unsuffixed-overlay substitution, or
 result relabeling.
 
 Remote write access is unavailable to agents. Successful local branches are
@@ -595,18 +599,19 @@ ownership. After each optimization run affected correctness tests; after the
 performance source freezes rerun the final memory/portability evidence once.
 
 The upstream-v1 comparison distinguishes ordinary hot paths from integrity work
-introduced by the 2.0.0 contract. The sole wider rows are the synthetic direct
-live reads `shadow_values_live` (`integrity-shadow-read`, median 3.25/q75 3.50)
-and `collection_values_{plain,rich,nested}`
-(`integrity-collection-read`, 2.75/3.00). They validate an origin
-generation/signature or the complete capsule DAG before returning a detached
-value. The ceilings are finite same-host ratios, preserve marginal review, and
-still reject retained pre-optimization evidence. The exception is timing-only;
-allocation retains the `hot` 1.25 ratio and 16-KiB minimum. Filtered getters and
-every real downstream consumer operation remain `hot`; domains, dependencies,
-params, constraints, and mutation do not inherit the exception. Reassess and
-normally remove these contract-reset tiers when Paradox 2 replaces v1 as the
-authenticated baseline.
+introduced by the 2.0.0 contract. Exactly seven rows use the wider integrity
+tiers. `shadow_values_live` uses `integrity-shadow-read` (median 3.25/q75 3.50).
+The three synthetic `collection_values_{plain,rich,nested}` rows and the three
+real `$values` rows for `mies_mutator_maybe`, `mies_optimizer`, and
+`mlr3pipelines_graph` use `integrity-collection-read` (2.75/3.00). They validate
+an origin generation/signature or the complete capsule DAG before returning a
+detached value. The ceilings are finite same-host ratios, preserve marginal
+review, and still reject retained pre-optimization evidence. The exception is
+timing-only; allocation retains the `hot` 1.25 ratio and 16-KiB minimum.
+Consumer `$params`, `get_values_unchecked`, filtered getters, and all other real
+consumer operations remain `hot`; domains, dependencies, constraints, and
+mutation do not inherit the exception. Reassess and normally remove these
+contract-reset tiers when Paradox 2 replaces v1 as the authenticated baseline.
 
 ## Acceptance and replay
 
@@ -634,4 +639,7 @@ similarity as release evidence.
 
 The active accepted run IDs and candidate hashes belong in
 [`release-2.0.0.md`](release-2.0.0.md). Until that ledger says `accepted`, no
-collection of partial green diagnostics is a release authorization.
+collection of partial green diagnostics is a release authorization. For the
+current candidate that ledger records every local gate complete; its remaining
+`pending` decision is limited to hosted Windows/macOS evidence and
+user-performed remote publication.
