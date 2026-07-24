@@ -283,16 +283,23 @@ expected_rchk_errors() {
   printf '%s\n' "$RCHK_ERROR_STRPTIME" "$RCHK_ERROR_EVAL" "$RCHK_ERROR_GC"
 }
 
-extract_rchk_blocks() {
+extract_rchk_bcheck_semantics() {
   local bcheck=$1 output=$2
   printf 'ordinal\tfunction\tup_count\tpb_count\n' > "$output"
-  awk '
+  LC_ALL=C awk -v block_output="$output" '
     function reject() { invalid = 1; exit 1 }
+    function emit_semantic_record(kind, owner, payload) {
+      # Length-prefix every field before line-delimited sorting. Report records
+      # cannot contain a newline, and LC_ALL=C makes lengths byte-stable.
+      # Repeated records remain repeated, so this binds a multiset, not a set.
+      printf "%d:%s%d:%s%d:%s\n", length(kind), kind, length(owner), owner,
+        length(payload), payload
+    }
     function emit_block() {
       if (up_count + pb_count == 0) reject()
       block_count++
       printf "%d\t%s\t%d\t%d\n", block_count, function_name,
-        up_count, pb_count
+        up_count, pb_count >> block_output
       function_name = ""
       in_block = 0
     }
@@ -310,6 +317,7 @@ extract_rchk_blocks() {
     /^Analyzed [1-9][0-9]* functions, traversed [1-9][0-9]* states\.$/ {
       if (summary_seen || block_count == 0 && !in_block) reject()
       if (in_block) emit_block()
+      emit_semantic_record("summary", "", $0)
       summary_seen = 1
       next
     }
@@ -322,18 +330,23 @@ extract_rchk_blocks() {
       if ($0 !~ /^  \[(UP|PB)\] / || marker_count != 1) reject()
       if ($0 ~ /^  \[UP\] /) up_count++
       else pb_count++
+      emit_semantic_record("diagnostic", function_name, $0)
       next
     }
     summary_seen && $0 != "" { reject() }
     $0 == "" { next }
-    index($0, "ERROR:") != 0 { next }
+    index($0, "ERROR:") != 0 {
+      emit_semantic_record("error", "", $0)
+      next
+    }
     { reject() }
     END {
       if (invalid) exit 1
       if (in_block) emit_block()
       if (!summary_seen || block_count == 0) exit 1
+      close(block_output)
     }
-  ' "$bcheck" >> "$output" ||
+  ' "$bcheck" ||
     fail "rchk bcheck diagnostic blocks are malformed"
 }
 
@@ -371,8 +384,6 @@ validate_rchk_report_set() {
     receipt_index=$((receipt_index + 1))
   done
 
-  RCHK_BCHECK_SHA256=$(sha256sum \
-    "$report_directory/paradox.so.bcheck" | cut -d ' ' -f 1)
   RCHK_MAACHECK_SHA256=$(sha256sum \
     "$report_directory/paradox.so.maacheck" | cut -d ' ' -f 1)
   RCHK_FFICHECK_SHA256=$(sha256sum \
@@ -404,7 +415,17 @@ validate_rchk_report_set() {
   [[ "$(extract_error_substrings \
       "$report_directory/paradox.so.bcheck")" == "$(expected_rchk_errors)" ]] ||
     fail "rchk bcheck error-substring inventory differs from the three base-R limits"
-  extract_rchk_blocks "$report_directory/paradox.so.bcheck" "$observed_blocks"
+  if ! RCHK_BCHECK_SEMANTIC_SHA256=$(
+      extract_rchk_bcheck_semantics \
+        "$report_directory/paradox.so.bcheck" "$observed_blocks" |
+        LC_ALL=C sort |
+        sha256sum |
+        cut -d ' ' -f 1
+    ); then
+    fail "could not canonicalize rchk bcheck semantics"
+  fi
+  [[ "$RCHK_BCHECK_SEMANTIC_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+    fail "rchk bcheck semantic SHA-256 is malformed"
   RCHK_FUNCTION_BLOCKS=$(( $(wc -l < "$observed_blocks") - 1 ))
   RCHK_UP_DIAGNOSTICS=$(awk -F '\t' 'NR > 1 { total += $3 } \
     END { print total + 0 }' "$observed_blocks")
@@ -440,7 +461,7 @@ read_rchk_policy() {
   local policy=$1 index key value extra
   local -a lines=() expected_keys=(
     schema package bounded_bcheck_sha256 bcheck_max_states
-    analyzer_identity_sha256 bcheck_report_sha256 maacheck_report_sha256
+    analyzer_identity_sha256 bcheck_semantic_sha256 maacheck_report_sha256
     fficheck_report_sha256
     analyzed_functions traversed_states registered_functions
     checked_registration_calls function_blocks up_diagnostics pb_diagnostics
@@ -458,7 +479,7 @@ read_rchk_policy() {
       fail "rchk policy.tsv key order or value shape is invalid"
     RCHK_POLICY_VALUES+=("$value")
   done
-  [[ "${RCHK_POLICY_VALUES[0]}" == 1 &&
+  [[ "${RCHK_POLICY_VALUES[0]}" == 2 &&
       "${RCHK_POLICY_VALUES[1]}" == paradox ]] ||
     fail "rchk policy schema or package is invalid"
   for index in 2 4 5 6 7 15 16; do
@@ -556,7 +577,7 @@ validate_rchk_policy_directory() {
   [[ "${RCHK_POLICY_VALUES[2]}" == "$RCHK_IDENTITY_BCHECK_SHA256" &&
       "${RCHK_POLICY_VALUES[3]}" == "$RCHK_IDENTITY_MAX_STATES" &&
       "${RCHK_POLICY_VALUES[4]}" == "$RCHK_IDENTITY_SHA256" &&
-      "${RCHK_POLICY_VALUES[5]}" == "$RCHK_BCHECK_SHA256" &&
+      "${RCHK_POLICY_VALUES[5]}" == "$RCHK_BCHECK_SEMANTIC_SHA256" &&
       "${RCHK_POLICY_VALUES[6]}" == "$RCHK_MAACHECK_SHA256" &&
       "${RCHK_POLICY_VALUES[6]}" == "$RCHK_EMPTY_SHA256" &&
       "${RCHK_POLICY_VALUES[7]}" == "$RCHK_FFICHECK_SHA256" &&
@@ -567,7 +588,7 @@ validate_rchk_policy_directory() {
       "${RCHK_POLICY_VALUES[12]}" == "$RCHK_FUNCTION_BLOCKS" &&
       "${RCHK_POLICY_VALUES[13]}" == "$RCHK_UP_DIAGNOSTICS" &&
       "${RCHK_POLICY_VALUES[14]}" == "$RCHK_PB_DIAGNOSTICS" ]] ||
-    fail "rchk policy does not bind the exact analyzer reports and counts"
+    fail "rchk policy does not bind the exact analyzer semantics and counts"
   [[ "${RCHK_POLICY_VALUES[15]}" == \
       "$(sha256sum "$blocks" | cut -d ' ' -f 1)" &&
       "${RCHK_POLICY_VALUES[16]}" == \
@@ -626,12 +647,13 @@ generate_rchk_policy() {
   rationales_sha=$(sha256sum "$stage/rationales.tsv" | cut -d ' ' -f 1)
   {
     printf 'key\tvalue\n'
-    printf 'schema\t1\n'
+    printf 'schema\t2\n'
     printf 'package\tparadox\n'
     printf 'bounded_bcheck_sha256\t%s\n' "$RCHK_IDENTITY_BCHECK_SHA256"
     printf 'bcheck_max_states\t%s\n' "$RCHK_IDENTITY_MAX_STATES"
     printf 'analyzer_identity_sha256\t%s\n' "$RCHK_IDENTITY_SHA256"
-    printf 'bcheck_report_sha256\t%s\n' "$RCHK_BCHECK_SHA256"
+    printf 'bcheck_semantic_sha256\t%s\n' \
+      "$RCHK_BCHECK_SEMANTIC_SHA256"
     printf 'maacheck_report_sha256\t%s\n' "$RCHK_MAACHECK_SHA256"
     printf 'fficheck_report_sha256\t%s\n' "$RCHK_FFICHECK_SHA256"
     printf 'analyzed_functions\t%s\n' "$RCHK_ANALYZED_FUNCTIONS"

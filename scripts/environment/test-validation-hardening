@@ -2284,6 +2284,12 @@ grep -qx $'up_diagnostics\t3' "$RCHK_POLICY/policy.tsv" ||
   fail "rchk policy generator retained the wrong UP count"
 grep -qx $'pb_diagnostics\t1' "$RCHK_POLICY/policy.tsv" ||
   fail "rchk policy generator retained the wrong PB count"
+grep -qx $'schema\t2' "$RCHK_POLICY/policy.tsv" ||
+  fail "rchk policy generator retained the wrong semantic-policy schema"
+RCHK_SEMANTIC_SHA256=$(awk -F '\t' \
+  '$1 == "bcheck_semantic_sha256" { print $2 }' "$RCHK_POLICY/policy.tsv")
+[[ "$RCHK_SEMANTIC_SHA256" =~ ^[0-9a-f]{64}$ ]] ||
+  fail "rchk policy generator retained no semantic bcheck identity"
 
 prepare_rchk_case() {
   local label=$1
@@ -2321,8 +2327,66 @@ printf '%s\n' 'driver prefix ERROR: synthetic package failure' \
   >> "$RCHK_CASE/rchk.log"
 expect_rchk_case_failure
 
-prepare_rchk_case changed-report
+# Raw reports remain bound by each run's tool-status receipt, but harmless
+# report-layout drift is not part of the reviewed cross-run semantic policy.
+prepare_rchk_case harmless-layout
 printf '\n' >> "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+"$EVIDENCE_HELPER" rchk "$RCHK_CASE/reports" "$RCHK_CASE/rchk.log" \
+  "$RCHK_CASE/artifacts" "$RCHK_CASE/policy" >/dev/null
+
+# Diagnostic order within one Function block is analyzer scheduling noise. The
+# exact diagnostic multiset and its function ownership remain unchanged.
+prepare_rchk_case reordered-diagnostics
+awk '
+  /reviewed beta allocation diagnostic/ {
+    held = $0
+    next
+  }
+  /reviewed beta lifetime diagnostic/ {
+    print
+    print held
+    held = ""
+    next
+  }
+  { print }
+  END { if (held != "") exit 1 }
+' "$RCHK_CASE/reports/paradox.so.bcheck" \
+  > "$RCHK_CASE/reports/paradox.so.bcheck.new"
+mv "$RCHK_CASE/reports/paradox.so.bcheck.new" \
+  "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+"$EVIDENCE_HELPER" rchk "$RCHK_CASE/reports" "$RCHK_CASE/rchk.log" \
+  "$RCHK_CASE/artifacts" "$RCHK_CASE/policy" >/dev/null
+
+# Counts and block identities alone are insufficient: changing any diagnostic
+# byte must invalidate the reviewed semantic digest.
+prepare_rchk_case diagnostic-text
+sed -i 's/reviewed beta lifetime diagnostic/reviewed beta changed diagnostic/' \
+  "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+# The existing abstraction inventory deliberately extracts from "ERROR:"
+# onward. The semantic digest separately binds the complete retained line.
+prepare_rchk_case error-prefix
+sed -i '1s/^/driver prefix /' "$RCHK_CASE/reports/paradox.so.bcheck"
+write_rchk_status "$RCHK_CASE/reports" \
+  > "$RCHK_CASE/reports/tool-status.tsv"
+expect_rchk_case_failure
+
+# Swapping two UP diagnostics between functions preserves every global and
+# per-block count and the global diagnostic multiset. Function-qualified
+# semantic records must nevertheless reject the reassignment.
+prepare_rchk_case diagnostic-reassignment
+sed -i \
+  -e 's/reviewed alpha allocation diagnostic fixture.c:10/reviewed held allocation diagnostic fixture.c:10/' \
+  -e 's/reviewed beta allocation diagnostic fixture.c:20/reviewed alpha allocation diagnostic fixture.c:10/' \
+  -e 's/reviewed held allocation diagnostic fixture.c:10/reviewed beta allocation diagnostic fixture.c:20/' \
+  "$RCHK_CASE/reports/paradox.so.bcheck"
 write_rchk_status "$RCHK_CASE/reports" \
   > "$RCHK_CASE/reports/tool-status.tsv"
 expect_rchk_case_failure

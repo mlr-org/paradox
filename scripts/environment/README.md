@@ -272,17 +272,19 @@ least 16384 MiB for the host. Rootless Podman memory flags are unsupported on
 this cgroup-v1 host and are not trusted as a limit.
 
 The frozen source supplies `policy.tsv`, `blocks.tsv`, and `rationales.tsv`
-under `environment/rchk-bcheck-policy/`. It binds the analyzer identity,
-complete report hashes, exact
+under `environment/rchk-bcheck-policy/`. It binds the analyzer identity, exact
 ordered Function blocks and UP/PB counts, and one reviewed analyzer-model
-rationale for each block. Any report drift or package-local `ERROR:` is fatal;
-this is not a wildcard suppression. maacheck must be byte-empty, and fficheck
-must report `R_init_paradox`, the exact dynamically discovered registered
-routine inventory, and exactly one registration call. The checked-in rchk
-policy is deliberately stale evidence for superseded source and is not release
-evidence. Regenerate all function/state/report inventories from the frozen
-candidate; only the authenticated bounded-analyzer executable cache may be
-reused without recompilation.
+rationale for each block. Its bcheck semantic digest sorts length-prefixed
+records and therefore ignores only diagnostic ordering within a Function
+block; it still binds the exact multiset of full diagnostics to function names
+plus the exact error and analysis-summary lines. Each run independently seals
+the raw reports in its tool-status receipt. Any semantic diagnostic drift or
+package-local `ERROR:` is fatal; this is not a wildcard suppression. maacheck
+must be byte-empty, and fficheck must report `R_init_paradox`, the exact
+dynamically discovered registered routine inventory, and exactly one
+registration call. Regenerate all function/state/semantic-report inventories
+from the frozen candidate; only the authenticated bounded-analyzer executable
+cache may be reused without recompilation.
 
 The Valgrind branch of `scripts/memory-check` separates fast sealed
 receipt/runtime validation from expensive content traversal. Its ordinary
