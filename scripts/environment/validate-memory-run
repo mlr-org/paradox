@@ -703,8 +703,8 @@ if [[ "${run_fields[valgrind]}" == true ]]; then
     'source_archive=sealed archive reused from the frozen native run' \
     'coverage=every registered routine plus four reviewed allocation/callback hazards' \
     'rounds=1' \
-    'analyzer_subset=6 files; >=70 blocks; >=650 passing expectations' \
-    'NOT_CRAN=false (four exact reviewed expensive scopes skipped)' \
+    'analyzer_subset=8 exact reviewed files; exact block and expectation accounting is bound by the trusted ledger' \
+    'NOT_CRAN=false (eight exact reviewed expensive scopes skipped)' \
     'full_functional_tests=false (owned by the frozen native run)' \
     'examples_vignettes_manual=false (documentation and policy are separate gates)' \
     'configuration=stage wrapper passes exact CLI options with --command-line-only=yes' \
