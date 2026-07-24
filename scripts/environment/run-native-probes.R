@@ -819,14 +819,40 @@ main <- function() {
       host$self <- host
       result <- .Call(symbol("upgrade_graph_discover"), host)
       boundary <- .Call(symbol("upgrade_graph_discover"), .GlobalEnv)
+      self_duplicate <- .Call(
+        symbol("test_stateful_altrep"),
+        list(candidate),
+        list(candidate),
+        NA_integer_,
+        NA_integer_,
+        NULL,
+        c(NA_integer_, NA_integer_, 1L)
+      )[[1L]]
+      altrep_diagnostics <- capture.output(
+        altrep_result <- .Call(
+          symbol("upgrade_graph_discover"),
+          self_duplicate
+        ),
+        type = "message"
+      )
       check(
         identical(names(result), c("objects", "paths")) &&
           length(result$objects) == 1L &&
           identical(result$objects[[1L]], candidate) &&
           length(result$paths) == 1L &&
           is.character(result$paths) &&
+          identical(altrep_result$objects, list(candidate)) &&
+          identical(altrep_result$paths, "x[[1]]") &&
+          !any(grepl(
+            "stack imbalance",
+            altrep_diagnostics,
+            fixed = TRUE
+          )) &&
           identical(boundary, list(objects = list(), paths = character())),
-        "identity-aware graph discovery or global boundary differs"
+        paste(
+          "identity-aware graph discovery, self-returning ALTREP duplicate,",
+          "or global boundary differs"
+        )
       )
     },
     direct_test_checked_affixed_size = function() {

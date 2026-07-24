@@ -228,6 +228,23 @@ test_that("native graph discovery does not consume the C or R stack", {
   expect_identical(discovery$objects[[1L]], candidate)
 })
 
+test_that("graph discovery balances a self-duplicating ALTREP root", {
+  candidate = graph_candidate("self-duplicating-altrep")
+  carrier = native_stateful_altrep(
+    list(candidate),
+    list(candidate),
+    duplicate_returns_self = TRUE
+  )
+
+  diagnostics = capture.output(
+    discovery <- discover_upgrade_candidates(carrier),
+    type = "message"
+  )
+  expect_false(any(grepl("stack imbalance", diagnostics, fixed = TRUE)))
+  expect_identical(discovery$objects, list(candidate))
+  expect_identical(discovery$paths, "x[[1]]")
+})
+
 test_that("current ParamSet payloads expose nested legacy candidates only", {
   nested = graph_candidate("opaque-current-value")
   current = ps(payload = p_uty())

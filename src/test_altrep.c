@@ -30,6 +30,7 @@ enum test_config_slot {
   TEST_CONFIG_LENGTH_SWITCH_AFTER,
   TEST_CONFIG_ELT_CALLBACK_AFTER,
   TEST_CONFIG_LENGTH_CALLBACK_AFTER,
+  TEST_CONFIG_DUPLICATE_RETURNS_SELF,
   TEST_CONFIG_SIZE
 };
 
@@ -159,14 +160,15 @@ static int scalar_control(SEXP value, const char *name) {
   return result;
 }
 
-static void callback_controls(SEXP value, int *elt_after,
-    int *length_after) {
+static int callback_controls(SEXP value, int *elt_after,
+    int *length_after, int allow_duplicate_control) {
   if (TYPEOF(value) != INTSXP || ALTREP(value)) {
-    Rf_error("`callback_after` must be an integer scalar or pair");
+    Rf_error("`callback_after` must be an ordinary integer control");
   }
   const R_xlen_t size = XLENGTH(value);
-  if (size != 1 && size != 2) {
-    Rf_error("`callback_after` must be an integer scalar or pair");
+  if (size != 1 && size != 2 &&
+      !(allow_duplicate_control && size == 3)) {
+    Rf_error("`callback_after` has an unsupported control size");
   }
   const int elt = INTEGER_ELT(value, 0);
   const int length = size == 1 ? NA_INTEGER : INTEGER_ELT(value, 1);
@@ -176,6 +178,14 @@ static void callback_controls(SEXP value, int *elt_after,
   }
   *elt_after = elt;
   *length_after = length;
+  if (size < 3) return FALSE;
+
+  const int duplicate_returns_self = INTEGER_ELT(value, 2);
+  if (duplicate_returns_self != FALSE &&
+      duplicate_returns_self != TRUE) {
+    Rf_error("ALTREP duplicate control must be TRUE or FALSE");
+  }
+  return duplicate_returns_self;
 }
 
 static int next_call(SEXP config, enum test_config_slot slot) {
@@ -268,6 +278,19 @@ static R_xlen_t test_length(SEXP x) {
   return result;
 }
 
+static SEXP test_duplicate(SEXP x, Rboolean deep) {
+  (void) deep;
+  SEXP config = R_altrep_data2(x);
+  if (TYPEOF(config) != INTSXP || ALTREP(config) ||
+      XLENGTH(config) != TEST_CONFIG_SIZE) {
+    Rf_error("Corrupt stateful ALTREP test fixture configuration");
+  }
+  return INTEGER_ELT(
+    config,
+    TEST_CONFIG_DUPLICATE_RETURNS_SELF
+  ) ? x : NULL;
+}
+
 static SEXP test_string_elt(SEXP x, R_xlen_t index) {
   SEXP source = begin_elt(x);
   SEXP result = index >= 0 && index < XLENGTH(source)
@@ -328,6 +351,7 @@ void attribute_hidden paradox_test_altrep_initialize(DllInfo *dll) {
     dll
   );
   R_set_altrep_Length_method(test_list_class, test_length);
+  R_set_altrep_Duplicate_method(test_list_class, test_duplicate);
   R_set_altlist_Elt_method(test_list_class, test_list_elt);
 
   test_integer_class = R_make_altinteger_class(
@@ -375,11 +399,15 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
   );
   int elt_callback_at;
   int length_callback_at;
-  callback_controls(
+  const int duplicate_returns_self = callback_controls(
     callback_after,
     &elt_callback_at,
-    &length_callback_at
+    &length_callback_at,
+    TRUE
   );
+  if (duplicate_returns_self && type != VECSXP) {
+    Rf_error("Self-returning duplicate control requires an ALTREP list");
+  }
 
   SEXP state = PROTECT(Rf_allocVector(VECSXP, TEST_STATE_SIZE));
   SET_VECTOR_ELT(state, TEST_STATE_FIRST, first);
@@ -399,6 +427,8 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
   );
   INTEGER(config)[TEST_CONFIG_ELT_CALLBACK_AFTER] = NA_INTEGER;
   INTEGER(config)[TEST_CONFIG_LENGTH_CALLBACK_AFTER] = NA_INTEGER;
+  INTEGER(config)[TEST_CONFIG_DUPLICATE_RETURNS_SELF] =
+    duplicate_returns_self;
 
   R_altrep_class_t class;
   switch (type) {
@@ -454,7 +484,12 @@ static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
 
   int elt_after;
   int length_after;
-  callback_controls(callback_after, &elt_after, &length_after);
+  (void) callback_controls(
+    callback_after,
+    &elt_after,
+    &length_after,
+    FALSE
+  );
   SEXP config = PROTECT(R_altrep_data2(value));
   if (TYPEOF(config) != INTSXP || ALTREP(config) ||
       XLENGTH(config) != TEST_CONFIG_SIZE) {
