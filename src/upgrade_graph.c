@@ -803,10 +803,11 @@ static void schedule_vector(
     paradox_upgrade_walker_t *walker,
     SEXP vector,
     const paradox_upgrade_path_t *path) {
-  PROTECT(vector);
   SEXP source = vector;
-  if (ALTREP(vector)) {
-    source = PROTECT(Rf_duplicate(vector));
+  PROTECT_INDEX source_index;
+  PROTECT_WITH_INDEX(source, &source_index);
+  if (ALTREP(source)) {
+    REPROTECT(source = Rf_duplicate(source), source_index);
   }
   const R_xlen_t count = XLENGTH(source);
   for (R_xlen_t index = count; index > 0; --index) {
@@ -816,7 +817,6 @@ static void schedule_vector(
       indexed_path(path, "[[", index - 1, "]]")
     );
   }
-  if (source != vector) UNPROTECT(1);
   UNPROTECT(1);
 }
 
