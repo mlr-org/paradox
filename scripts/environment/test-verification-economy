@@ -232,6 +232,10 @@ grep -Fq 'effective_jobs = effective_jobs' "$TEST_RUNNER" ||
   fail "functional ledger does not retain effective parallelism"
 grep -Fq 'scheduler_backend = scheduler_backend' "$TEST_RUNNER" ||
   fail "functional ledger does not retain its scheduler backend"
+for selector in "$TEST_RUNNER" "$TEST_VERIFIER"; do
+  grep -Fq '"upgrade-paradox-object|upgrade-registry)"' "$selector" ||
+    fail "focused native-test selection omits a migration contract: $selector"
+done
 
 # The old-R and legacy consumer fallbacks are costly enough that they must
 # expose the complete ordinary failure set before enforcing their strict clean
