@@ -14,7 +14,7 @@ mlr3tuningspaces	https://github.com/mlr-org/mlr3tuningspaces.git	0	9147e5b005ed8
 mlr3verse	https://github.com/mlr-org/mlr3verse.git	0	f67dd1563dc2ccffb188a1789cb48112cf4ef835	2026-07-02T11:41:07+02:00	main
 mlr3cluster	https://github.com/mlr-org/mlr3cluster.git	1	0aa0124c307ca8b9c7647188dffc7d1da0254e0a	2026-07-10T19:22:04+02:00	main
 mlr3fairness	https://github.com/mlr-org/mlr3fairness.git	1	6946cbe78c9f39e90c06562347e8bee06eead11e	2026-04-24T17:17:31+02:00	main
-mlr3fda	https://github.com/mlr-org/mlr3fda.git	1	8f5a3dfa297ad236812cda57fab02de75fec375a	2026-07-23T15:31:56+02:00	paradox2-snapshots
+mlr3fda	https://github.com/mlr-org/mlr3fda.git	1	c1cdad5a78913c9a47fec1003de8d4309275c80c	2026-07-24T09:52:57+02:00	paradox2-snapshots
 mlr3filters	https://github.com/mlr-org/mlr3filters.git	1	13318fe7b382950c0c52d90fd3801f632aa44d07	2026-07-02T11:41:12+02:00	main
 mlr3inferr	https://github.com/mlr-org/mlr3inferr.git	1	12b0024b0d45cf4f2966dd623cfaa4695c9cf5db	2025-11-26T15:50:48+01:00	main
 mlr3oml	https://github.com/mlr-org/mlr3oml.git	1	80ab341672bc5c8253b67a9f327968f2377ecb9d	2026-01-28T11:16:57+01:00	main

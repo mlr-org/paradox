@@ -204,7 +204,7 @@ gh pr create --web --repo mlr-org/mlr3pipelines --base master --head codex/parad
 ## mlr3fda
 
 - base: `5e6204d0d3a3c21325a71eda4402c30b31209eef`
-- head: `8f5a3dfa297ad236812cda57fab02de75fec375a`
+- head: `c1cdad5a78913c9a47fec1003de8d4309275c80c`
 - branch: `paradox2-snapshots`
 - target branch: `main`
 - proposed title: `Support Paradox 2 diagnostics in FDA snapshots`
@@ -215,9 +215,9 @@ Proposed body:
 > unchanged and select a Paradox-2 snapshot variant only when that major is
 > installed. The informative diagnostic content and punctuation are now the
 > same on both axes; the variant remains necessary only because Paradox 2's
-> native assignment reports the internal `.__ParamSet__values()` call header
-> instead of Paradox 1's `self$assert()` header. Pipeline construction and FDA
-> behavior are unchanged.
+> native assignment reports the current versioned
+> `.__paradox2_ParamSet__values()` call header instead of Paradox 1's
+> `self$assert()` header. Pipeline construction and FDA behavior are unchanged.
 
 Publish it manually with:
 

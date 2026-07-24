@@ -68,7 +68,7 @@ for binding in \
     $'mlr3fselect\tcd12d7717f31701edc6ebcf7f2cbe1168cae1ecb' \
     $'mlr3mbo\t1a1c0abe95f59cd314f1fbc19c596cb6ac15f067' \
     $'celecx\t6da5102ca948b8182aae13575c48a932812b05c6' \
-    $'mlr3fda\t8f5a3dfa297ad236812cda57fab02de75fec375a'; do
+    $'mlr3fda\tc1cdad5a78913c9a47fec1003de8d4309275c80c'; do
   repository=${binding%%$'\t'*}
   commit=${binding#*$'\t'}
   [[ $(awk -F '\t' -v repository="$repository" \

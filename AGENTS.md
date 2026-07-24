@@ -1137,9 +1137,9 @@ profile rerun against the active frozen Paradox payload remains a release gate:
 - mlr3pipelines `codex/paradox-diagnostic-compat` at `c85b2f4`: only the
   GraphLearner deep-clone ownership fix and mutation-isolation regression
   remain;
-- mlr3fda `paradox2-snapshots` at `8f5a3df`: the Paradox-1 snapshot stays
-  byte-identical; refresh the Paradox-2 internal assignment call header if the
-  versioned current target changes it, without weakening its public result;
+- mlr3fda `paradox2-snapshots` at `c1cdad5`: the Paradox-1 snapshot stays
+  byte-identical while the four Paradox-2 headers name the current versioned
+  `.__paradox2_ParamSet__values()` gateway; diagnostic bodies are unchanged;
 - mlr3 `codex/paradox2-diagnostics` at `35e30a9` and mlr3fselect
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
   PRs without replacement; there is no cleanup commit to publish.

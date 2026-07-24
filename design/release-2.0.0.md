@@ -355,7 +355,7 @@ not a local compatibility workaround.
   namespace rebinding allowlisted and registers relocking before the first
   historical target is changed;
 - [x] mlr3mbo `1a1c0ab`, celecx `6da5102`, mlr3pipelines `c85b2f4`, and
-  mlr3fda `8f5a3df` are prepared on their recorded branches; the mlr3
+  mlr3fda `c1cdad5` are prepared on their recorded branches; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
 - [ ] all eight profile heads are authenticated against the active candidate;
@@ -620,7 +620,7 @@ evidence only and must not be published as replacements.
 | mlr3 | `.local/compat/github-release-refresh-20260720/mlr3` | `codex/paradox2-diagnostics` | obsolete head `35e30a9` | Close without replacement; removing its numeric-diagnostic gates leaves an empty effective diff. |
 | mlr3fselect | `.local/compat/github-release-refresh-20260720/mlr3fselect` | `codex/paradox2-diagnostics` | obsolete head `ae8e1d1` | Close without replacement; removing its feature-fraction diagnostic gate leaves an empty effective diff. |
 | mlr3pipelines | `.local/compat/github-release-refresh-20260720/mlr3pipelines` | `codex/paradox-diagnostic-compat` | head `c85b2f4165e056934f892c5db37391869cd40e38` | Retain only the GraphLearner deep-clone ownership fix and mutation-isolation regression. |
-| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | baseline head `8f5a3dfa297ad236812cda57fab02de75fec375a` | Preserve byte-identical Paradox-1 messages; refresh only the Paradox-2 internal call header if the versioned current target changes that snapshot. |
+| mlr3fda | `.local/compat/github-release-refresh-20260720/mlr3fda` | `paradox2-snapshots` | head `c1cdad5a78913c9a47fec1003de8d4309275c80c` (base `8f5a3dfa297ad236812cda57fab02de75fec375a`) | Preserve byte-identical Paradox-1 messages; the four Paradox-2 headers now name `.__paradox2_ParamSet__values()` while their diagnostic bodies remain unchanged. |
 
 For the historical pre-migration payload, the unchanged miesmuschel head passed
 its complete repository suite and source-package check against both exact
