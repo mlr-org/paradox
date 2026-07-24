@@ -68,11 +68,11 @@ paired	collection_params_rich	-	hot	de-facto-public-metadata-access
 paired	collection_params_nested	-	standard	nested-metadata-access
 paired	trafo	-	hot	common-value-transformation
 consumer	mies_mutator_maybe	params	hot	mandatory-miesmuschel-shape
-consumer	mies_mutator_maybe	values	standard	integrity-validated-live-collection-value-read
+consumer	mies_mutator_maybe	values	integrity-collection-read	integrity-validated-live-collection-value-read
 consumer	mies_mutator_maybe	get_values_unchecked	hot	mandatory-miesmuschel-shape
 consumer	mies_optimizer	params	hot	mandatory-miesmuschel-shape
-consumer	mies_optimizer	values	standard	integrity-validated-live-collection-value-read
+consumer	mies_optimizer	values	integrity-collection-read	integrity-validated-live-collection-value-read
 consumer	mies_optimizer	get_values_unchecked	hot	mandatory-miesmuschel-shape
 consumer	mlr3pipelines_graph	params	hot	maintained-mlr3pipelines-shape
-consumer	mlr3pipelines_graph	values	standard	integrity-validated-live-collection-value-read
+consumer	mlr3pipelines_graph	values	integrity-collection-read	integrity-validated-live-collection-value-read
 consumer	mlr3pipelines_graph	get_values_unchecked	hot	maintained-mlr3pipelines-shape

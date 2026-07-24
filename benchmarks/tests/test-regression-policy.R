@@ -137,14 +137,27 @@ if (nrow(reviewed_policy) != nrow(expected_inventory) ||
 integrity_rows <- reviewed_policy$tier %in% c(
   "integrity-shadow-read", "integrity-collection-read"
 )
+expected_integrity_scopes <- c(rep("paired", 4L), rep("consumer", 3L))
 expected_integrity_cases <- c(
   "shadow_values_live", "collection_values_plain",
-  "collection_values_rich", "collection_values_nested"
+  "collection_values_rich", "collection_values_nested",
+  "mies_mutator_maybe", "mies_optimizer", "mlr3pipelines_graph"
 )
-if (!identical(reviewed_policy$case[integrity_rows], expected_integrity_cases) ||
-    any(reviewed_policy$scope[integrity_rows] != "paired") ||
-    any(reviewed_policy$scope == "consumer" & integrity_rows)) {
-  fail("integrity-read tiers are not confined to the reviewed synthetic rows")
+expected_integrity_operations <- c(rep("-", 4L), rep("values", 3L))
+expected_integrity_tiers <- c(
+  "integrity-shadow-read", rep("integrity-collection-read", 6L)
+)
+if (!identical(
+      reviewed_policy$scope[integrity_rows], expected_integrity_scopes
+    ) ||
+    !identical(reviewed_policy$case[integrity_rows], expected_integrity_cases) ||
+    !identical(
+      reviewed_policy$operation[integrity_rows], expected_integrity_operations
+    ) ||
+    !identical(
+      reviewed_policy$tier[integrity_rows], expected_integrity_tiers
+    )) {
+  fail("integrity-read tiers differ from the seven reviewed rows")
 }
 consumer_policy <- reviewed_policy[
   reviewed_policy$scope == "consumer", , drop = FALSE
@@ -154,7 +167,9 @@ expected_consumer_cases <- c(
   "mies_mutator_maybe", "mies_optimizer", "mlr3pipelines_graph"
 )
 if (!identical(consumer_policy$case[consumer_values], expected_consumer_cases) ||
-    any(consumer_policy$tier[consumer_values] != "standard") ||
+    any(
+      consumer_policy$tier[consumer_values] != "integrity-collection-read"
+    ) ||
     any(
       consumer_policy$rationale[consumer_values] !=
         "integrity-validated-live-collection-value-read"

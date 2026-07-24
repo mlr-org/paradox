@@ -262,17 +262,20 @@ the same host:
 
 Common constructors, direct ID/value/domain access, validation, design
 generation, mutation, and maintained consumer hot paths use the stricter `hot`
-tier. Structural stress, nested graph traversal, callback-bearing cases, and
-the retained consumers' integrity-validated live collection `$values` reads use
-`standard`. The same consumers' direct `$params` and
+tier. Structural stress, nested graph traversal, and callback-bearing cases use
+`standard`. The retained consumers' integrity-validated live collection
+`$values` reads use `integrity-collection-read`; their direct `$params` and
 `$get_values(check_required = FALSE)` paths remain `hot`.
 The two integrity tiers are deliberately narrower than a generic compatibility
-waiver. They apply only to `shadow_values_live` and the three synthetic direct
-`collection_values_*` rows. A live Shadow read validates its origin generation,
-signature, hidden-value merge, and visible schema; a direct collection read
-admits the complete authoritative capsule DAG before assembling its detached
-result. Paradox 1 did not provide those integrity contracts, so its cached R
-surfaces are not an honest strict-latency budget for the additional work.
+waiver. `integrity-shadow-read` applies only to `shadow_values_live`.
+`integrity-collection-read` applies to exactly six full collection-graph reads:
+the three synthetic direct `collection_values_*` rows and the three exact
+miesmuschel/mlr3pipelines consumer `$values` rows. A live Shadow read validates
+its origin generation, signature, hidden-value merge, and visible schema; a
+direct collection read admits the complete authoritative capsule DAG before
+assembling its detached result. Paradox 1 did not provide those integrity
+contracts, so its cached R surfaces are not an honest strict-latency budget for
+the additional work.
 
 The finite ceilings retain that major-version contract-reset cost in every
 decision ledger, turn a material fraction of it into a visible `marginal`
@@ -281,13 +284,14 @@ They cover the measured optimized ratios with reviewable headroom and would
 reject the retained pre-optimization nested collection stage. Shadow
 construction, constraints, domains, and writes remain `hot` or `standard` as
 listed. The three real miesmuschel/mlr3pipelines structural `$values` reads use
-the existing `standard` ceiling because they repeatedly expose the same
-integrity-validated nested collection traversal; their `$params` and unchecked
-filtered getters, and every other retained consumer operation, remain `hot`.
-Thus a synthetic safety boundary cannot hide an end-to-end consumer regression,
-while the structural read is still held to a finite ordinary tier rather than a
-bespoke waiver. These are portable same-host relative budgets: the policy
-assumes no processor model, instruction set, or absolute nanosecond target.
+the existing `integrity-collection-read` ceiling because they expose the same
+integrity-validated full collection-graph traversal as the three synthetic
+reads; their `$params` and unchecked filtered getters, and every other retained
+consumer operation, remain `hot`. Thus a synthetic safety boundary cannot hide
+an end-to-end consumer regression, while every full graph read is held to the
+same finite reviewed tier. These are portable same-host relative budgets: the
+policy assumes no processor model, instruction set, or absolute nanosecond
+target.
 The exception is timing-only; both integrity tiers retain the strict `hot`
 allocation ratio and minimum-byte thresholds.
 After Paradox 2 becomes the authenticated baseline, review and normally retire
