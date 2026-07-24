@@ -23,29 +23,32 @@ The informative-diagnostic and legacy object-graph migration source changes
 intentionally differ from that payload, so the proof does not establish
 anything about the active package bytes. The replacement package payload is
 now frozen at
-`refs/paradox-release/candidate-20260724T011004Z`, commit
-`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
-`7913a390ca85beba03dcc954af18efcb7a35ecfe`. Treat all `10c6a0e` package,
+`refs/paradox-release/candidate-20260724T105215Z`, commit
+`8797f1163fe612cb01d1facf517834d3f516a697`, tree
+`81e6f901266754b97a0906f88a472bf04795f13c`. Treat all `10c6a0e` package,
 downstream, memory, and performance conclusions as historical. Any further
 package-source, package-test, help, or package-facing documentation change
 requires another candidate; post-freeze release-policy and evidence-ledger
 changes must prove that those package-facing paths are unchanged.
 
-The exact frozen source has a refreshed bounded-rchk discovery under
-`.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk`.
-Bcheck analyzed 845 functions and 28,745 states and retained the same 77
-reviewed blocks, 196 UP diagnostics, and 13 PB diagnostics; its report SHA-256
-is `a6b6f1dee7808424b82cfa3e9e587a71b6da99613cf7bbfdd94b921d083e82fa`.
+The exact frozen package source has a refreshed bounded-rchk discovery under
+`.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk`.
+Bcheck analyzed 870 functions and 30,245 states and retained 80 exact reviewed
+blocks, 238 UP diagnostics, and 13 PB diagnostics; its report SHA-256 is
+`02b08085ea0fadc906fb8e8fdd3f5211a6eb2a7eb08e922205e69f4d25361072`.
 Maacheck is byte-empty
 (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`);
-fficheck records 73 functions and one registration call, with report SHA-256
-`daac4796cfc39fc04d0b92c4654431699dc9505a735360eb9d98b449d9f788d7`.
-The refreshed policy, observed inventory, block table, and unchanged rationale
-table have SHA-256
-`07201bb186edff37ba4f8b719bcef2ca04db02e32e53764d8cda51606447ad2e`,
-`a2400bfc9b1743203f8273b2e7856f6279d8069a8d3030d5177d0be1895e7075`,
-`1ba2e2f2cdb272928332f2e3e41bc5f0c74675936409fad0ff9b137f3bf76bff`,
+fficheck records 79 functions and one registration call, with report SHA-256
+`565392164712e15df4bbdd0b34fb852b35eeab380f612c0983f2ccab69c31370`.
+The refreshed policy, block table, and unchanged rationale table have SHA-256
+`0ef5d687efbc34b1eff9eddeab21110a50e3c55b5c7dfec107f07e9dd8fa8c6f`,
+`50445fd2be3da7cbeb05f689377802deac7597ee2eeed8acc34f683989e3a71d`,
 and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
+The policy and corrected exact eight-file Valgrind scope live in the
+package-identical validation child
+`refs/paradox-release/validation-20260724T120434Z`, commit
+`3597d415a4e162120f5f05e986695909c11151df`; its four changed paths are all
+excluded by `.Rbuildignore`.
 The preceding discovery exposed a real protection imbalance in
 `schedule_vector()`: an ALTREP `Duplicate` method may legally return its input,
 but pointer equality was incorrectly used to decide whether to release the
@@ -53,8 +56,8 @@ second protection. One indexed root plus `REPROTECT` fixes the imbalance, and
 the frozen candidate includes a self-returning ALTREP-list regression that
 captures R's direct stack-imbalance diagnostic. `schedule_vector` is absent
 from the refreshed report. This discovery and policy refresh are exact
-source-bound analyzer evidence, not a substitute for the still-pending sealed
-GCT/Valgrind/rchk memory gate or the other final release gates.
+source-bound analyzer evidence. The retained combined GCT/Valgrind/rchk
+completion, rather than discovery alone, owns the release memory conclusion.
 The retained focused diagnostic install from before the object-graph migration
 source change has DSO SHA-256
 `2d1636ab5e0c10e23336f7bf33389e5963facdfaa08f7e23e2dd84372ecc4b49`.
@@ -1299,25 +1302,26 @@ Paradox 2 is the authenticated baseline.
 ## Active frozen candidate
 
 The current package candidate is
-`refs/paradox-release/candidate-20260724T011004Z`, commit
-`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
-`7913a390ca85beba03dcc954af18efcb7a35ecfe`. It contains the informative native
-diagnostics, recursive legacy object-graph migration, the indexed-root
-`schedule_vector()` repair, and the self-returning ALTREP duplicate regression.
+`refs/paradox-release/candidate-20260724T105215Z`, commit
+`8797f1163fe612cb01d1facf517834d3f516a697`, tree
+`81e6f901266754b97a0906f88a472bf04795f13c`. It contains the informative native
+diagnostics, recursive legacy object-graph migration, authenticated native
+gateway contexts and generation barriers, the indexed-root `schedule_vector()`
+repair, and the self-returning ALTREP duplicate regression.
 `AGENTS.md`, `design/`, and `environment/` are excluded from the package build,
 so the post-freeze rchk-policy and release-ledger refresh does not alter that
 package payload. Do not infer this for any other path: authenticate the exact
 diff before transferring a package-byte-bound result.
 
-The exact candidate's discovery2 bcheck/maacheck/fficheck reports and refreshed
-policy are recorded in the Authority section above. The release decision
-remains pending. Required final work still includes the complete package suite
-and `R CMD check`, strict compilers and sanitizers, the complete R-API and
-R 4.3.3/4.5.2/development runtime gates, the sealed combined
-GCT/Valgrind/rchk/adversarial gate, normalized differential, both downstream
-axes and maintained consumers, documentation workloads, the idle-host release
+The exact candidate's bcheck/maacheck/fficheck reports and refreshed policy are
+recorded in the Authority section above. The complete package suite, CRAN-style
+and depends-only checks, strict compilers, analyzers, sanitizers, R API/header
+matrix, and real R 4.3.3/4.5.2 runtime matrix are green. Required final work is
+the retained combined GCT/Valgrind/rchk completion, normalized differential,
+the exact Paradox-2 serialization-owner downstream checks, idle-host bounded
 benchmark, exact Windows x86-64 and Apple-silicon macOS evidence, and the
-user-performed downstream PR/publication handoff.
+user-performed downstream PR/publication handoff. Current Paradox-1 bbotk and
+miesmuschel owner rows are already retained against the unchanged 1.0.1 axis.
 
 ## Historical candidates
 
@@ -1333,6 +1337,16 @@ dependency, downstream, and `$has_deps` work. Their evidence remains below
 ignored `.local/` paths and in Git history, but none is a baseline for current
 source completeness, compatibility policy, routine inventory, test counts, or
 release readiness.
+
+The serialized-migration candidate
+`refs/paradox-release/candidate-20260724T011004Z` at `348539ad` was superseded
+after adversarial review tightened native shell authentication, read-only
+Shadow receipts, joint graph validation, and postorder commit barriers.
+Candidate `a362365` contained that hardening but failed the strict enum
+conversion build; `2bcce2b` fixed the compiler warning but retained a
+cppcheck-only conservative null-flow diagnostic. The active `8797f11`
+candidate makes the admitted graph guard explicit to the analyzer. None of
+these rejected refs is release evidence for the active package payload.
 
 The later candidate `refs/paradox-release/candidate-20260719T150831Z` at
 `612345ceb403c70a0ea6c1149c367c6782d9870b` passed its native, R-API,

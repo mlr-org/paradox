@@ -4,11 +4,12 @@
 
 **Package payload frozen; final release validation pending.**
 The active candidate is
-`refs/paradox-release/candidate-20260724T011004Z`, commit
-`348539ad141e1b75d424d7f92e3acd50c4549dec`, tree
-`7913a390ca85beba03dcc954af18efcb7a35ecfe`. It includes the informative native
-diagnostics, recursive legacy object-graph migration, and the focused
-self-returning ALTREP duplicate regression. The former frozen candidate and
+`refs/paradox-release/candidate-20260724T105215Z`, commit
+`8797f1163fe612cb01d1facf517834d3f516a697`, tree
+`81e6f901266754b97a0906f88a472bf04795f13c`. It includes the informative native
+diagnostics, recursive legacy object-graph migration, authenticated native
+gateway/generation barriers, and the focused self-returning ALTREP duplicate
+regression. The former frozen candidate and
 its local correctness, compatibility, documentation, memory, and performance
 gates remain historical evidence only; they do not transfer to this changed
 package payload. The release decision remains pending on the complete
@@ -403,21 +404,20 @@ not a local compatibility workaround.
 ### Performance and correctness
 
 The exact frozen candidate has a source-bound bounded-rchk discovery under
-`.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk`.
-Bcheck analyzed 845 functions and 28,745 states, with 77 reviewed Function
-blocks, 196 UP diagnostics, and 13 PB diagnostics; its report SHA-256 is
-`a6b6f1dee7808424b82cfa3e9e587a71b6da99613cf7bbfdd94b921d083e82fa`.
+`.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk`.
+Bcheck analyzed 870 functions and 30,245 states, with 80 reviewed Function
+blocks, 238 UP diagnostics, and 13 PB diagnostics; its report SHA-256 is
+`02b08085ea0fadc906fb8e8fdd3f5211a6eb2a7eb08e922205e69f4d25361072`.
 Maacheck is byte-empty
 (`e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855`).
-Fficheck reports 73 registered functions and one checked registration call;
+Fficheck reports 79 registered functions and one checked registration call;
 its report SHA-256 is
-`daac4796cfc39fc04d0b92c4654431699dc9505a735360eb9d98b449d9f788d7`.
-The analyzer-identity, refreshed policy, observed inventory, block-table, and
-unchanged rationale-table SHA-256 values are
+`565392164712e15df4bbdd0b34fb852b35eeab380f612c0983f2ccab69c31370`.
+The analyzer-identity, refreshed policy, block-table, and unchanged
+rationale-table SHA-256 values are
 `356e2e277a3ef8441fbf464c3c927a9f9f088db839f60b5b16231f30d2889028`,
-`07201bb186edff37ba4f8b719bcef2ca04db02e32e53764d8cda51606447ad2e`,
-`a2400bfc9b1743203f8273b2e7856f6279d8069a8d3030d5177d0be1895e7075`,
-`1ba2e2f2cdb272928332f2e3e41bc5f0c74675936409fad0ff9b137f3bf76bff`,
+`0ef5d687efbc34b1eff9eddeab21110a50e3c55b5c7dfec107f07e9dd8fa8c6f`,
+`50445fd2be3da7cbeb05f689377802deac7597ee2eeed8acc34f683989e3a71d`,
 and `c9e94a9f49b5570838df94fba7f45ef870999b78d03b7b4824412dc34645d8a4`.
 
 The preceding discovery exposed a real protection imbalance in
@@ -428,10 +428,11 @@ the second protection. The replacement keeps one indexed root and uses
 `REPROTECT`; the candidate also contains a test-only ALTREP list whose
 `Duplicate` method returns itself and a graph-discovery regression that captures
 R's direct stack-imbalance diagnostic. `schedule_vector`'s former one-UP/two-PB
-block is absent from discovery2. The remaining 77 blocks and rationale
-assignments are the exact reviewed inventory, subject only to generated helper
-suffix and source-line shifts. This refresh admits the current rchk policy; it
-does not by itself seal the combined GCT/Valgrind/rchk memory gate.
+block is absent. The 80 current blocks and rationale assignments are the exact
+reviewed inventory. The refreshed policy and truthful exact eight-file
+Valgrind scope are confined to the package-identical validation child
+`3597d415`; the retained combined memory completion, not discovery alone,
+closes the release gate.
 
 The following historical results and hashes bind the superseded pre-migration
 payload. They remain useful engineering evidence but do not close a release
@@ -464,20 +465,21 @@ same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
 - [x] directly affected development tests pass from stable cached
   installations;
-- [ ] the complete unit suite and package check pass for the active frozen
-  migration payload; the former donor execution and payload-identity proof are
-  historical only;
+- [x] the complete unit suite, CRAN-style package check, and depends-only check
+  pass for the active frozen migration payload under
+  `.local/checks/serialized-migration-release-8797f11-20260724`;
 - [x] the final profiling decisions are closed: sparse search-target projection
   and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
 - [x] measured hot-path changes remain intact under the bounded refreshed
   comparison recorded below;
 - [ ] a new sealed release benchmark passes for the active candidate;
-- [ ] strict GCC/Clang, sanitizers, GCT, Valgrind, rchk, adversarial corruption,
-  and R-API/exception-ledger checks are sealed for the active payload; the
-  bounded-rchk discovery above refreshes policy but is not the combined memory
-  completion;
-- [ ] R 4.3.3, 4.5.2, and development-R local execution are sealed for the
-  active payload;
+- [x] strict GCC/Clang, both analyzers, cppcheck, symbol/registration audit,
+  ASan, UBSan, and R-API/exception-ledger checks are sealed for the active
+  payload;
+- [ ] the combined GCT, Valgrind, and bounded-rchk memory completion is sealed
+  for the active payload;
+- [x] real R 4.3.3 and 4.5.2 runtime execution plus the current local R 4.6.1
+  native execution are sealed for the active payload;
 - [ ] Windows x86-64 and real macOS ARM64 are clean for the exact frozen
   candidate and independently retained;
 - [ ] priority consumer, documentation, differential, and benchmark gates are
@@ -726,11 +728,11 @@ The active immutable package candidate is:
 
 | Field | Value |
 |---|---|
-| Full candidate ref | `refs/paradox-release/candidate-20260724T011004Z` |
-| Commit | `348539ad141e1b75d424d7f92e3acd50c4549dec` |
-| Tree | `7913a390ca85beba03dcc954af18efcb7a35ecfe` |
+| Full candidate ref | `refs/paradox-release/candidate-20260724T105215Z` |
+| Commit | `8797f1163fe612cb01d1facf517834d3f516a697` |
+| Tree | `81e6f901266754b97a0906f88a472bf04795f13c` |
 | Version | 2.0.0 |
-| Exact bounded-rchk discovery | `.local/checks/migration-release-rchk-policy-discovery2-20260724/modes/rchk` |
+| Exact bounded-rchk discovery | `.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk` |
 
 This ref freezes package source, package tests, help, and package-facing
 documentation. The post-freeze rchk-policy and release-ledger refresh changes
