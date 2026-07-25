@@ -698,6 +698,8 @@ sandboxed by Paradox and is outside this guarantee.
   COLLECTION construction and atomic collection add;
 - `src/paramset_mutate.c`: tag/dependency projection and atomic mutation plus
   BASE callback replacement;
+- `src/parameter_suggestion.[ch]`: bounded failure-only UTF-8 identifier
+  ranking and formatting for the shared unknown-parameter diagnostic;
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
   planners and kernels over capsule state;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery

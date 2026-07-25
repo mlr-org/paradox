@@ -19,17 +19,21 @@ back into current source. The independently replayed `a4617ca` to `10c6a0e`
 package-payload proof is one historical transfer for that superseded payload;
 it establishes nothing about the active implementation.
 
-The active package-facing source is frozen at
+The last sealed package-facing candidate is
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
 `81e6f901266754b97a0906f88a472bf04795f13c`, with authenticated candidate
 content SHA-256
 `ced2390bc756b01805e7bdcf32fdb4a6ff2c1bd010dd3d576194d939e491f644`.
-Any package source, package test, help, or package-facing documentation change
-requires a new candidate. Post-freeze release-policy, validation, and ledger
-commits must prove that those paths are unchanged; call that relationship
-*package-facing-source identical*, not package-identical, unless a separate
-sealed complete-payload byte proof exists.
+Final pre-release cleanup reopened package source after that seal on
+2026-07-25. The ref and all source-bound gates are therefore historical until a
+new candidate is frozen; there is currently no active frozen package candidate.
+Record only focused development evidence while the remaining cleanup items are
+being implemented, then create one new candidate and rerun the applicable final
+gates once. Post-freeze release-policy, validation, and ledger commits for that
+future candidate must prove package-facing paths unchanged; call that
+relationship *package-facing-source identical*, not package-identical, unless a
+separate sealed complete-payload byte proof exists.
 
 The original source-bound bcheck discovery under
 `.local/checks/serialized-migration-release-8797f11-memory-20260724/modes/rchk`
@@ -252,6 +256,11 @@ semantic vectors remain supported at their stated positions.
   byte-identical reproduction of every checkmate quirk, `conditionCall()`,
   implementation frame, or exotic classed/ALTREP object behavior outside the
   structural contract.
+  Unknown-ID suggestions belong to the same failure-only native diagnostic
+  boundary. Rank the actual unknown name—not its position—by case-insensitive
+  partial edit distance, retain the 20% threshold, stable top-three order, and
+  cheap collection affixes. Exact ID hits must not allocate, calculate a
+  distance, or construct suggestion text.
   There are exactly two narrow cold R semantic-orchestration families. The
   first is internal tuning.
   `$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
@@ -1322,9 +1331,9 @@ evidence and explicit design review. Treat non-pass integrity rows as required
 raw-distribution review, and normally retire these contract-reset tiers once
 Paradox 2 is the authenticated baseline.
 
-## Active frozen candidate
+## Last sealed candidate (historical after final cleanup)
 
-The current package candidate is
+The last sealed package candidate is
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
 `81e6f901266754b97a0906f88a472bf04795f13c`, candidate content SHA-256
@@ -1334,11 +1343,12 @@ migration, authenticated native gateway contexts and generation barriers, the
 indexed-root `schedule_vector()` repair, and the self-returning ALTREP duplicate
 regression.
 `AGENTS.md`, `design/`, and `environment/` are excluded from the package build,
-and the exact candidate-to-`fc92edd` diff contains no package-facing source, so
-the post-freeze validation and release-ledger work does not alter that frozen
-source. This is package-facing-source identity, not an unproved complete
-package-payload byte identity. Do not infer it for any other path: authenticate
-the exact diff before transferring a source-bound result.
+and the exact candidate-to-`fc92edd` diff contained no package-facing source,
+so that post-freeze validation and release-ledger work did not alter the sealed
+source. The later 2026-07-25 cleanup does alter package-facing source and
+invalidates this transfer. This was package-facing-source identity, not an
+unproved complete package-payload byte identity. Do not infer it for any other
+path: authenticate the exact diff before transferring a source-bound result.
 
 The exact candidate's bcheck/maacheck/fficheck reports and refreshed policy are
 recorded in the Authority section above. The complete package suite, CRAN-style
@@ -1346,10 +1356,11 @@ and depends-only checks, strict compilers, analyzers, sanitizers, R API/header
 matrix, real R 4.3.3/4.5.2 runtime matrix, retained combined memory run,
 normalized differential, both downstream axes, 20-of-28 scoped broad corpus,
 mandatory documentation, five-package exact Paradox-2 source check, and sealed
-77-row benchmark are green or accepted under their recorded reviewed exclusion
-policies. All local gates are complete. The only remaining work is exact hosted
-Windows x86-64 and Apple-silicon macOS evidence plus the user-performed
-downstream branch/PR, tag, and workflow publication handoff.
+77-row benchmark were green or accepted under their recorded reviewed
+exclusion policies for that payload. They are historical development evidence
+for the cleanup source, not completed release gates. A replacement candidate
+needs the applicable local and hosted gates plus the user-performed downstream
+branch/PR, tag, and workflow publication handoff.
 
 ## Historical candidates
 
@@ -1372,9 +1383,10 @@ after adversarial review tightened native shell authentication, read-only
 Shadow receipts, joint graph validation, and postorder commit barriers.
 Candidate `a362365` contained that hardening but failed the strict enum
 conversion build; `2bcce2b` fixed the compiler warning but retained a
-cppcheck-only conservative null-flow diagnostic. The active `8797f11`
+cppcheck-only conservative null-flow diagnostic. The later `8797f11`
 candidate makes the admitted graph guard explicit to the analyzer. None of
-these rejected refs is release evidence for the active package payload.
+these rejected refs, nor the now-historical `8797f11` gates, is release
+evidence for the reopened cleanup payload.
 
 The later candidate `refs/paradox-release/candidate-20260719T150831Z` at
 `612345ceb403c70a0ea6c1149c367c6782d9870b` passed its native, R-API,

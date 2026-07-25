@@ -17,6 +17,7 @@
 #include "domain_admission.h"
 #include "paramset_domain_common.h"
 #include "paramset_shadow.h"
+#include "parameter_suggestion.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "shell_auth.h"
@@ -2255,7 +2256,12 @@ static SEXP initialize_point(SEXP stable_values, const check_plan_t *plan,
     R_xlen_t row = R_XLEN_T_MAX;
     SEXP id = STRING_ELT(point->names, index);
     if (!find_id(&plan->root_ids, id, &row, &work_since_interrupt)) {
-      return utf8_message_1("Parameter '", id, "' not available.");
+      return paradox_parameter_unavailable_diagnostic(
+        id,
+        plan->root_ids.ids,
+        "",
+        TRUE
+      );
     }
     if (point->value_for_param[row] != R_XLEN_T_MAX) {
       return check_message("Names must be unique.");

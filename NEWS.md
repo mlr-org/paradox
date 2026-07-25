@@ -21,6 +21,13 @@ hazards that Paradox 2 is intended to remove.
   operations, collection traversal, designs, and samplers enter registered
   portable C17 operations directly. Current objects have one semantic engine;
   operations are not retried through a second R/checkmate/data.table/S3 path.
+* Unknown parameter diagnostics again include a native
+  `"Did you mean ...?"` hint when a close ID exists. Paradox 1 accidentally
+  ranked the numeric position of the unknown entry instead of its name; the
+  native matcher now uses the actual misspelling, retains the established
+  case-insensitive partial-edit threshold and three-candidate limit, and
+  therefore discounts prefixes introduced by `ParamSetCollection`. Suggestion
+  work runs only after the exact ID lookup has failed.
 * Checked assignment of a ParamSet-bearing `ObjectTuneToken` now accepts only an
   exact nonempty bounded BASE `ParamSet` capsule, not a collection, shadow, or
   additive subclass, and executes no candidate callback during admission.

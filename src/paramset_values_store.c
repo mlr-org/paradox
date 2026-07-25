@@ -7,6 +7,7 @@
 
 #include "paramset_domain_common.h"
 #include "paramset_params_internal.h"
+#include "parameter_suggestion.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "core_state.h"
@@ -40,18 +41,18 @@ static int exact_flag(SEXP value, int *result) {
   return TRUE;
 }
 
-static void shadow_parameter_unavailable(SEXP id) {
+static void shadow_parameter_unavailable(SEXP id, SEXP candidate_ids) {
   PROTECT(id);
   if (Rf_getCharCE(id) == CE_BYTES) {
     UNPROTECT(1);
     Rf_error("Unknown bytes-encoded parameter ID");
   }
-  const paradox_utf8_piece_t pieces[] = {
-    paradox_utf8_ascii_piece("Parameter '"),
-    paradox_utf8_charsxp_piece(id),
-    paradox_utf8_ascii_piece("' not available in ParamSetShadow")
-  };
-  SEXP message = PROTECT(paradox_utf8_message(pieces, 3));
+  SEXP message = PROTECT(paradox_parameter_unavailable_diagnostic(
+    id,
+    candidate_ids,
+    " in ParamSetShadow",
+    FALSE
+  ));
   paradox_error_from_scalar_string(message);
 }
 
@@ -1523,7 +1524,10 @@ static void process_shadow_write(value_write_transaction_t *transaction,
         STRING_ELT(input_names, index),
         transaction->work_since_interrupt
       )) {
-      shadow_parameter_unavailable(STRING_ELT(input_names, index));
+      shadow_parameter_unavailable(
+        STRING_ELT(input_names, index),
+        checked_params.ids
+      );
     }
   }
 

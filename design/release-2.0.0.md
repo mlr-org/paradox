@@ -2,9 +2,9 @@
 
 ## Status
 
-**Package-facing source frozen; all local release gates complete; remote
-evidence and publication pending.**
-The active candidate is
+**Package-facing source reopened for final cleanup; the prior local release
+gates are historical and a new candidate will be required.**
+The last sealed candidate is
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
 `81e6f901266754b97a0906f88a472bf04795f13c`, candidate content SHA-256
@@ -13,12 +13,11 @@ It includes the informative native diagnostics, recursive legacy object-graph
 migration, authenticated native gateway/generation barriers, and the focused
 self-returning ALTREP duplicate regression. The former frozen candidate and
 its local correctness, compatibility, documentation, memory, and performance
-gates are historical only; they do not transfer to this changed package
-implementation. The active candidate's complete local native, R API, runtime,
-memory, differential, downstream, documentation, and benchmark gates are now
-accepted below. The release decision remains pending only on retained hosted
-Windows x86-64/macOS ARM64 portability evidence and user-performed downstream
-branch/PR, tag, and workflow publication.
+gates are historical only; they do not transfer to the cleanup source that
+followed it. While these final items are in flight, use the focused development
+policy below. Freeze one replacement candidate and run the applicable native,
+R API, runtime, memory, differential, downstream, documentation, benchmark,
+and hosted portability gates after the package-facing source converges.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -389,7 +388,8 @@ not a local compatibility workaround.
   mlr3fda `c1cdad5` are prepared on their recorded branches; the mlr3
   `35e30a9` and mlr3fselect `ae8e1d1` diagnostic-only PRs are documented for
   closure without replacement;
-- [x] all eight profile heads are authenticated against the active candidate;
+- [x] all eight profile heads were authenticated against the last sealed
+  candidate;
   the complete priority-zero/one Paradox-2 repository corpus ran once with
   `jobs = 2` in 14 admitted waves, the five final Paradox-2 source-package
   checks are green, and the Paradox-1 five-package conclusion is explicitly
@@ -450,7 +450,7 @@ discovery alone, closes the release gate.
 
 The following historical results and hashes bind the superseded pre-migration
 payload. They remain useful engineering evidence but do not close a release
-gate for the active candidate.
+gate for either the last sealed candidate or the reopened cleanup source.
 
 The historical candidate's rchk policy bound the refreshed reviewed
 public-table source and its bounded-analyzer reports. Bcheck
@@ -716,6 +716,15 @@ when their byte-affecting inputs match. A candidate DSO, package installation,
 memory report, differential, consumer result, documentation result, or
 benchmark is not transferable across a changed distributable payload.
 
+The 2026-07-25 unknown-parameter-suggestion cleanup has development evidence
+only: an incremental package installation; warning-as-error GCC 14 and Clang 22
+C17 compiles of the changed translation units (also independently reviewed
+against R 4.3 headers); focused `NOT_CRAN=true` runs of the new suggestion,
+native ParamSet check, native value-mutation, and characterization
+value-mutation files; and 500 randomized comparisons with the intended
+Paradox-1 `mlr3misc::did_you_mean()` policy. All passed. No broad, downstream,
+memory, or release benchmark gate was rerun for this isolated item.
+
 A completed package-facing row may be reused across refs only through a sealed,
 independently replayed proof that every Git change is excluded by the exact
 `.Rbuildignore` and that clean builds have the same complete payload inventory
@@ -735,9 +744,10 @@ R/compiler/instrumentation profile; compatible evidence families may share
 that exact authenticated installation, and a sealed identical-payload ref may
 inherit the donor conclusion, never development component objects.
 
-## Active candidate freeze record
+## Last sealed candidate freeze record
 
-The active immutable package candidate is:
+The last sealed immutable package candidate, now historical after the
+2026-07-25 cleanup reopened package-facing source, is:
 
 | Field | Value |
 |---|---|
@@ -751,19 +761,20 @@ The active immutable package candidate is:
 | Final documentation/consumer/benchmark tooling | commit `fc92edd7f1ab612468066fe06bd3d9fc7afea41c`, tree `05cc4e5213c5ee73d0bc764c3d102c15e4c57141` |
 | Portability companion | `refs/paradox-release/portability-harness-5305ead`, commit `5305eaddbc9c2159fe194e6be10388c17b4c506a`, tree `e1fe00ddad08af89566e3df12460bc47d3e98292` |
 
-This ref freezes package source, package tests, help, and package-facing
-documentation. The exact candidate-to-`a05cd51` and candidate-to-`fc92edd`
+This ref froze package source, package tests, help, and package-facing
+documentation at that point. The exact candidate-to-`a05cd51` and
+candidate-to-`fc92edd`
 diffs contain no package-facing path; these relationships are
 package-facing-source identity, not claims of complete package-payload byte
-identity. The active local native, R API, runtime, combined-memory,
-differential, downstream, documentation, and benchmark identities are retained
-below. Only the hosted portability result and user remote publication remain
-open.
+identity. The later cleanup source is not identical to this payload. Its native,
+R API, runtime, combined-memory, differential, downstream, documentation,
+benchmark, and hosted portability conclusions must be established after a
+replacement candidate is frozen.
 
 ## Historical candidate freeze record (superseded payload)
 
 The table below records the superseded `10c6a0e` payload only. It does not
-describe the active candidate above and authorizes no current release
+describe the last sealed candidate above and authorizes no current release
 conclusion.
 
 An immutable package candidate is committed after package implementation,
@@ -906,14 +917,14 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending` only for remote completion. The object-graph
-migration payload is frozen at the active candidate identity above, and every
-required local unit/check, R API, runtime, combined-memory, differential,
-documentation, downstream, source-package, and benchmark gate is complete.
-Independent hosted Windows x86-64/macOS ARM64 evidence and user publication of
-the prepared downstream branches/PRs, release tag, and workflow remain
-required. No row in the historical table above contributes to this active
-local conclusion.
+The release decision is `pending` while final cleanup changes remain in flight.
+The `8797f11` local gates above describe only the last sealed payload. After the
+package-facing source converges, freeze one replacement candidate and complete
+its applicable local unit/check, R API, runtime, combined-memory, differential,
+documentation, downstream, source-package, benchmark, and hosted Windows
+x86-64/macOS ARM64 gates. User publication of the prepared downstream
+branches/PRs, release tag, and workflow remains required. No historical row
+alone authorizes the reopened payload.
 
 ## Historical rejected or superseded refs
 

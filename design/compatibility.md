@@ -52,6 +52,11 @@ Subject to the legacy-object migration boundary described below, preserve:
   membership retain their established checkmate-style categories and useful
   message fragments. An ordinary scalar missing value keeps the missingness
   diagnosis even when its storage mode would otherwise be incompatible.
+  Unknown parameter diagnostics use the actual misspelled ID for their
+  failure-only native `"Did you mean ...?"` ranking. They preserve the
+  case-insensitive partial-distance threshold and stable three-candidate limit,
+  so omitted `ParamSetCollection` affixes are inexpensive; this deliberately
+  fixes Paradox 1's ranking by the unknown entry's integer position.
   Byte-identical reproduction of every checkmate quirk, `conditionCall()`, or
   unsupported exotic-object behavior is not required;
 - the historical distinction between callback-free structural `$deps <-`

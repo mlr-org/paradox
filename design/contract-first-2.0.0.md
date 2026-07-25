@@ -477,6 +477,13 @@ informative checkmate-style categories and established consumer-relied-on
 fragments for missingness, type/shape, integerish values, bounds, and factor
 membership. The diagnostic formatter runs only after native admission fails;
 successful checks neither construct messages nor enter R or checkmate.
+An unknown parameter ID is likewise formatted only after its exact native hash
+lookup fails. The failure-only C matcher uses the actual unknown name,
+case-insensitive partial edit distance, the established 20% query-length
+threshold, stable parameter order for ties, and at most three candidates.
+Partial matching gives collection-added prefixes/postfixes low cost. This fixes
+Paradox 1's accidental use of the unknown entry's integer position as the
+distance query without adding work to successful assignment or checking.
 Byte-identical reproduction of every checkmate quirk, internal error priority
 that depends on a side-effecting promise, `conditionCall()`, implementation
 frames, and unsupported exotic-object behavior is not an outward requirement.
