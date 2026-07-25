@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+
+# Enter the installed, root-owned aggregate-cgroup launcher. This checkout
+# script never executes repository code as root.
+
+set -euo pipefail
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
+HELPER=/usr/local/libexec/paradox-verify-systemd
+
+if [[ "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" == 1 ]]; then
+  exec "$ROOT/scripts/verify" "$@"
+fi
+[[ -x "$HELPER" && -f "$HELPER" && ! -L "$HELPER" ]] || {
+  printf '%s\n' \
+    "scripts/verify-systemd: $HELPER is not installed; see verification/README.md" >&2
+  exit 2
+}
+
+launcher=(
+  --expect-root "$ROOT"
+  --engine "${PARADOX_CONTAINER_ENGINE:-podman}"
+)
+if [[ -n "${PARADOX_VERIFY_WORKER_IMAGE:-}" ]]; then
+  launcher+=(--worker-image "$PARADOX_VERIFY_WORKER_IMAGE")
+fi
+launcher+=(-- "$@")
+
+if [[ $EUID -eq 0 ]]; then
+  exec "$HELPER" "${launcher[@]}"
+fi
+if [[ -t 0 && -t 1 ]]; then
+  exec /usr/bin/sudo "$HELPER" "${launcher[@]}"
+fi
+exec /usr/bin/sudo -n "$HELPER" "${launcher[@]}"

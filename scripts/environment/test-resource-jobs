@@ -59,6 +59,57 @@ run_fixture "$V2/proc" "$V2/cgroup" api-compile --report > "$V2_REPORT"
 [[ "$(field memory_reserve_mib "$V2_REPORT")" == 12288 ]]
 [[ "$(field memory_source "$V2_REPORT")" == proc_memavailable+cgroup ]]
 [[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile --max-jobs 3)" == 3 ]]
+
+# An outer verification worker's reviewed allocation is an additional
+# cooperative ceiling. It lowers nested concurrency without pretending to be
+# another cgroup or deducting another reserve from the assigned value.
+ASSIGNED_REPORT="$SCRATCH/v2-assigned-report.tsv"
+env \
+  PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+  PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=2304 \
+  PARADOX_RESOURCE_TEST_MODE=true \
+  PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+  PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+  PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+  PARADOX_RESOURCE_ONLINE_CPUS=32 \
+  "$HELPER" api-compile --report > "$ASSIGNED_REPORT"
+[[ "$(field jobs "$ASSIGNED_REPORT")" == 3 ]]
+[[ "$(field operator_max_jobs "$ASSIGNED_REPORT")" == 3 ]]
+[[ "$(field memory_reserve_mib "$ASSIGNED_REPORT")" == 12288 ]]
+[[ "$(run_fixture "$V2/proc" "$V2/cgroup" api-compile \
+  --verify-report "$ASSIGNED_REPORT")" == \
+  resource_report_verified=api-compile ]]
+if env \
+    PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+    PARADOX_VERIFY_ASSIGNED_MEMORY_MIB=767 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/assigned-small.out" \
+      2> "$SCRATCH/assigned-small.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: undersized assigned memory was accepted' >&2
+  exit 1
+fi
+grep -q 'assigned memory envelope cannot fit one api-compile job' \
+  "$SCRATCH/assigned-small.err"
+if env \
+    PARADOX_VERIFY_ASSIGNED_CPUS=3 \
+    PARADOX_RESOURCE_TEST_MODE=true \
+    PARADOX_RESOURCE_TEST_PLATFORM=Linux \
+    PARADOX_RESOURCE_PROC_ROOT="$V2/proc" \
+    PARADOX_RESOURCE_CGROUP_ROOT="$V2/cgroup" \
+    PARADOX_RESOURCE_ONLINE_CPUS=32 \
+    "$HELPER" api-compile > "$SCRATCH/assigned-half.out" \
+      2> "$SCRATCH/assigned-half.err"; then
+  printf '%s\n' \
+    'test-resource-jobs: incomplete assigned envelope was accepted' >&2
+  exit 1
+fi
+grep -q 'must be supplied together' "$SCRATCH/assigned-half.err"
+
 if run_fixture "$V2/proc" "$V2/cgroup" rchk \
     > "$SCRATCH/unsafe-rchk.out" 2> "$SCRATCH/unsafe-rchk.err"; then
   printf '%s\n' \

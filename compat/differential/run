@@ -11,6 +11,8 @@ CASE_SOURCE_KIND=default
 EXPECTED_SOURCE_KIND=default
 FETCH=1
 SELECTED_CASES=()
+RUN_ID_OVERRIDE=
+RUN_ID_SET=0
 
 usage() {
   sed -n 's/^# *//p' <<'USAGE'
@@ -26,6 +28,7 @@ usage() {
 #   --case NAME          Run one named case; repeat to select several
 #   --expected-differences FILE
 #                       Expected-difference manifest (default: checked-in list)
+#   --run-id ID         New retained run ID (default: UTC timestamp/PID)
 #   --strict             Treat every observed difference as a failure
 #   --offline            Do not clone or fetch; require an existing mirror/ref
 #   -h, --help           Show this help
@@ -61,6 +64,19 @@ while (($#)); do
       EXPECTED_SOURCE_KIND=external
       shift 2
       ;;
+    --run-id)
+      [[ $# -ge 2 ]] || { printf '%s\n' "--run-id requires a value" >&2; exit 2; }
+      ((RUN_ID_SET == 0)) || { printf '%s\n' "--run-id may be supplied only once" >&2; exit 2; }
+      RUN_ID_OVERRIDE=$2
+      RUN_ID_SET=1
+      shift 2
+      ;;
+    --run-id=*)
+      ((RUN_ID_SET == 0)) || { printf '%s\n' "--run-id may be supplied only once" >&2; exit 2; }
+      RUN_ID_OVERRIDE=${1#--run-id=}
+      RUN_ID_SET=1
+      shift
+      ;;
     --strict)
       EXPECTED_DIFFERENCES=""
       EXPECTED_SOURCE_KIND=strict
@@ -81,6 +97,12 @@ while (($#)); do
       ;;
   esac
 done
+
+if ((RUN_ID_SET == 1)) &&
+   [[ ! "$RUN_ID_OVERRIDE" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]]; then
+  printf '%s\n' "--run-id must be a safe name of at most 128 characters" >&2
+  exit 2
+fi
 
 if [[ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]]; then
   printf '%s\n' "Activate the repository-local toolchain first: . scripts/activate" >&2
@@ -162,7 +184,15 @@ if ! BASELINE_COMMIT=$(git --git-dir="$MIRROR" rev-parse --verify "${BASELINE_RE
   exit 2
 fi
 
-RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+if ((RUN_ID_SET == 1)); then
+  RUN_ID=$RUN_ID_OVERRIDE
+else
+  RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)-$$"
+fi
+[[ "$RUN_ID" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] || {
+  printf '%s\n' "--run-id must be a safe name of at most 128 characters" >&2
+  exit 2
+}
 RUN_DIR="$STATE/runs/$RUN_ID"
 HARNESS="$RUN_DIR/harness"
 BASELINE_SOURCE="$RUN_DIR/source-baseline"

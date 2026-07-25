@@ -1,9 +1,9 @@
 #!/usr/bin/env Rscript
 
 # Render current public documentation consumers and execute pinned corpus
-# workloads against one immutable candidate. Full projects are attempted
-# first; focused paradox surfaces remain separate gates so unrelated content
-# cannot obscure the compatibility signal.
+# workloads against one immutable candidate. Essential Paradox surfaces run
+# across the complete corpus before advisory full renders, so unrelated content
+# cannot delay the highest-information compatibility signal.
 
 fail <- function(...) stop(..., call. = FALSE)
 `%||%` <- function(x, y) if (is.null(x)) y else x
@@ -27,6 +27,7 @@ usage <- function(status = 0L) {
     "  --paradox-axis NAME         exact Paradox evidence axis",
     "  --extra-library PATH        additional local library; repeatable",
     "  --run-id ID                 new retained run identifier",
+    "  --reserved-run-parent PATH  precreated empty run directory",
     "  --scope all|essential|full  workload scope (default: all)",
     "  --timeout SECONDS           per-command timeout (default: 7200)",
     "  --help                      show this help"
@@ -38,7 +39,8 @@ args <- commandArgs(trailingOnly = TRUE)
 options <- list(
   root = getwd(), candidate_library = NULL, candidate_source = NULL,
   dependency_library = NULL, evidence_profile = NULL, paradox_axis = NULL,
-  extra_library = character(), run_id = NULL, scope = "all", timeout = 7200
+  extra_library = character(), run_id = NULL, reserved_run_parent = NULL,
+  scope = "all", timeout = 7200
 )
 i <- 1L
 while (i <= length(args)) {
@@ -177,15 +179,88 @@ runs_root <- normalizePath(
   winslash = "/", mustWork = TRUE
 )
 run_parent <- file.path(runs_root, run_id)
-if (file.exists(run_parent) || dir.exists(run_parent) || is_symbolic(run_parent)) {
-  fail("documentation run ID already exists: ", run_parent)
-}
-run_directory <- file.path(run_parent, "documentation")
 
 if (!requireNamespace("processx", quietly = TRUE) ||
     !requireNamespace("fs", quietly = TRUE)) {
   fail("the repository-local processx and fs packages are required")
 }
+documentation_directory_entries <- function(path) {
+  if (file.access(path, mode = 4L) != 0L) {
+    fail("cannot inspect reserved documentation run parent: ", path)
+  }
+  setdiff(
+    list.files(
+      path, all.files = TRUE, full.names = FALSE, recursive = FALSE
+    ),
+    c(".", "..")
+  )
+}
+documentation_directory_identity <- function(path, label) {
+  require_plain_directory(path, label)
+  details <- fs::file_info(path)
+  if (nrow(details) != 1L ||
+      !identical(as.character(details$type[[1L]]), "directory") ||
+      anyNA(c(details$device_id[[1L]], details$inode[[1L]])) ||
+      any(!is.finite(c(details$device_id[[1L]], details$inode[[1L]])))) {
+    fail(label, " has no stable device/inode identity: ", path)
+  }
+  c(
+    device_id = format(
+      details$device_id[[1L]], scientific = FALSE, trim = TRUE, digits = 22L
+    ),
+    inode = format(
+      details$inode[[1L]], scientific = FALSE, trim = TRUE, digits = 22L
+    )
+  )
+}
+documentation_capture_reserved_run_parent <- function(argument, expected) {
+  if (is.null(argument)) return(NULL)
+  if (length(argument) != 1L || !nzchar(argument)) {
+    fail("--reserved-run-parent must name one nonempty path")
+  }
+  if (!identical(argument, expected)) {
+    fail(
+      "--reserved-run-parent must exactly equal the derived run directory: ",
+      expected
+    )
+  }
+  path <- require_plain_local_library_argument(
+    argument, "reserved documentation run parent"
+  )
+  if (length(documentation_directory_entries(path))) {
+    fail("reserved documentation run parent is not empty: ", path)
+  }
+  list(
+    path = path,
+    identity = documentation_directory_identity(
+      path, "reserved documentation run parent"
+    )
+  )
+}
+documentation_recheck_reserved_run_parent <- function(reservation) {
+  current_identity <- documentation_directory_identity(
+    reservation$path, "reserved documentation run parent"
+  )
+  if (!identical(current_identity, reservation$identity)) {
+    fail("reserved documentation run parent identity changed before use")
+  }
+  if (length(documentation_directory_entries(reservation$path))) {
+    fail(
+      "reserved documentation run parent changed before use: ",
+      reservation$path
+    )
+  }
+  invisible(TRUE)
+}
+reserved_run_parent <- documentation_capture_reserved_run_parent(
+  options$reserved_run_parent, run_parent
+)
+if (is.null(reserved_run_parent) && (
+  file.exists(run_parent) || dir.exists(run_parent) || is_symbolic(run_parent)
+)) {
+  fail("documentation run ID already exists: ", run_parent)
+}
+run_directory <- file.path(run_parent, "documentation")
 fingerprint_script <- file.path(root, "compat", "fingerprint.R")
 harness_script <- file.path(root, "compat", "test-documentation")
 evidence_helper_script <- file.path(root, "compat", "repository-evidence.R")
@@ -922,10 +997,14 @@ content_hash_metadata <- rbind(
 )
 rownames(content_hash_metadata) <- NULL
 
-if (!dir.create(run_parent, recursive = FALSE, showWarnings = FALSE)) {
-  fail("could not reserve documentation run ID: ", run_parent)
+if (!is.null(reserved_run_parent)) {
+  documentation_recheck_reserved_run_parent(reserved_run_parent)
+} else {
+  if (!dir.create(run_parent, recursive = FALSE, showWarnings = FALSE)) {
+    fail("could not reserve documentation run ID: ", run_parent)
+  }
+  run_parent <- normalizePath(run_parent, winslash = "/", mustWork = TRUE)
 }
-run_parent <- normalizePath(run_parent, winslash = "/", mustWork = TRUE)
 if (!identical(dirname(run_parent), runs_root)) {
   fail("documentation run directory escaped its retained parent")
 }
@@ -1171,8 +1250,20 @@ capture <- function(command, arguments = character(), wd = root, env = character
   )
 }
 
+documentation_checkout_git_environment <- c(
+  GIT_ATTR_NOSYSTEM = "1",
+  GIT_CONFIG_GLOBAL = "/dev/null",
+  GIT_CONFIG_SYSTEM = "/dev/null",
+  GIT_CONFIG_NOSYSTEM = "1",
+  GIT_NO_LAZY_FETCH = "1",
+  GIT_NO_REPLACE_OBJECTS = "1",
+  GIT_OPTIONAL_LOCKS = "0"
+)
 git_output <- function(checkout, arguments) {
-  value <- capture(git, c("-C", checkout, arguments))
+  value <- capture(
+    git, c("-C", checkout, arguments),
+    env = documentation_checkout_git_environment
+  )
   if (value$status != 0L) fail("Git validation failed for ", checkout, ": ", value$stderr)
   trimws(value$stdout)
 }
@@ -1212,11 +1303,7 @@ for (repository in input_repositories) {
       "-c", "tar.umask=0002",
       "-C", checkout, "archive",
       "--format=tar", "-o", archive, observed_commit),
-    env = c(
-      GIT_ATTR_NOSYSTEM = "1", GIT_CONFIG_GLOBAL = "/dev/null",
-      GIT_CONFIG_SYSTEM = "/dev/null", GIT_CONFIG_NOSYSTEM = "1",
-      GIT_NO_REPLACE_OBJECTS = "1"
-    )
+    env = documentation_checkout_git_environment
   )
   if (archived$status != 0L) fail("could not archive ", repository, ": ", archived$stderr)
   destination <- file.path(run_directory, "sources", repository)
@@ -1871,12 +1958,159 @@ run_retained <- function(
   status == 0L
 }
 
-scopes <- switch(scope, all = c("full", "essential"), essential = "essential", full = "full")
+scopes <- switch(
+  scope, all = c("essential", "full"), essential = "essential", full = "full"
+)
 retained_workload_scripts <- file.path(
   run_directory, "metadata", basename(workload_scripts)
 )
 names(retained_workload_scripts) <- names(workload_scripts)
 
+run_documentation_scope <- function(
+  repository, active_scope, source_directory, overlay, helper_ok
+) {
+  if (!active_scope %in% c("essential", "full")) {
+    fail("documentation workload has an invalid scope: ", active_scope)
+  }
+  if (repository == "mlr3book") {
+    if (active_scope == "essential") {
+      run_retained(
+        repository, "paradox-chapter", TRUE, quarto,
+        c(
+          "render",
+          "book/chapters/chapter16/advanced_hyperparameter_specification_using_paradox.qmd",
+          "--execute-debug", "--to", "html"
+        ), source_directory, overlay, helper_ok
+      )
+    } else {
+      run_retained(
+        repository, "full", FALSE, quarto,
+        c("render", "book/", "--cache-refresh", "--execute-debug"),
+        source_directory, overlay, helper_ok
+      )
+    }
+  } else if (repository == "mlr3website") {
+    if (active_scope == "essential") {
+      run_retained(
+        repository, "paradox-benchmark", TRUE, quarto,
+        c(
+          "render", "mlr-org/benchmarks/benchmarks_paradox.qmd",
+          "--execute-debug"
+        ),
+        source_directory, overlay, helper_ok
+      )
+    } else {
+      run_retained(
+        repository, "full", FALSE, quarto, c("render", "mlr-org/"),
+        source_directory, overlay, helper_ok
+      )
+    }
+  } else if (repository == "mlr3gallery") {
+    if (active_scope == "essential") {
+      expression <- paste0(
+        "posts <- c(",
+        paste(shQuote(c(
+          "_posts/2020-02-01-tuning-multiplexer/2020-02-01-tuning-multiplexer.Rmd",
+          "_posts/2021-02-03-tuning-a-complex-graph/tuning-a-complex-graph.Rmd",
+          "_posts/2021-07-06-introduction-to-mlr3tuningspaces/introduction-to-mlr3tuningspaces.Rmd"
+        )), collapse = ","),
+        "); for (path in posts) rmarkdown::render(path, encoding='UTF-8', params=list(eval_all=TRUE)"
+      )
+      expression <- paste0(expression, ")")
+      run_retained(
+        repository, "legacy-paradox-subset", FALSE, local_rscript,
+        c("--vanilla", "-e", expression), source_directory, overlay, helper_ok
+      )
+    } else {
+      run_retained(
+        repository, "legacy-14-post-corpus", FALSE, local_rscript,
+        c("--vanilla", "_inst/eval_all.R"), source_directory, overlay, helper_ok
+      )
+    }
+  } else if (repository == "mlr3cheatsheets") {
+    all_cheatsheets <- c(
+      "mlr3/mlr3.Rmd", "mlr3tuning/mlr3tuning.Rmd",
+      "mlr3fselect/mlr3fselect.Rmd",
+      "mlr3pipelines/mlr3pipelines.Rmd"
+    )
+    focused_cheatsheets <- c(
+      "mlr3tuning/mlr3tuning.Rmd", "mlr3pipelines/mlr3pipelines.Rmd"
+    )
+    render_expression <- function(paths) paste0(
+      "paths <- c(", paste(shQuote(paths), collapse = ","),
+      "); for (path in paths) rmarkdown::render(path, encoding='UTF-8', quiet=FALSE)"
+    )
+    run_retained(
+      repository,
+      if (active_scope == "essential") {
+        "paradox-cheatsheets"
+      } else {
+        "all-cheatsheets"
+      },
+      active_scope == "essential",
+      local_rscript,
+      c(
+        "--vanilla", "-e",
+        render_expression(if (active_scope == "essential") {
+          focused_cheatsheets
+        } else {
+          all_cheatsheets
+        })
+      ),
+      source_directory, overlay, helper_ok
+    )
+  } else if (repository == "mlr3benchmark") {
+    run_retained(
+      repository,
+      if (active_scope == "essential") {
+        "nested-values-contract"
+      } else {
+        "nested-values-documentation"
+      },
+      FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3benchmark"]],
+        source_directory
+      ), source_directory, overlay, helper_ok
+    )
+  } else if (repository == "mbo_config") {
+    run_retained(
+      repository,
+      if (active_scope == "essential") {
+        "serialized-spaces"
+      } else {
+        "serialized-spaces-large"
+      },
+      active_scope == "essential", local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mbo_config"]],
+        source_directory,
+        if (active_scope == "essential") "128" else "2048"
+      ), source_directory, overlay, helper_ok
+    )
+  } else if (repository == "mlr3-targets") {
+    run_retained(
+      repository,
+      if (active_scope == "essential") {
+        "legacy-migration-contract"
+      } else {
+        "legacy-migration-source"
+      },
+      FALSE, local_rscript,
+      c(
+        "--vanilla", retained_workload_scripts[["mlr3_targets"]],
+        source_directory
+      ), source_directory, overlay, helper_ok
+    )
+  } else {
+    fail("documentation harness has no workload for ", repository)
+  }
+  invisible(NULL)
+}
+
+documentation_workload_contexts <- setNames(
+  vector("list", length(repositories)), repositories
+)
 for (repository in repositories) {
   source_directory <- source_metadata$source[source_metadata$repository == repository]
   overlay <- file.path(run_directory, "libraries", repository)
@@ -1925,122 +2159,20 @@ for (repository in repositories) {
       root, overlay, helper_ok
     ) && helper_ok
   }
+  documentation_workload_contexts[[repository]] <- list(
+    source_directory = source_directory,
+    overlay = overlay,
+    helper_ok = helper_ok
+  )
+}
 
-  if (repository == "mlr3book") {
-    if ("full" %in% scopes) run_retained(
-      repository, "full", FALSE, quarto,
-      c("render", "book/", "--cache-refresh", "--execute-debug"),
-      source_directory, overlay, helper_ok
+for (active_scope in scopes) {
+  for (repository in repositories) {
+    context <- documentation_workload_contexts[[repository]]
+    run_documentation_scope(
+      repository, active_scope, context$source_directory, context$overlay,
+      context$helper_ok
     )
-    if ("essential" %in% scopes) run_retained(
-      repository, "paradox-chapter", TRUE, quarto,
-      c(
-        "render",
-        "book/chapters/chapter16/advanced_hyperparameter_specification_using_paradox.qmd",
-        "--execute-debug", "--to", "html"
-      ), source_directory, overlay, helper_ok
-    )
-  } else if (repository == "mlr3website") {
-    if ("full" %in% scopes) run_retained(
-      repository, "full", FALSE, quarto, c("render", "mlr-org/"),
-      source_directory, overlay, helper_ok
-    )
-    if ("essential" %in% scopes) run_retained(
-      repository, "paradox-benchmark", TRUE, quarto,
-      c("render", "mlr-org/benchmarks/benchmarks_paradox.qmd", "--execute-debug"),
-      source_directory, overlay, helper_ok
-    )
-  } else if (repository == "mlr3gallery") {
-    if ("full" %in% scopes) run_retained(
-      repository, "legacy-14-post-corpus", FALSE, local_rscript,
-      c("--vanilla", "_inst/eval_all.R"), source_directory, overlay
-    )
-    if ("essential" %in% scopes) {
-      expression <- paste0(
-        "posts <- c(",
-        paste(shQuote(c(
-          "_posts/2020-02-01-tuning-multiplexer/2020-02-01-tuning-multiplexer.Rmd",
-          "_posts/2021-02-03-tuning-a-complex-graph/tuning-a-complex-graph.Rmd",
-          "_posts/2021-07-06-introduction-to-mlr3tuningspaces/introduction-to-mlr3tuningspaces.Rmd"
-        )), collapse = ","),
-        "); for (path in posts) rmarkdown::render(path, encoding='UTF-8', params=list(eval_all=TRUE)"
-      )
-      expression <- paste0(expression, ")")
-      run_retained(
-        repository, "legacy-paradox-subset", FALSE, local_rscript,
-        c("--vanilla", "-e", expression), source_directory, overlay
-      )
-    }
-  } else if (repository == "mlr3cheatsheets") {
-    all_cheatsheets <- c(
-      "mlr3/mlr3.Rmd", "mlr3tuning/mlr3tuning.Rmd",
-      "mlr3fselect/mlr3fselect.Rmd",
-      "mlr3pipelines/mlr3pipelines.Rmd"
-    )
-    focused_cheatsheets <- c(
-      "mlr3tuning/mlr3tuning.Rmd", "mlr3pipelines/mlr3pipelines.Rmd"
-    )
-    render_expression <- function(paths) paste0(
-      "paths <- c(", paste(shQuote(paths), collapse = ","),
-      "); for (path in paths) rmarkdown::render(path, encoding='UTF-8', quiet=FALSE)"
-    )
-    if ("full" %in% scopes) run_retained(
-      repository, "all-cheatsheets", FALSE, local_rscript,
-      c("--vanilla", "-e", render_expression(all_cheatsheets)),
-      source_directory, overlay
-    )
-    if ("essential" %in% scopes) run_retained(
-      repository, "paradox-cheatsheets", TRUE, local_rscript,
-      c("--vanilla", "-e", render_expression(focused_cheatsheets)),
-      source_directory, overlay
-    )
-  } else if (repository == "mlr3benchmark") {
-    if ("full" %in% scopes) run_retained(
-      repository, "nested-values-documentation", FALSE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mlr3benchmark"]],
-        source_directory
-      ), source_directory, overlay
-    )
-    if ("essential" %in% scopes) run_retained(
-      repository, "nested-values-contract", FALSE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mlr3benchmark"]],
-        source_directory
-      ), source_directory, overlay
-    )
-  } else if (repository == "mbo_config") {
-    if ("full" %in% scopes) run_retained(
-      repository, "serialized-spaces-large", FALSE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mbo_config"]],
-        source_directory, "2048"
-      ), source_directory, overlay
-    )
-    if ("essential" %in% scopes) run_retained(
-      repository, "serialized-spaces", TRUE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mbo_config"]],
-        source_directory, "128"
-      ), source_directory, overlay
-    )
-  } else if (repository == "mlr3-targets") {
-    if ("full" %in% scopes) run_retained(
-      repository, "legacy-migration-source", FALSE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mlr3_targets"]],
-        source_directory
-      ), source_directory, overlay
-    )
-    if ("essential" %in% scopes) run_retained(
-      repository, "legacy-migration-contract", FALSE, local_rscript,
-      c(
-        "--vanilla", retained_workload_scripts[["mlr3_targets"]],
-        source_directory
-      ), source_directory, overlay
-    )
-  } else {
-    fail("documentation harness has no workload for ", repository)
   }
 }
 

@@ -1,0 +1,4 @@
+# Optional: install as /etc/sudoers.d/paradox-verify-systemd with mode 0440.
+# The installed root-owned helper has a fixed configuration, applies only
+# bounded systemd properties, and runs repository code as uid/gid 1002.
+mewse ALL=(root) NOPASSWD: /usr/local/libexec/paradox-verify-systemd *

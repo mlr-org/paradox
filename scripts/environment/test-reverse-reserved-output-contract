@@ -1,0 +1,273 @@
+#!/usr/bin/env sh
+
+# Cheap deterministic contract fixtures for the coordinator-owned reverse
+# output reservation. No package is installed and no reverse check is run.
+
+set -eu
+
+CDPATH=
+export CDPATH
+ROOT=$(cd -- "$(dirname "$0")/../.." && pwd -P)
+# shellcheck source=../activate
+# shellcheck disable=SC1091
+. "$ROOT/scripts/activate"
+TEST_PARENT="$ROOT/.local/tmp"
+mkdir -p "$TEST_PARENT"
+TEST_ROOT=$(mktemp -d "$TEST_PARENT/reverse-reserved-output.XXXXXX")
+trap 'rm -rf -- "$TEST_ROOT"' EXIT HUP INT TERM
+
+FAKE_ROOT="$TEST_ROOT/fake-root"
+FAKE_BIN="$TEST_ROOT/fake-bin"
+WRAPPER="$ROOT/scripts/environment/run-reverse-verification"
+mkdir -p "$FAKE_BIN" "$FAKE_ROOT/.local/compat/reverse-runs"
+ln -s /bin/echo "$FAKE_BIN/Rscript"
+
+run_wrapper() {
+  attempt=$1
+  run_id=$2
+  mode=$3
+  PARADOX_VERIFY_TASK_ATTEMPT=$attempt \
+    PATH="$FAKE_BIN:$PATH" \
+    "$WRAPPER" \
+      "$FAKE_ROOT" "$run_id" /candidate /dependency /source \
+      1 paradox2 "$mode"
+}
+
+mkdir "$FAKE_ROOT/.local/compat/reverse-runs/fresh"
+run_wrapper 1 fresh full >"$TEST_ROOT/fresh.out"
+grep -F -- "--reserved-run-directory" "$TEST_ROOT/fresh.out" >/dev/null
+if grep -F -- "--resume" "$TEST_ROOT/fresh.out" >/dev/null; then
+  printf '%s\n' "fresh wrapper invocation unexpectedly resumed" >&2
+  exit 1
+fi
+
+mkdir "$FAKE_ROOT/.local/compat/reverse-runs/retry-empty"
+run_wrapper 2 retry-empty full >"$TEST_ROOT/retry-empty.out"
+grep -F -- "--resume" "$TEST_ROOT/retry-empty.out" >/dev/null
+
+mkdir "$FAKE_ROOT/.local/compat/reverse-runs/plan-retry"
+run_wrapper 2 plan-retry miesmuschel-plan >"$TEST_ROOT/plan-retry.out"
+grep -F -- "--package miesmuschel --plan-only" \
+  "$TEST_ROOT/plan-retry.out" >/dev/null
+if grep -F -- "--resume" "$TEST_ROOT/plan-retry.out" >/dev/null; then
+  printf '%s\n' "attempt-specific plan invocation unexpectedly resumed" >&2
+  exit 1
+fi
+
+mkdir "$FAKE_ROOT/.local/compat/reverse-runs/collision"
+: >"$FAKE_ROOT/.local/compat/reverse-runs/collision/unrelated"
+if run_wrapper 1 collision full >"$TEST_ROOT/collision.out" \
+    2>"$TEST_ROOT/collision.err"; then
+  printf '%s\n' "fresh wrapper invocation accepted nonempty output" >&2
+  exit 1
+fi
+grep -F -- "fresh full run requires an empty reservation" \
+  "$TEST_ROOT/collision.err" >/dev/null
+
+mkdir "$FAKE_ROOT/.local/compat/reverse-runs/missing-attempt"
+if PATH="$FAKE_BIN:$PATH" \
+    "$WRAPPER" \
+      "$FAKE_ROOT" missing-attempt /candidate /dependency /source \
+      1 paradox2 full >"$TEST_ROOT/missing-attempt.out" \
+      2>"$TEST_ROOT/missing-attempt.err"; then
+  printf '%s\n' "wrapper accepted an absent task attempt" >&2
+  exit 1
+fi
+grep -F -- "PARADOX_VERIFY_TASK_ATTEMPT" \
+  "$TEST_ROOT/missing-attempt.err" >/dev/null
+
+"$ROOT/.local/toolchain/bin/Rscript" --vanilla - "$ROOT" <<'RSCRIPT'
+args <- commandArgs(trailingOnly = TRUE)
+root <- normalizePath(args[[1L]], winslash = "/", mustWork = TRUE)
+sys.source(file.path(root, "compat", "reverse-runner.R"), envir = .GlobalEnv)
+
+needed <- c(
+  "reverse_is_symbolic",
+  "reverse_require_plain_directory",
+  "reverse_marker_temporary",
+  "reverse_validate_exact_marker",
+  "reverse_remove_marker_temporary",
+  "reverse_publish_exact_marker",
+  "reverse_reset_initialization_children",
+  "reverse_reset_initialization_files",
+  "reverse_prepare_reserved_layout"
+)
+for (expression in parse(file = file.path(
+    root, "compat", "test-reverse-dependencies.R"
+  ))) {
+  if (!is.call(expression) ||
+      !identical(expression[[1L]], as.name("<-")) ||
+      !is.symbol(expression[[2L]])) {
+    next
+  }
+  name <- as.character(expression[[2L]])
+  if (name %in% needed) eval(expression, envir = .GlobalEnv)
+}
+if (!all(vapply(
+    needed, exists, logical(1L), envir = .GlobalEnv, inherits = FALSE
+  ))) {
+  stop("could not load reserved-output helpers", call. = FALSE)
+}
+
+fixture <- tempfile("reverse-reserved-layout-")
+dir.create(fixture)
+on.exit(unlink(fixture, recursive = TRUE, force = TRUE), add = TRUE)
+children <- c("metadata", "packages", "interrupted")
+files <- "plan.tsv"
+reservation <- data.frame(
+  key = c("schema", "state", "run_id"),
+  value = c("1", "reserved", "fixture"),
+  stringsAsFactors = FALSE
+)
+initialized <- data.frame(
+  key = c(
+    "schema", "state", "reservation_marker_identity_sha256", "children",
+    "files"
+  ),
+  value = c(
+    "1", "initialized", rr_object_sha256(reservation),
+    paste(children, collapse = ","), paste(files, collapse = ",")
+  ),
+  stringsAsFactors = FALSE
+)
+
+paths <- function(directory) {
+  list(
+    reservation = file.path(
+      directory, ".paradox-reverse-reservation.tsv"
+    ),
+    initialized = file.path(
+      directory, ".paradox-reverse-initialized.tsv"
+    )
+  )
+}
+
+fresh <- file.path(fixture, "fresh")
+dir.create(fresh)
+fresh_paths <- paths(fresh)
+if (reverse_prepare_reserved_layout(
+    fresh, fresh_paths$reservation, reservation,
+    fresh_paths$initialized, initialized, children, files, FALSE
+  )) {
+  stop("fresh layout reported semantic resume", call. = FALSE)
+}
+if (!all(dir.exists(file.path(fresh, children)))) {
+  stop("fresh layout lacks initialized child directories", call. = FALSE)
+}
+
+# Any derived state written before the durable initialized marker is
+# authenticated by the reservation marker and is safe to discard and rebuild.
+writeLines("partial", file.path(fresh, "metadata", "partial"))
+writeLines("partial", file.path(fresh, files))
+writeLines("partial", file.path(fresh, paste0(files, ".new")))
+if (reverse_prepare_reserved_layout(
+    fresh, fresh_paths$reservation, reservation,
+    fresh_paths$initialized, initialized, children, files, TRUE
+  )) {
+  stop("pre-boundary retry reported semantic resume", call. = FALSE)
+}
+if (file.exists(file.path(fresh, files)) ||
+    file.exists(file.path(fresh, paste0(files, ".new"))) ||
+    length(list.files(
+    file.path(fresh, "metadata"), all.files = TRUE, no.. = TRUE
+  )) || length(list.files(
+    file.path(fresh, "packages"), all.files = TRUE, no.. = TRUE
+  ))) {
+  stop("pre-boundary retry retained derived partial state", call. = FALSE)
+}
+
+writeLines("plan", file.path(fresh, files))
+reverse_publish_exact_marker(
+  fresh_paths$initialized, initialized, "fixture initialized marker"
+)
+writeLines("retained", file.path(fresh, "metadata", "retained"))
+if (!reverse_prepare_reserved_layout(
+    fresh, fresh_paths$reservation, reservation,
+    fresh_paths$initialized, initialized, children, files, TRUE
+  )) {
+  stop("initialized layout did not report semantic resume", call. = FALSE)
+}
+if (!file.exists(file.path(fresh, "metadata", "retained"))) {
+  stop("initialized resume discarded retained evidence", call. = FALSE)
+}
+
+post_boundary <- file.path(fixture, "missing-initialized-marker")
+dir.create(post_boundary)
+post_boundary_paths <- paths(post_boundary)
+if (reverse_prepare_reserved_layout(
+    post_boundary, post_boundary_paths$reservation, reservation,
+    post_boundary_paths$initialized, initialized, children, files, FALSE
+  )) {
+  stop("fresh post-boundary fixture reported semantic resume",
+    call. = FALSE)
+}
+dir.create(file.path(post_boundary, "packages", "row"))
+if (!inherits(try(
+    reverse_prepare_reserved_layout(
+      post_boundary, post_boundary_paths$reservation, reservation,
+      post_boundary_paths$initialized, initialized, children, files, TRUE
+    ),
+    silent = TRUE
+  ), "try-error") ||
+    !dir.exists(file.path(post_boundary, "packages", "row"))) {
+  stop("missing initialized marker destroyed post-boundary evidence",
+    call. = FALSE)
+}
+
+collision <- file.path(fixture, "collision")
+dir.create(collision)
+writeLines("unrelated", file.path(collision, "unrelated"))
+collision_paths <- paths(collision)
+if (!inherits(try(
+    reverse_prepare_reserved_layout(
+      collision, collision_paths$reservation, reservation,
+      collision_paths$initialized, initialized, children, files, TRUE
+    ),
+    silent = TRUE
+  ), "try-error")) {
+  stop("unrelated output was accepted as resumable", call. = FALSE)
+}
+
+interrupted <- file.path(fixture, "interrupted-publication")
+dir.create(interrupted)
+interrupted_paths <- paths(interrupted)
+writeLines(
+  "partial",
+  reverse_marker_temporary(interrupted_paths$reservation, reservation)
+)
+if (reverse_prepare_reserved_layout(
+    interrupted, interrupted_paths$reservation, reservation,
+    interrupted_paths$initialized, initialized, children, files, TRUE
+  )) {
+  stop("interrupted marker publication reported semantic resume",
+    call. = FALSE)
+}
+reverse_validate_exact_marker(
+  interrupted_paths$reservation, reservation, "recovered reservation marker"
+)
+
+forged <- file.path(fixture, "forged")
+dir.create(forged)
+forged_paths <- paths(forged)
+reverse_publish_exact_marker(
+  forged_paths$reservation, reservation, "fixture reservation marker"
+)
+other <- reservation
+other$value[[3L]] <- "other-run"
+if (!inherits(try(
+    reverse_prepare_reserved_layout(
+      forged, forged_paths$reservation, other,
+      forged_paths$initialized, initialized, children, files, TRUE
+    ),
+    silent = TRUE
+  ), "try-error")) {
+  stop("foreign reservation identity was accepted", call. = FALSE)
+}
+
+cat("reverse reserved-output R fixtures: PASS\n")
+RSCRIPT
+
+"$ROOT/.local/toolchain/bin/Rscript" --vanilla \
+  "$ROOT/compat/test-reverse-dependencies-self-test.R"
+
+printf '%s\n' "reverse reserved-output wrapper fixtures: PASS"

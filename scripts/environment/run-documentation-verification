@@ -1,0 +1,73 @@
+#!/usr/bin/env sh
+
+# Convert the authenticated path-list parameter into the repeated argv form
+# required by the documentation gate. The child deliberately receives no
+# PARADOX_*_EXTRA_LIBS shortcut: its retained command records every library.
+
+set -eu
+set -f
+
+if [ "$#" -ne 8 ]; then
+  printf '%s\n' \
+    "run-documentation-verification: ROOT RUN_ID CANDIDATE_LIBRARY CANDIDATE_SOURCE DEPENDENCY_LIBRARY PROFILE AXIS TIMEOUT are required" >&2
+  exit 2
+fi
+
+ROOT=$1
+RUN_ID=$2
+CANDIDATE_LIBRARY=$3
+CANDIDATE_SOURCE=$4
+DEPENDENCY_LIBRARY=$5
+EVIDENCE_PROFILE=$6
+PARADOX_AXIS=$7
+COMMAND_TIMEOUT=$8
+EXTRA_LIBRARIES=${PARADOX_DOCUMENTATION_EXTRA_LIBS:-}
+RESERVED_RUN_PARENT=$ROOT/.local/compat/runs/$RUN_ID
+
+if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ]; then
+  printf '%s\n' \
+    "run-documentation-verification: the authenticated prepared gate currently requires Linux x86_64" >&2
+  exit 2
+fi
+if [ "$PARADOX_AXIS" != paradox2 ]; then
+  printf '%s\n' \
+    "run-documentation-verification: only the paradox2 axis is supported" >&2
+  exit 2
+fi
+case "$EXTRA_LIBRARIES" in
+  ''|:*|*:|*::*)
+    printf '%s\n' \
+      "run-documentation-verification: authenticated documentation libraries are absent or malformed" >&2
+    exit 2
+    ;;
+esac
+case "$COMMAND_TIMEOUT" in
+  ''|*[!0-9]*)
+    printf '%s\n' "run-documentation-verification: invalid timeout" >&2
+    exit 2
+    ;;
+esac
+
+set -- \
+  --root "$ROOT" \
+  --candidate-library "$CANDIDATE_LIBRARY" \
+  --candidate-source "$CANDIDATE_SOURCE" \
+  --dependency-library "$DEPENDENCY_LIBRARY" \
+  --evidence-profile "$EVIDENCE_PROFILE" \
+  --paradox-axis "$PARADOX_AXIS"
+
+OLD_IFS=$IFS
+IFS=:
+for LIBRARY in $EXTRA_LIBRARIES; do
+  set -- "$@" --extra-library "$LIBRARY"
+done
+IFS=$OLD_IFS
+unset PARADOX_CONSUMER_EXTRA_LIBS
+unset PARADOX_DOCUMENTATION_EXTRA_LIBS
+
+exec Rscript --vanilla "$ROOT/compat/test-documentation" \
+  "$@" \
+  --run-id "$RUN_ID" \
+  --reserved-run-parent "$RESERVED_RUN_PARENT" \
+  --scope all \
+  --timeout "$COMMAND_TIMEOUT"

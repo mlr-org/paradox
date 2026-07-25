@@ -301,7 +301,8 @@ validate_report() {
           !positive(value["memory_reserve_mib"]) ||
           value["memory_mib_per_job"] != expected_memory_mib ||
           !positive(value["memory_jobs"]) ||
-          value["operator_max_jobs"] != "none" ||
+          (value["operator_max_jobs"] != "none" &&
+           !positive(value["operator_max_jobs"])) ||
           !positive(value["jobs"])) exit 1
 
       cpu_limit = min(value["online_cpus"] + 0, value["affinity_cpus"] + 0)
@@ -341,6 +342,11 @@ validate_report() {
       jobs = min(cpu_jobs, memory_jobs)
       if (expected_profile_max_jobs > 0 &&
           jobs > expected_profile_max_jobs) jobs = expected_profile_max_jobs
+      if (value["operator_max_jobs"] != "none") {
+        if (!positive(value["operator_max_jobs"]) ||
+            value["operator_max_jobs"] + 0 > jobs) exit 1
+        jobs = min(jobs, value["operator_max_jobs"] + 0)
+      }
       expected_profile_max = expected_profile_max_jobs > 0 ? expected_profile_max_jobs : "unlimited"
 
       if (value["cpu_limit"] + 0 != cpu_limit ||
@@ -519,14 +525,43 @@ else
   MEMORY_BUDGET_MIB=0
 fi
 ((MEMORY_BUDGET_MIB >= MEMORY_MIB_PER_JOB)) ||
-  fail "insufficient memory for one $PROFILE job while retaining the ${RESERVE_MIB}-MiB safety reserve (available=${MEMORY_AVAILABLE_MIB} MiB, required_per_job=${MEMORY_MIB_PER_JOB} MiB)"
+  fail "insufficient memory for one $PROFILE job while retaining the ${RESERVE_MIB}-MiB safety reserve (available=${MEMORY_AVAILABLE_MIB} MiB, required_per_job=${MEMORY_MIB_PER_JOB} MiB, cpu_limit=${CPU_LIMIT})"
 MEMORY_JOBS=$((MEMORY_BUDGET_MIB / MEMORY_MIB_PER_JOB))
 ((MEMORY_JOBS > 0)) ||
   fail "internal error: positive memory budget produced no jobs"
 
+ASSIGNED_MAX_JOBS=0
+ASSIGNED_CPUS=${PARADOX_VERIFY_ASSIGNED_CPUS:-}
+ASSIGNED_MEMORY_MIB=${PARADOX_VERIFY_ASSIGNED_MEMORY_MIB:-}
+if [[ -n "$ASSIGNED_CPUS" || -n "$ASSIGNED_MEMORY_MIB" ]]; then
+  [[ -n "$ASSIGNED_CPUS" && -n "$ASSIGNED_MEMORY_MIB" ]] ||
+    fail "assigned CPU and memory envelopes must be supplied together"
+  [[ "$ASSIGNED_CPUS" =~ ^([1-9][0-9]{0,8})(\.[0-9]+)?$ ]] ||
+    fail "assigned CPU envelope is malformed"
+  ASSIGNED_CPU_WHOLE=${BASH_REMATCH[1]}
+  positive_integer "$ASSIGNED_MEMORY_MIB" ||
+    fail "assigned memory envelope is malformed"
+  ASSIGNED_CPU_JOBS=$((ASSIGNED_CPU_WHOLE / CPU_PER_JOB))
+  ASSIGNED_MEMORY_JOBS=$((ASSIGNED_MEMORY_MIB / MEMORY_MIB_PER_JOB))
+  ((ASSIGNED_CPU_JOBS > 0)) ||
+    fail "assigned CPU envelope cannot fit one $PROFILE job"
+  ((ASSIGNED_MEMORY_JOBS > 0)) ||
+    fail "assigned memory envelope cannot fit one $PROFILE job"
+  ASSIGNED_MAX_JOBS=$(minimum \
+    "$ASSIGNED_CPU_JOBS" "$ASSIGNED_MEMORY_JOBS")
+fi
+
 JOBS=$(minimum "$CPU_JOBS" "$MEMORY_JOBS")
 if ((PROFILE_MAX_JOBS > 0 && JOBS > PROFILE_MAX_JOBS)); then
   JOBS=$PROFILE_MAX_JOBS
+fi
+if ((ASSIGNED_MAX_JOBS > 0 &&
+    (MAX_JOBS == 0 || ASSIGNED_MAX_JOBS < MAX_JOBS) &&
+    ASSIGNED_MAX_JOBS < JOBS)); then
+  MAX_JOBS=$ASSIGNED_MAX_JOBS
+fi
+if ((MAX_JOBS > JOBS)); then
+  MAX_JOBS=$JOBS
 fi
 if ((MAX_JOBS > 0 && JOBS > MAX_JOBS)); then
   JOBS=$MAX_JOBS

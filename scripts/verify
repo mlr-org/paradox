@@ -1,0 +1,58 @@
+#!/usr/bin/env sh
+
+# One unattended entry point for the repository's verification DAG.  The
+# controller itself uses only Python's standard library.  Expensive commands
+# still enter the existing, evidence-producing gate drivers.
+
+set -eu
+
+ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
+
+# A root-owned helper is a machine-local opt-in. Once installed, ordinary
+# doctor/plan/run commands enter the dedicated aggregate systemd envelope by
+# default. Help and self-tests stay daemon/root-free, and an operator can
+# explicitly bypass the local default to use a proved per-worker engine.
+case "${1:-}" in
+  doctor|plan|run)
+    if [ "${PARADOX_VERIFY_AGGREGATE_SYSTEMD:-}" != 1 ] &&
+        [ "${PARADOX_VERIFY_SYSTEMD_DEFAULT:-auto}" != off ] &&
+        [ -x /usr/local/libexec/paradox-verify-systemd ] &&
+        [ -f /etc/paradox-verify-systemd.conf ] &&
+        [ ! -L /etc/paradox-verify-systemd.conf ] &&
+        /usr/bin/grep -Fxq "repository=$ROOT" \
+          /etc/paradox-verify-systemd.conf; then
+      exec "$ROOT/scripts/verify-systemd" "$@"
+    fi
+    ;;
+esac
+
+if [ -x "$ROOT/.local/toolchain/bin/R" ] &&
+    [ -x "$ROOT/.local/toolchain/bin/Rscript" ]; then
+  if [ "${PARADOX_ACTIVE_ROOT:-}" != "$ROOT" ]; then
+    cd "$ROOT"
+    # shellcheck source=activate
+    # shellcheck disable=SC1091
+    . "$ROOT/scripts/activate"
+  fi
+fi
+
+if [ -x "$ROOT/.local/toolchain/bin/python3" ]; then
+  PYTHON="$ROOT/.local/toolchain/bin/python3"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON=$(command -v python3)
+else
+  printf '%s\n' \
+    "scripts/verify: no Python 3 is available; run scripts/bootstrap first" >&2
+  exit 2
+fi
+if ! "$PYTHON" -c \
+    'import sys; raise SystemExit(0 if sys.version_info >= (3, 10) else 1)'
+then
+  printf '%s\n' \
+    "scripts/verify: Python 3.10 or newer is required; run scripts/bootstrap first" >&2
+  exit 2
+fi
+
+cd "$ROOT"
+exec "$PYTHON" "$ROOT/verification/harness.py" \
+  --root "$ROOT" --manifest "$ROOT/verification/tasks.json" "$@"

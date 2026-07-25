@@ -5,6 +5,104 @@ adversarial without rebuilding the world or replaying complete suites after
 each small fix. This policy replaces the superseded candidate's fixed
 file/count matrix.
 
+## Unattended orchestration
+
+`scripts/verify` and the reviewed DAG in `verification/tasks.json` are the
+top-level development coordinator. The existing native, memory, runtime,
+differential, and compatibility drivers remain the semantic/evidence
+authorities; the coordinator must not duplicate their validators. Use
+`scripts/verify plan` to expose selection, exact cache status, priority,
+dependencies, and resource claims before a long run. The design and operator
+contract are in `verification/README.md`.
+Every currently shipped local task inherits the mounted toolchain's Linux
+x86-64 constraint. Other platforms fail at planning and use the hosted matrix
+until a reviewed task supplies a self-contained platform toolchain image.
+
+Generic exact-key success caching is development acceleration only. A release
+profile runs source-bound semantic gates fresh and relies only on the existing
+gate-specific authenticated receipts. Changed-file impacts may select and
+prioritize development tasks, but never narrow a release inventory.
+
+The default `adaptive` failure policy completes independent peers in the
+current phase and then blocks descendants and later expensive phases.
+Provenance, cache, source, containment, or protected host-reserve failures abort
+the complete run. `keep-going` and `fail-fast` are explicit alternatives; no
+driver should implement an accidental mixture by depending on shell
+`set -e` behavior.
+
+A task that cannot ever fit its reviewed static CPU/RAM/PID/disk or declared
+platform/architecture contract is a scheduler-origin capacity block, not an
+executed semantic failure. Its descendants remain blocked, but unrelated
+branches remain informative under every policy. Momentary free RAM/disk/PID
+pressure is compared only with live admission budgets and receives bounded
+backoff; it must not become a false permanent-capacity result. Static task fit
+applies the configured RAM fraction to physical/parent-cgroup capacity, while
+live admission recomputes it from current availability. Starting under
+pressure therefore cannot freeze a low future ceiling, and a busy large
+machine does not withhold a capacity-sized live reserve.
+
+Planning content-hashes every declared input and reauthenticates the same
+digest before execution, before publishing a success, and at completion.
+Semantic task identity retains reviewed OS/architecture, toolchain content,
+hard-backend/cgroup generation, and immutable worker-image content. Freshly
+proved kernel, engine-version/path/storage, live-capacity, and image-alias
+observations live in the invocation receipt instead, so incidental machine
+differences do not destroy otherwise reusable plans. The explicitly
+non-release best-effort fallback remains keyed to its exact host platform and
+controller Python.
+The activated repository R-library tree is always semantic: disabling generic
+release-cache publication does not disable successful-row reuse during
+coordinator resume.
+Release runtime refs must resolve to the exact captured clean HEAD commit/tree;
+the offline differential baseline is resolved to a commit before cache keying.
+Retries use attempt-specific child run IDs. Compatibility drivers with a
+candidate-wide public stage use that attempt ID for private work and
+authenticate an already-published stage on resume. Interrupted private
+evidence therefore remains immutable without blocking or being mistaken for a
+successful retry.
+Every execution attempt has an immutable result beside its immutable log.
+`result.json` is only the latest view. Each coordinator invocation, including
+a resume on another machine, retains and hashes its current host/engine
+receipt. Resume accepts a success only when that latest view is byte-identical
+to the numbered attempt receipt and authenticates the exact log and original
+invocation. A task marked for revalidation also invalidates all of its
+descendants; even a previously completed coordinator run enters this path
+rather than returning from its old summary. Host capacity remains outside
+semantic plan identity. Scheduler,
+dependency, and policy blocks retain an explicit origin, but only real
+execution failures affect the next exact-key priority.
+
+The prepared release-compatibility inventory is explicit rather than hidden
+behind synthetic fixtures. `prepared-downstream` remains axis-neutral;
+`prepared-reverse` and `prepared-documentation` are Paradox-2-only; and
+`prepared-release-compat` combines their real gates with maintained downstream
+checks under `keep-going`. A broken downstream overlay blocks its consumers
+but does not cancel an independent CRAN/Bioconductor reverse branch. The real
+reverse task first runs the required fresh miesmuschel plan-only preflight,
+then uses one stable child ID so accepted reverse rows and the authenticated
+install cache resume after interruption. Attempt one accepts only an empty
+controller reservation. Later attempts require a run/candidate/options/
+harness-bound reservation marker and treat a durable initialized marker as
+the sole semantic-resume boundary; authenticated pre-boundary interruption is
+reset transactionally. A completed reverse result is revalidated on
+coordinator resume. Documentation has no row-level resume and therefore uses
+a fresh attempt-specific child ID; all essential rows across repositories
+precede every advisory full row.
+
+Prepared consumer tasks source the verified opt-in compatibility-system layer
+inside the worker. Native, API, runtime, and differential tasks source only
+ordinary activation. Candidate context keeps ordinary consumer extra
+libraries separate from documentation-only libraries; the documentation argv
+is bridge, consumer extras, then documentation extras, while repository checks
+never see the final role. Reverse-only selection validates only the base
+candidate tuple, so missing unrelated bridge/documentation overlays cannot
+block it. The detached source uses its exact commit-owned snapshot path and
+bridge libraries are candidate-run-owned. The two real gates receive exact pre-reserved output
+directories, verify their filesystem identity, and cannot write sibling
+historical evidence. Their current authenticated TinyTeX/toolchain/system
+contracts make them intentionally Linux x86-64 gates, not substitutes for the
+hosted macOS and Windows matrix.
+
 ## Evidence classes
 
 ### Development diagnostics
@@ -57,16 +155,73 @@ tests in a batch to share one candidate installation.
 
 ## Parallel resource policy
 
-Use `scripts/environment/resource-jobs` immediately before a parallel wave and
-retain its report. Parallelize independent outer tasks—test files, runtime
-stages, or consumer rows. Within each admitted worker set make/CMake/Cargo,
-testthat, `parallel`/`future`, BLAS, and OpenMP pools to one unless a reviewed
-test specifically verifies a bounded worker contract.
+At the top level, use `scripts/verify`: it consumes
+`scripts/environment/resource-jobs` host/cgroup discovery and continuously
+admits heterogeneous tasks by CPU, hard RAM ceiling, PID ceiling, and scratch
+reservation. Direct low-level drivers still use `resource-jobs` immediately
+before their own inner wave and retain its report. Parallelize independent
+outer tasks—test files, runtime stages, or consumer rows. Within an admitted
+worker, Make may use only the CPUs reserved for that coarse task; testthat,
+`parallel`/`future`, BLAS, and OpenMP stay at one unless a reviewed test
+specifically verifies a bounded worker contract.
 
-The outer ceiling is lowering-only and memory-aware. Leave the resource
-helper's reserve untouched so the controlling process and OS are not OOM-killed.
+Every admission is capped by both static machine/cgroup capacity and current
+resource availability. Leave the resource helper's reserve untouched so the
+controlling process and OS are not OOM-killed.
+Each scalable coarse task declares a reviewed minimum and desired ceiling.
+Admission first preserves every selected peer's minima, then assigns spare
+CPU/RAM to higher-information peers up to their ceilings. Live parent-cgroup
+memory and PID availability and free disk are refreshed before new waves and
+at a bounded cadence; temporary outside pressure waits with bounded backoff.
 Wait for all siblings, retain each exit status/log, and let one parent aggregate
 and seal results. A wave failure does not discard successful row artifacts.
+
+There are two acceptable hard-containment modes. Per-worker Podman/Docker
+limits must pass an active inner-cgroup and sacrificial-OOM proof. Aggregate
+containment must put the complete controller/local-rootless-Podman tree in one
+dedicated root-created system service and prove its exact v1/v2 cgroup leaf,
+finite memory/CPU/PID ceilings, no-swap contract, systemd kill/accounting
+properties, and real worker inheritance. Both active probes run with the
+eventual worker UID and prove a read-only checkout bind with a nested writable
+leaf. SELinux label handling is explicit (`label=disable`) rather than an
+untested host default.
+
+Rootless Podman on cgroup v1 cannot enforce the per-worker resource flags.
+Inside a proved aggregate service it instead runs with
+`--cgroups=disabled --cgroupns=host`; individual resource declarations become
+admission reservations within the hard aggregate ceiling. Docker and remote
+Podman cannot use this mode because their daemon may escape the controller
+cgroup. The root-owned launcher may set systemd properties as root, but
+mutable repository code must execute only after systemd changes to the
+configured unprivileged UID/GID.
+Nested drivers must treat `PARADOX_VERIFY_ASSIGNED_CPUS` and
+`PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` as upper bounds on their worker counts.
+Those values are already inside the outer safe budget, so inner admission must
+apply the assigned-envelope cap directly; the retained inner live-resource
+check may still lower it.
+
+Without either proof, normal runs fail closed. `--best-effort` is an explicit
+serial development fallback using `RLIMIT_AS`, an RSS watchdog, and the host
+reserve; it cannot produce release evidence. Aggregate memory admission is
+approximately the minimum of cgroup headroom and global `MemAvailable` minus
+the outside reserve: the reserve must not be subtracted from both sides. Any
+aggregate event-counter increase, contract/path/limit change, or protected
+host pressure terminates all siblings and invalidates the run as
+infrastructure. A per-user machine execution lock prevents two top-level runs
+from independently admitting the full budget. Free RAM, disk, PID headroom,
+and aggregate state are recomputed before new waves and at a bounded cadence
+while work is active.
+The source/toolchain mount is read-only; attempt-private runtime/temp
+directories and explicit manifest paths are the only writable mounts, and
+candidate or dependency libraries nested below an evidence path are remounted
+read-only.
+
+The combined `scripts/memory-check --mode all` is not a generic coordinator
+task. Its rchk branch launches a nested pinned Podman image and its inner
+resource policy retains another 16 GiB, so wrapping the whole driver would be
+unrunnable or would misstate containment. Keep it as the direct source-bound
+release gate until GCT/Valgrind are separated into a normal worker and the rchk
+image itself becomes the outer worker.
 
 ## Required package tests
 

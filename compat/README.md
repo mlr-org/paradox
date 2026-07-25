@@ -1,5 +1,17 @@
 # Compatibility laboratory
 
+`scripts/verify run --profile prepared-downstream` is the unattended coordinator
+for an already installed candidate and bridge overlay. It consumes one
+authenticated schema-1 candidate context rather than independently templating
+candidate paths and hashes for each task; see
+[`verification/README.md`](../verification/README.md). The compatibility
+runners below remain the evidence authorities and reauthenticate the same
+context. Candidate freezing, dependency preparation, installation, and overlay
+construction are explicit serialized preparation steps, not implicit scheduler
+side effects. The coordinator gives focused/corpus tasks a writable run-owned
+evidence parent but remounts the candidate source/library, dependency library,
+bridge library, and every extra consumer library read-only inside the worker.
+
 `reverse-dependencies.tsv` is the reviewed inventory from the CRAN package
 page plus current CRAN source metadata. The latter deliberately retains direct
 relationships from newly published `FoRecoML`, `interflex`, and `ggmlR` source
@@ -335,7 +347,7 @@ Rscript compat/test-repositories.R "$PARADOX_ROOT" 1 \
   --paradox-axis "$axis" --jobs 1
 compat/check-downstream-profile --candidate-source "$candidate_source" \
   --evidence-profile "$profile" --paradox-axis "$axis" \
-  --repositories bbotk,miesmuschel,mlr3mbo,celecx,mlr3fda
+  --resume --repositories bbotk,miesmuschel,mlr3mbo,celecx,mlr3fda
 ```
 
 Use a distinct run/library/overlay with `axis=paradox1` for the released
@@ -345,6 +357,12 @@ Paradox-1 compatibility axis. On that axis, add
 `check-downstream-profile` selection. Do not repeat the complete consumer
 corpus, reverse-dependency, documentation, differential, or benchmark gates on
 Paradox 1.
+
+`check-downstream-profile --resume` starts normally when its public stage is
+absent. If a completed stage was published just before an interruption, it
+authenticates and reports that stage instead of rerunning the checks.
+Orchestrated attempts also use distinct private work paths, so an abandoned
+private directory cannot collide with the next attempt.
 
 The full-check stage records and reauthenticates an ordered content manifest
 for the candidate package, every configured extra library (including the
@@ -378,6 +396,22 @@ Start from ordinary activation and source the verified system overlay when the
 selected Linux packages require it; do not edit `PATH` manually. The harness
 requires the exact top-level `.local/toolchain/bin/R` and `Rscript`, the
 authenticated TinyTeX tools, and the local `texi2dvi`:
+
+For Paradox 2, the unattended coordinator exposes this real gate as
+`prepared-reverse` and as the reverse branch of `prepared-release-compat`.
+It first runs the required fresh miesmuschel plan-only preflight, activates the
+verified compatibility-system layer inside the contained worker, and assigns a
+stable reverse run ID. Task attempt one requires an empty reservation. Later
+attempts use `--resume` only against the exact run/candidate/options/
+harness-bound reservation marker; a durable initialized marker separates
+safely resettable pre-initialization state from semantic row resume. A
+completed full task is revalidated on coordinator resume instead of being
+accepted solely from its generic task log. Reverse-only candidate admission
+does not require consumer-bridge or documentation-library state.
+Generic coordinator result caching remains disabled; the reverse runner's own
+authenticated install cache and row evidence remain authoritative. The task
+mounts only its reserved run directory, lock directory, and install cache
+writable. These prepared profiles reject the Paradox-1 axis.
 
 ```sh
 reverse_run_id="$run_id-reverse-p1"
@@ -713,6 +747,15 @@ Give it a new evidence ID and supply the candidate-specific exact downstream
 bridge first, followed by the `mlr3verse` hard-import library and the locked
 documentation-only library containing `gt`, `V8`, `bigD`, and `juicyjuice`:
 
+For Paradox 2, `prepared-documentation` and `prepared-release-compat` invoke
+this actual all-scope gate. Candidate context separates consumer extras from
+documentation-only libraries; the coordinator constructs repeated
+`--extra-library` arguments in bridge/consumer/documentation order and removes
+the flattened environment variable before R starts. Each retry receives a
+fresh attempt-specific reserved run parent because this driver has no resume
+mode. All essential workloads across the corpus run before any advisory full
+render. Historical sibling run directories remain read-only.
+
 ```sh
 documentation_run_id="$run_id-documentation"
 documentation_extra_library="$PARADOX_ROOT/.local/compat/R/library-documentation-extra-final3"
@@ -742,7 +785,8 @@ to `processx` for every retained command and records the same value as
 `timeout_seconds` in the sealed metadata; it is never converted to
 milliseconds by the harness.
 
-`--scope all` runs `full` followed by `essential`. The full mlr3book render,
+`--scope all` runs the high-information mandatory `essential` workload for
+each repository before its advisory `full` workload. The full mlr3book render,
 full mlr3website render, all four current cheatsheets, mlr3gallery's legacy
 14-post corpus, the maintained mlr3benchmark nested-values example, and a
 2,048-row real-space workload are retained advisory probes. The essential

@@ -1,0 +1,303 @@
+#!/bin/bash
+
+# Root-owned, narrowly scoped launcher for one unprivileged Paradox
+# verification controller in a dedicated transient systemd service.
+#
+# Install this file as /usr/local/libexec/paradox-verify-systemd, owned by
+# root and not writable by group/other. Never execute the checkout copy with
+# sudo: it intentionally refuses to operate unless its own file is root-owned.
+
+set -euo pipefail
+
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+
+CONFIG=/etc/paradox-verify-systemd.conf
+SYSTEMD_RUN=/usr/bin/systemd-run
+SYSTEMCTL=/usr/bin/systemctl
+GETCONF=/usr/bin/getconf
+STAT=/usr/bin/stat
+DATE=/usr/bin/date
+
+fail() {
+  printf 'paradox-verify-systemd: %s\n' "$*" >&2
+  exit 2
+}
+
+positive_integer() {
+  [[ "$1" =~ ^[1-9][0-9]{0,8}$ ]]
+}
+
+safe_scalar() {
+  [[ -n "$1" && ${#1} -le 1024 && "$1" != *$'\n'* &&
+     "$1" != *$'\r'* ]]
+}
+
+[[ $EUID -eq 0 ]] || fail "this installed launcher must be invoked through sudo/root"
+[[ -f "$0" && ! -L "$0" ]] || fail "launcher is absent, non-regular, or symbolic"
+self_owner=$("$STAT" -c '%u' -- "$0") || fail "cannot inspect launcher ownership"
+self_mode=$("$STAT" -c '%a' -- "$0") || fail "cannot inspect launcher mode"
+[[ "$self_owner" == 0 && "$self_mode" =~ ^[0-7]{3,4}$ ]] ||
+  fail "launcher must be root-owned with a canonical mode"
+(( (8#$self_mode & 8#022) == 0 )) ||
+  fail "launcher must not be writable by group or other"
+
+[[ -f "$CONFIG" && ! -L "$CONFIG" ]] ||
+  fail "root-owned configuration is absent or symbolic: $CONFIG"
+config_owner=$("$STAT" -c '%u' -- "$CONFIG") ||
+  fail "cannot inspect configuration ownership"
+config_mode=$("$STAT" -c '%a' -- "$CONFIG") ||
+  fail "cannot inspect configuration mode"
+[[ "$config_owner" == 0 && "$config_mode" =~ ^[0-7]{3,4}$ ]] ||
+  fail "configuration must be root-owned with a canonical mode"
+(( (8#$config_mode & 8#022) == 0 )) ||
+  fail "configuration must not be writable by group or other"
+
+repository=
+uid=
+gid=
+user=
+group=
+home=
+memory_max_mib=
+memory_reserve_mib=
+cpu_reserve=
+tasks_max=
+runtime_max_sec=
+engine=
+worker_image=
+declare -A seen=()
+line_number=0
+while IFS= read -r line || [[ -n "$line" ]]; do
+  ((line_number += 1))
+  [[ -n "$line" && "$line" != \#* ]] || continue
+  [[ "$line" == *=* ]] ||
+    fail "configuration row $line_number is not key=value"
+  key=${line%%=*}
+  value=${line#*=}
+  [[ "$key" =~ ^[a-z][a-z0-9_]*$ && -z "${seen[$key]:-}" ]] ||
+    fail "configuration row $line_number has an unsafe or duplicate key"
+  if [[ "$key" == worker_image && -z "$value" ]]; then
+    :
+  else
+    safe_scalar "$value" ||
+      fail "configuration row $line_number has an unsafe value"
+  fi
+  seen[$key]=1
+  case "$key" in
+    repository) repository=$value ;;
+    uid) uid=$value ;;
+    gid) gid=$value ;;
+    user) user=$value ;;
+    group) group=$value ;;
+    home) home=$value ;;
+    memory_max_mib) memory_max_mib=$value ;;
+    memory_reserve_mib) memory_reserve_mib=$value ;;
+    cpu_reserve) cpu_reserve=$value ;;
+    tasks_max) tasks_max=$value ;;
+    runtime_max_sec) runtime_max_sec=$value ;;
+    engine) engine=$value ;;
+    worker_image) worker_image=$value ;;
+    *) fail "configuration row $line_number has unknown key '$key'" ;;
+  esac
+done < "$CONFIG"
+
+required=(
+  repository uid gid user group home memory_max_mib memory_reserve_mib
+  cpu_reserve tasks_max runtime_max_sec engine
+)
+for key in "${required[@]}"; do
+  [[ -n "${!key}" ]] || fail "configuration lacks '$key'"
+done
+[[ "$repository" == /* && "$home" == /* ]] ||
+  fail "repository and home must be absolute paths"
+[[ "$repository" != *"/../"* && "$repository" != */.. &&
+   "$repository" != *"//"* ]] || fail "repository path is unsafe"
+[[ "$user" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ &&
+   "$group" =~ ^[A-Za-z_][A-Za-z0-9_.-]*$ ]] ||
+  fail "configured user/group name is unsafe"
+for value in "$uid" "$gid" "$memory_max_mib" "$memory_reserve_mib" \
+    "$tasks_max" "$runtime_max_sec"; do
+  positive_integer "$value" || fail "configuration has a non-positive integer"
+done
+[[ "$cpu_reserve" =~ ^[0-9]{1,3}$ ]] ||
+  fail "cpu_reserve must be a non-negative integer"
+[[ "$uid" -ne 0 && "$memory_reserve_mib" -lt "$memory_max_mib" ]] ||
+  fail "configuration would run as root or has nonsensical memory values"
+[[ "$engine" == auto || "$engine" == podman ]] ||
+  fail "aggregate launcher engine must be auto or podman"
+[[ -z "$worker_image" ]] || safe_scalar "$worker_image" ||
+  fail "configured worker image is unsafe"
+
+[[ -d "$repository" && ! -L "$repository" ]] ||
+  fail "configured repository is absent, non-directory, or symbolic"
+[[ -x "$repository/scripts/verify" &&
+   -f "$repository/scripts/verify" &&
+   ! -L "$repository/scripts/verify" ]] ||
+  fail "configured repository has no plain executable scripts/verify"
+repo_owner=$("$STAT" -c '%u' -- "$repository") ||
+  fail "cannot inspect repository ownership"
+verify_owner=$("$STAT" -c '%u' -- "$repository/scripts/verify") ||
+  fail "cannot inspect verification launcher ownership"
+[[ "$repo_owner" == "$uid" && "$verify_owner" == "$uid" ]] ||
+  fail "repository and scripts/verify must be owned by the configured user"
+[[ -z "${SUDO_UID:-}" || "$SUDO_UID" == "$uid" ]] ||
+  fail "sudo caller does not match the configured verification user"
+
+expected_root=
+override_engine=
+override_image=
+while (($#)); do
+  case "$1" in
+    --expect-root)
+      (($# >= 2)) || fail "--expect-root requires a value"
+      expected_root=$2
+      shift 2
+      ;;
+    --engine)
+      (($# >= 2)) || fail "--engine requires a value"
+      override_engine=$2
+      shift 2
+      ;;
+    --worker-image)
+      (($# >= 2)) || fail "--worker-image requires a value"
+      override_image=$2
+      shift 2
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *) fail "unknown launcher argument '$1'" ;;
+  esac
+done
+[[ "$expected_root" == "$repository" ]] ||
+  fail "installed launcher is configured for a different checkout"
+if [[ -n "$override_engine" ]]; then
+  [[ "$override_engine" == auto || "$override_engine" == podman ]] ||
+    fail "aggregate engine override must be auto or podman"
+  engine=$override_engine
+fi
+if [[ -n "$override_image" ]]; then
+  safe_scalar "$override_image" || fail "worker image override is unsafe"
+  worker_image=$override_image
+fi
+(($# >= 1)) || fail "one scripts/verify command is required"
+case "$1" in
+  doctor|plan|run) ;;
+  *) fail "aggregate launcher accepts only doctor, plan, or run" ;;
+esac
+verify_arguments=("$@")
+
+mem_available_kib=
+while read -r key value unit rest; do
+  if [[ "$key" == MemAvailable: ]]; then
+    [[ "$value" =~ ^[1-9][0-9]{0,17}$ && "$unit" == kB &&
+       -z "${rest:-}" ]] || fail "cannot parse /proc/meminfo MemAvailable"
+    mem_available_kib=$value
+    break
+  fi
+done < /proc/meminfo
+[[ -n "$mem_available_kib" ]] || fail "cannot read /proc/meminfo MemAvailable"
+mem_available_mib=$((mem_available_kib / 1024))
+dynamic_reserve_mib=$((mem_available_mib / 4))
+reserve_mib=$memory_reserve_mib
+if ((dynamic_reserve_mib > reserve_mib)); then
+  reserve_mib=$dynamic_reserve_mib
+fi
+((mem_available_mib > reserve_mib)) ||
+  fail "not enough currently available memory outside the protected reserve"
+safe_cap_mib=$((mem_available_mib - reserve_mib))
+cap_mib=$memory_max_mib
+if ((safe_cap_mib < cap_mib)); then
+  cap_mib=$safe_cap_mib
+fi
+((cap_mib >= 2048)) ||
+  fail "safe aggregate memory ceiling is below 2048 MiB"
+
+online_cpus=$("$GETCONF" _NPROCESSORS_ONLN) ||
+  fail "cannot determine online CPU count"
+positive_integer "$online_cpus" || fail "online CPU count is malformed"
+if ((online_cpus > cpu_reserve)); then
+  quota_cpus=$((online_cpus - cpu_reserve))
+else
+  quota_cpus=1
+fi
+cpu_quota_percent=$((quota_cpus * 100))
+
+stamp=$("$DATE" -u +%Y%m%dT%H%M%S) || fail "cannot create unit timestamp"
+unit="paradox-verify-aggregate-u${uid}-${stamp}-$$"
+[[ "$unit.service" =~ ^paradox-verify-aggregate-u[0-9]+-[A-Za-z0-9_.-]+\.service$ ]] ||
+  fail "could not construct a safe transient unit name"
+
+environment=(
+  "--setenv=HOME=$home"
+  "--setenv=USER=$user"
+  "--setenv=LOGNAME=$user"
+  "--setenv=PATH=$home/.local/bin:$PATH"
+  "--setenv=PARADOX_CONTAINER_ENGINE=$engine"
+  "--setenv=PARADOX_VERIFY_CONTAINMENT=aggregate"
+  "--setenv=PARADOX_VERIFY_AGGREGATE_SYSTEMD=1"
+  "--setenv=PARADOX_VERIFY_AGGREGATE_CAP_MIB=$cap_mib"
+  "--setenv=PARADOX_VERIFY_AGGREGATE_OUTSIDE_RESERVE_MIB=$reserve_mib"
+)
+if [[ -n "$worker_image" ]]; then
+  environment+=("--setenv=PARADOX_VERIFY_WORKER_IMAGE=$worker_image")
+fi
+
+properties=(
+  "--property=MemoryAccounting=yes"
+  "--property=MemoryMax=${cap_mib}M"
+  "--property=CPUAccounting=yes"
+  "--property=CPUQuota=${cpu_quota_percent}%"
+  "--property=TasksAccounting=yes"
+  "--property=TasksMax=$tasks_max"
+  "--property=OOMPolicy=kill"
+  "--property=OOMScoreAdjust=1000"
+  "--property=KillMode=control-group"
+  "--property=SendSIGKILL=yes"
+  "--property=TimeoutStopSec=30s"
+  "--property=Delegate=no"
+  "--property=UMask=0077"
+  "--property=RuntimeMaxSec=${runtime_max_sec}s"
+)
+if [[ -f /sys/fs/cgroup/cgroup.controllers &&
+      ! -L /sys/fs/cgroup/cgroup.controllers ]]; then
+  properties+=("--property=MemorySwapMax=0")
+fi
+
+runner_pid=
+stop_unit() {
+  "$SYSTEMCTL" stop "$unit.service" >/dev/null 2>&1 || true
+}
+interrupted() {
+  stop_unit
+  if [[ -n "$runner_pid" ]]; then
+    kill -TERM "$runner_pid" >/dev/null 2>&1 || true
+    wait "$runner_pid" 2>/dev/null || true
+  fi
+  exit 130
+}
+trap interrupted INT TERM HUP
+
+set +e
+"$SYSTEMD_RUN" \
+  "--unit=$unit" \
+  "--description=Paradox aggregate verification" \
+  "--uid=$uid" \
+  "--gid=$gid" \
+  "--working-directory=$repository" \
+  "--service-type=exec" \
+  --wait \
+  --collect \
+  --pipe \
+  "${environment[@]}" \
+  "${properties[@]}" \
+  -- \
+  "$repository/scripts/verify" "${verify_arguments[@]}" &
+runner_pid=$!
+wait "$runner_pid"
+status=$?
+set -e
+trap - INT TERM HUP
+exit "$status"

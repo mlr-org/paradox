@@ -35,6 +35,17 @@ function_binding <- function(name) {
   }
   value
 }
+top_level_for <- function(variable) {
+  matches <- Filter(function(expression) {
+    is.call(expression) && length(expression) == 4L &&
+      identical(expression[[1L]], quote(`for`)) &&
+      identical(expression[[2L]], as.name(variable))
+  }, as.list(tree))
+  if (length(matches) != 1L) {
+    fail("expected one top-level for loop over ", variable)
+  }
+  matches[[1L]]
+}
 call_count <- function(value, head) {
   count <- 0L
   walk <- function(node) {
@@ -65,10 +76,100 @@ run_retained <- function_binding("run_retained")
 row_boundary <- function_binding("verify_row_boundary")
 full_boundary <- function_binding("verify_full_boundary")
 candidate_authenticator <- function_binding("authenticate_candidate_git")
+documentation_scope_runner <- function_binding("run_documentation_scope")
 if (!"candidate_source" %in% all.names(
     candidate_authenticator, functions = TRUE, unique = TRUE
   )) {
   fail("documentation candidate authentication omits the detached source")
+}
+scope_values <- lapply(c("all", "essential", "full"), function(value) {
+  environment <- new.env(parent = baseenv())
+  environment$scope <- value
+  eval(binding("scopes"), envir = environment)
+})
+if (!identical(
+    scope_values,
+    list(c("essential", "full"), "essential", "full")
+  )) {
+  fail("documentation scope expansion is not essential-first and scope-specific")
+}
+scope_loop <- top_level_for("active_scope")
+scope_body <- as.list(scope_loop[[4L]])
+repository_loops <- Filter(function(expression) {
+  is.call(expression) && length(expression) == 4L &&
+    identical(expression[[1L]], quote(`for`)) &&
+    identical(expression[[2L]], quote(repository)) &&
+    identical(expression[[3L]], quote(repositories))
+}, scope_body)
+if (!identical(scope_loop[[3L]], quote(scopes)) ||
+    length(repository_loops) != 1L ||
+    call_count(repository_loops[[1L]], "run_documentation_scope") != 1L ||
+    call_count(tree, "run_documentation_scope") != 1L ||
+    !"active_scope" %in% names(documentation_scope_runner[[2L]])) {
+  fail("documentation workloads are not one repository corpus per ordered scope pass")
+}
+scope_calls <- list()
+scope_environment <- new.env(parent = globalenv())
+scope_environment$fail <- fail
+scope_environment$quarto <- "quarto"
+scope_environment$local_rscript <- "Rscript"
+scope_environment$retained_workload_scripts <- c(
+  mlr3benchmark = "mlr3benchmark.R",
+  mbo_config = "mbo-config.R",
+  mlr3_targets = "mlr3-targets.R"
+)
+scope_environment$run_retained <- function(
+  repository, workload, required, command, arguments, wd, overlay,
+  prerequisite = TRUE
+) {
+  scope_calls[[length(scope_calls) + 1L]] <<- list(
+    repository = repository,
+    workload = workload,
+    required = required,
+    prerequisite = prerequisite
+  )
+  TRUE
+}
+scope_runner <- eval(documentation_scope_runner, envir = scope_environment)
+scope_repositories <- c(
+  "mlr3book", "mlr3website", "mlr3gallery", "mlr3cheatsheets",
+  "mlr3benchmark", "mbo_config", "mlr3-targets"
+)
+for (active_scope in c("essential", "full")) {
+  for (repository in scope_repositories) {
+    scope_runner(
+      repository, active_scope, "source", "overlay", TRUE
+    )
+  }
+}
+observed_workloads <- vapply(scope_calls, `[[`, character(1L), "workload")
+observed_required <- vapply(scope_calls, `[[`, logical(1L), "required")
+expected_workloads <- c(
+  "paradox-chapter", "paradox-benchmark", "legacy-paradox-subset",
+  "paradox-cheatsheets", "nested-values-contract", "serialized-spaces",
+  "legacy-migration-contract", "full", "full", "legacy-14-post-corpus",
+  "all-cheatsheets", "nested-values-documentation", "serialized-spaces-large",
+  "legacy-migration-source"
+)
+if (!identical(observed_workloads, expected_workloads) ||
+    !identical(
+      observed_required,
+      c(TRUE, TRUE, FALSE, TRUE, FALSE, TRUE, FALSE, rep(FALSE, 7L))
+    ) || !all(vapply(
+      scope_calls, `[[`, logical(1L), "prerequisite"
+    ))) {
+  fail("documentation scope runner changed its workload or requirement contract")
+}
+checkout_git_environment <- eval(binding(
+  "documentation_checkout_git_environment"
+))
+if (!identical(
+    checkout_git_environment[c("GIT_NO_LAZY_FETCH", "GIT_OPTIONAL_LOCKS")],
+    c(GIT_NO_LAZY_FETCH = "1", GIT_OPTIONAL_LOCKS = "0")
+  ) || !"documentation_checkout_git_environment" %in% all.names(
+    function_binding("git_output"), functions = TRUE, unique = TRUE
+  )) {
+  fail("documentation checkout Git inspection may write locks or fetch lazily")
 }
 expected_consumer_root <- quote(require_plain_local_library_argument(
   file.path(root, ".local", "compat", "github"),
@@ -168,11 +269,16 @@ for (snapshot in expected_hardening_snapshots) {
 
 helper_environment <- new.env(parent = globalenv())
 helper_environment$fail <- fail
+helper_environment$root <- root
 helper_environment$is_symbolic <- function(path) {
   link <- Sys.readlink(path)
   length(link) == 1L && !is.na(link) && nzchar(link)
 }
 for (name in c(
+  "require_plain_local_library_argument", "require_plain_directory",
+  "documentation_directory_entries", "documentation_directory_identity",
+  "documentation_capture_reserved_run_parent",
+  "documentation_recheck_reserved_run_parent",
   "documentation_write_tsv", "documentation_format_metadata_number",
   "documentation_list_descendants", "documentation_metadata_ledger",
   "documentation_assert_metadata", "sample_classification_log",
@@ -193,6 +299,52 @@ if (!dir.create(scratch, recursive = FALSE, showWarnings = FALSE)) {
   fail("could not create documentation economy fixture")
 }
 on.exit(unlink(scratch, recursive = TRUE, force = TRUE), add = TRUE)
+reserved <- file.path(scratch, "reserved")
+if (!dir.create(reserved, recursive = FALSE, showWarnings = FALSE)) {
+  fail("could not create reserved-output fixture")
+}
+reservation <- helper_environment$documentation_capture_reserved_run_parent(
+  reserved, reserved
+)
+if (!identical(reservation$path, reserved) ||
+    !identical(
+      names(reservation$identity), c("device_id", "inode")
+    ) || !isTRUE(
+      helper_environment$documentation_recheck_reserved_run_parent(reservation)
+    ) || !is.null(
+      helper_environment$documentation_capture_reserved_run_parent(NULL, reserved)
+    )) {
+  fail("reserved-output admission did not retain its exact empty directory")
+}
+expect_reserved_error <- function(expression) {
+  inherits(tryCatch({
+    force(expression)
+    NULL
+  }, error = identity), "error")
+}
+if (!expect_reserved_error(
+  helper_environment$documentation_capture_reserved_run_parent(
+    paste0(reserved, "/"), reserved
+  )
+)) {
+  fail("reserved-output admission accepted a non-exact path")
+}
+marker <- file.path(reserved, "unexpected")
+writeLines("unexpected", marker, useBytes = TRUE)
+if (!expect_reserved_error(
+  helper_environment$documentation_recheck_reserved_run_parent(reservation)
+)) {
+  fail("reserved-output recheck accepted a nonempty directory")
+}
+unlink(marker)
+retired <- file.path(scratch, "reserved-retired")
+if (!file.rename(reserved, retired) ||
+    !dir.create(reserved, recursive = FALSE, showWarnings = FALSE) ||
+    !expect_reserved_error(
+      helper_environment$documentation_recheck_reserved_run_parent(reservation)
+    )) {
+  fail("reserved-output recheck accepted a replaced directory identity")
+}
 first <- file.path(scratch, "first")
 second <- file.path(scratch, "second")
 outside <- file.path(scratch, "outside")

@@ -1,0 +1,15 @@
+# Install as /etc/paradox-verify-systemd.conf, owned by root and mode 0644.
+# Values are parsed as data; this file is never sourced by a shell.
+repository=/home/mewse/paradox_neo
+uid=1002
+gid=1002
+user=mewse
+group=mewse
+home=/home/mewse
+memory_max_mib=32768
+memory_reserve_mib=12288
+cpu_reserve=2
+tasks_max=8192
+runtime_max_sec=604800
+engine=podman
+worker_image=localhost/paradox-verification-worker@sha256:1f71d30850a5dbb4b7777d91fe82ed98b524cd26ed4ffb757de5ef85daf82d6f

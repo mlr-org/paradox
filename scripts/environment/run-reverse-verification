@@ -1,0 +1,109 @@
+#!/usr/bin/env sh
+
+# Enter the real reverse-dependency gate with one stable child run ID. An
+# interrupted coordinator attempt resumes the retained row/wave evidence;
+# a fresh coordinator run receives a fresh ID and cannot inherit old results.
+
+set -eu
+
+if [ "$#" -ne 8 ]; then
+  printf '%s\n' \
+    "run-reverse-verification: ROOT RUN_ID CANDIDATE_LIBRARY DEPENDENCY_LIBRARY CANDIDATE_SOURCE MAX_PRIORITY AXIS MODE are required" >&2
+  exit 2
+fi
+
+ROOT=$1
+RUN_ID=$2
+CANDIDATE_LIBRARY=$3
+DEPENDENCY_LIBRARY=$4
+CANDIDATE_SOURCE=$5
+MAX_PRIORITY=$6
+PARADOX_AXIS=$7
+MODE=$8
+RUN_DIRECTORY="$ROOT/.local/compat/reverse-runs/$RUN_ID"
+TASK_ATTEMPT=${PARADOX_VERIFY_TASK_ATTEMPT:-}
+
+if [ "$(uname -s)" != Linux ] || [ "$(uname -m)" != x86_64 ]; then
+  printf '%s\n' \
+    "run-reverse-verification: the authenticated prepared gate currently requires Linux x86_64" >&2
+  exit 2
+fi
+case "$RUN_ID" in
+  ''|*[!A-Za-z0-9._-]*|.|..)
+    printf '%s\n' "run-reverse-verification: unsafe run ID" >&2
+    exit 2
+    ;;
+esac
+case "$MAX_PRIORITY" in
+  ''|*[!0-9]*)
+    printf '%s\n' "run-reverse-verification: invalid maximum priority" >&2
+    exit 2
+    ;;
+esac
+if [ "$PARADOX_AXIS" != paradox2 ]; then
+  printf '%s\n' \
+    "run-reverse-verification: only the paradox2 axis is supported" >&2
+  exit 2
+fi
+case "$MODE" in
+  full|miesmuschel-plan) ;;
+  *)
+    printf '%s\n' \
+      "run-reverse-verification: mode must be full or miesmuschel-plan" >&2
+    exit 2
+    ;;
+esac
+case "$TASK_ATTEMPT" in
+  [1-9]|[1-9][0-9]|[1-9][0-9][0-9]) ;;
+  *)
+    printf '%s\n' \
+      "run-reverse-verification: PARADOX_VERIFY_TASK_ATTEMPT must be an integer from 1 through 999" >&2
+    exit 2
+    ;;
+esac
+if [ ! -d "$RUN_DIRECTORY" ] || [ -L "$RUN_DIRECTORY" ]; then
+  printf '%s\n' \
+    "run-reverse-verification: reserved run directory is absent, non-directory, or symbolic" >&2
+  exit 2
+fi
+
+RUN_DIRECTORY_NONEMPTY=
+for ENTRY in \
+  "$RUN_DIRECTORY"/* \
+  "$RUN_DIRECTORY"/.[!.]* \
+  "$RUN_DIRECTORY"/..?*
+do
+  if [ -e "$ENTRY" ] || [ -L "$ENTRY" ]; then
+    RUN_DIRECTORY_NONEMPTY=1
+    break
+  fi
+done
+if [ "$MODE" = miesmuschel-plan ] && [ -n "$RUN_DIRECTORY_NONEMPTY" ]; then
+  printf '%s\n' \
+    "run-reverse-verification: miesmuschel-plan requires a fresh empty reservation" >&2
+  exit 2
+fi
+if [ "$MODE" = full ] && [ "$TASK_ATTEMPT" -eq 1 ] &&
+    [ -n "$RUN_DIRECTORY_NONEMPTY" ]; then
+  printf '%s\n' \
+    "run-reverse-verification: a fresh full run requires an empty reservation" >&2
+  exit 2
+fi
+
+set -- \
+  --root "$ROOT" \
+  --max-priority "$MAX_PRIORITY" \
+  --candidate-library "$CANDIDATE_LIBRARY" \
+  --dependency-library "$DEPENDENCY_LIBRARY" \
+  --candidate-source "$CANDIDATE_SOURCE" \
+  --run-id "$RUN_ID" \
+  --reserved-run-directory "$RUN_DIRECTORY"
+
+if [ "$MODE" = full ] && [ "$TASK_ATTEMPT" -gt 1 ]; then
+  set -- "$@" --resume
+fi
+if [ "$MODE" = miesmuschel-plan ]; then
+  set -- "$@" --package miesmuschel --plan-only
+fi
+
+exec Rscript --vanilla "$ROOT/compat/test-reverse-dependencies.R" "$@"

@@ -33,3 +33,5 @@
 ^design$
 ^environment$
 ^scripts$
+^verification$
+^Makefile$

@@ -1,5 +1,57 @@
 # Native validation harness
 
+The unattended top-level entry point is now:
+
+```sh
+scripts/verify doctor
+scripts/verify plan --profile focused
+scripts/verify run --profile focused
+```
+
+It orders the existing drivers as a weighted, cache-aware DAG and uses either
+proved per-worker Podman/Docker cgroups or one proved aggregate systemd cgroup
+before unlocking parallel coarse tasks. On this rootless-Podman/cgroup-v1
+machine, the reviewed installed aggregate launcher is the default for
+`doctor`, `plan`, and `run`; task resource claims are admission reservations
+inside its hard process-tree ceiling. This file continues to document the
+low-level native drivers and their retained evidence contracts. See
+`verification/README.md` for one-time installation, containment proofs,
+failure policies, development caching, change-aware ordering, resume, and the
+explicit non-release `--best-effort` fallback.
+
+The outer scheduler discovers CPU, parent-cgroup live RAM, aggregate PID, and
+disk budgets rather than assuming this development host's size. It keeps
+separate physical/cgroup/filesystem/PID capacity ceilings so temporary
+pressure waits rather than becoming a permanent block. Static platform and
+machine constraints fail visibly in the plan. Scalable tasks
+declare a reviewed minimum and desired ceiling; peers receive their minima
+first and spare CPU/RAM is assigned in information order. A per-user
+machine-wide lock prevents two checkouts from independently admitting the full
+host budget. Static fit applies the RAM fraction to physical/parent-cgroup
+capacity, while live admission recomputes it from current availability; low
+startup availability therefore waits without freezing later capacity.
+Attempt results are immutable, each
+resume records the current host/engine invocation, and retained successes must
+match their numbered result, log, and original invocation; revalidated tasks
+also invalidate their descendants. Scheduler-origin blocks do not cancel independent
+branches or influence execution-failure priority. Each attempt enters through `verify-task-entry`, which reconstructs
+ordinary activation after establishing private HOME/tmp/runtime state.
+Prepared consumer tasks explicitly request `activate-compat-system` there, so
+hard-container and host best-effort behavior cannot silently differ. Every
+hard-containment probe uses that same worker UID and proves the read-only
+root/nested-writable bind pattern. Per-worker mode additionally proves cgroup
+and sacrificial OOM enforcement; aggregate mode authenticates the dedicated
+system service and proves the real Podman payload remains in it.
+
+The generic `release-core` profile stops at the native/API/runtime/differential
+foundation. The combined memory driver below remains a direct source-bound gate
+because its rchk branch already launches the pinned analyzer container; it must
+be split before it can be safely represented as an outer contained task.
+Actual prepared Paradox-2 reverse-dependency and documentation gates are
+available separately and together through `prepared-reverse`,
+`prepared-documentation`, and `prepared-release-compat`; their synthetic
+fixtures remain preflights rather than substitutes.
+
 Run the harness only after activating the repository-contained toolchain:
 
 ```sh
@@ -11,6 +63,11 @@ scripts/native-check --mode strict-gcc --mode strict-clang --tests focused
 cgroup v1/v2 CPU and memory constraints, and currently available RAM. Its
 `--report` mode is evidence-friendly; `--max-jobs` can only lower the result.
 It fails closed when even one job would invade the reserved memory headroom.
+Inside a top-level verification worker it also converts
+`PARADOX_VERIFY_ASSIGNED_CPUS` and
+`PARADOX_VERIFY_ASSIGNED_MEMORY_MIB` into a cooperative job-count ceiling, so
+several aggregate-contained coarse tasks cannot each rediscover and spend the
+complete service envelope.
 The conservative profiles are: `compile`, one CPU and 1024 MiB per job with a
 16-job cap; `api-compile`, one CPU and 768 MiB per job; `light-test`, one CPU
 and 2048 MiB per job with a 16-job cap; and `consumer`, two CPUs and 8192 MiB

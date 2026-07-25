@@ -30,6 +30,8 @@
 docs/
 vignettes/*.html
 vignettes/*.pdf
+__pycache__/
+*.py[cod]
 *_cache/
 /cache/
 *.utf8.md

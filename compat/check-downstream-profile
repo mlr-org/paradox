@@ -9,17 +9,19 @@ AXIS=paradox2
 REPOSITORIES=
 CANDIDATE_SOURCE=${PARADOX_CANDIDATE_SOURCE:-$ROOT}
 VERIFY=false
+RESUME=false
 
 usage() {
   cat <<'EOF'
 Usage: compat/check-downstream-profile --repositories NAME[,NAME...] \
        [--candidate-source PATH] [--evidence-profile NAME] \
-       [--paradox-axis paradox2|paradox1] [--verify]
+       [--paradox-axis paradox2|paradox1] [--verify|--resume]
 
 Build and serially check exact heads in one authenticated downstream profile.
 Each immutable check subject is the package tarball produced by R CMD build,
 not the raw source directory. The stage is separate from repository-test
-evidence.
+evidence. --verify requires and verifies an existing completed stage.
+--resume verifies one when present and otherwise starts a fresh attempt.
 EOF
 }
 
@@ -81,7 +83,18 @@ while (($#)); do
       esac
       shift
       ;;
-    --verify) [[ $VERIFY == false ]] || fail "--verify may occur once"; VERIFY=true; shift ;;
+    --verify)
+      [[ $VERIFY == false && $RESUME == false ]] ||
+        fail "--verify and --resume are mutually exclusive and may occur once"
+      VERIFY=true
+      shift
+      ;;
+    --resume)
+      [[ $RESUME == false && $VERIFY == false ]] ||
+        fail "--verify and --resume are mutually exclusive and may occur once"
+      RESUME=true
+      shift
+      ;;
     -h|--help) usage; exit 0 ;;
     *) fail "unknown argument: $1" ;;
   esac
@@ -457,13 +470,23 @@ verify_stage() {
     "downstream_profile_check_stage=$STAGE"
 }
 
-if [[ $VERIFY == true ]]; then
+if [[ $VERIFY == true || ( $RESUME == true &&
+    ( -e $STAGE || -L $STAGE ) ) ]]; then
   verify_stage
   exit 0
 fi
-[[ ! -e $STAGE && ! -L $STAGE ]] || fail "check stage already exists; use --verify"
+[[ ! -e $STAGE && ! -L $STAGE ]] ||
+  fail "check stage already exists; use --verify or --resume"
 
-PRIVATE_PREFIX=$RUN/.repository-checks$SUFFIX
+ATTEMPT_ID=${PARADOX_VERIFY_ATTEMPT_ID:-manual.$$.$RANDOM.$RANDOM}
+[[ $ATTEMPT_ID =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$ ]] ||
+  fail "verification attempt ID is unsafe"
+command -v flock >/dev/null 2>&1 ||
+  fail "flock is required for downstream check exclusion"
+exec {CHECK_LOCK_FD}<"$BRIDGE_EVIDENCE"
+flock -n "$CHECK_LOCK_FD" ||
+  fail "another process owns downstream checks for this run and profile"
+PRIVATE_PREFIX=$RUN/.repository-checks$SUFFIX.$ATTEMPT_ID
 OWNER=$PRIVATE_PREFIX-owner
 OWNER_STAGING=
 OWNER_STAGING_ID=
@@ -538,6 +561,7 @@ OWNER_ID=$OWNER_STAGING_ID
 OWNER_TOKEN=${OWNER_STAGING##*.}
 OWNER_RECORD=$(printf '%s\n' \
   $'field\tvalue' $'schema\t1' "owner_token\t$OWNER_TOKEN" "pid\t$$" \
+  "verification_attempt_id\t$ATTEMPT_ID" \
   "candidate_run_id\t$RUN_ID" "evidence_profile\t$PROFILE" \
   "paradox_axis\t$AXIS")
 printf '%s\n' "$OWNER_RECORD" >"$OWNER_STAGING/owner.tsv"

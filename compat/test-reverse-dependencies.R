@@ -24,6 +24,9 @@ reverse_usage <- function() {
     "  compat/install-candidate with the same ref, commit, and tree.\n\n",
     "Other options:\n",
     "  --run-id ID                 output below .local/compat/reverse-runs/ID\n",
+    "  --reserved-run-directory PATH\n",
+    "                              coordinator-precreated output reservation;\n",
+    "                              must equal the path derived from --run-id\n",
     "  --package NAME              select one package; repeatable\n",
     "  --install-timeout SECONDS   bounded consumer install (default 1800)\n",
     "  --check-timeout SECONDS     bounded complete check (default 3600)\n",
@@ -59,6 +62,7 @@ reverse_parse_arguments <- function(arguments) {
     candidate_source = Sys.getenv("PARADOX_CANDIDATE_SOURCE", unset = ""),
     candidate_content = Sys.getenv("PARADOX_CANDIDATE_CONTENT_SHA256", unset = ""),
     run_id = NULL,
+    reserved_run_directory = NULL,
     packages = character(),
     install_timeout = "1800",
     check_timeout = "3600",
@@ -70,7 +74,8 @@ reverse_parse_arguments <- function(arguments) {
     "--root", "--max-priority", "--candidate-library",
     "--dependency-library", "--candidate-ref", "--candidate-commit",
     "--candidate-tree", "--candidate-source", "--candidate-content",
-    "--run-id", "--package", "--install-timeout", "--check-timeout"
+    "--run-id", "--reserved-run-directory", "--package",
+    "--install-timeout", "--check-timeout"
   )
 
   index <- 1L
@@ -109,6 +114,9 @@ reverse_parse_arguments <- function(arguments) {
       if (identical(option, "--candidate-source")) values$candidate_source <- value
       if (identical(option, "--candidate-content")) values$candidate_content <- value
       if (identical(option, "--run-id")) values$run_id <- value
+      if (identical(option, "--reserved-run-directory")) {
+        values$reserved_run_directory <- value
+      }
       if (identical(option, "--package")) values$packages <- c(values$packages, value)
       if (identical(option, "--install-timeout")) values$install_timeout <- value
       if (identical(option, "--check-timeout")) values$check_timeout <- value
@@ -280,6 +288,59 @@ reverse_require_plain_directory <- function(path, label) {
   }
   invisible(path)
 }
+reverse_directory_identity <- function(path, label) {
+  if (!requireNamespace("fs", quietly = TRUE)) {
+    stop("fs is required to authenticate ", label, call. = FALSE)
+  }
+  info <- fs::file_info(path, fail = TRUE, follow = FALSE)
+  if (nrow(info) != 1L || !identical(as.character(info$type), "directory") ||
+      length(info$device_id) != 1L || is.na(info$device_id) ||
+      length(info$inode) != 1L || is.na(info$inode)) {
+    stop(label, " is absent, non-directory, symbolic, or lacks identity metadata",
+      call. = FALSE)
+  }
+  number <- function(value) {
+    format(as.numeric(value), scientific = FALSE, trim = TRUE, digits = 17L)
+  }
+  c(device = number(info$device_id), inode = number(info$inode))
+}
+reverse_directory_is_empty <- function(path, label) {
+  entries <- fs::dir_ls(
+    path, all = TRUE, recurse = FALSE, type = "any", fail = TRUE
+  )
+  if (length(entries)) {
+    stop(label, " must be empty for a fresh run", call. = FALSE)
+  }
+  invisible(TRUE)
+}
+reverse_assert_reserved_run_directory <- function(
+  path, identity, require_empty, context
+) {
+  observed_path <- reverse_require_plain_local_directory(
+    path, "reserved run directory"
+  )
+  if (!identical(observed_path, path)) {
+    stop("reserved run directory path changed ", context, call. = FALSE)
+  }
+  observed <- reverse_directory_identity(path, "reserved run directory")
+  if (!identical(observed, identity)) {
+    stop("reserved run directory identity changed ", context, call. = FALSE)
+  }
+  if (require_empty) {
+    reverse_directory_is_empty(path, "reserved run directory")
+    observed_after_empty_check <- reverse_directory_identity(
+      path, "reserved run directory"
+    )
+    if (!identical(observed_after_empty_check, identity)) {
+      stop(
+        "reserved run directory identity changed while checking emptiness ",
+        context,
+        call. = FALSE
+      )
+    }
+  }
+  invisible(TRUE)
+}
 for (path in c(file.path(root, ".local"), file.path(root, ".local", "compat"))) {
   reverse_require_plain_directory(path, "reverse-dependency evidence parent")
 }
@@ -293,51 +354,45 @@ if (dir.exists(reverse_runs_root)) {
 } else if (file.exists(reverse_runs_root) || reverse_is_symbolic(reverse_runs_root)) {
   stop("reverse-dependency evidence root is not a plain directory", call. = FALSE)
 }
-run_directory <- file.path(reverse_runs_root, run_id)
-if (!arguments$resume && (file.exists(run_directory) || dir.exists(run_directory) ||
-    reverse_is_symbolic(run_directory))) {
-  stop("run directory already exists: ", run_directory, call. = FALSE)
-}
-if (arguments$resume && (!dir.exists(run_directory) ||
-    reverse_is_symbolic(run_directory))) {
-  stop("--resume run is absent or symbolic: ", run_directory, call. = FALSE)
-}
-if (arguments$resume && file.exists(file.path(
-    run_directory, "metadata", "completion.seal"
-  ))) {
-  trusted_verifier <- file.path(
-    root, "compat", "verify-reverse-dependency-evidence.R"
+derived_run_directory <- file.path(
+  root, ".local", "compat", "reverse-runs", run_id
+)
+reserved_run_directory <- arguments$reserved_run_directory
+reserved_run_identity <- NULL
+if (!is.null(reserved_run_directory)) {
+  if (!identical(reserved_run_directory, derived_run_directory)) {
+    stop(
+      "--reserved-run-directory must exactly equal the output derived from ",
+      "--root and --run-id: ", derived_run_directory,
+      call. = FALSE
+    )
+  }
+  reserved_run_directory <- reverse_require_plain_local_directory(
+    reserved_run_directory, "reserved run directory"
   )
-  if (!file.exists(trusted_verifier) || dir.exists(trusted_verifier) ||
-      nzchar(Sys.readlink(trusted_verifier))) {
-    stop("completed resume lacks the trusted reverse evidence verifier",
-      call. = FALSE)
-  }
-  verification <- suppressWarnings(system2(
-    actual_rscript,
-    c("--vanilla", shQuote(trusted_verifier), shQuote(run_directory), "--quiet"),
-    stdout = TRUE, stderr = TRUE
-  ))
-  verification_status <- as.integer(attr(verification, "status") %||% 0L)
-  if (!identical(verification_status, 0L)) {
-    stop("completed reverse evidence failed verification: ",
-      paste(tail(verification, 30L), collapse = "\n"), call. = FALSE)
-  }
-  completion <- utils::read.delim(
-    file.path(run_directory, "metadata", "completion.tsv"),
-    header = TRUE, sep = "\t", quote = "", comment.char = "",
-    colClasses = "character", check.names = FALSE,
-    stringsAsFactors = FALSE
+  reserved_run_identity <- reverse_directory_identity(
+    reserved_run_directory, "reserved run directory"
   )
-  completion <- setNames(completion$value, completion$field)
-  cat("Verified completed reverse-dependency evidence: ", run_directory,
-    "\n", sep = "")
-  if (identical(completion[["status"]], "completed_with_failures")) {
-    quit(save = "no", status = 1L)
+  if (!arguments$resume) {
+    reverse_assert_reserved_run_directory(
+      reserved_run_directory,
+      reserved_run_identity,
+      require_empty = TRUE,
+      context = "during initial admission"
+    )
   }
-  quit(save = "no", status = 0L)
+  run_directory <- reserved_run_directory
+} else {
+  run_directory <- file.path(reverse_runs_root, run_id)
+  if (!arguments$resume && (file.exists(run_directory) ||
+      dir.exists(run_directory) || reverse_is_symbolic(run_directory))) {
+    stop("run directory already exists: ", run_directory, call. = FALSE)
+  }
+  if (arguments$resume && (!dir.exists(run_directory) ||
+      reverse_is_symbolic(run_directory))) {
+    stop("--resume run is absent or symbolic: ", run_directory, call. = FALSE)
+  }
 }
-
 reverse_read_tsv <- function(path, expected_columns) {
   value <- utils::read.delim(
     path,
@@ -875,6 +930,216 @@ candidate_provenance <- reverse_validate_candidate_provenance(
   candidate_content = candidate_content
 )
 
+reverse_marker_temporary <- function(path, expected) {
+  paste0(path, ".new-", rr_object_sha256(expected))
+}
+reverse_validate_exact_marker <- function(path, expected, label) {
+  path <- rr_require_file(path, label)
+  observed <- rr_read_tsv(path, c("key", "value"))
+  if (!identical(observed, expected)) {
+    stop(label, " disagrees with this reserved run", call. = FALSE)
+  }
+  invisible(path)
+}
+reverse_remove_marker_temporary <- function(path, expected, label) {
+  temporary <- reverse_marker_temporary(path, expected)
+  if (!file.exists(temporary) && !dir.exists(temporary) &&
+      !reverse_is_symbolic(temporary)) {
+    return(invisible(TRUE))
+  }
+  if (!file.exists(temporary) || dir.exists(temporary) ||
+      reverse_is_symbolic(temporary) ||
+      !identical(rr_path_type(temporary), "file")) {
+    stop("interrupted ", label, " publication is unsafe", call. = FALSE)
+  }
+  if (unlink(temporary, force = TRUE) != 0L || file.exists(temporary) ||
+      reverse_is_symbolic(temporary)) {
+    stop("could not remove interrupted ", label, " publication",
+      call. = FALSE)
+  }
+  invisible(TRUE)
+}
+reverse_publish_exact_marker <- function(path, expected, label) {
+  if (file.exists(path) || dir.exists(path) || reverse_is_symbolic(path)) {
+    reverse_validate_exact_marker(path, expected, label)
+    reverse_remove_marker_temporary(path, expected, label)
+    return(invisible(path))
+  }
+  reverse_remove_marker_temporary(path, expected, label)
+  temporary <- reverse_marker_temporary(path, expected)
+  on.exit(unlink(temporary, force = TRUE), add = TRUE)
+  utils::write.table(
+    expected, temporary, quote = FALSE, sep = "\t", row.names = FALSE,
+    na = "-", fileEncoding = "UTF-8"
+  )
+  if (!file.rename(temporary, path)) {
+    stop("could not atomically publish ", label, call. = FALSE)
+  }
+  reverse_validate_exact_marker(path, expected, label)
+  invisible(path)
+}
+reverse_reset_initialization_children <- function(run_directory, children) {
+  for (child in children) {
+    path <- file.path(run_directory, child)
+    if (file.exists(path) || dir.exists(path) || reverse_is_symbolic(path)) {
+      if (!dir.exists(path) || reverse_is_symbolic(path) ||
+          !identical(rr_path_type(path), "directory")) {
+        stop("pre-initialization evidence child is unsafe: ", path,
+          call. = FALSE)
+      }
+      if (unlink(path, recursive = TRUE, force = TRUE) != 0L ||
+          file.exists(path) || dir.exists(path) ||
+          reverse_is_symbolic(path)) {
+        stop("could not reset interrupted initialization child: ", path,
+          call. = FALSE)
+      }
+    }
+    if (!dir.create(path, recursive = FALSE, showWarnings = FALSE)) {
+      stop("could not create reverse-dependency evidence child: ", path,
+        call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+reverse_reset_initialization_files <- function(run_directory, files) {
+  for (file in c(files, paste0(files, ".new"))) {
+    path <- file.path(run_directory, file)
+    if (!file.exists(path) && !dir.exists(path) &&
+        !reverse_is_symbolic(path)) {
+      next
+    }
+    if (!file.exists(path) || dir.exists(path) ||
+        reverse_is_symbolic(path) ||
+        !identical(rr_path_type(path), "file")) {
+      stop("pre-initialization evidence file is unsafe: ", path,
+        call. = FALSE)
+    }
+    if (unlink(path, force = TRUE) != 0L || file.exists(path) ||
+        reverse_is_symbolic(path)) {
+      stop("could not reset interrupted initialization file: ", path,
+        call. = FALSE)
+    }
+  }
+  invisible(TRUE)
+}
+reverse_prepare_reserved_layout <- function(
+  run_directory,
+  reservation_marker_path,
+  reservation_marker,
+  initialized_marker_path,
+  initialized_marker,
+  children,
+  files,
+  resume_requested
+) {
+  reservation_temporary <- reverse_marker_temporary(
+    reservation_marker_path, reservation_marker
+  )
+  initial_entries <- list.files(
+    run_directory, all.files = TRUE, no.. = TRUE, full.names = TRUE
+  )
+  if (!resume_requested && length(initial_entries)) {
+    stop("fresh reserved run directory is no longer empty", call. = FALSE)
+  }
+  if (resume_requested && !file.exists(reservation_marker_path)) {
+    if (length(setdiff(initial_entries, reservation_temporary))) {
+      stop(
+        "resumed reserved output is neither empty nor an authenticated ",
+        "interrupted initialization",
+        call. = FALSE
+      )
+    }
+  }
+  reverse_publish_exact_marker(
+    reservation_marker_path,
+    reservation_marker,
+    "reverse reservation marker"
+  )
+  initialized_temporary <- reverse_marker_temporary(
+    initialized_marker_path, initialized_marker
+  )
+  reverse_remove_marker_temporary(
+    initialized_marker_path,
+    initialized_marker,
+    "reverse initialized marker"
+  )
+  current_entries <- list.files(
+    run_directory, all.files = TRUE, no.. = TRUE, full.names = TRUE
+  )
+  allowed_entries <- file.path(
+    run_directory,
+    c(
+      basename(reservation_marker_path),
+      basename(initialized_marker_path),
+      basename(initialized_temporary),
+      children,
+      files,
+      paste0(files, ".new")
+    )
+  )
+  if (length(setdiff(current_entries, allowed_entries))) {
+    stop("reserved run directory contains unrelated output", call. = FALSE)
+  }
+  initialized_exists <- file.exists(initialized_marker_path) ||
+    dir.exists(initialized_marker_path) ||
+    reverse_is_symbolic(initialized_marker_path)
+  if (initialized_exists) {
+    reverse_validate_exact_marker(
+      initialized_marker_path,
+      initialized_marker,
+      "reverse initialized marker"
+    )
+    if (!resume_requested) {
+      stop("fresh reserved run unexpectedly has initialized evidence",
+        call. = FALSE)
+    }
+    for (child in children) {
+      reverse_require_plain_directory(
+        file.path(run_directory, child),
+        "initialized reverse-dependency evidence child"
+      )
+    }
+    for (file in files) {
+      rr_require_file(
+        file.path(run_directory, file),
+        "initialized reverse-dependency evidence file"
+      )
+      if (file.exists(file.path(run_directory, paste0(file, ".new"))) ||
+          reverse_is_symbolic(file.path(
+            run_directory, paste0(file, ".new")
+          ))) {
+        stop("initialized reverse-dependency evidence has a stale temporary",
+          call. = FALSE)
+      }
+    }
+    return(TRUE)
+  }
+
+  for (child in intersect(children, c("packages", "interrupted"))) {
+    path <- file.path(run_directory, child)
+    if (dir.exists(path) && length(list.files(
+        path, all.files = TRUE, no.. = TRUE
+      ))) {
+      stop(
+        "uninitialized reservation contains post-boundary child evidence: ",
+        path,
+        call. = FALSE
+      )
+    }
+  }
+  if (file.exists(file.path(
+      run_directory, "metadata", "completion.seal"
+    ))) {
+    stop("uninitialized reservation contains a completion seal",
+      call. = FALSE)
+  }
+  reverse_reset_initialization_files(run_directory, files)
+  reverse_reset_initialization_children(run_directory, children)
+  # A retry before the initialized marker is a safe authenticated
+  # reinitialization, not a semantic resume.
+  FALSE
+}
+
 # Candidate provenance must be fully authenticated before the harness creates
 # retained artifacts or inspects any consumer source archive.
 if (!dir.exists(reverse_runs_root)) {
@@ -908,7 +1173,90 @@ reverse_release_mutation_lock <- function() {
   invisible(TRUE)
 }
 run_directory <- file.path(reverse_runs_root, run_id)
-if (!arguments$resume) {
+reserved_initialization_marker_path <- NULL
+reserved_initialization_marker <- NULL
+reserved_initialized_marker_path <- NULL
+reserved_initialized_marker <- NULL
+reserved_initialization_children <- c("metadata", "packages", "interrupted")
+reserved_initialization_files <- "plan.tsv"
+if (!is.null(reserved_run_identity)) {
+  if (!identical(run_directory, reserved_run_directory)) {
+    stop("derived reserved run directory changed during admission", call. = FALSE)
+  }
+  reverse_assert_reserved_run_directory(
+    run_directory,
+    reserved_run_identity,
+    require_empty = !arguments$resume,
+    context = "immediately before population"
+  )
+  marker_values <- c(
+    schema = "1",
+    state = "reserved",
+    run_id = run_id,
+    root = root,
+    run_directory = run_directory,
+    reservation_device = unname(reserved_run_identity[["device"]]),
+    reservation_inode = unname(reserved_run_identity[["inode"]]),
+    max_priority = as.character(max_priority),
+    plan_only = as.character(arguments$plan_only),
+    packages = if (length(arguments$packages)) {
+      paste(arguments$packages, collapse = ",")
+    } else "-",
+    install_timeout_seconds = as.character(install_timeout),
+    check_timeout_seconds = as.character(check_timeout),
+    reverse_jobs = Sys.getenv("PARADOX_REVERSE_JOBS", unset = "-"),
+    candidate_run_id = candidate_run_id,
+    candidate_ref = candidate_ref,
+    candidate_commit = candidate_commit,
+    candidate_tree = candidate_tree,
+    candidate_source = candidate_source,
+    candidate_library = candidate_library,
+    dependency_library = dependency_library,
+    candidate_content_sha256 = candidate_content,
+    candidate_version = candidate_version,
+    candidate_provenance_sha256 = candidate_provenance$receipt_sha256,
+    r_version = as.character(getRversion()),
+    harness_sha256 = unname(tools::sha256sum(harness_script))
+  )
+  if (any(!nzchar(marker_values)) ||
+      any(grepl("[\t\r\n]", marker_values))) {
+    stop("reserved-run initialization identity is malformed", call. = FALSE)
+  }
+  reserved_initialization_marker <- data.frame(
+    key = names(marker_values),
+    value = unname(marker_values),
+    stringsAsFactors = FALSE
+  )
+  reserved_initialization_marker_path <- file.path(
+    run_directory, ".paradox-reverse-reservation.tsv"
+  )
+  reservation_sha256 <- rr_object_sha256(reserved_initialization_marker)
+  initialized_values <- c(
+    schema = "1",
+    state = "initialized",
+    reservation_marker_identity_sha256 = reservation_sha256,
+    children = paste(reserved_initialization_children, collapse = ","),
+    files = paste(reserved_initialization_files, collapse = ",")
+  )
+  reserved_initialized_marker <- data.frame(
+    key = names(initialized_values),
+    value = unname(initialized_values),
+    stringsAsFactors = FALSE
+  )
+  reserved_initialized_marker_path <- file.path(
+    run_directory, ".paradox-reverse-initialized.tsv"
+  )
+  arguments$resume <- reverse_prepare_reserved_layout(
+    run_directory,
+    reserved_initialization_marker_path,
+    reserved_initialization_marker,
+    reserved_initialized_marker_path,
+    reserved_initialized_marker,
+    reserved_initialization_children,
+    reserved_initialization_files,
+    arguments$resume
+  )
+} else if (!arguments$resume) {
   if (file.exists(run_directory) || dir.exists(run_directory) ||
       reverse_is_symbolic(run_directory)) {
     stop("run directory already exists: ", run_directory, call. = FALSE)
@@ -923,18 +1271,68 @@ run_directory <- normalizePath(run_directory, winslash = "/", mustWork = TRUE)
 if (!identical(dirname(run_directory), reverse_runs_root)) {
   stop("reverse-dependency run directory escaped its evidence root", call. = FALSE)
 }
-for (child in c("metadata", "packages", "interrupted")) {
+for (child in reserved_initialization_children) {
   child_path <- file.path(run_directory, child)
-  if (!arguments$resume &&
+  if (is.null(reserved_run_identity) && !arguments$resume &&
       !dir.create(child_path, recursive = FALSE, showWarnings = FALSE)) {
     stop("could not create reverse-dependency evidence child: ", child_path,
       call. = FALSE)
   }
-  if (arguments$resume &&
+  if ((arguments$resume || !is.null(reserved_run_identity)) &&
       (!dir.exists(child_path) || reverse_is_symbolic(child_path))) {
     stop("resume evidence child is absent or symbolic: ", child_path,
       call. = FALSE)
   }
+}
+
+if (arguments$resume && file.exists(file.path(
+    run_directory, "metadata", "completion.seal"
+  ))) {
+  if (!is.null(reserved_run_identity)) {
+    reverse_validate_exact_marker(
+      reserved_initialized_marker_path,
+      reserved_initialized_marker,
+      "reverse initialized marker"
+    )
+    reverse_assert_reserved_run_directory(
+      run_directory,
+      reserved_run_identity,
+      require_empty = FALSE,
+      context = "before completed-run verification"
+    )
+  }
+  trusted_verifier <- file.path(
+    root, "compat", "verify-reverse-dependency-evidence.R"
+  )
+  if (!file.exists(trusted_verifier) || dir.exists(trusted_verifier) ||
+      nzchar(Sys.readlink(trusted_verifier))) {
+    stop("completed resume lacks the trusted reverse evidence verifier",
+      call. = FALSE)
+  }
+  verification <- suppressWarnings(system2(
+    actual_rscript,
+    c("--vanilla", shQuote(trusted_verifier), shQuote(run_directory), "--quiet"),
+    stdout = TRUE, stderr = TRUE
+  ))
+  verification_status <- as.integer(attr(verification, "status") %||% 0L)
+  if (!identical(verification_status, 0L)) {
+    stop("completed reverse evidence failed verification: ",
+      paste(tail(verification, 30L), collapse = "\n"), call. = FALSE)
+  }
+  completion <- utils::read.delim(
+    file.path(run_directory, "metadata", "completion.tsv"),
+    header = TRUE, sep = "\t", quote = "", comment.char = "",
+    colClasses = "character", check.names = FALSE,
+    stringsAsFactors = FALSE
+  )
+  completion <- setNames(completion$value, completion$field)
+  reverse_release_mutation_lock()
+  cat("Verified completed reverse-dependency evidence: ", run_directory,
+    "\n", sep = "")
+  if (identical(completion[["status"]], "completed_with_failures")) {
+    quit(save = "no", status = 1L)
+  }
+  quit(save = "no", status = 0L)
 }
 
 inventory_path <- file.path(root, "compat", "reverse-dependencies.tsv")
@@ -1684,6 +2082,33 @@ if (arguments$resume) {
   }
 } else {
   reverse_write_tsv(run_metadata, run_metadata_path)
+}
+
+if (!is.null(reserved_run_identity)) {
+  reverse_assert_reserved_run_directory(
+    run_directory,
+    reserved_run_identity,
+    require_empty = FALSE,
+    context = "at the durable initialization boundary"
+  )
+  reverse_validate_exact_marker(
+    reserved_initialization_marker_path,
+    reserved_initialization_marker,
+    "reverse reservation marker"
+  )
+  if (arguments$resume) {
+    reverse_validate_exact_marker(
+      reserved_initialized_marker_path,
+      reserved_initialized_marker,
+      "reverse initialized marker"
+    )
+  } else {
+    reverse_publish_exact_marker(
+      reserved_initialized_marker_path,
+      reserved_initialized_marker,
+      "reverse initialized marker"
+    )
+  }
 }
 
 if (arguments$plan_only) {

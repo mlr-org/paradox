@@ -1269,6 +1269,154 @@ that do not use current Paradox are evidence inventory, not release blockers.
 
 ## Release convergence
 
+The top-level verification coordinator is `scripts/verify`, with reviewed task
+and profile data in `verification/tasks.json` and its normative operator/design
+contract in `verification/README.md`. It schedules the existing retained gate
+drivers; it does not reimplement their semantic verifiers. Run
+`scripts/verify doctor` and `scripts/verify plan --profile focused` before a
+long development run. `scripts/verify self-test` is the cheap, daemon-free
+controller regression.
+
+Hard parallel task execution has two supported forms. Per-worker
+Podman/Docker containment requires proof of the requested memory, no-swap,
+PID, and CPU cgroup ceilings plus an actual OOM-killed sacrificial worker.
+Aggregate containment requires the controller and every local rootless Podman
+payload to inherit one dedicated root-created system service with authenticated
+finite memory/CPU/PID ceilings, no swap, systemd kill/accounting properties,
+and stable cgroup/event state. Both probes execute as the eventual worker UID
+and prove the read-only checkout plus nested writable-bind pattern; workers
+disable SELinux labels explicitly rather than depending on host relabel
+defaults. Never infer containment from accepted flags or an environment
+marker.
+
+This host's rootless Podman/cgroup-v1 setup cannot enforce per-worker limits.
+After the manually reviewed root-owned launcher from `verification/systemd/`
+is installed, ordinary `scripts/verify doctor|plan|run` commands enter its
+aggregate service by default and can schedule independent coarse tasks in
+parallel. Repository code never runs as root: systemd changes to the configured
+UID/GID first. Aggregate Podman workers use `--cgroups=disabled
+--cgroupns=host` and omit ineffective individual resource flags. Docker/remote
+engines are ineligible because their daemon can escape the service.
+`PARADOX_VERIFY_SYSTEMD_DEFAULT=off` is the machine-local escape hatch;
+`--containment worker|aggregate` requires a specific mechanism.
+`--best-effort` remains an explicit serial development-only
+RLIMIT/RSS-watchdog fallback and cannot produce release evidence.
+All shipped local tasks currently inherit the repository's Linux x86-64
+toolchain constraint. The planner must reject another host explicitly; macOS
+ARM64 and Windows x86-64 remain hosted-workflow evidence until a task supplies
+a self-contained platform toolchain image and overrides that constraint.
+
+The coordinator preserves at least 12 GiB/25% live memory and 8 GiB free disk
+outside its work for Codex, the OS, and unrelated processes. It continuously
+admits ready tasks by summed CPU, memory, PID, and scratch reservations;
+tasks start at reviewed CPU/RAM minima and receive spare capacity up to their
+reviewed ceilings in information order. Make receives only a task's actual
+allocation while BLAS/OpenMP/testthat nested parallelism stays one. One
+per-user machine execution lock prevents independent controllers—even from
+different checkouts—from double-spending that aggregate budget. Cgroup-aware
+live memory, disk, and PID availability are refreshed before new waves and at
+a bounded cadence; transient outside pressure waits with a bounded timeout.
+Static fit reserves the configured fraction of physical/parent-cgroup
+capacity, while live admission recomputes that fraction from current
+availability. Startup pressure therefore neither becomes a permanent ceiling
+nor withholds a capacity-sized reserve on a busy large machine.
+Under aggregate containment, task allocations are scheduler reservations
+rather than individual cgroup limits. Admission uses the smaller of aggregate
+headroom and global available memory outside the protected reserve, without
+subtracting that reserve twice. `verify-task-entry` and `resource-jobs` must
+cap nested work directly by the assigned CPU/RAM envelope; their independent
+live-resource gate may still lower the result. Any aggregate memory/PID
+event-counter increase or
+cgroup/systemd/path/limit change is a fatal infrastructure failure that
+terminates every sibling. A real payload proves worker inheritance at startup;
+runtime monitoring then authenticates the controller cgroup and systemd unit.
+The aggregate `TasksMax` is a host-protection boundary, not a per-worker PID
+limit; complete saturation may defer engine cleanup until
+`KillMode=control-group` tears down the transient service.
+Permanent task incompatibility is decided against separate physical/cgroup
+memory, filesystem, PID, CPU, platform, and architecture ceilings—not against
+momentary free resources. A scheduler-created capacity/dependency/policy block
+makes the profile incomplete but never masquerades as an executed failure or
+cancels an otherwise independent branch, even under adaptive/fail-fast policy.
+The checkout and toolchain are
+read-only in workers; only reviewed task paths are writable, with task-private
+temporary/runtime state and protected downstream libraries remounted
+read-only. Retry HOME/tmp/runtime state is attempt-private. The default
+adaptive policy completes independent peers in the
+current phase, blocks failed descendants and later expensive phases, and
+aborts globally only for fatal provenance, cache, containment, host pressure,
+container-cleanup, or source-integrity failures.
+
+Exact-key semantic cache hits below `.local/verify` accelerate development.
+They are never release-evidence transfers: release profiles disable generic
+result reuse/publication and retain the existing source-bound gate receipts.
+Task identity includes reviewed OS/architecture, toolchain content,
+hard-backend/cgroup generation, and immutable worker-image content. Kernel release, engine
+version/path/storage, live capacity, and local aliases for that image belong
+only to the per-invocation receipt after containment is freshly proved. The
+non-release best-effort fallback remains keyed to its exact host/Python.
+The activated repository R-library tree is always semantic, including for
+release/prepared profiles that disable generic cache publication, because
+coordinator resume can still reuse their completed rows.
+Changed-file impact rules affect development selection and priority only.
+Downstream runs consume one authenticated candidate-context JSON below
+`.local`; never hand-template divergent ref/commit/tree/source/library/content
+values across tasks. Every retried coarse gate gets an attempt-specific child
+run ID. Execution results are immutable per attempt, every coordinator resume
+adds a current host/engine invocation receipt, and a retained success is
+accepted only when its latest view, immutable attempt, exact log, and original
+invocation receipt authenticate one another. Tasks opting into resume
+revalidation invalidate their complete descendant closure as well. Only
+genuine execution failures—not capacity/dependency blocks—raise future
+scheduling priority. A
+compatibility gate whose public stage is candidate-wide uses that ID
+for private work and verifies an already-published stage on resume. A release
+`source_ref` must resolve to the exact clean HEAD commit/tree used by every
+other release-foundation gate.
+
+Prepared compatibility has four explicit profiles. `prepared-downstream`
+remains axis-neutral. `prepared-reverse` and `prepared-documentation` run the
+real Paradox-2-only gates, while `prepared-release-compat` runs downstream,
+priority-zero/one reverse dependencies, and all-scope documentation as one
+keep-going DAG. The real gates source the authenticated
+`scripts/activate-compat-system` layer inside their workers; ordinary native,
+API, runtime, and differential tasks must not inherit it. Reverse execution
+uses a stable run ID and an explicit controller-owned attempt number: attempt
+one requires a fresh reservation, while a retry resumes only a
+candidate/options/harness-bound initialized marker. The completed reverse task
+is revalidated rather than blindly trusted on a later coordinator resume.
+Documentation uses an
+attempt-specific ID because it has no resume mode. Both receive a narrowly
+reserved exact writable output directory rather than a writable historical
+evidence parent. Candidate contexts keep consumer extras separate from
+documentation-only libraries so the latter cannot alter repository dependency
+resolution; reverse-only profiles neither require nor authenticate those
+unused layers. All documentation-essential rows run before any advisory full
+render, and its task reserves one CPU because the retained driver is serial.
+Their additional compatibility-system, TinyTeX, and documentation contracts
+remain Linux x86-64 as well.
+
+The coordinator self-test is the routine harness-change gate. It must cover
+strict container exited-state/exit agreement, fail-closed stale cleanup,
+attempt/interrupt cleanup, adaptive minima/ceilings, aggregate PID admission,
+cgroup-aware live memory, optional future package inputs, locking, cache
+tamper rejection, immutable attempt/invocation receipts, static-versus-live
+capacity, aggregate v1/v2 and systemd proof, non-duplicated reserve
+accounting, event-counter failure, actual parallel aggregate workers, platform
+constraints, reserved-output recovery, and source reauthentication. Harness
+work alone does not
+authorize launching the multi-hour real R, reverse, documentation, or memory
+suites.
+
+`release-core` intentionally excludes the combined memory driver. The current
+`scripts/memory-check --mode all` launches pinned rchk Podman from inside the
+driver and applies its own 16-GiB reserve; putting it in the generic worker
+would require unsupported nested Podman and duplicate the reserve. Run that
+existing source-bound gate directly after the release foundation, using the
+`native-release` task result's `child_run_id`. A future integration must make
+the rchk image the outer worker and must not claim nominal containment before
+that split is implemented and tested.
+
 Only freeze a candidate after code, contract tests, docs, downstream bridges,
 and profiling converge. The active status and exact evidence IDs belong in
 `design/release-2.0.0.md`; never encode stale pass counts in scripts as a proxy
