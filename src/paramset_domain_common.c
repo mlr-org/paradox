@@ -595,8 +595,9 @@ int paradox_domain_validate_trafos(SEXP trafos,
   return TRUE;
 }
 
-int paradox_domain_validate_dependencies(SEXP dependencies,
+static int validate_dependencies(SEXP dependencies,
     paradox_domain_dependencies_t *result,
+    SEXP **condition_rhs,
     R_xlen_t *work_since_interrupt) {
   static const char *const column_names[] = {"id", "on", "cond"};
   PROTECT(dependencies);
@@ -628,6 +629,9 @@ int paradox_domain_validate_dependencies(SEXP dependencies,
     UNPROTECT(4);
     return FALSE;
   }
+  SEXP *rhs_by_row = condition_rhs == NULL
+    ? NULL
+    : paradox_temporary_alloc(row_count, sizeof(*rhs_by_row));
   for (R_xlen_t row = 0; row < row_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
     SEXP condition = PROTECT(VECTOR_ELT(conditions, row));
@@ -646,16 +650,47 @@ int paradox_domain_validate_dependencies(SEXP dependencies,
       UNPROTECT(5);
       return FALSE;
     }
+    if (rhs_by_row != NULL) {
+      rhs_by_row[row] = rhs;
+    }
     (void) kind;
-    (void) rhs;
     UNPROTECT(1);
   }
   result->ids = ids;
   result->on = on;
   result->conditions = conditions;
   result->row_count = row_count;
+  if (condition_rhs != NULL) {
+    *condition_rhs = rhs_by_row;
+  }
   UNPROTECT(4);
   return TRUE;
+}
+
+int paradox_domain_validate_dependencies(SEXP dependencies,
+    paradox_domain_dependencies_t *result,
+    R_xlen_t *work_since_interrupt) {
+  return validate_dependencies(
+    dependencies,
+    result,
+    NULL,
+    work_since_interrupt
+  );
+}
+
+int paradox_domain_validate_dependencies_with_rhs(SEXP dependencies,
+    paradox_domain_dependencies_t *result,
+    SEXP **condition_rhs,
+    R_xlen_t *work_since_interrupt) {
+  if (condition_rhs == NULL) {
+    Rf_error("Internal error: missing dependency RHS output");
+  }
+  return validate_dependencies(
+    dependencies,
+    result,
+    condition_rhs,
+    work_since_interrupt
+  );
 }
 
 int paradox_domain_validate_values(SEXP values,
@@ -720,7 +755,7 @@ static void set_scalar_column(SEXP result,
   UNPROTECT(2);
 }
 
-static SEXP set_domain_attributes(SEXP result, SEXP cls,
+SEXP paradox_domain_prepare_facade(SEXP result, SEXP cls,
     R_xlen_t *work_since_interrupt) {
   PROTECT(cls);
   SEXP names = PROTECT(Rf_allocVector(STRSXP, PARADOX_DOMAIN_COLUMN_COUNT));
@@ -744,11 +779,8 @@ static SEXP set_domain_attributes(SEXP result, SEXP cls,
   SET_INTEGER_ELT(row_names, 1, -1);
   Rf_setAttrib(result, R_RowNamesSymbol, row_names);
 
-  SEXP prepared = PROTECT(paradox_prepare_data_table(result, TRUE));
-  SEXP prepared_names = PROTECT(Rf_getAttrib(prepared, R_NamesSymbol));
-  Rf_setAttrib(prepared, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(prepared, R_NamesSymbol, prepared_names);
-  UNPROTECT(6);
+  SEXP prepared = PROTECT(paradox_prepare_fresh_data_table(result));
+  UNPROTECT(5);
   return prepared;
 }
 
@@ -831,7 +863,7 @@ SEXP paradox_domain_fill(SEXP domain, const paradox_domain_row_t *row,
   SET_VECTOR_ELT(domain, PARADOX_DOMAIN_INIT, init_column);
   UNPROTECT(2);
 
-  return set_domain_attributes(
+  return paradox_domain_prepare_facade(
     domain,
     STRING_ELT(row->params->classes, row->parameter_row),
     work_since_interrupt

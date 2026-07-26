@@ -19,6 +19,12 @@ typedef enum {
 } get_values_type_t;
 
 typedef struct {
+  SEXP ids;
+  R_xlen_t *slots;
+  R_xlen_t capacity;
+} get_values_id_index_t;
+
+typedef struct {
   SEXP params;
   SEXP tags;
   SEXP values;
@@ -27,10 +33,13 @@ typedef struct {
   paradox_domain_tags_t tags_data;
   paradox_domain_values_t values_data;
   paradox_domain_dependencies_t dependencies_data;
+  get_values_id_index_t parameter_ids;
   R_xlen_t *value_by_parameter;
   R_xlen_t *dependency_id_parameter;
   R_xlen_t *dependency_on_parameter;
   SEXP *dependency_rhs;
+  unsigned char *required_by_parameter;
+  R_xlen_t required_count;
 } get_values_snapshot_t;
 
 enum get_values_root_slot {
@@ -57,13 +66,70 @@ static int strings_equal(SEXP left, SEXP right) {
   return paradox_domain_strings_equal(left, right);
 }
 
-static R_xlen_t find_string(SEXP haystack, SEXP needle,
+static R_xlen_t id_index_slot(SEXP id, R_xlen_t capacity) {
+  uintptr_t value = (uintptr_t) id;
+  value ^= value >> 4;
+  value ^= value >> 9;
+  return (R_xlen_t) (value & (uintptr_t) (capacity - 1));
+}
+
+static get_values_id_index_t build_id_index(SEXP ids,
     R_xlen_t *work_since_interrupt) {
-  const R_xlen_t size = XLENGTH(haystack);
-  for (R_xlen_t index = 0; index < size; ++index) {
+  const R_xlen_t count = XLENGTH(ids);
+  if (count == 0) {
+    return (get_values_id_index_t) {ids, NULL, 0};
+  }
+  if (count > R_XLEN_T_MAX / 2) {
+    Rf_error("ParamSet parameter ID index is too large");
+  }
+  const R_xlen_t required = count * 2;
+  R_xlen_t capacity = 1;
+  while (capacity < required) {
+    if (capacity > R_XLEN_T_MAX / 2) {
+      Rf_error("ParamSet parameter ID index is too large");
+    }
+    capacity *= 2;
+  }
+
+  R_xlen_t *slots = paradox_temporary_alloc(capacity, sizeof(*slots));
+  for (R_xlen_t slot = 0; slot < capacity; ++slot) {
+    slots[slot] = 0;
+  }
+  for (R_xlen_t row = 0; row < count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
-    if (strings_equal(STRING_ELT(haystack, index), needle)) {
-      return index;
+    SEXP id = STRING_ELT(ids, row);
+    R_xlen_t slot = id_index_slot(id, capacity);
+    while (slots[slot] != 0) {
+      slot = (slot + 1) & (capacity - 1);
+    }
+    slots[slot] = row + 1;
+  }
+  return (get_values_id_index_t) {ids, slots, capacity};
+}
+
+static R_xlen_t id_index_find(const get_values_id_index_t *index, SEXP sought,
+    R_xlen_t *work_since_interrupt) {
+  if (index->capacity != 0) {
+    R_xlen_t slot = id_index_slot(sought, index->capacity);
+    while (index->slots[slot] != 0) {
+      paradox_domain_account_work(work_since_interrupt);
+      const R_xlen_t row = index->slots[slot] - 1;
+      if (STRING_ELT(index->ids, row) == sought) {
+        return row;
+      }
+      slot = (slot + 1) & (index->capacity - 1);
+    }
+  }
+
+  /* Canonical package IDs are interned CHARSXP values, so pointer identity is
+   * authoritative on the maintained path. A forged but structurally admitted
+   * capsule may use an equivalent string in a different encoding; retain the
+   * existing encoding-aware comparison as the uncommon fallback. */
+  const R_xlen_t count = XLENGTH(index->ids);
+  for (R_xlen_t row = 0; row < count; ++row) {
+    paradox_domain_account_work(work_since_interrupt);
+    if (strings_equal(STRING_ELT(index->ids, row), sought)) {
+      return row;
     }
   }
   return R_XLEN_T_MAX;
@@ -149,86 +215,89 @@ static int map_values_to_parameters(get_values_snapshot_t *snapshot,
     R_xlen_t *work_since_interrupt) {
   const R_xlen_t parameter_count = snapshot->params_data.row_count;
   snapshot->value_by_parameter = paradox_temporary_alloc(
-    parameter_count,
+    parameter_count == 0 ? 1 : parameter_count,
     sizeof(*snapshot->value_by_parameter)
   );
   for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
     snapshot->value_by_parameter[parameter] = R_XLEN_T_MAX;
   }
 
-  R_xlen_t parameter = 0;
+  R_xlen_t previous_parameter = 0;
+  int have_previous = FALSE;
   for (R_xlen_t value = 0; value < snapshot->values_data.size; ++value) {
     paradox_domain_account_work(work_since_interrupt);
     SEXP name = STRING_ELT(snapshot->values_data.names, value);
-    while (parameter < parameter_count && !strings_equal(
-        STRING_ELT(snapshot->params_data.ids, parameter),
-        name
-      )) {
-      paradox_domain_account_work(work_since_interrupt);
-      ++parameter;
-    }
-    if (parameter == parameter_count) {
+    const R_xlen_t parameter = id_index_find(
+      &snapshot->parameter_ids,
+      name,
+      work_since_interrupt
+    );
+    /* Capsule values are a schema-ordered subsequence. Preserve the old
+     * corruption boundary instead of accepting an arbitrary reordered store
+     * merely because the index can resolve every name independently. */
+    if (parameter == R_XLEN_T_MAX ||
+        (have_previous && parameter <= previous_parameter)) {
       return FALSE;
     }
     snapshot->value_by_parameter[parameter] = value;
-    ++parameter;
+    previous_parameter = parameter;
+    have_previous = TRUE;
   }
   return TRUE;
 }
 
-static int tag_owners_exist(const get_values_snapshot_t *snapshot,
+static int map_tags_and_required(get_values_snapshot_t *snapshot,
+    SEXP required_tag,
     R_xlen_t *work_since_interrupt) {
-  SEXP matches = PROTECT(Rf_match(
-    snapshot->params_data.ids,
-    snapshot->tags_data.ids,
-    0
-  ));
-  const SEXPTYPE type = (SEXPTYPE) TYPEOF(matches);
-  if ((type != INTSXP && type != REALSXP) ||
-      XLENGTH(matches) != snapshot->tags_data.row_count) {
-    UNPROTECT(1);
-    return FALSE;
+  const R_xlen_t parameter_count = snapshot->params_data.row_count;
+  snapshot->required_by_parameter = paradox_temporary_alloc(
+    parameter_count == 0 ? 1 : parameter_count,
+    sizeof(*snapshot->required_by_parameter)
+  );
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    snapshot->required_by_parameter[parameter] = FALSE;
   }
+  snapshot->required_count = 0;
+
   for (R_xlen_t row = 0; row < snapshot->tags_data.row_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
-    const int present = type == INTSXP
-      ? INTEGER_ELT(matches, row) > 0
-      : REAL_ELT(matches, row) > 0.0;
-    if (!present) {
-      UNPROTECT(1);
+    const R_xlen_t owner = id_index_find(
+      &snapshot->parameter_ids,
+      STRING_ELT(snapshot->tags_data.ids, row),
+      work_since_interrupt
+    );
+    if (owner == R_XLEN_T_MAX) {
       return FALSE;
     }
+    if (!snapshot->required_by_parameter[owner] &&
+        strings_equal(
+          STRING_ELT(snapshot->tags_data.values, row),
+          required_tag
+        )) {
+      snapshot->required_by_parameter[owner] = TRUE;
+      ++snapshot->required_count;
+    }
   }
-  UNPROTECT(1);
   return TRUE;
 }
 
-static SEXP snapshot_values(SEXP values,
+static void admit_values(SEXP values, paradox_domain_values_t *validated,
     R_xlen_t *work_since_interrupt) {
-  paradox_domain_values_t validated;
   if (!paradox_domain_validate_values(
       values,
-      &validated,
+      validated,
       work_since_interrupt
     )) {
     Rf_error("Corrupt ParamSet capsule: invalid `.values` field");
   }
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, validated.size));
-  SEXP names = PROTECT(Rf_allocVector(STRSXP, validated.size));
-  for (R_xlen_t index = 0; index < validated.size; ++index) {
+  for (R_xlen_t index = 0; index < validated->size; ++index) {
     paradox_domain_account_work(work_since_interrupt);
-    SEXP element = VECTOR_ELT(validated.values, index);
+    SEXP element = VECTOR_ELT(validated->values, index);
     if (element == R_UnboundValue || element == R_MissingArg ||
         TYPEOF(element) == PROMSXP) {
-      UNPROTECT(2);
       Rf_error("Corrupt ParamSet capsule: invalid `.values` element");
     }
-    SET_VECTOR_ELT(result, index, element);
-    SET_STRING_ELT(names, index, STRING_ELT(validated.names, index));
   }
-  Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(2);
-  return result;
 }
 
 static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
@@ -285,8 +354,13 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       &graph,
       work_since_interrupt
     ));
-    snapshot->values = snapshot_values(values, work_since_interrupt);
+    snapshot->values = values;
     SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUES, snapshot->values);
+    admit_values(
+      snapshot->values,
+      &snapshot->values_data,
+      work_since_interrupt
+    );
     UNPROTECT(1);
 
     SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
@@ -303,9 +377,13 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
      * graph capsule-root chain together. */
     UNPROTECT(2);
   } else {
-    SEXP values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
-    snapshot->values = snapshot_values(values, work_since_interrupt);
+    snapshot->values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
     SET_VECTOR_ELT(roots, GET_VALUES_ROOT_VALUES, snapshot->values);
+    admit_values(
+      snapshot->values,
+      &snapshot->values_data,
+      work_since_interrupt
+    );
     snapshot->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
     SET_VECTOR_ELT(
       roots,
@@ -322,26 +400,37 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       &snapshot->params_data,
       &unused_row,
       work_since_interrupt
-    )) {
+  )) {
     Rf_error("Corrupt ParamSet capsule: invalid `.params` field");
   }
+  snapshot->parameter_ids = build_id_index(
+    snapshot->params_data.ids,
+    work_since_interrupt
+  );
   if (!paradox_domain_validate_tags(
       snapshot->tags,
       &snapshot->tags_data,
       work_since_interrupt
-    ) || !tag_owners_exist(snapshot, work_since_interrupt)) {
+    )) {
     Rf_error("Corrupt ParamSet capsule: invalid `.tags` field");
   }
-  if (!paradox_domain_validate_values(
-      snapshot->values,
-      &snapshot->values_data,
-      work_since_interrupt
-    ) || !map_values_to_parameters(snapshot, work_since_interrupt)) {
+  SEXP required_tag = PROTECT(Rf_mkChar("required"));
+  const int valid_tags = map_tags_and_required(
+    snapshot,
+    required_tag,
+    work_since_interrupt
+  );
+  UNPROTECT(1);
+  if (!valid_tags) {
+    Rf_error("Corrupt ParamSet capsule: invalid `.tags` field");
+  }
+  if (!map_values_to_parameters(snapshot, work_since_interrupt)) {
     Rf_error("Corrupt ParamSet capsule: invalid `.values` field");
   }
-  if (!paradox_domain_validate_dependencies(
+  if (!paradox_domain_validate_dependencies_with_rhs(
       snapshot->dependencies,
       &snapshot->dependencies_data,
+      &snapshot->dependency_rhs,
       work_since_interrupt
     )) {
     Rf_error("Corrupt ParamSet capsule: invalid `.deps` field");
@@ -355,14 +444,10 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
     dependency_count,
     sizeof(*snapshot->dependency_on_parameter)
   );
-  snapshot->dependency_rhs = paradox_temporary_alloc(
-    dependency_count,
-    sizeof(*snapshot->dependency_rhs)
-  );
   for (R_xlen_t row = 0; row < dependency_count; ++row) {
     paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t dependent = find_string(
-      snapshot->params_data.ids,
+    const R_xlen_t dependent = id_index_find(
+      &snapshot->parameter_ids,
       STRING_ELT(snapshot->dependencies_data.ids, row),
       work_since_interrupt
     );
@@ -370,22 +455,11 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
       Rf_error("Corrupt ParamSet capsule: dependency owner is unknown");
     }
     snapshot->dependency_id_parameter[row] = dependent;
-    snapshot->dependency_on_parameter[row] = find_string(
-      snapshot->params_data.ids,
+    snapshot->dependency_on_parameter[row] = id_index_find(
+      &snapshot->parameter_ids,
       STRING_ELT(snapshot->dependencies_data.on, row),
       work_since_interrupt
     );
-    paradox_builtin_condition_kind_t condition_kind;
-    SEXP rhs = R_NilValue;
-    if (!paradox_builtin_condition_exact(
-        VECTOR_ELT(snapshot->dependencies_data.conditions, row),
-        &condition_kind,
-        &rhs,
-        work_since_interrupt
-      )) {
-      Rf_error("Corrupt ParamSet capsule: invalid dependency condition");
-    }
-    snapshot->dependency_rhs[row] = rhs;
   }
 }
 
@@ -452,58 +526,42 @@ static void apply_type_filter(const get_values_snapshot_t *snapshot,
 static void check_required(const get_values_snapshot_t *snapshot,
     const unsigned char *active,
     R_xlen_t *work_since_interrupt) {
-  SEXP required_tag = PROTECT(Rf_mkString("required"));
-  SEXP required = PROTECT(paradox_param_set_ids(
-    snapshot->params,
-    snapshot->tags,
-    R_NilValue,
-    required_tag,
-    R_NilValue
-  ));
-  const R_xlen_t size = XLENGTH(required);
+  const R_xlen_t size = snapshot->required_count;
+  if (size == 0) {
+    return;
+  }
   R_xlen_t missing_count = 0;
   size_t text_size = 1;
   size_t *sizes = paradox_temporary_alloc(size, sizeof(*sizes));
   const void *vmax = vmaxget();
-  R_xlen_t parameter = 0;
-  for (R_xlen_t index = 0; index < size; ++index) {
+  for (R_xlen_t parameter = 0;
+      parameter < snapshot->params_data.row_count;
+      ++parameter) {
     paradox_domain_account_work(work_since_interrupt);
-    SEXP id = STRING_ELT(required, index);
-    while (parameter < snapshot->params_data.row_count && !strings_equal(
-        STRING_ELT(snapshot->params_data.ids, parameter),
-        id
-      )) {
-      ++parameter;
-    }
-    if (parameter == snapshot->params_data.row_count) {
-      UNPROTECT(2);
-      Rf_error("Internal error: required ID is absent from ParamSet schema");
+    if (!snapshot->required_by_parameter[parameter]) {
+      continue;
     }
     if ((active != NULL && !active[parameter]) ||
         snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
-      ++parameter;
       continue;
     }
+    SEXP id = STRING_ELT(snapshot->params_data.ids, parameter);
     const size_t id_size = strlen(Rf_translateCharUTF8(id));
     const size_t separator = missing_count == 0 ? 0 : 2;
     if (separator > SIZE_MAX - text_size ||
         id_size > SIZE_MAX - text_size - separator) {
       vmaxset(vmax);
-      UNPROTECT(2);
       Rf_error("Unable to construct required-parameter diagnostic");
     }
     sizes[missing_count] = id_size;
     text_size += separator + id_size;
     ++missing_count;
-    ++parameter;
   }
   vmaxset(vmax);
   if (missing_count == 0) {
-    UNPROTECT(2);
     return;
   }
   if ((uintmax_t) text_size > (uintmax_t) R_XLEN_T_MAX) {
-    UNPROTECT(2);
     Rf_error("Unable to construct required-parameter diagnostic");
   }
 
@@ -511,47 +569,39 @@ static void check_required(const get_values_snapshot_t *snapshot,
   size_t offset = 0;
   R_xlen_t emitted = 0;
   vmax = vmaxget();
-  parameter = 0;
-  for (R_xlen_t index = 0; index < size; ++index) {
+  for (R_xlen_t parameter = 0;
+      parameter < snapshot->params_data.row_count;
+      ++parameter) {
     paradox_domain_account_work(work_since_interrupt);
-    SEXP id = STRING_ELT(required, index);
-    while (parameter < snapshot->params_data.row_count && !strings_equal(
-        STRING_ELT(snapshot->params_data.ids, parameter),
-        id
-      )) {
-      ++parameter;
-    }
-    if (parameter == snapshot->params_data.row_count) {
-      vmaxset(vmax);
-      UNPROTECT(2);
-      Rf_error("Internal error: required ID is absent from ParamSet schema");
+    if (!snapshot->required_by_parameter[parameter]) {
+      continue;
     }
     if ((active != NULL && !active[parameter]) ||
         snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
-      ++parameter;
       continue;
     }
     if (emitted != 0) {
       text[offset++] = ',';
       text[offset++] = ' ';
     }
+    SEXP id = STRING_ELT(snapshot->params_data.ids, parameter);
     const char *id_text = Rf_translateCharUTF8(id);
     const size_t id_size = strlen(id_text);
     if (id_size != sizes[emitted] || id_size > text_size - 1 - offset) {
       vmaxset(vmax);
-      UNPROTECT(2);
       Rf_error("Unable to construct required-parameter diagnostic");
     }
     memcpy(text + offset, id_text, id_size);
     offset += id_size;
     ++emitted;
-    ++parameter;
+  }
+  if (emitted != missing_count) {
+    vmaxset(vmax);
+    Rf_error("Unable to construct required-parameter diagnostic");
   }
   text[offset] = '\0';
-  /* `text` was allocated after this vmax watermark.  Error construction must
-   * consume it before any vmaxset(); the non-local error exit releases the
-   * temporary allocation itself. */
-  UNPROTECT(2);
+  /* `text` predates the translation watermark and remains valid here.  The
+   * non-local error exit releases both it and any translation scratch. */
   Rf_error("Missing required parameters: %s", text);
 }
 
@@ -665,8 +715,10 @@ SEXP paradox_param_set_get_values(SEXP private_environment, SEXP self,
   paradox_activity_result_t activity = {NULL, NULL};
   const int has_dependencies =
     snapshot.dependencies_data.row_count != 0;
+  const int required_needs_activity =
+    should_check_required && snapshot.required_count != 0;
   if (has_dependencies &&
-      (should_remove_dependencies || should_check_required)) {
+      (should_remove_dependencies || required_needs_activity)) {
     evaluate_activity(
       &snapshot,
       &activity,
@@ -690,13 +742,18 @@ SEXP paradox_param_set_get_values(SEXP private_environment, SEXP self,
     );
   }
 
-  SEXP selected_ids = PROTECT(paradox_param_set_ids(
-    snapshot.params,
-    snapshot.tags,
-    class_filter,
-    all_tags,
-    any_tags
-  ));
+  SEXP selected_ids = PROTECT(
+    class_filter == R_NilValue && all_tags == R_NilValue &&
+      any_tags == R_NilValue
+      ? snapshot.params_data.ids
+      : paradox_param_set_ids(
+          snapshot.params,
+          snapshot.tags,
+          class_filter,
+          all_tags,
+          any_tags
+        )
+  );
   SEXP result = build_result(
     &snapshot,
     kept,

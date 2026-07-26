@@ -740,6 +740,50 @@ main <- function() {
           ";rng_changed=", rng_changed)
       }
     },
+    direct_sampler_unif_subspace_handoffs = function() {
+      set <- ps(x = p_dbl(0, 1), y = p_int(0L, 4L))
+      result <- .Call(
+        symbol("sampler_unif_subspace_handoffs"),
+        set,
+        set$ids(),
+        set$extra_trafo
+      )
+      valid <- identical(names(result), c("x", "y")) &&
+        identical(length(result), 2L) &&
+        all(vapply(result, typeof, "") == "externalptr") &&
+        all(vapply(
+          result,
+          function(carrier) is.null(attributes(carrier)),
+          logical(1L)
+        ))
+      check(valid, "SamplerUnif subspace handoff issue differs")
+    },
+    direct_sampler_unif_take_subspace = function() {
+      set <- ps(x = p_dbl(0, 1))
+      carrier <- .Call(
+        symbol("sampler_unif_subspace_handoffs"),
+        set,
+        "x",
+        set$extra_trafo
+      )[[1L]]
+      token <- .Call(symbol("sampler_unif_take_subspace"), carrier)
+      adopted <- .Call(symbol("param_set_adopt_subset_state"), NULL, token)
+      reused <- tryCatch(
+        .Call(symbol("sampler_unif_take_subspace"), carrier),
+        error = identity
+      )
+      check(
+        typeof(token) == "externalptr" &&
+          identical(adopted, TRUE) &&
+          inherits(reused, "error") &&
+          grepl(
+            "already consumed internal SamplerUnif subspace handoff",
+            conditionMessage(reused),
+            fixed = TRUE
+          ),
+        "SamplerUnif subspace handoff consumption differs"
+      )
+    },
     direct_generate_design_grid_builtin = function() {
       set <- ps(x = p_int(0L, 2L), y = p_dbl(0, 1))
       result <- .Call(

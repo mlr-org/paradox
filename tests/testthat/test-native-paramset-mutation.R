@@ -210,6 +210,51 @@ test_that("dependency setters snapshot structure while add_dep checks feasibilit
   expect_identical(set$deps$on, "foreign")
 })
 
+test_that("BASE and SHADOW dependency reads return detached native facades", {
+  origin = ps(
+    hidden = p_int(),
+    parent = p_int(0L, 2L),
+    child = p_lgl()
+  )
+  origin$add_dep("child", "parent", CondAnyOf(c(1L, 2L)))
+  shadow = ParamSetShadow$new(origin, "hidden")
+
+  for (set in list(origin, shadow)) {
+    first = set$deps
+    second = set$deps
+    expect_identical(first, second)
+    expect_identical(class(first), c("data.table", "data.frame"))
+    expect_identical(names(first), c("id", "on", "cond"))
+    expect_identical(data.table::key(first), NULL)
+    expect_identical(data.table::indices(first), NULL)
+    expect_identical(data.table:::selfrefok(first, FALSE), 1L)
+    expect_false(identical(
+      data.table::address(first),
+      data.table::address(second)
+    ))
+    for (column in names(first)) {
+      expect_false(identical(
+        data.table::address(first[[column]]),
+        data.table::address(second[[column]])
+      ), info = column)
+    }
+    expect_false(identical(
+      data.table::address(first$cond[[1L]]),
+      data.table::address(second$cond[[1L]])
+    ))
+
+    state = paradox:::param_set_core_state(
+      set$.__enclos_env__$private
+    )$.deps
+    expect_identical(class(state), "data.frame")
+    expect_null(attr(state, ".internal.selfref", exact = TRUE))
+
+    data.table::set(first, i = 1L, j = "id", value = "changed")
+    first$cond[[1L]]$rhs[[1L]] = 0L
+    expect_identical(set$deps, second)
+  }
+})
+
 test_that("dependency admission materializes Condition RHS values once", {
   condition = CondAnyOf(1:2)
   dependencies = data.frame(

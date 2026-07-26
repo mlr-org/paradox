@@ -950,6 +950,19 @@ SEXP paradox_prepare_data_table(SEXP table, int growable) {
   return table;
 }
 
+SEXP paradox_prepare_fresh_data_table(SEXP table) {
+  PROTECT(table);
+  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
+  /* data.table ties the self-reference tag to this exact names vector.
+   * Reattaching the already-owned names last matches its outward ownership
+   * boundary without the defensive copies required for caller-owned input. */
+  SEXP names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
+  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(3);
+  return result;
+}
+
 SEXP paradox_finalize_data_table(SEXP table) {
   if (TYPEOF(table) != VECSXP || ALTREP(table) ||
       !Rf_inherits(table, "data.table")) {

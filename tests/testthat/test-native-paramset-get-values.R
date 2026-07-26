@@ -18,6 +18,22 @@ native_get_values_internal_domain = function() {
   )
 }
 
+native_get_values_copy_table = function(table) {
+  structure(
+    lapply(table, identity),
+    names = names(table),
+    row.names = attr(table, "row.names"),
+    class = "data.frame"
+  )
+}
+
+native_get_values_copy_state = function(param_set) {
+  state = paradox:::param_set_core_state(
+    param_set$.__enclos_env__$private
+  )
+  setNames(lapply(state, identity), names(state))
+}
+
 test_that("get_values is one registered native operation", {
   namespace = asNamespace("paradox")
   native = get("C_param_set_get_values", envir = namespace)
@@ -102,6 +118,173 @@ test_that("dependencies are transitive and independent of row order", {
   expect_identical(
     names(param_set$get_values()),
     c("root", "middle", "leaf")
+  )
+})
+
+test_that("wide chain and star dependency projections retain linear semantics", {
+  make_wide_set = function(size, shape) {
+    ids = sprintf("parameter_%04d", seq_len(size))
+    domains = setNames(
+      lapply(seq_len(size), function(index) p_lgl()),
+      ids
+    )
+    param_set = ParamSet$new(domains)
+    condition = CondEqual(TRUE)
+    parents = if (identical(shape, "chain")) {
+      ids[-size]
+    } else {
+      rep(ids[[1L]], size - 1L)
+    }
+    param_set$deps = data.table::data.table(
+      id = ids[-1L],
+      on = parents,
+      cond = rep(list(condition), size - 1L)
+    )
+    values = setNames(as.list(rep(TRUE, size)), ids)
+    param_set$values = values
+    list(param_set = param_set, values = values)
+  }
+
+  chain = make_wide_set(512L, "chain")
+  expect_identical(
+    chain$param_set$get_values(remove_dependencies = FALSE),
+    chain$values
+  )
+  expect_identical(chain$param_set$get_values(), chain$values)
+
+  # Resolution must not rely on a topological dependency-table order.
+  dependencies = chain$param_set$deps
+  chain$param_set$deps = dependencies[rev(seq_len(nrow(dependencies)))]
+  expect_identical(chain$param_set$get_values(), chain$values)
+
+  star = make_wide_set(512L, "star")
+  expect_identical(
+    star$param_set$get_values(remove_dependencies = FALSE),
+    star$values
+  )
+  expect_identical(star$param_set$get_values(), star$values)
+})
+
+test_that("ID indexing preserves equivalent and unknown mixed encodings", {
+  utf8 = enc2utf8(c("caf\u00e9", "\u00e9l\u00e8ve", "inconnu\u00e9"))
+  latin1 = iconv(utf8, from = "UTF-8", to = "latin1")
+  skip_if(
+    anyNA(latin1),
+    "this platform cannot represent the latin1 fixtures"
+  )
+  Encoding(latin1) = "latin1"
+
+  equivalent = ps(
+    parent = p_lgl(tags = "required"),
+    child = p_lgl()
+  )
+  equivalent$add_dep("child", "parent", CondEqual(TRUE))
+  equivalent$values = list(parent = TRUE, child = TRUE)
+  private = equivalent$.__enclos_env__$private
+  state = native_get_values_copy_state(equivalent)
+  state$.params = native_get_values_copy_table(state$.params)
+  state$.params$id = utf8[1:2]
+  state$.values = setNames(unname(state$.values), latin1[1:2])
+  state$.tags = native_get_values_copy_table(state$.tags)
+  state$.tags$id[[1L]] = latin1[[1L]]
+  state$.deps = native_get_values_copy_table(state$.deps)
+  state$.deps$id[[1L]] = latin1[[2L]]
+  state$.deps$on[[1L]] = latin1[[1L]]
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+
+  invisible(gc())
+  observed = equivalent$get_values()
+  expect_identical(unname(observed), list(TRUE, TRUE))
+  expect_identical(enc2utf8(names(observed)), utf8[1:2])
+  expect_identical(Encoding(names(observed)), c("UTF-8", "UTF-8"))
+
+  missing = native_get_values_copy_state(equivalent)
+  missing$.values = setNames(list(TRUE), latin1[[2L]])
+  private$.core = .Call(C_param_set_core_new, 1L, missing)
+  error = tryCatch(equivalent$get_values(), error = identity)
+  expect_s3_class(error, "error")
+  expect_identical(
+    enc2utf8(conditionMessage(error)),
+    paste0("Missing required parameters: ", utf8[[1L]])
+  )
+
+  unknown = latin1[[3L]]
+  values = ps(cafe = p_lgl())
+  values$values = list(cafe = TRUE)
+  private = values$.__enclos_env__$private
+  state = native_get_values_copy_state(values)
+  names(state$.values) = unknown
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+  expect_error(
+    values$get_values(),
+    "Corrupt ParamSet capsule: invalid `.values` field",
+    fixed = TRUE
+  )
+
+  tags = ps(cafe = p_lgl(tags = "required"))
+  private = tags$.__enclos_env__$private
+  state = native_get_values_copy_state(tags)
+  state$.tags = native_get_values_copy_table(state$.tags)
+  state$.tags$id[[1L]] = unknown
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+  expect_error(
+    tags$get_values(),
+    "Corrupt ParamSet capsule: invalid `.tags` field",
+    fixed = TRUE
+  )
+
+  dependencies = ps(parent = p_lgl(), cafe = p_lgl())
+  dependencies$add_dep("cafe", "parent", CondEqual(TRUE))
+  private = dependencies$.__enclos_env__$private
+  state = native_get_values_copy_state(dependencies)
+  state$.deps = native_get_values_copy_table(state$.deps)
+  state$.deps$id[[1L]] = unknown
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+  expect_error(
+    dependencies$get_values(remove_dependencies = FALSE),
+    "Corrupt ParamSet capsule: dependency owner is unknown",
+    fixed = TRUE
+  )
+})
+
+test_that("raw dependency reads skip activity only after full admission", {
+  cyclic = ps(a = p_lgl(), b = p_lgl())
+  cyclic$add_dep("a", "b", CondEqual(TRUE))
+  cyclic$add_dep("b", "a", CondEqual(TRUE))
+  cyclic$assert_values = FALSE
+  cyclic$values = list(a = TRUE, b = TRUE)
+  cyclic$assert_values = TRUE
+
+  expect_identical(
+    cyclic$get_values(remove_dependencies = FALSE),
+    list(a = TRUE, b = TRUE)
+  )
+  expect_error(cyclic$get_values(), "cycle", ignore.case = TRUE)
+
+  required = ps(a = p_lgl(tags = "required"), b = p_lgl())
+  required$add_dep("a", "b", CondEqual(TRUE))
+  required$add_dep("b", "a", CondEqual(TRUE))
+  required$assert_values = FALSE
+  required$values = list(a = TRUE, b = TRUE)
+  required$assert_values = TRUE
+  expect_error(
+    required$get_values(remove_dependencies = FALSE),
+    "cycle",
+    ignore.case = TRUE
+  )
+
+  malformed = native_get_values_copy_state(cyclic)
+  malformed$.deps = native_get_values_copy_table(malformed$.deps)
+  malformed$.deps$cond[1L] = list(list())
+  cyclic$.__enclos_env__$private$.core = .Call(
+    C_param_set_core_new,
+    1L,
+    malformed
+  )
+  expect_error(
+    cyclic$get_values(remove_dependencies = FALSE),
+    "Unsupported Condition class",
+    fixed = TRUE
   )
 })
 
@@ -253,6 +436,32 @@ test_that("malformed capsules error instead of replaying or crashing", {
   expect_error(
     param_set$get_values(),
     "Corrupt ParamSet capsule: invalid `.values` field",
+    fixed = TRUE
+  )
+
+  reordered = ps(a = p_int(), b = p_int())
+  reordered$values = list(a = 1L, b = 2L)
+  private = reordered$.__enclos_env__$private
+  state = native_get_values_copy_state(reordered)
+  state$.values = state$.values[c(2L, 1L)]
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+  expect_error(
+    reordered$get_values(),
+    "Corrupt ParamSet capsule: invalid `.values` field",
+    fixed = TRUE
+  )
+
+  unknown_owner = ps(parent = p_lgl(), child = p_lgl())
+  unknown_owner$add_dep("child", "parent", CondEqual(TRUE))
+  unknown_owner$values = list(parent = TRUE, child = TRUE)
+  private = unknown_owner$.__enclos_env__$private
+  state = native_get_values_copy_state(unknown_owner)
+  state$.deps = native_get_values_copy_table(state$.deps)
+  state$.deps$id[[1L]] = "ghost"
+  private$.core = .Call(C_param_set_core_new, 1L, state)
+  expect_error(
+    unknown_owner$get_values(remove_dependencies = FALSE),
+    "Corrupt ParamSet capsule: dependency owner is unknown",
     fixed = TRUE
   )
 })

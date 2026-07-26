@@ -35,10 +35,16 @@ typedef struct {
   SEXP levels;
 } sampler_spec_t;
 
+static unsigned char sampler_unif_handoff_identity;
+
 static const char *const core_field_names[PARADOX_CORE_FIELD_COUNT] = {
   ".params", ".values", ".tags", ".deps", ".trafos", ".extra_trafo",
   ".constraint", ".sets", ".translation", ".postfix"
 };
+
+static SEXP sampler_unif_handoff_tag(void) {
+  return Rf_install("paradox.sampler.unif.subspace.v1");
+}
 
 static int exact_core_state(SEXP state) {
   static const char *const allowed_attributes[] = {"names"};
@@ -270,6 +276,94 @@ static void fill_table(SEXP table, const sampler_spec_t *specs,
     }
   }
   PutRNGstate();
+}
+
+SEXP paradox_sampler_unif_subspace_handoffs(SEXP param_set,
+    SEXP requested_ids, SEXP extra_trafo) {
+  /*
+   * Issue the subset tokens and sampler-specific carriers in one native
+   * operation. The protected subset tokens have never been exposed through a
+   * public ParamSet shell, so ownership can safely move into the child
+   * sampler. A non-NULL process-local address makes the carrier impossible to
+   * fabricate or restore through serialization from R.
+   */
+  SEXP private_environment = PROTECT(
+    paradox_domain_private_environment(param_set)
+  );
+  if (private_environment == R_UnboundValue) {
+    UNPROTECT(1);
+    Rf_error("`param_set` must be a current ParamSet object");
+  }
+  SEXP tokens = PROTECT(paradox_param_set_subspace_states(
+    private_environment,
+    param_set,
+    requested_ids,
+    extra_trafo
+  ));
+  if (TYPEOF(tokens) != VECSXP || ALTREP(tokens) || Rf_isS4(tokens)) {
+    UNPROTECT(2);
+    Rf_error("Internal error: invalid SamplerUnif subspace token list");
+  }
+  SEXP names = PROTECT(Rf_getAttrib(tokens, R_NamesSymbol));
+  if (TYPEOF(names) != STRSXP || ALTREP(names) || Rf_isS4(names) ||
+      XLENGTH(names) != XLENGTH(tokens) ||
+      !paradox_api_has_no_attributes(names)) {
+    UNPROTECT(3);
+    Rf_error("Internal error: invalid SamplerUnif subspace token names");
+  }
+
+  const R_xlen_t count = XLENGTH(tokens);
+  SEXP handoffs = PROTECT(Rf_allocVector(VECSXP, count));
+  for (R_xlen_t index = 0; index < count; ++index) {
+    SEXP token = VECTOR_ELT(tokens, index);
+    if (TYPEOF(token) != EXTPTRSXP || Rf_isS4(token) ||
+        !paradox_api_has_no_attributes(token)) {
+      UNPROTECT(4);
+      Rf_error("Internal error: invalid SamplerUnif subspace token");
+    }
+    SEXP handoff = PROTECT(R_MakeExternalPtr(
+      (void *) &sampler_unif_handoff_identity,
+      sampler_unif_handoff_tag(),
+      token
+    ));
+    SET_VECTOR_ELT(handoffs, index, handoff);
+    UNPROTECT(1);
+  }
+  Rf_setAttrib(handoffs, R_NamesSymbol, names);
+  UNPROTECT(4);
+  return handoffs;
+}
+
+SEXP paradox_sampler_unif_take_subspace(SEXP handoff) {
+  if (TYPEOF(handoff) != EXTPTRSXP ||
+      R_ExternalPtrTag(handoff) != sampler_unif_handoff_tag()) {
+    return R_NilValue;
+  }
+  if (Rf_isS4(handoff) || !paradox_api_has_no_attributes(handoff) ||
+      R_ExternalPtrAddr(handoff) !=
+        (void *) &sampler_unif_handoff_identity) {
+    Rf_error(
+      "Invalid, malformed, or already consumed internal "
+      "SamplerUnif subspace handoff"
+    );
+  }
+
+  SEXP token = PROTECT(R_ExternalPtrProtected(handoff));
+  if (TYPEOF(token) != EXTPTRSXP || Rf_isS4(token) ||
+      !paradox_api_has_no_attributes(token)) {
+    UNPROTECT(1);
+    Rf_error("Malformed internal SamplerUnif subspace handoff");
+  }
+
+  /*
+   * Keep the tag after clearing the address so reuse and serialized carriers
+   * fail with the specific handoff diagnostic. The protected subset token is
+   * returned exactly once and is itself consumed by ParamSet$new().
+   */
+  R_SetExternalPtrProtected(handoff, R_NilValue);
+  R_ClearExternalPtr(handoff);
+  UNPROTECT(1);
+  return token;
 }
 
 SEXP paradox_sampler_unif_sample_builtin(SEXP param_set, SEXP n) {

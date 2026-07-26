@@ -136,14 +136,20 @@ test_that("all five public Domain kinds use the canonical native row", {
     )
     expect_identical(data.table:::selfrefok(domain, FALSE), 1L)
 
-    partial = domain2_construct_domain(domain)
-    expect_type(partial, "list")
-    expect_false(inherits(partial, "Domain"))
-    expect_identical(names(partial), paradox:::domain_names)
-    expect_identical(partial$id, domain$id)
-    expect_identical(partial$.requirements, domain$.requirements)
-    for (field in names(partial)) {
-      expect_identical(partial[[field]], domain[[field]], info = paste(name, field))
+    native = domain2_construct_domain(domain)
+    expect_type(native, "list")
+    expect_identical(
+      class(native),
+      c(classes[[name]], "Domain", "data.table", "data.frame")
+    )
+    expect_identical(names(native), paradox:::domain_names)
+    expect_identical(dim(native), c(1L, 16L))
+    expect_identical(data.table:::selfrefok(native, FALSE), 1L)
+    expect_null(attr(native, "repr", exact = TRUE))
+    expect_identical(native$id, domain$id)
+    expect_identical(native$.requirements, domain$.requirements)
+    for (field in names(native)) {
+      expect_identical(native[[field]], domain[[field]], info = paste(name, field))
     }
   }
 
@@ -570,7 +576,7 @@ test_that("Domain constructors remain rooted during GC and callback reentry", {
 
   previous = gctorture(TRUE)
   on.exit(gctorture(previous), add = TRUE)
-  partials = lapply(existing, domain2_construct_domain)
+  native_facades = lapply(existing, domain2_construct_domain)
   reentrant = p_uty(custom_check = function(value) {
     callback_count <<- callback_count + 1L
     nested <<- p_int(0L, 2L)
@@ -586,8 +592,13 @@ test_that("Domain constructors remain rooted during GC and callback reentry", {
   )
   gctorture(previous)
 
-  expect_true(all(vapply(partials, is.list, logical(1L))))
-  expect_identical(partials[[5L]]$default[[1L]], marker)
+  expect_true(all(vapply(native_facades, inherits, logical(1L), "Domain")))
+  expect_true(all(vapply(
+    native_facades,
+    function(domain) data.table:::selfrefok(domain, FALSE) == 1L,
+    logical(1L)
+  )))
+  expect_identical(native_facades[[5L]]$default[[1L]], marker)
   expect_identical(vapply(fresh, `[[`, character(1L), "cls"), c(
     "ParamDbl", "ParamInt", "ParamFct", "ParamLgl", "ParamUty"
   ))

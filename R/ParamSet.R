@@ -1215,9 +1215,7 @@ ParamSet = R6Class("ParamSet",
     #' @template field_deps
     deps = function(v) {
       if (missing(v)) {
-        param_set_data_table_facade(
-          .Call(C_param_set_dependencies, private, self)
-        )
+        .Call(C_param_set_dependencies, private, self)
       } else {
         .Call(C_param_set_set_dependencies, private, self, v)
       }

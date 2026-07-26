@@ -353,24 +353,53 @@ SEXP paradox_param_set_dependency_table_snapshot(SEXP dependencies) {
   );
 }
 
+SEXP paradox_dependency_public_facade(SEXP table) {
+  PROTECT(table);
+  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 2));
+  SET_STRING_ELT(classes, 0, Rf_mkChar("data.table"));
+  SET_STRING_ELT(classes, 1, Rf_mkChar("data.frame"));
+  Rf_setAttrib(table, R_ClassSymbol, classes);
+  SEXP result = PROTECT(paradox_prepare_fresh_data_table(table));
+  UNPROTECT(3);
+  return result;
+}
+
 SEXP paradox_param_set_dependencies(SEXP private_environment, SEXP self) {
   R_xlen_t work_since_interrupt = 0;
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
     Rf_error("ParamSet method called with a foreign private environment");
   }
-  SEXP core = paradox_core_from_private(private_environment);
+  PROTECT_INDEX core_index;
+  SEXP core;
+  PROTECT_WITH_INDEX(
+    core = paradox_core_from_private(private_environment),
+    &core_index
+  );
   if (core == R_UnboundValue) {
+    UNPROTECT(1);
     Rf_error("Corrupt ParamSet state: missing versioned core capsule");
   }
-  if (paradox_core_kind(core) == PARADOX_CORE_SHADOW) {
-    core = paradox_core_refresh_shadow(self, private_environment);
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind == PARADOX_CORE_SHADOW) {
+    REPROTECT(
+      core = paradox_core_refresh_shadow(self, private_environment),
+      core_index
+    );
+    kind = paradox_core_kind(core);
+  }
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_SHADOW) {
+    UNPROTECT(1);
+    Rf_error("Corrupt ParamSet dependency capsule kind");
   }
   SEXP state = R_ExternalPtrProtected(core);
-  return snapshot_dependencies(
+  SEXP plain = PROTECT(snapshot_dependencies(
     VECTOR_ELT(state, PARADOX_CORE_DEPS),
     NULL,
     &work_since_interrupt
-  );
+  ));
+  SEXP result = PROTECT(paradox_dependency_public_facade(plain));
+  UNPROTECT(3);
+  return result;
 }
 
 SEXP paradox_param_set_get_tags(SEXP private_environment, SEXP self) {

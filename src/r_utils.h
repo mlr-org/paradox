@@ -175,5 +175,10 @@ attribute_hidden int paradox_public_table_row_count(
 attribute_hidden SEXP paradox_materialize_public_table_shell(SEXP table);
 
 attribute_hidden SEXP paradox_prepare_data_table(SEXP table, int growable);
+/* Finish a freshly allocated table whose canonical names, class, and row
+ * names are already installed. Unlike the registered defensive finalizer,
+ * this does not duplicate the shell or metadata: callers must own the fresh
+ * shell and names exclusively. */
+attribute_hidden SEXP paradox_prepare_fresh_data_table(SEXP table);
 
 #endif

@@ -246,6 +246,27 @@ test_that("deep-cloned and serialized SamplerUnif objects remain current", {
     serialized = unserialize(serialize(original, NULL))
   )
   for (name in names(variants)) {
+    expect_s3_class(variants[[name]], "SamplerUnif")
+    expect_false(identical(variants[[name]]$param_set, original$param_set))
+    expect_identical(
+      unname(vapply(
+        variants[[name]]$samplers,
+        function(component) class(component)[[1L]],
+        ""
+      )),
+      rep("Sampler1DUnif", original$param_set$length),
+      info = name
+    )
+    expect_identical(
+      unname(vapply(
+        variants[[name]]$samplers,
+        function(component) component$param$ids(),
+        ""
+      )),
+      original$param_set$ids(),
+      info = name
+    )
+
     set.seed(320L)
     expected = sampler_unif_call(variants[[name]]$param_set, 5L)
     expected_seed = .Random.seed

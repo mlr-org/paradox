@@ -4,7 +4,6 @@
 
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
-#include "r_utils.h"
 
 static SEXP set_plain_dependencies_attributes(SEXP result,
     R_xlen_t row_count) {
@@ -137,21 +136,6 @@ SEXP paradox_collection_dependencies_from_graph(
   return result;
 }
 
-static SEXP public_dependency_facade(SEXP table) {
-  SEXP classes = PROTECT(Rf_allocVector(STRSXP, 2));
-  SET_STRING_ELT(classes, 0, Rf_mkChar("data.table"));
-  SET_STRING_ELT(classes, 1, Rf_mkChar("data.frame"));
-  Rf_setAttrib(table, R_ClassSymbol, classes);
-  SEXP result = PROTECT(paradox_prepare_data_table(table, TRUE));
-  /* Reinstall the independently allocated names attribute after selfref
-   * construction, matching the public data.table ownership boundary. */
-  SEXP names = PROTECT(Rf_getAttrib(result, R_NamesSymbol));
-  Rf_setAttrib(result, R_NamesSymbol, R_NilValue);
-  Rf_setAttrib(result, R_NamesSymbol, names);
-  UNPROTECT(3);
-  return result;
-}
-
 SEXP paradox_param_set_has_dependencies(SEXP private_environment, SEXP self) {
   R_xlen_t work_since_interrupt = 0;
   if (!paradox_domain_owns_private_environment(self, private_environment)) {
@@ -233,7 +217,7 @@ SEXP paradox_param_set_collection_deps(SEXP private_environment, SEXP self) {
     &graph,
     &work_since_interrupt
   ));
-  SEXP result = PROTECT(public_dependency_facade(plain));
+  SEXP result = PROTECT(paradox_dependency_public_facade(plain));
   UNPROTECT(3);
   return result;
 }

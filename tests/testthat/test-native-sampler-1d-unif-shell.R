@@ -1,3 +1,25 @@
+sampler_unif_handoff_symbols = function() {
+  namespace = asNamespace("paradox")
+  mget(
+    paste0("C_", c(
+      "sampler_unif_subspace_handoffs",
+      "sampler_unif_take_subspace"
+    )),
+    envir = namespace,
+    inherits = FALSE
+  )
+}
+
+sampler_unif_handoffs = function(param_set, ids = param_set$ids()) {
+  symbols = sampler_unif_handoff_symbols()
+  .Call(
+    symbols$C_sampler_unif_subspace_handoffs,
+    param_set,
+    ids,
+    param_set$extra_trafo
+  )
+}
+
 test_that("Sampler1DUnif uses the ordinary public R6 constructor contract", {
   namespace = asNamespace("paradox")
   retired = c(
@@ -56,6 +78,75 @@ test_that("Sampler1DUnif never consumes a ParamSet subset capability", {
   expect_false(.Call(adopt_symbol, NULL, token))
 })
 
+test_that("SamplerUnif ownership handoffs are private and single-use", {
+  symbols = sampler_unif_handoff_symbols()
+  expect_identical(
+    symbols$C_sampler_unif_subspace_handoffs$numParameters,
+    3L
+  )
+  expect_identical(symbols$C_sampler_unif_take_subspace$numParameters, 1L)
+
+  param_set = ps(x = p_dbl(0, 1), y = p_int(0, 4))
+  param_set$values = list(x = 0.25, y = 2L)
+  handoffs = sampler_unif_handoffs(param_set)
+  expect_identical(names(handoffs), c("x", "y"))
+  expect_true(all(vapply(handoffs, typeof, "") == "externalptr"))
+  expect_true(all(vapply(
+    handoffs,
+    function(handoff) is.null(attributes(handoff)),
+    logical(1L)
+  )))
+
+  x_handoff = handoffs[[1L]]
+  child = Sampler1DUnif$new(x_handoff)
+  expect_identical(child$param$ids(), "x")
+  expect_identical(child$param$values, list(x = 0.25))
+  expect_error(
+    Sampler1DUnif$new(x_handoff),
+    "already consumed internal SamplerUnif subspace handoff",
+    fixed = TRUE
+  )
+
+  # A carrier cannot survive serialization because its authority is a
+  # process-local native address. The still-live original remains consumable.
+  y_handoff = handoffs[[2L]]
+  restored = unserialize(serialize(y_handoff, NULL))
+  expect_error(
+    Sampler1DUnif$new(restored),
+    "internal SamplerUnif subspace handoff",
+    fixed = TRUE
+  )
+  expect_identical(Sampler1DUnif$new(y_handoff)$param$ids(), "y")
+})
+
+test_that("SamplerUnif ownership handoffs reject corruption and fabrication", {
+  carrier = sampler_unif_handoffs(ps(x = p_dbl(0, 1)))[[1L]]
+  attr(carrier, "forged") = TRUE
+  expect_error(
+    Sampler1DUnif$new(carrier),
+    "malformed.*SamplerUnif subspace handoff"
+  )
+
+  # Generic external pointers and even genuine ParamSet subset capabilities
+  # are not sampler ownership handoffs and retain the public constructor
+  # diagnostic instead of bypassing its defensive clone boundary.
+  expect_error(Sampler1DUnif$new(new("externalptr")), "R6")
+  namespace = asNamespace("paradox")
+  ordinary = ps(x = p_dbl(0, 1))
+  token = .Call(
+    get("C_param_set_subset_state", envir = namespace),
+    ordinary$.__enclos_env__$private,
+    ordinary,
+    "x",
+    FALSE,
+    TRUE,
+    ordinary$constraint,
+    ordinary$extra_trafo,
+    TRUE
+  )
+  expect_error(Sampler1DUnif$new(token), "R6")
+})
+
 test_that("SamplerUnif obtains independent singleton ParamSets via subspaces", {
   param_set = ps(
     x = p_dbl(0, 1),
@@ -85,6 +176,15 @@ test_that("SamplerUnif obtains independent singleton ParamSets via subspaces", {
     function(component) nrow(component$param$deps) == 0L,
     logical(1L)
   )))
+
+  second = sampler$samplers[[2L]]
+  second_param = second$param
+  second_param$values = list(y = 1L)
+  expect_identical(sampler$samplers[[1L]]$param$values, list(x = 0.5))
+  expect_identical(sampler$samplers[[2L]]$param$values, list(y = 1L))
+  expect_identical(sampler$samplers[[3L]]$param$values, list(flag = TRUE))
+  expect_identical(sampler$param_set$values, list(x = 0.5, flag = TRUE))
+  second_param$values = named_list()
 
   param_set$values = list(y = 2L)
   expect_identical(sampler$samplers[[1L]]$param$values, list(x = 0.5))

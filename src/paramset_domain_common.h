@@ -138,9 +138,25 @@ attribute_hidden int paradox_domain_validate_dependencies(
   paradox_domain_dependencies_t *result,
   R_xlen_t *work_since_interrupt
 );
+/* Validate the same exact dependency representation while retaining each
+ * admitted built-in Condition RHS in operation-local workspace.  The
+ * dependencies object remains the owner/root of every returned SEXP. */
+attribute_hidden int paradox_domain_validate_dependencies_with_rhs(
+  SEXP dependencies,
+  paradox_domain_dependencies_t *result,
+  SEXP **condition_rhs,
+  R_xlen_t *work_since_interrupt
+);
 attribute_hidden int paradox_domain_validate_values(
   SEXP values,
   paradox_domain_values_t *result,
+  R_xlen_t *work_since_interrupt
+);
+/* Install the canonical one-row built-in Domain facade on a fresh, owned
+ * 16-column shell. The class scalar must be an admitted built-in Param class. */
+attribute_hidden SEXP paradox_domain_prepare_facade(
+  SEXP domain,
+  SEXP cls,
   R_xlen_t *work_since_interrupt
 );
 attribute_hidden SEXP paradox_domain_fill(

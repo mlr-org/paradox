@@ -52,7 +52,24 @@ Sampler1DUnif = R6Class("Sampler1DUnif", inherit = Sampler1D,
     #' @description
     #' Creates a new instance of this [R6][R6::R6Class] class.
     initialize = function(param) {
-      super$initialize(param)
+      handoff = if (typeof(param) == "externalptr") {
+        .Call(C_sampler_unif_take_subspace, param)
+      }
+      if (is.null(handoff)) {
+        super$initialize(param)
+      } else {
+        # Only the package-owned SamplerUnif issuer can create an accepted
+        # carrier. ParamSet$new() consumes its nested subset token, installing
+        # the already independent capsule without a redundant deep clone.
+        owned = ParamSet$new(handoff)
+        if (owned$length != 1) {
+          stopf(
+            "param must contain exactly 1 Param, but contains %s",
+            owned$length
+          )
+        }
+        self$param_set = owned
+      }
       assert_param_set(self$param, no_untyped = TRUE, must_bounded = TRUE)
     }
   ),

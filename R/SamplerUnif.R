@@ -26,7 +26,17 @@ SamplerUnif = R6Class("SamplerUnif", inherit = SamplerHierarchical,
     #'   The [`ParamSet`] to associated with this `SamplerUnif`.
     initialize = function(param_set) {
       assert_param_set(param_set, must_bounded = TRUE, no_deps = FALSE, no_untyped = TRUE)
-      samplers = lapply(param_set$subspaces(), Sampler1DUnif$new)
+      # The native issuer constructs fresh singleton subset states and wraps
+      # each in a SamplerUnif-only, single-use ownership handoff. This avoids
+      # defensively cloning a shell that has never been exposed or aliased;
+      # ordinary public Sampler1DUnif construction keeps its clone boundary.
+      handoffs = .Call(
+        C_sampler_unif_subspace_handoffs,
+        param_set,
+        param_set$ids(),
+        param_set$extra_trafo
+      )
+      samplers = lapply(handoffs, Sampler1DUnif$new)
       super$initialize(param_set, samplers)
       private$.canonical_samplers = self$samplers
     }

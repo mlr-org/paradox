@@ -144,6 +144,9 @@ attribute_hidden SEXP paradox_param_set_get_tags(
 attribute_hidden SEXP paradox_param_set_dependency_table_snapshot(
   SEXP dependencies
 );
+/* Complete a fresh, owned, canonical dependency table as a detached public
+ * data.table facade. This is shared by BASE/SHADOW and COLLECTION reads. */
+attribute_hidden SEXP paradox_dependency_public_facade(SEXP table);
 attribute_hidden SEXP paradox_param_set_dependencies(
   SEXP private_environment,
   SEXP self
@@ -279,6 +282,12 @@ attribute_hidden SEXP paradox_sampler_unif_sample_builtin(
   SEXP param_set,
   SEXP n
 );
+attribute_hidden SEXP paradox_sampler_unif_subspace_handoffs(
+  SEXP param_set,
+  SEXP requested_ids,
+  SEXP extra_trafo
+);
+attribute_hidden SEXP paradox_sampler_unif_take_subspace(SEXP handoff);
 attribute_hidden SEXP paradox_design_dependency_plan(
   SEXP data,
   SEXP param_set

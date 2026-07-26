@@ -78,6 +78,22 @@ test_that("Condition access does not dispatch through dollar methods", {
   expect_identical(condition_as_string(cond), "x == 1")
 })
 
+test_that("Condition admission accepts attribute order but rejects extras", {
+  condition = CondEqual(1L)
+  reordered = condition
+  attributes(reordered) = attributes(condition)[c("class", "names")]
+
+  expect_identical(condition_test(reordered, 1:2), c(TRUE, FALSE))
+
+  malformed = condition
+  attr(malformed, "unexpected") = TRUE
+  expect_error(
+    condition_test(malformed, 1L),
+    "Malformed built-in Condition object",
+    fixed = TRUE
+  )
+})
+
 test_that("Condition vector comparison is one registered native operation", {
   symbol = get("C_condition_test_builtin", envir = asNamespace("paradox"))
   expect_s3_class(symbol, "NativeSymbolInfo")

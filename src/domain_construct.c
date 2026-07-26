@@ -51,12 +51,6 @@ typedef enum {
 static int plain_scalar_number_value(SEXP value, double *result);
 static int plain_integer_bound(double value);
 
-static const char *const domain_column_names[DOMAIN_COLUMN_COUNT] = {
-  "id", "cls", "grouping", "cargo", "lower", "upper", "tolerance",
-  "levels", "special_vals", "default", "storage_type", ".tags",
-  ".trafo", ".requirements", ".init_given", ".init"
-};
-
 static int string_is(SEXP value, const char *expected) {
   return value != NA_STRING && strcmp(CHAR(value), expected) == 0;
 }
@@ -1004,15 +998,6 @@ static SEXP snapshot_builtin_value_leaf(SEXP value) {
   return result;
 }
 
-static SEXP domain_names(void) {
-  SEXP result = PROTECT(Rf_allocVector(STRSXP, DOMAIN_COLUMN_COUNT));
-  for (R_xlen_t column = 0; column < DOMAIN_COLUMN_COUNT; ++column) {
-    SET_STRING_ELT(result, column, Rf_mkChar(domain_column_names[column]));
-  }
-  UNPROTECT(1);
-  return result;
-}
-
 static SEXP build_domain_shell(
     SEXP id,
     SEXP cls,
@@ -1029,7 +1014,8 @@ static SEXP build_domain_shell(
     SEXP storage_type,
     SEXP init_given,
     SEXP init_value,
-    SEXP requirements) {
+    SEXP requirements,
+    R_xlen_t *work_since_interrupt) {
   PROTECT(id);
   PROTECT(cls);
   PROTECT(grouping);
@@ -1071,11 +1057,14 @@ static SEXP build_domain_shell(
   SET_VECTOR_ELT(result, DOMAIN_INIT_GIVEN, init_given);
   SEXP init_column = PROTECT(one_element_list(init_value));
   SET_VECTOR_ELT(result, DOMAIN_INIT, init_column);
-  SEXP names = PROTECT(domain_names());
-  Rf_setAttrib(result, R_NamesSymbol, names);
+  SEXP prepared = PROTECT(paradox_domain_prepare_facade(
+    result,
+    STRING_ELT(cls, 0),
+    work_since_interrupt
+  ));
 
   UNPROTECT(26);
-  return result;
+  return prepared;
 }
 
 SEXP paradox_domain_construct(
@@ -1497,7 +1486,8 @@ SEXP paradox_domain_construct(
     storage_type,
     init_given,
     init_value,
-    requirements
+    requirements,
+    &admission_work
   ));
   UNPROTECT(2);
   return result;

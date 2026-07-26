@@ -39,15 +39,51 @@ static int condition_rhs_is_plain(SEXP rhs,
     Rf_any_duplicated(rhs, FALSE) == 0;
 }
 
+typedef struct {
+  SEXP names;
+  SEXP classes;
+  R_xlen_t count;
+  int saw_names;
+  int saw_classes;
+  int exact;
+} condition_attribute_snapshot_t;
+
+static void snapshot_condition_attribute(SEXP tag, SEXP value, void *data) {
+  condition_attribute_snapshot_t *snapshot = data;
+  if (!snapshot->exact || snapshot->count == R_XLEN_T_MAX) {
+    snapshot->exact = FALSE;
+    return;
+  }
+  ++snapshot->count;
+  if (tag == R_NamesSymbol && !snapshot->saw_names) {
+    snapshot->names = value;
+    snapshot->saw_names = TRUE;
+  } else if (tag == R_ClassSymbol && !snapshot->saw_classes) {
+    snapshot->classes = value;
+    snapshot->saw_classes = TRUE;
+  } else {
+    snapshot->exact = FALSE;
+  }
+}
+
 static int condition_outer_exact(SEXP condition,
     paradox_builtin_condition_kind_t *kind, SEXP *rhs,
     R_xlen_t *work_since_interrupt) {
   static const char *const names[] = {"rhs", "condition_format_string"};
   static const char *const equal_classes[] = {"CondEqual", "Condition"};
   static const char *const any_of_classes[] = {"CondAnyOf", "Condition"};
-  static const char *const attributes[] = {"names", "class"};
-  PROTECT(condition);
-  SEXP classes = PROTECT(Rf_getAttrib(condition, R_ClassSymbol));
+  /* Both callers root `condition`. Capture its two raw attributes in one
+   * public-API traversal instead of repeatedly counting, selecting, and
+   * installing their names for every dependency row. */
+  condition_attribute_snapshot_t attributes = {
+    R_NilValue, R_NilValue, 0, FALSE, FALSE, TRUE
+  };
+  paradox_api_map_stored_attributes(
+    condition,
+    snapshot_condition_attribute,
+    &attributes
+  );
+  SEXP classes = PROTECT(attributes.classes);
   const int plain_classes = !Rf_isS4(classes) &&
     paradox_api_has_no_attributes(classes);
   const int is_equal = plain_classes && paradox_domain_exact_string_vector(
@@ -64,7 +100,7 @@ static int condition_outer_exact(SEXP condition,
     work_since_interrupt
   );
   if (!is_equal && !is_any_of) {
-    UNPROTECT(2);
+    UNPROTECT(1);
     Rf_error(
       "Unsupported Condition class; supported classes are 'CondEqual' and 'CondAnyOf'."
     );
@@ -74,26 +110,23 @@ static int condition_outer_exact(SEXP condition,
     : PARADOX_BUILTIN_CONDITION_ANY_OF;
 
   if (TYPEOF(condition) != VECSXP || ALTREP(condition) || Rf_isS4(condition) ||
-      XLENGTH(condition) != 2 || !paradox_api_has_only_attributes(
-        condition,
-        attributes,
-        2
-      )) {
-    UNPROTECT(2);
+      XLENGTH(condition) != 2 || !attributes.exact ||
+      attributes.count != 2 || !attributes.saw_names ||
+      !attributes.saw_classes) {
+    UNPROTECT(1);
     return FALSE;
   }
 
-  SEXP condition_names = PROTECT(Rf_getAttrib(condition, R_NamesSymbol));
+  SEXP condition_names = PROTECT(attributes.names);
   if (Rf_isS4(condition_names) ||
       !paradox_api_has_no_attributes(condition_names) ||
-      !paradox_api_has_no_attributes(classes) ||
       !paradox_domain_exact_string_vector(
         condition_names,
         names,
         2,
         work_since_interrupt
       )) {
-    UNPROTECT(3);
+    UNPROTECT(2);
     return FALSE;
   }
 
@@ -111,7 +144,7 @@ static int condition_outer_exact(SEXP condition,
   if (exact) {
     *rhs = candidate_rhs;
   }
-  UNPROTECT(5);
+  UNPROTECT(4);
   return exact;
 }
 

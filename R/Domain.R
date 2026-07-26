@@ -294,9 +294,6 @@ Domain = function(cls, grouping,
     param_id,
     requirements
   )
-  attr(param, "row.names") = .set_row_names(1L)
-  attr(param, "class") = c(param$cls[[1L]], "Domain", "data.table", "data.frame")
-  param = finalize_domain_data_table(param)
   attr(param, "repr") = param_repr
 
   if (identical(param$cls[[1L]], "ParamUty") && !is_nodefault(default)) {
