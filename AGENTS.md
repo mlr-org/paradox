@@ -124,6 +124,18 @@ shim. Explicit check-family calls remain strict point validators and are
 store-blind, so a legal raw dormant store is not itself promised to pass
 `$check()`.
 
+The final pre-release performance batch is governed by
+[`design/final-performance-implementation-plan.md`](design/final-performance-implementation-plan.md).
+That plan was recorded at package commit `b2e1649` before implementation and
+locks both the measured targets and their compatibility/integrity proof
+obligations.  During this batch run focused tests and balanced per-slice A/B
+benchmarks only; do not spend the remaining pre-freeze period rerunning the
+full compatibility, memory, portability, or release matrices.  In particular,
+operation-local indexes and one-use package-private ownership handoffs are
+allowed optimizations, while persistent validation caches, trusted caller
+metadata, skipped graph checks, and weakened generation reauthentication are
+not.
+
 ## Non-negotiable design decisions
 
 - `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` are serializable R6
