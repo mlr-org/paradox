@@ -14,6 +14,13 @@ mlr3hyperband instead of conflating sampling with constructor cost.
 Separate plain and dependency-bearing workloads time `ParamSet$subspaces()`
 and `SamplerUnif$new()` themselves, preserving visibility into their one-time
 construction and ownership costs.
+Grid generation retains the ordinary four- and eight-dimensional mixed
+Cartesian workloads and adds three output-sensitive cases. Five binary integer
+axes at resolution 12 cover deduplication of realized values before expansion;
+five fixed numeric axes cover singleton-axis collapse; and a seven-parameter
+dependency chain covers branch pruning. Their validators compare the complete
+small realized tables, including column types and established row order, rather
+than accepting only the expected row count.
 Two fixed 64-parameter dependency-chain workloads cover the dormant-value
 contract directly. `set_values_deep_dependencies` performs a checked,
 complete, all-active replacement, while `get_values_deep_dependencies`

@@ -7,7 +7,10 @@
 #include <R_ext/Arith.h>
 #include <R_ext/Utils.h>
 
+#include "builtin_condition.h"
 #include "core_state.h"
+#include "dependency_graph.h"
+#include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
@@ -765,8 +768,8 @@ static void snapshot_grid_resolutions(SEXP resolutions, SEXP stable_names,
 
 static void load_grid_specs(const param_columns_t *columns,
     const id_map_t *id_map, SEXP resolution_names,
-    qunif_spec_t *specs, const int *counts, R_xlen_t *strides,
-    unsigned char *selected, SEXP spec_roots, R_xlen_t *rows,
+    qunif_spec_t *specs, const int *counts,
+    unsigned char *selected, SEXP spec_roots,
     R_xlen_t *work_since_interrupt) {
   for (R_xlen_t row = 0; row < columns->size; ++row) {
     account_work(work_since_interrupt);
@@ -814,22 +817,6 @@ static void load_grid_specs(const param_columns_t *columns,
     }
     selected[param_row] = 1;
   }
-
-  R_xlen_t total = 1;
-  for (R_xlen_t remaining = columns->size; remaining > 0; --remaining) {
-    const R_xlen_t column = remaining - 1;
-    account_work(work_since_interrupt);
-    strides[column] = total;
-    if (counts[column] == 0) {
-      total = 0;
-      continue;
-    }
-    if (total > (R_xlen_t) INT_MAX / (R_xlen_t) counts[column]) {
-      Rf_error("Grid product exceeds the maximum data.frame row count");
-    }
-    total *= (R_xlen_t) counts[column];
-  }
-  *rows = total;
 }
 
 static double grid_unit_value(R_xlen_t level, int resolution) {
@@ -840,57 +827,6 @@ static double grid_unit_value(R_xlen_t level, int resolution) {
     return 1.0;
   }
   return (double) level * (1.0 / (double) (resolution - 1));
-}
-
-static int fill_grid_column(SEXP output, R_xlen_t rows, int resolution,
-    R_xlen_t stride, const qunif_spec_t *spec,
-    int *warn_integer_range, R_xlen_t *work_since_interrupt) {
-  if (rows != 0 && (resolution <= 0 || stride <= 0)) {
-    return FALSE;
-  }
-
-  for (R_xlen_t row = 0; row < rows; ++row) {
-    account_work(work_since_interrupt);
-    const R_xlen_t level = (row / stride) % (R_xlen_t) resolution;
-    const double unit = grid_unit_value(level, resolution);
-    switch (spec->kind) {
-    case QUNIF_KIND_DBL:
-      REAL(output)[row] = paradox_qunif_double_value(
-        unit,
-        spec->lower,
-        spec->upper
-      );
-      break;
-    case QUNIF_KIND_INT:
-      if (!paradox_qunif_integer_value(
-            unit,
-            spec->lower,
-            spec->upper,
-            &INTEGER(output)[row]
-          )) {
-        INTEGER(output)[row] = NA_INTEGER;
-        *warn_integer_range = TRUE;
-      }
-      break;
-    case QUNIF_KIND_FCT: {
-      const R_xlen_t choice = paradox_qunif_level_index(
-        unit,
-        XLENGTH(spec->levels)
-      );
-      if (choice == R_XLEN_T_MAX) {
-        return FALSE;
-      }
-      SET_STRING_ELT(output, row, STRING_ELT(spec->levels, choice));
-      break;
-    }
-    case QUNIF_KIND_LGL:
-      LOGICAL(output)[row] = unit < 0.5;
-      break;
-    case QUNIF_KIND_UNKNOWN:
-      return FALSE;
-    }
-  }
-  return TRUE;
 }
 
 SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
@@ -1047,40 +983,1056 @@ SEXP paradox_param_set_qunif_builtin(SEXP private_environment, SEXP self,
   return prepared;
 }
 
-SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
+enum grid_state_root {
+  GRID_STATE_PRIVATE = 0,
+  GRID_STATE_SELF,
+  GRID_STATE_CORE,
+  GRID_STATE_PARAMS,
+  GRID_STATE_VALUES,
+  GRID_STATE_DEPENDENCIES,
+  GRID_STATE_ROOT_COUNT
+};
+
+typedef struct {
+  SEXP params;
+  SEXP values;
+  SEXP dependencies;
+  paradox_domain_values_t values_data;
+  paradox_domain_dependencies_t dependencies_data;
+} grid_state_t;
+
+typedef union {
+  double real;
+  int integer;
+  SEXP string;
+} grid_scalar_t;
+
+typedef struct {
+  qunif_spec_t spec;
+  SEXP values;
+  int *first_levels;
+  R_xlen_t param_row;
+  int count;
+  int fixed;
+} grid_axis_t;
+
+typedef struct {
+  grid_scalar_t *values;
+  int *first_levels;
+  int size;
+  int capacity;
+} grid_axis_builder_t;
+
+static void load_grid_state(SEXP private_environment, SEXP self,
+    grid_state_t *state, SEXP state_roots, SEXP *graph_roots,
+    PROTECT_INDEX graph_roots_index, R_xlen_t *work_since_interrupt) {
+  if (!paradox_domain_owns_private_environment(self, private_environment)) {
+    Rf_error("Corrupt ParamSet shell ownership in grid generation");
+  }
+  SET_VECTOR_ELT(state_roots, GRID_STATE_PRIVATE, private_environment);
+  SET_VECTOR_ELT(state_roots, GRID_STATE_SELF, self);
+
+  SEXP core = paradox_core_from_private(private_environment);
+  if (core == R_UnboundValue) {
+    Rf_error("Corrupt ParamSet grid state: missing core capsule");
+  }
+  paradox_core_kind_t kind = paradox_core_kind(core);
+  if (kind == PARADOX_CORE_SHADOW) {
+    core = paradox_core_refresh_shadow(self, private_environment);
+    kind = paradox_core_kind(core);
+  }
+  if (kind != PARADOX_CORE_BASE && kind != PARADOX_CORE_COLLECTION &&
+      kind != PARADOX_CORE_SHADOW) {
+    Rf_error("Corrupt ParamSet grid state: unknown core kind");
+  }
+  SET_VECTOR_ELT(state_roots, GRID_STATE_CORE, core);
+
+  SEXP payload = paradox_core_payload(core);
+  if (payload == R_UnboundValue) {
+    Rf_error("Corrupt ParamSet grid state: invalid core payload");
+  }
+  state->params = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+  SET_VECTOR_ELT(state_roots, GRID_STATE_PARAMS, state->params);
+
+  if (kind == PARADOX_CORE_COLLECTION) {
+    paradox_collection_graph_t graph;
+    paradox_collection_graph_build(
+      private_environment,
+      self,
+      &graph,
+      graph_roots,
+      graph_roots_index,
+      work_since_interrupt
+    );
+    state->params = graph.nodes[0].params.table;
+    SET_VECTOR_ELT(state_roots, GRID_STATE_PARAMS, state->params);
+
+    SEXP values = PROTECT(paradox_collection_values_from_graph(
+      &graph,
+      work_since_interrupt
+    ));
+    state->values = values;
+    SET_VECTOR_ELT(state_roots, GRID_STATE_VALUES, state->values);
+    UNPROTECT(1);
+
+    SEXP dependencies = PROTECT(paradox_collection_dependencies_from_graph(
+      &graph,
+      work_since_interrupt
+    ));
+    state->dependencies = dependencies;
+    SET_VECTOR_ELT(
+      state_roots,
+      GRID_STATE_DEPENDENCIES,
+      state->dependencies
+    );
+    UNPROTECT(1);
+  } else {
+    state->values = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
+    state->dependencies = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+    SET_VECTOR_ELT(state_roots, GRID_STATE_VALUES, state->values);
+    SET_VECTOR_ELT(
+      state_roots,
+      GRID_STATE_DEPENDENCIES,
+      state->dependencies
+    );
+  }
+
+  if (!paradox_domain_validate_values(
+        state->values,
+        &state->values_data,
+        work_since_interrupt
+      ) || !paradox_domain_validate_dependencies(
+        state->dependencies,
+        &state->dependencies_data,
+        work_since_interrupt
+      )) {
+    Rf_error("Corrupt ParamSet grid value or dependency state");
+  }
+}
+
+static void initialize_axis_builder(grid_axis_builder_t *builder,
+    int maximum_size) {
+  int capacity = maximum_size < 16 ? maximum_size : 16;
+  if (capacity < 1) capacity = 1;
+  builder->values = paradox_temporary_alloc(
+    (R_xlen_t) capacity,
+    sizeof(*builder->values)
+  );
+  builder->first_levels = paradox_temporary_alloc(
+    (R_xlen_t) capacity,
+    sizeof(*builder->first_levels)
+  );
+  builder->size = 0;
+  builder->capacity = capacity;
+}
+
+static void grow_axis_builder(grid_axis_builder_t *builder,
+    int maximum_size) {
+  if (builder->size < builder->capacity) return;
+  int capacity = builder->capacity;
+  if (capacity > maximum_size / 2) {
+    capacity = maximum_size;
+  } else {
+    capacity *= 2;
+  }
+  if (capacity <= builder->capacity) {
+    Rf_error("Realized grid axis is too large");
+  }
+  grid_scalar_t *values = paradox_temporary_alloc(
+    (R_xlen_t) capacity,
+    sizeof(*values)
+  );
+  int *first_levels = paradox_temporary_alloc(
+    (R_xlen_t) capacity,
+    sizeof(*first_levels)
+  );
+  memcpy(
+    values,
+    builder->values,
+    (size_t) builder->size * sizeof(*values)
+  );
+  memcpy(
+    first_levels,
+    builder->first_levels,
+    (size_t) builder->size * sizeof(*first_levels)
+  );
+  builder->values = values;
+  builder->first_levels = first_levels;
+  builder->capacity = capacity;
+}
+
+static int same_realized_double(double left, double right) {
+  if (left == right) return TRUE;
+  if (R_IsNA(left) || R_IsNA(right)) {
+    return R_IsNA(left) && R_IsNA(right);
+  }
+  return R_IsNaN(left) && R_IsNaN(right);
+}
+
+static int axis_builder_contains_last(const grid_axis_builder_t *builder,
+    qunif_kind_t kind, grid_scalar_t value) {
+  if (builder->size == 0) return FALSE;
+  const grid_scalar_t previous = builder->values[builder->size - 1];
+  switch (kind) {
+  case QUNIF_KIND_DBL:
+    return same_realized_double(previous.real, value.real);
+  case QUNIF_KIND_INT:
+  case QUNIF_KIND_LGL:
+    return previous.integer == value.integer;
+  case QUNIF_KIND_FCT:
+    return strings_equal(previous.string, value.string);
+  case QUNIF_KIND_UNKNOWN:
+    break;
+  }
+  Rf_error("Internal error: unknown realized grid kind");
+  return FALSE;
+}
+
+static void append_axis_value(grid_axis_builder_t *builder,
+    qunif_kind_t kind, grid_scalar_t value, int first_level,
+    int maximum_size) {
+  /*
+   * Every built-in quantile map is monotone in its unit argument. Equal
+   * realized values are consequently adjacent, including integer rounding,
+   * fixed numeric bounds, signed zero, and the NaN interior of (-Inf, Inf).
+   * Comparing only the last retained value keeps axis construction O(r).
+   */
+  if (axis_builder_contains_last(builder, kind, value)) return;
+  grow_axis_builder(builder, maximum_size);
+  builder->values[builder->size] = value;
+  builder->first_levels[builder->size] = first_level;
+  ++builder->size;
+}
+
+static SEXP realized_axis_vector(const grid_axis_builder_t *builder,
+    qunif_kind_t kind, R_xlen_t *work_since_interrupt) {
+  SEXP result = PROTECT(Rf_allocVector(
+    output_type(kind),
+    (R_xlen_t) builder->size
+  ));
+  for (R_xlen_t index = 0;
+      index < (R_xlen_t) builder->size;
+      ++index) {
+    account_work(work_since_interrupt);
+    switch (kind) {
+    case QUNIF_KIND_DBL:
+      REAL(result)[index] = builder->values[index].real;
+      break;
+    case QUNIF_KIND_INT:
+      INTEGER(result)[index] = builder->values[index].integer;
+      break;
+    case QUNIF_KIND_LGL:
+      LOGICAL(result)[index] = builder->values[index].integer;
+      break;
+    case QUNIF_KIND_FCT:
+      SET_STRING_ELT(result, index, builder->values[index].string);
+      break;
+    case QUNIF_KIND_UNKNOWN:
+      UNPROTECT(1);
+      Rf_error("Internal error: unknown realized grid kind");
+    }
+  }
+  UNPROTECT(1);
+  return result;
+}
+
+static void build_realized_axis(grid_axis_t *axis, int resolution,
+    int *warn_integer_range, R_xlen_t *work_since_interrupt) {
+  grid_axis_builder_t builder;
+  initialize_axis_builder(&builder, resolution);
+  for (R_xlen_t level = 0;
+      level < (R_xlen_t) resolution;
+      ++level) {
+    account_work(work_since_interrupt);
+    const double unit = grid_unit_value((R_xlen_t) level, resolution);
+    grid_scalar_t value;
+    switch (axis->spec.kind) {
+    case QUNIF_KIND_DBL:
+      value.real = paradox_qunif_double_value(
+        unit,
+        axis->spec.lower,
+        axis->spec.upper
+      );
+      break;
+    case QUNIF_KIND_INT:
+      if (!paradox_qunif_integer_value(
+            unit,
+            axis->spec.lower,
+            axis->spec.upper,
+            &value.integer
+          )) {
+        value.integer = NA_INTEGER;
+        *warn_integer_range = TRUE;
+      }
+      break;
+    case QUNIF_KIND_FCT: {
+      const R_xlen_t choice = paradox_qunif_level_index(
+        unit,
+        XLENGTH(axis->spec.levels)
+      );
+      if (choice == R_XLEN_T_MAX) {
+        Rf_error("Corrupt ParamSet realized grid mapping state");
+      }
+      value.string = STRING_ELT(axis->spec.levels, choice);
+      break;
+    }
+    case QUNIF_KIND_LGL:
+      value.integer = unit < 0.5;
+      break;
+    case QUNIF_KIND_UNKNOWN:
+      Rf_error("Corrupt ParamSet realized grid mapping state");
+    }
+    append_axis_value(
+      &builder,
+      axis->spec.kind,
+      value,
+      (int) level,
+      resolution
+    );
+  }
+  axis->values = realized_axis_vector(
+    &builder,
+    axis->spec.kind,
+    work_since_interrupt
+  );
+  axis->count = builder.size;
+  axis->first_levels = builder.first_levels;
+  axis->fixed = FALSE;
+}
+
+static SEXP fixed_axis_vector(SEXP value, SEXPTYPE storage_type) {
+  if (Rf_inherits(value, "TuneToken")) {
+    Rf_error(
+      "Grid generation cannot materialize a stored TuneToken value"
+    );
+  }
+  const SEXPTYPE type = (SEXPTYPE) TYPEOF(value);
+  if (type == storage_type && !Rf_isObject(value) && !Rf_isS4(value) &&
+      XLENGTH(value) == 1 && (type == LGLSXP || type == INTSXP ||
+        type == REALSXP || type == STRSXP)) {
+    SEXP result = PROTECT(Rf_allocVector(type, 1));
+    switch (type) {
+    case LGLSXP:
+      LOGICAL(result)[0] = LOGICAL_ELT(value, 0);
+      break;
+    case INTSXP:
+      INTEGER(result)[0] = INTEGER_ELT(value, 0);
+      break;
+    case REALSXP:
+      REAL(result)[0] = REAL_ELT(value, 0);
+      break;
+    case STRSXP:
+      SET_STRING_ELT(result, 0, STRING_ELT(value, 0));
+      break;
+    default:
+      UNPROTECT(1);
+      Rf_error("Internal error: invalid fixed grid scalar");
+    }
+    UNPROTECT(1);
+    return result;
+  }
+
+  /*
+   * A TuneToken, NULL, S4 special value, or other opaque admitted leaf is one
+   * parameter value, irrespective of its representation's internal length.
+   * Store it as one list-column cell instead of reproducing data.table's
+   * accidental unlisting/coercion behavior from the old post-hoc overwrite.
+   */
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, 1));
+  SET_VECTOR_ELT(result, 0, value);
+  UNPROTECT(1);
+  return result;
+}
+
+static int map_fixed_values(const grid_state_t *state,
+    const id_map_t *id_map, R_xlen_t parameter_count,
+    R_xlen_t *fixed_by_parameter, R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    fixed_by_parameter[parameter] = R_XLEN_T_MAX;
+  }
+  for (R_xlen_t value = 0; value < state->values_data.size; ++value) {
+    account_work(work_since_interrupt);
+    R_xlen_t parameter;
+    if (!find_id(
+          id_map,
+          STRING_ELT(state->values_data.names, value),
+          &parameter,
+          work_since_interrupt
+        ) || fixed_by_parameter[parameter] != R_XLEN_T_MAX) {
+      return FALSE;
+    }
+    fixed_by_parameter[parameter] = value;
+  }
+  return TRUE;
+}
+
+static void build_grid_axes(const grid_state_t *state,
+    const param_columns_t *columns, const id_map_t *id_map,
+    SEXP resolution_names, const int *counts, qunif_spec_t *specs,
+    const R_xlen_t *fixed_by_parameter, grid_axis_t *axes,
+    R_xlen_t *axis_by_parameter, SEXP axis_roots,
+    int *warn_integer_range, R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t parameter = 0; parameter < columns->size; ++parameter) {
+    axis_by_parameter[parameter] = R_XLEN_T_MAX;
+  }
+  for (R_xlen_t column = 0; column < columns->size; ++column) {
+    R_xlen_t parameter;
+    if (!find_id(
+          id_map,
+          STRING_ELT(resolution_names, column),
+          &parameter,
+          work_since_interrupt
+        )) {
+      Rf_error("Internal error: unresolved grid parameter");
+    }
+    axes[column].spec = specs[column];
+    axes[column].param_row = parameter;
+    axis_by_parameter[parameter] = column;
+    const R_xlen_t fixed = fixed_by_parameter[parameter];
+    if (fixed != R_XLEN_T_MAX) {
+      SEXP value = PROTECT(fixed_axis_vector(
+        VECTOR_ELT(state->values_data.values, fixed),
+        output_type(specs[column].kind)
+      ));
+      axes[column].values = value;
+      axes[column].count = 1;
+      axes[column].first_levels = paradox_temporary_alloc(
+        1,
+        sizeof(*axes[column].first_levels)
+      );
+      axes[column].first_levels[0] = 0;
+      axes[column].fixed = TRUE;
+      SET_VECTOR_ELT(axis_roots, column, value);
+      UNPROTECT(1);
+    } else {
+      build_realized_axis(
+        &axes[column],
+        counts[column],
+        warn_integer_range,
+        work_since_interrupt
+      );
+      SET_VECTOR_ELT(axis_roots, column, axes[column].values);
+    }
+  }
+}
+
+static int parse_grid_upper_limit(SEXP upper_limit, int *supplied) {
+  *supplied = upper_limit != R_NilValue;
+  if (upper_limit == R_NilValue) return INT_MAX;
+  if (Rf_isS4(upper_limit) || Rf_isObject(upper_limit) ||
+      ALTREP(upper_limit) || !paradox_api_has_no_attributes(upper_limit) ||
+      XLENGTH(upper_limit) != 1) {
+    Rf_error("`upper_limit` must be NULL or one non-negative whole number");
+  }
+  if (TYPEOF(upper_limit) == INTSXP) {
+    const int value = INTEGER_ELT(upper_limit, 0);
+    if (value == NA_INTEGER || value < 0) {
+      Rf_error("`upper_limit` must be NULL or one non-negative whole number");
+    }
+    return value;
+  }
+  if (TYPEOF(upper_limit) == REALSXP) {
+    const double value = REAL_ELT(upper_limit, 0);
+    if (!R_FINITE(value) || value < 0.0 || value > (double) INT_MAX ||
+        floor(value) != value) {
+      Rf_error("`upper_limit` must be NULL or one non-negative whole number");
+    }
+    return (int) value;
+  }
+  Rf_error("`upper_limit` must be NULL or one non-negative whole number");
+  return 0;
+}
+
+static void grid_limit_error(R_xlen_t limit) {
+  Rf_error(
+    "Realized grid exceeds `upper_limit` of %.0f rows",
+    (double) limit
+  );
+}
+
+static void copy_axis_element(SEXP output, R_xlen_t output_row,
+    SEXP values, R_xlen_t value_row) {
+  switch (TYPEOF(values)) {
+  case LGLSXP:
+    LOGICAL(output)[output_row] = LOGICAL_ELT(values, value_row);
+    break;
+  case INTSXP:
+    INTEGER(output)[output_row] = INTEGER_ELT(values, value_row);
+    break;
+  case REALSXP:
+    REAL(output)[output_row] = REAL_ELT(values, value_row);
+    break;
+  case STRSXP:
+    SET_STRING_ELT(output, output_row, STRING_ELT(values, value_row));
+    break;
+  case VECSXP:
+    SET_VECTOR_ELT(output, output_row, VECTOR_ELT(values, value_row));
+    break;
+  default:
+    Rf_error("Internal error: unsupported realized grid axis type");
+  }
+}
+
+static SEXP build_empty_grid(const grid_axis_t *axes,
+    R_xlen_t column_count, SEXP names,
+    R_xlen_t *work_since_interrupt) {
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, column_count));
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    account_work(work_since_interrupt);
+    SEXP values = axes == NULL
+      ? R_NilValue
+      : axes[column].values;
+    const SEXPTYPE type = values == R_NilValue
+      ? output_type(axes[column].spec.kind)
+      : (SEXPTYPE) TYPEOF(values);
+    SEXP output = PROTECT(Rf_allocVector(type, 0));
+    SET_VECTOR_ELT(result, column, output);
+    UNPROTECT(1);
+  }
+  SEXP prepared = PROTECT(set_table_attributes(result, names, 0));
+  UNPROTECT(2);
+  return prepared;
+}
+
+static SEXP build_independent_grid(const grid_axis_t *axes,
+    R_xlen_t column_count, SEXP names, int upper_limit,
+    int upper_limit_supplied, R_xlen_t *work_since_interrupt) {
+  R_xlen_t rows = 1;
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    account_work(work_since_interrupt);
+    const int count = axes[column].count;
+    if (count == 0) {
+      rows = 0;
+      break;
+    }
+    if (rows > (R_xlen_t) upper_limit / (R_xlen_t) count) {
+      if (upper_limit_supplied) grid_limit_error(upper_limit);
+      Rf_error("Grid product exceeds the maximum data.frame row count");
+    }
+    rows *= (R_xlen_t) count;
+  }
+  if (rows == 0) {
+    return build_empty_grid(axes, column_count, names, work_since_interrupt);
+  }
+
+  R_xlen_t *strides = paradox_temporary_alloc(
+    column_count,
+    sizeof(*strides)
+  );
+  R_xlen_t stride = 1;
+  for (R_xlen_t remaining = column_count; remaining > 0; --remaining) {
+    const R_xlen_t column = remaining - 1;
+    strides[column] = stride;
+    stride *= (R_xlen_t) axes[column].count;
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, column_count));
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    account_work(work_since_interrupt);
+    SEXP values = axes[column].values;
+    SEXP output = PROTECT(Rf_allocVector(
+      (SEXPTYPE) TYPEOF(values),
+      rows
+    ));
+    const R_xlen_t column_stride = strides[column];
+    for (R_xlen_t row = 0; row < rows; ++row) {
+      account_work(work_since_interrupt);
+      const R_xlen_t value = (row / column_stride) %
+        (R_xlen_t) axes[column].count;
+      copy_axis_element(output, row, values, value);
+    }
+    SET_VECTOR_ELT(result, column, output);
+    UNPROTECT(1);
+  }
+  SEXP prepared = PROTECT(set_table_attributes(result, names, rows));
+  UNPROTECT(2);
+  return prepared;
+}
+
+#define GRID_CHOICE_INACTIVE (-1)
+#define GRID_CHOICE_UNASSIGNED (-2)
+
+static int grid_condition_compatible(SEXP values, SEXP rhs) {
+  const SEXPTYPE value_type = (SEXPTYPE) TYPEOF(values);
+  const SEXPTYPE rhs_type = (SEXPTYPE) TYPEOF(rhs);
+  const int value_numeric = value_type == LGLSXP ||
+    value_type == INTSXP || value_type == REALSXP;
+  const int rhs_numeric = rhs_type == LGLSXP ||
+    rhs_type == INTSXP || rhs_type == REALSXP;
+  return (value_numeric && rhs_numeric) ||
+    (value_type == STRSXP && rhs_type == STRSXP);
+}
+
+static int grid_parameter_is_active(
+    const paradox_dependency_graph_plan_t *plan,
+    R_xlen_t parameter, const grid_axis_t *axes,
+    const R_xlen_t *axis_by_parameter, const int *choices,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t incoming = plan->incoming_start[parameter];
+      incoming < plan->incoming_start[parameter + 1];
+      ++incoming) {
+    account_work(work_since_interrupt);
+    const paradox_dependency_graph_edge_t *edge =
+      &plan->edges[plan->incoming_edges[incoming]];
+    if (edge->parent == R_XLEN_T_MAX) return FALSE;
+    if (edge->parent >= plan->parameter_count) {
+      Rf_error("Corrupt ParamSet dependency topology");
+    }
+    const int choice = choices[edge->parent];
+    if (choice == GRID_CHOICE_INACTIVE) return FALSE;
+    if (choice == GRID_CHOICE_UNASSIGNED) {
+      Rf_error("Internal error: dependency parent was not assigned");
+    }
+    const grid_axis_t *parent =
+      &axes[axis_by_parameter[edge->parent]];
+    if (choice < 0 || choice >= parent->count) return FALSE;
+
+    SEXP values = parent->values;
+    R_xlen_t value_index = (R_xlen_t) choice;
+    if (TYPEOF(values) == VECSXP) {
+      /*
+       * Cross-storage fixed specials are represented as one list-column cell
+       * to preserve their exact leaf. Compare the admitted scalar leaf through
+       * the same built-in Condition authority; opaque/NULL/S4 leaves simply do
+       * not satisfy a built-in predicate.
+       */
+      values = VECTOR_ELT(values, value_index);
+      value_index = 0;
+      if (values == R_NilValue ||
+          !paradox_builtin_condition_scalar_supported(values, edge->rhs)) {
+        return FALSE;
+      }
+    } else if (!grid_condition_compatible(values, edge->rhs)) {
+      return FALSE;
+    }
+    if (!paradox_builtin_condition_element_matches(
+        values,
+        value_index,
+        edge->rhs,
+        work_since_interrupt
+      )) {
+      return FALSE;
+    }
+  }
+  return TRUE;
+}
+
+static R_xlen_t enumerate_dependent_grid(
+    const paradox_dependency_graph_plan_t *plan,
+    const R_xlen_t *topological_order, const grid_axis_t *axes,
+    const R_xlen_t *axis_by_parameter, R_xlen_t row_capacity,
+    int capacity_is_user_limit, int *choice_matrix,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t parameter_count = plan->parameter_count;
+  int *choices = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*choices)
+  );
+  int *next_branch = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*next_branch)
+  );
+  int *branch_count = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*branch_count)
+  );
+  unsigned char *active = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*active)
+  );
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    choices[parameter] = GRID_CHOICE_UNASSIGNED;
+    next_branch[parameter] = GRID_CHOICE_UNASSIGNED;
+  }
+
+  R_xlen_t rows = 0;
+  R_xlen_t depth = 0;
+  while (TRUE) {
+    account_work(work_since_interrupt);
+    if (depth == parameter_count) {
+      if (rows >= row_capacity) {
+        if (choice_matrix != NULL) {
+          Rf_error("Internal error: dependent grid count changed");
+        }
+        if (capacity_is_user_limit) grid_limit_error(row_capacity);
+        Rf_error("Grid product exceeds the maximum data.frame row count");
+      }
+      if (choice_matrix != NULL) {
+        for (R_xlen_t parameter = 0;
+            parameter < parameter_count;
+            ++parameter) {
+          account_work(work_since_interrupt);
+          choice_matrix[parameter * row_capacity + rows] =
+            choices[parameter];
+        }
+      }
+      ++rows;
+      --depth;
+      continue;
+    }
+
+    const R_xlen_t parameter = topological_order[depth];
+    if (next_branch[depth] == GRID_CHOICE_UNASSIGNED) {
+      active[depth] = (unsigned char) grid_parameter_is_active(
+        plan,
+        parameter,
+        axes,
+        axis_by_parameter,
+        choices,
+        work_since_interrupt
+      );
+      branch_count[depth] = active[depth]
+        ? axes[axis_by_parameter[parameter]].count
+        : 1;
+      next_branch[depth] = 0;
+    }
+
+    if (next_branch[depth] < branch_count[depth]) {
+      choices[parameter] = active[depth]
+        ? next_branch[depth]
+        : GRID_CHOICE_INACTIVE;
+      ++next_branch[depth];
+      ++depth;
+      if (depth < parameter_count) {
+        next_branch[depth] = GRID_CHOICE_UNASSIGNED;
+      }
+      continue;
+    }
+
+    choices[parameter] = GRID_CHOICE_UNASSIGNED;
+    next_branch[depth] = GRID_CHOICE_UNASSIGNED;
+    if (depth == 0) break;
+    --depth;
+  }
+  return rows;
+}
+
+static int compare_grid_rows(R_xlen_t left, R_xlen_t right,
+    const int *choice_matrix, R_xlen_t row_count,
+    const grid_axis_t *axes, R_xlen_t column_count) {
+  for (R_xlen_t column = 0; column < column_count; ++column) {
+    const grid_axis_t *axis = &axes[column];
+    const R_xlen_t parameter = axis->param_row;
+    const int left_choice =
+      choice_matrix[parameter * row_count + left];
+    const int right_choice =
+      choice_matrix[parameter * row_count + right];
+    const int left_rank = left_choice < 0 || axis->fixed
+      ? 0
+      : axis->first_levels[left_choice];
+    const int right_rank = right_choice < 0 || axis->fixed
+      ? 0
+      : axis->first_levels[right_choice];
+    if (left_rank < right_rank) return -1;
+    if (left_rank > right_rank) return 1;
+  }
+  return 0;
+}
+
+static R_xlen_t *stable_grid_row_order(const int *choice_matrix,
+    R_xlen_t row_count, const grid_axis_t *axes,
+    R_xlen_t column_count, R_xlen_t *work_since_interrupt) {
+  R_xlen_t *order = paradox_temporary_alloc(
+    row_count == 0 ? 1 : row_count,
+    sizeof(*order)
+  );
+  R_xlen_t *scratch = paradox_temporary_alloc(
+    row_count == 0 ? 1 : row_count,
+    sizeof(*scratch)
+  );
+  for (R_xlen_t row = 0; row < row_count; ++row) {
+    order[row] = row;
+  }
+
+  R_xlen_t *source = order;
+  R_xlen_t *target = scratch;
+  for (R_xlen_t width = 1; width < row_count;) {
+    for (R_xlen_t start = 0; start < row_count;) {
+      const R_xlen_t middle = width > row_count - start
+        ? row_count
+        : start + width;
+      const R_xlen_t remaining = row_count - middle;
+      const R_xlen_t end = width > remaining
+        ? row_count
+        : middle + width;
+      R_xlen_t left = start;
+      R_xlen_t right = middle;
+      R_xlen_t output = start;
+      while (left < middle || right < end) {
+        account_work(work_since_interrupt);
+        if (right == end || (left < middle && compare_grid_rows(
+              source[left],
+              source[right],
+              choice_matrix,
+              row_count,
+              axes,
+              column_count
+            ) <= 0)) {
+          target[output++] = source[left++];
+        } else {
+          target[output++] = source[right++];
+        }
+      }
+      start = end;
+    }
+    R_xlen_t *swap = source;
+    source = target;
+    target = swap;
+    if (width > row_count / 2) {
+      width = row_count;
+    } else {
+      width *= 2;
+    }
+  }
+  if (source != order && row_count != 0) {
+    memcpy(order, source, (size_t) row_count * sizeof(*order));
+  }
+  return order;
+}
+
+static void set_grid_missing(SEXP output, R_xlen_t row,
+    SEXP list_missing) {
+  switch (TYPEOF(output)) {
+  case LGLSXP:
+    LOGICAL(output)[row] = NA_LOGICAL;
+    break;
+  case INTSXP:
+    INTEGER(output)[row] = NA_INTEGER;
+    break;
+  case REALSXP:
+    REAL(output)[row] = NA_REAL;
+    break;
+  case STRSXP:
+    SET_STRING_ELT(output, row, NA_STRING);
+    break;
+  case VECSXP:
+    SET_VECTOR_ELT(output, row, list_missing);
+    break;
+  default:
+    Rf_error("Internal error: unsupported dependent grid column type");
+  }
+}
+
+static SEXP build_dependent_grid(
+    const paradox_dependency_graph_plan_t *plan,
+    const grid_axis_t *axes, const R_xlen_t *axis_by_parameter,
+    SEXP names, int upper_limit, int upper_limit_supplied,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t parameter_count = plan->parameter_count;
+  R_xlen_t *branch_factors = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*branch_factors)
+  );
+  R_xlen_t *topological_order = paradox_temporary_alloc(
+    parameter_count,
+    sizeof(*topological_order)
+  );
+  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
+    const R_xlen_t axis = axis_by_parameter[parameter];
+    if (axis == R_XLEN_T_MAX) {
+      Rf_error("Internal error: grid parameter has no realized axis");
+    }
+    branch_factors[parameter] = (R_xlen_t) axes[axis].count;
+  }
+  paradox_dependency_graph_topological_order(
+    plan,
+    branch_factors,
+    topological_order,
+    work_since_interrupt
+  );
+
+  /*
+   * Count exactly before allocating. Unlike the celecx prototype, the ceiling
+   * is checked only at complete leaves, so a later empty active branch can
+   * still reduce the final design. Nominal zero axes have already taken the
+   * stronger legacy short-circuit above.
+   */
+  const R_xlen_t row_count = enumerate_dependent_grid(
+    plan,
+    topological_order,
+    axes,
+    axis_by_parameter,
+    (R_xlen_t) upper_limit,
+    upper_limit_supplied,
+    NULL,
+    work_since_interrupt
+  );
+  if (row_count == 0) {
+    return build_empty_grid(
+      axes,
+      parameter_count,
+      names,
+      work_since_interrupt
+    );
+  }
+  if (parameter_count > R_XLEN_T_MAX / row_count) {
+    Rf_error("Dependent grid choice matrix is too large");
+  }
+  int *choice_matrix = paradox_temporary_alloc(
+    parameter_count * row_count,
+    sizeof(*choice_matrix)
+  );
+  const R_xlen_t filled = enumerate_dependent_grid(
+    plan,
+    topological_order,
+    axes,
+    axis_by_parameter,
+    row_count,
+    FALSE,
+    choice_matrix,
+    work_since_interrupt
+  );
+  if (filled != row_count) {
+    Rf_error("Internal error: dependent grid count changed");
+  }
+  /*
+   * When DFS assigned parameters in public axis order, its rows are already
+   * ordered by the retained first nominal level. This is the common case for
+   * dependency chains and avoids an O(n log n) compatibility sort plus two
+   * row-sized index vectors. A branch-factor reordering still takes the exact
+   * stable sort below.
+   */
+  int public_order = TRUE;
+  for (R_xlen_t column = 0; column < parameter_count; ++column) {
+    if (topological_order[column] != axes[column].param_row) {
+      public_order = FALSE;
+      break;
+    }
+  }
+  R_xlen_t *order = public_order
+    ? NULL
+    : stable_grid_row_order(
+        choice_matrix,
+        row_count,
+        axes,
+        parameter_count,
+        work_since_interrupt
+      );
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, parameter_count));
+  for (R_xlen_t column = 0; column < parameter_count; ++column) {
+    account_work(work_since_interrupt);
+    const grid_axis_t *axis = &axes[column];
+    SEXP output = PROTECT(Rf_allocVector(
+      (SEXPTYPE) TYPEOF(axis->values),
+      row_count
+    ));
+    SEXP list_missing = R_NilValue;
+    if (TYPEOF(output) == VECSXP) {
+      list_missing = PROTECT(Rf_ScalarLogical(NA_LOGICAL));
+    }
+    for (R_xlen_t row = 0; row < row_count; ++row) {
+      account_work(work_since_interrupt);
+      const R_xlen_t generated_row = order == NULL ? row : order[row];
+      const int choice = choice_matrix[
+        axis->param_row * row_count + generated_row
+      ];
+      if (choice == GRID_CHOICE_INACTIVE) {
+        set_grid_missing(output, row, list_missing);
+      } else if (choice >= 0 && choice < axis->count) {
+        copy_axis_element(
+          output,
+          row,
+          axis->values,
+          (R_xlen_t) choice
+        );
+      } else {
+        if (TYPEOF(output) == VECSXP) UNPROTECT(1);
+        UNPROTECT(2);
+        Rf_error("Internal error: invalid dependent grid choice");
+      }
+    }
+    SET_VECTOR_ELT(result, column, output);
+    if (TYPEOF(output) == VECSXP) UNPROTECT(1);
+    UNPROTECT(1);
+  }
+  SEXP prepared = PROTECT(set_table_attributes(
+    result,
+    names,
+    row_count
+  ));
+  UNPROTECT(2);
+  return prepared;
+}
+
+SEXP paradox_generate_design_grid_builtin(SEXP private_environment, SEXP self,
+    SEXP resolutions, SEXP upper_limit) {
+  PROTECT(private_environment);
+  PROTECT(self);
+  PROTECT(resolutions);
+  PROTECT(upper_limit);
   const SEXPTYPE resolution_type = (SEXPTYPE) TYPEOF(resolutions);
   if ((resolution_type != INTSXP && resolution_type != REALSXP) ||
       ALTREP(resolutions) || Rf_isObject(resolutions)) {
+    UNPROTECT(4);
     Rf_error("`resolutions` must be an ordinary named numeric vector");
   }
 
+  int upper_limit_supplied = FALSE;
+  const int maximum_rows = parse_grid_upper_limit(
+    upper_limit,
+    &upper_limit_supplied
+  );
+  R_xlen_t work_since_interrupt = 0;
+  SEXP state_roots = PROTECT(Rf_allocVector(
+    VECSXP,
+    GRID_STATE_ROOT_COUNT
+  ));
+  PROTECT_INDEX graph_roots_index;
+  SEXP graph_roots;
+  PROTECT_WITH_INDEX(graph_roots = R_NilValue, &graph_roots_index);
+  grid_state_t state = {0};
+  load_grid_state(
+    private_environment,
+    self,
+    &state,
+    state_roots,
+    &graph_roots,
+    graph_roots_index,
+    &work_since_interrupt
+  );
+
   param_columns_t columns;
   SEXP column_roots = PROTECT(Rf_allocVector(VECSXP, QUNIF_ROOT_COUNT));
-  if (!load_param_columns(params, &columns, column_roots)) {
-    UNPROTECT(1);
+  if (!load_param_columns(state.params, &columns, column_roots)) {
+    UNPROTECT(7);
     Rf_error("Corrupt ParamSet grid state: invalid parameter schema");
   }
+  paradox_dependency_graph_plan_t dependency_plan = {0};
   if (columns.size == 0) {
     if (XLENGTH(resolutions) != 0) {
-      UNPROTECT(1);
+      UNPROTECT(7);
       Rf_error("`resolutions` must contain one value per parameter");
+    }
+    if (state.dependencies_data.row_count != 0) {
+      /*
+       * A canonical zero-dimensional schema cannot own an edge. Route the
+       * impossible state through the same mapper so empty-grid handling does
+       * not conceal an unknown child or another dependency corruption.
+       */
+      paradox_dependency_graph_plan_build(
+        columns.ids,
+        &state.dependencies_data,
+        &dependency_plan,
+        &work_since_interrupt
+      );
     }
     SEXP stable_names = PROTECT(Rf_allocVector(STRSXP, 0));
     int unused_count = 0;
     snapshot_grid_resolutions(resolutions, stable_names, &unused_count);
     SEXP result = PROTECT(Rf_allocVector(VECSXP, 0));
     SEXP prepared = PROTECT(set_table_attributes(result, stable_names, 0));
-    UNPROTECT(4);
+    UNPROTECT(10);
     return prepared;
   }
   if (XLENGTH(resolutions) != columns.size) {
-    UNPROTECT(1);
+    UNPROTECT(7);
     Rf_error("`resolutions` must contain one value per parameter");
   }
 
   id_map_t id_map;
   if (!initialize_id_map(columns.ids, &id_map)) {
-    UNPROTECT(1);
+    UNPROTECT(7);
     Rf_error("Corrupt ParamSet grid state: duplicate parameter IDs");
   }
 
@@ -1089,10 +2041,6 @@ SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
     sizeof(*specs)
   );
   int *counts = paradox_temporary_alloc(columns.size, sizeof(*counts));
-  R_xlen_t *strides = paradox_temporary_alloc(
-    columns.size,
-    sizeof(*strides)
-  );
   unsigned char *selected = paradox_temporary_alloc(
     columns.size,
     sizeof(*selected)
@@ -1102,8 +2050,6 @@ SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
     STRSXP,
     columns.size
   ));
-  R_xlen_t rows;
-  R_xlen_t work_since_interrupt = 0;
   snapshot_grid_resolutions(
     resolutions,
     stable_resolution_names,
@@ -1115,46 +2061,117 @@ SEXP paradox_generate_design_grid_builtin(SEXP params, SEXP resolutions) {
     stable_resolution_names,
     specs,
     counts,
-    strides,
     selected,
     spec_roots,
-    &rows,
     &work_since_interrupt
   );
+  if (state.dependencies_data.row_count != 0) {
+    /*
+     * Topology is part of ParamSet admission, not a consequence of producing
+     * rows. Validate it before the nominal-zero return so an empty grid cannot
+     * hide an admitted dependency cycle.
+     */
+    paradox_dependency_graph_plan_build(
+      columns.ids,
+      &state.dependencies_data,
+      &dependency_plan,
+      &work_since_interrupt
+    );
+  }
 
-  SEXP result = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  grid_axis_t *axes = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*axes)
+  );
+  for (R_xlen_t column = 0; column < columns.size; ++column) {
+    axes[column] = (grid_axis_t) {
+      .spec = specs[column],
+      .values = R_NilValue,
+      .first_levels = NULL,
+      .param_row = R_XLEN_T_MAX,
+      .count = counts[column],
+      .fixed = FALSE
+    };
+  }
   SEXP result_names = PROTECT(copy_column_names(
     stable_resolution_names,
     &work_since_interrupt
   ));
-  int warn_integer_range = FALSE;
+
+  /*
+   * Preserve the established nominal-zero contract before consulting fixed
+   * values: a requested zero-resolution axis or zero-level factor makes the
+   * complete grid empty even when that parameter has a stored value.
+   */
   for (R_xlen_t column = 0; column < columns.size; ++column) {
-    account_work(&work_since_interrupt);
-    SEXP output = PROTECT(Rf_allocVector(
-      output_type(specs[column].kind),
-      rows
-    ));
-    SET_VECTOR_ELT(result, column, output);
-    if (!fill_grid_column(
-          output,
-          rows,
-          counts[column],
-          strides[column],
-          &specs[column],
-          &warn_integer_range,
-          &work_since_interrupt
-        )) {
-      UNPROTECT(6);
-      Rf_error("Corrupt ParamSet grid mapping state");
+    if (counts[column] == 0) {
+      SEXP prepared = PROTECT(build_empty_grid(
+        axes,
+        columns.size,
+        result_names,
+        &work_since_interrupt
+      ));
+      UNPROTECT(11);
+      return prepared;
     }
-    UNPROTECT(1);
   }
 
+  R_xlen_t *fixed_by_parameter = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*fixed_by_parameter)
+  );
+  if (!map_fixed_values(
+        &state,
+        &id_map,
+        columns.size,
+        fixed_by_parameter,
+        &work_since_interrupt
+      )) {
+    UNPROTECT(10);
+    Rf_error("Corrupt ParamSet grid state: invalid stored value IDs");
+  }
+  R_xlen_t *axis_by_parameter = paradox_temporary_alloc(
+    columns.size,
+    sizeof(*axis_by_parameter)
+  );
+  SEXP axis_roots = PROTECT(Rf_allocVector(VECSXP, columns.size));
+  int warn_integer_range = FALSE;
+  build_grid_axes(
+    &state,
+    &columns,
+    &id_map,
+    stable_resolution_names,
+    counts,
+    specs,
+    fixed_by_parameter,
+    axes,
+    axis_by_parameter,
+    axis_roots,
+    &warn_integer_range,
+    &work_since_interrupt
+  );
+
+  SEXP prepared = PROTECT(state.dependencies_data.row_count == 0
+    ? build_independent_grid(
+        axes,
+        columns.size,
+        result_names,
+        maximum_rows,
+        upper_limit_supplied,
+        &work_since_interrupt
+      )
+    : build_dependent_grid(
+        &dependency_plan,
+        axes,
+        axis_by_parameter,
+        result_names,
+        maximum_rows,
+        upper_limit_supplied,
+        &work_since_interrupt
+      ));
   if (warn_integer_range) {
     Rf_warning("NAs introduced by coercion to integer range");
   }
-
-  SEXP prepared = PROTECT(set_table_attributes(result, result_names, rows));
-  UNPROTECT(6);
+  UNPROTECT(12);
   return prepared;
 }

@@ -490,6 +490,35 @@ A zero-level `ParamFct` is canonical. Zero-row quantile, grid, and uniform
 sampling results retain a `character(0)` column; a positive-row quantile or
 uniform-sampling request errors before level indexing or RNG entry.
 
+Grid generation is output-sensitive rather than a fast materialization of the
+nominal Cartesian product followed by repair. One registered operation freezes
+the complete BASE/COLLECTION/SHADOW parameter, raw-value, and dependency
+generation. It maps each requested built-in axis once, deduplicates monotone
+realized values while retaining their earliest nominal level, and turns an
+ordinary fixed value into one axis choice. Dependency-free grids fill the
+compact mixed-radix product directly. Dependency-bearing grids use the same
+owned edge mapping, Condition admission, incoming ranges, and cycle detection
+as the Design vector masker; an iterative two-pass traversal first counts exact
+leaves and then records only dependency-valid choices. Traversal already has
+the historical row order when its topological sequence is the public axis
+sequence, so that common case emits directly. Otherwise a stable sort over each
+choice's earliest nominal-level tuple reproduces the historical
+full-product/normalize/first-unique row order without constructing that product.
+The optional `upper_limit` is checked against complete realized leaves, not an
+intermediate expansion.
+
+The nominal-zero rule precedes fixed-axis collapse: any zero requested
+resolution or zero-level factor makes the complete typed grid empty. Dependency
+topology is nevertheless admitted before returning, so a cycle is never hidden
+by emptiness. Same-storage fixed scalars retain their atomic storage. A valid
+cross-storage, `NULL`, or S4 special is one opaque list-column leaf rather than
+being subjected to data.table's former coercion/deletion accidents; a stored
+TuneToken is rejected explicitly because a grid is a concrete Design. The
+native result is already fixed, dependency-masked, deduplicated, and ordered.
+Only this package-created result may pass the namespace-owned prepared-grid
+token to `Design$new()`; all other generators and public Design construction
+retain the ordinary normalization boundary.
+
 Supported callbacks remain first-class state: ParamUty custom checks,
 individual transformations, extra transformations, constraints, aggregation,
 and internal tuning. Native code snapshots callback objects before execution,

@@ -7,6 +7,7 @@
 
 #include "builtin_condition.h"
 #include "core_state.h"
+#include "dependency_graph.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
@@ -26,13 +27,6 @@
   ((size_t) 128U * (size_t) 1024U * (size_t) 1024U)
 
 typedef struct {
-  R_xlen_t child;
-  R_xlen_t parent;
-  paradox_builtin_condition_kind_t kind;
-  SEXP rhs;
-} dependency_edge_t;
-
-typedef struct {
   SEXP params;
   SEXP dependencies;
   SEXP columns;
@@ -43,11 +37,7 @@ typedef struct {
   R_xlen_t dependency_count;
   R_xlen_t row_count;
   R_xlen_t *column_by_parameter;
-  dependency_edge_t *edges;
-  R_xlen_t *topological_order;
-  R_xlen_t *incoming_count;
-  R_xlen_t *incoming_start;
-  R_xlen_t *incoming_edges;
+  paradox_dependency_graph_plan_t graph;
 } dependency_snapshot_t;
 
 static int strings_equal(SEXP left, SEXP right) {
@@ -380,11 +370,32 @@ static int rhs_matches_string(SEXP value, SEXP rhs,
   return FALSE;
 }
 
-static int condition_matches(const dependency_edge_t *edge, SEXP column,
+static int condition_matches(const paradox_dependency_graph_edge_t *edge,
+    SEXP column,
     R_xlen_t row, R_xlen_t *work_since_interrupt) {
+  if (TYPEOF(column) == VECSXP) {
+    SEXP value = VECTOR_ELT(column, row);
+    /* Complete Design rows use list columns for opaque and cross-storage
+     * scalar leaves. TuneToken parents skip their edge just as they do in the
+     * shared list-basis activity kernel; other supported scalar leaves enter
+     * the same built-in comparator as native grid traversal. */
+    if (Rf_inherits(value, "TuneToken")) {
+      return TRUE;
+    }
+    if (value == R_NilValue ||
+        !paradox_builtin_condition_scalar_supported(value, edge->rhs)) {
+      return FALSE;
+    }
+    return paradox_builtin_condition_element_matches(
+      value,
+      0,
+      edge->rhs,
+      work_since_interrupt
+    );
+  }
   if (factor_column(column)) {
     if (TYPEOF(edge->rhs) != STRSXP) {
-      Rf_error("A factor dependency parent requires a character condition");
+      return FALSE;
     }
     const int code = INTEGER_ELT(column, row);
     if (code == NA_INTEGER) {
@@ -402,7 +413,7 @@ static int condition_matches(const dependency_edge_t *edge, SEXP column,
   const SEXPTYPE rhs_type = (SEXPTYPE) TYPEOF(edge->rhs);
   if (!((numeric_type(column_type) && numeric_type(rhs_type)) ||
         (column_type == STRSXP && rhs_type == STRSXP))) {
-    Rf_error("A Design dependency condition is incompatible with its parent column");
+    return FALSE;
   }
   return paradox_builtin_condition_element_matches(
     column,
@@ -424,129 +435,6 @@ static int value_is_missing(SEXP column, R_xlen_t row) {
     return STRING_ELT(column, row) == NA_STRING;
   default:
     return FALSE;
-  }
-}
-
-static void build_edge_plan(dependency_snapshot_t *snapshot,
-    R_xlen_t *work_since_interrupt) {
-  const R_xlen_t parameter_count = snapshot->parameter_count;
-  const R_xlen_t dependency_count = snapshot->dependency_count;
-  snapshot->edges = paradox_temporary_alloc(
-    dependency_count,
-    sizeof(*snapshot->edges)
-  );
-  snapshot->incoming_count = paradox_temporary_alloc(
-    parameter_count,
-    sizeof(*snapshot->incoming_count)
-  );
-  R_xlen_t *indegree = paradox_temporary_alloc(
-    parameter_count,
-    sizeof(*indegree)
-  );
-  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-    snapshot->incoming_count[parameter] = 0;
-    indegree[parameter] = 0;
-  }
-
-  for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-    paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t child = find_string(
-      snapshot->params_data.ids,
-      STRING_ELT(snapshot->dependencies_data.ids, edge),
-      work_since_interrupt
-    );
-    const R_xlen_t parent = find_string(
-      snapshot->params_data.ids,
-      STRING_ELT(snapshot->dependencies_data.on, edge),
-      work_since_interrupt
-    );
-    if (child == R_XLEN_T_MAX || parent == R_XLEN_T_MAX) {
-      Rf_error("Design dependencies refer to an unknown parameter");
-    }
-    paradox_builtin_condition_kind_t kind;
-    SEXP rhs = R_NilValue;
-    if (!paradox_builtin_condition_exact(
-        VECTOR_ELT(snapshot->dependencies_data.conditions, edge),
-        &kind,
-        &rhs,
-        work_since_interrupt
-      )) {
-      Rf_error("Corrupt dependency Condition in ParamSet capsule");
-    }
-    snapshot->edges[edge] = (dependency_edge_t) {
-      child, parent, kind, rhs
-    };
-    ++snapshot->incoming_count[child];
-    ++indegree[child];
-  }
-
-  if (parameter_count == R_XLEN_T_MAX) {
-    Rf_error("ParamSet dependency graph is too large");
-  }
-  snapshot->incoming_start = paradox_temporary_alloc(
-    parameter_count + 1,
-    sizeof(*snapshot->incoming_start)
-  );
-  snapshot->incoming_edges = paradox_temporary_alloc(
-    dependency_count,
-    sizeof(*snapshot->incoming_edges)
-  );
-  snapshot->incoming_start[0] = 0;
-  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-    if (snapshot->incoming_count[parameter] >
-        R_XLEN_T_MAX - snapshot->incoming_start[parameter]) {
-      Rf_error("ParamSet dependency graph is too large");
-    }
-    snapshot->incoming_start[parameter + 1] =
-      snapshot->incoming_start[parameter] +
-      snapshot->incoming_count[parameter];
-  }
-  if (snapshot->incoming_start[parameter_count] != dependency_count) {
-    Rf_error("Corrupt ParamSet dependency graph counts");
-  }
-  R_xlen_t *incoming_cursor = paradox_temporary_alloc(
-    parameter_count,
-    sizeof(*incoming_cursor)
-  );
-  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-    incoming_cursor[parameter] = snapshot->incoming_start[parameter];
-  }
-  for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-    const R_xlen_t child = snapshot->edges[edge].child;
-    snapshot->incoming_edges[incoming_cursor[child]] = edge;
-    ++incoming_cursor[child];
-  }
-
-  snapshot->topological_order = paradox_temporary_alloc(
-    parameter_count,
-    sizeof(*snapshot->topological_order)
-  );
-  int *emitted = paradox_temporary_alloc(parameter_count, sizeof(*emitted));
-  for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-    emitted[parameter] = FALSE;
-  }
-  for (R_xlen_t output = 0; output < parameter_count; ++output) {
-    R_xlen_t selected = R_XLEN_T_MAX;
-    for (R_xlen_t parameter = 0; parameter < parameter_count; ++parameter) {
-      paradox_domain_account_work(work_since_interrupt);
-      if (!emitted[parameter] && indegree[parameter] == 0) {
-        selected = parameter;
-        break;
-      }
-    }
-    if (selected == R_XLEN_T_MAX) {
-      Rf_error("ParamSet dependency graph contains a cycle");
-    }
-    emitted[selected] = TRUE;
-    snapshot->topological_order[output] = selected;
-    for (R_xlen_t edge = 0; edge < dependency_count; ++edge) {
-      if (snapshot->edges[edge].parent == selected) {
-        if (indegree[snapshot->edges[edge].child] == 0) {
-          Rf_error("Corrupt ParamSet dependency topology");
-        }
-        --indegree[snapshot->edges[edge].child];
-      }
-    }
   }
 }
 
@@ -615,20 +503,48 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     sizeof(*inactive_counts)
   );
   for (R_xlen_t position = 0; position < parameter_count; ++position) {
-    const R_xlen_t child = snapshot->topological_order[position];
+    paradox_domain_account_work(work_since_interrupt);
+    const R_xlen_t child = snapshot->graph.topological_order[position];
     inactive_counts[child] = 0;
-    if (snapshot->incoming_count[child] == 0) {
+    if (snapshot->graph.incoming_count[child] == 0) {
       continue;
     }
     ++patch_count;
     for (R_xlen_t row = 0; row < row_count; ++row) {
+      /*
+       * Account at the complete-row boundary as well as inside the comparator:
+       * TuneToken children and dangling parents deliberately short-circuit
+       * before any Condition element is observed.
+       */
+      paradox_domain_account_work(work_since_interrupt);
       int child_inactive = FALSE;
-      for (R_xlen_t incoming = snapshot->incoming_start[child];
-          incoming < snapshot->incoming_start[child + 1] && !child_inactive;
+      SEXP child_column = VECTOR_ELT(
+        snapshot->columns,
+        snapshot->column_by_parameter[child]
+      );
+      /*
+       * TuneToken children skip all incoming edges, after the shared graph
+       * planner above has already admitted topology and rejected cycles.
+       */
+      if (TYPEOF(child_column) == VECSXP &&
+          Rf_inherits(VECTOR_ELT(child_column, row), "TuneToken")) {
+        continue;
+      }
+      for (R_xlen_t incoming = snapshot->graph.incoming_start[child];
+          incoming < snapshot->graph.incoming_start[child + 1] &&
+            !child_inactive;
           ++incoming) {
-        const dependency_edge_t *dependency = &snapshot->edges[
-          snapshot->incoming_edges[incoming]
+        const paradox_dependency_graph_edge_t *dependency =
+          &snapshot->graph.edges[
+          snapshot->graph.incoming_edges[incoming]
         ];
+        if (dependency->parent == R_XLEN_T_MAX) {
+          child_inactive = TRUE;
+          continue;
+        }
+        if (dependency->parent >= parameter_count) {
+          Rf_error("Corrupt ParamSet dependency topology");
+        }
         SEXP parent_column = VECTOR_ELT(
           snapshot->columns,
           snapshot->column_by_parameter[dependency->parent]
@@ -667,8 +583,9 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
 
   R_xlen_t output = 0;
   for (R_xlen_t position = 0; position < parameter_count; ++position) {
-    const R_xlen_t child = snapshot->topological_order[position];
-    if (snapshot->incoming_count[child] == 0) {
+    paradox_domain_account_work(work_since_interrupt);
+    const R_xlen_t child = snapshot->graph.topological_order[position];
+    if (snapshot->graph.incoming_count[child] == 0) {
       continue;
     }
     SEXP indices = PROTECT(Rf_allocVector(
@@ -677,6 +594,7 @@ static SEXP build_output(dependency_snapshot_t *snapshot,
     ));
     R_xlen_t index = 0;
     for (R_xlen_t row = 0; row < row_count; ++row) {
+      paradox_domain_account_work(work_since_interrupt);
       if (mask_get(snapshot, inactive, child, row)) {
         SET_INTEGER_ELT(indices, index, (int) row + 1);
         ++index;
@@ -760,7 +678,12 @@ SEXP paradox_design_dependency_plan(SEXP data, SEXP param_set) {
     roots,
     &work_since_interrupt
   );
-  build_edge_plan(&snapshot, &work_since_interrupt);
+  paradox_dependency_graph_plan_build(
+    snapshot.params_data.ids,
+    &snapshot.dependencies_data,
+    &snapshot.graph,
+    &work_since_interrupt
+  );
   SEXP result = PROTECT(build_output(
     &snapshot,
     &work_since_interrupt

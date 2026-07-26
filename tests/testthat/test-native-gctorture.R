@@ -186,8 +186,10 @@ test_that("every allocating native entry point survives forced collection", {
   sampler_seed_after_rows = .Random.seed
   generated_grid = .Call(
     symbols$C_generate_design_grid_builtin,
-    params,
-    c(double = 3, integer = 3, factor = 2, logical = 2)
+    private,
+    parameter_set,
+    c(double = 3, integer = 5, factor = 2, logical = 2),
+    NULL
   )
   recovered_domain = .Call(
     symbols$C_param_set_get_domain,

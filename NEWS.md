@@ -161,7 +161,9 @@ hazards that Paradox 2 is intended to remove.
   parent-Domain narrowing. `$add_dep()` remains the stricter authoring API: RHS
   feasibility uses the shared check kernel, callback reentry is
   generation-checked, and Shadow append routes to the origin only when both
-  endpoints remain visible.
+  endpoints remain visible. Design masking and grid generation consistently
+  treat an infeasible predicate or dangling parent as unsatisfied, so its child
+  is inactive instead of failing in a later vectorized comparison.
 * `$has_deps` is now a native scalar read. BASE and live SHADOW nodes validate
   their canonical dependency state directly; COLLECTION nodes retain complete
   graph admission and use its subtree count. The flag no longer constructs a
@@ -425,6 +427,16 @@ hazards that Paradox 2 is intended to remove.
   receive the correct active unprefixed values; strict checks consult live
   child constraints.
 * Collection assignment reaches live child state, including a shadow's origin.
+* `generate_design_grid()` now deduplicates each realized built-in axis,
+  collapses stored fixed values, and prunes dependency-inactive branches before
+  materializing their Cartesian product. It retains the established
+  first-nominal-occurrence row order while avoiding nominal products that may
+  be vastly larger than the returned design. The new optional `upper_limit`
+  argument bounds the final realized row count. A nominal zero axis still
+  makes the result empty, even when that parameter has a stored fixed value.
+  Valid fixed cross-storage, `NULL`, and S4 special values retain their identity
+  as list-column values; a fixed TuneToken now raises an informative error
+  instead of being treated as a concrete grid value.
 * ParamSet quantile and grid kernels now consume canonical plain capsule tables
   on every supported R release, including R 4.3/4.5. Zero-axis grids retain a
   typed empty result; this includes zero-level factor Domains, whose empty

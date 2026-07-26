@@ -744,8 +744,10 @@ main <- function() {
       set <- ps(x = p_int(0L, 2L), y = p_dbl(0, 1))
       result <- .Call(
         symbol("generate_design_grid_builtin"),
-        state_of(set)$.params,
-        c(y = 3, x = 3)
+        private_of(set),
+        set,
+        c(y = 3, x = 3),
+        NULL
       )
       check(
         identical(names(result), c("y", "x")) &&
@@ -754,11 +756,14 @@ main <- function() {
           data.table:::selfrefok(result, verbose = FALSE) == 1L,
         "one-shot grid differs"
       )
+      dense <- ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
       overflow <- tryCatch(
         .Call(
           symbol("generate_design_grid_builtin"),
-          state_of(set)$.params,
-          c(y = 50000, x = 50000)
+          private_of(dense),
+          dense,
+          c(y = 50000, x = 50000),
+          NULL
         ),
         error = identity
       )

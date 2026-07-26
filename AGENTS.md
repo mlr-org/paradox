@@ -518,7 +518,24 @@ store-blind, so a legal raw dormant store is not itself promised to pass
   uniform engine. `SamplerUnif$samplers` remains descriptive compatibility
   metadata: replacing/reordering the list is an error and child mutation never
   selects another engine. Use `SamplerHierarchical` for custom 1-D samplers.
-  Fixed values and dependency masking remain the single `Design$new()` boundary.
+  Random, Sobol, LHS, hierarchical, and directly constructed designs retain
+  fixed-value overwrite and dependency masking at the ordinary `Design$new()`
+  boundary. `generate_design_grid()` is the one deliberate prepared-design
+  exception: its registered native operation snapshots the complete
+  BASE/COLLECTION/SHADOW graph, realizes and deduplicates axes, collapses fixed
+  axes, enumerates dependency-valid branches, restores first-nominal-occurrence
+  row order, and returns the final table. It enters `Design$new()` with the
+  namespace-owned prepared-grid token and must not pay for or risk divergence
+  from a second normalization pass. The grid and Design vector masker share
+  the same dependency graph planner and built-in Condition comparator; neither
+  may grow a parallel R/data.table evaluator.
+  A nominal zero-resolution or zero-level axis still makes the complete grid
+  empty before fixed collapse or quantile warnings, but dependency topology is
+  admitted first so an empty result cannot hide a cycle. `upper_limit` applies
+  to the exact final realized row count. Ordinary same-storage fixed scalars
+  retain atomic columns; a valid cross-storage, `NULL`, or S4 special fixed
+  leaf is one identity-preserving list-column cell, and fixed TuneTokens receive
+  a direct informative grid error.
 - Stable ALTREP inputs, including base compact sequences such as `1:n`, are
   supported in documented semantic-vector positions. Structural containers
   remain deliberately ordinary non-ALTREP and non-S4: configuration/search-

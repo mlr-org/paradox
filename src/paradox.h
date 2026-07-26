@@ -284,8 +284,10 @@ attribute_hidden SEXP paradox_design_dependency_plan(
   SEXP param_set
 );
 attribute_hidden SEXP paradox_generate_design_grid_builtin(
-  SEXP params,
-  SEXP resolutions
+  SEXP private_environment,
+  SEXP self,
+  SEXP resolutions,
+  SEXP upper_limit
 );
 attribute_hidden SEXP paradox_param_set_trafo(
   SEXP private_environment,

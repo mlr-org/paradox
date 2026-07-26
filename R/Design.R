@@ -1,3 +1,5 @@
+.design_prepared_grid = new.env(parent = emptyenv())
+
 #' @title Design of Configurations
 #'
 #' @description
@@ -47,16 +49,21 @@ Design = R6Class("Design",
       assert_data_table(data, ncols = param_set$length)
       assert_names(colnames(data), permutation.of = param_set$ids())
       self$param_set = param_set
-      # Apply fixed values at this one generator-independent boundary. Random,
-      # grid, Sobol, and LHS designs therefore share identical overwrite and
-      # dependency behavior even when a generator produced placeholder data.
-      imap(param_set$values, function(v, n) set(data, j = n, value = v))
       self$data = data
-      private$set_deps_to_na()
-      # NB: duplicated rows can happen to to NA setting
-      if (remove_dupl) {
-        self$data = unique(self$data)
-      } # remove duplicated rows
+      if (!identical(remove_dupl, .design_prepared_grid)) {
+        # Apply fixed values at this one generator-independent boundary. Random,
+        # Sobol, LHS, and directly constructed designs therefore share identical
+        # overwrite and dependency behavior even when their input contains
+        # placeholder data. The native grid generator has already performed this
+        # normalization while pruning its search and enters with the package's
+        # namespace-owned prepared-grid token.
+        imap(param_set$values, function(v, n) set(data, j = n, value = v))
+        private$set_deps_to_na()
+        # NB: duplicated rows can happen due to NA setting.
+        if (remove_dupl) {
+          self$data = unique(self$data)
+        }
+      }
     },
 
 

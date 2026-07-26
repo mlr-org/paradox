@@ -110,7 +110,7 @@ static const R_CallMethodDef call_methods[] = {
   {"sampler_unif_sample_builtin",
     (DL_FUNC) &paradox_sampler_unif_sample_builtin, 2},
   {"generate_design_grid_builtin",
-    (DL_FUNC) &paradox_generate_design_grid_builtin, 2},
+    (DL_FUNC) &paradox_generate_design_grid_builtin, 4},
   {"param_set_trafo", (DL_FUNC) &paradox_param_set_trafo, 4},
   {"param_set_get_domain", (DL_FUNC) &paradox_param_set_get_domain, 3},
   {"param_set_domains", (DL_FUNC) &paradox_param_set_domains, 2},

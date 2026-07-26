@@ -58,7 +58,7 @@ test_that("ALTREP-sensitive native routines use their current fixed arities", {
     param_set_check_dt_builtin = 6L,
     condition_test_builtin = 2L,
     param_set_qunif_builtin = 3L,
-    generate_design_grid_builtin = 2L,
+    generate_design_grid_builtin = 4L,
     design_transpose = 2L,
     design_transpose_trafos = 2L,
     param_set_trafo = 4L,
@@ -102,8 +102,10 @@ test_that("ordinary compact sequences work at every applicable boundary", {
   names(resolutions) = c("a", "b")
   grid = .Call(
     altrep2_symbol("generate_design_grid_builtin"),
-    altrep2_state(grid_set)$.params,
-    resolutions
+    altrep2_private(grid_set),
+    grid_set,
+    resolutions,
+    NULL
   )
   expect_identical(as.list(grid), list(a = c(0L, 0L), b = c(0L, 1L)))
 
@@ -774,8 +776,10 @@ test_that("exotic ALTREP state is rejected before dispatch", {
   )
   expect_error(.Call(
     altrep2_symbol("generate_design_grid_builtin"),
-    altrep2_state(grid_set)$.params,
-    resolutions
+    altrep2_private(grid_set),
+    grid_set,
+    resolutions,
+    NULL
   ), "ordinary named numeric vector", fixed = TRUE)
   expect_identical(callbacks, 0L)
 })

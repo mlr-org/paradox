@@ -54,7 +54,7 @@ param_set_set_callback	4	production	production-dynamic	direct_param_set_set_call
 param_set_property	2	production	production-dynamic	direct_param_set_property	Direct named-vector static property extraction
 param_set_qunif_builtin	3	production	production-dynamic	direct_param_set_qunif_builtin	Direct matrix/data.frame mapping from an owned current capsule; malformed inputs error without replay
 sampler_unif_sample_builtin	2	production	production-dynamic	direct_sampler_unif_sample_builtin	Direct capsule-driven whole-operation uniform sampling
-generate_design_grid_builtin	2	production	production-dynamic	direct_generate_design_grid_builtin	Direct one-shot mixed grid construction; malformed inputs and overflowing products error before allocation
+generate_design_grid_builtin	4	production	production-dynamic	direct_generate_design_grid_builtin	Direct output-sensitive fixed/dependency-aware grid construction; malformed inputs and overflowing realized products error before allocation
 param_set_trafo	4	production	production-dynamic	direct_param_set_trafo	Direct single-row transformation through the shared capsule engine
 param_set_get_domain	3	production	production-dynamic	direct_param_set_get_domain	Direct Domain recovery from exact capsule state
 param_set_domains	2	production	production-dynamic	direct_param_set_domains	Direct batch Domain recovery

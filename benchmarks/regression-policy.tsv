@@ -29,6 +29,9 @@ paired	sampler_unif_sample	-	hot	optimizer-loop-uniform-sampling
 paired	generate_design_random	-	hot	common-design-generation
 paired	generate_design_grid_mixed4	-	hot	common-grid-generation
 paired	generate_design_grid_mixed8	-	hot	larger-grid-generation
+paired	generate_design_grid_integer_collapse	-	hot	integer-mapping-collapse-before-product
+paired	generate_design_grid_fixed_collapse	-	hot	fixed-axis-collapse-before-product
+paired	generate_design_grid_dependency_pruned	-	hot	dependency-pruned-grid-generation
 paired	design_transpose_plain	-	standard	design-materialization
 paired	design_transpose_filtered	-	standard	design-filtering
 paired	design_transpose_trafo	-	standard	design-transformation

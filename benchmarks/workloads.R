@@ -34,6 +34,9 @@ benchmark_workload_names <- function() {
     "generate_design_random",
     "generate_design_grid_mixed4",
     "generate_design_grid_mixed8",
+    "generate_design_grid_integer_collapse",
+    "generate_design_grid_fixed_collapse",
+    "generate_design_grid_dependency_pruned",
     "design_transpose_plain",
     "design_transpose_filtered",
     "design_transpose_trafo",
@@ -154,6 +157,41 @@ benchmark_make_inputs <- function(n_params, n_rows) {
   }
   grid_mixed4 <- make_grid_space(1L)
   grid_mixed8 <- make_grid_space(2L)
+
+  collapsed_grid_ids <- sprintf("collapsed_%02d", seq_len(5L))
+  collapsed_grid_domains <- lapply(
+    collapsed_grid_ids,
+    function(id) p_int(0L, 1L)
+  )
+  names(collapsed_grid_domains) <- collapsed_grid_ids
+  grid_integer_collapse <- ParamSet$new(collapsed_grid_domains)
+
+  fixed_grid_ids <- sprintf("fixed_%02d", seq_len(5L))
+  fixed_grid_domains <- lapply(
+    fixed_grid_ids,
+    function(id) p_dbl(0, 1)
+  )
+  names(fixed_grid_domains) <- fixed_grid_ids
+  grid_fixed_collapse <- ParamSet$new(fixed_grid_domains)
+  grid_fixed_collapse$values <- setNames(
+    rep(list(0.25), length(fixed_grid_ids)),
+    fixed_grid_ids
+  )
+
+  dependency_grid_ids <- sprintf("dependent_%02d", seq_len(7L))
+  dependency_grid_domains <- lapply(
+    dependency_grid_ids,
+    function(id) p_int(1L, 5L)
+  )
+  names(dependency_grid_domains) <- dependency_grid_ids
+  grid_dependency_pruned <- ParamSet$new(dependency_grid_domains)
+  for (index in seq.int(2L, length(dependency_grid_ids))) {
+    grid_dependency_pruned$add_dep(
+      dependency_grid_ids[[index]],
+      dependency_grid_ids[[index - 1L]],
+      CondEqual(1L)
+    )
+  }
 
   scalar_values <- vector("list", n_params)
   for (i in seq_len(n_params)) {
@@ -530,6 +568,11 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     grid_mixed4 = grid_mixed4,
     grid_mixed8 = grid_mixed8,
     grid_resolution = 3L,
+    grid_integer_collapse = grid_integer_collapse,
+    grid_fixed_collapse = grid_fixed_collapse,
+    grid_dependency_pruned = grid_dependency_pruned,
+    grid_collapse_resolution = 12L,
+    grid_dependency_resolution = 5L,
     scalar_values = scalar_values,
     sanitize_values = sanitize_values,
     sanitized_expected = sanitized_expected,
@@ -577,6 +620,28 @@ benchmark_make_workloads <- function(inputs) {
     )
     paste(expected_rows, space$length, data[[1L]][[1L]],
       data[[1L]][[expected_rows]], sep = "|")
+  }
+
+  exact_compact_grid <- function(result, space, expected_rows) {
+    data <- result$data
+    stopifnot(
+      inherits(result, "Design"),
+      inherits(data, "data.table"),
+      nrow(data) == expected_rows,
+      ncol(data) == space$length,
+      identical(names(data), space$ids()),
+      identical(result$param_set$ids(), space$ids())
+    )
+    # The small realized tables make an exact value/type/order key cheap. This
+    # detects a generator that returns the right row count but changes the
+    # established first-nominal-occurrence ordering.
+    columns <- lapply(seq_along(data), function(index) data[[index]])
+    payload <- list(
+      names = names(data),
+      types = unname(vapply(columns, typeof, character(1L))),
+      columns = columns
+    )
+    paste(format(serialize(payload, NULL, version = 2L)), collapse = "")
   }
 
   workloads <- list(
@@ -958,6 +1023,33 @@ benchmark_make_workloads <- function(inputs) {
         inputs$grid_resolution
       )),
       validate = function(result) exact_grid(result, inputs$grid_mixed8)
+    ),
+    generate_design_grid_integer_collapse = list(
+      expression = quote(generate_design_grid(
+        inputs$grid_integer_collapse,
+        inputs$grid_collapse_resolution
+      )),
+      validate = function(result) {
+        exact_compact_grid(result, inputs$grid_integer_collapse, 32L)
+      }
+    ),
+    generate_design_grid_fixed_collapse = list(
+      expression = quote(generate_design_grid(
+        inputs$grid_fixed_collapse,
+        inputs$grid_collapse_resolution
+      )),
+      validate = function(result) {
+        exact_compact_grid(result, inputs$grid_fixed_collapse, 1L)
+      }
+    ),
+    generate_design_grid_dependency_pruned = list(
+      expression = quote(generate_design_grid(
+        inputs$grid_dependency_pruned,
+        inputs$grid_dependency_resolution
+      )),
+      validate = function(result) {
+        exact_compact_grid(result, inputs$grid_dependency_pruned, 29L)
+      }
     ),
     design_transpose_plain = list(
       expression = quote(inputs$design$transpose(filter_na = FALSE, trafo = FALSE)),

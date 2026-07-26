@@ -300,6 +300,20 @@ A `ParamFct` with `character()` levels is canonical. Operations that request
 zero rows preserve a typed `character(0)` factor column; nonempty quantile or
 uniform-sampling requests error before indexing a level or entering the RNG.
 
+`generate_design_grid()` is one complete native graph operation, not a nominal
+Cartesian generator followed by an R/data.table normalization engine. It
+deduplicates realized built-in axes, makes stored values fixed axes, traverses
+only dependency-valid branches, and preserves the established first nominal
+occurrence of every final row. Its optional ceiling is defined over that final
+realized row count. Dependency graph planning and built-in comparison are
+shared with Design dependency masking. A nominal zero axis still produces a
+typed empty grid even if fixed, after dependency topology has been validated.
+Package-created final grid data alone enters the R6 Design shell with a
+namespace-owned prepared token; that token is not a public bypass for arbitrary
+Design input. Valid non-storage/`NULL`/S4 fixed specials retain exact identity
+as single list-column leaves, while a fixed TuneToken errors because it is not a
+concrete design value.
+
 Canonical semantic admission of one built-in Domain row has exactly one native
 owner. The constructor's final-state assertion, ParamSet construction, and an
 ObjectTuneToken carrying a Domain all call that owner for kind/storage,

@@ -17,9 +17,12 @@ gates are historical only; they do not transfer to the cleanup source that
 followed it. The dormant-values/default-aware-activity implementation is an
 additional package-facing semantic change after that seal; it changes the
 native dependency/check/value paths and therefore cannot inherit any
-package-facing conclusion from `8797f11`. While it and the remaining
-pre-release items are in flight, use only the focused development policy
-below. This development batch intentionally does not run or claim the complete
+package-facing conclusion from `8797f11`. The later output-sensitive native
+grid implementation is another package-facing change: it adds the final-size
+ceiling and prepared-grid boundary and changes the formerly broken handling of
+valid cross-storage fixed specials. While it and the remaining pre-release
+items are in flight, use only the focused development policy below. This
+development batch intentionally does not run or claim the complete
 compatibility or release matrix. Freeze one replacement candidate only after
 all package-facing source converges, then run the applicable native, R API,
 runtime, memory, differential, downstream, documentation, benchmark, and
@@ -274,6 +277,10 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   never walks private/inherited R6 active bindings. Canonical node references
   distinguish shared from duplicated topology without distinguishing
   independently built equivalent DAGs.
+- Grid generation is one output-sensitive native graph operation. It shares
+  dependency planning/comparison with Design masking, preserves exact ordinary
+  first-nominal-occurrence order, and applies `upper_limit` to the final
+  realized design rather than a nominal or intermediate product.
 - All major compatibility breaks above ship now. They are not deferred to a
   later release.
 
@@ -290,6 +297,9 @@ values source. The active package-facing blockers are:
 - [x] converge the dormant-values/default-aware-activity implementation,
   focused contract tests, documentation, differential cases, and dependency-
   rich benchmark workloads;
+- [x] replace nominal Cartesian grid materialization with the native
+  output-sensitive fixed/dependency-aware engine, focused exact-order and graph
+  tests, final-size ceiling, and collapse/pruning benchmark workloads;
 - [ ] finish the other planned pre-release package-facing changes and freeze
   one clean replacement candidate;
 - [ ] run and retain the complete applicable gate matrix against that exact
