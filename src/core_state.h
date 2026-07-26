@@ -35,7 +35,15 @@ attribute_hidden int paradox_core_has_exact_schema(SEXP core);
 attribute_hidden int paradox_core_is_canonical(SEXP core);
 attribute_hidden paradox_core_kind_t paradox_core_kind(SEXP core);
 attribute_hidden SEXP paradox_core_payload(SEXP core);
+/* Required package-owned capsule lookup used by hot semantic entry points.
+ * On old R a missing binding is corrupt and may raise at the binding API. */
 attribute_hidden SEXP paradox_core_from_private(SEXP private_environment);
+/* Absence-tolerant classifier for arbitrary candidate shells. It preserves
+ * the current-R R_UnboundValue result on R 3.6--4.1 without making every
+ * authenticated hot lookup evaluate base::exists(). */
+attribute_hidden SEXP paradox_core_from_private_optional(
+  SEXP private_environment
+);
 attribute_hidden SEXP paradox_core_refresh_shadow(
   SEXP self,
   SEXP private_environment

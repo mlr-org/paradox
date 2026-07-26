@@ -274,7 +274,7 @@ SEXP paradox_domain_private_environment(SEXP self) {
     return R_UnboundValue;
   }
   SEXP enclosure_symbol = Rf_install(".__enclos_env__");
-  SEXP enclosure = PROTECT(paradox_api_plain_binding_snapshot(
+  SEXP enclosure = PROTECT(paradox_api_optional_plain_binding_snapshot(
     self,
     enclosure_symbol
   ));
@@ -283,13 +283,16 @@ SEXP paradox_domain_private_environment(SEXP self) {
     return R_UnboundValue;
   }
   SEXP private_symbol = Rf_install("private");
-  SEXP private_environment = PROTECT(paradox_api_plain_binding_snapshot(
-    enclosure,
-    private_symbol
-  ));
+  SEXP private_environment = PROTECT(
+    paradox_api_optional_plain_binding_snapshot(
+      enclosure,
+      private_symbol
+    )
+  );
   SEXP result = TYPEOF(private_environment) == ENVSXP &&
       !Rf_isS4(private_environment) &&
-      paradox_core_from_private(private_environment) != R_UnboundValue
+      paradox_core_from_private_optional(private_environment) !=
+        R_UnboundValue
     ? private_environment
     : R_UnboundValue;
   UNPROTECT(2);

@@ -23,22 +23,19 @@ SEXP paradox_param_set_collection_params(SEXP private_environment, SEXP self) {
     &work_since_interrupt
   );
 
-  /* Reuse the existing compact static-table builder against the exact root
-   * capsule selected by the graph admission. A one-binding package-owned
-   * environment prevents a reentrant capsule replacement from making this
-   * helper observe a newer generation. */
-  SEXP snapshot_private = PROTECT(R_NewEnv(R_EmptyEnv, TRUE, 1));
-  Rf_defineVar(Rf_install(".core"), graph.nodes[0].core, snapshot_private);
+  /* Reuse the compact static-table builder against the exact root capsule
+   * selected and rooted by graph admission. Loading the core directly avoids
+   * both a temporary environment and a redundant capsule lookup. */
   SEXP static_roots = PROTECT(Rf_allocVector(VECSXP, 1));
   paradox_params_state_t state;
-  if (!paradox_params_load_private_state_rooted(
-      snapshot_private,
+  if (!paradox_params_load_core_state_rooted(
+      graph.nodes[0].core,
       &state,
       static_roots,
       0,
       &work_since_interrupt
     )) {
-    UNPROTECT(3);
+    UNPROTECT(2);
     Rf_error("Corrupt ParamSetCollection static parameter capsule");
   }
 
@@ -65,9 +62,9 @@ SEXP paradox_param_set_collection_params(SEXP private_environment, SEXP self) {
       values,
       &work_since_interrupt
     )) {
-    UNPROTECT(6);
+    UNPROTECT(5);
     Rf_error("Corrupt ParamSetCollection dynamic parameter snapshot");
   }
-  UNPROTECT(6);
+  UNPROTECT(5);
   return result;
 }

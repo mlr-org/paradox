@@ -21,9 +21,9 @@ architecture-specific vector instructions, or private data.table APIs. Use
 ## Local supported-runtime matrix
 
 Repository-local pinned prefixes exercise R 3.6.3, R 4.3.3, and R 4.5.2
-independently of the development R 4.6.1 prefix. The R 3.6.0 headers are also
-an explicit compile/API axis, so support is not inferred only from the last
-patch release:
+independently of the development R 4.6.1 prefix. Pinned R 3.6.0, 4.0.0, and
+4.2.0 headers are explicit compile/API axes, so support is not inferred only
+from endpoint runtimes and every old-R preprocessor transition is compiled:
 
 ```sh
 scripts/bootstrap-runtime-matrix
@@ -61,8 +61,9 @@ validated.
 
 ## R API discipline and non-forcing compatibility facade
 
-Shipped C compiles against the pinned R 3.6.0, 4.3.0, 4.4.0, 4.5.2, and
-development headers. Version adapters live in `src/r_api_compat.c` and may
+Shipped C compiles against the pinned R 3.6.0, 4.0.0, 4.2.0, 4.3.0, 4.4.0,
+4.5.2, and development headers. Version adapters live in
+`src/r_api_compat.c` and may
 select equivalent APIs, but may not select a different semantic engine. For
 older supported headers, the adapters use the public, documented `FORMALS` and `ATTRIB`
 backports for `R_ClosureFormals`, `ANY_ATTRIB`, `R_getAttribCount`, and
@@ -105,12 +106,20 @@ supported-runtime compromise, not a CRAN allowlist justification.
 
 R 3.6--4.1 also lacks the public `R_existsVarInFrame()`. Optional, cold
 absence-tolerant lookup uses `base::exists(..., inherits = FALSE)`, whose
-implementation does not invoke active bindings; mandatory admitted bindings
-stay on the allocation-free classifier. The terminal optional receipt scan
+implementation does not invoke active bindings; mandatory admitted ordinary
+bindings stay on the allocation-free classifier. On newer R, the ordinary
+frame path remains allocation-free. Callers keep one conservative rooting
+proof across all supported facade branches because hostile class metadata can
+allocate during admission, and recognized callback-backed user databases are
+rejected before binding inspection. The terminal optional receipt scan
 cannot evaluate or allocate. It therefore uses the header-declared/exported
 `R_HasFancyBindings()` only on R 3.6--4.1 to reject a fancy frame before
 reading a stored cell. This is an exact old-runtime exception, not a general
-environment-layout API.
+environment-layout API. The facade first rejects
+`UserDefinedDatabase` environments with the public inheritance predicate R
+itself uses: their callback-backed object table is outside the supported
+ordinary-frame boundary, and old `R_HasFancyBindings()` assumes a hash-vector
+layout that they do not have.
 
 Consequently, the R < 4.6 branch in `src/r_api_compat.c` calls the
 header-declared/exported `Rf_findVarInFrame` once and may inspect a returned
@@ -129,8 +138,13 @@ when active-binding inspection is required, with an instruction to load and
 migrate the object under R >= 4.0. Paradox-1 ParamSet-family R6 shells
 themselves contain active bindings, so practical ParamSet/Collection object and
 graph migration requires R >= 4.0. Current Paradox-2 operations and idempotent
-current-object conversion remain supported on R 3.6, as do standalone legacy
-Domain/Condition conversion and graphs without active bindings.
+current-object conversion remain supported on R 3.6. Exact built-in current
+shells also retain recursive traversal through their authenticated capsule;
+their package active facades are opaque because unsupported in-place
+replacement cannot be distinguished when exact shell receipts are preserved.
+Such a binding is never invoked. Additive shells and modifications that fail
+exact authentication instead fail closed. Standalone legacy Domain/Condition
+conversion and graphs without arbitrary active bindings remain supported.
 
 `environment/r-api-exceptions.tsv` is the exact ledger. It records each
 exceptional symbol, source, raw-token count, version branch, and rationale; the

@@ -9,6 +9,7 @@
 #include "r_api_compat.h"
 #include "r_utils.h"
 #include "core_state.h"
+#include "paramset_shadow.h"
 
 typedef struct {
   SEXPTYPE type;
@@ -20,7 +21,8 @@ typedef struct {
  * source tables are rooted: a finalizer can replace a table column or names
  * attribute while a later allocation is in flight. */
 enum params_state_root_slot {
-  PARAMS_ROOT_PARAMS_SOURCE = 0,
+  PARAMS_ROOT_CORE = 0,
+  PARAMS_ROOT_PARAMS_SOURCE,
   PARAMS_ROOT_TAGS_SOURCE,
   PARAMS_ROOT_TRAFOS_SOURCE,
   PARAMS_ROOT_DEPENDENCIES_SOURCE,
@@ -344,7 +346,7 @@ static int validate_dynamic_state(
   return valid;
 }
 
-static int load_private_state(SEXP private_environment,
+static int load_core_state(SEXP core,
     paradox_params_state_t *state, SEXP roots, R_xlen_t roots_offset,
     R_xlen_t *work_since_interrupt) {
   const int retain = roots != R_NilValue;
@@ -353,66 +355,48 @@ static int load_private_state(SEXP private_environment,
     Rf_error("Internal error: invalid ParamSet params root plan");
   }
 
+  PROTECT(core);
   SEXP state_roots = PROTECT(Rf_allocVector(VECSXP, PARAMS_ROOT_COUNT));
   if (retain) {
     SET_VECTOR_ELT(roots, roots_offset, state_roots);
   }
-  state->params_sexp = paradox_domain_local_value(
-    private_environment,
-    ".params"
-  );
-  if (state->params_sexp != R_UnboundValue) {
-    SET_VECTOR_ELT(
-      state_roots,
-      PARAMS_ROOT_PARAMS_SOURCE,
-      state->params_sexp
-    );
-  }
-  state->tags_sexp = paradox_domain_local_value(private_environment, ".tags");
-  if (state->tags_sexp != R_UnboundValue) {
-    SET_VECTOR_ELT(state_roots, PARAMS_ROOT_TAGS_SOURCE, state->tags_sexp);
-  }
-  state->trafos_sexp = paradox_domain_local_value(
-    private_environment,
-    ".trafos"
-  );
-  if (state->trafos_sexp != R_UnboundValue) {
-    SET_VECTOR_ELT(
-      state_roots,
-      PARAMS_ROOT_TRAFOS_SOURCE,
-      state->trafos_sexp
-    );
-  }
-  state->dependencies_sexp = paradox_domain_local_value(
-    private_environment,
-    ".deps"
-  );
-  if (state->dependencies_sexp != R_UnboundValue) {
-    SET_VECTOR_ELT(
-      state_roots,
-      PARAMS_ROOT_DEPENDENCIES_SOURCE,
-      state->dependencies_sexp
-    );
-  }
-  state->values_sexp = paradox_domain_local_value(
-    private_environment,
-    ".values"
-  );
-  if (state->values_sexp != R_UnboundValue) {
-    SET_VECTOR_ELT(
-      state_roots,
-      PARAMS_ROOT_VALUES_SOURCE,
-      state->values_sexp
-    );
-  }
+  SET_VECTOR_ELT(state_roots, PARAMS_ROOT_CORE, core);
 
   int valid = FALSE;
   R_xlen_t unused_row = 0;
-  if (state->params_sexp == R_UnboundValue ||
-      state->tags_sexp == R_UnboundValue ||
-      state->trafos_sexp == R_UnboundValue ||
-      state->dependencies_sexp == R_UnboundValue ||
-      state->values_sexp == R_UnboundValue ||
+  if (!paradox_core_is_canonical(core) ||
+      (paradox_core_kind(core) == PARADOX_CORE_SHADOW &&
+        !paradox_shadow_metadata_is_exact(core))) {
+    goto done;
+  }
+  SEXP payload = paradox_core_payload(core);
+  state->params_sexp = VECTOR_ELT(payload, PARADOX_CORE_PARAMS);
+  state->tags_sexp = VECTOR_ELT(payload, PARADOX_CORE_TAGS);
+  state->trafos_sexp = VECTOR_ELT(payload, PARADOX_CORE_TRAFOS);
+  state->dependencies_sexp = VECTOR_ELT(payload, PARADOX_CORE_DEPS);
+  state->values_sexp = VECTOR_ELT(payload, PARADOX_CORE_VALUES);
+  SET_VECTOR_ELT(
+    state_roots,
+    PARAMS_ROOT_PARAMS_SOURCE,
+    state->params_sexp
+  );
+  SET_VECTOR_ELT(state_roots, PARAMS_ROOT_TAGS_SOURCE, state->tags_sexp);
+  SET_VECTOR_ELT(
+    state_roots,
+    PARAMS_ROOT_TRAFOS_SOURCE,
+    state->trafos_sexp
+  );
+  SET_VECTOR_ELT(
+    state_roots,
+    PARAMS_ROOT_DEPENDENCIES_SOURCE,
+    state->dependencies_sexp
+  );
+  SET_VECTOR_ELT(
+    state_roots,
+    PARAMS_ROOT_VALUES_SOURCE,
+    state->values_sexp
+  );
+  if (
       !paradox_params_supported_table_attributes(state->params_sexp, FALSE) ||
       !paradox_params_supported_table_attributes(state->tags_sexp, TRUE) ||
       !paradox_params_supported_table_attributes(state->trafos_sexp, TRUE)) {
@@ -560,26 +544,44 @@ static int load_private_state(SEXP private_environment,
   }
 
 done:
-  UNPROTECT(1);
+  UNPROTECT(2);
   return valid;
 }
 
 int paradox_params_load_private_state(SEXP private_environment,
     paradox_params_state_t *state, R_xlen_t *work_since_interrupt) {
-  return load_private_state(
-    private_environment,
+  SEXP core = PROTECT(paradox_core_from_private(private_environment));
+  const int valid = load_core_state(
+    core,
     state,
     R_NilValue,
     0,
     work_since_interrupt
   );
+  UNPROTECT(1);
+  return valid;
 }
 
 int paradox_params_load_private_state_rooted(SEXP private_environment,
     paradox_params_state_t *state, SEXP roots, R_xlen_t roots_offset,
     R_xlen_t *work_since_interrupt) {
-  return load_private_state(
-    private_environment,
+  SEXP core = PROTECT(paradox_core_from_private(private_environment));
+  const int valid = load_core_state(
+    core,
+    state,
+    roots,
+    roots_offset,
+    work_since_interrupt
+  );
+  UNPROTECT(1);
+  return valid;
+}
+
+int paradox_params_load_core_state_rooted(SEXP core,
+    paradox_params_state_t *state, SEXP roots, R_xlen_t roots_offset,
+    R_xlen_t *work_since_interrupt) {
+  return load_core_state(
+    core,
     state,
     roots,
     roots_offset,

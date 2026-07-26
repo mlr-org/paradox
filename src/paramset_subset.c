@@ -432,10 +432,14 @@ static SEXP subset_column(SEXP source, const R_xlen_t *rows,
       SET_LOGICAL_ELT(result, output, LOGICAL_ELT(source, input));
       break;
     case CPLXSXP:
-      SET_COMPLEX_ELT(result, output, COMPLEX_ELT(source, input));
+      paradox_api_set_complex_elt(
+        result,
+        output,
+        COMPLEX_ELT(source, input)
+      );
       break;
     case RAWSXP:
-      SET_RAW_ELT(result, output, RAW_ELT(source, input));
+      paradox_api_set_raw_elt(result, output, RAW_ELT(source, input));
       break;
     default:
       UNPROTECT(1);
@@ -854,10 +858,12 @@ SEXP paradox_param_set_adopt_subset_state(SEXP private_environment,
   * capability that its intended fresh constructor could otherwise adopt. */
   SEXP core_symbol = Rf_install(".core");
   PROTECT(core);
-  SEXP destination_core = PROTECT(paradox_api_plain_binding_snapshot(
-    private_environment,
-    core_symbol
-  ));
+  SEXP destination_core = PROTECT(
+    paradox_api_optional_plain_binding_snapshot(
+      private_environment,
+      core_symbol
+    )
+  );
   const int destination_is_fresh = destination_core == R_NilValue &&
     token_core(token) == core;
   UNPROTECT(1);

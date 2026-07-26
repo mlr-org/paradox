@@ -1,11 +1,11 @@
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "core_state.h"
 #include "r_api_compat.h"
 #include "r_utils.h"
+#include "shell_auth.h"
 #include "upgrade_graph.h"
 
 typedef struct paradox_upgrade_path {
@@ -165,18 +165,28 @@ static paradox_upgrade_path_t *indexed_path(
     R_xlen_t index,
     const char *suffix) {
   char digits[32];
-  const int written = snprintf(
-    digits,
-    sizeof(digits),
-    "%lld",
-    (long long) (index + 1)
-  );
-  if (written < 0 || (size_t) written >= sizeof(digits)) {
+  if (index < 0 || index == R_XLEN_T_MAX) {
     Rf_error("Object graph index is too large to report");
+  }
+  R_xlen_t value = index + 1;
+  size_t digits_size = 0;
+  do {
+    if (digits_size == sizeof(digits)) {
+      Rf_error("Object graph index is too large to report");
+    }
+    digits[digits_size++] =
+      (char) ('0' + (int) (value % (R_xlen_t) 10));
+    value /= (R_xlen_t) 10;
+  } while (value != 0);
+  for (size_t left = 0, right = digits_size - 1;
+      left < right;
+      ++left, --right) {
+    const char temporary = digits[left];
+    digits[left] = digits[right];
+    digits[right] = temporary;
   }
   const size_t prefix_size = strlen(prefix);
   const size_t suffix_size = strlen(suffix);
-  const size_t digits_size = (size_t) written;
   if (prefix_size > SIZE_MAX - suffix_size ||
       prefix_size + suffix_size > SIZE_MAX - digits_size) {
     Rf_error("Object graph path is too large to report");
@@ -517,6 +527,15 @@ static int imports_environment(SEXP environment) {
 static int environment_boundary(
     const paradox_upgrade_walker_t *walker, SEXP environment) {
   return boundary_contains(&walker->boundaries, environment) ||
+    /*
+     * Object-table environments route enumeration and binding access through
+     * arbitrary callbacks and do not have an ordinary frame layout. They are
+     * traversal boundaries, just like namespaces and package environments.
+     * This predicate must precede the namespace/package predicates: old R
+     * implements those through an object-table lookup.
+     */
+    (Rf_isObject(environment) &&
+      Rf_inherits(environment, "UserDefinedDatabase")) ||
     R_IsNamespaceEnv(environment) ||
     R_IsPackageEnv(environment) ||
     imports_environment(environment);
@@ -582,7 +601,19 @@ static void schedule_binding(
     SEXP symbol,
     const paradox_upgrade_path_t *path) {
   if (R_BindingIsActive(symbol, environment)) {
-    SEXP function = PROTECT(R_ActiveBindingFunction(symbol, environment));
+    SEXP function = PROTECT(paradox_api_active_binding_function(
+      environment,
+      symbol
+    ));
+    if (function == R_UnboundValue) {
+      UNPROTECT(1);
+      SEXP location = PROTECT(render_path(path));
+      Rf_error(
+        "Recursive Paradox object upgrade cannot inspect an active binding "
+        "on R 3.6 (at `%s`); load and upgrade this object under R >= 4.0",
+        CHAR(location)
+      );
+    }
     schedule_node(
       walker,
       function,
@@ -732,12 +763,51 @@ static void schedule_binding(
 #endif
 }
 
+#if R_VERSION < R_Version(4, 0, 0)
+static void schedule_builtin_current_binding(
+    paradox_upgrade_walker_t *walker,
+    SEXP environment,
+    SEXP symbol,
+    const paradox_upgrade_path_t *path) {
+  if (symbol == Rf_install(".__enclos_env__") ||
+      R_BindingIsActive(symbol, environment)) {
+    return;
+  }
+  SEXP value = PROTECT(paradox_api_stored_binding_snapshot(
+    environment,
+    symbol
+  ));
+  /*
+   * An exact built-in R6 shell is locked against new public members. Its
+   * locked ordinary closures are treated as package-generated methods;
+   * following their R6 enclosure would only rediscover active facades already
+   * represented by the authenticated core. An unlocked replacement closure
+   * and every non-function public value remain graph edges. Replacing and then
+   * relocking a method is unsupported and indistinguishable on R 3.6, so that
+   * closure is opaque just like a replaced package active facade.
+   */
+  if (value != R_UnboundValue &&
+      (TYPEOF(value) != CLOSXP ||
+        !R_BindingIsLocked(symbol, environment))) {
+    if (TYPEOF(value) == PROMSXP) {
+      schedule_promise_edges(walker, value, path);
+    } else {
+      schedule_node(walker, value, path);
+    }
+  }
+  UNPROTECT(1);
+}
+#endif
+
 static void schedule_environment(
     paradox_upgrade_walker_t *walker,
     SEXP environment,
     const paradox_upgrade_path_t *path) {
   if (environment_boundary(walker, environment)) return;
 
+#if R_VERSION < R_Version(4, 0, 0)
+  int current_builtin = FALSE;
+#endif
   /*
    * Current shells are candidates as well as legacy shells.  R preflight
    * distinguishes them and performs the complete callback-free capsule graph
@@ -751,6 +821,25 @@ static void schedule_environment(
       environment,
       path
     );
+#if R_VERSION < R_Version(4, 0, 0)
+    /*
+     * R 3.6 cannot retrieve an active binding's closure. Exact built-in
+     * current shells have already authenticated every R6 topology receipt,
+     * and their active facades expose only state held by the canonical core.
+     * Schedule that authority directly and continue through ordinary public
+     * fields. Additive/custom shells do not enter this exception.
+     */
+    SEXP core = PROTECT(paradox_builtin_current_core_snapshot(environment));
+    if (core != R_UnboundValue) {
+      current_builtin = TRUE;
+      schedule_node(
+        walker,
+        core,
+        literal_path(path, ".core")
+      );
+    }
+    UNPROTECT(1);
+#endif
   }
 
   SEXP parent = PROTECT(parent_environment(environment));
@@ -769,6 +858,17 @@ static void schedule_environment(
       Rf_error("Internal error: missing environment binding name");
     }
     SEXP symbol = Rf_installChar(name);
+#if R_VERSION < R_Version(4, 0, 0)
+    if (current_builtin) {
+      schedule_builtin_current_binding(
+        walker,
+        environment,
+        symbol,
+        named_path(path, "[[\"", name, "\"]]")
+      );
+      continue;
+    }
+#endif
     schedule_binding(
       walker,
       environment,

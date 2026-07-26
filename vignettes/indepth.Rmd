@@ -65,6 +65,13 @@ larger R6 object, closure, attribute, or ordinary container. The recursive
 upgrader preserves the identities of both the containing object and every
 legacy ParamSet-family R6 shell:
 
+This ParamSet-family migration must be run under R >= 4.0. Paradox 1 R6 shells
+contain active bindings, and R 3.6 provides no safe way to retrieve their
+functions for inert authentication. On R 3.6, current Paradox 2 objects and
+standalone legacy Domain/Condition conversion remain supported; load a legacy
+model under R >= 4.0 once, migrate it, and then save the upgraded object for
+continued use on R 3.6.
+
 ```{r, eval=FALSE}
 model = readRDS("legacy-model.rds")
 upgrade_paradox_object_graph(model)

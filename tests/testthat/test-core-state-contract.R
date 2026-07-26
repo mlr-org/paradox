@@ -106,6 +106,12 @@ test_that("capsule admission rejects S4-marked carriers and schema metadata", {
     paradox:::param_set_core_state(private),
     "Corrupt ParamSet|missing versioned core capsule"
   )
+
+  expect_error(
+    paradox:::param_set_core_state(new.env(parent = emptyenv())),
+    "missing versioned core capsule",
+    fixed = TRUE
+  )
 })
 
 test_that("capsule tables are plain immutable column stores", {

@@ -1,10 +1,10 @@
-# Reproducible GCC 14 / C17 warning gate for scripts/native-check.
+# Reproducible GCC 14 / C99 warning gate for scripts/native-check.
 # Keep warning exceptions in the source, next to the documented R API
 # construct that requires them; this profile intentionally has none.
 
-CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
 CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
-SHLIB_LD = $(CC17)
+SHLIB_LD = $(CC)
 
 # R's conda Makeconf puts a linker-only option in CPPFLAGS.  Supplying the
 # equivalent compile-only set prevents compiler-driver noise without disabling

@@ -315,6 +315,13 @@ test_that("subset capabilities are single-use, unforgeable, and destination-safe
 
   expect_type(token, "externalptr")
   expect_true(.Call(symbols$C_param_set_adopt_subset_state, NULL, token))
+  missing = new.env(parent = emptyenv())
+  expect_false(.Call(
+    symbols$C_param_set_adopt_subset_state,
+    missing,
+    token
+  ))
+  expect_true(.Call(symbols$C_param_set_adopt_subset_state, NULL, token))
   occupied = ParamSet$new()
   expect_false(.Call(
     symbols$C_param_set_adopt_subset_state,

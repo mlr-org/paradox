@@ -19,7 +19,7 @@ void attribute_visible R_init_paradox(DllInfo *dll);
 #   pragma clang diagnostic ignored "-Wcast-function-type-mismatch"
 #  endif
 # endif
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && __GNUC__ >= 8
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wcast-function-type"
 #endif
@@ -157,7 +157,7 @@ static const R_CallMethodDef call_methods[] = {
 };
 #if defined(__clang__)
 # pragma clang diagnostic pop
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && __GNUC__ >= 8
 # pragma GCC diagnostic pop
 #endif
 

@@ -9,6 +9,7 @@
 
 #include "builtin_value.h"
 #include "paramset_domain_common.h"
+#include "r_api_compat.h"
 #include "r_utils.h"
 
 static paradox_builtin_value_result_t valid_result(void) {
@@ -50,7 +51,7 @@ int paradox_builtin_special_values_contain(
       kind == PARADOX_BUILTIN_DOMAIN_UTY ||
       (!Rf_isS4(special) && !Rf_isS4(value));
     if (exact || (compare_structurally && R_compute_identical(
-        special, value, IDENT_USE_CLOENV
+        special, value, paradox_api_identical_default_flags()
       ))) {
       UNPROTECT(2);
       return TRUE;

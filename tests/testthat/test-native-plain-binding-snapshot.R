@@ -165,6 +165,40 @@ test_that("plain binding snapshots reject non-value frame bindings inertly", {
   expect_identical(active_reads, 0L)
 })
 
+test_that("plain binding snapshots distinguish locked and absent bindings", {
+  environment = new.env(parent = emptyenv())
+  environment$value = 42L
+  lockBinding("value", environment)
+  lockEnvironment(environment, bindings = FALSE)
+
+  expect_identical(
+    plain_binding_snapshot(environment, "value"),
+    list(ok = TRUE, value = 42L)
+  )
+  expect_identical(
+    plain_binding_snapshot(environment, "absent"),
+    list(ok = FALSE, value = NULL)
+  )
+})
+
+test_that("user-database environments are rejected before binding APIs", {
+  # R's user-defined object tables store an external pointer where ordinary
+  # environments store a hash vector. The native facade must recognize the
+  # same class gate as R itself before entering either representation.
+  environment = new.env(parent = emptyenv())
+  environment$value = 42L
+  class(environment) = "UserDefinedDatabase"
+
+  expect_identical(
+    plain_binding_snapshot(environment, "value"),
+    list(ok = FALSE, value = NULL)
+  )
+
+  shell = ps(x = p_dbl())
+  class(shell) = c("UserDefinedDatabase", class(shell))
+  expect_false(paradox:::.paradox_gateway_current_core(shell))
+})
+
 test_that("plain binding snapshot arguments are structurally exact", {
   environment = new.env(parent = emptyenv())
 

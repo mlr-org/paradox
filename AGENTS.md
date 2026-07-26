@@ -144,7 +144,8 @@ The final compatibility batch is governed by
 Paradox 2 supports R >= 3.6 and uses portable C99. Old-runtime adaptation stays
 inside the small R API facade or removes a newer-API dependency; it is never a
 second semantic engine. The real supported-runtime matrix includes R 3.6.3,
-and the header matrix begins at R 3.6.0. Historical candidate evidence that
+and the header matrix includes the 3.6.0 minimum plus the 4.0.0 and 4.2.0 API
+transition releases before the existing later axes. Historical candidate evidence that
 started at R 4.3 remains historical and cannot prove this reopened source.
 
 ## Non-negotiable design decisions
@@ -720,13 +721,25 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   forcing an unforced promise. R 3.6--4.5 additionally inspect a detached
   `PROMSXP`; under strict R >= 4.6 headers such a promise outside a binding/dots
   cell is opaque. It never invokes an active binding or a serialized method.
-  R 3.6 exposes no accessor for an active binding's function; encountering one
-  during recursive migration therefore fails closed with an instruction to
-  perform that migration under R >= 4.0. Paradox-1 ParamSet-family R6 shells
-  themselves contain active bindings, so their practical object/graph
-  migration requires R >= 4.0. Ordinary current-object operations, idempotent
-  conversion of current objects, standalone legacy Domain/Condition
-  conversion, and graphs without active bindings remain supported on R 3.6.
+  R 3.6 exposes no accessor for an active binding's function; encountering an
+  arbitrary one during recursive migration therefore fails closed with an
+  instruction to perform that migration under R >= 4.0. The one narrow
+  exception is an exact built-in current Paradox-2 shell: native topology,
+  class, policy, and capsule receipts admit its capsule as the graph authority,
+  locked methods are skipped, and unlocked replacement closures remain graph
+  edges. Package active facades are necessarily opaque on R 3.6. Replacing a
+  core method or active binding is unsupported; an in-place active-binding
+  replacement, or a method replacement that is relocked, preserves every
+  receipt available on that runtime and cannot be distinguished from generated
+  code. Anything reachable only from such a closure is not traversed (and an
+  active binding is never invoked). Additive shells and
+  modifications that prevent exact authentication fail closed instead of
+  receiving this exception. Paradox-1 ParamSet-family R6 shells contain active
+  bindings, so their practical object/graph migration requires R >= 4.0.
+  Ordinary current-object operations, exact built-in current-object graph
+  traversal, idempotent conversion of current objects, standalone legacy
+  Domain/Condition conversion, and graphs without arbitrary active bindings
+  remain supported on R 3.6.
   Direct environment bindings are classified natively rather than inferred
   from an R expression: a realized language object or symbol remains a realized
   value, while a delayed promise with the same apparent expression is identified
@@ -840,13 +853,27 @@ started at R 4.3 remains historical and cannot prove this reopened source.
 - Shipped C is portable C99 and supports R >= 3.6. Version selection is
   centralized in `src/r_api_compat.c`; semantic translation units do not
   acquire old-R implementations. Current runtimes retain their public,
-  allocation-free fast paths. R 3.6--4.1 use a cold
+  allocation-free ordinary-frame fast paths. The compatibility boundary keeps
+  one conservative rooting proof across all supported branches because hostile
+  class metadata can allocate during facade admission, while recognized
+  callback-backed user databases are rejected before binding APIs.
+  R 3.6--4.1 use a cold
   `base::exists(..., inherits = FALSE)` query only where absence is an accepted
-  result. Required binding snapshots remain allocation-free. Their terminal
+  result. Candidate-shell and fresh-destination classifiers use that optional
+  path, while admitted core/generation reads keep the required native path so
+  old R does not evaluate `base::exists()` on every hot operation. Required
+  binding snapshots remain allocation-free. Their terminal
   optional receipt scan fails closed when `R_HasFancyBindings()` reports a
   locked or active frame, then uses the same stored-cell path; this old-only
   exception avoids either evaluator allocation or invocation of an active
-  binding. R 3.6--4.5 use the declared/exported
+  binding. The facade rejects `UserDefinedDatabase` environments through the
+  same public inheritance predicate R uses before any binding operation:
+  their callback-backed table is unsupported, and old
+  `R_HasFancyBindings()` assumes an incompatible ordinary-frame layout.
+  The graph walker applies this boundary before namespace/package
+  classification because old R implements those predicates through an
+  object-table lookup.
+  R 3.6--4.5 use the declared/exported
   `Rf_findVarInFrame` to obtain the stored frame cell and, when it is a
   `PROMSXP`, the three header-declared/exported accessors `R_PromiseExpr`,
   `PRENV`, and `PRVALUE`. R >= 4.6 uses only the documented experimental
@@ -861,8 +888,15 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   tested against pinned headers and real runtimes before freeze.
   `R_HasFancyBindings`, `Rf_findVarInFrame`, `R_PromiseExpr`, `PRENV`, and
   `PRVALUE` are confined to their exact old-runtime branches and ledgered.
+  Pre-4.6 required snapshots authenticate once and then use the centralized
+  stored-cell selector; do not reintroduce a duplicate active/class boundary
+  into this hot path.
   None is a
   CRAN allowlist or permission for another internal API or semantic path.
+  Old-Windows portability does not rely on `%lld`: graph indices use bounded
+  decimal arithmetic. GCC-only diagnostic pragmas are compiler-version gated,
+  and strict/analyzer/sanitizer profiles compile the package as GNU C99 rather
+  than proving only that C17 accepts it.
   `src/binding_snapshot.c` exposes the same centralized classifier to the cold
   R migration/gateway code as one registered native call: it returns an exact
   realized ordinary frame value, or a negative result for absent, inherited,

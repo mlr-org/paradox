@@ -136,10 +136,17 @@ The migration implementation has three layers:
    evaluation environment but are not forced. R 3.6--4.5 also inspect a
    detached `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as
    opaque. Because R 3.6 exposes no accessor for an active binding's function,
-   encountering one on that runtime fails migration closed and asks for
-   R >= 4.0; it is never invoked or silently omitted. Paradox-1 ParamSet-family
-   R6 shells use active bindings, so practical migration of those objects
-   requires R >= 4.0. The native direct-binding
+   encountering an arbitrary one on that runtime fails migration closed and
+   asks for R >= 4.0; it is never invoked. Exact built-in current Paradox-2
+   shells use a narrow authenticated capsule traversal that omits their locked
+   methods and package active facades. Core method and active-binding
+   replacement is unsupported. R 3.6 cannot distinguish an in-place
+   replacement of a package active facade, or a method replacement that is
+   relocked, when every available topology receipt is preserved. Such a
+   replacement closure is opaque, and an active binding is never invoked;
+   additive shells and modifications that fail exact authentication instead
+   fail closed. Paradox-1 ParamSet-family R6 shells use active bindings, so
+   practical migration of those objects requires R >= 4.0. The native direct-binding
    classifier distinguishes a realized
    language object or symbol from a delayed promise whose expression has that
    type; it never infers binding kind from expression shape. Search-path,
@@ -881,7 +888,13 @@ production list-ALTREP branches are simply vacuous on those old runtimes.
   backport for newer closure inspection. These adapters never evaluate
   `formals()`, `attributes()`, or another R/data.table helper. R 3.6--4.1 use
   `base::exists(..., inherits = FALSE)` only for cold optional existence
-  queries; admitted required bindings retain an allocation-free native path.
+  queries. Candidate-shell and fresh-destination classifiers take that path;
+  admitted capsule/generation reads retain an allocation-free native path, so
+  an old runtime does not evaluate R on each hot operation. The facade rejects
+  recognized `UserDefinedDatabase`
+  environments before binding inspection because their callback-backed object
+  table is not an ordinary R6 frame and the old fancy-binding helper assumes
+  an incompatible layout.
   A terminal optional receipt scan must not allocate, so it uses old-only
   `R_HasFancyBindings()` to reject a fancy frame before the stored-cell scan.
   The exact non-public compatibility entries are centralized here. R < 4.6 uses one

@@ -77,6 +77,22 @@ domain2_altrep_helpers_available = function() {
   )
 }
 
+test_that("the declared backports floor supplies deparse1 on old R", {
+  if (getRversion() < "4.0.0") {
+    expect_true(exists(
+      "deparse1",
+      envir = asNamespace("paradox"),
+      inherits = FALSE
+    ))
+  }
+
+  domain = p_dbl()
+  token = to_tune()
+  expect_identical(domain$id, "p_dbl()")
+  expect_identical(token$call, "to_tune()")
+  expect_identical(class(token), c("FullTuneToken", "TuneToken"))
+})
+
 test_that("Domain construction uses fixed registered native interfaces", {
   arities = c(
     domain_construct = 18L,
@@ -132,7 +148,11 @@ test_that("all five public Domain kinds use the canonical native row", {
     expect_identical(domain$storage_type, storage[[name]])
     expect_identical(
       domain$id,
-      deparse1(attr(domain, "repr"), collapse = "\n", width.cutoff = 80)
+      get(
+        "deparse1",
+        envir = asNamespace("paradox"),
+        inherits = TRUE
+      )(attr(domain, "repr"), collapse = "\n", width.cutoff = 80)
     )
     expect_identical(data.table:::selfrefok(domain, FALSE), 1L)
 

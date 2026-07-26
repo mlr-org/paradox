@@ -13,7 +13,7 @@
 #   pragma clang diagnostic ignored "-Wc23-extensions"
 #  endif
 # endif
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && __GNUC__ >= 5
 # pragma GCC diagnostic push
 # pragma GCC diagnostic ignored "-Wpedantic"
 #endif
@@ -24,7 +24,7 @@
 #include <R_ext/Visibility.h>
 #if defined(__clang__)
 # pragma clang diagnostic pop
-#elif defined(__GNUC__)
+#elif defined(__GNUC__) && __GNUC__ >= 5
 # pragma GCC diagnostic pop
 #endif
 

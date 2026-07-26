@@ -293,7 +293,12 @@ families.
   cover both supported pre-4.6 and development-R API branches. On R 3.6 the
   active-binding case must fail closed without invocation and direct the user
   to migrate under R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
-  active bindings, their practical migration runs only on R >= 4.0;
+  active bindings, their practical migration runs only on R >= 4.0. The exact-
+  current R 3.6 exception traverses capsule state and ordinary public edges,
+  while package active facades remain opaque. A regression records that an
+  unsupported in-place facade replacement is neither invoked nor traversed on
+  R 3.6, because that runtime cannot distinguish its closure without an
+  accessor;
 - attributes of generic weak references and external pointers remain normal
   edges, but their internal referents/protected/tag/address slots are opaque.
   Only an authenticated Paradox core contributes its protected payload;
@@ -534,8 +539,10 @@ The frozen candidate must pass:
   including language objects and symbols, are distinguished without evaluation
   on every supported runtime. R 3.6--4.1 additionally exercise cold optional
   absence lookup, locked bindings, fancy-frame fail-closed receipt scans, and
-  the allocation-free required-binding path. Current runtimes must retain their
-  public fast-path symbol inventory.
+  the allocation-free required ordinary-frame binding path. Current runtimes
+  must retain their public fast-path symbol inventory, while adversarial tests
+  prove the recognized `UserDefinedDatabase` class is rejected before that
+  callback/layout boundary.
 
 The R 3.6 stage exercises atomic ALTREP normally. It records one precise
 capability exclusion for the adversarial VECSXP ALTREP fixture, because R did
@@ -562,7 +569,10 @@ mandatory historical `mbo_config` objects through the shared authenticated
 Git-object helper. The full direct and recursive ParamSet-family migration
 assertions execute on R >= 4.0. R 3.6 instead proves the non-invoking
 active-binding failure plus
-current-object/idempotent and standalone legacy Domain/Condition paths; its
+current-object/idempotent and standalone legacy Domain/Condition paths. Exact
+current-shell regressions cover unlocked replacement closures as graph edges
+and the explicit R-3.6 opacity of relocked methods and package active facades;
+its
 capability exclusion is version-derived, not a file-wide waiver. An unset
 fixture root is an unexpected harness skip, not a reviewed runtime exclusion.
 The retained bundle is outside all mutable

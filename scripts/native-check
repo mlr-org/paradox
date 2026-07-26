@@ -12,8 +12,8 @@ no default mode, so merely invoking this script cannot start a long compiler or
 sanitizer run.
 
 Modes:
-  strict-gcc     GCC 14 C17 source install, warnings as errors
-  strict-clang   Clang 22 C17 source install, warnings as errors
+  strict-gcc     GCC 14 C99 source install, warnings as errors
+  strict-clang   Clang 22 C99 source install, warnings as errors
   analyzer       GCC 14 -fanalyzer source install
   analyzer-clang Clang 22 Static Analyzer, retained plist per C source
   cppcheck       exhaustive cppcheck pass over shipped C sources
@@ -839,7 +839,7 @@ fi
     printf 'tinytex_tree_receipt_sha256=not-used\n'
   fi
   printf 'R_HOME=%s\n' "$(R RHOME)"
-  for configuration in CC CC17 C17FLAGS CPPFLAGS LDFLAGS SHLIB_LD; do
+  for configuration in CC CFLAGS CC17 C17FLAGS CPPFLAGS LDFLAGS SHLIB_LD; do
     printf 'R_CMD_config_%s=' "$configuration"
     R CMD config "$configuration"
   done
@@ -1325,7 +1325,7 @@ if [ "$MODE_ANALYZER_CLANG" = true ]; then
         "LD_LIBRARY_PATH=$LOCAL_LD_LIBRARY_PATH" \
         "CPATH=" "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH=" \
         "LC_ALL=C.UTF-8" "TZ=UTC" \
-        "$CLANG" --analyze -std=gnu17 \
+        "$CLANG" --analyze -std=gnu99 \
         -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2 \
         -isystem "$TOOLCHAIN/include" \
         "-I$TOOLCHAIN/lib/R/include" "-I$SOURCE_DIRECTORY/src" \
@@ -1373,7 +1373,7 @@ if [ "$MODE_CPPCHECK" = true ]; then
     "CPATH=" "C_INCLUDE_PATH=" "CPLUS_INCLUDE_PATH=" \
     "LC_ALL=C.UTF-8" "TZ=UTC" \
     "$CPPCHECK" \
-    --std=c17 --language=c --platform=unix64 \
+    --std=c99 --language=c --platform=unix64 \
     --enable=warning,performance,portability \
     --check-level=exhaustive --inconclusive \
     --error-exitcode=1 --inline-suppr \

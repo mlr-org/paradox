@@ -110,13 +110,17 @@ static SEXP snapshot_column(SEXP source,
       SET_REAL_ELT(result, index, REAL_ELT(source, index));
       break;
     case CPLXSXP:
-      SET_COMPLEX_ELT(result, index, COMPLEX_ELT(source, index));
+      paradox_api_set_complex_elt(
+        result,
+        index,
+        COMPLEX_ELT(source, index)
+      );
       break;
     case STRSXP:
       SET_STRING_ELT(result, index, STRING_ELT(source, index));
       break;
     case RAWSXP:
-      SET_RAW_ELT(result, index, RAW_ELT(source, index));
+      paradox_api_set_raw_elt(result, index, RAW_ELT(source, index));
       break;
     case VECSXP:
       SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
@@ -178,7 +182,7 @@ static SEXP atomic_scalar(SEXP column, R_xlen_t row) {
     break;
   case RAWSXP:
     result = PROTECT(Rf_allocVector(RAWSXP, 1));
-    SET_RAW_ELT(result, 0, RAW_ELT(column, row));
+    paradox_api_set_raw_elt(result, 0, RAW_ELT(column, row));
     break;
   default:
     Rf_error("Internal error: non-atomic Design column");

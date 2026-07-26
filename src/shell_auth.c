@@ -112,50 +112,69 @@ static void clear_gateway_context(SEXP result, SEXP false_value) {
 }
 
 typedef SEXP (*gateway_binding_reader_t)(SEXP, SEXP);
+typedef int (*gateway_binding_presence_t)(SEXP, SEXP);
 
 static SEXP gateway_enclosure_at(SEXP top, SEXP self,
     SEXP private_environment, R_xlen_t steps,
     SEXP enclosure_symbol, SEXP self_symbol, SEXP private_symbol,
     SEXP super_symbol, gateway_binding_reader_t read_binding) {
-  SEXP enclosure = top;
+  SEXP enclosure;
+  PROTECT_INDEX enclosure_index;
+  PROTECT_WITH_INDEX(enclosure = top, &enclosure_index);
   for (R_xlen_t step = 0; step <= steps; ++step) {
     if (TYPEOF(enclosure) != ENVSXP || Rf_isS4(enclosure) ||
         read_binding(enclosure, self_symbol) != self ||
         read_binding(enclosure, private_symbol) != private_environment) {
+      UNPROTECT(1);
       return R_UnboundValue;
     }
-    if (step == steps) return enclosure;
-    SEXP super = read_binding(enclosure, super_symbol);
+    if (step == steps) {
+      SEXP result = enclosure;
+      UNPROTECT(1);
+      return result;
+    }
+    SEXP super = PROTECT(read_binding(enclosure, super_symbol));
     if (TYPEOF(super) != ENVSXP || Rf_isS4(super)) {
+      UNPROTECT(2);
       return R_UnboundValue;
     }
-    enclosure = read_binding(super, enclosure_symbol);
+    REPROTECT(
+      enclosure = read_binding(super, enclosure_symbol),
+      enclosure_index
+    );
+    UNPROTECT(1);
   }
+  UNPROTECT(1);
   return R_UnboundValue;
 }
 
 static SEXP gateway_target_super(SEXP target, SEXP self,
     SEXP private_environment, paradox_core_kind_t expected_kind,
     SEXP enclosure_symbol, SEXP self_symbol, SEXP private_symbol,
-    SEXP super_symbol, gateway_binding_reader_t read_binding) {
-  SEXP super = read_binding(target, super_symbol);
+    SEXP super_symbol, gateway_binding_reader_t read_binding,
+    gateway_binding_presence_t has_binding) {
+  PROTECT(target);
   if (expected_kind == PARADOX_CORE_BASE) {
-    return super == R_UnboundValue &&
-        !paradox_api_frame_has_binding(target, super_symbol)
-      ? R_NilValue
-      : R_UnboundValue;
+    SEXP result = has_binding(target, super_symbol)
+      ? R_UnboundValue
+      : R_NilValue;
+    UNPROTECT(1);
+    return result;
   }
+  SEXP super = PROTECT(read_binding(target, super_symbol));
   if (TYPEOF(super) != ENVSXP || Rf_isS4(super)) {
+    UNPROTECT(2);
     return R_UnboundValue;
   }
-  SEXP base_enclosure = read_binding(super, enclosure_symbol);
+  SEXP base_enclosure = PROTECT(read_binding(super, enclosure_symbol));
   if (TYPEOF(base_enclosure) != ENVSXP || Rf_isS4(base_enclosure) ||
       read_binding(base_enclosure, self_symbol) != self ||
       read_binding(base_enclosure, private_symbol) != private_environment ||
-      read_binding(base_enclosure, super_symbol) != R_UnboundValue ||
-      paradox_api_frame_has_binding(base_enclosure, super_symbol)) {
+      has_binding(base_enclosure, super_symbol)) {
+    UNPROTECT(3);
     return R_UnboundValue;
   }
+  UNPROTECT(3);
   return super;
 }
 
@@ -178,8 +197,12 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   /*
    * Allocate the complete return carrier before selecting any binding. Once a
    * selected value enters this vector it remains rooted even if an
-   * allocation-triggered finalizer rewires the shell. The final receipt scan
-   * itself allocates nothing.
+   * allocation-triggered finalizer rewires the shell. For a genuine
+   * package-created ordinary shell, the final receipt scan itself allocates
+   * nothing. Recognized callback-backed user-database environments are
+   * rejected at the facade. Uniform roots still cover hostile class metadata
+   * inspected by the facade and keep the lifetime proof independent of the
+   * selected supported-R API branch.
    */
   SEXP result = PROTECT(Rf_allocVector(VECSXP, GATEWAY_CONTEXT_FIELD_COUNT));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, GATEWAY_CONTEXT_FIELD_COUNT));
@@ -215,7 +238,7 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   }
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_CLASS, classes);
 
-  SEXP top_enclosure = paradox_api_plain_binding_snapshot(
+  SEXP top_enclosure = paradox_api_optional_plain_binding_snapshot(
     self,
     enclosure_symbol
   );
@@ -224,12 +247,25 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
     UNPROTECT(4);
     return result;
   }
-  if (paradox_api_plain_binding_snapshot(top_enclosure, self_symbol) != self) {
+  /*
+   * This slot is provisionally the top enclosure and is replaced with the
+   * selected target below. On R 3.6--4.1 the next optional read evaluates
+   * base::exists(), so the provisional receipt is also the GC root that keeps
+   * a concurrently detached enclosure alive until the final ordinary-shell
+   * topology scan rejects the mutation. The same root is retained on newer R
+   * because hostile class metadata can allocate during facade admission and
+   * one protection proof is used across both branches.
+   */
+  SET_VECTOR_ELT(result, GATEWAY_CONTEXT_ENCLOSURE, top_enclosure);
+  if (paradox_api_optional_plain_binding_snapshot(
+      top_enclosure,
+      self_symbol
+    ) != self) {
     clear_gateway_context(result, false_value);
     UNPROTECT(4);
     return result;
   }
-  SEXP private_environment = paradox_api_plain_binding_snapshot(
+  SEXP private_environment = paradox_api_optional_plain_binding_snapshot(
     top_enclosure,
     private_symbol
   );
@@ -241,7 +277,7 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   }
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_PRIVATE, private_environment);
 
-  SEXP assert_values = paradox_api_plain_binding_snapshot(
+  SEXP assert_values = paradox_api_optional_plain_binding_snapshot(
     self,
     assert_values_symbol
   );
@@ -256,7 +292,7 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
     assert_values
   );
 
-  SEXP core = paradox_api_plain_binding_snapshot(
+  SEXP core = paradox_api_optional_plain_binding_snapshot(
     private_environment,
     core_symbol
   );
@@ -294,7 +330,7 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
     self_symbol,
     private_symbol,
     super_symbol,
-    paradox_api_plain_binding_snapshot
+    paradox_api_optional_plain_binding_snapshot
   );
   SEXP super = enclosure == R_UnboundValue
     ? R_UnboundValue
@@ -307,7 +343,8 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
         self_symbol,
         private_symbol,
         super_symbol,
-        paradox_api_plain_binding_snapshot
+        paradox_api_optional_plain_binding_snapshot,
+        paradox_api_frame_has_binding
       );
   if (enclosure == R_UnboundValue || super == R_UnboundValue) {
     clear_gateway_context(result, false_value);
@@ -339,7 +376,8 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
         self_symbol,
         private_symbol,
         super_symbol,
-        paradox_api_plain_binding_scan
+        paradox_api_plain_binding_scan,
+        paradox_api_frame_has_binding_scan
       );
   if (Rf_getAttrib(self, R_ClassSymbol) != classes ||
       paradox_param_set_class_kind_raw(self, NULL) != class_kind ||
@@ -357,4 +395,33 @@ SEXP paradox_gateway_context_snapshot(SEXP self, SEXP expected_kind_value) {
   SET_VECTOR_ELT(result, GATEWAY_CONTEXT_OK, true_value);
   UNPROTECT(4);
   return result;
+}
+
+SEXP paradox_builtin_current_core_snapshot(SEXP self) {
+  SEXP classes = R_NilValue;
+  const paradox_core_kind_t kind =
+    paradox_param_set_class_kind_raw(self, &classes);
+  const R_xlen_t expected_size = kind == PARADOX_CORE_BASE ? 2 : 3;
+  if (kind == 0 || XLENGTH(classes) != expected_size) {
+    return R_UnboundValue;
+  }
+
+  SEXP expected_kind = PROTECT(Rf_ScalarInteger((int) kind));
+  SEXP context = PROTECT(paradox_gateway_context_snapshot(
+    self,
+    expected_kind
+  ));
+  SEXP ok = VECTOR_ELT(context, GATEWAY_CONTEXT_OK);
+  SEXP authenticated_classes =
+    VECTOR_ELT(context, GATEWAY_CONTEXT_CLASS);
+  SEXP core = ok == R_NilValue ||
+      TYPEOF(ok) != LGLSXP ||
+      XLENGTH(ok) != 1 ||
+      LOGICAL_ELT(ok, 0) != TRUE ||
+      TYPEOF(authenticated_classes) != STRSXP ||
+      XLENGTH(authenticated_classes) != expected_size
+    ? R_UnboundValue
+    : VECTOR_ELT(context, GATEWAY_CONTEXT_CORE);
+  UNPROTECT(2);
+  return core;
 }

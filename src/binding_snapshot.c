@@ -31,9 +31,13 @@ SEXP paradox_plain_binding_snapshot(SEXP environment, SEXP name) {
     Rf_error("`name` must be an ordinary non-empty character scalar");
   }
 
+  SEXP symbol = Rf_installChar(label);
+  if (!paradox_api_frame_has_binding(environment, symbol)) {
+    return binding_snapshot_result(FALSE, R_NilValue);
+  }
   SEXP value = PROTECT(paradox_api_plain_binding_snapshot(
     environment,
-    Rf_installChar(label)
+    symbol
   ));
   SEXP result = binding_snapshot_result(value != R_UnboundValue, value);
   UNPROTECT(1);

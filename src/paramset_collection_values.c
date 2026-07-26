@@ -329,7 +329,7 @@ static int permanent_rows_equal(const paradox_domain_params_t *parent,
       const int equal = left_value == right_value || R_compute_identical(
           left_value,
           right_value,
-          IDENT_USE_CLOENV
+          paradox_api_identical_default_flags()
         );
       UNPROTECT(2);
       if (!equal) {

@@ -186,11 +186,19 @@ test_that("legacy gateways reject borrowed current enclosures inertly", {
   malformed_policy = ps(x = p_dbl())
   malformed_policy$assert_values = NA
   expect_false(paradox:::.paradox_gateway_current_core(malformed_policy))
-  expect_error(
-    upgrade_paradox_object_graph(malformed_policy),
-    "assert_values",
-    fixed = TRUE
-  )
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_policy),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_policy),
+      "assert_values",
+      fixed = TRUE
+    )
+  }
 
   noncanonical = ps(x = p_dbl())
   noncanonical_private = noncanonical$.__enclos_env__$private
@@ -198,11 +206,19 @@ test_that("legacy gateways reject borrowed current enclosures inertly", {
   attr(noncanonical_core, "forged") = TRUE
   noncanonical_private$.core = noncanonical_core
   expect_false(paradox:::.paradox_gateway_current_core(noncanonical))
-  expect_error(
-    upgrade_paradox_object_graph(noncanonical),
-    "noncanonical versioned core capsule",
-    fixed = TRUE
-  )
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(noncanonical),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(noncanonical),
+      "noncanonical versioned core capsule",
+      fixed = TRUE
+    )
+  }
 
   class_observations = new.env(parent = emptyenv())
   class_observations$count = 0L
@@ -425,6 +441,23 @@ test_that("native graph discovery is iterative, identity-aware, and inert", {
   )
 })
 
+test_that("user-database environments are opaque graph boundaries", {
+  database = new.env(parent = emptyenv())
+  namespace_reads = 0L
+  makeActiveBinding(".__NAMESPACE__.", function(value) {
+    if (!missing(value)) stop("namespace marker is read-only")
+    namespace_reads <<- namespace_reads + 1L
+    stop("namespace marker was invoked")
+  }, database)
+  database$hidden = graph_candidate("user-database-hidden")
+  class(database) = "UserDefinedDatabase"
+
+  discovery = discover_upgrade_candidates(database)
+  expect_length(discovery$objects, 0L)
+  expect_length(discovery$paths, 0L)
+  expect_identical(namespace_reads, 0L)
+})
+
 test_that("native graph discovery does not consume the C or R stack", {
   candidate = graph_candidate("deep")
   root = candidate
@@ -453,6 +486,16 @@ test_that("graph discovery balances a self-duplicating ALTREP root", {
   expect_identical(discovery$paths, "x[[1]]")
 })
 
+test_that("graph paths render multi-digit indices portably", {
+  candidate = graph_candidate("multi-digit-index")
+  carrier = rep(list(NULL), 12L)
+  carrier[[12L]] = candidate
+
+  discovery = discover_upgrade_candidates(carrier)
+  expect_identical(discovery$objects, list(candidate))
+  expect_identical(discovery$paths, "x[[12]]")
+})
+
 test_that("current ParamSet payloads expose current and nested candidates", {
   nested = graph_candidate("opaque-current-value")
   current = ps(payload = p_uty())
@@ -467,6 +510,66 @@ test_that("current ParamSet payloads expose current and nested candidates", {
   ))
   expect_length(nested_position, 1L)
   expect_true(grepl("\\.protected", discovery$paths[[nested_position]]))
+})
+
+test_that("replaced current methods remain graph edges", {
+  nested = graph_candidate("replaced-method-environment")
+  closure_environment = new.env(parent = emptyenv())
+  closure_environment$nested = nested
+  replacement = function(...) character()
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  unlockBinding("ids", current)
+  current$ids = replacement
+
+  discovery = discover_upgrade_candidates(current)
+  expect_true(same_environment_set(discovery$objects, list(current, nested)))
+})
+
+test_that("R 3.6 keeps unsupported relocked method replacements opaque", {
+  nested = graph_candidate("relocked-method-environment")
+  closure_environment = new.env(parent = emptyenv())
+  closure_environment$nested = nested
+  replacement = function(...) character()
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  unlockBinding("ids", current)
+  current$ids = replacement
+  lockBinding("ids", current)
+  discovery = discover_upgrade_candidates(current)
+
+  expected = if (getRversion() < "4.0.0") {
+    list(current)
+  } else {
+    list(current, nested)
+  }
+  expect_true(same_environment_set(discovery$objects, expected))
+})
+
+test_that("R 3.6 keeps unsupported replaced active facades opaque", {
+  nested = graph_candidate("replaced-active-environment")
+  closure_environment = new.env(parent = baseenv())
+  closure_environment$nested = nested
+  closure_environment$calls = 0L
+  replacement = function(value) {
+    calls <<- calls + 1L
+    stop("replacement active binding was invoked")
+  }
+  environment(replacement) = closure_environment
+
+  current = ps(x = p_dbl())
+  makeActiveBinding("values", replacement, current)
+  discovery = discover_upgrade_candidates(current)
+
+  expected = if (getRversion() < "4.0.0") {
+    list(current)
+  } else {
+    list(current, nested)
+  }
+  expect_true(same_environment_set(discovery$objects, expected))
+  expect_identical(closure_environment$calls, 0L)
 })
 
 test_that("current graph preflight does not refresh stale Shadows", {
@@ -508,11 +611,19 @@ test_that("current graph preflight does not refresh stale Shadows", {
     list(child = malformed_child)
   )
   class(malformed_child) = "ParamSet"
-  expect_error(
-    upgrade_paradox_object_graph(malformed_collection),
-    "invalid ParamSet-family R6 class",
-    fixed = TRUE
-  )
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_collection),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(malformed_collection),
+      "invalid ParamSet-family R6 class",
+      fixed = TRUE
+    )
+  }
 })
 
 test_that("recursive graph upgrade is an identity-preserving no-op for current graphs", {
@@ -523,6 +634,32 @@ test_that("recursive graph upgrade is an identity-preserving no-op for current g
   expect_identical(upgrade_paradox_object_graph(host), host)
   expect_identical(host$parameter_set, parameter_set)
   expect_identical(host$parameter_set$ids(), "x")
+})
+
+test_that("additive current graphs fail closed only without active inspection", {
+  AdditiveSet = R6::R6Class(
+    "GraphAdditiveSet",
+    inherit = ParamSet
+  )
+  parameter_set = AdditiveSet$new(list(x = p_dbl(0, 1)))
+  private = mlr3misc::get_private(parameter_set)
+  before_core = serialize(private$.core, NULL)
+  before_enclosure = parameter_set$.__enclos_env__
+
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(parameter_set),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_identical(parameter_set$.__enclos_env__, before_enclosure)
+    expect_identical(serialize(private$.core, NULL), before_core)
+  } else {
+    expect_identical(
+      upgrade_paradox_object_graph(parameter_set),
+      parameter_set
+    )
+  }
 })
 
 test_that("authentic Paradox 1 shells upgrade everywhere by identity", {
@@ -617,11 +754,19 @@ test_that("graph migration preflight leaves every shell untouched on error", {
   legacy = readRDS(path)
   before = serialize(legacy, NULL)
   malformed = graph_candidate("malformed")
-  expect_error(
-    upgrade_paradox_object_graph(list(legacy, malformed)),
-    "Cannot upgrade Paradox object",
-    fixed = TRUE
-  )
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(list(legacy, malformed)),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+  } else {
+    expect_error(
+      upgrade_paradox_object_graph(list(legacy, malformed)),
+      "Cannot upgrade Paradox object",
+      fixed = TRUE
+    )
+  }
   expect_identical(serialize(legacy, NULL), before)
 })
 
@@ -653,9 +798,50 @@ test_that("legacy first use errors by default and can auto-upgrade", {
   options(paradox.legacy_object_action = "upgrade")
   legacy = readRDS(path)
   identity = legacy
-  ids = legacy$ids()
-  expect_identical(ids, expected_ids)
-  expect_identical(identity, legacy)
-  check = legacy$check(list())
-  expect_true(identical(check, TRUE) || is.character(check))
+  if (getRversion() < "4.0.0") {
+    before_enclosure = legacy$.__enclos_env__
+    before_private = before_enclosure$private
+    state_names = c(
+      ".params", ".values", ".tags", ".deps", ".trafos",
+      ".extra_trafo", ".constraint"
+    )
+    before_state = lapply(state_names, function(name) {
+      serialize(get(name, envir = before_private, inherits = FALSE), NULL)
+    })
+    error = tryCatch(
+      {
+        legacy$ids()
+        NULL
+      },
+      error = function(error) error
+    )
+    expect_s3_class(error, "error")
+    expect_match(
+      conditionMessage(error),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_match(conditionMessage(error), "R >= 4.0", fixed = TRUE)
+    expect_identical(legacy$.__enclos_env__, before_enclosure)
+    expect_identical(legacy$.__enclos_env__$private, before_private)
+    expect_false(exists(
+      ".core",
+      envir = legacy$.__enclos_env__$private,
+      inherits = FALSE
+    ))
+    after_state = lapply(state_names, function(name) {
+      serialize(get(name, envir = before_private, inherits = FALSE), NULL)
+    })
+    expect_identical(after_state, before_state)
+    expect_identical(identity, legacy)
+    # R 3.6's default JIT may compile the invoked serialized method closure,
+    # changing the byte serialization of the complete R6 graph even though
+    # neither the gateway nor the upgrader changed its authoritative state.
+  } else {
+    ids = legacy$ids()
+    expect_identical(ids, expected_ids)
+    expect_identical(identity, legacy)
+    check = legacy$check(list())
+    expect_true(identical(check, TRUE) || is.character(check))
+  }
 })

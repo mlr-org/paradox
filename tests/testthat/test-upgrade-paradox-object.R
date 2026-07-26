@@ -340,6 +340,34 @@ test_that("legacy migration fails closed without active-binding inspection", {
   expect_false(exists(".core", envir = private, inherits = FALSE))
 })
 
+test_that("legacy graph migration has a real old-R fail-closed boundary", {
+  legacy = transplantable_legacy_base_from_current(ps(x = p_dbl(0, 1)))
+  private = mlr3misc::get_private(legacy)
+  before_enclosure = legacy$.__enclos_env__
+  before_params = serialize(private$.params, NULL)
+  before_values = serialize(private$.values, NULL)
+  host = list(search_space = legacy)
+
+  if (getRversion() < "4.0.0") {
+    expect_error(
+      upgrade_paradox_object_graph(host),
+      "cannot inspect an active binding on R 3.6",
+      fixed = TRUE
+    )
+    expect_identical(legacy$.__enclos_env__, before_enclosure)
+    expect_identical(serialize(private$.params, NULL), before_params)
+    expect_identical(serialize(private$.values, NULL), before_values)
+    expect_false(exists(
+      ".core",
+      envir = mlr3misc::get_private(legacy),
+      inherits = FALSE
+    ))
+  } else {
+    expect_identical(upgrade_paradox_object_graph(host), host)
+    expect_true(paradox:::.paradox_gateway_current_core(legacy))
+  }
+})
+
 test_that("current capsule-backed objects upgrade idempotently", {
   base = ps(x = p_dbl(0, 1), hidden = p_lgl())
   collection = ParamSetCollection$new(list(a = base))
@@ -1589,9 +1617,28 @@ test_that("pinned mbo_config search spaces are explicit upgrade fixtures", {
   for (index in seq_along(files)) {
     legacy = readRDS(files[[index]])
     before = serialize(legacy, NULL)
-    upgraded = upgrade_paradox_object(legacy)
-    expect_identical(serialize(legacy, NULL), before)
-    expect_length(upgraded$ids(), expected_ids[[index]])
-    expect_equal(nrow(upgraded$deps), expected_deps[[index]])
+    before_enclosure = legacy$.__enclos_env__
+    if (getRversion() < "4.0.0") {
+      error = tryCatch(
+        {
+          upgrade_paradox_object(legacy)
+          NULL
+        },
+        error = function(error) error
+      )
+      expect_s3_class(error, "error")
+      expect_match(
+        conditionMessage(error),
+        "legacy ParamSet migration requires R >= 4.0.0",
+        fixed = TRUE
+      )
+      expect_identical(serialize(legacy, NULL), before)
+      expect_identical(legacy$.__enclos_env__, before_enclosure)
+    } else {
+      upgraded = upgrade_paradox_object(legacy)
+      expect_identical(serialize(legacy, NULL), before)
+      expect_length(upgraded$ids(), expected_ids[[index]])
+      expect_equal(nrow(upgraded$deps), expected_deps[[index]])
+    }
   }
 })

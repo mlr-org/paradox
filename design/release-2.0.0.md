@@ -52,9 +52,16 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the established
   `ATTRIB` traversal on R 3.6--4.5 without evaluating R or data.table code.
   R 3.6--4.1 use `base::exists(..., inherits = FALSE)` only for cold optional
-  existence queries; required binding snapshots stay allocation-free, and the
-  terminal optional receipt scan uses exact old-only
+  existence queries; required ordinary-frame binding snapshots stay
+  allocation-free, and the terminal optional receipt scan uses exact old-only
   `R_HasFancyBindings()` to fail closed for a fancy frame.
+  On newer R the authenticated ordinary-frame path is likewise
+  allocation-free. Callers retain one conservative rooting proof across the
+  supported API branches because hostile class metadata can allocate during
+  facade admission.
+  The facade rejects the recognized `UserDefinedDatabase` class before all
+  binding APIs; callback-backed object tables are not ParamSet/R6 shells, and
+  old `R_HasFancyBindings()` is valid only for ordinary frame layouts.
   The compatibility facade uses exported `Rf_findVarInFrame` on R 3.6--4.5 to
   retrieve a stored frame cell and inspects any returned `PROMSXP` through
   the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
@@ -74,8 +81,14 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   legacy ParamSet-family migration therefore fail closed when its inspection is
   required and ask for R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
   active bindings, practical migration of those objects requires R >= 4.0.
-  Current Paradox-2 operations, idempotent current-object conversion, and
-  standalone legacy Domain/Condition conversion remain supported on R 3.6.
+  Exact built-in current Paradox-2 shells retain recursive traversal through
+  their authenticated capsule. Package active facades are opaque on R 3.6:
+  unsupported in-place replacement cannot be distinguished when the exact
+  shell receipts remain unchanged, and its closure is not traversed or invoked.
+  Additive shells and modifications that fail exact authentication instead
+  fail closed. Current
+  operations, idempotent current-object conversion, and standalone legacy
+  Domain/Condition conversion remain supported on R 3.6.
 - Public old-header adapters for raw/complex setters and default
   `identical()` flags are inline. Collection parameter reads pass the admitted,
   rooted core directly to the shared loader, eliminating both a temporary

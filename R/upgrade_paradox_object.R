@@ -2279,7 +2279,7 @@
 #' enclosing environments, unforced binding and `...` promises without forcing
 #' them, language objects, S4 attributes, and ordinary containers. A native
 #' direct-binding classifier distinguishes realized language/symbol values from
-#' delayed promises without evaluating either. R 4.3--4.5
+#' delayed promises without evaluating either. R 3.6--4.5
 #' can also inspect a detached promise; strict R 4.6 and newer expose no safe
 #' API for that edge, so a promise reached outside a binding or `...` cell is
 #' opaque. It does not enter
@@ -2288,6 +2288,17 @@
 #' weak-reference internals. The protected ordinary-R payload of an
 #' authenticated current Paradox capsule is traversed so a legacy object stored
 #' as an opaque parameter value is not missed.
+#'
+#' R 3.6 cannot retrieve an active binding's function. Exact built-in current
+#' Paradox 2 shells are traversed through their authenticated native capsule,
+#' but migration of a Paradox 1 ParamSet-family shell (including one nested in
+#' another object) must be performed under R >= 4.0. Package active facades and
+#' relocked method replacements on an exact built-in current shell are opaque:
+#' these unsupported replacements cannot be distinguished from generated code
+#' when every receipt available on R 3.6 remains unchanged. Their closures are
+#' not traversed, and an active binding is never invoked. Additive shells and
+#' modifications that fail exact authentication instead fail closed on R 3.6.
+#' Standalone legacy `Domain` and `Condition` conversion has no such limitation.
 #' Known package-generated Paradox 1 callback wrappers are authenticated
 #' narrowly rather than treated as general object graphs. ParamSet children
 #' captured by a detached collection transformation or constraint are migrated
@@ -2410,6 +2421,11 @@ upgrade_paradox_object_graph = function(x) {
 #' [register_paradox_object_upgrader()] bridge can also be rebuilt without
 #' mutating the input; the recursive graph API uses the same bridge while
 #' preserving the original shell identity.
+#'
+#' R 3.6 cannot safely retrieve an active binding's function. Current
+#' capsule-backed objects are still returned unchanged, and standalone legacy
+#' `Domain` and `Condition` objects can still be converted, but a legacy
+#' ParamSet-family R6 object must be upgraded under R >= 4.0.
 #'
 #' @param x A current or legacy Paradox object.
 #'

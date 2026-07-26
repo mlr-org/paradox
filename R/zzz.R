@@ -31,6 +31,11 @@ utils::globalVariables(c("J", "id", "original_id", "owner_ps_index", ".tags", "t
 .onLoad = function(libname, pkgname) { # nolint
   # nocov start
   backports::import(pkgname)
+  if (getRversion() < "4.0.0") {
+    # backports 1.1.7 defines and exports deparse1() on old R, but its generic
+    # import ledger predates that entry. Import this declared floor explicitly.
+    backports::import(pkgname, "deparse1", force = TRUE)
+  }
 
   register_namespace_callback(pkgname, "ParamHelpers", function(...) {
     warning("Packages 'paradox' and 'ParamHelpers' are conflicting and should not be loaded in the same session")

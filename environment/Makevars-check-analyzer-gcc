@@ -1,9 +1,9 @@
 # GCC 14 static analyzer build.  Analyzer findings and ordinary compiler
 # warnings are fatal.  This is intentionally separate from runtime testing.
 
-CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu99
 CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-gcc -std=gnu17
-SHLIB_LD = $(CC17)
+SHLIB_LD = $(CC)
 # glibc deliberately diagnoses _FORTIFY_SOURCE at -O0. The analyzer stays
 # unoptimized for path fidelity; the strict and runtime profiles retain
 # fortification, so omitting it here does not weaken a shipped build.

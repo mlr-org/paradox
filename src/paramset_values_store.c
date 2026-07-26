@@ -113,13 +113,17 @@ static SEXP materialize_altrep_value(SEXP value,
       SET_REAL_ELT(result, index, REAL_ELT(value, index));
       break;
     case CPLXSXP:
-      SET_COMPLEX_ELT(result, index, COMPLEX_ELT(value, index));
+      paradox_api_set_complex_elt(
+        result,
+        index,
+        COMPLEX_ELT(value, index)
+      );
       break;
     case STRSXP:
       SET_STRING_ELT(result, index, STRING_ELT(value, index));
       break;
     case RAWSXP:
-      SET_RAW_ELT(result, index, RAW_ELT(value, index));
+      paradox_api_set_raw_elt(result, index, RAW_ELT(value, index));
       break;
     case VECSXP:
       SET_VECTOR_ELT(result, index, VECTOR_ELT(value, index));

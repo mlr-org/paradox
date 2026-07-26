@@ -2,9 +2,9 @@
 # Clang ASan runtime through LD_PRELOAD because the pinned R executable itself
 # was not linked with -fsanitize=address.  Do not combine with UBSan.
 
-CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=address -fno-omit-frame-pointer
+CC = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu99 -fsanitize=address -fno-omit-frame-pointer
 CC17 = $(CONDA_PREFIX)/bin/x86_64-conda-linux-gnu-clang -std=gnu17 -fsanitize=address -fno-omit-frame-pointer
-SHLIB_LD = $(CC17)
+SHLIB_LD = $(CC)
 CPPFLAGS = -DNDEBUG -D_FORTIFY_SOURCE=2 -isystem $(CONDA_PREFIX)/include
 
 PARADOX_ASAN_FLAGS = -O1 -g3 -fno-optimize-sibling-calls \

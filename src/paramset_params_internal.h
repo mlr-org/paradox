@@ -45,6 +45,16 @@ attribute_hidden int paradox_params_load_private_state_rooted(
   R_xlen_t roots_offset,
   R_xlen_t *work_since_interrupt
 );
+/* Load from an already admitted exact core. This avoids manufacturing a
+ * one-binding environment when a collection graph has already selected and
+ * rooted the authoritative generation. */
+attribute_hidden int paradox_params_load_core_state_rooted(
+  SEXP core,
+  paradox_params_state_t *state,
+  SEXP roots,
+  R_xlen_t roots_offset,
+  R_xlen_t *work_since_interrupt
+);
 attribute_hidden SEXP paradox_params_build_static(
   const paradox_params_state_t *state,
   R_xlen_t *work_since_interrupt

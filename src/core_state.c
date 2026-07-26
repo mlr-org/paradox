@@ -152,7 +152,10 @@ SEXP paradox_core_payload(SEXP core) {
     : R_UnboundValue;
 }
 
-SEXP paradox_core_from_private(SEXP private_environment) {
+typedef SEXP (*core_binding_reader_t)(SEXP, SEXP);
+
+static SEXP core_from_private_using(SEXP private_environment,
+    core_binding_reader_t read_binding) {
   if (TYPEOF(private_environment) != ENVSXP ||
       Rf_isS4(private_environment)) {
     return R_UnboundValue;
@@ -161,7 +164,7 @@ SEXP paradox_core_from_private(SEXP private_environment) {
    * boundary.  This rejects active and delayed bindings before canonical core
    * validation, including on the supported pre-4.6 runtimes. */
   SEXP core_symbol = Rf_install(".core");
-  SEXP core = PROTECT(paradox_api_plain_binding_snapshot(
+  SEXP core = PROTECT(read_binding(
     private_environment,
     core_symbol
   ));
@@ -170,12 +173,35 @@ SEXP paradox_core_from_private(SEXP private_environment) {
   return canonical ? core : R_UnboundValue;
 }
 
+SEXP paradox_core_from_private(SEXP private_environment) {
+  return core_from_private_using(
+    private_environment,
+    paradox_api_plain_binding_snapshot
+  );
+}
+
+SEXP paradox_core_from_private_optional(SEXP private_environment) {
+  /*
+   * On R 3.6--4.1 the optional reader evaluates base::exists() before taking
+   * the non-forcing binding snapshot. Keep a cold-path root here so callers
+   * may safely pass an environment reached through another protected object;
+   * the required hot-path reader above remains allocation-free.
+   */
+  PROTECT(private_environment);
+  SEXP core = core_from_private_using(
+    private_environment,
+    paradox_api_optional_plain_binding_snapshot
+  );
+  UNPROTECT(1);
+  return core;
+}
+
 static SEXP private_from_self(SEXP self) {
   if (TYPEOF(self) != ENVSXP || Rf_isS4(self)) {
     return R_UnboundValue;
   }
   SEXP enclosure_symbol = Rf_install(".__enclos_env__");
-  SEXP enclosure = PROTECT(paradox_api_plain_binding_snapshot(
+  SEXP enclosure = PROTECT(paradox_api_optional_plain_binding_snapshot(
     self,
     enclosure_symbol
   ));
@@ -184,7 +210,7 @@ static SEXP private_from_self(SEXP self) {
     UNPROTECT(1);
     return R_UnboundValue;
   }
-  SEXP owned_private = PROTECT(paradox_api_plain_binding_snapshot(
+  SEXP owned_private = PROTECT(paradox_api_optional_plain_binding_snapshot(
     enclosure,
     private_symbol
   ));
@@ -230,7 +256,7 @@ void paradox_core_validate_graph_path(SEXP root) {
       SEXP private_environment = PROTECT(private_from_self(frame->self));
       SEXP core = private_environment == R_UnboundValue
         ? R_UnboundValue
-        : paradox_core_from_private(private_environment);
+        : paradox_core_from_private_optional(private_environment);
       if (core == R_UnboundValue) {
         UNPROTECT(1);
         Rf_error("Corrupt ParamSet node in capsule graph");
@@ -342,7 +368,7 @@ static SEXP core_from_owner(SEXP owner) {
   if (paradox_core_is_canonical(owner)) {
     return owner;
   }
-  return paradox_core_from_private(owner);
+  return paradox_core_from_private_optional(owner);
 }
 
 SEXP paradox_param_set_core_state(SEXP owner) {

@@ -386,8 +386,9 @@ Header compilation cannot prove that versioned public-API paths behave
 correctly inside the actual R interpreter. The opt-in runtime matrix therefore
 uses the authenticated `environment/runtime-matrix.tsv` registry to provision
 exact conda environments for R 3.6.3, R 4.3.3, and R 4.5.2 from their
-SHA-256 explicit locks. It separately compiles shipped source against the
-R 3.6.0 headers:
+SHA-256 explicit locks. It separately compiles shipped source against R 3.6.0,
+4.0.0, and 4.2.0 headers (plus the later existing axes) so every old-R native
+API transition is represented:
 
 ```sh
 scripts/bootstrap-runtime-matrix
@@ -426,7 +427,9 @@ validator. R 3.6--4.5 use the ATTRIB and
 FORMALS backports documented in Writing R Extensions rather than evaluating R
 inspection shims. R 3.6--4.1 use a cold `base::exists()` path only for optional
 absence checks and an old-only `R_HasFancyBindings()` receipt-scan exception;
-required binding reads remain allocation-free. The two ConfigSpace
+required authenticated ordinary-frame binding reads remain allocation-free.
+Recognized callback-backed `UserDefinedDatabase` environments are rejected
+before binding inspection. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated
@@ -437,6 +440,15 @@ suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported
 inventory, skip ledgers, counts, and hashes.
+Only the declared-minimum R 3.6.3 axis additionally runs a clean source-package
+check from the built tarball. Its exact bounded scope is
+`_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual
+--no-build-vignettes`: the authenticated old-runtime library deliberately
+omits heavy Suggests, while package installation, examples, tests, compiled
+code, and ordinary check policy still execute. The driver log, complete
+`paradox.Rcheck` tree, exact `Status: OK`, status ledger, and their hashes are
+retained and replayed by the evidence verifier. This check is not multiplied
+across the newer runtime axes.
 The coordinator also runs `mbo-config-fixtures` before resource admission.
 That helper joins the candidate's snapshot and organization-review manifests,
 reads the two upgrade fixtures from the selected immutable Git commit rather

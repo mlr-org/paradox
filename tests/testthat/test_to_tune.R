@@ -853,6 +853,36 @@ test_that("search_space admits exact TuneTokens before closed kind selection", {
   )
   expect_false(flatten_called)
 
+  malformed_shells = list(
+    missing_enclosure = local({
+      shell = new.env(parent = emptyenv())
+      class(shell) = c("ParamSet", "R6")
+      shell
+    }),
+    missing_self = local({
+      shell = ps(value = p_int())
+      rm("self", envir = shell$.__enclos_env__)
+      shell
+    }),
+    missing_private = local({
+      shell = ps(value = p_int())
+      rm("private", envir = shell$.__enclos_env__)
+      shell
+    }),
+    missing_core = local({
+      shell = ps(value = p_int())
+      rm(".core", envir = shell$.__enclos_env__$private)
+      shell
+    })
+  )
+  for (shell in malformed_shells) {
+    expect_error(
+      target$search_space(list(value = make_object_token(shell))),
+      "malformed exact BASE ParamSet",
+      fixed = TRUE
+    )
+  }
+
   extra = make_object_token(domain)
   extra$metadata = TRUE
   expect_error(

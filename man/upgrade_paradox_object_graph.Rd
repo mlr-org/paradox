@@ -27,7 +27,7 @@ bindings, active-binding functions (never their values), closures and safe
 enclosing environments, unforced binding and \code{...} promises without forcing
 them, language objects, S4 attributes, and ordinary containers. A native
 direct-binding classifier distinguishes realized language/symbol values from
-delayed promises without evaluating either. R 4.3--4.5
+delayed promises without evaluating either. R 3.6--4.5
 can also inspect a detached promise; strict R 4.6 and newer expose no safe
 API for that edge, so a promise reached outside a binding or \code{...} cell is
 opaque. It does not enter
@@ -36,6 +36,17 @@ search path, base/empty environments, or arbitrary external-pointer and
 weak-reference internals. The protected ordinary-R payload of an
 authenticated current Paradox capsule is traversed so a legacy object stored
 as an opaque parameter value is not missed.
+
+R 3.6 cannot retrieve an active binding's function. Exact built-in current
+Paradox 2 shells are traversed through their authenticated native capsule,
+but migration of a Paradox 1 ParamSet-family shell (including one nested in
+another object) must be performed under R >= 4.0. Package active facades and
+relocked method replacements on an exact built-in current shell are opaque:
+these unsupported replacements cannot be distinguished from generated code
+when every receipt available on R 3.6 remains unchanged. Their closures are
+not traversed, and an active binding is never invoked. Additive shells and
+modifications that fail exact authentication instead fail closed on R 3.6.
+Standalone legacy \code{Domain} and \code{Condition} conversion has no such limitation.
 Known package-generated Paradox 1 callback wrappers are authenticated
 narrowly rather than treated as general object graphs. ParamSet children
 captured by a detached collection transformation or constraint are migrated

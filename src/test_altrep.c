@@ -35,7 +35,9 @@ enum test_config_slot {
 };
 
 static R_altrep_class_t test_string_class;
+#if R_VERSION >= R_Version(4, 3, 0)
 static R_altrep_class_t test_list_class;
+#endif
 static R_altrep_class_t test_integer_class;
 static R_altrep_class_t test_real_class;
 static R_altrep_class_t test_logical_class;
@@ -278,6 +280,7 @@ static R_xlen_t test_length(SEXP x) {
   return result;
 }
 
+#if R_VERSION >= R_Version(4, 3, 0)
 static SEXP test_duplicate(SEXP x, Rboolean deep) {
   (void) deep;
   SEXP config = R_altrep_data2(x);
@@ -290,6 +293,7 @@ static SEXP test_duplicate(SEXP x, Rboolean deep) {
     TEST_CONFIG_DUPLICATE_RETURNS_SELF
   ) ? x : NULL;
 }
+#endif
 
 static SEXP test_string_elt(SEXP x, R_xlen_t index) {
   SEXP source = begin_elt(x);
@@ -300,6 +304,7 @@ static SEXP test_string_elt(SEXP x, R_xlen_t index) {
   return result;
 }
 
+#if R_VERSION >= R_Version(4, 3, 0)
 static SEXP test_list_elt(SEXP x, R_xlen_t index) {
   SEXP source = begin_elt(x);
   SEXP result = index >= 0 && index < XLENGTH(source)
@@ -308,6 +313,7 @@ static SEXP test_list_elt(SEXP x, R_xlen_t index) {
   UNPROTECT(3);
   return result;
 }
+#endif
 
 static int test_integer_elt(SEXP x, R_xlen_t index) {
   SEXP source = begin_elt(x);
@@ -345,6 +351,7 @@ void attribute_hidden paradox_test_altrep_initialize(DllInfo *dll) {
   R_set_altrep_Length_method(test_string_class, test_length);
   R_set_altstring_Elt_method(test_string_class, test_string_elt);
 
+#if R_VERSION >= R_Version(4, 3, 0)
   test_list_class = R_make_altlist_class(
     "paradox_test_stateful_list",
     "paradox",
@@ -353,6 +360,7 @@ void attribute_hidden paradox_test_altrep_initialize(DllInfo *dll) {
   R_set_altrep_Length_method(test_list_class, test_length);
   R_set_altrep_Duplicate_method(test_list_class, test_duplicate);
   R_set_altlist_Elt_method(test_list_class, test_list_elt);
+#endif
 
   test_integer_class = R_make_altinteger_class(
     "paradox_test_stateful_integer",
@@ -384,7 +392,11 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
     SEXP callback_after) {
   const SEXPTYPE type = (SEXPTYPE) TYPEOF(first);
   if (type != (SEXPTYPE) TYPEOF(later) || ALTREP(first) || ALTREP(later) ||
-      (type != STRSXP && type != VECSXP && type != INTSXP &&
+      (type != STRSXP &&
+#if R_VERSION >= R_Version(4, 3, 0)
+        type != VECSXP &&
+#endif
+        type != INTSXP &&
         type != REALSXP && type != LGLSXP) ||
       (callback != R_NilValue && !Rf_isFunction(callback))) {
     Rf_error("Unsupported stateful ALTREP test fixture arguments");
@@ -435,9 +447,11 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
   case STRSXP:
     class = test_string_class;
     break;
+#if R_VERSION >= R_Version(4, 3, 0)
   case VECSXP:
     class = test_list_class;
     break;
+#endif
   case INTSXP:
     class = test_integer_class;
     break;
@@ -475,7 +489,9 @@ SEXP paradox_test_stateful_altrep(SEXP first, SEXP later,
 static void rearm_stateful_altrep(SEXP value, SEXP callback_after) {
   if (!ALTREP(value) ||
       (!R_altrep_inherits(value, test_string_class) &&
+#if R_VERSION >= R_Version(4, 3, 0)
         !R_altrep_inherits(value, test_list_class) &&
+#endif
         !R_altrep_inherits(value, test_integer_class) &&
         !R_altrep_inherits(value, test_real_class) &&
         !R_altrep_inherits(value, test_logical_class))) {

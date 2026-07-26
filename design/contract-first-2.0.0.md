@@ -642,15 +642,19 @@ ordinary R helpers for genuine language capture or error construction. It must
 not call checkmate or data.table to implement a hot semantic operation. Shipped
 code is portable C99 and supports R >= 3.6. Equivalent API spellings are
 centralized in `src/r_api_compat.c`; current R retains its public,
-allocation-free fast path and no semantic translation unit gains a parallel
-old-R engine.
+allocation-free ordinary-frame fast path and no semantic translation unit
+gains a parallel old-R engine. Authentication keeps one conservative rooting
+proof across all supported branches because hostile class metadata can
+allocate during facade admission, and rejects recognized callback-backed user
+databases before binding inspection.
 
 R 3.6--4.1 has no public non-evaluating single-binding existence query. Cold
 optional lookups therefore use `base::exists(..., inherits = FALSE)`, which
-does not invoke active bindings. Required binding snapshots remain
-allocation-free. A terminal optional receipt scan cannot allocate, so on those
-runtimes it uses the header-declared/exported `R_HasFancyBindings()` only to
-fail closed for a fancy frame before selecting a stored cell. R 3.6--4.5 uses
+does not invoke active bindings. Required authenticated ordinary-frame binding
+snapshots remain allocation-free. A terminal genuine-shell optional receipt
+scan cannot allocate, so on those runtimes it uses the
+header-declared/exported `R_HasFancyBindings()` only to fail closed for a fancy
+frame before selecting a stored cell. R 3.6--4.5 uses
 the declared/exported `Rf_findVarInFrame` to retrieve that stored frame cell;
 recursive migration may then inspect a returned `PROMSXP` through the
 header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` without
@@ -677,9 +681,16 @@ Direct and recursive legacy ParamSet-family migration fail closed if active-
 binding inspection is required and ask the user to migrate under R >= 4.0; they
 never invoke or silently skip the binding. Paradox-1 ParamSet-family R6 shells
 themselves contain active bindings, so their practical object/graph migration
-requires R >= 4.0. This limitation does not affect current-object operations,
-idempotent current-object conversion, standalone legacy Domain/Condition
-conversion, or graphs without active bindings.
+requires R >= 4.0. Exact built-in current Paradox-2 shells retain recursive
+traversal through their authenticated capsule. Their package active facades are
+opaque on R 3.6: unsupported in-place replacement of such a facade cannot be
+distinguished when all exact shell receipts remain intact, and nodes reachable
+only from the replacement closure are not traversed. The binding is never
+invoked. Additive shells and modifications that fail exact authentication
+instead fail closed. This
+limitation does not affect current-object operations, idempotent current-object
+conversion, standalone legacy Domain/Condition conversion, or graphs without
+arbitrary active bindings.
 
 Other old-header adaptations remain public and inline: fresh raw/complex
 destinations use direct vector access before the element-setter declarations
@@ -1095,9 +1106,13 @@ migration boundary for a containing object:
   value and expression; an unforced one contributes its expression and
   evaluation environment. R 3.6--4.5 additionally inspect a detached
   `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as opaque.
-  R 3.6 cannot retrieve an active-binding function and therefore fails this
-  migration closed with an R >= 4.0 upgrade instruction rather than invoking
-  or omitting the binding.
+  R 3.6 cannot retrieve an arbitrary active-binding function and therefore
+  fails this migration closed with an R >= 4.0 upgrade instruction rather than
+  invoking or silently omitting the binding. Exact built-in current Paradox-2
+  shells have one narrow exception: authenticated capsule authority is
+  traversed directly while locked methods and package active facades remain
+  opaque. Unsupported relocked method and active-facade replacements cannot be
+  distinguished from generated code on that runtime and are likewise opaque.
   Direct bindings are classified by the native binding API, never by evaluating
   or inspecting a substituted R expression. A realized `LANGSXP` or `SYMSXP`
   is therefore a value, while a delayed promise whose expression is a language

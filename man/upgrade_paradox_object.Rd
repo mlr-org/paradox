@@ -40,6 +40,11 @@ Direct owner subclasses covered by an exact
 \code{\link[=register_paradox_object_upgrader]{register_paradox_object_upgrader()}} bridge can also be rebuilt without
 mutating the input; the recursive graph API uses the same bridge while
 preserving the original shell identity.
+
+R 3.6 cannot safely retrieve an active binding's function. Current
+capsule-backed objects are still returned unchanged, and standalone legacy
+\code{Domain} and \code{Condition} objects can still be converted, but a legacy
+ParamSet-family R6 object must be upgraded under R >= 4.0.
 }
 \examples{
 current = ps(x = p_dbl(0, 1))
