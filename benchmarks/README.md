@@ -23,7 +23,9 @@ are:
   16.4/18.0/18.2x versus `b2e1649`; the 128/512 chain/star set has geometric
   ratio 0.135. Checked-raw allocation fell from 75,784 to 44,080 bytes.
 - `SamplerUnif$new()` at 64 parameters improved 2.42x and allocation fell from
-  493,888 to 66,880 bytes.
+  493,888 to 66,880 bytes. An isolated control of the unchanged public
+  `Sampler1DUnif$new(input)` path found a balanced baseline/candidate ratio of
+  0.9993 (95% interval 0.9955--1.0031), excluding a stable 1% regression.
 - detached BASE/SHADOW dependency facades at 64 rows improved about 1.9x and
   saved 2,568 bytes; fresh Domain construction improved 1--16% across all
   representative kinds.
