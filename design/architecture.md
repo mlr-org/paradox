@@ -260,10 +260,13 @@ use it only when it is that exact admitted special leaf.
 
 Public accessors build independently owned objects. Accessors historically
 returning a data.table attach the public `c("data.table", "data.frame")` class
-and a valid self-reference only after every column shell is detached. Mutating
-the result with `set()` or `:=` cannot mutate the capsule. `Design$data` remains
-an intentionally public mutable data.table and is treated as operation input,
-not internal state.
+and a valid self-reference only after every mutable shell and column is newly
+owned or detached. Fresh native Domain and dependency producers finish their
+already-owned facades directly. The general finalizer remains the defensive
+boundary for caller-owned/public-ingress tables. Mutating an accessor result
+with `set()` or `:=` cannot mutate the capsule. `Design$data` remains an
+intentionally public mutable data.table and is treated as operation input, not
+internal state.
 
 There is one ledgered cold presentation-only data.table identity lookup in
 `R/ParamSet.R`. It resolves the unexported `.reassign_extracted_table` and the
@@ -309,6 +312,13 @@ All native semantic/admission graph traversal is iterative, uses checked
 `R_xlen_t` arithmetic, supports shared child identity, and rejects a node
 repeated on the current active path. It does not reject a shared node seen on a
 completed sibling path.
+
+Collection reader graphs keep coordinated inline node/path/postorder scratch
+for 16 nodes and grow those arrays together with checked operation-local
+allocation. Node initialization reuses the first admitted prior-node lookup
+instead of scanning the same prefix twice. This is bounded scratch only:
+complete graph/generation validation, shared-DAG identity, and active-path
+cycle checks are unchanged.
 
 Deep cloning is deliberately cold R orchestration over the same capsule graph,
 not a second semantic engine. It discovers topology iteratively, memoizes shell
@@ -445,6 +455,13 @@ structural class/name metadata are ordinary non-ALTREP/non-S4. Atomic RHS and
 direct operands may be admitted stable ALTREP, but explicitly reject S4.
 `condition_as_string()` is deliberately cold R formatting over an already
 closed built-in shape; it is not a competing semantic evaluator.
+
+Exact Condition admission captures raw `names` and `class` in one
+version-compatible attribute traversal. A dependency-table validator may also
+return an operation-local array of the exact admitted RHS pointers while the
+dependency/Condition graph remains rooted. Getter activity consumes that array
+directly, so integrity is checked once rather than re-admitting every
+Condition merely to recover its operand.
 
 `p_dbl()` and `p_int()` pass their raw bounds, numeric source kind, and
 `logscale` flag to the row constructor once. That registered operation owns
@@ -687,6 +704,16 @@ store-blind while allowing the raw store to contain dormant entries.
 `check_required` and `presence` consume the corresponding activity result, so
 a satisfying default can make an absent required child demand a value.
 
+The getter admits one operation-local open-addressed index over parameter
+CHARSXP IDs and reuses it for value names, tag owners, and both dependency
+endpoints. Pointer identity is the maintained fast path; the encoding-aware
+comparator handles equivalent identities/encodings on uncommon admitted
+inputs. A raw read that requests neither dependency filtering nor required
+checking does not calculate activity, but it still performs the complete
+parameter, dependency, and Condition integrity admission. An unfiltered
+result can consume the admitted value projection and rooted schema IDs
+directly while allocating a fresh outward list and names shell.
+
 Checked assignment builds and Domain-validates the complete replacement state
 without a dependency-feasibility pass. If there is no constraint, it performs
 no activity traversal. If a constraint is present, it computes activity once
@@ -797,8 +824,11 @@ sandboxed by Paradox and is outside this guarantee.
   ownership, SHADOW refresh, and graph-path safety;
 - `src/domain_construct.c`, `src/domain_admission.h`, `src/domain_kernels.c`,
   `src/paramset_domain_common.[ch]`: closed Domain construction, the sole shared
-  built-in row-admission owner, and canonical capsule table/kind validation;
-- `src/builtin_condition.[ch]`: closed Condition admission/evaluation;
+  built-in row-admission owner, canonical capsule table/kind validation, and
+  the exact dependency validator that can expose admitted RHS pointers to its
+  rooted caller;
+- `src/builtin_condition.[ch]`: closed Condition admission/evaluation and
+  one-pass exact raw-attribute capture;
 - `src/paramset_construct.c`, `src/paramset_collection_construct.c`: BASE and
   COLLECTION construction and atomic collection add;
 - `src/paramset_mutate.c`: tag/dependency projection and atomic mutation plus
@@ -815,7 +845,8 @@ sandboxed by Paradox and is outside this guarantee.
 - `src/parameter_suggestion.[ch]`: bounded failure-only UTF-8 identifier
   ranking and formatting for the shared unknown-parameter diagnostic;
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
-  planners and kernels over capsule state;
+  planners and kernels over capsule state; `src/sampler_unif.c` also owns the
+  process-local single-use singleton-subspace handoff;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
   for the recursive legacy migration boundary;
 - `src/binding_snapshot.c`: the registered cold R-facing projection of the
@@ -827,7 +858,9 @@ sandboxed by Paradox and is outside this guarantee.
   additive family-suffix recognition, canonical core agreement, defining-family
   enclosure selection, and the final binding receipt scan;
 - `src/r_utils.c` and `src/r_api_compat.c`: small R-API ownership and version
-  adapters, never alternate semantics. Raw stored-attribute selection uses
+  adapters, never alternate semantics. `r_utils.c` distinguishes the compact
+  facade completion for genuinely fresh package-owned tables from the
+  defensive caller-owned finalizer. Raw stored-attribute selection uses
   `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
   4.3--4.5; older supported R releases also use the documented public `FORMALS`
   backport for newer closure inspection. These adapters never evaluate
@@ -932,7 +965,7 @@ source-reference rule does not traverse arbitrary environments or opaque
 the separate legacy graph crawler retains its documented ability to find a
 legacy ParamSet shell inside an authenticated current capsule payload.
 
-Four final measured hot-path changes remove redundant work while retaining the
+Four earlier measured hot-path changes remove redundant work while retaining the
 same validation boundary. A ParamSet constructor with no initial values skips an
 empty value-store transaction. Complete collection-value admission retains the
 already resolved BASE parameter row and translates that validated offset upward
@@ -947,6 +980,18 @@ exact 50-iteration, three-warmup methodology and package/source fingerprints
 are retained in `benchmarks/README.md` and
 `.local/benchmarks/has-deps-scalar-ab-final-20260719`. These are
 operation-local shortcuts, not persistent validation caches.
+
+The bounded final performance batch is specified and measured in
+`design/final-performance-implementation-plan.md`. It adds the getter's shared
+operation-local ID index and direct admitted projection, the single
+dependency/Condition admission with retained RHS pointers, one-pass exact
+Condition attributes, native completion of fresh Domain/dependency facades,
+the SamplerUnif singleton ownership handoff, and bounded collection-graph
+scratch cleanup. Each accepted slice was faster in both balanced benchmark
+orders at its target size (the 256-node collection timing remained noisy but
+its fixed allocation reduction was material). The residual wide-getter profile
+is the one required exact dependency/Condition and parameter-table validation
+pass, not duplicated R/native work.
 
 A proposed sparse-target search-space projection was also measured and rejected.
 Search-space construction is cold, and the maintained end-to-end workload moved
@@ -984,6 +1029,11 @@ draws in public parameter/column-major order, and constructs the outward
 data.table without executing the per-dimension R6 objects. `SamplerUnif` keeps
 its inherited `$samplers` list only as descriptive compatibility metadata;
 replacement/reordering is rejected and child mutation has no semantic effect.
+Its constructor may transfer freshly issued, unexposed singleton subset states
+through sampler-specific process-local single-use carriers. Public
+`Sampler1DUnif` construction still defensively clones; reused, serialized,
+malformed, or generic carriers reject, and the public sampler topology does not
+contain a carrier.
 Users wanting executable custom child samplers use `SamplerHierarchical`.
 `generate_design_random()` and `SamplerUnif` both pass the native table through
 the one `Design$new()` boundary for fixed values and dependency masking.

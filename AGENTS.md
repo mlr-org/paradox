@@ -128,13 +128,16 @@ The final pre-release performance batch is governed by
 [`design/final-performance-implementation-plan.md`](design/final-performance-implementation-plan.md).
 That plan was recorded at package commit `b2e1649` before implementation and
 locks both the measured targets and their compatibility/integrity proof
-obligations.  During this batch run focused tests and balanced per-slice A/B
-benchmarks only; do not spend the remaining pre-freeze period rerunning the
-full compatibility, memory, portability, or release matrices.  In particular,
-operation-local indexes and one-use package-private ownership handoffs are
-allowed optimizations, while persistent validation caches, trusted caller
-metadata, skipped graph checks, and weakened generation reauthentication are
-not.
+obligations. P5 landed at `81cbccf`; P1--P4, the profile-led Condition/RHS
+follow-ups, direct native probes, and focused tests landed at `387c1cd`.
+Balanced per-slice evidence is complete and recorded in the plan, including
+the measured stop boundary at the remaining single exact integrity pass. Do
+not rerun those slice A/B experiments during minor cleanup. Do not run the
+full compatibility, memory, portability, or release matrices until source
+converges and the final release gate begins. Operation-local indexes and
+one-use package-private ownership handoffs are allowed optimizations;
+persistent validation caches, trusted caller metadata, skipped graph checks,
+and weakened generation reauthentication remain prohibited.
 
 ## Non-negotiable design decisions
 
@@ -164,11 +167,14 @@ not.
   missing, extra, or malformed attribute is corrupt state, never a fallback.
 - Capsule tables are canonical plain base `data.frame`s. They have no
   data.table key, index, spare capacity, or self-reference. Public table
-  accessors return detached, valid data.table facades. Attribute values,
-  classes, names, and row names are contractual by attribute name; incidental
-  pairlist order inherited from an R/data.table version is not. Native grid
-  facades use one fixed `row.names`/`class`/`names` construction order on every
-  supported runtime.
+  accessors return valid data.table facades whose mutable shells and columns
+  are newly owned or detached from capsule state. A native producer that owns
+  a genuinely fresh shell and metadata may complete that facade directly;
+  caller-owned/public-ingress tables still require defensive materialization
+  and finalization. Attribute values, classes, names, and row names are
+  contractual by attribute name; incidental pairlist order inherited from an
+  R/data.table version is not. Native grid facades use one fixed
+  `row.names`/`class`/`names` construction order on every supported runtime.
 - Mutations build and validate replacement capsules and swap `.core`
   atomically. Value assignment plans the complete BASE/COLLECTION/SHADOW
   graph through ultimate BASE targets, deduplicates shared targets with
@@ -234,7 +240,11 @@ not.
   element and `CondAnyOf` is non-empty and unique. Native dependency or direct
   comparison admission roots that selected RHS, materializes every element
   once, and validates the ordinary snapshot. The strict capsule validator does
-  not accept ALTREP; it validates only the already admitted snapshot.
+  not accept ALTREP; it validates only the already admitted snapshot. An
+  operation may retain pointers to the exact admitted RHS values in temporary
+  workspace while their dependency/Condition owner graph remains rooted. It
+  must not run the same exact Condition admission a second time merely to
+  recover those operands.
   Numeric bounds/logscale admission and row construction are one registered
   operation; exact empty Domain operations and zero-dimensional grids also
   enter C and have no R special-case engine. Canonical semantic admission of
@@ -388,7 +398,14 @@ not.
   activity kernel, and `check_required` is evaluated against that filtered
   view. Dependency filtering occurs at the node whose dependency rows own the
   rule: a collection-level cross-child edge filters the collection read, not a
-  direct read from either child.
+  direct read from either child. The getter builds one operation-local
+  open-addressed index over admitted CHARSXP IDs and reuses it for stored-value
+  names, tags, and both dependency endpoints. Pointer identity is the common
+  path and the encoding-aware comparator is the fallback. A raw read with no
+  dependency filtering and no required parameters skips activity evaluation,
+  but never skips parameter/dependency/Condition admission. With no ID/tag
+  filter it may reuse the rooted admitted schema IDs internally; the outward
+  values list and names remain fresh and detached.
 - Explicit `$search_space(values=)` input has the same outer-container
   representation boundary: an ordinary named list or an S3-classed named list
   carrying only `names` and `class`. Native code discards the class and selects
@@ -559,7 +576,13 @@ not.
 - `SamplerUnif` and `generate_design_random()` share one capsule-driven native
   uniform engine. `SamplerUnif$samplers` remains descriptive compatibility
   metadata: replacing/reordering the list is an error and child mutation never
-  selects another engine. Use `SamplerHierarchical` for custom 1-D samplers.
+  selects another engine. `SamplerUnif` may move each freshly created,
+  unexposed singleton subspace through its package-private process-local
+  single-use ownership carrier, avoiding a redundant child clone. Reused,
+  serialized, malformed, generic, or fabricated carriers reject. Ordinary
+  public `Sampler`/`Sampler1DUnif` construction retains defensive cloning, and
+  child order/classes/IDs plus serialized public topology are unchanged. Use
+  `SamplerHierarchical` for custom 1-D samplers.
   Random, Sobol, LHS, hierarchical, and directly constructed designs retain
   fixed-value overwrite and dependency masking at the ordinary `Design$new()`
   boundary. `generate_design_grid()` is the one deliberate prepared-design
@@ -997,8 +1020,10 @@ library.
   snapshot. Mutating commits detect intervening capsule replacement and fail
   without overwriting it.
 - Construct public data.table facades at the boundary, finalize their public
-  self-reference, and ensure every mutable column shell is detached from the
-  capsule. Never synthesize private indices or call private C APIs.
+  self-reference, and ensure every mutable shell and column is newly owned or
+  detached from the capsule. The compact fresh-facade helper is only for a
+  package-owned shell with package-owned metadata; caller-owned input uses the
+  defensive finalizer. Never synthesize private indices or call private C APIs.
 - Prefer a compact readable native operation over layers of helpers that only
   existed to reproduce an R vectorization pattern. Avoid per-row R calls except
   documented callbacks.
@@ -1020,6 +1045,12 @@ library.
   fingerprints, 50-iteration/three-warmup method, and raw evidence path are in
   `benchmarks/README.md`. These measured shortcuts remove redundant work
   without caching graph validity or weakening admission.
+- Collection graph readers keep bounded inline scratch for 16 nodes, then grow
+  all coordinated node/path/postorder arrays together with checked temporary
+  allocation. Admission retains and reuses the first prior-node lookup instead
+  of rescanning the prefix. This removes 2,232 bytes of scratch at 16 nodes and
+  7,008 bytes at 64/256 nodes; it does not create a trusted-node bit, skip a
+  graph/generation check, or change shared-DAG/cycle behavior.
 - Keep unavoidable package-owned callback wrappers thin. In particular,
   `to_tune(ParamSet)` may call the supplied transformation and perform its
   one-list-result/name boundary directly; it must not add checkmate or

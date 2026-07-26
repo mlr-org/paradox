@@ -147,7 +147,11 @@ hazards that Paradox 2 is intended to remove.
   Classed, dimensional, or otherwise attributed operands now fail explicitly
   instead of selecting `Ops`/`%in%` S3 behavior. Built-in Condition RHS values
   use the same four unclassed types without missing values; they are rooted and
-  materialized once when a dependency or direct comparison admits them.
+  materialized once when a dependency or direct comparison admits them. Wide
+  stored-value reads now use one operation-local ID index and reuse each
+  dependency validator's admitted RHS, avoiding quadratic endpoint scans and
+  duplicate Condition admission while retaining exact corruption checks,
+  informative diagnostics, mixed-encoding matching, and detached results.
 * `ParamSet$test_constraint()` and `$test_constraint_dt()` now share the native
   check graph, point admission, and constraint kernel. With value assertion
   enabled, the table method validates every row before invoking any constraint
@@ -195,7 +199,10 @@ hazards that Paradox 2 is intended to remove.
   ParamSet. Documented data.frame/data.table operation inputs use the shared
   suffix-aware classifier and snapshot an allowed top-level VECSXP ALTREP once.
   Package-owned table/facade metadata remains canonical ordinary structure;
-  admitted semantic atomic columns may be stable ALTREP.
+  admitted semantic atomic columns may be stable ALTREP. Fresh Domain and
+  BASE/SHADOW dependency results now complete their outward data.table facades
+  natively instead of copying/finalizing the same new shell again in R;
+  caller-owned input continues to use the defensive finalizer.
 * Numeric/list-valued `p_fct()` and log-scale `p_int()` create their small
   serializable mapping closures directly instead of compiling a fresh
   `crate()` closure for every Domain instance.
@@ -223,7 +230,7 @@ hazards that Paradox 2 is intended to remove.
   native ASCII IDs without repeated transcoding. Mixed encodings and non-ASCII
   native strings keep the translating path, and every read still performs the
   complete corrupt-state validation.
-* A final measured hot-path pass skips empty constructor value transactions,
+* An earlier measured hot-path pass skips empty constructor value transactions,
   reuses already resolved BASE rows while translating admitted collection
   values, and removes a redundant R-side Shadow dependency refresh. Paired
   forward/reverse development measurements improved small construction by
@@ -236,6 +243,16 @@ hazards that Paradox 2 is intended to remove.
   uniform engine for base sets, collections, and live shadows. The inherited
   `$samplers` list remains descriptive; replacing/reordering it is an error,
   and custom executable child samplers belong in `SamplerHierarchical`.
+  `SamplerUnif` construction also transfers its fresh singleton subspaces
+  through package-private single-use ownership carriers, removing redundant
+  child clones. Ordinary public sampler constructors still defensively clone;
+  malformed, reused, or serialized carriers reject and are not part of the
+  public sampler topology.
+* The final bounded performance pass also reduces collection-reader scratch
+  for common graphs, reuses the first prior-node lookup, and completes the
+  wide-getter, Condition, facade, and sampler optimizations above. These are
+  operation-local ownership/lookup improvements, not persistent validation
+  caches or weaker graph admission.
 * The package now requires R >= 4.3 and a C17 compiler. Linux, Windows x86-64,
   and Apple-silicon macOS are supported without architecture-specific code.
 

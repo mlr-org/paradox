@@ -253,7 +253,10 @@ it for byte-for-byte compatibility:
   unsatisfied (#265);
 - BASE dependency cycles remain constructible through the existing mutation
   surface, but every shared activity consumer detects them and errors
-  deterministically instead of looping or producing a partial active set;
+  deterministically instead of looping or producing a partial active set. A
+  raw `$get_values(remove_dependencies = FALSE, check_required = FALSE)` read
+  is not an activity consumer; it still validates the dependency/Condition
+  structure but returns the admitted raw store without traversing the cycle;
 - callback-dependent TuneToken search-space plausibility sampling is
   deterministic and restores caller RNG kind/state; native token admission does
   not sample or execute candidate callbacks;

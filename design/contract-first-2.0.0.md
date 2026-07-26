@@ -20,7 +20,10 @@ The contract reset is intentionally bounded. It spends the unreleased major
 version break on removing unused extension and mutation promises that otherwise
 force every ordinary operation to authenticate a second, mutable R execution
 surface. It is not permission for further discretionary performance work once
-the design below is implemented.
+the design below is implemented. The one explicitly bounded final performance
+batch was specified before implementation in
+`design/final-performance-implementation-plan.md`; it preserves every contract
+here and is now closed at commits `81cbccf` and `387c1cd`.
 
 It also spends that break now on one strict structural-object boundary. Exotic
 ALTREP/S4 shells and duplicate R/native admission have no known maintained
@@ -135,12 +138,15 @@ only by a package-controlled construction, refresh, clone, or upgrade path.
 Canonical table fields are plain base `data.frame` column stores with no key,
 secondary index, spare-column capacity, or data.table self-reference. Native
 code reads their columns directly after complete shape validation. Public table
-accessors construct detached data.table facades at the boundary. Consequently
-there is no load-time data.table-layout probe, version-specific index synthesis,
-or permanent table facade to maintain. Required table attributes and their
-values are contractual by name, but their pairlist order is not legacy API;
-native grid facades use one fixed `row.names`/`class`/`names` construction
-order rather than reproducing R-version-specific `data.table::CJ()` order.
+accessors construct data.table facades whose mutable shells and columns are
+newly owned or detached at the boundary. A native producer may complete a
+genuinely fresh package-owned facade directly; caller-owned/public-ingress
+tables retain the defensive finalizer. Consequently there is no load-time
+data.table-layout probe, version-specific index synthesis, or permanent table
+facade to maintain. Required table attributes and their values are contractual
+by name, but their pairlist order is not legacy API; native grid facades use
+one fixed `row.names`/`class`/`names` construction order rather than
+reproducing R-version-specific `data.table::CJ()` order.
 
 Every supported mutation constructs a replacement capsule and swaps the
 private `.core` binding only after validation. Reads retain the capsule selected
@@ -380,6 +386,10 @@ Condition shells and their structural class/name metadata must be ordinary
 non-ALTREP/non-S4. The admitted atomic RHS and direct operand may be stable
 ALTREP as above but also reject the S4 bit explicitly; S4 is never an opaque
 Condition operand.
+Exact admission may return the already validated RHS in operation-local
+workspace while its dependency/Condition graph remains rooted. Reusing that
+borrowed pointer is part of the single validator, not a cache or a second
+admission policy.
 `condition_as_string()` remains one cold R presentation operation, not another
 condition evaluator. `ParamSet$add_dep()` and dependency assignment reject an
 unknown or malformed condition immediately instead of storing an extension for
@@ -553,6 +563,10 @@ The basis is operation-specific and never guessed:
   They never consult stored `$values`.
 - `$get_values(remove_dependencies = TRUE)` uses the raw stored values plus
   recorded defaults. Its `check_required` decision is made after filtering.
+- A raw getter call that requests no dependency filtering and has no required
+  parameters does not invoke the activity kernel. It still admits the complete
+  parameter/dependency/Condition snapshot and therefore retains every
+  corruption boundary.
 - `presence = "required"` and `"all"` use the candidate point basis. A
   satisfying default can therefore make an absent child active and required
   where a default-blind check formerly exempted it.
@@ -1374,27 +1388,31 @@ different superseded package bytes. Refs with a sealed identical built payload
 follow the narrow evidence-reuse rule in the validation and release ledgers;
 donor execution identities are never rewritten.
 
-After the replacement benchmark establishes that the single engine has no
-release-relevant regression, performance work freezes again. Further source
-changes reopen only evidence that actually depends on those changed bytes, but
-the first contract-first candidate necessarily reopens the complete release
-matrix.
+The bounded final performance batch is now complete. Performance work is
+frozen again; further source changes reopen only evidence that actually depends
+on those changed bytes, but the first contract-first candidate necessarily
+reopens the complete release matrix.
 
 ## Implementation choices that are not public contracts
 
-Profiling is closed for the 2.0.0 implementation. The retained low-risk wins
-skip empty constructor storage, reuse resolved collection rows, remove a
-duplicate Shadow dependency refresh, and answer `$has_deps` from validated
-native counts without projecting `$deps`. The retained 64-parameter
-BASE/COLLECTION/SHADOW probe moved from 498.575 to 156.065 microseconds
-(3.195x); its one-evaluation allocation profile remained 12,688 bytes in 14
-records, so this is a latency win rather than an allocation claim. A sparse
-search-target projection moved a maintained end-to-end workload by only about
-2%, and a bulk-dependency constructor transaction improved representative
-xgboost construction by only about 6--7% despite a larger requirement-heavy
-microbenchmark gain. Both experiments are rejected for this release because
-their extra semantic and validation surface is not low-hanging; neither is an
-omitted compatibility break or unfinished public contract.
+Profiling is closed for the 2.0.0 implementation after the retained batches in
+`design/final-performance-implementation-plan.md`. In addition to the earlier
+low-risk wins (empty constructor storage, resolved collection rows, one Shadow
+refresh, and scalar `$has_deps`), the final batch adds one operation-local
+getter ID index, one exact dependency/Condition admission whose RHS is reused,
+one-pass exact Condition attributes, native completion of fresh
+Domain/dependency facades, a single-use internal SamplerUnif ownership handoff,
+and bounded collection-graph scratch. The final wide-getter residual is the
+single exact dependency/Condition and parameter-table integrity pass; removing
+it would change this contract rather than remove duplication.
+
+A sparse search-target projection moved a maintained end-to-end workload by
+only about 2%, and a bulk-dependency constructor transaction improved
+representative xgboost construction by only about 6--7% despite a larger
+requirement-heavy microbenchmark gain. Both experiments remain rejected for
+this release because their extra semantic and validation surface is not
+low-hanging; neither is an omitted compatibility break or unfinished public
+contract.
 
 The final paired policy does not pretend that Paradox 1 performed Paradox 2's
 new integrity work. It assigns finite contract-reset budgets only to the direct

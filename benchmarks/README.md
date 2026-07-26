@@ -1,5 +1,48 @@
 # Paired performance benchmarks
 
+## Final pre-release development batch
+
+The bounded implementation plan recorded before source changes is
+`design/final-performance-implementation-plan.md`. Its immutable performance
+baseline is `b2e1649884fe1478fd8f248cfefcd071f8278559b`; collection scratch
+cleanup landed at `81cbccf` and the remaining implementation/tests/probes at
+`387c1cd`. The ordinary integrated GCC DSO used for the final focused A/B pass
+has SHA-256
+`b664b29bca6e9ed6247fa17abe5f8a5942bd4d752e3d8f215f2482f353d17b9c`.
+This is development evidence, not the eventual sealed release benchmark.
+
+Every retained comparison used fresh R processes, one pinned CPU,
+single-threaded numeric libraries, warmups, both baseline-first and
+candidate-first orders, semantic result keys, and the geometric
+forward/reverse ratio. Exact scripts, CSVs, logs, installed libraries, source
+snapshots, and Callgrind outputs are below
+`.local/perf/final-performance-implementation-20260726/`. Principal results
+are:
+
+- 512-parameter chain active/checked-raw/unchecked-raw getters improved
+  16.4/18.0/18.2x versus `b2e1649`; the 128/512 chain/star set has geometric
+  ratio 0.135. Checked-raw allocation fell from 75,784 to 44,080 bytes.
+- `SamplerUnif$new()` at 64 parameters improved 2.42x and allocation fell from
+  493,888 to 66,880 bytes.
+- detached BASE/SHADOW dependency facades at 64 rows improved about 1.9x and
+  saved 2,568 bytes; fresh Domain construction improved 1--16% across all
+  representative kinds.
+- collection graph timing has geometric ratio 0.968, with every 16/64-node
+  case faster in both orders; fixed admission scratch fell 2,232 bytes at 16
+  nodes and 7,008 bytes at 64/256 nodes.
+- fusing dependency validation with RHS capture improved the already indexed
+  getter another 36%, and one-pass exact Condition attributes another 11.5%;
+  both were faster in every balanced target case without changing allocation.
+
+The equivalent chain-512 Callgrind workload fell from about 908.2 million to
+51.8 million instructions. The residual native cost is the single exact
+dependency/Condition pass and exact parameter-table admission required by the
+Paradox-2 integrity contract, not duplicated R/C logic. Strict GCC 14 and
+Clang 22 C17 builds are retained at
+`.local/checks/final-performance-batch-strict-20260726`; both promoted warnings
+to errors. The 176-record exhaustive direct native probe ledger has no
+failure.
+
 `benchmarks/run` compares a pinned upstream installation with the candidate in
 two separate, fresh R processes. It loads the supplied immutable installations
 and does not rebuild either package for each process or workload. It never

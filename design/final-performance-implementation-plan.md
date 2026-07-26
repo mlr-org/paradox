@@ -1,11 +1,15 @@
 # Final pre-release performance implementation plan
 
 Status at creation (2026-07-26, package commit `b2e1649`): **approved for
-implementation, not yet implemented**.  This document was written before the
-first source change in this batch so that the measured opportunities,
-compatibility obligations, and stop conditions cannot drift while the work is
-in progress.  Update the status and evidence table as each slice lands; do not
-rewrite the original baselines after seeing the result.
+implementation, not yet implemented**. Status after implementation:
+**P1--P5 and two profile-led P1 follow-ups accepted at commits `81cbccf` and
+`387c1cd`; focused development gates complete**. This document was written
+before the first source change in this batch so that the measured
+opportunities, compatibility obligations, and stop conditions could not drift
+while the work was in progress. The original baselines and targets below are
+therefore retained even where the result exceeded them. The full release
+matrix remains intentionally deferred until the remaining source cleanup
+converges.
 
 This is the last planned performance batch before the replacement Paradox 2
 release candidate is frozen.  It must preserve every behavioral and integrity
@@ -263,16 +267,34 @@ remaining package changes and belong after final source convergence.
 
 ## 5. Results ledger
 
-Fill this table without deleting the original target.  “Accepted” requires
-focused correctness plus balanced A/B evidence; “reverted” records useful
-negative evidence.
+“Accepted” requires focused correctness plus balanced A/B evidence. Raw
+results, scripts, exact installed libraries, source snapshots, logs, and DSO
+hashes are retained below
+`.local/perf/final-performance-implementation-20260726/`. Comparisons use the
+order-balanced method in §1.
 
 | Slice | Baseline | Target | Observed | Decision/evidence |
 |---|---|---|---|---|
-| P1 wide dependency lookup | chain-512 raw current/v1 19.3--36.7x slower | remove v1 regression; near-linear lookup | pending | pending |
-| P2 SamplerUnif handoff | 64-param construction about 158 ms | 1.8--2.3x faster | pending | pending |
-| P3 native BASE/SHADOW deps facade | BASE 64/63 about 214 us | about 76--90 us | pending | pending |
-| P4 native Domain facade | constructor-specific | 5--15% or material allocation gain | pending | pending |
-| P5 collection cleanup | plain/rich/nested current baselines | 2--8% or allocation gain | pending | pending |
-| Opportunistic | n/a | profile-led and positive in both orders | none yet | pending |
+| P1 wide dependency lookup | chain-512 raw current/v1 19.3--36.7x slower | remove v1 regression; near-linear lookup | Versus `b2e1649`, chain-512 active/checked-raw/unchecked-raw moved from 5.070/5.101/5.019 ms to 0.309/0.283/0.276 ms (16.4/18.0/18.2x); star-512 moved 9.3--10.8x. The 12-case 128/512 chain/star geometric ratio is 0.135. Checked chain-512 is within about 6% of the retained v1 timing; unchecked remains about 2x v1 because v2 still performs full capsule, dependency, and Condition integrity admission. Scaling is approximately linear and small 1--64-parameter reads were neutral or faster. | **Accepted.** One operation-local pointer index with encoding-aware fallback resolves values, tags, and both edge endpoints; the admitted value projection is consumed directly; unnecessary activity is skipped without skipping admission. Chain-512 checked raw allocation fell 75,784 to 44,080 bytes. |
+| P2 SamplerUnif handoff | 64-param construction about 158 ms | 1.8--2.3x faster | 64-parameter construction moved 143.76 to 59.31 ms (2.42x); allocation moved 493,888 to 66,880 bytes. Sizes 1/8/32/64 were faster in both orders. | **Accepted.** Fresh singleton states cross one sampler-specific process-local single-use carrier. Public constructors retain defensive cloning; malformed, reused, serialized, and generic carriers reject. |
+| P3 native BASE/SHADOW deps facade | BASE 64/63 about 214 us | about 76--90 us | BASE 64 rows moved 157.5 to 80.7 us and SHADOW 204.3 to 105.9 us; both saved 2,568 bytes. At 256 rows both saved 9,480 bytes. All ten 0/1/16/64/256 cases were faster in both orders. | **Accepted.** Fresh detached snapshots are completed with the shared native facade helper; caller-owned tables still use the defensive finalizer. |
+| P4 native Domain facade | constructor-specific | 5--15% or material allocation gain | All seven representative constructors were faster in both orders: common plain constructors about 9--11%, logscale integer 16%, factor 6%, callback-heavy cases 1--3%. Allocation was unchanged. | **Accepted.** The native constructor completes its fresh 16-column facade; R attaches only `repr`. |
+| P5 collection cleanup | plain/rich/nested current baselines | 2--8% or allocation gain | Geometric timing ratio 0.968. All 16/64-node cases were faster in both orders; 256-node timing was mixed/noisy. Admission scratch fell by 2,232 bytes at 16 nodes and 7,008 bytes at 64/256 nodes for every workload. | **Accepted at `81cbccf`.** Inline capacity 16 and reuse of the first prior-node lookup provide a material fixed allocation reduction without another validator/cache path. |
+| Opportunistic: dependency RHS fusion | P1 index implementation before fusion | profile-led and positive in both orders | All 12 128/512 chain/star getter cases improved in both orders; geometric ratio 0.638 (36% faster) with unchanged allocation. | **Accepted.** Exact dependency validation now returns its already admitted RHS array to the getter instead of validating every Condition twice. |
+| Opportunistic: one-pass Condition attributes | RHS-fused implementation | profile-led and positive in both orders | All 12 cases improved in both orders; geometric ratio 0.885 (11.5% faster) with unchanged allocation. | **Accepted.** Exact Condition admission captures raw `names`/`class` in one versioned public-API traversal while retaining exact class, attribute, and shape checks. |
 
+The chain-512 Callgrind workload fell from about 908.2 million instructions
+before P1 to 51.8 million after the final two follow-ups, about 17.5x fewer.
+The residual native profile is principally the one retained exact dependency/
+Condition pass and the exact sixteen-column parameter-table admission. Removing
+those would weaken v2 corrupt-state detection rather than remove duplicate
+work, so this batch stops there.
+
+Combined development verification used the exact `387c1cd` source: focused
+getter/dormant/Condition/dependency, sampler, dependency-facade, Domain,
+collection, Shadow, srcref, and data.table-characterization selections passed;
+the exhaustive registered-routine probe ledger passed with 176 records and no
+failure; and strict GCC 14 and Clang 22 C17 builds passed with warnings promoted
+to errors. Retained compiler evidence is
+`.local/checks/final-performance-batch-strict-20260726`. No full compatibility,
+memory, multi-R, or release matrix was run in this batch, as required by §4.

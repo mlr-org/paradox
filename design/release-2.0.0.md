@@ -23,9 +23,13 @@ ceiling and prepared-grid boundary and changes the formerly broken handling of
 valid cross-storage fixed specials. Callback source-reference normalization is
 also package-facing: stored package-interpreted callbacks now discard source
 metadata at admission while the source-reference normalizer leaves opaque
-`$values` untouched. While it and
-the remaining pre-release items are in flight, use only the focused development
-policy below. This development batch intentionally does not run or claim the complete
+`$values` untouched. The bounded final performance implementation is complete
+at `81cbccf`/`387c1cd` under
+`design/final-performance-implementation-plan.md`; its focused tests,
+order-balanced per-slice benchmarks, exhaustive native probes, and strict
+GCC/Clang builds are development evidence only. While the remaining
+pre-release items are in flight, use only the focused development policy
+below. This development batch intentionally does not run or claim the complete
 compatibility or release matrix. Freeze one replacement candidate only after
 all package-facing source converges, then run the applicable native, R API,
 runtime, memory, differential, downstream, documentation, benchmark, and
@@ -306,6 +310,9 @@ values source. The active package-facing blockers are:
 - [x] normalize source references on package-interpreted callbacks and legacy
   migration while preserving opaque function-valued payloads and the
   admission-time debugging opt-out;
+- [x] complete the pre-specified final performance batch with focused
+  correctness, balanced A/B evidence, direct routine coverage, strict
+  GCC/Clang builds, and the retained integrity-validation stop boundary;
 - [ ] finish the other planned pre-release package-facing changes and freeze
   one clean replacement candidate;
 - [ ] run and retain the complete applicable gate matrix against that exact
@@ -517,8 +524,9 @@ same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 - [x] the complete unit suite, CRAN-style package check, and depends-only check
   pass for the active frozen migration payload under
   `.local/checks/serialized-migration-release-8797f11-20260724`;
-- [x] the final profiling decisions are closed: sparse search-target projection
-  and a bulk-dependency constructor transaction are measured no-gos for 2.0.0;
+- [x] for the historical sealed migration payload, profiling was closed:
+  sparse search-target projection and a bulk-dependency constructor
+  transaction were measured no-gos for 2.0.0;
 - [x] measured hot-path changes remain intact under the bounded refreshed
   comparison recorded below;
 - [x] the sealed active-candidate benchmark has 77 policy/decision rows:
