@@ -1,7 +1,10 @@
 # The native detachment planner reduces a nested collection graph to tiny
-# callback carriers and a leaf-to-visible ID translation. Returned callbacks
-# retain an ordinary immutable plan and enter the native evaluator immediately;
-# there is no second R implementation of collection callback semantics.
+# callback carriers and a leaf-to-visible ID translation. Authoritative graph
+# check/assignment code filters activity before invoking these schema-free
+# carriers; the carriers must not grow a second activity engine. Returned
+# callbacks retain an ordinary immutable plan and enter the native evaluator
+# immediately; there is no second R implementation of collection callback
+# semantics.
 param_set_collection_constraint_closure = function(plan) {
   force(plan)
   function(x) {
@@ -72,7 +75,17 @@ param_set_collection_extra_trafo_factory = function(
 #'   collection does not maintain a second value state. Assignments are planned
 #'   over the complete collection/shadow graph and committed atomically to the
 #'   ultimate base sets. Direct child mutations remain visible through the
-#'   collection.
+#'   collection. `$values` is the translated raw store and may include dormant
+#'   values. The default `$get_values()` view filters activity across the
+#'   complete collection graph. A collection-level cross-set dependency is
+#'   therefore applied when reading the collection, not when reading either
+#'   child directly.
+#' * Checked assignment validates every supplied value but may store it while
+#'   dependency-inactive. If constraints are present, activity is computed
+#'   over the complete translated resulting configuration. Each child
+#'   constraint receives only its active child-scope entries, with collection
+#'   prefixes or postfixes removed. The graph transaction remains atomic if a
+#'   callback fails or mutates a planned target.
 #' * Dependencies: It is possible to currently handle dependencies
 #'      * regarding parameters inside of the same set - in this case simply
 #'        add the dependency to the set, best before adding the set to the collection

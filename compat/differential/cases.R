@@ -819,6 +819,167 @@ paradox_differential_cases <- list(
     seed = 202L
   ),
 
+  dormant_assignment = diff_case(
+    "Checked assignment retains a Domain-valid dependency-inactive value",
+    function() {
+      parameter_set <- paradox::ps(
+        gate = paradox::p_lgl(),
+        child = paradox::p_int(0L, 10L, depends = gate == TRUE)
+      )
+      assignment <- observe_call({
+        parameter_set$values <- list(gate = FALSE, child = 4L)
+        TRUE
+      })
+      list(
+        assignment = assignment,
+        raw_values = parameter_set$values,
+        active_values = parameter_set$get_values()
+      )
+    },
+    seed = 204L
+  ),
+
+  default_aware_check = diff_case(
+    "Point checks use a satisfying recorded default for an absent parent",
+    function() {
+      parameter_set <- paradox::ps(
+        gate = paradox::p_lgl(default = TRUE),
+        child = paradox::p_int(0L, 10L, depends = gate == TRUE)
+      )
+      point <- list(child = 4L)
+      table <- data.table::data.table(child = 4L)
+      list(
+        check = parameter_set$check(point),
+        test = parameter_set$test(point),
+        assert = observe_call(parameter_set$assert(point)),
+        check_dt = parameter_set$check_dt(table),
+        dependencies_only = parameter_set$check_dependencies(point)
+      )
+    },
+    seed = 205L
+  ),
+
+  default_active_presence = diff_case(
+    "Required presence demands a child activated by its absent parent's default",
+    function() {
+      active <- paradox::ps(
+        gate = paradox::p_lgl(default = TRUE),
+        child = paradox::p_int(
+          0L,
+          10L,
+          tags = "required",
+          depends = gate == TRUE
+        )
+      )
+      inactive <- paradox::ps(
+        gate = paradox::p_lgl(default = FALSE),
+        child = paradox::p_int(
+          0L,
+          10L,
+          tags = "required",
+          depends = gate == TRUE
+        )
+      )
+      list(
+        default_active = active$check(list(), presence = "required"),
+        explicit_active = active$check(
+          list(gate = TRUE),
+          presence = "required"
+        ),
+        default_inactive = inactive$check(list(), presence = "required")
+      )
+    },
+    seed = 206L
+  ),
+
+  default_active_required_values = diff_case(
+    "Required-value reads demand a child activated by its absent parent's default",
+    function() {
+      active <- paradox::ps(
+        gate = paradox::p_lgl(default = TRUE),
+        child = paradox::p_int(
+          0L,
+          10L,
+          tags = "required",
+          depends = gate == TRUE
+        )
+      )
+      inactive <- paradox::ps(
+        gate = paradox::p_lgl(default = FALSE),
+        child = paradox::p_int(
+          0L,
+          10L,
+          tags = "required",
+          depends = gate == TRUE
+        )
+      )
+      list(
+        default_active = observe_call(active$get_values(
+          check_required = TRUE
+        )),
+        default_inactive = observe_call(inactive$get_values(
+          check_required = TRUE
+        ))
+      )
+    },
+    seed = 207L
+  ),
+
+  filtered_constraint_input = diff_case(
+    "Constraint callbacks receive only the dependency-active point entries",
+    function() {
+      calls <- 0L
+      inputs <- list()
+      parameter_set <- paradox::ps(
+        gate = paradox::p_lgl(),
+        child = paradox::p_int(0L, 10L, depends = gate == TRUE),
+        .constraint = function(x) {
+          calls <<- calls + 1L
+          inputs[[length(inputs) + 1L]] <<- x
+          TRUE
+        }
+      )
+      result <- parameter_set$test_constraint(list(
+        gate = FALSE,
+        child = 4L
+      ))
+      list(
+        result = result,
+        calls = calls,
+        inputs = inputs
+      )
+    },
+    seed = 208L
+  ),
+
+  dormant_store_point_check = diff_case(
+    "A successful checked dormant store is not itself a strict point",
+    function() {
+      parameter_set <- paradox::ps(
+        gate = paradox::p_lgl(),
+        child = paradox::p_int(0L, 10L, depends = gate == TRUE)
+      )
+      assignment <- observe_call({
+        parameter_set$values <- list(gate = FALSE, child = 4L)
+        TRUE
+      })
+      raw <- parameter_set$values
+      active <- parameter_set$get_values()
+      list(
+        assignment = assignment,
+        raw = raw,
+        active = active,
+        raw_check = parameter_set$check(raw),
+        active_check = parameter_set$check(active),
+        raw_non_strict_check = parameter_set$check(
+          raw,
+          check_strict = FALSE
+        )
+      )
+    },
+    seed = 209L
+  ),
+
   dependency_copy_narrowing = diff_case(
     "Bulk dependency copies preserve predicates after parent Domain narrowing",
     function() {

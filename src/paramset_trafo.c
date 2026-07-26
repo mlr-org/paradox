@@ -4,7 +4,9 @@
 
 #include "paradox.h"
 
+#include "builtin_condition.h"
 #include "core_state.h"
+#include "paramset_activity.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
@@ -1499,6 +1501,158 @@ SEXP paradox_param_set_collection_extra_trafo(SEXP private_environment,
   return result;
 }
 
+static SEXP collection_active_constraint_row(SEXP row,
+    const trafo_snapshot_t *snapshot,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t parameter_count = snapshot->params.row_count;
+  R_xlen_t dependency_count = 0;
+  for (R_xlen_t node_index = 0;
+      node_index < snapshot->graph.count;
+      ++node_index) {
+    const R_xlen_t local_count =
+      snapshot->graph.nodes[node_index].dependencies.row_count;
+    if (local_count > R_XLEN_T_MAX - dependency_count) {
+      Rf_error("ParamSetCollection constraint dependency graph is too large");
+    }
+    dependency_count += local_count;
+  }
+  if (dependency_count == 0) {
+    return row;
+  }
+
+  R_xlen_t *value_by_parameter = paradox_temporary_alloc(
+    parameter_count == 0 ? 1 : parameter_count,
+    sizeof(*value_by_parameter)
+  );
+  for (R_xlen_t parameter = 0;
+      parameter < parameter_count;
+      ++parameter) {
+    value_by_parameter[parameter] = R_XLEN_T_MAX;
+  }
+  SEXP row_names = Rf_getAttrib(row, R_NamesSymbol);
+  for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
+    const R_xlen_t parameter = find_name(
+      snapshot->params.ids,
+      STRING_ELT(row_names, value),
+      work_since_interrupt
+    );
+    if (parameter != R_XLEN_T_MAX) {
+      value_by_parameter[parameter] = value;
+    }
+  }
+
+  R_xlen_t *dependency_child = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_child)
+  );
+  R_xlen_t *dependency_parent = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_parent)
+  );
+  SEXP *dependency_rhs = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_rhs)
+  );
+  R_xlen_t output = 0;
+  for (R_xlen_t node_index = 0;
+      node_index < snapshot->graph.count;
+      ++node_index) {
+    const paradox_collection_graph_node_t *node =
+      &snapshot->graph.nodes[node_index];
+    for (R_xlen_t dependency = 0;
+        dependency < node->dependencies.row_count;
+        ++dependency) {
+      const R_xlen_t local_child = find_name(
+        node->params.ids,
+        STRING_ELT(node->dependencies.ids, dependency),
+        work_since_interrupt
+      );
+      const R_xlen_t local_parent = find_name(
+        node->params.ids,
+        STRING_ELT(node->dependencies.on, dependency),
+        work_since_interrupt
+      );
+      if (local_child == R_XLEN_T_MAX) {
+        Rf_error("Corrupt ParamSetCollection constraint dependency target");
+      }
+      dependency_child[output] =
+        snapshot->root_parameter_by_local[node_index][local_child];
+      dependency_parent[output] = local_parent == R_XLEN_T_MAX
+        ? R_XLEN_T_MAX
+        : snapshot->root_parameter_by_local[node_index][local_parent];
+      paradox_builtin_condition_kind_t kind;
+      SEXP rhs = R_NilValue;
+      if (!paradox_builtin_condition_exact(
+          VECTOR_ELT(node->dependencies.conditions, dependency),
+          &kind,
+          &rhs,
+          work_since_interrupt
+        )) {
+        Rf_error("Corrupt ParamSetCollection constraint dependency");
+      }
+      dependency_rhs[output] = rhs;
+      ++output;
+    }
+  }
+  if (output != dependency_count) {
+    Rf_error("Internal error: incomplete collection constraint activity plan");
+  }
+
+  paradox_activity_result_t activity = {
+    paradox_temporary_alloc(
+      parameter_count == 0 ? 1 : parameter_count,
+      sizeof(*activity.active)
+    ),
+    NULL
+  };
+  const paradox_activity_plan_t plan = {
+    parameter_count,
+    VECTOR_ELT(snapshot->params.table, PARADOX_DOMAIN_DEFAULT),
+    row,
+    value_by_parameter,
+    dependency_count,
+    dependency_child,
+    dependency_parent,
+    (SEXP const *) dependency_rhs
+  };
+  paradox_activity_evaluate(
+    &plan,
+    &activity,
+    work_since_interrupt
+  );
+
+  R_xlen_t kept = 0;
+  for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
+    const R_xlen_t parameter = find_name(
+      snapshot->params.ids,
+      STRING_ELT(row_names, value),
+      work_since_interrupt
+    );
+    kept += parameter != R_XLEN_T_MAX && activity.active[parameter];
+  }
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, kept));
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, kept));
+  output = 0;
+  for (R_xlen_t value = 0; value < XLENGTH(row); ++value) {
+    const R_xlen_t parameter = find_name(
+      snapshot->params.ids,
+      STRING_ELT(row_names, value),
+      work_since_interrupt
+    );
+    if (parameter == R_XLEN_T_MAX || !activity.active[parameter]) continue;
+    SET_VECTOR_ELT(result, output, VECTOR_ELT(row, value));
+    SET_STRING_ELT(names, output, STRING_ELT(row_names, value));
+    ++output;
+  }
+  if (output != kept) {
+    UNPROTECT(2);
+    Rf_error("Internal error: incomplete collection constraint input");
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return result;
+}
+
 SEXP paradox_param_set_collection_constraint(SEXP private_environment,
     SEXP self, SEXP x) {
   PROTECT(private_environment);
@@ -1525,6 +1679,11 @@ SEXP paradox_param_set_collection_constraint(SEXP private_environment,
     UNPROTECT(6);
     Rf_error("Collection callback requires a ParamSetCollection capsule");
   }
+  SEXP active_row = PROTECT(collection_active_constraint_row(
+    frozen,
+    &snapshot,
+    &work_since_interrupt
+  ));
   for (R_xlen_t node_index = 0;
       node_index < snapshot.graph.count;
       ++node_index) {
@@ -1533,7 +1692,7 @@ SEXP paradox_param_set_collection_constraint(SEXP private_environment,
     SEXP callback = VECTOR_ELT(node->state, PARADOX_CORE_CONSTRAINT);
     if (node->kind == PARADOX_CORE_COLLECTION) {
       if (callback != R_NilValue) {
-        UNPROTECT(6);
+        UNPROTECT(7);
         Rf_error("Corrupt ParamSetCollection stored aggregate constraint");
       }
       continue;
@@ -1542,11 +1701,11 @@ SEXP paradox_param_set_collection_constraint(SEXP private_environment,
       continue;
     }
     if (!Rf_isFunction(callback)) {
-      UNPROTECT(6);
+      UNPROTECT(7);
       Rf_error("Corrupt ParamSetCollection constraint capsule");
     }
     SEXP input = PROTECT(local_extra_input(
-      frozen,
+      active_row,
       &snapshot,
       node_index,
       &work_since_interrupt
@@ -1554,7 +1713,7 @@ SEXP paradox_param_set_collection_constraint(SEXP private_environment,
     SEXP answer = PROTECT(evaluate_unary(callback, input));
     if (TYPEOF(answer) != LGLSXP || XLENGTH(answer) != 1 ||
         LOGICAL_ELT(answer, 0) == NA_LOGICAL) {
-      UNPROTECT(8);
+      UNPROTECT(9);
       Rf_error(
         "ParamSet constraint must return one non-missing logical value"
       );
@@ -1562,11 +1721,11 @@ SEXP paradox_param_set_collection_constraint(SEXP private_environment,
     const int accepted = LOGICAL_ELT(answer, 0);
     UNPROTECT(2);
     if (!accepted) {
-      UNPROTECT(6);
+      UNPROTECT(7);
       return Rf_ScalarLogical(FALSE);
     }
   }
-  UNPROTECT(6);
+  UNPROTECT(7);
   return Rf_ScalarLogical(TRUE);
 }
 

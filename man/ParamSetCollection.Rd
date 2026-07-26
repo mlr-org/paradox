@@ -16,7 +16,17 @@ may not overlap to avoid name clashes.
 collection does not maintain a second value state. Assignments are planned
 over the complete collection/shadow graph and committed atomically to the
 ultimate base sets. Direct child mutations remain visible through the
-collection.
+collection. \verb{$values} is the translated raw store and may include dormant
+values. The default \verb{$get_values()} view filters activity across the
+complete collection graph. A collection-level cross-set dependency is
+therefore applied when reading the collection, not when reading either
+child directly.
+\item Checked assignment validates every supplied value but may store it while
+dependency-inactive. If constraints are present, activity is computed
+over the complete translated resulting configuration. Each child
+constraint receives only its active child-scope entries, with collection
+prefixes or postfixes removed. The graph transaction remains atomic if a
+callback fails or mutates a planned target.
 \item Dependencies: It is possible to currently handle dependencies
 \itemize{
 \item regarding parameters inside of the same set - in this case simply
@@ -80,6 +90,11 @@ Constraint function. Settable on a base \code{\link{ParamSet}}; read-only and de
 from children on a \code{\link{ParamSetCollection}}.
 This function must evaluate a named \code{list()} of values and determine whether it satisfies
 constraints, returning a scalar \code{logical(1)} value.
+At package-owned check, test, and assignment sites, it receives only the
+default-aware active subset of the configuration being validated. A
+collection computes activity over its complete translated configuration,
+including cross-set dependencies, before each child receives an unprefixed
+active child-scope slice.
 The input list shell and structural names/list metadata are ordinary
 non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.}
 

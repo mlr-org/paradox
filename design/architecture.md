@@ -360,7 +360,13 @@ does not. A SHADOW over a COLLECTION uses the same engine.
 Callback selection comes from the admitted capsule graph, not from a child R6
 method override. Translation, collision checks, child-result admission,
 merging, and scalar constraint validation therefore have one implementation
-for live and detached uses. The merge first copies retained/untransformed
+for live and detached uses. The sole graph activity kernel remains upstream:
+authoritative
+collection check/test/assignment sites evaluate activity over the translated
+configuration before each constraint receives its active unprefixed child
+slice; detached BASE checking filters before invoking a detached carrier. The
+schema-free carrier itself owns no activity evaluator or stored mask. The
+extra-transformation merge first copies retained/untransformed
 inputs in input order. It drops every callback-owned input, then appends the
 changed outputs in callback-plan order and in each callback's result order;
 omitted owned names therefore disappear. A changed name colliding with a
@@ -392,12 +398,16 @@ retaining the old Shadow's private environment.
 
 For a BASE origin, the constraint closure retains one exact two-field plan:
 the admitted callback and hidden values. Its native evaluator snapshots both,
-builds an ordinary hidden-first/visible-second list manually, preserves opaque
-leaf identity, calls the callback once, and admits only one non-missing logical
-answer. It never uses `c()` and therefore cannot dispatch on an S3-classed
-visible-list container. A COLLECTION-origin adapter continues through the
-shared collection evaluator family, with the same native Shadow merge boundary
-where hidden values must be restored.
+builds an ordinary hidden-first/visible-second list manually from already
+activity-filtered slices, preserves opaque leaf identity, calls the callback
+once, and admits only one non-missing logical answer. It never uses `c()` and
+therefore cannot dispatch on an S3-classed visible-list container. The
+authoritative Shadow refresh filters the hidden snapshot from the complete live
+origin graph before constructing this schema-free plan, while the outer point
+kernel filters the visible candidate before invoking it. Since dependencies
+cannot cross the partition, this is equivalent to filtering the merged
+configuration. A COLLECTION-origin adapter continues through the shared
+collection evaluator family with the same upstream filter-then-merge boundary.
 
 The R6 shell likewise stores no parallel visible-ID or hidden-ID fields.
 Construction admits and materializes the visible schema once in C; later
@@ -519,6 +529,11 @@ vector, or an accepted empty base/S3-representation list—are canonicalized to
 a named native `list()` by the store operation. `set_values(.values=)` is the
 sole general-list ALTREP exception and
 owns its one native shell snapshot; it does not weaken direct assignment.
+Checked storage validates every supplied Domain/custom-check/token entry but
+does not reject dependency-inactive entries. Those entries remain in the raw
+store as dormant values; activity is evaluated only by filtered reads, explicit
+point checks, and—during assignment—when a constraint must receive an active
+view.
 
 ParamSet-bearing `ObjectTuneToken`s follow the same atomic boundary. Native
 checking builds and validates one rooted exact BASE candidate, requires at least
@@ -574,8 +589,10 @@ not a wrapper around an R data.table traversal. It requires an ordinary,
 uniquely named base list, builds the same graph snapshot and point mapping as
 `$check()`, and invokes the same dependency kernel. Unknown IDs are diagnosed
 even when the graph has zero dependency rows; TuneToken endpoints skip that
-edge. The operation stops at and returns the first deterministic diagnostic
-rather than constructing and collapsing an R list of every dependency error.
+edge. Missing operands are resolved from recorded defaults by the shared
+activity kernel, but the operation never consults stored `$values`. It stops at
+and returns the first deterministic diagnostic rather than constructing and
+collapsing an R list of every dependency error.
 
 `ParamSet$test_constraint()` and `$test_constraint_dt()` are registered native
 boundaries over the same graph plan, point initializer, and constraint kernel.
@@ -587,9 +604,10 @@ the shared count-only rule. Its
 admitted semantic atomic columns may be stable ALTREP. When value assertion is enabled,
 it admits every row before executing any constraint callback; a
 ParamUty custom check may run as part of that preceding Domain-value admission.
-Only then does it evaluate the snapshotted constraints once per row in order.
-This preserves all-or-no-constraint-callback validation and operation-entry
-constraint selection without an R row loop or a second constraint engine.
+Only then does it compute the default-aware active subset and evaluate the
+snapshotted constraints once per row in order. This preserves all-or-no-
+constraint-callback validation and operation-entry constraint selection
+without an R row loop or a second constraint engine.
 
 The tag, dependency, and BASE callback mutators are collected in
 `src/paramset_mutate.c`. Tag get/set and dependency snapshot/get/set/add own
@@ -612,6 +630,62 @@ refresh before validating its table, or admits the complete COLLECTION graph
 and reads the root `subtree_dependencies` count. It emits no detached columns
 or data.table facade. The COLLECTION branch is the existing graph admission,
 not a cached or reduced-integrity reader mode.
+
+## Activity, dormant values, and constraint filtering
+
+The ParamSet check/value module owns one cycle-safe list-basis activity kernel.
+It consumes the already admitted graph, one operation-local named point/store
+mapping, and the canonical Domain defaults. For each child it recursively
+requires all parent rows. After cycle validation a TuneToken child skips its
+incoming rows; otherwise an inactive parent is unsatisfying, an explicit value
+wins, a TuneToken parent skips the edge, an absent active parent falls back to
+its recorded default, and `NoDefault` remains absent. The kernel invokes the
+same closed built-in Condition comparator used by direct `condition_test()`.
+Its operation-local state handles deep
+chains and shared dependency paths without persistent cache authority; no
+activity state is stored in the capsule. Existing BASE dependency mutation can
+admit a cycle and is unchanged here; the kernel tracks the active path and
+raises a deterministic cycle error rather than looping or returning a partial
+mask.
+
+Scalar checks, each admitted table row, `check_dependencies()`, stored-value
+filtering, and authoritative constraint check/assignment sites call this one
+kernel with different operation-local bases. Explicit check points use only
+their own mapping and defaults, even though the graph snapshot also contains
+stored values.
+`$get_values()` uses the raw store and defaults. This makes strict point checks
+store-blind while allowing the raw store to contain dormant entries.
+`check_required` and `presence` consume the corresponding activity result, so
+a satisfying default can make an absent required child demand a value.
+
+Checked assignment builds and Domain-validates the complete replacement state
+without a dependency-feasibility pass. If there is no constraint, it performs
+no activity traversal. If a constraint is present, it computes activity once
+over the proposed complete state and builds a filtered callback list before
+the existing generation checks and commit wave. The raw `.values` capsule field
+therefore retains dormant entries. `C_param_set_get_values` selects and returns
+only active entries by default; disabling dependency removal returns the
+detached raw store. A later parent assignment requires no dormant-value rewrite:
+the next read computes the new activity mask and exposes the existing value.
+
+BASE constraints receive that active point subset. Authoritative COLLECTION
+graph sites apply activity in the translated namespace, including cross-child
+rows, and then slice/unprefix active entries for each child callback.
+Authoritative SHADOW refresh filters hidden values from the live origin state,
+and the outer point kernel filters visible candidates, before the merge adapter
+runs. The no-cross-partition dependency rule makes those two selections
+equivalent to filtering the complete merged origin configuration. Exact
+detached/Shadow carriers have no schema and perform no activity evaluation. The
+collection carrier ABI remains translation, callback carriers, and owner
+indices only; activity is always derived upstream from the current evaluation
+snapshot.
+
+The vectorized complete-row masker in `src/design_dependencies.c` remains a
+separate specialized design kernel. Every sampled row contains each dependency
+parent, so the list kernel's default-selection branch is unreachable there.
+Characterization tests require byte-identical design/sampler results and
+semantic equivalence on complete rows; this specialization cannot be reused as
+or grow into a second point/store activity authority.
 
 ## Operation transaction
 
@@ -641,12 +715,14 @@ Checked value assignment plans the complete BASE/COLLECTION/SHADOW graph
 through the ultimate BASE targets before invoking ParamUty or constraint
 callbacks. Shared targets are deduplicated with deterministic last-owner
 semantics. The plan captures every target generation, validates the complete
-assignment once, and prebuilds every replacement capsule. It then rechecks all
-target generations and swaps every replacement `.core` in one allocation- and
-callback-free commit wave. A nested public assignment to any planned target
-therefore wins: the outer setter raises before changing any target. Validation,
-callback, or allocation failure likewise leaves the complete graph unchanged;
-there is no second child-store pass or root-only generation guard.
+assignment's structural/Domain/token contract once without requiring dependency
+activity, filters the proposed state only for any constraint callback, and
+prebuilds every replacement capsule. It then rechecks all target generations
+and swaps every replacement `.core` in one allocation- and callback-free commit
+wave. A nested public assignment to any planned target therefore wins: the
+outer setter raises before changing any target. Validation, callback, or
+allocation failure likewise leaves the complete graph unchanged; there is no
+second child-store pass or root-only generation guard.
 
 ParamSet-bearing ObjectTuneTokens add a generation dependency outside the
 write-target graph. Candidate receipts are rooted before callbacks and retained
@@ -698,6 +774,15 @@ sandboxed by Paradox and is outside this guarantee.
   COLLECTION construction and atomic collection add;
 - `src/paramset_mutate.c`: tag/dependency projection and atomic mutation plus
   BASE callback replacement;
+- `src/paramset_activity.[ch]`: the sole cycle-safe, default-aware list-basis
+  activity kernel shared by graph points, stored-value reads, and authoritative
+  constraint sites;
+- `src/paramset_check.c`: graph point admission, strict check/dependency
+  diagnostics, presence, and BASE constraint input filtering over that shared
+  activity result;
+- `src/design_dependencies.c`: the complete-sampled-row vector masker whose
+  no-default specialization is kept equivalent to the shared list activity
+  contract;
 - `src/parameter_suggestion.[ch]`: bounded failure-only UTF-8 identifier
   ranking and formatting for the shared unknown-parameter diagnostic;
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph

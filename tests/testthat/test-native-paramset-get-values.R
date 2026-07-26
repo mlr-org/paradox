@@ -77,7 +77,7 @@ test_that("get_values filters built-in kinds, tags, tokens, and named NULL", {
   )
 })
 
-test_that("dependencies use one row-ordered value snapshot", {
+test_that("dependencies are transitive and independent of row order", {
   param_set = ps(
     root = p_int(),
     middle = p_int(),
@@ -96,7 +96,7 @@ test_that("dependencies use one row-ordered value snapshot", {
 
   reversed = param_set$deps[c(2L, 1L)]
   param_set$deps = reversed
-  expect_identical(param_set$get_values(), list(root = 0L, leaf = 2L))
+  expect_identical(param_set$get_values(), list(root = 0L))
 
   param_set$values = list(root = to_tune(), middle = 1L, leaf = 2L)
   expect_identical(

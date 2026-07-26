@@ -1,11 +1,16 @@
 # Dormant values: implementation plan
 
-Status: approved for implementation by the maintainer (mb706), 2026-07-26.
-Scope: paradox 2.0.0, before first public release. This document is
-design-only and does not change package-facing source; implementing it
-requires a **new release candidate** and a full re-run of the gate matrix per
-`design/release-2.0.0.md` and `AGENTS.md`. Agents must never perform remote
-writes.
+Status: implemented in the current worktree with focused validation complete,
+2026-07-26. The replacement-candidate freeze, full release gates, downstream
+waves, and remote tracker updates remain deliberately deferred until the other
+pre-release package-facing todos have converged.
+Scope: paradox 2.0.0, before first public release. The implementation changes
+package-facing source after the last sealed candidate and therefore requires a
+**new release candidate** and a full re-run of the gate matrix per
+`design/release-2.0.0.md` and `AGENTS.md`. During this development batch, only
+focused validation is intended because further pre-release todos remain; that
+focused evidence is not a substitute for the future candidate gates. Agents
+must never perform remote writes.
 
 Related reading: `design/contract-first-2.0.0.md` (contract to be amended),
 `design/compatibility.md` (break table to be amended), issue #265, PR #275,
@@ -67,10 +72,12 @@ Given an evaluation basis `x` (a named list) and a ParamSet(-graph) schema,
 a parameter `p` is **active** iff every dependency row `(p, on, cond)`
 is satisfied. A row is satisfied as follows:
 
-1. If `on` is itself not active w.r.t. `x` (recursive), the row is
+1. Validate the dependency path first; an active-path cycle is a hard error.
+2. If `x[[p]]` is a TuneToken, the row is skipped (treated as satisfied).
+3. Otherwise, if `on` is itself not active w.r.t. `x` (recursive), the row is
    **unsatisfied** — regardless of any value or default `on` carries.
    (The existing filter is already transitive in this sense; keep it.)
-2. Otherwise determine the effective operand for `on`:
+4. Otherwise determine the effective operand for `on`:
    - `x[[on]]` if present and not a TuneToken;
    - if `x[[on]]` is a TuneToken: the row is **skipped** (treated as
      satisfied) — this matches the documented `$check_dependencies()`
@@ -79,18 +86,20 @@ is satisfied. A row is satisfied as follows:
    - else `default(on)` if the recorded default is not `NoDefault`
      **[NEW — the #265 change]**;
    - else the row is **unsatisfied**.
-3. With an operand chosen, the row is satisfied iff the closed built-in
+5. With an operand chosen, the row is satisfied iff the closed built-in
    comparator (`C_condition_test_builtin` semantics) accepts it. Operand
    admission stays exactly as today: a stored special value (e.g. `NULL`)
    or an opaque `ParamUty` operand keeps its current comparator behavior —
    pin with characterization tests (6.T14/T15), do not change.
 
-Multiple rows on one child are conjunctive (unchanged). Dependency graphs
-are acyclic by construction (unchanged). Dangling parents (possible via
-bulk `$deps <-` or `allow_dangling_dependencies` subsets) evaluate as
-"absent": default if recorded, else unsatisfied — pin current dangling
-behavior first (6.T16) and preserve anything that would otherwise change
-design/`flatten()` behavior.
+Multiple rows on one child are conjunctive (unchanged). BASE dependency cycles
+can currently be constructed; mutation admission is unchanged in this task.
+Every unified activity consumer must detect an active-path cycle and fail with
+a deterministic cycle error, as the Design path already does, rather than loop
+or return a partial mask. Dangling parents (possible via bulk `$deps <-` or
+`allow_dangling_dependencies` subsets) evaluate as "absent": default if
+recorded, else unsatisfied — pin current dangling behavior first (6.T16) and
+preserve anything that would otherwise change design/`flatten()` behavior.
 
 **Evaluation basis per consumer:**
 
@@ -149,22 +158,21 @@ entries** to the callback:
 - Checked assignment with a constraint present: compute activity of the new
   complete state once, filter, call the snapshotted constraint exactly once
   (existing invocation point; only the input changes).
-- COLLECTION live and detached constraint evaluators
-  (`C_param_set_collection_constraint`,
-  `C_param_set_collection_detached_constraint`,
-  `R/ParamSetCollection.R:8/439`): activity is computed on the full
-  translated collection configuration (collection-level cross-set deps
-  apply), then each child constraint receives its **child-scope slice of
-  the active entries, unprefixed** — preserving the v2 fix that child
-  constraints see unprefixed child values.
-- SHADOW adapter (`C_param_set_shadow_constraint`,
-  `R/ParamSetShadow.R:8`): merge hidden+visible as today, compute activity
-  on the merged configuration using origin deps, filter, then call once.
+- COLLECTION live check/test/assignment graph sites compute activity on the
+  full translated collection configuration (collection-level cross-set deps
+  apply), then each child constraint receives its **child-scope slice of the
+  active entries, unprefixed** — preserving the v2 fix that child constraints
+  see unprefixed child values. Detached BASE checking filters before invoking
+  `C_param_set_collection_detached_constraint`.
+- SHADOW graph sites compute activity over the complete merged origin
+  configuration and pass already filtered hidden/visible slices to
+  `C_param_set_shadow_constraint`, which retains its merge-and-call role.
   (Deps never cross the visible/hidden boundary, so the partition is
   well-defined.)
-- Carrier ABI caution: collection callback carriers must keep exactly their
-  current plan fields; activity is computed at evaluation time, never
-  stored in the plan.
+- Carrier ABI caution: exact detached collection and Shadow callback carriers
+  have no schema. They must keep exactly their current plan fields; activity is
+  computed at the authoritative check/test/assignment graph site, never stored
+  in the plan or reimplemented in a carrier evaluator.
 
 ### 3.5 Intentional behavior changes to record (NEWS + differential rows)
 
@@ -317,7 +325,9 @@ New tests (t = testthat unless noted). Activity kernel, via public surface:
   A `p_lgl(default = TRUE)`; B `p_lgl(default = TRUE, depends = A == FALSE)`;
   C depends B == TRUE. With empty basis: A active, B inactive (A's default
   is TRUE), C inactive regardless of B's default. Assert exactly this.
-- T7 diamond/multi-row conjunction; CondAnyOf; multiple parents.
+- T7 diamond/multi-row conjunction; CondAnyOf; multiple parents; a BASE cycle
+  admitted through the existing mutation surface fails safely in every
+  activity consumer.
 - T8 store-blindness: set holds satisfying stored parent; `check(xs)` with
   xs lacking the parent (parent has no default) still errors.
 - T9 token parent skip: parent = TuneToken in basis → edge skipped, in all
@@ -389,28 +399,44 @@ result 0 new failures (Appendix A3 tally was 0 breaking expectations).
 
 ## 8. Documentation and process checklist
 
-- [ ] Roxygen: `values`, `set_values`, `check/assert/test(_dt)`,
+- [x] Roxygen: `values`, `set_values`, `check/assert/test(_dt)`,
       `check_dependencies`, `get_values`, `test_constraint(_dt)`,
       `constraint` (filtered input), `Domain(depends)`; regenerate docs
       (note AGENTS.md roxygen-8.0.0 caveat: doc refresh needs the
       disposable debug build).
-- [ ] `vignettes/indepth.Rmd`: Dependencies section gains a "dormant
+- [x] `vignettes/indepth.Rmd`: Dependencies section gains a "dormant
       values" paragraph + default-aware statement; Values section drops the
       claim that dependency constraints are enforced on assignment.
-- [ ] NEWS: one bullet per 3.5 item, under a "Dependency semantics" block.
-- [ ] `design/contract-first-2.0.0.md`, `design/compatibility.md` break
+- [x] NEWS: one bullet per 3.5 item, under a "Dependency semantics" block.
+- [x] `design/contract-first-2.0.0.md`, `design/compatibility.md` break
       table, `design/architecture.md`, `AGENTS.md` non-negotiables updated.
-- [ ] Differential harness: expected-difference rows for 3.5.
+- [x] Differential harness: expected-difference rows for 3.5.
 - [ ] Full local gates per `design/validation.md`; **new candidate freeze**
       (new ref under `refs/paradox-release/`); downstream waves; hosted
       Windows/macOS re-run on a new portability companion; ledger update.
-- [ ] `compat/downstream-pr-handoff.md`: add the three downstream notes
+- [x] `compat/downstream-pr-handoff.md`: add the three downstream notes
       from section 5.
 - [ ] Close/annotate trackers on merge: #265 and PR #275 (implemented,
       default-aware), PR #343 (completed via read-side filtering + dormant
       storage), mlr-org/mlr3pipelines#101 paradox-side unblocked; verify
       and probably close miesmuschel#65 (NA-in-`assert_dt` already
       tolerant in v2).
+
+Focused development evidence (not release-candidate evidence), 2026-07-26:
+
+- the seven changed native translation units pass strict C17 syntax checks
+  with `-Wall -Wextra -Wpedantic -Wconversion -Wshadow
+  -Wstrict-prototypes -Wmissing-prototypes -Werror`;
+- all 22 dormant-value contract blocks pass (156 expectations), and the
+  package-wide isolated unit inventory is green after rerunning its sole
+  optional ConfigSpace file with the already-cached local Python environment
+  (effectively 90 files, 6,528 passes, five skips, no failures/errors/warnings);
+- the six selected Paradox 1 differential cases are exact reviewed
+  differences with no fingerprint mismatch or unexpected delta; and
+- benchmark inventory/policy and worker-validation self-tests pass, including
+  exact result validation for both new dependency-rich workloads. No complete
+  benchmark, downstream, memory, or compatibility matrix was run in this
+  development batch, by maintainer request.
 
 ## 9. Acceptance criteria
 

@@ -119,7 +119,9 @@ hazards that Paradox 2 is intended to remove.
   evaluator family with shared semantic helpers. Their thin R closures contain
   no duplicate callback selection, translation, merge, or
   constraint-validation engine and do not dispatch through overridden child
-  ParamSet methods. Retained/untransformed inputs remain in input order,
+  ParamSet methods. Activity filtering is performed by the authoritative graph
+  check/test/assignment site before these schema-free carriers run.
+  Retained/untransformed inputs remain in input order,
   followed by changed child outputs in callback-plan order; omitted child
   outputs are removed.
 * Removed the dormant, unexported namespace-level R `transpose()` engine and
@@ -181,9 +183,10 @@ hazards that Paradox 2 is intended to remove.
   built-in token kinds, and owns callback-dependent one-dimensional output
   compatibility without another native/R conversion path.
 * A BASE-origin Shadow constraint uses an exact two-field callback/hidden-value
-  plan and a thin native evaluator. Hidden and visible values are merged
-  manually without `c.*` dispatch, opaque leaves retain identity, the callback
-  runs once, and its result must be one non-missing logical value.
+  plan and a thin native evaluator. The authoritative Shadow graph site filters
+  hidden and visible inputs for activity before this schema-free plan merges
+  them manually without `c.*` dispatch. Opaque leaves retain identity, the
+  callback runs once, and its result must be one non-missing logical value.
 * Internal tables are canonical base data.frames. data.table >= 1.18.4 is used
   only for independently owned outward-facing facades; returned tables remain
   safe to mutate with normal data.table operations without changing the
@@ -233,6 +236,51 @@ hazards that Paradox 2 is intended to remove.
   and custom executable child samplers belong in `SamplerHierarchical`.
 * The package now requires R >= 4.3 and a C17 compiler. Linux, Windows x86-64,
   and Apple-silicon macOS are supported without architecture-specific code.
+
+## Dependency semantics
+
+* Checked `$values <-` and `set_values()` assignment now accept
+  Domain-valid values whose dependencies are currently unsatisfied. These
+  dormant values remain in raw `$values`, are omitted by the default
+  `$get_values()` view, and reactivate automatically after a later parent
+  change. Dormant values still receive the same type, bounds, special-value,
+  ParamUty custom-check, sanitization, TuneToken, unknown-ID, and atomic
+  graph-transaction validation as active values.
+* Dependency evaluation is now default-aware (#265). If an active parent is
+  absent from the candidate point or stored-value basis, its recorded default
+  is tested; an explicit value overrides the default, `NoDefault` remains
+  unsatisfied, and a default on an inactive parent cannot activate a
+  descendant. `$check()`, `$check_dt()`, `check_dependencies()`,
+  `$get_values()`, and constraints share this one native activity engine.
+* `presence = "all"` and `"required"` now use default-aware point activity.
+  A child whose absent parent has a satisfying default is active and may
+  therefore be reported missing where the former default-blind check exempted
+  it.
+* `get_values(check_required = TRUE)` likewise checks required parameters after
+  default-aware dependency filtering. Required dormant parameters remain
+  exempt, while a required parameter made active by a parent default is now
+  demanded.
+* Constraint callbacks now receive only the dependency-active entries of the
+  configuration being validated. Collection activity is evaluated in the full
+  translated namespace before each child receives an unprefixed active slice;
+  Shadow activity uses complete merged origin state before its schema-free
+  native merge adapter runs. Activity is selected by the authoritative
+  check/test/assignment site, not reimplemented inside detached callback
+  carriers. Callback count, order, snapshots, and scalar-result validation are
+  unchanged.
+* A legal raw value store is no longer necessarily a valid explicit point:
+  `$check(ps$values)` may fail when `$values` contains dormant entries.
+  Check-family methods remain store-blind, point-strict by default, and never
+  fill a candidate from stored values. Use `$check(ps$get_values())` when the
+  intended point is the active configuration.
+* Dependency failures that still arise from strict point checking retain the
+  established `"can only be set if"` diagnostic fragment. Assignment no longer
+  raises that diagnostic merely for storing a dormant value; an absent parent
+  whose default does not satisfy may include additional default context without
+  changing the leading compatibility fragment.
+* Existing BASE dependency mutation admission is unchanged and can construct a
+  cycle. Every activity consumer now fails safely and deterministically on that
+  cycle rather than looping, overflowing, or returning a partial active set.
 
 ## Public model and migration
 
@@ -374,8 +422,8 @@ hazards that Paradox 2 is intended to remove.
   storage range instead of accepting them and later coercing them to
   `NA_integer_`.
 * Collection child transformations run exactly once and child constraints
-  receive the correct unprefixed values; strict checks consult live child
-  constraints.
+  receive the correct active unprefixed values; strict checks consult live
+  child constraints.
 * Collection assignment reaches live child state, including a shadow's origin.
 * ParamSet quantile and grid kernels now consume canonical plain capsule tables
   on every supported R release, including R 4.3/4.5. Zero-axis grids retain a

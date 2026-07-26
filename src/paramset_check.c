@@ -15,6 +15,7 @@
 #include "builtin_condition.h"
 #include "core_state.h"
 #include "domain_admission.h"
+#include "paramset_activity.h"
 #include "paramset_domain_common.h"
 #include "paramset_shadow.h"
 #include "parameter_suggestion.h"
@@ -159,6 +160,16 @@ typedef struct {
   R_xlen_t parameter_count;
   SEXP root_params;
   SEXP root_tags;
+  SEXP defaults;
+  int activity_mapping_ready;
+  R_xlen_t dependency_count;
+  unsigned char *has_dependency;
+  R_xlen_t *dependency_child;
+  R_xlen_t *dependency_parent;
+  SEXP *dependency_condition;
+  SEXP *dependency_rhs;
+  SEXP *dependency_exposed_id;
+  SEXP *dependency_exposed_on;
 } check_plan_t;
 
 typedef struct {
@@ -168,6 +179,12 @@ typedef struct {
   R_xlen_t *param_rows;
   R_xlen_t *value_for_param;
 } point_t;
+
+typedef struct {
+  int ready;
+  int retain_reasons;
+  paradox_activity_result_t result;
+} point_activity_t;
 
 static void account_work(R_xlen_t *work_since_interrupt) {
   ++*work_since_interrupt;
@@ -1201,11 +1218,168 @@ static value_spec_t load_spec(SEXP params, R_xlen_t row) {
   return spec;
 }
 
+static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
+    account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(
+        STRING_ELT(node->checked_params.ids, row), id
+      )) return row;
+  }
+  return R_XLEN_T_MAX;
+}
+
+static void initialize_activity_mapping(check_plan_t *plan) {
+  if (plan->activity_mapping_ready) return;
+  R_xlen_t dependency_count = 0;
+  for (R_xlen_t node_index = 0;
+      node_index < plan->graph.count; ++node_index) {
+    const check_node_t *node = &plan->graph.nodes[node_index];
+    if (!node->semantic) continue;
+    if (node->checked_dependencies.row_count >
+        R_XLEN_T_MAX - dependency_count) {
+      Rf_error("ParamSet dependency graph is too large");
+    }
+    dependency_count += node->checked_dependencies.row_count;
+  }
+
+  plan->dependency_count = dependency_count;
+  plan->has_dependency = paradox_temporary_alloc(
+    plan->parameter_count == 0 ? 1 : plan->parameter_count,
+    sizeof(*plan->has_dependency)
+  );
+  memset(
+    plan->has_dependency,
+    0,
+    (size_t) (plan->parameter_count == 0 ? 1 : plan->parameter_count)
+  );
+  const R_xlen_t allocation_count = dependency_count == 0
+    ? 1
+    : dependency_count;
+  plan->dependency_child = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_child)
+  );
+  plan->dependency_parent = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_parent)
+  );
+  plan->dependency_condition = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_condition)
+  );
+  plan->dependency_rhs = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_rhs)
+  );
+  plan->dependency_exposed_id = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_exposed_id)
+  );
+  plan->dependency_exposed_on = paradox_temporary_alloc(
+    allocation_count,
+    sizeof(*plan->dependency_exposed_on)
+  );
+
+  R_xlen_t output = 0;
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t node_index = 0;
+      node_index < plan->graph.count; ++node_index) {
+    const check_node_t *node = &plan->graph.nodes[node_index];
+    if (!node->semantic) continue;
+    for (R_xlen_t local_dependency = 0;
+        local_dependency < node->checked_dependencies.row_count;
+        ++local_dependency) {
+      account_work(&work_since_interrupt);
+      SEXP id = STRING_ELT(
+        node->checked_dependencies.ids,
+        local_dependency
+      );
+      SEXP on = STRING_ELT(
+        node->checked_dependencies.on,
+        local_dependency
+      );
+      const R_xlen_t local_child = local_param_row(
+        node,
+        id,
+        &work_since_interrupt
+      );
+      if (local_child == R_XLEN_T_MAX) {
+        Rf_error("Corrupt ParamSet state: dependency target is unknown");
+      }
+      R_xlen_t child = R_XLEN_T_MAX;
+      if (!find_id(
+          &plan->root_ids,
+          STRING_ELT(node->root_ids, local_child),
+          &child,
+          &work_since_interrupt
+        )) {
+        Rf_error("Corrupt ParamSet graph: dependency target is not exposed");
+      }
+
+      const R_xlen_t local_parent = local_param_row(
+        node,
+        on,
+        &work_since_interrupt
+      );
+      R_xlen_t parent = R_XLEN_T_MAX;
+      SEXP exposed_on = on;
+      if (local_parent != R_XLEN_T_MAX) {
+        exposed_on = STRING_ELT(node->root_ids, local_parent);
+        if (!find_id(
+            &plan->root_ids,
+            exposed_on,
+            &parent,
+            &work_since_interrupt
+          )) {
+          Rf_error("Corrupt ParamSet graph: dependency parent is not exposed");
+        }
+      }
+
+      SEXP condition = VECTOR_ELT(
+        node->checked_dependencies.conditions,
+        local_dependency
+      );
+      paradox_builtin_condition_kind_t condition_kind;
+      SEXP rhs = R_NilValue;
+      if (!paradox_builtin_condition_exact(
+          condition,
+          &condition_kind,
+          &rhs,
+          &work_since_interrupt
+        )) {
+        Rf_error(
+          "Corrupt ParamSet state: malformed built-in dependency condition"
+        );
+      }
+      plan->dependency_child[output] = child;
+      plan->has_dependency[child] = TRUE;
+      plan->dependency_parent[output] = parent;
+      plan->dependency_condition[output] = condition;
+      plan->dependency_rhs[output] = rhs;
+      plan->dependency_exposed_id[output] =
+        STRING_ELT(node->root_ids, local_child);
+      plan->dependency_exposed_on[output] = exposed_on;
+      ++output;
+    }
+  }
+  if (output != dependency_count) {
+    Rf_error("Internal error: incomplete ParamSet activity mapping");
+  }
+  plan->activity_mapping_ready = TRUE;
+}
+
 static void initialize_check_plan(check_plan_t *plan) {
   check_node_t *root = &plan->graph.nodes[0];
   plan->root_params = root->params;
   plan->root_tags = root->tags;
   plan->parameter_count = root->checked_params.row_count;
+  plan->defaults = VECTOR_ELT(plan->root_params, PARADOX_DOMAIN_DEFAULT);
+  plan->activity_mapping_ready = FALSE;
+  if (TYPEOF(plan->defaults) != VECSXP ||
+      XLENGTH(plan->defaults) != plan->parameter_count) {
+    Rf_error("Corrupt ParamSet state: malformed defaults");
+  }
   plan->specs = paradox_temporary_alloc(
     plan->parameter_count == 0 ? 1 : plan->parameter_count,
     sizeof(*plan->specs)
@@ -2602,19 +2776,8 @@ static int has_tag(const check_plan_t *plan, SEXP id, const char *tag,
   return FALSE;
 }
 
-static R_xlen_t local_param_row(const check_node_t *node, SEXP id,
-    R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
-    account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(
-        STRING_ELT(node->checked_params.ids, row), id
-      )) return row;
-  }
-  return R_XLEN_T_MAX;
-}
-
 static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
-    const point_t *point) {
+    const point_t *point, const unsigned char *active) {
   R_xlen_t size = 0;
   R_xlen_t work_since_interrupt = 0;
   for (R_xlen_t row = 0; row < node->checked_params.row_count; ++row) {
@@ -2625,7 +2788,10 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
       )) {
       Rf_error("Corrupt ParamSet graph: node-to-root identifier is unknown");
     }
-    if (point->value_for_param[root_row] != R_XLEN_T_MAX) ++size;
+    if (point->value_for_param[root_row] != R_XLEN_T_MAX &&
+        (active == NULL || active[root_row])) {
+      ++size;
+    }
   }
   SEXP values = PROTECT(Rf_allocVector(VECSXP, size));
   SEXP names = PROTECT(Rf_allocVector(STRSXP, size));
@@ -2637,7 +2803,9 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
       &work_since_interrupt
     );
     const R_xlen_t input = point->value_for_param[root_row];
-    if (input == R_XLEN_T_MAX) continue;
+    if (input == R_XLEN_T_MAX || (active != NULL && !active[root_row])) {
+      continue;
+    }
     SET_VECTOR_ELT(values, output, VECTOR_ELT(point->values, input));
     SET_STRING_ELT(
       names, output, STRING_ELT(node->checked_params.ids, row)
@@ -2649,92 +2817,37 @@ static SEXP local_values(const check_node_t *node, const check_plan_t *plan,
   return values;
 }
 
-static R_xlen_t named_value(SEXP values, SEXP id,
-    R_xlen_t *work_since_interrupt) {
-  SEXP names = Rf_getAttrib(values, R_NamesSymbol);
-  for (R_xlen_t index = 0; index < XLENGTH(values); ++index) {
-    account_work(work_since_interrupt);
-    if (paradox_domain_strings_equal(STRING_ELT(names, index), id)) {
-      return index;
-    }
-  }
-  return R_XLEN_T_MAX;
-}
-
-typedef enum {
-  CONDITION_MATCH_UNSUPPORTED = -1,
-  CONDITION_MATCH_FALSE = 0,
-  CONDITION_MATCH_TRUE = 1
-} condition_match_t;
-
-static condition_match_t condition_matches(SEXP condition, SEXP value,
-    R_xlen_t *work_since_interrupt) {
-  paradox_builtin_condition_kind_t kind;
-  SEXP rhs = R_NilValue;
-  if (!paradox_builtin_condition_exact(
-      condition, &kind, &rhs, work_since_interrupt
-    )) {
-    Rf_error("Corrupt ParamSet state: malformed built-in dependency condition");
-  }
-  if (!paradox_builtin_condition_scalar_supported(value, rhs)) {
-    return CONDITION_MATCH_UNSUPPORTED;
-  }
-  if (value == R_NilValue || Rf_inherits(value, "TuneToken")) {
-    return CONDITION_MATCH_FALSE;
-  }
-  return paradox_builtin_condition_element_matches(
-    value, 0, rhs, work_since_interrupt
-  ) ? CONDITION_MATCH_TRUE : CONDITION_MATCH_FALSE;
-}
-
-static int missing_dependency_state(const check_plan_t *plan,
-    const point_t *point, R_xlen_t missing_root_row, int *has_dependency) {
-  SEXP sought = STRING_ELT(plan->root_ids.ids, missing_root_row);
-  int all_satisfied = TRUE;
-  *has_dependency = FALSE;
+static void ensure_point_activity(check_plan_t *plan,
+    const point_t *point, point_activity_t *activity) {
+  if (activity->ready) return;
+  initialize_activity_mapping(plan);
+  activity->result.active = paradox_temporary_alloc(
+    plan->parameter_count == 0 ? 1 : plan->parameter_count,
+    sizeof(*activity->result.active)
+  );
+  activity->result.reasons = activity->retain_reasons
+    ? paradox_temporary_alloc(
+        plan->dependency_count == 0 ? 1 : plan->dependency_count,
+        sizeof(*activity->result.reasons)
+      )
+    : NULL;
+  const paradox_activity_plan_t activity_plan = {
+    plan->parameter_count,
+    plan->defaults,
+    point->values,
+    point->value_for_param,
+    plan->dependency_count,
+    plan->dependency_child,
+    plan->dependency_parent,
+    (SEXP const *) plan->dependency_rhs
+  };
   R_xlen_t work_since_interrupt = 0;
-  for (R_xlen_t node_index = 0;
-      node_index < plan->graph.count; ++node_index) {
-    const check_node_t *node = &plan->graph.nodes[node_index];
-    if (!node->semantic) continue;
-    for (R_xlen_t dep = 0;
-        dep < node->checked_dependencies.row_count; ++dep) {
-      const R_xlen_t dependent_row = local_param_row(
-        node, STRING_ELT(node->checked_dependencies.ids, dep),
-        &work_since_interrupt
-      );
-      if (dependent_row == R_XLEN_T_MAX || !paradox_domain_strings_equal(
-          STRING_ELT(node->root_ids, dependent_row), sought
-        )) continue;
-      *has_dependency = TRUE;
-      const R_xlen_t on_row = local_param_row(
-        node, STRING_ELT(node->checked_dependencies.on, dep),
-        &work_since_interrupt
-      );
-      if (on_row == R_XLEN_T_MAX) {
-        all_satisfied = FALSE;
-        continue;
-      }
-      R_xlen_t root_on_row = R_XLEN_T_MAX;
-      (void) find_id(
-        &plan->root_ids, STRING_ELT(node->root_ids, on_row),
-        &root_on_row, &work_since_interrupt
-      );
-      const R_xlen_t input = point->value_for_param[root_on_row];
-      if (input == R_XLEN_T_MAX) {
-        all_satisfied = FALSE;
-        continue;
-      }
-      SEXP value = VECTOR_ELT(point->values, input);
-      if (Rf_inherits(value, "TuneToken")) continue;
-      if (condition_matches(
-          VECTOR_ELT(node->checked_dependencies.conditions, dep),
-          value,
-          &work_since_interrupt
-        ) != CONDITION_MATCH_TRUE) all_satisfied = FALSE;
-    }
-  }
-  return all_satisfied;
+  paradox_activity_evaluate(
+    &activity_plan,
+    &activity->result,
+    &work_since_interrupt
+  );
+  activity->ready = TRUE;
 }
 
 static SEXP collapsed_ids(SEXP ids, const unsigned char *selected,
@@ -2779,9 +2892,10 @@ static SEXP collapsed_ids(SEXP ids, const unsigned char *selected,
   return paradox_utf8_message(pieces, piece_count);
 }
 
-static SEXP check_presence(const check_plan_t *plan, const point_t *point,
-    presence_t presence) {
+static SEXP check_presence(check_plan_t *plan, const point_t *point,
+    presence_t presence, point_activity_t *activity) {
   if (presence == PRESENCE_NONE) return R_NilValue;
+  ensure_point_activity(plan, point, activity);
   const R_xlen_t count = plan->parameter_count;
   unsigned char *plain_missing = paradox_temporary_alloc(
     count == 0 ? 1 : count, sizeof(*plain_missing)
@@ -2799,14 +2913,10 @@ static SEXP check_presence(const check_plan_t *plan, const point_t *point,
     SEXP id = STRING_ELT(plan->root_ids.ids, row);
     if (presence == PRESENCE_REQUIRED &&
         !has_tag(plan, id, "required", &work_since_interrupt)) continue;
-    int has_dependency = FALSE;
-    const int satisfied = missing_dependency_state(
-      plan, point, row, &has_dependency
-    );
-    if (!has_dependency) {
+    if (!plan->has_dependency[row]) {
       plain_missing[row] = 1;
       ++plain_count;
-    } else if (satisfied) {
+    } else if (activity->result.active[row]) {
       active_missing[row] = 1;
       ++active_count;
     }
@@ -2881,14 +2991,38 @@ static SEXP condition_description(SEXP condition, SEXP on,
   return result;
 }
 
-static SEXP check_constraints(const check_plan_t *plan,
-    const point_t *point) {
+static SEXP check_constraints(check_plan_t *plan,
+    const point_t *point, point_activity_t *activity) {
+  int any_constraint = FALSE;
+  int any_dependency = FALSE;
+  for (R_xlen_t node_index = 0;
+      node_index < plan->graph.count; ++node_index) {
+    const check_node_t *node = &plan->graph.nodes[node_index];
+    if (!node->semantic) continue;
+    any_constraint =
+      any_constraint || node->constraint != R_NilValue;
+    any_dependency =
+      any_dependency || node->checked_dependencies.row_count != 0;
+  }
+  if (!any_constraint) return R_NilValue;
+  if (any_dependency) {
+    ensure_point_activity(plan, point, activity);
+  }
+  const unsigned char *active = any_dependency
+    ? activity->result.active
+    : NULL;
+
   for (R_xlen_t node_index = 0;
       node_index < plan->graph.count; ++node_index) {
     const check_node_t *node = &plan->graph.nodes[node_index];
     if (!node->semantic) continue;
     if (node->constraint == R_NilValue) continue;
-    SEXP values = PROTECT(local_values(node, plan, point));
+    SEXP values = PROTECT(local_values(
+      node,
+      plan,
+      point,
+      active
+    ));
     SEXP call = PROTECT(Rf_lang2(node->constraint, values));
     SEXP answer = PROTECT(Rf_eval(call, R_BaseEnv));
     if (TYPEOF(answer) != LGLSXP || XLENGTH(answer) != 1 ||
@@ -2903,97 +3037,133 @@ static SEXP check_constraints(const check_plan_t *plan,
   return R_NilValue;
 }
 
-static SEXP check_dependencies(const check_plan_t *plan,
-    const point_t *point) {
-  R_xlen_t work_since_interrupt = 0;
+static int plan_has_dependencies(const check_plan_t *plan) {
   for (R_xlen_t node_index = 0;
       node_index < plan->graph.count; ++node_index) {
     const check_node_t *node = &plan->graph.nodes[node_index];
-    if (!node->semantic) continue;
-    if (node->checked_dependencies.row_count == 0) continue;
-    SEXP values = PROTECT(local_values(node, plan, point));
-    for (R_xlen_t dep = 0;
-        dep < node->checked_dependencies.row_count; ++dep) {
-      account_work(&work_since_interrupt);
-      SEXP id = STRING_ELT(node->checked_dependencies.ids, dep);
-      SEXP on = STRING_ELT(node->checked_dependencies.on, dep);
-      const R_xlen_t id_row = local_param_row(
-        node, id, &work_since_interrupt
-      );
-      const R_xlen_t on_row = local_param_row(
-        node, on, &work_since_interrupt
-      );
-      SEXP exposed_id = id_row == R_XLEN_T_MAX
-        ? id
-        : STRING_ELT(node->root_ids, id_row);
-      SEXP exposed_on = on_row == R_XLEN_T_MAX
-        ? on
-        : STRING_ELT(node->root_ids, on_row);
-      const R_xlen_t dependent = named_value(
-        values, id, &work_since_interrupt
-      );
-      if (dependent == R_XLEN_T_MAX ||
-          Rf_inherits(VECTOR_ELT(values, dependent), "TuneToken")) continue;
-      const R_xlen_t parent = named_value(values, on, &work_since_interrupt);
-      SEXP parent_value = parent == R_XLEN_T_MAX
-        ? R_NilValue
-        : VECTOR_ELT(values, parent);
-      if (parent != R_XLEN_T_MAX &&
-          Rf_inherits(parent_value, "TuneToken")) continue;
-      SEXP condition = VECTOR_ELT(node->checked_dependencies.conditions, dep);
-      condition_match_t match = parent == R_XLEN_T_MAX
-        ? CONDITION_MATCH_FALSE
-        : condition_matches(
-            condition,
-            parent_value,
-            &work_since_interrupt
-          );
-      if (match == CONDITION_MATCH_TRUE) continue;
-      if (match == CONDITION_MATCH_UNSUPPORTED) {
-        SEXP result = PROTECT(utf8_message_1(
-          "Dependency comparison for '", exposed_on,
-          "' requires a plain scalar logical, integer, double, or character value."
-        ));
-        UNPROTECT(2);
-        return result;
-      }
-
-      SEXP description = PROTECT(condition_description(
-        condition, exposed_on, &work_since_interrupt
-      ));
-      SEXP result;
-      if (parent == R_XLEN_T_MAX) {
-        result = PROTECT(utf8_message_4(
-          "", exposed_id,
-          ": can only be set if the following condition is met '",
-          STRING_ELT(description, 0),
-          "'. Instead the parameter value for '", exposed_on,
-          "' is not set at all. Try setting '", exposed_on,
-          "' to a value that satisfies the condition"
-        ));
-      } else {
-        SEXP shown = PROTECT(short_value(parent_value));
-        result = PROTECT(utf8_message_4(
-          "", exposed_id,
-          ": can only be set if the following condition is met '",
-          STRING_ELT(description, 0),
-          "'. Instead the current parameter value is: ", exposed_on,
-          " == ", STRING_ELT(shown, 0), ""
-        ));
-        UNPROTECT(1);
-      }
-      UNPROTECT(3);
-      return result;
+    if (node->semantic && node->checked_dependencies.row_count != 0) {
+      return TRUE;
     }
-    UNPROTECT(1);
+  }
+  return FALSE;
+}
+
+static SEXP check_dependencies(check_plan_t *plan,
+    const point_t *point, point_activity_t *activity) {
+  ensure_point_activity(plan, point, activity);
+  if (plan->dependency_count != 0 &&
+      activity->result.reasons == NULL) {
+    Rf_error("Internal error: dependency diagnostics were not retained");
+  }
+  R_xlen_t work_since_interrupt = 0;
+  for (R_xlen_t dependency = 0;
+      dependency < plan->dependency_count;
+      ++dependency) {
+    account_work(&work_since_interrupt);
+    const R_xlen_t child = plan->dependency_child[dependency];
+    const R_xlen_t child_value = point->value_for_param[child];
+    if (child_value == R_XLEN_T_MAX ||
+        Rf_inherits(
+          VECTOR_ELT(point->values, child_value),
+          "TuneToken"
+        )) {
+      continue;
+    }
+    const paradox_activity_reason_t reason =
+      activity->result.reasons[dependency];
+    if (paradox_activity_reason_is_satisfied(reason)) continue;
+
+    SEXP exposed_id = plan->dependency_exposed_id[dependency];
+    SEXP exposed_on = plan->dependency_exposed_on[dependency];
+    if (reason == PARADOX_ACTIVITY_VALUE_UNSUPPORTED ||
+        reason == PARADOX_ACTIVITY_DEFAULT_UNSUPPORTED) {
+      return utf8_message_1(
+        "Dependency comparison for '",
+        exposed_on,
+        "' requires a plain scalar logical, integer, double, or character value."
+      );
+    }
+
+    SEXP description = PROTECT(condition_description(
+      plan->dependency_condition[dependency],
+      exposed_on,
+      &work_since_interrupt
+    ));
+    SEXP result;
+    if (reason == PARADOX_ACTIVITY_PARENT_INACTIVE) {
+      result = PROTECT(utf8_message_3(
+        "",
+        exposed_id,
+        ": can only be set if the following condition is met '",
+        STRING_ELT(description, 0),
+        "'. Instead the parameter '",
+        exposed_on,
+        "' is inactive because its own dependencies are not satisfied"
+      ));
+    } else if (reason == PARADOX_ACTIVITY_PARENT_ABSENT) {
+      result = PROTECT(utf8_message_4(
+        "",
+        exposed_id,
+        ": can only be set if the following condition is met '",
+        STRING_ELT(description, 0),
+        "'. Instead the parameter value for '",
+        exposed_on,
+        "' is not set at all. Try setting '",
+        exposed_on,
+        "' to a value that satisfies the condition"
+      ));
+    } else {
+      const R_xlen_t parent = plan->dependency_parent[dependency];
+      const int from_default =
+        reason == PARADOX_ACTIVITY_DEFAULT_MISMATCH;
+      const R_xlen_t parent_value = parent == R_XLEN_T_MAX
+        ? R_XLEN_T_MAX
+        : point->value_for_param[parent];
+      SEXP effective = from_default
+        ? VECTOR_ELT(plan->defaults, parent)
+        : VECTOR_ELT(point->values, parent_value);
+      SEXP shown = PROTECT(short_value(effective));
+      result = from_default
+        ? PROTECT(utf8_message_4(
+            "",
+            exposed_id,
+            ": can only be set if the following condition is met '",
+            STRING_ELT(description, 0),
+            "'. Instead the parameter value for '",
+            exposed_on,
+            "' is not set at all and its default is: ",
+            STRING_ELT(shown, 0),
+            ""
+          ))
+        : PROTECT(utf8_message_4(
+            "",
+            exposed_id,
+            ": can only be set if the following condition is met '",
+            STRING_ELT(description, 0),
+            "'. Instead the current parameter value is: ",
+            exposed_on,
+            " == ",
+            STRING_ELT(shown, 0),
+            ""
+          ));
+      UNPROTECT(1);
+    }
+    UNPROTECT(2);
+    return result;
   }
   return R_NilValue;
 }
 
-static SEXP validate_initialized_point(const check_plan_t *plan,
-    point_t *point, int check_strict, int sanitize, presence_t presence,
+static SEXP validate_initialized_point(check_plan_t *plan,
+    point_t *point, int check_constraints_flag,
+    int check_dependencies_flag, int sanitize, presence_t presence,
     int allow_token, SEXP *receipts_result) {
   if (receipts_result != NULL) *receipts_result = R_NilValue;
+  point_activity_t activity = {
+    .ready = FALSE,
+    .retain_reasons = check_dependencies_flag,
+    .result = {NULL, NULL}
+  };
   for (R_xlen_t index = 0; index < point->size; ++index) {
     if (!allow_token && Rf_inherits(
         VECTOR_ELT(point->values, index), "TuneToken"
@@ -3002,7 +3172,12 @@ static SEXP validate_initialized_point(const check_plan_t *plan,
     }
   }
 
-  SEXP presence_failure = PROTECT(check_presence(plan, point, presence));
+  SEXP presence_failure = PROTECT(check_presence(
+    plan,
+    point,
+    presence,
+    &activity
+  ));
   if (presence_failure != R_NilValue) {
     UNPROTECT(1);
     return presence_failure;
@@ -3085,11 +3260,13 @@ static SEXP validate_initialized_point(const check_plan_t *plan,
     }
   }
 
-  if (check_strict) {
-    SEXP failure = PROTECT(check_constraints(plan, point));
-    if (failure == R_NilValue) {
+  if (check_constraints_flag || check_dependencies_flag) {
+    SEXP failure = check_constraints_flag
+      ? PROTECT(check_constraints(plan, point, &activity))
+      : PROTECT(R_NilValue);
+    if (failure == R_NilValue && check_dependencies_flag) {
       UNPROTECT(1);
-      failure = PROTECT(check_dependencies(plan, point));
+      failure = PROTECT(check_dependencies(plan, point, &activity));
     }
     if (failure != R_NilValue) {
       paradox_param_set_verify_token_receipts(receipts);
@@ -3114,8 +3291,9 @@ static SEXP validate_initialized_point(const check_plan_t *plan,
   return result;
 }
 
-static SEXP validate_point(const check_plan_t *plan, SEXP stable_values,
-    int check_strict, int sanitize, presence_t presence, int allow_token,
+static SEXP validate_point(check_plan_t *plan, SEXP stable_values,
+    int check_constraints_flag, int check_dependencies_flag,
+    int sanitize, presence_t presence, int allow_token,
     SEXP *receipts_result) {
   point_t point;
   SEXP structural_failure = PROTECT(initialize_point(
@@ -3129,7 +3307,8 @@ static SEXP validate_point(const check_plan_t *plan, SEXP stable_values,
   return validate_initialized_point(
     plan,
     &point,
-    check_strict,
+    check_constraints_flag,
+    check_dependencies_flag,
     sanitize,
     presence,
     allow_token,
@@ -3410,7 +3589,8 @@ SEXP paradox_param_set_validate_current_roots(SEXP selves) {
 SEXP paradox_param_set_check_builtin_with_receipts(
     SEXP private_environment, SEXP self,
     SEXP values, SEXP check_strict, SEXP sanitize, SEXP presence,
-    SEXP allow_token, SEXP *receipts_result) {
+    SEXP allow_token, int enforce_dependencies,
+    SEXP *receipts_result) {
   if (receipts_result != NULL) *receipts_result = R_NilValue;
   const int strict = exact_flag(check_strict, "check_strict");
   const int do_sanitize = exact_flag(sanitize, "sanitize");
@@ -3433,6 +3613,7 @@ SEXP paradox_param_set_check_builtin_with_receipts(
     &plan,
     stable_values,
     strict,
+    strict && enforce_dependencies,
     do_sanitize,
     required_presence,
     tokens,
@@ -3453,6 +3634,7 @@ SEXP paradox_param_set_check_builtin(SEXP private_environment, SEXP self,
     sanitize,
     presence,
     allow_token,
+    TRUE,
     NULL
   );
 }
@@ -3479,10 +3661,15 @@ SEXP paradox_param_set_check_dependencies_builtin(
   );
 
   point_t point;
+  point_activity_t activity = {
+    .ready = FALSE,
+    .retain_reasons = TRUE,
+    .result = {NULL, NULL}
+  };
   SEXP result = PROTECT(initialize_point(stable_values, &plan, &point));
   if (result == R_NilValue) {
     UNPROTECT(1);
-    result = PROTECT(check_dependencies(&plan, &point));
+    result = PROTECT(check_dependencies(&plan, &point, &activity));
   }
   if (result == R_NilValue) {
     UNPROTECT(1);
@@ -3505,7 +3692,7 @@ static void constraint_input_error(SEXP failure, const char *argument) {
 }
 
 static void initialize_constraint_point(SEXP values,
-    const check_plan_t *plan, point_t *point, int assert_value,
+    check_plan_t *plan, point_t *point, int assert_value,
     const char *argument) {
   SEXP structural_failure = PROTECT(initialize_point(values, plan, point));
   if (structural_failure != R_NilValue) {
@@ -3517,6 +3704,7 @@ static void initialize_constraint_point(SEXP values,
   SEXP validation = PROTECT(validate_initialized_point(
     plan,
     point,
+    FALSE,
     FALSE,
     FALSE,
     PRESENCE_NONE,
@@ -3560,10 +3748,15 @@ SEXP paradox_param_set_test_constraint_builtin(
     return result;
   }
   point_t point;
+  point_activity_t activity = {
+    .ready = FALSE,
+    .retain_reasons = FALSE,
+    .result = {NULL, NULL}
+  };
   initialize_constraint_point(
     stable_values, &plan, &point, validate, "x"
   );
-  SEXP failure = PROTECT(check_constraints(&plan, &point));
+  SEXP failure = PROTECT(check_constraints(&plan, &point, &activity));
   SEXP result = PROTECT(Rf_ScalarLogical(failure == R_NilValue));
   UNPROTECT(4);
   return result;
@@ -3612,6 +3805,14 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
     return result;
   }
 
+  /*
+   * The per-row watermark must never reclaim topology cached in `plan`.
+   * Materialize that operation-lifetime mapping before taking the watermark;
+   * only row-local activity/value scratch is then released between callbacks.
+   */
+  if (plan_has_dependencies(&plan)) {
+    initialize_activity_mapping(&plan);
+  }
   const void *row_watermark = vmaxget();
   for (R_xlen_t row = 0; row < rows; ++row) {
     if (row != 0 && row % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
@@ -3619,8 +3820,17 @@ SEXP paradox_param_set_test_constraint_dt_builtin(
     }
     SEXP values = PROTECT(table_point(stable_table, row));
     point_t point;
+    point_activity_t activity = {
+      .ready = FALSE,
+      .retain_reasons = FALSE,
+      .result = {NULL, NULL}
+    };
     initialize_constraint_point(values, &plan, &point, FALSE, "x");
-    SEXP failure = PROTECT(check_constraints(&plan, &point));
+    SEXP failure = PROTECT(check_constraints(
+      &plan,
+      &point,
+      &activity
+    ));
     LOGICAL(result)[row] = failure == R_NilValue;
     UNPROTECT(2);
     vmaxset(row_watermark);
@@ -3649,6 +3859,15 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
   build_check_plan(
     private_environment, self, &plan, &root_plan, root_plan_index
   );
+  /*
+   * Keep operation-lifetime topology below the per-row watermark. Point,
+   * mask, and DFS scratch can then be reclaimed after every row instead of
+   * growing linearly with a wide check table.
+   */
+  if (strict || required_presence != PRESENCE_NONE) {
+    initialize_activity_mapping(&plan);
+  }
+  const void *row_watermark = vmaxget();
   for (R_xlen_t row = 0; row < rows; ++row) {
     if (row != 0 && row % PARADOX_INTERRUPT_CHECK_INTERVAL == 0) {
       R_CheckUserInterrupt();
@@ -3658,6 +3877,7 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
       &plan,
       point,
       strict,
+      strict,
       FALSE,
       required_presence,
       tokens,
@@ -3665,10 +3885,12 @@ SEXP paradox_param_set_check_dt_builtin(SEXP private_environment, SEXP self,
     ));
     if (TYPEOF(result) != LGLSXP || XLENGTH(result) != 1 ||
         LOGICAL_ELT(result, 0) != TRUE) {
+      vmaxset(row_watermark);
       UNPROTECT(5);
       return result;
     }
     UNPROTECT(2);
+    vmaxset(row_watermark);
   }
   SEXP result = PROTECT(Rf_ScalarLogical(TRUE));
   UNPROTECT(4);

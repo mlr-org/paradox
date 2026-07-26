@@ -10,8 +10,11 @@ They can also be used to specify search spaces for optimization, indicating the 
 It is often convenient to generate search spaces from configuration spaces, which can be done using the \verb{$search_space()} method in combination with \code{to_tune()} / \code{\link{TuneToken}} objects.
 
 Individual dimensions of a \code{ParamSet} are specified by \code{\link{Domain}} objects, created as \code{\link[=p_dbl]{p_dbl()}}, \code{\link[=p_lgl]{p_lgl()}} etc.
-The field \verb{$values} can be used to store an active configuration or to partially fix
-some parameters to constant values -- the precise effect can be determined by the object being parameterized.
+The field \verb{$values} is the raw configuration store and can be used to
+partially fix parameters to constant values. A valid value may be stored
+even while its dependencies are unsatisfied; such a value is \emph{dormant}.
+The default \verb{$get_values()} view omits dormant values and reveals them
+automatically when their dependencies later become satisfied.
 
 Constructing a \code{ParamSet} can be done using \code{ParamSet$new()} in combination with a named list of \code{\link{Domain}} objects.
 This route is recommended when the set of dimensions (i.e. the members of this named list) is dynamically created, such as when the number of parameters is variable.
@@ -86,8 +89,11 @@ pset$check(list(d = 2.1, f = "d"))
   \if{html}{\out{<div class="r6-fields">}}
   \describe{
     \item{\code{assert_values}}{(\code{logical(1)})\cr
-Should values be checked for validity during assignment to active binding \verb{$values}?
-Default is \code{TRUE}, only switch this off if you know what you are doing.}
+Should values be checked for Domain, TuneToken, custom-check, and
+constraint validity during assignment to active binding \verb{$values}?
+Dependency-inactive values remain valid checked assignments and are
+stored dormant. Default is \code{TRUE}; only switch this off if you know what
+you are doing.}
   }
   \if{html}{\out{</div>}}
 }
@@ -99,8 +105,13 @@ Default is \code{TRUE}, only switch this off if you know what you are doing.}
 and structural metadata are ordinary non-ALTREP/non-S4.}
 
     \item{\code{values}}{(named \code{list()})\cr
-Currently set / fixed parameter values.
-Settable. By default feasibility is checked when values are assigned.
+Raw currently set / fixed parameter values, including Domain-valid dormant
+entries whose dependencies are currently unsatisfied.
+Settable. By default Domain, TuneToken, custom-check, and constraint
+feasibility is checked when values are assigned, but dependency satisfaction
+is not an assignment precondition. Any constraint receives the active subset
+of the complete resulting configuration. Use \verb{$get_values()} for the default
+dependency-filtered view.
 Set \verb{$assert_values = FALSE} to use the documented unchecked assignment
 policy; structural admission still applies.
 Direct checked and unchecked assignment accepts only an ordinary non-ALTREP,
@@ -154,6 +165,11 @@ Constraint function. Settable on a base \code{\link{ParamSet}}; read-only and de
 from children on a \code{\link{ParamSetCollection}}.
 This function must evaluate a named \code{list()} of values and determine whether it satisfies
 constraints, returning a scalar \code{logical(1)} value.
+At package-owned check, test, and assignment sites, it receives only the
+default-aware active subset of the configuration being validated. A
+collection computes activity over its complete translated configuration,
+including cross-set dependencies, before each child receives an unprefixed
+active child-scope slice.
 The input list shell and structural names/list metadata are ordinary
 non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.}
 
@@ -315,9 +331,12 @@ Return only IDs of dimensions that have at least one of the tags given in this a
 \if{html}{\out{<a id="method-ParamSet-get_values"></a>}}
 \if{latex}{\out{\hypertarget{method-ParamSet-get_values}{}}}
 \subsection{\code{ParamSet$get_values()}}{
-  Retrieves parameter values based on some selections, \code{NULL} means no
-restriction and is equivalent to \verb{$values}.
-Only returns values of parameters that satisfy all conditions.
+  Retrieves parameter values based on selections; \code{NULL} means no
+restriction for the corresponding selector. By default this returns the
+active view of the raw \verb{$values} store. Activity is recursive and uses a
+parent's explicit stored value when present, otherwise its recorded
+default. Dormant values remain stored and reappear when later values
+make them active.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$get_values(
@@ -339,9 +358,11 @@ Only returns values of parameters that satisfy all conditions.
       \item{\code{type}}{(\code{character(1)})\cr
 Return values \code{"with_token"} (i.e. all values),}
       \item{\code{check_required}}{(\code{logical(1)})\cr
-Check if all required parameters are set?}
+Check if all active required parameters are set? This check uses the
+dependency-filtered view, even when \code{remove_dependencies = FALSE}.}
       \item{\code{remove_dependencies}}{(\code{logical(1)})\cr
-If \code{TRUE}, set values with dependencies that are not fulfilled to \code{NULL}.}
+If \code{TRUE}, omit dormant values whose dependencies are not fulfilled.
+If \code{FALSE}, return the raw store, including dormant values.}
     }
     \if{html}{\out{</div>}}
   }
@@ -356,6 +377,12 @@ If \code{TRUE}, set values with dependencies that are not fulfilled to \code{NUL
 \subsection{\code{ParamSet$set_values()}}{
   Modifies (and overwrites) or replaces the parameter values.
 Per default already set values are being kept unless new values are being provided.
+Checked assignment validates every supplied value, including dormant
+values, but does not require its dependencies to be fulfilled.
+Constraints receive only the active subset of the complete resulting
+configuration. Assignment across a collection or shadow graph remains
+one atomic transaction: callback failure or reentrant mutation commits
+no target.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$set_values(..., .values = list(), .insert = TRUE)}
@@ -492,6 +519,9 @@ The internal search space.}
 Return \code{FALSE} if the given \verb{$constraint} is not satisfied, \code{TRUE} otherwise.
 Note this is different from satisfying the bounds or types given by the \code{ParamSet} itself:
 If \code{x} does not satisfy these, an error will be thrown, given that \code{assert_value} is \code{TRUE}.
+The constraint receives only entries active in the candidate point.
+Activity is default-aware and store-blind: recorded defaults may activate
+an absent parent, but stored \verb{$values} are never consulted.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$test_constraint(x, assert_value = TRUE)}
@@ -523,6 +553,8 @@ Should be \code{TRUE} unless this was already checked before.}
 For each row, return \code{FALSE} if the given \verb{$constraint} is not satisfied, \code{TRUE} otherwise.
 Note this is different from satisfying the bounds or types given by the \code{ParamSet} itself:
 If \code{x} does not satisfy these, an error will be thrown, given that \code{assert_value} is \code{TRUE}.
+For each row, the constraint receives only the default-aware active
+subset of that row; stored \verb{$values} are never consulted.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$test_constraint_dt(x, assert_value = TRUE)}
@@ -552,10 +584,17 @@ Should be \code{TRUE} unless this was already checked before.}
 \if{latex}{\out{\hypertarget{method-ParamSet-check}{}}}
 \subsection{\code{ParamSet$check()}}{
   \pkg{checkmate}-like check-function. Takes a setting of parameters as a named list.
-A point x is feasible, if it configures a subset of params in a valid manner, i.e.,
-the param type is correct, and param bounds, constraints and dependencies are satisfied.
+A point \code{xs} is feasible if it configures a subset of parameters in a
+valid manner: types and bounds are valid and, by default, constraints
+and dependencies are satisfied.
 Params for which dependencies are not satisfied should not be part of \code{x} (and not set to \code{NA}).
-Param dependencies and \verb{$constraint} are not checked when \code{check_strict} is \code{FALSE} (but data type and bounds are checked).
+Dependency activity uses only the candidate point plus recorded defaults,
+never the set's stored \verb{$values}. Consequently, once dormant values are
+stored, \code{ps$check(ps$values)} is not guaranteed to succeed: assignment
+validates a store, while this method validates a strict point.
+Constraint callbacks receive only the active subset of that point.
+Param dependencies and \verb{$constraint} are not checked when
+\code{check_strict} is \code{FALSE} (but data type and bounds are checked).
 This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
 Use \code{presence = "all"} to check that all parameters are present in \code{xs}, except for parameters with unsatisfied dependencies.
 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
@@ -590,8 +629,11 @@ is \code{TRUE}, the additional effect is that, should checks pass, the
 sanitized values of \code{xs} are added to the result as attribute \code{"sanitized"}.}
       \item{\code{presence}}{(\code{character(1)})\cr
 If \code{"none"} (default), no check is performed for the presence of parameters.
-If \code{"all"}, all parameters must be present in \code{xs}, except for parameters with unsatisfied dependencies.
-If \code{"required"}, parameters with the \code{"required"} tag must be present in \code{xs}, except for parameters with unsatisfied dependencies.
+If \code{"all"}, all parameters must be present in \code{xs}, except for
+parameters with unsatisfied dependencies. If \code{"required"}, parameters
+with the \code{"required"} tag must be present under the same exemption.
+Activity is computed from \code{xs} plus recorded defaults, so an absent
+parent with a satisfying default can make its child required.
 For \code{"all"} and \code{"required"}, \code{TuneToken}s are not allowed to be present in \code{xs}.}
       \item{\code{allow_token}}{(\code{logical(1)})\cr
 Whether to allow \code{TuneToken}s to be present in \code{xs}.
@@ -617,6 +659,8 @@ names; classed list containers are not admitted by this dependency-only
 boundary. Unknown parameter IDs are diagnosed even when the set has no
 dependencies. A dependent value or its parent supplied as a
 \code{\link{TuneToken}} is skipped, matching \verb{$check()} dependency semantics.
+Otherwise, an absent parent uses its recorded default, if any. Evaluation
+is recursive and store-blind: stored \verb{$values} are never consulted.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$check_dependencies(xs)}
@@ -640,6 +684,7 @@ diagnostic as a string.
 \if{latex}{\out{\hypertarget{method-ParamSet-test}{}}}
 \subsection{\code{ParamSet$test()}}{
   \pkg{checkmate}-like test-function (s. \verb{$check()}).
+Uses the same default-aware, store-blind point semantics.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$test(xs, check_strict = TRUE, presence = "none", allow_token = TRUE)}
@@ -672,6 +717,7 @@ Default is \code{TRUE}.}
 \if{latex}{\out{\hypertarget{method-ParamSet-assert}{}}}
 \subsection{\code{ParamSet$assert()}}{
   \pkg{checkmate}-like assert-function (s. \verb{$check()}).
+Uses the same default-aware, store-blind point semantics.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$assert(
@@ -721,6 +767,10 @@ Checks in a similar manner as \verb{$check(xs)}.
 A point x is feasible, if it configures a subset of params,
 all individual param constraints are satisfied and all dependencies are satisfied.
 Params for which dependencies are not satisfied should be set to \code{NA} in \code{xdt}.
+Each row is a store-blind point: dependency activity uses that row plus
+recorded defaults, and each constraint receives only the active subset
+of the row. Thus this method is not a raw-store validator for dormant
+values.
 Dependencies and \verb{$constraint} are not checked when \code{check_strict} is \code{FALSE}.
 Note that checking only subsets implies that \code{xdt} is therefore allowed to
 have fewer columns as there are params in the set.
@@ -767,6 +817,7 @@ Default is \code{TRUE}.}
 \if{latex}{\out{\hypertarget{method-ParamSet-test_dt}{}}}
 \subsection{\code{ParamSet$test_dt()}}{
   \pkg{checkmate}-like test-function (s. \verb{$check_dt()}).
+Uses the same per-row active-subset constraint semantics.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$test_dt(
@@ -806,6 +857,7 @@ Default is \code{TRUE}.}
 \if{latex}{\out{\hypertarget{method-ParamSet-assert_dt}{}}}
 \subsection{\code{ParamSet$assert_dt()}}{
   \pkg{checkmate}-like assert-function (s. \verb{$check_dt()}).
+Uses the same per-row active-subset constraint semantics.
   \subsection{Usage}{
     \if{html}{\out{<div class="r">}}
     \preformatted{ParamSet$assert_dt(

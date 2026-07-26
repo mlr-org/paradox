@@ -28,6 +28,9 @@ The public-API-first inventory now covers:
   deliberately stricter ordinary transformation-shell boundary;
 - additive ParamSet inheritance, values, checks, dependencies,
   transformations, constraints, serialization, designs, and random sampling;
+- dormant checked storage, default-aware point/presence/required-value
+  activity, active-only constraint input, and the resulting distinction
+  between a raw stored configuration and a strict point;
 - BASE and COLLECTION behavior, repeated-ID subset behavior, detached
   subset/flatten callbacks, and detached semantic equality;
 - the official live `ParamSetShadow` when available, with a public detached

@@ -128,7 +128,17 @@ expression (using \code{quote()}), or the expression can be entered directly and
 examples). The expression may be of the form \verb{<Param> == <value>} or \verb{<Param> \%in\% <values>}, which will result in
 dependencies according to \verb{ParamSet$add_dep(on = "<Param>", cond = CondEqual(<value>))} or
 \verb{ParamSet$add_dep(on = "<Param>", cond = CondAnyOf(<values>))}, respectively (see \code{\link{CondEqual}},
-\code{\link{CondAnyOf}}). The expression may also contain multiple conditions separated by \code{&&}.}
+\code{\link{CondAnyOf}}). The expression may also contain multiple conditions
+separated by \code{&&}.
+
+Dependency activity is recursive. For an active parent, its explicit value
+in the configuration is tested first; if the parent is absent, its
+recorded \code{default} is tested instead. An absent parent without a default,
+or an inactive parent, leaves the dependency unsatisfied. Defaults
+participate in activity but are not inserted into the configuration. A
+Domain-valid value may still be stored while this dependency is
+unsatisfied; it remains dormant until the dependency becomes satisfied
+and is omitted from the default \code{\link{ParamSet}}\verb{$get_values()} view meanwhile.}
 
 \item{trafo}{(\code{function})\cr
 Single argument function performing the transformation of a parameter. When the \code{Domain} is used to construct a

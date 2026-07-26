@@ -14,10 +14,16 @@ migration, authenticated native gateway/generation barriers, and the focused
 self-returning ALTREP duplicate regression. The former frozen candidate and
 its local correctness, compatibility, documentation, memory, and performance
 gates are historical only; they do not transfer to the cleanup source that
-followed it. While these final items are in flight, use the focused development
-policy below. Freeze one replacement candidate and run the applicable native,
-R API, runtime, memory, differential, downstream, documentation, benchmark,
-and hosted portability gates after the package-facing source converges.
+followed it. The dormant-values/default-aware-activity implementation is an
+additional package-facing semantic change after that seal; it changes the
+native dependency/check/value paths and therefore cannot inherit any
+package-facing conclusion from `8797f11`. While it and the remaining
+pre-release items are in flight, use only the focused development policy
+below. This development batch intentionally does not run or claim the complete
+compatibility or release matrix. Freeze one replacement candidate only after
+all package-facing source converges, then run the applicable native, R API,
+runtime, memory, differential, downstream, documentation, benchmark, and
+hosted portability gates once for that exact candidate.
 
 Normative contract: [`contract-first-2.0.0.md`](contract-first-2.0.0.md).
 Implementation map: [`architecture.md`](architecture.md). Compatibility and
@@ -275,6 +281,19 @@ Changing one of these requires an explicit contract/design/NEWS/test update,
 not a local compatibility workaround.
 
 ## Implementation convergence checklist
+
+Checked entries below record implemented architectural components or
+historical exact-payload conclusions. They do not make the reopened worktree
+release-ready and do not transfer the last candidate's green gates to dormant-
+values source. The active package-facing blockers are:
+
+- [x] converge the dormant-values/default-aware-activity implementation,
+  focused contract tests, documentation, differential cases, and dependency-
+  rich benchmark workloads;
+- [ ] finish the other planned pre-release package-facing changes and freeze
+  one clean replacement candidate;
+- [ ] run and retain the complete applicable gate matrix against that exact
+  replacement candidate.
 
 ### State and public model
 
@@ -725,6 +744,14 @@ value-mutation files; and 500 randomized comparisons with the intended
 Paradox-1 `mlr3misc::did_you_mean()` policy. All passed. No broad, downstream,
 memory, or release benchmark gate was rerun for this isolated item.
 
+The dormant-values/default-aware-activity batch follows the same development
+boundary. During implementation, strict changed-unit compilation and focused
+dependency/value/check/constraint tests are useful diagnostics only. The full
+unit, compatibility, runtime, memory, documentation, benchmark, and hosted
+portability gates are intentionally deferred because additional pre-release
+todos remain. Any focused result must retain its actual source identity and
+must not be entered in the candidate evidence tables below.
+
 A completed package-facing row may be reused across refs only through a sealed,
 independently replayed proof that every Git change is excluded by the exact
 `.Rbuildignore` and that clean builds have the same complete payload inventory
@@ -917,13 +944,15 @@ cheatsheet, `mbo_config`, and target rows pass.
 
 ## Release decision
 
-The release decision is `pending` while final cleanup changes remain in flight.
-The `8797f11` local gates above describe only the last sealed payload. After the
-package-facing source converges, freeze one replacement candidate and complete
-its applicable local unit/check, R API, runtime, combined-memory, differential,
-documentation, downstream, source-package, benchmark, and hosted Windows
-x86-64/macOS ARM64 gates. User publication of the prepared downstream
-branches/PRs, release tag, and workflow remains required. No historical row
+The release decision is `pending` while the dormant-values implementation and
+other final cleanup changes remain in flight. The `8797f11` local gates above
+describe only the last sealed payload. Focused results from the current
+development batch are not release evidence. After the package-facing source
+converges, freeze one replacement candidate and complete its applicable local
+unit/check, R API, runtime, combined-memory, differential, documentation,
+downstream, source-package, benchmark, and hosted Windows x86-64/macOS ARM64
+gates. User publication of the prepared downstream branches/PRs, release tag,
+and workflow remains required. No historical row or current focused diagnostic
 alone authorizes the reopened payload.
 
 ## Historical rejected or superseded refs

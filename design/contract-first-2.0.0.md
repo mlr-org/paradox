@@ -191,6 +191,11 @@ COLLECTION origins use the same engine. Child callbacks are selected from the
 admitted capsule snapshot rather than an overridden child R6 method.
 Translation, collision handling, child-result cardinality/name admission,
 merging, and scalar logical constraint admission are never duplicated in R.
+Authoritative collection check/test/assignment sites evaluate activity in the
+full translated namespace before each child constraint receives its active
+unprefixed child slice. Detached BASE checking performs the same filtering
+before invoking a detached carrier. The fixed schema-free callback carrier ABI
+stores no activity mask and contains no duplicate activity evaluator.
 Collection extra-transformation results first contain retained/untransformed
 inputs in input order, followed by changed child outputs in callback-plan order
 and each callback's result order. Child-owned inputs omitted by their callback
@@ -218,10 +223,13 @@ stored. In particular:
   values; it does not retain copied private tables in the shadow.
 - A BASE-origin constraint closure retains exactly the admitted callback and
   hidden-value snapshot in a two-field plan. Its native evaluator manually
-  forms the hidden-first/visible-second callback input, without `c()` or S3
-  dispatch, preserves opaque leaf identity, calls once, and requires one
-  non-missing logical result. COLLECTION-origin adapters use the shared native
-  collection evaluator family and the same Shadow merge rule where applicable.
+  forms the already activity-filtered hidden-first/visible-second callback
+  input, without `c()` or S3 dispatch, preserves opaque leaf identity, calls
+  once, and requires one non-missing logical result. The authoritative Shadow
+  graph site filters before constructing/invoking this exact schema-free plan;
+  the adapter does not own another activity engine. COLLECTION-origin adapters
+  use the shared native collection evaluator family and the same upstream
+  filtering rule where applicable.
 - A dependency crossing the visible/hidden boundary is rejected. This is
   checked at construction and again when a live dependency snapshot is used,
   so later origin mutation cannot create ambiguous shadow semantics.
@@ -453,7 +461,8 @@ preserves:
   positions;
 - `$values$x <- value`, named-list assignment, unset-via-`NULL`, explicit named
   `NULL`, required tags, TuneTokens, presence modes, sanitization, constraints,
-  dependencies, transformations, and internal-tuning behavior;
+  dependencies, transformations, dormant storage with filtered reads, and
+  internal-tuning behavior;
 - ordinary non-ALTREP S3-classed named configuration-list containers, with the
   outer class ignored and removed at native admission rather than used for
   dispatch, including explicit `$search_space(values=)` input;
@@ -489,6 +498,86 @@ that depends on a side-effecting promise, `conditionCall()`, implementation
 frames, and unsupported exotic-object behavior is not an outward requirement.
 Every intentional differential from Paradox 1 receives a NEWS entry and a
 focused regression test.
+
+## Dependency activity, dormant values, and filtered constraints
+
+Dependency activity has one native list-basis semantic kernel. The check
+family, `check_dependencies()`, `$get_values()` dependency filtering, and every
+authoritative constraint check/assignment site all call that kernel; none
+maintains a second point or stored-value evaluator in R or C.
+
+For one named evaluation basis `x`, a parameter is active only when every one
+of its dependency rows is satisfied. Evaluation is recursive and conjunctive.
+After cycle validation, a child supplied as a TuneToken skips its incoming
+rows. Otherwise an inactive parent makes the row unsatisfied regardless of any
+value or default it carries. For an active parent, an explicit value in `x` is
+the operand; a TuneToken parent skips the row. If an active parent is absent
+from `x`, its recorded default is the operand unless that row contains
+`NoDefault`; an absent `NoDefault` parent leaves the row unsatisfied. The
+built-in closed Condition comparator remains the sole operand evaluator.
+Explicit values therefore override defaults, and a default on an inactive
+parent cannot reactivate its descendants. Multiple rows on one child remain
+conjunctive. A dangling parent for which the admitted graph has no
+Domain/default is absent and unsatisfied. Existing BASE dependency
+mutation can construct a cycle and is unchanged by this feature. Every activity
+consumer detects an active-path cycle and raises a deterministic error; it
+never loops, overflows the C stack, or returns a partial mask.
+
+The basis is operation-specific and never guessed:
+
+- `$check()`, `$assert()`, `$test()`, each `$check_dt()` row, and
+  `$check_dependencies()` use only the candidate point plus recorded defaults.
+  They never consult stored `$values`.
+- `$get_values(remove_dependencies = TRUE)` uses the raw stored values plus
+  recorded defaults. Its `check_required` decision is made after filtering.
+- `presence = "required"` and `"all"` use the candidate point basis. A
+  satisfying default can therefore make an absent child active and required
+  where a default-blind check formerly exempted it.
+- A constraint uses the complete configuration presented at that invocation,
+  plus recorded defaults only for activity. Defaults influence which supplied
+  entries are active; they are not synthesized into the callback's list.
+
+Checked `$values <-` and `set_values()` assignment no longer reject a
+Domain-valid entry merely because its dependency is unsatisfied. Such an entry
+is **dormant**: it remains in the raw `$values` store, is omitted by the default
+`$get_values(remove_dependencies = TRUE)` view, and reappears automatically
+when a later assignment makes it active. `remove_dependencies = FALSE` exposes
+the complete raw store. Dormant values still undergo the same type, bounds,
+special-value, ParamUty `custom_check`, sanitization, TuneToken, unknown-ID, and
+structural admission as active values. Assignment without a constraint does not
+compute activity. The checked and unchecked stores retain their existing
+graph-wide planning, generation receipts, deterministic last-owner semantics,
+and allocation- and callback-free atomic commit.
+
+This deliberately separates a legal store from a valid explicit point.
+Check-family defaults remain `check_strict = TRUE`, and every supplied point
+entry must be active. Consequently `$check(ps$values)` is not an invariant:
+raw `$values` may legally include dormant entries, while
+`$check(ps$get_values())` or an explicitly non-strict point check can succeed.
+Dependency diagnostics for the still-failing point cases retain the established
+`"can only be set if"` fragment.
+
+Every constraint callback receives only the active entries of its candidate
+configuration. BASE scalar/table checking filters each candidate point;
+checked assignment filters the complete proposed state before its one
+snapshotted callback invocation. An authoritative COLLECTION graph operation
+computes activity in the full translated namespace, including cross-child
+dependency rows, then passes each child constraint only its active child-scope
+entries with collection affixes removed. The authoritative SHADOW graph
+operation computes activity over merged hidden and visible origin state and
+passes already filtered slices to the existing hidden-first/visible-second
+adapter. Exact detached collection and Shadow carriers have no schema, so they
+do not and must not reimplement activity; their owning BASE/graph check site
+filters before invoking them. Activity remains evaluation-time state and is not
+added to carrier plans or the Shadow capsule.
+
+Dependency filtering is owned where the dependency row lives. A collection-
+level cross-child edge affects a collection-level `$get_values()` read; reading
+one child directly applies only that child's dependency graph. The specialized
+Design/sampler row masker remains separate because it operates on complete
+sampled rows in which every parent already has a value, so a default cannot be
+selected. It must remain behaviorally equivalent to the list kernel on that
+complete-row domain and is not permission for a second point/list engine.
 
 ## One native semantic engine
 
@@ -598,19 +687,23 @@ native dependency-only operation using the same admitted capsule graph, point
 mapping, and dependency kernel as `$check()`. Its input is an ordinary uniquely
 named base list with no class or semantic attributes. It diagnoses unknown IDs
 even when no dependency rows exist, skips an edge when its child or parent is a
-TuneToken, and returns `TRUE` or the first dependency diagnostic. Paradox 2 does
-not preserve the former R data.table/pmap traversal or its newline-collapsed
-multi-error result.
+TuneToken, applies the shared default-aware activity rules, and returns `TRUE`
+or the first dependency diagnostic. It is a store-blind point operation and
+never fills the candidate from stored `$values`. Paradox 2 does not preserve
+the former R data.table/pmap traversal or its newline-collapsed multi-error
+result.
 
 `ParamSet$test_constraint()` and `$test_constraint_dt()` likewise enter the
 same native graph planner, point admission, and constraint kernel as the full
 checks. `assert_value = FALSE` skips Domain-value validation but not structural
-point admission. With validation enabled, the table method snapshots the
-input, validates every row before executing any constraint callback, and then
-evaluates the operation's snapshotted constraint set exactly once per row in
-order. A callback mutation cannot replace the callback selected for later rows
-of that operation. The table method retains its documented data.table-only
-boundary. There is no R scalar or per-row constraint implementation.
+point admission. Every constraint receives only the active subset selected by
+the shared default-aware activity kernel. With validation enabled, the table
+method snapshots the input, validates every row before executing any constraint
+callback, and then evaluates the operation's snapshotted constraint set exactly
+once per row in order. A callback mutation cannot replace the callback selected
+for later rows of that operation. The table method retains its documented
+data.table-only boundary. There is no R scalar or per-row constraint
+implementation.
 
 Tag projection/replacement, dependency-table snapshot/projection/replacement,
 dependency append, and BASE constraint/extra-transformation callback
@@ -657,7 +750,8 @@ Each public operation is one transaction with these phases:
    decisions, and mutation generations that the operation can observe.
 4. The operation executes against that snapshot. User callbacks run in their
    documented row/parameter order and receive the documented values and named
-   arguments.
+   arguments; constraint callbacks receive the dependency-active subset
+   specified above.
 5. A mutating operation verifies that every capsule generation on which its
    write depends is unchanged, then commits all package-owned state atomically
    in an allocation- and callback-free section. Failure before commit leaves
@@ -1161,6 +1255,21 @@ The package suite must contain contract tests for:
   ordinary infeasible value retains the check-diagnostic protocol;
 - operation-entry forcing, snapshot, callback order, mutation visibility, and
   no-replay behavior;
+- one shared default-aware list-basis activity kernel across scalar/table point
+  checks, dependency-only checking, stored-value filtering, and BASE/
+  COLLECTION/SHADOW constraint evaluation. Coverage includes transitive chains,
+  conjunctions/diamonds, explicit-value precedence, `NoDefault`, TuneToken
+  endpoints, dangling parents, safely rejected admitted BASE cycles,
+  store-blind points, collection-level ownership, and equivalence with complete
+  sampled rows;
+- checked storage of Domain-valid dormant values without dependency rejection,
+  including dormant custom/type/bounds validation, atomic mixed failures,
+  reactivation, raw-versus-filtered reads, presence/required tightening,
+  serialization/clone/equality/upgrade, and the documented non-invariant that
+  a legal raw store need not pass strict `$check()`;
+- filtered constraint inputs for BASE scalar/table points, checked assignment,
+  translated COLLECTION child slices, and merged SHADOW origin state, with
+  existing callback count/order/reentry and opaque-leaf guarantees retained;
 - one-observation native materialization for stable/base ALTREP under
   allocation, finalizers, and reentry, plus no-crash/no-corruption behavior for
   hostile state-changing custom ALTREP across the R-capture/native boundary;

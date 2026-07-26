@@ -1,6 +1,8 @@
-# The native engine selects and snapshots the exact origin callback and hidden
-# values. The retained closure has one fixed plan binding and immediately
-# enters the native adapter; it contains no second merge or result-admission
+# The native engine selects and snapshots the exact origin callback and the
+# already activity-filtered hidden values. Package-owned graph operations also
+# filter the visible slice before invoking this schema-free carrier. The
+# retained closure has one fixed plan binding and immediately enters the native
+# merge adapter; it contains no second activity, merge, or result-admission
 # implementation.
 param_set_shadow_constraint_closure = function(plan) {
   force(plan)
@@ -23,12 +25,20 @@ param_set_shadow_constraint_factory = function(callback, hidden_values) {
 #' retaining a live connection to that set. The IDs supplied in `shadowed` are
 #' hidden. Values are read from and written through to the origin, and current
 #' dependencies, constraints, and transformations are used for every
-#' operation.
+#' operation. `$values` is the raw visible store and may include dormant
+#' entries. The default `$get_values()` view evaluates the current visible
+#' dependency graph using recorded defaults and omits dormant visible entries.
 #'
 #' The visible parameter schema is captured when the shadow is constructed.
 #' Later changes to structural metadata in the origin therefore do not change
 #' the view. Dependencies may change, but a dependency crossing the
 #' visible/hidden boundary is always an error.
+#'
+#' Checked assignment validates every supplied visible value, including a
+#' dependency-inactive value, and preserves hidden origin values. If the live
+#' origin has a constraint, the complete merged configuration is filtered for
+#' activity before its visible and hidden slices are merged for that callback.
+#' The write-through operation remains one atomic graph transaction.
 #'
 #' @param set ([`ParamSet`])
 #'   Parameter set to view. A [`ParamSetCollection`] is accepted. A direct
@@ -158,7 +168,9 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     },
 
     #' @field constraint (`function` or `NULL`)
-    #' Live origin constraint adapted to the visible schema. Read-only.
+    #' Live origin constraint adapted to the visible schema. During
+    #' package-owned check, test, and assignment operations it receives the
+    #' merged active visible and hidden subsets. Read-only.
     constraint = function(value) {
       if (!missing(value)) {
         stop("ParamSetShadow does not allow setting constraint.")

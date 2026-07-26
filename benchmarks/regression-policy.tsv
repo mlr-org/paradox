@@ -39,9 +39,11 @@ paired	get_domain_last	-	hot	domain-lookup-scaling
 paired	domains_all	-	hot	common-domain-batch-access
 paired	params	-	hot	de-facto-public-metadata-access
 paired	get_values	-	hot	common-value-read
+paired	get_values_deep_dependencies	-	hot	dependency-rich-default-aware-filtered-read
 paired	get_values_no_dependencies	-	hot	common-value-read
 paired	get_values_tags	-	hot	common-filtered-value-read
 paired	set_values_insert	-	hot	common-value-write
+paired	set_values_deep_dependencies	-	hot	dependency-rich-checked-bulk-write
 paired	shadow_values_live	-	integrity-shadow-read	integrity-validated-live-shadow-value-read
 paired	shadow_constraint_live	-	hot	common-live-shadow-constraint-path
 paired	shadow_domains_live	-	standard	live-shadow-domain-reconstruction

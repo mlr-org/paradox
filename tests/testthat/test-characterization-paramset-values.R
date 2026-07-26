@@ -273,7 +273,7 @@ test_that("get_values validates its closed argument contract", {
   )
 })
 
-test_that("dependency rows are evaluated sequentially against a local snapshot", {
+test_that("dependency activity is transitive and independent of row order", {
   param_set = ps(
     root = p_int(0L, 2L),
     middle = p_int(0L, 2L),
@@ -291,7 +291,7 @@ test_that("dependency rows are evaluated sequentially against a local snapshot",
   )
 
   param_set$deps = param_set$deps[c(2L, 1L)]
-  expect_identical(param_set$get_values(), list(root = 0L, leaf = 2L))
+  expect_identical(param_set$get_values(), list(root = 0L))
 
   token = to_tune()
   param_set$values = list(root = token, middle = 1L, leaf = 2L)
@@ -300,10 +300,10 @@ test_that("dependency rows are evaluated sequentially against a local snapshot",
     list(root = token, middle = 1L, leaf = 2L)
   )
 
-  # With the reversed row order, a missing root removes middle only after leaf
-  # has already been accepted against middle's local value.
+  # A missing root makes middle inactive and therefore also makes leaf
+  # inactive, regardless of the dependency table's row order.
   param_set$values = list(middle = 1L, leaf = 2L)
-  expect_identical(param_set$get_values(), list(leaf = 2L))
+  expect_identical(param_set$get_values(), named_list())
 })
 
 test_that("collection stores preserve public ordering and replacement rules", {

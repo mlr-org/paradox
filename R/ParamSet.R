@@ -377,8 +377,11 @@ param_set_subspace_shells = function(param_set, private, ids) {
 #' It is often convenient to generate search spaces from configuration spaces, which can be done using the `$search_space()` method in combination with `to_tune()` / [`TuneToken`] objects.
 #'
 #' Individual dimensions of a `ParamSet` are specified by [`Domain`] objects, created as [`p_dbl()`], [`p_lgl()`] etc.
-#' The field `$values` can be used to store an active configuration or to partially fix
-#' some parameters to constant values -- the precise effect can be determined by the object being parameterized.
+#' The field `$values` is the raw configuration store and can be used to
+#' partially fix parameters to constant values. A valid value may be stored
+#' even while its dependencies are unsatisfied; such a value is *dormant*.
+#' The default `$get_values()` view omits dormant values and reveals them
+#' automatically when their dependencies later become satisfied.
 #'
 #' Constructing a `ParamSet` can be done using `ParamSet$new()` in combination with a named list of [`Domain`] objects.
 #' This route is recommended when the set of dimensions (i.e. the members of this named list) is dynamically created, such as when the number of parameters is variable.
@@ -446,8 +449,11 @@ ParamSet = R6Class("ParamSet",
   public = list(
 
     #' @field assert_values (`logical(1)`)\cr
-    #' Should values be checked for validity during assignment to active binding `$values`?
-    #' Default is `TRUE`, only switch this off if you know what you are doing.
+    #' Should values be checked for Domain, TuneToken, custom-check, and
+    #' constraint validity during assignment to active binding `$values`?
+    #' Dependency-inactive values remain valid checked assignments and are
+    #' stored dormant. Default is `TRUE`; only switch this off if you know what
+    #' you are doing.
     assert_values = TRUE,
 
     #' @description
@@ -532,9 +538,12 @@ ParamSet = R6Class("ParamSet",
     },
 
     #' @description
-    #' Retrieves parameter values based on some selections, `NULL` means no
-    #' restriction and is equivalent to `$values`.
-    #' Only returns values of parameters that satisfy all conditions.
+    #' Retrieves parameter values based on selections; `NULL` means no
+    #' restriction for the corresponding selector. By default this returns the
+    #' active view of the raw `$values` store. Activity is recursive and uses a
+    #' parent's explicit stored value when present, otherwise its recorded
+    #' default. Dormant values remain stored and reappear when later values
+    #' make them active.
     #'
     #' @param class (`character()`). See `$ids()`.
     #' @param tags (`character()`). See `$ids()`.
@@ -544,9 +553,11 @@ ParamSet = R6Class("ParamSet",
     #    `"without_token"` (all values that are not [`TuneToken`] objects), `"only_token"` (only [`TuneToken`] objects)
     #    or `"with_internal"` (all values that are no not `InternalTuneToken`)?
     #' @param check_required (`logical(1)`)\cr
-    #'   Check if all required parameters are set?
+    #'   Check if all active required parameters are set? This check uses the
+    #'   dependency-filtered view, even when `remove_dependencies = FALSE`.
     #' @param remove_dependencies (`logical(1)`)\cr
-    #'   If `TRUE`, set values with dependencies that are not fulfilled to `NULL`.
+    #'   If `TRUE`, omit dormant values whose dependencies are not fulfilled.
+    #'   If `FALSE`, return the raw store, including dormant values.
     #' @return Named `list()`.
     get_values = function(class = NULL, tags = NULL, any_tags = NULL,
       type = "with_token", check_required = TRUE, remove_dependencies = TRUE) {
@@ -556,6 +567,12 @@ ParamSet = R6Class("ParamSet",
     #' @description
     #' Modifies (and overwrites) or replaces the parameter values.
     #' Per default already set values are being kept unless new values are being provided.
+    #' Checked assignment validates every supplied value, including dormant
+    #' values, but does not require its dependencies to be fulfilled.
+    #' Constraints receive only the active subset of the complete resulting
+    #' configuration. Assignment across a collection or shadow graph remains
+    #' one atomic transaction: callback failure or reentrant mutation commits
+    #' no target.
     #'
     #' @param ... (any)\cr
     #'   Named parameter values.
@@ -687,6 +704,9 @@ ParamSet = R6Class("ParamSet",
     #' Return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
+    #' The constraint receives only entries active in the candidate point.
+    #' Activity is default-aware and store-blind: recorded defaults may activate
+    #' an absent parent, but stored `$values` are never consulted.
     #' @param x (named `list()`)\cr
     #'   The value to test. Its outer shell must be an ordinary
     #'   non-ALTREP/non-S4 list; admitted semantic atomic leaves may be stable
@@ -710,6 +730,8 @@ ParamSet = R6Class("ParamSet",
     #' For each row, return `FALSE` if the given `$constraint` is not satisfied, `TRUE` otherwise.
     #' Note this is different from satisfying the bounds or types given by the `ParamSet` itself:
     #' If `x` does not satisfy these, an error will be thrown, given that `assert_value` is `TRUE`.
+    #' For each row, the constraint receives only the default-aware active
+    #' subset of that row; stored `$values` are never consulted.
     #' @param x (`data.table`)\cr
     #'   The values to test. The shared suffix-aware public-table boundary applies;
     #'   raw row names supply the row count and must agree with every column.
@@ -731,10 +753,17 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like check-function. Takes a setting of parameters as a named list.
-    #' A point x is feasible, if it configures a subset of params in a valid manner, i.e.,
-    #' the param type is correct, and param bounds, constraints and dependencies are satisfied.
+    #' A point `xs` is feasible if it configures a subset of parameters in a
+    #' valid manner: types and bounds are valid and, by default, constraints
+    #' and dependencies are satisfied.
     #' Params for which dependencies are not satisfied should not be part of `x` (and not set to `NA`).
-    #' Param dependencies and `$constraint` are not checked when `check_strict` is `FALSE` (but data type and bounds are checked).
+    #' Dependency activity uses only the candidate point plus recorded defaults,
+    #' never the set's stored `$values`. Consequently, once dormant values are
+    #' stored, `ps$check(ps$values)` is not guaranteed to succeed: assignment
+    #' validates a store, while this method validates a strict point.
+    #' Constraint callbacks receive only the active subset of that point.
+    #' Param dependencies and `$constraint` are not checked when
+    #' `check_strict` is `FALSE` (but data type and bounds are checked).
     #' This is sometimes useful when you only want to check the validity of individual params in intermediate objects.
     #' Use `presence = "all"` to check that all parameters are present in `xs`, except for parameters with unsatisfied dependencies.
     #' 'presence = "none"' is often useful when you want to check the validity of settings you want to assign when defaults are already present,
@@ -756,8 +785,11 @@ ParamSet = R6Class("ParamSet",
     #'   sanitized values of `xs` are added to the result as attribute `"sanitized"`.
     #' @param presence (`character(1)`)\cr
     #'   If `"none"` (default), no check is performed for the presence of parameters.
-    #'   If `"all"`, all parameters must be present in `xs`, except for parameters with unsatisfied dependencies.
-    #'   If `"required"`, parameters with the `"required"` tag must be present in `xs`, except for parameters with unsatisfied dependencies.
+    #'   If `"all"`, all parameters must be present in `xs`, except for
+    #'   parameters with unsatisfied dependencies. If `"required"`, parameters
+    #'   with the `"required"` tag must be present under the same exemption.
+    #'   Activity is computed from `xs` plus recorded defaults, so an absent
+    #'   parent with a satisfying default can make its child required.
     #'   For `"all"` and `"required"`, `TuneToken`s are not allowed to be present in `xs`.
     #' @param allow_token (`logical(1)`)\cr
     #'   Whether to allow `TuneToken`s to be present in `xs`.
@@ -786,6 +818,8 @@ ParamSet = R6Class("ParamSet",
     #' boundary. Unknown parameter IDs are diagnosed even when the set has no
     #' dependencies. A dependent value or its parent supplied as a
     #' [`TuneToken`] is skipped, matching `$check()` dependency semantics.
+    #' Otherwise, an absent parent uses its recorded default, if any. Evaluation
+    #' is recursive and store-blind: stored `$values` are never consulted.
     #'
     #' @param xs (uniquely named base `list()`).
     #' @return If successful `TRUE`, otherwise the first dependency or input
@@ -796,6 +830,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like test-function (s. `$check()`).
+    #' Uses the same default-aware, store-blind point semantics.
     #'
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
@@ -813,6 +848,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check()`).
+    #' Uses the same default-aware, store-blind point semantics.
     #'
     #' @param xs (named `list()`).
     #' @param check_strict (`logical(1)`)\cr
@@ -845,6 +881,10 @@ ParamSet = R6Class("ParamSet",
     #' A point x is feasible, if it configures a subset of params,
     #' all individual param constraints are satisfied and all dependencies are satisfied.
     #' Params for which dependencies are not satisfied should be set to `NA` in `xdt`.
+    #' Each row is a store-blind point: dependency activity uses that row plus
+    #' recorded defaults, and each constraint receives only the active subset
+    #' of the row. Thus this method is not a raw-store validator for dormant
+    #' values.
     #' Dependencies and `$constraint` are not checked when `check_strict` is `FALSE`.
     #' Note that checking only subsets implies that `xdt` is therefore allowed to
     #' have fewer columns as there are params in the set.
@@ -881,6 +921,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like test-function (s. `$check_dt()`).
+    #' Uses the same per-row active-subset constraint semantics.
     #'
     #' @param xdt ([data.table::data.table]).
     #'   The table-shell and semantic-column boundary is the same as
@@ -900,6 +941,7 @@ ParamSet = R6Class("ParamSet",
 
     #' @description
     #' \pkg{checkmate}-like assert-function (s. `$check_dt()`).
+    #' Uses the same per-row active-subset constraint semantics.
     #'
     #' @param xdt ([data.table::data.table]).
     #'   The table-shell and semantic-column boundary is the same as
@@ -1104,8 +1146,10 @@ ParamSet = R6Class("ParamSet",
       }
       if (self$assert_values) {
         # One native transaction snapshots the complete capsule graph,
-        # validates strict dependency/constraint semantics, and commits every
-        # ultimate BASE target only after all callbacks have returned. Both
+        # validates every supplied value, computes activity only when needed
+        # to filter constraint input, and commits every ultimate BASE target
+        # only after all callbacks have returned. Dependency inactivity makes
+        # a value dormant; it does not reject the transaction. Both
         # checked and unchecked native stores reject a structural outer ALTREP
         # before observation. The native store canonicalizes the Paradox-1
         # NULL/ordinary zero-length clear-values spellings; R never

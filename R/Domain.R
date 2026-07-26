@@ -51,7 +51,17 @@
 #'   examples). The expression may be of the form `<Param> == <value>` or `<Param> %in% <values>`, which will result in
 #'   dependencies according to `ParamSet$add_dep(on = "<Param>", cond = CondEqual(<value>))` or
 #'   `ParamSet$add_dep(on = "<Param>", cond = CondAnyOf(<values>))`, respectively (see [`CondEqual`],
-#'   [`CondAnyOf`]). The expression may also contain multiple conditions separated by `&&`.
+#'   [`CondAnyOf`]). The expression may also contain multiple conditions
+#'   separated by `&&`.
+#'
+#'   Dependency activity is recursive. For an active parent, its explicit value
+#'   in the configuration is tested first; if the parent is absent, its
+#'   recorded `default` is tested instead. An absent parent without a default,
+#'   or an inactive parent, leaves the dependency unsatisfied. Defaults
+#'   participate in activity but are not inserted into the configuration. A
+#'   Domain-valid value may still be stored while this dependency is
+#'   unsatisfied; it remains dormant until the dependency becomes satisfied
+#'   and is omitted from the default [`ParamSet`]`$get_values()` view meanwhile.
 #' @param logscale (`logical(1)`)\cr
 #'   Put numeric domains on a log scale. Default `FALSE`. Log-scale `Domain`s represent parameter ranges where lower and upper bounds
 #'   are logarithmized, and where a `trafo` is added that exponentiates sampled values to the original scale. This is

@@ -5,10 +5,14 @@ close them. Six repository-local branches remain useful migrations. The mlr3
 and mlr3fselect diagnostic-only PRs are now wholly redundant and should be
 closed without replacement.
 
-## Exact handoff heads and manual state
+## Pre-dormant handoff heads and manual state
 
 No remote write was made while preparing this handoff. The exact local heads
-and remaining human actions are:
+below are the reviewed pre-dormant starting points, not final replacement-
+candidate evidence. In particular, the miesmuschel branch needs the focused
+dual-version dormant-assignment expectation described below. Record any new
+local head and rerun the affected rows before the user pushes it. The previous
+remote state and eventual human actions are:
 
 | Repository | Exact head | Current remote state | Remaining manual action |
 |---|---|---|---|
@@ -21,7 +25,15 @@ and remaining human actions are:
 
 Closing any open mlr3 and mlr3fselect diagnostic-only PRs also remains manual.
 
-## Active retained evidence
+## Historical retained evidence to refresh
+
+The dormant-value/default-aware dependency change reopens package-facing
+Paradox source after candidate `8797f11`. The exact runs below remain useful
+baselines for the recorded downstream heads, but they are not release evidence
+for the replacement candidate. After implementation and focused package tests
+converge, rebuild the Paradox-2 bridge overlay and rerun the affected
+dependency/value rows before the normal broad downstream wave. Do not relabel
+the historical hashes or pass counts.
 
 ### Exact Paradox 1 owner conclusion
 
@@ -52,9 +64,9 @@ Paradox source because installation timestamps and lazy-load databases are not
 reproducible package payloads. The claim is exact source identity and sealed
 row behavior, not byte identity between independently installed libraries.
 
-### Exact Paradox 2 final source-package checks
+### Historical exact Paradox 2 source-package checks
 
-The active Paradox-2 candidate is
+The last sealed Paradox-2 candidate before the dormant-value change is
 `refs/paradox-release/candidate-20260724T105215Z`, commit
 `8797f1163fe612cb01d1facf517834d3f516a697`, tree
 `81e6f901266754b97a0906f88a472bf04795f13c`. The authoritative final
@@ -135,6 +147,32 @@ Likewise, the old `a4617ca` to `10c6a0e` package-payload proof and the
 `bf64490` to `9e87556` post-freeze exception are historical proof paths, not
 evidence transfers to candidate `8797f11`.
 
+## Dormant-value downstream notes
+
+- mlr3 currently includes raw `$values` in learner/graph-related hashes. That
+  is correct when dormant settings are part of object identity. If a caller
+  instead wants canonical identity over only the currently effective
+  configuration, it should deliberately hash `$get_values()`; Paradox does not
+  silently redefine raw-store identity.
+- The checked assignment in `mlr3tuning::AutoTuner` refit no longer fails merely
+  because a tuned child became inactive in the selected branch. No downstream
+  workaround should disable Domain validation to solve that failure class.
+- `lrn(...)` and `$configure()` may now retain a dependency-inactive setting
+  instead of erroring. Default-aware activity also fixes common cases such as
+  an SVM option depending on the learner type's satisfying default. Downstream
+  code should consume the active configuration through `$get_values()` as it
+  already does for train/predict.
+- A cross-child dependency owned by `ParamSetCollection` filters the
+  collection-level read only. Direct child/PipeOp reads still apply the child's
+  own dependency rows. This is the intended boundary for the planned
+  mlr3pipelines automatic branch dependencies.
+- The Paradox-1 miesmuschel Shadow explicitly asserts the complete candidate
+  before writing and therefore remains strict. The Paradox-2 branch must use
+  `paradox::ParamSetShadow`, whose native assignment stores dormant values and
+  whose filtered reads reactivate them. Dual-version tests should assert the
+  version-appropriate assignment result rather than recreating a second Shadow
+  activity implementation.
+
 Publish and merge the dual-version bridge PRs before Paradox 2. Land and
 release mlr3mbo as 1.1.2 before celecx, whose DESCRIPTION intentionally
 requires that bridge. The other retained PRs are independent apart from their
@@ -197,8 +235,11 @@ Proposed body:
 > bridge selection, live values and dependencies, transformations, and
 > deep-clone integration. Paradox's own `ParamSetShadow` contract suite owns
 > direct constraint and serialization coverage rather than duplicating it here.
-> Keep dependency-error expectations useful on both major versions by selecting
-> the official Paradox 2 diagnostic only when that implementation is active.
+> The legacy Paradox-1 Shadow remains strict because it explicitly asserts the
+> candidate before writing. On Paradox 2, test the official class's dormant-
+> value storage and filtered reactivation contract instead of expecting that
+> assignment-time dependency error or adding another downstream activity
+> engine.
 > This is intentionally a dual-version bridge; existing Paradox 1 installations
 > continue to construct the legacy class. Keep the class documentation link
 > valid when the package is checked with either Paradox major version.

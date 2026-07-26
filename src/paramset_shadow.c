@@ -4,7 +4,9 @@
 
 #include "paramset_shadow.h"
 
+#include "builtin_condition.h"
 #include "core_state.h"
+#include "paramset_activity.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_api_compat.h"
@@ -954,8 +956,159 @@ static SEXP evaluate_factory3(SEXP factory, SEXP first, SEXP second,
   return result;
 }
 
+static R_xlen_t shadow_parameter_row(SEXP ids, SEXP sought,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t row = 0; row < XLENGTH(ids); ++row) {
+    paradox_domain_account_work(work_since_interrupt);
+    if (paradox_domain_strings_equal(STRING_ELT(ids, row), sought)) {
+      return row;
+    }
+  }
+  return R_XLEN_T_MAX;
+}
+
+/*
+ * A Shadow constraint carrier intentionally remains the exact two-field
+ * {callback, hidden_values} ABI. Dependencies may not cross the visible /
+ * hidden partition, so filtering the admitted hidden origin snapshot here and
+ * the candidate visible slice in the outer check kernel is exactly equivalent
+ * to filtering their merged configuration. Refresh rebuilds this snapshot
+ * from the live origin generation before every authoritative operation.
+ */
+static SEXP active_hidden_values(
+    const paradox_domain_params_t *params,
+    const paradox_domain_values_t *values,
+    const paradox_domain_dependencies_t *dependencies,
+    SEXP hidden_values,
+    R_xlen_t *work_since_interrupt) {
+  const R_xlen_t parameter_count = params->row_count;
+  const R_xlen_t dependency_count = dependencies->row_count;
+  if (dependency_count == 0) {
+    return hidden_values;
+  }
+  R_xlen_t *value_by_parameter = paradox_temporary_alloc(
+    parameter_count == 0 ? 1 : parameter_count,
+    sizeof(*value_by_parameter)
+  );
+  for (R_xlen_t parameter = 0;
+      parameter < parameter_count;
+      ++parameter) {
+    value_by_parameter[parameter] = R_XLEN_T_MAX;
+  }
+  for (R_xlen_t value = 0; value < values->size; ++value) {
+    const R_xlen_t parameter = shadow_parameter_row(
+      params->ids,
+      STRING_ELT(values->names, value),
+      work_since_interrupt
+    );
+    if (parameter == R_XLEN_T_MAX ||
+        value_by_parameter[parameter] != R_XLEN_T_MAX) {
+      Rf_error("Corrupt ParamSetShadow origin values");
+    }
+    value_by_parameter[parameter] = value;
+  }
+
+  R_xlen_t *dependency_child = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_child)
+  );
+  R_xlen_t *dependency_parent = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_parent)
+  );
+  SEXP *dependency_rhs = paradox_temporary_alloc(
+    dependency_count == 0 ? 1 : dependency_count,
+    sizeof(*dependency_rhs)
+  );
+  for (R_xlen_t dependency = 0;
+      dependency < dependency_count;
+      ++dependency) {
+    dependency_child[dependency] = shadow_parameter_row(
+      params->ids,
+      STRING_ELT(dependencies->ids, dependency),
+      work_since_interrupt
+    );
+    dependency_parent[dependency] = shadow_parameter_row(
+      params->ids,
+      STRING_ELT(dependencies->on, dependency),
+      work_since_interrupt
+    );
+    paradox_builtin_condition_kind_t kind;
+    SEXP rhs = R_NilValue;
+    if (dependency_child[dependency] == R_XLEN_T_MAX ||
+        !paradox_builtin_condition_exact(
+          VECTOR_ELT(dependencies->conditions, dependency),
+          &kind,
+          &rhs,
+          work_since_interrupt
+        )) {
+      Rf_error("Corrupt ParamSetShadow origin dependencies");
+    }
+    dependency_rhs[dependency] = rhs;
+  }
+
+  paradox_activity_result_t activity = {
+    paradox_temporary_alloc(
+      parameter_count == 0 ? 1 : parameter_count,
+      sizeof(*activity.active)
+    ),
+    NULL
+  };
+  const paradox_activity_plan_t plan = {
+    parameter_count,
+    VECTOR_ELT(params->table, PARADOX_DOMAIN_DEFAULT),
+    values->values,
+    value_by_parameter,
+    dependency_count,
+    dependency_child,
+    dependency_parent,
+    (SEXP const *) dependency_rhs
+  };
+  paradox_activity_evaluate(
+    &plan,
+    &activity,
+    work_since_interrupt
+  );
+
+  SEXP hidden_names = Rf_getAttrib(hidden_values, R_NamesSymbol);
+  R_xlen_t kept = 0;
+  for (R_xlen_t index = 0; index < XLENGTH(hidden_values); ++index) {
+    const R_xlen_t parameter = shadow_parameter_row(
+      params->ids,
+      STRING_ELT(hidden_names, index),
+      work_since_interrupt
+    );
+    if (parameter == R_XLEN_T_MAX) {
+      Rf_error("Corrupt ParamSetShadow hidden value");
+    }
+    kept += activity.active[parameter] != FALSE;
+  }
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, kept));
+  SEXP names = PROTECT(Rf_allocVector(STRSXP, kept));
+  R_xlen_t output = 0;
+  for (R_xlen_t index = 0; index < XLENGTH(hidden_values); ++index) {
+    const R_xlen_t parameter = shadow_parameter_row(
+      params->ids,
+      STRING_ELT(hidden_names, index),
+      work_since_interrupt
+    );
+    if (!activity.active[parameter]) continue;
+    SET_VECTOR_ELT(result, output, VECTOR_ELT(hidden_values, index));
+    SET_STRING_ELT(names, output, STRING_ELT(hidden_names, index));
+    ++output;
+  }
+  if (output != kept) {
+    UNPROTECT(2);
+    Rf_error("Internal error: incomplete ParamSetShadow hidden values");
+  }
+  Rf_setAttrib(result, R_NamesSymbol, names);
+  UNPROTECT(2);
+  return result;
+}
+
 static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     SEXP signature,
+    const paradox_domain_params_t *source_params,
     const paradox_domain_values_t *source_values,
     const paradox_domain_dependencies_t *source_dependencies,
     const paradox_domain_trafos_t *source_trafos,
@@ -982,22 +1135,33 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     visible_ids,
     work_since_interrupt
   ));
+  SEXP constraint_hidden_values = PROTECT(
+    source_constraint == R_NilValue
+      ? R_NilValue
+      : active_hidden_values(
+          source_params,
+          source_values,
+          source_dependencies,
+          hidden_values,
+          work_since_interrupt
+        )
+  );
   SEXP constraint = R_NilValue;
   if (source_constraint != R_NilValue) {
     constraint = evaluate_factory2(
       VECTOR_ELT(factories, SHADOW_FACTORY_CONSTRAINT),
       source_constraint,
-      hidden_values
+      constraint_hidden_values
     );
     if (!Rf_isFunction(constraint)) {
-      UNPROTECT(3);
+      UNPROTECT(4);
       Rf_error("ParamSetShadow constraint factory returned no function");
     }
   }
   PROTECT(constraint);
   if (source_extra_trafo != R_NilValue &&
       !Rf_isFunction(source_extra_trafo)) {
-    UNPROTECT(4);
+    UNPROTECT(5);
     Rf_error("ParamSetShadow origin extra_trafo is not a function");
   }
   PROTECT(source_extra_trafo);
@@ -1019,11 +1183,12 @@ static SEXP assemble_shadow_core(SEXP template_state, SEXP factories,
     fields
   ));
   Rf_setAttrib(result, shadow_metadata_symbol(), signature);
-  UNPROTECT(6);
+  UNPROTECT(7);
   return result;
 }
 
 static SEXP build_from_validated_base(SEXP template_state, SEXP state,
+    const paradox_domain_params_t *params,
     const paradox_domain_dependencies_t *dependencies,
     const paradox_domain_trafos_t *trafos,
     const paradox_domain_values_t *values,
@@ -1032,6 +1197,7 @@ static SEXP build_from_validated_base(SEXP template_state, SEXP state,
     template_state,
     factories,
     signature,
+    params,
     values,
     dependencies,
     trafos,
@@ -1056,10 +1222,10 @@ static SEXP build_from_base(SEXP template_state, SEXP origin_core,
     &values,
     work_since_interrupt
   );
-  (void) params;
   return build_from_validated_base(
     template_state,
     state,
+    &params,
     &dependencies,
     &trafos,
     &values,
@@ -1157,6 +1323,7 @@ static SEXP build_from_collection(SEXP template_state, SEXP origin,
     template_state,
     factories,
     signature,
+    &root->params,
     &values,
     &dependencies,
     &trafos,
@@ -1241,6 +1408,7 @@ SEXP paradox_param_set_shadow_construct(SEXP origin, SEXP shadowed) {
     result = PROTECT(build_from_validated_base(
       template_state,
       state,
+      &params,
       &dependencies,
       &trafos,
       &values,

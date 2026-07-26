@@ -232,6 +232,7 @@ attribute_hidden SEXP paradox_param_set_check_builtin_with_receipts(
   SEXP sanitize,
   SEXP presence,
   SEXP allow_token,
+  int enforce_dependencies,
   SEXP *receipts_result
 );
 attribute_hidden void paradox_param_set_verify_token_receipts(SEXP receipts);

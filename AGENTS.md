@@ -93,7 +93,8 @@ builds and checks bbotk, miesmuschel, mlr3mbo, celecx, and mlr3fda; all five
 finish with `Status: OK`. All mandatory documentation rows pass; advisory
 `mlr3book` full-render and legacy `mlr3gallery` dependency rows are excluded and
 do not weaken the focused Paradox documentation conclusion. All local release
-gates are complete.
+gates were complete for that historical payload; none is a completion claim
+for the reopened dormant-value source.
 
 The direct-child portability companion is
 `refs/paradox-release/portability-harness-5305ead`, commit
@@ -102,8 +103,10 @@ The direct-child portability companion is
 `.github/workflows/r-cmd-check.yml` (SHA-256
 `14c4c8d1cc8d8e07aea1829d1203f6217464ae9c6b94efc1050bf192638196e3`)
 and is package-facing-source identical to the candidate. The only remaining
-release gates are retained hosted Windows x86-64/macOS ARM64 results and the
-user-performed downstream branch/PR publication handoff; agents must not
+release gates for that historical candidate were retained hosted Windows
+x86-64/macOS ARM64 results and the user-performed downstream branch/PR
+publication handoff. The replacement dormant-value candidate instead requires
+the applicable local matrix again after source convergence. Agents must not
 perform either remote write.
 
 The structural boundary below is an intentional Paradox-2 break made in this
@@ -112,6 +115,14 @@ ALTREP/S4 shells or parallel R/native admission would preserve no known
 maintained use while retaining duplicate authority, dispatch, and
 multi-observation hazards. Ordinary documented containers and stable ALTREP
 semantic vectors remain supported at their stated positions.
+
+The pre-release dependency contract is also intentionally settled here:
+Domain-valid values may be stored while dependency-inactive, defaults
+participate in recursive activity for absent parents, and constraints observe
+only active entries. This is not a policy toggle or a deferred compatibility
+shim. Explicit check-family calls remain strict point validators and are
+store-blind, so a legal raw dormant store is not itself promised to pass
+`$check()`.
 
 ## Non-negotiable design decisions
 
@@ -153,6 +164,14 @@ semantic vectors remain supported at their stated positions.
   allocation- and callback-free wave. A callback mutation of any planned
   target wins and makes the outer assignment error before any target is
   changed. Native readers retain the capsule chosen at operation entry.
+  Checked assignment validates every supplied entry's Domain, special-value,
+  custom-check, sanitization, TuneToken, and structural contract, but does not
+  require its dependencies to be satisfied. A valid dependency-inactive entry
+  is stored as a dormant value in raw `$values`; the default
+  `$get_values(remove_dependencies = TRUE)` view omits it and makes it visible
+  again when a later state makes it active. Assignment computes activity only
+  when a constraint exists, solely to pass that callback the active subset.
+  Unchecked assignment keeps its existing structural-only boundary.
 - `BASE` owns a schema and mutable values. Each `COLLECTION` capsule generation
   owns ordered child references and an immutable translation snapshot; `$add()`
   is one native transaction that validates both complete graphs, rejects an
@@ -175,9 +194,13 @@ semantic vectors remain supported at their stated positions.
   `.params` plus current origin IDs define the visible/hidden partition.
 - A BASE-origin Shadow constraint adapter has one exact two-field
   `{callback, hidden_values}` plan and a thin native evaluator. The evaluator
-  validates and snapshots both inputs, merges hidden values before visible
-  values without `c()`/S3 dispatch, preserves opaque leaf identity, executes
-  the callback once, and requires one non-missing logical result.
+  validates and snapshots both inputs, merges the already activity-filtered
+  hidden values before the already filtered visible values without `c()`/S3
+  dispatch, preserves opaque leaf identity, executes the callback once, and
+  requires one non-missing logical result. The authoritative Shadow graph
+  operation computes activity before constructing/invoking this exact plan;
+  the two-field adapter has no schema and must not grow a duplicate activity
+  evaluator.
 - Third-party inheritance from the ParamSet family is additive only. Core
   ParamSet method/active-binding replacement, generated-wrapper mutation,
   reparenting, delayed bindings, and capsule/private-table writes are
@@ -261,6 +284,24 @@ semantic vectors remain supported at their stated positions.
   partial edit distance, retain the 20% threshold, stable top-three order, and
   cheap collection affixes. Exact ID hits must not allocate, calculate a
   distance, or construct suggestion text.
+  Dependency activity likewise has one native list-basis kernel shared by the
+  check family, `check_dependencies()`, stored-value filtering, and every
+  authoritative constraint check/assignment site. Activity is transitive and
+  conjunctive. After cycle validation, a TuneToken child skips its incoming
+  edges. Otherwise an inactive parent never satisfies its child, even if it
+  carries a value or default. For an active parent, an explicit basis value
+  wins; a TuneToken parent skips that edge; otherwise an admitted recorded
+  default is used, while `NoDefault` leaves the edge unsatisfied. Explicit
+  point checks are store-blind:
+  they use only the candidate point plus defaults, never stored `$values`.
+  Stored-value reads use the raw store plus defaults. The complete-row
+  Design/sampler dependency masker remains its specialized vector kernel
+  because every parent value is already present; it must stay semantically
+  equivalent where the two domains overlap and must not become a second
+  list/point activity implementation. BASE dependency mutation admission is
+  unchanged and can currently admit a cycle; every activity consumer tracks
+  the active dependency path and raises a deterministic cycle error rather than
+  recursing forever or reading partial state.
   There are exactly two narrow cold R semantic-orchestration families. The
   first is internal tuning.
   `$aggr_internal_tuned_values()`, `$disable_internal_tuning()`, and
@@ -301,10 +342,17 @@ semantic vectors remain supported at their stated positions.
   carrier does not. Callback selection, translation, merging, result admission,
   and constraint scalar validation are not reimplemented in R and never
   dispatch through an overridden child ParamSet method. Collection
-  extra-transformation merging keeps retained/untransformed inputs in input
-  order, then appends all changed child outputs in callback-plan order (and in
-  each callback's result order). Child-owned inputs omitted by their callback
-  disappear, and a changed name that collides with retained input is an error.
+  check/test/assignment sites compute activity over the complete translated
+  collection configuration, including collection-level cross-child
+  dependencies, and pass each child callback only its active child-scope
+  entries with prefixes removed. Detached BASE checking likewise filters
+  before it invokes a detached carrier. Activity is derived at the
+  authoritative graph site and is never another carrier field or a duplicate
+  evaluator inside the schema-free carrier. Collection extra-transformation
+  merging keeps retained/untransformed inputs in input order, then appends all
+  changed child outputs in callback-plan order (and in each callback's result
+  order). Child-owned inputs omitted by their callback disappear, and a changed
+  name that collides with retained input is an error.
   Every transformation result and non-table input outer list is ordinary
   non-ALTREP and non-S4. A documented data-frame input may use the exact
   public-table ALTREP boundary above. Semantic atomic leaves and admitted
@@ -323,6 +371,12 @@ semantic vectors remain supported at their stated positions.
   S4/list-like objects and semantic attributes other than `names` and `class`
   remain unsupported. This preserves ordinary configuration objects such as
   bbotk's `local_search_control` without reopening S3 extension seams.
+  `$values` is the raw store and therefore includes dormant entries.
+  `$get_values(remove_dependencies = TRUE)` (the default) applies the shared
+  activity kernel, and `check_required` is evaluated against that filtered
+  view. Dependency filtering occurs at the node whose dependency rows own the
+  rule: a collection-level cross-child edge filters the collection read, not a
+  direct read from either child.
 - Explicit `$search_space(values=)` input has the same outer-container
   representation boundary: an ordinary named list or an S3-classed named list
   carrying only `names` and `class`. Native code discards the class and selects
@@ -389,15 +443,18 @@ semantic vectors remain supported at their stated positions.
   names attribute. It reuses the native `$check()` graph snapshot, point
   initializer, and dependency kernel; validates unknown IDs even when there are
   no dependency rows; skips a dependency whose child or parent value is a
-  TuneToken; and returns `TRUE` or the first diagnostic. Do not restore the R
-  data.table/pmap traversal or newline-collapsed multi-error result.
+  TuneToken; consults recorded defaults only for parents absent from that
+  candidate point; and returns `TRUE` or the first diagnostic. It is
+  store-blind and does not consult the object's stored `$values`. Do not restore
+  the R data.table/pmap traversal or newline-collapsed multi-error result.
 - `ParamSet$test_constraint()` and `$test_constraint_dt()` reuse the native
   check graph, point admission, and constraint kernel; there is no scalar or
-  per-row R constraint engine. With `assert_value = TRUE`, the table method
-  validates every row before running any constraint callback, then calls the
-  snapshotted callback set once per row in order. Reentrant callback mutation
-  is visible only to the next public operation. The table boundary continues
-  to require a data.table.
+  per-row R constraint engine. Each callback receives only the default-aware
+  active subset of its candidate point. With `assert_value = TRUE`, the table
+  method validates every row before running any constraint callback, then calls
+  the snapshotted callback set once per row in order. Reentrant callback
+  mutation is visible only to the next public operation. The table boundary
+  continues to require a data.table.
 - Public tag get/set, dependency snapshot/get/set/add, and BASE constraint/
   extra-transformation callback replacement enter registered native mutators.
   The public `$has_deps` flag is a separate registered scalar reader: BASE and
@@ -1112,6 +1169,15 @@ The package suite must directly cover, before downstream packages are used:
   base `identical()` without dispatch;
 - values, dependencies, transformations, constraints, TuneTokens, special
   values, presence modes, sanitization, required tags, named NULL, and errors;
+  checked assignment stores Domain-valid dependency-inactive entries as dormant
+  values, continues to validate dormant custom/type/bounds/token inputs, and
+  preserves graph-wide atomicity. Raw `$values` exposes dormant entries while
+  default `$get_values()` filters them and later parent changes reactivate them.
+  Tests cover transitive chains, diamonds/conjunctions, explicit-value
+  precedence over defaults, `NoDefault`, TuneToken edge skipping, collection
+  cross-child state, Shadow visible/hidden state, serialization/clone/equality,
+  and the intentional non-invariant that `$check(ps$values)` may fail while the
+  store is legal;
   TuneToken coverage includes all five exact class/content shapes, scalar-name
   normalization, serialization, explicit `$search_space(values=)`, and
   fail-closed S4/subclass/extra-field/attribute/deep-or-cyclic-metadata cases;
@@ -1136,15 +1202,25 @@ The package suite must directly cover, before downstream packages are used:
 - callback order, reentry, mutation snapshots, warning/error propagation, and
   no replay;
 - strict native dependency-only checking across the graph, including
-  ordinary-list admission, unknown IDs, TuneToken edges, and first diagnostics;
+  ordinary-list admission, unknown IDs, TuneToken edges, first diagnostics,
+  default-aware recursive activity, store-blind point semantics, and safe cycle
+  errors for cycles admitted by the unchanged BASE mutation boundary. Check
+  and presence modes remain point-strict: every supplied entry must be active,
+  and a satisfying default can make an absent required child newly required;
 - scalar/table constraint-only checking uses the native graph/point/constraint
   kernels, validates all table rows before callbacks, calls once per row from
-  one callback snapshot, and isolates reentrant mutation to later operations;
+  one callback snapshot, passes only the active subset of each point, and
+  isolates reentrant mutation to later operations;
 - live collection callback bindings and detached subset/flatten/Shadow-origin
   plans select capsule callbacks, enter the shared native evaluator family, and
-  preserve the specified retained-then-changed order and omission behavior;
+  preserve the specified retained-then-changed order and omission behavior.
+  Authoritative collection graph sites filter once in the translated
+  collection namespace and give each child only active unprefixed child
+  entries before invoking schema-free carriers;
 - BASE-Shadow constraint plans merge hidden/visible values natively without S3
-  dispatch, preserve leaf identity, call once, and validate the scalar result;
+  dispatch after the authoritative Shadow graph site filters the complete
+  origin configuration, preserve leaf identity, call once, and validate the
+  scalar result;
 - materialize-once stable/base ALTREP under allocation/finalizers/reentry, plus
   rejection or admission of hostile state-changing custom ALTREP without
   replay or Paradox-caused crash/memory corruption; interpreted ParamSet
@@ -1187,10 +1263,13 @@ Remote writes by an agentic process are forbidden. Agents may edit, test, and
 commit in local downstream worktrees, but the user must push branches and open
 or submit PRs manually.
 
-The bbotk and miesmuschel heads below are the committed post-migration handoff;
-the remaining heads retain their previously reviewed bridge changes. Their
-active local profile validation is complete; only the user-performed remote
-publication handoff remains:
+The bbotk and miesmuschel heads below were the committed post-migration handoff
+before dormant values reopened Paradox source; the remaining heads retain their
+previously reviewed bridge changes. They are starting points, not final
+replacement-candidate evidence. In particular, miesmuschel needs the focused
+dual-version dormant-assignment expectation recorded in
+`compat/downstream-pr-handoff.md`, followed by affected-row validation. Only
+after that refresh does the user-performed remote publication handoff remain:
 
 - bbotk `codex/public-paramsetcollection-sets` at `29f1806`: public collection
   state and rooted detached native search-space snapshots remain, with the
@@ -1204,7 +1283,10 @@ publication handoff remains:
   `params_unid` and `set_id`; deep comparisons remain independent of data.table
   secondary-index caches. Its Shadow dependency diagnostic gate remains
   because it covers the intentionally different official Shadow graph
-  boundary, not ordinary built-in value admission. The unavoidable load-time
+  boundary, not ordinary built-in value admission. Separately, the legacy
+  Paradox-1 Shadow's explicit pre-write assert remains strict, while the
+  official Paradox-2 Shadow must test dormant storage and filtered
+  reactivation. The unavoidable load-time
   namespace rebinding is restricted to the exported generator and eleven
   historical package-owned leanification targets; relocking is registered
   before the first unlock, and this bridge exception is not a public API;
@@ -1222,7 +1304,7 @@ publication handoff remains:
   `codex/paradox2-diagnostics` at `ae8e1d1` are wholly redundant. Close those
   PRs without replacement; there is no cleanup commit to publish.
 
-The final exact Paradox-2 source-package check is
+The historical exact Paradox-2 source-package check was
 `.local/compat/runs/migration-release-final-p2-8797f11-fc92edd-bench-r1/repository-checks-release-refresh-20260720-paradox2`.
 It has five rows, zero failures, and five final `Status: OK` results. Its
 completion is independently verified; its completion TSV, results, manifest,
@@ -1231,7 +1313,8 @@ and seal-file SHA-256 values are
 `f443e9ace27450057e4c8fcb6f9d93da85d595028abfff133272cc32f11a364c`,
 `aa6d0ad380f0453db8c87888bdd5b7d18d54bc2698d21b9a4e67ce1040bcd731`,
 and `7de4719e3fa0016fb05d804aa240dea34a0e5de76763c7f1d5d885e2e581acf1`.
-The active Paradox-1 five-package conclusion is an explicit composition. The
+The pre-dormant Paradox-1 five-package conclusion is an explicit composition.
+The
 `migration-release-final-p1-cdcc8e6-221c95e-r2` stage passed the exact final
 bbotk, mlr3mbo, and celecx heads plus mlr3fda base `8f5a3df`; final mlr3fda
 `c1cdad5` differs from that base only in four Paradox-2 snapshot headers, so it
@@ -1240,9 +1323,11 @@ miesmuschel row passed in
 `migration-release-final-p1-cdcc8e6-2771f5d-r3`. The r2 donor stage as a whole
 is `completed_with_failures` because it exercised the superseded miesmuschel
 head; never describe that whole stage or the mlr3fda final head as an exact
-five-head Paradox-1 check. The broad active Paradox-2 corpus used two workers
-over 14 waves: 20 of 28 exact repositories pass, and the remaining eight are
-reviewed non-Paradox or environmental exclusions.
+five-head Paradox-1 check. The historical broad Paradox-2 corpus used two
+workers over 14 waves: 20 of 28 exact repositories passed, and the remaining
+eight were reviewed non-Paradox or environmental exclusions. The replacement
+source must rerun the applicable downstream waves rather than inherit that
+conclusion.
 
 Before the legacy object-graph migration reopened package and downstream
 source, the six affected consumer selections passed the same 2,022

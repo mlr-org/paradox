@@ -223,7 +223,9 @@ as.data.table(ps_all)
 Although a `ParamSet` fundamentally represents a value space, it also has a field `$values` that can contain a point within that space.
 This is useful because many things that define a parameter space need similar operations (like parameter checking) that can be simplified.
 The `$values` field contains a named list that is checked against parameter
-constraints by default. Setting `$assert_values = FALSE` selects unchecked
+Domains and the ParamSet constraint by default. A value whose dependencies are
+currently unsatisfied is nevertheless stored; it is *dormant* rather than
+invalid, as described below. Setting `$assert_values = FALSE` selects unchecked
 value assignment; structural validation still applies.
 When trying to set parameter values, e.g. for `mlr3` `Learner`s, it is the `$values` field of its `$param_set` that needs to be used.
 
@@ -233,7 +235,8 @@ ps1$values$y = 2.5
 print(ps1$values)
 ```
 
-The parameter constraints are automatically checked:
+Type, range, special-value, and custom constraints are automatically checked,
+including for dormant values:
 
 ```{r, error = TRUE}
 ps1$values$x = 1.5
@@ -250,9 +253,65 @@ The `Condition` object represents the check to be performed on the "dependee".
 Currently it can be created using `CondEqual()` and `CondAnyOf()`.
 Multiple dependencies can be added, and parameters that depend on others can again be depended on, as long as no cyclic dependencies are introduced.
 
-The consequence of dependencies are twofold:
-For one, the `$check()`, `$test()` and `$assert()` tests will not accept the presence of a parameter if its dependency is not met, when the `check_strict` argument is given as `TRUE`.
-Furthermore, when sampling or creating grid designs from a `ParamSet`, the dependencies will be respected.
+Dependencies affect explicit point checking, filtered value reads, constraints,
+and designs. With `check_strict = TRUE` (the default), `$check()`, `$test()`,
+and `$assert()` do not accept a supplied parameter whose dependency is not met.
+These functions validate the supplied point only: they do not fill it from the
+ParamSet's stored `$values`.
+
+Assignment is intentionally different. A valid value may be stored while its
+dependencies are unsatisfied. Raw `$values` retains this dormant value;
+`$get_values()` filters it by default, and a later parent change makes it
+visible again:
+
+```{r}
+branch = ps(
+  enabled = p_lgl(init = FALSE),
+  detail = p_int(0, 10, depends = enabled == TRUE)
+)
+branch$values$detail = 4
+branch$values                         # contains dormant 'detail'
+branch$get_values()                   # contains only 'enabled'
+branch$values$enabled = TRUE
+branch$get_values()                   # 'detail' is active again
+```
+
+Consequently, `$check(branch$values)` is not guaranteed to succeed while a raw
+store contains dormant entries. Use `$check(branch$get_values())` to validate
+the currently active configuration. `get_values(remove_dependencies = FALSE)`
+is the explicit raw-store view.
+
+When a dependency parent is absent from the point or store being evaluated, its
+recorded `default` participates in the condition. An explicit value takes
+precedence; a parent without a default does not satisfy the dependency. This
+rule is recursive: a default belonging to an inactive parent cannot activate a
+descendant.
+
+```{r}
+with_default = ps(
+  enabled = p_lgl(default = TRUE),
+  detail = p_int(0, 10, depends = enabled == TRUE)
+)
+with_default$check(list(detail = 4))  # parent default makes 'detail' active
+```
+
+The same default-aware activity rule controls `presence = "all"` and
+`"required"` and `get_values(check_required = TRUE)`. It also determines the
+input to `$constraint`: a constraint receives only entries that are active in
+the configuration being validated; defaults select activity but are not added
+to the callback list. Collection constraints evaluate activity in the complete
+translated collection namespace and then give child callbacks their active
+unprefixed slice. A collection-level dependency filters collection-level
+reads; directly reading a child applies only dependencies owned by that child.
+
+Bulk dependency-table replacement can represent a cycle even though normal
+authoring should avoid one. Any check, filtered read, or constraint evaluation
+that encounters such a cycle reports it as an error instead of attempting to
+derive a partial configuration.
+
+Finally, sampling and grid designs respect dependencies as before. Those
+operations work on complete generated rows, so the new absent-parent default
+rule does not change their results.
 
 The easiest way to set dependencies is to give the `depends` argument to the `Domain` constructor.
 

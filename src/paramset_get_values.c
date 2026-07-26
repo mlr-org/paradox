@@ -6,6 +6,7 @@
 
 #include "builtin_condition.h"
 #include "core_state.h"
+#include "paramset_activity.h"
 #include "paramset_collection_readers.h"
 #include "paramset_domain_common.h"
 #include "r_utils.h"
@@ -388,52 +389,39 @@ static void load_snapshot(SEXP private_environment, SEXP self, SEXP roots,
   }
 }
 
-static int condition_matches(SEXP value, SEXP rhs,
+static void evaluate_activity(const get_values_snapshot_t *snapshot,
+    paradox_activity_result_t *result,
     R_xlen_t *work_since_interrupt) {
-  if (!paradox_builtin_condition_scalar_supported(value, rhs)) {
-    return FALSE;
-  }
-  if (value == R_NilValue || Rf_inherits(value, "TuneToken")) {
-    return FALSE;
-  }
-  return paradox_builtin_condition_element_matches(
-    value,
-    0,
-    rhs,
-    work_since_interrupt
+  result->active = paradox_temporary_alloc(
+    snapshot->params_data.row_count == 0
+      ? 1
+      : snapshot->params_data.row_count,
+    sizeof(*result->active)
   );
+  result->reasons = NULL;
+  const paradox_activity_plan_t plan = {
+    snapshot->params_data.row_count,
+    VECTOR_ELT(snapshot->params, PARADOX_DOMAIN_DEFAULT),
+    snapshot->values_data.values,
+    snapshot->value_by_parameter,
+    snapshot->dependencies_data.row_count,
+    snapshot->dependency_id_parameter,
+    snapshot->dependency_on_parameter,
+    (SEXP const *) snapshot->dependency_rhs
+  };
+  paradox_activity_evaluate(&plan, result, work_since_interrupt);
 }
 
 static void apply_dependencies(const get_values_snapshot_t *snapshot,
-    int *kept, R_xlen_t *work_since_interrupt) {
-  const paradox_domain_dependencies_t *dependencies =
-    &snapshot->dependencies_data;
-  for (R_xlen_t row = 0; row < dependencies->row_count; ++row) {
+    const unsigned char *active, int *kept,
+    R_xlen_t *work_since_interrupt) {
+  for (R_xlen_t parameter = 0;
+      parameter < snapshot->params_data.row_count;
+      ++parameter) {
     paradox_domain_account_work(work_since_interrupt);
-    const R_xlen_t dependent_parameter =
-      snapshot->dependency_id_parameter[row];
-    const R_xlen_t dependent =
-      snapshot->value_by_parameter[dependent_parameter];
-    if (dependent == R_XLEN_T_MAX || !kept[dependent]) {
-      continue;
-    }
-    const R_xlen_t parent_parameter =
-      snapshot->dependency_on_parameter[row];
-    const R_xlen_t parent = parent_parameter == R_XLEN_T_MAX
-      ? R_XLEN_T_MAX
-      : snapshot->value_by_parameter[parent_parameter];
-    if (parent != R_XLEN_T_MAX && kept[parent] && Rf_inherits(
-        VECTOR_ELT(snapshot->values_data.values, parent),
-        "TuneToken"
-      )) {
-      continue;
-    }
-    if (parent == R_XLEN_T_MAX || !kept[parent] || !condition_matches(
-        VECTOR_ELT(snapshot->values_data.values, parent),
-        snapshot->dependency_rhs[row],
-        work_since_interrupt
-      )) {
-      kept[dependent] = FALSE;
+    const R_xlen_t value = snapshot->value_by_parameter[parameter];
+    if (value != R_XLEN_T_MAX && !active[parameter]) {
+      kept[value] = FALSE;
     }
   }
 }
@@ -462,6 +450,7 @@ static void apply_type_filter(const get_values_snapshot_t *snapshot,
 }
 
 static void check_required(const get_values_snapshot_t *snapshot,
+    const unsigned char *active,
     R_xlen_t *work_since_interrupt) {
   SEXP required_tag = PROTECT(Rf_mkString("required"));
   SEXP required = PROTECT(paradox_param_set_ids(
@@ -490,7 +479,8 @@ static void check_required(const get_values_snapshot_t *snapshot,
       UNPROTECT(2);
       Rf_error("Internal error: required ID is absent from ParamSet schema");
     }
-    if (snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
+    if ((active != NULL && !active[parameter]) ||
+        snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
       ++parameter;
       continue;
     }
@@ -536,7 +526,8 @@ static void check_required(const get_values_snapshot_t *snapshot,
       UNPROTECT(2);
       Rf_error("Internal error: required ID is absent from ParamSet schema");
     }
-    if (snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
+    if ((active != NULL && !active[parameter]) ||
+        snapshot->value_by_parameter[parameter] != R_XLEN_T_MAX) {
       ++parameter;
       continue;
     }
@@ -671,12 +662,32 @@ SEXP paradox_param_set_get_values(SEXP private_environment, SEXP self,
     paradox_domain_account_work(&work_since_interrupt);
     kept[index] = TRUE;
   }
-  if (should_remove_dependencies) {
-    apply_dependencies(&snapshot, kept, &work_since_interrupt);
+  paradox_activity_result_t activity = {NULL, NULL};
+  const int has_dependencies =
+    snapshot.dependencies_data.row_count != 0;
+  if (has_dependencies &&
+      (should_remove_dependencies || should_check_required)) {
+    evaluate_activity(
+      &snapshot,
+      &activity,
+      &work_since_interrupt
+    );
+  }
+  if (should_remove_dependencies && has_dependencies) {
+    apply_dependencies(
+      &snapshot,
+      activity.active,
+      kept,
+      &work_since_interrupt
+    );
   }
   apply_type_filter(&snapshot, type, kept, &work_since_interrupt);
   if (should_check_required) {
-    check_required(&snapshot, &work_since_interrupt);
+    check_required(
+      &snapshot,
+      activity.active,
+      &work_since_interrupt
+    );
   }
 
   SEXP selected_ids = PROTECT(paradox_param_set_ids(

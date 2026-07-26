@@ -1730,6 +1730,7 @@ static SEXP validate_transaction_values(SEXP private_environment, SEXP self,
     sanitize,
     presence,
     allow_token,
+    FALSE,
     receipts_result
   ));
   PROTECT(*receipts_result);
@@ -1916,7 +1917,7 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
 
   SEXP result = stable_values;
   SEXP token_receipts = R_NilValue;
-  if (validate && XLENGTH(stable_values) != 0) {
+  if (validate) {
     SEXP sanitized = PROTECT(validate_transaction_values(
       private_environment,
       self,
@@ -1930,7 +1931,7 @@ static SEXP run_value_transaction(SEXP private_environment, SEXP self,
   }
   build_replacement_cores(&transaction);
   commit_replacement_cores(&transaction, token_receipts);
-  if (!validate || XLENGTH(stable_values) == 0) {
+  if (!validate) {
     result = unvalidated_transaction_result(&transaction, stable_values);
   }
   UNPROTECT(2);

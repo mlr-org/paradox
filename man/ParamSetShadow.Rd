@@ -8,12 +8,20 @@
 retaining a live connection to that set. The IDs supplied in \code{shadowed} are
 hidden. Values are read from and written through to the origin, and current
 dependencies, constraints, and transformations are used for every
-operation.
+operation. \verb{$values} is the raw visible store and may include dormant
+entries. The default \verb{$get_values()} view evaluates the current visible
+dependency graph using recorded defaults and omits dormant visible entries.
 
 The visible parameter schema is captured when the shadow is constructed.
 Later changes to structural metadata in the origin therefore do not change
 the view. Dependencies may change, but a dependency crossing the
 visible/hidden boundary is always an error.
+
+Checked assignment validates every supplied visible value, including a
+dependency-inactive value, and preserves hidden origin values. If the live
+origin has a constraint, the complete merged configuration is filtered for
+activity before its visible and hidden slices are merged for that callback.
+The write-through operation remains one atomic graph transaction.
 }
 \examples{
 origin = ps(x = p_dbl(0, 1), flag = p_lgl())
@@ -49,7 +57,9 @@ the detached facade has ordinary non-ALTREP/non-S4 structural metadata.}
 Tags captured with the visible schema. Read-only for a shadow.}
 
     \item{\code{constraint}}{(\code{function} or \code{NULL})
-Live origin constraint adapted to the visible schema. Read-only.}
+Live origin constraint adapted to the visible schema. During
+package-owned check, test, and assignment operations it receives the
+merged active visible and hidden subsets. Read-only.}
 
     \item{\code{extra_trafo}}{(\code{function} or \code{NULL})
 The origin's live extra transformation. Assignment writes through.}

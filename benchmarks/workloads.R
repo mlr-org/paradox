@@ -44,9 +44,11 @@ benchmark_workload_names <- function() {
     "domains_all",
     "params",
     "get_values",
+    "get_values_deep_dependencies",
     "get_values_no_dependencies",
     "get_values_tags",
     "set_values_insert",
+    "set_values_deep_dependencies",
     "shadow_values_live",
     "shadow_constraint_live",
     "shadow_domains_live",
@@ -194,6 +196,66 @@ benchmark_make_inputs <- function(n_params, n_rows) {
   mutation_update[[4L]] <- FALSE
   mutation_expected <- scalar_values
   mutation_expected[names(mutation_update)] <- mutation_update
+
+  # Keep these dependency workloads fixed at 64 parameters so their graph
+  # depth does not silently change with the general --n-params benchmark
+  # control. The checked assignment fixture has every edge satisfied and is
+  # therefore semantically identical under Paradox 1 and 2.
+  dependency_ids <- sprintf("dependency_%02d", seq_len(64L))
+  dependency_domains <- lapply(seq_along(dependency_ids), function(index) {
+    p_lgl(
+      default = TRUE,
+      tags = if (index %% 2L == 0L) "payload" else "control"
+    )
+  })
+  names(dependency_domains) <- dependency_ids
+  make_dependency_space <- function() {
+    dependency_space <- ParamSet$new(dependency_domains)
+    for (index in seq.int(2L, length(dependency_ids))) {
+      dependency_space$add_dep(
+        dependency_ids[[index]],
+        dependency_ids[[index - 1L]],
+        CondEqual(TRUE)
+      )
+    }
+    dependency_space
+  }
+
+  dependency_assignment_space <- make_dependency_space()
+  dependency_assignment_values <- setNames(
+    as.list(rep(TRUE, length(dependency_ids))),
+    dependency_ids
+  )
+  dependency_assignment_space$set_values(
+    .values = dependency_assignment_values,
+    .insert = FALSE
+  )
+
+  # The read fixture deliberately represents the same logical configuration
+  # differently on the two sides of the paired benchmark. Paradox 2 stores
+  # only even-numbered payload values: missing odd parents use their TRUE
+  # defaults until dependency_32 = FALSE makes the remaining payload values
+  # dormant. Paradox 1 has no default-aware dependency read, so it receives the
+  # equivalent explicit odd parent values. Those control values are excluded
+  # by the timed tag filter, keeping the validated outward result identical.
+  dependency_read_space <- make_dependency_space()
+  dependency_read_values <- dependency_assignment_values
+  dependency_read_values[[32L]] <- FALSE
+  if (utils::packageVersion("paradox") >= "2.0.0") {
+    dependency_read_values <- dependency_read_values[
+      seq.int(2L, length(dependency_ids), by = 2L)
+    ]
+    dependency_read_space$values <- dependency_read_values
+  } else {
+    dependency_read_space$assert_values <- FALSE
+    dependency_read_space$values <- dependency_read_values
+    dependency_read_space$assert_values <- TRUE
+  }
+  dependency_read_expected_ids <- dependency_ids[seq.int(2L, 32L, by = 2L)]
+  dependency_read_expected <- setNames(
+    as.list(c(rep(TRUE, 15L), FALSE)),
+    dependency_read_expected_ids
+  )
 
   collection_groups <- split(
     seq_len(n_params),
@@ -421,6 +483,12 @@ benchmark_make_inputs <- function(n_params, n_rows) {
     mutation_space = mutation_space,
     mutation_update = mutation_update,
     mutation_expected = mutation_expected,
+    dependency_ids = dependency_ids,
+    dependency_assignment_space = dependency_assignment_space,
+    dependency_assignment_values = dependency_assignment_values,
+    dependency_read_space = dependency_read_space,
+    dependency_read_values = dependency_read_values,
+    dependency_read_expected = dependency_read_expected,
     shadow_hidden_id = shadow_hidden_id,
     shadow_visible_ids = shadow_visible_ids,
     shadow_constructor_origin = shadow_constructor_origin,
@@ -1024,6 +1092,27 @@ benchmark_make_workloads <- function(inputs) {
         paste(length(result), result[[2L]], result[[3L]], sep = "|")
       }
     ),
+    get_values_deep_dependencies = list(
+      expression = quote(inputs$dependency_read_space$get_values(
+        tags = "payload"
+      )),
+      validate = function(result) {
+        stopifnot(
+          is.list(result),
+          identical(result, inputs$dependency_read_expected),
+          identical(
+            inputs$dependency_read_space$values,
+            inputs$dependency_read_values
+          )
+        )
+        paste(
+          length(inputs$dependency_ids),
+          length(result),
+          result[[length(result)]],
+          sep = "|"
+        )
+      }
+    ),
     get_values_no_dependencies = list(
       expression = quote(inputs$params_space$get_values(
         check_required = FALSE,
@@ -1067,6 +1156,26 @@ benchmark_make_workloads <- function(inputs) {
           observed[[2L]],
           observed[[3L]],
           observed[[4L]],
+          sep = "|"
+        )
+      }
+    ),
+    set_values_deep_dependencies = list(
+      expression = quote(inputs$dependency_assignment_space$set_values(
+        .values = inputs$dependency_assignment_values,
+        .insert = FALSE
+      )),
+      validate = function(result) {
+        observed = inputs$dependency_assignment_space$values
+        stopifnot(
+          identical(result, inputs$dependency_assignment_space),
+          identical(observed, inputs$dependency_assignment_values),
+          identical(names(observed), inputs$dependency_ids)
+        )
+        paste(
+          length(observed),
+          observed[[1L]],
+          observed[[length(observed)]],
           sep = "|"
         )
       }

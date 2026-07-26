@@ -14,6 +14,14 @@ mlr3hyperband instead of conflating sampling with constructor cost.
 Separate plain and dependency-bearing workloads time `ParamSet$subspaces()`
 and `SamplerUnif$new()` themselves, preserving visibility into their one-time
 construction and ownership costs.
+Two fixed 64-parameter dependency-chain workloads cover the dormant-value
+contract directly. `set_values_deep_dependencies` performs a checked,
+complete, all-active replacement, while `get_values_deep_dependencies`
+filters a mixture of active and dormant payload values whose intervening
+parents are supplied by defaults in Paradox 2. The pinned Paradox 1 fixture
+materializes those control defaults explicitly and the timed tag filter omits
+them, so both sides validate the same outward result while Paradox 2 still
+pays its intended default-aware activity cost.
 Five `ParamSetShadow` workloads retain the budget-view shape used by
 miesmuschel: construction over a mixed 64-parameter origin, a live `$values`
 read, the `shadow_constraint_live` hidden-value merge, live `$domains`

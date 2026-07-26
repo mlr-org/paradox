@@ -16,7 +16,11 @@
  * Freeze the package-owned capsule graph and every Design column once,
  * validate the closed Condition objects, walk one stable topological order,
  * and return the outward mutation plan. Invalid current state errors; there is
- * no alternate execution engine. */
+ * no alternate execution engine. This vector engine consumes complete sampled
+ * rows, so every dependency parent already has a column value and recorded
+ * defaults can never participate. It is therefore deliberately separate from,
+ * but comparator-equivalent to, the list-basis activity kernel used by
+ * checks, stored-value reads, and constraints. */
 
 #define DESIGN_DEPENDENCY_MASK_LIMIT_BYTES \
   ((size_t) 128U * (size_t) 1024U * (size_t) 1024U)

@@ -1,6 +1,11 @@
 #' @field values (named `list()`)\cr
-#' Currently set / fixed parameter values.
-#' Settable. By default feasibility is checked when values are assigned.
+#' Raw currently set / fixed parameter values, including Domain-valid dormant
+#' entries whose dependencies are currently unsatisfied.
+#' Settable. By default Domain, TuneToken, custom-check, and constraint
+#' feasibility is checked when values are assigned, but dependency satisfaction
+#' is not an assignment precondition. Any constraint receives the active subset
+#' of the complete resulting configuration. Use `$get_values()` for the default
+#' dependency-filtered view.
 #' Set `$assert_values = FALSE` to use the documented unchecked assignment
 #' policy; structural admission still applies.
 #' Direct checked and unchecked assignment accepts only an ordinary non-ALTREP,

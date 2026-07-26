@@ -125,7 +125,13 @@ if (!is.null(case_audit_path)) local({
     "tune_token_closed_shape",
     "semantic_equality",
     "collection_detachment",
-    "paramset_shadow"
+    "paramset_shadow",
+    "dormant_assignment",
+    "default_aware_check",
+    "default_active_presence",
+    "default_active_required_values",
+    "filtered_constraint_input",
+    "dormant_store_point_check"
   )
   missing_contract_cases <- setdiff(required_contract_cases, names(cases))
   if (length(missing_contract_cases)) {
@@ -184,9 +190,15 @@ if (!is.null(case_audit_path)) local({
     "additive_paramset_subclass\tvariable\tprivate",
     "additive_paramset_subclass\tvariable\tself",
     "additive_paramset_subclass\tvariable\tsuper",
+    "default_active_presence\tvariable\tgate",
+    "default_active_required_values\tvariable\tgate",
+    "default_aware_check\tvariable\tgate",
     "diagnostics\tvariable\tabsent",
     "diagnostics\tvariable\ton",
     "domain_lazy_arguments\tvariable\tinvalid_dependency",
+    "dormant_assignment\tvariable\tgate",
+    "dormant_store_point_check\tvariable\tgate",
+    "filtered_constraint_input\tvariable\tgate",
     "validation\tfunction\t:=",
     "validation\tvariable\tcount"
   )
