@@ -513,19 +513,10 @@ static void reserve_graph(paradox_collection_graph_t *graph,
 }
 
 static void initialize_graph(paradox_collection_graph_t *graph) {
-  graph->capacity = 8;
-  graph->nodes = paradox_temporary_alloc(
-    graph->capacity,
-    sizeof(*graph->nodes)
-  );
-  graph->path = paradox_temporary_alloc(
-    graph->capacity,
-    sizeof(*graph->path)
-  );
-  graph->postorder = paradox_temporary_alloc(
-    graph->capacity,
-    sizeof(*graph->postorder)
-  );
+  graph->capacity = PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY;
+  graph->nodes = graph->inline_nodes;
+  graph->path = graph->inline_path;
+  graph->postorder = graph->inline_postorder;
   graph->count = 0;
   graph->postorder_count = 0;
 }
@@ -656,22 +647,22 @@ void paradox_collection_validate_single_node(SEXP private_environment,
 
 static int initialize_node(SEXP self, SEXP private_environment,
     SEXP operation_core, SEXP source_core, R_xlen_t parent,
-    R_xlen_t parent_child,
-    paradox_collection_graph_t *graph,
+    R_xlen_t parent_child, R_xlen_t previous,
+    const paradox_collection_graph_t *graph,
     paradox_collection_graph_node_t *node, SEXP *roots,
     PROTECT_INDEX roots_index, R_xlen_t *work_since_interrupt) {
-  for (R_xlen_t previous = 0; previous < graph->count; ++previous) {
-    paradox_domain_account_work(work_since_interrupt);
-    if (graph->nodes[previous].self == self) {
-      *node = graph->nodes[previous];
-      node->parent = parent;
-      node->parent_child = parent_child;
-      node->parent_param_start = 0;
-      node->next_child = 0;
-      node->consumed_params = 0;
-      node->subtree_dependencies = node->dependencies.row_count;
-      return TRUE;
+  if (previous != R_XLEN_T_MAX) {
+    if (previous >= graph->count || graph->nodes[previous].self != self) {
+      return FALSE;
     }
+    *node = graph->nodes[previous];
+    node->parent = parent;
+    node->parent_child = parent_child;
+    node->parent_param_start = 0;
+    node->next_child = 0;
+    node->consumed_params = 0;
+    node->subtree_dependencies = node->dependencies.row_count;
+    return TRUE;
   }
   return initialize_new_node(
     self,
@@ -799,13 +790,15 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
 
       reserve_graph(graph, graph->count + 1);
       const R_xlen_t child_node_index = graph->count;
-      int reused = FALSE;
+      R_xlen_t previous_node = R_XLEN_T_MAX;
       for (R_xlen_t previous = 0; previous < graph->count; ++previous) {
+        paradox_domain_account_work(work_since_interrupt);
         if (graph->nodes[previous].self == child_self) {
-          reused = TRUE;
+          previous_node = previous;
           break;
         }
       }
+      const int reused = previous_node != R_XLEN_T_MAX;
       SEXP child_private = R_UnboundValue;
       SEXP child_source_core = R_UnboundValue;
       SEXP child_operation_core = R_UnboundValue;
@@ -844,6 +837,7 @@ static void collection_graph_build(SEXP private_environment, SEXP self,
           child_source_core,
           node_index,
           child_position,
+          previous_node,
           graph,
           &graph->nodes[child_node_index],
           roots,

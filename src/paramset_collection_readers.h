@@ -43,6 +43,8 @@ typedef struct {
   int postfix;
 } paradox_collection_graph_node_t;
 
+#define PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY 16
+
 typedef struct {
   paradox_collection_graph_node_t *nodes;
   R_xlen_t *path;
@@ -50,6 +52,14 @@ typedef struct {
   R_xlen_t count;
   R_xlen_t postorder_count;
   R_xlen_t capacity;
+  /* The common graph fits entirely on the caller's C stack.  The graph
+   * builder switches the three public pointers to operation-local R_alloc
+   * storage together when this capacity is exceeded; consumers never need to
+   * distinguish the two representations. */
+  paradox_collection_graph_node_t
+    inline_nodes[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
+  R_xlen_t inline_path[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
+  R_xlen_t inline_postorder[PARADOX_COLLECTION_GRAPH_INLINE_CAPACITY];
 } paradox_collection_graph_t;
 
 /* The caller owns one PROTECT_WITH_INDEX slot for `roots`. Every selected
