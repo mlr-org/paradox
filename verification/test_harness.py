@@ -1275,6 +1275,16 @@ class ResourceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             proc_root, cgroup_root, _ = aggregate_v1_fixture(root)
+            # Production must continue to authenticate the fixed host
+            # systemctl path.  The deliberately small worker image need not
+            # contain systemd, so exercise the identical plain-file,
+            # root-owner, mode, and executable checks with its required
+            # coreutils executable instead of weakening or skipping them.
+            self.assertEqual(
+                harness.SYSTEMCTL,
+                pathlib.Path("/usr/bin/systemctl"),
+            )
+            trusted_executable_fixture = pathlib.Path("/usr/bin/env")
             unit = (
                 f"paradox-verify-aggregate-u{os.getuid()}-fixture.service"
             )
@@ -1298,9 +1308,16 @@ class ResourceTests(unittest.TestCase):
                 stdout="".join(f"{key}={value}\n" for key, value in properties.items()),
                 stderr="",
             )
-            with mock.patch.object(
-                harness, "run_capture", return_value=observed
-            ) as captured:
+            with (
+                mock.patch.object(
+                    harness,
+                    "SYSTEMCTL",
+                    trusted_executable_fixture,
+                ),
+                mock.patch.object(
+                    harness, "run_capture", return_value=observed
+                ) as captured,
+            ):
                 probe = harness.probe_aggregate_containment(
                     root,
                     {
@@ -1316,7 +1333,7 @@ class ResourceTests(unittest.TestCase):
             self.assertEqual(probe.identity["systemd"]["OOMPolicy"], "kill")
             self.assertEqual(
                 captured.call_args.args[0][0],
-                "/usr/bin/systemctl",
+                str(trusted_executable_fixture),
             )
 
     @unittest.skipUnless(sys.platform == "linux", "Linux cgroup fixture")
