@@ -8,14 +8,18 @@ scripts=(
   scripts/test-runtime-matrix
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-prefix-handoff
   scripts/environment/runtime-matrix-prefix-repair
   scripts/environment/runtime-matrix-registry
+  scripts/environment/runtime-matrix-trusted-inputs
+  scripts/environment/runtime-matrix-managed-path
   scripts/environment/runtime-matrix-library
   scripts/environment/runtime-matrix-git
   scripts/environment/mbo-config-fixtures
   scripts/environment/run-runtime-matrix-stage
   scripts/environment/run-runtime-matrix-wave
   scripts/environment/test-runtime-matrix
+  scripts/environment/test-runtime-matrix-managed-paths
   scripts/environment/test-runtime-matrix-installed
 )
 for script in "${scripts[@]}"; do
@@ -33,11 +37,32 @@ fi
 registry="$ROOT/scripts/environment/runtime-matrix-registry"
 "$registry" validate >/dev/null
 mapfile -t registered_runtimes < <("$registry" versions)
-[[ ${#registered_runtimes[@]} -eq 3 &&
-  "${registered_runtimes[*]}" == "3.6.3 4.3.3 4.5.2" ]] || {
+[[ ${#registered_runtimes[@]} -eq 4 &&
+  "${registered_runtimes[*]}" == "3.6.3 4.0.5 4.3.3 4.5.2" ]] || {
   echo "Runtime registry differs from the reviewed compatibility axes" >&2
   exit 1
 }
+trusted_input_helper="$ROOT/scripts/environment/runtime-matrix-trusted-inputs"
+mapfile -t trusted_inputs < <("$trusted_input_helper")
+[[ ${#trusted_inputs[@]} -eq \
+    "$(printf '%s\n' "${trusted_inputs[@]}" | LC_ALL=C sort -u | wc -l)" ]] ||
+  {
+    echo "Runtime trusted-input policy contains a duplicate" >&2
+    exit 1
+  }
+for required_trusted_input in \
+    scripts/environment/runtime-matrix-prefix-repair \
+    scripts/environment/runtime-matrix-prefix-handoff \
+    scripts/environment/runtime-matrix-managed-path \
+    environment/r-packages-linux-64.lock \
+    environment/runtime-r-3.6.3-prefix-repair.lock \
+    environment/runtime-r-4.0.5-linux-64.lock \
+    environment/runtime-r-4.0.5-packages.lock; do
+  [[ " ${trusted_inputs[*]} " == *" $required_trusted_input "* ]] || {
+    echo "Runtime trusted-input policy omits $required_trusted_input" >&2
+    exit 1
+  }
+done
 
 exclusions="$ROOT/environment/runtime-matrix-pre46-exclusions.tsv"
 whole_skips="$ROOT/environment/runtime-matrix-whole-file-skips.tsv"
@@ -97,7 +122,7 @@ done
 }
 awk -F '\t' '
   NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
-  NF != 4 || $1 !~ /^(3[.]6[.]3|4[.]3[.]3|4[.]5[.]2)$/ ||
+  NF != 4 || $1 !~ /^(3[.]6[.]3|4[.]0[.]5|4[.]3[.]3|4[.]5[.]2)$/ ||
     $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
     ($4 != "Reason: On CRAN" &&
       $4 != "Reason: R < 4.0 cannot safely inspect active-binding functions" &&
@@ -111,18 +136,27 @@ awk -F '\t' '
     list_altrep[$1]++
   }
   END {
-    if (count["3.6.3"] != count["4.3.3"] ||
+    if (count["3.6.3"] != count["4.0.5"] ||
+        count["4.0.5"] != count["4.3.3"] ||
         count["4.3.3"] != count["4.5.2"] ||
-        active["3.6.3"] != 19 || list_altrep["3.6.3"] != 14 ||
-        active["4.3.3"] || active["4.5.2"] ||
+        active["3.6.3"] != 19 ||
+        list_altrep["3.6.3"] != 14 || list_altrep["4.0.5"] != 14 ||
+        active["4.0.5"] || active["4.3.3"] || active["4.5.2"] ||
         list_altrep["4.3.3"] || list_altrep["4.5.2"]) exit 1
   }
 ' "$result_skips"
 diff -u \
   <(awk -F '\t' '$1 == "3.6.3" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+  <(awk -F '\t' '$1 == "4.0.5" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
+  >/dev/null || {
+  echo "Runtime result-skip baseline inventories differ between R 3.6 and R 4.0" >&2
+  exit 1
+}
+diff -u \
+  <(awk -F '\t' '$1 == "4.0.5" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
   <(awk -F '\t' '$1 == "4.3.3" && $4 == "Reason: On CRAN" {print $2 "\t" $3 "\t" $4}' "$result_skips") \
   >/dev/null || {
-  echo "Runtime result-skip inventories differ between R 3.6 and R 4.3" >&2
+  echo "Runtime result-skip baseline inventories differ between R 4.0 and R 4.3" >&2
   exit 1
 }
 diff -u \
@@ -184,6 +218,7 @@ for symbol_policy in \
     "$ROOT/scripts/verify-runtime-matrix-evidence"; do
   rg -Fq 'required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame' \
     "$symbol_policy"
+  rg -Fq 'R_ActiveBindingFunction)' "$symbol_policy"
   rg -Fq 'required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame' \
     "$symbol_policy"
   rg -Fq 'required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv' \
@@ -191,6 +226,8 @@ for symbol_policy in \
 done
 [[ "$("$registry" field 4.3.3 api_branch)" == \
     pre-4.5-documented-public-backports ]]
+[[ "$("$registry" field 4.0.5 api_branch)" == \
+    r-4.0-active-binding-pre-4.2-compatibility ]]
 rg -Fq 'branch=$("$REGISTRY" field "$version" api_branch)' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'public_api_compatibility_policy=documented-versioned-accessors' \
@@ -199,6 +236,41 @@ rg -Fq 'verify_package_cache' \
   "$ROOT/scripts/environment/runtime-matrix-library"
 rg -Fq -- '--silent --show-error' \
   "$ROOT/scripts/environment/runtime-matrix-library"
+for prefix_handoff_consumer in \
+    "$ROOT/scripts/test-runtime-matrix" \
+    "$ROOT/scripts/verify-runtime-matrix-evidence"; do
+  rg -Fq '"$PREFIX_HANDOFF" "$version" "$inputs/bootstrap-receipt"' \
+    "$prefix_handoff_consumer" || {
+    echo "Runtime coordination or evidence replay omits the staged prefix receipt" >&2
+    exit 1
+  }
+done
+source_library_key=$(sed -n '/^key=[$]($/,/^)/p' \
+  "$ROOT/scripts/environment/runtime-matrix-library")
+for selected_build_input in \
+    SOURCE_LIBRARY_BUILD_SCHEMA runtime_lock_sha256 prefix_manifest_sha256 \
+    dependency_lock_sha256; do
+  grep -Fq "$selected_build_input" <<<"$source_library_key" || {
+    echo "Source-library cache key omits $selected_build_input" >&2
+    exit 1
+  }
+done
+if grep -Eq \
+    'registry_sha256|registry_helper_sha256|library_manager_sha256|library_helper_sha256|tree_receipt_helper_sha256|runtime_receipt_sha256|runtime_seal_sha256' \
+    <<<"$source_library_key"; then
+  echo "Source-library cache key still depends on verification provenance" >&2
+  exit 1
+fi
+for receipt_provenance in \
+    registry_sha256 registry_helper_sha256 library_manager_sha256 \
+    library_helper_sha256 tree_receipt_helper_sha256 \
+    runtime_receipt_sha256 runtime_seal_sha256; do
+  rg -Fq "${receipt_provenance}" \
+    "$ROOT/scripts/environment/runtime-matrix-library" || {
+    echo "Source-library receipt omits $receipt_provenance" >&2
+    exit 1
+  }
+done
 if rg -Fq 'tools::sha256sum' \
     "$ROOT/scripts/environment/runtime-matrix-library.R"; then
   echo "R 3.6 dependency bootstrap depends on an unavailable tools API" >&2
@@ -206,11 +278,12 @@ if rg -Fq 'tools::sha256sum' \
 fi
 [[ $(rg -Fc '_R_CHECK_FORCE_SUGGESTS_=false' \
     "$ROOT/scripts/environment/run-runtime-matrix-stage") -eq 1 ]]
-rg -Fq 'R CMD check --no-manual --no-build-vignettes "$archive"' \
+rg -Fq 'R CMD check --no-tests --no-manual --no-build-vignettes "$archive"' \
   "$ROOT/scripts/environment/run-runtime-matrix-stage"
 rg -Fq 'verify_declared_minimum_check "$version" "$artifacts" "$metadata"' \
   "$ROOT/scripts/verify-runtime-matrix-evidence"
 rg -Fq -- '--refresh-receipts' "$ROOT/scripts/bootstrap-runtime-matrix"
+"$ROOT/scripts/environment/test-runtime-matrix-managed-paths" >/dev/null
 
 if command -v Rscript >/dev/null 2>&1; then
   Rscript --vanilla -e 'for (path in commandArgs(TRUE)) parse(path)' \
@@ -349,6 +422,10 @@ local({
     'test_that("fixture result skip", {',
     '  skip_on_cran()',
     '  expect_true(TRUE)',
+    '})',
+    'test_that("fixture list ALTREP skip", {',
+    '  skip_if_no_list_altrep()',
+    '  expect_true(TRUE)',
     '})'
   ), file.path(fixture, "tests", "testthat", "test-fixture.R"))
   manifest_path <- file.path(
@@ -357,35 +434,52 @@ local({
   exclusion_path <- file.path(
     fixture, "environment", "runtime-matrix-pre46-exclusions.tsv"
   )
-  valid <- data.frame(
-    runtime = c("3.6.3", "4.3.3", "4.5.2"),
-    file = rep("test-fixture.R", 3L),
-    test = rep("fixture result skip", 3L),
-    reason = rep("Reason: On CRAN", 3L),
-    stringsAsFactors = FALSE
+  valid <- rbind(
+    data.frame(
+      runtime = rep(c("3.6.3", "4.0.5", "4.3.3", "4.5.2"), each = 1L),
+      file = "test-fixture.R",
+      test = "fixture result skip",
+      reason = "Reason: On CRAN",
+      stringsAsFactors = FALSE
+    ),
+    data.frame(
+      runtime = c("3.6.3", "4.0.5"),
+      file = "test-fixture.R",
+      test = "fixture list ALTREP skip",
+      reason = "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+      stringsAsFactors = FALSE
+    )
   )
+  valid <- valid[do.call(order, c(
+    valid[c("runtime", "file", "test", "reason")], list(method = "radix")
+  )), , drop = FALSE]
+  row.names(valid) <- NULL
   write.table(
     data.frame(
-      ordinal = as.character(seq_len(3L)),
-      runtime = c("3.6.3", "4.3.3", "4.5.2"),
-      platform = rep("linux-64", 3L),
+      ordinal = as.character(seq_len(4L)),
+      runtime = c("3.6.3", "4.0.5", "4.3.3", "4.5.2"),
+      platform = rep("linux-64", 4L),
       runtime_lock = paste0(
-        "environment/runtime-r-", c("3.6.3", "4.3.3", "4.5.2"),
+        "environment/runtime-r-",
+        c("3.6.3", "4.0.5", "4.3.3", "4.5.2"),
         "-linux-64.lock"
       ),
       dependency_mode = c(
-        "source-library", "data-table-overlay", "prefix-library"
+        "source-library", "source-library", "data-table-overlay",
+        "prefix-library"
       ),
       dependency_lock = c(
-        "environment/runtime-r-3.6.3-packages.lock", "-", "-"
+        "environment/runtime-r-3.6.3-packages.lock",
+        "environment/runtime-r-4.0.5-packages.lock", "-", "-"
       ),
       api_branch = c(
         "r-3.6-public-compatibility",
+        "r-4.0-active-binding-pre-4.2-compatibility",
         "pre-4.5-documented-public-backports",
         "4.5-direct-public-accessors"
       ),
       prefix_repair = c(
-        "environment/runtime-r-3.6.3-prefix-repair.lock", "-", "-"
+        "environment/runtime-r-3.6.3-prefix-repair.lock", "-", "-", "-"
       ),
       stringsAsFactors = FALSE
     ),
@@ -437,9 +531,32 @@ local({
     grepl("exclusion manifest is malformed", conditionMessage(exclusion_error))
   )
   writeLines("context\treason", exclusion_path)
+  missing_baseline <- valid[-which(valid$reason == "Reason: On CRAN")[[1L]],
+    , drop = FALSE]
   expect_policy_error(
-    valid[-1L, , drop = FALSE],
+    missing_baseline,
     "differs from current skip_on_cran test titles"
+  )
+  wrong_version <- rbind(
+    valid,
+    transform(
+      valid[
+        valid$runtime == "4.0.5" &
+          valid$reason ==
+            "Reason: R < 4.3 cannot construct list ALTREP test fixtures",
+        ,
+        drop = FALSE
+      ],
+      runtime = "4.3.3"
+    )
+  )
+  wrong_version <- wrong_version[do.call(order, c(
+    wrong_version[c("runtime", "file", "test", "reason")],
+    list(method = "radix")
+  )), , drop = FALSE]
+  expect_policy_error(
+    wrong_version,
+    "unreviewed version-specific skip"
   )
   tampered <- valid
   tampered$reason[[1L]] <- "Reason: Tampered"
@@ -458,12 +575,17 @@ resource_line=$(rg -n '^resource_report=' \
   "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
 worker_line=$(rg -n '^"[$]WAVE_RUNNER" ' \
   "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
+mapfile -t trusted_input_lines < <(rg -n '^verify_live_trusted_inputs$' \
+  "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
 fixture_line=$(rg -n '^"[$]MBO_CONFIG_FIXTURE_HELPER" stage ' \
   "$ROOT/scripts/test-runtime-matrix" | cut -d: -f1)
 [[ "$fixture_line" =~ ^[0-9]+$ && "$preflight_line" =~ ^[0-9]+$ &&
   "$resource_line" =~ ^[0-9]+$ && "$worker_line" =~ ^[0-9]+$ &&
+  ${#trusted_input_lines[@]} -eq 2 &&
   "$fixture_line" -lt "$preflight_line" && "$preflight_line" -lt "$resource_line" &&
-  "$resource_line" -lt "$worker_line" ]] || {
+  "$resource_line" -lt "${trusted_input_lines[0]}" &&
+  "${trusted_input_lines[0]}" -lt "$worker_line" &&
+  "$worker_line" -lt "${trusted_input_lines[1]}" ]] || {
   echo "Runtime immutable-input and skip-policy preflights do not precede stage work" >&2
   exit 1
 }
@@ -472,6 +594,112 @@ mkdir -p "$ROOT/.local/tmp"
 fixture=$(mktemp -d "$ROOT/.local/tmp/runtime-matrix-receipt.XXXXXX")
 trap 'chmod -R u+w "$fixture" 2>/dev/null || true; rm -rf -- "$fixture"' EXIT
 mkdir -p "$fixture/tree/sub" "$fixture/receipts"
+managed_path_helper="$ROOT/scripts/environment/runtime-matrix-managed-path"
+mkdir -p "$fixture/managed-root/.local/checks/plain/runtime-matrix"
+"$managed_path_helper" "$fixture/managed-root" \
+  "$fixture/managed-root/.local/checks/plain/runtime-matrix" existing
+"$managed_path_helper" "$fixture/managed-root" \
+  "$fixture/managed-root/.local/checks/new/runtime-matrix" allow-missing
+ln -s "$fixture/managed-root/.local/checks/plain" \
+  "$fixture/managed-root/.local/checks/symbolic-run"
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/symbolic-run/runtime-matrix" \
+    allow-missing >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted a symbolic run-ID component" >&2
+  exit 1
+fi
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/new/runtime-matrix" \
+    existing >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted an absent evidence chain" >&2
+  exit 1
+fi
+if "$managed_path_helper" "$fixture/managed-root" \
+    "$fixture/managed-root/.local/checks/new/" allow-missing \
+    >/dev/null 2>&1; then
+  echo "Runtime managed-path verifier accepted a trailing separator" >&2
+  exit 1
+fi
+mkdir -p "$fixture/trusted-live"
+printf 'first\n' > "$fixture/trusted-live/first"
+printf 'second\n' > "$fixture/trusted-live/second"
+{
+  printf 'relative\tsha256\n'
+  printf 'first\t%s\n' "$(sha256sum "$fixture/trusted-live/first" | cut -d ' ' -f1)"
+  printf 'second\t%s\n' "$(sha256sum "$fixture/trusted-live/second" | cut -d ' ' -f1)"
+} > "$fixture/trusted-inputs.tsv"
+verify_trusted_fixture() {
+  local relative digest extra rows=0
+  while IFS=$'\t' read -r relative digest extra; do
+    if ((rows == 0)); then
+      [[ "$relative" == relative && "$digest" == sha256 && -z "${extra:-}" ]] ||
+        return 1
+    else
+      [[ -z "${extra:-}" && -f "$fixture/trusted-live/$relative" &&
+        ! -L "$fixture/trusted-live/$relative" &&
+        "$(sha256sum "$fixture/trusted-live/$relative" | cut -d ' ' -f1)" == \
+          "$digest" ]] || return 1
+    fi
+    rows=$((rows + 1))
+  done < "$fixture/trusted-inputs.tsv"
+  [[ "$rows" -eq 3 ]]
+}
+verify_trusted_fixture
+printf 'mutation\n' >> "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted an in-wave mutation" >&2
+  exit 1
+fi
+rm -f -- "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted a missing input" >&2
+  exit 1
+fi
+ln -s first "$fixture/trusted-live/second"
+if verify_trusted_fixture; then
+  echo "Runtime trusted-input verifier accepted a symbolic input" >&2
+  exit 1
+fi
+repair_helper="$ROOT/scripts/environment/runtime-matrix-prefix-repair"
+repair_root="$fixture/prefix-repair"
+repair_prefix="$repair_root/prefix"
+repair_cache="$repair_root/package-cache"
+repair_artifact="fixture-r-base"
+repair_placeholder=/fixture/build/prefix-placeholder
+mkdir -p "$repair_prefix/lib/R/etc" \
+  "$repair_cache/$repair_artifact/lib/R/etc"
+: > "$repair_prefix/lib/R/etc/Makeconf"
+: > "$repair_prefix/lib/R/etc/ldpaths"
+printf 'CC=%s/bin/cc\n' "$repair_placeholder" \
+  > "$repair_cache/$repair_artifact/lib/R/etc/Makeconf"
+printf 'R_LD_LIBRARY_PATH=%s/lib\n' "$repair_placeholder" \
+  > "$repair_cache/$repair_artifact/lib/R/etc/ldpaths"
+{
+  printf 'Artifact\tPath\tSourceSHA256\tPlaceholder\n'
+  for repair_relative in lib/R/etc/Makeconf lib/R/etc/ldpaths; do
+    printf '%s\t%s\t%s\t%s\n' "$repair_artifact" "$repair_relative" \
+      "$(sha256sum "$repair_cache/$repair_artifact/$repair_relative" |
+        cut -d ' ' -f 1)" "$repair_placeholder"
+  done
+} > "$repair_root/repair.lock"
+"$repair_helper" apply "$repair_prefix" "$repair_cache" \
+  "$repair_root/repair.lock" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" create \
+  "$repair_prefix" "$repair_root/before-verify.tsv" >/dev/null
+"$repair_helper" verify "$repair_prefix" "$repair_cache" \
+  "$repair_root/repair.lock" >/dev/null
+"$ROOT/scripts/environment/runtime-matrix-prefix-receipt" create \
+  "$repair_prefix" "$repair_root/after-verify.tsv" >/dev/null
+cmp -s -- "$repair_root/before-verify.tsv" "$repair_root/after-verify.tsv" || {
+  echo "Runtime prefix-repair verify mode modified the sealed prefix" >&2
+  exit 1
+}
+printf 'tamper\n' >> "$repair_prefix/lib/R/etc/Makeconf"
+if "$repair_helper" verify "$repair_prefix" "$repair_cache" \
+    "$repair_root/repair.lock" >/dev/null 2>&1; then
+  echo "Runtime prefix-repair verify accepted a tampered target" >&2
+  exit 1
+fi
 printf 'spherical\n' > "$fixture/tree/sub/value"
 ln -s sub/value "$fixture/tree/link"
 "$ROOT/scripts/environment/runtime-matrix-prefix-receipt" \

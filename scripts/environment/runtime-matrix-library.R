@@ -1,29 +1,113 @@
 args <- commandArgs(trailingOnly = TRUE)
-if (length(args) != 4L || !args[[1L]] %in% c("install", "inventory")) {
+if (length(args) != 5L || !args[[1L]] %in% c("install", "inventory")) {
   stop(
-    "usage: runtime-matrix-library.R install|inventory LOCK CACHE LIBRARY",
+    paste(
+      "usage: runtime-matrix-library.R install|inventory",
+      "RUNTIME LOCK CACHE LIBRARY"
+    ),
     call. = FALSE
   )
 }
 
 operation <- args[[1L]]
-lock_path <- args[[2L]]
-cache <- args[[3L]]
-library <- args[[4L]]
+runtime <- args[[2L]]
+lock_path <- args[[3L]]
+cache <- args[[4L]]
+library <- args[[5L]]
+if (!grepl("^[0-9]+[.][0-9]+[.][0-9]+$", runtime)) {
+  stop("runtime-library version has an invalid shape", call. = FALSE)
+}
+if (!identical(as.character(getRversion()), runtime)) {
+  stop(
+    "package closure must be inspected by exact R ", runtime,
+    call. = FALSE
+  )
+}
 
 is_symbolic <- function(path) {
   target <- Sys.readlink(path)
   length(target) == 1L && !is.na(target) && nzchar(target)
 }
 
-for (path in c(lock_path, cache, library)) {
-  if (!file.exists(path) || is_symbolic(path)) {
-    stop("runtime-library input is absent or symbolic: ", path, call. = FALSE)
+root_input <- Sys.getenv("PARADOX_ROOT", unset = "")
+if (!nzchar(root_input) || !dir.exists(root_input) || is_symbolic(root_input)) {
+  stop("PARADOX_ROOT must identify a plain repository root", call. = FALSE)
+}
+root <- normalizePath(root_input, winslash = "/", mustWork = TRUE)
+if (!identical(root_input, root)) {
+  stop("PARADOX_ROOT must be canonical: ", root_input, call. = FALSE)
+}
+
+assert_plain_directory_chain <- function(path, label) {
+  if (!nzchar(path) || (nchar(path) > 1L && endsWith(path, "/"))) {
+    stop(label, " has a non-canonical trailing separator: ", path,
+      call. = FALSE)
   }
+  if (!identical(path, root) && !startsWith(path, paste0(root, "/"))) {
+    stop(label, " escaped the repository: ", path, call. = FALSE)
+  }
+  relative <- if (identical(path, root)) {
+    ""
+  } else {
+    substring(path, nchar(root) + 2L)
+  }
+  components <- if (nzchar(relative)) {
+    strsplit(relative, "/", fixed = TRUE)[[1L]]
+  } else {
+    character()
+  }
+  if (any(!nzchar(components)) || any(components %in% c(".", ".."))) {
+    stop("invalid managed path component in ", label, ": ", path,
+      call. = FALSE)
+  }
+  current <- root
+  for (component in components) {
+    current <- file.path(current, component)
+    if (is_symbolic(current)) {
+      stop("refusing symbolic ", label, " component: ", current,
+        call. = FALSE)
+    }
+    info <- file.info(current)
+    if (is.na(info$isdir) || !isTRUE(info$isdir)) {
+      stop(label, " component is absent or not a directory: ", current,
+        call. = FALSE)
+    }
+    if (!identical(
+      normalizePath(current, winslash = "/", mustWork = TRUE),
+      current
+    )) {
+      stop(label, " component is not canonical: ", current, call. = FALSE)
+    }
+  }
+  invisible(path)
 }
-if (!dir.exists(cache) || !dir.exists(library)) {
-  stop("runtime-library cache and library must be directories", call. = FALSE)
+
+require_plain_file <- function(path, label) {
+  assert_plain_directory_chain(dirname(path), paste0(label, " parent"))
+  mode <- suppressWarnings(system2(
+    "/usr/bin/stat",
+    c("-c", "%f", "--", shQuote(path)),
+    stdout = TRUE,
+    stderr = FALSE
+  ))
+  regular <- length(mode) == 1L && is.null(attr(mode, "status")) &&
+    grepl("^[0-9a-fA-F]+$", mode) &&
+    bitwAnd(strtoi(mode, base = 16L), 61440L) == 32768L
+  if (!isTRUE(regular) || is_symbolic(path)) {
+    stop(label, " is absent, non-regular, or symbolic: ", path,
+      call. = FALSE)
+  }
+  if (!identical(
+    normalizePath(path, winslash = "/", mustWork = TRUE),
+    path
+  )) {
+    stop(label, " is not canonical: ", path, call. = FALSE)
+  }
+  invisible(path)
 }
+
+require_plain_file(lock_path, "runtime package lock")
+assert_plain_directory_chain(library, "runtime-library library")
 
 lock <- utils::read.delim(
   lock_path,
@@ -38,15 +122,64 @@ expected_columns <- c(
 )
 if (!identical(names(lock), expected_columns) || !nrow(lock) ||
     anyDuplicated(lock$Package)) {
-  stop("R 3.6 package lock is empty, duplicated, or malformed", call. = FALSE)
+  stop("runtime package lock is empty, duplicated, or malformed",
+    call. = FALSE)
 }
 
+installed_inventory <- function() {
+  assert_plain_directory_chain(library, "runtime-library library")
+  entries <- list.dirs(library, full.names = FALSE, recursive = FALSE)
+  entries <- entries[nzchar(entries)]
+  if (anyDuplicated(entries) || !setequal(entries, lock$Package)) {
+    stop("installed package names differ from the exact lock", call. = FALSE)
+  }
+  rows <- lapply(lock$Package, function(package) {
+    path <- file.path(library, package)
+    description_path <- file.path(path, "DESCRIPTION")
+    assert_plain_directory_chain(path, "installed package")
+    require_plain_file(description_path, "installed package DESCRIPTION")
+    description <- read.dcf(description_path)
+    if (nrow(description) != 1L ||
+        !all(c("Package", "Version", "Built") %in% colnames(description))) {
+      stop("installed package DESCRIPTION is incomplete: ", package,
+        call. = FALSE)
+    }
+    data.frame(
+      Package = unname(description[1L, "Package"]),
+      Version = unname(description[1L, "Version"]),
+      Built = unname(description[1L, "Built"]),
+      stringsAsFactors = FALSE
+    )
+  })
+  inventory <- do.call(rbind, rows)
+  row.names(inventory) <- NULL
+  if (!identical(inventory$Package, lock$Package) ||
+      !identical(inventory$Version, lock$Version) ||
+      any(!startsWith(inventory$Built, paste0("R ", runtime, ";")))) {
+    stop("installed package version or Built runtime differs from the lock",
+      call. = FALSE)
+  }
+  inventory
+}
+
+if (operation == "inventory") {
+  utils::write.table(
+    installed_inventory(),
+    file = stdout(),
+    sep = "\t",
+    quote = FALSE,
+    row.names = FALSE,
+    col.names = TRUE
+  )
+  quit(save = "no", status = 0L)
+}
+
+assert_plain_directory_chain(cache, "runtime-library cache")
 archive_paths <- file.path(
   cache, sprintf("%s_%s.tar.gz", lock$Package, lock$Version)
 )
-if (any(!file.exists(archive_paths)) || any(dir.exists(archive_paths)) ||
-    any(vapply(archive_paths, is_symbolic, logical(1L)))) {
-  stop("one or more authenticated package archives are absent", call. = FALSE)
+for (archive in archive_paths) {
+  require_plain_file(archive, "authenticated package archive")
 }
 
 read_archive_description <- function(package, archive) {
@@ -81,62 +214,9 @@ for (index in seq_len(nrow(lock))) {
   }
 }
 
-installed_inventory <- function() {
-  entries <- list.dirs(library, full.names = FALSE, recursive = FALSE)
-  entries <- entries[nzchar(entries)]
-  if (anyDuplicated(entries) || !setequal(entries, lock$Package)) {
-    stop("installed package names differ from the exact lock", call. = FALSE)
-  }
-  rows <- lapply(lock$Package, function(package) {
-    path <- file.path(library, package)
-    description_path <- file.path(path, "DESCRIPTION")
-    if (!dir.exists(path) || is_symbolic(path) ||
-        !file.exists(description_path) || is_symbolic(description_path)) {
-      stop("installed package is absent or symbolic: ", package, call. = FALSE)
-    }
-    description <- read.dcf(description_path)
-    if (nrow(description) != 1L ||
-        !all(c("Package", "Version", "Built") %in% colnames(description))) {
-      stop("installed package DESCRIPTION is incomplete: ", package,
-        call. = FALSE)
-    }
-    data.frame(
-      Package = unname(description[1L, "Package"]),
-      Version = unname(description[1L, "Version"]),
-      Built = unname(description[1L, "Built"]),
-      stringsAsFactors = FALSE
-    )
-  })
-  inventory <- do.call(rbind, rows)
-  row.names(inventory) <- NULL
-  if (!identical(inventory$Package, lock$Package) ||
-      !identical(inventory$Version, lock$Version) ||
-      any(!grepl("^R 3[.]6[.]3;", inventory$Built))) {
-    stop("installed package version or Built runtime differs from the lock",
-      call. = FALSE)
-  }
-  inventory
-}
-
-if (operation == "inventory") {
-  utils::write.table(
-    installed_inventory(),
-    file = stdout(),
-    sep = "\t",
-    quote = FALSE,
-    row.names = FALSE,
-    col.names = TRUE
-  )
-  quit(save = "no", status = 0L)
-}
-
 if (length(list.files(library, all.files = TRUE, no.. = TRUE)) != 0L) {
   stop("install destination is not empty", call. = FALSE)
 }
-if (!identical(as.character(getRversion()), "3.6.3")) {
-  stop("package closure must be installed by exact R 3.6.3", call. = FALSE)
-}
-
 dependency_names <- function(description) {
   fields <- intersect(c("Depends", "Imports", "LinkingTo"), names(description))
   if (!length(fields)) return(character())
@@ -173,6 +253,8 @@ while (length(remaining)) {
   }
   for (package in ready) {
     archive <- archive_paths[match(package, locked_names)]
+    assert_plain_directory_chain(library, "runtime-library library")
+    require_plain_file(archive, "authenticated package archive")
     utils::install.packages(
       archive,
       repos = NULL,

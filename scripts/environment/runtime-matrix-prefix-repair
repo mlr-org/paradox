@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# The conda-forge R 3.6.3 artifact predates the current runtime matrix. Its
-# post-link script unconditionally runs `R CMD javareconf`. On the supported
-# host/toolchain combination that old script leaves the two no_link,
-# prefix-relocated configuration files below empty even though micromamba
-# reports a successful transaction. This helper reconstructs only those files
+# Some old conda-forge R artifacts predate the current runtime matrix. Their
+# post-link script unconditionally runs `R CMD javareconf` and can leave
+# no_link, prefix-relocated configuration files empty even though micromamba
+# reports a successful transaction. This helper reconstructs only locked files
 # from the authenticated extracted artifact, applies conda's literal text
 # prefix relocation, and refuses every unlisted or unexpected input. Bootstrap
 # subsequently seals the repaired bytes in the complete prefix manifest.
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
 
 fail() {
   printf 'runtime-matrix-prefix-repair: %s\n' "$*" >&2
@@ -49,6 +50,10 @@ sha256_file() {
 
 temporary=
 trap 'rm -f -- "${temporary:-}"' EXIT
+if [[ "$operation" == verify ]]; then
+  [[ -d "$ROOT/.local/tmp" && ! -L "$ROOT/.local/tmp" ]] ||
+    fail "repository-local verification scratch is absent or symbolic"
+fi
 rows=0
 while IFS=$'\t' read -r artifact relative source_sha placeholder; do
   [[ "$artifact" != Artifact ]] || continue
@@ -71,7 +76,11 @@ while IFS=$'\t' read -r artifact relative source_sha placeholder; do
   grep -Fq -- "$placeholder" "$source" ||
     fail "artifact member lacks its locked prefix placeholder: $source"
 
-  temporary=$(mktemp "${destination}.repair.XXXXXX")
+  if [[ "$operation" == apply ]]; then
+    temporary=$(mktemp "${destination}.repair.XXXXXX")
+  else
+    temporary=$(mktemp "$ROOT/.local/tmp/runtime-prefix-repair.verify.XXXXXX")
+  fi
   pattern=$(printf '%s' "$placeholder" | sed 's/[][\\.^$*|]/\\&/g')
   replacement=$(printf '%s' "$prefix" | sed 's/[\\&|]/\\&/g')
   LC_ALL=C sed "s|$pattern|$replacement|g" "$source" > "$temporary"

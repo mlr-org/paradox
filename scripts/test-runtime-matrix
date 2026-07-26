@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd -P)
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+PREFIX_HANDOFF="$ROOT/scripts/environment/runtime-matrix-prefix-handoff"
 GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 RESOURCE_JOBS="$ROOT/scripts/environment/resource-jobs"
@@ -12,6 +13,8 @@ MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
 MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
 LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+TRUSTED_INPUT_HELPER="$ROOT/scripts/environment/runtime-matrix-trusted-inputs"
+MANAGED_PATH_HELPER="$ROOT/scripts/environment/runtime-matrix-managed-path"
 STAGE_TIMEOUT_SECONDS=7200
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
@@ -108,33 +111,20 @@ source_tree=$("$GIT_HELPER" resolve-tree "$ROOT" "$source_commit")
 "$GIT_HELPER" verify-ref "$ROOT" "$source_ref" "$source_commit" \
   "$source_tree" >/dev/null
 
-trusted_inputs=(
-  scripts/bootstrap-runtime-matrix
-  scripts/activate-runtime-matrix
-  scripts/test-runtime-matrix
-  scripts/verify-runtime-matrix-evidence
-  scripts/environment/runtime-matrix-prefix-receipt
-  scripts/environment/runtime-matrix-registry
-  scripts/environment/runtime-matrix-library
-  scripts/environment/runtime-matrix-library.R
-  scripts/environment/runtime-matrix-git
-  scripts/environment/mbo-config-fixtures
-  scripts/environment/runtime-matrix-inventory.R
-  scripts/environment/runtime-matrix-probe.R
-  scripts/environment/runtime-matrix-skip-policy.R
-  scripts/environment/runtime-matrix-testthat-audit.R
-  scripts/environment/run-runtime-matrix-tests.R
-  scripts/environment/resource-jobs
-  scripts/environment/run-runtime-matrix-stage
-  scripts/environment/run-runtime-matrix-wave
-  environment/runtime-matrix-pre46-exclusions.tsv
-  environment/runtime-matrix-whole-file-skips.tsv
-  environment/runtime-matrix-result-skips.tsv
-  environment/runtime-matrix.tsv
-  environment/r-packages-linux-64.lock
-  compat/github-snapshot.tsv
-  compat/mlr-org-review.tsv
-)
+for relative in \
+    scripts/environment/runtime-matrix-registry \
+    scripts/environment/runtime-matrix-trusted-inputs; do
+  [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
+    fail "Trusted-input bootstrap is absent or symbolic: $relative"
+  "$GIT_HELPER" cat-file-exists "$ROOT" "$source_commit:$relative" 2>/dev/null ||
+    fail "Source commit does not contain trusted-input bootstrap: $relative"
+  "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
+    cmp -s -- "$ROOT/$relative" - ||
+    fail "Trusted-input bootstrap differs from the committed source ref: $relative"
+done
+mapfile -t trusted_inputs < <("$TRUSTED_INPUT_HELPER")
+[[ ${#trusted_inputs[@]} -gt 0 ]] ||
+  fail "Trusted-input inventory is empty"
 for relative in "${trusted_inputs[@]}"; do
   [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
     fail "Runtime-matrix input is absent or symbolic: $relative"
@@ -161,29 +151,50 @@ if [[ "$needs_data_table_overlay" == true ]]; then
   [[ "$(sha256sum -- "$DATATABLE_ARCHIVE" | cut -d ' ' -f 1)" == "$DATATABLE_SHA256" ]] ||
     fail "cached data.table source does not match its authenticated lock"
 fi
-for version in "${versions[@]}"; do
-  relative=$("$REGISTRY" field "$version" runtime_lock)
-  "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
-    cmp -s -- "$ROOT/$relative" - ||
-    fail "Runtime lock differs from the committed source ref: $relative"
-  dependency_relative=$("$REGISTRY" field "$version" dependency_lock)
-  if [[ "$dependency_relative" != - ]]; then
-    "$GIT_HELPER" show-file "$ROOT" "$source_commit:$dependency_relative" |
-      cmp -s -- "$ROOT/$dependency_relative" - ||
-      fail "Dependency lock differs from the committed source ref: $dependency_relative"
-  fi
-done
 
 "$ROOT/scripts/bootstrap-runtime-matrix" --runtime "$selection" --verify
 run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
-[[ ! -e "$run_root" && ! -L "$run_root" ]] || fail "Run directory already exists: $run_root"
+"$MANAGED_PATH_HELPER" "$ROOT" "$run_root" allow-missing
+[[ ! -e "$run_root" && ! -L "$run_root" ]] ||
+  fail "Run directory already exists: $run_root"
 mkdir -p -- "$run_root/metadata"
-printf 'field\tvalue\nstatus\tfailed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
-  "$run_id" "$source_ref" "$source_commit" "$source_tree" > "$run_root/metadata/run.tsv"
+"$MANAGED_PATH_HELPER" "$ROOT" "$run_root/metadata" existing
 
 sha256_file() {
   sha256sum -- "$1" | cut -d ' ' -f 1
 }
+
+trusted_inputs_manifest="$run_root/metadata/trusted-inputs.tsv"
+{
+  printf 'relative\tsha256\n'
+  for relative in "${trusted_inputs[@]}"; do
+    printf '%s\t%s\n' "$relative" "$(sha256_file "$ROOT/$relative")"
+  done
+} > "$trusted_inputs_manifest"
+trusted_inputs_sha256=$(sha256_file "$trusted_inputs_manifest")
+
+verify_live_trusted_inputs() {
+  local index=0 relative digest extra
+  IFS=$'\t' read -r relative digest extra < "$trusted_inputs_manifest"
+  [[ "$relative" == relative && "$digest" == sha256 && -z "${extra:-}" ]] ||
+    fail "Trusted-input manifest has the wrong header"
+  while IFS=$'\t' read -r relative digest extra; do
+    [[ -z "${extra:-}" && "$index" -lt "${#trusted_inputs[@]}" &&
+      "$relative" == "${trusted_inputs[index]}" &&
+      "$digest" =~ ^[0-9a-f]{64}$ &&
+      -f "$ROOT/$relative" && ! -L "$ROOT/$relative" &&
+      "$(sha256_file "$ROOT/$relative")" == "$digest" ]] ||
+      fail "Trusted runtime-matrix input changed during execution: $relative"
+    index=$((index + 1))
+  done < <(tail -n +2 "$trusted_inputs_manifest")
+  [[ "$index" -eq "${#trusted_inputs[@]}" ]] ||
+    fail "Trusted-input manifest has the wrong row count"
+  [[ "$(sha256_file "$trusted_inputs_manifest")" == "$trusted_inputs_sha256" ]] ||
+    fail "Trusted-input manifest changed during execution"
+}
+
+printf 'field\tvalue\nstatus\tfailed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
+  "$run_id" "$source_ref" "$source_commit" "$source_tree" > "$run_root/metadata/run.tsv"
 
 seal_metadata() {
   local metadata=$1
@@ -233,12 +244,7 @@ for version in "${versions[@]}"; do
   source_git_tar_hashes[$version]=$source_git_tar_sha256
   source_manifest_hashes[$version]=$source_manifest_sha256
   git_identity_hashes[$version]=$git_identity_sha256
-  runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
-  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
-  version_inputs=("${trusted_inputs[@]}" "$runtime_lock_relative")
-  [[ "$dependency_lock_relative" == - ]] ||
-    version_inputs+=("$dependency_lock_relative")
-  for relative in "${version_inputs[@]}"; do
+  for relative in "${trusted_inputs[@]}"; do
     mkdir -p -- "$inputs/${relative%/*}"
     cp -- "$ROOT/$relative" "$inputs/$relative"
   done
@@ -247,6 +253,7 @@ for version in "${versions[@]}"; do
     cp -- "$DATATABLE_ARCHIVE" "$inputs/data.table_${DATATABLE_VERSION}.tar.gz"
   fi
   cp -R -- "$ROOT/.local/runtime-matrix/receipts/R-$version" "$inputs/bootstrap-receipt"
+  "$PREFIX_HANDOFF" "$version" "$inputs/bootstrap-receipt" >/dev/null
   if [[ "$dependency_mode" == source-library ]]; then
     dependency_library=$("$LIBRARY_MANAGER" \
       --runtime "$version" --verify --print-path)
@@ -259,12 +266,13 @@ for version in "${versions[@]}"; do
     printf 'step\tcommand\n'
     printf 'snapshot\treplacement-disabled Git archive with isolated attributes and pre/post repository audits\n'
     printf 'source-integrity\tpre-execution source receipt; post-execution source and archive verification\n'
+    printf 'prefix-receipt\texact five-file staged handoff compared with the freshly authenticated live prefix receipt\n'
     printf 'git-identity\tauthenticated repository-local Git executable hash, version, path, and exec path\n'
     printf 'mbo-config-fixtures\treviewed commit/tree Git objects staged once as read-only retained source-test inputs\n'
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
     if [[ "$version" == 3.6.3 ]]; then
-      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --no-build-vignettes ARCHIVE\n'
+      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --no-manual --no-build-vignettes ARCHIVE\n'
     fi
     if [[ "$dependency_mode" == data-table-overlay ]]; then
       printf 'dependency-overlay\tSHA-256-authenticated R CMD INSTALL of data.table %s into the fresh stage library\n' "$DATATABLE_VERSION"
@@ -281,7 +289,7 @@ for version in "${versions[@]}"; do
 done
 
 # Validate source-derived skip policy from one authenticated extracted candidate
-# before resource admission or either build/install worker can start.  Both
+# before resource admission or any build/install worker can start.  All
 # runtime stages use the same exact Git archive bytes.
 preflight_source="$run_root/R-${versions[0]}/artifacts/source"
 mkdir -p -- "$run_root/inputs"
@@ -341,6 +349,7 @@ forward_wave_signal() {
 trap 'forward_wave_signal HUP' HUP
 trap 'forward_wave_signal INT' INT
 trap 'forward_wave_signal TERM' TERM
+verify_live_trusted_inputs
 "$WAVE_RUNNER" --jobs "$runtime_jobs" --admission-report "$resource_report" \
   --task-list "$task_list" --output-directory "$wave_directory" \
   --worker "$STAGE_WORKER" --root "$ROOT" --run-root "$run_root" \
@@ -350,6 +359,7 @@ wave_pid=$!
 wait "$wave_pid" || wave_status=$?
 wave_pid=
 trap - HUP INT TERM
+verify_live_trusted_inputs
 
 [[ -f "$wave_directory/task-ledger.tsv" &&
   -f "$wave_directory/wave-plan.tsv" ]] ||
@@ -384,6 +394,7 @@ for version in "${versions[@]}"; do
   git_identity_sha256=${git_identity_hashes[$version]}
 
   branch=$(awk -F = '$1 == "r_api_compat_branch" {print $2}' "$logs/r-api-symbol-audit.log")
+  dependency_mode=$("$REGISTRY" field "$version" dependency_mode)
   archive=$(find "$build" -maxdepth 1 -type f -name 'paradox_*.tar.gz' -print)
   scope="$inputs/source-test-scope"
   [[ -n "$branch" && -f "$archive" && -d "$scope" && ! -L "$scope" &&
@@ -391,6 +402,23 @@ for version in "${versions[@]}"; do
     -f "$scope/observed-whole-file-skips.tsv" &&
     -f "$scope/observed-result-skips.tsv" ]] ||
     fail "Runtime stage outputs are incomplete"
+  if [[ "$dependency_mode" == data-table-overlay ]]; then
+    [[ -f "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
+      ! -L "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
+      -f "$logs/data.table-install.log" &&
+      ! -L "$logs/data.table-install.log" &&
+      -f "$logs/data.table-version.tsv" &&
+      ! -L "$logs/data.table-version.tsv" ]] ||
+      fail "data.table overlay evidence is incomplete"
+  else
+    [[ ! -e "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
+      ! -L "$inputs/data.table_${DATATABLE_VERSION}.tar.gz" &&
+      ! -e "$logs/data.table-install.log" &&
+      ! -L "$logs/data.table-install.log" &&
+      ! -e "$logs/data.table-version.tsv" &&
+      ! -L "$logs/data.table-version.tsv" ]] ||
+      fail "A non-overlay runtime retained unexpected data.table overlay evidence"
+  fi
   if [[ "$version" == 3.6.3 ]]; then
     [[ -f "$logs/r-cmd-check.log" && ! -L "$logs/r-cmd-check.log" &&
       -f "$logs/r-cmd-check-status.tsv" &&
@@ -497,6 +525,18 @@ for version in "${versions[@]}"; do
       printf 'dependency_library_receipt_sha256\t%s\n' \
         "$(sha256_file "$inputs/dependency-library-receipt/receipt.tsv")"
     fi
+    if [[ "$dependency_mode" == data-table-overlay ]]; then
+      printf 'dependency_overlay_archive_sha256\t%s\n' \
+        "$(sha256_file "$inputs/data.table_${DATATABLE_VERSION}.tar.gz")"
+      printf 'dependency_overlay_install_log_sha256\t%s\n' \
+        "$(sha256_file "$logs/data.table-install.log")"
+      printf 'dependency_overlay_version_log_sha256\t%s\n' \
+        "$(sha256_file "$logs/data.table-version.tsv")"
+    else
+      printf 'dependency_overlay_archive_sha256\t-\n'
+      printf 'dependency_overlay_install_log_sha256\t-\n'
+      printf 'dependency_overlay_version_log_sha256\t-\n'
+    fi
     printf 'bootstrap_receipt_sha256\t%s\n' "$(sha256_file "$inputs/bootstrap-receipt/receipt.tsv")"
     printf 'pre46_exclusion_manifest_sha256\t%s\n' \
       "$(sha256_file "$inputs/environment/runtime-matrix-pre46-exclusions.tsv")"
@@ -514,6 +554,7 @@ for version in "${versions[@]}"; do
     printf 'source_git_tar_sha256\t%s\n' "$source_git_tar_sha256"
     printf 'source_manifest_sha256\t%s\n' "$source_manifest_sha256"
     printf 'git_identity_sha256\t%s\n' "$git_identity_sha256"
+    printf 'trusted_inputs_manifest_sha256\t%s\n' "$trusted_inputs_sha256"
     printf 'mbo_config_commit\t%s\n' "$mbo_config_commit"
     printf 'mbo_config_tree\t%s\n' "$mbo_config_tree"
     printf 'mbo_config_provenance_sha256\t%s\n' "$mbo_config_provenance_sha256"
@@ -574,11 +615,12 @@ done
   done
 } > "$run_root/metadata/stages.tsv"
 {
-  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\nruntime_jobs\t%s\nstage_timeout_seconds\t%s\nresource_report_sha256\t%s\nstage_tasks_sha256\t%s\nwave_plan_sha256\t%s\nwave_task_ledger_sha256\t%s\nwave_manifest_sha256\t%s\nmbo_config_commit\t%s\nmbo_config_tree\t%s\nmbo_config_provenance_sha256\t%s\nmbo_config_fixture_manifest_sha256\t%s\nmbo_config_mixed_search_space_sha256\t%s\nmbo_config_numeric_search_space_sha256\t%s\n' \
+  printf 'field\tvalue\nstatus\tpassed\nrun_id\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\nstage_count\t%s\nruntime_jobs\t%s\nstage_timeout_seconds\t%s\nresource_report_sha256\t%s\nstage_tasks_sha256\t%s\nwave_plan_sha256\t%s\nwave_task_ledger_sha256\t%s\nwave_manifest_sha256\t%s\ntrusted_inputs_manifest_sha256\t%s\nmbo_config_commit\t%s\nmbo_config_tree\t%s\nmbo_config_provenance_sha256\t%s\nmbo_config_fixture_manifest_sha256\t%s\nmbo_config_mixed_search_space_sha256\t%s\nmbo_config_numeric_search_space_sha256\t%s\n' \
     "$run_id" "$source_ref" "$source_commit" "$source_tree" \
     "${#versions[@]}" "$runtime_jobs" "$STAGE_TIMEOUT_SECONDS" \
     "$resource_report_sha256" "$stage_tasks_sha256" "$wave_plan_sha256" \
     "$wave_task_ledger_sha256" "$wave_manifest_sha256" \
+    "$trusted_inputs_sha256" \
     "$mbo_config_commit" "$mbo_config_tree" \
     "$mbo_config_provenance_sha256" "$mbo_config_manifest_sha256" \
     "$mbo_config_mixed_sha256" "$mbo_config_numeric_sha256"
@@ -586,7 +628,7 @@ done
 (
   cd "$run_root/metadata"
   : > completion.inputs.tsv
-  sha256sum run.tsv stages.tsv resource-jobs.tsv stage-tasks.tsv \
+  sha256sum run.tsv stages.tsv trusted-inputs.tsv resource-jobs.tsv stage-tasks.tsv \
     mbo-config-fixtures.log mbo-config-fixtures.manifest.tsv \
     stage-wave.manifest.tsv stage-wave/wave-plan.tsv \
     stage-wave/task-ledger.tsv >> completion.inputs.tsv

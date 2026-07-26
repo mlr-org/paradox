@@ -9,6 +9,9 @@ MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
 REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
 LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+PREFIX_HANDOFF="$ROOT/scripts/environment/runtime-matrix-prefix-handoff"
+TRUSTED_INPUT_RELATIVE=scripts/environment/runtime-matrix-trusted-inputs
+MANAGED_PATH_HELPER="$ROOT/scripts/environment/runtime-matrix-managed-path"
 
 usage() {
   cat <<'USAGE'
@@ -41,11 +44,14 @@ done
 [[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" &&
   "$(command -v git)" == "$LOCAL_GIT" ]] ||
   fail "activate the exact repository-local toolchain first: . scripts/activate"
-[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
-  fail "runtime registry or dependency-library manager is absent"
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" && -x "$PREFIX_HANDOFF" ]] ||
+  fail "runtime registry or receipt verifier is absent"
 "$REGISTRY" validate >/dev/null
 run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
-[[ -d "$run_root" && ! -L "$run_root" ]] || fail "Runtime-matrix run is absent: $run_root"
+[[ -x "$MANAGED_PATH_HELPER" && -f "$MANAGED_PATH_HELPER" &&
+  ! -L "$MANAGED_PATH_HELPER" ]] ||
+  fail "Managed-path verifier is absent or symbolic"
+"$MANAGED_PATH_HELPER" "$ROOT" "$run_root" existing
 
 verify_seal() {
   local metadata=$1
@@ -217,6 +223,8 @@ verify_recorded_digests() {
     $(metadata_value "$metadata" artifacts_manifest_sha256) == \
       "$(sha256sum "$metadata/artifacts.manifest.tsv" | cut -d ' ' -f 1)" ]] ||
     fail "Retained stage digest claims are inconsistent"
+  "$PREFIX_HANDOFF" "$version" "$inputs/bootstrap-receipt" >/dev/null ||
+    fail "Retained staged prefix receipt failed authenticated replay"
   if [[ "$dependency_mode" == source-library ]]; then
     [[ -d "$inputs/dependency-library-receipt" &&
       ! -L "$inputs/dependency-library-receipt" &&
@@ -236,6 +244,41 @@ verify_recorded_digests() {
     [[ $(metadata_value "$metadata" dependency_lock_sha256) == - &&
       $(metadata_value "$metadata" dependency_library_receipt_sha256) == - ]] ||
       fail "Runtime without a source library claims dependency-library inputs"
+  fi
+  local overlay_archive="$inputs/data.table_1.18.4.tar.gz"
+  local overlay_install_log="$artifacts/logs/data.table-install.log"
+  local overlay_version_log="$artifacts/logs/data.table-version.tsv"
+  if [[ "$dependency_mode" == data-table-overlay ]]; then
+    local overlay_sha=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
+    local overlay_lock_record
+    overlay_lock_record=$(awk -F '\t' '
+      $1 == "data.table" && $2 == "1.18.4" {print $2 "\t" $4}
+    ' "$inputs/environment/r-packages-linux-64.lock")
+    [[ "$overlay_lock_record" == "1.18.4"$'\t'"$overlay_sha" &&
+      -f "$overlay_archive" && ! -L "$overlay_archive" &&
+      -f "$overlay_install_log" && ! -L "$overlay_install_log" &&
+      -s "$overlay_install_log" &&
+      -f "$overlay_version_log" && ! -L "$overlay_version_log" &&
+      "$(sha256sum "$overlay_archive" | cut -d ' ' -f 1)" == "$overlay_sha" ]] ||
+      fail "Retained data.table overlay archive or install log is inconsistent"
+    printf 'version\tsha256\n1.18.4\t%s\n' "$overlay_sha" |
+      cmp -s -- "$overlay_version_log" - ||
+      fail "Retained data.table overlay version log is inconsistent"
+    [[ $(metadata_value "$metadata" dependency_overlay_archive_sha256) == \
+        "$overlay_sha" &&
+      $(metadata_value "$metadata" dependency_overlay_install_log_sha256) == \
+        "$(sha256sum "$overlay_install_log" | cut -d ' ' -f 1)" &&
+      $(metadata_value "$metadata" dependency_overlay_version_log_sha256) == \
+        "$(sha256sum "$overlay_version_log" | cut -d ' ' -f 1)" ]] ||
+      fail "Retained data.table overlay digest claims are inconsistent"
+  else
+    [[ ! -e "$overlay_archive" && ! -L "$overlay_archive" &&
+      ! -e "$overlay_install_log" && ! -L "$overlay_install_log" &&
+      ! -e "$overlay_version_log" && ! -L "$overlay_version_log" &&
+      $(metadata_value "$metadata" dependency_overlay_archive_sha256) == - &&
+      $(metadata_value "$metadata" dependency_overlay_install_log_sha256) == - &&
+      $(metadata_value "$metadata" dependency_overlay_version_log_sha256) == - ]] ||
+      fail "Runtime without a data.table overlay retained overlay evidence"
   fi
 }
 
@@ -281,7 +324,8 @@ verify_declared_minimum_check() {
   }
   [[ $(check_status_value scope) == declared-minimum-r-3.6.3 &&
     $(check_status_value force_suggests) == false &&
-    $(check_status_value options) == "--no-manual --no-build-vignettes" &&
+    $(check_status_value options) == \
+      "--no-tests --no-manual --no-build-vignettes" &&
     $(check_status_value exit_status) == 0 &&
     $(check_status_value conclusion) == OK &&
     $(check_status_value check_log_relative) == \
@@ -322,6 +366,14 @@ verify_runtime_symbol_scope() {
       R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
       R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.0.5 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
+      R_ActiveBindingFunction)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_existsVarInFrame R_NewEnv R_getVarEx R_GetBindingType
+      R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
+      SET_COMPLEX_ELT SET_RAW_ELT)
   elif [[ "$version" == 4.3.3 ]]; then
     required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE)
@@ -363,7 +415,7 @@ verify_runtime_symbol_scope() {
     text_has_exact_line_once "$log" "r_config_nm_status=1" &&
       text_has_exact_line_once "$log" \
         "r_config_nm=ERROR: no information for variable 'NM'" ||
-      fail "R 3.6.3 symbol evidence has an unexpected NM configuration"
+      fail "R $version symbol evidence has an unexpected NM configuration"
   else
     text_has_exact_line_once "$log" "r_config_nm_status=0" ||
       fail "Runtime symbol evidence did not retain a usable R NM configuration"
@@ -372,42 +424,52 @@ verify_runtime_symbol_scope() {
     fail "Runtime symbol policy branch differs from stage metadata"
 }
 
+declare -a RETAINED_TRUSTED_INPUTS=()
+TRUSTED_INPUTS_MANIFEST_SHA256=
+
+verify_trusted_inputs_manifest() {
+  local top_metadata=$1 source=$2
+  local manifest="$top_metadata/trusted-inputs.tsv"
+  local helper="$source/$TRUSTED_INPUT_RELATIVE"
+  local relative digest extra index=0
+  local -a expected=()
+
+  [[ -f "$manifest" && ! -L "$manifest" &&
+    -x "$helper" && -f "$helper" && ! -L "$helper" ]] ||
+    fail "Retained trusted-input policy or manifest is absent or symbolic"
+  mapfile -t expected < <("$helper")
+  [[ ${#expected[@]} -gt 0 ]] ||
+    fail "Retained trusted-input policy is empty"
+  IFS=$'\t' read -r relative digest extra < "$manifest"
+  [[ "$relative" == relative && "$digest" == sha256 && -z "${extra:-}" ]] ||
+    fail "Retained trusted-input manifest has the wrong header"
+  while IFS=$'\t' read -r relative digest extra; do
+    [[ -z "${extra:-}" && "$index" -lt "${#expected[@]}" &&
+      "$relative" == "${expected[index]}" &&
+      "$digest" =~ ^[0-9a-f]{64}$ &&
+      -f "$source/$relative" && ! -L "$source/$relative" &&
+      "$(sha256sum "$source/$relative" | cut -d ' ' -f 1)" == "$digest" ]] ||
+      fail "Retained trusted-input manifest differs from its source: $relative"
+    RETAINED_TRUSTED_INPUTS+=("$relative")
+    index=$((index + 1))
+  done < <(tail -n +2 "$manifest")
+  [[ "$index" -eq "${#expected[@]}" ]] ||
+    fail "Retained trusted-input manifest has the wrong row count"
+  TRUSTED_INPUTS_MANIFEST_SHA256=$(sha256sum "$manifest" | cut -d ' ' -f 1)
+  [[ $(metadata_value "$top_metadata" trusted_inputs_manifest_sha256) == \
+    "$TRUSTED_INPUTS_MANIFEST_SHA256" ]] ||
+    fail "Top-level trusted-input manifest digest is inconsistent"
+}
+
 verify_trusted_inputs() {
-  local version=$1 artifacts=$2
+  local artifacts=$1 metadata=$2
   local source="$artifacts/source"
   local inputs="$artifacts/inputs"
   local relative
-  local trusted_inputs=(
-    scripts/bootstrap-runtime-matrix
-    scripts/activate-runtime-matrix
-    scripts/test-runtime-matrix
-    scripts/verify-runtime-matrix-evidence
-    scripts/environment/runtime-matrix-prefix-receipt
-    scripts/environment/runtime-matrix-registry
-    scripts/environment/runtime-matrix-library
-    scripts/environment/runtime-matrix-library.R
-    scripts/environment/runtime-matrix-git
-    scripts/environment/mbo-config-fixtures
-    scripts/environment/runtime-matrix-inventory.R
-    scripts/environment/runtime-matrix-probe.R
-    scripts/environment/runtime-matrix-skip-policy.R
-    scripts/environment/runtime-matrix-testthat-audit.R
-    scripts/environment/run-runtime-matrix-tests.R
-    scripts/environment/resource-jobs
-    scripts/environment/run-runtime-matrix-stage
-    scripts/environment/run-runtime-matrix-wave
-    environment/runtime-matrix-pre46-exclusions.tsv
-    environment/runtime-matrix-whole-file-skips.tsv
-    environment/runtime-matrix-result-skips.tsv
-    environment/runtime-matrix.tsv
-    compat/github-snapshot.tsv
-    compat/mlr-org-review.tsv
-    "$("$REGISTRY" field "$version" runtime_lock)"
-  )
-  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
-  [[ "$dependency_lock_relative" == - ]] ||
-    trusted_inputs+=("$dependency_lock_relative")
-  for relative in "${trusted_inputs[@]}"; do
+  [[ $(metadata_value "$metadata" trusted_inputs_manifest_sha256) == \
+    "$TRUSTED_INPUTS_MANIFEST_SHA256" ]] ||
+    fail "Stage trusted-input policy differs from the top-level manifest"
+  for relative in "${RETAINED_TRUSTED_INPUTS[@]}"; do
     [[ -f "$inputs/$relative" && ! -L "$inputs/$relative" ]] ||
       fail "Retained trusted input is absent or symbolic: $relative"
     cmp -s -- "$inputs/$relative" "$source/$relative" ||
@@ -567,6 +629,10 @@ verify_source_scope() {
   cmp -s -- "$result_skip_policy" \
     "$source/environment/runtime-matrix-result-skips.tsv" ||
     fail "Retained result-skip policy differs from the source snapshot"
+  Rscript --vanilla \
+    "$source/scripts/environment/runtime-matrix-skip-policy.R" \
+    "$source" >/dev/null ||
+    fail "Retained result-skip policy fails its exact source-derived policy"
 
   awk -F '\t' '
     NR == 1 {if ($0 != "context\treason") exit 1; next}
@@ -587,7 +653,7 @@ verify_source_scope() {
     NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
     NF != 4 || $1 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ ||
       $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
-      $4 != "Reason: On CRAN" ||
+      $4 == "" ||
       seen[$1 FS $2 FS $3]++ {exit 1}
   ' "$result_skip_policy" || fail "Retained result-skip policy is malformed"
   while IFS=$'\t' read -r policy_runtime _; do
@@ -854,12 +920,22 @@ registered_count=$("$REGISTRY" versions | wc -l)
   "$top_stage_count" -le "$registered_count" &&
   "$top_stage_count" -eq "${#versions[@]}" ]] ||
   fail "Top-level runtime provenance is malformed or inconsistent"
-verify_mbo_config_evidence "$top_metadata" \
-  "$run_root/R-${versions[0]}/artifacts/source"
-verify_scheduler_evidence "$top_metadata" "${versions[@]}"
 "$GIT_HELPER" verify-ref "$ROOT" "$top_source_ref" "$top_commit" \
   "$top_tree" >/dev/null ||
   fail "Top-level source ref no longer resolves to its recorded commit and tree"
+first_source="$run_root/R-${versions[0]}/artifacts/source"
+[[ -f "$first_source/$TRUSTED_INPUT_RELATIVE" &&
+  ! -L "$first_source/$TRUSTED_INPUT_RELATIVE" ]] ||
+  fail "Retained trusted-input bootstrap is absent or symbolic"
+"$GIT_HELPER" show-file \
+  "$ROOT" "$top_commit:$TRUSTED_INPUT_RELATIVE" |
+  cmp -s -- "$first_source/$TRUSTED_INPUT_RELATIVE" - ||
+  fail "Retained trusted-input bootstrap differs from the recorded commit"
+verify_mbo_config_evidence "$top_metadata" \
+  "$first_source"
+verify_trusted_inputs_manifest "$top_metadata" \
+  "$first_source"
+verify_scheduler_evidence "$top_metadata" "${versions[@]}"
 for version in "${versions[@]}"; do
   "$REGISTRY" contains "$version" || fail "Unexpected retained runtime: $version"
   stage="$run_root/R-$version"
@@ -876,7 +952,7 @@ for version in "${versions[@]}"; do
     fail "Artifact tree receipt is absent"
   "$PREFIX_RECEIPT" verify "$artifacts" "$metadata/artifacts.manifest.tsv" >/dev/null
   verify_source_archive "$artifacts" "$metadata"
-  verify_trusted_inputs "$version" "$artifacts"
+  verify_trusted_inputs "$artifacts" "$metadata"
   verify_recorded_digests "$version" "$artifacts" "$metadata"
   verify_runtime_symbol_scope "$version" "$artifacts" "$metadata"
   [[ $(metadata_value "$metadata" scheduler_resource_report_sha256) == \

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Validate a repository-owned directory chain without following a symbolic
+# component.  "allow-missing" is used immediately before publication;
+# "existing" additionally requires and canonicalizes every component.
+
+fail() {
+  printf 'runtime-matrix-managed-path: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 3 && ($3 == allow-missing || $3 == existing) ]] ||
+  fail "usage: runtime-matrix-managed-path ROOT TARGET allow-missing|existing"
+
+root=$1
+target=$2
+mode=$3
+[[ "$root" == /* && -d "$root" && ! -L "$root" &&
+  "$(cd "$root" && pwd -P)" == "$root" ]] ||
+  fail "ROOT is not one canonical ordinary directory"
+[[ "$target" == "$root" || "$target" == "$root/"* ]] ||
+  fail "managed target escaped ROOT"
+[[ "$target" != *//* && ("$target" == "$root" || "$target" != */) ]] ||
+  fail "managed target is not component-canonical"
+
+current=$root
+remainder=${target#"$root"}
+missing=false
+while [[ -n "$remainder" ]]; do
+  remainder=${remainder#/}
+  component=${remainder%%/*}
+  if [[ "$component" == "$remainder" ]]; then
+    remainder=
+  else
+    remainder=${remainder#*/}
+  fi
+  [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+    fail "managed target contains an unsafe component"
+  current="$current/$component"
+  [[ ! -L "$current" ]] ||
+    fail "managed target contains a symbolic component: $current"
+  if [[ -e "$current" ]]; then
+    [[ "$missing" == false && -d "$current" ]] ||
+      fail "managed target has a non-directory or discontinuous component: $current"
+  else
+    missing=true
+    [[ "$mode" == allow-missing ]] ||
+      fail "managed target component is absent: $current"
+  fi
+done
+
+if [[ "$mode" == existing ]]; then
+  [[ "$(cd "$target" && pwd -P)" == "$target" ]] ||
+    fail "managed target is not canonical"
+fi

@@ -558,7 +558,8 @@ counts.
 ## Real R runtime matrix
 
 `scripts/test-runtime-matrix` runs the exact candidate on repository-local R
-3.6.3, R 4.3.3, and R 4.5.2; development validation also uses local R 4.6.1.
+3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2; development validation also uses local
+R 4.6.1.
 Each stage
 has a fresh candidate library, builds/installs Paradox once, runs the complete
 supported test inventory, audits DSO symbols, records package/compiler/session
@@ -579,10 +580,10 @@ The retained bundle is outside all mutable
 stage trees, is read-only, and is joined to top-level and per-stage evidence by
 commit, tree, receipt, provenance, and file digests.
 
-R 3.6.3 builds its exact SHA-256-authenticated dependency and test closure into
-a repository-local source library described by
-`environment/runtime-r-3.6.3-packages.lock`; it never mutates the runtime
-prefix, host R, HOME, or user library. R 4.3.3 receives only the
+R 3.6.3 and R 4.0.5 build their exact SHA-256-authenticated dependency and test
+closures into repository-local source libraries described by their
+`environment/runtime-r-*-packages.lock` files; neither mutates its runtime
+prefix, host R, HOME, or a user library. R 4.3.3 receives only the
 SHA-256-authenticated cached data.table 1.18.4 source
 overlay before Paradox is built. This is not a reason to skip tests or accept
 1.17 behavior. R 4.5.2 and development R resolve 1.18.4 directly. Runtime

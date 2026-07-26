@@ -8,7 +8,7 @@ runtime_matrix_skip_policy_is_symbolic <- function(path) {
 runtime_matrix_skip_policy_children <- function(value) {
   output <- list()
   for (index in seq_along(value)) {
-    if (!rlang::is_missing(value[[index]])) {
+    if (!identical(value[[index]], quote(expr = ))) {
       output[[length(output) + 1L]] <- value[[index]]
     }
   }
@@ -128,9 +128,6 @@ runtime_matrix_validate_pre46_exclusion_policy <- function(
 
 runtime_matrix_validate_result_skip_policy <- function(
     snapshot, test_files = NULL, test_paths = NULL) {
-  if (!requireNamespace("rlang", quietly = TRUE)) {
-    stop("the exact runtime lock does not provide rlang", call. = FALSE)
-  }
   snapshot <- normalizePath(snapshot, mustWork = TRUE)
   test_directory <- file.path(snapshot, "tests", "testthat")
   if (is.null(test_files)) {
@@ -247,8 +244,29 @@ runtime_matrix_validate_result_skip_policy <- function(
     list_altrep =
       "Reason: R < 4.3 cannot construct list ALTREP test fixtures"
   )
-  if (any(extra$runtime != "3.6.3") ||
-      any(!extra$reason %in% allowed_extra_reasons)) {
+  active_binding_runtimes <- reviewed_runtimes[
+    vapply(
+      reviewed_runtimes,
+      function(runtime) utils::compareVersion(runtime, "4.0.0") < 0L,
+      logical(1L)
+    )
+  ]
+  list_altrep_runtimes <- reviewed_runtimes[
+    vapply(
+      reviewed_runtimes,
+      function(runtime) utils::compareVersion(runtime, "4.3.0") < 0L,
+      logical(1L)
+    )
+  ]
+  valid_extra_runtime <- (
+    extra$reason == allowed_extra_reasons[["active_binding"]] &
+      extra$runtime %in% active_binding_runtimes
+  ) | (
+    extra$reason == allowed_extra_reasons[["list_altrep"]] &
+      extra$runtime %in% list_altrep_runtimes
+  )
+  if (any(!extra$reason %in% allowed_extra_reasons) ||
+      any(!valid_extra_runtime)) {
     stop("result-skip manifest contains an unreviewed version-specific skip",
       call. = FALSE)
   }
@@ -295,13 +313,15 @@ runtime_matrix_validate_result_skip_policy <- function(
       "title"
     )
     if (!length(titles)) return(NULL)
-    data.frame(
-      runtime = rep("3.6.3", length(titles)),
-      file = rep(file, length(titles)),
-      test = titles,
-      reason = rep(allowed_extra_reasons[["active_binding"]], length(titles)),
-      stringsAsFactors = FALSE
-    )
+    do.call(rbind, lapply(active_binding_runtimes, function(runtime) {
+      data.frame(
+        runtime = rep(runtime, length(titles)),
+        file = rep(file, length(titles)),
+        test = titles,
+        reason = rep(allowed_extra_reasons[["active_binding"]], length(titles)),
+        stringsAsFactors = FALSE
+      )
+    }))
   })
   active_rows <- do.call(rbind, active_rows)
   if (is.null(active_rows)) active_rows <- extra[FALSE, , drop = FALSE]
@@ -341,13 +361,15 @@ runtime_matrix_validate_result_skip_policy <- function(
       "title"
     )
     if (!length(titles)) return(NULL)
-    data.frame(
-      runtime = rep("3.6.3", length(titles)),
-      file = rep(file, length(titles)),
-      test = titles,
-      reason = rep(allowed_extra_reasons[["list_altrep"]], length(titles)),
-      stringsAsFactors = FALSE
-    )
+    do.call(rbind, lapply(list_altrep_runtimes, function(runtime) {
+      data.frame(
+        runtime = rep(runtime, length(titles)),
+        file = rep(file, length(titles)),
+        test = titles,
+        reason = rep(allowed_extra_reasons[["list_altrep"]], length(titles)),
+        stringsAsFactors = FALSE
+      )
+    }))
   })
   list_altrep_rows <- do.call(rbind, list_altrep_rows)
   if (is.null(list_altrep_rows)) {

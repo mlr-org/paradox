@@ -956,9 +956,12 @@ Authoritative inputs are:
 - `environment/toolchain-linux-64.lock`: local development toolchain;
 - `environment/r-packages-linux-64.lock`: exact source-package closure;
 - `environment/runtime-r-3.6.3-linux-64.lock`,
-  `environment/runtime-r-3.6.3-packages.lock`,
+  `environment/runtime-r-4.0.5-linux-64.lock`,
   `environment/runtime-r-4.3.3-linux-64.lock`, and
   `environment/runtime-r-4.5.2-linux-64.lock`: supported-runtime prefixes;
+- `environment/runtime-r-3.6.3-packages.lock` and
+  `environment/runtime-r-4.0.5-packages.lock`: exact source-package closures
+  for the two older runtime axes;
 - `environment/runtime-matrix.tsv`: authenticated runtime-axis registry;
 - `environment/r-api-sources.tsv`: local reference R sources/manuals;
 - `environment/r-api-exceptions.tsv`: the exact reviewed versioned R C API
@@ -983,9 +986,26 @@ Provision and inspect real older runtimes with:
 ```sh
 scripts/bootstrap-runtime-matrix
 scripts/bootstrap-runtime-matrix --verify
-. scripts/activate-runtime-matrix 3.6.3   # or 4.3.3 / 4.5.2
+. scripts/activate-runtime-matrix 3.6.3   # or 4.0.5 / 4.3.3 / 4.5.2
 . scripts/activate                        # return to R 4.6.1
 ```
+
+R 3.6.3 and R 4.0.5 install their exact source locks once into sealed,
+content- and identity-receipted libraries. Interactive activation fully
+verifies the selected library; a retained runtime worker instead consumes the
+coordinator's exact authenticated receipt handoff and does not repeat the full
+tree check. A source-library build key is scoped to the selected runtime's
+artifact fields, exact locks, authenticated prefix-content manifest, and the
+explicit install schema; verifier/helper identity remains refreshable receipt
+provenance. Therefore an unrelated registry row or verification-only edit must
+not rebuild an unchanged package closure. Any install-algorithm or isolated
+build-environment change must bump `SOURCE_LIBRARY_BUILD_SCHEMA`. One
+source-derived trusted-input manifest covers every helper,
+registry, policy, dependency lock, and prefix-repair lock. The coordinator
+checks it immediately before and after the worker wave and binds it into the
+top-level and per-stage evidence. The declared-minimum R 3.6 package check uses
+`--no-tests`; the separately receipted complete-source stage already runs the
+supported test suite once.
 
 `scripts/test-runtime-matrix` validates both the deliberately empty pre-R-4.6
 exclusion policy and the reviewed result-skip manifest against the exact
@@ -995,7 +1015,7 @@ policy preflight shared with the old-runtime test runner. The coordinator also
 stages and authenticates the mandatory `mbo_config` upgrade inputs before that
 same boundary, so the fixture test must execute and may not become an
 unreviewed environment-dependent skip. Malformed or stale input therefore
-fails cheaply instead of after two package installations. In
+fails cheaply instead of after the runtime package installations. In
 particular, validate the header-only exclusion manifest as zero rows; do not
 construct a synthetic file name from its empty `context` column.
 
@@ -1670,7 +1690,7 @@ Run release gates against one clean immutable full ref, broadly in this order:
 
 1. strict GCC/Clang C99, registered-routine/probe audit, ASan/UBSan, complete
    package suite, and clean `R CMD check --as-cran`;
-2. actual R 3.6.3, 4.3.3, 4.5.2, and development R plus compilation against
+2. actual R 3.6.3, 4.0.5, 4.3.3, 4.5.2, and development R plus compilation against
    pinned R 3.6.0 and later headers and
    exact stored-binding/promise
    `environment/r-api-exceptions.tsv`/raw-token/version-gated DSO audit;

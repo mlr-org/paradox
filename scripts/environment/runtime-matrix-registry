@@ -46,10 +46,8 @@ validate_registry() {
   local runtime_lock dependency_lock prefix_repair
   while IFS=$'\t' read -r _ runtime _ runtime_lock _ dependency_lock _ prefix_repair; do
     [[ "$runtime" != runtime ]] || continue
-    for relative in "$runtime_lock"; do
-      [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
-        fail "registered runtime lock is absent or symbolic: $relative"
-    done
+    [[ -f "$ROOT/$runtime_lock" && ! -L "$ROOT/$runtime_lock" ]] ||
+      fail "registered runtime lock is absent or symbolic: $runtime_lock"
     if [[ "$dependency_lock" != - ]]; then
       [[ -f "$ROOT/$dependency_lock" && ! -L "$ROOT/$dependency_lock" ]] ||
         fail "registered dependency lock is absent or symbolic: $dependency_lock"

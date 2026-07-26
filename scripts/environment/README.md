@@ -385,7 +385,7 @@ mode-0700 XDG runtime root.
 Header compilation cannot prove that versioned public-API paths behave
 correctly inside the actual R interpreter. The opt-in runtime matrix therefore
 uses the authenticated `environment/runtime-matrix.tsv` registry to provision
-exact conda environments for R 3.6.3, R 4.3.3, and R 4.5.2 from their
+exact conda environments for R 3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2 from their
 SHA-256 explicit locks. It separately compiles shipped source against R 3.6.0,
 4.0.0, and 4.2.0 headers (plus the later existing axes) so every old-R native
 API transition is represented:
@@ -403,14 +403,16 @@ clean shells and proves every activation repairs injected R libraries, startup
 files, compiler/linker/pkg-config inputs, caches, temporary paths, and XDG
 runtime state. It also re-sources activation to prove idempotence. No matrix
 command reads or mutates `.local/compat/R/library-dependencies` or either
-consumer system prefix. R 3.6.3 additionally uses the exact
-`environment/runtime-r-3.6.3-packages.lock` source closure in a separately
-receipted repository-local library; it does not write to the immutable prefix,
-host R, HOME, or a user library.
-R 3.6 still executes the atomic ALTREP tests. Its sole ALTREP capability
-exclusion is the adversarial list fixture: R did not expose VECSXP ALTREP
-classes until R 4.3, so the corresponding production branch cannot arise on
-that interpreter.
+consumer system prefix. R 3.6.3 and R 4.0.5 additionally use their exact
+`environment/runtime-r-*-packages.lock` source closures in separately
+receipted repository-local libraries; they do not write to the immutable
+prefix, host R, operator HOME, or a user library. Both runtimes still execute
+the atomic ALTREP tests. Their sole ALTREP capability exclusion is the
+adversarial list fixture: R did not expose VECSXP ALTREP classes until R 4.3,
+so the corresponding production branch cannot arise on either interpreter.
+The real R 4.0.5 axis uniquely executes active-binding inspection while still
+exercising the pre-R-4.2 optional-binding and element-setter compatibility
+branches.
 
 `scripts/test-runtime-matrix --help` describes the retained execution gate.
 For each selected actual interpreter it archives a committed source ref,
@@ -442,10 +444,12 @@ retains the exact scope ledger, staged source copies, testthat-reported
 inventory, skip ledgers, counts, and hashes.
 Only the declared-minimum R 3.6.3 axis additionally runs a clean source-package
 check from the built tarball. Its exact bounded scope is
-`_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual
+`_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-tests --no-manual
 --no-build-vignettes`: the authenticated old-runtime library deliberately
-omits heavy Suggests, while package installation, examples, tests, compiled
-code, and ordinary check policy still execute. The driver log, complete
+omits heavy Suggests, while package installation, examples, compiled code, and
+ordinary check policy still execute. The separately receipted complete-source
+test stage already executes every supported test exactly once, so the package
+check does not repeat the same suite. The driver log, complete
 `paradox.Rcheck` tree, exact `Status: OK`, status ledger, and their hashes are
 retained and replayed by the evidence verifier. This check is not multiplied
 across the newer runtime axes.
@@ -460,7 +464,33 @@ and standalone legacy Domain/Condition paths; Paradox-1 ParamSet-family R6
 shells themselves use active bindings, so their practical migration requires
 R >= 4.0.
 The top-level receipt and each stage's digest claims are replayed by
-`verify-runtime-matrix-evidence`.
+`verify-runtime-matrix-evidence`. One source-derived trusted-input inventory
+owns the coordinator, worker, verifier, registry, package/repair locks, and
+policy inputs. Its complete hash manifest is checked immediately before and
+after the worker wave and bound into every stage and the top completion seal;
+an in-wave helper mutation therefore invalidates the run without maintaining
+duplicate policy arrays. The data.table-overlay stage additionally replays the
+exact source-lock row, archive SHA-256, installed version receipt, and install
+log, while every non-overlay stage must lack those overlay artifacts.
+
+Source-library provisioning authenticates each downloaded archive once,
+installs the exact lock into a staging library with repository-owned HOME,
+temporary, and cache roots, and publishes a complete tree receipt plus installed
+inventory. Ordinary cache-hit verification authenticates that sealed installed
+tree, lock, inventory, and receipt; it does not untar or rehash every source
+archive again. Its build identity contains only the selected runtime row's
+artifact fields, exact runtime/dependency locks, authenticated prefix-content
+manifest, and an explicit install-schema number. Unrelated registry rows and
+verification/receipt helper bytes remain provenance in the refreshable receipt,
+not rebuild inputs. Bump `SOURCE_LIBRARY_BUILD_SCHEMA` whenever installation
+semantics or the isolated build environment could change installed bytes.
+During a retained runtime stage, activation consumes the
+coordinator's authenticated receipt handoff instead of immediately repeating
+that complete library verification. Interactive activation has no handoff and
+continues to perform the full check. Every retained stage also consumes an
+exact five-file prefix-receipt handoff after authenticating the live prefix;
+coordination, activation, and later evidence replay all require that copy to
+remain byte-identical to the live sealed receipt.
 Committed-source reads and archives use the authenticated project-local Git
 with replacements and unreviewed object/attribute inputs rejected, global and
 system attributes disabled, and the tar umask pinned. Its identity and

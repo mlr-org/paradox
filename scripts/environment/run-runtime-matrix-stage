@@ -17,7 +17,9 @@ ROOT=$1
 RUN_ROOT=$2
 VERSION=$3
 REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+MANAGED_PATH="$ROOT/scripts/environment/runtime-matrix-managed-path"
 [[ -x "$REGISTRY" ]] || fail "runtime registry helper is absent"
+[[ -x "$MANAGED_PATH" ]] || fail "runtime managed-path helper is absent"
 "$REGISTRY" contains "$VERSION" || fail "unsupported runtime version"
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
@@ -38,9 +40,19 @@ STAGE_LOGS="$STAGE_ARTIFACTS/logs"
 STAGE_INPUTS="$STAGE_ARTIFACTS/inputs"
 MBO_CONFIG_BUNDLE="$RUN_ROOT/inputs/mbo-config-fixtures"
 MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_BUNDLE/common"
+"$MANAGED_PATH" "$ROOT" "$STAGE_DIRECTORY" existing ||
+  fail "prepared runtime stage path is unsafe"
+"$MANAGED_PATH" "$ROOT" "$STAGE_ARTIFACTS" existing ||
+  fail "prepared runtime artifact path is unsafe"
+stage_artifacts_identity=$(/usr/bin/stat -c '%d:%i' -- "$STAGE_ARTIFACTS")
+exec {stage_artifacts_descriptor}< "$STAGE_ARTIFACTS"
+[[ "$(/usr/bin/stat -Lc '%d:%i' \
+  "/proc/$$/fd/$stage_artifacts_descriptor")" == \
+    "$stage_artifacts_identity" ]] ||
+  fail "prepared runtime artifact path changed while opening"
 for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_CHECK" "$STAGE_LIBRARY" \
     "$STAGE_LOGS" "$STAGE_INPUTS"; do
-  [[ -d "$directory" && ! -L "$directory" ]] ||
+  "$MANAGED_PATH" "$ROOT" "$directory" existing ||
     fail "prepared stage directory is absent or symbolic: $directory"
 done
 [[ -d "$MBO_CONFIG_BUNDLE" && ! -L "$MBO_CONFIG_BUNDLE" ]] ||
@@ -48,6 +60,21 @@ done
 "$ROOT/scripts/environment/mbo-config-fixtures" verify \
   "$STAGE_SOURCE" "$ROOT/.local/compat/github/mbo_config" \
   "$MBO_CONFIG_BUNDLE" >/dev/null
+dependency_mode=$("$REGISTRY" field "$VERSION" dependency_mode)
+PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF="$STAGE_INPUTS/bootstrap-receipt"
+[[ -d "$PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF" &&
+  ! -L "$PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF" ]] ||
+  fail "prepared prefix receipt handoff is absent or symbolic"
+export PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF
+if [[ "$dependency_mode" == source-library ]]; then
+  PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF="$STAGE_INPUTS/dependency-library-receipt"
+  [[ -d "$PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF" &&
+    ! -L "$PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF" ]] ||
+    fail "prepared dependency-library receipt handoff is absent or symbolic"
+  export PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF
+else
+  unset PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF
+fi
 
 sha256_file() {
   sha256sum -- "$1" | cut -d ' ' -f 1
@@ -71,7 +98,7 @@ audit_symbols() {
   if [[ "$version" == 3.6.3 ]]; then
     [[ "$configured_nm_status" == 1 &&
       "$configured_nm" == "ERROR: no information for variable 'NM'" ]] ||
-      fail "R 3.6.3 unexpectedly reports an NM configuration: $configured_nm"
+      fail "R $version unexpectedly reports an NM configuration: $configured_nm"
   else
     [[ "$configured_nm_status" == 0 &&
       "${configured_nm##*/}" == "$nm_name" ]] ||
@@ -93,6 +120,14 @@ audit_symbols() {
       R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
       R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.0.5 ]]; then
+    required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings
+      R_ActiveBindingFunction)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_existsVarInFrame R_NewEnv R_getVarEx R_GetBindingType
+      R_getRegisteredNamespace R_getAttribCount R_hasAttrib R_mapAttrib
+      SET_COMPLEX_ELT SET_RAW_ELT)
   elif [[ "$version" == 4.3.3 ]]; then
     required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE)
@@ -136,9 +171,146 @@ audit_symbols() {
   printf 'r_api_compat_branch=%s\nsymbol_audit=passed\n' "$branch" >> "$log"
 }
 
+ensure_stage_directory() {
+  local target=$1 mode=${2:-}
+  local relative remainder component current_public open_child
+  local current_descriptor next_descriptor child_identity fd_identity
+  local owns_current=false
+  "$MANAGED_PATH" "$ROOT" "$target" allow-missing ||
+    fail "runtime stage user/cache path is unsafe: $target"
+  case "$target" in
+    "$STAGE_ARTIFACTS"/*) ;;
+    *) fail "runtime stage user/cache path escaped its artifact root: $target" ;;
+  esac
+  [[ "$(/usr/bin/stat -c '%d:%i' -- "$STAGE_ARTIFACTS")" == \
+    "$stage_artifacts_identity" &&
+    "$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$stage_artifacts_descriptor")" == \
+      "$stage_artifacts_identity" ]] ||
+    fail "runtime artifact root changed before directory creation"
+  relative=${target#"$STAGE_ARTIFACTS/"}
+  remainder=$relative
+  current_public=$STAGE_ARTIFACTS
+  current_descriptor=$stage_artifacts_descriptor
+  while [[ -n "$remainder" ]]; do
+    component=${remainder%%/*}
+    if [[ "$component" == "$remainder" ]]; then
+      remainder=
+    else
+      remainder=${remainder#*/}
+    fi
+    [[ -n "$component" && "$component" != . && "$component" != .. ]] ||
+      fail "runtime stage user/cache path has an unsafe component: $target"
+    open_child="/proc/$$/fd/$current_descriptor/$component"
+    if [[ ! -e "$open_child" && ! -L "$open_child" ]] &&
+        ! mkdir -- "$open_child" 2>/dev/null; then
+      [[ -d "$open_child" && ! -L "$open_child" ]] ||
+        fail "could not create runtime stage directory: $target"
+    fi
+    [[ -d "$open_child" && ! -L "$open_child" ]] ||
+      fail "runtime stage directory component is unsafe: $target"
+    child_identity=$(/usr/bin/stat -Lc '%d:%i' "$open_child")
+    current_public="$current_public/$component"
+    [[ -d "$current_public" && ! -L "$current_public" &&
+      "$(/usr/bin/stat -c '%d:%i' -- "$current_public")" == \
+        "$child_identity" ]] ||
+      fail "runtime stage directory changed during creation: $target"
+    exec {next_descriptor}< "$open_child"
+    fd_identity=$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$next_descriptor")
+    [[ "$fd_identity" == "$child_identity" ]] ||
+      fail "runtime stage directory changed while opening: $target"
+    if [[ "$owns_current" == true ]]; then
+      exec {current_descriptor}<&-
+    fi
+    current_descriptor=$next_descriptor
+    owns_current=true
+  done
+  if [[ -n "$mode" ]]; then
+    chmod "$mode" "/proc/$$/fd/$current_descriptor"
+  fi
+  "$MANAGED_PATH" "$ROOT" "$target" existing ||
+    fail "runtime stage user/cache path is unsafe after creation: $target"
+  [[ "$(/usr/bin/stat -c '%d:%i' -- "$target")" == \
+    "$(/usr/bin/stat -Lc '%d:%i' \
+      "/proc/$$/fd/$current_descriptor")" ]] ||
+    fail "runtime stage user/cache path changed after creation: $target"
+  if [[ "$owns_current" == true ]]; then
+    exec {current_descriptor}<&-
+  fi
+}
+
+configure_stage_user_environment() {
+  local directory mode
+  local -a stage_user_directories=(
+    "$STAGE_ARTIFACTS/home"
+    "$STAGE_ARTIFACTS/tmp"
+    "$STAGE_ARTIFACTS/config/xdg"
+    "$STAGE_ARTIFACTS/cache/xdg"
+    "$STAGE_ARTIFACTS/data/xdg"
+    "$STAGE_ARTIFACTS/state/xdg"
+    "$STAGE_ARTIFACTS/runtime"
+    "$STAGE_ARTIFACTS/cache/R"
+    "$STAGE_ARTIFACTS/cache/ccache"
+    "$STAGE_ARTIFACTS/tmp/ccache"
+    "$STAGE_ARTIFACTS/cache/pip"
+    "$STAGE_ARTIFACTS/cache/uv"
+    "$STAGE_ARTIFACTS/cache/cargo"
+    "$STAGE_ARTIFACTS/cache/rustup"
+    "$STAGE_ARTIFACTS/cache/go"
+    "$STAGE_ARTIFACTS/cache/go-mod"
+    "$STAGE_ARTIFACTS/cache/npm"
+    "$STAGE_ARTIFACTS/cache/yarn"
+    "$STAGE_ARTIFACTS/cache/bundle"
+    "$STAGE_ARTIFACTS/cache/python"
+    "$STAGE_ARTIFACTS/cache/julia"
+    "$STAGE_ARTIFACTS/cache/cuda"
+  )
+  for directory in "${stage_user_directories[@]}"; do
+    mode=
+    case "$directory" in
+      "$STAGE_ARTIFACTS/home"|"$STAGE_ARTIFACTS/tmp"|\
+          "$STAGE_ARTIFACTS/runtime")
+        mode=0700
+        ;;
+    esac
+    ensure_stage_directory "$directory" "$mode"
+  done
+  export HOME="$STAGE_ARTIFACTS/home"
+  export R_USER="$STAGE_ARTIFACTS/home"
+  export TMPDIR="$STAGE_ARTIFACTS/tmp"
+  export TMP="$STAGE_ARTIFACTS/tmp"
+  export TEMP="$STAGE_ARTIFACTS/tmp"
+  export XDG_CONFIG_HOME="$STAGE_ARTIFACTS/config/xdg"
+  export XDG_CACHE_HOME="$STAGE_ARTIFACTS/cache/xdg"
+  export XDG_DATA_HOME="$STAGE_ARTIFACTS/data/xdg"
+  export XDG_STATE_HOME="$STAGE_ARTIFACTS/state/xdg"
+  export XDG_RUNTIME_DIR="$STAGE_ARTIFACTS/runtime"
+  export R_USER_CACHE_DIR="$STAGE_ARTIFACTS/cache/R"
+  export CCACHE_DIR="$STAGE_ARTIFACTS/cache/ccache"
+  export CCACHE_TEMPDIR="$STAGE_ARTIFACTS/tmp/ccache"
+  export PIP_CACHE_DIR="$STAGE_ARTIFACTS/cache/pip"
+  export UV_CACHE_DIR="$STAGE_ARTIFACTS/cache/uv"
+  export CARGO_HOME="$STAGE_ARTIFACTS/cache/cargo"
+  export RUSTUP_HOME="$STAGE_ARTIFACTS/cache/rustup"
+  export GOPATH="$STAGE_ARTIFACTS/cache/go"
+  export GOMODCACHE="$STAGE_ARTIFACTS/cache/go-mod"
+  export npm_config_cache="$STAGE_ARTIFACTS/cache/npm"
+  export YARN_CACHE_FOLDER="$STAGE_ARTIFACTS/cache/yarn"
+  export BUNDLE_USER_HOME="$STAGE_ARTIFACTS/cache/bundle"
+  export PYTHONPYCACHEPREFIX="$STAGE_ARTIFACTS/cache/python"
+  export JULIA_DEPOT_PATH="$STAGE_ARTIFACTS/cache/julia"
+  export CUDA_CACHE_PATH="$STAGE_ARTIFACTS/cache/cuda"
+  export GIT_CONFIG_GLOBAL=/dev/null
+  export GIT_CONFIG_SYSTEM=/dev/null
+}
+
+configure_stage_user_environment
 cd "$ROOT"
 # shellcheck disable=SC1091
 . "$ROOT/scripts/activate-runtime-matrix" "$VERSION"
+configure_stage_user_environment
+exec {stage_artifacts_descriptor}<&-
 
 # The scheduler admits at most two independently isolated R-version stages at
 # once. Do not let a package, BLAS, OpenMP runtime, future/parallel, or a nested
@@ -147,14 +319,6 @@ export R_LIBS_USER="$STAGE_LIBRARY"
 export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
-export TMPDIR="$STAGE_ARTIFACTS/tmp"
-export XDG_RUNTIME_DIR="$STAGE_ARTIFACTS/runtime"
-export XDG_CACHE_HOME="$STAGE_ARTIFACTS/cache/xdg"
-export R_USER_CACHE_DIR="$STAGE_ARTIFACTS/cache/R"
-export CCACHE_DIR="$STAGE_ARTIFACTS/cache/ccache"
-export CCACHE_TEMPDIR="$STAGE_ARTIFACTS/tmp/ccache"
-export PIP_CACHE_DIR="$STAGE_ARTIFACTS/cache/pip"
-export UV_CACHE_DIR="$STAGE_ARTIFACTS/cache/uv"
 export MAKEFLAGS=-j1
 export CMAKE_BUILD_PARALLEL_LEVEL=1
 export CARGO_BUILD_JOBS=1
@@ -169,15 +333,11 @@ export MKL_NUM_THREADS=1
 export BLIS_NUM_THREADS=1
 export VECLIB_MAXIMUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1
-mkdir -p "$TMPDIR" "$XDG_RUNTIME_DIR" "$XDG_CACHE_HOME" \
-  "$R_USER_CACHE_DIR" "$CCACHE_DIR" "$CCACHE_TEMPDIR" \
-  "$PIP_CACHE_DIR" "$UV_CACHE_DIR"
-chmod 0700 "$XDG_RUNTIME_DIR"
 
 # R 4.3 has no authenticated conda-forge build of the minimum supported
 # data.table release. Install the cached, SHA-pinned CRAN source into this
 # isolated stage before paradox; no other dependency is rebuilt here.
-if [[ "$("$REGISTRY" field "$VERSION" dependency_mode)" == data-table-overlay ]]; then
+if [[ "$dependency_mode" == data-table-overlay ]]; then
   data_table_archive="$STAGE_INPUTS/data.table_${DATATABLE_VERSION}.tar.gz"
   [[ -f "$data_table_archive" && ! -L "$data_table_archive" ]] ||
     fail "prepared data.table source overlay is absent"
@@ -191,8 +351,10 @@ observed_data_table=$(Rscript --vanilla -e \
   'cat(as.character(packageVersion("data.table")))')
 [[ "$observed_data_table" == "$DATATABLE_VERSION" ]] ||
   fail "runtime resolved data.table $observed_data_table, expected $DATATABLE_VERSION"
-printf 'version\tsha256\n%s\t%s\n' "$DATATABLE_VERSION" "$DATATABLE_SHA256" \
-  > "$STAGE_LOGS/data.table-version.tsv"
+if [[ "$dependency_mode" == data-table-overlay ]]; then
+  printf 'version\tsha256\n%s\t%s\n' "$DATATABLE_VERSION" "$DATATABLE_SHA256" \
+    > "$STAGE_LOGS/data.table-version.tsv"
+fi
 
 cd "$STAGE_BUILD"
 R CMD build --no-build-vignettes --no-manual "$STAGE_SOURCE" \
@@ -221,7 +383,7 @@ if [[ "$VERSION" == 3.6.3 ]]; then
   (
     cd "$STAGE_CHECK"
     _R_CHECK_FORCE_SUGGESTS_=false \
-      R CMD check --no-manual --no-build-vignettes "$archive"
+      R CMD check --no-tests --no-manual --no-build-vignettes "$archive"
   ) > "$check_driver_log" 2>&1 || check_exit_status=$?
   check_log="$STAGE_CHECK/paradox.Rcheck/00check.log"
   check_conclusion=unavailable
@@ -238,7 +400,7 @@ if [[ "$VERSION" == 3.6.3 ]]; then
     printf 'field\tvalue\n'
     printf 'scope\tdeclared-minimum-r-3.6.3\n'
     printf 'force_suggests\tfalse\n'
-    printf 'options\t--no-manual --no-build-vignettes\n'
+    printf 'options\t--no-tests --no-manual --no-build-vignettes\n'
     printf 'exit_status\t%s\n' "$check_exit_status"
     printf 'conclusion\t%s\n' "$check_conclusion"
     printf 'driver_log_sha256\t%s\n' "$(sha256_file "$check_driver_log")"

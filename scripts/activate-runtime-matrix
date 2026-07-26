@@ -13,10 +13,12 @@ if [ ! -f DESCRIPTION ]; then
 fi
 PARADOX_RUNTIME_MATRIX_REGISTRY="$PWD/scripts/environment/runtime-matrix-registry"
 PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER="$PWD/scripts/environment/runtime-matrix-library"
+PARADOX_RUNTIME_MATRIX_PREFIX_HANDOFF="$PWD/scripts/environment/runtime-matrix-prefix-handoff"
 if [ ! -x "$PARADOX_RUNTIME_MATRIX_REGISTRY" ] ||
     [ ! -x "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" ] ||
+    [ ! -x "$PARADOX_RUNTIME_MATRIX_PREFIX_HANDOFF" ] ||
     ! "$PARADOX_RUNTIME_MATRIX_REGISTRY" validate >/dev/null; then
-  runtime_matrix_activation_fail "runtime registry or library manager is invalid" ||
+  runtime_matrix_activation_fail "runtime registry or receipt helper is invalid" ||
     { return 1 2>/dev/null || exit 1; }
 fi
 if [ "$#" -ne 1 ]; then
@@ -34,22 +36,49 @@ fi
 PARADOX_ROOT=$(pwd -P)
 PARADOX_RUNTIME_MATRIX_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/prefixes/R-$PARADOX_RUNTIME_MATRIX_VERSION"
 if ! "$PARADOX_ROOT/scripts/bootstrap-runtime-matrix" \
-    --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" --verify >/dev/null; then
+    --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" \
+    --verify-prefix-only >/dev/null; then
   runtime_matrix_activation_fail \
     "R $PARADOX_RUNTIME_MATRIX_VERSION prefix failed authenticated verification" ||
     { return 1 2>/dev/null || exit 1; }
 fi
+if [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF:-}" ] &&
+    ! "$PARADOX_RUNTIME_MATRIX_PREFIX_HANDOFF" \
+      "$PARADOX_RUNTIME_MATRIX_VERSION" \
+      "$PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF" >/dev/null; then
+  runtime_matrix_activation_fail \
+    "R $PARADOX_RUNTIME_MATRIX_VERSION staged prefix receipt failed verification" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
 PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=
-if [ "$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
-    "$PARADOX_RUNTIME_MATRIX_VERSION" dependency_mode)" = source-library ]; then
-  PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=$(
-    "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" \
-      --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" --verify --print-path
-  ) || {
-    runtime_matrix_activation_fail \
-      "R $PARADOX_RUNTIME_MATRIX_VERSION dependency library failed verification" ||
-      { return 1 2>/dev/null || exit 1; }
-  }
+runtime_matrix_dependency_mode=$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
+  "$PARADOX_RUNTIME_MATRIX_VERSION" dependency_mode)
+if [ "$runtime_matrix_dependency_mode" = source-library ]; then
+  if [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" ]; then
+    PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=$(
+      "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" \
+        --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" \
+        --verified-receipt-handoff \
+        "$PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF" --print-path
+    ) || {
+      runtime_matrix_activation_fail \
+        "R $PARADOX_RUNTIME_MATRIX_VERSION staged dependency handoff failed verification" ||
+        { return 1 2>/dev/null || exit 1; }
+    }
+  else
+    PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=$(
+      "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" \
+        --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" --verify --print-path
+    ) || {
+      runtime_matrix_activation_fail \
+        "R $PARADOX_RUNTIME_MATRIX_VERSION dependency library failed verification" ||
+        { return 1 2>/dev/null || exit 1; }
+    }
+  fi
+elif [ -n "${PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF:-}" ]; then
+  runtime_matrix_activation_fail \
+    "A staged dependency handoff was supplied for a non-source-library runtime" ||
+    { return 1 2>/dev/null || exit 1; }
 fi
 
 runtime_matrix_require_plain_directory_chain() {
@@ -147,6 +176,8 @@ if ! unset \
   XDG_RUNTIME_DIR CCACHE_TEMPDIR \
   PARADOX_COMPAT_REQUESTED_ROOT PARADOX_COMPAT_CLEAN_PATH \
   PARADOX_COMPAT_PATH_REMAINDER PARADOX_COMPAT_PATH_ENTRY \
+  PARADOX_RUNTIME_MATRIX_VERIFIED_PREFIX_RECEIPT_HANDOFF \
+  PARADOX_RUNTIME_MATRIX_VERIFIED_RECEIPT_HANDOFF \
   PARADOX_COMPAT_SYSTEM_ACTIVE_ROOT PARADOX_COMPAT_SYSTEM_RECEIPT \
   PARADOX_COMPAT_SYSTEM_GEO PARADOX_COMPAT_SYSTEM_P1 \
   PARADOX_COMPAT_SYSTEM_ACTIVE PARADOX_COMPAT_SYSTEM_ROOT \
@@ -168,6 +199,7 @@ export PARADOX_ROOT PARADOX_RUNTIME_MATRIX_VERSION
 export PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY
 export PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY
 export PARADOX_RUNTIME_MATRIX_REGISTRY PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER
+export PARADOX_RUNTIME_MATRIX_PREFIX_HANDOFF
 export CONDA_PREFIX="$PARADOX_RUNTIME_MATRIX_PREFIX"
 export MAMBA_ROOT_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/micromamba"
 export R_LIBS_USER="$PARADOX_RUNTIME_MATRIX_LIBRARY"
@@ -260,5 +292,6 @@ export PARADOX_ACTIVE_ROOT="$PARADOX_ROOT"
 export PARADOX_RUNTIME_MATRIX_ACTIVE=1
 hash -r 2>/dev/null || true
 unset runtime_matrix_clean_path runtime_matrix_path_remainder runtime_matrix_path_entry
+unset runtime_matrix_dependency_mode
 unset runtime_matrix_hook runtime_matrix_had_nounset
 unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true

@@ -941,12 +941,12 @@ For the exact candidate ref, retain and verify:
 
 1. strict GCC and Clang C99 warning-clean builds, registration/probe audit,
    ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
-2. real R 3.6.3, 4.3.3, and 4.5.2 runtime stages plus development R,
+2. real R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtime stages plus development R,
    compilation against R 3.6.0 and every later pinned API branch, and the exact
    R-API-exception ledger/raw-token/version-gated DSO audit for optional
    existence, receipt scans, stored bindings, and non-forcing promise
-   inspection, including the authenticated R-3.6 source-package closure and
-   R-4.3 data.table 1.18.4 overlay;
+   inspection, including the authenticated R-3.6/R-4.0 source-package closures
+   and R-4.3 data.table 1.18.4 overlay;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
 4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
    superseding heads in the `release-refresh-20260720` profile against both

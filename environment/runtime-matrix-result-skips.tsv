@@ -48,6 +48,36 @@ runtime	file	test	reason
 3.6.3	test-upgrade-paradox-object.R	post-transplant validation detects external mutation without rollback	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	recursive migration transplants shared legacy collections in place	Reason: R < 4.0 cannot safely inspect active-binding functions
 3.6.3	test-upgrade-paradox-object.R	replacement owners preserve assert_values in pure and graph migration	Reason: R < 4.0 cannot safely inspect active-binding functions
+4.0.5	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
+4.0.5	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
+4.0.5	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN
+4.0.5	test-native-altrep-lifetimes.R	Design columns materialize while trafo shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	Domain vectors materialize once and constructor shells stay structural	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	check rejects structural ALTREP before selecting capsule state	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	constructor rejects ALTREP nested structure before observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	exotic ALTREP state is rejected before dispatch	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	materialized and rejected inputs remain safe under forced collection	Reason: On CRAN
+4.0.5	test-native-altrep-lifetimes.R	public tables snapshot ALTREP shells while other shells reject	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-altrep-lifetimes.R	value merge alone snapshots shells while preserving opaque leaves	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-domain-construction.R	Domain constructors remain rooted during GC and callback reentry	Reason: On CRAN
+4.0.5	test-native-domain-construction.R	interpreted Domain list shells reject ALTREP without observation	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-domain-kernels.R	translated ParamUty diagnostics survive forced collection	Reason: On CRAN
+4.0.5	test-native-final-pointer-lifetimes.R	capsule and diagnostic paths survive forced collection	Reason: On CRAN
+4.0.5	test-native-gctorture.R	every allocating native entry point survives forced collection	Reason: On CRAN
+4.0.5	test-native-paramset-ids.R	mixed-encoding native matching survives forced collection	Reason: On CRAN
+4.0.5	test-native-paramset-properties.R	native static properties handle an interrupt-sized table under forced collection	Reason: On CRAN
+4.0.5	test-native-paramset-qunif.R	bulk qunif remains rooted under adversarial collection	Reason: On CRAN
+4.0.5	test-native-paramset-trafo-gctorture.R	authoritative ParamSet trafo survives forced collection	Reason: On CRAN
+4.0.5	test-native-paramset-trafo-gctorture.R	batched nested collection name translation releases transient state	Reason: On CRAN
+4.0.5	test-native-paramset-trafo-gctorture.R	live and detached mixed-encoding trafo names survive forced collection	Reason: On CRAN
+4.0.5	test-native-paramset-value-mutation.R	value transactions reject structural ALTREP list shells	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-paramsetcollection-construction.R	collection construction remains rooted under forced collection	Reason: On CRAN
+4.0.5	test-native-paramsetcollection-values.R	mixed-encoding collection value matching survives forced collection	Reason: On CRAN
+4.0.5	test-native-public-table-wrappers.R	additive data.table classes are inert across every table ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-public-table-wrappers.R	real data.table key and index carriers pass every public ingress	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission observes each top-level element once	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-native-public-table-wrappers.R	wide ALTREP table admission owns names before Elt reentry	Reason: R < 4.3 cannot construct list ALTREP test fixtures
+4.0.5	test-upgrade-paradox-object-graph.R	graph discovery balances a self-duplicating ALTREP root	Reason: R < 4.3 cannot construct list ALTREP test fixtures
 4.3.3	test-characterization-paramset-values.R	values getters and setters survive gctorture	Reason: On CRAN
 4.3.3	test-characterization-paramsetcollection-construction.R	small rich construction survives forced collection	Reason: On CRAN
 4.3.3	test-characterization-value-mutation.R	mutation survives clone, serialization, and forced collection	Reason: On CRAN

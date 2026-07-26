@@ -1403,7 +1403,7 @@ prerequisites and candidate bytes are frozen:
 
 1. strict GCC and Clang C99 builds, registered-routine/export audit, static
    analyzers, and the complete package suite;
-2. R 3.6.3, R 4.3.3, R 4.5.2, and development-R execution plus compilation
+2. R 3.6.3, R 4.0.5, R 4.3.3, R 4.5.2, and development-R execution plus compilation
    against the pinned R 3.6.0 and later headers and the exact stored-binding/
    promise
    `environment/r-api-exceptions.tsv` audit;

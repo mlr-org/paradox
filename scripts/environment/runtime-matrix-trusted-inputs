@@ -1,0 +1,75 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Emit the one authoritative, stable runtime-matrix trusted-input inventory.
+# The two bootstrap entries below must be authenticated before a caller
+# executes this helper; every emitted input can then be checked without
+# maintaining a second policy array in the coordinator or evidence verifier.
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+
+fail() {
+  printf 'runtime-matrix-trusted-inputs: %s\n' "$*" >&2
+  exit 1
+}
+
+[[ $# -eq 0 ]] ||
+  fail "usage: runtime-matrix-trusted-inputs"
+[[ -x "$REGISTRY" && -f "$REGISTRY" && ! -L "$REGISTRY" ]] ||
+  fail "runtime registry helper is absent or symbolic"
+"$REGISTRY" validate >/dev/null
+
+inputs=(
+  scripts/bootstrap-runtime-matrix
+  scripts/activate-runtime-matrix
+  scripts/test-runtime-matrix
+  scripts/verify-runtime-matrix-evidence
+  scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-prefix-handoff
+  scripts/environment/runtime-matrix-prefix-repair
+  scripts/environment/runtime-matrix-registry
+  scripts/environment/runtime-matrix-trusted-inputs
+  scripts/environment/runtime-matrix-managed-path
+  scripts/environment/runtime-matrix-library
+  scripts/environment/runtime-matrix-library.R
+  scripts/environment/runtime-matrix-git
+  scripts/environment/mbo-config-fixtures
+  scripts/environment/runtime-matrix-inventory.R
+  scripts/environment/runtime-matrix-probe.R
+  scripts/environment/runtime-matrix-skip-policy.R
+  scripts/environment/runtime-matrix-testthat-audit.R
+  scripts/environment/run-runtime-matrix-tests.R
+  scripts/environment/resource-jobs
+  scripts/environment/run-runtime-matrix-stage
+  scripts/environment/run-runtime-matrix-wave
+  environment/runtime-matrix-pre46-exclusions.tsv
+  environment/runtime-matrix-whole-file-skips.tsv
+  environment/runtime-matrix-result-skips.tsv
+  environment/runtime-matrix.tsv
+  environment/r-packages-linux-64.lock
+  compat/github-snapshot.tsv
+  compat/mlr-org-review.tsv
+)
+
+while IFS= read -r version; do
+  inputs+=("$("$REGISTRY" field "$version" runtime_lock)")
+  dependency_lock=$("$REGISTRY" field "$version" dependency_lock)
+  [[ "$dependency_lock" == - ]] || inputs+=("$dependency_lock")
+  prefix_repair=$("$REGISTRY" field "$version" prefix_repair)
+  [[ "$prefix_repair" == - ]] || inputs+=("$prefix_repair")
+done < <("$REGISTRY" versions)
+
+declare -A seen=()
+for relative in "${inputs[@]}"; do
+  [[ "$relative" =~ ^[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
+    "$relative" != /* && "$relative" != *..* &&
+    "$relative" != */ && "$relative" != *//* ]] ||
+    fail "trusted input has an unsafe relative path: $relative"
+  [[ -z "${seen[$relative]:-}" ]] ||
+    fail "trusted input is duplicated: $relative"
+  seen[$relative]=1
+  [[ -f "$ROOT/$relative" && ! -L "$ROOT/$relative" ]] ||
+    fail "trusted input is absent or symbolic: $relative"
+  printf '%s\n' "$relative"
+done

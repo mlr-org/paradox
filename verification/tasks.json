@@ -875,7 +875,7 @@
     },
     {
       "id": "runtime-supported",
-      "description": "Complete supported corpus under actual local R 3.6.3, 4.3.3, and 4.5.2 runtimes.",
+      "description": "Complete supported corpus under actual local R 3.6.3, 4.0.5, 4.3.3, and 4.5.2 runtimes.",
       "command": [
         "scripts/test-runtime-matrix",
         "--runtime",
@@ -893,14 +893,14 @@
       "phase": 40,
       "priority": 600,
       "information": 9,
-      "estimated_seconds": 5400,
+      "estimated_seconds": 10800,
       "cpu": 4,
       "cpu_min": 2,
       "memory_mib": 24576,
       "memory_mib_min": 16384,
       "pids": 1024,
       "scratch_mib": 6144,
-      "timeout_seconds": 10800,
+      "timeout_seconds": 36000,
       "failure_class": "blocker",
       "cache": "none",
       "input_groups": [

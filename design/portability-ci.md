@@ -20,7 +20,7 @@ architecture-specific vector instructions, or private data.table APIs. Use
 
 ## Local supported-runtime matrix
 
-Repository-local pinned prefixes exercise R 3.6.3, R 4.3.3, and R 4.5.2
+Repository-local pinned prefixes exercise R 3.6.3, R 4.0.5, R 4.3.3, and R 4.5.2
 independently of the development R 4.6.1 prefix. Pinned R 3.6.0, 4.0.0, and
 4.2.0 headers are explicit compile/API axes, so support is not inferred only
 from endpoint runtimes and every old-R preprocessor transition is compiled:
@@ -35,15 +35,20 @@ scripts/verify-runtime-matrix-evidence \
   --run-id release-runtime-YYYYMMDDTHHMMSSZ
 ```
 
-The three stages use isolated libraries and caches and may overlap only when
+The four stages use isolated libraries and caches and may overlap only when
 the memory-aware resource report admits the workers. Nested make, testthat,
 parallel/future, BLAS, and OpenMP pools remain one.
 
-R 3.6.3 uses the exact conda runtime lock plus a separately authenticated
-source-package library from
-`environment/runtime-r-3.6.3-packages.lock`. That snapshot-compatible closure
-includes the package imports, test framework, and focused test support without
-changing the prefix or host libraries. R 4.3 has no authenticated conda-forge
+R 3.6.3 and R 4.0.5 use exact conda runtime locks plus separately authenticated
+source-package libraries from their
+`environment/runtime-r-*-packages.lock` files. Those snapshot-compatible
+closures include the package imports, test framework, and focused test support
+without changing either prefix or host libraries. Their cache identities bind
+only selected build inputs (runtime artifact fields, exact locks, authenticated
+prefix content, and the explicit install schema); verification-tool provenance
+is resealed without reinstalling the closure. The R 4.0.5 stage covers the
+active-binding accessor introduced in R 4.0 while retaining the pre-R-4.2
+optional-binding and element-setter branches. R 4.3 has no authenticated conda-forge
 R-4.3 build of data.table 1.18.4. That stage therefore authenticates the source row in
 `environment/r-packages-linux-64.lock`, copies the cached exact archive into its
 retained inputs, installs it into the fresh stage library, verifies the resolved
@@ -55,6 +60,11 @@ Each stage must discover the current test inventory, run supported contract
 tests, audit the DSO's undefined R symbols against the public API plus the exact
 exception ledger, and seal source, build,
 library, inputs, commands, logs, compiler, package, and session information.
+One source-derived trusted-input manifest covers every helper, registry/policy
+file, package lock, and prefix-repair lock; it is authenticated before and
+after the complete worker wave and bound into top-level and per-stage evidence.
+The declared-minimum package check uses `--no-tests`, because the separately
+receipted complete-source stage already executes that exact suite once.
 Historical fixed file/skip/expectation counts are removed; a narrow exclusion
 must name a current unsupported runtime capability and be independently
 validated.
