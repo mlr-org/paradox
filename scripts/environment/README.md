@@ -442,10 +442,11 @@ That helper joins the candidate's snapshot and organization-review manifests,
 reads the two upgrade fixtures from the selected immutable Git commit rather
 than its worktree, and publishes one read-only shared bundle. All stages set
 `PARADOX_MBO_CONFIG_ROOT` to that bundle's `common/` directory. R >= 4.0 runs
-the complete ParamSet-family migration assertions. R 3.6 proves the precise
-fail-closed active-binding limitation plus current-object and standalone
-legacy Domain/Condition paths; Paradox-1 ParamSet-family R6 shells themselves
-use active bindings, so their practical migration requires R >= 4.0.
+the complete direct and recursive ParamSet-family migration assertions. R 3.6
+proves the precise fail-closed active-binding limitation plus current-object
+and standalone legacy Domain/Condition paths; Paradox-1 ParamSet-family R6
+shells themselves use active bindings, so their practical migration requires
+R >= 4.0.
 The top-level receipt and each stage's digest claims are replayed by
 `verify-runtime-matrix-evidence`.
 Committed-source reads and archives use the authenticated project-local Git

@@ -701,7 +701,10 @@ started at R 4.3 remains historical and cannot prove this reopened source.
   directly supplied Paradox object. It returns a new current ParamSet-family
   graph for a canonical built-in legacy ParamSet/Collection, returns an
   authenticated current object unchanged, and also owns standalone built-in
-  Domain/Condition normalization. It never becomes an in-place crawler.
+  Domain/Condition normalization. On R 3.6 its attempt to authenticate a
+  legacy ParamSet-family R6 shell fails closed because active-binding functions
+  cannot be inspected; run that conversion under R >= 4.0. It never becomes an
+  in-place crawler.
 - `upgrade_paradox_object_graph(x)` is the identity-preserving migration
   boundary for a containing object graph. It returns `x` invisibly and
   transplants every admitted legacy ParamSet-family R6 shell in place, including

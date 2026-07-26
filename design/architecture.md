@@ -157,6 +157,9 @@ The migration implementation has three layers:
    `c("ParamSetCollection", "ParamSet", "R6")`, or SHADOW
    `c("ParamSetShadow", "ParamSet", "R6")`; the selected family must match a
    canonical core, and `assert_values` is an exact non-missing logical scalar.
+   Legacy R6 authentication inspects active-binding functions through the same
+   version gate; direct as well as recursive ParamSet-family migration therefore
+   fails closed on R 3.6 and requires R >= 4.0.
    Read-only Shadow admission builds the authoritative live semantic core
    without installing it, retains the private binding's source core as a
    distinct generation receipt, and derives callback detachment from the same

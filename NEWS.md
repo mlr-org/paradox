@@ -261,13 +261,13 @@ hazards that Paradox 2 is intended to remove.
   their public-API fast paths; small version adapters cover old API spellings
   without a second semantic implementation. The reusable runtime harness now
   includes real R 3.6.3 execution and compilation against R 3.6.0 headers.
-  Recursive migration of a graph containing an active binding is the one
-  R-3.6-only limitation: because that runtime exposes no accessor for the
-  binding function, migration fails closed and asks the user to perform the
-  upgrade under R >= 4.0. Paradox-1 ParamSet-family R6 shells themselves use
-  active bindings, so their practical object/graph migration needs that newer
-  runtime. Current objects, standalone legacy Domain/Condition conversion, and
-  migration graphs without active bindings remain supported. R 3.6 also cannot construct the package's
+  Legacy ParamSet-family migration has one R-3.6-only limitation: because that
+  runtime exposes no accessor for an active-binding function, both direct and
+  recursive migration fail closed and ask the user to perform the upgrade under
+  R >= 4.0. Paradox-1 ParamSet-family R6 shells themselves use active bindings,
+  so their practical object/graph migration needs that newer runtime. Current
+  objects, standalone legacy Domain/Condition conversion, and migration graphs
+  without active bindings remain supported. R 3.6 also cannot construct the package's
   list-ALTREP adversarial test fixture; list ALTREP does not exist there, so
   this does not narrow production behavior. Linux, Windows x86-64, and
   Apple-silicon macOS are supported without architecture-specific code.

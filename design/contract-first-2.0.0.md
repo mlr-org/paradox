@@ -673,13 +673,13 @@ listed exactly in `environment/r-api-exceptions.tsv` and must pass raw-token,
 DSO, pinned-header, and real-runtime audits before freeze. These entries are not
 a CRAN allowlist and authorize neither another internal API nor an alternate
 semantic path. R 3.6 also exposes no function accessor for an active binding.
-Recursive legacy graph migration fails closed if it encounters one and asks the
-user to migrate under R >= 4.0; it never invokes or silently skips the binding.
-Paradox-1 ParamSet-family R6 shells themselves contain active bindings, so
-their practical object/graph migration requires R >= 4.0. This limitation does
-not affect current-object operations, idempotent current-object conversion,
-standalone legacy Domain/Condition conversion, or graphs without active
-bindings.
+Direct and recursive legacy ParamSet-family migration fail closed if active-
+binding inspection is required and ask the user to migrate under R >= 4.0; they
+never invoke or silently skip the binding. Paradox-1 ParamSet-family R6 shells
+themselves contain active bindings, so their practical object/graph migration
+requires R >= 4.0. This limitation does not affect current-object operations,
+idempotent current-object conversion, standalone legacy Domain/Condition
+conversion, or graphs without active bindings.
 
 Other old-header adaptations remain public and inline: fresh raw/complex
 destinations use direct vector access before the element-setter declarations

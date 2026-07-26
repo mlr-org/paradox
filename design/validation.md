@@ -559,8 +559,9 @@ identity, and seals the source/build/library/log tree.
 
 Before the supported-R workers are admitted, the coordinator also stages the two
 mandatory historical `mbo_config` objects through the shared authenticated
-Git-object helper. The full ParamSet-family migration assertions execute on
-R >= 4.0. R 3.6 instead proves the non-invoking active-binding failure plus
+Git-object helper. The full direct and recursive ParamSet-family migration
+assertions execute on R >= 4.0. R 3.6 instead proves the non-invoking
+active-binding failure plus
 current-object/idempotent and standalone legacy Domain/Condition paths; its
 capability exclusion is version-derived, not a file-wide waiver. An unset
 fixture root is an unexpected harness skip, not a reviewed runtime exclusion.

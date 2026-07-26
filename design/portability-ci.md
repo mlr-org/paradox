@@ -124,13 +124,13 @@ all three detached-promise accessors, so the facade compiles none of them on
 R >= 4.6 and a `PROMSXP` reached outside a binding/dots cell is opaque.
 
 R 3.6 exposes neither `R_ActiveBindingFunction()` nor an equivalent R
-accessor. If recursive legacy migration encounters an active binding on that
-runtime, it fails closed with an instruction to load and migrate the object
-under R >= 4.0. Paradox-1 ParamSet-family R6 shells themselves contain active
-bindings, so practical ParamSet/Collection graph migration requires R >= 4.0.
-Current Paradox-2 operations and idempotent current-object conversion remain
-supported on R 3.6, as do standalone legacy Domain/Condition conversion and
-graphs without active bindings.
+accessor. Direct and recursive legacy ParamSet-family migration fail closed
+when active-binding inspection is required, with an instruction to load and
+migrate the object under R >= 4.0. Paradox-1 ParamSet-family R6 shells
+themselves contain active bindings, so practical ParamSet/Collection object and
+graph migration requires R >= 4.0. Current Paradox-2 operations and idempotent
+current-object conversion remain supported on R 3.6, as do standalone legacy
+Domain/Condition conversion and graphs without active bindings.
 
 `environment/r-api-exceptions.tsv` is the exact ledger. It records each
 exceptional symbol, source, raw-token count, version branch, and rationale; the

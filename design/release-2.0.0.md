@@ -70,12 +70,12 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   recorded in `environment/r-api-exceptions.tsv` and pass raw-token, DSO,
   pinned-header, and real-runtime audits before freeze. None is a CRAN allowlist
   or broader internal-API permission.
-  R 3.6 has no accessor for an active-binding function. Recursive migration
-  therefore fails closed if it encounters one and asks for R >= 4.0; because
-  Paradox-1 ParamSet-family R6 shells use active bindings, practical migration
-  of those objects requires R >= 4.0. Current Paradox-2 operations, idempotent
-  current-object conversion, and standalone legacy Domain/Condition conversion
-  remain supported on R 3.6.
+  R 3.6 has no accessor for an active-binding function. Direct and recursive
+  legacy ParamSet-family migration therefore fail closed when its inspection is
+  required and ask for R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
+  active bindings, practical migration of those objects requires R >= 4.0.
+  Current Paradox-2 operations, idempotent current-object conversion, and
+  standalone legacy Domain/Condition conversion remain supported on R 3.6.
 - Public old-header adapters for raw/complex setters and default
   `identical()` flags are inline. Collection parameter reads pass the admitted,
   rooted core directly to the shared loader, eliminating both a temporary
