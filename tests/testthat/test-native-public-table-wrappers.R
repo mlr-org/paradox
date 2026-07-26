@@ -55,6 +55,8 @@ expect_additive_public_table_ingresses = function(table, data_table) {
 }
 
 test_that("additive data.table classes are inert across every table ingress", {
+  skip_if_no_list_altrep()
+
   aggregated = data.table::data.table(
     group = c("first", "second"),
     x = c(0.25, 0.75)
@@ -424,6 +426,8 @@ test_that("ignored data.table caches still have ordinary carrier metadata", {
 })
 
 test_that("real data.table key and index carriers pass every public ingress", {
+  skip_if_no_list_altrep()
+
   param_set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
   param_set$constraint = function(x) TRUE
   dependency_set = ps(x = p_dbl(0, 1), y = p_dbl(0, 1))
@@ -649,6 +653,8 @@ test_that("lazy table normalization does not admit exotic attributes", {
 })
 
 test_that("wide ALTREP table admission observes each top-level element once", {
+  skip_if_no_list_altrep()
+
   skip_if_not(
     exists(
       "C_test_stateful_altrep",
@@ -718,6 +724,8 @@ test_that("wide ALTREP table admission observes each top-level element once", {
 })
 
 test_that("wide ALTREP table admission owns names before Elt reentry", {
+  skip_if_no_list_altrep()
+
   skip_if_not(
     exists(
       "C_test_stateful_altrep",

@@ -875,7 +875,7 @@
     },
     {
       "id": "runtime-supported",
-      "description": "Complete supported corpus under actual local R 4.3.3 and 4.5.2 runtimes.",
+      "description": "Complete supported corpus under actual local R 3.6.3, 4.3.3, and 4.5.2 runtimes.",
       "command": [
         "scripts/test-runtime-matrix",
         "--runtime",

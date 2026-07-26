@@ -114,6 +114,8 @@ test_that("ordinary compact sequences work at every applicable boundary", {
 })
 
 test_that("Domain vectors materialize once and constructor shells stay structural", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
   callbacks = 0L
   callback = function() {
@@ -178,6 +180,8 @@ test_that("Domain vectors materialize once and constructor shells stay structura
 })
 
 test_that("constructor rejects ALTREP nested structure before observation", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
   callbacks = 0L
   callback = function() {
@@ -267,6 +271,8 @@ test_that("Domain special-value and value checks share one ALTREP snapshot", {
 })
 
 test_that("check rejects structural ALTREP before selecting capsule state", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
 
   point_set = ps(x = p_int(0L, 1L))
@@ -396,6 +402,8 @@ test_that("bulk qunif snapshots matrix values and metadata", {
 })
 
 test_that("Design columns materialize while trafo shells stay structural", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
 
   design_set = ps(
@@ -457,6 +465,8 @@ test_that("Design columns materialize while trafo shells stay structural", {
 })
 
 test_that("public tables snapshot ALTREP shells while other shells reject", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
   param_set = ps(x = p_dbl(0, 1))
   table = structure(
@@ -683,6 +693,8 @@ test_that("structural shells reject S4 while table prefixes stay inert", {
 })
 
 test_that("value merge alone snapshots shells while preserving opaque leaves", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
   marker = new.env(parent = emptyenv())
   callbacks = 0L
@@ -727,6 +739,8 @@ test_that("value merge alone snapshots shells while preserving opaque leaves", {
 })
 
 test_that("exotic ALTREP state is rejected before dispatch", {
+  skip_if_no_list_altrep()
+
   altrep2_skip_without_helpers()
   callbacks = 0L
   trap = function() {

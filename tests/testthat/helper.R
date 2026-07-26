@@ -19,6 +19,11 @@ native_stateful_altrep = function(first, later,
   elt_switch_after = NA_integer_, length_switch_after = NA_integer_,
   callback = NULL, callback_after = NA_integer_,
   duplicate_returns_self = FALSE) {
+  if (is.list(first) && getRversion() < "4.3.0") {
+    testthat::skip(
+      "R < 4.3 cannot construct list ALTREP test fixtures"
+    )
+  }
   if (!is.logical(duplicate_returns_self) ||
       length(duplicate_returns_self) != 1L ||
       is.na(duplicate_returns_self)) {
@@ -50,4 +55,18 @@ native_stateful_altrep_rearm = function(value, callback_after = 0L) {
     value,
     as.integer(callback_after)
   ))
+}
+
+skip_if_no_list_altrep = function() {
+  testthat::skip_if(
+    getRversion() < "4.3.0",
+    "R < 4.3 cannot construct list ALTREP test fixtures"
+  )
+}
+
+skip_if_no_active_binding_inspection = function() {
+  testthat::skip_if(
+    getRversion() < "4.0.0",
+    "R < 4.0 cannot safely inspect active-binding functions"
+  )
 }

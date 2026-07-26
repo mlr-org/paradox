@@ -10,7 +10,9 @@ STAGE_WORKER="$ROOT/scripts/environment/run-runtime-matrix-stage"
 WAVE_RUNNER="$ROOT/scripts/environment/run-runtime-matrix-wave"
 MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
 MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
-STAGE_TIMEOUT_SECONDS=5400
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+STAGE_TIMEOUT_SECONDS=7200
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
 DATATABLE_ARCHIVE="$ROOT/.cache/downloads/r-packages/data.table_${DATATABLE_VERSION}.tar.gz"
@@ -19,11 +21,11 @@ usage() {
   cat <<'USAGE'
 Usage: scripts/test-runtime-matrix [OPTIONS]
 
-Build and test one committed paradox source tree under actual local R 4.3.3
-and R 4.5.2 runtimes.
+Build and test one committed paradox source tree under registered actual local
+runtimes.
 
 Options:
-  --runtime VERSION  Select 4.3.3, 4.5.2, or all (default: all).
+  --runtime VERSION  Select one registered runtime or all (default: all).
   --source-ref REF   Immutable full refs/... Git ref to archive (required).
   --run-id ID        New retained run ID (required).
   -h, --help         Show this help.
@@ -32,9 +34,9 @@ Each stage builds a source archive, installs it in a fresh run-specific
 library, executes a focused r_api_compat probe and the authenticated supported
 source-test scope with NOT_CRAN=false, audits the DSO's version-specific
 undefined public R symbols, and seals all retained artifacts below
-.local/checks/ID/.  With --runtime all, the two isolated stages share one
-resource-aware light-test admission and run concurrently when two workers are
-safe. PARADOX_RUNTIME_MATRIX_JOBS may lower that ceiling to 1.
+.local/checks/ID/.  The isolated stages share one resource-aware light-test
+admission; at most two run concurrently. PARADOX_RUNTIME_MATRIX_JOBS may lower
+that ceiling to 1.
 USAGE
 }
 
@@ -67,11 +69,16 @@ while (($#)); do
     *) fail "Unknown test-runtime-matrix argument: $1" ;;
   esac
 done
-case "$selection" in
-  all) versions=(4.3.3 4.5.2) ;;
-  4.3.3|4.5.2) versions=("$selection") ;;
-  *) fail "Runtime must be 4.3.3, 4.5.2, or all" ;;
-esac
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "runtime registry or dependency-library manager is absent"
+"$REGISTRY" validate >/dev/null
+if [[ "$selection" == all ]]; then
+  mapfile -t versions < <("$REGISTRY" versions)
+elif "$REGISTRY" contains "$selection"; then
+  versions=("$selection")
+else
+  fail "Runtime must be registered or all: $selection"
+fi
 runtime_jobs_limit=2
 if [[ -n "${PARADOX_RUNTIME_MATRIX_JOBS:-}" ]]; then
   [[ "$PARADOX_RUNTIME_MATRIX_JOBS" =~ ^[12]$ ]] ||
@@ -107,11 +114,15 @@ trusted_inputs=(
   scripts/test-runtime-matrix
   scripts/verify-runtime-matrix-evidence
   scripts/environment/runtime-matrix-prefix-receipt
+  scripts/environment/runtime-matrix-registry
+  scripts/environment/runtime-matrix-library
+  scripts/environment/runtime-matrix-library.R
   scripts/environment/runtime-matrix-git
   scripts/environment/mbo-config-fixtures
   scripts/environment/runtime-matrix-inventory.R
   scripts/environment/runtime-matrix-probe.R
   scripts/environment/runtime-matrix-skip-policy.R
+  scripts/environment/runtime-matrix-testthat-audit.R
   scripts/environment/run-runtime-matrix-tests.R
   scripts/environment/resource-jobs
   scripts/environment/run-runtime-matrix-stage
@@ -119,6 +130,7 @@ trusted_inputs=(
   environment/runtime-matrix-pre46-exclusions.tsv
   environment/runtime-matrix-whole-file-skips.tsv
   environment/runtime-matrix-result-skips.tsv
+  environment/runtime-matrix.tsv
   environment/r-packages-linux-64.lock
   compat/github-snapshot.tsv
   compat/mlr-org-review.tsv
@@ -135,17 +147,31 @@ done
 lock_record=$(awk -F '\t' -v version="$DATATABLE_VERSION" '
   $1 == "data.table" && $2 == version { print $2 "\t" $4 }
 ' "$ROOT/environment/r-packages-linux-64.lock")
-[[ "$lock_record" == "$DATATABLE_VERSION"$'\t'"$DATATABLE_SHA256" ]] ||
-  fail "authenticated data.table source lock is absent or ambiguous"
-[[ -f "$DATATABLE_ARCHIVE" && ! -L "$DATATABLE_ARCHIVE" ]] ||
-  fail "cached data.table source is absent: run scripts/bootstrap"
-[[ "$(sha256sum -- "$DATATABLE_ARCHIVE" | cut -d ' ' -f 1)" == "$DATATABLE_SHA256" ]] ||
-  fail "cached data.table source does not match its authenticated lock"
+needs_data_table_overlay=false
 for version in "${versions[@]}"; do
-  relative="environment/runtime-r-${version}-linux-64.lock"
+  if [[ "$("$REGISTRY" field "$version" dependency_mode)" == data-table-overlay ]]; then
+    needs_data_table_overlay=true
+  fi
+done
+if [[ "$needs_data_table_overlay" == true ]]; then
+  [[ "$lock_record" == "$DATATABLE_VERSION"$'\t'"$DATATABLE_SHA256" ]] ||
+    fail "authenticated data.table source lock is absent or ambiguous"
+  [[ -f "$DATATABLE_ARCHIVE" && ! -L "$DATATABLE_ARCHIVE" ]] ||
+    fail "cached data.table source is absent: run scripts/bootstrap"
+  [[ "$(sha256sum -- "$DATATABLE_ARCHIVE" | cut -d ' ' -f 1)" == "$DATATABLE_SHA256" ]] ||
+    fail "cached data.table source does not match its authenticated lock"
+fi
+for version in "${versions[@]}"; do
+  relative=$("$REGISTRY" field "$version" runtime_lock)
   "$GIT_HELPER" show-file "$ROOT" "$source_commit:$relative" |
     cmp -s -- "$ROOT/$relative" - ||
     fail "Runtime lock differs from the committed source ref: $relative"
+  dependency_relative=$("$REGISTRY" field "$version" dependency_lock)
+  if [[ "$dependency_relative" != - ]]; then
+    "$GIT_HELPER" show-file "$ROOT" "$source_commit:$dependency_relative" |
+      cmp -s -- "$ROOT/$dependency_relative" - ||
+      fail "Dependency lock differs from the committed source ref: $dependency_relative"
+  fi
 done
 
 "$ROOT/scripts/bootstrap-runtime-matrix" --runtime "$selection" --verify
@@ -186,10 +212,12 @@ for version in "${versions[@]}"; do
   metadata="$stage/metadata"
   source="$artifacts/source"
   build="$artifacts/build"
+  check="$artifacts/check"
   library="$artifacts/library"
   logs="$artifacts/logs"
   inputs="$artifacts/inputs"
-  mkdir -p -- "$source" "$build" "$library" "$logs" "$inputs" "$metadata"
+  mkdir -p -- "$source" "$build" "$check" "$library" "$logs" "$inputs" \
+    "$metadata"
   printf 'field\tvalue\nstatus\tfailed\nrun_id\t%s\nruntime\t%s\nsource_ref\t%s\nsource_commit\t%s\nsource_tree\t%s\n' \
     "$run_id" "$version" "$source_ref" "$source_commit" "$source_tree" > "$metadata/run.tsv"
 
@@ -205,14 +233,28 @@ for version in "${versions[@]}"; do
   source_git_tar_hashes[$version]=$source_git_tar_sha256
   source_manifest_hashes[$version]=$source_manifest_sha256
   git_identity_hashes[$version]=$git_identity_sha256
-  for relative in "${trusted_inputs[@]}" "environment/runtime-r-${version}-linux-64.lock"; do
+  runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  version_inputs=("${trusted_inputs[@]}" "$runtime_lock_relative")
+  [[ "$dependency_lock_relative" == - ]] ||
+    version_inputs+=("$dependency_lock_relative")
+  for relative in "${version_inputs[@]}"; do
     mkdir -p -- "$inputs/${relative%/*}"
     cp -- "$ROOT/$relative" "$inputs/$relative"
   done
-  if [[ "$version" == 4.3.3 ]]; then
+  dependency_mode=$("$REGISTRY" field "$version" dependency_mode)
+  if [[ "$dependency_mode" == data-table-overlay ]]; then
     cp -- "$DATATABLE_ARCHIVE" "$inputs/data.table_${DATATABLE_VERSION}.tar.gz"
   fi
   cp -R -- "$ROOT/.local/runtime-matrix/receipts/R-$version" "$inputs/bootstrap-receipt"
+  if [[ "$dependency_mode" == source-library ]]; then
+    dependency_library=$("$LIBRARY_MANAGER" \
+      --runtime "$version" --verify --print-path)
+    dependency_key=${dependency_library%/library}
+    dependency_key=${dependency_key##*/}
+    cp -R -- "$ROOT/.local/runtime-matrix/dependency-receipts/R-$version/$dependency_key" \
+      "$inputs/dependency-library-receipt"
+  fi
   {
     printf 'step\tcommand\n'
     printf 'snapshot\treplacement-disabled Git archive with isolated attributes and pre/post repository audits\n'
@@ -221,8 +263,13 @@ for version in "${versions[@]}"; do
     printf 'mbo-config-fixtures\treviewed commit/tree Git objects staged once as read-only retained source-test inputs\n'
     printf 'build\tR CMD build --no-build-vignettes --no-manual SOURCE\n'
     printf 'install\tR CMD INSTALL --preclean --clean --install-tests --library=LIBRARY ARCHIVE\n'
-    if [[ "$version" == 4.3.3 ]]; then
+    if [[ "$version" == 3.6.3 ]]; then
+      printf 'declared-minimum-check\t_R_CHECK_FORCE_SUGGESTS_=false R CMD check --no-manual --no-build-vignettes ARCHIVE\n'
+    fi
+    if [[ "$dependency_mode" == data-table-overlay ]]; then
       printf 'dependency-overlay\tSHA-256-authenticated R CMD INSTALL of data.table %s into the fresh stage library\n' "$DATATABLE_VERSION"
+    elif [[ "$dependency_mode" == source-library ]]; then
+      printf 'dependency-overlay\tverified sealed source-package library from the exact runtime dependency lock\n'
     else
       printf 'dependency-overlay\tvalidated prefix data.table %s\n' "$DATATABLE_VERSION"
     fi
@@ -328,6 +375,7 @@ for version in "${versions[@]}"; do
   metadata="$stage/metadata"
   source="$artifacts/source"
   build="$artifacts/build"
+  check="$artifacts/check"
   library="$artifacts/library"
   logs="$artifacts/logs"
   inputs="$artifacts/inputs"
@@ -343,6 +391,21 @@ for version in "${versions[@]}"; do
     -f "$scope/observed-whole-file-skips.tsv" &&
     -f "$scope/observed-result-skips.tsv" ]] ||
     fail "Runtime stage outputs are incomplete"
+  if [[ "$version" == 3.6.3 ]]; then
+    [[ -f "$logs/r-cmd-check.log" && ! -L "$logs/r-cmd-check.log" &&
+      -f "$logs/r-cmd-check-status.tsv" &&
+      ! -L "$logs/r-cmd-check-status.tsv" &&
+      -f "$check/paradox.Rcheck/00check.log" &&
+      ! -L "$check/paradox.Rcheck/00check.log" ]] ||
+      fail "Declared-minimum R CMD check evidence is incomplete"
+  else
+    [[ -d "$check" && ! -L "$check" &&
+      -z $(find "$check" -mindepth 1 -print -quit) &&
+      ! -e "$logs/r-cmd-check.log" && ! -L "$logs/r-cmd-check.log" &&
+      ! -e "$logs/r-cmd-check-status.tsv" &&
+      ! -L "$logs/r-cmd-check-status.tsv" ]] ||
+      fail "A non-minimum runtime retained unexpected R CMD check evidence"
+  fi
   [[ $(sha256_file "$inputs/source.git.tar") == "$source_git_tar_sha256" &&
     $(sha256_file "$inputs/source.manifest.tsv") == "$source_manifest_sha256" &&
     $(sha256_file "$inputs/git-identity.tsv") == "$git_identity_sha256" ]] ||
@@ -422,7 +485,18 @@ for version in "${versions[@]}"; do
     printf 'source_commit\t%s\n' "$source_commit"
     printf 'source_tree\t%s\n' "$source_tree"
     printf 'r_api_compat_branch\t%s\n' "$branch"
-    printf 'lock_sha256\t%s\n' "$(sha256_file "$ROOT/environment/runtime-r-${version}-linux-64.lock")"
+    runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+    dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+    printf 'lock_sha256\t%s\n' "$(sha256_file "$ROOT/$runtime_lock_relative")"
+    if [[ "$dependency_lock_relative" == - ]]; then
+      printf 'dependency_lock_sha256\t-\n'
+      printf 'dependency_library_receipt_sha256\t-\n'
+    else
+      printf 'dependency_lock_sha256\t%s\n' \
+        "$(sha256_file "$ROOT/$dependency_lock_relative")"
+      printf 'dependency_library_receipt_sha256\t%s\n' \
+        "$(sha256_file "$inputs/dependency-library-receipt/receipt.tsv")"
+    fi
     printf 'bootstrap_receipt_sha256\t%s\n' "$(sha256_file "$inputs/bootstrap-receipt/receipt.tsv")"
     printf 'pre46_exclusion_manifest_sha256\t%s\n' \
       "$(sha256_file "$inputs/environment/runtime-matrix-pre46-exclusions.tsv")"
@@ -468,6 +542,18 @@ for version in "${versions[@]}"; do
     printf 'total_test_skips\t%s\n' "$total_skips"
     printf 'archive_sha256\t%s\n' "$(sha256_file "$archive")"
     printf 'candidate_dso_sha256\t%s\n' "$(sha256_file "$library/paradox/libs/paradox.so")"
+    if [[ "$version" == 3.6.3 ]]; then
+      printf 'declared_minimum_check_status_sha256\t%s\n' \
+        "$(sha256_file "$logs/r-cmd-check-status.tsv")"
+      printf 'declared_minimum_check_driver_sha256\t%s\n' \
+        "$(sha256_file "$logs/r-cmd-check.log")"
+      printf 'declared_minimum_check_log_sha256\t%s\n' \
+        "$(sha256_file "$check/paradox.Rcheck/00check.log")"
+    else
+      printf 'declared_minimum_check_status_sha256\t-\n'
+      printf 'declared_minimum_check_driver_sha256\t-\n'
+      printf 'declared_minimum_check_log_sha256\t-\n'
+    fi
     printf 'artifacts_manifest_sha256\t%s\n' "$(sha256_file "$metadata/artifacts.manifest.tsv")"
   } > "$metadata/run.tsv"
   seal_metadata "$metadata" run.tsv artifacts.manifest.tsv

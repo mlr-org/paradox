@@ -27,11 +27,21 @@ fail() {
 usage() {
   cat <<'USAGE'
 Usage: scripts/fetch-reference-sources [--offline]
+       scripts/fetch-reference-sources --print-r-source-url VERSION
 
 Fetch and authenticate the pinned R and auxiliary reference sources. Offline
 mode performs no downloads or Git fetches and requires every archive, checkout,
 and pinned commit to be present already.
 USAGE
+}
+
+r_source_archive_url() {
+  local version=$1 major
+  [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] ||
+    fail "invalid R source version: $version"
+  major=${version%%.*}
+  printf 'https://cran.r-project.org/src/base/R-%s/R-%s.tar.gz\n' \
+    "$major" "$version"
 }
 
 case $# in
@@ -42,6 +52,12 @@ case $# in
       -h|--help) usage; exit 0 ;;
       *) usage >&2; fail "unknown option: $1" ;;
     esac
+    ;;
+  2)
+    [[ "$1" == --print-r-source-url ]] ||
+      { usage >&2; fail "unknown option: $1"; }
+    r_source_archive_url "$2"
+    exit 0
     ;;
   *) usage >&2; fail "too many arguments" ;;
 esac
@@ -317,7 +333,7 @@ for row in "${r_api_rows[@]:1}"; do
   if [[ ! -f "$version_archive" ]]; then
     [[ "$OFFLINE" == false ]] ||
       fail "offline mode requires the pinned archive $version_archive"
-    "$LOCAL_CURL" -fL "https://cran.r-project.org/src/base/R-4/R-${version}.tar.gz" \
+    "$LOCAL_CURL" -fL "$(r_source_archive_url "$version")" \
       -o "$version_archive"
   fi
   verify_sha256 "$sha256" "$version_archive"

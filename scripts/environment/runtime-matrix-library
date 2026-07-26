@@ -1,0 +1,319 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+R_HELPER="$ROOT/scripts/environment/runtime-matrix-library.R"
+TREE_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
+MATRIX_ROOT="$ROOT/.local/runtime-matrix"
+CACHE_ROOT="$ROOT/.cache/downloads/runtime-matrix"
+
+fail() {
+  printf 'runtime-matrix-library: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: runtime-matrix-library --runtime VERSION [--verify|--verify-lock]
+                              [--offline]
+                              [--print-path]
+
+Provision or verify the exact sealed source-package library registered for an
+old runtime. The cache and installed library remain inside this checkout.
+EOF
+}
+
+version=
+mode=provision
+offline=false
+print_path=false
+while (($#)); do
+  case "$1" in
+    --runtime)
+      (($# >= 2)) || fail "--runtime requires a value"
+      version=$2
+      shift 2
+      ;;
+    --verify) mode=verify; shift ;;
+    --verify-lock) mode=verify_lock; shift ;;
+    --offline) offline=true; shift ;;
+    --print-path) print_path=true; shift ;;
+    -h|--help) usage; exit 0 ;;
+    *) fail "unknown argument: $1" ;;
+  esac
+done
+[[ -n "$version" ]] || fail "--runtime is required"
+[[ "$mode" == provision || "$offline" == false ]] ||
+  fail "--offline is meaningful only while provisioning"
+"$REGISTRY" contains "$version" ||
+  fail "runtime is not registered: $version"
+[[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]] ||
+  fail "runtime does not use a source-package library: $version"
+
+case "$(uname -s)-$(uname -m)" in
+  Linux-x86_64) ;;
+  *) fail "the local runtime library is pinned for Linux x86_64" ;;
+esac
+
+lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+lock="$ROOT/$lock_relative"
+prefix="$MATRIX_ROOT/prefixes/R-$version"
+prefix_receipt="$MATRIX_ROOT/receipts/R-$version/receipt.tsv"
+prefix_seal="$MATRIX_ROOT/receipts/R-$version/receipt.sha256"
+cache="$CACHE_ROOT/R-$version"
+for input in "$MANAGER" "$REGISTRY" "$R_HELPER" "$TREE_RECEIPT" "$lock"; do
+  [[ -f "$input" && ! -L "$input" ]] ||
+    fail "authenticated input is absent or symbolic: $input"
+done
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+verify_package_cache() {
+  local package package_version expected_hash archive
+  while IFS=$'\t' read -r package package_version _ expected_hash _ _; do
+    [[ "$package" != Package ]] || continue
+    archive="$cache/${package}_${package_version}.tar.gz"
+    [[ -f "$archive" && ! -L "$archive" ]] ||
+      fail "authenticated package archive is absent: $archive"
+    [[ "$(sha256_file "$archive")" == "$expected_hash" ]] ||
+      fail "cached source archive failed SHA-256: $archive"
+  done < "$lock"
+}
+
+expected_header=$'Package\tVersion\tRole\tSHA256\tURL\tFallbackURL'
+[[ $(head -n 1 "$lock") == "$expected_header" ]] ||
+  fail "dependency lock header is malformed"
+awk -F '\t' '
+  NR == 1 {next}
+  NF != 6 {exit 1}
+  $1 !~ /^[A-Za-z][A-Za-z0-9.]*$/ || package[$1]++ {exit 1}
+  $2 !~ /^[A-Za-z0-9][A-Za-z0-9.-]*$/ {exit 1}
+  $3 !~ /^(runtime-import|runtime-dependency|test-framework|test-support)$/ {exit 1}
+  $4 !~ /^[0-9a-f]+$/ || length($4) != 64 {exit 1}
+  $5 !~ /^https:\/\/(cloud[.]r-project[.]org|packagemanager[.]posit[.]co)\// {exit 1}
+  $6 != "-" &&
+    $6 !~ /^https:\/\/cloud[.]r-project[.]org\/src\/contrib\/Archive\// {exit 1}
+  END {if (NR < 2) exit 1}
+' "$lock" || fail "dependency lock rows are malformed"
+if [[ "$mode" == verify_lock ]]; then
+  printf 'runtime_matrix_dependency_lock=passed\nruntime=%s\npackages=%s\nlock_sha256=%s\n' \
+    "$version" "$(( $(wc -l < "$lock") - 1 ))" "$(sha256_file "$lock")"
+  exit 0
+fi
+
+for input in "$prefix_receipt" "$prefix_seal"; do
+  [[ -f "$input" && ! -L "$input" ]] ||
+    fail "authenticated runtime receipt is absent or symbolic: $input"
+done
+[[ -d "$prefix" && ! -L "$prefix" ]] ||
+  fail "runtime prefix is absent: $prefix"
+
+key=$(
+  {
+    printf 'schema\t1\n'
+    printf 'runtime\t%s\n' "$version"
+    printf 'runtime_lock\t%s\n' \
+      "$(sha256_file "$ROOT/$("$REGISTRY" field "$version" runtime_lock)")"
+    printf 'runtime_receipt\t%s\n' "$(sha256_file "$prefix_receipt")"
+    printf 'runtime_seal\t%s\n' "$(sha256_file "$prefix_seal")"
+    printf 'dependency_lock\t%s\n' "$(sha256_file "$lock")"
+    printf 'registry\t%s\n' "$(sha256_file "$ROOT/environment/runtime-matrix.tsv")"
+    printf 'registry_helper\t%s\n' "$(sha256_file "$REGISTRY")"
+    printf 'library_manager\t%s\n' "$(sha256_file "$MANAGER")"
+    printf 'library_helper\t%s\n' "$(sha256_file "$R_HELPER")"
+    printf 'tree_receipt\t%s\n' "$(sha256_file "$TREE_RECEIPT")"
+  } | sha256sum | cut -d ' ' -f 1
+)
+library="$MATRIX_ROOT/dependencies/R-$version/$key/library"
+receipt_directory="$MATRIX_ROOT/dependency-receipts/R-$version/$key"
+manifest="$receipt_directory/library.manifest.tsv"
+inventory="$receipt_directory/packages.tsv"
+receipt="$receipt_directory/receipt.tsv"
+seal="$receipt_directory/receipt.sha256"
+
+write_expected_receipt() {
+  cat <<EOF
+format	1
+runtime	$version
+platform	linux-64
+cache_key	$key
+library_relative	.local/runtime-matrix/dependencies/R-$version/$key/library
+lock_relative	$lock_relative
+lock_sha256	$(sha256_file "$lock")
+runtime_receipt_sha256	$(sha256_file "$prefix_receipt")
+runtime_seal_sha256	$(sha256_file "$prefix_seal")
+registry_sha256	$(sha256_file "$ROOT/environment/runtime-matrix.tsv")
+registry_helper_sha256	$(sha256_file "$REGISTRY")
+library_manager_sha256	$(sha256_file "$MANAGER")
+library_helper_sha256	$(sha256_file "$R_HELPER")
+tree_receipt_helper_sha256	$(sha256_file "$TREE_RECEIPT")
+library_manifest_sha256	$(sha256_file "$manifest")
+r_version	$("$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')
+EOF
+}
+
+run_inventory() {
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER="$library" R_LIBS_SITE= \
+    "$prefix/bin/Rscript" --vanilla "$R_HELPER" \
+    inventory "$lock" "$cache" "$library"
+}
+
+verify_library() {
+  local expected_receipt
+  verify_package_cache
+  [[ -d "$library" && ! -L "$library" ]] ||
+    fail "sealed dependency library is absent: $library"
+  for input in "$manifest" "$inventory" "$receipt" "$seal"; do
+    [[ -f "$input" && ! -L "$input" ]] ||
+      fail "dependency-library receipt is absent or symbolic: $input"
+  done
+  "$TREE_RECEIPT" verify "$library" "$manifest" >/dev/null
+  run_inventory | cmp -s -- "$inventory" - ||
+    fail "installed dependency inventory differs from its receipt"
+  expected_receipt=$(mktemp "$ROOT/.local/tmp/runtime-library-receipt.XXXXXX")
+  trap 'rm -f -- "${expected_receipt:-}"' RETURN
+  write_expected_receipt > "$expected_receipt"
+  cmp -s -- "$receipt" "$expected_receipt" ||
+    fail "dependency-library receipt differs from current inputs"
+  expected_seal="$(sha256_file "$receipt")  receipt.tsv"
+  [[ $(wc -l < "$seal") -eq 1 && "$(<"$seal")" == "$expected_seal" ]] ||
+    fail "dependency-library receipt seal is malformed or stale"
+  rm -f -- "$expected_receipt"
+  trap - RETURN
+}
+
+if [[ "$mode" == verify ]]; then
+  verify_library
+  if [[ "$print_path" == true ]]; then
+    printf '%s\n' "$library"
+  else
+    printf 'runtime_matrix_library=passed\nruntime=%s\ncache_key=%s\nlibrary=%s\n' \
+      "$version" "$key" "$library"
+  fi
+  exit 0
+fi
+
+if [[ -e "$library" || -L "$library" || -e "$receipt_directory" ||
+    -L "$receipt_directory" ]]; then
+  verify_library
+  [[ "$print_path" == false ]] || printf '%s\n' "$library"
+  exit 0
+fi
+
+mkdir -p -- "$cache" "$ROOT/.local/tmp" \
+  "$MATRIX_ROOT/dependencies/R-$version" \
+  "$MATRIX_ROOT/dependency-receipts/R-$version"
+while IFS=$'\t' read -r package package_version _ expected_hash url fallback; do
+  [[ "$package" != Package ]] || continue
+  archive="$cache/${package}_${package_version}.tar.gz"
+  [[ ! -L "$archive" && (! -e "$archive" || -f "$archive") ]] ||
+    fail "package cache entry is symbolic or non-regular: $archive"
+  if [[ ! -f "$archive" ]]; then
+    [[ "$offline" == false ]] ||
+      fail "offline package archive is absent: $archive"
+    partial=$(mktemp "$cache/.${package}_${package_version}.XXXXXX")
+    downloaded=false
+    for candidate in "$url" "$fallback"; do
+      [[ "$candidate" != - ]] || continue
+      if curl -fL --retry 3 --silent --show-error \
+          -o "$partial" -- "$candidate"; then
+        downloaded=true
+        break
+      fi
+    done
+    if [[ "$downloaded" != true ]]; then
+      rm -f -- "$partial"
+      fail "could not download locked source archive: $package $package_version"
+    fi
+    if [[ "$(sha256_file "$partial")" != "$expected_hash" ]]; then
+      rm -f -- "$partial"
+      fail "downloaded source archive failed SHA-256: $package $package_version"
+    fi
+    chmod 0444 "$partial"
+    mv -- "$partial" "$archive"
+  fi
+  [[ "$(sha256_file "$archive")" == "$expected_hash" ]] ||
+    fail "cached source archive failed SHA-256: $archive"
+done < "$lock"
+verify_package_cache
+
+staging_library=$(mktemp -d "$ROOT/.local/tmp/runtime-library.R-$version.XXXXXX")
+staging_receipt=$(mktemp -d "$ROOT/.local/tmp/runtime-library-receipt.R-$version.XXXXXX")
+cleanup_staging() {
+  if [[ -n "${staging_library:-}" && -d "$staging_library" &&
+      ! -L "$staging_library" ]]; then
+    chmod -R u+w -- "$staging_library" 2>/dev/null || true
+  fi
+  rm -rf -- "${staging_library:-}" "${staging_receipt:-}"
+}
+trap cleanup_staging EXIT
+(
+  unset R_HOME R_LIBS R_LIBS_USER R_LIBS_SITE R_ENVIRON R_ENVIRON_USER \
+    R_PROFILE R_PROFILE_USER R_MAKEVARS_SITE R_MAKEVARS_USER \
+    CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
+    CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS LDFLAGS \
+    CPATH C_INCLUDE_PATH CPLUS_INCLUDE_PATH LIBRARY_PATH LD_LIBRARY_PATH \
+    PKG_CONFIG PKG_CONFIG_PATH PKG_CONFIG_LIBDIR PKG_CONFIG_SYSROOT_DIR \
+    MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES
+  export PATH="$prefix/bin:/usr/bin:/bin"
+  export CONDA_PREFIX="$prefix"
+  export R_ENVIRON_USER=/dev/null
+  export R_PROFILE_USER=/dev/null
+  export R_MAKEVARS_USER=/dev/null
+  export R_LIBS_USER="$staging_library"
+  export R_LIBS_SITE=
+  export TMPDIR="$ROOT/.local/tmp"
+  export MAKEFLAGS=-j1
+  export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
+  set +u
+  for hook in "$prefix"/etc/conda/activate.d/*.sh; do
+    [[ ! -f "$hook" || "${hook##*/}" == activate-r-base.sh ]] || . "$hook"
+  done
+  set -u
+  "$prefix/bin/Rscript" --vanilla "$R_HELPER" \
+    install "$lock" "$cache" "$staging_library"
+)
+
+find "$staging_library" -type f -exec chmod a-w {} +
+# Keep only the unreceipted staging root writable until its cross-directory
+# rename completes. The manifest excludes that root but seals every child
+# directory mode; the installed root becomes read-only immediately after move.
+find "$staging_library" -mindepth 1 -type d -exec chmod 0555 {} +
+"$TREE_RECEIPT" create "$staging_library" \
+  "$staging_receipt/library.manifest.tsv" >/dev/null
+library=$staging_library
+run_inventory > "$staging_receipt/packages.tsv"
+library="$MATRIX_ROOT/dependencies/R-$version/$key/library"
+manifest="$staging_receipt/library.manifest.tsv"
+write_expected_receipt > "$staging_receipt/receipt.tsv"
+printf '%s  receipt.tsv\n' "$(sha256_file "$staging_receipt/receipt.tsv")" \
+  > "$staging_receipt/receipt.sha256"
+chmod 0444 "$staging_receipt"/*
+
+mkdir -p -- "${library%/*}"
+mv -- "$staging_library" "$library"
+staging_library=$library
+chmod 0555 "$library"
+mkdir -p -- "${receipt_directory%/*}"
+mv -- "$staging_receipt" "$receipt_directory"
+staging_receipt=$receipt_directory
+
+manifest="$receipt_directory/library.manifest.tsv"
+inventory="$receipt_directory/packages.tsv"
+receipt="$receipt_directory/receipt.tsv"
+seal="$receipt_directory/receipt.sha256"
+verify_library
+staging_library=
+staging_receipt=
+trap - EXIT
+if [[ "$print_path" == true ]]; then
+  printf '%s\n' "$library"
+else
+  printf 'runtime_matrix_library=passed\nruntime=%s\ncache_key=%s\nlibrary=%s\n' \
+    "$version" "$key" "$library"
+fi

@@ -13,6 +13,9 @@ MICROMAMBA_ARCHIVE="$ROOT/.cache/downloads/micromamba-${MICROMAMBA_VERSION}-linu
 MICROMAMBA_URL="https://micro.mamba.pm/api/micromamba/linux-64/${MICROMAMBA_VERSION}"
 PREFIX_RECEIPT="$ROOT/scripts/environment/runtime-matrix-prefix-receipt"
 INVENTORY_HELPER="$ROOT/scripts/environment/runtime-matrix-inventory.R"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
+PREFIX_REPAIR="$ROOT/scripts/environment/runtime-matrix-prefix-repair"
 
 usage() {
   cat <<'USAGE'
@@ -21,9 +24,11 @@ Usage: scripts/bootstrap-runtime-matrix [OPTIONS]
 Provision or verify exact repository-local compatibility runtimes.
 
 Options:
-  --runtime VERSION  Select 4.3.3, 4.5.2, or all (default: all).
+  --runtime VERSION  Select one registered runtime or all (default: all).
   --verify           Read-only verification; never provisions a prefix.
   --verify-locks     Validate only the checked-in explicit artifact locks.
+  --refresh-receipts Reauthenticate existing prefixes and atomically rewrite
+                     only their receipt.tsv and receipt.sha256 files.
   --offline          Provision absent prefixes from the local conda cache only.
   -h, --help         Show this help.
 
@@ -50,16 +55,22 @@ while (($#)); do
       ;;
     --verify) mode=verify; shift ;;
     --verify-locks) mode=verify_locks; shift ;;
+    --refresh-receipts) mode=refresh_receipts; shift ;;
     --offline) offline=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) fail "Unknown bootstrap-runtime-matrix argument: $1" ;;
   esac
 done
-case "$selection" in
-  all) versions=(4.3.3 4.5.2) ;;
-  4.3.3|4.5.2) versions=("$selection") ;;
-  *) fail "Runtime must be 4.3.3, 4.5.2, or all" ;;
-esac
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "Runtime registry or dependency-library manager is absent"
+"$REGISTRY" validate >/dev/null
+if [[ "$selection" == all ]]; then
+  mapfile -t versions < <("$REGISTRY" versions)
+elif "$REGISTRY" contains "$selection"; then
+  versions=("$selection")
+else
+  fail "Runtime must be registered or all: $selection"
+fi
 [[ "$mode" == provision || "$offline" == false ]] ||
   fail "--offline is meaningful only while provisioning"
 case "$(uname -s)-$(uname -m)" in
@@ -147,11 +158,16 @@ validate_lock() {
 }
 
 for version in "${versions[@]}"; do
-  validate_lock "$version" "$ROOT/environment/runtime-r-${version}-linux-64.lock"
+  runtime_lock=$("$REGISTRY" field "$version" runtime_lock)
+  validate_lock "$version" "$ROOT/$runtime_lock"
+  if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+    "$LIBRARY_MANAGER" --runtime "$version" --verify-lock
+  fi
 done
 [[ "$mode" != verify_locks ]] || exit 0
 
-for input in "$PREFIX_RECEIPT" "$INVENTORY_HELPER"; do
+for input in "$PREFIX_RECEIPT" "$INVENTORY_HELPER" "$REGISTRY" \
+    "$LIBRARY_MANAGER" "$PREFIX_REPAIR"; do
   [[ -f "$input" && ! -L "$input" ]] || fail "Runtime helper is absent or symbolic: $input"
 done
 for managed in \
@@ -199,31 +215,43 @@ trap - EXIT
 
 write_expected_receipt() {
   local version=$1 prefix=$2 lock=$3 manifest=$4
-  local cc
+  local cc lock_relative repair_relative
+  lock_relative=$("$REGISTRY" field "$version" runtime_lock)
   cc=$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
     "$prefix/bin/R" CMD config CC)
-  cat <<EOF
-format\t1
-runtime\t$version
-platform\tlinux-64
-prefix_relative\t.local/runtime-matrix/prefixes/R-$version
-lock_relative\tenvironment/runtime-r-$version-linux-64.lock
-lock_sha256\t$(sha256_file "$lock")
-micromamba_version\t$MICROMAMBA_VERSION
-micromamba_archive_sha256\t$MICROMAMBA_ARCHIVE_SHA256
-micromamba_executable_sha256\t$(sha256_file "$MICROMAMBA")
-inventory_helper_sha256\t$(sha256_file "$INVENTORY_HELPER")
-prefix_receipt_helper_sha256\t$(sha256_file "$PREFIX_RECEIPT")
-prefix_manifest_sha256\t$(sha256_file "$manifest")
-r_version\t$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')
-r_home_relative\t.local/runtime-matrix/prefixes/R-$version/lib/R
-cc\t$cc
-EOF
+  printf 'format\t1\n'
+  printf 'runtime\t%s\n' "$version"
+  printf 'platform\tlinux-64\n'
+  printf 'prefix_relative\t.local/runtime-matrix/prefixes/R-%s\n' "$version"
+  printf 'lock_relative\t%s\n' "$lock_relative"
+  printf 'lock_sha256\t%s\n' "$(sha256_file "$lock")"
+  printf 'micromamba_version\t%s\n' "$MICROMAMBA_VERSION"
+  printf 'micromamba_archive_sha256\t%s\n' "$MICROMAMBA_ARCHIVE_SHA256"
+  printf 'micromamba_executable_sha256\t%s\n' "$(sha256_file "$MICROMAMBA")"
+  printf 'inventory_helper_sha256\t%s\n' "$(sha256_file "$INVENTORY_HELPER")"
+  printf 'prefix_receipt_helper_sha256\t%s\n' "$(sha256_file "$PREFIX_RECEIPT")"
+  printf 'prefix_manifest_sha256\t%s\n' "$(sha256_file "$manifest")"
+  printf 'r_version\t%s\n' "$(
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+      "$prefix/bin/Rscript" --vanilla \
+      -e 'cat(as.character(getRversion()))'
+  )"
+  printf 'r_home_relative\t.local/runtime-matrix/prefixes/R-%s/lib/R\n' \
+    "$version"
+  printf 'cc\t%s\n' "$cc"
+  repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+  if [[ "$repair_relative" != - ]]; then
+    printf 'prefix_repair_relative\t%s\n' "$repair_relative"
+    printf 'prefix_repair_lock_sha256\t%s\n' \
+      "$(sha256_file "$ROOT/$repair_relative")"
+    printf 'prefix_repair_helper_sha256\t%s\n' "$(sha256_file "$PREFIX_REPAIR")"
+  fi
 }
 
 verify_one() {
   local version=$1
-  local lock="$ROOT/environment/runtime-r-${version}-linux-64.lock"
+  local refresh_receipt=${2:-false}
+  local lock="$ROOT/$("$REGISTRY" field "$version" runtime_lock)"
   local prefix="$PREFIX_ROOT/R-$version"
   local receipt_directory="$RECEIPT_ROOT/R-$version"
   local manifest="$receipt_directory/prefix.manifest.tsv"
@@ -232,6 +260,7 @@ verify_one() {
   local receipt="$receipt_directory/receipt.tsv"
   local seal="$receipt_directory/receipt.sha256"
   local expected_inventory actual_inventory expected_receipt expected_seal
+  local replacement_receipt replacement_seal
 
   [[ -d "$prefix" && ! -L "$prefix" ]] || fail "Runtime prefix is absent: $prefix"
   for file in "$manifest" "$inventory" "$packages" "$receipt" "$seal"; do
@@ -255,6 +284,19 @@ verify_one() {
     "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" |
     cmp -s -- "$packages" - || fail "Installed package ledger differs from conda metadata"
   write_expected_receipt "$version" "$prefix" "$lock" "$manifest" > "$expected_receipt"
+  if [[ "$refresh_receipt" == true ]]; then
+    replacement_receipt=$(mktemp "$receipt_directory/.receipt.tsv.XXXXXX")
+    replacement_seal=$(mktemp "$receipt_directory/.receipt.sha256.XXXXXX")
+    trap 'rm -f -- "${expected_inventory:-}" "${actual_inventory:-}" "${expected_receipt:-}" "${replacement_receipt:-}" "${replacement_seal:-}"' RETURN
+    cp -- "$expected_receipt" "$replacement_receipt"
+    printf '%s  receipt.tsv\n' "$(sha256_file "$replacement_receipt")" \
+      > "$replacement_seal"
+    chmod 0444 "$replacement_receipt" "$replacement_seal"
+    mv -- "$replacement_receipt" "$receipt"
+    replacement_receipt=
+    mv -- "$replacement_seal" "$seal"
+    replacement_seal=
+  fi
   cmp -s -- "$receipt" "$expected_receipt" ||
     fail "Runtime receipt differs from its authenticated inputs"
   expected_seal="$(sha256_file "$receipt")  receipt.tsv"
@@ -270,65 +312,122 @@ verify_one() {
     "$version" "$prefix" "$receipt"
 }
 
+verify_unreceipted_prefix() {
+  local version=$1 prefix=$2 lock=$3 expected actual
+  [[ -d "$prefix" && ! -L "$prefix" ]] ||
+    fail "Unreceipted runtime prefix is absent or symbolic: $prefix"
+  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    "$prefix/bin/Rscript" --vanilla \
+    -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
+    fail "Unreceipted runtime does not report exact R $version"
+  expected=$(mktemp "$ROOT/.local/tmp/runtime-unreceipted-lock.XXXXXX")
+  actual=$(mktemp "$ROOT/.local/tmp/runtime-unreceipted-inventory.XXXXXX")
+  trap 'rm -f -- "${expected:-}" "${actual:-}"' RETURN
+  tail -n +4 "$lock" | sort > "$expected"
+  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null \
+    R_LIBS_USER='' R_LIBS_SITE='' \
+    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+    sort > "$actual"
+  cmp -s -- "$expected" "$actual" ||
+    fail "Unreceipted runtime differs from its exact explicit lock"
+  rm -f -- "$expected" "$actual"
+  trap - RETURN
+}
+
 if [[ "$mode" == verify ]]; then
-  for version in "${versions[@]}"; do verify_one "$version"; done
+  for version in "${versions[@]}"; do
+    verify_one "$version"
+    if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+      "$LIBRARY_MANAGER" --runtime "$version" --verify
+    fi
+  done
+  exit 0
+fi
+if [[ "$mode" == refresh_receipts ]]; then
+  for version in "${versions[@]}"; do
+    verify_one "$version" true
+  done
   exit 0
 fi
 
 mkdir -p -- "$PREFIX_ROOT" "$RECEIPT_ROOT" "$MAMBA_ROOT" "$ROOT/.local/tmp"
 for version in "${versions[@]}"; do
-  lock="$ROOT/environment/runtime-r-${version}-linux-64.lock"
+  lock="$ROOT/$("$REGISTRY" field "$version" runtime_lock)"
   prefix="$PREFIX_ROOT/R-$version"
   receipt_directory="$RECEIPT_ROOT/R-$version"
+  finalize_prefix=false
   if [[ -e "$prefix" || -L "$prefix" ]]; then
-    verify_one "$version"
-    continue
-  fi
-  [[ ! -e "$receipt_directory" && ! -L "$receipt_directory" ]] ||
-    fail "Receipt exists for an absent R $version prefix: $receipt_directory"
-  mkdir -p -- "$receipt_directory"
-  create_args=(create --yes --no-rc --no-env -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
-  [[ "$offline" == false ]] || create_args+=(--offline)
-  CONDARC=/dev/null MAMBARC=/dev/null MAMBA_ROOT_PREFIX="$MAMBA_ROOT" \
-    "$MICROMAMBA" "${create_args[@]}"
+    if [[ -f "$receipt_directory/receipt.tsv" ]]; then
+      verify_one "$version"
+    else
+      [[ -d "$receipt_directory" && ! -L "$receipt_directory" &&
+        -z "$(find "$receipt_directory" -mindepth 1 -maxdepth 1 -print -quit)" ]] ||
+        fail "Unreceipted runtime has a nonempty or unsafe receipt directory"
+      verify_unreceipted_prefix "$version" "$prefix" "$lock"
+      finalize_prefix=true
+    fi
+  else
+    [[ ! -e "$receipt_directory" && ! -L "$receipt_directory" ]] ||
+      fail "Receipt exists for an absent R $version prefix: $receipt_directory"
+    mkdir -p -- "$receipt_directory"
+    create_args=(create --yes --no-rc --no-env -r "$MAMBA_ROOT" -p "$prefix" -f "$lock")
+    [[ "$offline" == false ]] || create_args+=(--offline)
+    CONDARC=/dev/null MAMBARC=/dev/null MAMBA_ROOT_PREFIX="$MAMBA_ROOT" \
+      "$MICROMAMBA" "${create_args[@]}"
 
-  [[ "$(R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null "$prefix/bin/Rscript" --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]] ||
-    fail "Provisioned runtime does not report exact R $version"
-  test_directory="$MATRIX_ROOT/probes/R-$version"
-  mkdir -p -- "$test_directory"
-  cat > "$test_directory/c17.c" <<'EOF'
+    verify_unreceipted_prefix "$version" "$prefix" "$lock"
+    finalize_prefix=true
+  fi
+  if [[ "$finalize_prefix" == true ]]; then
+    repair_relative=$("$REGISTRY" field "$version" prefix_repair)
+    if [[ "$repair_relative" != - ]]; then
+      "$PREFIX_REPAIR" apply "$prefix" "$MAMBA_ROOT/pkgs" \
+        "$ROOT/$repair_relative"
+    fi
+    test_directory="$MATRIX_ROOT/probes/R-$version"
+    mkdir -p -- "$test_directory"
+    cat > "$test_directory/c99.c" <<'EOF'
 #include <R.h>
 #include <Rinternals.h>
-SEXP runtime_matrix_c17(SEXP value) {
+SEXP runtime_matrix_c99(SEXP value) {
   for (int i = 0; i < 1; ++i) { if (value != R_NilValue) return value; }
   return R_NilValue;
 }
 EOF
-  (
-    export PATH="$prefix/bin:/usr/bin:/bin"
-    export CONDA_PREFIX="$prefix"
-    for hook in "$prefix"/etc/conda/activate.d/*.sh; do
-      # shellcheck disable=SC1090
-      [[ ! -f "$hook" ]] || . "$hook"
-    done
-    cd "$test_directory"
-    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
-      "$prefix/bin/R" CMD SHLIB --preclean c17.c
-  ) > "$test_directory/build.log" 2>&1
-  [[ -f "$test_directory/c17.so" ]] || fail "R $version C17 capability probe failed"
+    (
+      export PATH="$prefix/bin:/usr/bin:/bin"
+      export CONDA_PREFIX="$prefix"
+      set +u
+      for hook in "$prefix"/etc/conda/activate.d/*.sh; do
+        # shellcheck disable=SC1090
+        [[ ! -f "$hook" || "${hook##*/}" == activate-r-base.sh ]] || . "$hook"
+      done
+      set -u
+      cd "$test_directory"
+      R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+        "$prefix/bin/R" CMD SHLIB --preclean c99.c
+    ) > "$test_directory/build.log" 2>&1
+    [[ -f "$test_directory/c99.so" ]] ||
+      fail "R $version C99 capability probe failed"
 
-  manifest="$receipt_directory/prefix.manifest.tsv"
-  "$PREFIX_RECEIPT" create "$prefix" "$manifest"
-  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
-    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
-    sort > "$receipt_directory/installed-explicit.lock"
-  R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
-    "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" \
-    > "$receipt_directory/packages.tsv"
-  write_expected_receipt "$version" "$prefix" "$lock" "$manifest" \
-    > "$receipt_directory/receipt.tsv"
-  printf '%s  receipt.tsv\n' "$(sha256_file "$receipt_directory/receipt.tsv")" \
-    > "$receipt_directory/receipt.sha256"
-  chmod 0444 "$receipt_directory"/*
-  verify_one "$version"
+    manifest="$receipt_directory/prefix.manifest.tsv"
+    "$PREFIX_RECEIPT" create "$prefix" "$manifest"
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+      "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" explicit "$prefix" |
+      sort > "$receipt_directory/installed-explicit.lock"
+    R_ENVIRON_USER=/dev/null R_PROFILE_USER=/dev/null R_LIBS_USER='' R_LIBS_SITE='' \
+      "$prefix/bin/Rscript" --vanilla "$INVENTORY_HELPER" packages "$prefix" \
+      > "$receipt_directory/packages.tsv"
+    write_expected_receipt "$version" "$prefix" "$lock" "$manifest" \
+      > "$receipt_directory/receipt.tsv"
+    printf '%s  receipt.tsv\n' "$(sha256_file "$receipt_directory/receipt.tsv")" \
+      > "$receipt_directory/receipt.sha256"
+    chmod 0444 "$receipt_directory"/*
+    verify_one "$version"
+  fi
+  if [[ "$("$REGISTRY" field "$version" dependency_mode)" == source-library ]]; then
+    library_args=(--runtime "$version")
+    [[ "$offline" == false ]] || library_args+=(--offline)
+    "$LIBRARY_MANAGER" "${library_args[@]}"
+  fi
 done

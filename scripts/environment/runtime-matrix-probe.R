@@ -9,14 +9,30 @@ candidate_library <- normalizePath(args[[1L]], mustWork = TRUE)
 library("paradox", character.only = TRUE, lib.loc = candidate_library)
 
 runtime <- as.character(getRversion())
-if (!runtime %in% c("4.3.3", "4.5.2")) {
+registry_path <- Sys.getenv("PARADOX_RUNTIME_MATRIX_REGISTRY_FILE", unset = "")
+if (!nzchar(registry_path) || !file.exists(registry_path) ||
+    nzchar(Sys.readlink(registry_path))) {
+  stop("authenticated runtime registry is absent or symbolic", call. = FALSE)
+}
+registry <- read.delim(
+  registry_path,
+  header = TRUE,
+  quote = "",
+  comment.char = "",
+  colClasses = "character",
+  check.names = FALSE
+)
+if (!identical(
+    names(registry),
+    c(
+      "ordinal", "runtime", "platform", "runtime_lock", "dependency_mode",
+      "dependency_lock", "api_branch", "prefix_repair"
+    )
+  ) || anyNA(registry) || anyDuplicated(registry$runtime) ||
+    sum(registry$runtime == runtime) != 1L) {
   stop("probe must run under an exact matrix runtime", call. = FALSE)
 }
-branch <- if (getRversion() < "4.5.0") {
-  "pre-4.5-documented-public-backports"
-} else {
-  "4.5-direct-public-accessors"
-}
+branch <- registry$api_branch[registry$runtime == runtime]
 
 cases <- 0L
 check <- function(value, message) {

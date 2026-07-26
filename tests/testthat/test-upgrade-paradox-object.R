@@ -372,6 +372,7 @@ test_that("current capsule-backed objects upgrade idempotently", {
 })
 
 test_that("replacement owners preserve assert_values in pure and graph migration", {
+  skip_if_no_active_binding_inspection()
   with_replacement_owner_upgrader({
     pure_legacy = replacement_owner_legacy()
     pure_origin = mlr3misc::get_private(pure_legacy)$.set
@@ -473,6 +474,7 @@ test_that("built-in Domain and Condition objects are normalized", {
 })
 
 test_that("canonical legacy BASE state is rebuilt without executing it", {
+  skip_if_no_active_binding_inspection()
   callback_calls = 0L
   current = ps(
     x = p_dbl(0, 1, tags = "number", trafo = function(x) x + 1),
@@ -521,6 +523,7 @@ test_that("canonical legacy BASE state is rebuilt without executing it", {
 })
 
 test_that("legacy preparation normalizes callbacks but not opaque values", {
+  skip_if_no_active_binding_inspection()
   source_function = function(text) {
     result = eval(parse(text = text, keep.source = TRUE)[[1L]],
       envir = new.env(parent = baseenv()))
@@ -691,6 +694,7 @@ test_that("standalone Domain upgrade normalizes callbacks and repr", {
 })
 
 test_that("authenticated legacy crate adapters normalize captured callbacks", {
+  skip_if_no_active_binding_inspection()
   source_function = function(text) {
     result = eval(parse(text = text, keep.source = TRUE)[[1L]],
       envir = new.env(parent = baseenv()))
@@ -838,6 +842,7 @@ test_that("authenticated legacy crate adapters normalize captured callbacks", {
 })
 
 test_that("option-off detached callback migration does not mutate legacy carriers", {
+  skip_if_no_active_binding_inspection()
   old = options(paradox.strip_srcrefs = FALSE)
   on.exit(options(old), add = TRUE)
 
@@ -1019,6 +1024,7 @@ test_that("additive owner migration composes inherited callback carriers", {
 })
 
 test_that("graph migration rebinds shared callback carrier identities", {
+  skip_if_no_active_binding_inspection()
   child = transplantable_legacy_base_from_current(ps(y = p_int()))
   parent = transplantable_legacy_base_from_current(ps(x = p_int()))
   private = mlr3misc::get_private(parent)
@@ -1083,6 +1089,7 @@ test_that("graph migration rebinds shared callback carrier identities", {
 })
 
 test_that("legacy callback carrier shells reject dispatch and ALTREP", {
+  skip_if_no_active_binding_inspection()
   child = legacy_base_from_current(ps(y = p_int()))
   class_dispatches = 0L
   length.paradox_hostile_carriers = function(x) {
@@ -1136,6 +1143,7 @@ test_that("legacy callback carrier shells reject dispatch and ALTREP", {
 })
 
 test_that("legacy collection sharing is preserved and cycles are rejected", {
+  skip_if_no_active_binding_inspection()
   child = ps(x = p_int(0, 4, tags = "shared"))
   child$values = list(x = 3L)
   current = ParamSetCollection$new(
@@ -1183,6 +1191,7 @@ test_that("legacy collection sharing is preserved and cycles are rejected", {
 })
 
 test_that("recursive migration transplants shared legacy collections in place", {
+  skip_if_no_active_binding_inspection()
   child = ps(x = p_int(0, 4, init = 2L), enabled = p_lgl(init = TRUE))
   child$values = list(x = 3L, enabled = TRUE)
   current = ParamSetCollection$new(list(left = child, right = child))
@@ -1218,6 +1227,7 @@ test_that("recursive migration transplants shared legacy collections in place", 
 })
 
 test_that("a partially refreshed shell remains discoverable and retryable", {
+  skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(
     ps(x = p_dbl(0, 1))
   )
@@ -1259,6 +1269,7 @@ test_that("a partially refreshed shell remains discoverable and retryable", {
 })
 
 test_that("legacy extensions, replacements, and malformed state fail closed", {
+  skip_if_no_active_binding_inspection()
   hostile_flag_dispatches = 0L
   length.paradox_hostile_flag = function(x) {
     hostile_flag_dispatches <<- hostile_flag_dispatches + 1L
@@ -1419,6 +1430,7 @@ test_that("legacy extensions, replacements, and malformed state fail closed", {
 })
 
 test_that("joint commit validation protects earlier preflighted roots", {
+  skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
   old_enclosure = legacy$.__enclos_env__
   before = serialize(legacy, NULL)
@@ -1442,6 +1454,7 @@ test_that("joint commit validation protects earlier preflighted roots", {
 })
 
 test_that("per-rebase joint validation protects unrelated live roots", {
+  skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
   old_enclosure = legacy$.__enclos_env__
   before = serialize(legacy, NULL)
@@ -1486,6 +1499,7 @@ test_that("per-rebase joint validation protects unrelated live roots", {
 })
 
 test_that("post-transplant validation detects external mutation without rollback", {
+  skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
   old_enclosure = legacy$.__enclos_env__
   current = ps(x = p_dbl())
@@ -1536,6 +1550,7 @@ test_that("post-transplant validation detects external mutation without rollback
 })
 
 test_that("corrupt current roots abort graph preflight before legacy mutation", {
+  skip_if_no_active_binding_inspection()
   legacy = transplantable_legacy_base_from_current(ps(x = p_dbl()))
   old_enclosure = legacy$.__enclos_env__
   before = serialize(legacy, NULL)

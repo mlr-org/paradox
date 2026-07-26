@@ -62,6 +62,14 @@ if (!file.exists(skip_policy_helper) || dir.exists(skip_policy_helper) ||
   stop("runtime skip-policy validator is absent or symbolic", call. = FALSE)
 }
 source(skip_policy_helper, local = TRUE)
+result_audit_helper <- file.path(
+  snapshot, "scripts", "environment", "runtime-matrix-testthat-audit.R"
+)
+if (!file.exists(result_audit_helper) || dir.exists(result_audit_helper) ||
+    is_symbolic(result_audit_helper)) {
+  stop("runtime result auditor is absent or symbolic", call. = FALSE)
+}
+source(result_audit_helper, local = TRUE)
 
 Sys.setenv(NOT_CRAN = "false")
 options(
@@ -342,6 +350,9 @@ results <- testthat::test_dir(
   load_package = "none"
 )
 summary <- as.data.frame(results)
+result_audit <- runtime_matrix_audit_testthat_results(results, summary)
+raw_results <- result_audit$raw_results
+expectation_types <- result_audit$expectation_types
 reported_files <- unique(as.character(summary$file))
 if (anyNA(reported_files) || any(!nzchar(reported_files)) ||
     !identical(reported_files, basename(reported_files))) {
@@ -385,10 +396,16 @@ write.table(
 cat("observed_whole_file_skip_count=", length(missing_result_files),
   "\n", sep = "")
 
-skipped_rows <- which(summary$skipped)
+skipped_rows <- which(vapply(
+  raw_results,
+  function(block) {
+    any(vapply(block, inherits, logical(1L), what = "expectation_skip"))
+  },
+  logical(1L)
+))
 observed_result_skips <- lapply(skipped_rows, function(i) {
-  skipped_expectations <- summary$result[[i]][vapply(
-    summary$result[[i]],
+  skipped_expectations <- raw_results[[i]][vapply(
+    raw_results[[i]],
     inherits,
     logical(1L),
     what = "expectation_skip"
@@ -432,10 +449,10 @@ for (i in seq_len(nrow(observed_result_skips))) {
     "\treason=", observed_result_skips$reason[[i]], "\n", sep = ""
   )
 }
-failed <- sum(summary$failed)
-warnings <- sum(summary$warning)
-errors <- sum(summary$error)
-passed <- sum(summary$passed)
+failed <- sum(expectation_types == "failure")
+warnings <- sum(expectation_types == "warning")
+errors <- sum(expectation_types == "error")
+passed <- sum(expectation_types == "success")
 skipped <- nrow(observed_result_skips)
 cat("expectations_passed=", passed, "\n", sep = "")
 cat("expectations_failed=", failed, "\n", sep = "")

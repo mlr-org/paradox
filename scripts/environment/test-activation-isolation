@@ -22,6 +22,9 @@ env -i \
   PARADOX_RUNTIME_MATRIX_VERSION=4.3.3 \
   PARADOX_RUNTIME_MATRIX_PREFIX="$ROOT/.local/runtime-matrix/prefixes/R-4.3.3" \
   PARADOX_RUNTIME_MATRIX_LIBRARY="$ROOT/.local/runtime-matrix/libraries/R-4.3.3" \
+  PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=/outside/dependency-library \
+  PARADOX_RUNTIME_MATRIX_REGISTRY=/outside/runtime-registry \
+  PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER=/outside/library-manager \
   PARADOX_RUNTIME_MATRIX_TMP="$ROOT/.local/runtime-matrix/tmp/R-4.3.3" \
   PARADOX_RUNTIME_MATRIX_CACHE="$ROOT/.cache/runtime-matrix/R-4.3.3" \
   PARADOX_RUNTIME_MATRIX_XDG="$ROOT/.local/runtime-matrix/runtime/R-4.3.3" \

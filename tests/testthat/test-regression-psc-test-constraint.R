@@ -27,6 +27,8 @@ test_that("ParamSetCollection strict checks use live child constraints", {
 })
 
 test_that("constraint checks do not authenticate a replaced R6 getter", {
+  skip_if_no_active_binding_inspection()
+
   collection = psc(component = ps(x = p_int(0, 10)))
   reads = 0L
   original = activeBindingFunction("constraint", collection)

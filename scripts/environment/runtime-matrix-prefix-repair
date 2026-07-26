@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# The conda-forge R 3.6.3 artifact predates the current runtime matrix. Its
+# post-link script unconditionally runs `R CMD javareconf`. On the supported
+# host/toolchain combination that old script leaves the two no_link,
+# prefix-relocated configuration files below empty even though micromamba
+# reports a successful transaction. This helper reconstructs only those files
+# from the authenticated extracted artifact, applies conda's literal text
+# prefix relocation, and refuses every unlisted or unexpected input. Bootstrap
+# subsequently seals the repaired bytes in the complete prefix manifest.
+
+fail() {
+  printf 'runtime-matrix-prefix-repair: %s\n' "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+Usage: runtime-matrix-prefix-repair apply PREFIX PACKAGE_CACHE LOCK
+       runtime-matrix-prefix-repair verify PREFIX PACKAGE_CACHE LOCK
+EOF
+}
+
+[[ $# -eq 4 ]] || { usage >&2; exit 2; }
+operation=$1
+prefix=$2
+package_cache=$3
+lock=$4
+[[ "$operation" == apply || "$operation" == verify ]] ||
+  fail "operation must be apply or verify"
+for directory in "$prefix" "$package_cache"; do
+  [[ -d "$directory" && ! -L "$directory" ]] ||
+    fail "directory is absent or symbolic: $directory"
+done
+prefix=$(cd "$prefix" && pwd -P)
+package_cache=$(cd "$package_cache" && pwd -P)
+[[ -f "$lock" && ! -L "$lock" ]] ||
+  fail "repair lock is absent or symbolic: $lock"
+[[ $(head -n 1 "$lock") == $'Artifact\tPath\tSourceSHA256\tPlaceholder' ]] ||
+  fail "repair lock header is malformed"
+case "$prefix" in
+  *$'\n'*) fail "prefix contains a newline" ;;
+esac
+
+sha256_file() {
+  sha256sum -- "$1" | cut -d ' ' -f 1
+}
+
+temporary=
+trap 'rm -f -- "${temporary:-}"' EXIT
+rows=0
+while IFS=$'\t' read -r artifact relative source_sha placeholder; do
+  [[ "$artifact" != Artifact ]] || continue
+  ((rows += 1))
+  [[ "$artifact" =~ ^[A-Za-z0-9._-]+$ &&
+    "$relative" =~ ^[A-Za-z0-9._/-]+$ &&
+    "$relative" != /* && "$relative" != *"/../"* &&
+    "$relative" != ../* && "$relative" != */.. &&
+    "$source_sha" =~ ^[0-9a-f]{64}$ &&
+    -n "$placeholder" ]] ||
+    fail "repair lock row is malformed"
+  source="$package_cache/$artifact/$relative"
+  destination="$prefix/$relative"
+  [[ -f "$source" && ! -L "$source" ]] ||
+    fail "authenticated artifact member is absent or symbolic: $source"
+  [[ "$(sha256_file "$source")" == "$source_sha" ]] ||
+    fail "artifact member SHA-256 differs from the repair lock: $source"
+  [[ -f "$destination" && ! -L "$destination" ]] ||
+    fail "prefix repair target is absent or symbolic: $destination"
+  grep -Fq -- "$placeholder" "$source" ||
+    fail "artifact member lacks its locked prefix placeholder: $source"
+
+  temporary=$(mktemp "${destination}.repair.XXXXXX")
+  pattern=$(printf '%s' "$placeholder" | sed 's/[][\\.^$*|]/\\&/g')
+  replacement=$(printf '%s' "$prefix" | sed 's/[\\&|]/\\&/g')
+  LC_ALL=C sed "s|$pattern|$replacement|g" "$source" > "$temporary"
+  [[ -s "$temporary" ]] ||
+    fail "prefix relocation produced an empty file: $relative"
+  ! grep -Fq -- "$placeholder" "$temporary" ||
+    fail "prefix relocation left a build placeholder: $relative"
+  grep -Fq -- "$prefix" "$temporary" ||
+    fail "prefix relocation did not install the runtime prefix: $relative"
+
+  if cmp -s -- "$destination" "$temporary"; then
+    rm -f -- "$temporary"
+    temporary=
+    continue
+  fi
+  [[ "$operation" == apply ]] ||
+    fail "sealed prefix differs from the authenticated repair: $relative"
+  [[ ! -s "$destination" ]] ||
+    fail "refusing to replace a nonempty unexpected repair target: $relative"
+  chmod --reference="$source" "$temporary"
+  mv -- "$temporary" "$destination"
+  temporary=
+done < "$lock"
+((rows == 2)) || fail "repair lock must contain exactly two rows"
+trap - EXIT
+printf 'runtime_matrix_prefix_repair=passed\noperation=%s\nfiles=%s\n' \
+  "$operation" "$rows"

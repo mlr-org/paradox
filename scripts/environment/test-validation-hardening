@@ -15,6 +15,7 @@ RECEIPT_HELPER="$ROOT/scripts/environment/valgrind-receipts"
 EVIDENCE_HELPER="$ROOT/scripts/environment/validate-memory-evidence"
 API_TOKEN_AUDITOR="$ROOT/scripts/environment/audit-public-api-tokens"
 API_COMPATIBILITY_GATE="$ROOT/scripts/check-r-api-compatibility"
+REFERENCE_SOURCE_FETCHER="$ROOT/scripts/fetch-reference-sources"
 COMPILER_BATCH_RUNNER="$ROOT/scripts/environment/run-compiler-batch"
 COMPILER_WAVE_RUNNER="$ROOT/scripts/environment/run-compiler-wave"
 REVERSE_DEPENDENCY_PREP_TEST="$ROOT/scripts/environment/test-reverse-dependency-preparation.R"
@@ -1059,25 +1060,27 @@ printf '%s\n' \
 grep -qx 'result=passed' "$TEST_ROOT/public-api-allowed.txt" ||
   fail "public API token auditor did not pass allowed identifiers"
 
-# R 4.3--4.5 have one reviewed non-forcing binding exception. Detached promise
-# inspection additionally uses three exact header-declared accessors on those
-# old runtimes. Strict R >= 4.6 builds use the public binding/dots APIs and
-# compile none of the detached-promise accessors. The raw-token auditor admits
-# every exceptional occurrence only at the centralized compatibility facade
-# and with the exact versioned ledger.
+# R 3.6--4.5 have one reviewed non-forcing binding exception and three exact
+# detached-promise accessors. R 3.6--4.1 additionally need the exported
+# fancy-frame query for the allocation-free terminal scan. Strict R >= 4.6
+# builds compile none of those old accessors. The raw-token auditor admits each
+# occurrence only at the centralized compatibility facade and with the exact
+# versioned ledger.
 TOKEN_EXCEPTION="$TEST_ROOT/reviewed legacy binding token"
 mkdir -p "$TOKEN_EXCEPTION/src" "$TOKEN_EXCEPTION/environment"
 printf '%s\n' \
   'Rf_findVarInFrame(environment, symbol);' \
+  'R_HasFancyBindings(environment);' \
   'R_PromiseExpr(promise); PRENV(promise);' \
   'PRVALUE(promise);' \
   > "$TOKEN_EXCEPTION/src/r_api_compat.c"
 printf '%s\n' \
   $'symbol\tsource\tcount\tversions\tpolicy\trationale' \
-  $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
-  $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
-  $'PRENV\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
-  $'PRVALUE\tsrc/r_api_compat.c\t1\tR-4.3.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'Rf_findVarInFrame\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdeclared-exported-pre-4.6-only\ttest fixture' \
+  $'R_HasFancyBindings\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.1.x\tfancy-frame-terminal-scan-pre-4.2-only\ttest fixture' \
+  $'R_PromiseExpr\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'PRENV\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
+  $'PRVALUE\tsrc/r_api_compat.c\t1\tR-3.6.x--R-4.5.x\tdetached-promise-snapshot-pre-4.6-only\ttest fixture' \
   > "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv"
 "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION" \
   "$TEST_ROOT/public-api-exception.txt" >/dev/null
@@ -1085,6 +1088,10 @@ grep -qx \
   'reviewed_legacy_binding=Rf_findVarInFrame:src/r_api_compat.c:1' \
   "$TEST_ROOT/public-api-exception.txt" ||
   fail "public API token auditor did not ledger its reviewed exception"
+grep -qx \
+  'reviewed_fancy_binding=R_HasFancyBindings:src/r_api_compat.c:1' \
+  "$TEST_ROOT/public-api-exception.txt" ||
+  fail "public API token auditor did not ledger R_HasFancyBindings"
 for promise_symbol in R_PromiseExpr PRENV PRVALUE; do
   grep -qx \
     "reviewed_promise_accessor=$promise_symbol:src/r_api_compat.c:1" \
@@ -1110,7 +1117,7 @@ cp "$TOKEN_EXCEPTION/environment/r-api-exceptions.tsv" \
   "$TOKEN_EXCEPTION_BAD/environment/r-api-exceptions.tsv"
 expect_failure "$API_TOKEN_AUDITOR" "$CLANG" "$TOKEN_EXCEPTION_BAD" \
   "$TEST_ROOT/public-api-unreviewed-exception.txt"
-grep -q '^unreviewed_legacy_binding_file=src/unreviewed.c:1$' \
+grep -q '^unreviewed_exception_file=src/unreviewed.c:Rf_findVarInFrame:1$' \
   "$TEST_ROOT/public-api-unreviewed-exception.txt" ||
   fail "public API token auditor accepted an exception outside its facade"
 
@@ -1142,6 +1149,15 @@ grep -Eq '^API_TOKEN_AUDITOR=.*audit-public-api-tokens"$' \
 grep -Fq "\"\$API_TOKEN_AUDITOR\" \"\$CLANG\" \"\$RUN/source\" \\" \
   "$API_COMPATIBILITY_GATE" ||
   fail "R API compatibility gate has no active token-auditor command"
+[[ $(grep -Fc -- '-std=gnu99 -O2 -fsyntax-only' \
+  "$API_COMPATIBILITY_GATE") -eq 2 ]] ||
+  fail "R API compatibility gate does not enforce C99 for both compilers"
+[[ "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 3.6.0)" == \
+    'https://cran.r-project.org/src/base/R-3/R-3.6.0.tar.gz' &&
+   "$("$REFERENCE_SOURCE_FETCHER" --print-r-source-url 4.6.1)" == \
+    'https://cran.r-project.org/src/base/R-4/R-4.6.1.tar.gz' ]] ||
+  fail "R source cold-cache URL selection does not follow the release major"
+expect_failure "$REFERENCE_SOURCE_FETCHER" --print-r-source-url 3.6
 grep -Fq 'done < <(tail -n +2 "$SNAPSHOT_MANIFEST")' \
   "$API_COMPATIBILITY_GATE" ||
   fail "R API compatibility gate does not parse its snapshot manifest"

@@ -212,6 +212,8 @@ test_that("direct checked and unchecked calls each commit one capsule", {
 })
 
 test_that("value transactions reject structural ALTREP list shells", {
+  skip_if_no_list_altrep()
+
   callbacks = 0L
   values = native_stateful_altrep(
     structure(list(x = 1L), names = "x"),

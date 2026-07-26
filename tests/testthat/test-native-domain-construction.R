@@ -387,6 +387,8 @@ test_that("semantic Domain atomic vectors materialize once before admission", {
 })
 
 test_that("interpreted Domain list shells reject ALTREP without observation", {
+  skip_if_no_list_altrep()
+
   skip_if_not(
     domain2_altrep_helpers_available(),
     "the internal stateful ALTREP test class is unavailable"

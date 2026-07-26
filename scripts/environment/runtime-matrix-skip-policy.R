@@ -29,18 +29,17 @@ runtime_matrix_contains_named_call <- function(value, target) {
   ))
 }
 
-runtime_matrix_not_cran_test_titles <- function(path) {
-  titles <- character()
+runtime_matrix_literal_test_blocks <- function(path) {
+  blocks <- list()
   walk <- function(value) {
     if (is.call(value) && is.name(value[[1L]]) &&
-        identical(as.character(value[[1L]]), "test_that") &&
-        runtime_matrix_contains_named_call(value, "skip_on_cran")) {
+        identical(as.character(value[[1L]]), "test_that")) {
       title <- value[[2L]]
       if (!is.character(title) || length(title) != 1L || is.na(title) ||
           !nzchar(title)) {
-        stop("skip_on_cran test has a non-literal title", call. = FALSE)
+        stop("test_that block has a non-literal title", call. = FALSE)
       }
-      titles <<- c(titles, title)
+      blocks[[length(blocks) + 1L]] <<- list(title = title, call = value)
       return(invisible(NULL))
     }
     if (is.call(value) || is.expression(value)) {
@@ -49,7 +48,24 @@ runtime_matrix_not_cran_test_titles <- function(path) {
     invisible(NULL)
   }
   walk(parse(path, keep.source = FALSE))
-  titles
+  blocks
+}
+
+runtime_matrix_not_cran_test_titles <- function(path) {
+  blocks <- runtime_matrix_literal_test_blocks(path)
+  if (!length(blocks)) return(character())
+  vapply(
+    blocks[vapply(
+      blocks,
+      function(block) {
+        runtime_matrix_contains_named_call(block$call, "skip_on_cran")
+      },
+      logical(1L)
+    )],
+    `[[`,
+    character(1L),
+    "title"
+  )
 }
 
 runtime_matrix_validate_pre46_exclusion_policy <- function(
@@ -160,7 +176,29 @@ runtime_matrix_validate_result_skip_policy <- function(
   } else {
     integer()
   }
-  reviewed_runtimes <- c("4.3.3", "4.5.2")
+  registry_path <- file.path(snapshot, "environment", "runtime-matrix.tsv")
+  if (!file.exists(registry_path) || dir.exists(registry_path) ||
+      runtime_matrix_skip_policy_is_symbolic(registry_path)) {
+    stop("runtime registry is absent or symbolic", call. = FALSE)
+  }
+  registry <- read.delim(
+    registry_path,
+    header = TRUE,
+    quote = "",
+    comment.char = "",
+    colClasses = "character",
+    check.names = FALSE
+  )
+  expected_registry_columns <- c(
+    "ordinal", "runtime", "platform", "runtime_lock", "dependency_mode",
+    "dependency_lock", "api_branch", "prefix_repair"
+  )
+  if (!identical(names(registry), expected_registry_columns) ||
+      !nrow(registry) || anyNA(registry) ||
+      anyDuplicated(registry$runtime)) {
+    stop("runtime registry is malformed", call. = FALSE)
+  }
+  reviewed_runtimes <- registry$runtime
   if (!identical(names(policy), c("runtime", "file", "test", "reason")) ||
       anyNA(policy) || any(!nzchar(policy$test)) ||
       any(!nzchar(policy$reason)) ||
@@ -193,7 +231,7 @@ runtime_matrix_validate_result_skip_policy <- function(
   if (anyDuplicated(source_rows)) {
     stop("source contains duplicate skip_on_cran test titles", call. = FALSE)
   }
-  expected <- do.call(rbind, lapply(reviewed_runtimes, function(runtime) {
+  expected_baseline <- do.call(rbind, lapply(reviewed_runtimes, function(runtime) {
     data.frame(
       runtime = rep(runtime, nrow(source_rows)),
       file = source_rows$file,
@@ -202,6 +240,135 @@ runtime_matrix_validate_result_skip_policy <- function(
       stringsAsFactors = FALSE
     )
   }))
+  extra <- policy[policy$reason != "Reason: On CRAN", , drop = FALSE]
+  allowed_extra_reasons <- c(
+    active_binding =
+      "Reason: R < 4.0 cannot safely inspect active-binding functions",
+    list_altrep =
+      "Reason: R < 4.3 cannot construct list ALTREP test fixtures"
+  )
+  if (any(extra$runtime != "3.6.3") ||
+      any(!extra$reason %in% allowed_extra_reasons)) {
+    stop("result-skip manifest contains an unreviewed version-specific skip",
+      call. = FALSE)
+  }
+  source_blocks <- setNames(lapply(test_paths, runtime_matrix_literal_test_blocks),
+    test_files)
+  extra_calls <- lapply(seq_len(nrow(extra)), function(index) {
+    blocks <- source_blocks[[extra$file[[index]]]]
+    positions <- which(vapply(
+      blocks,
+      function(block) identical(block$title, extra$test[[index]]),
+      logical(1L)
+    ))
+    if (length(positions) != 1L) {
+      stop("version-specific result skip has no unique literal test block",
+        call. = FALSE)
+    }
+    blocks[[positions[[1L]]]]$call
+  })
+  for (index in seq_len(nrow(extra))) {
+    expected_call <- if (identical(
+        extra$reason[[index]], allowed_extra_reasons[["active_binding"]]
+      )) {
+      "skip_if_no_active_binding_inspection"
+    } else {
+      "skip_if_no_list_altrep"
+    }
+    if (!runtime_matrix_contains_named_call(extra_calls[[index]], expected_call)) {
+      stop("version-specific result skip does not contain its reviewed trigger",
+        call. = FALSE)
+    }
+  }
+  active_rows <- lapply(names(source_blocks), function(file) {
+    blocks <- source_blocks[[file]]
+    titles <- vapply(
+      blocks[vapply(
+        blocks,
+        function(block) runtime_matrix_contains_named_call(
+          block$call, "skip_if_no_active_binding_inspection"
+        ),
+        logical(1L)
+      )],
+      `[[`,
+      character(1L),
+      "title"
+    )
+    if (!length(titles)) return(NULL)
+    data.frame(
+      runtime = rep("3.6.3", length(titles)),
+      file = rep(file, length(titles)),
+      test = titles,
+      reason = rep(allowed_extra_reasons[["active_binding"]], length(titles)),
+      stringsAsFactors = FALSE
+    )
+  })
+  active_rows <- do.call(rbind, active_rows)
+  if (is.null(active_rows)) active_rows <- extra[FALSE, , drop = FALSE]
+  recorded_active <- extra[
+    extra$reason == allowed_extra_reasons[["active_binding"]],
+    ,
+    drop = FALSE
+  ]
+  active_order <- function(value) {
+    value[do.call(order, c(
+      value[c("runtime", "file", "test", "reason")],
+      list(method = "radix")
+    )), , drop = FALSE]
+  }
+  row.names(active_rows) <- NULL
+  row.names(recorded_active) <- NULL
+  active_rows <- active_order(active_rows)
+  recorded_active <- active_order(recorded_active)
+  row.names(active_rows) <- NULL
+  row.names(recorded_active) <- NULL
+  if (!identical(recorded_active, active_rows)) {
+    stop("active-binding result skips differ from current guarded tests",
+      call. = FALSE)
+  }
+  list_altrep_rows <- lapply(names(source_blocks), function(file) {
+    blocks <- source_blocks[[file]]
+    titles <- vapply(
+      blocks[vapply(
+        blocks,
+        function(block) runtime_matrix_contains_named_call(
+          block$call, "skip_if_no_list_altrep"
+        ),
+        logical(1L)
+      )],
+      `[[`,
+      character(1L),
+      "title"
+    )
+    if (!length(titles)) return(NULL)
+    data.frame(
+      runtime = rep("3.6.3", length(titles)),
+      file = rep(file, length(titles)),
+      test = titles,
+      reason = rep(allowed_extra_reasons[["list_altrep"]], length(titles)),
+      stringsAsFactors = FALSE
+    )
+  })
+  list_altrep_rows <- do.call(rbind, list_altrep_rows)
+  if (is.null(list_altrep_rows)) {
+    list_altrep_rows <- extra[FALSE, , drop = FALSE]
+  }
+  recorded_list_altrep <- extra[
+    extra$reason == allowed_extra_reasons[["list_altrep"]],
+    ,
+    drop = FALSE
+  ]
+  row.names(list_altrep_rows) <- NULL
+  row.names(recorded_list_altrep) <- NULL
+  list_altrep_rows <- active_order(list_altrep_rows)
+  recorded_list_altrep <- active_order(recorded_list_altrep)
+  row.names(list_altrep_rows) <- NULL
+  row.names(recorded_list_altrep) <- NULL
+  if (!identical(recorded_list_altrep, list_altrep_rows)) {
+    stop("list-ALTREP result skips differ from current guarded tests",
+      call. = FALSE)
+  }
+  expected <- rbind(expected_baseline, active_rows, list_altrep_rows)
   expected <- expected[do.call(order, c(
     expected[c("runtime", "file", "test", "reason")],
     list(method = "radix")

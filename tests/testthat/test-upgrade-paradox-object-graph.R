@@ -309,6 +309,7 @@ test_that("the serialized ParamSet-family target ledger is complete", {
 })
 
 test_that("native graph discovery is iterative, identity-aware, and inert", {
+  skip_if_no_active_binding_inspection()
   ordinary = graph_candidate("ordinary")
   active = graph_candidate("active")
   promised = graph_candidate("promised")
@@ -434,6 +435,8 @@ test_that("native graph discovery does not consume the C or R stack", {
 })
 
 test_that("graph discovery balances a self-duplicating ALTREP root", {
+  skip_if_no_list_altrep()
+
   candidate = graph_candidate("self-duplicating-altrep")
   carrier = native_stateful_altrep(
     list(candidate),
@@ -523,6 +526,8 @@ test_that("recursive graph upgrade is an identity-preserving no-op for current g
 })
 
 test_that("authentic Paradox 1 shells upgrade everywhere by identity", {
+  skip_if_no_active_binding_inspection()
+
   root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
   skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
   path = file.path(root, "mixed_search_space.rds")
@@ -581,6 +586,8 @@ test_that("authentic Paradox 1 shells upgrade everywhere by identity", {
 })
 
 test_that("legacy shells inside a current capsule are upgraded in place", {
+  skip_if_no_active_binding_inspection()
+
   root = Sys.getenv("PARADOX_MBO_CONFIG_ROOT", "")
   skip_if(!nzchar(root), "PARADOX_MBO_CONFIG_ROOT is not configured")
   path = file.path(root, "numeric_search_space.rds")

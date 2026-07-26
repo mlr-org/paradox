@@ -11,18 +11,25 @@ if [ ! -f DESCRIPTION ]; then
     "scripts/activate-runtime-matrix must be sourced from the paradox repository root" ||
     { return 1 2>/dev/null || exit 1; }
 fi
-if [ "$#" -ne 1 ]; then
-  runtime_matrix_activation_fail \
-    "usage: . scripts/activate-runtime-matrix 4.3.3|4.5.2" ||
+PARADOX_RUNTIME_MATRIX_REGISTRY="$PWD/scripts/environment/runtime-matrix-registry"
+PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER="$PWD/scripts/environment/runtime-matrix-library"
+if [ ! -x "$PARADOX_RUNTIME_MATRIX_REGISTRY" ] ||
+    [ ! -x "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" ] ||
+    ! "$PARADOX_RUNTIME_MATRIX_REGISTRY" validate >/dev/null; then
+  runtime_matrix_activation_fail "runtime registry or library manager is invalid" ||
     { return 1 2>/dev/null || exit 1; }
 fi
-case "$1" in
-  4.3.3|4.5.2) PARADOX_RUNTIME_MATRIX_VERSION=$1 ;;
-  *)
-    runtime_matrix_activation_fail "runtime must be 4.3.3 or 4.5.2" ||
-      { return 1 2>/dev/null || exit 1; }
-    ;;
-esac
+if [ "$#" -ne 1 ]; then
+  runtime_matrix_activation_fail \
+    "usage: . scripts/activate-runtime-matrix REGISTERED_VERSION" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
+if "$PARADOX_RUNTIME_MATRIX_REGISTRY" contains "$1"; then
+  PARADOX_RUNTIME_MATRIX_VERSION=$1
+else
+  runtime_matrix_activation_fail "runtime is not registered: $1" ||
+    { return 1 2>/dev/null || exit 1; }
+fi
 
 PARADOX_ROOT=$(pwd -P)
 PARADOX_RUNTIME_MATRIX_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/prefixes/R-$PARADOX_RUNTIME_MATRIX_VERSION"
@@ -31,6 +38,18 @@ if ! "$PARADOX_ROOT/scripts/bootstrap-runtime-matrix" \
   runtime_matrix_activation_fail \
     "R $PARADOX_RUNTIME_MATRIX_VERSION prefix failed authenticated verification" ||
     { return 1 2>/dev/null || exit 1; }
+fi
+PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=
+if [ "$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
+    "$PARADOX_RUNTIME_MATRIX_VERSION" dependency_mode)" = source-library ]; then
+  PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY=$(
+    "$PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER" \
+      --runtime "$PARADOX_RUNTIME_MATRIX_VERSION" --verify --print-path
+  ) || {
+    runtime_matrix_activation_fail \
+      "R $PARADOX_RUNTIME_MATRIX_VERSION dependency library failed verification" ||
+      { return 1 2>/dev/null || exit 1; }
+  }
 fi
 
 runtime_matrix_require_plain_directory_chain() {
@@ -76,6 +95,12 @@ do
     return 1 2>/dev/null || exit 1
   fi
 done
+if [ -n "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" ] &&
+    ! runtime_matrix_require_plain_directory_chain \
+      "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"; then
+  unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true
+  return 1 2>/dev/null || exit 1
+fi
 unset runtime_matrix_directory runtime_matrix_path runtime_matrix_current
 unset runtime_matrix_remainder runtime_matrix_component
 
@@ -85,7 +110,7 @@ if ! unset \
   R_MAKEVARS_SITE R_MAKEVARS_USER R_HISTFILE \
   CC CPP CXX FC F77 F90 F95 GFORTRAN GCC GXX \
   CC_FOR_BUILD CPP_FOR_BUILD CXX_FOR_BUILD FC_FOR_BUILD \
-  AR AS LD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
+  AR AS LD LD_GOLD NM OBJCOPY OBJDUMP RANLIB READELF SIZE STRINGS STRIP \
   ADDR2LINE CXXFILT ELFEDIT GPROF \
   CFLAGS CPPFLAGS CXXFLAGS FCFLAGS FFLAGS FORTRANFLAGS LDFLAGS \
   LDFLAGS_LD DEBUG_CFLAGS DEBUG_CPPFLAGS DEBUG_CXXFLAGS DEBUG_FFLAGS \
@@ -98,6 +123,7 @@ if ! unset \
   CMAKE_PREFIX_PATH CMAKE_MODULE_PATH CMAKE_TOOLCHAIN_FILE CMAKE_ARGS MESON_ARGS \
   CONFIG_SITE MAKEFLAGS MFLAGS GNUMAKEFLAGS MAKEFILES \
   CONDA_PREFIX MAMBA_ROOT_PREFIX CONDA_BUILD CONDA_BUILD_SYSROOT \
+  _CONDA_PYTHON_SYSCONFIGDATA_NAME \
   CONDA_BUILD_CROSS_COMPILATION CONDA_TOOLCHAIN_HOST CONDA_TOOLCHAIN_BUILD \
   HOST BUILD QEMU_LD_PREFIX build_alias host_alias \
   GCC_AR GCC_NM GCC_RANLIB \
@@ -140,10 +166,12 @@ fi
 
 export PARADOX_ROOT PARADOX_RUNTIME_MATRIX_VERSION
 export PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY
+export PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY
+export PARADOX_RUNTIME_MATRIX_REGISTRY PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER
 export CONDA_PREFIX="$PARADOX_RUNTIME_MATRIX_PREFIX"
 export MAMBA_ROOT_PREFIX="$PARADOX_ROOT/.local/runtime-matrix/micromamba"
 export R_LIBS_USER="$PARADOX_RUNTIME_MATRIX_LIBRARY"
-export R_LIBS_SITE=
+export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
 export R_ENVIRON_USER="$PARADOX_ROOT/environment/Renviron"
 export R_PROFILE_USER="$PARADOX_ROOT/environment/Rprofile.R"
 export R_MAKEVARS_USER="$PARADOX_ROOT/environment/Makevars"
@@ -197,6 +225,10 @@ while :; do
 done
 export PATH="$PARADOX_RUNTIME_MATRIX_PREFIX/bin:$PARADOX_ROOT/.local/bin${runtime_matrix_clean_path:+:$runtime_matrix_clean_path}"
 
+case $- in
+  *u*) runtime_matrix_had_nounset=true; set +u ;;
+  *) runtime_matrix_had_nounset=false ;;
+esac
 for runtime_matrix_hook in "$PARADOX_RUNTIME_MATRIX_PREFIX"/etc/conda/activate.d/*.sh; do
   if [ -f "$runtime_matrix_hook" ]; then
     # The r-base hook runs javareconf and is therefore inappropriate for an
@@ -204,11 +236,13 @@ for runtime_matrix_hook in "$PARADOX_RUNTIME_MATRIX_PREFIX"/etc/conda/activate.d
     [ "${runtime_matrix_hook##*/}" != activate-r-base.sh ] || continue
     # shellcheck disable=SC1090
     if ! . "$runtime_matrix_hook"; then
+      [ "$runtime_matrix_had_nounset" = false ] || set -u
       runtime_matrix_activation_fail "Compiler activation hook failed: $runtime_matrix_hook" ||
         { return 1 2>/dev/null || exit 1; }
     fi
   fi
 done
+[ "$runtime_matrix_had_nounset" = false ] || set -u
 export PKG_CONFIG="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/pkg-config"
 export PKG_CONFIG_PATH="$PARADOX_RUNTIME_MATRIX_PREFIX/lib/pkgconfig:$PARADOX_RUNTIME_MATRIX_PREFIX/share/pkgconfig"
 export PKG_CONFIG_LIBDIR="$PKG_CONFIG_PATH"
@@ -226,5 +260,5 @@ export PARADOX_ACTIVE_ROOT="$PARADOX_ROOT"
 export PARADOX_RUNTIME_MATRIX_ACTIVE=1
 hash -r 2>/dev/null || true
 unset runtime_matrix_clean_path runtime_matrix_path_remainder runtime_matrix_path_entry
-unset runtime_matrix_hook
+unset runtime_matrix_hook runtime_matrix_had_nounset
 unset -f runtime_matrix_require_plain_directory_chain runtime_matrix_activation_fail 2>/dev/null || true

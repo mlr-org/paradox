@@ -2,12 +2,17 @@
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd -P)
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
 selection=${1:-all}
-case "$selection" in
-  all) versions=(4.3.3 4.5.2) ;;
-  4.3.3|4.5.2) versions=("$selection") ;;
-  *) echo "usage: scripts/environment/test-runtime-matrix-installed [4.3.3|4.5.2|all]" >&2; exit 2 ;;
-esac
+"$REGISTRY" validate >/dev/null
+if [[ "$selection" == all ]]; then
+  mapfile -t versions < <("$REGISTRY" versions)
+elif "$REGISTRY" contains "$selection"; then
+  versions=("$selection")
+else
+  echo "usage: scripts/environment/test-runtime-matrix-installed [REGISTERED_VERSION|all]" >&2
+  exit 2
+fi
 
 for version in "${versions[@]}"; do
   env \
@@ -77,6 +82,14 @@ prefix="$root/.local/runtime-matrix/prefixes/R-$version"
 [[ "$(R RHOME)" == "$prefix/lib/R" ]]
 [[ "$(Rscript --vanilla -e 'cat(as.character(getRversion()))')" == "$version" ]]
 [[ "$R_LIBS_USER" == "$root/.local/runtime-matrix/libraries/R-$version" ]]
+dependency_mode=$("$PARADOX_RUNTIME_MATRIX_REGISTRY" field \
+  "$version" dependency_mode)
+if [[ "$dependency_mode" == source-library ]]; then
+  [[ -n "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" &&
+    -d "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" ]]
+else
+  [[ -z "$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY" ]]
+fi
 [[ "$TMPDIR" == "$root/.local/runtime-matrix/tmp/R-$version" ]]
 [[ "$XDG_RUNTIME_DIR" == "$root/.local/runtime-matrix/runtime/R-$version" ]]
 [[ "$(stat -c '%a' "$XDG_RUNTIME_DIR")" == 700 ]]
@@ -123,10 +136,21 @@ first_cmake_args=$CMAKE_ARGS
 configured_cc=$(R CMD config CC)
 case "$(command -v "${configured_cc%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
 case "$(command -v "${CC%% *}")" in "$prefix"/*) ;; *) exit 1 ;; esac
-configured_nm=$(R CMD config NM)
-[[ -n "$NM" && "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]]
-[[ "${configured_nm##*/}" == "$NM" ]]
-[[ "$(command -v "$NM")" == "$prefix/bin/$NM" ]]
+if configured_nm=$(LC_ALL=C R CMD config NM 2>&1); then
+  configured_nm_status=0
+else
+  configured_nm_status=$?
+fi
+nm_name="$CONDA_TOOLCHAIN_HOST-nm"
+[[ -n "$NM" ]]
+[[ "$(command -v "$NM")" == "$prefix/bin/$nm_name" ]]
+if [[ "$version" == 3.6.3 ]]; then
+  [[ "$configured_nm_status" == 1 ]]
+  [[ "$configured_nm" == "ERROR: no information for variable 'NM'" ]]
+else
+  [[ "$configured_nm_status" == 0 ]]
+  [[ "${configured_nm##*/}" == "$nm_name" ]]
+fi
 
 . scripts/activate
 [[ "$(command -v R)" == "$root/.local/toolchain/bin/R" ]]
@@ -139,8 +163,10 @@ esac
 for variable in \
   PARADOX_RUNTIME_MATRIX_ACTIVE PARADOX_RUNTIME_MATRIX_VERSION \
   PARADOX_RUNTIME_MATRIX_PREFIX PARADOX_RUNTIME_MATRIX_LIBRARY \
+  PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY \
   PARADOX_RUNTIME_MATRIX_TMP PARADOX_RUNTIME_MATRIX_CACHE \
-  PARADOX_RUNTIME_MATRIX_XDG
+  PARADOX_RUNTIME_MATRIX_XDG PARADOX_RUNTIME_MATRIX_REGISTRY \
+  PARADOX_RUNTIME_MATRIX_LIBRARY_MANAGER
 do
   [[ ! -v $variable ]]
 done

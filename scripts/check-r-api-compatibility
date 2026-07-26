@@ -458,7 +458,7 @@ printf 'version\tresource_report_sha256\twave_plan_sha256\tjobs\tgcc_jobs\tclang
   > "$RUN/metadata/compiler-waves.tsv"
 
 gcc_flags=(
-  -std=gnu17 -O2 -fsyntax-only
+  -std=gnu99 -O2 -fsyntax-only
   -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2
   -Wall -Wextra -Wpedantic -Werror
   -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations
@@ -472,7 +472,7 @@ gcc_flags=(
   -Werror=implicit-function-declaration -Werror=incompatible-pointer-types
 )
 clang_flags=(
-  -std=gnu17 -O2 -fsyntax-only
+  -std=gnu99 -O2 -fsyntax-only
   -DR_NO_REMAP -DSTRICT_R_HEADERS -DNDEBUG -D_FORTIFY_SOURCE=2
   -Wall -Wextra -Wpedantic -Werror
   -Wstrict-prototypes -Wmissing-prototypes -Wmissing-variable-declarations

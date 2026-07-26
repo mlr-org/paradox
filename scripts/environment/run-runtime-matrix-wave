@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Run one or two independent runtime-matrix stages under one resource admission
+# Run registered runtime-matrix stages under one resource admission
 # decision.  Every sibling is waited and recorded before a failing result is
 # returned.  GNU timeout bounds each whole stage, while util-linux setsid makes
 # descendant cleanup independent of the worker's cooperation.
@@ -120,14 +120,19 @@ positive_integer "$admitted_jobs" || fail "admission report jobs are malformed"
 [[ $(head -n 1 "$TASK_LIST") == $'ordinal\tversion' ]] ||
   fail "task list has the wrong header"
 mapfile -t task_rows < <(tail -n +2 "$TASK_LIST")
-((${#task_rows[@]} >= 1 && ${#task_rows[@]} <= 2)) ||
-  fail "task list must contain one or two stages"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+[[ -x "$REGISTRY" ]] || fail "runtime registry helper is absent"
+mapfile -t registered_versions < <("$REGISTRY" versions)
+((${#task_rows[@]} >= 1 &&
+  ${#task_rows[@]} <= ${#registered_versions[@]})) ||
+  fail "task list exceeds the registered runtime count"
 declare -a versions=()
 for ((index = 0; index < ${#task_rows[@]}; index++)); do
   IFS=$'\t' read -r ordinal version extra <<< "${task_rows[index]}"
   [[ -z "${extra:-}" && "$ordinal" == "$((index + 1))" ]] ||
     fail "task list order or field count is malformed"
-  case "$version" in 4.3.3|4.5.2) ;; *) fail "unknown task runtime: $version" ;; esac
+  "$REGISTRY" contains "$version" ||
+    fail "unknown task runtime: $version"
   [[ " ${versions[*]-} " != *" $version "* ]] || fail "duplicate task runtime"
   versions+=("$version")
 done
@@ -218,7 +223,8 @@ trap 'on_signal TERM' TERM
 trap on_exit EXIT
 
 next=0
-while ((next < ${#versions[@]})); do
+completed=0
+while ((completed < ${#versions[@]})); do
   ((interrupted_status == 0)) || break
   while ((next < ${#versions[@]} && ${#active[@]} < JOBS &&
       interrupted_status == 0)); do
@@ -237,7 +243,33 @@ while ((next < ${#versions[@]})); do
     next=$((next + 1))
   done
 
-  collect=$((next - ${#active[@]}))
+  # Bash 5.0 has `wait -n` but not `wait -n -p`, so it cannot report which
+  # child supplied the status. Poll the shell's own running-job table at a
+  # bounded interval instead. This reaps whichever sibling finishes first,
+  # keeps a slot occupied when later tasks remain, and emits no progress noise.
+  collect=-1
+  while ((collect < 0 && ${#active[@]} != 0 &&
+      interrupted_status == 0)); do
+    mapfile -t running_pids < <(jobs -pr)
+    for ((index = 0; index < next; index++)); do
+      [[ -n "${pids[index]+x}" && -z "${statuses[index]+x}" ]] || continue
+      pid=${pids[index]}
+      running=false
+      for running_pid in "${running_pids[@]}"; do
+        if [[ "$running_pid" == "$pid" ]]; then
+          running=true
+          break
+        fi
+      done
+      if [[ "$running" == false ]]; then
+        collect=$index
+        break
+      fi
+    done
+    ((collect >= 0)) || sleep 0.25 || true
+  done
+  ((interrupted_status == 0)) || break
+  ((collect >= 0)) || continue
   pid=${pids[collect]}
   status=0
   wait "$pid" || status=$?
@@ -250,10 +282,11 @@ while ((next < ${#versions[@]})); do
   fi
   statuses[collect]=$status
   unset 'active[$pid]'
+  completed=$((completed + 1))
 done
 
-# The launch loop above may leave the final concurrently launched sibling
-# uncollected after the last task has been queued.
+# An interrupt may leave launched siblings uncollected and later siblings
+# unstarted. Retain one deterministic ledger row for every registered task.
 for ((index = 0; index < ${#versions[@]}; index++)); do
   [[ -n "${statuses[index]+x}" ]] && continue
   if [[ -z "${pids[index]+x}" ]]; then

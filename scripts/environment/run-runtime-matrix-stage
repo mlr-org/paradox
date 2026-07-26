@@ -16,7 +16,9 @@ fail() {
 ROOT=$1
 RUN_ROOT=$2
 VERSION=$3
-case "$VERSION" in 4.3.3|4.5.2) ;; *) fail "unsupported runtime version" ;; esac
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+[[ -x "$REGISTRY" ]] || fail "runtime registry helper is absent"
+"$REGISTRY" contains "$VERSION" || fail "unsupported runtime version"
 DATATABLE_VERSION=1.18.4
 DATATABLE_SHA256=d65256f0050a6443770d5982b5098a2a8c894f9675ed17053416c7815cbddeb9
 [[ "$ROOT" == /* && -d "$ROOT" && ! -L "$ROOT" &&
@@ -30,12 +32,13 @@ STAGE_DIRECTORY="$RUN_ROOT/R-$VERSION"
 STAGE_ARTIFACTS="$STAGE_DIRECTORY/artifacts"
 STAGE_SOURCE="$STAGE_ARTIFACTS/source"
 STAGE_BUILD="$STAGE_ARTIFACTS/build"
+STAGE_CHECK="$STAGE_ARTIFACTS/check"
 STAGE_LIBRARY="$STAGE_ARTIFACTS/library"
 STAGE_LOGS="$STAGE_ARTIFACTS/logs"
 STAGE_INPUTS="$STAGE_ARTIFACTS/inputs"
 MBO_CONFIG_BUNDLE="$RUN_ROOT/inputs/mbo-config-fixtures"
 MBO_CONFIG_FIXTURE_ROOT="$MBO_CONFIG_BUNDLE/common"
-for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_LIBRARY" \
+for directory in "$STAGE_SOURCE" "$STAGE_BUILD" "$STAGE_CHECK" "$STAGE_LIBRARY" \
     "$STAGE_LOGS" "$STAGE_INPUTS"; do
   [[ -d "$directory" && ! -L "$directory" ]] ||
     fail "prepared stage directory is absent or symbolic: $directory"
@@ -51,39 +54,58 @@ sha256_file() {
 }
 
 audit_symbols() {
-  local version=$1 dso=$2 log=$3 configured_nm nm_tool symbols symbol count branch
+  local version=$1 dso=$2 log=$3 configured_nm configured_nm_status
+  local nm_name nm_tool symbols symbol count branch
   local -a required forbidden
-  configured_nm=$(R CMD config NM)
-  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" &&
-      "$NM" == "$CONDA_TOOLCHAIN_HOST-nm" ]] ||
+  if configured_nm=$(LC_ALL=C R CMD config NM 2>&1); then
+    configured_nm_status=0
+  else
+    configured_nm_status=$?
+  fi
+  [[ -n "${NM:-}" && -n "${CONDA_TOOLCHAIN_HOST:-}" ]] ||
     fail "runtime compiler activation did not select the expected NM"
-  [[ "${configured_nm##*/}" == "$NM" ]] ||
-    fail "runtime R and compiler activation disagree about NM: $configured_nm / $NM"
-  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$NM"
+  nm_name="$CONDA_TOOLCHAIN_HOST-nm"
+  nm_tool="$PARADOX_RUNTIME_MATRIX_PREFIX/bin/$nm_name"
   [[ -x "$nm_tool" && "$(command -v -- "$NM")" == "$nm_tool" ]] ||
     fail "authenticated runtime compiler NM is absent: $nm_tool"
+  if [[ "$version" == 3.6.3 ]]; then
+    [[ "$configured_nm_status" == 1 &&
+      "$configured_nm" == "ERROR: no information for variable 'NM'" ]] ||
+      fail "R 3.6.3 unexpectedly reports an NM configuration: $configured_nm"
+  else
+    [[ "$configured_nm_status" == 0 &&
+      "${configured_nm##*/}" == "$nm_name" ]] ||
+      fail "runtime R and compiler activation disagree about NM: $configured_nm / $nm_name"
+  fi
   symbols=${log%.log}.symbols.txt
   "$nm_tool" -D --undefined-only "$dso" > "$symbols"
   {
     printf 'runtime=%s\n' "$version"
+    printf 'r_config_nm_status=%s\n' "$configured_nm_status"
     printf 'r_config_nm=%s\n' "$configured_nm"
     printf 'nm=%s\n' "$nm_tool"
     printf 'dso_sha256=%s\n' "$(sha256_file "$dso")"
   } > "$log"
-  if [[ "$version" == 4.3.3 ]]; then
+  if [[ "$version" == 3.6.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
+      R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.3.3 ]]; then
     required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE)
     forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
       R_GetBindingType R_getRegisteredNamespace R_getAttribCount R_hasAttrib
       R_mapAttrib)
-    branch=pre-4.5-documented-public-backports
   else
     required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv
       R_ParentEnv Rf_findVarInFrame R_PromiseExpr PRENV PRVALUE)
     forbidden=(R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib)
-    branch=4.5-direct-public-accessors
   fi
+  branch=$("$REGISTRY" field "$version" api_branch)
   for symbol in "${required[@]}"; do
     count=$(awk -v expected="$symbol" '
       NF {
@@ -118,12 +140,11 @@ cd "$ROOT"
 # shellcheck disable=SC1091
 . "$ROOT/scripts/activate-runtime-matrix" "$VERSION"
 
-# The two independently isolated R-version stages are the currently proved
-# safe outer overlap.  Do not let a package, BLAS, OpenMP runtime,
-# future/parallel, or a nested build multiply the admitted process and memory
-# budget inside either stage.
+# The scheduler admits at most two independently isolated R-version stages at
+# once. Do not let a package, BLAS, OpenMP runtime, future/parallel, or a nested
+# build multiply the admitted process and memory budget inside a stage.
 export R_LIBS_USER="$STAGE_LIBRARY"
-export R_LIBS_SITE=
+export R_LIBS_SITE="$PARADOX_RUNTIME_MATRIX_DEPENDENCY_LIBRARY"
 export LC_ALL=C.UTF-8
 export LANG=C.UTF-8
 export TMPDIR="$STAGE_ARTIFACTS/tmp"
@@ -156,7 +177,7 @@ chmod 0700 "$XDG_RUNTIME_DIR"
 # R 4.3 has no authenticated conda-forge build of the minimum supported
 # data.table release. Install the cached, SHA-pinned CRAN source into this
 # isolated stage before paradox; no other dependency is rebuilt here.
-if [[ "$VERSION" == 4.3.3 ]]; then
+if [[ "$("$REGISTRY" field "$VERSION" dependency_mode)" == data-table-overlay ]]; then
   data_table_archive="$STAGE_INPUTS/data.table_${DATATABLE_VERSION}.tar.gz"
   [[ -f "$data_table_archive" && ! -L "$data_table_archive" ]] ||
     fail "prepared data.table source overlay is absent"
@@ -183,6 +204,7 @@ mapfile -t archives < <(find "$STAGE_BUILD" -maxdepth 1 -type f \
 archive=${archives[0]}
 R CMD INSTALL --preclean --clean --install-tests \
   --library="$STAGE_LIBRARY" "$archive" > "$STAGE_LOGS/install.log" 2>&1
+export PARADOX_RUNTIME_MATRIX_REGISTRY_FILE="$STAGE_INPUTS/environment/runtime-matrix.tsv"
 Rscript --vanilla "$ROOT/scripts/environment/runtime-matrix-probe.R" \
   "$STAGE_LIBRARY" > "$STAGE_LOGS/focused-probe.log" 2>&1
 audit_symbols "$VERSION" "$STAGE_LIBRARY/paradox/libs/paradox.so" \
@@ -192,6 +214,40 @@ NOT_CRAN=false PARADOX_MBO_CONFIG_ROOT="$MBO_CONFIG_FIXTURE_ROOT" \
   "$ROOT/scripts/environment/run-runtime-matrix-tests.R" \
   "$STAGE_SOURCE" "$STAGE_LIBRARY" "$STAGE_INPUTS/source-test-scope" \
   > "$STAGE_LOGS/source-tests.log" 2>&1
+if [[ "$VERSION" == 3.6.3 ]]; then
+  check_driver_log="$STAGE_LOGS/r-cmd-check.log"
+  check_status="$STAGE_LOGS/r-cmd-check-status.tsv"
+  check_exit_status=0
+  (
+    cd "$STAGE_CHECK"
+    _R_CHECK_FORCE_SUGGESTS_=false \
+      R CMD check --no-manual --no-build-vignettes "$archive"
+  ) > "$check_driver_log" 2>&1 || check_exit_status=$?
+  check_log="$STAGE_CHECK/paradox.Rcheck/00check.log"
+  check_conclusion=unavailable
+  check_log_sha256=-
+  if [[ -f "$check_log" && ! -L "$check_log" ]]; then
+    check_log_sha256=$(sha256_file "$check_log")
+    if [[ $(grep -Fxc 'Status: OK' "$check_log") -eq 1 ]]; then
+      check_conclusion=OK
+    else
+      check_conclusion=not-OK
+    fi
+  fi
+  {
+    printf 'field\tvalue\n'
+    printf 'scope\tdeclared-minimum-r-3.6.3\n'
+    printf 'force_suggests\tfalse\n'
+    printf 'options\t--no-manual --no-build-vignettes\n'
+    printf 'exit_status\t%s\n' "$check_exit_status"
+    printf 'conclusion\t%s\n' "$check_conclusion"
+    printf 'driver_log_sha256\t%s\n' "$(sha256_file "$check_driver_log")"
+    printf 'check_log_relative\tcheck/paradox.Rcheck/00check.log\n'
+    printf 'check_log_sha256\t%s\n' "$check_log_sha256"
+  } > "$check_status"
+  [[ "$check_exit_status" -eq 0 && "$check_conclusion" == OK ]] ||
+    fail "R 3.6.3 declared-minimum R CMD check was not clean"
+fi
 Rscript --vanilla -e 'sessionInfo()' > "$STAGE_LOGS/session-info.log" 2>&1
 Rscript --vanilla -e 'write.table(as.data.frame(installed.packages()[, c("Package", "Version", "Built")]), file = stdout(), sep = "\t", quote = FALSE, row.names = FALSE)' \
   > "$STAGE_LOGS/r-packages.tsv" 2>&1

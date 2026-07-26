@@ -7,13 +7,15 @@ GIT_HELPER="$ROOT/scripts/environment/runtime-matrix-git"
 MBO_CONFIG_FIXTURE_HELPER="$ROOT/scripts/environment/mbo-config-fixtures"
 MBO_CONFIG_CHECKOUT="$ROOT/.local/compat/github/mbo_config"
 LOCAL_GIT="$ROOT/.local/toolchain/bin/git"
+REGISTRY="$ROOT/scripts/environment/runtime-matrix-registry"
+LIBRARY_MANAGER="$ROOT/scripts/environment/runtime-matrix-library"
 
 usage() {
   cat <<'USAGE'
 Usage: scripts/verify-runtime-matrix-evidence --run-id ID
 
 Verify the completion seals and complete retained artifact trees for a local
-R 4.3.3 / R 4.5.2 runtime-matrix run.
+registered runtime-matrix run.
 USAGE
 }
 
@@ -39,6 +41,9 @@ done
 [[ "${PARADOX_ACTIVE_ROOT:-}" == "$ROOT" &&
   "$(command -v git)" == "$LOCAL_GIT" ]] ||
   fail "activate the exact repository-local toolchain first: . scripts/activate"
+[[ -x "$REGISTRY" && -x "$LIBRARY_MANAGER" ]] ||
+  fail "runtime registry or dependency-library manager is absent"
+"$REGISTRY" validate >/dev/null
 run_root="$ROOT/.local/checks/$run_id/runtime-matrix"
 [[ -d "$run_root" && ! -L "$run_root" ]] || fail "Runtime-matrix run is absent: $run_root"
 
@@ -197,8 +202,12 @@ verify_recorded_digests() {
     -name 'paradox_*.tar.gz' -print)
   [[ ${#archives[@]} -eq 1 ]] || fail "Retained build has no unique package archive"
   archive=${archives[0]}
+  local runtime_lock_relative dependency_lock_relative dependency_mode
+  runtime_lock_relative=$("$REGISTRY" field "$version" runtime_lock)
+  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  dependency_mode=$("$REGISTRY" field "$version" dependency_mode)
   [[ $(metadata_value "$metadata" lock_sha256) == \
-      "$(sha256sum "$inputs/environment/runtime-r-${version}-linux-64.lock" | cut -d ' ' -f 1)" &&
+      "$(sha256sum "$inputs/$runtime_lock_relative" | cut -d ' ' -f 1)" &&
     $(metadata_value "$metadata" bootstrap_receipt_sha256) == \
       "$(sha256sum "$inputs/bootstrap-receipt/receipt.tsv" | cut -d ' ' -f 1)" &&
     $(metadata_value "$metadata" archive_sha256) == \
@@ -208,6 +217,90 @@ verify_recorded_digests() {
     $(metadata_value "$metadata" artifacts_manifest_sha256) == \
       "$(sha256sum "$metadata/artifacts.manifest.tsv" | cut -d ' ' -f 1)" ]] ||
     fail "Retained stage digest claims are inconsistent"
+  if [[ "$dependency_mode" == source-library ]]; then
+    [[ -d "$inputs/dependency-library-receipt" &&
+      ! -L "$inputs/dependency-library-receipt" &&
+      $(metadata_value "$metadata" dependency_lock_sha256) == \
+        "$(sha256sum "$inputs/$dependency_lock_relative" | cut -d ' ' -f 1)" &&
+      $(metadata_value "$metadata" dependency_library_receipt_sha256) == \
+        "$(sha256sum "$inputs/dependency-library-receipt/receipt.tsv" | cut -d ' ' -f 1)" ]] ||
+      fail "Retained dependency-library digest claims are inconsistent"
+    dependency_library=$("$LIBRARY_MANAGER" \
+      --runtime "$version" --verify --print-path)
+    dependency_key=${dependency_library%/library}
+    dependency_key=${dependency_key##*/}
+    live_receipt="$ROOT/.local/runtime-matrix/dependency-receipts/R-$version/$dependency_key"
+    diff -ru -- "$inputs/dependency-library-receipt" "$live_receipt" >/dev/null ||
+      fail "Retained dependency-library receipt differs from the live sealed input"
+  else
+    [[ $(metadata_value "$metadata" dependency_lock_sha256) == - &&
+      $(metadata_value "$metadata" dependency_library_receipt_sha256) == - ]] ||
+      fail "Runtime without a source library claims dependency-library inputs"
+  fi
+}
+
+verify_declared_minimum_check() {
+  local version=$1 artifacts=$2 metadata=$3
+  local check="$artifacts/check"
+  local status="$artifacts/logs/r-cmd-check-status.tsv"
+  local driver="$artifacts/logs/r-cmd-check.log"
+  local check_log="$check/paradox.Rcheck/00check.log"
+  if [[ "$version" != 3.6.3 ]]; then
+    [[ -d "$check" && ! -L "$check" &&
+      -z $(find "$check" -mindepth 1 -print -quit) &&
+      ! -e "$status" && ! -L "$status" &&
+      ! -e "$driver" && ! -L "$driver" &&
+      $(metadata_value "$metadata" declared_minimum_check_status_sha256) == - &&
+      $(metadata_value "$metadata" declared_minimum_check_driver_sha256) == - &&
+      $(metadata_value "$metadata" declared_minimum_check_log_sha256) == - ]] ||
+      fail "A non-minimum runtime claims R CMD check evidence"
+    return
+  fi
+
+  [[ -d "$check/paradox.Rcheck" && ! -L "$check/paradox.Rcheck" &&
+    -f "$status" && ! -L "$status" &&
+    -f "$driver" && ! -L "$driver" &&
+    -f "$check_log" && ! -L "$check_log" ]] ||
+    fail "Declared-minimum R CMD check evidence is absent or symbolic"
+  awk -F '\t' '
+    NR == 1 {
+      if ($0 != "field\tvalue") exit 1
+      next
+    }
+    NF != 2 || $1 == "" || $2 == "" || seen[$1]++ {exit 1}
+    END {
+      if (NR != 9 ||
+          !seen["scope"] || !seen["force_suggests"] || !seen["options"] ||
+          !seen["exit_status"] || !seen["conclusion"] ||
+          !seen["driver_log_sha256"] || !seen["check_log_relative"] ||
+          !seen["check_log_sha256"]) exit 1
+    }
+  ' "$status" || fail "Declared-minimum R CMD check status is malformed"
+  check_status_value() {
+    awk -F '\t' -v key="$1" '$1 == key {print $2}' "$status"
+  }
+  [[ $(check_status_value scope) == declared-minimum-r-3.6.3 &&
+    $(check_status_value force_suggests) == false &&
+    $(check_status_value options) == "--no-manual --no-build-vignettes" &&
+    $(check_status_value exit_status) == 0 &&
+    $(check_status_value conclusion) == OK &&
+    $(check_status_value check_log_relative) == \
+      check/paradox.Rcheck/00check.log &&
+    $(check_status_value driver_log_sha256) == \
+      "$(sha256sum "$driver" | cut -d ' ' -f 1)" &&
+    $(check_status_value check_log_sha256) == \
+      "$(sha256sum "$check_log" | cut -d ' ' -f 1)" ]] ||
+    fail "Declared-minimum R CMD check status is inconsistent"
+  [[ $(grep -Fxc 'Status: OK' "$check_log") -eq 1 ]] ||
+    fail "Declared-minimum R CMD check did not retain exact Status: OK"
+  [[ $(metadata_value "$metadata" declared_minimum_check_status_sha256) == \
+      "$(sha256sum "$status" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_minimum_check_driver_sha256) == \
+      "$(sha256sum "$driver" | cut -d ' ' -f 1)" &&
+    $(metadata_value "$metadata" declared_minimum_check_log_sha256) == \
+      "$(sha256sum "$check_log" | cut -d ' ' -f 1)" ]] ||
+    fail "Declared-minimum R CMD check digest claims are inconsistent"
+  unset -f check_status_value
 }
 
 verify_runtime_symbol_scope() {
@@ -222,20 +315,26 @@ verify_runtime_symbol_scope() {
       fail "Runtime symbol evidence is absent or symbolic: $file"
   done
 
-  if [[ "$version" == 4.3.3 ]]; then
+  if [[ "$version" == 3.6.3 ]]; then
+    required=(Rf_eval ATTRIB FORMALS Rf_findVarInFrame
+      R_PromiseExpr PRENV PRVALUE R_HasFancyBindings)
+    forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv
+      R_ActiveBindingFunction R_existsVarInFrame R_NewEnv
+      R_getVarEx R_GetBindingType R_getRegisteredNamespace
+      R_getAttribCount R_hasAttrib R_mapAttrib SET_COMPLEX_ELT SET_RAW_ELT)
+  elif [[ "$version" == 4.3.3 ]]; then
     required=(Rf_eval ATTRIB FORMALS R_ClosureExpr Rf_findVarInFrame
       R_PromiseExpr PRENV PRVALUE)
     forbidden=(R_ClosureFormals R_ClosureEnv R_ParentEnv R_getVarEx
       R_GetBindingType R_getRegisteredNamespace R_getAttribCount
       R_hasAttrib R_mapAttrib)
-    branch=pre-4.5-documented-public-backports
   else
     required=(Rf_eval ATTRIB R_ClosureFormals R_ClosureExpr R_ClosureEnv
       R_ParentEnv Rf_findVarInFrame R_PromiseExpr PRENV PRVALUE)
     forbidden=(R_getVarEx R_GetBindingType R_getRegisteredNamespace
       R_getAttribCount R_hasAttrib R_mapAttrib)
-    branch=4.5-direct-public-accessors
   fi
+  branch=$("$REGISTRY" field "$version" api_branch)
 
   for symbol in "${required[@]}"; do
     count=$(runtime_symbol_count "$symbols" "$symbol") ||
@@ -260,6 +359,15 @@ verify_runtime_symbol_scope() {
       ! text_has_exact_line_once "$log" "symbol_audit=passed"; then
     fail "Runtime symbol audit identity or completion marker is inconsistent"
   fi
+  if [[ "$version" == 3.6.3 ]]; then
+    text_has_exact_line_once "$log" "r_config_nm_status=1" &&
+      text_has_exact_line_once "$log" \
+        "r_config_nm=ERROR: no information for variable 'NM'" ||
+      fail "R 3.6.3 symbol evidence has an unexpected NM configuration"
+  else
+    text_has_exact_line_once "$log" "r_config_nm_status=0" ||
+      fail "Runtime symbol evidence did not retain a usable R NM configuration"
+  fi
   [[ $(metadata_value "$metadata" r_api_compat_branch) == "$branch" ]] ||
     fail "Runtime symbol policy branch differs from stage metadata"
 }
@@ -275,11 +383,15 @@ verify_trusted_inputs() {
     scripts/test-runtime-matrix
     scripts/verify-runtime-matrix-evidence
     scripts/environment/runtime-matrix-prefix-receipt
+    scripts/environment/runtime-matrix-registry
+    scripts/environment/runtime-matrix-library
+    scripts/environment/runtime-matrix-library.R
     scripts/environment/runtime-matrix-git
     scripts/environment/mbo-config-fixtures
     scripts/environment/runtime-matrix-inventory.R
     scripts/environment/runtime-matrix-probe.R
     scripts/environment/runtime-matrix-skip-policy.R
+    scripts/environment/runtime-matrix-testthat-audit.R
     scripts/environment/run-runtime-matrix-tests.R
     scripts/environment/resource-jobs
     scripts/environment/run-runtime-matrix-stage
@@ -287,10 +399,14 @@ verify_trusted_inputs() {
     environment/runtime-matrix-pre46-exclusions.tsv
     environment/runtime-matrix-whole-file-skips.tsv
     environment/runtime-matrix-result-skips.tsv
+    environment/runtime-matrix.tsv
     compat/github-snapshot.tsv
     compat/mlr-org-review.tsv
-    "environment/runtime-r-${version}-linux-64.lock"
+    "$("$REGISTRY" field "$version" runtime_lock)"
   )
+  dependency_lock_relative=$("$REGISTRY" field "$version" dependency_lock)
+  [[ "$dependency_lock_relative" == - ]] ||
+    trusted_inputs+=("$dependency_lock_relative")
   for relative in "${trusted_inputs[@]}"; do
     [[ -f "$inputs/$relative" && ! -L "$inputs/$relative" ]] ||
       fail "Retained trusted input is absent or symbolic: $relative"
@@ -469,13 +585,15 @@ verify_source_scope() {
   ' "$whole_skips" || fail "Retained whole-file skip policy is malformed"
   awk -F '\t' '
     NR == 1 {if ($0 != "runtime\tfile\ttest\treason") exit 1; next}
-    NF != 4 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
+    NF != 4 || $1 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ ||
       $2 !~ /^test[-_][A-Za-z0-9_-]+[.]R$/ || $3 == "" ||
       $4 != "Reason: On CRAN" ||
       seen[$1 FS $2 FS $3]++ {exit 1}
-    {count[$1]++}
-    END {if (count["4.3.3"] != count["4.5.2"]) exit 1}
   ' "$result_skip_policy" || fail "Retained result-skip policy is malformed"
+  while IFS=$'\t' read -r policy_runtime _; do
+    [[ "$policy_runtime" == runtime ]] || "$REGISTRY" contains "$policy_runtime" ||
+      fail "Result-skip policy names an unregistered runtime"
+  done < "$result_skip_policy"
   diff -u \
     <(awk -F '\t' '$1 == "4.3.3" {print $2 "\t" $3 "\t" $4}' \
       "$result_skip_policy") \
@@ -707,24 +825,33 @@ stages_file="$top_metadata/stages.tsv"
 verify_seal "$top_metadata"
 awk -F '\t' '
   NR == 1 {if ($0 != "runtime\tstage_seal_sha256") exit 1; next}
-  NF != 2 || $1 !~ /^(4[.]3[.]3|4[.]5[.]2)$/ ||
+  NF != 2 || $1 !~ /^[0-9]+[.][0-9]+[.][0-9]+$/ ||
     $2 !~ /^[0-9a-f]+$/ || length($2) != 64 || seen[$1]++ {exit 1}
-  $1 == "4.3.3" {if (seen45) exit 1}
-  $1 == "4.5.2" {seen45 = 1}
-  END {if (NR < 2 || NR > 3) exit 1}
+  END {if (NR < 2) exit 1}
 ' "$stages_file" || fail "Runtime stage ledger is malformed"
 mapfile -t versions < <(awk -F '\t' 'NR > 1 {print $1}' "$stages_file")
+previous_ordinal=0
+for version in "${versions[@]}"; do
+  "$REGISTRY" contains "$version" ||
+    fail "Runtime stage ledger names an unregistered runtime"
+  ordinal=$("$REGISTRY" field "$version" ordinal)
+  ((ordinal > previous_ordinal)) ||
+    fail "Runtime stage ledger differs from registry order"
+  previous_ordinal=$ordinal
+done
 top_run_id=$(metadata_value "$top_metadata" run_id)
 top_source_ref=$(metadata_value "$top_metadata" source_ref)
 top_commit=$(metadata_value "$top_metadata" source_commit)
 top_tree=$(metadata_value "$top_metadata" source_tree)
 top_stage_count=$(metadata_value "$top_metadata" stage_count)
+registered_count=$("$REGISTRY" versions | wc -l)
 [[ "$top_run_id" == "$run_id" &&
   "$top_source_ref" =~ ^refs/[A-Za-z0-9][A-Za-z0-9._/-]*$ &&
   "$top_source_ref" != *..* && "$top_source_ref" != */ &&
   "$top_source_ref" != *//* && "$top_commit" =~ ^[0-9a-f]{40}$ &&
   "$top_tree" =~ ^[0-9a-f]{40}$ &&
-  "$top_stage_count" =~ ^[12]$ &&
+  "$top_stage_count" =~ ^[1-9][0-9]*$ &&
+  "$top_stage_count" -le "$registered_count" &&
   "$top_stage_count" -eq "${#versions[@]}" ]] ||
   fail "Top-level runtime provenance is malformed or inconsistent"
 verify_mbo_config_evidence "$top_metadata" \
@@ -734,7 +861,7 @@ verify_scheduler_evidence "$top_metadata" "${versions[@]}"
   "$top_tree" >/dev/null ||
   fail "Top-level source ref no longer resolves to its recorded commit and tree"
 for version in "${versions[@]}"; do
-  case "$version" in 4.3.3|4.5.2) ;; *) fail "Unexpected retained runtime: $version" ;; esac
+  "$REGISTRY" contains "$version" || fail "Unexpected retained runtime: $version"
   stage="$run_root/R-$version"
   metadata="$stage/metadata"
   artifacts="$stage/artifacts"
@@ -774,6 +901,7 @@ for version in "${versions[@]}"; do
       fail "Stage mbo_config evidence differs from the shared retained input: $fixture_field"
   done
   verify_source_scope "$artifacts" "$metadata"
+  verify_declared_minimum_check "$version" "$artifacts" "$metadata"
   recorded_run_id=$(awk -F '\t' '$1 == "run_id" {print $2}' "$metadata/run.tsv")
   recorded_version=$(awk -F '\t' '$1 == "runtime" {print $2}' "$metadata/run.tsv")
   recorded_ref=$(awk -F '\t' '$1 == "source_ref" {print $2}' "$metadata/run.tsv")
@@ -784,11 +912,8 @@ for version in "${versions[@]}"; do
     "$recorded_ref" == "$top_source_ref" && "$recorded_commit" == "$top_commit" &&
     "$recorded_tree" == "$top_tree" ]] ||
     fail "Stage source/runtime provenance differs from the top-level ledger"
-  case "$version:$recorded_branch" in
-    4.3.3:pre-4.5-documented-public-backports|\
-      4.5.2:4.5-direct-public-accessors) ;;
-    *) fail "Retained public-R-API branch marker is inconsistent" ;;
-  esac
+  [[ "$recorded_branch" == "$("$REGISTRY" field "$version" api_branch)" ]] ||
+    fail "Retained public-R-API branch marker is inconsistent"
   text_has_exact_line_once "$artifacts/logs/focused-probe.log" \
     'runtime_matrix_focused_probe=passed' ||
     fail "Focused public-R-API probe did not pass"

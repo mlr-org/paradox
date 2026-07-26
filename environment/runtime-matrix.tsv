@@ -1,0 +1,4 @@
+ordinal	runtime	platform	runtime_lock	dependency_mode	dependency_lock	api_branch	prefix_repair
+1	3.6.3	linux-64	environment/runtime-r-3.6.3-linux-64.lock	source-library	environment/runtime-r-3.6.3-packages.lock	r-3.6-public-compatibility	environment/runtime-r-3.6.3-prefix-repair.lock
+2	4.3.3	linux-64	environment/runtime-r-4.3.3-linux-64.lock	data-table-overlay	-	pre-4.5-documented-public-backports	-
+3	4.5.2	linux-64	environment/runtime-r-4.5.2-linux-64.lock	prefix-library	-	4.5-direct-public-accessors	-
