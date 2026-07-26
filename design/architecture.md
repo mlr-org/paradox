@@ -899,8 +899,38 @@ package-owned closure factories whose call frames contain exactly their level
 or bound state. They do not invoke `compiler::cmpfun()`/`mlr3misc::crate()` for
 every Domain instance: per-instance compilation was measured constructor
 overhead, not an isolation or compatibility requirement. The returned closures
-remain ordinary serializable R functions and documented user callbacks retain
-identity.
+remain ordinary serializable R functions.
+
+Package-interpreted callback admission runs `.paradox_strip_srcref()` over
+`custom_check`, individual and extra transformations, constraints,
+aggregation, and internal-tuning callbacks, as well as a Domain's printable
+representation language. A read-only recursive scan covers closure attributes,
+body ASTs, and formals defaults. A clean callback returns at exact pointer
+identity; one carrying `srcref`, `srcfile`, or `wholeSrcref` is copied without
+changing its enclosing environment and the source-reference attributes are
+removed recursively. Package-generated categorical/logscale closures,
+Shadow/Collection callback adapters, and the internal-tuning namespace adapter
+created while flattening a collection pass through the same normalization;
+otherwise a keep-source package build could reintroduce metadata after user
+callback admission. The debugging option
+`options(paradox.strip_srcrefs = FALSE)` bypasses normalization at subsequent
+admission sites only. Legacy preparation applies the same normalization before
+building offside current state. It narrowly authenticates and rebuilds the
+known Paradox-1 categorical, flattened-internal-tuning, tuning-ParamSet, and
+detached collection crate shapes. ParamSet carriers in authenticated detached
+collection adapters enter the migration dependency graph, so they are prepared
+once, preserve aliases, and are rebound to original identities during an
+in-place transplant. A detached wrapper is always rebuilt in a fresh closure
+environment so rebinding cannot mutate serialized input; when source stripping
+is disabled, the rebuilt wrapper retains source metadata but not original
+wrapper/environment identity. A cold registered C boundary first rejects
+ALTREP/S4/object carrier-list shells and shallow-snapshots the ordinary list,
+because R cannot reject a VECSXP ALTREP without observing its length machinery.
+This is structural admission, not a second callback or migration engine. The
+source-reference rule does not traverse arbitrary environments or opaque
+`$values`, defaults, specials, initialization leaves, or other value payloads;
+the separate legacy graph crawler retains its documented ability to find a
+legacy ParamSet shell inside an authenticated current capsule payload.
 
 Four final measured hot-path changes remove redundant work while retaining the
 same validation boundary. A ParamSet constructor with no initial values skips an

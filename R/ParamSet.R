@@ -1196,6 +1196,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.state()$.extra_trafo
       } else {
+        f = .paradox_strip_srcref(f)
         .Call(C_param_set_set_callback, private, self, f, 0L)
       }
     },
@@ -1205,6 +1206,7 @@ ParamSet = R6Class("ParamSet",
       if (missing(f)) {
         private$.state()$.constraint
       } else {
+        f = .paradox_strip_srcref(f)
         .Call(C_param_set_set_callback, private, self, f, 1L)
       }
     },

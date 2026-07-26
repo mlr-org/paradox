@@ -331,6 +331,21 @@ hazards that Paradox 2 is intended to remove.
   `ParamLgl`, and `ParamUty`. `p_uty(custom_check=)` remains the supported
   general validation escape hatch. Registering third-party `domain_*` S3
   methods is no longer an extension contract.
+* Stored `custom_check`, per-parameter `trafo`, `extra_trafo`, `constraint`,
+  aggregation, and internal-tuning callbacks now discard recursive `srcref`,
+  `srcfile`, and `wholeSrcref` metadata at admission. This makes serialized
+  ParamSets smaller and their bytes independent of the source file that
+  defined an otherwise equivalent callback. Printable Domain representations
+  containing source-bearing inline functions now use canonical deparse
+  formatting, without source comments. For a callback that required
+  stripping, source breakpoints on the original function no longer affect the
+  stored copy; set
+  `options(paradox.strip_srcrefs = FALSE)` before constructing or assigning
+  callbacks when source-level debugging is needed. The option is
+  admission-time only. Source-reference normalization deliberately leaves
+  function-valued `$values`, defaults, special values, initial values, and
+  other opaque payloads untouched; their owner may use
+  `utils::removeSource()` or `options(keep.source = FALSE)` when desired.
 * Numeric Domain bounds and logscale normalization now enter the row
   constructor once. Empty Domain operations and zero-dimensional grids also
   enter their native engines instead of taking R-side special cases.
@@ -395,8 +410,9 @@ hazards that Paradox 2 is intended to remove.
   supports an additive bridge for bbotk's legacy `Codomain` and a replacement
   bridge from miesmuschel's legacy Shadow to Paradox's `ParamSetShadow`,
   including explicit errors for its retired `params_unid` and `set_id`
-  bindings. Additive inspectors have no extra dependencies; replacements have
-  exactly one `origin` and must produce a current Shadow. Owner classes with R6
+  bindings. Additive inspectors declare no owner dependencies; authenticated
+  BASE callback-carrier dependencies are composed internally. Replacements
+  have exactly one `origin` and must produce a current Shadow. Owner classes with R6
   finalizers are rejected because their registrations cannot be transplanted
   safely. Unknown subclasses still fail closed. Legacy method provenance is
   authenticated by exact loaded namespace identity rather than spoofable

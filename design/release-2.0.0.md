@@ -20,9 +20,12 @@ native dependency/check/value paths and therefore cannot inherit any
 package-facing conclusion from `8797f11`. The later output-sensitive native
 grid implementation is another package-facing change: it adds the final-size
 ceiling and prepared-grid boundary and changes the formerly broken handling of
-valid cross-storage fixed specials. While it and the remaining pre-release
-items are in flight, use only the focused development policy below. This
-development batch intentionally does not run or claim the complete
+valid cross-storage fixed specials. Callback source-reference normalization is
+also package-facing: stored package-interpreted callbacks now discard source
+metadata at admission while the source-reference normalizer leaves opaque
+`$values` untouched. While it and
+the remaining pre-release items are in flight, use only the focused development
+policy below. This development batch intentionally does not run or claim the complete
 compatibility or release matrix. Freeze one replacement candidate only after
 all package-facing source converges, then run the applicable native, R API,
 runtime, memory, differential, downstream, documentation, benchmark, and
@@ -300,6 +303,9 @@ values source. The active package-facing blockers are:
 - [x] replace nominal Cartesian grid materialization with the native
   output-sensitive fixed/dependency-aware engine, focused exact-order and graph
   tests, final-size ceiling, and collapse/pruning benchmark workloads;
+- [x] normalize source references on package-interpreted callbacks and legacy
+  migration while preserving opaque function-valued payloads and the
+  admission-time debugging opt-out;
 - [ ] finish the other planned pre-release package-facing changes and freeze
   one clean replacement candidate;
 - [ ] run and retain the complete applicable gate matrix against that exact

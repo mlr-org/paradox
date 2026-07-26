@@ -21,12 +21,21 @@ state capsule. Current capsule-backed parameter sets are returned unchanged.
 }
 \details{
 The upgrader accepts package-owned \code{ParamSet}, \code{ParamSetCollection}, built-in
-\code{Domain}, and built-in \code{Condition} objects. It preserves callbacks and shared
-collection children without calling legacy methods or active bindings. The
-input is never mutated. Cycles, malformed private state, replaced core R6
-methods, custom Domain or Condition classes, and unregistered legacy
-third-party R6 subclasses are rejected with a path-specific error. A current
-capsule-backed additive subclass is validated and returned unchanged.
+\code{Domain}, and built-in \code{Condition} objects. It preserves callback behavior
+and shared collection children without calling legacy methods or active
+bindings. The input is never mutated. Cycles, malformed private state,
+replaced core R6 methods, custom Domain or Condition classes, and
+unregistered legacy third-party R6 subclasses are rejected with a
+path-specific error. A current capsule-backed additive subclass is validated
+and returned unchanged.
+Legacy package-interpreted callbacks are normalized according to
+\code{getOption("paradox.strip_srcrefs", TRUE)} during preparation; this
+normalization does not modify opaque parameter values. Exact
+package-generated callback wrappers can contribute captured ParamSet children
+as migration dependencies; this does not traverse arbitrary callback
+environments. Such a detached wrapper is always rebuilt with a fresh
+environment before child rebinding; disabling source stripping preserves its
+source metadata but not wrapper identity.
 Direct owner subclasses covered by an exact
 \code{\link[=register_paradox_object_upgrader]{register_paradox_object_upgrader()}} bridge can also be rebuilt without
 mutating the input; the recursive graph API uses the same bridge while

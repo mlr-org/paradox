@@ -895,6 +895,51 @@ main <- function() {
         )
       )
     },
+    direct_upgrade_carrier_list_snapshot = function() {
+      marker <- new.env(parent = emptyenv())
+      source <- list(left = marker, right = NULL)
+      snapshot <- .Call(symbol("upgrade_carrier_list_snapshot"), source)
+
+      classed <- structure(source, class = "hostile_carrier")
+      classed_result <- .Call(
+        symbol("upgrade_carrier_list_snapshot"),
+        classed
+      )
+      s4_result <- .Call(
+        symbol("upgrade_carrier_list_snapshot"),
+        asS4(source)
+      )
+
+      observations <- 0L
+      hostile_altrep <- stateful(
+        source,
+        source,
+        callback = function() {
+          observations <<- observations + 1L
+          invisible(gc())
+        }
+      )
+      .Call(symbol("test_stateful_altrep_rearm"), hostile_altrep, 0L)
+      altrep_result <- .Call(
+        symbol("upgrade_carrier_list_snapshot"),
+        hostile_altrep
+      )
+
+      check(
+        is.list(snapshot) &&
+          identical(names(snapshot), names(source)) &&
+          identical(snapshot[[1L]], marker) &&
+          is.null(snapshot[[2L]]) &&
+          is.null(classed_result) &&
+          is.null(s4_result) &&
+          is.null(altrep_result) &&
+          identical(observations, 0L),
+        paste(
+          "ordinary callback-carrier snapshot or inert rejection of",
+          "classed/ALTREP carrier shells differs"
+        )
+      )
+    },
     direct_plain_binding_snapshot = function() {
       parent <- new.env(parent = emptyenv())
       assign("inherited", TRUE, envir = parent)

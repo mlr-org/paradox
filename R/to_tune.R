@@ -71,6 +71,8 @@
 #'   Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
 #'   This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
 #'   If none specified, the default aggregation function of the parameter will be used.
+#'   Source-reference attributes are removed from the stored callback unless
+#'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @return A `TuneToken` object.
 #' @examples
 #' params = ps(
@@ -168,6 +170,7 @@ to_tune = function(..., internal = !is.null(aggr), aggr = NULL) {
     assert_true(internal)
   }
   assert_function(aggr, nargs = 1L, null.ok = TRUE)
+  aggr = .paradox_strip_srcref(aggr)
   call = sys.call()
   if (...length() > 3) {
     stop("to_tune() must have zero arguments (tune entire parameter range), one argument (a Domain/Param, or a vector/list of values to tune over), or up to three arguments (any of `lower`, `upper`, `logscale`).")
@@ -442,7 +445,7 @@ param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
 .make_tune_param_set_trafo = function(trafo, pname) {
   force(trafo)
   force(pname)
-  function(x, param_set) {
+  .paradox_strip_srcref(function(x, param_set) {
     result = trafo(x)
     if (typeof(result) != "list" || inherits(result, "data.frame") ||
         length(result) != 1L) {
@@ -453,5 +456,5 @@ param_set_to_tune_ps = function(pslike, call, param, usersupplied = TRUE,
     }
     names(result) = pname
     result
-  }
+  })
 }

@@ -151,6 +151,49 @@ transplantable_legacy_collection_from_current = function(current, children) {
   result
 }
 
+legacy_detached_extra_trafo = function(sets_with_trafos) {
+  children_with_trafos = seq_along(sets_with_trafos)
+  translation = NULL
+  psc_extra_trafo = function(x, ...) x
+  postfix = FALSE
+  result = mlr3misc::crate(
+    function(x) psc_extra_trafo(
+      x,
+      children_with_trafos,
+      sets_with_trafos,
+      translation,
+      postfix
+    ),
+    children_with_trafos,
+    sets_with_trafos,
+    translation,
+    psc_extra_trafo,
+    postfix
+  )
+  parent.env(environment(result)) = asNamespace("paradox")
+  result
+}
+
+legacy_detached_constraint = function(sets_with_constraints) {
+  children_with_constraints = seq_along(sets_with_constraints)
+  translation = NULL
+  psc_constraint = function(x, ...) TRUE
+  result = mlr3misc::crate(
+    function(x) psc_constraint(
+      x,
+      children_with_constraints,
+      sets_with_constraints,
+      translation
+    ),
+    children_with_constraints,
+    sets_with_constraints,
+    translation,
+    psc_constraint
+  )
+  parent.env(environment(result)) = asNamespace("paradox")
+  result
+}
+
 copy_legacy_private_environment = function(x, omit = character()) {
   enclosing = x$.__enclos_env__
   source = mlr3misc::get_private(x)
@@ -430,6 +473,621 @@ test_that("canonical legacy BASE state is rebuilt without executing it", {
   expect_identical(class(state$.deps$cond[[1L]]), c("CondEqual", "Condition"))
   expect_identical(state$.extra_trafo, current$extra_trafo)
   expect_identical(state$.constraint, current$constraint)
+})
+
+test_that("legacy preparation normalizes callbacks but not opaque values", {
+  source_function = function(text) {
+    result = eval(parse(text = text, keep.source = TRUE)[[1L]],
+      envir = new.env(parent = baseenv()))
+    stopifnot(paradox:::.paradox_has_srcref(result))
+    result
+  }
+  trafo = source_function("function(x) { # legacy trafo\n x + 1 }")
+  custom_check = source_function(
+    "function(x) { # legacy custom check\n TRUE }"
+  )
+  aggr = source_function("function(x) { # legacy aggr\n x[[1L]] }")
+  in_tune_fn = source_function(
+    "function(domain, param_vals) { # legacy internal tuning\n domain$upper }"
+  )
+  extra_trafo = source_function(
+    "function(x, param_set) { # legacy extra trafo\n x }"
+  )
+  constraint = source_function(
+    "function(x) { # legacy constraint\n TRUE }"
+  )
+  opaque_value = source_function(
+    "function(x) { # legacy opaque value\n x }"
+  )
+
+  old = options(paradox.strip_srcrefs = FALSE)
+  on.exit(options(old), add = TRUE)
+  current = ps(
+    numeric = p_dbl(0, 1, trafo = trafo),
+    categorical = p_fct(list(a = 1, b = 2), trafo = trafo),
+    payload = p_uty(
+      custom_check = custom_check,
+      tags = "internal_tuning",
+      aggr = aggr,
+      in_tune_fn = in_tune_fn,
+      disable_in_tune = list(enabled = FALSE)
+    )
+  )
+  current$extra_trafo = extra_trafo
+  current$constraint = constraint
+  current$values = list(payload = opaque_value)
+  legacy = legacy_base_from_current(current)
+  legacy_private = mlr3misc::get_private(legacy)
+  categorical_index = match("categorical", legacy_private$.trafos$id)
+  levels = list(a = 1, b = 2)
+  legacy_fct_trafo = mlr3misc::crate(function(x) {
+    x = levels[[x]]
+    if (!is.null(trafo)) x = trafo(x)
+    x
+  }, levels, trafo)
+  parent.env(environment(legacy_fct_trafo)) = asNamespace("paradox")
+  legacy_private$.trafos$trafo[[categorical_index]] = legacy_fct_trafo
+
+  options(paradox.strip_srcrefs = TRUE)
+  upgraded = upgrade_paradox_object(legacy)
+  state = paradox:::param_set_core_state(mlr3misc::get_private(upgraded))
+
+  expect_true(all(vapply(
+    state$.trafos$trafo,
+    function(callback) !paradox:::.paradox_has_srcref(callback),
+    logical(1L)
+  )))
+  categorical_trafo = state$.trafos$trafo[
+    match("categorical", state$.trafos$id)
+  ][[1L]]
+  expect_false(paradox:::.paradox_has_srcref(
+    get("trafo", envir = environment(categorical_trafo), inherits = FALSE)
+  ))
+  payload_index = match("payload", state$.params$id)
+  payload_cargo = state$.params$cargo[[payload_index]]
+  expect_false(paradox:::.paradox_has_srcref(payload_cargo$custom_check))
+  expect_false(paradox:::.paradox_has_srcref(payload_cargo$aggr))
+  expect_false(paradox:::.paradox_has_srcref(payload_cargo$in_tune_fn))
+  expect_false(paradox:::.paradox_has_srcref(state$.extra_trafo))
+  expect_false(paradox:::.paradox_has_srcref(state$.constraint))
+  expect_true(paradox:::.paradox_has_srcref(state$.values$payload))
+  expect_identical(
+    data.table::address(state$.values$payload),
+    data.table::address(opaque_value)
+  )
+  expect_identical(
+    upgraded$trafo(list(numeric = 0, categorical = "b")),
+    list(numeric = 1, categorical = 3)
+  )
+
+  fresh = ps(
+    numeric = p_dbl(0, 1, trafo = trafo),
+    categorical = p_fct(list(a = 1, b = 2), trafo = trafo),
+    payload = p_uty(
+      custom_check = custom_check,
+      tags = "internal_tuning",
+      aggr = aggr,
+      in_tune_fn = in_tune_fn,
+      disable_in_tune = list(enabled = FALSE)
+    ),
+    .extra_trafo = extra_trafo,
+    .constraint = constraint
+  )
+  fresh$values = list(payload = opaque_value)
+  expect_equal(upgraded, fresh)
+})
+
+test_that("standalone Domain upgrade normalizes callbacks and repr", {
+  old = options(paradox.strip_srcrefs = FALSE)
+  on.exit(options(old), add = TRUE)
+  domain = eval(parse(
+    text = paste(
+      "p_dbl(0, 1, trafo = function(x) {",
+      "# standalone legacy repr marker",
+      "x + 1",
+      "})",
+      sep = "\n"
+    ),
+    keep.source = TRUE
+  )[[1L]], envir = new.env(parent = asNamespace("paradox")))
+  expect_true(paradox:::.paradox_has_srcref(
+    .subset2(domain, ".trafo")[[1L]]
+  ))
+  expect_true(paradox:::.paradox_has_srcref(
+    attr(domain, "repr", exact = TRUE)
+  ))
+  categorical_callback = eval(parse(
+    text = "function(x) { # standalone categorical marker\n x + 1 }",
+    keep.source = TRUE
+  )[[1L]], envir = new.env(parent = baseenv()))
+  levels = list(a = 1, b = 2)
+  trafo = categorical_callback
+  categorical = p_fct(levels)
+  legacy_categorical_trafo = mlr3misc::crate(function(x) {
+    x = levels[[x]]
+    if (!is.null(trafo)) x = trafo(x)
+    x
+  }, levels, trafo)
+  parent.env(environment(legacy_categorical_trafo)) =
+    asNamespace("paradox")
+  data.table::set(
+    categorical,
+    i = 1L,
+    j = ".trafo",
+    value = list(legacy_categorical_trafo)
+  )
+  categorical_trafo = .subset2(categorical, ".trafo")[[1L]]
+  expect_true(paradox:::.paradox_has_srcref(
+    get("trafo", envir = environment(categorical_trafo), inherits = FALSE)
+  ))
+
+  options(paradox.strip_srcrefs = TRUE)
+  upgraded = upgrade_paradox_object(domain)
+  expect_false(paradox:::.paradox_has_srcref(
+    .subset2(upgraded, ".trafo")[[1L]]
+  ))
+  expect_false(paradox:::.paradox_has_srcref(
+    attr(upgraded, "repr", exact = TRUE)
+  ))
+  expect_identical(.subset2(upgraded, ".trafo")[[1L]](1), 2)
+
+  upgraded_categorical = upgrade_paradox_object(categorical)
+  upgraded_categorical_trafo =
+    .subset2(upgraded_categorical, ".trafo")[[1L]]
+  expect_false(paradox:::.paradox_has_srcref(upgraded_categorical_trafo))
+  expect_false(paradox:::.paradox_has_srcref(
+    get(
+      "trafo",
+      envir = environment(upgraded_categorical_trafo),
+      inherits = FALSE
+    )
+  ))
+  expect_identical(upgraded_categorical_trafo("b"), 3)
+})
+
+test_that("authenticated legacy crate adapters normalize captured callbacks", {
+  source_function = function(text) {
+    result = eval(parse(text = text, keep.source = TRUE)[[1L]],
+      envir = new.env(parent = baseenv()))
+    stopifnot(paradox:::.paradox_has_srcref(result))
+    result
+  }
+
+  current = ps(
+    value = p_int(
+      0, 20,
+      tags = "internal_tuning",
+      aggr = function(x) x[[1L]],
+      in_tune_fn = function(domain, param_vals) domain$upper,
+      disable_in_tune = list(gate = FALSE)
+    ),
+    gate = p_lgl()
+  )
+  legacy = legacy_base_from_current(current)
+  legacy_private = mlr3misc::get_private(legacy)
+
+  in_tune_fn = source_function(
+    "function(domain, param_vals) domain$upper + as.integer(param_vals$gate)"
+  )
+  prefix = "child"
+  prefixed_set_ids = c("child.value", "child.gate")
+  flattened_wrapper = mlr3misc::crate(function(domain, param_vals) {
+    param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
+    names(param_vals) = gsub(
+      sprintf("^\\Q%s.\\E", prefix),
+      "",
+      names(param_vals)
+    )
+    in_tune_fn(domain, param_vals)
+  }, in_tune_fn, prefix, prefixed_set_ids)
+  parent.env(environment(flattened_wrapper)) = asNamespace("paradox")
+  value_index = match("value", legacy_private$.params$id)
+  value_cargo = legacy_private$.params$cargo[[value_index]]
+  value_cargo$in_tune_fn = flattened_wrapper
+  legacy_private$.params$cargo[[value_index]] = value_cargo
+
+  trafo = source_function("function(x) list(value = x$value)")
+  pname = "answer"
+  tuning_wrapper = mlr3misc::crate(function(x, param_set) {
+    mlr3misc::set_names(
+      checkmate::assert_list(
+        trafo(x),
+        len = 1,
+        .var.name = sprintf(
+          "Trafo for tuning ParamSet for parameter %s",
+          pname
+        )
+      ),
+      pname
+    )
+  }, trafo, pname)
+  parent.env(environment(tuning_wrapper)) = asNamespace("paradox")
+  legacy_private$.extra_trafo = tuning_wrapper
+
+  upgraded = upgrade_paradox_object(legacy)
+  state = paradox:::param_set_core_state(mlr3misc::get_private(upgraded))
+  upgraded_cargo = state$.params$cargo[[match("value", state$.params$id)]]
+  upgraded_in_tune = upgraded_cargo$in_tune_fn
+  expect_false(paradox:::.paradox_has_srcref(upgraded_in_tune))
+  expect_false(paradox:::.paradox_has_srcref(get(
+    "in_tune_fn",
+    envir = environment(upgraded_in_tune),
+    inherits = FALSE
+  )))
+  expect_identical(
+    upgraded_in_tune(
+      upgraded$domains$value,
+      list(child.gate = TRUE, unrelated = 100L)
+    ),
+    21
+  )
+  expect_false(paradox:::.paradox_has_srcref(upgraded$extra_trafo))
+  expect_false(paradox:::.paradox_has_srcref(get(
+    "trafo",
+    envir = environment(upgraded$extra_trafo),
+    inherits = FALSE
+  )))
+  expect_identical(
+    upgraded$extra_trafo(list(value = 2L), upgraded),
+    list(answer = 2L)
+  )
+
+  collection_legacy = legacy_base_from_current(ps(x = p_int()))
+  collection_private = mlr3misc::get_private(collection_legacy)
+  children_with_trafos = integer()
+  sets_with_trafos = list()
+  translation = NULL
+  psc_extra_trafo = source_function("function(x, ...) x")
+  postfix = FALSE
+  collection_private$.extra_trafo = mlr3misc::crate(
+    function(x) psc_extra_trafo(
+      x,
+      children_with_trafos,
+      sets_with_trafos,
+      translation,
+      postfix
+    ),
+    children_with_trafos,
+    sets_with_trafos,
+    translation,
+    psc_extra_trafo,
+    postfix
+  )
+  parent.env(environment(collection_private$.extra_trafo)) =
+    asNamespace("paradox")
+
+  children_with_constraints = integer()
+  sets_with_constraints = list()
+  psc_constraint = source_function("function(x, ...) TRUE")
+  collection_private$.constraint = mlr3misc::crate(
+    function(x) psc_constraint(
+      x,
+      children_with_constraints,
+      sets_with_constraints,
+      translation
+    ),
+    children_with_constraints,
+    sets_with_constraints,
+    translation,
+    psc_constraint
+  )
+  parent.env(environment(collection_private$.constraint)) =
+    asNamespace("paradox")
+
+  upgraded_collection = upgrade_paradox_object(collection_legacy)
+  expect_false(paradox:::.paradox_has_srcref(get(
+    "psc_extra_trafo",
+    envir = environment(upgraded_collection$extra_trafo),
+    inherits = FALSE
+  )))
+  expect_false(paradox:::.paradox_has_srcref(get(
+    "psc_constraint",
+    envir = environment(upgraded_collection$constraint),
+    inherits = FALSE
+  )))
+  expect_identical(
+    upgraded_collection$extra_trafo(list(x = 1L)),
+    list(x = 1L)
+  )
+  expect_true(upgraded_collection$constraint(list(x = 1L)))
+})
+
+test_that("option-off detached callback migration does not mutate legacy carriers", {
+  old = options(paradox.strip_srcrefs = FALSE)
+  on.exit(options(old), add = TRUE)
+
+  source_function = function(text, environment) {
+    result = eval(
+      parse(text = text, keep.source = TRUE)[[1L]],
+      envir = environment
+    )
+    stopifnot(paradox:::.paradox_has_srcref(result))
+    compiler::cmpfun(result)
+  }
+
+  child = legacy_base_from_current(ps(y = p_int()))
+  legacy = legacy_base_from_current(ps(x = p_int()))
+  private = mlr3misc::get_private(legacy)
+
+  extra_bindings = list(
+    children_with_trafos = 1L,
+    sets_with_trafos = list(child = child),
+    translation = NULL,
+    psc_extra_trafo = source_function(
+      "function(x, ...) x",
+      new.env(parent = baseenv())
+    ),
+    postfix = FALSE
+  )
+  extra_environment = list2env(
+    extra_bindings,
+    parent = asNamespace("paradox")
+  )
+  private$.extra_trafo = source_function(
+    paste(
+      "function(x) psc_extra_trafo(",
+      "  x, children_with_trafos, sets_with_trafos, translation, postfix",
+      ")",
+      sep = "\n"
+    ),
+    extra_environment
+  )
+
+  constraint_bindings = list(
+    children_with_constraints = 1L,
+    sets_with_constraints = list(child = child),
+    translation = NULL,
+    psc_constraint = source_function(
+      "function(x, ...) TRUE",
+      new.env(parent = baseenv())
+    )
+  )
+  constraint_environment = list2env(
+    constraint_bindings,
+    parent = asNamespace("paradox")
+  )
+  private$.constraint = source_function(
+    paste(
+      "function(x) psc_constraint(",
+      "  x, children_with_constraints, sets_with_constraints, translation",
+      ")",
+      sep = "\n"
+    ),
+    constraint_environment
+  )
+
+  extra_alias = private$.extra_trafo
+  constraint_alias = private$.constraint
+  child_alias = child
+  legacy_bytes = serialize(legacy, NULL)
+  extra_bytes = serialize(extra_alias, NULL)
+  constraint_bytes = serialize(constraint_alias, NULL)
+
+  upgraded = upgrade_paradox_object(legacy)
+
+  expect_identical(serialize(legacy, NULL), legacy_bytes)
+  expect_identical(private$.extra_trafo, extra_alias)
+  expect_identical(private$.constraint, constraint_alias)
+  expect_identical(serialize(extra_alias, NULL), extra_bytes)
+  expect_identical(serialize(constraint_alias, NULL), constraint_bytes)
+  expect_identical(
+    get(
+      "sets_with_trafos",
+      envir = extra_environment,
+      inherits = FALSE
+    )[[1L]],
+    child_alias
+  )
+  expect_identical(
+    get(
+      "sets_with_constraints",
+      envir = constraint_environment,
+      inherits = FALSE
+    )[[1L]],
+    child_alias
+  )
+
+  upgraded_extra = upgraded$extra_trafo
+  upgraded_constraint = upgraded$constraint
+  expect_true(paradox:::.paradox_has_srcref(upgraded_extra))
+  expect_true(paradox:::.paradox_has_srcref(upgraded_constraint))
+  expect_true(paradox:::.paradox_has_srcref(get(
+    "psc_extra_trafo",
+    envir = environment(upgraded_extra),
+    inherits = FALSE
+  )))
+  expect_true(paradox:::.paradox_has_srcref(get(
+    "psc_constraint",
+    envir = environment(upgraded_constraint),
+    inherits = FALSE
+  )))
+  expect_false(identical(
+    environment(upgraded_extra),
+    extra_environment
+  ))
+  expect_false(identical(
+    environment(upgraded_constraint),
+    constraint_environment
+  ))
+  upgraded_extra_child = get(
+    "sets_with_trafos",
+    envir = environment(upgraded_extra),
+    inherits = FALSE
+  )[[1L]]
+  upgraded_constraint_child = get(
+    "sets_with_constraints",
+    envir = environment(upgraded_constraint),
+    inherits = FALSE
+  )[[1L]]
+  expect_false(identical(upgraded_extra_child, child_alias))
+  expect_identical(upgraded_extra_child, upgraded_constraint_child)
+  expect_identical(upgraded_extra(list(x = 1L)), list(x = 1L))
+  expect_true(upgraded_constraint(list(x = 1L)))
+})
+
+test_that("additive owner migration composes inherited callback carriers", {
+  legacy_child = legacy_base_from_current(ps(y = p_int()))
+  carrier_info = list(
+    extra_trafo = list(child = legacy_child),
+    constraint = NULL
+  )
+  info = list(
+    kind = "owner",
+    owner = list(migration_kind = "additive"),
+    base = list(callback_carriers = carrier_info),
+    dependencies = structure(list(), names = character())
+  )
+
+  dependencies = paradox:::.upgrade_paradox_info_dependencies(info)
+  expect_identical(names(dependencies), "extra_trafo_1")
+  expect_identical(dependencies[[1L]], legacy_child)
+  split = paradox:::.upgrade_paradox_split_owner_dependencies(
+    info,
+    dependencies,
+    "x"
+  )
+  expect_identical(split$base, dependencies)
+  expect_identical(split$owner, structure(list(), names = character()))
+
+  current_child = ps(y = p_int())
+  callback_environment = list2env(
+    list(sets_with_trafos = list(child = legacy_child)),
+    parent = baseenv()
+  )
+  callback = eval(
+    quote(function(x) x),
+    envir = callback_environment
+  )
+  prepared = ps(x = p_int(), .extra_trafo = callback)
+  paradox:::.upgrade_paradox_rebase_prepared(
+    info,
+    prepared,
+    list(extra_trafo_1 = current_child),
+    "x"
+  )
+  rebound = get(
+    "sets_with_trafos",
+    envir = environment(prepared$extra_trafo),
+    inherits = FALSE
+  )
+  expect_identical(rebound, list(child = current_child))
+})
+
+test_that("graph migration rebinds shared callback carrier identities", {
+  child = transplantable_legacy_base_from_current(ps(y = p_int()))
+  parent = transplantable_legacy_base_from_current(ps(x = p_int()))
+  private = mlr3misc::get_private(parent)
+  private$.extra_trafo = legacy_detached_extra_trafo(
+    list(child = child)
+  )
+  private$.constraint = legacy_detached_constraint(
+    list(child = child)
+  )
+  parent_alias = parent
+  child_alias = child
+  host = list(parent = parent, child = child)
+
+  expect_identical(upgrade_paradox_object_graph(host), host)
+  expect_identical(host$parent, parent_alias)
+  expect_identical(host$child, child_alias)
+  expect_true(exists(
+    ".core",
+    envir = mlr3misc::get_private(parent_alias),
+    inherits = FALSE
+  ))
+  expect_true(exists(
+    ".core",
+    envir = mlr3misc::get_private(child_alias),
+    inherits = FALSE
+  ))
+  expect_identical(
+    get(
+      "sets_with_trafos",
+      envir = environment(parent_alias$extra_trafo),
+      inherits = FALSE
+    ),
+    list(child = child_alias)
+  )
+  expect_identical(
+    get(
+      "sets_with_constraints",
+      envir = environment(parent_alias$constraint),
+      inherits = FALSE
+    ),
+    list(child = child_alias)
+  )
+  expect_identical(parent_alias$extra_trafo(list(x = 1L)), list(x = 1L))
+  expect_true(parent_alias$constraint(list(x = 1L)))
+
+  cyclic = transplantable_legacy_base_from_current(ps(x = p_int()))
+  cyclic_private = mlr3misc::get_private(cyclic)
+  cyclic_private$.extra_trafo = legacy_detached_extra_trafo(
+    list(self = cyclic)
+  )
+  cyclic_bytes = serialize(cyclic, NULL)
+  expect_error(
+    upgrade_paradox_object_graph(cyclic),
+    "callback_dependencies.*cycle reaches active node"
+  )
+  expect_identical(serialize(cyclic, NULL), cyclic_bytes)
+  expect_false(exists(
+    ".core",
+    envir = cyclic_private,
+    inherits = FALSE
+  ))
+})
+
+test_that("legacy callback carrier shells reject dispatch and ALTREP", {
+  child = legacy_base_from_current(ps(y = p_int()))
+  class_dispatches = 0L
+  length.paradox_hostile_carriers = function(x) {
+    class_dispatches <<- class_dispatches + 1L
+    NextMethod()
+  }
+  classed_carriers = structure(
+    list(child = child),
+    class = "paradox_hostile_carriers"
+  )
+  classed = legacy_base_from_current(ps(x = p_int()))
+  classed_private = mlr3misc::get_private(classed)
+  classed_private$.extra_trafo =
+    legacy_detached_extra_trafo(classed_carriers)
+  expect_error(
+    upgrade_paradox_object(classed),
+    "sets_with_trafos.*ordinary list"
+  )
+  expect_identical(class_dispatches, 0L)
+
+  s4 = legacy_base_from_current(ps(x = p_int()))
+  s4_private = mlr3misc::get_private(s4)
+  s4_private$.extra_trafo = legacy_detached_extra_trafo(
+    asS4(list(child = child))
+  )
+  expect_error(
+    upgrade_paradox_object(s4),
+    "sets_with_trafos.*ordinary list"
+  )
+
+  altrep_observations = 0L
+  altrep_carriers = native_stateful_altrep(
+    list(child = child),
+    list(child = child),
+    callback = function() {
+      altrep_observations <<- altrep_observations + 1L
+    },
+    callback_after = 0L,
+    duplicate_returns_self = TRUE
+  )
+  altrep = legacy_base_from_current(ps(x = p_int()))
+  altrep_private = mlr3misc::get_private(altrep)
+  altrep_private$.extra_trafo =
+    legacy_detached_extra_trafo(altrep_carriers)
+  native_stateful_altrep_rearm(altrep_carriers, callback_after = 0L)
+  expect_error(
+    upgrade_paradox_object(altrep),
+    "sets_with_trafos.*ordinary list"
+  )
+  expect_identical(altrep_observations, 0L)
 })
 
 test_that("legacy collection sharing is preserved and cycles are rejected", {

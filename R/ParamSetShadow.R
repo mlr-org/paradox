@@ -6,9 +6,9 @@
 # implementation.
 param_set_shadow_constraint_closure = function(plan) {
   force(plan)
-  function(x) {
+  .paradox_strip_srcref(function(x) {
     .Call(C_param_set_shadow_constraint, plan, x)
-  }
+  })
 }
 
 param_set_shadow_constraint_factory = function(callback, hidden_values) {
@@ -170,7 +170,9 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     #' @field constraint (`function` or `NULL`)
     #' Live origin constraint adapted to the visible schema. During
     #' package-owned check, test, and assignment operations it receives the
-    #' merged active visible and hidden subsets. Read-only.
+    #' merged active visible and hidden subsets. Read-only. Source-reference
+    #' normalization occurs both when the callback is assigned to the origin
+    #' and when the package-generated visible-schema adapter is created.
     constraint = function(value) {
       if (!missing(value)) {
         stop("ParamSetShadow does not allow setting constraint.")
@@ -180,7 +182,8 @@ ParamSetShadow = R6Class("ParamSetShadow", inherit = ParamSet,
     },
 
     #' @field extra_trafo (`function` or `NULL`)
-    #' The origin's live extra transformation. Assignment writes through.
+    #' The origin's live extra transformation. Assignment writes through and
+    #' therefore applies the origin's source-reference normalization.
     extra_trafo = function(value) {
       if (missing(value)) {
         invisible(.Call(C_param_set_shadow_refresh, self, private))

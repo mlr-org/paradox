@@ -45,6 +45,9 @@
 #'   with e.g. `p_dbl(..., trafo = ...)` will *not* automatically give the `to_tune()` assigned to it a transformation.
 #'   `trafo` only makes sense for [`ParamSet`]s that get used as search spaces for optimization or tuning, it is not useful when
 #'   defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.
+#'   Source-reference attributes are removed from the stored callback at
+#'   construction time. See `options(paradox.strip_srcrefs = FALSE)` under
+#'   [paradox-package] for the debugging opt-out.
 #' @param depends (`call` | `expression`)\cr
 #'   An expression indicating a requirement for the parameter that will be constructed from this. Can be given as an
 #'   expression (using `quote()`), or the expression can be entered directly and will be parsed using NSE (see
@@ -84,6 +87,9 @@
 #' @param repr (`language`)\cr
 #'   Symbol to use to represent the value given in `default`.
 #'   The `deparse()` of this object is used when printing the domain, in some cases.
+#'   Unless `options(paradox.strip_srcrefs = FALSE)` is set, source-reference
+#'   metadata is removed before the printable ID is computed, so inline
+#'   functions use canonical deparse formatting without original comments.
 #' @param init (`any`)\cr
 #'   Initial value. When this is given, then the corresponding entry in `ParamSet$values` is initialized with this
 #'   value upon construction. For `p_dbl()`, `p_int()`, `p_fct()`, and
@@ -93,11 +99,15 @@
 #' @param aggr (`function`)\cr
 #'   Default aggregation function for a parameter. Can only be given for parameters tagged with `"internal_tuning"`.
 #'   Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
+#'   Source-reference attributes are removed from the stored callback unless
+#'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @param in_tune_fn (`function(domain, param_vals)`)\cr
 #'   Function that converters a `Domain` object into a parameter value.
 #'   Can only be given for parameters tagged with `"internal_tuning"`.
 #'   This function should also assert that the parameters required to enable internal tuning for the given `domain` are
 #'   set in `param_vals` (such as `early_stopping_rounds` for `XGBoost`).
+#'   Source-reference attributes are removed from the stored callback unless
+#'   `options(paradox.strip_srcrefs = FALSE)` is set before construction.
 #' @param disable_in_tune (named `list()`)\cr
 #'   The parameter values that need to be set in the `ParamSet` to disable the internal tuning for the parameter.
 #'   For `XGBoost` this would e.g. be `list(early_stopping_rounds = NULL)`.
@@ -228,6 +238,19 @@ Domain = function(cls, grouping,
   reprargs$depends = depends_expr
   reprargs$trafo = trafoexpr
   if (identical(reprargs$logscale, TRUE)) reprargs$trafo = NULL
+  # `as.call()` below creates a fresh, source-free carrier. Normalize only
+  # closure/language components before assembly instead of recursively
+  # rescanning the complete ordinary constructor call. This preserves the
+  # exact recursive semantics for every component that can carry source
+  # metadata while keeping callback-free construction cheap.
+  for (index in seq_along(reprargs)) {
+    component = reprargs[[index]]
+    if (typeof(component) == "closure" ||
+        is.language(component) ||
+        is.pairlist(component)) {
+      reprargs[[index]] = .paradox_strip_srcref(component)
+    }
+  }
   param_repr = as.call(c(constructorcall[[1]], reprargs))
 
   param_id = .Call(C_domain_simple_repr_id, param_repr)

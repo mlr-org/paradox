@@ -16,3 +16,6 @@
 #' into the collection namespace. The target algorithm must accept the result.
 #' For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
 #' Is NULL by default, and you can set it to NULL to switch the transformation off.
+#' Source-reference attributes are removed from the stored callback when it is
+#' assigned. See `options(paradox.strip_srcrefs = FALSE)` under
+#' [paradox-package] for the debugging opt-out.

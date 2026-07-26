@@ -36,6 +36,16 @@ search path, base/empty environments, or arbitrary external-pointer and
 weak-reference internals. The protected ordinary-R payload of an
 authenticated current Paradox capsule is traversed so a legacy object stored
 as an opaque parameter value is not missed.
+Known package-generated Paradox 1 callback wrappers are authenticated
+narrowly rather than treated as general object graphs. ParamSet children
+captured by a detached collection transformation or constraint are migrated
+as explicit dependencies, preserving shared identities. Other callback
+environments are not traversed. During preparation, package-interpreted
+callbacks follow \code{getOption("paradox.strip_srcrefs", TRUE)}. A detached
+wrapper is nevertheless always rebuilt in a fresh environment so carrier
+rebinding cannot mutate serialized input; disabling stripping preserves its
+source metadata, not its wrapper identity. This source-reference
+normalization does not alter opaque parameter payloads.
 
 All discovered nodes and registered owner migrations are semantically
 inspected and rebuilt before the first legacy shell changes. Already-current

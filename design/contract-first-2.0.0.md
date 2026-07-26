@@ -347,7 +347,16 @@ Its Domain shell and structural metadata remain ordinary non-ALTREP/non-S4.
 values. Its callback is part of the ordinary callback contract, not a new
 Domain type. Existing `special_vals`, transformations, defaults, initial
 values, aggregation, and internal-tuning callbacks remain supported where
-their public constructors document them.
+their public constructors document them. Package-interpreted callbacks retain
+identity from the point of admission: admission recursively discards
+`srcref`, `srcfile`, and `wholeSrcref` representation metadata from a stored
+copy while retaining the exact enclosing environment. A callback with no such
+metadata is stored at pointer identity. The admission-time debugging opt-out is
+`options(paradox.strip_srcrefs = FALSE)`. This does not weaken the opaque-leaf
+contract: function-valued `$values`, defaults, special values, initialization
+leaves, and other user payload remain untouched by source-reference
+normalization. The separately specified legacy graph migration may still
+identity-migrate a legacy ParamSet shell reached inside such a payload.
 
 The supported dependency conditions are exactly `CondEqual` and `CondAnyOf`.
 Their exported constructor names, `Constructor$new` adapter, class vectors,
@@ -1010,6 +1019,21 @@ compatibility-first 2.0.0 implementation.
   state, and legacy third-party R6 subclasses not covered by an exact
   registered owner bridge fail with a path-specific diagnostic.
 - The upgrader never executes a legacy operation merely to discover its state.
+
+During pure and graph preparation, package-interpreted legacy callbacks undergo
+the same source-reference normalization as fresh callbacks. Only exact known
+Paradox-1 package-generated wrapper shapes are authenticated: categorical
+mapping, collection-flattened `in_tune_fn`, tuning-ParamSet transformation, and
+detached collection transformation/constraint adapters. An authenticated
+detached adapter contributes its captured ParamSet carrier list as explicit
+migration dependencies, preserving aliases. Before R observes that list, one
+registered C boundary rejects ALTREP, S4, and object shells and shallow-copies
+an ordinary list with optional ordinary names. The wrapper is always rebuilt
+in a fresh closure environment before carrier rebinding, so neither the pure
+converter nor graph preflight mutates serialized input. With
+`paradox.strip_srcrefs = FALSE`, that rebuilt wrapper retains source metadata
+but does not retain wrapper pointer or environment identity. No arbitrary
+callback environment becomes a migration edge.
 
 `upgrade_paradox_object_graph(x)` is the identity-preserving recursive
 migration boundary for a containing object:

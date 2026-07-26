@@ -17,7 +17,9 @@ This is only available for parameters tagged with \code{"internal_tuning"}.}
 \item{aggr}{(\code{function})\cr
 Function with one argument, which is a list of parameter values and returns a single aggregated value (e.g. the mean).
 This specifies how multiple parameter values are aggregated to form a single value in the context of internal tuning.
-If none specified, the default aggregation function of the parameter will be used.}
+If none specified, the default aggregation function of the parameter will be used.
+Source-reference attributes are removed from the stored callback unless
+\code{options(paradox.strip_srcrefs = FALSE)} is set before construction.}
 }
 \value{
 A \code{TuneToken} object.

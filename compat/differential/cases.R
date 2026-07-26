@@ -186,6 +186,105 @@ paradox_differential_cases <- list(
     seed = 31L
   ),
 
+  stored_callback_srcrefs = diff_case(
+    "Stored callbacks discard source references while function values remain opaque",
+    function() {
+      has_source_reference <- function(object) {
+        attributes <- attributes(object)
+        if (!is.null(attributes) &&
+            any(c("srcref", "srcfile", "wholeSrcref") %in% names(attributes))) {
+          return(TRUE)
+        }
+        if (is.function(object)) {
+          return(
+            has_source_reference(formals(object)) ||
+              has_source_reference(body(object))
+          )
+        }
+        if (is.call(object) || is.expression(object) || is.pairlist(object)) {
+          parts <- as.list(object)
+          return(any(vapply(parts, has_source_reference, logical(1L))))
+        }
+        FALSE
+      }
+      source_function <- function(text) {
+        eval(parse(text = text, keep.source = TRUE)[[1L]], envir = environment())
+      }
+
+      custom_check <- source_function(
+        "function(value) {\n# custom check marker\nif (is.function(value)) TRUE else \"must be a function\"\n}"
+      )
+      trafo <- source_function(
+        "function(value) {\n# trafo marker\nvalue + 1\n}"
+      )
+      extra_trafo <- source_function(
+        "function(x) {\n# extra trafo marker\nlist(answer = x$x * 2)\n}"
+      )
+      constraint <- source_function(
+        "function(x) {\n# constraint marker\nis.null(x$x) || x$x <= 1\n}"
+      )
+      function_value <- source_function(
+        "function(value) {\n# opaque value marker\nvalue * 3\n}"
+      )
+
+      parameter_set <- paradox::ps(
+        x = paradox::p_dbl(0, 1, trafo = trafo),
+        payload = paradox::p_uty(custom_check = custom_check)
+      )
+      parameter_set$extra_trafo <- extra_trafo
+      parameter_set$constraint <- constraint
+      parameter_set$values <- list(x = 0.25, payload = function_value)
+
+      inline_domain <- eval(
+        parse(
+          text = paste(
+            "paradox::p_dbl(0, 1, trafo = function(value) {",
+            "# inline repr marker",
+            "value + 2",
+            "})",
+            sep = "\n"
+          ),
+          keep.source = TRUE
+        )[[1L]],
+        envir = environment()
+      )
+
+      stored_domains <- parameter_set$domains
+      stored_trafo <- stored_domains$x$.trafo[[1L]]
+      stored_custom_check <- stored_domains$payload$cargo[[1L]]$custom_check
+      stored_extra_trafo <- parameter_set$extra_trafo
+      stored_constraint <- parameter_set$constraint
+      stored_value <- parameter_set$values$payload
+
+      list(
+        fixture_guards = list(
+          custom_check = has_source_reference(custom_check),
+          trafo = has_source_reference(trafo),
+          extra_trafo = has_source_reference(extra_trafo),
+          constraint = has_source_reference(constraint),
+          function_value = has_source_reference(function_value)
+        ),
+        stored_source_references = list(
+          custom_check = has_source_reference(stored_custom_check),
+          trafo = has_source_reference(stored_trafo),
+          extra_trafo = has_source_reference(stored_extra_trafo),
+          constraint = has_source_reference(stored_constraint),
+          inline_repr = has_source_reference(attr(inline_domain, "repr")),
+          function_value = has_source_reference(stored_value)
+        ),
+        callback_results = list(
+          custom_check = stored_custom_check(stored_value),
+          trafo = stored_trafo(2),
+          extra_trafo = stored_extra_trafo(list(x = 3)),
+          constraint = stored_constraint(list(x = 0.5)),
+          function_value = stored_value(4),
+          inline_trafo = inline_domain$.trafo[[1L]](2)
+        )
+      )
+    },
+    seed = 35L
+  ),
+
   representation_inputs = diff_case(
     paste(
       "Named scalar Domain inputs and classed value/check containers are",

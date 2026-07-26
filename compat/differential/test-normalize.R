@@ -121,6 +121,7 @@ if (!is.null(case_audit_path)) local({
     "representation_inputs",
     "closed_extension_boundary",
     "additive_paramset_subclass",
+    "stored_callback_srcrefs",
     "tune_token_search_space",
     "tune_token_closed_shape",
     "semantic_equality",

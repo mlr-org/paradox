@@ -480,6 +480,36 @@ store-blind, so a legal raw dormant store is not itself promised to pass
   constructor arguments are representation-only and are discarded from the
   owned native snapshot. Classes and other attributes remain fail-closed.
   Named scalar bounds are common R behavior, not a third-party Domain kind.
+- Source references on package-interpreted callbacks are representation-only
+  admission metadata. Recursively remove `srcref`, `srcfile`, and
+  `wholeSrcref` from stored `custom_check`, individual/extra transformations,
+  constraints, aggregation, and internal-tuning callbacks, and from printable
+  Domain representation language. Normalize package-generated
+  Shadow/Collection callback adapters and flattened internal-tuning namespace
+  adapters under the same rule. At ordinary current-object admission, return a
+  clean callback unchanged; a stripped copy must retain the exact enclosing
+  environment. Read
+  `options(paradox.strip_srcrefs = FALSE)` only at admission as a debugging
+  opt-out. The recursive source-reference walk never enters arbitrary callback
+  environments or anything reached through `$values`, defaults, specials, or
+  initialization payloads. Exact legacy-crate authentication may snapshot only
+  its fixed known binding set. The independently specified legacy graph crawler
+  may still discover a legacy ParamSet shell stored in an opaque value. Apply
+  normalization during legacy preparation, before any graph transplant.
+  Authenticate only the exact known Paradox-1 package-generated crate shapes:
+  categorical mapping, collection-flattened `in_tune_fn`, tuning-ParamSet
+  transformation, and detached collection transformation/constraint adapters.
+  Rebuild those wrappers without mutating the serialized input. An authenticated
+  detached collection wrapper always receives a fresh closure environment so
+  carriers can be rebound safely; with stripping disabled, preserve its source
+  metadata but do not promise wrapper pointer/environment identity. Treat
+  ParamSet carriers captured by an authenticated detached collection adapter as
+  explicit migration dependencies, preserving aliases and rebasing them during
+  graph transplant; this is not permission to traverse arbitrary callback
+  environments. Before R observes such a carrier list,
+  `C_upgrade_carrier_list_snapshot` rejects ALTREP/S4/object shells and takes
+  one shallow ordinary-list snapshot; never replace that boundary with
+  `length()`/`seq_along()` on untrusted legacy state.
 - `$subset(..., keep_trafo = FALSE)` is the public way to derive an
   untransformed search space. The final additive argument defaults to `TRUE`
   for BASE, COLLECTION, and SHADOW. `FALSE` makes the single native subset

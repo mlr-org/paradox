@@ -14,6 +14,10 @@ p_uty = function(custom_check = NULL, special_vals = list(), default = NO_DEF, t
       )
     }
   }
+  custom_check = .paradox_strip_srcref(custom_check)
+  trafo = .paradox_strip_srcref(trafo)
+  aggr = .paradox_strip_srcref(aggr)
+  in_tune_fn = .paradox_strip_srcref(in_tune_fn)
   repr = if (!is_nodefault(default)) {
     deparse(repr)[[1]]
   } else {

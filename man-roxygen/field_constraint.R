@@ -10,3 +10,6 @@
 #' active child-scope slice.
 #' The input list shell and structural names/list metadata are ordinary
 #' non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.
+#' Source-reference attributes are removed from the stored callback when it is
+#' assigned. See `options(paradox.strip_srcrefs = FALSE)` under
+#' [paradox-package] for the debugging opt-out.

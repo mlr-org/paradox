@@ -59,10 +59,13 @@ Tags captured with the visible schema. Read-only for a shadow.}
     \item{\code{constraint}}{(\code{function} or \code{NULL})
 Live origin constraint adapted to the visible schema. During
 package-owned check, test, and assignment operations it receives the
-merged active visible and hidden subsets. Read-only.}
+merged active visible and hidden subsets. Read-only. Source-reference
+normalization occurs both when the callback is assigned to the origin
+and when the package-generated visible-schema adapter is created.}
 
     \item{\code{extra_trafo}}{(\code{function} or \code{NULL})
-The origin's live extra transformation. Assignment writes through.}
+The origin's live extra transformation. Assignment writes through and
+therefore applies the origin's source-reference normalization.}
 
     \item{\code{has_constraint}}{(\code{logical(1)})
 Whether the origin currently has a constraint.}

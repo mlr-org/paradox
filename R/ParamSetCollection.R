@@ -7,9 +7,9 @@
 # semantics.
 param_set_collection_constraint_closure = function(plan) {
   force(plan)
-  function(x) {
+  .paradox_strip_srcref(function(x) {
     .Call(C_param_set_collection_detached_constraint, plan, x)
-  }
+  })
 }
 
 param_set_collection_constraint_factory = function(
@@ -26,9 +26,9 @@ param_set_collection_constraint_factory = function(
 
 param_set_collection_extra_trafo_closure = function(plan) {
   force(plan)
-  function(x) {
+  .paradox_strip_srcref(function(x) {
     .Call(C_param_set_collection_detached_extra_trafo, plan, x)
-  }
+  })
 }
 
 param_set_collection_extra_trafo_factory = function(
@@ -59,6 +59,25 @@ param_set_collection_extra_trafo_factory = function(
     indices = trafo_indices,
     sets = trafo_sets
   ))
+}
+
+param_set_collection_in_tune_fn_factory = function(
+    in_tune_fn,
+    prefix,
+    prefixed_set_ids
+) {
+  force(in_tune_fn)
+  force(prefix)
+  force(prefixed_set_ids)
+  crate(.paradox_strip_srcref(function(domain, param_vals) {
+    param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
+    names(param_vals) = gsub(
+      sprintf("^\\Q%s.\\E", prefix),
+      "",
+      names(param_vals)
+    )
+    in_tune_fn(domain, param_vals)
+  }), in_tune_fn, prefix, prefixed_set_ids)
 }
 
 #' @title ParamSetCollection
@@ -324,11 +343,11 @@ ParamSetCollection = R6Class("ParamSetCollection", inherit = ParamSet,
         in_tune_fn = cargo$in_tune_fn
 
         prefixed_set_ids = private$.add_name_prefix(prefix, info$ids)
-        cargo$in_tune_fn = crate(function(domain, param_vals) {
-          param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
-          names(param_vals) = gsub(sprintf("^\\Q%s.\\E", prefix), "", names(param_vals))
-          in_tune_fn(domain, param_vals)
-        }, in_tune_fn, prefix, prefixed_set_ids)
+        cargo$in_tune_fn = param_set_collection_in_tune_fn_factory(
+          in_tune_fn,
+          prefix,
+          prefixed_set_ids
+        )
 
         if (length(cargo$disable_in_tune)) {
           cargo$disable_in_tune = set_names(

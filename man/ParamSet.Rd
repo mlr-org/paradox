@@ -158,7 +158,10 @@ otherwise supplied names must be unique. A child transformation in a
 \code{\link{ParamSetCollection}} must return unique names so they can be translated
 into the collection namespace. The target algorithm must accept the result.
 For convenience, the self-paramset is also passed in, if you need some info from it (e.g. tags).
-Is NULL by default, and you can set it to NULL to switch the transformation off.}
+Is NULL by default, and you can set it to NULL to switch the transformation off.
+Source-reference attributes are removed from the stored callback when it is
+assigned. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out.}
 
     \item{\code{constraint}}{(\verb{function(x)})\cr
 Constraint function. Settable on a base \code{\link{ParamSet}}; read-only and derived
@@ -171,7 +174,10 @@ collection computes activity over its complete translated configuration,
 including cross-set dependencies, before each child receives an unprefixed
 active child-scope slice.
 The input list shell and structural names/list metadata are ordinary
-non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.}
+non-ALTREP/non-S4; admitted semantic atomic leaves may be stable ALTREP.
+Source-reference attributes are removed from the stored callback when it is
+assigned. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out.}
 
     \item{\code{deps}}{(\code{\link[data.table:data.table]{data.table::data.table()}})\cr
 Table has cols \code{id} (\code{character(1)}) and \code{on} (\code{character(1)}) and \code{cond} (\link{Condition}).

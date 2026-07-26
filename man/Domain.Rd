@@ -146,7 +146,10 @@ Single argument function performing the transformation of a parameter. When the 
 Note that the trafo is \emph{not} inherited by \code{\link{TuneToken}}s! Defining a parameter
 with e.g. \code{p_dbl(..., trafo = ...)} will \emph{not} automatically give the \code{to_tune()} assigned to it a transformation.
 \code{trafo} only makes sense for \code{\link{ParamSet}}s that get used as search spaces for optimization or tuning, it is not useful when
-defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.}
+defining domains or hyperparameter ranges of learning algorithms, because these do not use trafos.
+Source-reference attributes are removed from the stored callback at
+construction time. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out.}
 
 \item{logscale}{(\code{logical(1)})\cr
 Put numeric domains on a log scale. Default \code{FALSE}. Log-scale \code{Domain}s represent parameter ranges where lower and upper bounds
@@ -177,13 +180,17 @@ opaque and may be S4.}
 
 \item{aggr}{(\code{function})\cr
 Default aggregation function for a parameter. Can only be given for parameters tagged with \code{"internal_tuning"}.
-Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.}
+Function with one argument, which is a list of parameter values and that returns the aggregated parameter value.
+Source-reference attributes are removed from the stored callback unless
+\code{options(paradox.strip_srcrefs = FALSE)} is set before construction.}
 
 \item{in_tune_fn}{(\verb{function(domain, param_vals)})\cr
 Function that converters a \code{Domain} object into a parameter value.
 Can only be given for parameters tagged with \code{"internal_tuning"}.
 This function should also assert that the parameters required to enable internal tuning for the given \code{domain} are
-set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost}).}
+set in \code{param_vals} (such as \code{early_stopping_rounds} for \code{XGBoost}).
+Source-reference attributes are removed from the stored callback unless
+\code{options(paradox.strip_srcrefs = FALSE)} is set before construction.}
 
 \item{disable_in_tune}{(named \code{list()})\cr
 The parameter values that need to be set in the \code{ParamSet} to disable the internal tuning for the parameter.
@@ -207,11 +214,19 @@ Custom function to check the feasibility.
 Function which checks the input.
 Must return 'TRUE' if the input is valid and a \code{character(1)} with the error message otherwise.
 This function should \emph{not} throw an error.
-Defaults to \code{NULL}, which means that no check is performed.}
+Defaults to \code{NULL}, which means that no check is performed.
+Paradox removes source-reference attributes from the stored callback at
+construction time. See \code{options(paradox.strip_srcrefs = FALSE)} under
+\link{paradox-package} for the debugging opt-out. Source-reference
+normalization does not modify function-valued parameter values or other
+opaque value payloads.}
 
 \item{repr}{(\code{language})\cr
 Symbol to use to represent the value given in \code{default}.
-The \code{deparse()} of this object is used when printing the domain, in some cases.}
+The \code{deparse()} of this object is used when printing the domain, in some cases.
+Unless \code{options(paradox.strip_srcrefs = FALSE)} is set, source-reference
+metadata is removed before the printable ID is computed, so inline
+functions use canonical deparse formatting without original comments.}
 }
 \value{
 A \code{Domain} object.

@@ -458,6 +458,7 @@
 }
 
 .upgrade_paradox_requirements = function(requirements, path) {
+  if (is.null(requirements)) return(list())
   if (!is.list(requirements) || is.object(requirements)) {
     .upgrade_paradox_abort(path, "Domain requirements must be a plain list")
   }
@@ -534,6 +535,183 @@
   invisible(NULL)
 }
 
+.upgrade_paradox_crate_bindings = function(callback, binding_names, template) {
+  wrapper_environment = environment(callback)
+  if (!is.environment(wrapper_environment) ||
+      !identical(parent.env(wrapper_environment), asNamespace("paradox")) ||
+      !is.null(attributes(wrapper_environment)) ||
+      environmentIsLocked(wrapper_environment) ||
+      !identical(
+        sort(ls(wrapper_environment, all.names = TRUE)),
+        sort(binding_names)
+      ) ||
+      any(vapply(
+        binding_names,
+        bindingIsActive,
+        logical(1L),
+        env = wrapper_environment
+      )) ||
+      any(vapply(
+        binding_names,
+        bindingIsLocked,
+        logical(1L),
+        env = wrapper_environment
+      )) ||
+      length(setdiff(
+        names(attributes(callback)),
+        .paradox_srcref_attributes
+      )) ||
+      !identical(
+        .paradox_strip_srcref_node(formals(callback)),
+        .paradox_strip_srcref_node(formals(template))
+      ) ||
+      !identical(
+        .paradox_strip_srcref_node(body(callback)),
+        .paradox_strip_srcref_node(body(template))
+      )) {
+    return(NULL)
+  }
+
+  snapshots = lapply(binding_names, function(name) {
+    .paradox_plain_binding_snapshot(wrapper_environment, name)
+  })
+  if (any(!vapply(snapshots, function(snapshot) {
+    isTRUE(snapshot$ok)
+  }, logical(1L)))) {
+    return(NULL)
+  }
+  stats::setNames(lapply(snapshots, `[[`, "value"), binding_names)
+}
+
+.upgrade_paradox_fct_trafo_template = function(x) {
+  x = levels[[x]]
+  if (!is.null(trafo)) x = trafo(x)
+  x
+}
+
+.upgrade_paradox_collection_in_tune_template = function(
+    domain,
+    param_vals
+) {
+  param_vals = param_vals[names(param_vals) %in% prefixed_set_ids]
+  names(param_vals) = gsub(
+    sprintf("^\\Q%s.\\E", prefix),
+    "",
+    names(param_vals)
+  )
+  in_tune_fn(domain, param_vals)
+}
+
+.upgrade_paradox_tune_trafo_template = function(x, param_set) {
+  mlr3misc::set_names(
+    checkmate::assert_list(
+      trafo(x),
+      len = 1,
+      .var.name = sprintf(
+        "Trafo for tuning ParamSet for parameter %s",
+        pname
+      )
+    ),
+    pname
+  )
+}
+
+.upgrade_paradox_collection_extra_trafo_template = function(x)
+  psc_extra_trafo(
+    x,
+    children_with_trafos,
+    sets_with_trafos,
+    translation,
+    postfix
+  )
+
+.upgrade_paradox_collection_constraint_template = function(x)
+  psc_constraint(
+    x,
+    children_with_constraints,
+    sets_with_constraints,
+    translation
+  )
+
+.upgrade_paradox_rebuild_legacy_crate = function(callback, bindings) {
+  # Carrier rebinding must never mutate the authenticated legacy wrapper.
+  # `environment<-` gives the closure a fresh environment; the ordinary
+  # admission helper independently decides whether source metadata is removed
+  # or retained under `paradox.strip_srcrefs`.
+  rebuilt = .paradox_strip_srcref(callback)
+  environment(rebuilt) = list2env(
+    bindings,
+    parent = asNamespace("paradox")
+  )
+  compiler::cmpfun(rebuilt)
+}
+
+.upgrade_paradox_strip_legacy_in_tune_fn = function(callback) {
+  if (!isTRUE(getOption("paradox.strip_srcrefs", TRUE))) return(callback)
+  bindings = .upgrade_paradox_crate_bindings(
+    callback,
+    c("in_tune_fn", "prefix", "prefixed_set_ids"),
+    .upgrade_paradox_collection_in_tune_template
+  )
+  if (is.null(bindings) ||
+      (!is.null(bindings$in_tune_fn) &&
+        !is.function(bindings$in_tune_fn)) ||
+      !is.character(bindings$prefix) ||
+      length(bindings$prefix) != 1L ||
+      is.na(bindings$prefix) ||
+      !is.character(bindings$prefixed_set_ids) ||
+      anyNA(bindings$prefixed_set_ids)) {
+    return(.paradox_strip_srcref(callback))
+  }
+  param_set_collection_in_tune_fn_factory(
+    .paradox_strip_srcref(bindings$in_tune_fn),
+    bindings$prefix,
+    bindings$prefixed_set_ids
+  )
+}
+
+.upgrade_paradox_strip_cargo_callbacks = function(cargo) {
+  if (is.null(cargo) || !is.list(cargo) || is.object(cargo)) return(cargo)
+  cargo_names = names(cargo)
+  if (is.null(cargo_names)) return(cargo)
+  callback_indices = which(
+    cargo_names %in% c("custom_check", "aggr", "in_tune_fn")
+  )
+  for (index in callback_indices) {
+    callback = cargo[[index]]
+    if (is.function(callback)) {
+      cargo[[index]] = if (identical(
+          cargo_names[[index]],
+          "in_tune_fn"
+        )) {
+        .upgrade_paradox_strip_legacy_in_tune_fn(callback)
+      } else {
+        .paradox_strip_srcref(callback)
+      }
+    }
+  }
+  cargo
+}
+
+.upgrade_paradox_strip_domain_callbacks = function(columns) {
+  columns$cargo = lapply(
+    columns$cargo,
+    .upgrade_paradox_strip_cargo_callbacks
+  )
+  if (".trafo" %in% names(columns)) {
+    columns$.trafo = lapply(seq_along(columns$.trafo), function(index) {
+      trafo = columns$.trafo[[index]]
+      if (!is.function(trafo)) return(trafo)
+      .upgrade_paradox_strip_legacy_fct_trafo(
+        trafo,
+        columns$id[[index]],
+        columns
+      )
+    })
+  }
+  columns
+}
+
 .upgrade_paradox_domain = function(domain, path) {
   classes = .upgrade_paradox_materialize_atomic(
     attr(domain, "class", exact = TRUE)
@@ -579,10 +757,12 @@
       !is.function(columns$.trafo[[1L]])) {
     .upgrade_paradox_abort(path, "malformed Domain transformation")
   }
+  columns = .upgrade_paradox_strip_domain_callbacks(columns)
 
   result = .upgrade_paradox_domain_table(columns)
   class(result) = classes
   repr = attr(domain, "repr", exact = TRUE)
+  repr = .paradox_strip_srcref(repr)
   if (!is.null(repr)) attr(result, "repr") = repr
   result
 }
@@ -594,7 +774,7 @@
   if (anyNA(ids) || any(!nzchar(ids)) || anyDuplicated(ids)) {
     .upgrade_paradox_abort(path, "parameter IDs must be nonempty and unique")
   }
-  columns
+  .upgrade_paradox_strip_domain_callbacks(columns)
 }
 
 .upgrade_paradox_tags = function(tags, ids, path) {
@@ -608,15 +788,242 @@
   .upgrade_paradox_internal_table(list(id = id, tag = tag))
 }
 
-.upgrade_paradox_trafos = function(trafos, ids, path) {
+.upgrade_paradox_strip_legacy_fct_trafo = function(
+    trafo,
+    id,
+    param_columns
+) {
+  if (!isTRUE(getOption("paradox.strip_srcrefs", TRUE))) return(trafo)
+  param_index = match(id, param_columns$id, nomatch = 0L)
+  if (!param_index ||
+      !identical(param_columns$cls[[param_index]], "ParamFct")) {
+    return(.paradox_strip_srcref(trafo))
+  }
+
+  bindings = .upgrade_paradox_crate_bindings(
+    trafo,
+    c("levels", "trafo"),
+    .upgrade_paradox_fct_trafo_template
+  )
+  if (is.null(bindings)) {
+    return(.paradox_strip_srcref(trafo))
+  }
+
+  if (!(is.atomic(bindings$levels) || is.list(bindings$levels)) ||
+      !identical(
+        .upgrade_paradox_materialize_atomic(names(bindings$levels)),
+        param_columns$levels[[param_index]]
+      ) ||
+      (!is.null(bindings$trafo) &&
+        !is.function(bindings$trafo))) {
+    return(.paradox_strip_srcref(trafo))
+  }
+
+  .paradox_strip_srcref(.make_p_fct_trafo(
+    bindings$levels,
+    .paradox_strip_srcref(bindings$trafo)
+  ))
+}
+
+.upgrade_paradox_strip_legacy_extra_trafo = function(callback) {
+  if (isTRUE(getOption("paradox.strip_srcrefs", TRUE))) {
+    tune_bindings = .upgrade_paradox_crate_bindings(
+      callback,
+      c("trafo", "pname"),
+      .upgrade_paradox_tune_trafo_template
+    )
+    if (!is.null(tune_bindings) &&
+        is.function(tune_bindings$trafo) &&
+        is.character(tune_bindings$pname) &&
+        length(tune_bindings$pname) == 1L &&
+        !is.na(tune_bindings$pname)) {
+      return(.make_tune_param_set_trafo(
+        .paradox_strip_srcref(tune_bindings$trafo),
+        tune_bindings$pname
+      ))
+    }
+  }
+
+  collection_bindings = .upgrade_paradox_crate_bindings(
+    callback,
+    c(
+      "children_with_trafos", "sets_with_trafos", "translation",
+      "psc_extra_trafo", "postfix"
+    ),
+    .upgrade_paradox_collection_extra_trafo_template
+  )
+  if (!is.null(collection_bindings) &&
+      typeof(collection_bindings$sets_with_trafos) == "list" &&
+      is.function(collection_bindings$psc_extra_trafo)) {
+    collection_bindings$psc_extra_trafo = .paradox_strip_srcref(
+      collection_bindings$psc_extra_trafo
+    )
+    return(.upgrade_paradox_rebuild_legacy_crate(
+      callback,
+      collection_bindings
+    ))
+  }
+
+  .paradox_strip_srcref(callback)
+}
+
+.upgrade_paradox_strip_legacy_constraint = function(callback) {
+  collection_bindings = .upgrade_paradox_crate_bindings(
+    callback,
+    c(
+      "children_with_constraints", "sets_with_constraints",
+      "translation", "psc_constraint"
+    ),
+    .upgrade_paradox_collection_constraint_template
+  )
+  if (!is.null(collection_bindings) &&
+      typeof(collection_bindings$sets_with_constraints) == "list" &&
+      is.function(collection_bindings$psc_constraint)) {
+    collection_bindings$psc_constraint = .paradox_strip_srcref(
+      collection_bindings$psc_constraint
+    )
+    return(.upgrade_paradox_rebuild_legacy_crate(
+      callback,
+      collection_bindings
+    ))
+  }
+  .paradox_strip_srcref(callback)
+}
+
+.upgrade_paradox_callback_carrier_snapshot = function(
+    carrier,
+    field,
+    path
+) {
+  stable = .Call(C_upgrade_carrier_list_snapshot, carrier)
+  if (is.null(stable)) {
+    .upgrade_paradox_abort(
+      path,
+      "legacy detached callback `%s` carriers must be an ordinary list",
+      field
+    )
+  }
+  stable
+}
+
+.upgrade_paradox_callback_carriers = function(
+    extra_trafo,
+    constraint,
+    path
+) {
+  extra_bindings = if (is.function(extra_trafo)) {
+    .upgrade_paradox_crate_bindings(
+      extra_trafo,
+      c(
+        "children_with_trafos", "sets_with_trafos", "translation",
+        "psc_extra_trafo", "postfix"
+      ),
+      .upgrade_paradox_collection_extra_trafo_template
+    )
+  } else {
+    NULL
+  }
+  constraint_bindings = if (is.function(constraint)) {
+    .upgrade_paradox_crate_bindings(
+      constraint,
+      c(
+        "children_with_constraints", "sets_with_constraints",
+        "translation", "psc_constraint"
+      ),
+      .upgrade_paradox_collection_constraint_template
+    )
+  } else {
+    NULL
+  }
+  list(
+    extra_trafo = if (is.null(extra_bindings)) {
+      NULL
+    } else {
+      .upgrade_paradox_callback_carrier_snapshot(
+        extra_bindings$sets_with_trafos,
+        "sets_with_trafos",
+        path
+      )
+    },
+    constraint = if (is.null(constraint_bindings)) {
+      NULL
+    } else {
+      .upgrade_paradox_callback_carrier_snapshot(
+        constraint_bindings$sets_with_constraints,
+        "sets_with_constraints",
+        path
+      )
+    }
+  )
+}
+
+.upgrade_paradox_callback_dependencies = function(carriers) {
+  extra_trafo = unname(carriers$extra_trafo)
+  constraint = unname(carriers$constraint)
+  result = c(list(), extra_trafo, constraint)
+  names(result) = c(
+    sprintf("extra_trafo_%d", seq_along(extra_trafo)),
+    sprintf("constraint_%d", seq_along(constraint))
+  )
+  result
+}
+
+.upgrade_paradox_rebind_callback_carriers = function(
+    extra_trafo,
+    constraint,
+    carriers,
+    dependencies,
+    path
+) {
+  expected = length(carriers$extra_trafo) + length(carriers$constraint)
+  if (length(dependencies) != expected) {
+    .upgrade_paradox_abort(
+      path,
+      "internal detached-callback dependency mismatch"
+    )
+  }
+  cursor = 0L
+  if (!is.null(carriers$extra_trafo)) {
+    count = length(carriers$extra_trafo)
+    replacements = dependencies[seq.int(cursor + 1L, length.out = count)]
+    names(replacements) = names(carriers$extra_trafo)
+    assign(
+      "sets_with_trafos",
+      replacements,
+      envir = environment(extra_trafo)
+    )
+    cursor = cursor + count
+  }
+  if (!is.null(carriers$constraint)) {
+    count = length(carriers$constraint)
+    replacements = dependencies[seq.int(cursor + 1L, length.out = count)]
+    names(replacements) = names(carriers$constraint)
+    assign(
+      "sets_with_constraints",
+      replacements,
+      envir = environment(constraint)
+    )
+  }
+  list(extra_trafo = extra_trafo, constraint = constraint)
+}
+
+.upgrade_paradox_trafos = function(trafos, param_columns, path) {
   columns = .upgrade_paradox_table(trafos, c("id", "trafo"), path)
   id = columns$id
   trafo = columns$trafo
+  ids = param_columns$id
   if (!is.character(id) || anyNA(id) || any(id %nin% ids) ||
       anyDuplicated(id) || !is.list(trafo) ||
       any(!vapply(trafo, is.function, logical(1L)))) {
     .upgrade_paradox_abort(path, "malformed legacy transformation table")
   }
+  trafo = lapply(seq_along(trafo), function(index) {
+    .upgrade_paradox_strip_legacy_fct_trafo(
+      trafo[[index]],
+      id[[index]],
+      param_columns
+    )
+  })
   .upgrade_paradox_internal_table(list(id = id, trafo = trafo))
 }
 
@@ -673,7 +1080,7 @@
     paste0(path, "$private$.tags")
   )
   trafos = .upgrade_paradox_trafos(
-    .upgrade_paradox_binding(private, ".trafos", path), ids,
+    .upgrade_paradox_binding(private, ".trafos", path), param_columns,
     paste0(path, "$private$.trafos")
   )
   deps = .upgrade_paradox_deps(
@@ -692,6 +1099,17 @@
   if (!is.null(constraint) && !is.function(constraint)) {
     .upgrade_paradox_abort(path, "legacy `constraint` is malformed")
   }
+  if (is.function(extra_trafo)) {
+    extra_trafo = .upgrade_paradox_strip_legacy_extra_trafo(extra_trafo)
+  }
+  if (is.function(constraint)) {
+    constraint = .upgrade_paradox_strip_legacy_constraint(constraint)
+  }
+  callback_carriers = .upgrade_paradox_callback_carriers(
+    extra_trafo,
+    constraint,
+    path
+  )
 
   tags_by_id = stats::setNames(vector("list", length(ids)), ids)
   for (index in seq_along(ids)) {
@@ -718,6 +1136,7 @@
     values = values,
     extra_trafo = extra_trafo,
     constraint = constraint,
+    callback_carriers = callback_carriers,
     assert_values = .upgrade_paradox_binding(x, "assert_values", path)
   )
 }
@@ -947,7 +1366,7 @@
       paste0(path, "$private$.tags")
     ),
     trafos = .upgrade_paradox_trafos(
-      .upgrade_paradox_binding(private, ".trafos", path), ids,
+      .upgrade_paradox_binding(private, ".trafos", path), param_columns,
       paste0(path, "$private$.trafos")
     ),
     deps = .upgrade_paradox_deps(
@@ -993,7 +1412,7 @@
   .upgrade_paradox_domain(result, path)
 }
 
-.upgrade_paradox_build_base = function(info, path) {
+.upgrade_paradox_build_base = function(info, path, dependencies = list()) {
   domains = lapply(seq_along(info$ids), function(index) {
     .upgrade_paradox_domain_from_row(
       info,
@@ -1013,14 +1432,21 @@
     }
   )
   private = result$.__enclos_env__$private
+  callbacks = .upgrade_paradox_rebind_callback_carriers(
+    info$extra_trafo,
+    info$constraint,
+    info$callback_carriers,
+    dependencies,
+    path
+  )
   param_set_core_replace(
     private,
     values = info$values,
     tags = info$tags,
     deps = info$deps,
     trafos = info$trafos,
-    extra_trafo = info$extra_trafo,
-    constraint = info$constraint
+    extra_trafo = callbacks$extra_trafo,
+    constraint = callbacks$constraint
   )
   result$assert_values = info$assert_values
   result
@@ -1074,21 +1500,69 @@
 }
 
 .upgrade_paradox_info_dependencies = function(info) {
+  if (identical(info$kind, "base")) {
+    return(.upgrade_paradox_callback_dependencies(info$callback_carriers))
+  }
   if (identical(info$kind, "collection")) return(info$children)
-  if (identical(info$kind, "owner")) return(info$dependencies)
+  if (identical(info$kind, "owner")) {
+    base_dependencies = if (identical(
+        info$owner$migration_kind,
+        "additive"
+      )) {
+      .upgrade_paradox_callback_dependencies(
+        info$base$callback_carriers
+      )
+    } else {
+      list()
+    }
+    return(c(base_dependencies, info$dependencies))
+  }
   list()
+}
+
+.upgrade_paradox_split_owner_dependencies = function(
+    info,
+    dependencies,
+    path
+) {
+  base_count = if (identical(info$owner$migration_kind, "additive")) {
+    length(.upgrade_paradox_callback_dependencies(
+      info$base$callback_carriers
+    ))
+  } else {
+    0L
+  }
+  owner_count = length(info$dependencies)
+  if (length(dependencies) != base_count + owner_count) {
+    .upgrade_paradox_abort(
+      path,
+      "internal owner dependency mismatch"
+    )
+  }
+  base = dependencies[seq_len(base_count)]
+  owner = dependencies[seq.int(
+    base_count + 1L,
+    length.out = owner_count
+  )]
+  names(owner) = names(info$dependencies)
+  list(base = base, owner = owner)
 }
 
 .upgrade_paradox_build_owner = function(info, dependencies, path) {
   entry = info$owner
+  dependencies = .upgrade_paradox_split_owner_dependencies(
+    info,
+    dependencies,
+    path
+  )
   base = if (identical(entry$migration_kind, "additive")) {
-    .upgrade_paradox_build_base(info$base, path)
+    .upgrade_paradox_build_base(info$base, path, dependencies$base)
   } else {
     NULL
   }
   rebuilder = .paradox_object_upgrader_resolve(entry, "rebuilder")
   result = tryCatch(
-    rebuilder(base, info$owner_state, dependencies),
+    rebuilder(base, info$owner_state, dependencies$owner),
     error = function(error) {
       .upgrade_paradox_abort(
         path,
@@ -1158,15 +1632,12 @@
   switch(
     info$kind,
     current = info$value,
-    base = .upgrade_paradox_build_base(info, path),
+    base = .upgrade_paradox_build_base(info, path, dependencies),
     collection = {
       names(dependencies) = names(info$children)
       .upgrade_paradox_build_collection(info, dependencies, path)
     },
-    owner = {
-      names(dependencies) = names(info$dependencies)
-      .upgrade_paradox_build_owner(info, dependencies, path)
-    },
+    owner = .upgrade_paradox_build_owner(info, dependencies, path),
     .upgrade_paradox_abort(path, "internal unknown migration node kind")
   )
 }
@@ -1230,6 +1701,25 @@
             "%s$sets[[%d]]",
             node_paths[[index]],
             dependency_position
+          )
+        } else if (identical(info$kind, "base")) {
+          sprintf(
+            "%s$callback_dependencies[[%s]]",
+            node_paths[[index]],
+            dependency_name
+          )
+        } else if (identical(
+            info$owner$migration_kind,
+            "additive"
+          ) && dependency_position <= length(
+            .upgrade_paradox_callback_dependencies(
+              info$base$callback_carriers
+            )
+          )) {
+          sprintf(
+            "%s$base_callback_dependencies[[%s]]",
+            node_paths[[index]],
+            dependency_name
           )
         } else {
           sprintf(
@@ -1589,7 +2079,48 @@
 }
 
 .upgrade_paradox_rebase_prepared = function(info, prepared, originals, path) {
-  if (identical(info$kind, "collection")) {
+  if (identical(info$kind, "base") &&
+      length(.upgrade_paradox_callback_dependencies(
+        info$callback_carriers
+      ))) {
+    private = .upgrade_paradox_shell(prepared, path)$private
+    state = param_set_core_state(private)
+    callbacks = .upgrade_paradox_rebind_callback_carriers(
+      state$.extra_trafo,
+      state$.constraint,
+      info$callback_carriers,
+      originals,
+      path
+    )
+    param_set_core_replace(
+      private,
+      extra_trafo = callbacks$extra_trafo,
+      constraint = callbacks$constraint
+    )
+  } else if (identical(info$kind, "owner") &&
+      identical(info$owner$migration_kind, "additive")) {
+    dependencies = .upgrade_paradox_split_owner_dependencies(
+      info,
+      originals,
+      path
+    )
+    if (length(dependencies$base)) {
+      private = .upgrade_paradox_shell(prepared, path)$private
+      state = param_set_core_state(private)
+      callbacks = .upgrade_paradox_rebind_callback_carriers(
+        state$.extra_trafo,
+        state$.constraint,
+        info$base$callback_carriers,
+        dependencies$base,
+        path
+      )
+      param_set_core_replace(
+        private,
+        extra_trafo = callbacks$extra_trafo,
+        constraint = callbacks$constraint
+      )
+    }
+  } else if (identical(info$kind, "collection")) {
     private = .upgrade_paradox_shell(prepared, path)$private
     param_set_core_replace(private, sets = originals)
   } else if (identical(info$kind, "owner") &&
@@ -1734,6 +2265,16 @@
 #' weak-reference internals. The protected ordinary-R payload of an
 #' authenticated current Paradox capsule is traversed so a legacy object stored
 #' as an opaque parameter value is not missed.
+#' Known package-generated Paradox 1 callback wrappers are authenticated
+#' narrowly rather than treated as general object graphs. ParamSet children
+#' captured by a detached collection transformation or constraint are migrated
+#' as explicit dependencies, preserving shared identities. Other callback
+#' environments are not traversed. During preparation, package-interpreted
+#' callbacks follow `getOption("paradox.strip_srcrefs", TRUE)`. A detached
+#' wrapper is nevertheless always rebuilt in a fresh environment so carrier
+#' rebinding cannot mutate serialized input; disabling stripping preserves its
+#' source metadata, not its wrapper identity. This source-reference
+#' normalization does not alter opaque parameter payloads.
 #'
 #' All discovered nodes and registered owner migrations are semantically
 #' inspected and rebuilt before the first legacy shell changes. Already-current
@@ -1827,12 +2368,21 @@ upgrade_paradox_object_graph = function(x) {
 #' state capsule. Current capsule-backed parameter sets are returned unchanged.
 #'
 #' The upgrader accepts package-owned `ParamSet`, `ParamSetCollection`, built-in
-#' `Domain`, and built-in `Condition` objects. It preserves callbacks and shared
-#' collection children without calling legacy methods or active bindings. The
-#' input is never mutated. Cycles, malformed private state, replaced core R6
-#' methods, custom Domain or Condition classes, and unregistered legacy
-#' third-party R6 subclasses are rejected with a path-specific error. A current
-#' capsule-backed additive subclass is validated and returned unchanged.
+#' `Domain`, and built-in `Condition` objects. It preserves callback behavior
+#' and shared collection children without calling legacy methods or active
+#' bindings. The input is never mutated. Cycles, malformed private state,
+#' replaced core R6 methods, custom Domain or Condition classes, and
+#' unregistered legacy third-party R6 subclasses are rejected with a
+#' path-specific error. A current capsule-backed additive subclass is validated
+#' and returned unchanged.
+#' Legacy package-interpreted callbacks are normalized according to
+#' `getOption("paradox.strip_srcrefs", TRUE)` during preparation; this
+#' normalization does not modify opaque parameter values. Exact
+#' package-generated callback wrappers can contribute captured ParamSet children
+#' as migration dependencies; this does not traverse arbitrary callback
+#' environments. Such a detached wrapper is always rebuilt with a fresh
+#' environment before child rebinding; disabling source stripping preserves its
+#' source metadata but not wrapper identity.
 #' Direct owner subclasses covered by an exact
 #' [register_paradox_object_upgrader()] bridge can also be rebuilt without
 #' mutating the input; the recursive graph API uses the same bridge while

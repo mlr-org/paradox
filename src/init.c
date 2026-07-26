@@ -122,6 +122,8 @@ static const R_CallMethodDef call_methods[] = {
   {"param_set_subspace_states", (DL_FUNC) &paradox_param_set_subspace_states, 4},
   {"param_set_adopt_subset_state", (DL_FUNC) &paradox_param_set_adopt_subset_state, 2},
   {"upgrade_graph_discover", (DL_FUNC) &paradox_upgrade_graph_discover, 1},
+  {"upgrade_carrier_list_snapshot",
+    (DL_FUNC) &paradox_upgrade_carrier_list_snapshot, 1},
   {"plain_binding_snapshot", (DL_FUNC) &paradox_plain_binding_snapshot, 2},
   {"gateway_context_snapshot",
     (DL_FUNC) &paradox_gateway_context_snapshot, 2},

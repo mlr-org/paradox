@@ -424,10 +424,19 @@ test_that("T13 Collection and Shadow constraints filter before slicing", {
   collection_inputs = list()
   left = ps(gate = p_lgl())
   right = ps(value = p_int(), static = p_int())
-  right$constraint = function(x) {
-    collection_inputs[[length(collection_inputs) + 1L]] <<- x
-    TRUE
-  }
+  collection_constraint = eval(parse(
+    text = paste(
+      "function(x) {",
+      "  collection_inputs[[length(collection_inputs) + 1L]] <<- x",
+      "  TRUE",
+      "}",
+      sep = "\n"
+    ),
+    keep.source = TRUE
+  )[[1L]], envir = environment())
+  expect_true(paradox:::.paradox_has_srcref(collection_constraint))
+  right$constraint = collection_constraint
+  expect_false(paradox:::.paradox_has_srcref(right$constraint))
   collection = ParamSetCollection$new(list(left = left, right = right))
   collection$add_dep("right.value", "left.gate", CondEqual(TRUE))
 
@@ -468,11 +477,21 @@ test_that("T13 Collection and Shadow constraints filter before slicing", {
     hidden_gate = FALSE,
     hidden_value = 9L
   )
-  origin$constraint = function(x) {
-    shadow_inputs[[length(shadow_inputs) + 1L]] <<- x
-    TRUE
-  }
+  shadow_constraint = eval(parse(
+    text = paste(
+      "function(x) {",
+      "  shadow_inputs[[length(shadow_inputs) + 1L]] <<- x",
+      "  TRUE",
+      "}",
+      sep = "\n"
+    ),
+    keep.source = TRUE
+  )[[1L]], envir = environment())
+  expect_true(paradox:::.paradox_has_srcref(shadow_constraint))
+  origin$constraint = shadow_constraint
+  expect_false(paradox:::.paradox_has_srcref(origin$constraint))
   shadow = ParamSetShadow$new(origin, c("hidden_gate", "hidden_value"))
+  expect_false(paradox:::.paradox_has_srcref(shadow$constraint))
   shadow$values = list(gate = FALSE, value = 1L)
 
   expect_length(shadow_inputs, 1L)

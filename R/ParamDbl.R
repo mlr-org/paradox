@@ -1,6 +1,9 @@
 #' @rdname Domain
 #' @export
 p_dbl = function(lower = -Inf, upper = Inf, special_vals = list(), default = NO_DEF, tags = character(), tolerance = sqrt(.Machine$double.eps), depends = NULL, trafo = NULL, logscale = FALSE, init, aggr = NULL, in_tune_fn = NULL, disable_in_tune = NULL) {
+  trafo = .paradox_strip_srcref(trafo)
+  aggr = .paradox_strip_srcref(aggr)
+  in_tune_fn = .paradox_strip_srcref(in_tune_fn)
   cargo = list()
   cargo$aggr = aggr
   cargo$in_tune_fn = in_tune_fn

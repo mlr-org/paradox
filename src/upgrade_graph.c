@@ -68,6 +68,50 @@ typedef struct {
   R_xlen_t work_since_interrupt;
 } paradox_upgrade_walker_t;
 
+SEXP paradox_upgrade_carrier_list_snapshot(SEXP source) {
+  static const char *const allowed_attributes[] = {"names"};
+  if (TYPEOF(source) != VECSXP || ALTREP(source) || Rf_isS4(source) ||
+      Rf_isObject(source) ||
+      !paradox_api_has_only_attributes(source, allowed_attributes, 1)) {
+    return R_NilValue;
+  }
+
+  SEXP source_names = PROTECT(paradox_api_raw_attribute(
+    source,
+    R_NamesSymbol
+  ));
+  const R_xlen_t size = XLENGTH(source);
+  if (source_names != R_NilValue &&
+      (TYPEOF(source_names) != STRSXP || ALTREP(source_names) ||
+        Rf_isS4(source_names) || Rf_isObject(source_names) ||
+        !paradox_api_has_no_attributes(source_names) ||
+        XLENGTH(source_names) != size)) {
+    UNPROTECT(1);
+    return R_NilValue;
+  }
+  if (source_names != R_NilValue) {
+    for (R_xlen_t index = 0; index < size; ++index) {
+      SEXP name = STRING_ELT(source_names, index);
+      if (name == NA_STRING || Rf_getCharCE(name) == CE_BYTES) {
+        UNPROTECT(1);
+        return R_NilValue;
+      }
+    }
+  }
+
+  SEXP result = PROTECT(Rf_allocVector(VECSXP, size));
+  for (R_xlen_t index = 0; index < size; ++index) {
+    SET_VECTOR_ELT(result, index, VECTOR_ELT(source, index));
+  }
+  if (source_names != R_NilValue) {
+    SEXP stable_names = PROTECT(Rf_duplicate(source_names));
+    Rf_setAttrib(result, R_NamesSymbol, stable_names);
+    UNPROTECT(1);
+  }
+  UNPROTECT(2);
+  return result;
+}
+
 static void *temporary_size_alloc(size_t count, size_t element_size) {
   if (count > (size_t) R_XLEN_T_MAX) {
     Rf_error("Object graph is too large to inspect");

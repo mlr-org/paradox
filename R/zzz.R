@@ -4,6 +4,21 @@
 #' @importFrom R6 R6Class is.R6Class
 #' @importFrom stats runif rnorm
 #' @useDynLib paradox, .registration = TRUE, .fixes = "C_"
+#'
+#' @section Callback source references:
+#' Paradox removes `srcref`, `srcfile`, and `wholeSrcref` attributes
+#' recursively from stored `custom_check`, per-parameter `trafo`,
+#' `extra_trafo`, `constraint`, aggregation, and internal-tuning callbacks.
+#' This keeps serialized search spaces independent of the source file that
+#' defined a callback. The callback's enclosing environment and ordinary
+#' return values are preserved; source display, breakpoint, and introspection
+#' behavior can change for a stripped copy. Source-reference normalization
+#' never modifies function-valued parameter values or opaque value payloads.
+#'
+#' For source-level debugging, set
+#' `options(paradox.strip_srcrefs = FALSE)` before constructing or assigning
+#' the callbacks, then reconstruct the object. The option is read only at each
+#' admission boundary and does not retroactively change existing objects.
 "_PACKAGE"
 
 

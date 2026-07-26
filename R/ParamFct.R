@@ -1,11 +1,11 @@
 .make_p_fct_trafo = function(levels, trafo) {
   force(levels)
   force(trafo)
-  function(x) {
+  .paradox_strip_srcref(function(x) {
     x = levels[[x]]
     if (!is.null(trafo)) x = trafo(x)
     x
-  }
+  })
 }
 
 #' @rdname Domain
@@ -14,6 +14,9 @@ p_fct = function(levels, special_vals = list(), default = NO_DEF, tags = charact
   if (!is.null(aggr)) {
     if (!is.function(aggr)) stop("`aggr` must be a function", call. = FALSE)
   }
+  trafo = .paradox_strip_srcref(trafo)
+  aggr = .paradox_strip_srcref(aggr)
+  in_tune_fn = .paradox_strip_srcref(in_tune_fn)
   constargs = as.list(match.call()[-1])
   levels = eval.parent(constargs$levels)
   if (!is.character(levels)) {
