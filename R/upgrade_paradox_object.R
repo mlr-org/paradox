@@ -13,6 +13,29 @@
   )
 }
 
+.upgrade_paradox_active_binding_accessor = function() {
+  get0(
+    "activeBindingFunction",
+    envir = baseenv(),
+    inherits = FALSE,
+    mode = "function"
+  )
+}
+
+.upgrade_paradox_active_binding_function = function(name, owner, path) {
+  accessor = .upgrade_paradox_active_binding_accessor()
+  if (is.null(accessor)) {
+    .upgrade_paradox_abort(
+      path,
+      paste0(
+        "safe active-binding inspection is unavailable on this R version; ",
+        "legacy ParamSet migration requires R >= 4.0.0"
+      )
+    )
+  }
+  accessor(name, owner)
+}
+
 .upgrade_paradox_binding = function(owner, name, path, required = TRUE) {
   if (!is.environment(owner)) {
     .upgrade_paradox_abort(path, "expected an environment")
@@ -222,7 +245,7 @@
 
   for (name in setdiff(public_names, ".__enclos_env__")) {
     if (bindingIsActive(name, x)) {
-      binding = activeBindingFunction(name, x)
+      binding = .upgrade_paradox_active_binding_function(name, x, path)
       if (!owns_method(binding)) {
         .upgrade_paradox_abort(path, "core binding `%s` was replaced", name)
       }
@@ -1213,7 +1236,7 @@
   public_names = setdiff(ls(x, all.names = TRUE), ".__enclos_env__")
   for (name in public_names) {
     if (bindingIsActive(name, x)) {
-      binding = activeBindingFunction(name, x)
+      binding = .upgrade_paradox_active_binding_function(name, x, path)
       if (!owns_method(binding) &&
           !(name %in% entry$retired_bindings &&
             .upgrade_paradox_is_retired_binding(
@@ -1942,7 +1965,7 @@
     current_values = lapply(seq_along(current_names), function(position) {
       name = current_names[[position]]
       if (current_shape$active[[position]]) {
-        activeBindingFunction(name, current)
+        .upgrade_paradox_active_binding_function(name, current, path)
       } else {
         get(name, envir = current, inherits = FALSE)
       }

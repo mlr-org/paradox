@@ -295,6 +295,51 @@ replacement_owner_legacy = function() {
   result
 }
 
+test_that("active-binding inspection is transparent or fails closed", {
+  owner = new.env(parent = emptyenv())
+  binding = function(value) {
+    if (missing(value)) 1L else stop("read-only")
+  }
+  makeActiveBinding("value", binding, owner)
+
+  if (getRversion() >= "4.0.0") {
+    expect_identical(
+      paradox:::.upgrade_paradox_active_binding_function(
+        "value",
+        owner,
+        "<root>"
+      ),
+      activeBindingFunction("value", owner)
+    )
+  } else {
+    expect_error(
+      paradox:::.upgrade_paradox_active_binding_function(
+        "value",
+        owner,
+        "<root>"
+      ),
+      "legacy ParamSet migration requires R >= 4.0.0",
+      fixed = TRUE
+    )
+  }
+})
+
+test_that("legacy migration fails closed without active-binding inspection", {
+  legacy = legacy_base_from_current(ps(x = p_dbl(0, 1)))
+  private = mlr3misc::get_private(legacy)
+
+  expect_error(
+    testthat::with_mocked_bindings(
+      upgrade_paradox_object(legacy),
+      .upgrade_paradox_active_binding_accessor = function() NULL,
+      .package = "paradox"
+    ),
+    "legacy ParamSet migration requires R >= 4.0.0",
+    fixed = TRUE
+  )
+  expect_false(exists(".core", envir = private, inherits = FALSE))
+})
+
 test_that("current capsule-backed objects upgrade idempotently", {
   base = ps(x = p_dbl(0, 1), hidden = p_lgl())
   collection = ParamSetCollection$new(list(a = base))
