@@ -139,6 +139,14 @@ one-use package-private ownership handoffs are allowed optimizations;
 persistent validation caches, trusted caller metadata, skipped graph checks,
 and weakened generation reauthentication remain prohibited.
 
+The final compatibility batch is governed by
+[`design/r-3.6-compatibility-implementation-plan.md`](design/r-3.6-compatibility-implementation-plan.md).
+Paradox 2 supports R >= 3.6 and uses portable C99. Old-runtime adaptation stays
+inside the small R API facade or removes a newer-API dependency; it is never a
+second semantic engine. The real supported-runtime matrix includes R 3.6.3,
+and the header matrix begins at R 3.6.0. Historical candidate evidence that
+started at R 4.3 remains historical and cannot prove this reopened source.
+
 ## Non-negotiable design decisions
 
 - `ParamSet`, `ParamSetCollection`, and `ParamSetShadow` are serializable R6
@@ -656,7 +664,7 @@ and weakened generation reauthentication remain prohibited.
   canonical ordinary metadata; this input exception does not admit ALTREP
   capsule, Domain, Condition, TuneToken, row, callback-result, or general list
   shells. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the
-  established `ATTRIB` traversal backport on R 4.3--4.5. Neither path invokes R
+  established `ATTRIB` traversal backport on R 3.6--4.5. Neither path invokes R
   or data.table fallback logic. Direct checked or unchecked `$values <-`
   assignment rejects an outer
   ALTREP before observation and canonicalizes the accepted Paradox-1 empty
@@ -706,9 +714,16 @@ and weakened generation reauthentication remain prohibited.
   slots, environment bindings and parents, active-binding *functions*, closure
   environments/formals/bodies and bytecode expressions, and promise-binding
   expression/environment or forced-value state—including `...` cells—without
-  forcing an unforced promise. R 4.3--4.5 additionally inspect a detached
+  forcing an unforced promise. R 3.6--4.5 additionally inspect a detached
   `PROMSXP`; under strict R >= 4.6 headers such a promise outside a binding/dots
   cell is opaque. It never invokes an active binding or a serialized method.
+  R 3.6 exposes no accessor for an active binding's function; encountering one
+  during recursive migration therefore fails closed with an instruction to
+  perform that migration under R >= 4.0. Paradox-1 ParamSet-family R6 shells
+  themselves contain active bindings, so their practical object/graph
+  migration requires R >= 4.0. Ordinary current-object operations, idempotent
+  conversion of current objects, standalone legacy Domain/Condition
+  conversion, and graphs without active bindings remain supported on R 3.6.
   Direct environment bindings are classified natively rather than inferred
   from an R expression: a realized language object or symbol remains a realized
   value, while a delayed promise with the same apparent expression is identified
@@ -819,10 +834,16 @@ and weakened generation reauthentication remain prohibited.
   the exact current Paradox namespace. `isNamespace()` plus
   `environmentName()` is descriptive metadata and is not authentication: an
   ordinary environment can spoof both.
-- Shipped C is portable C17 and otherwise uses public R C APIs available in
-  R >= 4.3. The centralized compatibility exceptions in
-  `src/r_api_compat.c` exist solely for non-forcing stored-binding/promise
-  inspection. R 4.3--4.5 uses the declared/exported
+- Shipped C is portable C99 and supports R >= 3.6. Version selection is
+  centralized in `src/r_api_compat.c`; semantic translation units do not
+  acquire old-R implementations. Current runtimes retain their public,
+  allocation-free fast paths. R 3.6--4.1 use a cold
+  `base::exists(..., inherits = FALSE)` query only where absence is an accepted
+  result. Required binding snapshots remain allocation-free. Their terminal
+  optional receipt scan fails closed when `R_HasFancyBindings()` reports a
+  locked or active frame, then uses the same stored-cell path; this old-only
+  exception avoids either evaluator allocation or invocation of an active
+  binding. R 3.6--4.5 use the declared/exported
   `Rf_findVarInFrame` to obtain the stored frame cell and, when it is a
   `PROMSXP`, the three header-declared/exported accessors `R_PromiseExpr`,
   `PRENV`, and `PRVALUE`. R >= 4.6 uses only the documented experimental
@@ -834,7 +855,10 @@ and weakened generation reauthentication remain prohibited.
   expression from a realized language/symbol value or provide a stable
   binding-generation receipt. Every such symbol/version/source occurrence must be listed
   exactly in `environment/r-api-exceptions.tsv`, raw-token and DSO audited, and
-  tested against pinned headers and real runtimes before freeze. None is a
+  tested against pinned headers and real runtimes before freeze.
+  `R_HasFancyBindings`, `Rf_findVarInFrame`, `R_PromiseExpr`, `PRENV`, and
+  `PRVALUE` are confined to their exact old-runtime branches and ledgered.
+  None is a
   CRAN allowlist or permission for another internal API or semantic path.
   `src/binding_snapshot.c` exposes the same centralized classifier to the cold
   R migration/gateway code as one registered native call: it returns an exact
@@ -848,10 +872,15 @@ and weakened generation reauthentication remain prohibited.
   Treat R API predicates as predicates rather than assuming a stable
   integer typedef: when storing their result, normalize it with an explicit
   comparison such as `predicate(...) != FALSE`. The pinned old-header compiler
-  matrix is authoritative for signedness and declaration drift. Linux, Windows x86-64, and Apple
-  ARM64 remain first-class targets. Corrupt/forged state must error and must
-  never cause an out-of-bounds access, stale pointer, double evaluation, or
-  segfault.
+  matrix is authoritative for signedness and declaration drift. The params
+  reader accepts an already admitted, rooted core directly; collection reads
+  do not allocate a temporary environment or depend on `R_NewEnv()`. R 3.6
+  lacks list ALTREP, so only the package's adversarial VECSXP ALTREP test
+  fixture is unavailable there. Production list-ALTREP branches are vacuous
+  below R 4.3, while atomic ALTREP and every ordinary-container contract remain
+  tested. Linux, Windows x86-64, and Apple ARM64 remain first-class targets.
+  Corrupt/forged state must error and must never cause an out-of-bounds access,
+  stale pointer, double evaluation, or segfault.
 
 Do not leave obsolete compatibility code merely unreachable. Before release,
 all semantic translation units must be free of generated-closure/body
@@ -874,7 +903,7 @@ scripts/bootstrap
 . scripts/activate
 ```
 
-Activation selects the pinned local R 4.6.1/C17 toolchain and
+Activation selects the pinned local R 4.6.1 toolchain and
 `.local/R/library`, clears inherited compiler/library variables, and redirects
 temporary and cache state below the repository. Confirm retained work with:
 
@@ -889,8 +918,11 @@ Authoritative inputs are:
 
 - `environment/toolchain-linux-64.lock`: local development toolchain;
 - `environment/r-packages-linux-64.lock`: exact source-package closure;
-- `environment/runtime-r-4.3.3-linux-64.lock` and
+- `environment/runtime-r-3.6.3-linux-64.lock`,
+  `environment/runtime-r-3.6.3-packages.lock`,
+  `environment/runtime-r-4.3.3-linux-64.lock`, and
   `environment/runtime-r-4.5.2-linux-64.lock`: supported-runtime prefixes;
+- `environment/runtime-matrix.tsv`: authenticated runtime-axis registry;
 - `environment/r-api-sources.tsv`: local reference R sources/manuals;
 - `environment/r-api-exceptions.tsv`: the exact reviewed versioned R C API
   exception ledger;
@@ -914,7 +946,7 @@ Provision and inspect real older runtimes with:
 ```sh
 scripts/bootstrap-runtime-matrix
 scripts/bootstrap-runtime-matrix --verify
-. scripts/activate-runtime-matrix 4.3.3   # or 4.5.2
+. scripts/activate-runtime-matrix 3.6.3   # or 4.3.3 / 4.5.2
 . scripts/activate                        # return to R 4.6.1
 ```
 
@@ -1103,7 +1135,7 @@ execution or mutable-surface authentication path.
 Verification should be trustworthy and proportional. During implementation:
 
 1. parse changed R/tests and run `git diff --check`;
-2. compile only changed C translation units with the strict C17 warning set;
+2. compile only changed C translation units with the strict C99 warning set;
 3. install one stable source snapshot into one disposable library;
 4. run all directly affected test files in one batch and fix a coherent batch
    of failures, not one failure per complete rerun;
@@ -1599,9 +1631,10 @@ for test discovery.
 
 Run release gates against one clean immutable full ref, broadly in this order:
 
-1. strict GCC/Clang C17, registered-routine/probe audit, ASan/UBSan, complete
+1. strict GCC/Clang C99, registered-routine/probe audit, ASan/UBSan, complete
    package suite, and clean `R CMD check --as-cran`;
-2. actual R 4.3.3, 4.5.2, and development R plus pinned-header compilation and
+2. actual R 3.6.3, 4.3.3, 4.5.2, and development R plus compilation against
+   pinned R 3.6.0 and later headers and
    exact stored-binding/promise
    `environment/r-api-exceptions.tsv`/raw-token/version-gated DSO audit;
 3. upstream differential with reviewed intentional Paradox-2 deltas;

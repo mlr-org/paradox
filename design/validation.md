@@ -152,7 +152,7 @@ gates affected by changed bytes or inputs.
 For a coherent edit batch:
 
 1. run `git diff --check`, parse changed R/test files, and audit registrations;
-2. compile only changed C files with the release C17 warning set;
+2. compile only changed C files with the release C99 warning set;
 3. copy the package source to a stable disposable stage, excluding `.o`/`.so`;
 4. install that stage once into an absent library;
 5. run every directly affected test file in one batch and collect the complete
@@ -288,9 +288,12 @@ families.
   Realized direct language objects and symbols are distinguished from delayed
   promises carrying language/symbol expressions by the native classifier;
   neither path uses `substitute()` or evaluates the binding.
-  R 4.3--4.5 also inspect detached `PROMSXP` structure; strict R >= 4.6 treats
+  R 3.6--4.5 also inspect detached `PROMSXP` structure; strict R >= 4.6 treats
   one outside a binding/dots cell as opaque. Tests record side effects and
-  cover both supported pre-4.6 and development-R API branches;
+  cover both supported pre-4.6 and development-R API branches. On R 3.6 the
+  active-binding case must fail closed without invocation and direct the user
+  to migrate under R >= 4.0; because Paradox-1 ParamSet-family R6 shells use
+  active bindings, their practical migration runs only on R >= 4.0;
 - attributes of generic weak references and external pointers remain normal
   edges, but their internal referents/protected/tag/address slots are opaque.
   Only an authenticated Paradox core contributes its protected payload;
@@ -499,7 +502,7 @@ candidate's GitHub snapshot and mlr-org review ledgers to agree on one exact
 commit/tree, reads the files from those immutable Git objects, publishes them
 read-only, and records their complete receipt and hashes. The native driver
 seals this bundle under its functional mode. The supported-R coordinator
-stages it once before worker admission, both runtime stages consume the same
+stages it once before worker admission, all runtime stages consume the same
 bytes, and the evidence verifier reauthenticates the ledgers, tree, files, and
 receipt.
 
@@ -507,16 +510,18 @@ receipt.
 
 The frozen candidate must pass:
 
-- strict GCC and Clang C17 builds with the repository's highest warning set and
+- strict GCC and Clang C99 builds with the repository's highest warning set and
   warnings as errors;
 - fixed-arity registered-routine inventory, dynamic lookup disabled, direct
   probe for every entry, and no unregistered native symbol use;
 - ASan and UBSan direct hazard/probe coverage;
-- pinned R-header compilation against every supported source version;
+- pinned R-header compilation beginning with R 3.6.0 and covering every
+  supported API branch;
 - no forbidden private data.table API or unledgered/unsupported R API symbol;
 - exact authentication of `environment/r-api-exceptions.tsv`: every
   non-forcing stored-binding/promise symbol has its precise source, count,
-  version range, and rationale. R 4.3--4.5 must contain the one
+  version range, and rationale. R 3.6--4.1 must additionally contain the exact
+  old-only `R_HasFancyBindings` receipt-scan entry. R 3.6--4.5 must contain the one
   `Rf_findVarInFrame` call plus the ledgered header-declared/exported
   `R_PromiseExpr`, `PRENV`, and `PRVALUE`; R >= 4.6 must exclude all four and
   use its experimental binding/delayed-binding/dots APIs. Raw-token,
@@ -527,7 +532,16 @@ The frozen candidate must pass:
   or generation receipt. The registered plain-binding probe must additionally prove
   that realized and delayed literal values of identical apparent R type,
   including language objects and symbols, are distinguished without evaluation
-  on every supported runtime.
+  on every supported runtime. R 3.6--4.1 additionally exercise cold optional
+  absence lookup, locked bindings, fancy-frame fail-closed receipt scans, and
+  the allocation-free required-binding path. Current runtimes must retain their
+  public fast-path symbol inventory.
+
+The R 3.6 stage exercises atomic ALTREP normally. It records one precise
+capability exclusion for the adversarial VECSXP ALTREP fixture, because R did
+not expose list ALTREP classes until R 4.3. No production behavior is waived:
+list ALTREP objects cannot exist on the excluded runtime and the corresponding
+production branch is vacuous.
 
 Primary drivers are `scripts/native-check` and
 `scripts/check-r-api-compatibility`. Use their current `--help`; their retained
@@ -537,23 +551,31 @@ counts.
 ## Real R runtime matrix
 
 `scripts/test-runtime-matrix` runs the exact candidate on repository-local R
-4.3.3 and R 4.5.2; development validation also uses local R 4.6.1. Each stage
+3.6.3, R 4.3.3, and R 4.5.2; development validation also uses local R 4.6.1.
+Each stage
 has a fresh candidate library, builds/installs Paradox once, runs the complete
 supported test inventory, audits DSO symbols, records package/compiler/session
 identity, and seals the source/build/library/log tree.
 
-Before either old-R worker is admitted, the coordinator also stages the two
+Before the supported-R workers are admitted, the coordinator also stages the two
 mandatory historical `mbo_config` objects through the shared authenticated
-Git-object helper. `test-upgrade-paradox-object.R` therefore executes in the
-complete runtime suite; an unset fixture root is an unexpected harness skip,
-not a reviewed runtime exclusion. The retained bundle is outside both mutable
+Git-object helper. The full ParamSet-family migration assertions execute on
+R >= 4.0. R 3.6 instead proves the non-invoking active-binding failure plus
+current-object/idempotent and standalone legacy Domain/Condition paths; its
+capability exclusion is version-derived, not a file-wide waiver. An unset
+fixture root is an unexpected harness skip, not a reviewed runtime exclusion.
+The retained bundle is outside all mutable
 stage trees, is read-only, and is joined to top-level and per-stage evidence by
 commit, tree, receipt, provenance, and file digests.
 
-R 4.3.3 receives only the SHA-256-authenticated cached data.table 1.18.4 source
+R 3.6.3 builds its exact SHA-256-authenticated dependency and test closure into
+a repository-local source library described by
+`environment/runtime-r-3.6.3-packages.lock`; it never mutates the runtime
+prefix, host R, HOME, or user library. R 4.3.3 receives only the
+SHA-256-authenticated cached data.table 1.18.4 source
 overlay before Paradox is built. This is not a reason to skip tests or accept
-1.17 behavior. R 4.5.2 and development R resolve 1.18.4 directly. The two
-runtime stages may run concurrently when the resource report admits two outer
+1.17 behavior. R 4.5.2 and development R resolve 1.18.4 directly. Runtime
+stages may run concurrently when the resource report admits their outer
 workers; nested work stays at one.
 
 No fixed “57 of 79 files” or expected skip count is a contract. Exclusions must
@@ -766,7 +788,7 @@ subset, collections, live Shadow constraints and read/write paths, Design, and
 samplers.
 
 Profile first. Optimize measured R-boundary, repeated validation/snapshot,
-lookup, allocation, or per-row overhead while keeping portable C17 and readable
+lookup, allocation, or per-row overhead while keeping portable C99 and readable
 ownership. After each optimization run affected correctness tests; after the
 performance source freezes rerun the final memory/portability evidence once.
 

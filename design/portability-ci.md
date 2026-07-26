@@ -5,12 +5,12 @@ for the superseded compatibility-first source are not accepted evidence.
 
 ## Supported baseline
 
-- R >= 4.3;
-- ISO C17 through the toolchain selected by R;
+- R >= 3.6;
+- portable ISO C99 through the toolchain selected by R;
 - Linux x86-64, Windows x86-64, and macOS Apple-silicon ARM64;
 - data.table >= 1.18.4 as an outward interoperability dependency;
 - public R C APIs available at the selected supported runtime, except for the
-  exact versioned non-forcing binding/promise compatibility entries described
+  exact versioned old-runtime binding/promise compatibility entries described
   below.
 
 The source must not rely on GNU-only C behavior, x86 floating-point details,
@@ -20,8 +20,10 @@ architecture-specific vector instructions, or private data.table APIs. Use
 
 ## Local supported-runtime matrix
 
-Repository-local pinned prefixes exercise R 4.3.3 and R 4.5.2 independently of
-the development R 4.6.1 prefix:
+Repository-local pinned prefixes exercise R 3.6.3, R 4.3.3, and R 4.5.2
+independently of the development R 4.6.1 prefix. The R 3.6.0 headers are also
+an explicit compile/API axis, so support is not inferred only from the last
+patch release:
 
 ```sh
 scripts/bootstrap-runtime-matrix
@@ -33,12 +35,16 @@ scripts/verify-runtime-matrix-evidence \
   --run-id release-runtime-YYYYMMDDTHHMMSSZ
 ```
 
-The two stages use isolated libraries and caches and may overlap only when the
-memory-aware resource report admits two workers. Nested make, testthat,
+The three stages use isolated libraries and caches and may overlap only when
+the memory-aware resource report admits the workers. Nested make, testthat,
 parallel/future, BLAS, and OpenMP pools remain one.
 
-R 4.3 has no authenticated conda-forge R-4.3 build of data.table 1.18.4. The
-stage therefore authenticates the source row in
+R 3.6.3 uses the exact conda runtime lock plus a separately authenticated
+source-package library from
+`environment/runtime-r-3.6.3-packages.lock`. That snapshot-compatible closure
+includes the package imports, test framework, and focused test support without
+changing the prefix or host libraries. R 4.3 has no authenticated conda-forge
+R-4.3 build of data.table 1.18.4. That stage therefore authenticates the source row in
 `environment/r-packages-linux-64.lock`, copies the cached exact archive into its
 retained inputs, installs it into the fresh stage library, verifies the resolved
 version, and then builds Paradox. R 4.5.2 already contains the exact minimum.
@@ -55,13 +61,13 @@ validated.
 
 ## R API discipline and non-forcing compatibility facade
 
-Shipped C compiles against the pinned R 4.3.0, 4.4.0, 4.5.2, and development
-headers. Version adapters live in `src/r_api_compat.c` and may select equivalent
-APIs, but may not select a different semantic engine. For older supported
-headers, the adapters use the public, documented `FORMALS` and `ATTRIB`
+Shipped C compiles against the pinned R 3.6.0, 4.3.0, 4.4.0, 4.5.2, and
+development headers. Version adapters live in `src/r_api_compat.c` and may
+select equivalent APIs, but may not select a different semantic engine. For
+older supported headers, the adapters use the public, documented `FORMALS` and `ATTRIB`
 backports for `R_ClosureFormals`, `ANY_ATTRIB`, `R_getAttribCount`, and
 `R_hasAttrib`; raw stored-attribute selection uses `R_mapAttrib()` on R >= 4.6
-and that established `ATTRIB` traversal on R 4.3--4.5. They do not evaluate
+and that established `ATTRIB` traversal on R 3.6--4.5. They do not evaluate
 R-level `formals()`/`attributes()` helpers or call data.table code.
 Code also must not assume that an R API predicate has the same signed integer
 typedef in every supported header. A predicate retained in C state is
@@ -69,9 +75,17 @@ normalized by an explicit truth comparison (for example, `Rf_isObject(x) !=
 FALSE`); the old-header GCC/Clang matrix rejects implicit signedness
 conversions.
 
+The remaining post-3.6 API differences are public and local: fresh raw/complex
+destinations use public vector access before the element-setter declarations
+appear, and the documented default `identical()` flags are represented by
+their old-header value before `IDENT_USE_CLOENV` is named. Collection parameter
+reads pass their already admitted, rooted core directly to the shared params
+loader, eliminating the temporary environment and any need for `R_NewEnv()`.
+These adapters are inline or remove work; they do not slow the current path.
+
 The only exceptions to the public-API rule are the exact versioned entries
 needed to inspect a stored environment binding or already reached promise
-without forcing it. R 4.3--4.5 has no public non-forcing classifier for one
+without forcing it. R 3.6--4.5 has no public non-forcing classifier for one
 binding. The public R-level `substitute()` workaround is non-forcing but
 insufficient for simultaneous generation/TuneToken receipt scans and recursive
 object-graph migration: it returns a promise expression, not an unambiguous
@@ -88,6 +102,16 @@ delayed-binding information is unavailable in the API. The R 4.6 manual labels
 `Rf_findVarInFrame` as too low-level for the API; R 4.6 `tools` includes the
 latter in its warned non-API symbols. Thus this exception is a reviewed
 supported-runtime compromise, not a CRAN allowlist justification.
+
+R 3.6--4.1 also lacks the public `R_existsVarInFrame()`. Optional, cold
+absence-tolerant lookup uses `base::exists(..., inherits = FALSE)`, whose
+implementation does not invoke active bindings; mandatory admitted bindings
+stay on the allocation-free classifier. The terminal optional receipt scan
+cannot evaluate or allocate. It therefore uses the header-declared/exported
+`R_HasFancyBindings()` only on R 3.6--4.1 to reject a fancy frame before
+reading a stored cell. This is an exact old-runtime exception, not a general
+environment-layout API.
+
 Consequently, the R < 4.6 branch in `src/r_api_compat.c` calls the
 header-declared/exported `Rf_findVarInFrame` once and may inspect a returned
 `PROMSXP` through
@@ -99,11 +123,21 @@ forced-binding expression/environment accessors and does not compile the
 all three detached-promise accessors, so the facade compiles none of them on
 R >= 4.6 and a `PROMSXP` reached outside a binding/dots cell is opaque.
 
+R 3.6 exposes neither `R_ActiveBindingFunction()` nor an equivalent R
+accessor. If recursive legacy migration encounters an active binding on that
+runtime, it fails closed with an instruction to load and migrate the object
+under R >= 4.0. Paradox-1 ParamSet-family R6 shells themselves contain active
+bindings, so practical ParamSet/Collection graph migration requires R >= 4.0.
+Current Paradox-2 operations and idempotent current-object conversion remain
+supported on R 3.6, as do standalone legacy Domain/Condition conversion and
+graphs without active bindings.
+
 `environment/r-api-exceptions.tsv` is the exact ledger. It records each
 exceptional symbol, source, raw-token count, version branch, and rationale; the
 pinned-header and real-runtime matrices exercise both sides. These symbols are
-not CRAN-allowlisted. R 4.3--4.5 DSO inventories must contain the ledgered old
-binding/promise set, while R >= 4.6 inventories must exclude
+not CRAN-allowlisted. R 3.6--4.1 inventories additionally contain the exact
+old-only `R_HasFancyBindings` scan entry; R 3.6--4.5 DSO inventories contain
+the ledgered old binding/promise set, while R >= 4.6 inventories must exclude
 `Rf_findVarInFrame`, include the documented experimental binding entries
 selected by the crawler, and exclude `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
 The
@@ -118,6 +152,12 @@ Symbol audits reject too-new R APIs in older-runtime DSOs, any unledgered
 internal R API, any binding/promise count/path/version-branch mismatch, and any
 private data.table symbols. Direct probes exercise each registered routine on
 valid and malformed inputs.
+
+R did not expose VECSXP ALTREP classes before R 4.3. The package's adversarial
+list-ALTREP fixture is compiled and run only where that facility exists;
+atomic ALTREP fixtures still execute on R 3.6. Production list-ALTREP behavior
+is not skipped on old R—the corresponding object kind cannot exist there, so
+the semantic branch is vacuous.
 
 ## Floating-point portability
 
@@ -163,7 +203,7 @@ workflow's top-level green mark alone.
 ## Windows-specific checks
 
 - strict registration and DLL loading with no unresolved symbols;
-- C17 compilation under the selected Rtools GCC;
+- C99 compilation under the selected Rtools GCC;
 - path, encoding, line-ending, temporary-directory, and file-lock behavior;
 - no POSIX-only shipped code or shell dependency in package execution;
 - serialization and data.table facade behavior;
@@ -171,7 +211,7 @@ workflow's top-level green mark alone.
 
 ## macOS ARM64-specific checks
 
-- Apple Clang C17 warning-clean compile and link;
+- Apple Clang C99 warning-clean compile and link;
 - ARM64 floating/quantile/tolerance boundary suite;
 - alignment-safe object access and checked integer widths;
 - no x86-only compiler flags or intrinsic assumptions;

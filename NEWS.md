@@ -19,7 +19,7 @@ hazards that Paradox 2 is intended to remove.
   capsule and selects checked versus unchecked native value storage.
 * Performance-sensitive constructors, checks, value access/mutation, Domain
   operations, collection traversal, designs, and samplers enter registered
-  portable C17 operations directly. Current objects have one semantic engine;
+  portable C99 operations directly. Current objects have one semantic engine;
   operations are not retried through a second R/checkmate/data.table/S3 path.
 * Unknown parameter diagnostics again include a native
   `"Did you mean ...?"` hint when a close ID exists. Paradox 1 accidentally
@@ -253,8 +253,24 @@ hazards that Paradox 2 is intended to remove.
   wide-getter, Condition, facade, and sampler optimizations above. These are
   operation-local ownership/lookup improvements, not persistent validation
   caches or weaker graph admission.
-* The package now requires R >= 4.3 and a C17 compiler. Linux, Windows x86-64,
-  and Apple-silicon macOS are supported without architecture-specific code.
+* Collection parameter reads now pass the already admitted, rooted core
+  directly to the shared params loader. This removes a temporary environment
+  allocation and redundant capsule lookup and avoids requiring the
+  post-R-3.6 `R_NewEnv()` API.
+* The package supports R >= 3.6 and uses portable C99. Current R releases keep
+  their public-API fast paths; small version adapters cover old API spellings
+  without a second semantic implementation. The reusable runtime harness now
+  includes real R 3.6.3 execution and compilation against R 3.6.0 headers.
+  Recursive migration of a graph containing an active binding is the one
+  R-3.6-only limitation: because that runtime exposes no accessor for the
+  binding function, migration fails closed and asks the user to perform the
+  upgrade under R >= 4.0. Paradox-1 ParamSet-family R6 shells themselves use
+  active bindings, so their practical object/graph migration needs that newer
+  runtime. Current objects, standalone legacy Domain/Condition conversion, and
+  migration graphs without active bindings remain supported. R 3.6 also cannot construct the package's
+  list-ALTREP adversarial test fixture; list ALTREP does not exist there, so
+  this does not narrow production behavior. Linux, Windows x86-64, and
+  Apple-silicon macOS are supported without architecture-specific code.
 
 ## Dependency semantics
 
@@ -471,7 +487,7 @@ hazards that Paradox 2 is intended to remove.
   as list-column values; a fixed TuneToken now raises an informative error
   instead of being treated as a concrete grid value.
 * ParamSet quantile and grid kernels now consume canonical plain capsule tables
-  on every supported R release, including R 4.3/4.5. Zero-axis grids retain a
+  on every supported R release, including R 3.6/4.3/4.5. Zero-axis grids retain a
   typed empty result; this includes zero-level factor Domains, whose empty
   quantile maps and categorical/mixed grids retain `character(0)` columns.
   Zero-row uniform sampling does the same. A nonempty quantile map or

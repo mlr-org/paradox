@@ -27,7 +27,11 @@ metadata at admission while the source-reference normalizer leaves opaque
 at `81cbccf`/`387c1cd` under
 `design/final-performance-implementation-plan.md`; its focused tests,
 order-balanced per-slice benchmarks, exhaustive native probes, and strict
-GCC/Clang builds are development evidence only. While the remaining
+GCC/Clang builds are development evidence only. The final compatibility change
+lowers the supported baseline to R 3.6 and portable C99, adds version-bounded
+R API adapters, and extends the runtime/header harness. It changes native,
+metadata, tests, and validation inputs, so none of the historical R-4.3+
+candidate evidence proves this source. While the remaining
 pre-release items are in flight, use only the focused development policy
 below. This development batch intentionally does not run or claim the complete
 compatibility or release matrix. Freeze one replacement candidate only after
@@ -42,12 +46,16 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
 
 ## Decisions frozen for the first public release
 
-- Version is 2.0.0; R >= 4.3; portable C17; data.table >= 1.18.4.
+- Version is 2.0.0; R >= 3.6; portable C99; data.table >= 1.18.4.
 - R C API use is public except for the exact centralized non-forcing
   stored-binding/promise compatibility entries described below.
   Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and the established
-  `ATTRIB` traversal on R 4.3--4.5 without evaluating R or data.table code. The
-  compatibility facade uses exported `Rf_findVarInFrame` on R 4.3--4.5 to
+  `ATTRIB` traversal on R 3.6--4.5 without evaluating R or data.table code.
+  R 3.6--4.1 use `base::exists(..., inherits = FALSE)` only for cold optional
+  existence queries; required binding snapshots stay allocation-free, and the
+  terminal optional receipt scan uses exact old-only
+  `R_HasFancyBindings()` to fail closed for a fancy frame.
+  The compatibility facade uses exported `Rf_findVarInFrame` on R 3.6--4.5 to
   retrieve a stored frame cell and inspects any returned `PROMSXP` through
   the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`.
   R >= 4.6 instead uses only its experimental binding/delayed-binding/dots APIs;
@@ -62,6 +70,20 @@ migration policy: [`compatibility.md`](compatibility.md). Validation sequencing:
   recorded in `environment/r-api-exceptions.tsv` and pass raw-token, DSO,
   pinned-header, and real-runtime audits before freeze. None is a CRAN allowlist
   or broader internal-API permission.
+  R 3.6 has no accessor for an active-binding function. Recursive migration
+  therefore fails closed if it encounters one and asks for R >= 4.0; because
+  Paradox-1 ParamSet-family R6 shells use active bindings, practical migration
+  of those objects requires R >= 4.0. Current Paradox-2 operations, idempotent
+  current-object conversion, and standalone legacy Domain/Condition conversion
+  remain supported on R 3.6.
+- Public old-header adapters for raw/complex setters and default
+  `identical()` flags are inline. Collection parameter reads pass the admitted,
+  rooted core directly to the shared loader, eliminating both a temporary
+  environment allocation and the need for post-3.6 `R_NewEnv()`.
+- R 3.6 cannot construct VECSXP ALTREP because R exposes that facility only
+  from R 4.3. Its runtime row therefore version-gates only the adversarial
+  list-ALTREP fixture; atomic ALTREP tests still run and the corresponding
+  production list branch is vacuous.
 - One opaque v1 capsule and BASE/COLLECTION/SHADOW node graph are the current
   state model.
 - The public `assert_values` flag is the sole stateful R-shell policy outside
@@ -519,6 +541,17 @@ suffixes and line locations; the reviewed UP/PB block inventory and rationale
 assignments are unchanged. The exact frozen-candidate memory gate retained the
 same authenticated report and passed Gctorture, Valgrind, and bounded rchk.
 
+The checklist below is the historical `8797f11` payload ledger. It is retained
+to explain old evidence and is not the acceptance state of the open R-3.6
+source. The replacement candidate still requires:
+
+- [ ] strict C99 compilation against R 3.6.0 and every later pinned header/API
+  branch;
+- [ ] an authenticated real R 3.6.3 source-library build/install/test stage,
+  including the precise active-binding and list-ALTREP capability results;
+- [ ] the complete applicable current-R, portability, memory, compatibility,
+  documentation, and benchmark gates after source freeze.
+
 - [x] directly affected development tests pass from stable cached
   installations;
 - [x] the complete unit suite, CRAN-style package check, and depends-only check
@@ -893,12 +926,14 @@ all remote writes after reviewing this record.
 
 For the exact candidate ref, retain and verify:
 
-1. strict GCC and Clang C17 warning-clean builds, registration/probe audit,
+1. strict GCC and Clang C99 warning-clean builds, registration/probe audit,
    ASan/UBSan, complete unit tests, examples, and `R CMD check --as-cran`;
-2. real R 4.3.3 and 4.5.2 runtime stages plus development R, pinned-header
-   compilation, and the exact R-API-exception ledger/raw-token/version-gated DSO
-   audit for both stored-binding and non-forcing promise inspection, including
-   the authenticated R-4.3 data.table 1.18.4 overlay;
+2. real R 3.6.3, 4.3.3, and 4.5.2 runtime stages plus development R,
+   compilation against R 3.6.0 and every later pinned API branch, and the exact
+   R-API-exception ledger/raw-token/version-gated DSO audit for optional
+   existence, receipt scans, stored bindings, and non-forcing promise
+   inspection, including the authenticated R-3.6 source-package closure and
+   R-4.3 data.table 1.18.4 overlay;
 3. normalized Paradox-1 differential with reviewed intentional 2.0 deltas;
 4. every exact default head in `compat/github-bridge-provenance.tsv`, the four
    superseding heads in the `release-refresh-20260720` profile against both

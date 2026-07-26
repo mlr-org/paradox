@@ -639,14 +639,22 @@ restarts the operation through a second implementation.
 
 Native code may evaluate documented user callbacks through R. It may also use
 ordinary R helpers for genuine language capture or error construction. It must
-not call checkmate or data.table to implement a hot semantic operation. It uses
-public R C APIs available from R 4.3 onward except for the exact centralized
-non-forcing binding/promise-inspection compatibility entries in
-`src/r_api_compat.c`. R 4.3--4.5 uses the declared/exported
-`Rf_findVarInFrame` to retrieve a stored frame cell; unlike the old ordinary-
-binding-only helper, recursive migration may then inspect a returned `PROMSXP`
-through the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE`
-without forcing it.
+not call checkmate or data.table to implement a hot semantic operation. Shipped
+code is portable C99 and supports R >= 3.6. Equivalent API spellings are
+centralized in `src/r_api_compat.c`; current R retains its public,
+allocation-free fast path and no semantic translation unit gains a parallel
+old-R engine.
+
+R 3.6--4.1 has no public non-evaluating single-binding existence query. Cold
+optional lookups therefore use `base::exists(..., inherits = FALSE)`, which
+does not invoke active bindings. Required binding snapshots remain
+allocation-free. A terminal optional receipt scan cannot allocate, so on those
+runtimes it uses the header-declared/exported `R_HasFancyBindings()` only to
+fail closed for a fancy frame before selecting a stored cell. R 3.6--4.5 uses
+the declared/exported `Rf_findVarInFrame` to retrieve that stored frame cell;
+recursive migration may then inspect a returned `PROMSXP` through the
+header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` without
+forcing it.
 R >= 4.6 uses only the documented experimental binding classifier and delayed/
 forced-binding/dots accessors. Strict headers hide all three detached-promise
 accessors, so none is locally declared or present in the current DSO and a
@@ -664,7 +672,21 @@ Every exceptional symbol, version range, source occurrence, and rationale is
 listed exactly in `environment/r-api-exceptions.tsv` and must pass raw-token,
 DSO, pinned-header, and real-runtime audits before freeze. These entries are not
 a CRAN allowlist and authorize neither another internal API nor an alternate
-semantic path.
+semantic path. R 3.6 also exposes no function accessor for an active binding.
+Recursive legacy graph migration fails closed if it encounters one and asks the
+user to migrate under R >= 4.0; it never invokes or silently skips the binding.
+Paradox-1 ParamSet-family R6 shells themselves contain active bindings, so
+their practical object/graph migration requires R >= 4.0. This limitation does
+not affect current-object operations, idempotent current-object conversion,
+standalone legacy Domain/Condition conversion, or graphs without active
+bindings.
+
+Other old-header adaptations remain public and inline: fresh raw/complex
+destinations use direct vector access before the element-setter declarations
+exist, and the default `identical()` flag value is used before its named macro
+appears. Collection parameter reads pass the already admitted, rooted core
+directly to the shared params loader; no temporary environment, repeated
+capsule lookup, or `R_NewEnv()` compatibility implementation exists.
 
 Exactly two narrow cold semantic-orchestration families are allowed to use R;
 each has one implementation and neither is a fallback. The first is internal
@@ -922,7 +944,7 @@ count, and drops ignored data.table caches. Base R's lazy attribute-only
 duplicate is the common motivating case; admission does not depend on its
 current internal width threshold. Semantic atomic columns may themselves be
 stable ALTREP. Raw attribute selection uses `R_mapAttrib()` on R >= 4.6 and an
-`ATTRIB` traversal on R 4.3--4.5; neither route evaluates R code, calls
+`ATTRIB` traversal on R 3.6--4.5; neither route evaluates R code, calls
 data.table, or supplies a fallback engine. This narrow table exception does not
 extend to general list, row, callback-result, or package-state shells.
 Direct checked and unchecked `$values <-` reject an outer ALTREP
@@ -945,6 +967,10 @@ not select an R replay path or cause Paradox itself to crash or corrupt memory.
 An implementation that violates the R C API or crashes inside its own accessor
 cannot be sandboxed by Paradox and is outside this guarantee. Exact Paradox-1
 behavior for these state-changing objects is deliberately not reproduced.
+R did not expose VECSXP ALTREP classes before R 4.3, so the adversarial
+list-ALTREP fixture is unavailable on R 3.6 while the production list-ALTREP
+branch is vacuous. Atomic ALTREP admission and fixtures remain part of the
+R-3.6 contract.
 
 Materialization occurs before the payload snapshot. If an ALTREP accessor
 reenters Paradox and performs a valid mutation, that mutation is therefore part
@@ -1067,8 +1093,11 @@ migration boundary for a containing object:
   expressions; and forced or unforced binding/`...` promise structure without
   forcing an unforced promise. A forced binding promise contributes its stored
   value and expression; an unforced one contributes its expression and
-  evaluation environment. R 4.3--4.5 additionally inspect a detached
+  evaluation environment. R 3.6--4.5 additionally inspect a detached
   `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as opaque.
+  R 3.6 cannot retrieve an active-binding function and therefore fails this
+  migration closed with an R >= 4.0 upgrade instruction rather than invoking
+  or omitting the binding.
   Direct bindings are classified by the native binding API, never by evaluating
   or inspecting a substituted R expression. A realized `LANGSXP` or `SYMSXP`
   is therefore a value, while a delayed promise whose expression is a language
@@ -1357,10 +1386,11 @@ Once one clean Git ref implements the complete contract, validate in this
 dependency/acceptance order; independent long stages may overlap after their
 prerequisites and candidate bytes are frozen:
 
-1. strict GCC and Clang C17 builds, registered-routine/export audit, static
+1. strict GCC and Clang C99 builds, registered-routine/export audit, static
    analyzers, and the complete package suite;
-2. R 4.3.3, R 4.5.2, and development-R execution plus the pinned-header API
-   matrix and exact stored-binding/promise
+2. R 3.6.3, R 4.3.3, R 4.5.2, and development-R execution plus compilation
+   against the pinned R 3.6.0 and later headers and the exact stored-binding/
+   promise
    `environment/r-api-exceptions.tsv` audit;
 3. a new normalized upstream differential whose intentional deltas describe
    this contract reset rather than the superseded seven-delta policy;

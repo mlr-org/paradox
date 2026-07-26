@@ -218,7 +218,7 @@ command runs a compact generated clean corpus through the real ledger writer
 and trusted verifier, including admitted `skip_on_cran()` scopes; its size is a
 runner fixture, not a coverage baseline.
 
-Cppcheck uses its exhaustive analysis level on the actual Linux/C17 package
+Cppcheck uses its exhaustive analysis level on the actual Linux/C99 package
 configuration. It deliberately does not force every imagined preprocessor
 configuration in R's public headers: doing so invents self-referential values
 for API macros such as `NORET` and produces header syntax errors unrelated to
@@ -258,7 +258,7 @@ static modes, compare the retained harness/helper to trusted current copies,
 replay the source manifest against the tree, and reject any missing, added, or
 modified evidence.
 
-The strict profiles use C17 and turn a broad warning set into errors. They do
+The strict profiles use C99 and turn a broad warning set into errors. They do
 not globally suppress compiler diagnostics. The only accepted R-specific
 exceptions therefore remain the narrow source pragmas around the public R
 header fixed-base enum and the registration ABI's required `DL_FUNC` casts.
@@ -383,9 +383,11 @@ mode-0700 XDG runtime root.
 ## Real supported-R runtime matrix
 
 Header compilation cannot prove that versioned public-API paths behave
-correctly inside the actual R interpreter. The opt-in runtime matrix therefore provisions
-exact conda environments for R 4.3.3 and R 4.5.2 from the SHA-256 explicit
-locks in `environment/runtime-r-*-linux-64.lock`:
+correctly inside the actual R interpreter. The opt-in runtime matrix therefore
+uses the authenticated `environment/runtime-matrix.tsv` registry to provision
+exact conda environments for R 3.6.3, R 4.3.3, and R 4.5.2 from their
+SHA-256 explicit locks. It separately compiles shipped source against the
+R 3.6.0 headers:
 
 ```sh
 scripts/bootstrap-runtime-matrix
@@ -394,34 +396,43 @@ scripts/environment/test-runtime-matrix
 scripts/environment/test-runtime-matrix-installed all
 ```
 
-The fast fixture checks shell/R syntax, lock shape, complete-tree tamper
+The fast fixture checks registry, shell/R syntax, lock shape, complete-tree tamper
 detection, and outward-link refusal. The installed fixture starts hostile
-clean shells and proves both activations repair injected R libraries, startup
+clean shells and proves every activation repairs injected R libraries, startup
 files, compiler/linker/pkg-config inputs, caches, temporary paths, and XDG
 runtime state. It also re-sources activation to prove idempotence. No matrix
 command reads or mutates `.local/compat/R/library-dependencies` or either
-consumer system prefix.
+consumer system prefix. R 3.6.3 additionally uses the exact
+`environment/runtime-r-3.6.3-packages.lock` source closure in a separately
+receipted repository-local library; it does not write to the immutable prefix,
+host R, HOME, or a user library.
+R 3.6 still executes the atomic ALTREP tests. Its sole ALTREP capability
+exclusion is the adversarial list fixture: R did not expose VECSXP ALTREP
+classes until R 4.3, so the corresponding production branch cannot arise on
+that interpreter.
 
 `scripts/test-runtime-matrix --help` describes the retained execution gate.
 For each selected actual interpreter it archives a committed source ref,
 builds and installs paradox into a fresh stage library, runs the focused
 public-R-API facade probe and an authenticated supported source-test scope, and
-audits undefined DSO symbols against that release's allowed accessor set. Both
-old interpreters stage the complete discovered public, characterization,
+audits undefined DSO symbols against that release's allowed accessor set. All
+supported interpreters stage the complete discovered public, characterization,
 regression, and native source suite. The header-only
 `environment/runtime-matrix-pre46-exclusions.tsv` authenticates that there are
 no remaining pre-R-4.6 implementation exclusions. The coordinator validates
 that zero-row contract from the exact extracted candidate before admitting
-either build/install worker, and the old-runtime runner reuses the same
-validator. R 4.3 uses the ATTRIB and
+any build/install worker, and each old-runtime runner reuses the same
+validator. R 3.6--4.5 use the ATTRIB and
 FORMALS backports documented in Writing R Extensions rather than evaluating R
-inspection shims. The two ConfigSpace
+inspection shims. R 3.6--4.1 use a cold `base::exists()` path only for optional
+absence checks and an old-only `R_HasFancyBindings()` receipt-scan exception;
+required binding reads remain allocation-free. The two ConfigSpace
 files that stop at their absent-reticulate guard remain staged and are audited
 separately through `environment/runtime-matrix-whole-file-skips.tsv`, including
 the old file's preceding available `callr` guard; they are not silently treated
 as executed result files. Every result-block skip title and reason is likewise
 derived from the current block-scoped `skip_on_cran()` source and matched
-against `environment/runtime-matrix-result-skips.tsv` for both runtimes. The
+against `environment/runtime-matrix-result-skips.tsv` for every runtime. The
 suite must be clean and nonempty; file, context, support, and skip counts are
 joined to their retained inventories instead of frozen prose floors. The stage
 retains the exact scope ledger, staged source copies, testthat-reported
@@ -429,9 +440,12 @@ inventory, skip ledgers, counts, and hashes.
 The coordinator also runs `mbo-config-fixtures` before resource admission.
 That helper joins the candidate's snapshot and organization-review manifests,
 reads the two upgrade fixtures from the selected immutable Git commit rather
-than its worktree, and publishes one read-only shared bundle. Both stages set
-`PARADOX_MBO_CONFIG_ROOT` to that bundle's `common/` directory, so the legacy
-upgrade test executes instead of contributing an environment-dependent skip.
+than its worktree, and publishes one read-only shared bundle. All stages set
+`PARADOX_MBO_CONFIG_ROOT` to that bundle's `common/` directory. R >= 4.0 runs
+the complete ParamSet-family migration assertions. R 3.6 proves the precise
+fail-closed active-binding limitation plus current-object and standalone
+legacy Domain/Condition paths; Paradox-1 ParamSet-family R6 shells themselves
+use active bindings, so their practical migration requires R >= 4.0.
 The top-level receipt and each stage's digest claims are replayed by
 `verify-runtime-matrix-evidence`.
 Committed-source reads and archives use the authenticated project-local Git

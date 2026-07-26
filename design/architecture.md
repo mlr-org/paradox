@@ -133,9 +133,14 @@ The migration implementation has three layers:
    container/language/attribute/S4/environment/closure/bytecode and promise-
    binding edges. Active bindings contribute their functions but are not
    invoked; unforced binding/`...` promises contribute expression and
-   evaluation environment but are not forced. R 4.3--4.5 also inspect a
+   evaluation environment but are not forced. R 3.6--4.5 also inspect a
    detached `PROMSXP`; strict R >= 4.6 treats one outside a binding/dots cell as
-   opaque. The native direct-binding classifier distinguishes a realized
+   opaque. Because R 3.6 exposes no accessor for an active binding's function,
+   encountering one on that runtime fails migration closed and asks for
+   R >= 4.0; it is never invoked or silently omitted. Paradox-1 ParamSet-family
+   R6 shells use active bindings, so practical migration of those objects
+   requires R >= 4.0. The native direct-binding
+   classifier distinguishes a realized
    language object or symbol from a delayed promise whose expression has that
    type; it never infers binding kind from expression shape. Search-path,
    global, package, namespace, imports, base, and empty
@@ -816,7 +821,10 @@ or matching printed representation are not promised for that boundary. It is
 rejected or admitted from one native materialization without an R retry or
 Paradox itself causing a crash or memory corruption. An ALTREP implementation
 that violates the R C API or crashes inside its own accessor cannot be
-sandboxed by Paradox and is outside this guarantee.
+sandboxed by Paradox and is outside this guarantee. R did not expose VECSXP
+ALTREP classes before R 4.3. The corresponding adversarial package test fixture
+is therefore version-gated, while atomic ALTREP fixtures still run on R 3.6;
+production list-ALTREP branches are simply vacuous on those old runtimes.
 
 ## Source organization
 
@@ -847,6 +855,10 @@ sandboxed by Paradox and is outside this guarantee.
 - operation-specific `src/paramset_*.c`, design, and sampler units: thin graph
   planners and kernels over capsule state; `src/sampler_unif.c` also owns the
   process-local single-use singleton-subspace handoff;
+- `src/paramset_params.[ch]`: the shared rooted parameter-state loader and
+  static facade builder. It accepts an already admitted core directly, so
+  collection reads do not allocate a temporary environment or repeat the
+  private-to-core lookup;
 - `src/upgrade_graph.[ch]`: non-forcing, pointer-memoized iterative discovery
   for the recursive legacy migration boundary;
 - `src/binding_snapshot.c`: the registered cold R-facing projection of the
@@ -862,10 +874,14 @@ sandboxed by Paradox and is outside this guarantee.
   facade completion for genuinely fresh package-owned tables from the
   defensive caller-owned finalizer. Raw stored-attribute selection uses
   `R_mapAttrib()` on R >= 4.6 and the established `ATTRIB` traversal on R
-  4.3--4.5; older supported R releases also use the documented public `FORMALS`
+  3.6--4.5; older supported R releases also use the documented public `FORMALS`
   backport for newer closure inspection. These adapters never evaluate
-  `formals()`, `attributes()`, or another R/data.table helper. The exact
-  non-public compatibility entries are centralized here. R < 4.6 uses one
+  `formals()`, `attributes()`, or another R/data.table helper. R 3.6--4.1 use
+  `base::exists(..., inherits = FALSE)` only for cold optional existence
+  queries; admitted required bindings retain an allocation-free native path.
+  A terminal optional receipt scan must not allocate, so it uses old-only
+  `R_HasFancyBindings()` to reject a fancy frame before the stored-cell scan.
+  The exact non-public compatibility entries are centralized here. R < 4.6 uses one
   declared/exported `Rf_findVarInFrame` call to obtain the stored binding cell
   and the header-declared/exported `R_PromiseExpr`, `PRENV`, and `PRVALUE` when
   that cell is a `PROMSXP`.
@@ -1059,7 +1075,7 @@ diagnostic is reserved for ordinary structurally admitted value infeasibility.
 Every allocating or callback-capable boundary has explicit protection. Long
 loops poll interrupts without holding unrooted objects or raw pointers. Output
 sizes, byte counts, recursion replacements, row/column products, and C casts
-are checked before allocation or indexing. Portable scalar C17 is the baseline;
+are checked before allocation or indexing. Portable scalar C99 is the baseline;
 architecture-specific code is not required for performance.
 
 ## Forbidden architecture regressions
