@@ -5,6 +5,9 @@
 
 #define PARADOX_API_MAX_ALLOWED_ATTRIBUTES ((size_t) 16)
 
+#if R_VERSION < R_Version(4, 5, 0)
+/* Cold public-R bridge for accessors that became supported native API in
+ * R 4.5. Compile it out entirely once every caller selects that direct API. */
 static SEXP evaluate_base_unary(const char *name, SEXP argument) {
   if (name == NULL) {
     Rf_error("Internal error: missing base function name");
@@ -16,6 +19,7 @@ static SEXP evaluate_base_unary(const char *name, SEXP argument) {
   UNPROTECT(4);
   return result;
 }
+#endif
 
 SEXP paradox_api_closure_formals(SEXP closure) {
 #if R_VERSION >= R_Version(4, 5, 0)
